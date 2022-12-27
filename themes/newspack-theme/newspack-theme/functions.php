@@ -398,6 +398,17 @@ function newspack_widgets_init() {
 			'after_title'   => '</h2>',
 		)
 	);
+	register_sidebar(
+		array(
+			'name'          => __( 'Article above comments', 'newspack-theme' ),
+			'id'            => 'article-above-comments',
+			'description'   => __( 'Add widgets here to appear above article comments.', 'newspack-theme' ),
+			'before_widget' => '<section id="%1$s" class="above-comments widget %2$s">',
+			'after_widget'  => '</section>',
+			'before_title'  => '<h2 class="widget-title">',
+			'after_title'   => '</h2>',
+		)
+	);
 }
 add_action( 'widgets_init', 'newspack_widgets_init' );
 
