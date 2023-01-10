@@ -45,12 +45,13 @@ get_header();
 
 					newspack_previous_next();
 
-					if ( is_active_sidebar( 'article-above-comments' ) ) {
-						dynamic_sidebar( 'article-above-comments' );
-					}
-
 					// If comments are open or we have at least one comment, load up the comment template.
 					if ( comments_open() || get_comments_number() ) {
+
+						if ( is_active_sidebar( 'article-above-comments' ) ) {
+							dynamic_sidebar( 'article-above-comments' );
+						}
+	
 						newspack_comments_template();
 					}
 
