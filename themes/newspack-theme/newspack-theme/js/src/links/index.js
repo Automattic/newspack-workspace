@@ -11,32 +11,32 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import FeaturedImageEditor from './FeaturedImageEditor';
-import { appendFeaturedImageToDomElement, connectWithSelect } from './utils';
+import LinkEditor from './LinkEditor';
+import { appendLinkToDomElement, connectWithSelect } from './utils';
 
 /**
  * Component to be used as a panel in the Document tab of the Editor.
  *
  * https://developer.wordpress.org/block-editor/developers/slotfills/plugin-document-setting-panel/
  */
-const NewspackFeaturedImagePanel = ( { caption, credit, mode } ) => {
+const NewspackLinkPanel = ( { caption, credit, mode } ) => {
 	// Update the DOM when subtitle value changes or editor mode is switched
 	useEffect( () => {
-		appendFeaturedImageToDomElement( caption, credit, mode === 'text' );
-	}, [ caption, credit, mode ] );
+		appendLinkToDomElement( link, mode === 'text' );
+	}, [ link, mode ] );
 
 	return (
 		<PluginDocumentSettingPanel
-			name="newspack-featured-image-credit-caption"
-			title={ __( 'Credit/Caption', 'newspack' ) }
-			className="newspack-credit-caption"
+			name="newspack-external-link"
+			title={ __( 'External Link', 'newspack' ) }
+			className="newspack-external-link"
 		>
-			<FeaturedImageEditor />
+			<LinkEditor />
 		</PluginDocumentSettingPanel>
 	);
 };
 
-registerPlugin( 'plugin-document-setting-panel-newspack-credit-caption', {
-	render: connectWithSelect( NewspackFeaturedImagePanel ),
+registerPlugin( 'plugin-document-setting-panel-newspack-external-link', {
+	render: connectWithSelect( NewspackLinkPanel ),
 	icon: null,
 } );

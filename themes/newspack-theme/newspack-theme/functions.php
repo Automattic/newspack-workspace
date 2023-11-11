@@ -638,6 +638,11 @@ function newspack_enqueue_scripts() {
 		wp_set_script_translations( 'newspack-post-featured-image-credit', 'newspack', $languages_path );
 	}
 
+	if ( 'link' === $post_type ) {
+		wp_enqueue_script( 'newspack-post-external-link', get_theme_file_uri( '/js/dist/links.js' ), array(), $theme_version, true );
+		wp_set_script_translations( 'newspack-post-external-link', 'newspack', $languages_path );
+	}
+
 	// Post meta options.
 	wp_register_script(
 		'newspack-post-meta-toggles',
