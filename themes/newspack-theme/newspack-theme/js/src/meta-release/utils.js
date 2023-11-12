@@ -15,7 +15,7 @@ export const connectWithSelect = withSelect( ( select ) => ( {
 		LINK_ORG_FIELD_NAME
 	],
 	sponsored: select( 'core/editor' ).getEditedPostAttribute( 'meta' )[
-		LINK__SPONSORED_FIELD_NAME
+		LINK_SPONSORED_FIELD_NAME
 	],
 	mode: select( 'core/edit-post' ).getEditorMode(),
 } ) );

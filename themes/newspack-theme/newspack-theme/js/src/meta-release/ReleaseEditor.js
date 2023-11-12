@@ -4,17 +4,23 @@
 import { __ } from '@wordpress/i18n';
 import { compose } from '@wordpress/compose';
 import { withDispatch } from '@wordpress/data';
-import { TextControl, CheckboxControl } from '@wordpress/components';
+import { TextControl, ToggleControl } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { connectWithSelect, LINK_FIELD_NAME, LINK_ORG_FIELD_NAME, LINK_SPONSORED_FIELD_NAME } from './utils';
+import {
+	connectWithSelect,
+	LINK_FIELD_NAME,
+	LINK_ORG_FIELD_NAME,
+	LINK_SPONSORED_FIELD_NAME,
+} from './utils';
 
 const decorate = compose(
 	connectWithSelect,
 	withDispatch( ( dispatch ) => ( {
 		saveLink: ( link ) => {
+			console.log( 'saveLink', link );
 			dispatch( 'core/editor' ).editPost( {
 				meta: {
 					[ LINK_FIELD_NAME ]: link,
@@ -22,6 +28,7 @@ const decorate = compose(
 			} );
 		},
 		saveOrg: ( org ) => {
+			console.log( 'saveOrg', org );
 			dispatch( 'core/editor' ).editPost( {
 				meta: {
 					[ LINK_ORG_FIELD_NAME ]: org,
@@ -29,16 +36,25 @@ const decorate = compose(
 			} );
 		},
 		saveSponsored: ( sponsored ) => {
+			console.log( 'saveSponsored', sponsored );
 			dispatch( 'core/editor' ).editPost( {
 				meta: {
-					[ LINK_SPONSORED_FIELD_NAME ]: sponsored,
+					[ LINK_SPONSORED_FIELD_NAME ]: sponsored ? 1 : 0,
 				},
 			} );
 		},
 	} ) )
 );
 
-const ReleaseEditor = ( { link, saveLink, saveSponsored, saveOrg, org, sponsored } ) => {
+const ReleaseEditor = ( {
+	link,
+	saveLink,
+	saveSponsored,
+	saveOrg,
+	org,
+	sponsored,
+} ) => {
+	console.log( { org, sponsored } );
 	return (
 		<>
 			<TextControl
@@ -54,13 +70,13 @@ const ReleaseEditor = ( { link, saveLink, saveSponsored, saveOrg, org, sponsored
 				onChange={ saveOrg }
 				style={ { marginTop: '10px', width: '100%' } }
 			/>
-			<CheckboxControl
+			<ToggleControl
 				label={ __( 'External Link Sponsored', 'newspack-theme' ) }
-				value={ sponsored }
-				onChange={saveSponsored}
+				checked={ sponsored === 1 }
+				onChange={ saveSponsored }
 			/>
 		</>
 	);
 };
 
-export default decorate( LinkEditor );
+export default decorate( ReleaseEditor );
