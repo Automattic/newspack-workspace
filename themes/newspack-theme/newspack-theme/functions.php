@@ -986,6 +986,26 @@ function newspack_register_meta() {
 	);
 
 	register_post_meta(
+		['post', 'release'],
+		'terminal_featured_meta_caption',
+		array(
+			'show_in_rest' => true,
+			'single'       => true,
+			'type'         => 'string',
+		)
+	);
+
+	register_post_meta(
+		['post', 'release'],
+		'terminal_featured_meta_credit',
+		array(
+			'show_in_rest' => true,
+			'single'       => true,
+			'type'         => 'string',
+		)
+	);
+
+	register_post_meta(
 		'release',
 		'link_org',
 		array(
