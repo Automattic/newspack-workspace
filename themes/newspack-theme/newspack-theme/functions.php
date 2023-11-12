@@ -643,6 +643,11 @@ function newspack_enqueue_scripts() {
 		wp_set_script_translations( 'newspack-post-external-link', 'newspack', $languages_path );
 	}
 
+	if ( 'release' === $post_type ) {
+		wp_enqueue_script( 'newspack-post-external-link-release', get_theme_file_uri( '/js/dist/meta-release.js' ), array(), $theme_version, true );
+		wp_set_script_translations( 'newspack-post-external-link-release', 'newspack', $languages_path );
+	}
+
 	// Post meta options.
 	wp_register_script(
 		'newspack-post-meta-toggles',
@@ -967,6 +972,37 @@ function newspack_register_meta() {
 			'show_in_rest' => true,
 			'single'       => true,
 			'type'         => 'string',
+		)
+	);
+
+	register_post_meta(
+		['link', 'release'],
+		'link',
+		array(
+			'show_in_rest' => true,
+			'single'       => true,
+			'type'         => 'string',
+		)
+	);
+
+	register_post_meta(
+		['link', 'release'],
+		'link_org',
+		array(
+			'show_in_rest' => true,
+			'single'       => true,
+			'type'         => 'string',
+		)
+	);
+
+
+	register_post_meta(
+		['link', 'release'],
+		'link_sponsored',
+		array(
+			'show_in_rest' => true,
+			'single'       => true,
+			'type'         => 'boolean',
 		)
 	);
 

@@ -4,16 +4,12 @@
 import { __ } from '@wordpress/i18n';
 import { compose } from '@wordpress/compose';
 import { withDispatch } from '@wordpress/data';
-import { useState, useEffect } from '@wordpress/element';
-import { TextareaControl } from '@wordpress/components';
+import { TextControl } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import {
-	connectWithSelect,
-	LINK_FIELD_NAME,
-} from './utils';
+import { connectWithSelect, LINK_FIELD_NAME } from './utils';
 
 const decorate = compose(
 	connectWithSelect,
@@ -28,26 +24,15 @@ const decorate = compose(
 	} ) )
 );
 
-const LinkEditor = ( {
-	link,
-	saveLink,
-} ) => {
-	const [ linkValue, setLink ] = useState( link );
-
-	useEffect( () => {
-		saveLink( linkValue );
-	}, [ linkValue ] );
-
+const LinkEditor = ( { link, saveLink } ) => {
 	return (
-		<>
-			<TextareaControl
-				label={ __( 'External Link', 'newspack-theme' ) }
-				value={ linkValue }
-				onChange={ setLink }
-				rows={2}
-				style={ { marginTop: '10px', width: '100%' } }
-			/>
-		</>
+		<TextControl
+			label={ __( 'External Link', 'newspack-theme' ) }
+			value={ link }
+			onChange={ saveLink }
+			type={ 'url' }
+			style={ { marginTop: '10px', width: '100%' } }
+		/>
 	);
 };
 
