@@ -70,9 +70,7 @@ if ( function_exists( 'newspack_get_all_sponsors' ) ) {
 		?>
 	</div><!-- .entry-content -->
 
-	<footer class="entry-footer">
-		<?php newspack_entry_footer(); ?>
-	</footer><!-- .entry-footer -->
+	<footer class="entry-footer"><?php newspack_entry_footer(); ?></footer><!-- .entry-footer -->
 
 	<?php
 	$show_author = ! empty( $native_sponsors ) ? newspack_display_sponsors_and_authors( $native_sponsors ) : true;

@@ -42,8 +42,6 @@
 		?>
 	</div><!-- .entry-content -->
 
-	<footer class="entry-footer">
-		<?php newspack_entry_footer(); ?>
-	</footer><!-- .entry-footer -->
+	<footer class="entry-footer"><?php newspack_entry_footer(); ?></footer><!-- .entry-footer -->
 </article><!-- #post-${ID} -->
 
