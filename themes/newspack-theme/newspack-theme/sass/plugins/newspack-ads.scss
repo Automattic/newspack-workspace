@@ -3,7 +3,7 @@
 @use "../mixins/utilities";
 @use "../variables-site/structure";
 
-.newspack_global_ad {
+.newspack_global_dad {
 	display: flex;
 	justify-content: center;
 	align-items: center;
@@ -102,7 +102,7 @@ div[class*="newspack-ads-blocks-ad-unit"] {
 
 body {
 	// Reduce space on top of the content a bit when there's an ad below the header.
-	&:not(.newspack-front-page) .newspack_global_ad.global_below_header + .site-content {
+	&:not(.newspack-front-page) .newspack_global_dad.global_below_header + .site-content {
 		margin-top: #{1.5 * structure.$size__spacing-unit};
 	}
 }
@@ -134,13 +134,13 @@ body {
 	}
 }
 
-.single-featured-image-behind .newspack_global_ad.global_below_header {
+.single-featured-image-behind .newspack_global_dad.global_below_header {
 	margin-bottom: -1.5rem;
 }
 
 .custom-ad-bg {
 	// Add a top margin to the above-footer ad, if a above footer widget doesn't exist.
-	&:not(.af-widget) .newspack_global_ad.global_above_footer {
+	&:not(.af-widget) .newspack_global_dad.global_above_footer {
 		margin-top: 2rem;
 	}
 
@@ -148,7 +148,7 @@ body {
 		margin-top: 0;
 	}
 
-	.newspack_global_ad > * {
+	.newspack_global_dad > * {
 		margin-bottom: 8px;
 		margin-top: 8px;
 	}

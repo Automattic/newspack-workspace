@@ -56,7 +56,8 @@ body:not(.h-stk, .splash-page-home, .page-template-no-header-footer) .site-conte
 body:not(.h-stk, .splash-page-home, .page-template-no-header-footer).hide-page-title .site-content,
 body:not(.h-stk, .splash-page-home, .page-template-no-header-footer).newspack-front-page.hide-homepage-title .site-content,
 body:not(.h-stk, .splash-page-home, .page-template-no-header-footer):not(.newspack-front-page)
-.newspack_global_ad.global_below_header + .site-content,
+	.newspack_global_dad.global_below_header
+	+ .site-content,
 body:not(.h-stk) .site-breadcrumb {
 	@include utilities.media( tablet ) {
 		margin-top: #{-3.5 * structure.$size__spacing-unit};
@@ -690,7 +691,7 @@ blockquote {
 
 // Ads
 
-.newspack_global_ad.global_below_header {
+.newspack_global_dad.global_below_header {
 	display: none !important; // !important to override inline styles for this ad placement.
 }
 

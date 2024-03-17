@@ -1866,10 +1866,10 @@ $colors: (
 
 	// Make ad placements full-width.
 	.main-content {
-		.scaip .newspack_global_ad,
+		.scaip .newspack_global_dad,
 		.scaip .widget_newspack-ads-widget,
-		.newspack_global_ad.sidebar_article-1,
-		.newspack_global_ad.sidebar_article-2 {
+		.newspack_global_dad.sidebar_article-1,
+		.newspack_global_dad.sidebar_article-2 {
 			background-color: var(--newspack-theme-color-bg-pre);
 			margin-left: calc(50% - 50vw);
 			margin-right: calc(50% - 50vw);
