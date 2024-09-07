@@ -95,6 +95,7 @@
 		line-height: 1;
 		margin: 0 #{0.25 * structure.$size__spacing-unit} #{0.25 * structure.$size__spacing-unit} 0;
 		padding: 0.3em 0.5em;
+		position: relative;
 
 		&:visited {
 			color: var(--newspack-theme-color-against-primary);
