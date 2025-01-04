@@ -61,6 +61,10 @@ get_header();
 	
 						newspack_comments_template();
 					}
+
+					if ( is_active_sidebar( 'article-3' ) ) {
+						dynamic_sidebar( 'article-3' );
+					}
 					?>
 				</div>
 
