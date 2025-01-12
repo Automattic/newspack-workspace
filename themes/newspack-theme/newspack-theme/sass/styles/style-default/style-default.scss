@@ -200,24 +200,6 @@ div.author-bio {
 	}
 }
 
-/* Footer */
-
-.site-footer .footer-branding,
-.site-footer .footer-widgets:first-child {
-	.wrapper {
-		border-top: 4px solid var(--newspack-theme-color-border);
-	}
-}
-
-.af-widget {
-	.site-footer .footer-branding,
-	.site-footer .footer-widgets:first-child {
-		.wrapper {
-			border: 0;
-		}
-	}
-}
-
 // Sponsored Content
 .single.sponsors-show-cats .sponsor-label,
 .single.sponsors-show-cats .sponsor-label + button {
