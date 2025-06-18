@@ -16,6 +16,22 @@ function newspack_custom_typography_css() {
 	$css_blocks        = '';
 	$editor_css_blocks = '';
 
+	if ( get_theme_mod( 'font_body_stack', 'serif' ) === 'sans_serif' || get_theme_mod( 'font_header_stack', 'serif' ) === 'sans_serif' ) {
+		$css_blocks .= '
+			@font-face {
+				font-family: "Roboto-Fallback-Arial";
+				size-adjust: 99%;
+				ascent-override: 91%;
+				src: local("Arial");
+			}
+			@font-face {
+				font-family: "Roboto-Fallback-Helvetica";
+				size-adjust: 99%;
+				src: local("Helvetica");
+			}
+		';
+	}
+
 	if ( get_theme_mod( 'font_header', '' ) ) {
 		$css_blocks .= '
 			:root {
@@ -123,7 +139,8 @@ function newspack_get_font_stacks() {
 		'sans_serif' => array(
 			'name'  => __( 'Sans Serif', 'newspack-theme' ),
 			'fonts' => array(
-				'Helvetica',
+				'Roboto-Fallback-Helvetica',
+				'Roboto-Fallback-Arial',
 				'sans-serif',
 			),
 		),
