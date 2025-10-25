@@ -563,8 +563,8 @@ if ( ! function_exists( 'newspack_mobile_cta' ) ) :
 	 */
 	function newspack_mobile_cta() {
 		$cta_show   = get_theme_mod( 'show_header_cta', false );
-		$cta_text   = get_theme_mod( 'header_cta_text', esc_html__( 'Donate', 'newspack-theme' ) );
-		$cta_url    = get_theme_mod( 'header_cta_url', '' );
+		$cta_text   = apply_filters( 'newspack_header_cta_text', get_theme_mod( 'header_cta_text', esc_html__( 'Donate', 'newspack-theme' ) ) );
+		$cta_url    = apply_filters( 'newspack_header_cta_url', get_theme_mod( 'header_cta_url', '' ) );
 		$cta_target = get_theme_mod( 'header_cta_target', false );
 
 		if ( true === $cta_show && '' !== $cta_url ) {
