@@ -642,9 +642,10 @@
 		}
 	}
 
-	.highlight-menu-contain.desktop-only {
-		display: none;
-	}
+	// Newspack default hides highlight menu with sticky header, but I want control
+	// .highlight-menu-contain.desktop-only {
+	// 	display: none;
+	// }
 }
 
 .h-stk,
