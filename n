@@ -337,7 +337,8 @@ case $1 in
 		echo "  trunk                    Switch all repositories to the trunk branch."
 		echo "  alpha                    Switch all repositories to the alpha branch."
 		echo "  release                  Switch all repositories to the release branch."
-		echo "  setup-newspack-network   Set up Newspack Network Docker environment."
+		echo "  worktree [args]          Manage isolated Git worktrees for repositories (create, list, remove)."
+		echo "  env [args]               Manage isolated development environments (create, list, switch, destroy)."
 		;;
     *)
         echo Unknown command
