@@ -341,6 +341,6 @@ case $1 in
         echo "  setup-newspack-network   Set up Newspack Network Docker environment."
         ;;
     *)
-        echo Unknown command
+        echo "Unknown command: $1. Run 'n help' to see available commands."
         ;;
 esac
