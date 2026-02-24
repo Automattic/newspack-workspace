@@ -67,7 +67,7 @@ cd "$(dirname "$0")"
 source .env
 
 if [ $# -eq 0 ]; then
-    echo "No arguments provided. Run 'n help' to see available commands."
+    echo "No arguments provided. Run 'n help' to see available commands." >&2
     exit 1
 fi
 
