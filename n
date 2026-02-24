@@ -299,7 +299,6 @@ case $1 in
     env)
         "$NABSPATH/bin/env.sh" "${@:2}"
         ;;
-	help)
     help)
         echo "Available commands:"
         echo "  start [version]          Start the Docker containers. Optionally specify a PHP version (e.g. 8.2)."
@@ -320,7 +319,7 @@ case $1 in
         echo "  sites-add [name]         Add a new additional site with the given name."
         echo "  sites-list               List all additional sites."
         echo "  sites-drop [name]        Remove an additional site with the given name."
-        echo "  build [folder]           Build the specified folder (plugin/theme) or all if not specified."
+        echo "  build [folder]           Build the specified folder (plugin/theme) or all for every repo."
         echo "  ci-build [folder]        Build for CI environment with specific optimizations."
         echo "  watch                    Watch for changes in the current repo and rebuild automatically."
         echo "  test-php [args]          Run PHP tests for the current repo with optional arguments."
@@ -339,6 +338,8 @@ case $1 in
         echo "  alpha                    Switch all repositories to the alpha branch."
         echo "  release                  Switch all repositories to the release branch."
         echo "  setup-newspack-network   Set up Newspack Network Docker environment."
+        echo "  worktree [args]          Manage isolated Git worktrees for repositories (create, list, remove)."
+        echo "  env [args]               Manage isolated development environments (create, list, switch, destroy)."
         ;;
     *)
         echo "Unknown command: $1. Run 'n help' to see available commands."
