@@ -67,8 +67,8 @@ cd "$(dirname "$0")"
 source .env
 
 if [ $# -eq 0 ]; then
-	echo "No arguments provided"
-	exit 1
+    echo "No arguments provided. Run 'n help' to see available commands." >&2
+    exit 1
 fi
 
 if [ ! -z "$USE_CUSTOM_APACHE_USER" ]
@@ -111,6 +111,7 @@ switch_all_repos_to_branch() {
     done
 }
 
+# NOTE: when adding a new command, update the 'help' case below.
 case $1 in
     start)
         start "${@:2}"
@@ -299,7 +300,63 @@ case $1 in
     env)
         "$NABSPATH/bin/env.sh" "${@:2}"
         ;;
+    help)
+        echo "Available commands:"
+        echo ""
+        echo "Container Management:"
+        echo "  start [version]          Start the Docker containers. Optionally specify a PHP version (e.g. 8.2)."
+        echo "  stop                     Stop the Docker containers."
+        echo "  restart [version]        Restart the Docker containers. Optionally specify a PHP version (e.g. 8.2)."
+        echo "  sh                       Open a bash shell inside the container as the Apache user."
+        echo "  rsh                      Open a bash shell inside the container as root."
+        echo ""
+        echo "WordPress:"
+        echo "  install                  Run the installation script for the current site."
+        echo "  uninstall                Run the uninstallation script for the current site."
+        echo "  reset-site               Reset the current site to a clean state."
+        echo "  wp [args]                Run a WP-CLI command for the current site. Example: n wp plugin list"
+        echo "  db                       Open a WP-CLI database shell for the current site."
+        echo "  shell                    Open a WP-CLI shell for the current site."
+        echo "  tail                     Tail the debug.log file of the current site."
+        echo "  secrets                  Export current site secrets (API keys, options, constants) as JSON."
+        echo "  secrets-import           Import secrets from secrets.json into the current site."
+        echo "  snapshot [name]          Create a snapshot of the current site with the given name."
+        echo "  snapshot-load [name]     Load a snapshot with the given name into the current site."
+        echo ""
+        echo "Building & Testing:"
+        echo "  build [folder]           Build the specified folder (plugin/theme) or all for every repo."
+        echo "  ci-build [folder]        Build for CI environment with specific optimizations."
+        echo "  watch                    Watch for changes in the current repo and rebuild automatically."
+        echo "  test-php [args]          Run PHP tests for the current repo with optional arguments."
+        echo "  test-js                  Run JavaScript tests for the current repo."
+        echo "  composer [args]          Run a composer command for the current repo. Example: n composer update"
+        echo "  npm [args]               Run an npm command for the current repo. Example: n npm install"
+        echo ""
+        echo "Multi-site:"
+        echo "  sites-add [name]         Add a new additional site with the given name."
+        echo "  sites-list               List all additional sites."
+        echo "  sites-drop [name]        Remove an additional site with the given name."
+        echo "  install-manager          Install WordPress on the Newspack Manager site."
+        echo "  setup-manager            Set up WordPress Manager plugin on the manager site."
+        echo "  setup-newspack-network   Set up Newspack Network Docker environment."
+        echo ""
+        echo "Repository Management:"
+        echo "  pull                     Pull the latest changes for all repositories."
+        echo "  branch [name]            Switch all repositories to the specified branch."
+        echo "  trunk                    Switch all repositories to the trunk branch."
+        echo "  alpha                    Switch all repositories to the alpha branch."
+        echo "  release                  Switch all repositories to the release branch."
+        echo ""
+        echo "Isolated Environments:"
+        echo "  worktree [args]          Manage isolated Git worktrees for repositories (add, list, remove)."
+        echo "  env [args]               Manage isolated development environments (create, up, down, destroy, list)."
+        echo ""
+        echo "Other:"
+        echo "  cd-install               Install the ncd command in your system for easy navigation to repos and sites."
+        echo "  jncp [args]              Copy selected plugins to a Jurassic Ninja site via SSH."
+        echo "  jninit [args]            Initialize a Jurassic Ninja site with core Newspack and WooCommerce plugins and runs setup."
+        ;;
     *)
-        echo Unknown command
+        echo "Unknown command: $1. Run 'n help' to see available commands."
         ;;
 esac
