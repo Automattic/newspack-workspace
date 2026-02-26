@@ -1,4 +1,4 @@
-version: '3.3'
+name: newspack-docker
 
 volumes:
   ## Kludge for not having the ./docker directory bound recursively
@@ -18,8 +18,8 @@ services:
     env_file:
       - default.env
       - .env
-    entrypoint: [ '/bin/bash', '/var/scripts/docker-db-start-and-autoupgrade.sh' ]
-    command: [ 'mysqld' ]
+    entrypoint: ["/bin/bash", "/var/scripts/docker-db-start-and-autoupgrade.sh"]
+    command: ["mysqld"]
 
   ## - The container wordpress is a very basic but custom container with WordPress and all of the tools we need
   ##   for development.
@@ -36,7 +36,7 @@ services:
     platform: linux/arm64
     depends_on:
       - db
-    image: newspack-dev-81:latest
+    image: newspack-dev:latest
     volumes:
       - ./logs/newspack-dev/apache2/:/var/log/apache2
       - ./logs/newspack-dev/php:/var/log/php
@@ -54,7 +54,7 @@ services:
       - .env
     environment:
       - HOST_PORT=${PORT_WORDPRESS:-80}
-     # - COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME
+      # - COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME
       - APACHE_RUN_USER=${USE_CUSTOM_APACHE_USER:-www-data}
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -35,19 +35,11 @@ if [ ! -f /var/www/html/wp-config.php ]; then
 	wp --allow-root config set table_prefix ${TABLE_PREFIX}
 	wp --allow-root config set WP_CACHE true --type=constant
 
-	# Respecting Dockerfile-forwarded environment variables
-	# Allow to be reverse-proxied from https
-	wp --allow-root config set "_SERVER['HTTPS']" "isset( \$_SERVER['HTTP_X_FORWARDED_PROTO'] ) && \$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https' ? 'on' : NULL" \
-		--raw \
-		--type=variable
+	# Dynamic URL resolution for multi-environment support
+	wp --allow-root config set NEWSPACK_URL "'http://localhost'" --raw --type=constant
 
-	# Allow this installation to run on http or https.
-	wp --allow-root config set DOCKER_REQUEST_URL \
-		"( ! empty( \$_SERVER['HTTPS'] ) ? 'https://' : 'http://' ) . ( ! empty( \$_SERVER['HTTP_HOST'] ) ? \$_SERVER['HTTP_HOST'] : 'localhost' )" \
-		--raw \
-		--type=constant
-	wp --allow-root config set WP_SITEURL "DOCKER_REQUEST_URL" --raw --type=constant
-	wp --allow-root config set WP_HOME "DOCKER_REQUEST_URL" --raw --type=constant
+	# Insert URL resolution logic after NEWSPACK_URL
+	sed -i "/define( 'NEWSPACK_URL'/r /var/scripts/wp-config-url-resolution.php" /var/www/html/wp-config.php
 
 	# Tell WP-CONFIG we're in a docker instance.
 	wp --allow-root config set JETPACK_DOCKER_ENV true --raw --type=constant

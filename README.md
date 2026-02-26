@@ -1,4 +1,4 @@
-# newspack-docker
+# newspack-workspace
 Newspack helper Repository for running local environments using Docker.
 
 The main idea is to have all the dependecies we need to run the projects, and its tests, inside the container so we don't depend on anything in our local machine.
@@ -7,7 +7,7 @@ The main idea is to have all the dependecies we need to run the projects, and it
 ### Clone this repository
 
 ```BASH
-git clone https://github.com/Automattic/newspack-docker.git
+git clone https://github.com/Automattic/newspack-workspace.git
 ```
 
 ### Set up your local vars
@@ -32,7 +32,7 @@ You only need to run this the first time you set up your env.
 ./build-image.sh
 ```
 
-The default builds using PHP 8.1. You can also call `./build-image-7.4.sh` or `./build-image-80.sh` to build an image with PHP 7.4 or 8.0. It's a good idea to have both.
+The default builds using PHP 8.3. You can also call `./build-image-82.sh` to build an image with PHP 8.2. It's a good idea to have both.
 
 ### Clone all repos
 
@@ -51,11 +51,11 @@ Now we are going to use the `n` script. (Tip: Create an alias in your `.bashrc` 
 n start
 ```
 
-(`n start 8.0` or `n start 7.4` will start the image with php 8.0 or 7.4 if you built them)
+(`n start 8.2` will start the image with php 8.2 if you built it)
 
 When you are done, you can stop the containers with `n stop`.
 
-You can also stop and start in one command with `n restart` (or `n restart 8.1` or `n restart 7.4`).
+You can also stop and start in one command with `n restart` (or `n restart 8.2`).
 
 At this point you should be able to see your site in `https://localhost`.
 
@@ -139,6 +139,8 @@ Other commands:
 * `sites-add`, `sites-drop`, `sites-list`: See Additional Sites section below
 * `n setup-newspack-network`: Sets up the connections of Newspack Network and Distributor plugins between all active sites
 * `n cd-install`: Install the handy `ncd` function to your terminal. See section below.
+* `n worktree add|list|remove`: Manage git worktrees for parallel development. See Isolated Environments section below.
+* `n env create|up|down|destroy|list`: Manage isolated WordPress environments. See Isolated Environments section below.
 
 ## Navigating between projects (the `ncd` command)
 
@@ -155,7 +157,7 @@ To make navigating easier, use the `ncd` terminal command.
 * Look for an additional site with that name `... /additional-sites-html/plugin`
 * Look for a plugin installed in the main site `... /html/wp-content/plugins/plugin`
 
-So when you arrive at your home folder and want to go to the `newspack-newsletters` project, instead of typing something like `cd my-project/newspack-docker/repos/newspack-newsletters`, all you need to do is `ncd newsletters`!
+So when you arrive at your home folder and want to go to the `newspack-newsletters` project, instead of typing something like `cd my-project/newspack-workspace/repos/newspack-newsletters`, all you need to do is `ncd newsletters`!
 
 To start using it, you need to add it to your terminal by running `n cd-install` and then inform the loader file you want to add the script to, for example `.bashrc`, `.zshrc`, etc.
 
@@ -246,6 +248,68 @@ Here's an example of a `launch.json` file for VSCode to be used for the `newspac
     }
   ]
 }
+```
+
+## Isolated Environments (Git Worktrees)
+
+When working on multiple features in parallel (e.g. multiple Claude Code agents), you can spin up isolated WordPress environments that each use a different branch of a plugin. This uses git worktrees to check out multiple branches simultaneously, and Docker volume mount overrides to route each environment to the correct code.
+
+### Quick start
+
+```BASH
+# 1. Create a worktree for the branch you want to test
+n worktree add newspack-plugin fix/my-feature
+
+# 2. Create an environment pointing to that worktree
+n env create my-feature --worktree newspack-plugin:fix/my-feature
+
+# 3. Start it (--build installs deps and compiles assets)
+n env up my-feature --build
+
+# 4. Visit http://localhost:8081 — this site uses the worktree branch
+#    Meanwhile http://localhost still uses the main repos/ checkout
+```
+
+### Worktree commands
+
+```BASH
+n worktree add <repo> <branch>      # Create a worktree from a repo in repos/
+n worktree list [repo]              # List active worktrees (all repos or one)
+n worktree remove <repo> <branch>   # Remove a worktree
+```
+
+### Environment commands
+
+```BASH
+n env create <name> --worktree <repo>:<branch> [--worktree ...] [--port <port>]
+n env up <name> [--build]           # Start the environment (--build installs deps)
+n env down <name>                   # Stop the environment
+n env destroy <name>                # Stop and remove the environment
+n env list                          # List all environments and their status
+```
+
+You can override multiple repos in a single environment:
+
+```BASH
+n worktree add newspack-plugin fix/my-feature
+n worktree add newspack-blocks fix/my-feature
+n env create my-feature \
+  --worktree newspack-plugin:fix/my-feature \
+  --worktree newspack-blocks:fix/my-feature \
+  --port 8081  # optional — auto-assigns from 8081 if omitted
+```
+
+### How it works
+
+Each environment is a lightweight Apache/PHP container sharing the same database as the main site. The existing symlinks in `wp-content/plugins/` point to `/newspack-repos/<plugin>` inside the container. By mounting a worktree directory on top of `/newspack-repos/<plugin>`, Docker's mount specificity routes the environment to the correct branch — no symlink changes needed.
+
+If `--port` is omitted, a port is automatically assigned starting from 8081, skipping any ports already used by other environments.
+
+### Cleanup
+
+```BASH
+n env destroy my-feature
+n worktree remove newspack-plugin fix/my-feature
 ```
 
 ## Newspack Manager

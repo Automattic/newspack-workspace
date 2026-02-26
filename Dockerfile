@@ -19,7 +19,20 @@ RUN \
 	export DEBIAN_FRONTEND=noninteractive \
 	&& apt-get update \
 	&& apt-get install -y language-pack-en-base software-properties-common \
-	&& add-apt-repository ppa:ondrej/php \
+	&& retry_ppa() { \
+		local attempt=0 delay=5 max_retries=5; \
+		until add-apt-repository ppa:ondrej/php; do \
+			attempt=$((attempt + 1)); \
+			if [ $attempt -ge $max_retries ]; then \
+				echo "Failed to add PPA after $max_retries attempts" >&2; \
+				return 1; \
+			fi; \
+			echo "Attempt $attempt failed. Retrying in $delay seconds..." >&2; \
+			sleep $delay; \
+			delay=$((delay * 2)); \
+		done; \
+	} \
+	&& retry_ppa \
 	&& apt-get update \
 	&& apt-get install -y \
 		apache2 \
@@ -142,9 +155,6 @@ COPY ./config/ssmtp.conf /etc/ssmtp/ssmtp.conf
 COPY ./bin/init_apache_user.sh /usr/local/bin/init_apache_user
 RUN chmod +x /usr/local/bin/init_apache_user && /usr/local/bin/init_apache_user
 
-# Xdebug
-RUN pecl install xdebug
-
 # Copy and make cmd script executable.
 COPY ./bin/run.sh /usr/local/bin/run
 RUN chmod +x /usr/local/bin/run
@@ -154,7 +164,9 @@ RUN a2enmod ssl
 # https://stackoverflow.com/a/73303983/3772847
 RUN echo "Mutex posixsem" >> /etc/apache2/apache2.conf
 COPY ./bin/ssl.sh /usr/local/bin/ssl
-RUN chmod +x /usr/local/bin/ssl && /usr/local/bin/ssl
+RUN chmod +x /usr/local/bin/ssl
+RUN /usr/local/bin/ssl 'localhost'
+RUN /usr/local/bin/ssl 'manager.com'
 
 # Set up additional sites support
 RUN a2enmod vhost_alias

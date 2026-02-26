@@ -1,4 +1,4 @@
-<?php 
+<?php
 
 if ( ! is_readable('/tmp/secrets.json') ) {
     exit;
@@ -15,7 +15,6 @@ $stripe_data = [
 	'location_code' => "US",
 	'newsletter_list_id' => "",
 	'_locale' => "user",
-	'can_use_stripe_platform' => true,
 	'connection_error' => false,
 	'fee_multiplier' => "2.9",
 	'fee_static' => "0.3",
@@ -24,28 +23,28 @@ $stripe_data = [
 $stripe_secrets = $secrets->stripe;
 
 // Process stripe.
-if ( 
+if (
     method_exists( 'Newspack\Stripe_Connection', 'update_stripe_data' ) &&
     class_exists( 'WC_Payment_Gateways' ) &&
     ! empty( $stripe_secrets ) &&
     ! empty( $stripe_secrets->testPublishableKey ) &&
-    ! empty( $stripe_secrets->testSecretKey ) 
+    ! empty( $stripe_secrets->testSecretKey )
 ) {
     echo "Processing Stripe config\n";
     $stripe_data['testPublishableKey'] = $stripe_secrets->testPublishableKey;
     $stripe_data['usedPublishableKey'] = $stripe_secrets->testPublishableKey;
     $stripe_data['testSecretKey'] = $stripe_secrets->testSecretKey;
     $stripe_data['usedSecretKey'] = $stripe_secrets->testSecretKey;
-    
+
     // Accepted overrides
     $overrides = [ 'currency', 'location_code', 'newsletter_list_id' ];
-    
+
     foreach( $overrides as $override ) {
         if ( ! empty( $stripe_secrets->$override ) ) {
             $stripe_data[ $override ] = $stripe_secrets->$override;
         }
     }
-    
+
     Newspack\Stripe_Connection::update_stripe_data( $stripe_data );
 }
 

@@ -6,11 +6,13 @@ then
     APACHE_USER="$USE_CUSTOM_APACHE_USER"
 fi
 
-docker build --platform linux/arm64 \
-    -t newspack-dev-81 \
-    --build-arg PHP_VERSION=8.1 \
+docker build \
+    --platform linux/arm64 \
+    -t newspack-dev \
+    --build-arg PHP_VERSION=8.3 \
     --build-arg COMPOSER_VERSION=2.2.6 \
     --build-arg NODE_VERSION=20.16.0 \
     --build-arg APACHE_RUN_USER="$APACHE_USER" \
     --build-arg PHPUNIT_VERSION=9.5.10 \
+    --progress=plain \
     .

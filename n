@@ -1,7 +1,40 @@
 #!/bin/bash
 
-NABSPATH="$(dirname "${BASH_SOURCE[0]}")"
+NABSPATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 source "$(dirname "${BASH_SOURCE[0]}")/bin/repos.sh"
+
+# Use -it flags only when TTY is available
+if [ -t 0 ] && [ -t 1 ]; then
+    DOCKER_IT="-it"
+else
+    DOCKER_IT=""
+fi
+
+# Determine target container based on current directory
+# If inside a worktree, find the environment that mounts it; otherwise use newspack_dev
+get_target_container() {
+    if [[ "$PWD" == "$NABSPATH/worktrees/"* ]]; then
+        # Extract the worktree path segment (e.g., /worktrees/repo-name/branch-name)
+        worktree_rel=$(echo "$PWD" | sed "s|.*\(/worktrees/[^/]*/[^/]*\).*|\1|")
+        for f in "$NABSPATH"/docker-compose.env-*.yml; do
+            [[ -f "$f" ]] || continue
+            if grep -q "$worktree_rel" "$f" 2>/dev/null; then
+                env_name=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
+                echo "newspack_env_${env_name}" | tr '-' '_'
+                return
+            fi
+        done
+    fi
+    echo "newspack_dev"
+}
+
+# Cache the target container for this invocation
+TARGET_CONTAINER=$(get_target_container)
+
+# Show feedback when targeting an isolated environment
+if [[ "$TARGET_CONTAINER" != "newspack_dev" ]]; then
+    echo "[n] Targeting container: $TARGET_CONTAINER" >&2
+fi
 
 # Infer the current working project from the current folder;
 projects=("${newspack_plugins[@]}" "newspack-theme" "newspack-block-theme") # create a new list with the appended value
@@ -24,12 +57,18 @@ if [[ "$PWD" == *"additional-sites-html"* ]]; then
     path_param="--path=$current_site_path"
 fi
 
+if [[ "$PWD" == *"manager-html"* ]]; then
+    current_site_path="/var/www/manager-html"
+    current_site_relative_path="manager-html"
+    path_param="--path=$current_site_path"
+fi
+
 cd "$(dirname "$0")"
 source .env
 
 if [ $# -eq 0 ]; then
-	echo "No arguments provided"
-	exit 1
+    echo "No arguments provided. Run 'n help' to see available commands." >&2
+    exit 1
 fi
 
 if [ ! -z "$USE_CUSTOM_APACHE_USER" ]
@@ -48,16 +87,13 @@ require_target_folder() {
 
 start() {
     file="docker-compose.yml"
-        if [ "$2" == "8.0" ]; then
-            file="docker-compose-80.yml"
+        if [ "$1" == "8.2" ]; then
+            file="docker-compose-82.yml"
         fi
-        if [ "$2" == "7.4" ]; then
-            file="docker-compose-74.yml"
-        fi
-        docker-compose -f $file up -d
+        docker compose -f $file up -d
 }
 stop() {
-    docker-compose down
+    docker compose down
 }
 
 switch_all_repos_to_branch() {
@@ -69,40 +105,61 @@ switch_all_repos_to_branch() {
             git pull
             target=$(basename $dir)
             echo $target
-            docker exec -it $USER_COMMAND newspack_dev sh -c "/var/scripts/build-repos.sh $target"
+            docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/build-repos.sh $target"
         fi
         cd ..
     done
 }
 
+# NOTE: when adding a new command, update the 'help' case below.
 case $1 in
     start)
-        start
+        start "${@:2}"
         ;;
     stop)
         stop
         ;;
     restart)
         stop
-        start
+        start "${@:2}"
         ;;
     sh)
-        docker exec -it $USER_COMMAND newspack_dev /bin/bash
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER /bin/bash
         ;;
     rsh)
-        docker exec -it newspack_dev /bin/bash
+        docker exec $DOCKER_IT $TARGET_CONTAINER /bin/bash
         ;;
     cd-install)
         echo "This will install the ncd command in your system. Please inform the file you want to add this to (e.g. .bashrc)"
         read -e -p "> $HOME/" file
         target="$HOME/$file"
-        snippet="source $NABSPATH/bin/ncd.sh"
-        if grep -Fxq "$snippet" $target
-        then
-            echo "ncd is already installed on $target"
+        # Resolve symlinks so sed -i works on the real file
+        if [ -L "$target" ]; then
+            target="$(readlink -f "$target")"
+        fi
+        snippet="source \"$NABSPATH/bin/ncd.sh\""
+        if grep -q "bin/ncd.sh" "$target" 2>/dev/null; then
+            # Update existing installation if the path has changed (e.g. repo moved or renamed)
+            current_root=$(grep "NEWSPACK_DOCKER_ROOT=" "$target" | head -1 | cut -d= -f2- | tr -d '"')
+            if [ "$current_root" = "$NABSPATH" ]; then
+                echo "ncd is already installed on $target"
+            else
+                root_sub="s|NEWSPACK_DOCKER_ROOT=.*|NEWSPACK_DOCKER_ROOT=\"$NABSPATH\"|"
+                source_sub="s|source .*/bin/ncd\.sh\"*|source \"$NABSPATH/bin/ncd.sh\"|"
+                # Try BSD sed first, fall back to GNU sed
+                { sed -i '' "$root_sub" "$target" 2>/dev/null || sed -i "$root_sub" "$target"; } && \
+                { sed -i '' "$source_sub" "$target" 2>/dev/null || sed -i "$source_sub" "$target"; }
+                if [ $? -eq 0 ]; then
+                    echo "ncd path updated in $target"
+                    echo
+                    echo "Restart your terminal or run 'source $target' to apply the changes"
+                else
+                    echo "Error: failed to update $target."
+                fi
+            fi
         else
-            echo "NEWSPACK_DOCKER_ROOT=$NABSPATH" >> $target
-            echo $snippet >> $target
+            echo "NEWSPACK_DOCKER_ROOT=\"$NABSPATH\"" >> "$target"
+            echo "$snippet" >> "$target"
             echo "ncd installed!"
             echo
             echo "Restart your terminal or run 'source $target' to start using it"
@@ -112,103 +169,105 @@ case $1 in
         fi
         ;;
     install)
-        docker exec -it $USER_COMMAND newspack_dev sh -c "/var/scripts/install.sh $current_site_path"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/install.sh $current_site_path"
         ;;
     uninstall)
-        docker exec -it $USER_COMMAND newspack_dev sh -c "/var/scripts/uninstall.sh $current_site_path"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/uninstall.sh $current_site_path"
         ;;
     reset-site)
-        docker exec -it $USER_COMMAND newspack_dev sh -c "/var/scripts/reset-site.sh $current_site_path"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/reset-site.sh $current_site_path"
         ;;
     tail)
         tail -f $current_site_relative_path/wp-content/debug.log
         ;;
     wp)
         cmd="wp --allow-root $path_param ${@:2}"
-        docker exec -it $USER_COMMAND newspack_dev $cmd
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER $cmd
         ;;
     db)
-        docker exec -it $USER_COMMAND newspack_dev sh -c "wp db cli --allow-root $path_param"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "wp db cli --allow-root $path_param"
         ;;
     shell)
-        docker exec -it $USER_COMMAND newspack_dev sh -c "wp shell --allow-root $path_param"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "wp shell --allow-root $path_param"
         ;;
     install-manager)
-        docker exec -it $USER_COMMAND newspack_dev sh -c "/var/scripts/install-manager.sh"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/install-manager.sh"
         ;;
     setup-manager)
-        docker exec -it $USER_COMMAND newspack_dev sh -c "/var/scripts/init-wp-manager.sh"
-        docker exec -it $USER_COMMAND newspack_dev sh -c "/var/scripts/setup-manager.sh"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/init-wp-manager.sh"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/setup-manager.sh"
         ;;
     sites-add)
-        docker exec -it newspack_dev sh -c "/var/scripts/sites-add.sh $2"
-        read -p "Do you want to add this domain to your local hosts file? (Y/n): " choice
-        choice=${choice,,}
-        if [[ "$choice" != "n" ]]; then
-            echo "127.0.0.1 $2.local" | sudo tee -a /etc/hosts
+        docker exec $DOCKER_IT $TARGET_CONTAINER sh -c "/var/scripts/sites-add.sh $2"
+        if ! grep -q "\s$2.local" /etc/hosts; then
+            read -p "Do you want to add this domain to your local hosts file? (Y/n): " choice
+            choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
+            if [[ "$choice" != "n" ]]; then
+              echo "127.0.0.1 $2.local" | sudo tee -a /etc/hosts
+            fi
         fi
 
         ;;
     sites-list)
-        docker exec -it newspack_dev sh -c "/var/scripts/sites-list.sh ${@:2}"
+        docker exec $DOCKER_IT $TARGET_CONTAINER sh -c "/var/scripts/sites-list.sh ${@:2}"
         ;;
     sites-drop)
-        docker exec -it newspack_dev sh -c "/var/scripts/sites-drop.sh ${@:2}"
+        docker exec $DOCKER_IT $TARGET_CONTAINER sh -c "/var/scripts/sites-drop.sh ${@:2}"
         ;;
     build)
         if [[ -n "$2" ]]; then
             target_folder=$2
         fi
-        docker exec -it $USER_COMMAND newspack_dev sh -c "/var/scripts/build-repos.sh $target_folder"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/build-repos.sh $target_folder"
         ;;
     ci-build)
         if [[ -n "$2" ]]; then
             target_folder=$2
         fi
-        docker exec -it $USER_COMMAND newspack_dev sh -c "/var/scripts/build-repos.sh $target_folder ci"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/build-repos.sh $target_folder ci"
         ;;
     watch)
         require_target_folder
-        docker exec -it $USER_COMMAND newspack_dev sh -c "/var/scripts/watch-repo.sh $target_folder"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/watch-repo.sh $target_folder"
         ;;
     test-php)
         require_target_folder
         command="/var/scripts/test-php.sh $target_folder ${@:2}"
-        docker exec -it $USER_COMMAND newspack_dev sh -c "$command"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "$command"
         ;;
     test-js)
         require_target_folder
-        docker exec -it $USER_COMMAND newspack_dev sh -c "/var/scripts/test-js.sh $target_folder"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/test-js.sh $target_folder"
         ;;
     composer)
         require_target_folder
         command="/var/scripts/composer.sh $target_folder ${@:2}"
-        docker exec -it $USER_COMMAND newspack_dev sh -c "$command"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "$command"
         ;;
     npm)
         require_target_folder
         command="/var/scripts/npm.sh $target_folder ${@:2}"
-        docker exec -it $USER_COMMAND newspack_dev sh -c "$command"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "$command"
         ;;
     secrets)
-        docker exec -it $USER_COMMAND newspack_dev sh -c "wp eval-file /var/scripts/generate-secrets.php --allow-root"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "wp eval-file /var/scripts/generate-secrets.php --allow-root"
         ;;
     secrets-import)
-        docker exec -it $USER_COMMAND newspack_dev sh -c "/var/scripts/import-secrets.sh"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/import-secrets.sh"
         ;;
     snapshot)
-        docker exec -it $USER_COMMAND newspack_dev sh -c "/var/scripts/snapshot-create.sh $2"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/snapshot-create.sh $2"
         ;;
     snapshot-load)
-        docker exec -it $USER_COMMAND newspack_dev sh -c "/var/scripts/snapshot-load.sh $2"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/snapshot-load.sh $2"
         ;;
     jncp)
         cmd="/var/scripts/jn-cp.sh ${@:2}"
-        docker exec -it $USER_COMMAND newspack_dev $cmd
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER $cmd
         ;;
     jninit)
         cmd="/var/scripts/jn-init.sh ${@:2}"
-        docker exec -it $USER_COMMAND newspack_dev $cmd
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER $cmd
         ;;
     pull)
         for dir in repos/*/; do
@@ -233,9 +292,71 @@ case $1 in
         switch_all_repos_to_branch release
         ;;
     setup-newspack-network)
-        docker exec -it $USER_COMMAND newspack_dev sh -c "/var/scripts/setup-newspack-network.sh"
+        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/setup-newspack-network.sh"
+        ;;
+    worktree)
+        "$NABSPATH/bin/worktree.sh" "${@:2}"
+        ;;
+    env)
+        "$NABSPATH/bin/env.sh" "${@:2}"
+        ;;
+    help)
+        echo "Available commands:"
+        echo ""
+        echo "Container Management:"
+        echo "  start [version]          Start the Docker containers. Optionally specify a PHP version (e.g. 8.2)."
+        echo "  stop                     Stop the Docker containers."
+        echo "  restart [version]        Restart the Docker containers. Optionally specify a PHP version (e.g. 8.2)."
+        echo "  sh                       Open a bash shell inside the container as the Apache user."
+        echo "  rsh                      Open a bash shell inside the container as root."
+        echo ""
+        echo "WordPress:"
+        echo "  install                  Run the installation script for the current site."
+        echo "  uninstall                Run the uninstallation script for the current site."
+        echo "  reset-site               Reset the current site to a clean state."
+        echo "  wp [args]                Run a WP-CLI command for the current site. Example: n wp plugin list"
+        echo "  db                       Open a WP-CLI database shell for the current site."
+        echo "  shell                    Open a WP-CLI shell for the current site."
+        echo "  tail                     Tail the debug.log file of the current site."
+        echo "  secrets                  Export current site secrets (API keys, options, constants) as JSON."
+        echo "  secrets-import           Import secrets from secrets.json into the current site."
+        echo "  snapshot [name]          Create a snapshot of the current site with the given name."
+        echo "  snapshot-load [name]     Load a snapshot with the given name into the current site."
+        echo ""
+        echo "Building & Testing:"
+        echo "  build [folder]           Build the specified folder (plugin/theme) or all for every repo."
+        echo "  ci-build [folder]        Build for CI environment with specific optimizations."
+        echo "  watch                    Watch for changes in the current repo and rebuild automatically."
+        echo "  test-php [args]          Run PHP tests for the current repo with optional arguments."
+        echo "  test-js                  Run JavaScript tests for the current repo."
+        echo "  composer [args]          Run a composer command for the current repo. Example: n composer update"
+        echo "  npm [args]               Run an npm command for the current repo. Example: n npm install"
+        echo ""
+        echo "Multi-site:"
+        echo "  sites-add [name]         Add a new additional site with the given name."
+        echo "  sites-list               List all additional sites."
+        echo "  sites-drop [name]        Remove an additional site with the given name."
+        echo "  install-manager          Install WordPress on the Newspack Manager site."
+        echo "  setup-manager            Set up WordPress Manager plugin on the manager site."
+        echo "  setup-newspack-network   Set up Newspack Network Docker environment."
+        echo ""
+        echo "Repository Management:"
+        echo "  pull                     Pull the latest changes for all repositories."
+        echo "  branch [name]            Switch all repositories to the specified branch."
+        echo "  trunk                    Switch all repositories to the trunk branch."
+        echo "  alpha                    Switch all repositories to the alpha branch."
+        echo "  release                  Switch all repositories to the release branch."
+        echo ""
+        echo "Isolated Environments:"
+        echo "  worktree [args]          Manage isolated Git worktrees for repositories (add, list, remove)."
+        echo "  env [args]               Manage isolated development environments (create, up, down, destroy, list)."
+        echo ""
+        echo "Other:"
+        echo "  cd-install               Install the ncd command in your system for easy navigation to repos and sites."
+        echo "  jncp [args]              Copy selected plugins to a Jurassic Ninja site via SSH."
+        echo "  jninit [args]            Initialize a Jurassic Ninja site with core Newspack and WooCommerce plugins and runs setup."
         ;;
     *)
-        echo Unknown command
+        echo "Unknown command: $1. Run 'n help' to see available commands."
         ;;
 esac

@@ -17,11 +17,13 @@ if [ ! -d "${WP_PATH}" ]; then
 	exit 1
 fi
 
-
-for dir in "${newspack_plugins[@]}"
+# Link all directories in /newspack-repos
+readarray -t NEWSPACK_REPOS_DIRS < <(ls -d $CODE_PATH/*/)
+for dir in "${NEWSPACK_REPOS_DIRS[@]}"
 do :
+	dir=$(basename "$dir")
 	link="$WP_PATH/plugins/$dir"
-	if [ -L "${link}" ]; then
+	if [ -e "${link}" ]; then
 		echo "$dir already symlinked"
 	else
 		echo "Symlinking $dir"

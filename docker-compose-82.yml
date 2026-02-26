@@ -1,4 +1,4 @@
-version: '3.3'
+name: newspack-docker
 
 volumes:
   ## Kludge for not having the ./docker directory bound recursively
@@ -36,9 +36,8 @@ services:
     platform: linux/arm64
     depends_on:
       - db
-    image: newspack-dev-74:latest
+    image: newspack-dev-82:latest
     volumes:
-      # - ./wordpress-develop:/tmp/wordpress-develop
       - ./logs/newspack-dev/apache2/:/var/log/apache2
       - ./logs/newspack-dev/php:/var/log/php
       - ./bin:/var/scripts

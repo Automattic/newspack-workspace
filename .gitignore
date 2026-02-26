@@ -13,3 +13,5 @@ bin/manager.public.key
 bin/newspack-network/nodes-keys.json
 bin/newspack-network/service-accounts.secret
 rootCA.pem
+worktrees
+docker-compose.env-*.yml

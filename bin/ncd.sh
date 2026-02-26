@@ -1,6 +1,6 @@
 ncd() {
 
-	# If no argument is provided, go to the root of the newspack-docker folder:
+	# If no argument is provided, go to the root of the newspack-workspace folder:
 	if [ -z "$1" ]
 	then
 		cd $NEWSPACK_DOCKER_ROOT

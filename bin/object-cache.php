@@ -121,11 +121,16 @@ class WP_Object_Cache {
 
 	var $no_mc_groups = array();
 
-	var $cache       = array();
-	var $mc          = array();
-	var $default_mcs = array();
-	var $stats       = array();
-	var $group_ops   = array();
+	var $cache         = array();
+	var $mc            = array();
+	var $default_mcs   = array();
+	var $stats         = array();
+	var $group_ops     = array();
+	var $cache_hits    = 0;
+	var $cache_misses  = 0;
+	var $global_prefix = '';
+	var $blog_prefix   = '';
+	var $key_salt      = '';
 
 	var $flush_group         = 'WP_Object_Cache';
 	var $global_flush_group  = 'WP_Object_Cache_global';
@@ -142,6 +147,7 @@ class WP_Object_Cache {
 
 	var $connection_errors = array();
 
+	var $time_start = 0;
 	var $time_total = 0;
 	var $size_total = 0;
 	var $slow_op_microseconds = 0.005; // 5 ms
@@ -186,7 +192,7 @@ class WP_Object_Cache {
 
 		$this->group_ops_stats( 'add', $key, $group, $size, $elapsed, $comment );
 
-		if ( false !== $result ) {
+		if ( false !== $result || empty( $this->cache[$key][ 'found' ] ) ) {
 			$this->cache[ $key ] = [
 				'value' => $data,
 				'found' => true,
