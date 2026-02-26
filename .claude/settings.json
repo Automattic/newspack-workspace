@@ -1,0 +1,38 @@
+{
+  "extraKnownMarketplaces": {
+    "newspack-devkit": {
+      "source": {
+        "source": "github",
+        "repo": "Automattic/newspack-devkit"
+      }
+    },
+    "cc-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "kenryu42/cc-marketplace"
+      }
+    },
+    "skill-codex": {
+      "source": {
+        "source": "github",
+        "repo": "skills-directory/skill-codex"
+      }
+    },
+    "chrome-devtools-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "ChromeDevTools/chrome-devtools-mcp"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "newspack@newspack-devkit": true,
+    "superpowers@claude-plugins-official": true,
+    "safety-net@cc-marketplace": true,
+    "skill-codex@skill-codex": true,
+    "chrome-devtools-mcp@chrome-devtools-plugins": true,
+    "context7@claude-plugins-official": true,
+    "linear@claude-plugins-official": true,
+    "figma@claude-plugins-official": true
+  }
+}

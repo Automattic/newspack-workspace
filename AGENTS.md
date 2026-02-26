@@ -210,72 +210,12 @@ Configured on port 9003 with IDE key `DOCKERDEBUG`. Path mapping: `/newspack-rep
 
 ## Isolated Environments for Parallel Development
 
-When working on a feature branch that needs testing in WordPress without disrupting the main development environment (e.g. when multiple agents work in parallel), use the worktree + env system.
+Use the `newspack` plugin skills to manage worktrees and isolated Docker environments:
+- `newspack:worktree` — Create or remove git worktrees for branch isolation
+- `newspack:env-create` — Create worktrees + isolated Docker environment on a separate port
+- `newspack:env-destroy` — Destroy environment and clean up worktrees
 
-```bash
-# 1. Create a worktree for your branch
-n worktree add newspack-plugin fix/my-feature
-
-# 2. Create an isolated environment on a separate port
-n env create my-feature --worktree newspack-plugin:fix/my-feature
-
-# 3. Start it and build deps (worktrees are fresh checkouts with no vendor/ or dist/)
-n env up my-feature --build
-
-# WordPress is now at localhost:8081 using the worktree branch.
-# The main site at localhost:80 is unaffected.
-```
-
-Key details:
-- The `--build` flag on `n env up` runs `composer install` and `npm ci && npm run build` inside the container for all worktree repos. Without it, the plugin will fail to load (missing `vendor/autoload.php`).
-- Multiple `--worktree` flags can be passed to `n env create` if a feature spans multiple repos.
-- The environment shares the same database as the main site. Only the plugin/theme code differs.
-- **Auto-detection**: When you `cd` into a worktree directory and run `n build`, `n wp`, etc., the script automatically detects and targets the correct container.
-- **Worktree paths preserve branch slashes**: Branch `feat/my-feature` creates `worktrees/newspack-plugin/feat/my-feature` (not `feat-my-feature`).
-- **Run lint/build in the container**, not locally in the worktree, since the worktree has no `node_modules`.
-- **Never destroy environments or remove worktrees without explicit user permission.** The user may have other work depending on them. When done with your task, inform the user the environment is still running and provide the cleanup commands:
-  ```bash
-  n env destroy my-feature
-  n worktree remove newspack-plugin fix/my-feature
-  ```
-
-### Testing PRs Across Multiple Repos
-
-When a feature spans multiple repos (e.g. a plugin PR + a theme PR), create worktrees for each and pass multiple `--worktree` flags:
-
-```bash
-# Fetch and create worktrees for each repo
-git -C repos/newspack-plugin fetch origin feat/plugin-branch
-n worktree add newspack-plugin feat/plugin-branch
-
-git -C repos/newspack-block-theme fetch origin feat/theme-branch
-n worktree add newspack-block-theme feat/theme-branch
-
-# Create environment with both
-n env create my-feature \
-  --worktree newspack-plugin:feat/plugin-branch \
-  --worktree newspack-block-theme:feat/theme-branch
-
-n env up my-feature --build
-```
-
-To add a repo to an existing environment, you must destroy and recreate it with all worktrees, then `n env up --build`.
-
-After startup, verify changes are present in the container:
-```bash
-# Plugin repos mount at /newspack-repos/<repo>
-docker exec newspack_env_my_feature sh -c "grep 'unique-string' /newspack-repos/newspack-plugin/path/to/file.php"
-
-# Themes mount at /var/www/html/wp-content/themes/<theme>
-docker exec newspack_env_my_feature sh -c "grep 'unique-string' /var/www/html/wp-content/themes/newspack-block-theme/path/to/file.php"
-```
-
-Cleanup requires removing all worktrees:
-```bash
-n env destroy my-feature
-n worktree remove newspack-plugin feat/plugin-branch
-n worktree remove newspack-block-theme feat/theme-branch
-```
+If the `newspack` plugin is not available, use the `n worktree` and `n env` commands directly. Run `n worktree --help` and `n env --help` for usage.
 
 ## Cross-Repository Workflow
 
@@ -376,15 +316,25 @@ newspack-plugin provides configuration managers for other plugins:
 - **Commit messages**: Single line, max 72 characters. Conventional commit format: `<type>(<scope>): <subject>`. No body, no `Co-Authored-By`, no extra attributes.
 - **Never push automatically**. Always ask for confirmation before pushing to remote.
 
-## Pull Request Descriptions
+## Claude Code Plugin
 
-When asked to create a PR description, follow the repo template (`.github/PULL_REQUEST_TEMPLATE.md`):
+The `newspack` plugin provides Newspack-specific skills for PR workflows and development tasks. See the [newspack-devkit README](https://github.com/Automattic/newspack-devkit) for the full list of available skills.
 
-1. **Changes proposed**: Write a concise description focused on **functionality and user impact**, not implementation details.
-2. **How to test**: Provide thorough test steps covering all business cases. Derive these by diffing the branch against `trunk` (committed changes only, ignoring the working tree). Consider edge cases, error states, and different user roles/configurations.
-3. **Checklist items**: Fill in as applicable.
-4. **"Closes" line**: Reference the Linear issue ID directly (e.g., `Closes NPPD-1234.`). Do not use a full URL.
-5. **No template comments**: Strip all HTML comments (`<!-- ... -->`) from the output.
+If the plugin is not installed, run `n setup-agents` to install all recommended plugins, or add it manually:
+
+```
+/plugin marketplace add Automattic/newspack-devkit
+/plugin install newspack@newspack-devkit
+```
+
+## Pull Requests
+
+Use the `newspack` plugin skills for the full PR lifecycle:
+1. `newspack:pr-create` — Create draft PR and request Copilot review
+2. `newspack:pr-feedback` — Address review comments and resolve threads
+3. `newspack:pr-ready` — Mark ready for human review and apply label
+4. `newspack:pr-merge` — Merge after approval and checks pass
+5. `newspack:pr-test` — Test a PR in an isolated environment with automated checks and code review
 
 ## External Tools
 
