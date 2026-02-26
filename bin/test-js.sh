@@ -20,9 +20,8 @@ case $WHAT_TO_WATCH in
         npm run test
         ;;
     block-theme)
-        cd "$CODE_PATH/newspack-block-theme"
-        npm ci
-        npm run test
+        echo "Block theme tests are not supported yet"
+        exit 1
         ;;
     *)
         if [ ! -d "${CODE_PATH}/${WHAT_TO_WATCH}" ]; then
