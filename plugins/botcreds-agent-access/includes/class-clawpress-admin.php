@@ -139,7 +139,8 @@ class ClawPress_Admin {
 		<div id="clawpress" class="clawpress-profile-section">
 			<h2 class="clawpress-title">
 				<span class="clawpress-logo">&#129438;</span>
-				<?php esc_html_e( 'ClawPress — OpenClaw Connection', 'clawpress' ); ?>
+				<?php esc_html_e( 'ClawPress by WordPress.com', 'clawpress' ); ?>
+				<img src="https://s.w.org/style/images/about/WordPress-logotype-wmark.png" alt="WordPress" class="clawpress-wp-logo" />
 			</h2>
 			<p class="description">
 				<?php esc_html_e( 'Connect OpenClaw to your WordPress site in one click.', 'clawpress' ); ?>
