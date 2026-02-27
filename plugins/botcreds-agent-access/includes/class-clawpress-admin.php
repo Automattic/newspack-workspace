@@ -201,6 +201,7 @@ class ClawPress_Admin {
 		$last_used    = ! empty( $existing['last_used'] )
 			? date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $existing['last_used'] )
 			: __( 'Never', 'clawpress' );
+		$stats        = ClawPress_Tracker::get_stats( get_current_user_id() );
 		?>
 		<div class="clawpress-notice-row">
 			<div class="clawpress-notice-box clawpress-notice-box--green">
@@ -213,10 +214,6 @@ class ClawPress_Admin {
 
 		<table class="clawpress-status-table">
 			<tr>
-				<th><?php esc_html_e( 'Status', 'clawpress' ); ?></th>
-				<td><span class="clawpress-badge clawpress-badge--active"><?php esc_html_e( 'Active', 'clawpress' ); ?></span></td>
-			</tr>
-			<tr>
 				<th><?php esc_html_e( 'Created', 'clawpress' ); ?></th>
 				<td><?php echo esc_html( $created_date ); ?></td>
 			</tr>
@@ -224,7 +221,57 @@ class ClawPress_Admin {
 				<th><?php esc_html_e( 'Last Used', 'clawpress' ); ?></th>
 				<td><?php echo esc_html( $last_used ); ?></td>
 			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Posts', 'clawpress' ); ?></th>
+				<td>
+					<?php
+					printf(
+						/* translators: %d: number of posts */
+						esc_html( _n( '%d post created via OpenClaw', '%d posts created via OpenClaw', $stats['post_count'], 'clawpress' ) ),
+						$stats['post_count']
+					);
+					?>
+				</td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Media', 'clawpress' ); ?></th>
+				<td>
+					<?php
+					printf(
+						/* translators: %d: number of files */
+						esc_html( _n( '%d file uploaded via OpenClaw', '%d files uploaded via OpenClaw', $stats['media_count'], 'clawpress' ) ),
+						$stats['media_count']
+					);
+					?>
+				</td>
+			</tr>
 		</table>
+
+		<?php if ( ! empty( $stats['recent_posts'] ) ) : ?>
+			<h3><?php esc_html_e( 'Recent OpenClaw Posts', 'clawpress' ); ?></h3>
+			<table class="widefat striped clawpress-recent-table">
+				<thead>
+					<tr>
+						<th><?php esc_html_e( 'Title', 'clawpress' ); ?></th>
+						<th><?php esc_html_e( 'Date', 'clawpress' ); ?></th>
+						<th><?php esc_html_e( 'Status', 'clawpress' ); ?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $stats['recent_posts'] as $post ) : ?>
+						<tr>
+							<td>
+								<a href="<?php echo esc_url( get_edit_post_link( $post->ID ) ); ?>">
+									<?php echo esc_html( $post->post_title ?: __( '(no title)', 'clawpress' ) ); ?>
+								</a>
+							</td>
+							<td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $post->post_date ) ) ); ?></td>
+							<td><span class="clawpress-badge clawpress-badge--<?php echo esc_attr( $post->post_status ); ?>"><?php echo esc_html( ucfirst( $post->post_status ) ); ?></span></td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+		<?php endif; ?>
 
 		<div class="clawpress-revoke-section">
 			<button type="button" class="button clawpress-revoke-btn" id="clawpress-revoke-btn">
