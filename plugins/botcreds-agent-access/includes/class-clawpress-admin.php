@@ -1,6 +1,6 @@
 <?php
 /**
- * ClawPress Admin page rendering and AJAX handlers.
+ * ClawPress Admin — Profile page integration and AJAX handlers.
  *
  * @package ClawPress
  */
@@ -27,32 +27,20 @@ class ClawPress_Admin {
 	 * Register hooks.
 	 */
 	public function init() {
-		add_action( 'admin_menu', array( $this, 'add_menu_page' ) );
+		add_action( 'show_user_profile', array( $this, 'render_profile_section' ) );
+		add_action( 'edit_user_profile', array( $this, 'render_profile_section' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'admin_post_clawpress_create', array( $this, 'handle_create' ) );
 		add_action( 'wp_ajax_clawpress_revoke', array( $this, 'handle_revoke_ajax' ) );
 	}
 
 	/**
-	 * Add the settings page under Settings menu.
-	 */
-	public function add_menu_page() {
-		add_options_page(
-			__( 'ClawPress', 'clawpress' ),
-			__( 'ClawPress', 'clawpress' ),
-			'manage_options',
-			'clawpress',
-			array( $this, 'render_page' )
-		);
-	}
-
-	/**
-	 * Enqueue admin CSS and JS on our page only.
+	 * Enqueue admin CSS and JS on profile pages only.
 	 *
 	 * @param string $hook_suffix The current admin page hook suffix.
 	 */
 	public function enqueue_assets( $hook_suffix ) {
-		if ( 'settings_page_clawpress' !== $hook_suffix ) {
+		if ( ! in_array( $hook_suffix, array( 'profile.php', 'user-edit.php' ), true ) ) {
 			return;
 		}
 
@@ -85,7 +73,7 @@ class ClawPress_Admin {
 	 * Handle the Create Application Password form submission.
 	 */
 	public function handle_create() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( 'exist' ) ) {
 			wp_die( esc_html__( 'You do not have permission to do this.', 'clawpress' ) );
 		}
 
@@ -95,7 +83,7 @@ class ClawPress_Admin {
 
 		if ( is_wp_error( $result ) ) {
 			set_transient( 'clawpress_error_' . get_current_user_id(), $result->get_error_message(), 60 );
-			wp_safe_redirect( admin_url( 'options-general.php?page=clawpress' ) );
+			wp_safe_redirect( admin_url( 'profile.php#clawpress' ) );
 			exit;
 		}
 
@@ -106,7 +94,7 @@ class ClawPress_Admin {
 			300
 		);
 
-		wp_safe_redirect( admin_url( 'options-general.php?page=clawpress&created=1' ) );
+		wp_safe_redirect( admin_url( 'profile.php?clawpress_created=1#clawpress' ) );
 		exit;
 	}
 
@@ -114,7 +102,7 @@ class ClawPress_Admin {
 	 * Handle the AJAX revoke request.
 	 */
 	public function handle_revoke_ajax() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( 'exist' ) ) {
 			wp_send_json_error( __( 'You do not have permission to do this.', 'clawpress' ) );
 		}
 
@@ -130,10 +118,13 @@ class ClawPress_Admin {
 	}
 
 	/**
-	 * Render the admin page.
+	 * Render the ClawPress section on the profile page.
+	 *
+	 * @param WP_User $user The user being edited.
 	 */
-	public function render_page() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+	public function render_profile_section( $user ) {
+		// Only show on own profile
+		if ( get_current_user_id() !== $user->ID ) {
 			return;
 		}
 
@@ -141,7 +132,7 @@ class ClawPress_Admin {
 		$user_id        = get_current_user_id();
 		$error_message  = get_transient( 'clawpress_error_' . $user_id );
 		$created_info   = get_transient( 'clawpress_created_' . $user_id );
-		$just_created   = isset( $_GET['created'] ) && '1' === $_GET['created'] && $created_info;
+		$just_created   = isset( $_GET['clawpress_created'] ) && '1' === $_GET['clawpress_created'] && $created_info;
 
 		if ( $error_message ) {
 			delete_transient( 'clawpress_error_' . $user_id );
@@ -151,17 +142,17 @@ class ClawPress_Admin {
 		}
 
 		?>
-		<div class="wrap clawpress-wrap">
-			<h1 class="clawpress-title">
+		<div id="clawpress" class="clawpress-profile-section">
+			<h2 class="clawpress-title">
 				<span class="clawpress-logo">&#129438;</span>
-				<?php esc_html_e( 'ClawPress', 'clawpress' ); ?>
-			</h1>
-			<p class="clawpress-subtitle">
+				<?php esc_html_e( 'ClawPress — OpenClaw Connection', 'clawpress' ); ?>
+			</h2>
+			<p class="description">
 				<?php esc_html_e( 'Connect OpenClaw to your WordPress site in one click.', 'clawpress' ); ?>
 			</p>
 
 			<?php if ( $error_message ) : ?>
-				<div class="notice notice-error clawpress-notice">
+				<div class="notice notice-error inline clawpress-notice">
 					<p><?php echo esc_html( $error_message ); ?></p>
 				</div>
 			<?php endif; ?>
@@ -187,32 +178,14 @@ class ClawPress_Admin {
 		?>
 		<div class="clawpress-card clawpress-card--success">
 			<div class="clawpress-card__icon">&#10003;</div>
-			<h2><?php esc_html_e( 'Connection Created!', 'clawpress' ); ?></h2>
+			<h3><?php esc_html_e( 'Connection Created!', 'clawpress' ); ?></h3>
 
 			<div class="clawpress-warning-box">
 				<strong><?php esc_html_e( 'Important:', 'clawpress' ); ?></strong>
 				<?php esc_html_e( 'This password will only be shown once. Copy it now and paste it into your OpenClaw config.', 'clawpress' ); ?>
 			</div>
 
-			<div class="clawpress-credentials">
-				<table class="clawpress-credentials__table">
-					<tr>
-						<th><?php esc_html_e( 'Site URL', 'clawpress' ); ?></th>
-						<td><code><?php echo esc_html( $info['site_url'] ); ?></code></td>
-					</tr>
-					<tr>
-						<th><?php esc_html_e( 'Username', 'clawpress' ); ?></th>
-						<td><code><?php echo esc_html( $info['username'] ); ?></code></td>
-					</tr>
-					<tr>
-						<th><?php esc_html_e( 'Password', 'clawpress' ); ?></th>
-						<td><code class="clawpress-password"><?php echo esc_html( $info['password'] ); ?></code></td>
-					</tr>
-				</table>
-			</div>
-
 			<div class="clawpress-json-block">
-				<label><?php esc_html_e( 'Or copy as JSON for your OpenClaw config:', 'clawpress' ); ?></label>
 				<pre class="clawpress-json" id="clawpress-json"><?php echo esc_html( $json ); ?></pre>
 				<button type="button" class="button clawpress-copy-btn" data-target="clawpress-json">
 					<?php esc_html_e( 'Copy', 'clawpress' ); ?>
@@ -239,9 +212,9 @@ class ClawPress_Admin {
 		?>
 		<div class="clawpress-card clawpress-card--connected">
 			<div class="clawpress-card__icon clawpress-card__icon--connected">&#9679;</div>
-			<h2><?php esc_html_e( 'Connected', 'clawpress' ); ?></h2>
+			<h3><?php esc_html_e( 'Connected', 'clawpress' ); ?></h3>
 			<p class="clawpress-card__desc">
-				<?php esc_html_e( 'An OpenClaw Application Password is active for this site.', 'clawpress' ); ?>
+				<?php esc_html_e( 'An OpenClaw Application Password is active for your account.', 'clawpress' ); ?>
 			</p>
 
 			<table class="clawpress-status-table">
@@ -263,9 +236,9 @@ class ClawPress_Admin {
 				<button type="button" class="button clawpress-revoke-btn" id="clawpress-revoke-btn">
 					<?php esc_html_e( 'Revoke Connection', 'clawpress' ); ?>
 				</button>
-				<p class="clawpress-revoke-hint">
-					<?php esc_html_e( 'This will disconnect OpenClaw from your site. You can create a new connection afterward.', 'clawpress' ); ?>
-				</p>
+				<span class="clawpress-revoke-hint">
+					<?php esc_html_e( 'This will disconnect OpenClaw from your account.', 'clawpress' ); ?>
+				</span>
 			</div>
 		</div>
 		<?php
@@ -278,7 +251,7 @@ class ClawPress_Admin {
 		?>
 		<div class="clawpress-card clawpress-card--disconnected">
 			<div class="clawpress-card__icon clawpress-card__icon--disconnected">&#9675;</div>
-			<h2><?php esc_html_e( 'Not Connected', 'clawpress' ); ?></h2>
+			<h3><?php esc_html_e( 'Not Connected', 'clawpress' ); ?></h3>
 			<p class="clawpress-card__desc">
 				<?php esc_html_e( 'Create a secure connection to let OpenClaw manage your WordPress content.', 'clawpress' ); ?>
 			</p>

@@ -1,59 +1,61 @@
 /**
- * ClawPress Admin Styles
+ * ClawPress Admin Styles — Profile Page
  */
 
-.clawpress-wrap {
-	max-width: 640px;
+/* Section wrapper */
+.clawpress-profile-section {
+	margin-top: 2em;
+	padding-top: 1em;
+	border-top: 1px solid #c3c4c7;
 }
 
 .clawpress-title {
 	display: flex;
 	align-items: center;
-	gap: 8px;
-	font-size: 28px;
-	margin-bottom: 4px;
+	gap: 0.4em;
+	font-size: 1.3em;
 }
 
 .clawpress-logo {
-	font-size: 32px;
-	line-height: 1;
+	font-size: 1.2em;
 }
 
-.clawpress-subtitle {
-	color: #646970;
-	font-size: 14px;
-	margin-top: 0;
-	margin-bottom: 24px;
-}
-
-/* Notice override */
-.clawpress-notice {
-	max-width: 640px;
-}
-
-/* Cards */
+/* Card */
 .clawpress-card {
 	background: #fff;
 	border: 1px solid #c3c4c7;
 	border-radius: 4px;
-	padding: 32px;
-	text-align: center;
+	padding: 1.5em 2em;
+	margin: 1em 0;
+	max-width: 600px;
 }
 
-.clawpress-card h2 {
-	margin-top: 8px;
-	margin-bottom: 8px;
-	font-size: 20px;
-}
-
-.clawpress-card__desc {
-	color: #646970;
-	margin-bottom: 24px;
+.clawpress-card h3 {
+	margin: 0.5em 0;
+	font-size: 1.2em;
 }
 
 .clawpress-card__icon {
-	font-size: 48px;
-	line-height: 1;
+	font-size: 2.5em;
+	text-align: center;
+	margin-bottom: 0;
+}
+
+.clawpress-card--success .clawpress-card__icon {
+	color: #fff;
+	background: #00a32a;
+	width: 1.4em;
+	height: 1.4em;
+	line-height: 1.4em;
+	border-radius: 50%;
+	margin: 0 auto;
+	font-size: 2em;
+}
+
+.clawpress-card--success h3,
+.clawpress-card--connected h3,
+.clawpress-card--disconnected h3 {
+	text-align: center;
 }
 
 .clawpress-card__icon--connected {
@@ -61,94 +63,42 @@
 }
 
 .clawpress-card__icon--disconnected {
-	color: #c3c4c7;
+	color: #a7aaad;
 }
 
-/* Success card (just created) */
-.clawpress-card--success .clawpress-card__icon {
-	width: 56px;
-	height: 56px;
-	line-height: 56px;
-	border-radius: 50%;
-	background: #00a32a;
-	color: #fff;
-	font-size: 28px;
-	margin: 0 auto;
+.clawpress-card__desc {
+	text-align: center;
+	color: #50575e;
 }
 
 /* Warning box */
 .clawpress-warning-box {
-	background: #fcf0e3;
+	background: #fef8ee;
 	border-left: 4px solid #dba617;
-	padding: 12px 16px;
-	margin: 16px 0 24px;
-	text-align: left;
-	border-radius: 2px;
-	font-size: 13px;
+	padding: 0.8em 1em;
+	margin: 1em 0;
+	font-size: 0.9em;
 }
 
-/* Credentials table */
-.clawpress-credentials {
-	margin-bottom: 24px;
-}
-
-.clawpress-credentials__table {
-	width: 100%;
-	border-collapse: collapse;
-	text-align: left;
-}
-
-.clawpress-credentials__table th {
-	width: 100px;
-	padding: 8px 12px;
-	font-weight: 600;
-	color: #1d2327;
-	vertical-align: top;
-}
-
-.clawpress-credentials__table td {
-	padding: 8px 12px;
-}
-
-.clawpress-credentials__table code {
-	background: #f0f0f1;
-	padding: 4px 8px;
-	border-radius: 3px;
-	font-size: 13px;
-	word-break: break-all;
-}
-
-.clawpress-password {
-	font-weight: 600;
-	color: #1d2327;
-}
-
-/* JSON block */
+/* JSON block — simplified (no duplicate field table) */
 .clawpress-json-block {
-	text-align: left;
 	background: #f6f7f7;
-	border: 1px solid #dcdcde;
+	border: 1px solid #c3c4c7;
 	border-radius: 4px;
-	padding: 16px;
-	margin-bottom: 24px;
-}
-
-.clawpress-json-block label {
-	display: block;
-	font-weight: 600;
-	margin-bottom: 8px;
-	font-size: 13px;
+	padding: 1em;
+	margin: 1em 0;
 }
 
 .clawpress-json {
 	background: #1d2327;
-	color: #50c878;
-	padding: 16px;
+	color: #9ec89e;
+	padding: 1em;
 	border-radius: 4px;
+	font-family: Menlo, Monaco, Consolas, monospace;
 	font-size: 13px;
 	overflow-x: auto;
-	margin-bottom: 12px;
-	user-select: all;
+	white-space: pre;
+	margin: 0 0 0.8em;
 }
 
 .clawpress-copy-btn {
@@ -160,42 +110,33 @@
 	border-color: #00a32a !important;
 }
 
-.clawpress-next-step {
-	color: #646970;
-	font-size: 13px;
-	margin-bottom: 0;
-}
-
 /* Status table */
 .clawpress-status-table {
 	width: 100%;
+	margin: 1em 0;
 	border-collapse: collapse;
+}
+
+.clawpress-status-table th,
+.clawpress-status-table td {
+	padding: 0.5em 0;
 	text-align: left;
-	margin-bottom: 24px;
+	border-bottom: 1px solid #f0f0f1;
 }
 
 .clawpress-status-table th {
 	width: 100px;
-	padding: 10px 12px;
+	color: #50575e;
 	font-weight: 600;
-	color: #1d2327;
-	border-bottom: 1px solid #f0f0f1;
-}
-
-.clawpress-status-table td {
-	padding: 10px 12px;
-	border-bottom: 1px solid #f0f0f1;
 }
 
 /* Badge */
 .clawpress-badge {
 	display: inline-block;
-	padding: 2px 10px;
-	border-radius: 12px;
-	font-size: 12px;
+	padding: 0.15em 0.6em;
+	border-radius: 3px;
+	font-size: 0.85em;
 	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: 0.5px;
 }
 
 .clawpress-badge--active {
@@ -203,58 +144,42 @@
 	color: #00a32a;
 }
 
-/* Revoke section */
-.clawpress-revoke-section {
-	border-top: 1px solid #f0f0f1;
-	padding-top: 24px;
-}
-
-.clawpress-revoke-btn {
-	color: #b32d2e !important;
-	border-color: #b32d2e !important;
-}
-
-.clawpress-revoke-btn:hover {
-	background: #b32d2e !important;
+/* Buttons */
+.clawpress-create-btn {
+	background: #E74C3C !important;
+	border-color: #c0392b !important;
 	color: #fff !important;
+	font-size: 14px !important;
+	padding: 6px 24px !important;
+	height: auto !important;
 }
 
-.clawpress-revoke-btn:disabled {
-	opacity: 0.6;
-	cursor: not-allowed;
+.clawpress-create-btn:hover {
+	background: #c0392b !important;
+}
+
+.clawpress-create-hint,
+.clawpress-next-step {
+	color: #646970;
+	font-size: 0.9em;
+	margin-top: 0.8em;
+}
+
+/* Revoke */
+.clawpress-revoke-section {
+	margin-top: 1em;
+	display: flex;
+	align-items: center;
+	gap: 1em;
 }
 
 .clawpress-revoke-hint {
 	color: #646970;
-	font-size: 12px;
-	margin-top: 8px;
-	margin-bottom: 0;
+	font-size: 0.85em;
 }
 
-/* Create button */
-.clawpress-create-btn {
-	background: #e74c3c !important;
-	border-color: #c0392b !important;
-	font-size: 14px !important;
-	padding: 8px 24px !important;
-	height: auto !important;
-	line-height: 1.5 !important;
-}
-
-.clawpress-create-btn:hover,
-.clawpress-create-btn:focus {
-	background: #c0392b !important;
-	border-color: #a93226 !important;
-}
-
-.clawpress-create-hint {
-	color: #646970;
-	font-size: 12px;
-	margin-top: 12px;
-	margin-bottom: 0;
-}
-
-/* Revoke success notice injected via JS */
-.clawpress-notice--success {
-	max-width: 640px;
+/* Inline notice */
+.clawpress-notice.inline {
+	margin: 1em 0;
+	max-width: 600px;
 }
