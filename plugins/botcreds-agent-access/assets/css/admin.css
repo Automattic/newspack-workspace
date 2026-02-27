@@ -59,6 +59,33 @@
 	border-color: #00a32a !important;
 }
 
+/* Notice boxes */
+.clawpress-notice-row {
+	display: flex;
+	gap: 0.8em;
+	margin: 1em 0;
+	max-width: 600px;
+}
+
+.clawpress-notice-box {
+	padding: 0.6em 1em;
+	border-radius: 3px;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.clawpress-notice-box--green {
+	background: #edfaef;
+	color: #00a32a;
+	border: 1px solid #00a32a;
+}
+
+.clawpress-notice-box--red {
+	background: #fef2f0;
+	color: #cc1818;
+	border: 1px solid #cc1818;
+}
+
 /* Status table — matches WP native tables */
 .clawpress-status-table {
 	max-width: 600px;

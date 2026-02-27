@@ -202,6 +202,15 @@ class ClawPress_Admin {
 			? date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $existing['last_used'] )
 			: __( 'Never', 'clawpress' );
 		?>
+		<div class="clawpress-notice-row">
+			<div class="clawpress-notice-box clawpress-notice-box--green">
+				<?php esc_html_e( 'Connected', 'clawpress' ); ?>
+			</div>
+			<div class="clawpress-notice-box clawpress-notice-box--red">
+				<?php esc_html_e( 'Your OpenClaw agent can post here on your behalf.', 'clawpress' ); ?>
+			</div>
+		</div>
+
 		<table class="clawpress-status-table">
 			<tr>
 				<th><?php esc_html_e( 'Status', 'clawpress' ); ?></th>
