@@ -62,16 +62,15 @@ class ClawPress_Tracker {
 		}
 
 		// Check if authenticated via Application Password
-		// WordPress sets this global when app password auth succeeds
-		global $wp_current_application_password_uuid;
-		if ( empty( $wp_current_application_password_uuid ) ) {
+		$app_password_uuid = rest_get_authenticated_app_password();
+		if ( empty( $app_password_uuid ) ) {
 			return false;
 		}
 
 		// Verify it's the OpenClaw app password specifically
 		$passwords = WP_Application_Passwords::get_user_application_passwords( $user_id );
 		foreach ( $passwords as $item ) {
-			if ( $item['uuid'] === $wp_current_application_password_uuid ) {
+			if ( $item['uuid'] === $app_password_uuid ) {
 				return $item['name'] === CLAWPRESS_APP_PASSWORD_NAME;
 			}
 		}
