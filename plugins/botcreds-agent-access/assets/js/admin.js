@@ -5,9 +5,90 @@
 	'use strict';
 
 	document.addEventListener('DOMContentLoaded', function () {
+		initCreateButton();
 		initCopyButtons();
 		initRevokeButton();
 	});
+
+	/**
+	 * Create connection via AJAX.
+	 */
+	function initCreateButton() {
+		var btn = document.getElementById('clawpress-create-btn');
+		if (!btn) return;
+
+		btn.addEventListener('click', function () {
+			btn.disabled = true;
+			btn.textContent = clawpress.creating_text;
+
+			var xhr = new XMLHttpRequest();
+			xhr.open('POST', clawpress.ajax_url, true);
+			xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+
+			xhr.onload = function () {
+				var response;
+				try {
+					response = JSON.parse(xhr.responseText);
+				} catch (e) {
+					alert('Unexpected error. Please reload the page.');
+					btn.disabled = false;
+					btn.textContent = 'Connect OpenClaw';
+					return;
+				}
+
+				if (response.success) {
+					renderCreatedState(response.data);
+				} else {
+					alert(response.data || 'An error occurred.');
+					btn.disabled = false;
+					btn.textContent = 'Connect OpenClaw';
+				}
+			};
+
+			xhr.onerror = function () {
+				alert('Network error. Please try again.');
+				btn.disabled = false;
+				btn.textContent = 'Connect OpenClaw';
+			};
+
+			xhr.send('action=clawpress_create&nonce=' + encodeURIComponent(clawpress.create_nonce));
+		});
+	}
+
+	/**
+	 * Replace the card with the created state (password + JSON).
+	 */
+	function renderCreatedState(info) {
+		var card = document.getElementById('clawpress-card');
+		if (!card) return;
+
+		var json = JSON.stringify(info, null, 4);
+
+		card.className = 'clawpress-card clawpress-card--success';
+		card.innerHTML =
+			'<div class="clawpress-card__icon" style="color:#fff;background:#00a32a;width:1.4em;height:1.4em;line-height:1.4em;border-radius:50%;margin:0 auto;font-size:2em;">&#10003;</div>' +
+			'<h3 style="text-align:center;">Connection Created!</h3>' +
+			'<div class="clawpress-warning-box">' +
+				'<strong>Important:</strong> This password will only be shown once. Copy it now and paste it into your OpenClaw config.' +
+			'</div>' +
+			'<div class="clawpress-json-block">' +
+				'<pre class="clawpress-json" id="clawpress-json">' + escapeHtml(json) + '</pre>' +
+				'<button type="button" class="button clawpress-copy-btn" data-target="clawpress-json">' + clawpress.copy_text + '</button>' +
+			'</div>' +
+			'<p class="clawpress-next-step">Paste this into your OpenClaw config, then you\'re all set.</p>';
+
+		// Re-bind copy button
+		initCopyButtons();
+	}
+
+	/**
+	 * Escape HTML entities.
+	 */
+	function escapeHtml(str) {
+		var div = document.createElement('div');
+		div.appendChild(document.createTextNode(str));
+		return div.innerHTML;
+	}
 
 	/**
 	 * Copy-to-clipboard buttons.
@@ -16,22 +97,23 @@
 		var buttons = document.querySelectorAll('.clawpress-copy-btn');
 
 		buttons.forEach(function (btn) {
-			btn.addEventListener('click', function () {
-				var targetId = btn.getAttribute('data-target');
+			// Remove old listeners by cloning
+			var newBtn = btn.cloneNode(true);
+			btn.parentNode.replaceChild(newBtn, btn);
+
+			newBtn.addEventListener('click', function () {
+				var targetId = newBtn.getAttribute('data-target');
 				var target = document.getElementById(targetId);
 
-				if (!target) {
-					return;
-				}
+				if (!target) return;
 
 				var text = target.textContent;
 
 				if (navigator.clipboard && navigator.clipboard.writeText) {
 					navigator.clipboard.writeText(text).then(function () {
-						showCopied(btn);
+						showCopied(newBtn);
 					});
 				} else {
-					// Fallback for older browsers
 					var textarea = document.createElement('textarea');
 					textarea.value = text;
 					textarea.style.position = 'fixed';
@@ -40,7 +122,7 @@
 					textarea.select();
 					document.execCommand('copy');
 					document.body.removeChild(textarea);
-					showCopied(btn);
+					showCopied(newBtn);
 				}
 			});
 		});
@@ -48,8 +130,6 @@
 
 	/**
 	 * Show "Copied!" feedback on a button.
-	 *
-	 * @param {HTMLElement} btn
 	 */
 	function showCopied(btn) {
 		var original = btn.textContent;
@@ -67,15 +147,10 @@
 	 */
 	function initRevokeButton() {
 		var btn = document.getElementById('clawpress-revoke-btn');
-
-		if (!btn) {
-			return;
-		}
+		if (!btn) return;
 
 		btn.addEventListener('click', function () {
-			if (!confirm(clawpress.confirm_msg)) {
-				return;
-			}
+			if (!confirm(clawpress.confirm_msg)) return;
 
 			btn.disabled = true;
 			btn.textContent = clawpress.revoking_text;
@@ -91,7 +166,7 @@
 				} catch (e) {
 					alert('Unexpected error. Please reload the page.');
 					btn.disabled = false;
-					btn.textContent = clawpress.copy_text;
+					btn.textContent = 'Revoke Connection';
 					return;
 				}
 
@@ -100,14 +175,14 @@
 				} else {
 					alert(response.data || 'An error occurred.');
 					btn.disabled = false;
-					btn.textContent = clawpress.copy_text;
+					btn.textContent = 'Revoke Connection';
 				}
 			};
 
 			xhr.onerror = function () {
 				alert('Network error. Please try again.');
 				btn.disabled = false;
-				btn.textContent = clawpress.copy_text;
+				btn.textContent = 'Revoke Connection';
 			};
 
 			xhr.send('action=clawpress_revoke&nonce=' + encodeURIComponent(clawpress.revoke_nonce));

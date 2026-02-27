@@ -30,7 +30,7 @@ class ClawPress_Admin {
 		add_action( 'show_user_profile', array( $this, 'render_profile_section' ) );
 		add_action( 'edit_user_profile', array( $this, 'render_profile_section' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
-		add_action( 'admin_post_clawpress_create', array( $this, 'handle_create' ) );
+		add_action( 'wp_ajax_clawpress_create', array( $this, 'handle_create_ajax' ) );
 		add_action( 'wp_ajax_clawpress_revoke', array( $this, 'handle_revoke_ajax' ) );
 	}
 
@@ -60,42 +60,36 @@ class ClawPress_Admin {
 		);
 
 		wp_localize_script( 'clawpress-admin', 'clawpress', array(
-			'ajax_url'      => admin_url( 'admin-ajax.php' ),
-			'revoke_nonce'  => wp_create_nonce( 'clawpress_revoke' ),
-			'confirm_msg'   => __( 'Are you sure you want to revoke the OpenClaw connection? You will need to reconfigure OpenClaw with a new password.', 'clawpress' ),
-			'revoking_text' => __( 'Revoking…', 'clawpress' ),
-			'copied_text'   => __( 'Copied!', 'clawpress' ),
-			'copy_text'     => __( 'Copy', 'clawpress' ),
+			'ajax_url'       => admin_url( 'admin-ajax.php' ),
+			'create_nonce'   => wp_create_nonce( 'clawpress_create' ),
+			'revoke_nonce'   => wp_create_nonce( 'clawpress_revoke' ),
+			'confirm_msg'    => __( 'Are you sure you want to revoke the OpenClaw connection? You will need to reconfigure OpenClaw with a new password.', 'clawpress' ),
+			'creating_text'  => __( 'Connecting…', 'clawpress' ),
+			'revoking_text'  => __( 'Revoking…', 'clawpress' ),
+			'copied_text'    => __( 'Copied!', 'clawpress' ),
+			'copy_text'      => __( 'Copy', 'clawpress' ),
 		) );
 	}
 
 	/**
-	 * Handle the Create Application Password form submission.
+	 * Handle the AJAX create request.
 	 */
-	public function handle_create() {
+	public function handle_create_ajax() {
 		if ( ! current_user_can( 'exist' ) ) {
-			wp_die( esc_html__( 'You do not have permission to do this.', 'clawpress' ) );
+			wp_send_json_error( __( 'You do not have permission to do this.', 'clawpress' ) );
 		}
 
-		check_admin_referer( 'clawpress_create' );
+		check_ajax_referer( 'clawpress_create', 'nonce' );
 
 		$result = $this->api->create_password();
 
 		if ( is_wp_error( $result ) ) {
-			set_transient( 'clawpress_error_' . get_current_user_id(), $result->get_error_message(), 60 );
-			wp_safe_redirect( admin_url( 'profile.php#clawpress' ) );
-			exit;
+			wp_send_json_error( $result->get_error_message() );
 		}
 
 		$connection_info = $this->api->get_connection_info( $result['password'] );
-		set_transient(
-			'clawpress_created_' . get_current_user_id(),
-			$connection_info,
-			300
-		);
 
-		wp_safe_redirect( admin_url( 'profile.php?clawpress_created=1#clawpress' ) );
-		exit;
+		wp_send_json_success( $connection_info );
 	}
 
 	/**
@@ -249,20 +243,18 @@ class ClawPress_Admin {
 	 */
 	private function render_disconnected_state() {
 		?>
-		<div class="clawpress-card clawpress-card--disconnected">
+		<div class="clawpress-card clawpress-card--disconnected" id="clawpress-card">
 			<div class="clawpress-card__icon clawpress-card__icon--disconnected">&#9675;</div>
 			<h3><?php esc_html_e( 'Not Connected', 'clawpress' ); ?></h3>
 			<p class="clawpress-card__desc">
 				<?php esc_html_e( 'Create a secure connection to let OpenClaw manage your WordPress content.', 'clawpress' ); ?>
 			</p>
 
-			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-				<input type="hidden" name="action" value="clawpress_create" />
-				<?php wp_nonce_field( 'clawpress_create' ); ?>
-				<button type="submit" class="button button-primary clawpress-create-btn">
+			<div style="text-align:center;">
+				<button type="button" class="button button-primary clawpress-create-btn" id="clawpress-create-btn">
 					<?php esc_html_e( 'Connect OpenClaw', 'clawpress' ); ?>
 				</button>
-			</form>
+			</div>
 
 			<p class="clawpress-create-hint">
 				<?php esc_html_e( 'This will generate a secure Application Password for OpenClaw. You\'ll be given credentials to paste into your OpenClaw config.', 'clawpress' ); ?>
