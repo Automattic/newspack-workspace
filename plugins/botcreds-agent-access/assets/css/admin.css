@@ -1,23 +1,17 @@
 /**
  * ClawPress Admin Styles — Profile Page
+ * Matches native wp-admin profile section styling.
  */
 
 /* Section wrapper */
 .clawpress-profile-section {
 	margin-top: 2em;
-	padding-top: 1em;
-	border-top: 1px solid #c3c4c7;
 }
 
 .clawpress-title {
 	display: flex;
 	align-items: center;
 	gap: 0.4em;
-	font-size: 1.3em;
-}
-
-.clawpress-logo {
-	font-size: 1.2em;
 }
 
 .clawpress-wp-logo {
@@ -28,57 +22,6 @@
 	opacity: 0.7;
 }
 
-/* Card */
-.clawpress-card {
-	background: #fff;
-	border: 1px solid #c3c4c7;
-	border-radius: 4px;
-	padding: 1.5em 2em;
-	margin: 1em 0;
-	max-width: 600px;
-}
-
-.clawpress-card h3 {
-	margin: 0.5em 0;
-	font-size: 1.2em;
-}
-
-.clawpress-card__icon {
-	font-size: 2.5em;
-	text-align: center;
-	margin-bottom: 0;
-}
-
-.clawpress-card--success .clawpress-card__icon {
-	color: #fff;
-	background: #00a32a;
-	width: 1.4em;
-	height: 1.4em;
-	line-height: 1.4em;
-	border-radius: 50%;
-	margin: 0 auto;
-	font-size: 2em;
-}
-
-.clawpress-card--success h3,
-.clawpress-card--connected h3,
-.clawpress-card--disconnected h3 {
-	text-align: center;
-}
-
-.clawpress-card__icon--connected {
-	color: #00a32a;
-}
-
-.clawpress-card__icon--disconnected {
-	color: #a7aaad;
-}
-
-.clawpress-card__desc {
-	text-align: center;
-	color: #50575e;
-}
-
 /* Warning box */
 .clawpress-warning-box {
 	background: #fef8ee;
@@ -86,14 +29,12 @@
 	padding: 0.8em 1em;
 	margin: 1em 0;
 	font-size: 0.9em;
+	max-width: 600px;
 }
 
-/* JSON block — simplified (no duplicate field table) */
+/* JSON block */
 .clawpress-json-block {
-	background: #f6f7f7;
-	border: 1px solid #c3c4c7;
-	border-radius: 4px;
-	padding: 1em;
+	max-width: 600px;
 	margin: 1em 0;
 }
 
@@ -118,16 +59,16 @@
 	border-color: #00a32a !important;
 }
 
-/* Status table */
+/* Status table — matches WP native tables */
 .clawpress-status-table {
-	width: 100%;
+	max-width: 600px;
 	margin: 1em 0;
 	border-collapse: collapse;
 }
 
 .clawpress-status-table th,
 .clawpress-status-table td {
-	padding: 0.5em 0;
+	padding: 0.5em 0.5em 0.5em 0;
 	text-align: left;
 	border-bottom: 1px solid #f0f0f1;
 }
@@ -152,7 +93,7 @@
 	color: #00a32a;
 }
 
-/* Buttons */
+/* Connect button */
 .clawpress-create-btn {
 	background: #E74C3C !important;
 	border-color: #c0392b !important;
@@ -169,8 +110,7 @@
 .clawpress-create-hint,
 .clawpress-next-step {
 	color: #646970;
-	font-size: 0.9em;
-	margin-top: 0.8em;
+	font-size: 13px;
 }
 
 /* Revoke */
@@ -183,11 +123,20 @@
 
 .clawpress-revoke-hint {
 	color: #646970;
-	font-size: 0.85em;
+	font-size: 13px;
 }
 
-/* Inline notice */
-.clawpress-notice.inline {
-	margin: 1em 0;
-	max-width: 600px;
+/* Success icon — inline, smaller */
+.clawpress-success-icon {
+	display: inline-block;
+	color: #fff;
+	background: #00a32a;
+	width: 1.4em;
+	height: 1.4em;
+	line-height: 1.4em;
+	text-align: center;
+	border-radius: 50%;
+	font-size: 1.2em;
+	vertical-align: middle;
+	margin-right: 0.4em;
 }

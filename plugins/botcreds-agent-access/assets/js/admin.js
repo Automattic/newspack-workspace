@@ -64,10 +64,8 @@
 
 		var json = JSON.stringify(info, null, 4);
 
-		card.className = 'clawpress-card clawpress-card--success';
 		card.innerHTML =
-			'<div class="clawpress-card__icon" style="color:#fff;background:#00a32a;width:1.4em;height:1.4em;line-height:1.4em;border-radius:50%;margin:0 auto;font-size:2em;">&#10003;</div>' +
-			'<h3 style="text-align:center;">Connection Created!</h3>' +
+			'<p><span class="clawpress-success-icon">&#10003;</span> <strong>Connection Created!</strong></p>' +
 			'<div class="clawpress-warning-box">' +
 				'<strong>Important:</strong> This password will only be shown once. Copy it now and paste it into your OpenClaw config.' +
 			'</div>' +

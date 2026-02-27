@@ -171,26 +171,23 @@ class ClawPress_Admin {
 	private function render_created_state( $info ) {
 		$json = wp_json_encode( $info, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
 		?>
-		<div class="clawpress-card clawpress-card--success">
-			<div class="clawpress-card__icon">&#10003;</div>
-			<h3><?php esc_html_e( 'Connection Created!', 'clawpress' ); ?></h3>
+		<p><span class="clawpress-success-icon">&#10003;</span> <strong><?php esc_html_e( 'Connection Created!', 'clawpress' ); ?></strong></p>
 
-			<div class="clawpress-warning-box">
-				<strong><?php esc_html_e( 'Important:', 'clawpress' ); ?></strong>
-				<?php esc_html_e( 'This password will only be shown once. Copy it now and paste it into your OpenClaw config.', 'clawpress' ); ?>
-			</div>
-
-			<div class="clawpress-json-block">
-				<pre class="clawpress-json" id="clawpress-json"><?php echo esc_html( $json ); ?></pre>
-				<button type="button" class="button clawpress-copy-btn" data-target="clawpress-json">
-					<?php esc_html_e( 'Copy', 'clawpress' ); ?>
-				</button>
-			</div>
-
-			<p class="clawpress-next-step">
-				<?php esc_html_e( 'Paste this into your OpenClaw config, then you\'re all set.', 'clawpress' ); ?>
-			</p>
+		<div class="clawpress-warning-box">
+			<strong><?php esc_html_e( 'Important:', 'clawpress' ); ?></strong>
+			<?php esc_html_e( 'This password will only be shown once. Copy it now and paste it into your OpenClaw config.', 'clawpress' ); ?>
 		</div>
+
+		<div class="clawpress-json-block">
+			<pre class="clawpress-json" id="clawpress-json"><?php echo esc_html( $json ); ?></pre>
+			<button type="button" class="button clawpress-copy-btn" data-target="clawpress-json">
+				<?php esc_html_e( 'Copy', 'clawpress' ); ?>
+			</button>
+		</div>
+
+		<p class="clawpress-next-step">
+			<?php esc_html_e( 'Paste this into your OpenClaw config, then you\'re all set.', 'clawpress' ); ?>
+		</p>
 		<?php
 	}
 
@@ -205,36 +202,28 @@ class ClawPress_Admin {
 			? date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $existing['last_used'] )
 			: __( 'Never', 'clawpress' );
 		?>
-		<div class="clawpress-card clawpress-card--connected">
-			<div class="clawpress-card__icon clawpress-card__icon--connected">&#9679;</div>
-			<h3><?php esc_html_e( 'Connected', 'clawpress' ); ?></h3>
-			<p class="clawpress-card__desc">
-				<?php esc_html_e( 'An OpenClaw Application Password is active for your account.', 'clawpress' ); ?>
-			</p>
+		<table class="clawpress-status-table">
+			<tr>
+				<th><?php esc_html_e( 'Status', 'clawpress' ); ?></th>
+				<td><span class="clawpress-badge clawpress-badge--active"><?php esc_html_e( 'Active', 'clawpress' ); ?></span></td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Created', 'clawpress' ); ?></th>
+				<td><?php echo esc_html( $created_date ); ?></td>
+			</tr>
+			<tr>
+				<th><?php esc_html_e( 'Last Used', 'clawpress' ); ?></th>
+				<td><?php echo esc_html( $last_used ); ?></td>
+			</tr>
+		</table>
 
-			<table class="clawpress-status-table">
-				<tr>
-					<th><?php esc_html_e( 'Status', 'clawpress' ); ?></th>
-					<td><span class="clawpress-badge clawpress-badge--active"><?php esc_html_e( 'Active', 'clawpress' ); ?></span></td>
-				</tr>
-				<tr>
-					<th><?php esc_html_e( 'Created', 'clawpress' ); ?></th>
-					<td><?php echo esc_html( $created_date ); ?></td>
-				</tr>
-				<tr>
-					<th><?php esc_html_e( 'Last Used', 'clawpress' ); ?></th>
-					<td><?php echo esc_html( $last_used ); ?></td>
-				</tr>
-			</table>
-
-			<div class="clawpress-revoke-section">
-				<button type="button" class="button clawpress-revoke-btn" id="clawpress-revoke-btn">
-					<?php esc_html_e( 'Revoke Connection', 'clawpress' ); ?>
-				</button>
-				<span class="clawpress-revoke-hint">
-					<?php esc_html_e( 'This will disconnect OpenClaw from your account.', 'clawpress' ); ?>
-				</span>
-			</div>
+		<div class="clawpress-revoke-section">
+			<button type="button" class="button clawpress-revoke-btn" id="clawpress-revoke-btn">
+				<?php esc_html_e( 'Revoke Connection', 'clawpress' ); ?>
+			</button>
+			<span class="clawpress-revoke-hint">
+				<?php esc_html_e( 'This will disconnect OpenClaw from your account.', 'clawpress' ); ?>
+			</span>
 		</div>
 		<?php
 	}
@@ -244,19 +233,12 @@ class ClawPress_Admin {
 	 */
 	private function render_disconnected_state() {
 		?>
-		<div class="clawpress-card clawpress-card--disconnected" id="clawpress-card">
-			<div class="clawpress-card__icon clawpress-card__icon--disconnected">&#9675;</div>
-			<h3><?php esc_html_e( 'Not Connected', 'clawpress' ); ?></h3>
-			<p class="clawpress-card__desc">
-				<?php esc_html_e( 'Create a secure connection to let OpenClaw manage your WordPress content.', 'clawpress' ); ?>
-			</p>
-
-			<div style="text-align:center;">
+		<div id="clawpress-card">
+			<p>
 				<button type="button" class="button button-primary clawpress-create-btn" id="clawpress-create-btn">
 					<?php esc_html_e( 'Connect OpenClaw', 'clawpress' ); ?>
 				</button>
-			</div>
-
+			</p>
 			<p class="clawpress-create-hint">
 				<?php esc_html_e( 'This will generate a secure Application Password for OpenClaw. You\'ll be given credentials to paste into your OpenClaw config.', 'clawpress' ); ?>
 			</p>
