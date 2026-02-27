@@ -26,5 +26,5 @@ newspack_themes=(
 )
 
 newspack_block_theme=(
-	"newspack-theme"
+	"newspack-block-theme"
 )

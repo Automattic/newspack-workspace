@@ -37,7 +37,7 @@ if [[ "$TARGET_CONTAINER" != "newspack_dev" ]]; then
 fi
 
 # Infer the current working project from the current folder;
-projects=("${newspack_plugins[@]}" "newspack-theme") # create a new list with the appended value
+projects=("${newspack_plugins[@]}" "newspack-theme" "newspack-block-theme") # create a new list with the appended value
 target_folder=""
 for plugin in "${projects[@]}"; do
     if [[ "$PWD" == *"$plugin"* ]]; then

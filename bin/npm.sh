@@ -20,6 +20,11 @@ case $WHAT_TO_WATCH in
         echo "Running: npm ${@:2}"
         npm "${@:2}"
         ;;
+    block-theme)
+        cd "$CODE_PATH/newspack-block-theme"
+        echo "Running: npm ${@:2}"
+        npm "${@:2}"
+        ;;
     *)
         if [ ! -d "${CODE_PATH}/${WHAT_TO_WATCH}" ]; then
             echo "$WHAT_TO_WATCH directory does not exist"

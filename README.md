@@ -80,6 +80,7 @@ Build one specific project:
 
 ```BASH
 n build theme # Builds the newspack-theme repo
+n build block-theme # Builds the newspack-block-theme repo
 n build newspack-plugin # Builds the main plugin
 n build newsletters # You can also omit the 'newspack-' prefix from plugins
 n build # Builds the project you are currently in

@@ -19,6 +19,10 @@ case $WHAT_TO_WATCH in
         npm ci
         npm run test
         ;;
+    block-theme)
+        echo "Block theme tests are not supported yet"
+        exit 1
+        ;;
     *)
         if [ ! -d "${CODE_PATH}/${WHAT_TO_WATCH}" ]; then
             echo "$WHAT_TO_WATCH directory does not exist"

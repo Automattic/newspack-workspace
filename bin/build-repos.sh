@@ -31,9 +31,13 @@ case $WHAT_TO_BUILD in
             build_dir "$CODE_PATH/$dir" $2
         done
         build_dir "$CODE_PATH/newspack-theme" $2
+        build_dir "$CODE_PATH/newspack-block-theme" $2
         ;;
     theme)
         build_dir "$CODE_PATH/newspack-theme" $2
+        ;;
+    block-theme)
+        build_dir "$CODE_PATH/newspack-block-theme" $2
         ;;
     *)
         if [ ! -d "${CODE_PATH}/${WHAT_TO_BUILD}" ]; then
