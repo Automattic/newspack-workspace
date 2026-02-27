@@ -179,7 +179,7 @@ class ClawPress_Admin {
 		</div>
 
 		<div class="clawpress-json-block">
-			<pre class="clawpress-json" id="clawpress-json"><?php echo esc_html( 'Connect to my WordPress site using these credentials:' . "\n" . $json ); ?></pre>
+			<pre class="clawpress-json" id="clawpress-json"><?php echo esc_html( 'Save these WordPress Application Password credentials and use them to connect to my site via the WordPress REST API:' . "\n" . $json ); ?></pre>
 			<button type="button" class="button clawpress-copy-btn" data-target="clawpress-json">
 				<?php esc_html_e( 'Copy', 'clawpress' ); ?>
 			</button>

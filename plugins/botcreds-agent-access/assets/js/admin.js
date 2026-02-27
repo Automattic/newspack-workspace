@@ -63,7 +63,7 @@
 		if (!card) return;
 
 		var json = JSON.stringify(info, null, 4);
-		var prompt = 'Connect to my WordPress site using these credentials:\n' + json;
+		var prompt = 'Save these WordPress Application Password credentials and use them to connect to my site via the WordPress REST API:\n' + json;
 
 		card.innerHTML =
 			'<p><span class="clawpress-success-icon">&#10003;</span> <strong>Connection Created!</strong></p>' +
