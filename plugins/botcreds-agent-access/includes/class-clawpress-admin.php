@@ -175,18 +175,18 @@ class ClawPress_Admin {
 
 		<div class="clawpress-warning-box">
 			<strong><?php esc_html_e( 'Important:', 'clawpress' ); ?></strong>
-			<?php esc_html_e( 'This password will only be shown once. Copy it now and paste it into your OpenClaw config.', 'clawpress' ); ?>
+			<?php esc_html_e( 'This password will only be shown once. Copy the message below and send it to OpenClaw.', 'clawpress' ); ?>
 		</div>
 
 		<div class="clawpress-json-block">
-			<pre class="clawpress-json" id="clawpress-json"><?php echo esc_html( $json ); ?></pre>
+			<pre class="clawpress-json" id="clawpress-json"><?php echo esc_html( 'Connect to my WordPress site using these credentials:' . "\n" . $json ); ?></pre>
 			<button type="button" class="button clawpress-copy-btn" data-target="clawpress-json">
 				<?php esc_html_e( 'Copy', 'clawpress' ); ?>
 			</button>
 		</div>
 
 		<p class="clawpress-next-step">
-			<?php esc_html_e( 'Paste this into your OpenClaw config, then you\'re all set.', 'clawpress' ); ?>
+			<?php esc_html_e( 'Paste this into your OpenClaw chat (Telegram, WhatsApp, etc.) and your agent will handle the rest.', 'clawpress' ); ?>
 		</p>
 		<?php
 	}

@@ -63,17 +63,18 @@
 		if (!card) return;
 
 		var json = JSON.stringify(info, null, 4);
+		var prompt = 'Connect to my WordPress site using these credentials:\n' + json;
 
 		card.innerHTML =
 			'<p><span class="clawpress-success-icon">&#10003;</span> <strong>Connection Created!</strong></p>' +
 			'<div class="clawpress-warning-box">' +
-				'<strong>Important:</strong> This password will only be shown once. Copy it now and paste it into your OpenClaw config.' +
+				'<strong>Important:</strong> This password will only be shown once. Copy the message below and send it to OpenClaw.' +
 			'</div>' +
 			'<div class="clawpress-json-block">' +
-				'<pre class="clawpress-json" id="clawpress-json">' + escapeHtml(json) + '</pre>' +
+				'<pre class="clawpress-json" id="clawpress-json">' + escapeHtml(prompt) + '</pre>' +
 				'<button type="button" class="button clawpress-copy-btn" data-target="clawpress-json">' + clawpress.copy_text + '</button>' +
 			'</div>' +
-			'<p class="clawpress-next-step">Paste this into your OpenClaw config, then you\'re all set.</p>';
+			'<p class="clawpress-next-step">Paste this into your OpenClaw chat (Telegram, WhatsApp, etc.) and your agent will handle the rest.</p>';
 
 		// Re-bind copy button
 		initCopyButtons();
