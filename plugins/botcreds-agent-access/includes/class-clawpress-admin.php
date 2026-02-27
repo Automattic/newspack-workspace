@@ -30,6 +30,7 @@ class ClawPress_Admin {
 		add_action( 'show_user_profile', array( $this, 'render_profile_section' ) );
 		add_action( 'edit_user_profile', array( $this, 'render_profile_section' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
+		add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
 		add_action( 'wp_ajax_clawpress_create', array( $this, 'handle_create_ajax' ) );
 		add_action( 'wp_ajax_clawpress_revoke', array( $this, 'handle_revoke_ajax' ) );
 	}
@@ -39,8 +40,21 @@ class ClawPress_Admin {
 	 *
 	 * @param string $hook_suffix The current admin page hook suffix.
 	 */
+	/**
+	 * Register Tools → ClawPress admin page.
+	 */
+	public function add_admin_menu() {
+		add_management_page(
+			__( 'ClawPress', 'clawpress' ),
+			__( 'ClawPress', 'clawpress' ),
+			'manage_options',
+			'clawpress',
+			array( $this, 'render_admin_page' )
+		);
+	}
+
 	public function enqueue_assets( $hook_suffix ) {
-		if ( ! in_array( $hook_suffix, array( 'profile.php', 'user-edit.php' ), true ) ) {
+		if ( ! in_array( $hook_suffix, array( 'profile.php', 'user-edit.php', 'tools_page_clawpress' ), true ) ) {
 			return;
 		}
 
@@ -300,5 +314,109 @@ class ClawPress_Admin {
 			</p>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Render the Tools → ClawPress admin page.
+	 */
+	public function render_admin_page() {
+		$users_with_passwords = $this->get_all_openclaw_users();
+		?>
+		<div class="wrap">
+			<h1>
+				<span>&#129438;</span>
+				<?php esc_html_e( 'ClawPress', 'clawpress' ); ?>
+			</h1>
+			<p><?php esc_html_e( 'All users with active OpenClaw connections on this site.', 'clawpress' ); ?></p>
+
+			<?php if ( empty( $users_with_passwords ) ) : ?>
+				<p><em><?php esc_html_e( 'No users have connected OpenClaw yet.', 'clawpress' ); ?></em></p>
+			<?php else : ?>
+				<table class="widefat striped">
+					<thead>
+						<tr>
+							<th><?php esc_html_e( 'User', 'clawpress' ); ?></th>
+							<th><?php esc_html_e( 'Role', 'clawpress' ); ?></th>
+							<th><?php esc_html_e( 'Created', 'clawpress' ); ?></th>
+							<th><?php esc_html_e( 'Last Used', 'clawpress' ); ?></th>
+							<th><?php esc_html_e( 'Posts', 'clawpress' ); ?></th>
+							<th><?php esc_html_e( 'Media', 'clawpress' ); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ( $users_with_passwords as $entry ) : ?>
+							<tr>
+								<td>
+									<strong>
+										<a href="<?php echo esc_url( get_edit_user_link( $entry['user']->ID ) ); ?>">
+											<?php echo esc_html( $entry['user']->display_name ); ?>
+										</a>
+									</strong>
+									<br>
+									<span class="description"><?php echo esc_html( $entry['user']->user_login ); ?></span>
+								</td>
+								<td>
+									<span class="clawpress-badge clawpress-badge--<?php echo esc_attr( $entry['role_slug'] ); ?>">
+										<?php echo esc_html( $entry['role_name'] ); ?>
+									</span>
+								</td>
+								<td><?php echo esc_html( $entry['created'] ); ?></td>
+								<td><?php echo esc_html( $entry['last_used'] ); ?></td>
+								<td><?php echo esc_html( $entry['stats']['post_count'] ); ?></td>
+								<td><?php echo esc_html( $entry['stats']['media_count'] ); ?></td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			<?php endif; ?>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Get all users who have an OpenClaw Application Password.
+	 *
+	 * @return array
+	 */
+	private function get_all_openclaw_users() {
+		$results = array();
+		$users   = get_users();
+
+		foreach ( $users as $user ) {
+			$passwords = WP_Application_Passwords::get_user_application_passwords( $user->ID );
+
+			foreach ( $passwords as $item ) {
+				if ( $item['name'] !== CLAWPRESS_APP_PASSWORD_NAME ) {
+					continue;
+				}
+
+				$roles      = $user->roles;
+				$role_slug  = ! empty( $roles ) ? $roles[0] : 'none';
+				$role_obj   = get_role( $role_slug );
+				$role_name  = $role_obj ? ucfirst( $role_slug ) : $role_slug;
+
+				// Use wp_roles() for display name
+				$wp_roles  = wp_roles();
+				$role_name = isset( $wp_roles->role_names[ $role_slug ] ) ? translate_user_role( $wp_roles->role_names[ $role_slug ] ) : ucfirst( $role_slug );
+
+				$created   = date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $item['created'] );
+				$last_used = ! empty( $item['last_used'] )
+					? date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $item['last_used'] )
+					: __( 'Never', 'clawpress' );
+
+				$results[] = array(
+					'user'      => $user,
+					'role_slug' => $role_slug,
+					'role_name' => $role_name,
+					'created'   => $created,
+					'last_used' => $last_used,
+					'stats'     => ClawPress_Tracker::get_stats( $user->ID ),
+				);
+
+				break; // Only one OpenClaw password per user
+			}
+		}
+
+		return $results;
 	}
 }

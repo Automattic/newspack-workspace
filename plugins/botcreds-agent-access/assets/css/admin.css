@@ -142,6 +142,27 @@
 	color: #996800;
 }
 
+.clawpress-badge--administrator {
+	background: #fef2f0;
+	color: #cc1818;
+}
+
+.clawpress-badge--editor {
+	background: #e7f3fe;
+	color: #0073aa;
+}
+
+.clawpress-badge--author {
+	background: #edfaef;
+	color: #00a32a;
+}
+
+.clawpress-badge--contributor,
+.clawpress-badge--subscriber {
+	background: #f0f0f1;
+	color: #50575e;
+}
+
 /* Connect button */
 .clawpress-create-btn {
 	background: #E74C3C !important;
