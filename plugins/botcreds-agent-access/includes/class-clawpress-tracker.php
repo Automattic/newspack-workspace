@@ -17,19 +17,24 @@ class ClawPress_Tracker {
 	 * Register hooks.
 	 */
 	public function init() {
-		add_action( 'rest_after_insert_post', array( $this, 'maybe_tag_post' ), 10, 1 );
-		add_action( 'rest_after_insert_page', array( $this, 'maybe_tag_post' ), 10, 1 );
+		add_action( 'wp_after_insert_post', array( $this, 'maybe_tag_post' ), 10, 2 );
 		add_action( 'add_attachment', array( $this, 'maybe_tag_attachment' ), 10, 1 );
 	}
 
 	/**
 	 * Tag a post/page if created via OpenClaw Application Password.
 	 *
-	 * @param WP_Post $post The inserted post.
+	 * @param int     $post_id The post ID.
+	 * @param WP_Post $post    The post object.
 	 */
-	public function maybe_tag_post( $post ) {
+	public function maybe_tag_post( $post_id, $post ) {
+		// Skip revisions and attachments (attachments handled separately)
+		if ( wp_is_post_revision( $post_id ) || 'attachment' === $post->post_type ) {
+			return;
+		}
+
 		if ( $this->is_openclaw_request() ) {
-			update_post_meta( $post->ID, self::META_KEY, time() );
+			update_post_meta( $post_id, self::META_KEY, time() );
 		}
 	}
 
