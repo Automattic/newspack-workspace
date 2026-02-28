@@ -154,7 +154,7 @@ class ClawPress_Admin {
 			<h2 class="clawpress-title">
 				<span class="clawpress-logo">&#129438;</span>
 				<?php esc_html_e( 'ClawPress by WordPress.com', 'clawpress' ); ?>
-				<img src="https://s.w.org/style/images/about/WordPress-logotype-wmark.png" alt="WordPress" class="clawpress-wp-logo" />
+				<span class="dashicons dashicons-wordpress" style="font-size:1.2em;vertical-align:middle;opacity:0.7;"></span>
 			</h2>
 			<p class="description">
 				<?php esc_html_e( 'Connect OpenClaw to your WordPress site in one click.', 'clawpress' ); ?>
