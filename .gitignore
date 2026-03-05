@@ -15,3 +15,4 @@ bin/newspack-network/service-accounts.secret
 rootCA.pem
 worktrees
 docker-compose.env-*.yml
+.claude/settings.local.json

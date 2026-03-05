@@ -300,6 +300,12 @@ case $1 in
     env)
         "$NABSPATH/bin/env.sh" "${@:2}"
         ;;
+    root)
+        echo "$NABSPATH"
+        ;;
+    setup-agents)
+        "$NABSPATH/bin/setup-agents.sh"
+        ;;
     help)
         echo "Available commands:"
         echo ""
@@ -351,7 +357,11 @@ case $1 in
         echo "  worktree [args]          Manage isolated Git worktrees for repositories (add, list, remove)."
         echo "  env [args]               Manage isolated development environments (create, up, down, destroy, list)."
         echo ""
+        echo "AI Agents:"
+        echo "  setup-agents             Set up AI agent tooling for Newspack development."
+        echo ""
         echo "Other:"
+        echo "  root                     Print the absolute path to the workspace root directory."
         echo "  cd-install               Install the ncd command in your system for easy navigation to repos and sites."
         echo "  jncp [args]              Copy selected plugins to a Jurassic Ninja site via SSH."
         echo "  jninit [args]            Initialize a Jurassic Ninja site with core Newspack and WooCommerce plugins and runs setup."
