@@ -2,8 +2,8 @@
 
 WP_PATH=${1:-"/var/www/html"}
 
-/var/scripts/uninstall.sh $WP_PATH
-/var/scripts/install.sh $WP_PATH
+/var/scripts/uninstall.sh "$WP_PATH"
+/var/scripts/install.sh "$WP_PATH"
 
 wp --allow-root --path="$WP_PATH" plugin install woocommerce
 wp --allow-root --path="$WP_PATH" plugin activate newspack-plugin woocommerce
