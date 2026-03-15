@@ -26,6 +26,7 @@ require_once CLAWPRESS_PLUGIN_DIR . 'includes/class-clawpress-api.php';
 require_once CLAWPRESS_PLUGIN_DIR . 'includes/class-clawpress-admin.php';
 require_once CLAWPRESS_PLUGIN_DIR . 'includes/class-clawpress-tracker.php';
 require_once CLAWPRESS_PLUGIN_DIR . 'includes/class-clawpress-theme-bridge.php';
+require_once CLAWPRESS_PLUGIN_DIR . 'includes/class-clawpress-mentions.php';
 
 /**
  * Initialize the plugin.
@@ -35,8 +36,10 @@ function clawpress_init() {
 	$admin        = new ClawPress_Admin( $api );
 	$tracker      = new ClawPress_Tracker();
 	$theme_bridge = new ClawPress_Theme_Bridge();
+	$mentions     = new ClawPress_Mentions();
 	$admin->init();
 	$tracker->init();
 	$theme_bridge->init();
+	$mentions->init();
 }
 add_action( 'plugins_loaded', 'clawpress_init' );

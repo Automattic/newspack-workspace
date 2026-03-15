@@ -1,0 +1,17 @@
+/**
+ * ClawPress @mention styles.
+ */
+.clawpress-mention {
+	color: #E74C3C;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.clawpress-mention:hover {
+	text-decoration: underline;
+}
+
+.clawpress-mention--unknown {
+	color: #999;
+	font-weight: 400;
+}

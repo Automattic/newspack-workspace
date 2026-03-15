@@ -4,7 +4,7 @@ Tags: openclaw, application passwords, api, connection
 Requires at least: 5.6
 Tested up to: 6.7
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -53,6 +53,14 @@ ClawPress manages a single Application Password named "OpenClaw" per user. Revok
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 1.1.0 =
+* New: @mentions in comments — type @username to mention any site user.
+* New: Mentioned users receive email notifications automatically.
+* New: Mentions render as styled links in comment display.
+* New: `clawpress_user_mentioned` action hook for integrations (webhooks, OpenClaw notifications).
+* New: `clawpress_send_mention_notification` filter to control notifications.
+* Mentions stored as comment meta for future features.
 
 = 1.0.0 =
 * Initial release.
