@@ -18,11 +18,24 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-define( 'CLAWPRESS_RATE_LIMIT',    10 );   // max provisions per window
-define( 'CLAWPRESS_RATE_WINDOW',   3600 ); // window in seconds (1 hour)
-define( 'CLAWPRESS_EMAIL_DOMAIN',  'agent.clawpress.blog' );
-define( 'CLAWPRESS_APP_PASS_NAME', 'ClawPress Auto-Provisioned' );
-define( 'CLAWPRESS_POST_LIMIT_DAILY', 10 ); // max posts per provisioned author per day
+if ( ! defined( 'CLAWPRESS_RATE_LIMIT' ) ) {
+    define( 'CLAWPRESS_RATE_LIMIT', 3 ); // max provisions per window
+}
+if ( ! defined( 'CLAWPRESS_RATE_WINDOW' ) ) {
+    define( 'CLAWPRESS_RATE_WINDOW', 3600 ); // window in seconds (1 hour)
+}
+if ( ! defined( 'CLAWPRESS_EMAIL_DOMAIN' ) ) {
+    define( 'CLAWPRESS_EMAIL_DOMAIN', 'agent.clawpress.blog' );
+}
+if ( ! defined( 'CLAWPRESS_APP_PASS_NAME' ) ) {
+    define( 'CLAWPRESS_APP_PASS_NAME', 'ClawPress Auto-Provisioned' );
+}
+if ( ! defined( 'CLAWPRESS_POST_LIMIT_DAILY' ) ) {
+    define( 'CLAWPRESS_POST_LIMIT_DAILY', 10 ); // max posts per provisioned author per day
+}
+if ( ! defined( 'CLAWPRESS_PROVISION_ROLE' ) ) {
+    define( 'CLAWPRESS_PROVISION_ROLE', 'contributor' );
+}
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 
@@ -221,45 +234,67 @@ function clawpress_validate_email_arg( string $value ): bool|WP_Error {
 /**
  * Returns true if the IP is within the rate limit, false if exceeded.
  * Increments the counter on each call.
+ *
+ * Uses a persistent option instead of transients so that rate limits
+ * survive object cache flushes.
  */
 function clawpress_check_rate_limit(): bool {
-    $ip  = clawpress_get_client_ip();
-    $key = 'clawpress_rl_' . md5( $ip );
+    $ip       = clawpress_get_client_ip();
+    $ip_hash  = md5( $ip );
+    $now      = time();
+    $limits   = get_option( '_clawpress_rate_limits', array() );
 
-    $count = (int) get_transient( $key );
+    // Clean expired entries.
+    foreach ( $limits as $hash => $entry ) {
+        if ( $now - $entry['start'] >= CLAWPRESS_RATE_WINDOW ) {
+            unset( $limits[ $hash ] );
+        }
+    }
+
+    $count = 0;
+    if ( isset( $limits[ $ip_hash ] ) ) {
+        $count = $limits[ $ip_hash ]['count'];
+    }
 
     if ( $count >= CLAWPRESS_RATE_LIMIT ) {
+        update_option( '_clawpress_rate_limits', $limits, false );
         return false;
     }
 
-    if ( 0 === $count ) {
-        set_transient( $key, 1, CLAWPRESS_RATE_WINDOW );
-    } else {
-        // Preserve remaining TTL by updating the value only.
-        // WordPress doesn't expose TTL natively, so we overwrite with full window.
-        // Acceptable trade-off for a simple rate limiter.
-        set_transient( $key, $count + 1, CLAWPRESS_RATE_WINDOW );
-    }
+    $limits[ $ip_hash ] = array(
+        'count' => $count + 1,
+        'start' => isset( $limits[ $ip_hash ] ) ? $limits[ $ip_hash ]['start'] : $now,
+    );
 
+    update_option( '_clawpress_rate_limits', $limits, false );
     return true;
 }
 
 function clawpress_get_client_ip(): string {
-    $headers = [
-        'HTTP_CF_CONNECTING_IP', // Cloudflare
-        'HTTP_X_REAL_IP',
-        'HTTP_X_FORWARDED_FOR',
-        'REMOTE_ADDR',
-    ];
+    // Only trust proxy headers when explicitly configured (e.g. behind Cloudflare
+    // or a reverse proxy that overwrites these headers).
+    if ( defined( 'CLAWPRESS_TRUST_PROXY' ) && CLAWPRESS_TRUST_PROXY ) {
+        $proxy_headers = [
+            'HTTP_CF_CONNECTING_IP', // Cloudflare
+            'HTTP_X_REAL_IP',
+            'HTTP_X_FORWARDED_FOR',
+        ];
 
-    foreach ( $headers as $header ) {
-        if ( ! empty( $_SERVER[ $header ] ) ) {
-            // X-Forwarded-For can be a comma-separated list; take the first.
-            $ip = trim( explode( ',', sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) ) )[0] );
-            if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
-                return $ip;
+        foreach ( $proxy_headers as $header ) {
+            if ( ! empty( $_SERVER[ $header ] ) ) {
+                // X-Forwarded-For can be a comma-separated list; take the first.
+                $ip = trim( explode( ',', sanitize_text_field( wp_unslash( $_SERVER[ $header ] ) ) )[0] );
+                if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+                    return $ip;
+                }
             }
         }
+    }
+
+    // Default: trust only REMOTE_ADDR (cannot be spoofed at the TCP level).
+    $ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '0.0.0.0';
+    if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+        return $ip;
     }
 
     return '0.0.0.0';
@@ -311,6 +346,8 @@ function clawpress_verify_gravatar( WP_REST_Request $request ): WP_REST_Response
     update_user_meta( $user_id, '_clawpress_verified_email', $email );
 
     $user = get_user_by( 'ID', $user_id );
+
+    do_action( 'clawpress_audit', 'account_verified', array( 'username' => $user->user_login, 'email' => $email ) );
 
     return new WP_REST_Response( [
         'success'    => true,
@@ -573,8 +610,21 @@ function clawpress_block_password_reset( $allow, $user_id ) {
 
 function clawpress_provision( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 
+    // 0. Token gate — when CLAWPRESS_PROVISION_TOKEN is defined, require it.
+    if ( defined( 'CLAWPRESS_PROVISION_TOKEN' ) && CLAWPRESS_PROVISION_TOKEN ) {
+        $token = $request->get_header( 'X-ClawPress-Token' );
+        if ( ! $token || ! hash_equals( CLAWPRESS_PROVISION_TOKEN, $token ) ) {
+            return new WP_Error(
+                'unauthorized',
+                'A valid provisioning token is required.',
+                array( 'status' => 403 )
+            );
+        }
+    }
+
     // 1. Rate limit check
     if ( ! clawpress_check_rate_limit() ) {
+        do_action( 'clawpress_audit', 'rate_limit_exceeded', array( 'ip' => clawpress_get_client_ip() ) );
         return new WP_Error(
             'rate_limit_exceeded',
             'Too many provisioning requests from this IP. Try again in an hour.',
@@ -590,19 +640,10 @@ function clawpress_provision( WP_REST_Request $request ): WP_REST_Response|WP_Er
 
     // 2. Check for existing username
     if ( username_exists( $username ) ) {
-        $user       = get_user_by( 'login', $username );
-        $author_url = get_author_posts_url( $user->ID );
-
         return new WP_Error(
-            'username_taken',
-            sprintf(
-                'The username "%s" is already registered. Credentials are not re-issued for security reasons.',
-                $username
-            ),
-            [
-                'status'     => 409,
-                'author_url' => $author_url,
-            ]
+            'username_unavailable',
+            'This username is not available.',
+            [ 'status' => 409 ]
         );
     }
 
@@ -618,14 +659,15 @@ function clawpress_provision( WP_REST_Request $request ): WP_REST_Response|WP_Er
         'display_name' => $display_name,
         'description'  => $description,
         'user_url'     => $homepage,
-        'role'         => 'author',
+        'role'         => CLAWPRESS_PROVISION_ROLE,
         'user_pass'    => wp_generate_password( 64, true, true ), // long random, never disclosed
     ] );
 
     if ( is_wp_error( $user_id ) ) {
+        error_log( '[ClawPress] Provision user creation failed: ' . $user_id->get_error_message() );
         return new WP_Error(
             'user_creation_failed',
-            $user_id->get_error_message(),
+            'Account creation failed. Please try again later.',
             [ 'status' => 500 ]
         );
     }
@@ -678,10 +720,11 @@ function clawpress_provision( WP_REST_Request $request ): WP_REST_Response|WP_Er
     );
 
     if ( is_wp_error( $app_pass_result ) ) {
+        error_log( '[ClawPress] Provision app password failed: ' . $app_pass_result->get_error_message() );
         wp_delete_user( $user_id );
         return new WP_Error(
             'app_password_failed',
-            $app_pass_result->get_error_message(),
+            'Account creation failed. Please try again later.',
             [ 'status' => 500 ]
         );
     }
@@ -692,6 +735,8 @@ function clawpress_provision( WP_REST_Request $request ): WP_REST_Response|WP_Er
     // 6. Build response URLs
     $author_url = get_author_posts_url( $user_id );
     $api_base   = rest_url( 'wp/v2/' );
+
+    do_action( 'clawpress_audit', 'account_provisioned', array( 'username' => $username, 'ip' => clawpress_get_client_ip() ) );
 
     // 7. Return credentials
     return new WP_REST_Response(

@@ -17,12 +17,39 @@ global $wpdb;
 $wpdb->delete( $wpdb->postmeta, array( 'meta_key' => '_clawpress_created' ) );
 
 // Remove any transients we may have set.
-$wpdb->query(
-	"DELETE FROM {$wpdb->options}
-	 WHERE option_name LIKE '_transient_clawpress\_%'
-	 OR option_name LIKE '_transient_timeout_clawpress\_%'"
-);
+$wpdb->query( $wpdb->prepare(
+	"DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+	$wpdb->esc_like( '_transient_clawpress_' ) . '%',
+	$wpdb->esc_like( '_transient_timeout_clawpress_' ) . '%'
+) );
 
-// Note: We do NOT delete Application Passwords here — that would break
-// existing connections and is a destructive action beyond plugin scope.
-// Users should revoke connections manually before uninstalling.
+// Remove ClawPress-managed Application Passwords.
+$all_user_ids = get_users( array( 'fields' => 'ID' ) );
+foreach ( $all_user_ids as $uid ) {
+	$passwords = WP_Application_Passwords::get_user_application_passwords( $uid );
+	foreach ( $passwords as $item ) {
+		if ( in_array( $item['name'], array( 'OpenClaw', 'ClawPress Auto-Provisioned' ), true ) ) {
+			WP_Application_Passwords::delete_application_password( $uid, $item['uuid'] );
+		}
+	}
+}
+
+// Remove provisioner user meta.
+$clawpress_meta_keys = array(
+	'_clawpress_provisioned',
+	'_clawpress_provisioned_at',
+	'_clawpress_provisioned_ip',
+	'_clawpress_fingerprint',
+	'_clawpress_verified',
+	'_clawpress_verified_at',
+	'_clawpress_verified_email',
+);
+foreach ( $clawpress_meta_keys as $meta_key ) {
+	$wpdb->delete( $wpdb->usermeta, array( 'meta_key' => $meta_key ) );
+}
+
+// Remove comment meta.
+$wpdb->delete( $wpdb->commentmeta, array( 'meta_key' => '_clawpress_mentions' ) );
+
+// Remove rate limit option.
+delete_option( '_clawpress_rate_limits' );
