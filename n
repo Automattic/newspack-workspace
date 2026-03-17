@@ -124,7 +124,12 @@ case $1 in
         start "${@:2}"
         ;;
     sh)
-        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER /bin/bash
+        if [[ -n "$2" ]]; then
+            container=$(echo "newspack_env_${2}" | tr '-' '_')
+            docker exec $DOCKER_IT $USER_COMMAND "$container" /bin/bash
+        else
+            docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER /bin/bash
+        fi
         ;;
     rsh)
         docker exec $DOCKER_IT $TARGET_CONTAINER /bin/bash
