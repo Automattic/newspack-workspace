@@ -84,6 +84,8 @@ ${worktree_volumes}      - ./html:/var/www/html
       - APACHE_RUN_USER=\${USE_CUSTOM_APACHE_USER:-www-data}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - default
 YAML
         echo "Created $compose_file"
         echo "Run: n env up $env_name"

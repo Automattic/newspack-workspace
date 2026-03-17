@@ -36,7 +36,7 @@ if [ ! -f /var/www/html/wp-config.php ]; then
 	wp --allow-root config set WP_CACHE true --type=constant
 
 	# Dynamic URL resolution for multi-environment support
-	wp --allow-root config set NEWSPACK_URL "'http://${WP_DOMAIN}'" --raw --type=constant
+	wp --allow-root config set NEWSPACK_URL "'https://${WP_DOMAIN}'" --raw --type=constant
 
 	# Insert URL resolution logic after NEWSPACK_URL
 	sed -i "/define( 'NEWSPACK_URL'/r /var/scripts/wp-config-url-resolution.php" /var/www/html/wp-config.php
