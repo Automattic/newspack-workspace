@@ -34,6 +34,9 @@ if [ ! -f /var/www/html/wp-config.php ]; then
 	wp --allow-root config set AUTOMATIC_UPDATER_DISABLED true --raw --type=constant
 	wp --allow-root config set table_prefix ${TABLE_PREFIX}
 	wp --allow-root config set WP_CACHE true --type=constant
+	if [ -n "$WP_CACHE_KEY_SALT" ]; then
+		wp --allow-root config set WP_CACHE_KEY_SALT "$WP_CACHE_KEY_SALT" --type=constant
+	fi
 
 	# Dynamic URL resolution for multi-environment support
 	wp --allow-root config set NEWSPACK_URL "'https://${WP_DOMAIN}'" --raw --type=constant
