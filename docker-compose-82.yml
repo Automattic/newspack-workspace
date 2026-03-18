@@ -47,8 +47,8 @@ services:
       - ./additional-sites-html:/var/www/additional-sites-html
       - ./snapshots:/snapshots
     ports:
-      - "${PORT_WORDPRESS:-80}:80"
-      - "${PORT_WORDPRESS:-443}:443"
+      - "127.0.0.1:${PORT_WORDPRESS:-80}:80"
+      - "127.0.0.1:${PORT_WORDPRESS:-443}:443"
     env_file:
       - default.env
       - .env
