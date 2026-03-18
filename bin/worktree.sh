@@ -19,11 +19,12 @@ case $1 in
         fi
         worktree_dir="$NABSPATH/worktrees/$repo/$branch"
         mkdir -p "$(dirname "$worktree_dir")"
-        cd "$repo_dir"
+        cd "$repo_dir" || exit 1
         if git show-ref --verify --quiet "refs/heads/$branch" || git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
-            git worktree add "$worktree_dir" "$branch"
+            git worktree add "$worktree_dir" "$branch" || exit 1
         else
-            git worktree add -b "$branch" "$worktree_dir"
+            echo "Creating branch '$branch' from $(git rev-parse --abbrev-ref HEAD)..."
+            git worktree add -b "$branch" "$worktree_dir" || exit 1
         fi
         ;;
     list)
