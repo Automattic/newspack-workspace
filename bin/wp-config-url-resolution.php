@@ -15,9 +15,13 @@ if ( ! empty( $_SERVER['HTTP_HOST'] ) ) {
 	$is_localhost = preg_match( '/^localhost(:\d+)?$/', $host );
 	$is_allowed   = in_array( $host, $newspack_allowed_hosts, true );
 	if ( $is_localhost || $is_allowed ) {
-		$_SERVER['HTTPS'] = isset( $_SERVER['HTTP_X_FORWARDED_PROTO'] ) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https' ? 'on' : null;
-		$scheme           = ! empty( $_SERVER['HTTPS'] ) ? 'https' : 'http';
-		$site_url         = $scheme . '://' . $host;
+		$is_https = ! empty( $_SERVER['HTTPS'] )
+			|| ( isset( $_SERVER['HTTP_X_FORWARDED_PROTO'] ) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https' );
+		if ( $is_https ) {
+			$_SERVER['HTTPS'] = 'on';
+		}
+		$scheme   = $is_https ? 'https' : 'http';
+		$site_url = $scheme . '://' . $host;
 	}
 }
 if ( ! $site_url ) {
