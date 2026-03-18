@@ -138,7 +138,97 @@ case $1 in
         done
         exit 0
         ;;
+    cleanup)
+        # Collect all worktrees across repos.
+        worktrees=()
+        worktree_repos=()
+        worktree_branches=()
+        for dir in "$NABSPATH"/repos/*/; do
+            [[ -d "$dir/.git" ]] || continue
+            repo=$(basename "$dir")
+            while IFS= read -r line; do
+                # Skip the main worktree (first line).
+                wt_path=$(echo "$line" | awk '{print $1}')
+                wt_branch=$(echo "$line" | sed 's/.*\[//' | sed 's/\]//')
+                [[ "$wt_path" == "${dir%/}"* ]] && continue  # skip main repo dir
+                [[ -z "$wt_branch" ]] && continue
+                worktrees+=("$repo:$wt_branch")
+                worktree_repos+=("$repo")
+                worktree_branches+=("$wt_branch")
+            done < <(cd "$dir" && git worktree list 2>/dev/null)
+        done
+        if [[ ${#worktrees[@]} -eq 0 ]]; then
+            echo "No worktrees to clean up."
+            exit 0
+        fi
+        # Track which indices to keep (use index-based array to avoid key issues).
+        keep_flags=()
+        for i in "${!worktrees[@]}"; do keep_flags[$i]=false; done
+        while true; do
+            echo ""
+            echo "Worktrees (marked for REMOVAL unless toggled):"
+            for i in "${!worktrees[@]}"; do
+                repo="${worktree_repos[$i]}"
+                branch="${worktree_branches[$i]}"
+                # Check if an env uses this worktree.
+                env_label=""
+                for f in "$NABSPATH"/docker-compose.env-*.yml; do
+                    [[ -f "$f" ]] || continue
+                    if grep -q "worktrees/$repo/$branch" "$f" 2>/dev/null; then
+                        env_name=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
+                        env_label=" (env: $env_name)"
+                        break
+                    fi
+                done
+                if [[ "${keep_flags[$i]}" == true ]]; then
+                    echo "  $((i+1)). [KEEP]    ${worktrees[$i]}$env_label"
+                else
+                    echo "  $((i+1)). [REMOVE]  ${worktrees[$i]}$env_label"
+                fi
+            done
+            echo ""
+            echo "Enter a number to toggle, 'a' to select all for removal, or 'go' to proceed:"
+            read -p "> " choice
+            if [[ "$choice" == "go" ]]; then
+                break
+            elif [[ "$choice" == "a" ]]; then
+                for i in "${!worktrees[@]}"; do keep_flags[$i]=false; done
+            elif [[ "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -ge 1 && "$choice" -le ${#worktrees[@]} ]]; then
+                idx=$((choice-1))
+                if [[ "${keep_flags[$idx]}" == true ]]; then
+                    keep_flags[$idx]=false
+                else
+                    keep_flags[$idx]=true
+                fi
+            fi
+        done
+        to_remove=()
+        to_remove_repos=()
+        to_remove_branches=()
+        for i in "${!worktrees[@]}"; do
+            if [[ "${keep_flags[$i]}" != true ]]; then
+                to_remove+=("${worktrees[$i]}")
+                to_remove_repos+=("${worktree_repos[$i]}")
+                to_remove_branches+=("${worktree_branches[$i]}")
+            fi
+        done
+        if [[ ${#to_remove[@]} -eq 0 ]]; then
+            echo "Nothing to remove."
+            exit 0
+        fi
+        echo "Will remove: ${to_remove[*]}"
+        read -p "Confirm? (y/N): " confirm
+        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+            echo "Aborted."
+            exit 0
+        fi
+        for i in "${!to_remove[@]}"; do
+            echo ""
+            echo "--- Removing ${to_remove[$i]} ---"
+            "$NABSPATH/bin/worktree.sh" remove --yes "${to_remove_repos[$i]}" "${to_remove_branches[$i]}"
+        done
+        ;;
     *)
-        echo "Usage: n worktree <add|list|remove> [repo] [branch]"
+        echo "Usage: n worktree <add|list|remove|cleanup> [repo] [branch]"
         ;;
 esac

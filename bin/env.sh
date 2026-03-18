@@ -374,7 +374,73 @@ YAML
             fi
         done
         ;;
+    cleanup)
+        envs=()
+        for f in "$NABSPATH"/docker-compose.env-*.yml; do
+            [[ -f "$f" ]] || continue
+            name=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
+            envs+=("$name")
+        done
+        if [[ ${#envs[@]} -eq 0 ]]; then
+            echo "No environments to clean up."
+            exit 0
+        fi
+        # Track which indices to keep.
+        keep_flags=()
+        for i in "${!envs[@]}"; do keep_flags[$i]=false; done
+        while true; do
+            echo ""
+            echo "Environments (marked for REMOVAL unless toggled):"
+            for i in "${!envs[@]}"; do
+                name="${envs[$i]}"
+                container_name=$(echo "newspack_env_${name}" | tr '-' '_')
+                domain=$(domain_for_env "$NABSPATH/docker-compose.env-${name}.yml")
+                status="stopped"
+                docker inspect -f '{{.State.Status}}' "$container_name" >/dev/null 2>&1 && \
+                    status=$(docker inspect -f '{{.State.Status}}' "$container_name" 2>/dev/null)
+                if [[ "${keep_flags[$i]}" == true ]]; then
+                    echo "  $((i+1)). [KEEP]    $name ($status) https://${domain}/"
+                else
+                    echo "  $((i+1)). [REMOVE]  $name ($status) https://${domain}/"
+                fi
+            done
+            echo ""
+            echo "Enter a number to toggle, 'a' to select all for removal, or 'go' to proceed:"
+            read -p "> " choice
+            if [[ "$choice" == "go" ]]; then
+                break
+            elif [[ "$choice" == "a" ]]; then
+                for i in "${!envs[@]}"; do keep_flags[$i]=false; done
+            elif [[ "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -ge 1 && "$choice" -le ${#envs[@]} ]]; then
+                idx=$((choice-1))
+                if [[ "${keep_flags[$idx]}" == true ]]; then
+                    keep_flags[$idx]=false
+                else
+                    keep_flags[$idx]=true
+                fi
+            fi
+        done
+        to_remove=()
+        for i in "${!envs[@]}"; do
+            [[ "${keep_flags[$i]}" != true ]] && to_remove+=("${envs[$i]}")
+        done
+        if [[ ${#to_remove[@]} -eq 0 ]]; then
+            echo "Nothing to remove."
+            exit 0
+        fi
+        echo "Will destroy: ${to_remove[*]}"
+        read -p "Confirm? (y/N): " confirm
+        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+            echo "Aborted."
+            exit 0
+        fi
+        for name in "${to_remove[@]}"; do
+            echo ""
+            echo "--- Destroying $name ---"
+            "$NABSPATH/bin/env.sh" destroy "$name"
+        done
+        ;;
     *)
-        echo "Usage: n env <create|up|down|destroy|list>"
+        echo "Usage: n env <create|up|down|destroy|list|cleanup>"
         ;;
 esac
