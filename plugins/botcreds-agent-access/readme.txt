@@ -1,5 +1,5 @@
 === Agent Access ===
-Contributors: agentaccess
+Contributors: jboydston
 Tags: ai, agents, openclaw, application-passwords, api
 Requires at least: 5.6
 Tested up to: 6.9
