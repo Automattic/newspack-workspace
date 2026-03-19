@@ -35,6 +35,7 @@ class Agent_Access_Tracker {
 
 		if ( $this->is_openclaw_request() ) {
 			update_post_meta( $post_id, self::META_KEY, time() );
+			wp_cache_delete( 'agent_access_stats_' . get_current_user_id(), 'agent_access' );
 		}
 	}
 
@@ -46,6 +47,7 @@ class Agent_Access_Tracker {
 	public function maybe_tag_attachment( $attachment_id ) {
 		if ( $this->is_openclaw_request() ) {
 			update_post_meta( $attachment_id, self::META_KEY, time() );
+			wp_cache_delete( 'agent_access_stats_' . get_current_user_id(), 'agent_access' );
 		}
 	}
 
@@ -90,9 +92,17 @@ class Agent_Access_Tracker {
 	 * @return array{post_count: int, media_count: int, recent_posts: array}
 	 */
 	public static function get_stats( $user_id ) {
+		$cache_key = 'agent_access_stats_' . $user_id;
+		$cached    = wp_cache_get( $cache_key, 'agent_access' );
+
+		if ( false !== $cached ) {
+			return $cached;
+		}
+
 		global $wpdb;
 
-		// Count posts (not attachments) tagged by Agent Access
+		// Count posts (not attachments) tagged by Agent Access.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$post_count = (int) $wpdb->get_var( $wpdb->prepare(
 			"SELECT COUNT(*) FROM {$wpdb->posts} p
 			 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
@@ -104,7 +114,8 @@ class Agent_Access_Tracker {
 			self::META_KEY
 		) );
 
-		// Count media tagged by Agent Access
+		// Count media tagged by Agent Access.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$media_count = (int) $wpdb->get_var( $wpdb->prepare(
 			"SELECT COUNT(*) FROM {$wpdb->posts} p
 			 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
@@ -115,7 +126,8 @@ class Agent_Access_Tracker {
 			self::META_KEY
 		) );
 
-		// Recent posts (last 5)
+		// Recent posts (last 5).
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$recent_posts = $wpdb->get_results( $wpdb->prepare(
 			"SELECT p.ID, p.post_title, p.post_date, p.post_status, p.post_type
 			 FROM {$wpdb->posts} p
@@ -130,10 +142,14 @@ class Agent_Access_Tracker {
 			self::META_KEY
 		) );
 
-		return array(
+		$stats = array(
 			'post_count'   => $post_count,
 			'media_count'  => $media_count,
 			'recent_posts' => $recent_posts,
 		);
+
+		wp_cache_set( $cache_key, $stats, 'agent_access', 300 );
+
+		return $stats;
 	}
 }

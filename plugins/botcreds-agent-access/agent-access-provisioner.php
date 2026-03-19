@@ -664,7 +664,9 @@ function agent_access_provision( WP_REST_Request $request ): WP_REST_Response|WP
     ] );
 
     if ( is_wp_error( $user_id ) ) {
-        error_log( '[Agent Access] Provision user creation failed: ' . $user_id->get_error_message() );
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            error_log( '[Agent Access] Provision user creation failed: ' . $user_id->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+        }
         return new WP_Error(
             'user_creation_failed',
             'Account creation failed. Please try again later.',
@@ -720,7 +722,9 @@ function agent_access_provision( WP_REST_Request $request ): WP_REST_Response|WP
     );
 
     if ( is_wp_error( $app_pass_result ) ) {
-        error_log( '[Agent Access] Provision app password failed: ' . $app_pass_result->get_error_message() );
+        if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            error_log( '[Agent Access] Provision app password failed: ' . $app_pass_result->get_error_message() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+        }
         wp_delete_user( $user_id );
         return new WP_Error(
             'app_password_failed',
