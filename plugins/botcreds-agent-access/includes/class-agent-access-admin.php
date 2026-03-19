@@ -1,25 +1,25 @@
 <?php
 /**
- * ClawPress Admin — Profile page integration and AJAX handlers.
+ * Agent Access Admin — Profile page integration and AJAX handlers.
  *
- * @package ClawPress
+ * @package Agent Access
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ClawPress_Admin {
+class Agent_Access_Admin {
 
 	/**
-	 * @var ClawPress_API
+	 * @var Agent_Access_API
 	 */
 	private $api;
 
 	/**
-	 * @param ClawPress_API $api
+	 * @param Agent_Access_API $api
 	 */
-	public function __construct( ClawPress_API $api ) {
+	public function __construct( Agent_Access_API $api ) {
 		$this->api = $api;
 	}
 
@@ -31,8 +31,8 @@ class ClawPress_Admin {
 		add_action( 'edit_user_profile', array( $this, 'render_profile_section' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
-		add_action( 'wp_ajax_clawpress_create', array( $this, 'handle_create_ajax' ) );
-		add_action( 'wp_ajax_clawpress_revoke', array( $this, 'handle_revoke_ajax' ) );
+		add_action( 'wp_ajax_agent_access_create', array( $this, 'handle_create_ajax' ) );
+		add_action( 'wp_ajax_agent_access_revoke', array( $this, 'handle_revoke_ajax' ) );
 	}
 
 	/**
@@ -41,47 +41,47 @@ class ClawPress_Admin {
 	 * @param string $hook_suffix The current admin page hook suffix.
 	 */
 	/**
-	 * Register Tools → ClawPress admin page.
+	 * Register Tools → Agent Access admin page.
 	 */
 	public function add_admin_menu() {
 		add_management_page(
-			__( 'ClawPress', 'clawpress' ),
-			__( 'ClawPress', 'clawpress' ),
+			__( 'Agent Access', 'agent-access' ),
+			__( 'Agent Access', 'agent-access' ),
 			'manage_options',
-			'clawpress',
+			'agent-access',
 			array( $this, 'render_admin_page' )
 		);
 	}
 
 	public function enqueue_assets( $hook_suffix ) {
-		if ( ! in_array( $hook_suffix, array( 'profile.php', 'user-edit.php', 'tools_page_clawpress' ), true ) ) {
+		if ( ! in_array( $hook_suffix, array( 'profile.php', 'user-edit.php', 'tools_page_agent-access' ), true ) ) {
 			return;
 		}
 
 		wp_enqueue_style(
-			'clawpress-admin',
-			CLAWPRESS_PLUGIN_URL . 'assets/css/admin.css',
+			'agent-access-admin',
+			AGENT_ACCESS_PLUGIN_URL . 'assets/css/admin.css',
 			array(),
-			CLAWPRESS_VERSION
+			AGENT_ACCESS_VERSION
 		);
 
 		wp_enqueue_script(
-			'clawpress-admin',
-			CLAWPRESS_PLUGIN_URL . 'assets/js/admin.js',
+			'agent-access-admin',
+			AGENT_ACCESS_PLUGIN_URL . 'assets/js/admin.js',
 			array(),
-			CLAWPRESS_VERSION,
+			AGENT_ACCESS_VERSION,
 			true
 		);
 
-		wp_localize_script( 'clawpress-admin', 'clawpress', array(
+		wp_localize_script( 'agent-access-admin', 'agentAccess', array(
 			'ajax_url'       => admin_url( 'admin-ajax.php' ),
-			'create_nonce'   => wp_create_nonce( 'clawpress_create' ),
-			'revoke_nonce'   => wp_create_nonce( 'clawpress_revoke' ),
-			'confirm_msg'    => __( 'Are you sure you want to revoke the OpenClaw connection? You will need to reconfigure OpenClaw with a new password.', 'clawpress' ),
-			'creating_text'  => __( 'Connecting…', 'clawpress' ),
-			'revoking_text'  => __( 'Revoking…', 'clawpress' ),
-			'copied_text'    => __( 'Copied!', 'clawpress' ),
-			'copy_text'      => __( 'Copy', 'clawpress' ),
+			'create_nonce'   => wp_create_nonce( 'agent_access_create' ),
+			'revoke_nonce'   => wp_create_nonce( 'agent_access_revoke' ),
+			'confirm_msg'    => __( 'Are you sure you want to revoke the agent connection? You will need to reconfigure your agent with a new password.', 'agent-access' ),
+			'creating_text'  => __( 'Connecting…', 'agent-access' ),
+			'revoking_text'  => __( 'Revoking…', 'agent-access' ),
+			'copied_text'    => __( 'Copied!', 'agent-access' ),
+			'copy_text'      => __( 'Copy', 'agent-access' ),
 		) );
 	}
 
@@ -90,10 +90,10 @@ class ClawPress_Admin {
 	 */
 	public function handle_create_ajax() {
 		if ( ! current_user_can( 'edit_posts' ) ) {
-			wp_send_json_error( __( 'You do not have permission to do this.', 'clawpress' ) );
+			wp_send_json_error( __( 'You do not have permission to do this.', 'agent-access' ) );
 		}
 
-		check_ajax_referer( 'clawpress_create', 'nonce' );
+		check_ajax_referer( 'agent_access_create', 'nonce' );
 
 		$result = $this->api->create_password();
 
@@ -104,7 +104,7 @@ class ClawPress_Admin {
 		$connection_info = $this->api->get_connection_info( $result['password'] );
 
 		$user = wp_get_current_user();
-		do_action( 'clawpress_audit', 'app_password_created', array( 'username' => $user->user_login ) );
+		do_action( 'agent_access_audit', 'app_password_created', array( 'username' => $user->user_login ) );
 
 		wp_send_json_success( $connection_info );
 	}
@@ -114,10 +114,10 @@ class ClawPress_Admin {
 	 */
 	public function handle_revoke_ajax() {
 		if ( ! current_user_can( 'edit_posts' ) ) {
-			wp_send_json_error( __( 'You do not have permission to do this.', 'clawpress' ) );
+			wp_send_json_error( __( 'You do not have permission to do this.', 'agent-access' ) );
 		}
 
-		check_ajax_referer( 'clawpress_revoke', 'nonce' );
+		check_ajax_referer( 'agent_access_revoke', 'nonce' );
 
 		$result = $this->api->revoke_password();
 
@@ -126,13 +126,13 @@ class ClawPress_Admin {
 		}
 
 		$user = wp_get_current_user();
-		do_action( 'clawpress_audit', 'app_password_revoked', array( 'username' => $user->user_login ) );
+		do_action( 'agent_access_audit', 'app_password_revoked', array( 'username' => $user->user_login ) );
 
-		wp_send_json_success( __( 'OpenClaw connection revoked successfully.', 'clawpress' ) );
+		wp_send_json_success( __( 'Agent connection revoked successfully.', 'agent-access' ) );
 	}
 
 	/**
-	 * Render the ClawPress section on the profile page.
+	 * Render the Agent Access section on the profile page.
 	 *
 	 * @param WP_User $user The user being edited.
 	 */
@@ -144,30 +144,30 @@ class ClawPress_Admin {
 
 		$existing       = $this->api->get_existing_password();
 		$user_id        = get_current_user_id();
-		$error_message  = get_transient( 'clawpress_error_' . $user_id );
-		$created_info   = get_transient( 'clawpress_created_' . $user_id );
+		$error_message  = get_transient( 'agent_access_error_' . $user_id );
+		$created_info   = get_transient( 'agent_access_created_' . $user_id );
 		$just_created   = ! empty( $created_info );
 
 		if ( $error_message ) {
-			delete_transient( 'clawpress_error_' . $user_id );
+			delete_transient( 'agent_access_error_' . $user_id );
 		}
 		if ( $just_created ) {
-			delete_transient( 'clawpress_created_' . $user_id );
+			delete_transient( 'agent_access_created_' . $user_id );
 		}
 
 		?>
-		<div id="clawpress" class="clawpress-profile-section">
-			<h2 class="clawpress-title">
-				<span class="clawpress-logo">&#129438;</span>
-				<?php esc_html_e( 'ClawPress by WordPress.com', 'clawpress' ); ?>
+		<div id="agent-access" class="agent-access-profile-section">
+			<h2 class="agent-access-title">
+				<span class="agent-access-logo">&#129438;</span>
+				<?php esc_html_e( 'Agent Access', 'agent-access' ); ?>
 				<span class="dashicons dashicons-wordpress" style="font-size:1.2em;vertical-align:middle;opacity:0.7;"></span>
 			</h2>
 			<p class="description">
-				<?php esc_html_e( 'Connect OpenClaw to your WordPress site in one click.', 'clawpress' ); ?>
+				<?php esc_html_e( 'Connect your AI agent to WordPress in one click.', 'agent-access' ); ?>
 			</p>
 
 			<?php if ( $error_message ) : ?>
-				<div class="notice notice-error inline clawpress-notice">
+				<div class="notice notice-error inline agent-access-notice">
 					<p><?php echo esc_html( $error_message ); ?></p>
 				</div>
 			<?php endif; ?>
@@ -191,22 +191,22 @@ class ClawPress_Admin {
 	private function render_created_state( $info ) {
 		$json = wp_json_encode( $info, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
 		?>
-		<p><span class="clawpress-success-icon">&#10003;</span> <strong><?php esc_html_e( 'Connection Created!', 'clawpress' ); ?></strong></p>
+		<p><span class="agent-access-success-icon">&#10003;</span> <strong><?php esc_html_e( 'Connection Created!', 'agent-access' ); ?></strong></p>
 
-		<div class="clawpress-warning-box">
-			<strong><?php esc_html_e( 'Important:', 'clawpress' ); ?></strong>
-			<?php esc_html_e( 'This password will only be shown once. Copy the message below and send it to OpenClaw.', 'clawpress' ); ?>
+		<div class="agent-access-warning-box">
+			<strong><?php esc_html_e( 'Important:', 'agent-access' ); ?></strong>
+			<?php esc_html_e( 'This password will only be shown once. Copy the message below and send it to your AI agent.', 'agent-access' ); ?>
 		</div>
 
-		<div class="clawpress-json-block">
-			<pre class="clawpress-json" id="clawpress-json"><?php echo esc_html( 'Save these WordPress Application Password credentials and use them to connect to my site via the WordPress REST API:' . "\n" . $json ); ?></pre>
-			<button type="button" class="button clawpress-copy-btn" data-target="clawpress-json">
-				<?php esc_html_e( 'Copy', 'clawpress' ); ?>
+		<div class="agent-access-json-block">
+			<pre class="agent-access-json" id="agent-access-json"><?php echo esc_html( 'Save these WordPress Application Password credentials and use them to connect to my site via the WordPress REST API:' . "\n" . $json ); ?></pre>
+			<button type="button" class="button agent-access-copy-btn" data-target="agent-access-json">
+				<?php esc_html_e( 'Copy', 'agent-access' ); ?>
 			</button>
 		</div>
 
-		<p class="clawpress-next-step">
-			<?php esc_html_e( 'Paste this into your OpenClaw chat (Telegram, WhatsApp, etc.) and your agent will handle the rest.', 'clawpress' ); ?>
+		<p class="agent-access-next-step">
+			<?php esc_html_e( 'Paste this into your Agent Access chat (Telegram, WhatsApp, etc.) and your agent will handle the rest.', 'agent-access' ); ?>
 		</p>
 		<?php
 	}
@@ -220,46 +220,46 @@ class ClawPress_Admin {
 		$created_date = date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $existing['created'] );
 		$last_used    = ! empty( $existing['last_used'] )
 			? date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $existing['last_used'] )
-			: __( 'Never', 'clawpress' );
-		$stats        = ClawPress_Tracker::get_stats( get_current_user_id() );
+			: __( 'Never', 'agent-access' );
+		$stats        = Agent_Access_Tracker::get_stats( get_current_user_id() );
 		?>
-		<div class="clawpress-notice-row">
-			<div class="clawpress-notice-box clawpress-notice-box--green">
-				<?php esc_html_e( 'Connected', 'clawpress' ); ?>
+		<div class="agent-access-notice-row">
+			<div class="agent-access-notice-box agent-access-notice-box--green">
+				<?php esc_html_e( 'Connected', 'agent-access' ); ?>
 			</div>
-			<div class="clawpress-notice-box clawpress-notice-box--red">
-				<?php esc_html_e( 'Your OpenClaw agent can post here on your behalf.', 'clawpress' ); ?>
+			<div class="agent-access-notice-box agent-access-notice-box--red">
+				<?php esc_html_e( 'Your AI agent can post here on your behalf.', 'agent-access' ); ?>
 			</div>
 		</div>
 
-		<table class="clawpress-status-table">
+		<table class="agent-access-status-table">
 			<tr>
-				<th><?php esc_html_e( 'Created', 'clawpress' ); ?></th>
+				<th><?php esc_html_e( 'Created', 'agent-access' ); ?></th>
 				<td><?php echo esc_html( $created_date ); ?></td>
 			</tr>
 			<tr>
-				<th><?php esc_html_e( 'Last Used', 'clawpress' ); ?></th>
+				<th><?php esc_html_e( 'Last Used', 'agent-access' ); ?></th>
 				<td><?php echo esc_html( $last_used ); ?></td>
 			</tr>
 			<tr>
-				<th><?php esc_html_e( 'Posts', 'clawpress' ); ?></th>
+				<th><?php esc_html_e( 'Posts', 'agent-access' ); ?></th>
 				<td>
 					<?php
 					printf(
 						/* translators: %d: number of posts */
-						esc_html( _n( '%d post created via OpenClaw', '%d posts created via OpenClaw', $stats['post_count'], 'clawpress' ) ),
+						esc_html( _n( '%d post created via agent', '%d posts created via agent', $stats['post_count'], 'agent-access' ) ),
 						$stats['post_count']
 					);
 					?>
 				</td>
 			</tr>
 			<tr>
-				<th><?php esc_html_e( 'Media', 'clawpress' ); ?></th>
+				<th><?php esc_html_e( 'Media', 'agent-access' ); ?></th>
 				<td>
 					<?php
 					printf(
 						/* translators: %d: number of files */
-						esc_html( _n( '%d file uploaded via OpenClaw', '%d files uploaded via OpenClaw', $stats['media_count'], 'clawpress' ) ),
+						esc_html( _n( '%d file uploaded via agent', '%d files uploaded via agent', $stats['media_count'], 'agent-access' ) ),
 						$stats['media_count']
 					);
 					?>
@@ -268,13 +268,13 @@ class ClawPress_Admin {
 		</table>
 
 		<?php if ( ! empty( $stats['recent_posts'] ) ) : ?>
-			<h3><?php esc_html_e( 'Recent OpenClaw Posts', 'clawpress' ); ?></h3>
-			<table class="widefat striped clawpress-recent-table">
+			<h3><?php esc_html_e( 'Recent Agent Posts', 'agent-access' ); ?></h3>
+			<table class="widefat striped agent-access-recent-table">
 				<thead>
 					<tr>
-						<th><?php esc_html_e( 'Title', 'clawpress' ); ?></th>
-						<th><?php esc_html_e( 'Date', 'clawpress' ); ?></th>
-						<th><?php esc_html_e( 'Status', 'clawpress' ); ?></th>
+						<th><?php esc_html_e( 'Title', 'agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Date', 'agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Status', 'agent-access' ); ?></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -282,23 +282,23 @@ class ClawPress_Admin {
 						<tr>
 							<td>
 								<a href="<?php echo esc_url( get_edit_post_link( $post->ID ) ); ?>">
-									<?php echo esc_html( $post->post_title ?: __( '(no title)', 'clawpress' ) ); ?>
+									<?php echo esc_html( $post->post_title ?: __( '(no title)', 'agent-access' ) ); ?>
 								</a>
 							</td>
 							<td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $post->post_date ) ) ); ?></td>
-							<td><span class="clawpress-badge clawpress-badge--<?php echo esc_attr( $post->post_status ); ?>"><?php echo esc_html( ucfirst( $post->post_status ) ); ?></span></td>
+							<td><span class="agent-access-badge agent-access-badge--<?php echo esc_attr( $post->post_status ); ?>"><?php echo esc_html( ucfirst( $post->post_status ) ); ?></span></td>
 						</tr>
 					<?php endforeach; ?>
 				</tbody>
 			</table>
 		<?php endif; ?>
 
-		<div class="clawpress-revoke-section">
-			<button type="button" class="button clawpress-revoke-btn" id="clawpress-revoke-btn">
-				<?php esc_html_e( 'Revoke Connection', 'clawpress' ); ?>
+		<div class="agent-access-revoke-section">
+			<button type="button" class="button agent-access-revoke-btn" id="agent-access-revoke-btn">
+				<?php esc_html_e( 'Revoke Connection', 'agent-access' ); ?>
 			</button>
-			<span class="clawpress-revoke-hint">
-				<?php esc_html_e( 'This will disconnect OpenClaw from your account.', 'clawpress' ); ?>
+			<span class="agent-access-revoke-hint">
+				<?php esc_html_e( 'This will disconnect your agent from your account.', 'agent-access' ); ?>
 			</span>
 		</div>
 		<?php
@@ -309,21 +309,21 @@ class ClawPress_Admin {
 	 */
 	private function render_disconnected_state() {
 		?>
-		<div id="clawpress-card">
+		<div id="agent-access-card">
 			<p>
-				<button type="button" class="button button-primary clawpress-create-btn" id="clawpress-create-btn">
-					<?php esc_html_e( 'Connect OpenClaw', 'clawpress' ); ?>
+				<button type="button" class="button button-primary agent-access-create-btn" id="agent-access-create-btn">
+					<?php esc_html_e( 'Connect Agent', 'agent-access' ); ?>
 				</button>
 			</p>
-			<p class="clawpress-create-hint">
-				<?php esc_html_e( 'This will generate a secure Application Password for OpenClaw. You\'ll be given credentials to paste into your OpenClaw config.', 'clawpress' ); ?>
+			<p class="agent-access-create-hint">
+				<?php esc_html_e( 'This will generate a secure Application Password for Agent Access. You\'ll be given credentials to paste into your Agent Access config.', 'agent-access' ); ?>
 			</p>
 		</div>
 		<?php
 	}
 
 	/**
-	 * Render the Tools → ClawPress admin page.
+	 * Render the Tools → Agent Access admin page.
 	 */
 	public function render_admin_page() {
 		$users_with_passwords = $this->get_all_openclaw_users();
@@ -331,22 +331,22 @@ class ClawPress_Admin {
 		<div class="wrap">
 			<h1>
 				<span>&#129438;</span>
-				<?php esc_html_e( 'ClawPress', 'clawpress' ); ?>
+				<?php esc_html_e( 'Agent Access', 'agent-access' ); ?>
 			</h1>
-			<p><?php esc_html_e( 'All users with active OpenClaw connections on this site.', 'clawpress' ); ?></p>
+			<p><?php esc_html_e( 'All users with active agent connections on this site.', 'agent-access' ); ?></p>
 
 			<?php if ( empty( $users_with_passwords ) ) : ?>
-				<p><em><?php esc_html_e( 'No users have connected OpenClaw yet.', 'clawpress' ); ?></em></p>
+				<p><em><?php esc_html_e( 'No users have connected an agent yet.', 'agent-access' ); ?></em></p>
 			<?php else : ?>
 				<table class="widefat striped">
 					<thead>
 						<tr>
-							<th><?php esc_html_e( 'User', 'clawpress' ); ?></th>
-							<th><?php esc_html_e( 'Role', 'clawpress' ); ?></th>
-							<th><?php esc_html_e( 'Created', 'clawpress' ); ?></th>
-							<th><?php esc_html_e( 'Last Used', 'clawpress' ); ?></th>
-							<th><?php esc_html_e( 'Posts', 'clawpress' ); ?></th>
-							<th><?php esc_html_e( 'Media', 'clawpress' ); ?></th>
+							<th><?php esc_html_e( 'User', 'agent-access' ); ?></th>
+							<th><?php esc_html_e( 'Role', 'agent-access' ); ?></th>
+							<th><?php esc_html_e( 'Created', 'agent-access' ); ?></th>
+							<th><?php esc_html_e( 'Last Used', 'agent-access' ); ?></th>
+							<th><?php esc_html_e( 'Posts', 'agent-access' ); ?></th>
+							<th><?php esc_html_e( 'Media', 'agent-access' ); ?></th>
 						</tr>
 					</thead>
 					<tbody>
@@ -362,7 +362,7 @@ class ClawPress_Admin {
 									<span class="description"><?php echo esc_html( $entry['user']->user_login ); ?></span>
 								</td>
 								<td>
-									<span class="clawpress-badge clawpress-badge--<?php echo esc_attr( $entry['role_slug'] ); ?>">
+									<span class="agent-access-badge agent-access-badge--<?php echo esc_attr( $entry['role_slug'] ); ?>">
 										<?php echo esc_html( $entry['role_name'] ); ?>
 									</span>
 								</td>
@@ -380,7 +380,7 @@ class ClawPress_Admin {
 	}
 
 	/**
-	 * Get all users who have an OpenClaw Application Password.
+	 * Get all users who have an Agent Access Application Password.
 	 *
 	 * @return array
 	 */
@@ -392,7 +392,7 @@ class ClawPress_Admin {
 			$passwords = WP_Application_Passwords::get_user_application_passwords( $user->ID );
 
 			foreach ( $passwords as $item ) {
-				if ( $item['name'] !== CLAWPRESS_APP_PASSWORD_NAME ) {
+				if ( $item['name'] !== AGENT_ACCESS_APP_PASSWORD_NAME ) {
 					continue;
 				}
 
@@ -408,7 +408,7 @@ class ClawPress_Admin {
 				$created   = date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $item['created'] );
 				$last_used = ! empty( $item['last_used'] )
 					? date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $item['last_used'] )
-					: __( 'Never', 'clawpress' );
+					: __( 'Never', 'agent-access' );
 
 				$results[] = array(
 					'user'      => $user,
@@ -416,10 +416,10 @@ class ClawPress_Admin {
 					'role_name' => $role_name,
 					'created'   => $created,
 					'last_used' => $last_used,
-					'stats'     => ClawPress_Tracker::get_stats( $user->ID ),
+					'stats'     => Agent_Access_Tracker::get_stats( $user->ID ),
 				);
 
-				break; // Only one OpenClaw password per user
+				break; // Only one Agent Access password per user
 			}
 		}
 

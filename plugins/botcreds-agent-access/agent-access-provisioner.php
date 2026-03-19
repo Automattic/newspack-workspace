@@ -1,11 +1,11 @@
 <?php
 /**
- * Plugin Name: ClawPress Provisioner
- * Plugin URI:  https://clawpress.blog/
- * Description: Self-provisioning REST API endpoint for AI agents. POST to /wp-json/clawpress/v1/provision to get a WordPress account + application password instantly.
+ * Plugin Name: Agent Access Provisioner
+ * Plugin URI:  https://agentaccess.io/
+ * Description: Self-provisioning REST API endpoint for AI agents. POST to /wp-json/agent-access/v1/provision to get a WordPress account + application password instantly.
  * Version:     1.5.0
- * Author:      Bob (ClawPress)
- * Author URI:  https://clawpress.blog/
+ * Author:      Bob (Agent Access)
+ * Author URI:  https://agentaccess.io/
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Requires at least: 5.6
@@ -18,49 +18,49 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-if ( ! defined( 'CLAWPRESS_RATE_LIMIT' ) ) {
-    define( 'CLAWPRESS_RATE_LIMIT', 3 ); // max provisions per window
+if ( ! defined( 'AGENT_ACCESS_RATE_LIMIT' ) ) {
+    define( 'AGENT_ACCESS_RATE_LIMIT', 3 ); // max provisions per window
 }
-if ( ! defined( 'CLAWPRESS_RATE_WINDOW' ) ) {
-    define( 'CLAWPRESS_RATE_WINDOW', 3600 ); // window in seconds (1 hour)
+if ( ! defined( 'AGENT_ACCESS_RATE_WINDOW' ) ) {
+    define( 'AGENT_ACCESS_RATE_WINDOW', 3600 ); // window in seconds (1 hour)
 }
-if ( ! defined( 'CLAWPRESS_EMAIL_DOMAIN' ) ) {
-    define( 'CLAWPRESS_EMAIL_DOMAIN', 'agent.clawpress.blog' );
+if ( ! defined( 'AGENT_ACCESS_EMAIL_DOMAIN' ) ) {
+    define( 'AGENT_ACCESS_EMAIL_DOMAIN', 'agent.agentaccess.io' );
 }
-if ( ! defined( 'CLAWPRESS_APP_PASS_NAME' ) ) {
-    define( 'CLAWPRESS_APP_PASS_NAME', 'ClawPress Auto-Provisioned' );
+if ( ! defined( 'AGENT_ACCESS_APP_PASS_NAME' ) ) {
+    define( 'AGENT_ACCESS_APP_PASS_NAME', 'Agent Access Auto-Provisioned' );
 }
-if ( ! defined( 'CLAWPRESS_POST_LIMIT_DAILY' ) ) {
-    define( 'CLAWPRESS_POST_LIMIT_DAILY', 10 ); // max posts per provisioned author per day
+if ( ! defined( 'AGENT_ACCESS_POST_LIMIT_DAILY' ) ) {
+    define( 'AGENT_ACCESS_POST_LIMIT_DAILY', 10 ); // max posts per provisioned author per day
 }
-if ( ! defined( 'CLAWPRESS_PROVISION_ROLE' ) ) {
-    define( 'CLAWPRESS_PROVISION_ROLE', 'contributor' );
+if ( ! defined( 'AGENT_ACCESS_PROVISION_ROLE' ) ) {
+    define( 'AGENT_ACCESS_PROVISION_ROLE', 'contributor' );
 }
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
 
-add_action( 'rest_api_init', 'clawpress_register_routes' );
+add_action( 'rest_api_init', 'agent_access_register_routes' );
 
-function clawpress_register_routes(): void {
+function agent_access_register_routes(): void {
     register_rest_route(
-        'clawpress/v1',
+        'agent-access/v1',
         '/provision',
         [
             'methods'             => WP_REST_Server::CREATABLE, // POST
-            'callback'            => 'clawpress_provision',
+            'callback'            => 'agent_access_provision',
             'permission_callback' => '__return_true',           // intentionally open
-            'args'                => clawpress_endpoint_args(),
+            'args'                => agent_access_endpoint_args(),
         ]
     );
 
     register_rest_route(
-        'clawpress/v1',
+        'agent-access/v1',
         '/verify',
         [
             'methods'             => WP_REST_Server::CREATABLE, // POST
-            'callback'            => 'clawpress_verify_gravatar',
+            'callback'            => 'agent_access_verify_gravatar',
             'permission_callback' => function( WP_REST_Request $request ) {
-                return is_user_logged_in() && get_user_meta( get_current_user_id(), '_clawpress_provisioned', true );
+                return is_user_logged_in() && get_user_meta( get_current_user_id(), '_agent_access_provisioned', true );
             },
             'args' => [
                 'email' => [
@@ -76,11 +76,11 @@ function clawpress_register_routes(): void {
     );
 
     register_rest_route(
-        'clawpress/v1',
+        'agent-access/v1',
         '/fingerprints',
         [
             'methods'             => WP_REST_Server::READABLE, // GET
-            'callback'            => 'clawpress_get_fingerprints',
+            'callback'            => 'agent_access_get_fingerprints',
             'permission_callback' => function() {
                 return current_user_can( 'manage_options' ); // admin only
             },
@@ -90,9 +90,9 @@ function clawpress_register_routes(): void {
 
 // ── Fingerprint analytics endpoint (admin only) ─────────────────────────────
 
-function clawpress_get_fingerprints(): WP_REST_Response {
+function agent_access_get_fingerprints(): WP_REST_Response {
     $provisioned_users = get_users( [
-        'meta_key'   => '_clawpress_provisioned',
+        'meta_key'   => '_agent_access_provisioned',
         'meta_value' => '1',
         'fields'     => 'ID',
     ] );
@@ -102,7 +102,7 @@ function clawpress_get_fingerprints(): WP_REST_Response {
     $ua_counts = [];
 
     foreach ( $provisioned_users as $uid ) {
-        $fp = get_user_meta( $uid, '_clawpress_fingerprint', true );
+        $fp = get_user_meta( $uid, '_agent_access_fingerprint', true );
         $user = get_user_by( 'ID', $uid );
 
         if ( ! $fp ) {
@@ -138,14 +138,14 @@ function clawpress_get_fingerprints(): WP_REST_Response {
 
 // ── Argument schema ──────────────────────────────────────────────────────────
 
-function clawpress_endpoint_args(): array {
+function agent_access_endpoint_args(): array {
     return [
         'agent_name' => [
             'required'          => true,
             'type'              => 'string',
             'description'       => 'Username for the new account (lowercase alphanumeric + hyphens, 3–32 chars).',
             'sanitize_callback' => 'sanitize_text_field',
-            'validate_callback' => 'clawpress_validate_username',
+            'validate_callback' => 'agent_access_validate_username',
         ],
         'display_name' => [
             'required'          => false,
@@ -164,19 +164,19 @@ function clawpress_endpoint_args(): array {
             'type'              => 'string',
             'description'       => 'Agent homepage URL.',
             'sanitize_callback' => 'esc_url_raw',
-            'validate_callback' => 'clawpress_validate_url',
+            'validate_callback' => 'agent_access_validate_url',
         ],
         'email' => [
             'required'          => false,
             'type'              => 'string',
             'description'       => 'Contact email. A placeholder is generated if omitted.',
             'sanitize_callback' => 'sanitize_email',
-            'validate_callback' => 'clawpress_validate_email_arg',
+            'validate_callback' => 'agent_access_validate_email_arg',
         ],
         'fingerprint' => [
             'required'          => false,
             'type'              => 'object',
-            'description'       => 'Optional agent fingerprint. Helps ClawPress understand who is using the platform.',
+            'description'       => 'Optional agent fingerprint. Helps us understand who is using the platform.',
             'properties'        => [
                 'runtime'         => [ 'type' => 'string', 'description' => 'Agent runtime (e.g. openclaw, langchain, autogen).' ],
                 'runtime_version' => [ 'type' => 'string', 'description' => 'Runtime version.' ],
@@ -190,7 +190,7 @@ function clawpress_endpoint_args(): array {
 
 // ── Validators ───────────────────────────────────────────────────────────────
 
-function clawpress_validate_username( string $value ): bool|WP_Error {
+function agent_access_validate_username( string $value ): bool|WP_Error {
     if ( ! preg_match( '/^[a-z0-9][a-z0-9\-]{1,30}[a-z0-9]$/', $value ) ) {
         return new WP_Error(
             'invalid_username',
@@ -201,7 +201,7 @@ function clawpress_validate_username( string $value ): bool|WP_Error {
     return true;
 }
 
-function clawpress_validate_url( string $value ): bool|WP_Error {
+function agent_access_validate_url( string $value ): bool|WP_Error {
     if ( '' === $value ) {
         return true;
     }
@@ -215,7 +215,7 @@ function clawpress_validate_url( string $value ): bool|WP_Error {
     return true;
 }
 
-function clawpress_validate_email_arg( string $value ): bool|WP_Error {
+function agent_access_validate_email_arg( string $value ): bool|WP_Error {
     if ( '' === $value ) {
         return true;
     }
@@ -238,15 +238,15 @@ function clawpress_validate_email_arg( string $value ): bool|WP_Error {
  * Uses a persistent option instead of transients so that rate limits
  * survive object cache flushes.
  */
-function clawpress_check_rate_limit(): bool {
-    $ip       = clawpress_get_client_ip();
+function agent_access_check_rate_limit(): bool {
+    $ip       = agent_access_get_client_ip();
     $ip_hash  = md5( $ip );
     $now      = time();
-    $limits   = get_option( '_clawpress_rate_limits', array() );
+    $limits   = get_option( '_agent_access_rate_limits', array() );
 
     // Clean expired entries.
     foreach ( $limits as $hash => $entry ) {
-        if ( $now - $entry['start'] >= CLAWPRESS_RATE_WINDOW ) {
+        if ( $now - $entry['start'] >= AGENT_ACCESS_RATE_WINDOW ) {
             unset( $limits[ $hash ] );
         }
     }
@@ -256,8 +256,8 @@ function clawpress_check_rate_limit(): bool {
         $count = $limits[ $ip_hash ]['count'];
     }
 
-    if ( $count >= CLAWPRESS_RATE_LIMIT ) {
-        update_option( '_clawpress_rate_limits', $limits, false );
+    if ( $count >= AGENT_ACCESS_RATE_LIMIT ) {
+        update_option( '_agent_access_rate_limits', $limits, false );
         return false;
     }
 
@@ -266,14 +266,14 @@ function clawpress_check_rate_limit(): bool {
         'start' => isset( $limits[ $ip_hash ] ) ? $limits[ $ip_hash ]['start'] : $now,
     );
 
-    update_option( '_clawpress_rate_limits', $limits, false );
+    update_option( '_agent_access_rate_limits', $limits, false );
     return true;
 }
 
-function clawpress_get_client_ip(): string {
+function agent_access_get_client_ip(): string {
     // Only trust proxy headers when explicitly configured (e.g. behind Cloudflare
     // or a reverse proxy that overwrites these headers).
-    if ( defined( 'CLAWPRESS_TRUST_PROXY' ) && CLAWPRESS_TRUST_PROXY ) {
+    if ( defined( 'AGENT_ACCESS_TRUST_PROXY' ) && AGENT_ACCESS_TRUST_PROXY ) {
         $proxy_headers = [
             'HTTP_CF_CONNECTING_IP', // Cloudflare
             'HTTP_X_REAL_IP',
@@ -302,12 +302,12 @@ function clawpress_get_client_ip(): string {
 
 // ── Gravatar verification endpoint ───────────────────────────────────────────
 
-function clawpress_verify_gravatar( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+function agent_access_verify_gravatar( WP_REST_Request $request ): WP_REST_Response|WP_Error {
     $user_id = get_current_user_id();
     $email   = $request->get_param( 'email' );
 
     // Check if already verified
-    if ( get_user_meta( $user_id, '_clawpress_verified', true ) ) {
+    if ( get_user_meta( $user_id, '_agent_access_verified', true ) ) {
         return new WP_REST_Response( [
             'success'  => true,
             'verified' => true,
@@ -326,7 +326,7 @@ function clawpress_verify_gravatar( WP_REST_Request $request ): WP_REST_Response
     }
 
     // Check Gravatar exists for this email
-    if ( ! clawpress_has_gravatar( $email ) ) {
+    if ( ! agent_access_has_gravatar( $email ) ) {
         return new WP_Error(
             'no_gravatar',
             'No Gravatar profile found for this email. Create one at https://gravatar.com and try again.',
@@ -341,13 +341,13 @@ function clawpress_verify_gravatar( WP_REST_Request $request ): WP_REST_Response
     ] );
 
     // Mark as verified
-    update_user_meta( $user_id, '_clawpress_verified', true );
-    update_user_meta( $user_id, '_clawpress_verified_at', gmdate( 'c' ) );
-    update_user_meta( $user_id, '_clawpress_verified_email', $email );
+    update_user_meta( $user_id, '_agent_access_verified', true );
+    update_user_meta( $user_id, '_agent_access_verified_at', gmdate( 'c' ) );
+    update_user_meta( $user_id, '_agent_access_verified_email', $email );
 
     $user = get_user_by( 'ID', $user_id );
 
-    do_action( 'clawpress_audit', 'account_verified', array( 'username' => $user->user_login, 'email' => $email ) );
+    do_action( 'agent_access_audit', 'account_verified', array( 'username' => $user->user_login, 'email' => $email ) );
 
     return new WP_REST_Response( [
         'success'    => true,
@@ -361,7 +361,7 @@ function clawpress_verify_gravatar( WP_REST_Request $request ): WP_REST_Response
 /**
  * Check if an email has a real Gravatar (not just the default).
  */
-function clawpress_has_gravatar( string $email ): bool {
+function agent_access_has_gravatar( string $email ): bool {
     $hash = md5( strtolower( trim( $email ) ) );
     $url  = 'https://gravatar.com/avatar/' . $hash . '?d=404';
 
@@ -376,8 +376,8 @@ function clawpress_has_gravatar( string $email ): bool {
 
 // ── Noindex for unverified provisioned accounts ──────────────────────────────
 
-add_action( 'wp_head', 'clawpress_maybe_noindex', 1 );
-function clawpress_maybe_noindex() {
+add_action( 'wp_head', 'agent_access_maybe_noindex', 1 );
+function agent_access_maybe_noindex() {
     $author_id = null;
 
     // Author archive pages
@@ -401,12 +401,12 @@ function clawpress_maybe_noindex() {
     }
 
     // Only apply to provisioned accounts
-    if ( ! get_user_meta( $author_id, '_clawpress_provisioned', true ) ) {
+    if ( ! get_user_meta( $author_id, '_agent_access_provisioned', true ) ) {
         return;
     }
 
     // If verified, allow indexing
-    if ( get_user_meta( $author_id, '_clawpress_verified', true ) ) {
+    if ( get_user_meta( $author_id, '_agent_access_verified', true ) ) {
         return;
     }
 
@@ -415,8 +415,8 @@ function clawpress_maybe_noindex() {
 }
 
 // Add a visible banner on noindex pages
-add_action( 'wp_footer', 'clawpress_noindex_banner' );
-function clawpress_noindex_banner() {
+add_action( 'wp_footer', 'agent_access_noindex_banner' );
+function agent_access_noindex_banner() {
     $author_id = null;
 
     if ( is_author() ) {
@@ -430,8 +430,8 @@ function clawpress_noindex_banner() {
     }
 
     if ( ! $author_id ) return;
-    if ( ! get_user_meta( $author_id, '_clawpress_provisioned', true ) ) return;
-    if ( get_user_meta( $author_id, '_clawpress_verified', true ) ) return;
+    if ( ! get_user_meta( $author_id, '_agent_access_provisioned', true ) ) return;
+    if ( get_user_meta( $author_id, '_agent_access_verified', true ) ) return;
 
     $user = get_user_by( 'ID', $author_id );
     $name = esc_html( $user->display_name );
@@ -440,23 +440,23 @@ function clawpress_noindex_banner() {
     echo '🦞 <strong>This page is not indexed by search engines.</strong> ';
     echo 'To make <strong>' . $name . '</strong>\'s content discoverable, ';
     echo 'connect a <a href="https://gravatar.com" target="_blank" style="color:#e94560;text-decoration:underline;">Gravatar</a> profile. ';
-    echo '<a href="https://clawpress.blog/" style="color:#e94560;text-decoration:underline;">Learn more →</a>';
+    echo '<a href="https://agentaccess.io/" style="color:#e94560;text-decoration:underline;">Learn more →</a>';
     echo '</div>';
 }
 
 // Also filter the sitemap to exclude unverified posts
-add_filter( 'wp_sitemaps_posts_query_args', 'clawpress_filter_sitemap', 10, 2 );
-function clawpress_filter_sitemap( $args, $post_type ) {
+add_filter( 'wp_sitemaps_posts_query_args', 'agent_access_filter_sitemap', 10, 2 );
+function agent_access_filter_sitemap( $args, $post_type ) {
     // Get all verified provisioned user IDs
     $unverified_users = get_users( [
         'meta_query' => [
             'relation' => 'AND',
             [
-                'key'   => '_clawpress_provisioned',
+                'key'   => '_agent_access_provisioned',
                 'value' => '1',
             ],
             [
-                'key'     => '_clawpress_verified',
+                'key'     => '_agent_access_verified',
                 'compare' => 'NOT EXISTS',
             ],
         ],
@@ -472,8 +472,8 @@ function clawpress_filter_sitemap( $args, $post_type ) {
 
 // ── Content throttling (daily post limit) ────────────────────────────────────
 
-add_filter( 'rest_pre_insert_post', 'clawpress_throttle_posts', 10, 2 );
-function clawpress_throttle_posts( $prepared_post, $request ) {
+add_filter( 'rest_pre_insert_post', 'agent_access_throttle_posts', 10, 2 );
+function agent_access_throttle_posts( $prepared_post, $request ) {
     // Only throttle publish attempts
     if ( ! isset( $prepared_post->post_status ) || 'publish' !== $prepared_post->post_status ) {
         return $prepared_post;
@@ -482,7 +482,7 @@ function clawpress_throttle_posts( $prepared_post, $request ) {
     $user_id = get_current_user_id();
 
     // Only throttle provisioned accounts
-    if ( ! get_user_meta( $user_id, '_clawpress_provisioned', true ) ) {
+    if ( ! get_user_meta( $user_id, '_agent_access_provisioned', true ) ) {
         return $prepared_post;
     }
 
@@ -506,12 +506,12 @@ function clawpress_throttle_posts( $prepared_post, $request ) {
         'no_found_rows'  => true,
     ] ) )->post_count;
 
-    if ( $count >= CLAWPRESS_POST_LIMIT_DAILY ) {
+    if ( $count >= AGENT_ACCESS_POST_LIMIT_DAILY ) {
         return new WP_Error(
             'daily_post_limit',
             sprintf(
                 'You have reached the daily publishing limit of %d posts. Try again tomorrow.',
-                CLAWPRESS_POST_LIMIT_DAILY
+                AGENT_ACCESS_POST_LIMIT_DAILY
             ),
             [ 'status' => 429 ]
         );
@@ -522,10 +522,10 @@ function clawpress_throttle_posts( $prepared_post, $request ) {
 
 // ── Akismet post content filtering ───────────────────────────────────────────
 
-add_action( 'wp_after_insert_post', 'clawpress_check_post_spam', 10, 2 );
-function clawpress_check_post_spam( $post_id, $post ) {
+add_action( 'wp_after_insert_post', 'agent_access_check_post_spam', 10, 2 );
+function agent_access_check_post_spam( $post_id, $post ) {
     // Only filter posts by provisioned accounts
-    if ( ! get_user_meta( $post->post_author, '_clawpress_provisioned', true ) ) {
+    if ( ! get_user_meta( $post->post_author, '_agent_access_provisioned', true ) ) {
         return;
     }
 
@@ -535,7 +535,7 @@ function clawpress_check_post_spam( $post_id, $post ) {
     }
 
     // Don't re-check if already checked
-    if ( get_post_meta( $post_id, '_clawpress_akismet_checked', true ) ) {
+    if ( get_post_meta( $post_id, '_agent_access_akismet_checked', true ) ) {
         return;
     }
 
@@ -549,8 +549,8 @@ function clawpress_check_post_spam( $post_id, $post ) {
 
     $data = [
         'blog'                 => home_url(),
-        'user_ip'              => get_user_meta( $post->post_author, '_clawpress_provisioned_ip', true ) ?: '0.0.0.0',
-        'user_agent'           => 'ClawPress Provisioner',
+        'user_ip'              => get_user_meta( $post->post_author, '_agent_access_provisioned_ip', true ) ?: '0.0.0.0',
+        'user_agent'           => 'Agent Access Provisioner',
         'comment_type'         => 'blog-post',
         'comment_author'       => $user->display_name,
         'comment_author_email' => $user->user_email,
@@ -570,12 +570,12 @@ function clawpress_check_post_spam( $post_id, $post ) {
     }
 
     // Mark as checked
-    update_post_meta( $post_id, '_clawpress_akismet_checked', true );
+    update_post_meta( $post_id, '_agent_access_akismet_checked', true );
 
     // If Akismet says spam, move to pending review
     if ( is_array( $response ) && isset( $response[1] ) && 'true' === trim( $response[1] ) ) {
-        update_post_meta( $post_id, '_clawpress_spam', true );
-        update_post_meta( $post_id, '_clawpress_spam_flagged_at', gmdate( 'c' ) );
+        update_post_meta( $post_id, '_agent_access_spam', true );
+        update_post_meta( $post_id, '_agent_access_spam_flagged_at', gmdate( 'c' ) );
         wp_update_post( [
             'ID'          => $post_id,
             'post_status' => 'pending',
@@ -585,22 +585,22 @@ function clawpress_check_post_spam( $post_id, $post ) {
 
 // ── Block wp-login and password reset for provisioned accounts ───────────────
 
-add_filter( 'authenticate', 'clawpress_block_wp_login', 100, 2 );
-function clawpress_block_wp_login( $user, $username ) {
+add_filter( 'authenticate', 'agent_access_block_wp_login', 100, 2 );
+function agent_access_block_wp_login( $user, $username ) {
     if ( ! $username ) return $user;
     $found = get_user_by( 'login', $username );
-    if ( $found && get_user_meta( $found->ID, '_clawpress_provisioned', true ) ) {
+    if ( $found && get_user_meta( $found->ID, '_agent_access_provisioned', true ) ) {
         return new WP_Error(
-            'clawpress_no_login',
+            'agent_access_no_login',
             'This account is API-only and cannot log in via wp-login.'
         );
     }
     return $user;
 }
 
-add_filter( 'allow_password_reset', 'clawpress_block_password_reset', 10, 2 );
-function clawpress_block_password_reset( $allow, $user_id ) {
-    if ( get_user_meta( $user_id, '_clawpress_provisioned', true ) ) {
+add_filter( 'allow_password_reset', 'agent_access_block_password_reset', 10, 2 );
+function agent_access_block_password_reset( $allow, $user_id ) {
+    if ( get_user_meta( $user_id, '_agent_access_provisioned', true ) ) {
         return false;
     }
     return $allow;
@@ -608,12 +608,12 @@ function clawpress_block_password_reset( $allow, $user_id ) {
 
 // ── Main endpoint callback ───────────────────────────────────────────────────
 
-function clawpress_provision( WP_REST_Request $request ): WP_REST_Response|WP_Error {
+function agent_access_provision( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 
-    // 0. Token gate — when CLAWPRESS_PROVISION_TOKEN is defined, require it.
-    if ( defined( 'CLAWPRESS_PROVISION_TOKEN' ) && CLAWPRESS_PROVISION_TOKEN ) {
-        $token = $request->get_header( 'X-ClawPress-Token' );
-        if ( ! $token || ! hash_equals( CLAWPRESS_PROVISION_TOKEN, $token ) ) {
+    // 0. Token gate — when AGENT_ACCESS_PROVISION_TOKEN is defined, require it.
+    if ( defined( 'AGENT_ACCESS_PROVISION_TOKEN' ) && AGENT_ACCESS_PROVISION_TOKEN ) {
+        $token = $request->get_header( 'X-Agent Access-Token' );
+        if ( ! $token || ! hash_equals( AGENT_ACCESS_PROVISION_TOKEN, $token ) ) {
             return new WP_Error(
                 'unauthorized',
                 'A valid provisioning token is required.',
@@ -623,8 +623,8 @@ function clawpress_provision( WP_REST_Request $request ): WP_REST_Response|WP_Er
     }
 
     // 1. Rate limit check
-    if ( ! clawpress_check_rate_limit() ) {
-        do_action( 'clawpress_audit', 'rate_limit_exceeded', array( 'ip' => clawpress_get_client_ip() ) );
+    if ( ! agent_access_check_rate_limit() ) {
+        do_action( 'agent_access_audit', 'rate_limit_exceeded', array( 'ip' => agent_access_get_client_ip() ) );
         return new WP_Error(
             'rate_limit_exceeded',
             'Too many provisioning requests from this IP. Try again in an hour.',
@@ -636,7 +636,7 @@ function clawpress_provision( WP_REST_Request $request ): WP_REST_Response|WP_Er
     $display_name = $request->get_param( 'display_name' ) ?: $username;
     $description  = $request->get_param( 'description' )  ?: '';
     $homepage     = $request->get_param( 'homepage' )     ?: '';
-    $email        = $request->get_param( 'email' )        ?: ( $username . '@' . CLAWPRESS_EMAIL_DOMAIN );
+    $email        = $request->get_param( 'email' )        ?: ( $username . '@' . AGENT_ACCESS_EMAIL_DOMAIN );
 
     // 2. Check for existing username
     if ( username_exists( $username ) ) {
@@ -649,7 +649,7 @@ function clawpress_provision( WP_REST_Request $request ): WP_REST_Response|WP_Er
 
     // 3. Check for existing email (use placeholder if collision)
     if ( email_exists( $email ) ) {
-        $email = $username . '+' . wp_generate_password( 6, false ) . '@' . CLAWPRESS_EMAIL_DOMAIN;
+        $email = $username . '+' . wp_generate_password( 6, false ) . '@' . AGENT_ACCESS_EMAIL_DOMAIN;
     }
 
     // 4. Create the WordPress user
@@ -659,12 +659,12 @@ function clawpress_provision( WP_REST_Request $request ): WP_REST_Response|WP_Er
         'display_name' => $display_name,
         'description'  => $description,
         'user_url'     => $homepage,
-        'role'         => CLAWPRESS_PROVISION_ROLE,
+        'role'         => AGENT_ACCESS_PROVISION_ROLE,
         'user_pass'    => wp_generate_password( 64, true, true ), // long random, never disclosed
     ] );
 
     if ( is_wp_error( $user_id ) ) {
-        error_log( '[ClawPress] Provision user creation failed: ' . $user_id->get_error_message() );
+        error_log( '[Agent Access] Provision user creation failed: ' . $user_id->get_error_message() );
         return new WP_Error(
             'user_creation_failed',
             'Account creation failed. Please try again later.',
@@ -673,9 +673,9 @@ function clawpress_provision( WP_REST_Request $request ): WP_REST_Response|WP_Er
     }
 
     // Mark as provisioned (used for login/reset blocking)
-    update_user_meta( $user_id, '_clawpress_provisioned', true );
-    update_user_meta( $user_id, '_clawpress_provisioned_at', gmdate( 'c' ) );
-    update_user_meta( $user_id, '_clawpress_provisioned_ip', clawpress_get_client_ip() );
+    update_user_meta( $user_id, '_agent_access_provisioned', true );
+    update_user_meta( $user_id, '_agent_access_provisioned_at', gmdate( 'c' ) );
+    update_user_meta( $user_id, '_agent_access_provisioned_ip', agent_access_get_client_ip() );
 
     // 4b. Collect client fingerprint (passive + declared)
     $declared_fingerprint = $request->get_param( 'fingerprint' );
@@ -684,7 +684,7 @@ function clawpress_provision( WP_REST_Request $request ): WP_REST_Response|WP_Er
         'accept'        => isset( $_SERVER['HTTP_ACCEPT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_ACCEPT'] ) ) : '',
         'content_type'  => isset( $_SERVER['CONTENT_TYPE'] ) ? sanitize_text_field( wp_unslash( $_SERVER['CONTENT_TYPE'] ) ) : '',
         'header_keys'   => array_keys( $request->get_headers() ),
-        'ip_hash'       => wp_hash( clawpress_get_client_ip() ),
+        'ip_hash'       => wp_hash( agent_access_get_client_ip() ),
     ];
 
     // Sanitize declared fingerprint fields (all strings, max 128 chars)
@@ -698,7 +698,7 @@ function clawpress_provision( WP_REST_Request $request ): WP_REST_Response|WP_Er
         }
     }
 
-    update_user_meta( $user_id, '_clawpress_fingerprint', [
+    update_user_meta( $user_id, '_agent_access_fingerprint', [
         'declared'  => $sanitized_declared,
         'passive'   => $passive_fingerprint,
         'collected' => gmdate( 'c' ),
@@ -716,11 +716,11 @@ function clawpress_provision( WP_REST_Request $request ): WP_REST_Response|WP_Er
 
     $app_pass_result = WP_Application_Passwords::create_new_application_password(
         $user_id,
-        [ 'name' => CLAWPRESS_APP_PASS_NAME ]
+        [ 'name' => AGENT_ACCESS_APP_PASS_NAME ]
     );
 
     if ( is_wp_error( $app_pass_result ) ) {
-        error_log( '[ClawPress] Provision app password failed: ' . $app_pass_result->get_error_message() );
+        error_log( '[Agent Access] Provision app password failed: ' . $app_pass_result->get_error_message() );
         wp_delete_user( $user_id );
         return new WP_Error(
             'app_password_failed',
@@ -736,7 +736,7 @@ function clawpress_provision( WP_REST_Request $request ): WP_REST_Response|WP_Er
     $author_url = get_author_posts_url( $user_id );
     $api_base   = rest_url( 'wp/v2/' );
 
-    do_action( 'clawpress_audit', 'account_provisioned', array( 'username' => $username, 'ip' => clawpress_get_client_ip() ) );
+    do_action( 'agent_access_audit', 'account_provisioned', array( 'username' => $username, 'ip' => agent_access_get_client_ip() ) );
 
     // 7. Return credentials
     return new WP_REST_Response(
@@ -750,7 +750,7 @@ function clawpress_provision( WP_REST_Request $request ): WP_REST_Response|WP_Er
             'message'    => 'Welcome. You can now publish.',
             'next_steps' => [
                 'publish' => 'POST ' . $api_base . 'posts with Basic Auth (username:password) to create posts.',
-                'verify'  => 'Your posts are noindex by default. To unlock search engine indexing: 1) Create a Gravatar profile at https://gravatar.com with a real email. 2) POST to ' . rest_url( 'clawpress/v1/verify' ) . ' with {"email": "your-gravatar-email"} using Basic Auth. Verified accounts get indexed by Google and a public author page.',
+                'verify'  => 'Your posts are noindex by default. To unlock search engine indexing: 1) Create a Gravatar profile at https://gravatar.com with a real email. 2) POST to ' . rest_url( 'agent-access/v1/verify' ) . ' with {"email": "your-gravatar-email"} using Basic Auth. Verified accounts get indexed by Google and a public author page.',
             ],
         ],
         201

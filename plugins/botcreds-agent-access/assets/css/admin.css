@@ -1,14 +1,14 @@
 /**
- * ClawPress Admin Styles — Profile Page
+ * Agent Access Admin Styles — Profile Page
  * Matches native wp-admin profile section styling.
  */
 
 /* Section wrapper */
-.clawpress-profile-section {
+.agent-access-profile-section {
 	margin-top: 2em;
 }
 
-.clawpress-title {
+.agent-access-title {
 	display: flex;
 	align-items: center;
 	gap: 0.4em;
@@ -16,7 +16,7 @@
 
 
 /* Warning box */
-.clawpress-warning-box {
+.agent-access-warning-box {
 	background: #fef8ee;
 	border-left: 4px solid #dba617;
 	padding: 0.8em 1em;
@@ -26,12 +26,12 @@
 }
 
 /* JSON block */
-.clawpress-json-block {
+.agent-access-json-block {
 	max-width: 600px;
 	margin: 1em 0;
 }
 
-.clawpress-json {
+.agent-access-json {
 	background: #1d2327;
 	color: #9ec89e;
 	padding: 1em;
@@ -43,64 +43,64 @@
 	margin: 0 0 0.8em;
 }
 
-.clawpress-copy-btn {
+.agent-access-copy-btn {
 	min-width: 80px;
 }
 
-.clawpress-copy-btn--copied {
+.agent-access-copy-btn--copied {
 	color: #00a32a !important;
 	border-color: #00a32a !important;
 }
 
 /* Notice boxes */
-.clawpress-notice-row {
+.agent-access-notice-row {
 	display: flex;
 	gap: 0.8em;
 	margin: 1em 0;
 	max-width: 600px;
 }
 
-.clawpress-notice-box {
+.agent-access-notice-box {
 	padding: 0.6em 1em;
 	border-radius: 3px;
 	font-size: 13px;
 	font-weight: 600;
 }
 
-.clawpress-notice-box--green {
+.agent-access-notice-box--green {
 	background: #edfaef;
 	color: #00a32a;
 	border: 1px solid #00a32a;
 }
 
-.clawpress-notice-box--red {
+.agent-access-notice-box--red {
 	background: #fef2f0;
 	color: #cc1818;
 	border: 1px solid #cc1818;
 }
 
 /* Status table — matches WP native tables */
-.clawpress-status-table {
+.agent-access-status-table {
 	max-width: 600px;
 	margin: 1em 0;
 	border-collapse: collapse;
 }
 
-.clawpress-status-table th,
-.clawpress-status-table td {
+.agent-access-status-table th,
+.agent-access-status-table td {
 	padding: 0.5em 0.5em 0.5em 0;
 	text-align: left;
 	border-bottom: 1px solid #f0f0f1;
 }
 
-.clawpress-status-table th {
+.agent-access-status-table th {
 	width: 100px;
 	color: #50575e;
 	font-weight: 600;
 }
 
 /* Badge */
-.clawpress-badge {
+.agent-access-badge {
 	display: inline-block;
 	padding: 0.15em 0.6em;
 	border-radius: 3px;
@@ -108,56 +108,56 @@
 	font-weight: 600;
 }
 
-.clawpress-badge--active {
+.agent-access-badge--active {
 	background: #edfaef;
 	color: #00a32a;
 }
 
 /* Recent posts table */
-.clawpress-recent-table {
+.agent-access-recent-table {
 	max-width: 600px;
 	margin: 0.5em 0 1em;
 }
 
-.clawpress-badge--draft {
+.agent-access-badge--draft {
 	background: #f0f0f1;
 	color: #50575e;
 }
 
-.clawpress-badge--publish,
-.clawpress-badge--published {
+.agent-access-badge--publish,
+.agent-access-badge--published {
 	background: #edfaef;
 	color: #00a32a;
 }
 
-.clawpress-badge--pending {
+.agent-access-badge--pending {
 	background: #fef8ee;
 	color: #996800;
 }
 
-.clawpress-badge--administrator {
+.agent-access-badge--administrator {
 	background: #fef2f0;
 	color: #cc1818;
 }
 
-.clawpress-badge--editor {
+.agent-access-badge--editor {
 	background: #e7f3fe;
 	color: #0073aa;
 }
 
-.clawpress-badge--author {
+.agent-access-badge--author {
 	background: #edfaef;
 	color: #00a32a;
 }
 
-.clawpress-badge--contributor,
-.clawpress-badge--subscriber {
+.agent-access-badge--contributor,
+.agent-access-badge--subscriber {
 	background: #f0f0f1;
 	color: #50575e;
 }
 
 /* Connect button */
-.clawpress-create-btn {
+.agent-access-create-btn {
 	background: #E74C3C !important;
 	border-color: #c0392b !important;
 	color: #fff !important;
@@ -166,31 +166,31 @@
 	height: auto !important;
 }
 
-.clawpress-create-btn:hover {
+.agent-access-create-btn:hover {
 	background: #c0392b !important;
 }
 
-.clawpress-create-hint,
-.clawpress-next-step {
+.agent-access-create-hint,
+.agent-access-next-step {
 	color: #646970;
 	font-size: 13px;
 }
 
 /* Revoke */
-.clawpress-revoke-section {
+.agent-access-revoke-section {
 	margin-top: 1em;
 	display: flex;
 	align-items: center;
 	gap: 1em;
 }
 
-.clawpress-revoke-hint {
+.agent-access-revoke-hint {
 	color: #646970;
 	font-size: 13px;
 }
 
 /* Success icon — inline, smaller */
-.clawpress-success-icon {
+.agent-access-success-icon {
 	display: inline-block;
 	color: #fff;
 	background: #00a32a;

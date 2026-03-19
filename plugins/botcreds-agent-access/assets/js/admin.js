@@ -1,5 +1,5 @@
 /**
- * ClawPress Admin JavaScript
+ * Agent Access Admin JavaScript
  */
 (function () {
 	'use strict';
@@ -14,15 +14,15 @@
 	 * Create connection via AJAX.
 	 */
 	function initCreateButton() {
-		var btn = document.getElementById('clawpress-create-btn');
+		var btn = document.getElementById('agent-access-create-btn');
 		if (!btn) return;
 
 		btn.addEventListener('click', function () {
 			btn.disabled = true;
-			btn.textContent = clawpress.creating_text;
+			btn.textContent = agentAccess.creating_text;
 
 			var xhr = new XMLHttpRequest();
-			xhr.open('POST', clawpress.ajax_url, true);
+			xhr.open('POST', agentAccess.ajax_url, true);
 			xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
 
 			xhr.onload = function () {
@@ -32,7 +32,7 @@
 				} catch (e) {
 					alert('Unexpected error. Please reload the page.');
 					btn.disabled = false;
-					btn.textContent = 'Connect OpenClaw';
+					btn.textContent = 'Connect Agent';
 					return;
 				}
 
@@ -41,17 +41,17 @@
 				} else {
 					alert(response.data || 'An error occurred.');
 					btn.disabled = false;
-					btn.textContent = 'Connect OpenClaw';
+					btn.textContent = 'Connect Agent';
 				}
 			};
 
 			xhr.onerror = function () {
 				alert('Network error. Please try again.');
 				btn.disabled = false;
-				btn.textContent = 'Connect OpenClaw';
+				btn.textContent = 'Connect Agent';
 			};
 
-			xhr.send('action=clawpress_create&nonce=' + encodeURIComponent(clawpress.create_nonce));
+			xhr.send('action=agent_access_create&nonce=' + encodeURIComponent(agentAccess.create_nonce));
 		});
 	}
 
@@ -59,22 +59,22 @@
 	 * Replace the card with the created state (password + JSON).
 	 */
 	function renderCreatedState(info) {
-		var card = document.getElementById('clawpress-card');
+		var card = document.getElementById('agent-access-card');
 		if (!card) return;
 
 		var json = JSON.stringify(info, null, 4);
 		var prompt = 'Save these WordPress Application Password credentials and use them to connect to my site via the WordPress REST API:\n' + json;
 
 		card.innerHTML =
-			'<p><span class="clawpress-success-icon">&#10003;</span> <strong>Connection Created!</strong></p>' +
-			'<div class="clawpress-warning-box">' +
-				'<strong>Important:</strong> This password will only be shown once. Copy the message below and send it to OpenClaw.' +
+			'<p><span class="agent-access-success-icon">&#10003;</span> <strong>Connection Created!</strong></p>' +
+			'<div class="agent-access-warning-box">' +
+				'<strong>Important:</strong> This password will only be shown once. Copy the message below and send it to your AI agent.' +
 			'</div>' +
-			'<div class="clawpress-json-block">' +
-				'<pre class="clawpress-json" id="clawpress-json">' + escapeHtml(prompt) + '</pre>' +
-				'<button type="button" class="button clawpress-copy-btn" data-target="clawpress-json">' + clawpress.copy_text + '</button>' +
+			'<div class="agent-access-json-block">' +
+				'<pre class="agent-access-json" id="agent-access-json">' + escapeHtml(prompt) + '</pre>' +
+				'<button type="button" class="button agent-access-copy-btn" data-target="agent-access-json">' + agentAccess.copy_text + '</button>' +
 			'</div>' +
-			'<p class="clawpress-next-step">Paste this into your OpenClaw chat (Telegram, WhatsApp, etc.) and your agent will handle the rest.</p>';
+			'<p class="agent-access-next-step">Paste this into your Agent Access chat (Telegram, WhatsApp, etc.) and your agent will handle the rest.</p>';
 
 		// Re-bind copy button
 		initCopyButtons();
@@ -93,7 +93,7 @@
 	 * Copy-to-clipboard buttons.
 	 */
 	function initCopyButtons() {
-		var buttons = document.querySelectorAll('.clawpress-copy-btn');
+		var buttons = document.querySelectorAll('.agent-access-copy-btn');
 
 		buttons.forEach(function (btn) {
 			// Remove old listeners by cloning
@@ -132,12 +132,12 @@
 	 */
 	function showCopied(btn) {
 		var original = btn.textContent;
-		btn.textContent = clawpress.copied_text;
-		btn.classList.add('clawpress-copy-btn--copied');
+		btn.textContent = agentAccess.copied_text;
+		btn.classList.add('agent-access-copy-btn--copied');
 
 		setTimeout(function () {
 			btn.textContent = original;
-			btn.classList.remove('clawpress-copy-btn--copied');
+			btn.classList.remove('agent-access-copy-btn--copied');
 		}, 2000);
 	}
 
@@ -145,17 +145,17 @@
 	 * Revoke button with confirmation and AJAX.
 	 */
 	function initRevokeButton() {
-		var btn = document.getElementById('clawpress-revoke-btn');
+		var btn = document.getElementById('agent-access-revoke-btn');
 		if (!btn) return;
 
 		btn.addEventListener('click', function () {
-			if (!confirm(clawpress.confirm_msg)) return;
+			if (!confirm(agentAccess.confirm_msg)) return;
 
 			btn.disabled = true;
-			btn.textContent = clawpress.revoking_text;
+			btn.textContent = agentAccess.revoking_text;
 
 			var xhr = new XMLHttpRequest();
-			xhr.open('POST', clawpress.ajax_url, true);
+			xhr.open('POST', agentAccess.ajax_url, true);
 			xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
 
 			xhr.onload = function () {
@@ -184,7 +184,7 @@
 				btn.textContent = 'Revoke Connection';
 			};
 
-			xhr.send('action=clawpress_revoke&nonce=' + encodeURIComponent(clawpress.revoke_nonce));
+			xhr.send('action=agent_access_revoke&nonce=' + encodeURIComponent(agentAccess.revoke_nonce));
 		});
 	}
 })();

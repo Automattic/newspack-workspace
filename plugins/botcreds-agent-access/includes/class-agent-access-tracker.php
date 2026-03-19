@@ -1,17 +1,17 @@
 <?php
 /**
- * ClawPress content tracker — tags posts and media created via OpenClaw.
+ * Agent Access content tracker — tags posts and media created via Agent Access.
  *
- * @package ClawPress
+ * @package Agent Access
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ClawPress_Tracker {
+class Agent_Access_Tracker {
 
-	const META_KEY = '_clawpress_created';
+	const META_KEY = '_agent_access_created';
 
 	/**
 	 * Register hooks.
@@ -22,7 +22,7 @@ class ClawPress_Tracker {
 	}
 
 	/**
-	 * Tag a post/page if created via OpenClaw Application Password.
+	 * Tag a post/page if created via Agent Access Application Password.
 	 *
 	 * @param int     $post_id The post ID.
 	 * @param WP_Post $post    The post object.
@@ -39,7 +39,7 @@ class ClawPress_Tracker {
 	}
 
 	/**
-	 * Tag an attachment if uploaded via OpenClaw Application Password.
+	 * Tag an attachment if uploaded via Agent Access Application Password.
 	 *
 	 * @param int $attachment_id The attachment ID.
 	 */
@@ -50,7 +50,7 @@ class ClawPress_Tracker {
 	}
 
 	/**
-	 * Check if the current request is authenticated via the OpenClaw Application Password.
+	 * Check if the current request is authenticated via the Agent Access Application Password.
 	 *
 	 * @return bool
 	 */
@@ -72,11 +72,11 @@ class ClawPress_Tracker {
 			return false;
 		}
 
-		// Verify it's the OpenClaw app password specifically
+		// Verify it's the Agent Access app password specifically
 		$passwords = WP_Application_Passwords::get_user_application_passwords( $user_id );
 		foreach ( $passwords as $item ) {
 			if ( $item['uuid'] === $app_password_uuid ) {
-				return $item['name'] === CLAWPRESS_APP_PASSWORD_NAME;
+				return $item['name'] === AGENT_ACCESS_APP_PASSWORD_NAME;
 			}
 		}
 
@@ -84,7 +84,7 @@ class ClawPress_Tracker {
 	}
 
 	/**
-	 * Get stats for content created via OpenClaw for a specific user.
+	 * Get stats for content created via Agent Access for a specific user.
 	 *
 	 * @param int $user_id The user ID.
 	 * @return array{post_count: int, media_count: int, recent_posts: array}
@@ -92,7 +92,7 @@ class ClawPress_Tracker {
 	public static function get_stats( $user_id ) {
 		global $wpdb;
 
-		// Count posts (not attachments) tagged by ClawPress
+		// Count posts (not attachments) tagged by Agent Access
 		$post_count = (int) $wpdb->get_var( $wpdb->prepare(
 			"SELECT COUNT(*) FROM {$wpdb->posts} p
 			 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
@@ -104,7 +104,7 @@ class ClawPress_Tracker {
 			self::META_KEY
 		) );
 
-		// Count media tagged by ClawPress
+		// Count media tagged by Agent Access
 		$media_count = (int) $wpdb->get_var( $wpdb->prepare(
 			"SELECT COUNT(*) FROM {$wpdb->posts} p
 			 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id

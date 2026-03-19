@@ -1,11 +1,11 @@
 <?php
 /**
- * ClawPress Theme Bridge — REST API for agent-driven site configuration.
+ * Agent Access Theme Bridge — REST API for agent-driven site configuration.
  *
  * Exposes theme_mods and global styles helpers so agents can configure
  * the look and feel of a WordPress site via the REST API.
  *
- * @package ClawPress
+ * @package Agent Access
  * @since   1.1.0
  */
 
@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ClawPress_Theme_Bridge {
+class Agent_Access_Theme_Bridge {
 
 	/**
 	 * Initialize hooks.
@@ -23,33 +23,33 @@ class ClawPress_Theme_Bridge {
 	}
 
 	/**
-	 * Register REST routes under clawpress/v1/theme-bridge/*.
+	 * Register REST routes under agent-access/v1/theme-bridge/*.
 	 */
 	public function register_routes() {
 
-		// GET /wp-json/clawpress/v1/theme-bridge/theme-mods
-		register_rest_route( 'clawpress/v1', '/theme-bridge/theme-mods', array(
+		// GET /wp-json/agent-access/v1/theme-bridge/theme-mods
+		register_rest_route( 'agent-access/v1', '/theme-bridge/theme-mods', array(
 			'methods'             => 'GET',
 			'callback'            => array( $this, 'get_theme_mods' ),
 			'permission_callback' => array( $this, 'can_edit_theme' ),
 		) );
 
-		// POST /wp-json/clawpress/v1/theme-bridge/theme-mods
-		register_rest_route( 'clawpress/v1', '/theme-bridge/theme-mods', array(
+		// POST /wp-json/agent-access/v1/theme-bridge/theme-mods
+		register_rest_route( 'agent-access/v1', '/theme-bridge/theme-mods', array(
 			'methods'             => 'POST',
 			'callback'            => array( $this, 'set_theme_mods' ),
 			'permission_callback' => array( $this, 'can_edit_theme' ),
 		) );
 
-		// DELETE /wp-json/clawpress/v1/theme-bridge/theme-mods/<key>
-		register_rest_route( 'clawpress/v1', '/theme-bridge/theme-mods/(?P<key>[a-z0-9_-]+)', array(
+		// DELETE /wp-json/agent-access/v1/theme-bridge/theme-mods/<key>
+		register_rest_route( 'agent-access/v1', '/theme-bridge/theme-mods/(?P<key>[a-z0-9_-]+)', array(
 			'methods'             => 'DELETE',
 			'callback'            => array( $this, 'remove_theme_mod' ),
 			'permission_callback' => array( $this, 'can_edit_theme' ),
 		) );
 
-		// GET /wp-json/clawpress/v1/theme-bridge/global-styles-id
-		register_rest_route( 'clawpress/v1', '/theme-bridge/global-styles-id', array(
+		// GET /wp-json/agent-access/v1/theme-bridge/global-styles-id
+		register_rest_route( 'agent-access/v1', '/theme-bridge/global-styles-id', array(
 			'methods'             => 'GET',
 			'callback'            => array( $this, 'get_global_styles_id' ),
 			'permission_callback' => array( $this, 'can_edit_theme' ),
