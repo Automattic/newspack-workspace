@@ -21,9 +21,13 @@ next_loopback_ip() {
         used_ips="$used_ips $ip"
     done
     octet=2
-    while echo "$used_ips" | grep -q "127.0.0.$octet"; do
+    while echo "$used_ips" | grep -qw "127\\.0\\.0\\.$octet"; do
         octet=$((octet + 1))
     done
+    if [[ "$octet" -gt 254 ]]; then
+        echo "Error: no available loopback IPs (127.0.0.2-254 exhausted)" >&2
+        exit 1
+    fi
     echo "127.0.0.$octet"
 }
 
@@ -45,6 +49,17 @@ case $1 in
             exit 1
         fi
         validate_env_name "$env_name"
+        # Reject names that would collide after dash/underscore normalization.
+        normalized=$(echo "$env_name" | tr '-' '_')
+        for f in "$NABSPATH"/docker-compose.env-*.yml; do
+            [[ -f "$f" ]] || continue
+            existing=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
+            [[ "$existing" == "$env_name" ]] && continue
+            if [[ "$(echo "$existing" | tr '-' '_')" == "$normalized" ]]; then
+                echo "Error: '$env_name' conflicts with existing environment '$existing' (same container/database name after normalization)"
+                exit 1
+            fi
+        done
         shift 2
         worktree_volumes=""
         domain=""
@@ -74,6 +89,7 @@ case $1 in
                         exit 1
                     fi
                     domain="$2"
+                    validate_domain "$domain"
                     shift 2
                     ;;
                 --up)
@@ -130,8 +146,8 @@ ${worktree_volumes}      - ./envs/${env_name}/html:/var/www/html
       - default
 YAML
         echo "Created $compose_file (db: $db_name, domain: $domain, ip: $ip)"
-        # Check networking prerequisites.
-        if ! ifconfig lo0 2>/dev/null | grep -q "$ip"; then
+        # Check networking prerequisites (macOS only — Linux routes all 127.x.x.x by default).
+        if [[ "$(uname)" == "Darwin" ]] && ! ifconfig lo0 2>/dev/null | grep -q "$ip"; then
             echo "Note: loopback alias for $ip is missing. Run 'n start' or: sudo ifconfig lo0 alias $ip"
         fi
         # Custom domains (not IP-based) need a /etc/hosts entry.
@@ -185,8 +201,8 @@ YAML
         db_name=$(db_name_for_env "$env_name")
         domain=$(domain_for_env "$compose_file")
         ip=$(ip_for_env "$compose_file")
-        # Ensure loopback alias exists (macOS requires this for 127.0.0.x where x>1).
-        if [[ -n "$ip" && "$ip" != "127.0.0.1" ]] && ! ifconfig lo0 | grep -q "$ip"; then
+        # Ensure loopback alias exists (macOS only — Linux routes all 127.x.x.x by default).
+        if [[ "$(uname)" == "Darwin" && -n "$ip" && "$ip" != "127.0.0.1" ]] && ! ifconfig lo0 | grep -q "$ip"; then
             echo "Error: loopback alias for $ip is not set up."
             echo "Run 'n start' to set up networking, or manually: sudo ifconfig lo0 alias $ip"
             exit 1
@@ -194,6 +210,7 @@ YAML
         # Custom domains (not IP-based) need a /etc/hosts entry.
         if [[ -n "$domain" && "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
             if [ -t 0 ] && [ -t 1 ]; then
+                echo "Adding $domain to /etc/hosts (requires sudo)..."
                 echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
                 echo "Added $domain to /etc/hosts"
             else
@@ -257,6 +274,9 @@ YAML
             fi
             sleep 3
         done
+        if ! docker exec "$container_name" wp --allow-root core is-installed 2>/dev/null; then
+            echo "Warning: WordPress may not be fully installed. Run 'n env up $env_name' to retry."
+        fi
         # Reload Apache to pick up SSL config (it's running by now).
         docker exec "$container_name" apachectl graceful 2>/dev/null
         echo "Environment '$env_name' is ready at https://${domain}/"
@@ -312,25 +332,31 @@ YAML
         fi
         docker stop "$container_name" 2>/dev/null
         docker rm "$container_name" 2>/dev/null
-        rm -f "$compose_file"
-        # Drop the environment database.
-        if docker inspect newspack-docker-db-1 >/dev/null 2>&1; then
-            set -a
-            source "$NABSPATH/default.env"
-            [[ -f "$NABSPATH/.env" ]] && source "$NABSPATH/.env"
-            set +a
-            docker exec newspack-docker-db-1 \
-                mysql -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" -e "DROP DATABASE IF EXISTS \`${db_name}\`" 2>/dev/null
-            echo "Dropped database $db_name"
-        fi
-        # Remove env html directory.
+        # Drop the environment database via docker compose (avoids hardcoding container name).
+        set -a
+        source "$NABSPATH/default.env"
+        [[ -f "$NABSPATH/.env" ]] && source "$NABSPATH/.env"
+        set +a
+        docker compose -f "$NABSPATH/docker-compose.yml" up -d db 2>/dev/null
+        docker compose -f "$NABSPATH/docker-compose.yml" exec -T db \
+            mysql -h localhost -u root -p"${MYSQL_ROOT_PASSWORD}" \
+            -e "DROP DATABASE IF EXISTS \`${db_name}\`" 2>/dev/null
+        echo "Dropped database $db_name"
+        # Remove env html and certs directories.
         if [[ -d "$NABSPATH/envs/${env_name}" ]]; then
             rm -rf "$NABSPATH/envs/${env_name}"
             echo "Removed envs/${env_name}/"
         fi
+        # Remove log directories.
+        if [[ -d "$NABSPATH/logs/env-${env_name}" ]]; then
+            rm -rf "$NABSPATH/logs/env-${env_name}"
+            echo "Removed logs/env-${env_name}/"
+        fi
         # Remove /etc/hosts entry (only for custom domains, not IP-based).
         if [[ -n "$domain" && "$domain" != "$ip" ]] && grep -q "$domain" /etc/hosts 2>/dev/null; then
-            sudo sed -i '' "/$domain/d" /etc/hosts
+            escaped_domain="${domain//./\\.}"
+            { sudo sed -i '' "/[[:space:]]${escaped_domain}$/d" /etc/hosts 2>/dev/null || \
+              sudo sed -i "/[[:space:]]${escaped_domain}$/d" /etc/hosts; }
             echo "Removed $domain from /etc/hosts"
         fi
         # Remove worktrees that were mounted by this environment.
@@ -338,6 +364,8 @@ YAML
             IFS='/' read -r wt_repo wt_branch <<< "$wt"
             "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
         done
+        # Remove compose file last so earlier steps can be retried on failure.
+        rm -f "$compose_file"
         echo "Destroyed environment '$env_name'"
         ;;
     list)
@@ -385,9 +413,9 @@ YAML
                 fi
             done
             echo ""
-            echo "Enter a number to toggle, 'a' to select all for removal, or 'go' to proceed:"
+            echo "Enter a number to toggle, 'a' to select all for removal, or 'delete' to proceed:"
             read -p "> " choice
-            if [[ "$choice" == "go" ]]; then
+            if [[ "$choice" == "delete" ]]; then
                 break
             elif [[ "$choice" == "a" ]]; then
                 for i in "${!envs[@]}"; do keep_flags[$i]=false; done

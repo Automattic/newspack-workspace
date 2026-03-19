@@ -187,9 +187,9 @@ case $1 in
                 fi
             done
             echo ""
-            echo "Enter a number to toggle, 'a' to select all for removal, or 'go' to proceed:"
+            echo "Enter a number to toggle, 'a' to select all for removal, or 'delete' to proceed:"
             read -p "> " choice
-            if [[ "$choice" == "go" ]]; then
+            if [[ "$choice" == "delete" ]]; then
                 break
             elif [[ "$choice" == "a" ]]; then
                 for i in "${!worktrees[@]}"; do keep_flags[$i]=false; done

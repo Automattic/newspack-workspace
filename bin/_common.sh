@@ -17,6 +17,13 @@ validate_env_name() {
     fi
 }
 
+validate_domain() {
+    if [[ ! "$1" =~ ^[a-zA-Z0-9.-]+$ ]] || [[ ${#1} -gt 253 ]]; then
+        echo "Error: invalid domain '$1'"
+        exit 1
+    fi
+}
+
 validate_port() {
     if [[ ! "$1" =~ ^[0-9]+$ ]] || [[ "$1" -lt 1 || "$1" -gt 65535 ]]; then
         echo "Error: invalid port '$1' (must be a number between 1 and 65535)"
