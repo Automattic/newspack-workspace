@@ -4,7 +4,7 @@ Tags: ai, agents, openclaw, application-passwords, api
 Requires at least: 5.6
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 1.1.0
+Stable tag: 2.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -53,6 +53,13 @@ Agent Access manages a single Application Password named "Agent Access" per user
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.0.0 =
+* Rebranded from ClawPress to Agent Access.
+* Removed provisioner and theme-bridge (available as separate add-ons).
+* Security hardening (escaping, nonces, input validation).
+* Added object caching for content stats.
+* Updated all namespaces, hooks, and REST routes.
 
 = 1.1.0 =
 * New: @mentions in comments — type @username to mention any site user.
