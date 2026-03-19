@@ -4,7 +4,7 @@
  * Plugin URI:  https://wearebob.blog/agent-access/
  * Description: Connect AI agents to WordPress — manage Application Passwords, track agent content, and @mentions.
  * Version:     2.0.0
- * Author:      Agent Access
+ * Author:      Joe Boydston
  * Author URI:  https://wearebob.blog
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
