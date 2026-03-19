@@ -1,6 +1,6 @@
 === Agent Access ===
 Contributors: agentaccess
-Tags: ai, agents, application-passwords, api, rest-api
+Tags: ai, agents, openclaw, application-passwords, api
 Requires at least: 5.6
 Tested up to: 6.9
 Requires PHP: 7.4
