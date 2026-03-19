@@ -41,7 +41,7 @@ case $1 in
     create)
         env_name="$2"
         if [[ -z "$env_name" ]]; then
-            echo "Usage: n env create <name> --worktree <repo>:<branch> [--worktree ...] [--domain <domain>] [--up] [--setup]"
+            echo "Usage: n env create <name> --worktree <repo>:<branch> [--worktree ...] [--domain <domain>] [--up]"
             exit 1
         fi
         validate_env_name "$env_name"
@@ -49,7 +49,6 @@ case $1 in
         worktree_volumes=""
         domain=""
         auto_up=false
-        auto_setup=false
         while [[ $# -gt 0 ]]; do
             case $1 in
                 --worktree)
@@ -79,11 +78,6 @@ case $1 in
                     ;;
                 --up)
                     auto_up=true
-                    shift
-                    ;;
-                --setup)
-                    auto_up=true
-                    auto_setup=true
                     shift
                     ;;
                 *)
@@ -153,15 +147,13 @@ YAML
             fi
         fi
         # Start the environment immediately or prompt.
-        up_args=("up" "$env_name")
-        [[ "$auto_setup" == true ]] && up_args+=("--setup")
         if [[ "$auto_up" == true ]]; then
-            exec "$NABSPATH/bin/env.sh" "${up_args[@]}"
+            exec "$NABSPATH/bin/env.sh" up "$env_name"
         elif [ -t 0 ] && [ -t 1 ]; then
             read -p "Start environment now? (Y/n): " choice
             choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
             if [[ "$choice" != "n" ]]; then
-                exec "$NABSPATH/bin/env.sh" "${up_args[@]}"
+                exec "$NABSPATH/bin/env.sh" up "$env_name"
             else
                 echo "Run: n env up $env_name"
             fi
@@ -172,16 +164,14 @@ YAML
     up)
         env_name="$2"
         if [[ -z "$env_name" ]]; then
-            echo "Usage: n env up <name> [--build] [--setup]"
+            echo "Usage: n env up <name> [--build]"
             exit 1
         fi
         validate_env_name "$env_name"
         shift 2
-        auto_setup=false
         auto_build=false
         while [[ $# -gt 0 ]]; do
             case $1 in
-                --setup) auto_setup=true; shift ;;
                 --build) auto_build=true; shift ;;
                 *) echo "Unknown option: $1"; exit 1 ;;
             esac
@@ -284,16 +274,6 @@ YAML
                     fi
                 done
             done
-        fi
-        # Run site setup immediately or prompt.
-        if [[ "$auto_setup" == true ]]; then
-            docker exec "$container_name" sh -c "/var/scripts/site-setup.sh /var/www/html --yes"
-        elif [ -t 0 ] && [ -t 1 ]; then
-            read -p "Run Newspack site setup? (Y/n): " choice
-            choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
-            if [[ "$choice" != "n" ]]; then
-                docker exec -it "$container_name" sh -c "/var/scripts/site-setup.sh /var/www/html"
-            fi
         fi
         ;;
     down)
