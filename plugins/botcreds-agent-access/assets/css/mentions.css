@@ -1,17 +1,17 @@
 /**
- * ClawPress @mention styles.
+ * Agent Access @mention styles.
  */
-.clawpress-mention {
+.agent-access-mention {
 	color: #E74C3C;
 	font-weight: 600;
 	text-decoration: none;
 }
 
-.clawpress-mention:hover {
+.agent-access-mention:hover {
 	text-decoration: underline;
 }
 
-.clawpress-mention--unknown {
+.agent-access-mention--unknown {
 	color: #999;
 	font-weight: 400;
 }

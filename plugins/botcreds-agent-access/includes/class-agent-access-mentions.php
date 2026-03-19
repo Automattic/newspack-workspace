@@ -1,15 +1,15 @@
 <?php
 /**
- * ClawPress @mentions — detect and notify when users are @mentioned in comments.
+ * Agent Access @mentions — detect and notify when users are @mentioned in comments.
  *
- * @package ClawPress
+ * @package Agent Access
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ClawPress_Mentions {
+class Agent_Access_Mentions {
 
 	/**
 	 * Regex pattern to match @mentions.
@@ -32,10 +32,10 @@ class ClawPress_Mentions {
 	public function enqueue_styles() {
 		if ( is_singular() && comments_open() ) {
 			wp_enqueue_style(
-				'clawpress-mentions',
-				CLAWPRESS_PLUGIN_URL . 'assets/css/mentions.css',
+				'agent-access-mentions',
+				AGENT_ACCESS_PLUGIN_URL . 'assets/css/mentions.css',
 				array(),
-				CLAWPRESS_VERSION
+				AGENT_ACCESS_VERSION
 			);
 		}
 	}
@@ -58,7 +58,7 @@ class ClawPress_Mentions {
 		}
 
 		// Store mentions as comment meta for potential future use.
-		update_comment_meta( $comment_id, '_clawpress_mentions', $mentions );
+		update_comment_meta( $comment_id, '_agent_access_mentions', $mentions );
 
 		// Notify each mentioned user.
 		foreach ( $mentions as $username ) {
@@ -129,19 +129,19 @@ class ClawPress_Mentions {
 		 * @param WP_User    $user    The mentioned user.
 		 * @param WP_Comment $comment The comment.
 		 */
-		if ( ! apply_filters( 'clawpress_send_mention_notification', true, $user, $comment ) ) {
+		if ( ! apply_filters( 'agent_access_send_mention_notification', true, $user, $comment ) ) {
 			return;
 		}
 
 		$post    = get_post( $comment->comment_post_ID );
-		$author  = sanitize_text_field( $comment->comment_author ?: __( 'Someone', 'clawpress' ) );
+		$author  = sanitize_text_field( $comment->comment_author ?: __( 'Someone', 'agent-access' ) );
 		$excerpt = wp_trim_words( wp_strip_all_tags( $comment->comment_content ), 40 );
 
-		$post_title = $post ? sanitize_text_field( $post->post_title ) : __( 'a post', 'clawpress' );
+		$post_title = $post ? sanitize_text_field( $post->post_title ) : __( 'a post', 'agent-access' );
 
 		$subject = sprintf(
 			/* translators: 1: comment author name, 2: post title */
-			__( '%1$s mentioned you on "%2$s"', 'clawpress' ),
+			__( '%1$s mentioned you on "%2$s"', 'agent-access' ),
 			$author,
 			$post_title
 		);
@@ -151,8 +151,8 @@ class ClawPress_Mentions {
 		$message = sprintf(
 			/* translators: 1: mentioned user display name, 2: comment author, 3: post title, 4: comment excerpt, 5: comment URL */
 			__(
-				"Hey %1\$s,\n\n%2\$s mentioned you in a comment on \"%3\$s\":\n\n\"%4\$s\"\n\nView the comment:\n%5\$s\n\n—\nClawPress @ %6\$s",
-				'clawpress'
+				"Hey %1\$s,\n\n%2\$s mentioned you in a comment on \"%3\$s\":\n\n\"%4\$s\"\n\nView the comment:\n%5\$s\n\n—\nAgent Access @ %6\$s",
+				'agent-access'
 			),
 			$user->display_name,
 			$author,
@@ -165,13 +165,13 @@ class ClawPress_Mentions {
 		/**
 		 * Fires when a user is @mentioned in a comment.
 		 *
-		 * Allows other plugins (or OpenClaw webhooks) to act on mentions.
+		 * Allows other plugins (or Agent Access webhooks) to act on mentions.
 		 *
 		 * @param WP_User    $user    The mentioned user.
 		 * @param WP_Comment $comment The comment.
 		 * @param WP_Post    $post    The post the comment is on.
 		 */
-		do_action( 'clawpress_user_mentioned', $user, $comment, $post );
+		do_action( 'agent_access_user_mentioned', $user, $comment, $post );
 
 		wp_mail( $user->user_email, $subject, $message );
 	}
@@ -210,7 +210,7 @@ class ClawPress_Mentions {
 			if ( $user ) {
 				$profile_url = get_author_posts_url( $user->ID );
 				return sprintf(
-					'<a href="%s" class="clawpress-mention" title="@%s">@%s</a>',
+					'<a href="%s" class="agent-access-mention" title="@%s">@%s</a>',
 					esc_url( $profile_url ),
 					esc_attr( $user->user_login ),
 					esc_html( $user->display_name )
@@ -219,7 +219,7 @@ class ClawPress_Mentions {
 
 			// Not a real user — render as styled but unlinked.
 			return sprintf(
-				'<span class="clawpress-mention clawpress-mention--unknown">@%s</span>',
+				'<span class="agent-access-mention agent-access-mention--unknown">@%s</span>',
 				esc_html( $matches[1] )
 			);
 		}, $text );

@@ -1,17 +1,17 @@
-# ClawPress — WordPress Plugin
+# Agent Access — WordPress Plugin
 
 ## Purpose
-A WordPress plugin that provides a wp-admin wizard for creating and revoking OpenClaw Application Passwords. Makes it dead simple for non-technical users to connect OpenClaw to their WordPress site.
+A WordPress plugin that provides a wp-admin wizard for creating and revoking Agent Access Application Passwords. Makes it dead simple for non-technical users to connect Agent Access to their WordPress site.
 
 ## MVP Features
-1. **wp-admin menu page** under Settings → ClawPress
+1. **wp-admin menu page** under Settings → Agent Access
 2. **Create Connection wizard:**
-   - One-click button to generate an Application Password named "OpenClaw"
+   - One-click button to generate an Application Password named "Agent Access"
    - Display the generated password ONCE with a copy button
    - Show the site URL + username + password in a ready-to-paste format (or copyable JSON)
-   - Clear instructions: "Paste this into your OpenClaw config"
+   - Clear instructions: "Paste this into your Agent Access config"
 3. **Connection Status:**
-   - Show if an OpenClaw Application Password exists
+   - Show if an Agent Access Application Password exists
    - Show when it was created
    - Show last used date (if available from WP)
 4. **Revoke Connection:**
@@ -20,20 +20,20 @@ A WordPress plugin that provides a wp-admin wizard for creating and revoking Ope
 
 ## Technical Details
 - Use WordPress Application Passwords API (built into WP 5.6+)
-- Application password name: "OpenClaw" (or "OpenClaw - [sitename]")
+- Application password name: "Agent Access" (or "Agent Access - [sitename]")
 - Minimum WP version: 5.6
 - No external dependencies
 - Clean, modern admin UI (use WP admin styles, no frameworks)
 - Proper nonces and capability checks (manage_options)
-- i18n ready (text domain: clawpress)
+- i18n ready (text domain: agent-access)
 
 ## File Structure
 ```
-clawpress/
-├── clawpress.php          # Main plugin file, hooks, activation
+agent-access/
+├── agent-access.php          # Main plugin file, hooks, activation
 ├── includes/
-│   ├── class-clawpress-admin.php    # Admin page rendering
-│   └── class-clawpress-api.php      # Application Password management
+│   ├── class-agent-access-admin.php    # Admin page rendering
+│   └── class-agent-access-api.php      # Application Password management
 ├── assets/
 │   ├── css/
 │   │   └── admin.css      # Admin page styles
@@ -46,5 +46,5 @@ clawpress/
 ## Design Notes
 - Keep it simple. This is a wizard, not a dashboard.
 - The password display should feel important/secure — show it once, make it clear it won't be shown again.
-- Use the OpenClaw lobster branding color (#E74C3C) as accent.
+- Use the Agent Access lobster branding color (#E74C3C) as accent.
 - Success/error states should be clear and friendly.

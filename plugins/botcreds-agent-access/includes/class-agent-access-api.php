@@ -1,18 +1,18 @@
 <?php
 /**
- * ClawPress Application Password management.
+ * Agent Access Application Password management.
  *
- * @package ClawPress
+ * @package Agent Access
  */
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class ClawPress_API {
+class Agent_Access_API {
 
 	/**
-	 * Create an OpenClaw Application Password for the current user.
+	 * Create an Agent Access Application Password for the current user.
 	 *
 	 * @return array{password: string, uuid: string, created: int}|WP_Error
 	 */
@@ -22,16 +22,16 @@ class ClawPress_API {
 
 		if ( $existing ) {
 			return new WP_Error(
-				'clawpress_exists',
-				__( 'An OpenClaw Application Password already exists. Revoke it first before creating a new one.', 'clawpress' )
+				'agent_access_exists',
+				__( 'An agent Application Password already exists. Revoke it first before creating a new one.', 'agent-access' )
 			);
 		}
 
 		$result = WP_Application_Passwords::create_new_application_password(
 			$user_id,
 			array(
-				'name'   => CLAWPRESS_APP_PASSWORD_NAME,
-				'app_id' => 'clawpress',
+				'name'   => AGENT_ACCESS_APP_PASSWORD_NAME,
+				'app_id' => 'agent-access',
 			)
 		);
 
@@ -49,7 +49,7 @@ class ClawPress_API {
 	}
 
 	/**
-	 * Revoke the OpenClaw Application Password for the current user.
+	 * Revoke the Agent Access Application Password for the current user.
 	 *
 	 * @return true|WP_Error
 	 */
@@ -59,8 +59,8 @@ class ClawPress_API {
 
 		if ( ! $existing ) {
 			return new WP_Error(
-				'clawpress_not_found',
-				__( 'No OpenClaw Application Password found to revoke.', 'clawpress' )
+				'agent_access_not_found',
+				__( 'No agent Application Password found to revoke.', 'agent-access' )
 			);
 		}
 
@@ -74,7 +74,7 @@ class ClawPress_API {
 	}
 
 	/**
-	 * Get the existing OpenClaw Application Password entry (without the password itself).
+	 * Get the existing Agent Access Application Password entry (without the password itself).
 	 *
 	 * @return array|null The application password item or null if not found.
 	 */
@@ -83,7 +83,7 @@ class ClawPress_API {
 		$passwords = WP_Application_Passwords::get_user_application_passwords( $user_id );
 
 		foreach ( $passwords as $item ) {
-			if ( $item['name'] === CLAWPRESS_APP_PASSWORD_NAME ) {
+			if ( $item['name'] === AGENT_ACCESS_APP_PASSWORD_NAME ) {
 				return $item;
 			}
 		}
