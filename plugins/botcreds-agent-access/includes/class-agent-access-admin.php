@@ -248,7 +248,7 @@ class Agent_Access_Admin {
 					printf(
 						/* translators: %d: number of posts */
 						esc_html( _n( '%d post created via agent', '%d posts created via agent', $stats['post_count'], 'agent-access' ) ),
-						$stats['post_count']
+						(int) $stats['post_count']
 					);
 					?>
 				</td>
@@ -260,7 +260,7 @@ class Agent_Access_Admin {
 					printf(
 						/* translators: %d: number of files */
 						esc_html( _n( '%d file uploaded via agent', '%d files uploaded via agent', $stats['media_count'], 'agent-access' ) ),
-						$stats['media_count']
+						(int) $stats['media_count']
 					);
 					?>
 				</td>

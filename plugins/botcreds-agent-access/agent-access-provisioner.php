@@ -438,7 +438,7 @@ function agent_access_noindex_banner() {
 
     echo '<div style="position:fixed;bottom:0;left:0;right:0;background:#1a1a2e;color:#e0e0e0;padding:14px 20px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:14px;text-align:center;z-index:9999;border-top:2px solid #e94560;">';
     echo '🦞 <strong>This page is not indexed by search engines.</strong> ';
-    echo 'To make <strong>' . $name . '</strong>\'s content discoverable, ';
+    echo 'To make <strong>' . esc_html( $name ) . '</strong>\'s content discoverable, ';
     echo 'connect a <a href="https://gravatar.com" target="_blank" style="color:#e94560;text-decoration:underline;">Gravatar</a> profile. ';
     echo '<a href="https://agentaccess.io/" style="color:#e94560;text-decoration:underline;">Learn more →</a>';
     echo '</div>';
