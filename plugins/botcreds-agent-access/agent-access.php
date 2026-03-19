@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Agent Access
  * Plugin URI:  https://agentaccess.io
- * Description: Connect AI agents to WordPress — manage Application Passwords, track agent content, and configure themes via REST API.
+ * Description: Connect AI agents to WordPress — manage Application Passwords, track agent content, and @mentions.
  * Version:     1.1.0
  * Author:      Agent Access
  * Author URI:  https://agentaccess.io
@@ -25,7 +25,6 @@ define( 'AGENT_ACCESS_APP_PASSWORD_NAME', 'Agent Access' );
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-api.php';
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-admin.php';
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-tracker.php';
-require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-theme-bridge.php';
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-mentions.php';
 
 /**
@@ -34,12 +33,10 @@ require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-mentions.php
 function agent_access_init() {
 	$api          = new Agent_Access_API();
 	$admin        = new Agent_Access_Admin( $api );
-	$tracker      = new Agent_Access_Tracker();
-	$theme_bridge = new Agent_Access_Theme_Bridge();
-	$mentions     = new Agent_Access_Mentions();
+	$tracker  = new Agent_Access_Tracker();
+	$mentions = new Agent_Access_Mentions();
 	$admin->init();
 	$tracker->init();
-	$theme_bridge->init();
 	$mentions->init();
 }
 add_action( 'plugins_loaded', 'agent_access_init' );

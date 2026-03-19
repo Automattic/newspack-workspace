@@ -8,7 +8,7 @@ Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Connect AI agents to WordPress — manage Application Passwords, track agent content, and configure themes via REST API.
+Connect AI agents to WordPress — manage Application Passwords, track agent content, and @mentions.
 
 == Description ==
 
