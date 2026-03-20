@@ -222,6 +222,11 @@ case $1 in
         setup_args=()
         while [[ $# -gt 0 ]]; do
             if [[ "$1" == "--env" ]]; then
+                if [[ $# -lt 2 || "$2" == --* ]]; then
+                    echo "Error: --env requires an environment name." >&2
+                    echo "Usage: n setup [--env ENV_NAME] [setup-args...]" >&2
+                    exit 1
+                fi
                 setup_container=$(echo "newspack_env_${2}" | tr '-' '_')
                 shift 2
             else
@@ -229,7 +234,7 @@ case $1 in
                 shift
             fi
         done
-        docker exec $DOCKER_IT $USER_COMMAND "$setup_container" sh -c "/var/scripts/site-setup.sh $current_site_path ${setup_args[*]}"
+        docker exec $DOCKER_IT $USER_COMMAND "$setup_container" /var/scripts/site-setup.sh "$current_site_path" "${setup_args[@]}"
         ;;
     tail)
         tail -f $current_site_relative_path/wp-content/debug.log
