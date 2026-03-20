@@ -17,9 +17,6 @@ if ( ! empty( $_SERVER['HTTP_HOST'] ) ) {
 	if ( $is_localhost || $is_allowed ) {
 		$is_https = ! empty( $_SERVER['HTTPS'] )
 			|| ( isset( $_SERVER['HTTP_X_FORWARDED_PROTO'] ) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https' );
-		if ( $is_https ) {
-			$_SERVER['HTTPS'] = 'on';
-		}
 		$scheme   = $is_https ? 'https' : 'http';
 		$site_url = $scheme . '://' . $host;
 	}

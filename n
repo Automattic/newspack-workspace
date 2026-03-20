@@ -91,6 +91,40 @@ start() {
             file="docker-compose-82.yml"
         fi
         docker compose -f $file up -d
+
+    # macOS: set up loopback aliases for isolated environments.
+    # Pre-allocate 127.0.0.2–10 so agents can create envs without sudo later.
+    # These don't survive reboots, so this runs on every start.
+    if [[ "$(uname)" == "Darwin" ]]; then
+        missing_aliases=()
+        for octet in $(seq 2 10); do
+            ip="127.0.0.$octet"
+            if ! ifconfig lo0 2>/dev/null | grep -q "$ip"; then
+                missing_aliases+=("$ip")
+            fi
+        done
+        missing_hosts=()
+        for f in "$NABSPATH"/docker-compose.env-*.yml; do
+            [[ -f "$f" ]] || continue
+            domain=$(grep 'WP_DOMAIN=' "$f" | head -1 | sed 's/.*WP_DOMAIN=//')
+            ip=$(grep -o '127\.0\.0\.[0-9]*' "$f" | head -1)
+            # Only add hosts entries for custom domains, not IP-based ones.
+            if [[ -n "$domain" && "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
+                missing_hosts+=("$ip $domain")
+            fi
+        done
+        if [[ ${#missing_aliases[@]} -gt 0 || ${#missing_hosts[@]} -gt 0 ]]; then
+            echo ""
+            echo "Setting up networking for isolated environments (requires sudo)..."
+            for ip in "${missing_aliases[@]}"; do
+                sudo ifconfig lo0 alias "$ip"
+            done
+            for entry in "${missing_hosts[@]}"; do
+                echo "$entry" | sudo tee -a /etc/hosts > /dev/null
+            done
+            echo "Ready: loopback aliases 127.0.0.2–10, $(( ${#missing_hosts[@]} )) hosts entries."
+        fi
+    fi
 }
 stop() {
     docker compose down
@@ -124,7 +158,12 @@ case $1 in
         start "${@:2}"
         ;;
     sh)
-        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER /bin/bash
+        if [[ -n "$2" ]]; then
+            container=$(echo "newspack_env_${2}" | tr '-' '_')
+            docker exec $DOCKER_IT $USER_COMMAND "$container" /bin/bash
+        else
+            docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER /bin/bash
+        fi
         ;;
     rsh)
         docker exec $DOCKER_IT $TARGET_CONTAINER /bin/bash
@@ -354,8 +393,8 @@ case $1 in
         echo "  release                  Switch all repositories to the release branch."
         echo ""
         echo "Isolated Environments:"
-        echo "  worktree [args]          Manage isolated Git worktrees for repositories (add, list, remove)."
-        echo "  env [args]               Manage isolated development environments (create, up, down, destroy, list)."
+        echo "  worktree [args]          Manage isolated Git worktrees for repositories (add, list, remove, cleanup)."
+        echo "  env [args]               Manage isolated development environments (create, up, down, destroy, list, cleanup)."
         echo ""
         echo "AI Agents:"
         echo "  setup-agents             Set up AI agent tooling for Newspack development."
