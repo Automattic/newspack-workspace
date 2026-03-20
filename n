@@ -216,6 +216,26 @@ case $1 in
     reset-site)
         docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/reset-site.sh $current_site_path"
         ;;
+    setup)
+        shift
+        setup_container="$TARGET_CONTAINER"
+        setup_args=()
+        while [[ $# -gt 0 ]]; do
+            if [[ "$1" == "--env" ]]; then
+                if [[ $# -lt 2 || "$2" == --* ]]; then
+                    echo "Error: --env requires an environment name." >&2
+                    echo "Usage: n setup [--env ENV_NAME] [setup-args...]" >&2
+                    exit 1
+                fi
+                setup_container=$(echo "newspack_env_${2}" | tr '-' '_')
+                shift 2
+            else
+                setup_args+=("$1")
+                shift
+            fi
+        done
+        docker exec $DOCKER_IT $USER_COMMAND "$setup_container" /var/scripts/site-setup.sh "$current_site_path" "${setup_args[@]}"
+        ;;
     tail)
         tail -f $current_site_relative_path/wp-content/debug.log
         ;;
@@ -359,6 +379,7 @@ case $1 in
         echo "  install                  Run the installation script for the current site."
         echo "  uninstall                Run the uninstallation script for the current site."
         echo "  reset-site               Reset the current site to a clean state."
+        echo "  setup [--env name] [opts] Bootstrap a full Newspack site (content, WooCommerce, campaigns)."
         echo "  wp [args]                Run a WP-CLI command for the current site. Example: n wp plugin list"
         echo "  db                       Open a WP-CLI database shell for the current site."
         echo "  shell                    Open a WP-CLI shell for the current site."
