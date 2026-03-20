@@ -359,13 +359,13 @@ YAML
               sudo sed -i "/[[:space:]]${escaped_domain}$/d" /etc/hosts; }
             echo "Removed $domain from /etc/hosts"
         fi
+        # Remove compose file before worktrees so worktree.sh doesn't see them as env-bound.
+        rm -f "$compose_file"
         # Remove worktrees that were mounted by this environment.
         for wt in "${worktree_entries[@]}"; do
             IFS='/' read -r wt_repo wt_branch <<< "$wt"
             "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
         done
-        # Remove compose file last so earlier steps can be retried on failure.
-        rm -f "$compose_file"
         echo "Destroyed environment '$env_name'"
         ;;
     list)
@@ -383,6 +383,16 @@ YAML
         done
         ;;
     cleanup)
+        shift
+        cleanup_all=false
+        cleanup_yes=false
+        while [[ $# -gt 0 ]]; do
+            case $1 in
+                --all) cleanup_all=true; shift ;;
+                --yes) cleanup_yes=true; shift ;;
+                *) echo "Usage: n env cleanup [--all --yes]"; exit 1 ;;
+            esac
+        done
         envs=()
         for f in "$NABSPATH"/docker-compose.env-*.yml; do
             [[ -f "$f" ]] || continue
@@ -393,54 +403,62 @@ YAML
             echo "No environments to clean up."
             exit 0
         fi
-        # Track which indices to keep.
-        keep_flags=()
-        for i in "${!envs[@]}"; do keep_flags[$i]=false; done
-        while true; do
-            echo ""
-            echo "Environments (marked for REMOVAL unless toggled):"
-            for i in "${!envs[@]}"; do
-                name="${envs[$i]}"
-                container_name=$(echo "newspack_env_${name}" | tr '-' '_')
-                domain=$(domain_for_env "$NABSPATH/docker-compose.env-${name}.yml")
-                status="stopped"
-                docker inspect -f '{{.State.Status}}' "$container_name" >/dev/null 2>&1 && \
-                    status=$(docker inspect -f '{{.State.Status}}' "$container_name" 2>/dev/null)
-                if [[ "${keep_flags[$i]}" == true ]]; then
-                    echo "  $((i+1)). [KEEP]    $name ($status) https://${domain}/"
-                else
-                    echo "  $((i+1)). [REMOVE]  $name ($status) https://${domain}/"
+        # --all: skip interactive selection (select all for removal).
+        # --yes: skip final confirmation prompt.
+        if [[ "$cleanup_all" != true ]]; then
+            # Interactive toggle loop.
+            keep_flags=()
+            for i in "${!envs[@]}"; do keep_flags[$i]=false; done
+            while true; do
+                echo ""
+                echo "Environments (marked for REMOVAL unless toggled):"
+                for i in "${!envs[@]}"; do
+                    name="${envs[$i]}"
+                    container_name=$(echo "newspack_env_${name}" | tr '-' '_')
+                    domain=$(domain_for_env "$NABSPATH/docker-compose.env-${name}.yml")
+                    status="stopped"
+                    docker inspect -f '{{.State.Status}}' "$container_name" >/dev/null 2>&1 && \
+                        status=$(docker inspect -f '{{.State.Status}}' "$container_name" 2>/dev/null)
+                    if [[ "${keep_flags[$i]}" == true ]]; then
+                        echo "  $((i+1)). [KEEP]    $name ($status) https://${domain}/"
+                    else
+                        echo "  $((i+1)). [REMOVE]  $name ($status) https://${domain}/"
+                    fi
+                done
+                echo ""
+                echo "Enter a number to toggle, 'a' to select all for removal, or 'delete' to proceed:"
+                read -p "> " choice
+                if [[ "$choice" == "delete" ]]; then
+                    break
+                elif [[ "$choice" == "a" ]]; then
+                    for i in "${!envs[@]}"; do keep_flags[$i]=false; done
+                elif [[ "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -ge 1 && "$choice" -le ${#envs[@]} ]]; then
+                    idx=$((choice-1))
+                    if [[ "${keep_flags[$idx]}" == true ]]; then
+                        keep_flags[$idx]=false
+                    else
+                        keep_flags[$idx]=true
+                    fi
                 fi
             done
-            echo ""
-            echo "Enter a number to toggle, 'a' to select all for removal, or 'delete' to proceed:"
-            read -p "> " choice
-            if [[ "$choice" == "delete" ]]; then
-                break
-            elif [[ "$choice" == "a" ]]; then
-                for i in "${!envs[@]}"; do keep_flags[$i]=false; done
-            elif [[ "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -ge 1 && "$choice" -le ${#envs[@]} ]]; then
-                idx=$((choice-1))
-                if [[ "${keep_flags[$idx]}" == true ]]; then
-                    keep_flags[$idx]=false
-                else
-                    keep_flags[$idx]=true
-                fi
-            fi
-        done
-        to_remove=()
-        for i in "${!envs[@]}"; do
-            [[ "${keep_flags[$i]}" != true ]] && to_remove+=("${envs[$i]}")
-        done
+            to_remove=()
+            for i in "${!envs[@]}"; do
+                [[ "${keep_flags[$i]}" != true ]] && to_remove+=("${envs[$i]}")
+            done
+        else
+            to_remove=("${envs[@]}")
+        fi
         if [[ ${#to_remove[@]} -eq 0 ]]; then
             echo "Nothing to remove."
             exit 0
         fi
         echo "Will destroy: ${to_remove[*]}"
-        read -p "Confirm? (y/N): " confirm
-        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-            echo "Aborted."
-            exit 0
+        if [[ "$cleanup_yes" != true ]]; then
+            read -p "Confirm? (y/N): " confirm
+            if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+                echo "Aborted."
+                exit 0
+            fi
         fi
         for name in "${to_remove[@]}"; do
             echo ""
@@ -450,5 +468,6 @@ YAML
         ;;
     *)
         echo "Usage: n env <create|up|down|destroy|list|cleanup>"
+        echo "  cleanup [--all --yes]  Remove environments (interactive, or destroy all non-interactively)"
         ;;
 esac
