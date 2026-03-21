@@ -167,6 +167,10 @@ fi
 
 # Confirmation prompt.
 if [ "$SKIP_CONFIRM" != true ]; then
+    if [[ ! -t 0 ]]; then
+        log_error "Non-interactive shell detected. Use --yes to skip confirmation."
+        exit 1
+    fi
     echo -e "${YELLOW}This will reset the database and set up a fresh Newspack site at ${SITE_URL}.${NC}"
     read -p "Continue? (y/N) " confirm
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
