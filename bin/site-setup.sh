@@ -35,19 +35,19 @@ NC='\033[0m' # No Color
 
 # Helper functions
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "${BLUE}[INFO]${NC} ${1}"
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}[SUCCESS]${NC} ${1}"
 }
 
 log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}[WARNING]${NC} ${1}"
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} ${1}"
 }
 
 # Parse command line arguments
@@ -288,7 +288,6 @@ if [ "$HOMEPAGE_ENABLED" = true ]; then
     $WP eval '
         if ( class_exists( "Newspack\Starter_Content_Generated" ) ) {
             Newspack\Starter_Content_Generated::create_homepage();
-            set_theme_mod( "hide_front_page_title", true );
             echo "Homepage created\n";
         } else {
             echo "Starter_Content_Generated class not found\n";
@@ -494,7 +493,7 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
         # Create Golden Plan
         PLAN_ID=$($WP wc memberships plan create --name="Golden Plan" --access="purchase" --product="$MONTH_PRODUCT,$YEAR_PRODUCT" 2>/dev/null | grep -o '[0-9]*') || true
 
-        if [ ! -z "$PLAN_ID" ] && [ ! -z "$CATEGORY_ID" ]; then
+        if [ -n "$PLAN_ID" ] && [ -n "$CATEGORY_ID" ]; then
             $WP wc memberships plan rule create \
                 --plan="$PLAN_ID" \
                 --type="content_restriction" \
