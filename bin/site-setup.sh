@@ -419,6 +419,8 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
     if [ "$CUSTOMERS_COUNT" -gt 0 ]; then
         log_info "Creating $CUSTOMERS_COUNT customers with orders..."
         $WP eval '
+            $donation_product_id = Newspack\Donations::get_donation_product( "once" );
+
             for ( $i = 1; $i <= '$CUSTOMERS_COUNT'; $i++ ) {
                 $customer_id = wc_create_new_customer(
                     "customer_" . $i . "@example.com",
@@ -437,17 +439,13 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
                         "status" => "completed"
                     ) );
 
-                    if ( $order ) {
-                        // Add a donation product to the order
-                        $donation_product_id = Newspack\Donations::get_donation_product( "once" );
-                        if ( $donation_product_id ) {
-                            $order->add_product( wc_get_product( $donation_product_id ), 1, array(
-                                "subtotal" => 25,
-                                "total" => 25
-                            ) );
-                            $order->calculate_totals();
-                            $order->save();
-                        }
+                    if ( $order && $donation_product_id ) {
+                        $order->add_product( wc_get_product( $donation_product_id ), 1, array(
+                            "subtotal" => 25,
+                            "total" => 25
+                        ) );
+                        $order->calculate_totals();
+                        $order->save();
                     }
 
                     if ( $i % 10 == 0 ) {
