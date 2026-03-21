@@ -347,9 +347,9 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
 
     # Activate WooCommerce plugins
     log_info "Activating WooCommerce plugins..."
-    PLUGINS=("woocommerce" "woocommerce-subscriptions" "woocommerce-memberships" "woocommerce-name-your-price")
+    source /var/scripts/repos.sh
 
-    for plugin in "${PLUGINS[@]}"; do
+    for plugin in "${woocommerce_plugins[@]}"; do
         if $WP plugin is-installed "$plugin" &>/dev/null; then
             $WP plugin activate $plugin || {
                 log_warning "Failed to activate $plugin"

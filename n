@@ -219,6 +219,7 @@ case $1 in
     setup)
         shift
         setup_container="$TARGET_CONTAINER"
+        setup_env_name=""
         setup_args=()
         while [[ $# -gt 0 ]]; do
             if [[ "$1" == "--env" ]]; then
@@ -227,13 +228,30 @@ case $1 in
                     echo "Usage: n setup [--env ENV_NAME] [setup-args...]" >&2
                     exit 1
                 fi
+                setup_env_name="$2"
                 setup_container=$(echo "newspack_env_${2}" | tr '-' '_')
+                current_site_path="/var/www/html"
                 shift 2
             else
                 setup_args+=("$1")
                 shift
             fi
         done
+        # For isolated envs with --woocommerce, copy third-party plugins from the main site.
+        if [[ -n "$setup_env_name" ]] && [[ " ${setup_args[*]} " == *" --woocommerce "* ]]; then
+            main_plugins="$NABSPATH/html/wp-content/plugins"
+            env_plugins="$NABSPATH/envs/${setup_env_name}/html/wp-content/plugins"
+            for plugin in "${woocommerce_plugins[@]}"; do
+                if [[ -e "$env_plugins/$plugin" ]]; then
+                    continue
+                elif [[ -d "$main_plugins/$plugin" ]]; then
+                    echo "Copying $plugin from main site to $setup_env_name..."
+                    cp -r "$main_plugins/$plugin" "$env_plugins/$plugin"
+                else
+                    echo "Warning: $plugin not found in main site. WooCommerce setup may be incomplete." >&2
+                fi
+            done
+        fi
         docker exec $DOCKER_IT $USER_COMMAND "$setup_container" /var/scripts/site-setup.sh "$current_site_path" "${setup_args[@]}"
         ;;
     tail)
