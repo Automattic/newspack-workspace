@@ -351,10 +351,11 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
 
     for plugin in "${woocommerce_plugins[@]}"; do
         if $WP plugin is-installed "$plugin" &>/dev/null; then
-            $WP plugin activate $plugin || {
+            if $WP plugin activate "$plugin"; then
+                log_success "Activated $plugin"
+            else
                 log_warning "Failed to activate $plugin"
-            }
-            log_success "Activated $plugin"
+            fi
         else
             log_warning "Plugin $plugin is not installed"
         fi
@@ -451,10 +452,12 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
                 }
             }
             echo "All customers created\n";
-        ' || {
+        '
+        if [ $? -eq 0 ]; then
+            log_success "Customers created"
+        else
             log_warning "Failed to create all customers"
-        }
-        log_success "Customers created"
+        fi
     fi
 
     # Create Membership Plans
@@ -577,11 +580,12 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
                 }
             }
             echo "All subscriptions and memberships created\n";
-        ' || {
+        '
+        if [ $? -eq 0 ]; then
+            log_success "Subscriptions created ($YEARLY_COUNT yearly, $MONTHLY_COUNT monthly)"
+        else
             log_warning "Failed to create all subscriptions"
-        }
-
-        log_success "Subscriptions created ($YEARLY_COUNT yearly, $MONTHLY_COUNT monthly)"
+        fi
     fi
 else
     log_info "Step 5: Skipping WooCommerce setup (disabled)"
@@ -599,11 +603,12 @@ if [ "$CAMPAIGNS_ENABLED" = true ]; then
         } else {
             echo "Newspack_Popups_Presets class not found\n";
         }
-    ' || {
+    '
+    if [ $? -eq 0 ]; then
+        log_success "Campaigns setup completed"
+    else
         log_warning "Failed to create RAS presets"
-    }
-
-    log_success "Campaigns setup completed"
+    fi
 else
     log_info "Step 6: Skipping campaigns setup (disabled)"
 fi
@@ -655,11 +660,12 @@ if [ "$MENUS_ENABLED" = true ]; then
         } else {
             echo "Failed to create menu\n";
         }
-    ' || {
+    '
+    if [ $? -eq 0 ]; then
+        log_success "Menus created"
+    else
         log_warning "Failed to create menus"
-    }
-
-    log_success "Menus created"
+    fi
 else
     log_info "Step 7: Skipping menus creation (disabled)"
 fi
