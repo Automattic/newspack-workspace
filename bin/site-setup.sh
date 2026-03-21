@@ -576,7 +576,6 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
                             $membership = wc_memberships_create_user_membership( array(
                                 "plan_id" => $golden_plan_id,
                                 "user_id" => $customer->ID,
-                                "order_id" => $subscription->get_id(),
                             ) );
 
                             // Link membership to subscription
