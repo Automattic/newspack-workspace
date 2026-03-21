@@ -579,9 +579,14 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
                                 "order_id" => $subscription->get_id(),
                             ) );
 
-                            // Link membership to subscription via meta
+                            // Link membership to subscription
                             if ( $membership && ! is_wp_error( $membership ) ) {
-                                update_post_meta( $membership->get_id(), "_subscription_id", $subscription->get_id() );
+                                if ( class_exists( "WC_Memberships_Integration_Subscriptions_User_Membership" ) ) {
+                                    $sub_membership = new WC_Memberships_Integration_Subscriptions_User_Membership( $membership->get_id() );
+                                    $sub_membership->set_subscription_id( $subscription->get_id() );
+                                } else {
+                                    update_post_meta( $membership->get_id(), "_subscription_id", $subscription->get_id() );
+                                }
                             }
                         }
                     }
