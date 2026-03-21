@@ -218,23 +218,11 @@ log_success "$THEME activated"
 
 # Activate Newspack plugins
 log_info "Activating Newspack plugins..."
-$WP plugin activate newspack-plugin || {
-    log_error "Failed to activate Newspack plugin"
+$WP plugin activate newspack-plugin newspack-blocks newspack-popups || {
+    log_error "Failed to activate Newspack plugins"
     exit 1
 }
-log_success "Newspack plugin activated"
-
-$WP plugin activate newspack-blocks || {
-    log_error "Failed to activate Newspack Blocks plugin"
-    exit 1
-}
-log_success "Newspack Blocks plugin activated"
-
-$WP plugin activate newspack-popups || {
-    log_error "Failed to activate Newspack Popups plugin"
-    exit 1
-}
-log_success "Newspack Popups plugin activated"
+log_success "Newspack plugins activated"
 
 # Mark Newspack setup as complete
 log_info "Marking Newspack setup as complete..."
@@ -319,37 +307,43 @@ fi
 if [ "$USERS_ENABLED" = true ]; then
     log_info "Step 4: Creating users..."
 
-    # Create Guest Contributors
-    for i in $(seq 1 $USERS_COUNT); do
-        $WP user create guest_contributor_$i guest_contributor_$i@example.com --role=contributor_no_edit --display_name="Guest Contributor $i" || {
-            log_warning "Failed to create guest contributor $i (may already exist)"
+    $WP eval '
+        $roles = array(
+            "contributor_no_edit" => "Guest Contributor",
+            "editor" => "Editor",
+            "author" => "Author",
+            "subscriber" => "Subscriber",
+        );
+        foreach ( $roles as $role => $label ) {
+            // Skip roles that do not exist (e.g. contributor_no_edit requires newspack-plugin).
+            if ( ! get_role( $role ) ) {
+                echo "Role $role not found, skipping\n";
+                continue;
+            }
+            $prefix = strtolower( str_replace( " ", "_", $label ) );
+            for ( $i = 1; $i <= '$USERS_COUNT'; $i++ ) {
+                $username = $prefix . "_" . $i;
+                if ( username_exists( $username ) ) {
+                    continue;
+                }
+                $user_id = wp_insert_user( array(
+                    "user_login" => $username,
+                    "user_email" => $username . "@example.com",
+                    "user_pass" => wp_generate_password(),
+                    "display_name" => $label . " " . $i,
+                    "role" => $role,
+                ) );
+                if ( is_wp_error( $user_id ) ) {
+                    echo "Failed to create $username: " . $user_id->get_error_message() . "\n";
+                }
+            }
+            echo "Created '$USERS_COUNT' " . $label . "s\n";
         }
-    done
-    log_success "Created $USERS_COUNT guest contributors"
-
-    # Create Editors
-    for i in $(seq 1 $USERS_COUNT); do
-        $WP user create editor_$i editor_$i@example.com --role=editor --display_name="Editor $i" || {
-            log_warning "Failed to create editor $i (may already exist)"
-        }
-    done
-    log_success "Created $USERS_COUNT editors"
-
-    # Create Authors
-    for i in $(seq 1 $USERS_COUNT); do
-        $WP user create author_$i author_$i@example.com --role=author --display_name="Author $i" || {
-            log_warning "Failed to create author $i (may already exist)"
-        }
-    done
-    log_success "Created $USERS_COUNT authors"
-
-    # Create Subscribers
-    for i in $(seq 1 $USERS_COUNT); do
-        $WP user create subscriber_$i subscriber_$i@example.com --role=subscriber --display_name="Subscriber $i" || {
-            log_warning "Failed to create subscriber $i (may already exist)"
-        }
-    done
-    log_success "Created $USERS_COUNT subscribers"
+    ' || {
+        log_error "Failed to create users"
+        exit 1
+    }
+    log_success "Users created"
 else
     log_info "Step 4: Skipping users creation (disabled)"
 fi
