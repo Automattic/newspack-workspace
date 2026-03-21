@@ -193,9 +193,9 @@ $WP cache flush 2>/dev/null || true
 $WP core install \
     --url="$SITE_URL" \
     --title="Newspack Site" \
-    --admin_user=admin \
-    --admin_password=password \
-    --admin_email=admin@example.com \
+    --admin_user="${WP_ADMIN_USER:-admin}" \
+    --admin_password="${WP_ADMIN_PASSWORD:-password}" \
+    --admin_email="${WP_ADMIN_EMAIL:-admin@example.com}" \
     --skip-email || {
     log_error "Failed to reinstall WordPress"
     exit 1
@@ -509,6 +509,9 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
     if [ "$SUBSCRIPTIONS_ENABLED" = true ] && [ "$CUSTOMERS_COUNT" -gt 0 ]; then
         log_info "Creating subscriptions for ${SUBSCRIPTIONS_PERCENTAGE}% of customers..."
 
+        if [[ "$SUBSCRIPTIONS_PERCENTAGE" -gt 100 ]]; then
+            SUBSCRIPTIONS_PERCENTAGE=100
+        fi
         SUBSCRIPTION_COUNT=$((CUSTOMERS_COUNT * SUBSCRIPTIONS_PERCENTAGE / 100))
         YEARLY_COUNT=$((SUBSCRIPTION_COUNT * 20 / 100))
         MONTHLY_COUNT=$((SUBSCRIPTION_COUNT - YEARLY_COUNT))
