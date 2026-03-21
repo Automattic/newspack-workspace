@@ -228,10 +228,12 @@ n setup --env myenv --yes     # fully configured Newspack site
 n env create <name> [options]  # Create environment config
   --worktree <repo>:<branch>   #   Mount a worktree (repeatable for multiple repos)
   --domain <domain>            #   Custom domain (default: loopback IP)
+  --up                         #   Start the environment immediately after creation
 n env up <name> [--build]      # Start environment (creates DB, installs WP, sets up SSL)
 n env down <name>              # Stop environment
 n env destroy <name>           # Remove environment, DB, worktrees, and files
 n env list                     # List environments with status and URLs
+n env cleanup                  # Interactive bulk cleanup of environments
 ```
 
 ### Site Setup
@@ -247,6 +249,8 @@ n setup --env <name> [options] # Bootstrap an isolated environment
   --posts-count N              #   Number of posts (default: 10)
   --customers-count N          #   Number of WooCommerce customers (default: 10)
 ```
+
+Run `n setup --help` for all available options.
 
 `n setup` resets the database and creates a site with: theme, Newspack plugins, posts with categories, homepage, users, and menus. Use `--woocommerce` to add donations/memberships/subscriptions, and `--campaigns` for prompts.
 
