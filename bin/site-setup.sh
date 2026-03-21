@@ -145,6 +145,15 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Validate numeric arguments.
+for _var in POSTS_COUNT USERS_COUNT CUSTOMERS_COUNT SUBSCRIPTIONS_PERCENTAGE; do
+    eval "_val=\$$_var"
+    if ! [[ "$_val" =~ ^[0-9]+$ ]]; then
+        log_error "--$(echo "$_var" | tr '[:upper:]_' '[:lower:]-') must be a positive integer, got: $_val"
+        exit 1
+    fi
+done
+
 WP="wp --allow-root --path=$WP_PATH"
 
 # Determine site URL.
