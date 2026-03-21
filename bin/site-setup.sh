@@ -350,8 +350,7 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
     PLUGINS=("woocommerce" "woocommerce-subscriptions" "woocommerce-memberships" "woocommerce-name-your-price")
 
     for plugin in "${PLUGINS[@]}"; do
-        $WP plugin is-installed $plugin &>/dev/null
-        if [ $? -eq 0 ]; then
+        if $WP plugin is-installed "$plugin" &>/dev/null; then
             $WP plugin activate $plugin || {
                 log_warning "Failed to activate $plugin"
             }
@@ -463,8 +462,8 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
         log_info "Creating membership plans..."
 
         # Registration Wall plan
-        PLAN_ID=$($WP wc memberships plan create --name="Registration Wall" --access="signup" 2>/dev/null | grep -o '[0-9]*')
-        if [ ! -z "$PLAN_ID" ]; then
+        PLAN_ID=$($WP wc memberships plan create --name="Registration Wall" --access="signup" 2>/dev/null | grep -o '[0-9]*') || true
+        if [ -n "$PLAN_ID" ]; then
             $WP wc memberships plan rule create \
                 --plan="$PLAN_ID" \
                 --type="content_restriction" \
@@ -476,14 +475,14 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
 
         # Premium Content plan
         # Create Premium Content category
-        CATEGORY_ID=$($WP term create category "Premium Content" --porcelain 2>/dev/null)
+        CATEGORY_ID=$($WP term create category "Premium Content" --porcelain 2>/dev/null) || true
 
         # Get donation product IDs
-        MONTH_PRODUCT=$($WP eval 'echo Newspack\Donations::get_donation_product("month");')
-        YEAR_PRODUCT=$($WP eval 'echo Newspack\Donations::get_donation_product("year");')
+        MONTH_PRODUCT=$($WP eval 'echo Newspack\Donations::get_donation_product("month");') || true
+        YEAR_PRODUCT=$($WP eval 'echo Newspack\Donations::get_donation_product("year");') || true
 
         # Create Golden Plan
-        PLAN_ID=$($WP wc memberships plan create --name="Golden Plan" --access="purchase" --product="$MONTH_PRODUCT,$YEAR_PRODUCT" 2>/dev/null | grep -o '[0-9]*')
+        PLAN_ID=$($WP wc memberships plan create --name="Golden Plan" --access="purchase" --product="$MONTH_PRODUCT,$YEAR_PRODUCT" 2>/dev/null | grep -o '[0-9]*') || true
 
         if [ ! -z "$PLAN_ID" ] && [ ! -z "$CATEGORY_ID" ]; then
             $WP wc memberships plan rule create \
