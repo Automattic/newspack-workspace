@@ -241,12 +241,13 @@ case $1 in
         if [[ -n "$setup_env_name" ]] && [[ " ${setup_args[*]} " == *" --woocommerce "* ]]; then
             main_plugins="$NABSPATH/html/wp-content/plugins"
             env_plugins="$NABSPATH/envs/${setup_env_name}/html/wp-content/plugins"
+            mkdir -p "$env_plugins"
             for plugin in "${woocommerce_plugins[@]}"; do
                 if [[ -e "$env_plugins/$plugin" ]]; then
                     continue
                 elif [[ -d "$main_plugins/$plugin" ]]; then
                     echo "Copying $plugin from main site to $setup_env_name..."
-                    cp -r "$main_plugins/$plugin" "$env_plugins/$plugin"
+                    cp -r "$main_plugins/$plugin" "$env_plugins/$plugin" || echo "Warning: failed to copy $plugin." >&2
                 else
                     echo "Warning: $plugin not found in main site. WooCommerce setup may be incomplete." >&2
                 fi
