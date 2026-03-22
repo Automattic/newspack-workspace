@@ -54,6 +54,7 @@ log_error() {
 while [[ $# -gt 0 ]]; do
     case $1 in
         --url)
+            [[ -z "${2:-}" || "$2" == --* ]] && { log_error "--url requires a value"; exit 1; }
             SITE_URL="$2"
             shift 2
             ;;
@@ -66,6 +67,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --posts-count)
+            [[ -z "${2:-}" || "$2" == --* ]] && { log_error "--posts-count requires a value"; exit 1; }
             POSTS_COUNT="$2"
             shift 2
             ;;
@@ -78,6 +80,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --users-count)
+            [[ -z "${2:-}" || "$2" == --* ]] && { log_error "--users-count requires a value"; exit 1; }
             USERS_COUNT="$2"
             shift 2
             ;;
@@ -86,6 +89,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --customers-count)
+            [[ -z "${2:-}" || "$2" == --* ]] && { log_error "--customers-count requires a value"; exit 1; }
             CUSTOMERS_COUNT="$2"
             shift 2
             ;;
@@ -98,6 +102,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --subscriptions-percentage)
+            [[ -z "${2:-}" || "$2" == --* ]] && { log_error "--subscriptions-percentage requires a value"; exit 1; }
             SUBSCRIPTIONS_PERCENTAGE="$2"
             shift 2
             ;;
@@ -469,7 +474,7 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
         log_info "Creating membership plans..."
 
         # Registration Wall plan
-        PLAN_ID=$($WP wc memberships plan create --name="Registration Wall" --access="signup" 2>/dev/null | grep -o '[0-9]*') || true
+        PLAN_ID=$($WP wc memberships plan create --name="Registration Wall" --access="signup" 2>/dev/null | grep -o '[0-9]*' | tail -1) || true
         if [ -n "$PLAN_ID" ]; then
             $WP wc memberships plan rule create \
                 --plan="$PLAN_ID" \
@@ -489,7 +494,7 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
         YEAR_PRODUCT=$($WP eval 'echo Newspack\Donations::get_donation_product("year");') || true
 
         # Create Golden Plan
-        PLAN_ID=$($WP wc memberships plan create --name="Golden Plan" --access="purchase" --product="$MONTH_PRODUCT,$YEAR_PRODUCT" 2>/dev/null | grep -o '[0-9]*') || true
+        PLAN_ID=$($WP wc memberships plan create --name="Golden Plan" --access="purchase" --product="$MONTH_PRODUCT,$YEAR_PRODUCT" 2>/dev/null | grep -o '[0-9]*' | tail -1) || true
 
         if [ -n "$PLAN_ID" ] && [ -n "$CATEGORY_ID" ]; then
             $WP wc memberships plan rule create \
