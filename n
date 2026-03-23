@@ -245,9 +245,23 @@ case $1 in
             for plugin in "${woocommerce_plugins[@]}"; do
                 if [[ -e "$env_plugins/$plugin" ]]; then
                     continue
-                elif [[ -d "$main_plugins/$plugin" ]]; then
-                    echo "Copying $plugin from main site to $setup_env_name..."
-                    cp -r "$main_plugins/$plugin" "$env_plugins/$plugin" || echo "Warning: failed to copy $plugin." >&2
+                elif [[ -d "$main_plugins/$plugin" || -L "$main_plugins/$plugin" ]]; then
+                    # Use -L to also match symlinks to container-only paths (e.g. /newspack-repos/).
+                    # Resolve symlinks via readlink so cp can follow the host-side path.
+                    src="$main_plugins/$plugin"
+                    if [[ -L "$src" ]]; then
+                        target="$(readlink "$src")"
+                        # Translate container path /newspack-repos/<name> to host path repos/<name>.
+                        if [[ "$target" == /newspack-repos/* ]]; then
+                            src="$NABSPATH/repos/${target#/newspack-repos/}"
+                        fi
+                    fi
+                    if [[ -d "$src" ]]; then
+                        echo "Copying $plugin from main site to $setup_env_name..."
+                        cp -r "$src" "$env_plugins/$plugin" || echo "Warning: failed to copy $plugin." >&2
+                    else
+                        echo "Warning: $plugin symlink target not found. WooCommerce setup may be incomplete." >&2
+                    fi
                 else
                     echo "Warning: $plugin not found in main site. WooCommerce setup may be incomplete." >&2
                 fi
