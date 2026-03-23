@@ -139,6 +139,16 @@ case $1 in
         exit 0
         ;;
     cleanup)
+        shift
+        cleanup_all=false
+        cleanup_yes=false
+        while [[ $# -gt 0 ]]; do
+            case $1 in
+                --all) cleanup_all=true; shift ;;
+                --yes) cleanup_yes=true; shift ;;
+                *) echo "Usage: n worktree cleanup [--all] [--yes]"; exit 1 ;;
+            esac
+        done
         # Collect all worktrees across repos.
         worktrees=()
         worktree_repos=()
@@ -161,66 +171,80 @@ case $1 in
             echo "No worktrees to clean up."
             exit 0
         fi
-        # Track which indices to keep (use index-based array to avoid key issues).
-        keep_flags=()
-        for i in "${!worktrees[@]}"; do keep_flags[$i]=false; done
-        while true; do
-            echo ""
-            echo "Worktrees (marked for REMOVAL unless toggled):"
-            for i in "${!worktrees[@]}"; do
-                repo="${worktree_repos[$i]}"
-                branch="${worktree_branches[$i]}"
-                # Check if an env uses this worktree.
-                env_label=""
-                for f in "$NABSPATH"/docker-compose.env-*.yml; do
-                    [[ -f "$f" ]] || continue
-                    if grep -q "worktrees/$repo/$branch" "$f" 2>/dev/null; then
-                        env_name=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
-                        env_label=" (env: $env_name)"
-                        break
+        # --all: skip interactive selection (select all for removal).
+        # --yes: skip final confirmation prompt.
+        if [[ "$cleanup_all" != true ]]; then
+            if ! [ -t 0 ] || ! [ -t 1 ]; then
+                echo "Interactive mode requires a terminal. Use --all --yes for non-interactive cleanup."
+                exit 1
+            fi
+            # Interactive toggle loop.
+            keep_flags=()
+            for i in "${!worktrees[@]}"; do keep_flags[$i]=false; done
+            while true; do
+                echo ""
+                echo "Worktrees (marked for REMOVAL unless toggled):"
+                for i in "${!worktrees[@]}"; do
+                    repo="${worktree_repos[$i]}"
+                    branch="${worktree_branches[$i]}"
+                    # Check if an env uses this worktree.
+                    env_label=""
+                    for f in "$NABSPATH"/docker-compose.env-*.yml; do
+                        [[ -f "$f" ]] || continue
+                        if grep -q "worktrees/$repo/$branch" "$f" 2>/dev/null; then
+                            env_name=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
+                            env_label=" (env: $env_name)"
+                            break
+                        fi
+                    done
+                    if [[ "${keep_flags[$i]}" == true ]]; then
+                        echo "  $((i+1)). [KEEP]    ${worktrees[$i]}$env_label"
+                    else
+                        echo "  $((i+1)). [REMOVE]  ${worktrees[$i]}$env_label"
                     fi
                 done
-                if [[ "${keep_flags[$i]}" == true ]]; then
-                    echo "  $((i+1)). [KEEP]    ${worktrees[$i]}$env_label"
-                else
-                    echo "  $((i+1)). [REMOVE]  ${worktrees[$i]}$env_label"
+                echo ""
+                echo "Enter a number to toggle, 'a' to select all for removal, or 'delete' to proceed:"
+                read -p "> " choice
+                if [[ "$choice" == "delete" ]]; then
+                    break
+                elif [[ "$choice" == "a" ]]; then
+                    for i in "${!worktrees[@]}"; do keep_flags[$i]=false; done
+                elif [[ "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -ge 1 && "$choice" -le ${#worktrees[@]} ]]; then
+                    idx=$((choice-1))
+                    if [[ "${keep_flags[$idx]}" == true ]]; then
+                        keep_flags[$idx]=false
+                    else
+                        keep_flags[$idx]=true
+                    fi
                 fi
             done
-            echo ""
-            echo "Enter a number to toggle, 'a' to select all for removal, or 'delete' to proceed:"
-            read -p "> " choice
-            if [[ "$choice" == "delete" ]]; then
-                break
-            elif [[ "$choice" == "a" ]]; then
-                for i in "${!worktrees[@]}"; do keep_flags[$i]=false; done
-            elif [[ "$choice" =~ ^[0-9]+$ ]] && [[ "$choice" -ge 1 && "$choice" -le ${#worktrees[@]} ]]; then
-                idx=$((choice-1))
-                if [[ "${keep_flags[$idx]}" == true ]]; then
-                    keep_flags[$idx]=false
-                else
-                    keep_flags[$idx]=true
+            to_remove=()
+            to_remove_repos=()
+            to_remove_branches=()
+            for i in "${!worktrees[@]}"; do
+                if [[ "${keep_flags[$i]}" != true ]]; then
+                    to_remove+=("${worktrees[$i]}")
+                    to_remove_repos+=("${worktree_repos[$i]}")
+                    to_remove_branches+=("${worktree_branches[$i]}")
                 fi
-            fi
-        done
-        to_remove=()
-        to_remove_repos=()
-        to_remove_branches=()
-        for i in "${!worktrees[@]}"; do
-            if [[ "${keep_flags[$i]}" != true ]]; then
-                to_remove+=("${worktrees[$i]}")
-                to_remove_repos+=("${worktree_repos[$i]}")
-                to_remove_branches+=("${worktree_branches[$i]}")
-            fi
-        done
+            done
+        else
+            to_remove=("${worktrees[@]}")
+            to_remove_repos=("${worktree_repos[@]}")
+            to_remove_branches=("${worktree_branches[@]}")
+        fi
         if [[ ${#to_remove[@]} -eq 0 ]]; then
             echo "Nothing to remove."
             exit 0
         fi
         echo "Will remove: ${to_remove[*]}"
-        read -p "Confirm? (y/N): " confirm
-        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-            echo "Aborted."
-            exit 0
+        if [[ "$cleanup_yes" != true ]]; then
+            read -p "Confirm? (y/N): " confirm
+            if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+                echo "Aborted."
+                exit 0
+            fi
         fi
         for i in "${!to_remove[@]}"; do
             echo ""
@@ -230,5 +254,6 @@ case $1 in
         ;;
     *)
         echo "Usage: n worktree <add|list|remove|cleanup> [repo] [branch]"
+        echo "  cleanup [--all] [--yes]  Remove worktrees (--all selects everything, --yes skips confirmation)"
         ;;
 esac
