@@ -146,7 +146,7 @@ case $1 in
             case $1 in
                 --all) cleanup_all=true; shift ;;
                 --yes) cleanup_yes=true; shift ;;
-                *) echo "Usage: n worktree cleanup [--all --yes]"; exit 1 ;;
+                *) echo "Usage: n worktree cleanup [--all] [--yes]"; exit 1 ;;
             esac
         done
         # Collect all worktrees across repos.
@@ -174,6 +174,10 @@ case $1 in
         # --all: skip interactive selection (select all for removal).
         # --yes: skip final confirmation prompt.
         if [[ "$cleanup_all" != true ]]; then
+            if ! [ -t 0 ] || ! [ -t 1 ]; then
+                echo "Interactive mode requires a terminal. Use --all --yes for non-interactive cleanup."
+                exit 1
+            fi
             # Interactive toggle loop.
             keep_flags=()
             for i in "${!worktrees[@]}"; do keep_flags[$i]=false; done
@@ -250,6 +254,6 @@ case $1 in
         ;;
     *)
         echo "Usage: n worktree <add|list|remove|cleanup> [repo] [branch]"
-        echo "  cleanup [--all --yes]  Remove worktrees (interactive, or remove all non-interactively)"
+        echo "  cleanup [--all] [--yes]  Remove worktrees (--all selects everything, --yes skips confirmation)"
         ;;
 esac

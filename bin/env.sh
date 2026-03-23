@@ -390,7 +390,7 @@ YAML
             case $1 in
                 --all) cleanup_all=true; shift ;;
                 --yes) cleanup_yes=true; shift ;;
-                *) echo "Usage: n env cleanup [--all --yes]"; exit 1 ;;
+                *) echo "Usage: n env cleanup [--all] [--yes]"; exit 1 ;;
             esac
         done
         envs=()
@@ -406,6 +406,10 @@ YAML
         # --all: skip interactive selection (select all for removal).
         # --yes: skip final confirmation prompt.
         if [[ "$cleanup_all" != true ]]; then
+            if ! [ -t 0 ] || ! [ -t 1 ]; then
+                echo "Interactive mode requires a terminal. Use --all --yes for non-interactive cleanup."
+                exit 1
+            fi
             # Interactive toggle loop.
             keep_flags=()
             for i in "${!envs[@]}"; do keep_flags[$i]=false; done
@@ -468,6 +472,6 @@ YAML
         ;;
     *)
         echo "Usage: n env <create|up|down|destroy|list|cleanup>"
-        echo "  cleanup [--all --yes]  Remove environments (interactive, or destroy all non-interactively)"
+        echo "  cleanup [--all] [--yes]  Remove environments (--all selects everything, --yes skips confirmation)"
         ;;
 esac
