@@ -220,18 +220,20 @@ Each isolated environment gets its own Docker container, WordPress installation,
 n env create myenv --worktree newspack-plugin:mybranch
 n env up myenv
 n setup --env myenv --yes     # fully configured Newspack site
-# → https://myenv.local/
+# → https://<ip>/  (use --domain myenv.local for a custom domain)
 ```
 
 ### Environment Commands
 ```bash
 n env create <name> [options]  # Create environment config
   --worktree <repo>:<branch>   #   Mount a worktree (repeatable for multiple repos)
-  --domain <domain>            #   Custom domain (default: <name>.local)
+  --domain <domain>            #   Custom domain (default: loopback IP)
+  --up                         #   Start the environment immediately after creation
 n env up <name> [--build]      # Start environment (creates DB, installs WP, sets up SSL)
 n env down <name>              # Stop environment
 n env destroy <name>           # Remove environment, DB, worktrees, and files
 n env list                     # List environments with status and URLs
+n env cleanup                  # Interactive bulk cleanup of environments
 ```
 
 ### Site Setup
@@ -248,6 +250,8 @@ n setup --env <name> [options] # Bootstrap an isolated environment
   --customers-count N          #   Number of WooCommerce customers (default: 10)
 ```
 
+Run `n setup --help` for all available options.
+
 `n setup` resets the database and creates a site with: theme, Newspack plugins, posts with categories, homepage, users, and menus. Use `--woocommerce` to add donations/memberships/subscriptions, and `--campaigns` for prompts.
 
 ### Shell Access
@@ -258,7 +262,7 @@ n sh <name>                    # Shell into environment container
 
 ### How It Works
 - Each env binds to a unique loopback IP (127.0.0.2+) on ports 80/443 with HTTPS via mkcert
-- Domain defaults to `<name>.local`, overridable with `--domain`
+- Domain defaults to the loopback IP, overridable with `--domain`
 - `n start` pre-creates loopback aliases (127.0.0.2–10) so agents can create envs without sudo
 - Each env mounts `envs/<name>/html/` as `/var/www/html` (isolated from `./html/`)
 - Each env gets its own database (`wordpress_<name>`) in the shared MariaDB server

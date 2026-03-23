@@ -35,25 +35,26 @@ NC='\033[0m' # No Color
 
 # Helper functions
 log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+    echo -e "${BLUE}[INFO]${NC} ${1}"
 }
 
 log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+    echo -e "${GREEN}[SUCCESS]${NC} ${1}"
 }
 
 log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${YELLOW}[WARNING]${NC} ${1}"
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} ${1}"
 }
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
         --url)
+            [[ -z "${2:-}" || "$2" == --* ]] && { log_error "--url requires a value"; exit 1; }
             SITE_URL="$2"
             shift 2
             ;;
@@ -66,6 +67,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --posts-count)
+            [[ -z "${2:-}" || "$2" == --* ]] && { log_error "--posts-count requires a value"; exit 1; }
             POSTS_COUNT="$2"
             shift 2
             ;;
@@ -78,6 +80,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --users-count)
+            [[ -z "${2:-}" || "$2" == --* ]] && { log_error "--users-count requires a value"; exit 1; }
             USERS_COUNT="$2"
             shift 2
             ;;
@@ -86,6 +89,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --customers-count)
+            [[ -z "${2:-}" || "$2" == --* ]] && { log_error "--customers-count requires a value"; exit 1; }
             CUSTOMERS_COUNT="$2"
             shift 2
             ;;
@@ -98,6 +102,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --subscriptions-percentage)
+            [[ -z "${2:-}" || "$2" == --* ]] && { log_error "--subscriptions-percentage requires a value"; exit 1; }
             SUBSCRIPTIONS_PERCENTAGE="$2"
             shift 2
             ;;
@@ -145,6 +150,15 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Validate numeric arguments.
+for _var in POSTS_COUNT USERS_COUNT CUSTOMERS_COUNT SUBSCRIPTIONS_PERCENTAGE; do
+    eval "_val=\$$_var"
+    if ! [[ "$_val" =~ ^[0-9]+$ ]]; then
+        log_error "--$(echo "$_var" | tr '[:upper:]_' '[:lower:]-') must be a positive integer, got: $_val"
+        exit 1
+    fi
+done
+
 WP="wp --allow-root --path=$WP_PATH"
 
 # Determine site URL.
@@ -158,6 +172,10 @@ fi
 
 # Confirmation prompt.
 if [ "$SKIP_CONFIRM" != true ]; then
+    if [[ ! -t 0 ]]; then
+        log_error "Non-interactive shell detected. Use --yes to skip confirmation."
+        exit 1
+    fi
     echo -e "${YELLOW}This will reset the database and set up a fresh Newspack site at ${SITE_URL}.${NC}"
     read -p "Continue? (y/N) " confirm
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
@@ -180,9 +198,9 @@ $WP cache flush 2>/dev/null || true
 $WP core install \
     --url="$SITE_URL" \
     --title="Newspack Site" \
-    --admin_user=admin \
-    --admin_password=password \
-    --admin_email=admin@example.com \
+    --admin_user="${WP_ADMIN_USER:-admin}" \
+    --admin_password="${WP_ADMIN_PASSWORD:-password}" \
+    --admin_email="${WP_ADMIN_EMAIL:-admin@example.com}" \
     --skip-email || {
     log_error "Failed to reinstall WordPress"
     exit 1
@@ -205,23 +223,11 @@ log_success "$THEME activated"
 
 # Activate Newspack plugins
 log_info "Activating Newspack plugins..."
-$WP plugin activate newspack-plugin || {
-    log_error "Failed to activate Newspack plugin"
+$WP plugin activate newspack-plugin newspack-blocks newspack-popups || {
+    log_error "Failed to activate Newspack plugins"
     exit 1
 }
-log_success "Newspack plugin activated"
-
-$WP plugin activate newspack-blocks || {
-    log_error "Failed to activate Newspack Blocks plugin"
-    exit 1
-}
-log_success "Newspack Blocks plugin activated"
-
-$WP plugin activate newspack-popups || {
-    log_error "Failed to activate Newspack Popups plugin"
-    exit 1
-}
-log_success "Newspack Popups plugin activated"
+log_success "Newspack plugins activated"
 
 # Mark Newspack setup as complete
 log_info "Marking Newspack setup as complete..."
@@ -287,7 +293,6 @@ if [ "$HOMEPAGE_ENABLED" = true ]; then
     $WP eval '
         if ( class_exists( "Newspack\Starter_Content_Generated" ) ) {
             Newspack\Starter_Content_Generated::create_homepage();
-            set_theme_mod( "hide_front_page_title", true );
             echo "Homepage created\n";
         } else {
             echo "Starter_Content_Generated class not found\n";
@@ -306,37 +311,43 @@ fi
 if [ "$USERS_ENABLED" = true ]; then
     log_info "Step 4: Creating users..."
 
-    # Create Guest Contributors
-    for i in $(seq 1 $USERS_COUNT); do
-        $WP user create guest_contributor_$i guest_contributor_$i@example.com --role=contributor_no_edit --display_name="Guest Contributor $i" || {
-            log_warning "Failed to create guest contributor $i (may already exist)"
+    $WP eval '
+        $roles = array(
+            "contributor_no_edit" => "Guest Contributor",
+            "editor" => "Editor",
+            "author" => "Author",
+            "subscriber" => "Subscriber",
+        );
+        foreach ( $roles as $role => $label ) {
+            // Skip roles that do not exist (e.g. contributor_no_edit requires newspack-plugin).
+            if ( ! get_role( $role ) ) {
+                echo "Role $role not found, skipping\n";
+                continue;
+            }
+            $prefix = strtolower( str_replace( " ", "_", $label ) );
+            for ( $i = 1; $i <= '$USERS_COUNT'; $i++ ) {
+                $username = $prefix . "_" . $i;
+                if ( username_exists( $username ) ) {
+                    continue;
+                }
+                $user_id = wp_insert_user( array(
+                    "user_login" => $username,
+                    "user_email" => $username . "@example.com",
+                    "user_pass" => wp_generate_password(),
+                    "display_name" => $label . " " . $i,
+                    "role" => $role,
+                ) );
+                if ( is_wp_error( $user_id ) ) {
+                    echo "Failed to create $username: " . $user_id->get_error_message() . "\n";
+                }
+            }
+            echo "Created '$USERS_COUNT' " . $label . "s\n";
         }
-    done
-    log_success "Created $USERS_COUNT guest contributors"
-
-    # Create Editors
-    for i in $(seq 1 $USERS_COUNT); do
-        $WP user create editor_$i editor_$i@example.com --role=editor --display_name="Editor $i" || {
-            log_warning "Failed to create editor $i (may already exist)"
-        }
-    done
-    log_success "Created $USERS_COUNT editors"
-
-    # Create Authors
-    for i in $(seq 1 $USERS_COUNT); do
-        $WP user create author_$i author_$i@example.com --role=author --display_name="Author $i" || {
-            log_warning "Failed to create author $i (may already exist)"
-        }
-    done
-    log_success "Created $USERS_COUNT authors"
-
-    # Create Subscribers
-    for i in $(seq 1 $USERS_COUNT); do
-        $WP user create subscriber_$i subscriber_$i@example.com --role=subscriber --display_name="Subscriber $i" || {
-            log_warning "Failed to create subscriber $i (may already exist)"
-        }
-    done
-    log_success "Created $USERS_COUNT subscribers"
+    ' || {
+        log_error "Failed to create users"
+        exit 1
+    }
+    log_success "Users created"
 else
     log_info "Step 4: Skipping users creation (disabled)"
 fi
@@ -347,15 +358,15 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
 
     # Activate WooCommerce plugins
     log_info "Activating WooCommerce plugins..."
-    PLUGINS=("woocommerce" "woocommerce-subscriptions" "woocommerce-memberships" "woocommerce-name-your-price")
+    source /var/scripts/repos.sh
 
-    for plugin in "${PLUGINS[@]}"; do
-        $WP plugin is-installed $plugin &>/dev/null
-        if [ $? -eq 0 ]; then
-            $WP plugin activate $plugin || {
+    for plugin in "${woocommerce_plugins[@]}"; do
+        if $WP plugin is-installed "$plugin" &>/dev/null; then
+            if $WP plugin activate "$plugin"; then
+                log_success "Activated $plugin"
+            else
                 log_warning "Failed to activate $plugin"
-            }
-            log_success "Activated $plugin"
+            fi
         else
             log_warning "Plugin $plugin is not installed"
         fi
@@ -413,6 +424,8 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
     if [ "$CUSTOMERS_COUNT" -gt 0 ]; then
         log_info "Creating $CUSTOMERS_COUNT customers with orders..."
         $WP eval '
+            $donation_product_id = Newspack\Donations::get_donation_product( "once" );
+
             for ( $i = 1; $i <= '$CUSTOMERS_COUNT'; $i++ ) {
                 $customer_id = wc_create_new_customer(
                     "customer_" . $i . "@example.com",
@@ -431,17 +444,13 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
                         "status" => "completed"
                     ) );
 
-                    if ( $order ) {
-                        // Add a donation product to the order
-                        $donation_product_id = Newspack\Donations::get_donation_product( "once" );
-                        if ( $donation_product_id ) {
-                            $order->add_product( wc_get_product( $donation_product_id ), 1, array(
-                                "subtotal" => 25,
-                                "total" => 25
-                            ) );
-                            $order->calculate_totals();
-                            $order->save();
-                        }
+                    if ( $order && $donation_product_id ) {
+                        $order->add_product( wc_get_product( $donation_product_id ), 1, array(
+                            "subtotal" => 25,
+                            "total" => 25
+                        ) );
+                        $order->calculate_totals();
+                        $order->save();
                     }
 
                     if ( $i % 10 == 0 ) {
@@ -452,10 +461,12 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
                 }
             }
             echo "All customers created\n";
-        ' || {
+        '
+        if [ $? -eq 0 ]; then
+            log_success "Customers created"
+        else
             log_warning "Failed to create all customers"
-        }
-        log_success "Customers created"
+        fi
     fi
 
     # Create Membership Plans
@@ -463,8 +474,8 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
         log_info "Creating membership plans..."
 
         # Registration Wall plan
-        PLAN_ID=$($WP wc memberships plan create --name="Registration Wall" --access="signup" 2>/dev/null | grep -o '[0-9]*')
-        if [ ! -z "$PLAN_ID" ]; then
+        PLAN_ID=$($WP wc memberships plan create --name="Registration Wall" --access="signup" 2>/dev/null | grep -o '[0-9]*' | tail -1) || true
+        if [ -n "$PLAN_ID" ]; then
             $WP wc memberships plan rule create \
                 --plan="$PLAN_ID" \
                 --type="content_restriction" \
@@ -476,16 +487,16 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
 
         # Premium Content plan
         # Create Premium Content category
-        CATEGORY_ID=$($WP term create category "Premium Content" --porcelain 2>/dev/null)
+        CATEGORY_ID=$($WP term create category "Premium Content" --porcelain 2>/dev/null) || true
 
         # Get donation product IDs
-        MONTH_PRODUCT=$($WP eval 'echo Newspack\Donations::get_donation_product("month");')
-        YEAR_PRODUCT=$($WP eval 'echo Newspack\Donations::get_donation_product("year");')
+        MONTH_PRODUCT=$($WP eval 'echo Newspack\Donations::get_donation_product("month");') || true
+        YEAR_PRODUCT=$($WP eval 'echo Newspack\Donations::get_donation_product("year");') || true
 
         # Create Golden Plan
-        PLAN_ID=$($WP wc memberships plan create --name="Golden Plan" --access="purchase" --product="$MONTH_PRODUCT,$YEAR_PRODUCT" 2>/dev/null | grep -o '[0-9]*')
+        PLAN_ID=$($WP wc memberships plan create --name="Golden Plan" --access="purchase" --product="$MONTH_PRODUCT,$YEAR_PRODUCT" 2>/dev/null | grep -o '[0-9]*' | tail -1) || true
 
-        if [ ! -z "$PLAN_ID" ] && [ ! -z "$CATEGORY_ID" ]; then
+        if [ -n "$PLAN_ID" ] && [ -n "$CATEGORY_ID" ]; then
             $WP wc memberships plan rule create \
                 --plan="$PLAN_ID" \
                 --type="content_restriction" \
@@ -503,6 +514,9 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
     if [ "$SUBSCRIPTIONS_ENABLED" = true ] && [ "$CUSTOMERS_COUNT" -gt 0 ]; then
         log_info "Creating subscriptions for ${SUBSCRIPTIONS_PERCENTAGE}% of customers..."
 
+        if [[ "$SUBSCRIPTIONS_PERCENTAGE" -gt 100 ]]; then
+            SUBSCRIPTIONS_PERCENTAGE=100
+        fi
         SUBSCRIPTION_COUNT=$((CUSTOMERS_COUNT * SUBSCRIPTIONS_PERCENTAGE / 100))
         YEARLY_COUNT=$((SUBSCRIPTION_COUNT * 20 / 100))
         MONTHLY_COUNT=$((SUBSCRIPTION_COUNT - YEARLY_COUNT))
@@ -561,12 +575,16 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
                             $membership = wc_memberships_create_user_membership( array(
                                 "plan_id" => $golden_plan_id,
                                 "user_id" => $customer->ID,
-                                "order_id" => $subscription->get_id(),
                             ) );
 
-                            // Link membership to subscription via meta
+                            // Link membership to subscription
                             if ( $membership && ! is_wp_error( $membership ) ) {
-                                update_post_meta( $membership->get_id(), "_subscription_id", $subscription->get_id() );
+                                if ( class_exists( "WC_Memberships_Integration_Subscriptions_User_Membership" ) ) {
+                                    $sub_membership = new WC_Memberships_Integration_Subscriptions_User_Membership( $membership->get_id() );
+                                    $sub_membership->set_subscription_id( $subscription->get_id() );
+                                } else {
+                                    update_post_meta( $membership->get_id(), "_subscription_id", $subscription->get_id() );
+                                }
                             }
                         }
                     }
@@ -578,11 +596,12 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
                 }
             }
             echo "All subscriptions and memberships created\n";
-        ' || {
+        '
+        if [ $? -eq 0 ]; then
+            log_success "Subscriptions created ($YEARLY_COUNT yearly, $MONTHLY_COUNT monthly)"
+        else
             log_warning "Failed to create all subscriptions"
-        }
-
-        log_success "Subscriptions created ($YEARLY_COUNT yearly, $MONTHLY_COUNT monthly)"
+        fi
     fi
 else
     log_info "Step 5: Skipping WooCommerce setup (disabled)"
@@ -600,11 +619,12 @@ if [ "$CAMPAIGNS_ENABLED" = true ]; then
         } else {
             echo "Newspack_Popups_Presets class not found\n";
         }
-    ' || {
+    '
+    if [ $? -eq 0 ]; then
+        log_success "Campaigns setup completed"
+    else
         log_warning "Failed to create RAS presets"
-    }
-
-    log_success "Campaigns setup completed"
+    fi
 else
     log_info "Step 6: Skipping campaigns setup (disabled)"
 fi
@@ -656,11 +676,12 @@ if [ "$MENUS_ENABLED" = true ]; then
         } else {
             echo "Failed to create menu\n";
         }
-    ' || {
+    '
+    if [ $? -eq 0 ]; then
+        log_success "Menus created"
+    else
         log_warning "Failed to create menus"
-    }
-
-    log_success "Menus created"
+    fi
 else
     log_info "Step 7: Skipping menus creation (disabled)"
 fi
