@@ -27,7 +27,7 @@ do :
 		echo "$dir already symlinked"
 	else
 		echo "Symlinking $dir"
-		ln -s "$CODE_PATH/$dir" "$link"
+		ln -s "$CODE_PATH/$dir" "$link" || true
 	fi
 done
 
