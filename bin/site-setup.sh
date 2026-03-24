@@ -186,6 +186,8 @@ fi
 
 # Step 1: Reset the database
 log_info "Step 1: Resetting the database..."
+# Deactivate all plugins first to prevent bootstrap queries against missing tables.
+$WP plugin deactivate --all 2>/dev/null || true
 $WP db reset --yes || {
     log_error "Failed to reset database"
     exit 1
@@ -194,7 +196,6 @@ log_success "Database reset completed"
 
 # Reinstall WordPress
 log_info "Reinstalling WordPress..."
-$WP cache flush 2>/dev/null || true
 $WP core install \
     --url="$SITE_URL" \
     --title="Newspack Site" \
