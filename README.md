@@ -341,6 +341,25 @@ That's it!
 
 Now visit `manager.com/wp-admin`, go to Newspack Manager, and add the URL for you other site there.
 
+### Connecting isolated environments to Manager
+
+Isolated environments (created with `n env create`) bind to loopback IPs like `127.0.0.2`. These IPs are accessible from the host machine but **not from inside other Docker containers**, because each container has its own loopback interface.
+
+When you add an isolated environment's URL (e.g. `https://127.0.0.2`) to the Manager UI, the manager container tries to reach `127.0.0.2` and fails -- the request never leaves the container. The error in the manager debug log will show `rest_no_route` / 404, which is misleading.
+
+To fix this, add a hosts entry inside the manager container that maps the loopback IP to the isolated environment's Docker-internal IP:
+
+```BASH
+# Find the environment container's Docker IP
+docker inspect newspack_env_<name> --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
+# e.g. 172.19.0.5
+
+# Add the mapping inside the manager container
+docker exec newspack_dev bash -c "echo '172.19.0.5 127.0.0.2' >> /etc/hosts"
+```
+
+This entry is lost when the manager container restarts, so you'll need to re-add it after `n stop`/`n start`.
+
 ### Note about the site domain when running CLI commands
 
 By default, the docker environment provides a dynamic site url, so you can access the site either via localhost or a tunneled domain, required for some actions. This is useful because it allows you to run your site without the tunnel when you don't need it.
