@@ -28,3 +28,10 @@ newspack_themes=(
 newspack_block_theme=(
 	"newspack-block-theme"
 )
+
+woocommerce_plugins=(
+	"woocommerce"
+	"woocommerce-subscriptions"
+	"woocommerce-memberships"
+	"woocommerce-name-your-price"
+)

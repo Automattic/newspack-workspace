@@ -121,6 +121,7 @@ cp default.env .env           # Create local config
 n start                       # Launch containers
 n install                     # Install WordPress
 n ci-build all                # Build all projects
+n setup --yes                 # Bootstrap site with content and plugins
 ```
 
 ### Building Projects
@@ -167,6 +168,8 @@ n sites-list                  # List additional sites
 n sites-drop <name>           # Remove site
 ```
 
+**Note:** Additional sites run in the same container and share plugin code — use them for multi-site/manager workflows. For branch isolation (different plugin versions), use isolated environments instead (see below).
+
 ### Working Across Repos
 ```bash
 n pull                        # Git pull all repos
@@ -210,12 +213,69 @@ Configured on port 9003 with IDE key `DOCKERDEBUG`. Path mapping: `/newspack-rep
 
 ## Isolated Environments for Parallel Development
 
-Use the `newspack` plugin skills to manage worktrees and isolated Docker environments:
-- `newspack:worktree` — Create or remove git worktrees for branch isolation
-- `newspack:env-create` — Create worktrees + isolated Docker environment on a separate port
-- `newspack:env-destroy` — Destroy environment and clean up worktrees
+Each isolated environment gets its own Docker container, WordPress installation, and database — completely independent of the main site. This enables parallel development and testing without interference.
 
-If the `newspack` plugin is not available, use the `n worktree` and `n env` commands directly. Run `n worktree --help` and `n env --help` for usage.
+### Quick Start
+```bash
+n env create myenv --worktree newspack-plugin:mybranch
+n env up myenv
+n setup --env myenv --yes     # fully configured Newspack site
+# → https://<ip>/  (use --domain myenv.local for a custom domain)
+```
+
+### Environment Commands
+```bash
+n env create <name> [options]  # Create environment config
+  --worktree <repo>:<branch>   #   Mount a worktree (repeatable for multiple repos)
+  --domain <domain>            #   Custom domain (default: loopback IP)
+  --up                         #   Start the environment immediately after creation
+n env up <name> [--build]      # Start environment (creates DB, installs WP, sets up SSL)
+n env down <name>              # Stop environment
+n env destroy <name>           # Remove environment, DB, worktrees, and files
+n env list                     # List environments with status and URLs
+n env cleanup                  # Interactive bulk cleanup of environments
+```
+
+### Site Setup
+```bash
+n setup [options]              # Bootstrap current site with full Newspack config
+n setup --env <name> [options] # Bootstrap an isolated environment
+  --yes                        #   Skip confirmation (destructive: resets DB)
+  --url <url>                  #   Override site URL (default: auto-detect)
+  --block-theme                #   Use newspack-block-theme instead of newspack-theme
+  --woocommerce                #   Enable WooCommerce + donations + subscriptions (off by default)
+  --campaigns                  #   Enable campaign/prompt setup (off by default)
+  --no-posts                   #   Skip post/category creation
+  --posts-count N              #   Number of posts (default: 10)
+  --customers-count N          #   Number of WooCommerce customers (default: 10)
+```
+
+Run `n setup --help` for all available options.
+
+`n setup` resets the database and creates a site with: theme, Newspack plugins, posts with categories, homepage, users, and menus. Use `--woocommerce` to add donations/memberships/subscriptions, and `--campaigns` for prompts.
+
+### Shell Access
+```bash
+n sh                           # Shell into main container
+n sh <name>                    # Shell into environment container
+```
+
+### How It Works
+- Each env binds to a unique loopback IP (127.0.0.2+) on ports 80/443 with HTTPS via mkcert
+- Domain defaults to the loopback IP, overridable with `--domain`
+- `n start` pre-creates loopback aliases (127.0.0.2–10) so agents can create envs without sudo
+- Each env mounts `envs/<name>/html/` as `/var/www/html` (isolated from `./html/`)
+- Each env gets its own database (`wordpress_<name>`) in the shared MariaDB server
+- Each env gets a unique `WP_CACHE_KEY_SALT` to prevent memcached key collisions
+- Worktrees override specific repos (e.g., `newspack-plugin`) while sharing the rest from `./repos/`
+- `n env destroy` cleans up everything: container, DB, html dir, hosts entry, and worktrees
+
+### Claude Code Plugin Skills
+
+If the `newspack` Claude Code plugin is installed, these skills wrap the commands above:
+- `newspack:worktree` — Create or remove git worktrees for branch isolation
+- `newspack:env-create` — Create worktrees + isolated Docker environment with HTTPS domain
+- `newspack:env-destroy` — Destroy environment and clean up worktrees
 
 ## Cross-Repository Workflow
 

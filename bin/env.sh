@@ -258,11 +258,14 @@ YAML
         # Auto-install WordPress if not already installed.
         echo "Waiting for WordPress setup..."
         for i in $(seq 1 20); do
-            if docker exec "$container_name" wp --allow-root core is-installed 2>/dev/null; then
-                break
-            fi
             if docker exec "$container_name" test -f /var/www/html/wp-config.php 2>/dev/null; then
+                # Check if core tables exist (wp core is-installed returns true even without them).
+                if docker exec "$container_name" wp --allow-root db query "SELECT 1 FROM wp_options LIMIT 1" 2>/dev/null | grep -q 1; then
+                    echo "WordPress already installed."
+                    break
+                fi
                 echo "Installing WordPress..."
+                docker exec "$container_name" wp --allow-root cache flush 2>/dev/null
                 docker exec "$container_name" wp --allow-root core install \
                     --url="https://${domain}" \
                     --title="${WP_TITLE:-Newspack}" \
