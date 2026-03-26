@@ -36,7 +36,7 @@ if [ 80 -eq "$HOST_PORT" ]; then
 	WP_HOST_PORT=""
 fi
 
-chmod +x /var/scripts/*
+chmod +x /var/scripts/*.sh
 /var/scripts/link-repos.sh
 
 # Memcached
