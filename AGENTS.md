@@ -373,7 +373,7 @@ newspack-plugin provides configuration managers for other plugins:
 ## Git & Commit Rules
 
 - **Merge strategy**: Always use **squash merge** (`gh pr merge --squash`) when merging PRs. The only exceptions are branch promotions (`trunk` to `alpha`, `alpha` to `release`, `release` to `trunk`, `release` to `alpha`), which use merge commits to preserve history.
-- **Commit messages**: Single line, max 72 characters. Conventional commit format: `<type>(<scope>): <subject>`. No body except for `Co-Authored-By` trailers.
+- **Commit messages**: Subject must be a single line, max 72 characters, in conventional commit format: `<type>(<scope>): <subject>`. No body. `Co-Authored-By` trailers are required after a blank line.
 - **Never push automatically**. Always ask for confirmation before pushing to remote.
 
 ## Claude Code Plugin
