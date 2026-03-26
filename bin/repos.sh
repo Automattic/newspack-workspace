@@ -34,4 +34,5 @@ woocommerce_plugins=(
 	"woocommerce-subscriptions"
 	"woocommerce-memberships"
 	"woocommerce-name-your-price"
+	"woocommerce-gateway-stripe"
 )
