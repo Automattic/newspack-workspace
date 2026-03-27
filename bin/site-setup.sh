@@ -186,6 +186,8 @@ fi
 
 # Step 1: Reset the database
 log_info "Step 1: Resetting the database..."
+# Deactivate all plugins first to prevent bootstrap queries against missing tables.
+$WP plugin deactivate --all 2>/dev/null || true
 $WP db reset --yes || {
     log_error "Failed to reset database"
     exit 1
@@ -385,6 +387,22 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
         update_option( "woocommerce_onboarding_profile", array( "completed" => true ) );
         echo "WooCommerce setup completed\n";
     '
+
+    # Setup Stripe gateway (if keys are provided via env vars)
+    if [ -n "${STRIPE_TEST_PUBLISHABLE_KEY:-}" ] && [ -n "${STRIPE_TEST_SECRET_KEY:-}" ]; then
+        log_info "Configuring Stripe gateway (test mode)..."
+        if $WP plugin is-installed woocommerce-gateway-stripe &>/dev/null; then
+            $WP plugin activate woocommerce-gateway-stripe 2>/dev/null || true
+            $WP option update woocommerce_stripe_settings "$(jq -n \
+                --arg pk "$STRIPE_TEST_PUBLISHABLE_KEY" \
+                --arg sk "$STRIPE_TEST_SECRET_KEY" \
+                '{enabled:"yes",testmode:"yes",test_publishable_key:$pk,test_secret_key:$sk,upe_checkout_experience_enabled:"yes",upe_checkout_experience_accepted_payments:["card"],capture:"yes",saved_cards:"yes",logging:"no"}')" \
+                --format=json
+            log_success "Stripe gateway configured (test mode)"
+        else
+            log_warning "woocommerce-gateway-stripe not installed, skipping Stripe setup"
+        fi
+    fi
 
     # Setup Newspack Donations
     log_info "Setting up Newspack Donations..."

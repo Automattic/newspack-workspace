@@ -8,12 +8,13 @@ newspack_plugins=(
 	"newspack-plugin"
 	"newspack-popups"
 	"newspack-manager"
-	"newspack-manager-client"
+	"newspack-manager-admin"
 	"newspack-sponsors"
 	"republication-tracker-tool"
 	"super-cool-ad-inserter-plugin"
 	"newspack-multibranded-site"
 	"newspack-network"
+	"newspack-subscription-migrations"
 )
 
 newspack_themes=(
@@ -31,6 +32,7 @@ newspack_block_theme=(
 
 woocommerce_plugins=(
 	"woocommerce"
+	"woocommerce-gateway-stripe"
 	"woocommerce-subscriptions"
 	"woocommerce-memberships"
 	"woocommerce-name-your-price"

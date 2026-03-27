@@ -27,7 +27,7 @@ do :
 		echo "$dir already symlinked"
 	else
 		echo "Symlinking $dir"
-		ln -s "$CODE_PATH/$dir" "$link"
+		ln -s "$CODE_PATH/$dir" "$link" || true
 	fi
 done
 
@@ -38,7 +38,7 @@ do :
 		echo "$dir already symlinked"
 	else
 		echo "Symlinking $dir"
-		ln -s "$CODE_PATH/newspack-theme/$dir" "$link"
+		ln -s "$CODE_PATH/newspack-theme/$dir" "$link" || true
 	fi
 done
 
@@ -49,14 +49,14 @@ do :
 		echo "$dir already symlinked"
 	else
 		echo "Symlinking $dir"
-		ln -s "$CODE_PATH/$dir" "$link"
+		ln -s "$CODE_PATH/$dir" "$link" || true
 	fi
 done
 
-link="/var/www/manager-html/wp-content/plugins/newspack-manager-client"
+link="/var/www/manager-html/wp-content/plugins/newspack-manager-admin"
 if [ -L "${link}" ]; then
-	echo "newspack-manager-client already symlinked"
+	echo "newspack-manager-admin already symlinked"
 else
-	echo "Symlinking newspack-manager-client"
-	ln -s "$CODE_PATH/newspack-manager-client" "$link"
+	echo "Symlinking newspack-manager-admin"
+	ln -s "$CODE_PATH/newspack-manager-admin" "$link"
 fi
