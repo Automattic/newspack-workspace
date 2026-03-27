@@ -220,7 +220,7 @@ Each isolated environment gets its own Docker container, WordPress installation,
 n env create myenv --worktree newspack-plugin:mybranch
 n env up myenv
 n setup --env myenv --yes     # fully configured Newspack site
-# → https://<ip>/  (use --domain myenv.local for a custom domain)
+# → https://myenv.local/  (override with --domain)
 ```
 
 ### Environment Commands
