@@ -92,6 +92,17 @@ start() {
         fi
         docker compose -f $file up -d
 
+    # Create shared network for inter-container communication.
+    # Env containers join this network with their domain as an alias,
+    # so they can reach each other by domain name via Docker DNS.
+    if ! docker network inspect newspack_envs >/dev/null 2>&1; then
+        if ! docker network create newspack_envs >/dev/null; then
+            echo "Error: failed to create Docker network 'newspack_envs'. Is Docker running?" >&2
+            exit 1
+        fi
+        echo "Created shared network: newspack_envs"
+    fi
+
     # macOS: set up loopback aliases for isolated environments.
     # Pre-allocate 127.0.0.2–10 so agents can create envs without sudo later.
     # These don't survive reboots, so this runs on every start.

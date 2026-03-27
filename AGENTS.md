@@ -220,14 +220,14 @@ Each isolated environment gets its own Docker container, WordPress installation,
 n env create myenv --worktree newspack-plugin:mybranch
 n env up myenv
 n setup --env myenv --yes     # fully configured Newspack site
-# → https://<ip>/  (use --domain myenv.local for a custom domain)
+# → https://myenv.local/  (override with --domain)
 ```
 
 ### Environment Commands
 ```bash
 n env create <name> [options]  # Create environment config
   --worktree <repo>:<branch>   #   Mount a worktree (repeatable for multiple repos)
-  --domain <domain>            #   Custom domain (default: loopback IP)
+  --domain <domain>            #   Custom domain (default: <name>.local)
   --up                         #   Start the environment immediately after creation
 n env up <name> [--build]      # Start environment (creates DB, installs WP, sets up SSL)
 n env down <name>              # Stop environment
@@ -262,12 +262,13 @@ n sh <name>                    # Shell into environment container
 
 ### How It Works
 - Each env binds to a unique loopback IP (127.0.0.2+) on ports 80/443 with HTTPS via mkcert
-- Domain defaults to the loopback IP, overridable with `--domain`
-- `n start` pre-creates loopback aliases (127.0.0.2–10) so agents can create envs without sudo
+- Domain defaults to `<name>.local`, overridable with `--domain`
+- `n start` pre-creates loopback aliases and the shared `newspack_envs` Docker network
 - Each env mounts `envs/<name>/html/` as `/var/www/html` (isolated from `./html/`)
 - Each env gets its own database (`wordpress_<name>`) in the shared MariaDB server
 - Each env gets a unique `WP_CACHE_KEY_SALT` to prevent memcached key collisions
 - Worktrees override specific repos (e.g., `newspack-plugin`) while sharing the rest from `./repos/`
+- All env containers join a shared `newspack_envs` Docker bridge network with their domain as a DNS alias, enabling inter-container communication (e.g., hub/node setups)
 - `n env destroy` cleans up everything: container, DB, html dir, hosts entry, and worktrees
 
 ### Claude Code Plugin Skills
