@@ -220,8 +220,9 @@ YAML
             #     networks:
             #       - default
             # Remove those two trailing lines, then append the new config.
-            # Use a temp file to avoid BSD/GNU sed -i differences with trailing newlines.
-            head -n -2 "$compose_file" > "${compose_file}.tmp" && mv "${compose_file}.tmp" "$compose_file"
+            # BSD head doesn't support -n -2, so use wc + awk.
+            total=$(wc -l < "$compose_file")
+            awk -v n="$((total - 2))" 'NR <= n' "$compose_file" > "${compose_file}.tmp" && mv "${compose_file}.tmp" "$compose_file"
             cat >> "$compose_file" <<MIGRATE
     networks:
       default: {}
