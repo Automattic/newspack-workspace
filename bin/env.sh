@@ -207,6 +207,35 @@ YAML
         db_name=$(db_name_for_env "$env_name")
         domain=$(domain_for_env "$compose_file")
         ip=$(ip_for_env "$compose_file")
+        # --- Migration: add shared network + domain if missing ---
+        if ! grep -q 'newspack_envs' "$compose_file"; then
+            # Assign a .local domain if the env is IP-based.
+            if [[ "$domain" == "$ip" || -z "$domain" ]]; then
+                domain="${env_name}.local"
+                # Update WP_DOMAIN in the compose file.
+                sed -i '' "s|WP_DOMAIN=${ip}|WP_DOMAIN=${domain}|" "$compose_file" 2>/dev/null || \
+                    sed -i "s|WP_DOMAIN=${ip}|WP_DOMAIN=${domain}|" "$compose_file"
+            fi
+            # Replace the old networks block. All existing env compose files end with:
+            #     networks:
+            #       - default
+            # Remove those two trailing lines, then append the new config.
+            # Use a temp file to avoid BSD/GNU sed -i differences with trailing newlines.
+            head -n -2 "$compose_file" > "${compose_file}.tmp" && mv "${compose_file}.tmp" "$compose_file"
+            cat >> "$compose_file" <<MIGRATE
+    networks:
+      default: {}
+      newspack_envs:
+        aliases:
+          - ${domain}
+networks:
+  newspack_envs:
+    external: true
+MIGRATE
+            echo "Migrated $env_name: added shared network (domain: $domain)"
+        fi
+        # Re-read domain after potential migration.
+        domain=$(domain_for_env "$compose_file")
         # Ensure loopback alias exists (macOS only — Linux routes all 127.x.x.x by default).
         if [[ "$(uname)" == "Darwin" && -n "$ip" && "$ip" != "127.0.0.1" ]] && ! ifconfig lo0 | grep -q "$ip"; then
             echo "Error: loopback alias for $ip is not set up."
@@ -268,6 +297,13 @@ YAML
                 # Check if core tables exist (wp core is-installed returns true even without them).
                 if docker exec "$container_name" wp --allow-root db query "SELECT 1 FROM wp_options LIMIT 1" 2>/dev/null | grep -q 1; then
                     echo "WordPress already installed."
+                    # Update site URL if domain changed (e.g., migration from IP to .local).
+                    current_url=$(docker exec "$container_name" wp --allow-root option get siteurl 2>/dev/null)
+                    if [[ -n "$current_url" && "$current_url" != "https://${domain}" ]]; then
+                        docker exec "$container_name" wp --allow-root search-replace "$current_url" "https://${domain}" --skip-columns=guid --quiet 2>/dev/null
+                        docker exec "$container_name" wp --allow-root cache flush 2>/dev/null
+                        echo "Updated site URL: $current_url -> https://${domain}"
+                    fi
                     break
                 fi
                 echo "Installing WordPress..."
