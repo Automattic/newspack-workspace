@@ -104,7 +104,7 @@ case $1 in
         done
         ip=$(next_loopback_ip)
         if [[ -z "$domain" ]]; then
-            domain="$ip"
+            domain="${env_name}.local"
         fi
         compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
@@ -143,7 +143,13 @@ ${worktree_volumes}      - ./envs/${env_name}/html:/var/www/html
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
-      - default
+      default: {}
+      newspack_envs:
+        aliases:
+          - ${domain}
+networks:
+  newspack_envs:
+    external: true
 YAML
         echo "Created $compose_file (db: $db_name, domain: $domain, ip: $ip)"
         # Check networking prerequisites (macOS only — Linux routes all 127.x.x.x by default).
