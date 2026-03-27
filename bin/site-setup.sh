@@ -196,6 +196,7 @@ log_success "Database reset completed"
 
 # Reinstall WordPress
 log_info "Reinstalling WordPress..."
+$WP cache flush 2>/dev/null || true
 $WP core install \
     --url="$SITE_URL" \
     --title="Newspack Site" \
@@ -392,8 +393,10 @@ if [ "$WOOCOMMERCE_ENABLED" = true ]; then
         log_info "Configuring Stripe gateway (test mode)..."
         if $WP plugin is-installed woocommerce-gateway-stripe &>/dev/null; then
             $WP plugin activate woocommerce-gateway-stripe 2>/dev/null || true
-            $WP option update woocommerce_stripe_settings \
-                "{\"enabled\":\"yes\",\"testmode\":\"yes\",\"test_publishable_key\":\"$STRIPE_TEST_PUBLISHABLE_KEY\",\"test_secret_key\":\"$STRIPE_TEST_SECRET_KEY\",\"upe_checkout_experience_enabled\":\"yes\",\"upe_checkout_experience_accepted_payments\":[\"card\"],\"capture\":\"yes\",\"saved_cards\":\"yes\",\"logging\":\"no\"}" \
+            $WP option update woocommerce_stripe_settings "$(jq -n \
+                --arg pk "$STRIPE_TEST_PUBLISHABLE_KEY" \
+                --arg sk "$STRIPE_TEST_SECRET_KEY" \
+                '{enabled:"yes",testmode:"yes",test_publishable_key:$pk,test_secret_key:$sk,upe_checkout_experience_enabled:"yes",upe_checkout_experience_accepted_payments:["card"],capture:"yes",saved_cards:"yes",logging:"no"}')" \
                 --format=json
             log_success "Stripe gateway configured (test mode)"
         else
