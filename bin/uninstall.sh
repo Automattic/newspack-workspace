@@ -1,6 +1,6 @@
 #!/bin/bash
 
-WP_PATH=${1:-"/var/www/html"}
+WP_PATH="${1:-/var/www/html}"
 
 # Flush cache to make sure memcached does not hold anything
 wp --allow-root --path="$WP_PATH" cache flush
