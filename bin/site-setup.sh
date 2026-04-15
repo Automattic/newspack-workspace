@@ -241,6 +241,43 @@ log_info "Enabling Reader Activation..."
 $WP option update newspack_reader_activation_enabled 1
 log_success "Reader Activation enabled"
 
+# Configure newspack-newsletters ESPs (if env vars provided).
+HAS_AC=false
+HAS_MC=false
+[ -n "${ACTIVECAMPAIGN_API_URL:-}" ] && [ -n "${ACTIVECAMPAIGN_API_KEY:-}" ] && HAS_AC=true
+[ -n "${MAILCHIMP_API_KEY:-}" ] && HAS_MC=true
+
+if [ "$HAS_AC" = true ] || [ "$HAS_MC" = true ]; then
+    log_info "Configuring newspack-newsletters ESPs..."
+    if $WP plugin is-installed newspack-newsletters &>/dev/null; then
+        $WP plugin activate newspack-newsletters || {
+            log_warning "Failed to activate newspack-newsletters"
+        }
+
+        if [ "$HAS_AC" = true ]; then
+            $WP option update newspack_newsletters_active_campaign_url "$ACTIVECAMPAIGN_API_URL"
+            $WP option update newspack_newsletters_active_campaign_key "$ACTIVECAMPAIGN_API_KEY"
+            log_success "ActiveCampaign credentials configured"
+        fi
+
+        if [ "$HAS_MC" = true ]; then
+            $WP option update newspack_mailchimp_api_key "$MAILCHIMP_API_KEY"
+            log_success "Mailchimp credentials configured"
+        fi
+
+        # Prefer ActiveCampaign if both are present; user can change later.
+        if [ "$HAS_AC" = true ]; then
+            $WP option update newspack_newsletters_service_provider active_campaign
+            log_success "Service provider set to ActiveCampaign"
+        else
+            $WP option update newspack_newsletters_service_provider mailchimp
+            log_success "Service provider set to Mailchimp"
+        fi
+    else
+        log_warning "newspack-newsletters not installed, skipping ESP setup"
+    fi
+fi
+
 # Remove default Sample Page
 log_info "Removing default Sample Page..."
 $WP post delete $($WP post list --post_type=page --name=sample-page --field=ID --format=ids 2>/dev/null) --force 2>/dev/null || true
