@@ -30,9 +30,9 @@ class Agent_Access_Chat {
 
 	public static function register_menu() {
 		add_submenu_page(
-			'agent-access',
-			__( 'Chat', 'agent-access' ),
-			__( 'Chat', 'agent-access' ),
+			'botcreds-agent-access',
+			__( 'Chat', 'botcreds-agent-access' ),
+			__( 'Chat', 'botcreds-agent-access' ),
 			'read',
 			'agent-access-chat',
 			array( __CLASS__, 'render_page' )
@@ -55,7 +55,7 @@ class Agent_Access_Chat {
 		if ( ! $table_exists ) {
 			echo '<div class="wrap"><h1>Agent Access Chat</h1>';
 			echo '<div class="notice notice-warning"><p>';
-			echo esc_html__( 'Chat table not found. Please deactivate and reactivate the plugin.', 'agent-access' );
+			echo esc_html__( 'Chat table not found. Please deactivate and reactivate the plugin.', 'botcreds-agent-access' );
 			echo '</p></div></div>';
 			return;
 		}
@@ -111,7 +111,7 @@ class Agent_Access_Chat {
 
 			<!-- Sidebar with channels + security notice -->
 			<div class="aa-sidebar">
-				<h2><?php esc_html_e( 'Channels', 'agent-access' ); ?></h2>
+				<h2><?php esc_html_e( 'Channels', 'botcreds-agent-access' ); ?></h2>
 				<ul class="aa-channel-list" id="aa-channels">
 					<?php foreach ( $channels as $i => $ch ) : ?>
 						<li data-channel="<?php echo esc_attr( $ch ); ?>"
@@ -142,8 +142,8 @@ class Agent_Access_Chat {
 				<div class="aa-messages" id="aa-messages"></div>
 				<div class="aa-typing" id="aa-typing"></div>
 				<div class="aa-compose">
-					<input type="text" id="aa-input" placeholder="<?php esc_attr_e( 'Type a message...', 'agent-access' ); ?>" autocomplete="off" />
-					<button id="aa-send"><?php esc_html_e( 'Send', 'agent-access' ); ?></button>
+					<input type="text" id="aa-input" placeholder="<?php esc_attr_e( 'Type a message...', 'botcreds-agent-access' ); ?>" autocomplete="off" />
+					<button id="aa-send"><?php esc_html_e( 'Send', 'botcreds-agent-access' ); ?></button>
 				</div>
 			</div>
 
