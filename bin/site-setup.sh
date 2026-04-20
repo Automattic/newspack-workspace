@@ -241,41 +241,58 @@ log_info "Enabling Reader Activation..."
 $WP option update newspack_reader_activation_enabled 1
 log_success "Reader Activation enabled"
 
-# Configure newspack-newsletters ESPs (if env vars provided).
-HAS_AC=false
-HAS_MC=false
-[ -n "${ACTIVECAMPAIGN_API_URL:-}" ] && [ -n "${ACTIVECAMPAIGN_API_KEY:-}" ] && HAS_AC=true
-[ -n "${MAILCHIMP_API_KEY:-}" ] && HAS_MC=true
+# Import secrets (API keys, options, constants) from secrets.json, if present.
+if [ -f /var/scripts/secrets.json ]; then
+    log_info "Importing secrets from secrets.json..."
+    /var/scripts/import-secrets.sh "$WP_PATH" || {
+        log_warning "Failed to import secrets"
+    }
 
-if [ "$HAS_AC" = true ] || [ "$HAS_MC" = true ]; then
-    log_info "Configuring newspack-newsletters ESPs..."
-    if $WP plugin is-installed newspack-newsletters &>/dev/null; then
-        $WP plugin activate newspack-newsletters || {
-            log_warning "Failed to activate newspack-newsletters"
+    # If any ESP credentials landed in options, activate newspack-newsletters
+    # and default the service provider to the first ESP with credentials.
+    $WP eval '
+        $providers = [
+            "active_campaign"  => [ "newspack_newsletters_active_campaign_key", "newspack_newsletters_active_campaign_url" ],
+            "mailchimp"        => [ "newspack_mailchimp_api_key" ],
+            "constant_contact" => [ "newspack_newsletters_constant_contact_api_key", "newspack_newsletters_constant_contact_api_secret" ],
+            "campaign_monitor" => [ "newspack_newsletters_campaign_monitor_api_key", "newspack_newsletters_campaign_monitor_client_id" ],
+        ];
+        $configured = [];
+        foreach ( $providers as $slug => $required_options ) {
+            $complete = true;
+            foreach ( $required_options as $option ) {
+                if ( empty( get_option( $option ) ) ) {
+                    $complete = false;
+                    break;
+                }
+            }
+            if ( $complete ) {
+                $configured[] = $slug;
+            }
         }
-
-        if [ "$HAS_AC" = true ]; then
-            $WP option update newspack_newsletters_active_campaign_url "$ACTIVECAMPAIGN_API_URL"
-            $WP option update newspack_newsletters_active_campaign_key "$ACTIVECAMPAIGN_API_KEY"
-            log_success "ActiveCampaign credentials configured"
-        fi
-
-        if [ "$HAS_MC" = true ]; then
-            $WP option update newspack_mailchimp_api_key "$MAILCHIMP_API_KEY"
-            log_success "Mailchimp credentials configured"
-        fi
-
-        # Prefer ActiveCampaign if both are present; user can change later.
-        if [ "$HAS_AC" = true ]; then
-            $WP option update newspack_newsletters_service_provider active_campaign
-            log_success "Service provider set to ActiveCampaign"
-        else
-            $WP option update newspack_newsletters_service_provider mailchimp
-            log_success "Service provider set to Mailchimp"
-        fi
-    else
-        log_warning "newspack-newsletters not installed, skipping ESP setup"
-    fi
+        if ( empty( $configured ) ) {
+            echo "No ESP credentials found in options\n";
+            return;
+        }
+        // Activate the plugin now that credentials are in place.
+        if ( ! is_plugin_active( "newspack-newsletters/newspack-newsletters.php" ) ) {
+            activate_plugin( "newspack-newsletters/newspack-newsletters.php" );
+            echo "Activated newspack-newsletters\n";
+        }
+        // Default the service provider to the first configured ESP if not already set.
+        $current = get_option( "newspack_newsletters_service_provider" );
+        if ( empty( $current ) ) {
+            update_option( "newspack_newsletters_service_provider", $configured[0] );
+            echo "Service provider set to " . $configured[0] . "\n";
+        } else {
+            echo "Service provider already set to " . $current . "\n";
+        }
+    ' || {
+        log_warning "Failed to finalize newsletters ESP setup"
+    }
+    log_success "Secrets imported"
+else
+    log_info "No secrets.json found, skipping secrets import"
 fi
 
 # Remove default Sample Page
