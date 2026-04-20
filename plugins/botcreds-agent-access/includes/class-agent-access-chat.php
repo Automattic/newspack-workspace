@@ -61,9 +61,14 @@ class Agent_Access_Chat {
 		}
 
 		// Get channels
-		$channels = $wpdb->get_col(
-			"SELECT DISTINCT channel FROM {$table} ORDER BY channel ASC"
-		);
+		$cache_key = 'botcreds_chat_channels';
+		$channels  = wp_cache_get( $cache_key );
+		if ( false === $channels ) {
+			$channels = $wpdb->get_col(
+				$wpdb->prepare( 'SELECT DISTINCT channel FROM %i ORDER BY channel ASC', $table ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			);
+			wp_cache_set( $cache_key, $channels, '', 30 );
+		}
 		if ( empty( $channels ) ) {
 			$channels = array( 'general' );
 		}
@@ -315,10 +320,17 @@ class Agent_Access_Chat {
 		global $wpdb;
 		$table = $wpdb->prefix . self::TABLE;
 
-		$rows = $wpdb->get_results(
-			"SELECT channel, COUNT(*) as msg_count, COUNT(DISTINCT sender) as member_count, MAX(timestamp) as last_message_at
-			 FROM {$table} GROUP BY channel ORDER BY channel"
-		);
+		$cache_key = 'botcreds_chat_api_channels';
+		$rows      = wp_cache_get( $cache_key );
+		if ( false === $rows ) {
+			$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->prepare(
+					'SELECT channel, COUNT(*) as msg_count, COUNT(DISTINCT sender) as member_count, MAX(timestamp) as last_message_at FROM %i GROUP BY channel ORDER BY channel',
+					$table
+				)
+			);
+			wp_cache_set( $cache_key, $rows, '', 30 );
+		}
 
 		$channels = array();
 		foreach ( $rows as $r ) {
@@ -343,14 +355,26 @@ class Agent_Access_Chat {
 
 		if ( $limit > 200 ) $limit = 200;
 
-		$where = $wpdb->prepare( 'WHERE channel = %s', $channel );
-		if ( $since > 0 ) {
-			$where .= $wpdb->prepare( ' AND id > %d', $since );
+		$cache_key = 'botcreds_msgs_' . md5( $channel . '_' . $since . '_' . $limit );
+		$rows      = wp_cache_get( $cache_key );
+		if ( false === $rows ) {
+			if ( $since > 0 ) {
+				$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					$wpdb->prepare(
+						'SELECT id, channel, sender, sender_type, message, timestamp FROM %i WHERE channel = %s AND id > %d ORDER BY id ASC LIMIT %d',
+						$table, $channel, $since, $limit
+					)
+				);
+			} else {
+				$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+					$wpdb->prepare(
+						'SELECT id, channel, sender, sender_type, message, timestamp FROM %i WHERE channel = %s ORDER BY id ASC LIMIT %d',
+						$table, $channel, $limit
+					)
+				);
+			}
+			wp_cache_set( $cache_key, $rows, '', 5 );
 		}
-
-		$rows = $wpdb->get_results(
-			"SELECT id, channel, sender, sender_type, message, timestamp FROM {$table} {$where} ORDER BY id ASC LIMIT {$limit}"
-		);
 
 		return new WP_REST_Response( $rows ?: array(), 200 );
 	}
@@ -407,10 +431,10 @@ class Agent_Access_Chat {
 
 		$end = time() + $timeout;
 		while ( time() < $end ) {
-			$rows = $wpdb->get_results(
+			$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					"SELECT id, channel, sender, sender_type, message, timestamp FROM {$table} WHERE channel = %s AND id > %d ORDER BY id ASC LIMIT 50",
-					$channel, $since
+					'SELECT id, channel, sender, sender_type, message, timestamp FROM %i WHERE channel = %s AND id > %d ORDER BY id ASC LIMIT 50',
+					$table, $channel, $since
 				)
 			);
 			if ( ! empty( $rows ) ) {
@@ -454,3 +478,4 @@ class Agent_Access_Chat {
 		dbDelta( $sql );
 	}
 }
+
