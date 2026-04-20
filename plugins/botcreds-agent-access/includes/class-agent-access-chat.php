@@ -48,7 +48,7 @@ class Agent_Access_Chat {
 		$table = $wpdb->prefix . self::TABLE;
 
 		// Check if chat table exists
-		$table_exists = $wpdb->get_var(
+		$table_exists = $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$wpdb->prepare( 'SHOW TABLES LIKE %s', $table )
 		);
 
@@ -64,8 +64,8 @@ class Agent_Access_Chat {
 		$cache_key = 'botcreds_chat_channels';
 		$channels  = wp_cache_get( $cache_key );
 		if ( false === $channels ) {
-			$channels = $wpdb->get_col(
-				$wpdb->prepare( 'SELECT DISTINCT channel FROM %i ORDER BY channel ASC', $table ) // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$channels = $wpdb->get_col( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->prepare( 'SELECT DISTINCT channel FROM `' . esc_sql( $table ) . '` ORDER BY channel ASC' )
 			);
 			wp_cache_set( $cache_key, $channels, '', 30 );
 		}
@@ -325,8 +325,7 @@ class Agent_Access_Chat {
 		if ( false === $rows ) {
 			$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$wpdb->prepare(
-					'SELECT channel, COUNT(*) as msg_count, COUNT(DISTINCT sender) as member_count, MAX(timestamp) as last_message_at FROM %i GROUP BY channel ORDER BY channel',
-					$table
+					'SELECT channel, COUNT(*) as msg_count, COUNT(DISTINCT sender) as member_count, MAX(timestamp) as last_message_at FROM `' . esc_sql( $table ) . '` GROUP BY channel ORDER BY channel'
 				)
 			);
 			wp_cache_set( $cache_key, $rows, '', 30 );
@@ -361,15 +360,15 @@ class Agent_Access_Chat {
 			if ( $since > 0 ) {
 				$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 					$wpdb->prepare(
-						'SELECT id, channel, sender, sender_type, message, timestamp FROM %i WHERE channel = %s AND id > %d ORDER BY id ASC LIMIT %d',
-						$table, $channel, $since, $limit
+						'SELECT id, channel, sender, sender_type, message, timestamp FROM `' . esc_sql( $table ) . '` WHERE channel = %s AND id > %d ORDER BY id ASC LIMIT %d',
+						$channel, $since, $limit
 					)
 				);
 			} else {
 				$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 					$wpdb->prepare(
-						'SELECT id, channel, sender, sender_type, message, timestamp FROM %i WHERE channel = %s ORDER BY id ASC LIMIT %d',
-						$table, $channel, $limit
+						'SELECT id, channel, sender, sender_type, message, timestamp FROM `' . esc_sql( $table ) . '` WHERE channel = %s ORDER BY id ASC LIMIT %d',
+						$channel, $limit
 					)
 				);
 			}
@@ -433,8 +432,8 @@ class Agent_Access_Chat {
 		while ( time() < $end ) {
 			$rows = $wpdb->get_results( // phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 				$wpdb->prepare(
-					'SELECT id, channel, sender, sender_type, message, timestamp FROM %i WHERE channel = %s AND id > %d ORDER BY id ASC LIMIT 50',
-					$table, $channel, $since
+					'SELECT id, channel, sender, sender_type, message, timestamp FROM `' . esc_sql( $table ) . '` WHERE channel = %s AND id > %d ORDER BY id ASC LIMIT 50',
+					$channel, $since
 				)
 			);
 			if ( ! empty( $rows ) ) {
@@ -478,4 +477,5 @@ class Agent_Access_Chat {
 		dbDelta( $sql );
 	}
 }
+
 
