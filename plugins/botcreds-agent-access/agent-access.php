@@ -3,7 +3,7 @@
  * Plugin Name: BotCreds Agent Access
  * Plugin URI:  https://wearebob.blog/agent-access/
  * Description: Scoped, per-agent application passwords for AI agents, MCP clients, and automation tools.
- * Version:     2.0.2
+ * Version:     2.0.3
  * Author:      Joe Boydston
  * Author URI:  https://wearebob.blog
  * License:     GPL-2.0-or-later
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AGENT_ACCESS_VERSION', '2.0.2' );
+define( 'AGENT_ACCESS_VERSION', '2.0.3' );
 define( 'AGENT_ACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AGENT_ACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AGENT_ACCESS_APP_PASSWORD_NAME', 'BotCreds' );
@@ -48,3 +48,4 @@ function agent_access_init() {
 	}
 }
 add_action( 'plugins_loaded', 'agent_access_init' );
+
