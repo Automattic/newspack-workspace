@@ -1,6 +1,6 @@
 === BotCreds Agent Access ===
 Contributors: jboydston
-Tags: ai, ai-agents, mcp, application-passwords, api, rest-api, security
+Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.6
 Tested up to: 6.9
 Requires PHP: 7.4
@@ -103,3 +103,4 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 * Create and revoke agent Application Passwords.
 * Connection status display with creation and last-used dates.
 * Copy-to-clipboard support for credentials.
+
