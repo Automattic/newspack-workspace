@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.6
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 2.0.2
+Stable tag: 2.0.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -76,6 +76,10 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 
 == Changelog ==
 
+= 2.0.3 =
+* Fixed text domain mismatch in all includes (botcreds-agent-access).
+* Trimmed tags to 5 for directory compliance.
+
 = 2.0.2 =
 * Renamed to BotCreds Agent Access.
 * Updated text domain to botcreds-agent-access.
@@ -103,4 +107,5 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 * Create and revoke agent Application Passwords.
 * Connection status display with creation and last-used dates.
 * Copy-to-clipboard support for credentials.
+
 
