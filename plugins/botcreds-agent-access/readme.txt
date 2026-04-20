@@ -1,10 +1,10 @@
-=== Botcred Application Passwords ===
+=== BotCreds Agent Access ===
 Contributors: jboydston
 Tags: ai, ai-agents, mcp, application-passwords, api, rest-api, security
 Requires at least: 5.6
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 2.0.1
+Stable tag: 2.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -12,17 +12,17 @@ Scoped, per-agent application passwords for AI agents, MCP clients, and automati
 
 == Description ==
 
-**Botcred Application Passwords** gives your AI agent, MCP client, or automation tool a secure, scoped credential to interact with your site — no code required.
+**BotCreds Agent Access** gives your AI agent, MCP client, or automation tool a secure, scoped credential to interact with your site — no code required.
 
-Whether you're connecting Claude, ChatGPT, a custom MCP server, or an OpenClaw agent, Botcred gives you a one-click setup wizard that generates a properly scoped WordPress Application Password and logs every action the agent takes.
+Whether you're connecting Claude, ChatGPT, a custom MCP server, or an OpenClaw agent, BotCreds gives you a one-click setup wizard that generates a properly scoped WordPress Application Password and logs every action the agent takes.
 
-**Why Botcred?**
+**Why BotCreds?**
 
-Most AI agent setups require digging into wp-config, creating users manually, or sharing admin credentials. Botcred removes all of that. Install, click, copy, paste — your agent is connected in under a minute.
+Most AI agent setups require digging into wp-config, creating users manually, or sharing admin credentials. BotCreds removes all of that. Install, click, copy, paste — your agent is connected in under a minute.
 
 **Features:**
 
-* One-click connection setup under Settings → Botcred
+* One-click connection setup under Settings → BotCreds
 * Generates a secure, scoped Application Password for your AI agent or MCP client
 * Works with any agent that supports the WordPress REST API: Claude, ChatGPT, OpenClaw, n8n, Zapier, custom MCP servers, and more
 * User-level and site-level logging of agent actions — see exactly what your agent did and when
@@ -40,9 +40,9 @@ Most AI agent setups require digging into wp-config, creating users manually, or
 
 == Installation ==
 
-1. Upload the `botcred-application-passwords` folder to `/wp-content/plugins/`.
+1. Upload the `botcreds-agent-access` folder to `/wp-content/plugins/`.
 2. Activate the plugin through the "Plugins" menu in WordPress.
-3. Go to Settings → Botcred.
+3. Go to Settings → BotCreds.
 4. Click "Connect Agent" to generate your credentials.
 5. Copy the credentials and paste them into your agent's config.
 
@@ -58,7 +58,7 @@ Any tool that supports HTTP Basic Auth against the WordPress REST API. This incl
 
 = What is MCP? =
 
-The Model Context Protocol (MCP) is an open standard for connecting AI agents to external tools and data sources. Botcred makes it easy to connect an MCP client to your site.
+The Model Context Protocol (MCP) is an open standard for connecting AI agents to external tools and data sources. BotCreds makes it easy to connect an MCP client to your site.
 
 = Is the password stored anywhere? =
 
@@ -66,7 +66,7 @@ The plain-text password is shown once when created. WordPress stores only a hash
 
 = Can I have multiple agent connections? =
 
-Botcred manages one Application Password per user. Revoke the existing one before creating a new connection, or create additional passwords directly in your WordPress profile.
+BotCreds manages one Application Password per user. Revoke the existing one before creating a new connection, or create additional passwords directly in your WordPress profile.
 
 == Screenshots ==
 
@@ -75,6 +75,10 @@ Botcred manages one Application Password per user. Revoke the existing one befor
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.0.2 =
+* Renamed to BotCreds Agent Access.
+* Updated text domain to botcreds-agent-access.
 
 = 2.0.1 =
 * Renamed to Botcred Application Passwords for clarity and directory compliance.
