@@ -15,7 +15,7 @@ class Agent_Access_Mentions {
 	 * Regex pattern to match @mentions.
 	 * Matches @username where username is 1-60 chars of letters, numbers, underscores, hyphens, or dots.
 	 */
-	const MENTION_PATTERN = '/@([a-zA-Z0-9_.\-]{1,60})\b/';
+	const MENTION_PATTERN = '/@([a-zA-Z0-9_.\-]{1,60})/';
 
 	/**
 	 * Register hooks.
@@ -134,14 +134,14 @@ class Agent_Access_Mentions {
 		}
 
 		$post    = get_post( $comment->comment_post_ID );
-		$author  = sanitize_text_field( $comment->comment_author ?: __( 'Someone', 'agent-access' ) );
+		$author  = sanitize_text_field( $comment->comment_author ?: __( 'Someone', 'botcreds-agent-access' ) );
 		$excerpt = wp_trim_words( wp_strip_all_tags( $comment->comment_content ), 40 );
 
-		$post_title = $post ? sanitize_text_field( $post->post_title ) : __( 'a post', 'agent-access' );
+		$post_title = $post ? sanitize_text_field( $post->post_title ) : __( 'a post', 'botcreds-agent-access' );
 
 		$subject = sprintf(
 			/* translators: 1: comment author name, 2: post title */
-			__( '%1$s mentioned you on "%2$s"', 'agent-access' ),
+			__( '%1$s mentioned you on "%2$s"', 'botcreds-agent-access' ),
 			$author,
 			$post_title
 		);
@@ -151,8 +151,18 @@ class Agent_Access_Mentions {
 		$message = sprintf(
 			/* translators: 1: mentioned user display name, 2: comment author, 3: post title, 4: comment excerpt, 5: comment URL */
 			__(
-				"Hey %1\$s,\n\n%2\$s mentioned you in a comment on \"%3\$s\":\n\n\"%4\$s\"\n\nView the comment:\n%5\$s\n\n—\nAgent Access @ %6\$s",
-				'agent-access'
+				"Hey %1\$s,
+
+%2\$s mentioned you in a comment on \"%3\$s\":
+
+\"%4\$s\"
+
+View the comment:
+%5\$s
+
+—
+Agent Access @ %6\$s",
+				'botcreds-agent-access'
 			),
 			$user->display_name,
 			$author,
