@@ -391,7 +391,7 @@ class Agent_Access_Chat {
 			return new WP_Error( 'empty_message', 'Message cannot be empty.', array( 'status' => 400 ) );
 		}
 
-		$inserted = $wpdb->insert(
+		$inserted = $wpdb->insert( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 			$table,
 			array(
 				'channel'     => $channel,
@@ -406,6 +406,11 @@ class Agent_Access_Chat {
 		if ( ! $inserted ) {
 			return new WP_Error( 'insert_failed', 'Failed to save message.', array( 'status' => 500 ) );
 		}
+
+		// Bust message cache for this channel so next read is fresh.
+		wp_cache_delete( 'botcreds_chat_channels' );
+		wp_cache_delete( 'botcreds_chat_api_channels' );
+		wp_cache_delete( 'botcreds_msgs_' . md5( $channel . '_0_50' ) );
 
 		return new WP_REST_Response(
 			array(
@@ -477,5 +482,6 @@ class Agent_Access_Chat {
 		dbDelta( $sql );
 	}
 }
+
 
 
