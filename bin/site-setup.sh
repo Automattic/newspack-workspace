@@ -247,49 +247,6 @@ if [ -f /var/scripts/secrets.json ]; then
     /var/scripts/import-secrets.sh "$WP_PATH" || {
         log_warning "Failed to import secrets"
     }
-
-    # If any ESP credentials landed in options, activate newspack-newsletters
-    # and default the service provider to the first ESP with credentials.
-    $WP eval '
-        $providers = [
-            "active_campaign"  => [ "newspack_newsletters_active_campaign_key", "newspack_newsletters_active_campaign_url" ],
-            "mailchimp"        => [ "newspack_mailchimp_api_key" ],
-            "constant_contact" => [ "newspack_newsletters_constant_contact_api_key", "newspack_newsletters_constant_contact_api_secret" ],
-            "campaign_monitor" => [ "newspack_newsletters_campaign_monitor_api_key", "newspack_newsletters_campaign_monitor_client_id" ],
-        ];
-        $configured = [];
-        foreach ( $providers as $slug => $required_options ) {
-            $complete = true;
-            foreach ( $required_options as $option ) {
-                if ( empty( get_option( $option ) ) ) {
-                    $complete = false;
-                    break;
-                }
-            }
-            if ( $complete ) {
-                $configured[] = $slug;
-            }
-        }
-        if ( empty( $configured ) ) {
-            echo "No ESP credentials found in options\n";
-            return;
-        }
-        // Activate the plugin now that credentials are in place.
-        if ( ! is_plugin_active( "newspack-newsletters/newspack-newsletters.php" ) ) {
-            activate_plugin( "newspack-newsletters/newspack-newsletters.php" );
-            echo "Activated newspack-newsletters\n";
-        }
-        // Default the service provider to the first configured ESP if not already set.
-        $current = get_option( "newspack_newsletters_service_provider" );
-        if ( empty( $current ) ) {
-            update_option( "newspack_newsletters_service_provider", $configured[0] );
-            echo "Service provider set to " . $configured[0] . "\n";
-        } else {
-            echo "Service provider already set to " . $current . "\n";
-        }
-    ' || {
-        log_warning "Failed to finalize newsletters ESP setup"
-    }
     log_success "Secrets imported"
 else
     log_info "No secrets.json found, skipping secrets import"
