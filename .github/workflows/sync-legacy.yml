@@ -1,0 +1,99 @@
+name: Sync legacy repos
+
+# Pulls the latest trunk from each in-scope legacy Newspack repo, runs
+# bin/sync-legacy-repo.sh against it, and pushes the filtered result to a
+# per-repo sync/* branch in this monorepo. An integration job then merges
+# all sync/* branches into monorepo-integration.
+#
+# Because filter-repo is deterministic for a given input, re-running this
+# workflow produces the same rewritten SHAs for all previously-filtered
+# commits — git sees a fast-forward and only new commits land.
+#
+# Schedule: daily. Manual trigger available on demand for the day of
+# cutover and whenever someone wants fresh legacy commits reflected
+# immediately in the monorepo.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: sync-legacy
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Sync ${{ matrix.package.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - { name: newspack-plugin,              target: plugins/newspack-plugin }
+          - { name: newspack-blocks,              target: plugins/newspack-blocks }
+          - { name: newspack-popups,              target: plugins/newspack-popups }
+          - { name: newspack-newsletters,         target: plugins/newspack-newsletters }
+          - { name: newspack-ads,                 target: plugins/newspack-ads }
+          - { name: newspack-network,             target: plugins/newspack-network }
+          - { name: newspack-multibranded-site,   target: plugins/newspack-multibranded-site }
+          - { name: newspack-listings,            target: plugins/newspack-listings }
+          - { name: newspack-sponsors,            target: plugins/newspack-sponsors }
+          - { name: newspack-story-budget,        target: plugins/newspack-story-budget }
+          - { name: super-cool-ad-inserter-plugin, target: plugins/super-cool-ad-inserter-plugin }
+          - { name: republication-tracker-tool,   target: plugins/republication-tracker-tool }
+          - { name: newspack-theme,               target: themes/newspack-theme }
+          - { name: newspack-block-theme,         target: themes/newspack-block-theme }
+          - { name: newspack-scripts,             target: packages/scripts }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install git-filter-repo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git-filter-repo
+      - name: Run sync script
+        run: |
+          bin/sync-legacy-repo.sh \
+            "https://github.com/Automattic/${{ matrix.package.name }}.git" \
+            "${{ matrix.package.target }}" \
+            "/tmp/sync/${{ matrix.package.name }}.git" \
+            trunk
+      - name: Push filtered result to sync branch
+        run: |
+          BRANCH="sync/${{ matrix.package.name }}"
+          git fetch "/tmp/sync/${{ matrix.package.name }}.git" "refs/heads/trunk:refs/remotes/import/trunk"
+          git branch -f "$BRANCH" refs/remotes/import/trunk
+          git push --force origin "$BRANCH"
+
+  integrate:
+    name: Merge sync/* into monorepo-integration
+    needs: sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: monorepo-integration
+      - name: Configure git
+        run: |
+          git config user.name "newspack-sync-bot"
+          git config user.email "newspack-sync-bot@users.noreply.github.com"
+      - name: Merge all sync branches
+        run: |
+          set -euo pipefail
+          for branch in $(git branch -r --list 'origin/sync/*' | sed 's|origin/||'); do
+            echo "Merging $branch"
+            git merge --no-edit --allow-unrelated-histories "origin/$branch" || {
+              echo "Merge of $branch failed — investigate." >&2
+              exit 1
+            }
+          done
+      - name: Push
+        run: git push origin monorepo-integration
