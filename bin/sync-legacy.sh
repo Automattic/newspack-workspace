@@ -43,8 +43,52 @@ set -euo pipefail
 DRY_RUN="${DRY_RUN:-0}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_PATH="$SCRIPT_DIR/$(basename "${BASH_SOURCE[0]}")"
 SCRATCH_DIR="${SCRATCH_DIR:-/tmp/sync-legacy}"
 PARALLEL_FILTER_JOBS="${PARALLEL_FILTER_JOBS:-5}"
+
+# In dry-run mode, transparently re-execute inside a fresh detached-HEAD
+# worktree based off the integration target (origin/monorepo-integration by
+# default; override with DRY_RUN_BASE) so the caller's working tree and HEAD
+# are left untouched, and so dry-runs reproduce CI semantics regardless of
+# the branch the user happens to be on.
+#
+# Trap cleans up the worktree and scratch dir on any exit, including SIGINT.
+if [ "$DRY_RUN" = "1" ] && [ "${SYNC_LEGACY_DRY_RUN_ISOLATED:-0}" != "1" ]; then
+  DRY_RUN_BASE="${DRY_RUN_BASE:-origin/monorepo-integration}"
+  if ! git rev-parse --verify --quiet "$DRY_RUN_BASE" > /dev/null; then
+    echo "ERROR: DRY_RUN_BASE '$DRY_RUN_BASE' not found." >&2
+    echo "       Either fetch it (git fetch origin monorepo-integration) or" >&2
+    echo "       override: DRY_RUN_BASE=<ref> DRY_RUN=1 bin/sync-legacy.sh" >&2
+    exit 2
+  fi
+  BASE_SHA=$(git rev-parse "$DRY_RUN_BASE")
+  MAIN_REPO=$(git rev-parse --show-toplevel)
+  TEMP_WORKTREE=$(mktemp -d -t sync-legacy-dry-run-XXXXXX)
+  TEMP_SCRATCH=$(mktemp -d -t sync-legacy-scratch-XXXXXX)
+  echo "==> Dry run: isolating in $TEMP_WORKTREE @ $DRY_RUN_BASE (${BASE_SHA:0:8})"
+  git worktree add --quiet --detach "$TEMP_WORKTREE" "$BASE_SHA"
+
+  cleanup() {
+    local rc=$?
+    cd "$MAIN_REPO" 2>/dev/null || cd /
+    # Abort any in-flight merge so the worktree isn't blocked from removal.
+    git -C "$TEMP_WORKTREE" merge --abort 2>/dev/null || true
+    git -C "$TEMP_WORKTREE" reset --hard 2>/dev/null || true
+    git -C "$MAIN_REPO" worktree remove --force "$TEMP_WORKTREE" 2>/dev/null || true
+    git -C "$MAIN_REPO" worktree prune 2>/dev/null || true
+    rm -rf "$TEMP_SCRATCH"
+    return "$rc"
+  }
+  trap cleanup EXIT INT TERM
+
+  cd "$TEMP_WORKTREE"
+  SYNC_LEGACY_DRY_RUN_ISOLATED=1 \
+    SCRATCH_DIR="$TEMP_SCRATCH" \
+    DRY_RUN=1 \
+    bash "$SCRIPT_PATH"
+  exit $?
+fi
 
 # Manifest: name:target_subdir. Stable order (the integrate phase merges in
 # this order, so changing it changes the merge commit shape).
