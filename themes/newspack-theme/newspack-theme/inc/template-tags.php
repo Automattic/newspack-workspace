@@ -86,7 +86,7 @@ if ( ! function_exists( 'newspack_posted_by' ) ) :
 		if ( $byline ) :
 			echo wp_kses_post( $byline );
 			return;
-		elseif ( function_exists( 'coauthors_posts_links' ) && ! empty( get_coauthors() ) && 'post' === get_post_type() ) : // phpcs:ignore PHPCompatibility.LanguageConstructs.NewEmptyNonVariable.Found
+		elseif ( function_exists( 'coauthors_posts_links' ) && ! empty( get_coauthors() ) ) : // phpcs:ignore PHPCompatibility.LanguageConstructs.NewEmptyNonVariable.Found
 
 			$authors      = get_coauthors();
 			$author_count = count( $authors );
