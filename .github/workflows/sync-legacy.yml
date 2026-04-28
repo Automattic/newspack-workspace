@@ -43,8 +43,8 @@ jobs:
           sudo apt-get install -y git-filter-repo
       - name: Configure git
         run: |
-          git config user.name  "newspack-sync-bot"
-          git config user.email "newspack-sync-bot@users.noreply.github.com"
+          git config user.name  "Adam Cassis"
+          git config user.email "adam.cassis@automattic.com"
       - name: Run sync
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
