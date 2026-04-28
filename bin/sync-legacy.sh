@@ -141,6 +141,11 @@ filter_all() {
   local rc=0
   # xargs appends each stdin line as an extra argument after the fixed ones,
   # so positional args inside `bash -c` are: $0=script, $1=scratch, $2=entry.
+  # LEGACY_SYNC_GH_TOKEN, if set, authenticates clones for private legacy
+  # repos (e.g. newspack-story-budget). The default Actions GITHUB_TOKEN is
+  # scoped to the running repo only, so a separate org-level token is needed.
+  # Token stays in the environment — never on the command line — so it's not
+  # visible to other processes via ps.
   echo "$manifest" | xargs -n1 -P"$PARALLEL_FILTER_JOBS" \
     bash -c '
       script="$0"
@@ -148,8 +153,13 @@ filter_all() {
       entry="$2"
       name="${entry%%:*}"
       target="${entry#*:}"
+      if [ -n "${LEGACY_SYNC_GH_TOKEN:-}" ]; then
+        url="https://x-access-token:${LEGACY_SYNC_GH_TOKEN}@github.com/Automattic/$name.git"
+      else
+        url="https://github.com/Automattic/$name.git"
+      fi
       if "$script" \
-           "https://github.com/Automattic/$name.git" \
+           "$url" \
            "$target" \
            "$scratch/$name.git" \
            trunk > "$scratch/$name.log" 2>&1; then

@@ -59,4 +59,16 @@ jobs:
         working-directory: integration
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Org-scoped token for cloning private legacy repos (currently
+          # only newspack-story-budget). The default GITHUB_TOKEN is scoped
+          # to this repo and can't read other private Automattic repos.
+          LEGACY_SYNC_GH_TOKEN: ${{ secrets.LEGACY_SYNC_GH_TOKEN }}
         run: ../scripts-src/bin/sync-legacy.sh
+      - name: Upload sync logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sync-legacy-logs
+          path: /tmp/sync-legacy/*.log
+          if-no-files-found: ignore
+          retention-days: 14
