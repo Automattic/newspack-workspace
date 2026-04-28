@@ -32,20 +32,31 @@ jobs:
     name: Filter, publish, and integrate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Sync scripts live on main; the working tree the script merges into
+      # is monorepo-integration. Two checkouts keep them separate.
+      - name: Check out main (sync scripts)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: scripts-src
+      - name: Check out monorepo-integration (working tree)
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: monorepo-integration
+          path: integration
       - name: Install git-filter-repo
         run: |
           sudo apt-get update
           sudo apt-get install -y git-filter-repo
       - name: Configure git
+        working-directory: integration
         run: |
           git config user.name  "Adam Cassis"
           git config user.email "adam.cassis@automattic.com"
       - name: Run sync
+        working-directory: integration
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bin/sync-legacy.sh
+        run: ../scripts-src/bin/sync-legacy.sh
