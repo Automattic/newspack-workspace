@@ -1,17 +1,18 @@
 name: Sync legacy repos
 
-# Pulls the latest trunk from each in-scope legacy Newspack repo, runs
-# bin/sync-legacy-repo.sh against it, and pushes the filtered result to a
-# per-repo sync/* branch in this monorepo. An integration job then merges
-# all sync/* branches into monorepo-integration.
+# Daily 06:00 UTC mirror of legacy Newspack repos into this monorepo.
 #
-# Because filter-repo is deterministic for a given input, re-running this
-# workflow produces the same rewritten SHAs for all previously-filtered
-# commits — git sees a fast-forward and only new commits land.
+# bin/sync-legacy.sh runs end-to-end: filters each legacy repo's trunk into
+# the monorepo layout, publishes per-repo sync/<name> branches, and merges
+# them into monorepo-integration with auto-resolution and per-repo
+# escalation (draft PR with @adekbadek as reviewer) for any repo that
+# can't be merged automatically. See bin/sync-legacy.sh for the policy.
 #
-# Schedule: daily. Manual trigger available on demand for the day of
-# cutover and whenever someone wants fresh legacy commits reflected
-# immediately in the monorepo.
+# The same script runs locally — DRY_RUN=1 bin/sync-legacy.sh from any
+# worktree skips git push and gh pr create.
+#
+# Manual trigger via workflow_dispatch is available for the day of cutover
+# and whenever someone wants fresh legacy commits reflected immediately.
 
 on:
   schedule:
@@ -24,71 +25,27 @@ concurrency:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   sync:
-    name: Sync ${{ matrix.package.name }}
+    name: Filter, publish, and integrate
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        package:
-          - { name: newspack-plugin,              target: plugins/newspack-plugin }
-          - { name: newspack-blocks,              target: plugins/newspack-blocks }
-          - { name: newspack-popups,              target: plugins/newspack-popups }
-          - { name: newspack-newsletters,         target: plugins/newspack-newsletters }
-          - { name: newspack-ads,                 target: plugins/newspack-ads }
-          - { name: newspack-network,             target: plugins/newspack-network }
-          - { name: newspack-multibranded-site,   target: plugins/newspack-multibranded-site }
-          - { name: newspack-listings,            target: plugins/newspack-listings }
-          - { name: newspack-sponsors,            target: plugins/newspack-sponsors }
-          - { name: newspack-story-budget,        target: plugins/newspack-story-budget }
-          - { name: super-cool-ad-inserter-plugin, target: plugins/super-cool-ad-inserter-plugin }
-          - { name: republication-tracker-tool,   target: plugins/republication-tracker-tool }
-          - { name: newspack-theme,               target: themes/newspack-theme }
-          - { name: newspack-block-theme,         target: themes/newspack-block-theme }
-          - { name: newspack-scripts,             target: packages/scripts }
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install git-filter-repo
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git-filter-repo
-      - name: Run sync script
-        run: |
-          bin/sync-legacy-repo.sh \
-            "https://github.com/Automattic/${{ matrix.package.name }}.git" \
-            "${{ matrix.package.target }}" \
-            "/tmp/sync/${{ matrix.package.name }}.git" \
-            trunk
-      - name: Push filtered result to sync branch
-        run: |
-          BRANCH="sync/${{ matrix.package.name }}"
-          git fetch "/tmp/sync/${{ matrix.package.name }}.git" "refs/heads/trunk:refs/remotes/import/trunk"
-          git branch -f "$BRANCH" refs/remotes/import/trunk
-          git push --force origin "$BRANCH"
-
-  integrate:
-    name: Integrate sync branches
-    needs: sync
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: monorepo-integration
+      - name: Install git-filter-repo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git-filter-repo
       - name: Configure git
         run: |
           git config user.name  "newspack-sync-bot"
           git config user.email "newspack-sync-bot@users.noreply.github.com"
-      - name: Integrate
+      - name: Run sync
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bin/sync-legacy-integrate.sh
+        run: bin/sync-legacy.sh
