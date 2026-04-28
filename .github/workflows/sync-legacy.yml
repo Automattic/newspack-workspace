@@ -72,9 +72,12 @@ jobs:
           git push --force origin "$BRANCH"
 
   integrate:
-    name: Merge sync/* into monorepo-integration
+    name: Integrate sync branches
     needs: sync
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -83,17 +86,9 @@ jobs:
           ref: monorepo-integration
       - name: Configure git
         run: |
-          git config user.name "newspack-sync-bot"
+          git config user.name  "newspack-sync-bot"
           git config user.email "newspack-sync-bot@users.noreply.github.com"
-      - name: Merge all sync branches
-        run: |
-          set -euo pipefail
-          for branch in $(git branch -r --list 'origin/sync/*' | sed 's|origin/||'); do
-            echo "Merging $branch"
-            git merge --no-edit --allow-unrelated-histories "origin/$branch" || {
-              echo "Merge of $branch failed — investigate." >&2
-              exit 1
-            }
-          done
-      - name: Push
-        run: git push origin monorepo-integration
+      - name: Integrate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bin/sync-legacy-integrate.sh
