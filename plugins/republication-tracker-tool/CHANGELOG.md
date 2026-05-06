@@ -1,3 +1,10 @@
+## [2.8.2](https://github.com/Automattic/republication-tracker-tool/compare/v2.8.1...v2.8.2) (2026-05-04)
+
+
+### Bug Fixes
+
+* **pixel:** serve gif regardless of ga4 query param ([#325](https://github.com/Automattic/republication-tracker-tool/issues/325)) ([65ec914](https://github.com/Automattic/republication-tracker-tool/commit/65ec914f9df3d0bdbdc239019d493f8c82dfe0af))
+
 ## [2.8.1](https://github.com/Automattic/republication-tracker-tool/compare/v2.8.0...v2.8.1) (2026-03-30)
 
 
