@@ -1,3 +1,33 @@
+# [1.28.0](https://github.com/Automattic/newspack-block-theme/compare/v1.27.0...v1.28.0) (2026-05-04)
+
+
+### Bug Fixes
+
+* improve pagination, linking directly to comments ([#431](https://github.com/Automattic/newspack-block-theme/issues/431)) ([461def0](https://github.com/Automattic/newspack-block-theme/commit/461def0a3491733c023702dc2ce82595b89babf2))
+* **post-date:** use block bindings instead of deprecated displayType ([#430](https://github.com/Automattic/newspack-block-theme/issues/430)) ([b65b8c3](https://github.com/Automattic/newspack-block-theme/commit/b65b8c34b93a2239f71330bda0f19bfd67ba5983))
+
+
+### Features
+
+* add newsletters templates ([#437](https://github.com/Automattic/newspack-block-theme/issues/437)) ([cc8d244](https://github.com/Automattic/newspack-block-theme/commit/cc8d244b3f4d1f8138058ddd406ee6855bb3b730))
+* copy newsletters compatibility ([#436](https://github.com/Automattic/newspack-block-theme/issues/436)) ([214f73a](https://github.com/Automattic/newspack-block-theme/commit/214f73aa876184d7c036cfd3b919a34777df6347))
+* swap in Overlay Menu block to replace template parts ([30be676](https://github.com/Automattic/newspack-block-theme/commit/30be67680cc32bad0c579a4cd04ede93bbbe80d1))
+
+# [1.28.0-alpha.1](https://github.com/Automattic/newspack-block-theme/compare/v1.27.0...v1.28.0-alpha.1) (2026-04-16)
+
+
+### Bug Fixes
+
+* improve pagination, linking directly to comments ([#431](https://github.com/Automattic/newspack-block-theme/issues/431)) ([461def0](https://github.com/Automattic/newspack-block-theme/commit/461def0a3491733c023702dc2ce82595b89babf2))
+* **post-date:** use block bindings instead of deprecated displayType ([#430](https://github.com/Automattic/newspack-block-theme/issues/430)) ([b65b8c3](https://github.com/Automattic/newspack-block-theme/commit/b65b8c34b93a2239f71330bda0f19bfd67ba5983))
+
+
+### Features
+
+* add newsletters templates ([#437](https://github.com/Automattic/newspack-block-theme/issues/437)) ([cc8d244](https://github.com/Automattic/newspack-block-theme/commit/cc8d244b3f4d1f8138058ddd406ee6855bb3b730))
+* copy newsletters compatibility ([#436](https://github.com/Automattic/newspack-block-theme/issues/436)) ([214f73a](https://github.com/Automattic/newspack-block-theme/commit/214f73aa876184d7c036cfd3b919a34777df6347))
+* swap in Overlay Menu block to replace template parts ([30be676](https://github.com/Automattic/newspack-block-theme/commit/30be67680cc32bad0c579a4cd04ede93bbbe80d1))
+
 # [1.27.0](https://github.com/Automattic/newspack-block-theme/compare/v1.26.0...v1.27.0) (2026-04-13)
 
 

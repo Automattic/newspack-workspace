@@ -189,6 +189,11 @@ final class Patterns {
 				foreach ( $patterns as $pattern ) {
 					$should_remove = false;
 
+					// Preserve patterns required for the WooCommerce Coming Soon mode — these need to remain in the inserter listing and stay registered globally so the template can render at runtime.
+					if ( self::is_woocommerce_coming_soon_pattern( $pattern['name'] ) ) {
+						continue;
+					}
+
 					// Check if the pattern's name starts with any of the blacklisted prefixes.
 					foreach ( $blacklisted_pattern_prefixes as $prefix ) {
 						if ( strpos( $pattern['name'], $prefix ) === 0 ) {
@@ -237,6 +242,13 @@ final class Patterns {
 		foreach ( $patterns as $pattern ) {
 			$pattern_name = $pattern['name'];
 
+			// Preserve patterns required for the WooCommerce Coming Soon mode. These are
+			// referenced at render time by the coming-soon block template and must remain
+			// registered on the frontend.
+			if ( self::is_woocommerce_coming_soon_pattern( $pattern_name ) ) {
+				continue;
+			}
+
 			// Check for various WooCommerce pattern naming conventions.
 			if ( strpos( $pattern_name, 'woocommerce' ) === 0 ||
 				strpos( $pattern_name, 'woo-' ) === 0 ||
@@ -257,6 +269,22 @@ final class Patterns {
 	/**
 	 * WooCommerce-specific pattern handling methods.
 	 */
+
+	/**
+	 * Check whether a pattern name belongs to the WooCommerce Coming Soon chain.
+	 *
+	 * The `woocommerce/coming-soon` pattern resolves at runtime to either
+	 * `woocommerce/coming-soon-store-only` or `woocommerce/page-coming-soon-default`,
+	 * depending on the `woocommerce_store_pages_only` option. Both prefixes must be
+	 * preserved so the chain can render.
+	 *
+	 * @param string $pattern_name The pattern name to check.
+	 * @return bool
+	 */
+	private static function is_woocommerce_coming_soon_pattern( $pattern_name ) {
+		return strpos( $pattern_name, 'woocommerce/coming-soon' ) === 0
+			|| strpos( $pattern_name, 'woocommerce/page-coming-soon' ) === 0;
+	}
 
 	/**
 	 * Prevent WooCommerce patterns from being registered early.

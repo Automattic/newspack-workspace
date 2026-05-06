@@ -1,6 +1,6 @@
 {
 	"name": "@automattic/newspack-block-theme",
-	"version": "1.26.0",
+	"version": "1.28.0",
 	"description": "A forward-looking news theme designed and developed to be highly customizable with the WordPress block editor. Brought to you by Newspack: https://newspack.com",
 	"repository": {
 		"type": "git",
