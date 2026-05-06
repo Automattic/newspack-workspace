@@ -2,14 +2,14 @@ name: Sync legacy repos
 
 # Daily 06:00 UTC mirror of legacy Newspack repos into this monorepo.
 #
-# bin/sync-legacy.sh runs end-to-end: filters each legacy repo's trunk into
-# the monorepo layout, publishes per-repo sync/<name> branches, and merges
-# them into monorepo-integration with auto-resolution and per-repo
+# bin/migration/sync-legacy.sh runs end-to-end: filters each legacy repo's
+# trunk into the monorepo layout, publishes per-repo sync/<name> branches,
+# and merges them into monorepo-integration with auto-resolution and per-repo
 # escalation (draft PR with @adekbadek as reviewer) for any repo that
-# can't be merged automatically. See bin/sync-legacy.sh for the policy.
+# can't be merged automatically. See that script for the policy.
 #
-# The same script runs locally — DRY_RUN=1 bin/sync-legacy.sh from any
-# worktree skips git push and gh pr create.
+# The same script runs locally — DRY_RUN=1 bin/migration/sync-legacy.sh from
+# any worktree skips git push and gh pr create.
 #
 # Manual trigger via workflow_dispatch is available for the day of cutover
 # and whenever someone wants fresh legacy commits reflected immediately.
@@ -63,7 +63,7 @@ jobs:
           # only newspack-story-budget). The default GITHUB_TOKEN is scoped
           # to this repo and can't read other private Automattic repos.
           LEGACY_SYNC_GH_TOKEN: ${{ secrets.LEGACY_SYNC_GH_TOKEN }}
-        run: ../scripts-src/bin/sync-legacy.sh
+        run: ../scripts-src/bin/migration/sync-legacy.sh
       - name: Upload sync logs on failure
         if: failure()
         uses: actions/upload-artifact@v4

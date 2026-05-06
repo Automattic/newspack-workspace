@@ -200,12 +200,15 @@ publish_all() {
 # Phase 3: integrate
 # ---------------------------------------------------------------------------
 
-# Drop legacy per-plugin .github/ files and restore workspace:* in any
-# conflicting plugin/theme package.json.
+# Drop legacy per-plugin .github/ (CI runs at the monorepo root) and
+# package-lock.json (the monorepo uses pnpm-lock.yaml at the root; per-plugin
+# lockfiles are vestigial and would otherwise be re-added on every sync run
+# that touches them upstream). Also restore workspace:* in any conflicting
+# plugin/theme package.json.
 apply_structural_overrides() {
-  local name=$1
+  local target=$1
   git rm -rf --ignore-unmatch \
-    "plugins/$name/.github" "themes/$name/.github" \
+    "$target/.github" "$target/package-lock.json" \
     > /dev/null 2>&1 || true
   while IFS= read -r f; do
     case "$f" in
@@ -215,6 +218,40 @@ apply_structural_overrides() {
         ;;
     esac
   done < <(git diff --name-only --diff-filter=U)
+}
+
+# Rewrite repository field in every workspace package.json so semantic-release
+# resolves to the monorepo. Without this, multi-semantic-release ls-remotes
+# the legacy standalone repo of each plugin (which has no alpha/release
+# branches) and aborts. Idempotent — safe to call after every merge.
+normalize_package_repos() {
+  node -e '
+    const fs = require("fs"), path = require("path");
+    const url = "git+https://github.com/Automattic/newspack-workspace.git";
+    const roots = ["plugins", "themes", "packages"];
+    const changed = [];
+    for (const r of roots) {
+      if (!fs.existsSync(r)) continue;
+      for (const name of fs.readdirSync(r)) {
+        const dir = path.join(r, name);
+        const pj = path.join(dir, "package.json");
+        if (!fs.existsSync(pj)) continue;
+        const src = fs.readFileSync(pj, "utf8");
+        const indentMatch = src.match(/\n(\t+|[ ]+)"/);
+        const indent = indentMatch ? indentMatch[1] : "  ";
+        const trail = src.endsWith("\n") ? "\n" : "";
+        const j = JSON.parse(src);
+        const want = { type: "git", url, directory: dir };
+        if (JSON.stringify(j.repository) === JSON.stringify(want)) continue;
+        j.repository = want;
+        fs.writeFileSync(pj, JSON.stringify(j, null, indent) + trail);
+        changed.push(pj);
+      }
+    }
+    process.stdout.write(changed.join("\0"));
+  ' | while IFS= read -r -d "" f; do
+    git add -- "$f"
+  done
 }
 
 # For newspack-plugin: redirect any path under
@@ -335,6 +372,7 @@ integrate_all() {
 
   for entry in "${REPOS[@]}"; do
     local name="${entry%%:*}"
+    local target="${entry#*:}"
     local saved
     saved=$(git rev-parse HEAD)
 
@@ -355,7 +393,7 @@ integrate_all() {
       merge_clean=1
     fi
 
-    apply_structural_overrides "$name"
+    apply_structural_overrides "$target"
 
     # newspack-plugin always runs the extracted-package routing — files under
     # plugins/newspack-plugin/packages/{colors,components,icons}/ leak in even
@@ -368,6 +406,8 @@ integrate_all() {
         continue
       fi
     fi
+
+    normalize_package_repos
 
     if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
       git commit --no-edit > /dev/null
