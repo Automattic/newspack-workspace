@@ -941,16 +941,31 @@ Error message(s) received:
 	}
 
 	/**
-	 * Get contact fields for a list.
+	 * Get contact fields for Newspack integrations.
 	 *
-	 * By default, this method returns an empty array, but providers can override it to return the fields available in the ESP for a specific list.
+	 * By default, this method returns an empty array. Providers should override it to return the fields
+	 * available in the ESP in a shape that can be consumed by the Newspack ESP integration to configure
+	 * Reader Activation incoming fields (content gate access rules and popups segmentation criteria).
 	 *
-	 * This is used by Newspack integrations to sync contact data.
+	 * Each returned entry is an associative array with the following keys. All keys except 'key' are
+	 * optional — defaults kick in from the Incoming_Field class when a key is missing.
+	 *
+	 *   - key (string, required): Machine key for the field. Used as the Incoming_Field key.
+	 *   - name (string): Human-readable label. Defaults to the key.
+	 *   - value_type (string): Defaults to 'string'. The Incoming_Field setter accepts other values
+	 *       (e.g. 'boolean'); current providers only emit 'string'.
+	 *   - matching_function (string): Defaults to 'default' (strict equality). Use 'list__in' for
+	 *       multi-select fields whose stored value is a delimited list. The consumer also
+	 *       recognizes 'list__not_in' and 'range', though no current provider emits them.
+	 *   - options (array): List of [ 'value' => ..., 'label' => ... ] pairs for enumerated fields.
+	 *   - description (string): Optional help text surfaced in the admin UI.
+	 *   - is_access_rule (bool): Whether the field is eligible as a content-gate access rule by default.
+	 *   - is_segment_criteria (bool): Whether the field is eligible as a popups segmentation criterion by default.
 	 *
 	 * @param string|null $list_id The List ID. Optional, as some providers might not have different fields per list.
-	 * @return array|WP_Error The contact fields for the list. Each field should be an array with 'key' key at least. WP_Error if the request to fetch the fields failed.
+	 * @return array|WP_Error The contact fields for the list, or WP_Error if the request failed.
 	 */
-	public function get_contact_fields( $list_id = null ) {
+	public function get_contact_fields_for_integrations( $list_id = null ) {
 		return [];
 	}
 }

@@ -2265,17 +2265,12 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	}
 
 	/**
-	 * Get contact fields for a list.
+	 * Get contact fields for Newspack integrations.
 	 *
-	 * By default, this method returns an empty array, but providers can override it to return the fields available in the ESP for a specific list.
-	 *
-	 * This is used by Newspack integrations to sync contact data.
-	 *
-	 * @param string|null $list_id The List ID. Optional, as some providers might not have different fields per list.
-	 * @return array|WP_Error The contact fields for the list. Each field should be an array with 'key' key at least. WP_Error if the request to fetch the fields failed.
+	 * @param string|null $list_id The List ID.
+	 * @return array|WP_Error
 	 */
-	public function get_contact_fields( $list_id = null ) {
-		// Validate list_id up front.
+	public function get_contact_fields_for_integrations( $list_id = null ) {
 		if ( empty( $list_id ) ) {
 			return new WP_Error(
 				'newspack_mailchimp_get_contact_fields_failed',
@@ -2292,17 +2287,58 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			);
 		}
 
-		// Normalize to array to prevent PHP warnings when iterating.
 		if ( ! is_array( $all_fields ) ) {
 			$all_fields = [];
 		}
 
 		$fields = [];
 		foreach ( $all_fields as $field ) {
-			$fields[] = [
-				'key' => $field['name'],
-			];
+			$mapped = self::map_merge_field_to_integration_schema( $field );
+			if ( null !== $mapped ) {
+				$fields[] = $mapped;
+			}
 		}
 		return $fields;
+	}
+
+	/**
+	 * Map a Mailchimp merge field to the Newspack integrations schema.
+	 *
+	 * Mailchimp types eligible for access-rule / segmentation defaults: text, number, date, radio, dropdown.
+	 * Other types (phone, url, imageurl, birthday, zip, address) are exposed but not promoted by default.
+	 *
+	 * @param array $field Raw merge field from the Mailchimp API.
+	 * @return array|null Mapped field, or null if no usable identifier is available.
+	 */
+	private static function map_merge_field_to_integration_schema( $field ) {
+		$tag = isset( $field['tag'] ) ? (string) $field['tag'] : '';
+		if ( '' === $tag ) {
+			return null;
+		}
+
+		$type                 = isset( $field['type'] ) ? $field['type'] : 'text';
+		$eligible_types       = [ 'text', 'number', 'date', 'radio', 'dropdown' ];
+		$is_promoted_by_default = in_array( $type, $eligible_types, true );
+
+		$options = [];
+		if ( in_array( $type, [ 'radio', 'dropdown' ], true ) && ! empty( $field['options']['choices'] ) ) {
+			foreach ( (array) $field['options']['choices'] as $choice ) {
+				$options[] = [
+					'value' => $choice,
+					'label' => $choice,
+				];
+			}
+		}
+
+		return [
+			'key'                 => $tag,
+			'name'                => ! empty( $field['name'] ) ? $field['name'] : $tag,
+			'value_type'          => 'string',
+			'matching_function'   => 'default',
+			'options'             => $options,
+			'description'         => isset( $field['help_text'] ) ? $field['help_text'] : '',
+			'is_access_rule'      => $is_promoted_by_default,
+			'is_segment_criteria' => $is_promoted_by_default,
+		];
 	}
 }

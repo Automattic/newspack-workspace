@@ -408,6 +408,6 @@ class Newspack_Newsletters_Contacts {
 			return new WP_Error( 'newspack_newsletters_invalid_provider', __( 'Provider is not set.' ) );
 		}
 
-		return $provider->get_contact_fields( $list_id );
+		return $provider->get_contact_fields_for_integrations( $list_id );
 	}
 }

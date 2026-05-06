@@ -1,3 +1,15 @@
+# [3.32.0](https://github.com/Automattic/newspack-newsletters/compare/v3.31.1...v3.32.0) (2026-05-04)
+
+
+### Bug Fixes
+
+* **block-theme:** newsletters subscription form style fixes ([#2070](https://github.com/Automattic/newspack-newsletters/issues/2070)) ([d7e54ac](https://github.com/Automattic/newspack-newsletters/commit/d7e54ac41702d6bd9b3bc1d9e266a2ff018c4a4f))
+
+
+### Features
+
+* add newsletter editor check regression testing ([#2064](https://github.com/Automattic/newspack-newsletters/issues/2064)) ([998021f](https://github.com/Automattic/newspack-newsletters/commit/998021f2cc73b9588172e7ded083e858429b2b9b))
+
 ## [3.31.1](https://github.com/Automattic/newspack-newsletters/compare/v3.31.0...v3.31.1) (2026-04-15)
 
 
