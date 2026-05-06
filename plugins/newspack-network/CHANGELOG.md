@@ -1,3 +1,10 @@
+# [2.20.0](https://github.com/Automattic/newspack-network/compare/v2.19.0...v2.20.0) (2026-05-04)
+
+
+### Features
+
+* **memberships:** improve integrity check and handle ownership transfers ([#306](https://github.com/Automattic/newspack-network/issues/306)) ([2f8c5a6](https://github.com/Automattic/newspack-network/commit/2f8c5a6f7f58e68c00ded19c58932221fe6247ff))
+
 # [2.19.0](https://github.com/Automattic/newspack-network/compare/v2.18.4...v2.19.0) (2026-03-30)
 
 
