@@ -55,12 +55,24 @@ final class Overlay_Menu_Panel_Block {
 		$overlay_color    = $attributes['overlayColor'] ?? '';
 		$panel_bg_color   = $attributes['panelBackgroundColor'] ?? '';
 		$panel_text_color = $attributes['panelTextColor'] ?? '';
+		$is_full_screen   = ! empty( $attributes['isFullScreen'] );
+		$panel_width      = $attributes['panelWidth'] ?? 'small';
 
 		$valid_directions = [ 'left', 'right' ];
 		if ( ! in_array( $direction, $valid_directions, true ) ) {
 			$direction = 'left';
 		}
-		$position_class = 'overlay-menu__panel--' . $direction;
+
+		$valid_widths = [ 'x-small', 'small', 'medium', 'large', 'x-large' ];
+		if ( ! in_array( $panel_width, $valid_widths, true ) ) {
+			$panel_width = 'small';
+		}
+
+		if ( $is_full_screen ) {
+			$panel_class = 'overlay-menu__panel is-layout-constrained overlay-menu__panel--full-screen';
+		} else {
+			$panel_class = 'overlay-menu__panel is-layout-constrained overlay-menu__panel--' . $direction . ' overlay-menu__panel--width--' . $panel_width;
+		}
 
 		$panel_styles = [];
 		if ( $panel_bg_color ) {
@@ -71,8 +83,7 @@ final class Overlay_Menu_Panel_Block {
 		}
 		$extra_attributes = [
 			'id'                 => 'newspack-overlay-panel-' . $instance_id,
-			'class'              => 'overlay-menu__panel is-layout-constrained ' . $position_class,
-			'data-direction'     => $direction,
+			'class'              => $panel_class,
 			'data-overlay-color' => $overlay_color,
 			'aria-hidden'        => 'true',
 			'inert'              => 'true',

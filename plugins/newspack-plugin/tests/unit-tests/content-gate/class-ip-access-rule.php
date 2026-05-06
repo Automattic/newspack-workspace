@@ -62,6 +62,33 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that malformed CIDR prefixes do not match.
+	 *
+	 * Previously `(int) $bits` silently coerced non-numeric strings to 0,
+	 * letting "10.0.0.0/foo" and "10.0.0.0/" match every IP.
+	 */
+	public function test_malformed_cidr_prefix_does_not_match() {
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.0/foo' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.0/' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.0/24junk' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.0/-1' ) );
+		// Valid CIDR continues to match.
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.0/24' ) );
+	}
+
+	/**
+	 * Test that whitespace around the CIDR separator is tolerated.
+	 *
+	 * Common admin typos like "192.168.1.0 / 24" should not silently
+	 * disable the rule.
+	 */
+	public function test_cidr_tolerates_whitespace_around_slash() {
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '192.168.1.50', '192.168.1.0/ 24' ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '192.168.1.50', '192.168.1.0 /24' ) );
+		$this->assertTrue( IP_Access_Rule::ip_matches_ranges( '192.168.1.50', '192.168.1.0 / 24' ) );
+	}
+
+	/**
 	 * Test that the REST route is registered.
 	 */
 	public function test_rest_route_registered() {
@@ -349,5 +376,322 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$this->assertFalse( $data['show_paywall'] );
 
 		remove_all_filters( 'newspack_content_gate_check_ip' );
+	}
+
+	/**
+	 * Test the IP allowlist GET route is registered.
+	 */
+	public function test_ip_allowlist_route_registered() {
+		do_action( 'rest_api_init' );
+
+		$routes         = rest_get_server()->get_routes( NEWSPACK_API_NAMESPACE );
+		$expected_route = '/' . NEWSPACK_API_NAMESPACE . IP_Access_Rule::REST_ROUTE_IP_ALLOWLIST;
+		$this->assertArrayHasKey( $expected_route, $routes, 'The IP allowlist REST route should be registered.' );
+
+		$endpoint = $routes[ $expected_route ][0];
+		$this->assertArrayHasKey( 'GET', $endpoint['methods'], 'The route should accept GET requests.' );
+		$this->assertSame( [ IP_Access_Rule::class, 'api_permissions_check' ], $endpoint['permission_callback'], 'The route should be gated by the admin permission callback.' );
+	}
+
+	/**
+	 * Test the IP allowlist endpoint requires manage_options.
+	 */
+	public function test_ip_allowlist_requires_authentication() {
+		$route = '/' . NEWSPACK_API_NAMESPACE . IP_Access_Rule::REST_ROUTE_IP_ALLOWLIST;
+
+		$request  = new WP_REST_Request( 'GET', $route );
+		$response = rest_do_request( $request );
+		$this->assertSame( 401, $response->get_status() );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'subscriber' ] ) );
+		$request  = new WP_REST_Request( 'GET', $route );
+		$response = rest_do_request( $request );
+		$this->assertSame( 403, $response->get_status() );
+	}
+
+	/**
+	 * Test the IP allowlist endpoint response shape.
+	 */
+	public function test_ip_allowlist_response_shape() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$inst_id = \Newspack\Institution::create(
+			'Allowlist Test Library',
+			'',
+			[ 'ip_range' => '192.168.1.0/24,10.0.0.5' ]
+		);
+		$this->assertIsInt( $inst_id );
+		delete_transient( \Newspack\Institution::TRANSIENT_KEY );
+
+		$route    = '/' . NEWSPACK_API_NAMESPACE . IP_Access_Rule::REST_ROUTE_IP_ALLOWLIST;
+		$request  = new WP_REST_Request( 'GET', $route );
+		$response = rest_do_request( $request );
+		$data     = $response->get_data();
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertIsArray( $data );
+
+		$entry = null;
+		foreach ( $data as $item ) {
+			if ( $item['id'] === $inst_id ) {
+				$entry = $item;
+				break;
+			}
+		}
+		$this->assertNotNull( $entry, 'Created institution should appear in response.' );
+		$this->assertSame( 'Allowlist Test Library', $entry['name'] );
+		$this->assertSame( [ '192.168.1.0/24', '10.0.0.5' ], $entry['ip_ranges'] );
+	}
+
+	/**
+	 * Test institutions without configured IP ranges are excluded.
+	 */
+	public function test_ip_allowlist_excludes_institutions_without_ip_ranges() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$with_ip = \Newspack\Institution::create( 'Has IPs', '', [ 'ip_range' => '10.0.0.1' ] );
+		$no_ip   = \Newspack\Institution::create( 'No IPs', '', [ 'email_domain' => 'example.edu' ] );
+		$this->assertIsInt( $with_ip );
+		$this->assertIsInt( $no_ip );
+		delete_transient( \Newspack\Institution::TRANSIENT_KEY );
+
+		$route    = '/' . NEWSPACK_API_NAMESPACE . IP_Access_Rule::REST_ROUTE_IP_ALLOWLIST;
+		$request  = new WP_REST_Request( 'GET', $route );
+		$response = rest_do_request( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertContains( $with_ip, $ids );
+		$this->assertNotContains( $no_ip, $ids );
+	}
+
+	/**
+	 * Test institutions are returned sorted by id ascending.
+	 */
+	public function test_ip_allowlist_sorted_by_id_ascending() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$first  = \Newspack\Institution::create( 'First', '', [ 'ip_range' => '10.0.0.1' ] );
+		$second = \Newspack\Institution::create( 'Second', '', [ 'ip_range' => '10.0.0.2' ] );
+		$third  = \Newspack\Institution::create( 'Third', '', [ 'ip_range' => '10.0.0.3' ] );
+		delete_transient( \Newspack\Institution::TRANSIENT_KEY );
+
+		$route    = '/' . NEWSPACK_API_NAMESPACE . IP_Access_Rule::REST_ROUTE_IP_ALLOWLIST;
+		$request  = new WP_REST_Request( 'GET', $route );
+		$response = rest_do_request( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertContains( $first, $ids );
+		$this->assertContains( $second, $ids );
+		$this->assertContains( $third, $ids );
+
+		$sorted = $ids;
+		sort( $sorted, SORT_NUMERIC );
+		$this->assertSame( $sorted, $ids, 'Full institutions list should be in id-ascending order.' );
+	}
+
+	/**
+	 * Test comma-separated ip_range meta is split, trimmed, and emptied entries dropped.
+	 */
+	public function test_ip_allowlist_parses_comma_separated_ranges() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$inst_id = \Newspack\Institution::create(
+			'Whitespace Test',
+			'',
+			[ 'ip_range' => '  10.0.0.1 ,, 192.168.1.0/24 , ' ]
+		);
+		delete_transient( \Newspack\Institution::TRANSIENT_KEY );
+
+		$route    = '/' . NEWSPACK_API_NAMESPACE . IP_Access_Rule::REST_ROUTE_IP_ALLOWLIST;
+		$request  = new WP_REST_Request( 'GET', $route );
+		$response = rest_do_request( $request );
+		$data     = $response->get_data();
+
+		$entry = null;
+		foreach ( $data as $item ) {
+			if ( $item['id'] === $inst_id ) {
+				$entry = $item;
+				break;
+			}
+		}
+		$this->assertNotNull( $entry );
+		$this->assertSame( [ '10.0.0.1', '192.168.1.0/24' ], $entry['ip_ranges'] );
+	}
+
+	/**
+	 * Test the endpoint returns an empty institutions array when none exist.
+	 */
+	public function test_ip_allowlist_returns_empty_when_no_institutions() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		delete_transient( \Newspack\Institution::TRANSIENT_KEY );
+
+		$route    = '/' . NEWSPACK_API_NAMESPACE . IP_Access_Rule::REST_ROUTE_IP_ALLOWLIST;
+		$request  = new WP_REST_Request( 'GET', $route );
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( [], $response->get_data() );
+	}
+
+	/**
+	 * Test institutions with only separators or whitespace in ip_range are excluded.
+	 */
+	public function test_ip_allowlist_excludes_institution_with_only_separators() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$inst_id = \Newspack\Institution::create( 'Separators Only', '', [ 'ip_range' => ',, ,' ] );
+		$this->assertIsInt( $inst_id );
+		delete_transient( \Newspack\Institution::TRANSIENT_KEY );
+
+		$route    = '/' . NEWSPACK_API_NAMESPACE . IP_Access_Rule::REST_ROUTE_IP_ALLOWLIST;
+		$request  = new WP_REST_Request( 'GET', $route );
+		$response = rest_do_request( $request );
+		$ids      = wp_list_pluck( $response->get_data(), 'id' );
+
+		$this->assertNotContains( $inst_id, $ids );
+	}
+
+	/**
+	 * Test syntactically invalid IPv4/CIDR entries are dropped from the response.
+	 */
+	public function test_ip_allowlist_drops_invalid_ip_entries() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$inst_id = \Newspack\Institution::create(
+			'Mixed Validity',
+			'',
+			[ 'ip_range' => 'not-an-ip,10.0.0.1,999.999.999.999,192.168.1.0/24,10.0.0.5/40' ]
+		);
+		$this->assertIsInt( $inst_id );
+		delete_transient( \Newspack\Institution::TRANSIENT_KEY );
+
+		$route    = '/' . NEWSPACK_API_NAMESPACE . IP_Access_Rule::REST_ROUTE_IP_ALLOWLIST;
+		$request  = new WP_REST_Request( 'GET', $route );
+		$response = rest_do_request( $request );
+
+		$entry = null;
+		foreach ( $response->get_data() as $item ) {
+			if ( $item['id'] === $inst_id ) {
+				$entry = $item;
+				break;
+			}
+		}
+		$this->assertNotNull( $entry );
+		$this->assertSame( [ '10.0.0.1', '192.168.1.0/24' ], $entry['ip_ranges'] );
+	}
+
+	/**
+	 * Test the endpoint normalizes whitespace around the CIDR separator.
+	 */
+	public function test_ip_allowlist_normalizes_whitespace_around_cidr_slash() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$inst_id = \Newspack\Institution::create(
+			'Whitespace CIDR',
+			'',
+			[ 'ip_range' => '192.168.1.0 / 24, 10.0.0.0/ 8' ]
+		);
+		$this->assertIsInt( $inst_id );
+		delete_transient( \Newspack\Institution::TRANSIENT_KEY );
+
+		$route    = '/' . NEWSPACK_API_NAMESPACE . IP_Access_Rule::REST_ROUTE_IP_ALLOWLIST;
+		$request  = new WP_REST_Request( 'GET', $route );
+		$response = rest_do_request( $request );
+
+		$entry = null;
+		foreach ( $response->get_data() as $item ) {
+			if ( $item['id'] === $inst_id ) {
+				$entry = $item;
+				break;
+			}
+		}
+		$this->assertNotNull( $entry );
+		$this->assertSame( [ '192.168.1.0/24', '10.0.0.0/8' ], $entry['ip_ranges'] );
+	}
+
+	/**
+	 * Test malformed CIDR prefixes are rejected.
+	 *
+	 * Previously `(int) $bits` silently coerced non-numeric strings to 0,
+	 * letting `"10.0.0.0/foo"` and `"10.0.0.0/"` match all IPs.
+	 */
+	public function test_ip_allowlist_drops_malformed_cidr_prefixes() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$inst_id = \Newspack\Institution::create(
+			'Malformed CIDR',
+			'',
+			[ 'ip_range' => '10.0.0.0/foo,10.0.0.0/,10.0.0.0/24junk,10.0.0.0/-1,10.0.0.0/24' ]
+		);
+		$this->assertIsInt( $inst_id );
+		delete_transient( \Newspack\Institution::TRANSIENT_KEY );
+
+		$route    = '/' . NEWSPACK_API_NAMESPACE . IP_Access_Rule::REST_ROUTE_IP_ALLOWLIST;
+		$request  = new WP_REST_Request( 'GET', $route );
+		$response = rest_do_request( $request );
+
+		$entry = null;
+		foreach ( $response->get_data() as $item ) {
+			if ( $item['id'] === $inst_id ) {
+				$entry = $item;
+				break;
+			}
+		}
+		$this->assertNotNull( $entry );
+		$this->assertSame( [ '10.0.0.0/24' ], $entry['ip_ranges'] );
+
+		// Matcher must agree: malformed prefixes should not match anything.
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.0/foo' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.0/' ) );
+		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.0/-1' ) );
+	}
+
+	/**
+	 * Test the `newspack_content_gate_ip_allowlist` filter is applied and
+	 * receives the built institution list as input.
+	 */
+	public function test_ip_allowlist_filter_is_applied() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+
+		$inst_id = \Newspack\Institution::create( 'Filter Source', '', [ 'ip_range' => '10.1.2.3' ] );
+		$this->assertIsInt( $inst_id );
+		delete_transient( \Newspack\Institution::TRANSIENT_KEY );
+
+		$captured    = null;
+		$replacement = [
+			[
+				'id'        => 999999,
+				'name'      => 'Filtered',
+				'ip_ranges' => [ '8.8.8.8' ],
+			],
+		];
+		add_filter(
+			'newspack_content_gate_ip_allowlist',
+			function ( $list ) use ( &$captured, $replacement ) {
+				$captured = $list;
+				return $replacement;
+			}
+		);
+
+		$route    = '/' . NEWSPACK_API_NAMESPACE . IP_Access_Rule::REST_ROUTE_IP_ALLOWLIST;
+		$request  = new WP_REST_Request( 'GET', $route );
+		$response = rest_do_request( $request );
+
+		$this->assertIsArray( $captured, 'Filter should receive the pre-filter list.' );
+
+		$found = null;
+		foreach ( $captured as $entry ) {
+			if ( ( $entry['id'] ?? null ) === $inst_id ) {
+				$found = $entry;
+				break;
+			}
+		}
+		$this->assertNotNull( $found, 'Filter input should include freshly built institution entries.' );
+		$this->assertSame( 'Filter Source', $found['name'] );
+		$this->assertSame( [ '10.1.2.3' ], $found['ip_ranges'] );
+
+		$this->assertSame( $replacement, $response->get_data(), 'Response should reflect the filter return value.' );
+
+		remove_all_filters( 'newspack_content_gate_ip_allowlist' );
 	}
 }

@@ -431,11 +431,59 @@ class ESP extends Integration {
 			return $fields;
 		}
 
-		return array_map(
-			function( $field ) {
-				return new Incoming_Field( $field['key'], $field );
-			},
-			$fields
-		);
+		$incoming_fields = [];
+		foreach ( $fields as $field ) {
+			if ( ! is_array( $field ) || empty( $field['key'] ) || ! is_string( $field['key'] ) ) {
+				continue;
+			}
+			$incoming_fields[] = $this->configure_incoming_field( new Incoming_Field( $field['key'], $field ) );
+		}
+		return $incoming_fields;
+	}
+
+	/**
+	 * Apply defaults from the provider schema to the Incoming_Field.
+	 *
+	 * The raw data comes from Newspack_Newsletters_Contacts::get_fields(), which delegates to the
+	 * provider's get_contact_fields_for_integrations() method. That method returns a schema whose
+	 * `key` is the provider's stable machine identifier (e.g. Mailchimp merge-field `tag`,
+	 * ActiveCampaign `perstag`) — used as the Reader_Data attribute and segmentation matching key —
+	 * and whose remaining keys mirror Incoming_Field setters so we can configure each field
+	 * mechanically.
+	 *
+	 * @param Incoming_Field $field The field to configure.
+	 * @return Incoming_Field
+	 */
+	protected function configure_incoming_field( $field ) {
+		$raw = $field->get_raw_data();
+		if ( ! is_array( $raw ) ) {
+			return $field;
+		}
+		if ( isset( $raw['name'] ) && is_scalar( $raw['name'] ) && '' !== (string) $raw['name'] ) {
+			$field->set_name( (string) $raw['name'] );
+		}
+		if ( isset( $raw['value_type'] ) && is_scalar( $raw['value_type'] ) && '' !== (string) $raw['value_type'] ) {
+			$field->set_value_type( (string) $raw['value_type'] );
+		}
+		if ( isset( $raw['matching_function'] ) && is_scalar( $raw['matching_function'] ) && '' !== (string) $raw['matching_function'] ) {
+			$field->set_matching_function( (string) $raw['matching_function'] );
+		}
+		if ( isset( $raw['options'] ) && is_array( $raw['options'] ) ) {
+			$field->set_options( $raw['options'] );
+		}
+		// Description is the only optional-and-clearable scalar field — allow `''` to overwrite
+		// (so a provider can drop a previously-set description), unlike name / value_type /
+		// matching_function where an empty value would be a malformed schema.
+		if ( isset( $raw['description'] ) && is_scalar( $raw['description'] ) ) {
+			$field->set_description( (string) $raw['description'] );
+		}
+		// Symmetric assignment: present-but-falsy can reset the flag, not just present-and-truthy.
+		if ( isset( $raw['is_access_rule'] ) ) {
+			$field->set_is_access_rule( \wp_validate_boolean( $raw['is_access_rule'] ) );
+		}
+		if ( isset( $raw['is_segment_criteria'] ) ) {
+			$field->set_is_segment_criteria( \wp_validate_boolean( $raw['is_segment_criteria'] ) );
+		}
+		return $field;
 	}
 }

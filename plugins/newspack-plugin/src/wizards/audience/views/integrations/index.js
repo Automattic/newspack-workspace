@@ -11,6 +11,7 @@ import { forwardRef, useState, useEffect, useCallback } from '@wordpress/element
 import { Wizard, withWizard } from '../../../../../packages/components/src';
 import { SettingsSection } from './settings-section';
 import { ConfigureView } from './configure-view';
+import { LogsView } from './logs-view';
 
 const API_PATH = '/newspack/v1/wizard/newspack-audience-integrations/settings';
 
@@ -107,6 +108,13 @@ const AudienceIntegrations = ( props, ref ) => {
 					exact: true,
 					render: SettingsSection,
 					props: sharedProps,
+				},
+				{
+					path: '/settings/:integrationId/logs',
+					render: LogsView,
+					props: sharedProps,
+					isHidden: true,
+					fullWidth: true,
 				},
 				{
 					path: '/settings/:integrationId',

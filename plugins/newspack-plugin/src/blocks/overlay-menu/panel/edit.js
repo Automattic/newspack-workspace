@@ -14,6 +14,7 @@ import {
 } from '@wordpress/block-editor';
 import {
 	PanelBody,
+	ToggleControl,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
 	__experimentalToggleGroupControl as ToggleGroupControl,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
@@ -33,6 +34,14 @@ const DIRECTION_CONFIG = {
 
 const INNER_BLOCKS_TEMPLATE = [ [ 'core/navigation', { layout: { type: 'flex', orientation: 'vertical' } } ] ];
 
+const PANEL_WIDTH_OPTIONS = [
+	{ value: 'x-small', label: __( 'XS', 'newspack-plugin' ), ariaLabel: __( 'Extra small', 'newspack-plugin' ) },
+	{ value: 'small', label: __( 'S', 'newspack-plugin' ), ariaLabel: __( 'Small', 'newspack-plugin' ) },
+	{ value: 'medium', label: __( 'M', 'newspack-plugin' ), ariaLabel: __( 'Medium', 'newspack-plugin' ) },
+	{ value: 'large', label: __( 'L', 'newspack-plugin' ), ariaLabel: __( 'Large', 'newspack-plugin' ) },
+	{ value: 'x-large', label: __( 'XL', 'newspack-plugin' ), ariaLabel: __( 'Extra large', 'newspack-plugin' ) },
+];
+
 /**
  * Edit component for the Overlay Menu Panel block.
  *
@@ -44,7 +53,7 @@ const INNER_BLOCKS_TEMPLATE = [ [ 'core/navigation', { layout: { type: 'flex', o
  * @return {JSX.Element} The block editor UI.
  */
 export default function OverlayMenuPanelEdit( { attributes, clientId, setAttributes } ) {
-	const { slideDirection, overlayColor, panelBackgroundColor, panelTextColor } = attributes;
+	const { slideDirection, overlayColor, panelBackgroundColor, panelTextColor, isFullScreen, panelWidth } = attributes;
 
 	const [ isPreviewOpen, setIsPreviewOpen ] = useState( false );
 
@@ -75,9 +84,11 @@ export default function OverlayMenuPanelEdit( { attributes, clientId, setAttribu
 	// Fetch the theme's color palette for the color panel.
 	const [ colorSettings ] = useSettings( 'color.palette' );
 
-	const panelClassName = isPreviewOpen
-		? `overlay-menu__panel is-layout-constrained ${ positionClass } overlay-menu__panel--open`
-		: 'overlay-menu__editor-panel-hidden';
+	const openPanelClasses = isFullScreen
+		? 'overlay-menu__panel is-layout-constrained overlay-menu__panel--full-screen overlay-menu__panel--open'
+		: `overlay-menu__panel is-layout-constrained ${ positionClass } overlay-menu__panel--width--${ panelWidth } overlay-menu__panel--open`;
+
+	const panelClassName = isPreviewOpen ? openPanelClasses : 'overlay-menu__editor-panel-hidden';
 	const panelStyle = isPreviewOpen
 		? {
 				// Force fixed positioning in the editor — Gutenberg can override
@@ -97,16 +108,40 @@ export default function OverlayMenuPanelEdit( { attributes, clientId, setAttribu
 
 			<InspectorControls>
 				<PanelBody title={ __( 'Settings', 'newspack-plugin' ) } initialOpen={ true }>
-					<ToggleGroupControl
-						label={ __( 'Slide direction', 'newspack-plugin' ) }
-						help={ __( 'Choose which side of the screen the panel slides in from.', 'newspack-plugin' ) }
-						value={ slideDirection }
-						onChange={ val => setAttributes( { slideDirection: val } ) }
-						isBlock
-					>
-						<ToggleGroupControlOption value="left" label={ __( 'Left', 'newspack-plugin' ) } />
-						<ToggleGroupControlOption value="right" label={ __( 'Right', 'newspack-plugin' ) } />
-					</ToggleGroupControl>
+					<ToggleControl
+						label={ __( 'Full screen', 'newspack-plugin' ) }
+						help={ __( 'When enabled, the panel expands to fill the entire viewport.', 'newspack-plugin' ) }
+						checked={ isFullScreen }
+						onChange={ val => setAttributes( { isFullScreen: val } ) }
+					/>
+					{ ! isFullScreen && (
+						<>
+							<ToggleGroupControl
+								label={ __( 'Slide direction', 'newspack-plugin' ) }
+								help={ __( 'Choose which side of the screen the panel slides in from.', 'newspack-plugin' ) }
+								value={ slideDirection }
+								onChange={ val => setAttributes( { slideDirection: val } ) }
+								isBlock
+							>
+								<ToggleGroupControlOption value="left" label={ __( 'Left', 'newspack-plugin' ) } />
+								<ToggleGroupControlOption value="right" label={ __( 'Right', 'newspack-plugin' ) } />
+							</ToggleGroupControl>
+							<ToggleGroupControl
+								label={ __( 'Width', 'newspack-plugin' ) }
+								help={ __(
+									'Set how wide the panel appears when opened. Use smaller sizes for simple navigation and larger sizes for rich content layouts.',
+									'newspack-plugin'
+								) }
+								value={ panelWidth }
+								onChange={ val => setAttributes( { panelWidth: val } ) }
+								isBlock
+							>
+								{ PANEL_WIDTH_OPTIONS.map( ( { value, label, ariaLabel } ) => (
+									<ToggleGroupControlOption key={ value } value={ value } label={ label } aria-label={ ariaLabel } />
+								) ) }
+							</ToggleGroupControl>
+						</>
+					) }
 				</PanelBody>
 			</InspectorControls>
 

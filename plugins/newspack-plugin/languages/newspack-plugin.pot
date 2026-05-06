@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack 6.37.0\n"
+"Project-Id-Version: Newspack 6.39.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-plugin\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-04-30T23:40:54+00:00\n"
+"POT-Creation-Date: 2026-05-05T20:13:24+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -264,29 +264,29 @@ msgid "Authentication links support is currently %1$s for %2$s."
 msgstr ""
 
 #: includes/class-magic-link.php:1162
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:67
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:79
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:82
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:100
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:67
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:79
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:82
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:100
 #: dist/blocks.js:4
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:22
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:42
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:22
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:42
 #: src/blocks/reader-registration/edit.js:209
 msgid "disabled"
 msgstr ""
 
 #: includes/class-magic-link.php:1162
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:67
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:79
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:82
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:100
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:67
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:79
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:82
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:100
 #: dist/blocks.js:4
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:22
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:42
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:22
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:42
 #: src/blocks/reader-registration/edit.js:209
 msgid "enabled"
 msgstr ""
@@ -326,10 +326,10 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:235
 #: includes/reader-activation/class-reader-activation.php:1679
 #: includes/reader-activation/class-reader-activation.php:1802
-#: src/blocks/overlay-menu/panel/class-overlay-menu-panel-block.php:100
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:37
+#: src/blocks/overlay-menu/panel/class-overlay-menu-panel-block.php:111
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:37
 #: dist/blocks.js:6
-#: src/blocks/overlay-menu/panel/edit.js:157
+#: src/blocks/overlay-menu/panel/edit.js:192
 #: src/wizards/audience/components/prompt-action-card/index.js:139
 msgid "Close"
 msgstr ""
@@ -377,7 +377,7 @@ msgstr ""
 #: includes/reader-activation/class-reader-activation.php:286
 #: includes/reader-activation/class-reader-activation.php:314
 #: src/blocks/reader-registration/index.php:253
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: dist/blocks.js:4
 #: src/blocks/reader-registration/edit.js:315
 #: src/wizards/audience/views/setup/campaign.js:86
@@ -1132,13 +1132,13 @@ msgid "Use global setting"
 msgstr ""
 
 #: includes/collections/class-collection-meta.php:123
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:31
 #: src/wizards/audience/components/settings-modal/index.js:134
 msgid "Show"
 msgstr ""
 
 #: includes/collections/class-collection-meta.php:127
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:31
 #: src/wizards/audience/components/settings-modal/index.js:134
 msgid "Hide"
 msgstr ""
@@ -1453,12 +1453,12 @@ msgstr ""
 msgid "Unauthorized"
 msgstr ""
 
-#: includes/configuration_managers/class-woocommerce-configuration-manager.php:306
+#: includes/configuration_managers/class-woocommerce-configuration-manager.php:326
 msgid "Error activating the Stripe payment gateway."
 msgstr ""
 
 #. Translators: %s is the slug of the payment gateway.
-#: includes/configuration_managers/class-woocommerce-configuration-manager.php:370
+#: includes/configuration_managers/class-woocommerce-configuration-manager.php:390
 #, php-format
 msgid "Error activating %s gateway."
 msgstr ""
@@ -1481,9 +1481,9 @@ msgstr ""
 #: includes/content-gate/block-patterns/pay-wall-two-tiers.php:24
 #: includes/content-gate/block-patterns/pay-wall-two-tiers.php:94
 #: includes/content-gate/block-patterns/registration-wall.php:11
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:37
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:37
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/components/prompt-action-card/index.js:153
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:164
 msgid "Title"
@@ -1508,9 +1508,9 @@ msgstr ""
 #: includes/content-gate/content-gifting/class-content-gifting-cta.php:240
 #: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:691
 #: includes/reader-activation/class-reader-activation.php:292
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:174
 #: src/wizards/audience/views/setup/countdown-banner.js:113
 msgid "Sign in to an existing account"
@@ -1531,7 +1531,7 @@ msgstr ""
 #: includes/content-gate/block-patterns/pay-wall-two-tiers.php:21
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:253
 #: includes/plugins/woocommerce/my-account/templates/v1/subscription-totals-table.php:38
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "Subscription"
 msgid_plural "Subscriptions"
 msgstr[0] ""
@@ -1562,14 +1562,14 @@ msgstr ""
 #: includes/content-gate/block-patterns/pay-wall-two-tiers.php:88
 #: includes/content-gate/block-patterns/registration-banner.php:16
 #: includes/content-gate/block-patterns/registration-wall.php:17
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:67
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:70
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:97
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:100
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:22
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:25
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:39
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:42
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:67
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:70
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:97
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:100
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:22
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:25
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:39
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:42
 msgid "Content"
 msgstr ""
 
@@ -1755,7 +1755,7 @@ msgstr ""
 #: includes/content-gate/block-patterns/pay-wall-two-tiers.php:58
 #: includes/content-gate/block-patterns/pay-wall-two-tiers.php:115
 #: includes/plugins/woocommerce-subscriptions/class-subscriptions-tiers.php:543
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: src/wizards/audience/components/settings-modal/index.js:56
 msgid "Frequency"
 msgstr ""
@@ -1837,7 +1837,7 @@ msgstr ""
 
 #: includes/content-gate/block-patterns/registration-banner.php:13
 #: includes/content-gate/block-patterns/registration-wall.php:9
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:194
 msgid "Registration"
 msgstr ""
@@ -1858,40 +1858,40 @@ msgstr ""
 msgid "Form"
 msgstr ""
 
-#: includes/content-gate/class-access-rules.php:90
+#: includes/content-gate/class-access-rules.php:97
 msgid "Active subscription"
 msgstr ""
 
-#: includes/content-gate/class-access-rules.php:91
+#: includes/content-gate/class-access-rules.php:98
 msgid "Requires an active subscription to selected products."
 msgstr ""
 
-#: includes/content-gate/class-access-rules.php:96
+#: includes/content-gate/class-access-rules.php:103
 msgid "Whitelisted email domain"
 msgstr ""
 
-#: includes/content-gate/class-access-rules.php:97
+#: includes/content-gate/class-access-rules.php:104
 msgid "Only allow readers with specific email domains."
 msgstr ""
 
-#: includes/content-gate/class-access-rules.php:98
+#: includes/content-gate/class-access-rules.php:105
 msgid "example.com,another.com"
 msgstr ""
 
-#: includes/content-gate/class-access-rules.php:102
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: includes/content-gate/class-access-rules.php:109
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Reader data"
 msgstr ""
 
-#: includes/content-gate/class-access-rules.php:103
+#: includes/content-gate/class-access-rules.php:110
 msgid "Set custom conditions based on reader data key/value pairs."
 msgstr ""
 
-#: includes/content-gate/class-access-rules.php:107
+#: includes/content-gate/class-access-rules.php:114
 msgid "Institutional access"
 msgstr ""
 
-#: includes/content-gate/class-access-rules.php:108
+#: includes/content-gate/class-access-rules.php:115
 msgid "Grant access to readers from selected institutions."
 msgstr ""
 
@@ -1970,7 +1970,7 @@ msgstr ""
 
 #: includes/content-gate/class-content-gate.php:359
 #: includes/plugins/wc-memberships/class-memberships.php:149
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/content-gating.js:73
 msgid "Content Gate"
 msgstr ""
@@ -2042,11 +2042,11 @@ msgstr ""
 msgid "Invalid gate setting key."
 msgstr ""
 
-#: includes/content-gate/class-content-restriction-control.php:104
+#: includes/content-gate/class-content-restriction-control.php:97
 msgid "Content within specific categories."
 msgstr ""
 
-#: includes/content-gate/class-content-restriction-control.php:109
+#: includes/content-gate/class-content-restriction-control.php:102
 msgid "Content labeled with certain tags."
 msgstr ""
 
@@ -2079,87 +2079,99 @@ msgid "Newsletter subscription lists."
 msgstr ""
 
 #: includes/content-gate/class-institution.php:77
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Institutions"
 msgstr ""
 
+#: includes/content-gate/class-ip-access-rule.php:265
+msgid "Institution post ID."
+msgstr ""
+
+#: includes/content-gate/class-ip-access-rule.php:270
+msgid "Institution name."
+msgstr ""
+
+#: includes/content-gate/class-ip-access-rule.php:275
+msgid "Validated IPv4 addresses or CIDR blocks granting access."
+msgstr ""
+
 #. translators: %s: institution name
-#: includes/content-gate/class-ip-access-rule.php:285
+#: includes/content-gate/class-ip-access-rule.php:369
 #, php-format
 msgid "Connected to %s."
 msgstr ""
 
-#: includes/content-gate/class-ip-access-rule.php:286
-#: includes/content-gate/class-ip-access-rule.php:448
+#: includes/content-gate/class-ip-access-rule.php:370
+#: includes/content-gate/class-ip-access-rule.php:532
 msgid "Connected to your organization."
 msgstr ""
 
-#: includes/content-gate/class-ip-access-rule.php:296
+#: includes/content-gate/class-ip-access-rule.php:380
 msgid "We couldn't verify your location. Make sure you're on your organization's network and try again."
 msgstr ""
 
-#: includes/content-gate/class-ip-access-rule.php:382
+#: includes/content-gate/class-ip-access-rule.php:466
 msgid "Verifying access"
 msgstr ""
 
 #. translators: %s: institution name
-#: includes/content-gate/class-ip-access-rule.php:403
+#: includes/content-gate/class-ip-access-rule.php:487
 #, php-format
 msgid "Verifying your access to %s…"
 msgstr ""
 
-#: includes/content-gate/class-ip-access-rule.php:405
+#: includes/content-gate/class-ip-access-rule.php:489
 msgid "Verifying your access…"
 msgstr ""
 
-#: includes/content-gate/class-ip-access-rule.php:409
+#: includes/content-gate/class-ip-access-rule.php:493
 msgid "You'll be redirected in a few seconds."
 msgstr ""
 
-#: includes/content-gate/class-ip-access-rule.php:412
+#: includes/content-gate/class-ip-access-rule.php:496
 msgid "Try again"
 msgstr ""
 
-#: includes/content-gate/class-ip-access-rule.php:413
+#: includes/content-gate/class-ip-access-rule.php:497
 msgid "Continue to site"
 msgstr ""
 
-#: includes/content-gate/class-ip-access-rule.php:429
+#: includes/content-gate/class-ip-access-rule.php:513
 msgid "Verification timed out."
 msgstr ""
 
-#: includes/content-gate/class-ip-access-rule.php:430
+#: includes/content-gate/class-ip-access-rule.php:514
 msgid "Please check your connection and try again."
 msgstr ""
 
-#: includes/content-gate/class-ip-access-rule.php:447
+#: includes/content-gate/class-ip-access-rule.php:531
 msgid "Connected to "
 msgstr ""
 
-#: includes/content-gate/class-ip-access-rule.php:449
+#: includes/content-gate/class-ip-access-rule.php:533
 msgid "Redirecting…"
 msgstr ""
 
-#: includes/content-gate/class-ip-access-rule.php:460
+#: includes/content-gate/class-ip-access-rule.php:544
 msgid "We couldn't verify your location."
 msgstr ""
 
-#: includes/content-gate/class-ip-access-rule.php:461
+#: includes/content-gate/class-ip-access-rule.php:545
 msgid "Make sure you're on your organization's network and try again."
 msgstr ""
 
-#: includes/content-gate/class-ip-access-rule.php:468
+#: includes/content-gate/class-ip-access-rule.php:552
 msgid "Verification failed."
 msgstr ""
 
-#: includes/content-gate/class-ip-access-rule.php:469
+#: includes/content-gate/class-ip-access-rule.php:553
 msgid "An error occurred. Please try again."
 msgstr ""
 
 #: includes/content-gate/class-metering-countdown.php:43
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
 #: dist/commons.js:15
 #: src/blocks/content-gate/countdown-box/edit.jsx:112
 #: src/wizards/audience/views/setup/countdown-banner.js:112
@@ -2168,9 +2180,9 @@ msgstr ""
 
 #: includes/content-gate/class-metering-countdown.php:44
 #: includes/content-gate/content-gifting/class-content-gifting-cta.php:137
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:187
 #: src/wizards/audience/views/setup/countdown-banner.js:125
 msgid "Subscribe now"
@@ -2197,8 +2209,8 @@ msgstr ""
 #: includes/reader-activation/class-reader-activation.php:281
 #: includes/reader-activation/class-reader-activation.php:291
 #: includes/reader-activation/class-reader-activation.php:297
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:172
 msgid "Create an account"
 msgstr ""
@@ -2236,8 +2248,8 @@ msgid "or"
 msgstr ""
 
 #: includes/content-gate/content-gifting/class-content-gifting-cta.php:48
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:166
 msgid "This article has been gifted to you by someone who values great journalism."
 msgstr ""
@@ -2253,8 +2265,8 @@ msgid "Must be one of the following: day, week, month."
 msgstr ""
 
 #: includes/content-gate/content-gifting/class-content-gifting.php:273
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/content-gate-editor-metering.js:1
 #: src/content-gate/editor/metering-settings.js:54
 #: src/wizards/audience/views/setup/content-gifting.js:57
@@ -2262,8 +2274,8 @@ msgid "Day"
 msgstr ""
 
 #: includes/content-gate/content-gifting/class-content-gifting.php:274
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/content-gate-editor-metering.js:1
 #: src/content-gate/editor/metering-settings.js:55
 #: src/wizards/audience/views/setup/content-gifting.js:58
@@ -2271,8 +2283,8 @@ msgid "Week"
 msgstr ""
 
 #: includes/content-gate/content-gifting/class-content-gifting.php:275
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/content-gate-editor-metering.js:1
 #: src/content-gate/editor/metering-settings.js:56
 #: src/wizards/audience/views/setup/content-gifting.js:59
@@ -2308,15 +2320,15 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: includes/content-gate/content-gifting/class-content-gifting.php:382
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:80
 msgid "Hours"
 msgstr ""
 
 #: includes/content-gate/content-gifting/class-content-gifting.php:383
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:81
 msgid "Days"
 msgstr ""
@@ -2846,8 +2858,8 @@ msgstr ""
 #: includes/wizards/newspack/class-newspack-dashboard.php:166
 #: includes/wizards/newspack/class-newspack-dashboard.php:202
 #: includes/wizards/newspack/class-newspack-settings.php:186
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/billboard.js:15
 #: dist/blocks.js:4
 #: dist/blocks.js:6
@@ -2863,13 +2875,13 @@ msgstr ""
 #: src/blocks/avatar/inspector.jsx:18
 #: src/blocks/byline/inspector.jsx:25
 #: src/blocks/collections/components/InspectorPanel.jsx:63
-#: src/blocks/overlay-menu/panel/edit.js:99
+#: src/blocks/overlay-menu/panel/edit.js:110
 #: src/content-gate/editor/editor.js:114
 #: src/other-scripts/emails/index.js:106
 #: src/wizards/advertising/index.js:154
 #: src/wizards/advertising/views/settings/index.js:20
 #: src/wizards/audience/components/settings-modal/index.js:48
-#: src/wizards/audience/views/integrations/configure-view.js:121
+#: src/wizards/audience/views/integrations/configure-view.js:126
 #: src/wizards/newsletters/index.js:30
 #: src/wizards/newsletters/views/settings/index.js:393
 msgid "Settings"
@@ -3137,20 +3149,19 @@ msgstr ""
 
 #: includes/optional-modules/class-media-partners.php:477
 #: includes/plugins/woocommerce/my-account/templates/v1/account-settings.php:229
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:31
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:43
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:82
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:104
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:43
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:82
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:104
 #: dist/billboard.js:1
 #: dist/billboard.js:15
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:46
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:46
 #: dist/newspack-wizards.e386313f64136198a71d.js:1
 #: dist/newspack-wizards.e386313f64136198a71d.js:8
 #: dist/newspack-wizards.e386313f64136198a71d.js:26
@@ -3164,7 +3175,7 @@ msgstr ""
 #: src/wizards/advertising/views/providers/index.js:111
 #: src/wizards/audience/components/settings-modal/index.js:179
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:270
-#: src/wizards/audience/views/integrations/configure-view.js:70
+#: src/wizards/audience/views/integrations/configure-view.js:71
 msgid "Save"
 msgstr ""
 
@@ -3827,17 +3838,17 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:892
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:215
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:256
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:31
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:37
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:37
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/billboard.js:1
 #: dist/billboard.js:9
 #: dist/billboard.js:15
 #: dist/commons.js:13
 #: dist/componentsDemo.js:1
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 #: dist/newspack-wizards.e386313f64136198a71d.js:1
 #: dist/newspack-wizards.e386313f64136198a71d.js:26
 #: dist/newspack-wizards.e386313f64136198a71d.js:30
@@ -3857,16 +3868,16 @@ msgid "Cancel"
 msgstr ""
 
 #: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:203
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Weekly"
 msgstr ""
 
 #: includes/plugins/woocommerce-subscriptions/class-woocommerce-subscriptions.php:204
 #: includes/plugins/woocommerce/class-woocommerce-connection.php:517
 #: includes/plugins/woocommerce/class-woocommerce-connection.php:611
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Monthly"
 msgstr ""
 
@@ -4101,7 +4112,7 @@ msgid "Changing these settings will override settings inherited from %s."
 msgstr ""
 
 #: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-settings.php:372
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
 msgid "the product"
 msgstr ""
 
@@ -4121,7 +4132,7 @@ msgstr ""
 
 #: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-settings.php:439
 #: includes/plugins/woocommerce-subscriptions/group-subscription/class-group-subscription-settings.php:441
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: dist/commons.js:13
 #: dist/newspack-wizards.e386313f64136198a71d.js:14
 #: dist/other-scripts/nextdoor.js:1
@@ -4362,10 +4373,10 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/class-woocommerce-my-account.php:470
 #: includes/plugins/woocommerce/my-account/class-woocommerce-my-account.php:621
 #: includes/plugins/woocommerce/my-account/class-woocommerce-my-account.php:1221
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:46
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:55
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:46
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:55
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: dist/newsletters.js:1
 #: dist/newsletters.js:4
 #: dist/newspack-wizards.e386313f64136198a71d.js:14
@@ -4449,11 +4460,11 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:316
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:448
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:544
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:16
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:16
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Are you sure?"
 msgstr ""
 
@@ -4488,7 +4499,7 @@ msgstr ""
 
 #: includes/plugins/woocommerce/my-account/class-my-account-ui-v1.php:354
 #: includes/wizards/newspack/class-newspack-dashboard.php:81
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: dist/componentsDemo.js:1
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:208
 #: src/wizards/componentsDemo/index.js:990
@@ -4862,7 +4873,7 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:109
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:134
 #: includes/reader-activation/class-comment-display-name.php:113
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/billboard.js:15
 #: dist/newspack-wizards.e386313f64136198a71d.js:1
 #: dist/newspack-wizards.e386313f64136198a71d.js:30
@@ -4913,6 +4924,8 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/templates/v1/my-subscriptions.php:55
 #: includes/plugins/woocommerce/my-account/templates/v1/related-orders.php:30
 #: includes/plugins/woocommerce/my-account/templates/v1/related-orders.php:59
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: src/wizards/audience/views/integrations/logs-view.js:141
 msgid "Status"
 msgstr ""
 
@@ -4926,8 +4939,11 @@ msgid "Expired"
 msgstr ""
 
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:191
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:55
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:55
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: src/wizards/audience/views/integrations/logs-view.js:25
+#: src/wizards/audience/views/integrations/logs-view.js:150
 msgid "Pending"
 msgstr ""
 
@@ -4953,9 +4969,9 @@ msgstr ""
 
 #: includes/plugins/woocommerce/my-account/templates/v1/my-subscriptions.php:26
 #: includes/plugins/woocommerce/my-account/templates/v1/my-subscriptions.php:41
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:130
 #: src/wizards/audience/views/setup/countdown-banner.js:70
 msgid "Product"
@@ -5081,19 +5097,19 @@ msgstr ""
 
 #: includes/plugins/woocommerce/my-account/templates/v1/payment-information.php:218
 #: includes/plugins/woocommerce/my-account/templates/v1/subscription-header.php:104
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:37
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:70
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:94
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:102
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:37
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:70
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:94
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:102
 #: dist/billboard.js:9
 #: dist/billboard.js:15
 #: dist/componentsDemo.js:1
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:25
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:36
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:44
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:25
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:36
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:44
 #: dist/newsletters.js:4
 #: dist/newspack-wizards.e386313f64136198a71d.js:1
 #: dist/newspack-wizards.e386313f64136198a71d.js:14
@@ -5281,15 +5297,15 @@ msgid "Please choose a display name that is not derived from your email address.
 msgstr ""
 
 #: includes/reader-activation/class-promoted-fields.php:161
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:70
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:25
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:70
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:25
 #: dist/newspack-wizards.e386313f64136198a71d.js:8
 msgid "Yes"
 msgstr ""
 
 #: includes/reader-activation/class-promoted-fields.php:165
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:70
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:25
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:70
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:25
 #: dist/newspack-wizards.e386313f64136198a71d.js:8
 msgid "No"
 msgstr ""
@@ -5653,7 +5669,7 @@ msgid "Enable reCAPTCHA and enter your account credentials."
 msgstr ""
 
 #: includes/reader-activation/class-reader-activation.php:980
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:222
 msgid "Reader Revenue"
 msgstr ""
@@ -5786,12 +5802,12 @@ msgid "Thank you for supporting %s. Your account has been created, and your tran
 msgstr ""
 
 #: includes/reader-activation/class-reader-activation.php:2985
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "I understand this is a recurring subscription and that I can cancel anytime through the My Account Page."
 msgstr ""
 
 #: includes/reader-activation/class-reader-activation.php:3009
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "I have read and accept the {{Terms & Conditions}}."
 msgstr ""
 
@@ -5854,14 +5870,14 @@ msgid "Mailchimp Audience"
 msgstr ""
 
 #: includes/reader-activation/integrations/class-esp.php:83
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:46
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:46
 #: src/wizards/audience/components/mailchimp.js:47
 #: src/wizards/audience/components/settings.js:37
 msgid "Choose an audience to receive reader activity data."
 msgstr ""
 
 #: includes/reader-activation/integrations/class-esp.php:89
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:49
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:49
 #: src/wizards/audience/components/mailchimp.js:58
 #: src/wizards/audience/components/settings.js:74
 msgid "Default reader status"
@@ -5872,14 +5888,14 @@ msgid "Choose which Mailchimp status readers should have by default if they are 
 msgstr ""
 
 #: includes/reader-activation/integrations/class-esp.php:93
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/components/mailchimp.js:69
 #: src/wizards/audience/components/settings.js:89
 msgid "Transactional/Non-Subscribed"
 msgstr ""
 
 #: includes/reader-activation/integrations/class-esp.php:97
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/components/mailchimp.js:71
 #: src/wizards/audience/components/settings.js:91
 msgid "Subscribed"
@@ -5891,7 +5907,7 @@ msgstr ""
 
 #: includes/reader-activation/integrations/class-esp.php:107
 #: includes/reader-activation/integrations/class-esp.php:114
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:46
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:46
 #: src/wizards/audience/components/settings.js:38
 msgid "Choose a master list to which all registered readers will be added."
 msgstr ""
@@ -5901,7 +5917,7 @@ msgid "Constant Contact Master List"
 msgstr ""
 
 #: includes/reader-activation/integrations/class-esp.php:120
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:241
 #: src/wizards/audience/views/setup/setup.js:248
 msgid "Sync user account deletion"
@@ -5912,7 +5928,7 @@ msgid "When a reader account is deleted, also remove the contact from the ESP."
 msgstr ""
 
 #: includes/reader-activation/integrations/class-esp.php:221
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:49
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:49
 #: src/wizards/audience/components/active-campaign.js:52
 #: src/wizards/audience/components/mailchimp.js:52
 #: src/wizards/audience/components/settings.js:68
@@ -5933,21 +5949,21 @@ msgstr ""
 msgid "ESP master list ID is not set."
 msgstr ""
 
-#: includes/reader-activation/integrations/class-integration.php:606
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: includes/reader-activation/integrations/class-integration.php:668
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/components/metadata-fields.js:20
 msgid "Metadata field prefix"
 msgstr ""
 
-#: includes/reader-activation/integrations/class-integration.php:607
+#: includes/reader-activation/integrations/class-integration.php:669
 msgid "A string to prefix metadata fields synced to the integration. Required to ensure that metadata field names are unique. Default: NP_"
 msgstr ""
 
-#: includes/reader-activation/integrations/class-integration.php:613
+#: includes/reader-activation/integrations/class-integration.php:675
 msgid "Outgoing metadata fields"
 msgstr ""
 
-#: includes/reader-activation/integrations/class-integration.php:619
+#: includes/reader-activation/integrations/class-integration.php:681
 msgid "Incoming metadata fields"
 msgstr ""
 
@@ -6758,15 +6774,15 @@ msgid "Sponsors"
 msgstr ""
 
 #: includes/wizards/audience/class-audience-campaigns.php:50
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/index.js:30
 msgid "Audience Management / Campaigns"
 msgstr ""
 
 #: includes/wizards/audience/class-audience-campaigns.php:112
 #: includes/wizards/newspack/class-newspack-dashboard.php:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/settings-modal/index.js:31
 #: src/wizards/audience/components/settings-modal/index.js:41
 #: src/wizards/audience/views/campaigns/campaigns/index.js:173
@@ -6775,17 +6791,17 @@ msgid "Campaigns"
 msgstr ""
 
 #: includes/wizards/audience/class-audience-content-gates.php:77
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 #: src/wizards/audience/views/content-gates/consts.js:4
 msgid "Audience Management / Access control"
 msgstr ""
 
 #: includes/wizards/audience/class-audience-content-gates.php:131
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/content-gate-block-visibility.js:1
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 #: dist/wizards.js:115
 #: src/wizards/audience/views/content-gates/index.js:40
 #: src/wizards/newsletters/views/premium-newsletters/index.js:36
@@ -6805,7 +6821,7 @@ msgid "Invalid gate type."
 msgstr ""
 
 #: includes/wizards/audience/class-audience-donations.php:46
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/donations/index.js:34
 msgid "Audience Management / Donations"
 msgstr ""
@@ -6826,30 +6842,31 @@ msgid "Reset failed: unable to reset email template."
 msgstr ""
 
 #: includes/wizards/audience/class-audience-integrations.php:60
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: src/wizards/audience/views/integrations/index.js:103
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: src/wizards/audience/views/integrations/index.js:104
 msgid "Audience Management / Integrations"
 msgstr ""
 
 #: includes/wizards/audience/class-audience-integrations.php:70
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:255
 #: src/wizards/audience/views/integrations/settings-section.js:41
 msgid "Integrations"
 msgstr ""
 
-#: includes/wizards/audience/class-audience-integrations.php:161
+#: includes/wizards/audience/class-audience-integrations.php:206
 msgid "Settings must be an object of key-value pairs."
 msgstr ""
 
-#: includes/wizards/audience/class-audience-integrations.php:170
-#: includes/wizards/audience/class-audience-integrations.php:192
+#: includes/wizards/audience/class-audience-integrations.php:215
+#: includes/wizards/audience/class-audience-integrations.php:237
+#: includes/wizards/audience/class-audience-integrations.php:264
 msgid "Integration not found."
 msgstr ""
 
 #: includes/wizards/audience/class-audience-subscriptions.php:44
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Audience Management / Subscriptions"
 msgstr ""
 
@@ -6868,17 +6885,17 @@ msgstr ""
 
 #: includes/wizards/audience/class-audience-wizard.php:150
 #: includes/wizards/newspack/class-newspack-dashboard.php:52
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:19
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:19
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/donations/index.js:26
 #: src/wizards/audience/views/setup/index.js:101
 msgid "Configuration"
 msgstr ""
 
 #: includes/wizards/audience/class-audience-wizard.php:151
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/views/setup/index.js:101
 msgid "Setup"
 msgstr ""
@@ -7045,8 +7062,8 @@ msgstr ""
 
 #: includes/wizards/newspack/class-newspack-dashboard.php:47
 #: includes/wizards/newspack/class-newspack-dashboard.php:260
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/views/setup/index.js:136
 #: src/wizards/audience/views/setup/setup.js:81
 msgid "Audience Management"
@@ -7382,7 +7399,7 @@ msgstr ""
 msgid "%s goal"
 msgstr ""
 
-#: src/blocks/overlay-menu/panel/class-overlay-menu-panel-block.php:81
+#: src/blocks/overlay-menu/panel/class-overlay-menu-panel-block.php:92
 #: src/blocks/overlay-menu/trigger/class-overlay-menu-trigger-block.php:54
 #: dist/blocks.js:6
 #: src/blocks/overlay-menu/trigger/edit.js:68
@@ -7391,8 +7408,8 @@ msgid "Menu"
 msgstr ""
 
 #: src/blocks/reader-registration/index.php:40
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: dist/content-gate-editor.js:25
 #: src/content-gate/editor/editor.js:23
 #: src/wizards/audience/components/segment-group/index.js:171
@@ -7435,233 +7452,233 @@ msgid "Please visit %s to verify and manage your account."
 msgstr ""
 
 #. translators: %s is the type of content to restrict.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:4
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:4
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:4
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:4
 #, js-format
 msgid "Get started with %s"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:4
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:4
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:4
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:4
 msgid "premium newsletters"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:4
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:4
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:4
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:4
 msgid "access control"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:4
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:4
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:4
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:4
 msgid "Set up premium newsletters to manage which lists readers can sign up for. Start by selecting which lists to restrict, then configure access through registered and/or paid options."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:4
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:4
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:4
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:4
 msgid "Set up gates to manage what content readers can access across your site. Start by selecting which content to restrict, then configure access through registered and/or paid options (including metered rules)."
 msgstr ""
 
 #. translators: %s is the type of content to restrict.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:7
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:128
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:7
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:70
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:7
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:128
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:7
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:70
 #, js-format
 msgid "Restrict all %s"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:7
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:10
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:125
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:128
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:131
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:134
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:137
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:7
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:10
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:67
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:70
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:73
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:76
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:79
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:7
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:10
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:125
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:128
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:131
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:134
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:137
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:7
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:10
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:67
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:70
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:73
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:76
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:79
 msgid "lists"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:7
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:10
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:125
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:128
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:131
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:7
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:10
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:67
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:70
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:73
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:7
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:10
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:125
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:128
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:131
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:7
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:10
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:67
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:70
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:73
 msgid "posts"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:7
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:7
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:7
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:7
 msgid "All lists on your site will require access."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:7
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:7
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:7
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:7
 msgid "All posts on your site will require access."
 msgstr ""
 
 #. translators: %s is the type of content to restrict.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:10
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:134
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:10
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:76
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:10
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:134
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:10
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:76
 #, js-format
 msgid "Choose specific %s"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:10
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:10
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:10
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:10
 msgid "Select which lists to restrict using custom rules."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:10
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:10
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:10
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:10
 msgid "Select which content to restrict using custom rules."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:10
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:10
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:10
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:10
 msgid "(no name)"
 msgstr ""
 
 #. translators: 1: rule name, 2: includes or excludes
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:13
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:16
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:13
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:16
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:13
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:16
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:13
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:16
 #, js-format
 msgid "%1$s %2$s:"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:13
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:16
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:13
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:16
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:13
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:16
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:13
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:16
 msgid "exclude"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:13
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:16
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:13
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:16
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:13
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:16
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:13
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:16
 msgid "include"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:13
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:13
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:13
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:13
 msgid "Click to select, type to search"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:16
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:16
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:16
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:16
 msgid "All lists"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:16
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:16
 #: dist/blocks.js:6
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:16
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:16
 #: src/blocks/collections/components/InspectorPanel.jsx:65
 msgid "Mode"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:16
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:16
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:16
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:16
 msgid "Include"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:16
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:16
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:16
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:16
 msgid "Exclude"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:16
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:16
 #: dist/setup.js:1
 msgid "Suggested Donations"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:16
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:16
 #: dist/setup.js:1
 msgid "Set suggested donation amounts. These will be the default settings for the Donate block."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:16
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:16
 #: dist/setup.js:1
 msgid "Donation Type"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:16
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:16
 #: dist/setup.js:1
 msgid "Tiered"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:16
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:16
 #: dist/setup.js:1
 msgid "Untiered"
 msgstr ""
 
 #. Translators: %1$s is a link to the trashed products. %2$s is a comma-separated list of trashed product names.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:19
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:19
 #: dist/setup.js:4
 #, js-format
 msgid "One or more donation products is in trash. Please <a href=\"%1$s\">restore the product(s)</a> to continue using donation features: %2$s"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:19
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:19
 #: dist/setup.js:4
 msgid "Warning: suggested donations should be at least the minimum donation amount."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:19
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:19
 #: dist/setup.js:4
 msgid "Minimum donation"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:19
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:19
 #: dist/setup.js:4
 msgid "Set minimum donation amount. Setting a reasonable minimum donation amount can help protect your site from bot attacks."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:19
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:19
 msgid "Some donation products are invalid. Please correct the following issues:"
 msgstr ""
 
 #. translators: %d: Product ID.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #, js-format
 msgid "Product ID %d"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 msgid "edit"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 msgid "Donations Landing Page"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 msgid "Your donations landing page is published."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 msgid "Your donations landing page is not yet published."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: dist/billboard.js:15
 #: dist/newsletters.js:1
 #: dist/newspack-wizards.e386313f64136198a71d.js:8
@@ -7677,7 +7694,7 @@ msgstr ""
 msgid "Save Settings"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: dist/billboard.js:15
 #: dist/newspack-wizards.e386313f64136198a71d.js:1
 #: src/wizards/advertising/views/ad-units/options-popover.js:34
@@ -7686,19 +7703,19 @@ msgstr ""
 msgid "Close Popover"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/components/campaign-management-popover/index.js:43
 msgid "Activate all prompts"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/components/campaign-management-popover/index.js:54
 msgid "Deactivate all prompts"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:37
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:37
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/campaign-management-popover/index.js:64
 #: src/wizards/audience/components/prompt-action-card/index.js:177
 #: src/wizards/audience/components/prompt-popovers/primary.js:67
@@ -7707,40 +7724,40 @@ msgstr ""
 msgid "Duplicate"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:104
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:46
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:104
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:46
 #: src/wizards/audience/components/campaign-management-popover/index.js:73
 #: src/wizards/audience/views/campaigns/campaigns/index.js:48
 msgid "Rename"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: dist/billboard.js:15
 #: src/wizards/advertising/views/ad-units/options-popover.js:40
 #: src/wizards/audience/components/campaign-management-popover/index.js:83
 msgid "Archive"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/components/campaign-management-popover/index.js:94
 msgid "Unarchive"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:70
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:104
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:70
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:104
 #: dist/billboard.js:15
 #: dist/componentsDemo.js:1
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:16
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:25
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:46
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:16
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:25
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:46
 #: dist/newspack-wizards.e386313f64136198a71d.js:1
 #: dist/other-scripts/corrections-modal.js:1
 #: src/other-scripts/corrections-modal/index.js:300
@@ -7753,20 +7770,20 @@ msgstr ""
 msgid "Delete"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/components/prompt-popovers/primary.js:46
 msgid "Restore"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/components/prompt-popovers/primary.js:49
 msgid "Delete permanently"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/commons.js:13
 #: dist/componentsDemo.js:1
 #: packages/components/src/web-preview/index.js:224
@@ -7777,90 +7794,90 @@ msgstr ""
 msgid "Preview"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:70
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:104
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:25
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:46
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:70
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:104
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:25
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:46
 #: src/wizards/audience/components/prompt-popovers/primary.js:76
 msgid "Deactivate"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:70
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:104
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:70
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:104
 #: dist/commons.js:13
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:25
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:46
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:25
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:46
 #: packages/components/src/plugin-installer/index.js:169
 #: packages/components/src/plugin-installer/index.js:214
 #: src/wizards/audience/components/prompt-popovers/primary.js:76
 msgid "Activate"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/components/prompt-popovers/primary.js:84
 msgid "ID:"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/segment-group/index.js:137
 #: src/wizards/audience/views/campaigns/utils.js:53
 msgid "Top Overlay"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:54
 msgid "Top Left Overlay"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:55
 msgid "Top Right Overlay"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/segment-group/index.js:120
 #: src/wizards/audience/views/campaigns/utils.js:56
 msgid "Center Overlay"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:57
 msgid "Center Left Overlay"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:58
 msgid "Center Right Overlay"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/segment-group/index.js:154
 #: src/wizards/audience/views/campaigns/utils.js:59
 msgid "Bottom Overlay"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:60
 msgid "Bottom Left Overlay"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:61
 msgid "Bottom Right Overlay"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:63
 msgid "In archive pages"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: dist/componentsDemo.js:1
 #: src/wizards/audience/components/segment-group/index.js:188
 #: src/wizards/audience/views/campaigns/utils.js:64
@@ -7868,206 +7885,206 @@ msgstr ""
 msgid "Above Header"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/segment-group/index.js:239
 #: src/wizards/audience/views/campaigns/utils.js:65
 msgid "Manual Only"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/segment-group/index.js:205
 #: src/wizards/audience/views/campaigns/utils.js:71
 msgid "Custom Placement"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:96
 msgid "Once a month"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:97
 msgid "Once a week"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:98
 msgid "Once a day"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:99
 msgid "Every pageview"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:100
 msgid "Custom frequency (edit prompt to manage)"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:124
 msgid "Campaign: "
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:124
 msgid "Campaigns: "
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:128
 msgid "Categories: "
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:131
 msgid "Tags: "
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:134
 msgid "Pending review"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:137
 msgid "Scheduled"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:139
 msgid "Frequency: "
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:148
 msgid "Segment disabled"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:219
 msgid "Favorite Categories:"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:279
 msgid "Subscribed to:"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:279
 msgid "Not subscribed to:"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:310
 #: src/wizards/audience/views/campaigns/utils.js:283
 msgid "Deleted list"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:300
 msgid "Has active subscription(s):"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:301
 msgid "Does not have active subscription(s):"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:328
 #: src/wizards/audience/views/campaigns/utils.js:305
 msgid "Deleted subscription"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:321
 msgid "Has active membership(s):"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:322
 msgid "Does not have active membership(s):"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:22
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:22
 #: src/wizards/audience/views/campaigns/utils.js:326
 msgid "Deleted membership"
 msgstr ""
 
 #. Translators: %s is prompt type (above-header or overlay).
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:25
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:25
 #: src/wizards/audience/views/campaigns/utils.js:347
 #, js-format
 msgid "If multiple %s are rendered on the same pageview, only the most recent one will be displayed."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:25
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:25
 #: src/wizards/audience/views/campaigns/utils.js:348
 msgid "above-header prompts"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:25
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:25
 #: src/wizards/audience/views/campaigns/utils.js:348
 msgid "overlays"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:25
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:25
 #: src/wizards/audience/views/campaigns/utils.js:353
 msgid "If multiple prompts are rendered in the same custom placement, only the most recent one will be displayed."
 msgstr ""
 
 #. Translators: %s: 'Conflicts' or 'Conflict' depending on number of conflicts.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: src/wizards/audience/views/campaigns/utils.js:389
 #, js-format
 msgid "%s detected:"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: src/wizards/audience/views/campaigns/utils.js:390
 msgid "Conflicts"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: src/wizards/audience/views/campaigns/utils.js:390
 msgid "Conflict"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: src/wizards/audience/components/settings-modal/index.js:27
 msgid "Close Modal"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: src/wizards/audience/components/settings-modal/index.js:32
 msgid "Assign a prompt to one or more campaigns for easier management"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: src/wizards/audience/components/settings-modal/index.js:49
 msgid "When and how should the prompt be displayed"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: dist/content-gate-editor.js:25
 #: src/content-gate/editor/editor.js:100
 #: src/wizards/audience/components/settings-modal/index.js:65
 msgid "Position"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: src/wizards/audience/components/settings-modal/index.js:65
 msgid "Placement"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: dist/billboard.js:15
 #: dist/blocks.js:6
 #: dist/content-gate-editor.js:25
@@ -8079,79 +8096,79 @@ msgstr ""
 msgid "Size"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: src/wizards/audience/components/settings-modal/index.js:87
 msgid "Targeting"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: src/wizards/audience/components/settings-modal/index.js:90
 msgid "Under which conditions should the prompt be displayed"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: src/wizards/audience/components/settings-modal/index.js:92
 msgid "If multiple conditions are set, all will have to be satisfied in order to display the prompt"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: src/wizards/audience/components/settings-modal/index.js:108
 msgid "Segments"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: src/wizards/audience/components/settings-modal/index.js:112
 msgid "Post categories"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: src/wizards/audience/components/settings-modal/index.js:117
 msgid "Prompt will only appear on posts with the specified categories."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: src/wizards/audience/components/settings-modal/index.js:120
 msgid "Post tags"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:28
 #: src/wizards/audience/components/settings-modal/index.js:126
 msgid "Prompt will only appear on posts with the specified tags."
 msgstr ""
 
 #. translators: %s: whether to show or hide advanced settings fields.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:31
 #: src/wizards/audience/components/settings-modal/index.js:133
 #, js-format
 msgid "%s Advanced Settings"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:31
 #: src/wizards/audience/components/settings-modal/index.js:141
 msgid "Category Exclusions"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:31
 #: src/wizards/audience/components/settings-modal/index.js:152
 msgid "Prompt will not appear on posts with the specified categories."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:31
 #: src/wizards/audience/components/settings-modal/index.js:155
 msgid "Tag Exclusions"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:31
 #: src/wizards/audience/components/settings-modal/index.js:167
 msgid "Prompt will not appear on posts with the specified tags."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:31
 #: src/wizards/audience/components/prompt-action-card/index.js:49
 msgid " copy"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:31
 #: dist/commons.js:4
 #: dist/commons.js:13
 #: packages/components/src/autocomplete-with-latest-posts/index.js:138
@@ -8161,12 +8178,12 @@ msgstr ""
 msgid "(no title)"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:31
 #: src/wizards/audience/components/prompt-action-card/index.js:73
 msgid "Prompt settings"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:31
 #: dist/billboard.js:15
 #: dist/commons.js:13
 #: dist/newspack-wizards.e386313f64136198a71d.js:1
@@ -8177,344 +8194,344 @@ msgid "More options"
 msgstr ""
 
 #. Translators: %s: The title of the item.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:34
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:34
 #: src/wizards/audience/components/prompt-action-card/index.js:109
 #, js-format
 msgid "Duplicate “%s”"
 msgstr ""
 
 #. Translators: %s: The title of the item.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:37
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:37
 #: src/wizards/audience/components/prompt-action-card/index.js:123
 #, js-format
 msgid "Duplicate of “%s” created as a draft."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:37
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:37
 #: src/wizards/audience/components/prompt-action-card/index.js:128
 msgid "This prompt is currently not assigned to any campaign."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:37
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:37
 #: src/wizards/audience/components/prompt-action-card/index.js:149
 msgid "This prompt will not be assigned to any campaign."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:37
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:37
 #: src/wizards/audience/components/segment-group/index.js:46
 msgid "No unassigned prompts in this segment."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:37
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:37
 #: src/wizards/audience/components/segment-group/index.js:48
 msgid "No prompts in this segment for"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:37
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:37
 #: src/wizards/audience/components/segment-group/index.js:50
 msgid "No active prompts in this segment."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:37
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:37
 #: src/wizards/audience/components/segment-group/index.js:65
 msgid "Edit Segment"
 msgstr ""
 
 #. translators: %s: segment label
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:38
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:38
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/segment-group/index.js:72
 #: src/wizards/audience/components/segment-group/index.js:95
 #, js-format
 msgid "Segment: %s"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:38
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:38
 #: src/wizards/audience/components/segment-group/index.js:80
 msgid "All readers, regardless of segment"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:38
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:38
 #: src/wizards/audience/components/segment-group/index.js:90
 msgid "Preview Segment"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/segment-group/index.js:101
 #: src/wizards/audience/components/segment-group/index.js:105
 msgid "Add New Prompt"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/segment-group/index.js:121
 msgid "Fixed at the center of the screen"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/segment-group/index.js:138
 msgid "Fixed at the top of the screen"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/segment-group/index.js:155
 msgid "Fixed at the bottom of the screen"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/segment-group/index.js:172
 msgid "Embedded in content"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/segment-group/index.js:189
 msgid "Embedded at the very top of the page"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/segment-group/index.js:206
 msgid "Only appears when placed in content"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/segment-group/index.js:222
 msgid "In Archive Pages"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/segment-group/index.js:223
 msgid "Embedded once or many times in archive pages"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/components/segment-group/index.js:241
 msgid "Only appears where Single Prompt block is inserted"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/campaigns/index.js:39
 msgid "Rename Campaign"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/campaigns/index.js:41
 msgid "Duplicate Campaign"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/campaigns/index.js:43
 #: src/wizards/audience/views/campaigns/campaigns/index.js:261
 msgid "Add New Campaign"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: dist/other-scripts/corrections-modal.js:4
 #: src/other-scripts/corrections-modal/index.js:353
 #: src/wizards/audience/views/campaigns/campaigns/index.js:52
 msgid "Add"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/campaigns/index.js:90
 msgid "Everyone"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/campaigns/index.js:151
 msgid "Active Prompts"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/campaigns/index.js:155
 msgid "All Prompts"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/campaigns/index.js:159
 msgid "Trash"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/campaigns/index.js:165
 msgid "Unassigned Prompts"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/campaigns/index.js:187
 msgid "Archived Campaigns"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/campaigns/index.js:194
 msgid "(archived)"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: dist/newspack-wizards.e386313f64136198a71d.js:26
 #: src/wizards/audience/views/campaigns/campaigns/index.js:223
 msgid "Actions"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/campaigns/index.js:272
 #: src/wizards/audience/views/campaigns/campaigns/index.js:274
 msgid "Campaign Name"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/segments-list.js:18
 msgid "Add New Segment"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/segments-list.js:135
 msgid "Audience segments"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/segments-list.js:98
 msgid "There was an error sorting segments. Please try again."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/segments-list.js:143
 msgid "You have no saved audience segments."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/segments-list.js:146
 msgid "Create audience segments to target visitors by engagement, activity, and more."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:306
 msgid "Start typing to search for lists…"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:324
 msgid "Start typing to search for products…"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:342
 msgid "Start typing to search for membership plans…"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:346
 msgid "Deleted plan"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:50
 msgid "There are unsaved changes to this segment. Discard changes?"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:161
 msgid "Untitled Segment"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:169
 msgid "Segment Status"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:170
 msgid "If not enabled, the segment will be ignored for reader segmentation."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:174
 msgid "Segment enabled"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:181
 msgid "Reader Engagement"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:182
 msgid "Target readers based on their browsing behavior."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:195
 msgid "Target readers based on their user account registration status."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:209
 msgid "Target readers based on their newsletter subscription status."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:223
 msgid "Target readers based on their revenue activity."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:236
 msgid "Referrer Sources"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:237
 msgid "Target readers based on where they’re coming from."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:238
 msgid "Segments using these options will apply only to the first page visited after coming from an external source."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/segments/single-segment.js:256
 msgid "Target readers based on data from connected integrations."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/index.js:174
 msgid "Error duplicating prompt. Please try again later."
 msgstr ""
 
 #. translators: %s: prompt title
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 #: src/wizards/audience/views/campaigns/index.js:220
 #, js-format
 msgid "Prompt: %s"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:55
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:55
 msgid "Ready"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 msgid "Skipped"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:39
 msgid "Unavailable"
 msgstr ""
 
 #. translators: %s: Prerequisite status
 #. translators: %s: status of the prompt.
 #. Translators: %s: Plugin status
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:40
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:55
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:40
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:55
 #: dist/newspack-wizards.e386313f64136198a71d.js:14
 #, js-format
 msgid "Status: %s"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:40
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:40
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/newspack-wizards.e386313f64136198a71d.js:14
 #: src/wizards/audience/components/payment-methods/index.js:39
 #: src/wizards/audience/components/payment-methods/index.js:54
@@ -8528,9 +8545,9 @@ msgstr ""
 msgid "Learn more"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:40
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:55
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:40
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:55
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: dist/newspack-wizards.e386313f64136198a71d.js:31
 #: dist/other-scripts/corrections-modal.js:7
 #: src/other-scripts/corrections-modal/index.js:391
@@ -8539,15 +8556,15 @@ msgstr ""
 
 #. translators: %s: save or update settings.
 #. Translators: %s is the email service provider title
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:43
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:46
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:43
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:46
 #: src/wizards/audience/components/settings.js:44
 #, js-format
 msgid "%s settings"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:43
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:43
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: dist/billboard.js:13
 #: dist/bylines.js:1
 #: dist/componentsDemo.js:1
@@ -8560,290 +8577,290 @@ msgid "Update"
 msgstr ""
 
 #. translators: %1$s: specific instructions for satisfying the prerequisite. %2$s: opening <a> tag for the link to the Audience Configuration page. %3$s: closing </a> tag.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:46
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:46
 #, js-format
 msgid "%1$s%2$sReturn to the Audience Configuration page to complete the settings and activate%3$s."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:46
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:46
 msgid "Update "
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:46
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:46
 msgid "Save "
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:46
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:46
 msgid "Configure "
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:46
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:46
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/views/setup/campaign.js:83
 #: src/wizards/audience/views/setup/index.js:70
 msgid "Skip"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:46
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:46
 #: src/wizards/audience/components/mailchimp.js:46
 #: src/wizards/audience/components/settings.js:35
 msgid "Audience ID"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:46
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:46
 #: src/wizards/audience/components/active-campaign.js:46
 #: src/wizards/audience/components/settings.js:35
 msgid "Master List"
 msgstr ""
 
 #. Translators: %s is the email service provider title
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:46
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:46
 #: src/wizards/audience/components/settings.js:46
 #, js-format
 msgid "Settings for the %s integration."
 msgstr ""
 
 #. Translators: 1 is the term used to refer to lists for a given email service provider and 2 is the email service provider title
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:49
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:49
 #: src/wizards/audience/components/settings.js:54
 #, js-format
 msgid "No %1$s selected. You will not be able to send reader activity data to %2$s."
 msgstr ""
 
 #. Translators: %s is the email service provider title.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/components/settings.js:77
 #, js-format
 msgid "Choose which %s status readers should have by default if they are not subscribed to any newsletters"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/components/metadata-fields.js:16
 msgid "Metadata field settings"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/components/metadata-fields.js:17
 msgid "Select which data to sync for each contact."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/components/metadata-fields.js:21
 msgid "A string to prefix metadata fields attached to each contact synced to the ESP. Required to ensure that metadata field names are unique. Default: NP_"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: packages/components/src/sortable-newsletter-list-control/index.js:42
 msgid "Checked by default"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: packages/components/src/sortable-newsletter-list-control/index.js:106
 msgid "Add more lists:"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: packages/components/src/sortable-newsletter-list-control/index.js:108
 msgid "Select lists:"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/components/salesforce/index.js:74
 msgid "We couldn’t establish a connection to Salesforce. Please verify your Consumer Key and Secret and try connecting again."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/components/salesforce/index.js:143
 msgid "Salesforce Settings"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/components/salesforce/index.js:149
 msgid "Your site is connected to Salesforce."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/components/salesforce/index.js:152
 msgid "Establish a connection to sync WooCommerce order data to Salesforce. To connect with Salesforce, create or choose a Connected App for this site in your Salesforce dashboard. Make sure to paste the full URL for this page ("
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/components/salesforce/index.js:163
 msgid "copied to clipboard!"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/components/salesforce/index.js:163
 msgid "copy to clipboard"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/components/salesforce/index.js:166
 msgid ") into the “Callback URL” field in the Connected App’s settings. "
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/components/salesforce/index.js:169
 msgid "Learn how to create a Connected App"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:84
 msgid "Newspack's Audience Management system is a set of features that aim to increase reader loyalty, promote engagement, and drive revenue. "
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:95
 msgid "The following plugins are required."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:97
 msgid "Complete these settings to enable Audience Management."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:100
 msgid "Audience Management is enabled."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:105
 msgid "Fetching status…"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:130
 msgid "Present newsletter signup after checkout and registration"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:131
 msgid "Ask readers to sign up for newsletters after creating an account or completing a purchase."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:151
 msgid "Initial list size"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:152
 msgid "Number of newsletters initially visible during signup. Additional newsletters will be hidden behind a \"See all\" button."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:164
 msgid "Use My Account login screen for OAuth clients"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:165
 msgid "Allow OAuth clients to redirect to the My Account login screen instead of the default WordPress login screen. Might require additional configuration."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:177
 msgid "Email Service Provider (ESP) Advanced Settings"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:178
 msgid "Settings for Newspack Newsletters integration."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:181
 msgid "Newsletter subscription text on registration"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:182
 msgid "The text to display while subscribing to newsletters from the sign-in modal."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:186
 msgid "Configure options for syncing reader data to the connected ESP."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:189
 msgid "Sync contacts to ESP"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:242
 msgid "If enabled, the contact will be deleted from the ESP when a user account is deleted. If disabled, the contact will be unsubscribed from all lists, but not deleted."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:268
 msgid "Please select a Mailchimp Audience ID."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:273
 msgid "Please select an ActiveCampaign Master List."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
 #: src/wizards/audience/views/setup/setup.js:278
 msgid "Please select a Constant Contact Master List."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:52
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:82
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:82
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "You have unsaved changes that will be lost. Discard changes?"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:55
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:55
 msgid "Unsaved changes"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:55
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:55
 msgid "Select file"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:55
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:55
 msgid "Prompt saved."
 msgstr ""
 
 #. translators: %s: save or update settings.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #, js-format
 msgid "%s prompt settings"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 msgid "Preview prompt"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 msgid "We recommend"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/campaign.js:54
 msgid "Set Up Audience Management Campaign"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/campaign.js:55
 msgid "Preview and customize the prompts, or use our suggested defaults."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/campaign.js:61
 msgid "Retrieving prompts…"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: dist/billboard.js:15
 #: dist/newspack-wizards.e386313f64136198a71d.js:8
 #: dist/newspack-wizards.e386313f64136198a71d.js:37
@@ -8853,302 +8870,302 @@ msgstr ""
 msgid "Back"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/complete.js:19
 msgid "Your <strong>current segments and prompts</strong> will be deactivated and archived."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/complete.js:23
 msgid "<strong>Reader registration</strong> will be activated to enable better targeting for driving engagement and conversations."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/complete.js:29
 msgid "The <strong>Audience Management campaign</strong> will be activated with default segments and settings."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/complete.js:35
 msgid "Setting up new segments…"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/complete.js:36
 msgid "Activating reader registration…"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/complete.js:37
 msgid "Activating Audience Management Campaign…"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/complete.js:100
 msgid "Done!"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/complete.js:133
 #: src/wizards/audience/views/setup/complete.js:169
 msgid "Enable Audience Management"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/complete.js:136
 msgid "An easy way to let your readers register for your site, sign up for newsletters, or become donors and paid members. "
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/complete.js:158
 msgid "You're all set to enable Audience Management!"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/complete.js:159
 msgid "This is what will happen next:"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/countdown-banner.js:21
 msgid "Metered Countdown"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/countdown-banner.js:23
 msgid "Show a countdown banner before content is restricted by a metered content gate."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:94
 #: src/wizards/audience/views/setup/countdown-banner.js:34
 msgid "Message"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
 #: src/wizards/audience/views/setup/countdown-banner.js:35
 msgid "Text displayed in the countdown banner."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:101
 #: src/wizards/audience/views/setup/countdown-banner.js:41
 msgid "Subscribe button label"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:102
 #: src/wizards/audience/views/setup/countdown-banner.js:42
 msgid "Text displayed on the subscribe button in the banner."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:110
 #: src/wizards/audience/views/setup/countdown-banner.js:50
 msgid "Style"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:116
 #: src/wizards/audience/views/setup/countdown-banner.js:56
 msgid "Light"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:117
 #: src/wizards/audience/views/setup/countdown-banner.js:57
 msgid "Dark"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:120
 #: src/wizards/audience/views/setup/countdown-banner.js:60
 msgid "Subscribe button action"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:121
 #: src/wizards/audience/views/setup/countdown-banner.js:61
 msgid "Whether the subscribe button should start a product checkout or redirect to a landing page."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:131
 #: src/wizards/audience/views/setup/countdown-banner.js:71
 msgid "Landing page"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:135
 #: src/wizards/audience/views/setup/countdown-banner.js:75
 msgid "Subscribe button product"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:136
 #: src/wizards/audience/views/setup/countdown-banner.js:76
 msgid "Product linked to the subscribe button."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:137
 #: src/wizards/audience/views/setup/countdown-banner.js:77
 msgid "Select a product"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:148
 #: src/wizards/audience/views/setup/countdown-banner.js:88
 msgid "Subscribe button URL"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:149
 #: src/wizards/audience/views/setup/countdown-banner.js:89
 msgid "URL for the landing page to redirect to."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
 #: src/wizards/audience/views/setup/countdown-banner.js:108
 msgid "1/10 free articles this month"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/content-gifting.js:26
 msgid "Content Gifting"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/content-gifting.js:28
 msgid "Allow members to gift articles up to the configured limit."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: dist/commons.js:13
 #: packages/components/src/plugin-settings/index.js:201
 #: src/wizards/audience/views/setup/content-gifting.js:40
 msgid "General Settings"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:43
 msgid "Gifting limit"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:44
 msgid "Maximum number of articles that can be gifted per user for the configured interval."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:52
 msgid "Gifting limit interval"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:53
 msgid "Interval at which the gifting limit is reset."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:64
 msgid "Article link expiration time"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:65
 msgid "Time after which the article link expires."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:73
 msgid "Article link expiration time unit"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:74
 msgid "Unit of time for the article link expiration time."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/content-gifting.js:91
 msgid "Recipient Banner"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/setup/content-gifting.js:95
 msgid "Text displayed in the banner shown to recipients of gifted articles."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/views/setup/content-gating.js:61
 #: src/wizards/audience/views/setup/index.js:106
 msgid "Content Gating"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/content-gating.js:64
 msgid "WooCommerce Memberships integration to improve the reader experience with content gating. "
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/content-gating.js:50
 msgid "Configure the gate rendered on content with restricted access."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/content-gating.js:52
 msgid "The gate is currently published."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/content-gating.js:54
 msgid "The gate is currently a draft."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/billboard.js:1
 #: dist/commons.js:13
 #: dist/componentsDemo.js:1
@@ -9171,41 +9188,41 @@ msgstr ""
 msgid "Configure"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/content-gating.js:83
 msgid "Require membership in all plans"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/content-gating.js:84
 msgid "When enabled, readers must belong to all membership plans that apply to a restricted content item before they are granted access. Otherwise, they will be able to unlock access to that item with membership in any single plan that applies to it."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/content-gating.js:95
 msgid "Display memberships on the subscriptions tab"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/views/setup/content-gating.js:96
 msgid "Display memberships that don't have active subscriptions on the My Account Subscriptions tab, so readers can see information like expiration dates."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: dist/componentsDemo.js:1
 #: src/wizards/audience/components/payment-methods/stripe.js:69
 #: src/wizards/componentsDemo/index.js:977
 msgid "Stripe"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/components/payment-methods/stripe.js:72
 msgid "Enable the Stripe payment gateway for WooCommerce. "
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/commons.js:13
 #: dist/commons.js:15
 #: dist/newspack-wizards.e386313f64136198a71d.js:5
@@ -9226,16 +9243,16 @@ msgstr ""
 msgid "Loading…"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/payment-methods/payment-gateway.js:45
 #: src/wizards/audience/components/payment-methods/stripe.js:49
 #: src/wizards/audience/components/payment-methods/woopayments.js:45
 msgid "Connected - test mode"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: dist/newspack-wizards.e386313f64136198a71d.js:1
 #: dist/newspack-wizards.e386313f64136198a71d.js:8
 #: dist/newspack-wizards.e386313f64136198a71d.js:30
@@ -9245,13 +9262,13 @@ msgstr ""
 msgid "Connected"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
 #: src/wizards/audience/components/payment-methods/stripe.js:46
 msgid "Needs attention"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: dist/commons.js:18
 #: dist/newspack-wizards.e386313f64136198a71d.js:8
 #: dist/newspack-wizards.e386313f64136198a71d.js:30
@@ -9261,9 +9278,9 @@ msgstr ""
 msgid "Not connected"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:58
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/commons.js:18
 #: dist/componentsDemo.js:1
 #: dist/newspack-wizards.e386313f64136198a71d.js:8
@@ -9277,357 +9294,357 @@ msgid "Connect"
 msgstr ""
 
 #. Translators: %s is the payment gateway name.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/payment-methods/payment-gateway.js:67
 #: src/wizards/audience/components/payment-methods/woopayments.js:67
 #, js-format
 msgid "Enable %s. "
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/payment-methods/index.js:31
 msgid "Payment Gateways"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/payment-methods/index.js:34
 msgid "Configure Newspack-supported payment gateways for WooCommerce. Payment gateways allow you to accept various payment methods from your readers. "
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/payment-methods/index.js:50
 msgid "Missing or invalid SSL configuration detected. To collect payments, the site must be secured with SSL. "
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/nrh-settings/index.js:44
 msgid "News Revenue Hub Settings"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/nrh-settings/index.js:45
 msgid "Configure your site’s connection to News Revenue Hub."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/nrh-settings/index.js:50
 msgid "Organization ID"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/nrh-settings/index.js:56
 msgid "Custom domain (optional)"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/nrh-settings/index.js:63
 msgid "Salesforce Campaign ID (optional)"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/nrh-settings/index.js:72
 msgid "Donor Landing Page"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/nrh-settings/index.js:80
 msgid "Search for a New Donor Landing Page"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/nrh-settings/index.js:92
 msgid "page"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/nrh-settings/index.js:93
 msgid "pages"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "Billing Fields"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "Configure the billing fields shown in the modal checkout form. Fields marked with (*) are required if shown. Note that for shippable products, address fields will always be shown."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "Checkout Configuration"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "Require sign in or create account before checkout"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "Prompt users who are not logged in to sign in or register a new account before proceeding to checkout. When disabled, an account will automatically be created with the email address used at checkout."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "Post-checkout success message"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "The success message to display to readers after completing checkout."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "Post-checkout registration success message"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "The success message to display to new readers that have an account automatically created after completing checkout."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "Checkout privacy policy text"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "The privacy policy text to display at time of checkout for existing users. This will not show up unless a privacy page is set."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/cover-fees-settings/index.js:37
 #: src/wizards/audience/components/cover-fees-settings/index.js:45
 msgid "Collect transaction fees"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/cover-fees-settings/index.js:38
 msgid "Allow readers to optionally cover transaction fees imposed by payment processors when making donations or subscribing."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/cover-fees-settings/index.js:58
 msgid "Fee multiplier"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/cover-fees-settings/index.js:66
 msgid "Fee static portion"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/cover-fees-settings/index.js:72
 msgid "Custom message"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/cover-fees-settings/index.js:73
 msgid "A message to explain the transaction fee option (optional)."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/cover-fees-settings/index.js:80
 msgid "Cover fees by default"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/cover-fees-settings/index.js:83
 msgid "If enabled, the option to cover the transaction fee will be checked by default."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/cover-fees-settings/index.js:87
 msgid "Donations only"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/components/cover-fees-settings/index.js:90
 msgid "If enabled, the option to cover the transaction fee will only be available for donations."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "Manage the settings for subscription transparency and compliance."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "Enable subscription confirmation checkbox"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "Display a separate checkbox at checkout to confirm the user understands this is a recurring subscription and they can cancel anytime."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: dist/collections-admin.js:1
 #: src/collections/admin/collection-meta-ctas-field.js:206
 msgid "Label"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "Enable Terms & Conditions confirmation checkbox"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "Display the 'I have read and accept the Terms & Conditions' checkbox at checkout. Ensure the Terms & Conditions include subscription details to comply with the FTC guidelines."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "Text wrapped in {{ }} will be linked to the page set in the URL field."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: dist/collections-admin.js:1
 #: dist/newspack-wizards.e386313f64136198a71d.js:26
 #: src/collections/admin/collection-meta-ctas-field.js:225
 msgid "URL"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 msgid "Please provide a URL for the Terms & Conditions page."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/views/setup/index.js:110
 #: src/wizards/audience/views/setup/payment.js:25
 msgid "Checkout & Payment"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/views/setup/payment.js:26
 msgid "Reader revenue configuration for donations and subscriptions."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:61
 #: src/wizards/audience/views/setup/index.js:69
 msgid "Are you sure you want to skip this step? You can always come back later."
 msgstr ""
 
 #. translators: %s is the gate title.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:64
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:19
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:64
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:19
 #, js-format
 msgid "This will <strong>permanently delete</strong> “%s” and cannot be undone."
 msgstr ""
 
 #. translators: 1: the gate title, or "Content" if we can't determine the gate title. 2: the gate status.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:67
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:100
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:22
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:42
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:67
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:100
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:22
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:42
 #, js-format
 msgid "%1$s gate %2$s."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:67
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:79
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:82
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:100
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:22
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:42
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:67
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:79
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:82
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:100
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:22
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:42
 msgid "Undo"
 msgstr ""
 
 #. translators: %s is the gate title, or "Content" if we can't determine the deleted gate title.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:70
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:25
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:70
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:25
 #, js-format
 msgid "%s gate deleted."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:70
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:25
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:70
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:25
 msgid "Edit registered access layout"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:70
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:25
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:70
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:25
 msgid "Edit paid access layout"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:70
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:25
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:70
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:25
 msgid "Content rules"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:70
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:73
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:25
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:28
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:70
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:73
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:25
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:28
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "N/A"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:70
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:143
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:25
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:70
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:143
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:25
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:85
 msgid "Registered access"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:70
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:25
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:70
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:25
 msgid "Require verification:"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:70
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:73
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:25
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:28
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:70
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:73
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:25
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:28
 msgid "Metered:"
 msgstr ""
 
 #. translators: 1: metering count, 2: metering period
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:73
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:28
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:73
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:28
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 #, js-format
 msgid "%1$d free views per %2$s"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:73
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:146
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:28
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:73
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:146
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:28
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:88
 msgid "Paid access"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
 msgid "Gate priority updated."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
 msgid "Gate priority"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
 msgid "Gates are checked in this order. If content matches more than one gate, only the first matching gate will apply."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Settings updated."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Advanced settings"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
 msgid "Restrict content in feeds"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
 msgid "Truncate restricted content in RSS feeds."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:82
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:82
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/billboard.js:15
 #: dist/componentsDemo.js:1
 #: dist/newspack-wizards.e386313f64136198a71d.js:39
 #: src/wizards/advertising/views/placements/index.js:329
-#: src/wizards/audience/views/integrations/settings-section.js:78
+#: src/wizards/audience/views/integrations/settings-section.js:82
 #: src/wizards/componentsDemo/index.js:917
 #: src/wizards/componentsDemo/index.js:932
 #: src/wizards/componentsDemo/index.js:953
@@ -9636,27 +9653,27 @@ msgstr ""
 msgid "Disable"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:76
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:76
 msgid "Add new content gate"
 msgstr ""
 
 #. translators: %s is the status of the countdown banner.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:79
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:79
 #, js-format
 msgid "Metered countdown %s."
 msgstr ""
 
 #. translators: %s is the status of the content gifting.
 #. translators: %s is the status of content gifting.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:82
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:82
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #, js-format
 msgid "Content gifting %s."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:82
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:82
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/componentsDemo.js:1
 #: src/wizards/audience/views/content-gates/index.js:62
 #: src/wizards/componentsDemo/index.js:899
@@ -9665,20 +9682,20 @@ msgstr ""
 msgid "Metered countdown"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:82
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:82
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/content-gates/index.js:63
 msgid "Show a countdown banner letting readers know how many free views they have left before content is restricted."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:82
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:82
 #: dist/componentsDemo.js:1
 #: src/wizards/componentsDemo/index.js:904
 msgid "Requires metering"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:82
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:82
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/componentsDemo.js:1
 #: src/wizards/audience/views/content-gates/index.js:74
 #: src/wizards/componentsDemo/index.js:939
@@ -9686,28 +9703,28 @@ msgstr ""
 msgid "Content gifting"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:82
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:82
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/content-gates/index.js:75
 msgid "Let members gift articles to non-subscribers. Recipients can read the full content without needing to subscribe."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:82
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:82
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Discard changes"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:82
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:82
 msgid "Metered countdown settings updated."
 msgstr ""
 
 #. translators: %s: placement name.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:82
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:82
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/billboard.js:9
 #: dist/billboard.js:13
 #: dist/commons.js:13
@@ -9723,54 +9740,54 @@ msgid "Enable"
 msgstr ""
 
 #. translators: %s is the status of the countdown banner.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
 #, js-format
 msgid "Countdown banner %s."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
 msgid "Countdown banner"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:85
 msgid "Content gifting settings updated."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "General settings"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Recipient banner"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Get started with institutions"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Create institutions to manage access to your content by email domain, IP range, or reader data."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/content-gates/index.js:94
 msgid "Add new institution"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Back to Access control"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Failed to load institutions. Please refresh the page."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/newspack-wizards.e386313f64136198a71d.js:1
 msgid "Logo"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/other-scripts/corrections-modal.js:1
 #: dist/other-scripts/corrections-modal.js:4
 #: src/other-scripts/corrections-modal/index.js:292
@@ -9778,474 +9795,518 @@ msgstr ""
 msgid "Description"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Email domain"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "IP range"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Copy access page URL"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "URL copied to clipboard."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Failed to copy URL. Please copy it manually."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "This will permanently delete this institution. This action cannot be undone."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Failed to delete institution. Please try again."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Failed to save institution. Please try again."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Add institution"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/content-gates/index.js:102
 msgid "Edit institution"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Name and description"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Identify this institution. The name and image are shown on the access verification page."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Access rules"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Define how readers from this institution are identified. Rules use OR logic — matching any rule grants access."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Match readers by verified email domain"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Domains (comma-separated)"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Match visitors by IP address or CIDR block"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "IPs / CIDR blocks (comma-separated)"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Match readers by custom metadata"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 msgid "Key=value pairs (semicolon-delimited)"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: dist/componentsDemo.js:1
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 #: src/wizards/componentsDemo/index.js:364
 #: src/wizards/componentsDemo/index.js:369
 msgid "Active"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Inactive"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-#: dist/commons.js:13
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
-#: dist/newspack-wizards.e386313f64136198a71d.js:5
-msgid "Invalid Mailchimp API Key."
-msgstr ""
-
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-#: dist/commons.js:13
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
-#: dist/newspack-wizards.e386313f64136198a71d.js:5
-msgid "Missing Google refresh token. Please re-authenticate site."
-msgstr ""
-
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-#: dist/commons.js:13
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
-#: dist/newspack-wizards.e386313f64136198a71d.js:5
-msgid "Popup blocked by browser. Disable any popup blocking settings and try again."
-msgstr ""
-
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-#: dist/commons.js:13
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
-#: dist/newspack-wizards.e386313f64136198a71d.js:5
-msgid "URL is invalid. Please try again or contact support if the issue persists."
-msgstr ""
-
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-msgid "Subscription Upgrade Link"
-msgstr ""
-
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-msgid "Share the following URL to trigger the subscription upgrade:"
-msgstr ""
-
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-msgid "Primary Subscription Product"
-msgstr ""
-
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-msgid "Select a grouped or variable subscription product to allow readers to change their active subscriptions amongst all of its linked products and variations."
-msgstr ""
-
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-msgid "Select a product…"
-msgstr ""
-
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:88
-msgid "Reset primary product"
-msgstr ""
-
-#. translators: %s: product title
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#, js-format
-msgid "Edit %s"
-msgstr ""
-
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-msgid "Manage Subscriptions settings in Woo Memberships"
-msgstr ""
-
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-msgid "You can manage the details of your subscription offerings in the Woo Memberships plugin."
-msgstr ""
-
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-msgid "Manage Subscriptions"
-msgstr ""
-
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/integrations/settings-section.js:42
 msgid "Manage how Newspack syncs reader data with your tools. Connect an integration to start syncing reader activity across your stack."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
 #: src/wizards/audience/views/integrations/settings-section.js:51
 msgid "No integrations with configurable settings are registered."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: src/wizards/audience/views/integrations/configure-view.js:96
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: src/wizards/audience/views/integrations/logs-view.js:68
+#: src/wizards/audience/views/integrations/settings-section.js:78
+msgid "Logs"
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: src/wizards/audience/views/integrations/configure-view.js:97
 msgid "Integration not found"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: src/wizards/audience/views/integrations/configure-view.js:97
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: src/wizards/audience/views/integrations/configure-view.js:98
 msgid "The requested integration could not be found."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: src/wizards/audience/views/integrations/configure-view.js:140
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: src/wizards/audience/views/integrations/configure-view.js:145
 msgid "Inbound"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: src/wizards/audience/views/integrations/configure-view.js:165
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: src/wizards/audience/views/integrations/configure-view.js:170
 msgid "Outbound"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: src/wizards/audience/views/integrations/logs-view.js:23
+#: src/wizards/audience/views/integrations/logs-view.js:148
+msgid "Success"
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: src/wizards/audience/views/integrations/logs-view.js:24
+#: src/wizards/audience/views/integrations/logs-view.js:149
+msgid "Failed"
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: src/wizards/audience/views/integrations/logs-view.js:26
+#: src/wizards/audience/views/integrations/logs-view.js:151
+msgid "Canceled"
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: src/wizards/audience/views/integrations/logs-view.js:72
+msgid "Back to Integrations"
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: src/wizards/audience/views/integrations/logs-view.js:110
+msgid "Failed to load activity logs. Please try again."
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: src/wizards/audience/views/integrations/logs-view.js:129
+msgid "Timestamp"
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: src/wizards/audience/views/integrations/logs-view.js:135
+msgid "Event"
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: dist/commons.js:13
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
+#: dist/newspack-wizards.e386313f64136198a71d.js:5
+msgid "Invalid Mailchimp API Key."
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: dist/commons.js:13
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
+#: dist/newspack-wizards.e386313f64136198a71d.js:5
+msgid "Missing Google refresh token. Please re-authenticate site."
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: dist/commons.js:13
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
+#: dist/newspack-wizards.e386313f64136198a71d.js:5
+msgid "Popup blocked by browser. Disable any popup blocking settings and try again."
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+#: dist/commons.js:13
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
+#: dist/newspack-wizards.e386313f64136198a71d.js:5
+msgid "URL is invalid. Please try again or contact support if the issue persists."
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+msgid "Subscription Upgrade Link"
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+msgid "Share the following URL to trigger the subscription upgrade:"
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+msgid "Primary Subscription Product"
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+msgid "Select a grouped or variable subscription product to allow readers to change their active subscriptions amongst all of its linked products and variations."
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+msgid "Select a product…"
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:88
+msgid "Reset primary product"
+msgstr ""
+
+#. translators: %s: product title
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+#, js-format
+msgid "Edit %s"
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+msgid "Manage Subscriptions settings in Woo Memberships"
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+msgid "You can manage the details of your subscription offerings in the Woo Memberships plugin."
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+msgid "Manage Subscriptions"
+msgstr ""
+
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
 #: dist/content-gate-editor-metering.js:1
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 #: src/content-gate/editor/metering-settings.js:19
 msgid "Metering"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Allow limited free views before access conditions apply."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Metering is enabled but the number of views is set to 0. Content will be gated for all readers."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Free views"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Free views before the gate appears."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Reset period"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "How often free views reset."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Allow limited free views before requiring login."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
 #: dist/content-gate-block-visibility.js:1
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Require verification"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
 #: dist/content-gate-block-visibility.js:1
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Readers must verify their account to access."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Failed to load options. The list may be outdated."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:89
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:89
 #: dist/content-gate-block-visibility.js:1
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Separate with commas."
 msgstr ""
 
 #. translators: %s is the gate title.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:92
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:34
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:92
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:34
 #, js-format
 msgid "This will <strong>permanently delete</strong> \"%s\" and cannot be undone."
 msgstr ""
 
 #. translators: %s is the gate title.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:94
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:36
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:94
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:36
 #, js-format
 msgid "\"%s\" gate created."
 msgstr ""
 
 #. translators: %s is the gate title.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:97
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:39
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:97
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:39
 #, js-format
 msgid "%s gate updated."
 msgstr ""
 
 #. translators: %s is the gate title.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:102
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:44
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:102
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:44
 #, js-format
 msgid "“%s” gate deleted."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:102
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:44
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:102
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:44
 msgid "Add new"
 msgstr ""
 
 #. translators: %d is the content gate ID.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:104
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:46
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:104
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:46
 #, js-format
 msgid "Content gate %d not found. Create a new gate?"
 msgstr ""
 
 #. translators: %s is the type of content to restrict.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:107
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:49
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:107
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:49
 #, js-format
 msgid "Add new %s"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:107
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:110
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:113
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:116
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:119
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:49
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:52
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:55
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:58
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:107
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:110
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:113
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:116
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:119
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:49
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:52
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:55
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:58
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:61
 msgid "premium newsletter"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:107
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:110
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:113
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:116
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:119
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:49
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:52
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:55
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:58
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:107
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:110
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:113
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:116
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:119
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:49
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:52
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:55
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:58
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:61
 msgid "gate"
 msgstr ""
 
 #. translators: %s is the type of content to restrict.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:110
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:52
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:110
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:52
 #, js-format
 msgid "Untitled %s"
 msgstr ""
 
 #. translators: %s is the type of content to restrict.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:113
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:55
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:113
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:55
 #, js-format
 msgid "What should we call this %s?"
 msgstr ""
 
 #. translators: %s is the type of content to restrict.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:116
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:58
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:116
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:58
 #, js-format
 msgid "Choose a name to help you find this %s later. It won’t be shown to readers."
 msgstr ""
 
 #. translators: %s is the type of content to restrict.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:119
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:61
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:119
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:61
 #, js-format
 msgid "%s name"
 msgstr ""
 
 #. translators: %s is the type of content to restrict.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:122
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:64
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:122
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:64
 #, js-format
 msgid "e.g. %s"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:122
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:64
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:122
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:64
 msgid "Premium Lists"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:122
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:64
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:122
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:64
 msgid "Premium Articles"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:122
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:64
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:122
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:64
 msgid "What would you like to restrict?"
 msgstr ""
 
 #. translators: 1: the type of content to restrict, 2: content or "lists".
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:125
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:67
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:125
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:67
 #, js-format
 msgid "Choose whether to restrict all %1$s or select specific %2$s."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:125
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:134
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:137
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:140
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:143
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:125
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:134
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:137
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:140
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:143
 #: dist/blocks.js:6
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:67
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:76
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:79
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:82
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:85
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:67
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:76
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:79
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:82
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:85
 #: src/blocks/collections/index.js:32
 msgid "content"
 msgstr ""
 
 #. translators: %s is the type of content to restrict.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:131
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:73
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:131
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:73
 #, js-format
 msgid "All %s on your site will require access."
 msgstr ""
 
 #. translators: %s is the type of content to restrict.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:137
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:79
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:137
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:79
 #, js-format
 msgid "Select which %s to restrict using custom rules."
 msgstr ""
 
 #. translators: %s is the type of content to restrict.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:140
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:82
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:140
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:82
 #, js-format
 msgid "What’s required to access this %s?"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:140
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:143
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:82
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:140
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:143
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:82
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:85
 msgid "list"
 msgstr ""
 
 #. translators: 1: the type of content to restrict, 2: the metering description.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:143
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:143
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:85
 #, js-format
 msgid "Choose how readers can unlock this %1$s. Enable registered access, paid access, or both. %2$s"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:143
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:85
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:143
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:85
 msgid "Each option can include metering to give readers limited free access before the restriction applies."
 msgstr ""
 
 #. translators: %s is the type of content to restrict.
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:146
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:146
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:88
 #, js-format
 msgid "Readers must log in to view %s."
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:146
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:146
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:88
 msgid "these lists"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:146
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:146
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:88
 msgid "this content"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:146
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:146
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:88
 msgid "Edit layout"
 msgstr ""
 
-#: dist/audience-wizards.3e7087afd7902eafbf25.js:146
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:88
+#: dist/audience-wizards.28f3eed60a32d756fda6.js:146
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:88
 msgid "Readers must meet at least one condition to gain access."
 msgstr ""
 
@@ -10684,6 +10745,8 @@ msgid "Custom"
 msgstr ""
 
 #: dist/billboard.js:15
+#: dist/blocks.js:6
+#: src/blocks/overlay-menu/panel/edit.js:130
 #: src/wizards/advertising/components/ad-unit-size-control/index.js:92
 #: src/wizards/advertising/views/ad-unit/index.js:118
 msgid "Width"
@@ -11134,6 +11197,7 @@ msgstr ""
 #: src/blocks/author-profile-social/utils.js:14
 #: src/blocks/collections/components/InspectorPanel.jsx:191
 #: src/blocks/contribution-meter/components/InspectorPanel.jsx:169
+#: src/blocks/overlay-menu/panel/edit.js:39
 #: src/content-gate/editor/editor.js:34
 #: src/wizards/componentsDemo/index.js:575
 #: src/wizards/componentsDemo/index.js:651
@@ -11152,6 +11216,7 @@ msgstr ""
 #: src/blocks/author-profile-social/utils.js:16
 #: src/blocks/collections/components/InspectorPanel.jsx:201
 #: src/blocks/contribution-meter/components/InspectorPanel.jsx:171
+#: src/blocks/overlay-menu/panel/edit.js:41
 #: src/content-gate/editor/editor.js:36
 msgid "Large"
 msgstr ""
@@ -11251,7 +11316,7 @@ msgstr ""
 
 #: dist/blocks.js:6
 #: src/blocks/collections/components/InspectorPanel.jsx:170
-#: src/blocks/overlay-menu/panel/edit.js:107
+#: src/blocks/overlay-menu/panel/edit.js:126
 msgid "Left"
 msgstr ""
 
@@ -11263,7 +11328,7 @@ msgstr ""
 
 #: dist/blocks.js:6
 #: src/blocks/collections/components/InspectorPanel.jsx:175
-#: src/blocks/overlay-menu/panel/edit.js:108
+#: src/blocks/overlay-menu/panel/edit.js:127
 msgid "Right"
 msgstr ""
 
@@ -11279,6 +11344,7 @@ msgstr ""
 #: dist/setup.js:7
 #: src/blocks/collections/components/InspectorPanel.jsx:189
 #: src/blocks/contribution-meter/components/InspectorPanel.jsx:169
+#: src/blocks/overlay-menu/panel/edit.js:39
 msgid "S"
 msgstr ""
 
@@ -11288,6 +11354,7 @@ msgstr ""
 #: dist/setup.js:7
 #: src/blocks/collections/components/InspectorPanel.jsx:194
 #: src/blocks/contribution-meter/components/InspectorPanel.jsx:170
+#: src/blocks/overlay-menu/panel/edit.js:40
 msgid "M"
 msgstr ""
 
@@ -11296,6 +11363,7 @@ msgstr ""
 #: dist/contribution-meter-block.js:1
 #: src/blocks/collections/components/InspectorPanel.jsx:196
 #: src/blocks/contribution-meter/components/InspectorPanel.jsx:170
+#: src/blocks/overlay-menu/panel/edit.js:40
 #: src/content-gate/editor/editor.js:35
 msgid "Medium"
 msgstr ""
@@ -11306,6 +11374,7 @@ msgstr ""
 #: dist/setup.js:7
 #: src/blocks/collections/components/InspectorPanel.jsx:199
 #: src/blocks/contribution-meter/components/InspectorPanel.jsx:171
+#: src/blocks/overlay-menu/panel/edit.js:41
 msgid "L"
 msgstr ""
 
@@ -11537,33 +11606,74 @@ msgid "Button text"
 msgstr ""
 
 #: dist/blocks.js:6
+#: dist/contribution-meter-block.js:1
+#: dist/newspack-wizards.e386313f64136198a71d.js:30
+#: dist/setup.js:7
+#: src/blocks/contribution-meter/components/InspectorPanel.jsx:168
+#: src/blocks/overlay-menu/panel/edit.js:38
+msgid "XS"
+msgstr ""
+
+#: dist/blocks.js:6
+#: src/blocks/overlay-menu/panel/edit.js:38
+msgid "Extra small"
+msgstr ""
+
+#: dist/blocks.js:6
+#: dist/newspack-wizards.e386313f64136198a71d.js:30
+#: dist/setup.js:7
+#: src/blocks/overlay-menu/panel/edit.js:42
+msgid "XL"
+msgstr ""
+
+#: dist/blocks.js:6
+#: src/blocks/overlay-menu/panel/edit.js:42
+msgid "Extra large"
+msgstr ""
+
+#: dist/blocks.js:6
 #: src/blocks/overlay-menu/panel/index.js:15
 msgid "Menu Panel"
 msgstr ""
 
 #: dist/blocks.js:6
-#: src/blocks/overlay-menu/panel/edit.js:101
+#: src/blocks/overlay-menu/panel/edit.js:112
+msgid "Full screen"
+msgstr ""
+
+#: dist/blocks.js:6
+#: src/blocks/overlay-menu/panel/edit.js:113
+msgid "When enabled, the panel expands to fill the entire viewport."
+msgstr ""
+
+#: dist/blocks.js:6
+#: src/blocks/overlay-menu/panel/edit.js:120
 msgid "Slide direction"
 msgstr ""
 
 #: dist/blocks.js:6
-#: src/blocks/overlay-menu/panel/edit.js:102
+#: src/blocks/overlay-menu/panel/edit.js:121
 msgid "Choose which side of the screen the panel slides in from."
 msgstr ""
 
 #: dist/blocks.js:6
-#: src/blocks/overlay-menu/panel/edit.js:117
+#: src/blocks/overlay-menu/panel/edit.js:131
+msgid "Set how wide the panel appears when opened. Use smaller sizes for simple navigation and larger sizes for rich content layouts."
+msgstr ""
+
+#: dist/blocks.js:6
+#: src/blocks/overlay-menu/panel/edit.js:152
 msgid "Text"
 msgstr ""
 
 #: dist/blocks.js:6
-#: src/blocks/overlay-menu/panel/edit.js:122
+#: src/blocks/overlay-menu/panel/edit.js:157
 msgid "Background"
 msgstr ""
 
 #: dist/blocks.js:6
 #: dist/content-gate-editor.js:25
-#: src/blocks/overlay-menu/panel/edit.js:127
+#: src/blocks/overlay-menu/panel/edit.js:162
 #: src/content-gate/editor/editor.js:24
 msgid "Overlay"
 msgstr ""
@@ -13461,13 +13571,6 @@ msgstr ""
 msgid "Adjust the visual weight of the progress bar."
 msgstr ""
 
-#: dist/contribution-meter-block.js:1
-#: dist/newspack-wizards.e386313f64136198a71d.js:30
-#: dist/setup.js:7
-#: src/blocks/contribution-meter/components/InspectorPanel.jsx:168
-msgid "XS"
-msgstr ""
-
 #: dist/contribution-meter-block.js:5
 #: src/blocks/contribution-meter/index.js:29
 msgid "donations"
@@ -13544,29 +13647,29 @@ msgstr ""
 msgid "Define a custom tag name to be used in the Tagged Text export."
 msgstr ""
 
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 #: src/wizards/newsletters/views/premium-newsletters/consts.js:4
 msgid "Newsletters / Premium newsletters"
 msgstr ""
 
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Auto signup"
 msgstr ""
 
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Automatically sign up users when they meet access requirements for premium newsletters."
 msgstr ""
 
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Add new premium newsletter"
 msgstr ""
 
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 #: dist/wizards.js:115
 msgid "Premium newsletters"
 msgstr ""
 
-#: dist/newsletters-wizards.b9761a7dcd0cc571b589.js:31
+#: dist/newsletters-wizards.e4f94b5f30b2b1b16ab3.js:31
 msgid "Set up premium newsletters to control access to your lists."
 msgstr ""
 
@@ -14901,11 +15004,6 @@ msgstr ""
 #: dist/newspack-wizards.e386313f64136198a71d.js:30
 #: dist/setup.js:7
 msgid "Monospace"
-msgstr ""
-
-#: dist/newspack-wizards.e386313f64136198a71d.js:30
-#: dist/setup.js:7
-msgid "XL"
 msgstr ""
 
 #: dist/newspack-wizards.e386313f64136198a71d.js:30

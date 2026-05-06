@@ -15,7 +15,17 @@
 	"attributes": {
 		"slideDirection": {
 			"type": "string",
+			"enum": [ "left", "right" ],
 			"default": "left"
+		},
+		"isFullScreen": {
+			"type": "boolean",
+			"default": false
+		},
+		"panelWidth": {
+			"type": "string",
+			"enum": [ "x-small", "small", "medium", "large", "x-large" ],
+			"default": "small"
 		},
 		"overlayColor": {
 			"type": "string",
@@ -31,7 +41,8 @@
 		}
 	},
 	"supports": {
-		"html": false
+		"html": false,
+		"lock": false
 	},
 	"editorStyle": "file:../../../../dist/blocks.css",
 	"style": "file:../../../../dist/blocks.css"

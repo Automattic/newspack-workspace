@@ -313,4 +313,48 @@ class Test_Promoted_Fields extends \WP_UnitTestCase {
 		$this->assertSame( $user_id, $captured['user_id'] );
 		$this->assertSame( 'test_value', $captured['args'] );
 	}
+
+	/**
+	 * AC stores `checkbox` and `multiselect` field values as `||val1||val2||`. The list
+	 * matcher must recognize that delimiter so an audience rule on one option matches
+	 * a contact who has multiple selections.
+	 */
+	public function test_list_in_recognizes_active_campaign_pipe_delimited_values() {
+		$user_id = $this->factory->user->create();
+		if ( ! class_exists( '\Newspack\Reader_Data' ) ) {
+			$this->markTestSkipped( 'Reader_Data not available.' );
+		}
+		\Newspack\Reader_Data::update_item( $user_id, 'interests', wp_json_encode( '||Politics||Sports||' ) );
+
+		$method = new \ReflectionMethod( Promoted_Fields::class, 'evaluate_field' );
+		$method->setAccessible( true );
+
+		$field = ( new Incoming_Field( 'interests' ) )->set_matching_function( 'list__in' );
+		$this->assertTrue( $method->invoke( null, $field, $user_id, [ 'Politics' ] ), 'matches first selection' );
+		$this->assertTrue( $method->invoke( null, $field, $user_id, [ 'Sports' ] ), 'matches second selection' );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'Cooking' ] ), 'no match for unselected option' );
+
+		$field->set_matching_function( 'list__not_in' );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'Politics' ] ) );
+		$this->assertTrue( $method->invoke( null, $field, $user_id, [ 'Cooking' ] ) );
+	}
+
+	/**
+	 * Single-selection AC fields come back wrapped (`||Politics||`) too. The list matcher
+	 * must also handle that case correctly.
+	 */
+	public function test_list_in_handles_single_selection_pipe_wrapped_value() {
+		$user_id = $this->factory->user->create();
+		if ( ! class_exists( '\Newspack\Reader_Data' ) ) {
+			$this->markTestSkipped( 'Reader_Data not available.' );
+		}
+		\Newspack\Reader_Data::update_item( $user_id, 'interests', wp_json_encode( '||Politics||' ) );
+
+		$method = new \ReflectionMethod( Promoted_Fields::class, 'evaluate_field' );
+		$method->setAccessible( true );
+
+		$field = ( new Incoming_Field( 'interests' ) )->set_matching_function( 'list__in' );
+		$this->assertTrue( $method->invoke( null, $field, $user_id, [ 'Politics' ] ) );
+		$this->assertFalse( $method->invoke( null, $field, $user_id, [ 'Sports' ] ) );
+	}
 }

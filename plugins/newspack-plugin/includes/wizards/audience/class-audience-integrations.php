@@ -134,6 +134,51 @@ class Audience_Integrations extends Wizard {
 				'permission_callback' => [ $this, 'api_permissions_check' ],
 			]
 		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/settings/(?P<integration_id>[a-zA-Z0-9_-]+)/logs',
+			[
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_integration_logs' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'per_page' => [
+						'type'              => 'integer',
+						'default'           => 25,
+						'minimum'           => 1,
+						'maximum'           => 100,
+						'sanitize_callback' => 'absint',
+					],
+					'page'     => [
+						'type'              => 'integer',
+						'default'           => 1,
+						'minimum'           => 1,
+						'sanitize_callback' => 'absint',
+					],
+					'orderby'  => [
+						'type'    => 'string',
+						'default' => 'scheduled_date_gmt',
+						'enum'    => [ 'scheduled_date_gmt', 'action_id', 'hook', 'status' ],
+					],
+					'order'    => [
+						'type'    => 'string',
+						'default' => 'DESC',
+						'enum'    => [ 'ASC', 'DESC' ],
+					],
+					'search'   => [
+						'type'              => 'string',
+						'default'           => '',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'status'   => [
+						'type'    => 'string',
+						'default' => '',
+						'enum'    => [ '', 'pending', 'complete', 'failed', 'canceled' ],
+					],
+				],
+			]
+		);
 	}
 
 	/**
@@ -201,5 +246,80 @@ class Audience_Integrations extends Wizard {
 		}
 
 		return rest_ensure_response( Integrations::get_all_integration_settings() );
+	}
+
+	/**
+	 * Get activity logs for a specific integration.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function api_get_integration_logs( WP_REST_Request $request ) {
+		$integration_id = $request->get_param( 'integration_id' );
+		$integration    = Integrations::get_integration( $integration_id );
+
+		if ( ! $integration ) {
+			return new WP_Error(
+				'newspack_integration_not_found',
+				esc_html__( 'Integration not found.', 'newspack-plugin' ),
+				[ 'status' => 404 ]
+			);
+		}
+
+		$per_page = max( 1, (int) $request->get_param( 'per_page' ) );
+		$page     = max( 1, (int) $request->get_param( 'page' ) );
+
+		$query_args = [
+			'integration_id' => $integration_id,
+			'per_page'       => $per_page,
+			'offset'         => ( $page - 1 ) * $per_page,
+			'orderby'        => $request->get_param( 'orderby' ),
+			'order'          => $request->get_param( 'order' ),
+		];
+
+		$search = $request->get_param( 'search' );
+		if ( ! empty( $search ) ) {
+			$query_args['search'] = $search;
+		}
+
+		$status = $request->get_param( 'status' );
+		if ( ! empty( $status ) ) {
+			$query_args['status'] = $status;
+		}
+
+		$actions = Integrations::get_scheduled_actions( $query_args );
+
+		$count_args = [
+			'integration_id' => $integration_id,
+		];
+		if ( ! empty( $search ) ) {
+			$count_args['search'] = $search;
+		}
+		if ( ! empty( $status ) ) {
+			$count_args['status'] = $status;
+		}
+		$total = Integrations::count_scheduled_actions( $count_args );
+		$hook_labels = Action_Scheduler::get_hook_labels();
+
+		$items = array_map(
+			function ( $action ) use ( $hook_labels ) {
+				return [
+					'id'        => $action->action_id,
+					'timestamp' => $action->scheduled_date_gmt,
+					'event'     => $hook_labels[ $action->hook ] ?? $action->hook,
+					'status'    => $action->status,
+				];
+			},
+			$actions
+		);
+
+		return rest_ensure_response(
+			[
+				'items'    => array_values( $items ),
+				'total'    => $total,
+				'page'     => $page,
+				'per_page' => $per_page,
+			]
+		);
 	}
 }

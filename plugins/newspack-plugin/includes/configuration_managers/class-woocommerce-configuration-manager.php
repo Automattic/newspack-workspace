@@ -251,20 +251,40 @@ class WooCommerce_Configuration_Manager extends Configuration_Manager {
 		$test_mode    = $gateway && 'yes' === $gateway->get_option( 'test_mode', false ) ? true : false;
 
 		// PayPal gateway doesn't provide helper functions, so we need to use its internal API.
+		// Service IDs vary across plugin versions: `onboarding.environment` (≤2.9.6) was
+		// renamed to `settings.environment` in 3.0.0, and `onboarding.state` was removed in
+		// 4.0.0. Probe with has() before get() and wrap the whole block to keep future
+		// container changes from taking the wizard down.
 		if ( 'ppcp-gateway' === $gateway_slug && method_exists( 'WooCommerce\PayPalCommerce\PPCP', 'container' ) ) {
 			$paypal = \WooCommerce\PayPalCommerce\PPCP::container();
 			if ( $paypal ) {
 				try {
-					$env = $paypal->get( 'onboarding.environment' ); // woocommerce-paypal-payments@2.9.6.
+					$env = null;
+					if ( $paypal->has( 'settings.environment' ) ) {
+						$env = $paypal->get( 'settings.environment' );
+					} elseif ( $paypal->has( 'onboarding.environment' ) ) {
+						$env = $paypal->get( 'onboarding.environment' );
+					}
+					if ( $env && $env->current_environment_is( $env::SANDBOX ) ) {
+						$test_mode = true;
+					}
+					if ( $paypal->has( 'onboarding.state' ) ) {
+						$state = $paypal->get( 'onboarding.state' );
+						if ( $state && $state::STATE_ONBOARDED <= $state->current_state() ) {
+							$is_connected = true;
+						}
+					}
 				} catch ( \Throwable $th ) {
-					$env = $paypal->get( 'settings.environment' ); // woocommerce-paypal-payments@3.0.0.
-				}
-				if ( $env && $env->current_environment_is( $env::SANDBOX ) ) {
-					$test_mode = true;
-				}
-				$state = $paypal->get( 'onboarding.state' );
-				if ( $state && $state::STATE_ONBOARDED <= $state->current_state() ) {
-					$is_connected = true;
+					// Container shape changed unexpectedly; degrade to gateway-derived values
+					// so the wizard keeps rendering, and surface the cause for debugging.
+					Logger::log(
+						sprintf(
+							'PayPal container access failed in gateway_data(): %s on line %d',
+							$th->getMessage(),
+							$th->getLine()
+						),
+						'error'
+					);
 				}
 			}
 		}

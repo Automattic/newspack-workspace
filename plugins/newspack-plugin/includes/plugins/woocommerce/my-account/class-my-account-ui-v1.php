@@ -131,7 +131,7 @@ class My_Account_UI_V1 {
 			\wp_enqueue_script(
 				'newspack-my-account-v1',
 				\Newspack\Newspack::plugin_url() . '/dist/my-account-v1.js',
-				[ 'newspack-my-account' ],
+				[],
 				NEWSPACK_PLUGIN_VERSION,
 				true
 			);

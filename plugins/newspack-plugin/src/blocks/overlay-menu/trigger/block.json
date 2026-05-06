@@ -13,6 +13,7 @@
 	},
 	"supports": {
 		"html": false,
+		"lock": false,
 		"color": {
 			"background": true,
 			"text": true

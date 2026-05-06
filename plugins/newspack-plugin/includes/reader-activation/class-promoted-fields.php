@@ -269,6 +269,11 @@ class Promoted_Fields {
 	/**
 	 * Parse a value into an array for list matching.
 	 *
+	 * Recognizes ActiveCampaign's `||val1||val2||` multi-select delimiter so that
+	 * matching against AC checkbox / multiselect fields works under 'list__in' /
+	 * 'list__not_in' matching functions. Other multi-value formats fall through
+	 * as a single-element list.
+	 *
 	 * @param mixed $value The decoded value.
 	 *
 	 * @return array
@@ -278,6 +283,14 @@ class Promoted_Fields {
 			return $value;
 		}
 		if ( is_string( $value ) && '' !== $value ) {
+			// AC always wraps multi-select values with leading and trailing `||`
+			// (`||A||` for one selection, `||A||B||` for many). Require both ends to
+			// match so a non-AC string that happens to contain `||` mid-value is left
+			// alone.
+			if ( str_starts_with( $value, '||' ) && str_ends_with( $value, '||' ) ) {
+				$parts = array_map( 'trim', explode( '||', $value ) );
+				return array_values( array_filter( $parts, static fn( $part ) => '' !== $part ) );
+			}
 			return [ $value ];
 		}
 		return [];

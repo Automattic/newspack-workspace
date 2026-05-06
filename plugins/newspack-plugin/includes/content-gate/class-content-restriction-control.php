@@ -28,13 +28,6 @@ class Content_Restriction_Control {
 	private static $post_gate_layout_id_map = [];
 
 	/**
-	 * Cached user ID to check restrictions for.
-	 *
-	 * @var int
-	 */
-	private static $user_id = 0;
-
-	/**
 	 * Post meta key for exempting a post from access control restrictions.
 	 *
 	 * @var string
@@ -239,9 +232,6 @@ class Content_Restriction_Control {
 		}
 
 		$user_id = $user_id ?? get_current_user_id();
-		if ( ! self::$user_id ) {
-			self::$user_id = $user_id;
-		}
 
 		// Don't restrict this post for users who can edit it.
 		if ( ! empty( $post_id ) && user_can( $user_id, 'edit_post', $post_id ) ) {
@@ -254,19 +244,29 @@ class Content_Restriction_Control {
 		}
 
 		// Return if the post gate has already been determined.
-		if ( ! empty( self::$post_gate_id_map[ $post_id . '_' . self::$user_id ] ) ) {
+		if ( ! empty( self::$post_gate_id_map[ $post_id . '_' . $user_id ] ) ) {
 			return true;
 		}
 
 		foreach ( $post_gates as $gate ) {
 			$gate_layout_id = null;
 			$is_restricted  = false;
+			// Tracks the anonymous-bypass result so the same custom_access rules don't get
+			// evaluated twice in the second pass below. Stays null for non-anonymous calls.
+			$anonymous_bypass_passed = null;
 
 			// If registration mode is active.
 			if ( ! empty( $gate['registration']['active'] ) ) {
 				// Check if user is logged in.
 				if ( $user_id === 0 ) {
-					$is_restricted  = true;
+					// Anonymous visitors can still pass via the gate's custom_access rules if they
+					// match a populated rule with `supports_anonymous` (currently only `institution`).
+					// An unpopulated rule (e.g., institution rule with no institutions selected) must
+					// not grant access — Access_Rules treats an empty value as "no constraint" and
+					// returns true, which would silently bypass registration here.
+					$anonymous_bypass_passed = ! empty( $gate['custom_access']['active'] )
+						&& Access_Rules::evaluate_anonymous_rules( $gate['custom_access']['access_rules'] ?? [] );
+					$is_restricted  = ! $anonymous_bypass_passed;
 					$gate_layout_id = $gate['registration']['gate_layout_id'] ?? $gate['id'];
 				} elseif ( ! empty( $gate['registration']['require_verification'] ) ) {
 					// Check if email verification is required.
@@ -278,8 +278,8 @@ class Content_Restriction_Control {
 				}
 			}
 
-			// If custom_access mode is active.
-			if ( ! $is_restricted && ! empty( $gate['custom_access']['active'] ) ) {
+			// If custom_access mode is active and we didn't already evaluate it above for an anonymous bypass.
+			if ( ! $is_restricted && null === $anonymous_bypass_passed && ! empty( $gate['custom_access']['active'] ) ) {
 				$access_rules = $gate['custom_access']['access_rules'] ?? [];
 				if ( ! empty( $access_rules ) && ! Access_Rules::evaluate_rules( $access_rules, $user_id ) ) {
 					$is_restricted  = true;
@@ -288,8 +288,8 @@ class Content_Restriction_Control {
 			}
 
 			if ( $is_restricted && $gate_layout_id ) {
-				self::$post_gate_id_map[ $post_id . '_' . self::$user_id ] = $gate['id'];
-				self::$post_gate_layout_id_map[ $post_id . '_' . self::$user_id ] = $gate_layout_id;
+				self::$post_gate_id_map[ $post_id . '_' . $user_id ] = $gate['id'];
+				self::$post_gate_layout_id_map[ $post_id . '_' . $user_id ] = $gate_layout_id;
 				return true;
 			}
 		}
@@ -297,7 +297,12 @@ class Content_Restriction_Control {
 	}
 
 	/**
-	 * Get the current gate post ID.
+	 * Get the current gate post ID for the current user.
+	 *
+	 * Looks up the cache entry written by the most recent is_post_restricted()
+	 * call for the current user. Calls made for a *different* user (e.g.
+	 * queue workers, REST callbacks iterating over readers) write to their
+	 * own cache slot and do not surface here.
 	 *
 	 * @param int $post_id Post ID. If not given, uses the current post ID.
 	 *
@@ -313,14 +318,20 @@ class Content_Restriction_Control {
 		if ( ! $post_id ) {
 			return false;
 		}
-		if ( ! empty( self::$post_gate_id_map[ $post_id . '_' . self::$user_id ] ) ) {
-			return self::$post_gate_id_map[ $post_id . '_' . self::$user_id ];
+		$user_id = get_current_user_id();
+		if ( ! empty( self::$post_gate_id_map[ $post_id . '_' . $user_id ] ) ) {
+			return self::$post_gate_id_map[ $post_id . '_' . $user_id ];
 		}
 		return false;
 	}
 
 	/**
-	 * Get the current gate layout ID.
+	 * Get the current gate layout ID for the current user.
+	 *
+	 * Looks up the cache entry written by the most recent is_post_restricted()
+	 * call for the current user. Calls made for a *different* user (e.g.
+	 * queue workers, REST callbacks iterating over readers) write to their
+	 * own cache slot and do not surface here.
 	 *
 	 * @param int $post_id Post ID. If not given, uses the current post ID.
 	 *
@@ -336,8 +347,9 @@ class Content_Restriction_Control {
 		if ( ! $post_id ) {
 			return false;
 		}
-		if ( ! empty( self::$post_gate_layout_id_map[ $post_id . '_' . self::$user_id ] ) ) {
-			return self::$post_gate_layout_id_map[ $post_id . '_' . self::$user_id ];
+		$user_id = get_current_user_id();
+		if ( ! empty( self::$post_gate_layout_id_map[ $post_id . '_' . $user_id ] ) ) {
+			return self::$post_gate_layout_id_map[ $post_id . '_' . $user_id ];
 		}
 		return false;
 	}

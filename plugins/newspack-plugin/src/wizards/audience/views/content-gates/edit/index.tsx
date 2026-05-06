@@ -336,7 +336,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			{
 				type: 'primary',
 				label: __( 'Save', 'newspack-plugin' ),
-				action: isNew ? handleCreate : handleSave,
+				action: isNew ? () => handleCreate() : handleSave,
 				disabled:
 					isFetching ||
 					! title ||

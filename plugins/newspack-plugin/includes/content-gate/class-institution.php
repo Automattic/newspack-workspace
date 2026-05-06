@@ -253,7 +253,13 @@ class Institution {
 		}
 
 		if ( ! empty( $rules['ip_range'] ) ) {
-			$is_uncached = $uncached || ! empty( $user_id ) || isset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+			// IP evaluation is page-cache-safe only when the response would be uncached anyway:
+			// the caller flagged it as such, the visitor is logged in, or the visitor carries
+			// the IP-access bypass cookie. A first-time anonymous on-campus visitor landing
+			// directly on a gated post matches none of these and will see the gate — they must
+			// first complete the IP check at /institutional-access (or ?institutional-access=1)
+			// to set the cookie before subsequent gated requests can evaluate their IP.
+			$is_uncached = $uncached || ! empty( $user_id ) || IP_Access_Rule::is_cookie_set();
 			if ( $is_uncached && IP_Access_Rule::ip_matches_ranges( IP_Access_Rule::get_visitor_ip(), $rules['ip_range'] ) ) {
 				return true;
 			}

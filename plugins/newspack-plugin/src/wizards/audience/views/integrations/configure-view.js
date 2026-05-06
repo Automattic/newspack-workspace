@@ -13,6 +13,7 @@ import { Accordion, Divider, Grid, SectionHeader } from '../../../../../packages
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
 import { SettingsField } from './settings-field';
+
 import './configure-view.scss';
 
 export const ConfigureView = ( { integrations, loading, pendingChanges, saving, onFieldChange, onSave, match } ) => {
@@ -97,6 +98,10 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 				<p>{ __( 'The requested integration could not be found.', 'newspack-plugin' ) }</p>
 			</WizardsTab>
 		);
+	}
+
+	if ( ! integration ) {
+		return <WizardsTab isFetching={ loading } />;
 	}
 
 	const getFieldValue = field => {

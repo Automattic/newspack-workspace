@@ -1,3 +1,5 @@
+@use "../../newspack-ui/scss/variables/breakpoints";
+
 .wp-block-newspack-overlay-menu {
 	.overlay-menu__trigger {
 		align-items: center;
@@ -43,7 +45,7 @@
 	justify-content: flex-end;
 	margin-right: calc( -1 * var( --wp--preset--spacing--30 ) );
 
-	@media ( min-width: 782px ) {
+	@media ( min-width: breakpoints.$tablet_width ) {
 		margin-right: calc( -1 * var( --wp--preset--spacing--40 ) );
 	}
 }
@@ -87,43 +89,79 @@
 		top 250ms ease-in-out,
 		bottom 250ms ease-in-out,
 		transform 250ms ease-in-out;
+	max-width: 90vw;
 	width: 100%;
 	z-index: 50;
 
-	@media ( min-width: 782px ) {
+	@media ( min-width: breakpoints.$tablet_width ) {
 		padding: var( --wp--preset--spacing--40, 1.5rem );
 	}
 
 	.admin-bar & {
 		top: 46px;
 
-		@media ( min-width: 782px ) {
+		@media ( min-width: breakpoints.$tablet_width ) {
 			top: 32px;
 		}
 	}
-}
 
-// Side panels slide in from left or right.
-.overlay-menu__panel--left {
-	left: -100%;
-	max-width: min( 400px, 90vw );
-	right: auto;
-}
+	// Side panels slide in from left or right.
+	&--left {
+		left: -100%;
+		right: auto;
+	}
 
-.overlay-menu__panel--right {
-	left: auto;
-	max-width: min( 400px, 90vw );
-	right: -100%;
-}
+	&--right {
+		left: auto;
+		right: -100%;
+	}
 
+	// Full-screen panel fades in without a directional slide.
+	&--full-screen {
+		left: 0;
+		max-width: 100%;
+		right: 0;
+		transition: opacity 125ms ease-in-out, visibility 0s 125ms;
+		visibility: hidden;
+	}
 
-// ─── Open state (shared by frontend JS and block editor preview) ──────────────
+	// ─── Open state (shared by frontend JS and block editor preview) ──────────
 
-.overlay-menu__panel--open {
-	opacity: 1;
+	&--open {
+		opacity: 1;
 
-	&.overlay-menu__panel--left   { left: 0; }
-	&.overlay-menu__panel--right  { right: 0; }
+		&.overlay-menu__panel--left  {
+			left: 0;
+		}
+
+		&.overlay-menu__panel--right {
+			right: 0;
+		}
+
+		&.overlay-menu__panel--full-screen {
+			transition: opacity 125ms ease-in-out, visibility 0s;
+			visibility: visible;
+		}
+	}
+
+	// ─── Panel width ──────────────────────────────────────────────────────────
+	// Sets the panel to a specific width; the 90vw cap on --left/--right takes over on narrow screens.
+	// Each size adds horizontal padding to the content-size variable so the inner content area matches.
+
+	@mixin panel-width( $var, $fallback ) {
+		width: calc( var( --wp--preset--spacing--30, 1rem ) + var( #{$var}, #{$fallback} ) + var( --wp--preset--spacing--30, 1rem ) );
+
+		@media ( min-width: breakpoints.$tablet_width ) {
+			width: calc( var( --wp--preset--spacing--40, 1.5rem ) + var( #{$var}, #{$fallback} ) + var( --wp--preset--spacing--40, 1.5rem ) );
+		}
+	}
+
+	&--width--x-small { @include panel-width( --wp--custom--width--x-small, 300px ); }
+	&--width--small   { @include panel-width( --wp--custom--width--small, 410px ); }
+	// Medium intentionally maps to the theme's content size (from theme.json), not the --wp--custom--width-- family used by the other sizes.
+	&--width--medium  { @include panel-width( --wp--style--global--content-size, 632px ); }
+	&--width--large   { @include panel-width( --wp--custom--width--large, 964px ); }
+	&--width--x-large { @include panel-width( --wp--custom--width--x-large, 1296px ); }
 }
 
 // ─── Scrim ────────────────────────────────────────────────────────────────────

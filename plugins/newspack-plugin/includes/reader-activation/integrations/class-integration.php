@@ -357,6 +357,14 @@ abstract class Integration {
 	/**
 	 * Get filtered incoming contact fields from the integration.
 	 *
+	 * Filters out fields whose human-readable name matches one of the
+	 * outgoing-sync prefixed keys, so admins don't re-select fields they
+	 * are already pushing to the ESP. Comparison is against `name` (not
+	 * `key`) because outgoing custom fields are created on the ESP under
+	 * their prefixed *label*, which the ESP returns as the incoming
+	 * field's `name` — while `key` is the ESP-assigned machine identifier
+	 * (e.g. Mailchimp `tag`, ActiveCampaign `perstag`).
+	 *
 	 * @return Integrations\Incoming_Field[] Array of incoming contact field objects.
 	 */
 	public function get_filtered_incoming_fields() {
@@ -364,13 +372,13 @@ abstract class Integration {
 		if ( is_wp_error( $fields ) ) {
 			return [];
 		}
-		$keys_to_filter = Sync\Metadata::get_all_prefixed_keys();
+		$names_to_filter = Sync\Metadata::get_all_prefixed_keys();
 		return array_values(
 			array_filter(
 				$fields,
-				function( $field ) use ( $keys_to_filter ) {
-					foreach ( $keys_to_filter as $key_to_filter ) {
-						if ( strpos( $field->get_key(), $key_to_filter ) === 0 ) {
+				function( $field ) use ( $names_to_filter ) {
+					foreach ( $names_to_filter as $name_to_filter ) {
+						if ( strpos( $field->get_name(), $name_to_filter ) === 0 ) {
 							return false;
 						}
 					}
@@ -435,12 +443,34 @@ abstract class Integration {
 	}
 
 	/**
+	 * Schema keys that indicate a stored raw_data entry was saved with the
+	 * post-rename integration schema. Entries missing every one of these are
+	 * considered "legacy" and rebuilt from the live provider list on read.
+	 *
+	 * @var string[]
+	 */
+	private const SCHEMA_KEYS = [
+		'name',
+		'value_type',
+		'matching_function',
+		'options',
+		'description',
+		'is_access_rule',
+		'is_segment_criteria',
+	];
+
+	/**
 	 * Get the enabled incoming fields for this integration.
 	 *
 	 * Reads stored field data (key => raw_data map saved by
 	 * update_enabled_incoming_fields()) and constructs Incoming_Field objects
 	 * for each entry. Each field is passed through configure_incoming_field()
 	 * so the integration can enrich it with promotion configuration.
+	 *
+	 * Legacy entries (saved before the schema expansion) carry raw_data that
+	 * predates the new keys. For those, fetch the live provider list once and
+	 * merge in the enrichment so the field renders correctly without forcing
+	 * the admin to re-save the integrations page after upgrade.
 	 *
 	 * @return Integrations\Incoming_Field[] Array of field objects.
 	 */
@@ -449,10 +479,42 @@ abstract class Integration {
 		if ( ! is_array( $stored ) ) {
 			return [];
 		}
+
+		$has_legacy_entries = false;
+		foreach ( $stored as $key => $raw_data ) {
+			if ( ! is_string( $key ) || '' === $key ) {
+				continue;
+			}
+			if ( ! is_array( $raw_data ) || empty( array_intersect( self::SCHEMA_KEYS, array_keys( $raw_data ) ) ) ) {
+				$has_legacy_entries = true;
+				break;
+			}
+		}
+
+		// Resolve the live provider list once, only when at least one entry needs it.
+		// On API failure, fall back to the stored raw_data unchanged.
+		$live_by_key = [];
+		if ( $has_legacy_entries ) {
+			$available = $this->get_available_incoming_fields();
+			if ( ! is_wp_error( $available ) && is_array( $available ) ) {
+				foreach ( $available as $available_field ) {
+					if ( $available_field instanceof Integrations\Incoming_Field ) {
+						$live_by_key[ $available_field->get_key() ] = $available_field->get_raw_data();
+					}
+				}
+			}
+		}
+
 		$fields = [];
 		foreach ( $stored as $key => $raw_data ) {
-			if ( empty( $key ) || ! is_string( $key ) ) {
+			if ( ! is_string( $key ) || '' === $key ) {
 				continue;
+			}
+			$raw_data = is_array( $raw_data ) ? $raw_data : [];
+			if ( empty( array_intersect( self::SCHEMA_KEYS, array_keys( $raw_data ) ) ) && isset( $live_by_key[ $key ] ) ) {
+				// Stored entry is in the legacy shape — overlay the live schema while
+				// preserving any non-schema keys the publisher may have stored.
+				$raw_data = array_merge( $raw_data, $live_by_key[ $key ] );
 			}
 			$field = new Integrations\Incoming_Field( $key, $raw_data );
 			$field = $this->configure_incoming_field( $field );
@@ -803,7 +865,12 @@ abstract class Integration {
 				$incoming_fields  = $this->get_filtered_incoming_fields();
 				$field['options'] = array_map(
 					function ( $incoming_field ) {
-						return $incoming_field->get_key();
+						$key  = $incoming_field->get_key();
+						$name = $incoming_field->get_name();
+						return [
+							'value' => $key,
+							'label' => '' !== $name ? $name : $key,
+						];
 					},
 					is_wp_error( $incoming_fields ) ? [] : $incoming_fields
 				);

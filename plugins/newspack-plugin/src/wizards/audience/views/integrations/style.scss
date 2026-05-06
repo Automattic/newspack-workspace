@@ -1,0 +1,34 @@
+.newspack-integration-logs {
+	.dataviews__view-actions {
+		display: flex;
+		align-items: center;
+		margin-bottom: 16px;
+	}
+
+	.dataviews__search {
+		display: flex;
+		align-items: flex-start;
+		gap: 8px;
+	}
+
+	.dataviews-filters__visibility-toggle.components-button {
+		background: #1e1e1e;
+		color: #fff;
+		border-radius: 4px;
+
+		&:hover,
+		&:focus {
+			background: #000;
+			color: #fff;
+		}
+
+		&[aria-expanded='true'] {
+			background: #000;
+			color: #fff;
+		}
+
+		svg {
+			fill: currentcolor;
+		}
+	}
+}

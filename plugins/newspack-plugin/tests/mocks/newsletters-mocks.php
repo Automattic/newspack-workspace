@@ -11,6 +11,15 @@ if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
 		public static $add_and_remove_lists_calls = [];
 
 		/**
+		 * Fixture returned by get_fields(). Set in tests that exercise code paths
+		 * calling Newspack_Newsletters_Contacts::get_fields(). An array returns as-is;
+		 * a WP_Error is returned to simulate provider failure.
+		 *
+		 * @var array|\WP_Error
+		 */
+		public static $fields_fixture = [];
+
+		/**
 		 * If set, add_and_remove_lists() returns this value instead of true.
 		 * Use a WP_Error to simulate provider failure.
 		 *
@@ -28,6 +37,7 @@ if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
 
 		public static function reset_calls() {
 			self::$add_and_remove_lists_calls = [];
+			self::$fields_fixture             = [];
 			self::$next_return                = null;
 			self::$next_throw                 = null;
 		}
@@ -45,6 +55,10 @@ if ( ! class_exists( 'Newspack_Newsletters_Contacts' ) ) {
 				throw $exception;
 			}
 			return null === self::$next_return ? true : self::$next_return;
+		}
+
+		public static function get_fields( $list_id = null ) {
+			return self::$fields_fixture;
 		}
 	}
 }

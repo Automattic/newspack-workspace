@@ -35,13 +35,20 @@ class Access_Rules {
 	 * @param array $config {
 	 *     The rule configuration.
 	 *
-	 *     @type string   $id          The rule ID.
-	 *     @type string   $name        The rule name.
-	 *     @type string   $description The rule description.
-	 *     @type mixed    $default     The rule default value.
-	 *     @type array    $options     The rule options.
-	 *     @type callable $callback    The rule callback.
-	 *     @type bool     $is_boolean  Whether the rule is a boolean rule.
+	 *     @type string   $id                 The rule ID.
+	 *     @type string   $name               The rule name.
+	 *     @type string   $description        The rule description.
+	 *     @type mixed    $default            The rule default value.
+	 *     @type array    $options            The rule options.
+	 *     @type callable $callback           The rule callback.
+	 *     @type bool     $is_boolean         Whether the rule is a boolean rule.
+	 *     @type bool     $supports_anonymous Whether the rule's callback can evaluate access for
+	 *                                        a logged-out visitor (`user_id = 0`). Defaults to
+	 *                                        false — `evaluate_rule` short-circuits to false for
+	 *                                        anonymous users on rules that don't opt in. Rules
+	 *                                        that opt in are responsible for cache-safety
+	 *                                        (e.g. only running per-IP logic when the page is
+	 *                                        already uncached).
 	 * }
 	 *
 	 * @return void|\WP_Error
@@ -174,6 +181,60 @@ class Access_Rules {
 		}
 
 		return call_user_func( $rule['callback'], $user_id, $args );
+	}
+
+	/**
+	 * Determine whether the gate's custom_access rules grant access to an
+	 * anonymous (logged-out) visitor.
+	 *
+	 * Only rules that (a) declare `supports_anonymous` and (b) have a populated
+	 * `value` are considered. An unpopulated rule is treated as "not configured"
+	 * rather than "matches everyone" — Access_Rules's underlying evaluators
+	 * return true for empty values as the rule's own no-constraint semantics,
+	 * which is correct for the rule in isolation but must not silently bypass
+	 * registration here.
+	 *
+	 * Groups containing any non-eligible rule are dropped (the AND-within-group
+	 * semantics would force the group to fail for an anonymous visitor anyway,
+	 * since non-anonymous rules return false for `user_id = 0`).
+	 *
+	 * @param array $access_rules Custom access rules in grouped or flat format.
+	 *
+	 * @return bool True if a populated, anonymous-capable rule grants access.
+	 */
+	public static function evaluate_anonymous_rules( $access_rules ) {
+		if ( empty( $access_rules ) ) {
+			return false;
+		}
+		$eligible_groups = [];
+		foreach ( self::normalize_rules( $access_rules ) as $group ) {
+			if ( empty( $group ) || ! is_array( $group ) ) {
+				continue;
+			}
+			$group_eligible = true;
+			foreach ( $group as $rule ) {
+				// `empty()` is acceptable for `value` while the only `supports_anonymous` rule
+				// (`institution`) stores an array of post IDs — empty array means "no institutions
+				// selected." If a future anonymous-capable rule uses a falsy-but-valid scalar (e.g.
+				// `0`, `'0'`, `false`), tighten this check accordingly.
+				if ( ! isset( $rule['slug'] ) || empty( $rule['value'] ) ) {
+					$group_eligible = false;
+					break;
+				}
+				$rule_def = self::get_rule( $rule['slug'] );
+				if ( empty( $rule_def['supports_anonymous'] ) ) {
+					$group_eligible = false;
+					break;
+				}
+			}
+			if ( $group_eligible ) {
+				$eligible_groups[] = $group;
+			}
+		}
+		if ( empty( $eligible_groups ) ) {
+			return false;
+		}
+		return self::evaluate_rules( $eligible_groups, 0 );
 	}
 
 	/**
