@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Ads 3.10.3\n"
+"Project-Id-Version: Newspack Ads 3.10.4\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-ads\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-04-28T18:59:19+00:00\n"
+"POT-Creation-Date: 2026-05-04T17:41:28+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-ads\n"
@@ -58,7 +58,7 @@ msgstr ""
 msgid "Publisher ID provided by PubMatic."
 msgstr ""
 
-#: includes/blocks/class-ad-unit-block.php:96
+#: includes/blocks/class-ad-unit-block.php:97
 msgid "Could not determine ad unit for placement"
 msgstr ""
 
@@ -1164,22 +1164,22 @@ msgid "There is no provider available."
 msgstr ""
 
 #: dist/editor.js:6
-#: src/blocks/ad-unit/index.js:28
+#: src/blocks/ad-unit/index.js:29
 msgid "ad"
 msgstr ""
 
 #: dist/editor.js:6
-#: src/blocks/ad-unit/index.js:28
+#: src/blocks/ad-unit/index.js:29
 msgid "advert"
 msgstr ""
 
 #: dist/editor.js:6
-#: src/blocks/ad-unit/index.js:28
+#: src/blocks/ad-unit/index.js:29
 msgid "ads"
 msgstr ""
 
 #: dist/editor.js:6
-#: src/blocks/ad-unit/index.js:29
+#: src/blocks/ad-unit/index.js:30
 msgid "Render an ad unit from your inventory."
 msgstr ""
 
@@ -1196,14 +1196,14 @@ msgid "Save"
 msgstr ""
 
 #: dist/editor.js:6
-#: src/blocks/tabs-item/edit.js:47
-#: src/blocks/tabs/edit.js:89
-#: src/blocks/tabs/edit.js:96
+#: src/blocks/tabs-item/edit.js:48
+#: src/blocks/tabs/edit.js:156
+#: src/blocks/tabs/edit.js:168
 msgid "Tab Header"
 msgstr ""
 
 #: dist/editor.js:6
-#: src/blocks/tabs/edit.js:137
+#: src/blocks/tabs/edit.js:192
 msgid "Add New Tab"
 msgstr ""
 

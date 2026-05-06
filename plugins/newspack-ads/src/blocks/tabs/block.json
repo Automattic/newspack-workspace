@@ -1,4 +1,6 @@
 {
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
 	"name": "newspack/tabs",
 	"title": "Tabs",
 	"description": "Display sections of content with brief headings in a compact tab layout that shows one section at a time.",
@@ -47,4 +49,3 @@
 		"align": [ "wide" ]
 	}
 }
-

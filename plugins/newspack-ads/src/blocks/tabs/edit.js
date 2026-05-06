@@ -8,12 +8,12 @@ import PropTypes from 'prop-types';
  * WordPress dependencies
  */
 import { createBlock } from '@wordpress/blocks';
-import { compose, ifCondition } from '@wordpress/compose';
-import { useState, useEffect, Fragment } from '@wordpress/element';
+import { compose, ifCondition, useRefEffect } from '@wordpress/compose';
+import { useState, useEffect, useLayoutEffect, useCallback, Fragment } from '@wordpress/element';
 import { withSelect, withDispatch } from '@wordpress/data';
 import { Button, NavigableMenu } from '@wordpress/components';
 import { plus } from '@wordpress/icons';
-import { InnerBlocks } from '@wordpress/block-editor';
+import { InnerBlocks, useBlockProps } from '@wordpress/block-editor';
 import { decodeEntities } from '@wordpress/html-entities';
 import { __ } from '@wordpress/i18n';
 
@@ -27,15 +27,42 @@ const FilterableTabsHeader = createFilterableComponent( 'newspack.tabs.header' )
 const FilterableTabsFooter = createFilterableComponent( 'newspack.tabs.footer' );
 
 const TabsEdit = props => {
-	const { isSelected, className, clientId, block, selectBlock, insertBlock, removeBlock, activeClass = 'is-active' } = props;
+	const { isSelected, clientId, block, selectBlock, insertBlock, removeBlock, activeClass = 'is-active' } = props;
 	const { innerBlocks } = block;
 	const [ tabCount, setTabCount ] = useState( innerBlocks.length );
 	const [ editTab, setEditTab ] = useState( '' );
+	const [ blockElement, setBlockElement ] = useState( null );
 
-	const classes = classnames( {
-		border: ! isSelected,
-		'components-tab-panel__tabs-item-is-editing': editTab,
+	const ref = useRefEffect( element => {
+		setBlockElement( element );
+		return () => setBlockElement( null );
+	}, [] );
+
+	const blockProps = useBlockProps( {
+		ref,
+		className: classnames( 'tabs-horizontal', {
+			border: ! isSelected,
+			'components-tab-panel__tabs-item-is-editing': editTab,
+		} ),
 	} );
+
+	const resetEditing = useCallback( () => {
+		if ( ! blockElement ) {
+			return;
+		}
+		const isEditing = blockElement.querySelectorAll( '.wp-block[data-is-tab-header-editing]' );
+		if ( isEditing ) {
+			isEditing.forEach( _block => _block.removeAttribute( 'data-is-tab-header-editing' ) );
+		}
+	}, [ blockElement ] );
+
+	const onSelect = useCallback(
+		tabName => {
+			setEditTab( tabName );
+			selectBlock( tabName );
+		},
+		[ selectBlock ]
+	);
 
 	useEffect( () => {
 		const firstBlock = innerBlocks.length > 0 ? innerBlocks[ 0 ].clientId : null;
@@ -54,71 +81,99 @@ const TabsEdit = props => {
 		}
 
 		// Hacky but required in order to select which is the innerblocks assigned to header
-		if ( editTab ) {
-			document.getElementById( `block-${ clientId }` ).classList.add( 'is-tab-editing' );
-			if ( document.getElementById( `block-${ editTab }` ) ) {
-				document.getElementById( `block-${ editTab }` ).setAttribute( 'data-is-tab-header-editing', 1 );
+		if ( editTab && blockElement ) {
+			const editTabEl = blockElement.ownerDocument.getElementById( `block-${ editTab }` );
+			if ( editTabEl ) {
+				editTabEl.setAttribute( 'data-is-tab-header-editing', 1 );
 			}
 		}
-	}, [ selectBlock, clientId, tabCount, setTabCount, editTab, block, innerBlocks, removeBlock, activeClass ] );
+	}, [ selectBlock, clientId, tabCount, setTabCount, editTab, block, innerBlocks, removeBlock, activeClass, blockElement ] );
 
-	const onSelect = tabName => {
-		// Set selected tab
-		setEditTab( tabName );
-		selectBlock( tabName );
-	};
-
-	const resetEditing = () => {
-		const isEditing = document.querySelectorAll( `#block-${ clientId } > .wp-block-newspack-tabs .wp-block[data-is-tab-header-editing]` );
-		if ( isEditing ) {
-			isEditing.forEach( _block => _block.removeAttribute( 'data-is-tab-header-editing' ) );
+	/**
+	 * Position each `.tab-header` overlay precisely on top of its corresponding tab
+	 * button. The overlay lives inside `.newspack-ads__tab-group` (a different
+	 * positioning context than the buttons), so we translate the button's viewport
+	 * rect into the overlay's containing block. A ResizeObserver keeps the overlays
+	 * in sync when buttons reflow (e.g. text wrap on viewport resize) without
+	 * waiting for a React render.
+	 */
+	useLayoutEffect( () => {
+		if ( ! blockElement ) {
+			return;
 		}
-	};
 
-	const TabPanel = () => {
-		const tabPanels = innerBlocks.map( innerBlock => {
-			// eslint-disable-next-line @typescript-eslint/no-shadow
-			const { attributes, clientId } = innerBlock;
-			const { header } = attributes;
-			return (
-				<Fragment key={ clientId }>
-					<Button
-						orientation="horizontal"
-						data-tab-block={ clientId }
-						className={ classnames( 'newspack-ads__tab-item', { untitled: ! header }, 'components-tab-panel__tabs-item' ) }
-						label={ header || __( 'Tab Header', 'newspack-ads' ) }
-						onClick={ () => {
-							resetEditing();
-							onSelect( clientId );
-							document.getElementById( `block-${ clientId }` ).setAttribute( 'data-is-tab-header-editing', 1 );
-						} }
-					>
-						{ decodeEntities( header ) || __( 'Tab Header', 'newspack-ads' ) }
-					</Button>
-				</Fragment>
-			);
+		const positionTabHeader = innerBlock => {
+			const tabHeaderButton = blockElement.querySelector( `.components-tab-panel__tabs-item[data-tab-block="${ innerBlock.clientId }"]` );
+			if ( ! tabHeaderButton ) {
+				return;
+			}
+			const tabHeader = blockElement.querySelector( `.tab-header[data-tab-block="${ innerBlock.clientId }"]` );
+			// `offsetParent` is null while the tab is hidden (display:none); we
+			// reposition once it becomes visible (editTab change re-runs this effect).
+			const containingBlock = tabHeader && tabHeader.offsetParent;
+			if ( ! containingBlock ) {
+				return;
+			}
+			const containerRect = containingBlock.getBoundingClientRect();
+			const buttonRect = tabHeaderButton.getBoundingClientRect();
+			tabHeader.style.left = `${ buttonRect.left - containerRect.left }px`;
+			tabHeader.style.top = `${ buttonRect.top - containerRect.top }px`;
+			tabHeader.style.width = `${ buttonRect.width }px`;
+			tabHeader.style.height = `${ buttonRect.height }px`;
+		};
+
+		const positionAll = () => innerBlocks.forEach( positionTabHeader );
+
+		positionAll();
+
+		// Track size changes of the block and each button (covers viewport resizes,
+		// text wrapping mid-edit, font loading, etc. — anything that shifts the
+		// button's rect without triggering a React render of this component).
+		if ( typeof ResizeObserver === 'undefined' ) {
+			return;
+		}
+		const observer = new ResizeObserver( positionAll );
+		observer.observe( blockElement );
+		innerBlocks.forEach( innerBlock => {
+			const button = blockElement.querySelector( `.components-tab-panel__tabs-item[data-tab-block="${ innerBlock.clientId }"]` );
+			if ( button ) {
+				observer.observe( button );
+			}
 		} );
+		return () => observer.disconnect();
+	}, [ blockElement, innerBlocks, editTab ] );
 
-		/**
-		 * Hacky solution to positioning the tab header in the correct place
-		 */
-		useEffect( () => {
-			innerBlocks.forEach( innerBlock => {
-				const tabHeaderButton = document.querySelector( `.components-tab-panel__tabs-item[data-tab-block="${ innerBlock.clientId }"]` );
-
-				if ( ! tabHeaderButton ) {
-					return;
-				}
-				const tabHeader = document.querySelector( `.tab-header[data-tab-block="${ innerBlock.clientId }"]` );
-
-				if ( tabHeader && tabHeaderButton ) {
-					tabHeader.style.left = `${ tabHeaderButton.offsetLeft }px`;
-					tabHeader.style.top = `-${ tabHeader.offsetHeight }px`;
-				}
-			} );
-		} );
-
+	const tabPanels = innerBlocks.map( innerBlock => {
+		// eslint-disable-next-line @typescript-eslint/no-shadow
+		const { attributes, clientId: innerBlockClientId } = innerBlock;
+		const { header } = attributes;
 		return (
+			<Fragment key={ innerBlockClientId }>
+				<Button
+					orientation="horizontal"
+					data-tab-block={ innerBlockClientId }
+					className={ classnames( 'newspack-ads__tab-item', { untitled: ! header }, 'components-tab-panel__tabs-item' ) }
+					label={ header || __( 'Tab Header', 'newspack-ads' ) }
+					onClick={ () => {
+						resetEditing();
+						onSelect( innerBlockClientId );
+						if ( blockElement ) {
+							const innerBlockEl = blockElement.ownerDocument.getElementById( `block-${ innerBlockClientId }` );
+							if ( innerBlockEl ) {
+								innerBlockEl.setAttribute( 'data-is-tab-header-editing', 1 );
+							}
+						}
+					} }
+				>
+					{ decodeEntities( header ) || __( 'Tab Header', 'newspack-ads' ) }
+				</Button>
+			</Fragment>
+		);
+	} );
+
+	return (
+		<div { ...blockProps }>
+			<FilterableTabsHeader blockProps={ props } />
 			<div className="tab-control">
 				<div className="tabs-header">
 					<NavigableMenu
@@ -153,26 +208,17 @@ const TabsEdit = props => {
 					</NavigableMenu>
 				</div>
 			</div>
-		);
-	};
-
-	return (
-		<>
-			<div className={ `${ className } ${ classes } tabs-horizontal` }>
-				<FilterableTabsHeader blockProps={ props } />
-				<TabPanel />
-				<div className="newspack-ads__tab-group">
-					<InnerBlocks
-						orientation="horizontal"
-						allowedBlocks={ [ 'newspack/tabs-item' ] }
-						template={ [ [ 'newspack/tabs-item', { header: '' }, [ [ 'core/paragraph', {} ] ] ] ] }
-						templateInsertUpdatesSelection
-						__experimentalCaptureToolbars
-					/>
-				</div>
-				<FilterableTabsFooter blockProps={ props } />
+			<div className="newspack-ads__tab-group">
+				<InnerBlocks
+					orientation="horizontal"
+					allowedBlocks={ [ 'newspack/tabs-item' ] }
+					template={ [ [ 'newspack/tabs-item', { header: '' }, [ [ 'core/paragraph', {} ] ] ] ] }
+					templateInsertUpdatesSelection
+					__experimentalCaptureToolbars
+				/>
 			</div>
-		</>
+			<FilterableTabsFooter blockProps={ props } />
+		</div>
 	);
 };
 

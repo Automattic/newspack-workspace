@@ -23,7 +23,7 @@ final class Ad_Unit_Block {
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_block' ] );
-		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ] );
+		add_action( 'enqueue_block_assets', [ __CLASS__, 'enqueue_block_assets' ] );
 	}
 
 	/**
@@ -35,6 +35,7 @@ final class Ad_Unit_Block {
 		register_block_type(
 			'newspack-ads/ad-unit',
 			[
+				'api_version'     => 3,
 				'attributes'      => [
 					'provider'     => [
 						'type' => 'string',
@@ -154,7 +155,10 @@ final class Ad_Unit_Block {
 	/**
 	 * Enqueue block scripts and styles for editor.
 	 */
-	public static function enqueue_block_editor_assets() {
+	public static function enqueue_block_assets() {
+		if ( ! wp_should_load_block_editor_scripts_and_styles() ) {
+			return;
+		}
 		wp_enqueue_script(
 			'newspack-ads-editor',
 			Core::plugin_url( 'dist/editor.js' ),

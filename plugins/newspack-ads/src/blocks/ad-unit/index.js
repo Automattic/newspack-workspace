@@ -19,6 +19,7 @@ export const name = 'ad-unit';
 export const title = __( 'Ad Unit', 'newspack-ads' );
 
 export const settings = {
+	apiVersion: 3,
 	title,
 	icon: {
 		src: icon,

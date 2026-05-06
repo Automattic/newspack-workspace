@@ -7,7 +7,7 @@ import PropTypes from 'prop-types';
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { InnerBlocks, RichText } from '@wordpress/block-editor';
+import { InnerBlocks, RichText, useBlockProps } from '@wordpress/block-editor';
 import { compose } from '@wordpress/compose';
 import { withSelect } from '@wordpress/data';
 import { applyFilters } from '@wordpress/hooks';
@@ -32,36 +32,36 @@ const TabsItemEdit = props => {
 		attributes: { header },
 	} = props;
 
-	const classes = isSelected || hasSelectedInnerBlock() ? 'newspack-ads__tab-content is-active' : 'newspack-ads__tab-content';
+	const blockProps = useBlockProps( {
+		className: isSelected || hasSelectedInnerBlock() ? 'newspack-ads__tab-content is-active' : 'newspack-ads__tab-content',
+	} );
 
 	return (
-		<>
+		<div { ...blockProps }>
 			<FilterableTabsItemHeader blockProps={ props } />
-			<div className={ classes }>
-				<div data-tab-block={ clientId } className={ `tab-header orientation-horizontal position-${ position }` }>
-					{ /* The reason we don't have the RichText field in the parent block is so that when you are editing tab header text you are selecting
-					the child block. */ }
-					<RichText
-						tagName="div"
-						value={ header }
-						placeholder={ __( 'Tab Header', 'newspack-ads' ) }
-						onChange={ newHeader => {
-							setAttributes( {
-								header: decodeEntities( newHeader ).replace( /<\/?[a-z][^>]*?>/gi, ' ' ),
-							} );
-						} }
-						allowedFormats={ [] }
-					/>
-				</div>
-
-				<InnerBlocks
-					templateInsertUpdatesSelection
-					__experimentalCaptureToolbars
-					allowedBlocks={ applyFilters( 'newspack.tabs.allowedBlocks', true, name ) }
+			<div data-tab-block={ clientId } className={ `tab-header orientation-horizontal position-${ position }` }>
+				{ /* The reason we don't have the RichText field in the parent block is so that when you are editing tab header text you are selecting
+				the child block. */ }
+				<RichText
+					tagName="div"
+					value={ header }
+					placeholder={ __( 'Tab Header', 'newspack-ads' ) }
+					onChange={ newHeader => {
+						setAttributes( {
+							header: decodeEntities( newHeader ).replace( /<\/?[a-z][^>]*?>/gi, ' ' ),
+						} );
+					} }
+					allowedFormats={ [] }
 				/>
 			</div>
+
+			<InnerBlocks
+				templateInsertUpdatesSelection
+				__experimentalCaptureToolbars
+				allowedBlocks={ applyFilters( 'newspack.tabs.allowedBlocks', true, name ) }
+			/>
 			<FilterableTabsItemFooter blockProps={ props } />
-		</>
+		</div>
 	);
 };
 

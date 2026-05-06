@@ -25,10 +25,13 @@
 		}
 
 		& .tab-header {
+			align-items: center;
 			color: var(--newspack-ui-color-neutral-90, #1e1e1e);
+			display: flex;
 			font-family: inherit;
 			font-size: inherit;
 			font-weight: 600;
+			justify-content: center;
 			position: absolute;
 
 			& .rich-text {
@@ -44,9 +47,8 @@
 				padding:
 					var(--newspack-ui-spacer-2, 12px)
 					var(--newspack-ui-spacer-3, 16px);
-				position: relative;
-				top: 0;
-				width: auto;
+				text-align: center;
+				width: 100%;
 			}
 		}
 
@@ -106,6 +108,7 @@
 		padding:
 			var(--newspack-ui-spacer-2, 12px)
 			var(--newspack-ui-spacer-3, 16px);
+		white-space: pre-wrap;
 	}
 }
 
@@ -143,6 +146,7 @@
 	display: none !important;
 }
 
+.editor-styles-wrapper[class*="theme-newspack-theme/newspack-theme"],
 body[class*="theme-newspack-theme/newspack-theme"] {
 	& .wp-block[data-type="newspack/tabs"] {
 		& .tab-header {

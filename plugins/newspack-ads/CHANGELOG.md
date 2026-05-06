@@ -1,3 +1,13 @@
+## [3.10.4](https://github.com/Automattic/newspack-ads/compare/v3.10.3...v3.10.4) (2026-05-04)
+
+
+### Bug Fixes
+
+* **blocks:** deduplicate API calls across ad unit block instances ([#1043](https://github.com/Automattic/newspack-ads/issues/1043)) ([969994f](https://github.com/Automattic/newspack-ads/commit/969994ff136bafefd95ed60275d929b7237fdf7a))
+* refine phpcs:ignore comment per review feedback ([3a91118](https://github.com/Automattic/newspack-ads/commit/3a9111842f14a0a8523920fc965a9b3493bf3481))
+* remove wp_kses_post from tab block inner content output ([97d490b](https://github.com/Automattic/newspack-ads/commit/97d490b34de1641f3d0057b42f1aa9a4a4680a77))
+* remove wp_kses_post from tab block inner content output ([5e45116](https://github.com/Automattic/newspack-ads/commit/5e4511649adeac26f88e92c0190600c9a472bb2a))
+
 ## [3.10.3](https://github.com/Automattic/newspack-ads/compare/v3.10.2...v3.10.3) (2026-04-13)
 
 
