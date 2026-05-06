@@ -1,3 +1,10 @@
+## [4.26.2](https://github.com/Automattic/newspack-blocks/compare/v4.26.1...v4.26.2) (2026-05-04)
+
+
+### Bug Fixes
+
+* **modal-checkout:** retrieve order from query vars in thankyou template ([#2324](https://github.com/Automattic/newspack-blocks/issues/2324)) ([c483abd](https://github.com/Automattic/newspack-blocks/commit/c483abdc471e844e75fd0732b8cc878b52e58100))
+
 ## [4.26.1](https://github.com/Automattic/newspack-blocks/compare/v4.26.0...v4.26.1) (2026-04-13)
 
 
