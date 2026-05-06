@@ -1,3 +1,15 @@
+# [3.11.0](https://github.com/Automattic/newspack-popups/compare/v3.10.3...v3.11.0) (2026-05-04)
+
+
+### Bug Fixes
+
+* replace favorite categories matching ([#1542](https://github.com/Automattic/newspack-popups/issues/1542)) ([88391d2](https://github.com/Automattic/newspack-popups/commit/88391d2ae0920d191a5e256d66b6fda2eb3dfac4))
+
+
+### Features
+
+* reader activation segments ([#1539](https://github.com/Automattic/newspack-popups/issues/1539)) ([606d706](https://github.com/Automattic/newspack-popups/commit/606d706cb64a1bb8b01b03a06cd4ed8da899bed4))
+
 ## [3.10.3](https://github.com/Automattic/newspack-popups/compare/v3.10.2...v3.10.3) (2026-04-13)
 
 

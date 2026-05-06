@@ -2,14 +2,14 @@
 # This file is distributed under the same license as the Newspack Campaigns plugin.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Campaigns 3.10.3\n"
+"Project-Id-Version: Newspack Campaigns 3.11.0\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-popups\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-04-29T23:50:24+00:00\n"
+"POT-Creation-Date: 2026-05-04T23:03:42+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-popups\n"
@@ -67,12 +67,12 @@ msgstr ""
 msgid "resetting every %s"
 msgstr ""
 
-#: includes/class-newspack-popups-inserter.php:825
-#: includes/class-newspack-popups-inserter.php:1125
+#: includes/class-newspack-popups-inserter.php:912
+#: includes/class-newspack-popups-inserter.php:1212
 msgid "Prompts Visible"
 msgstr ""
 
-#: includes/class-newspack-popups-inserter.php:826
+#: includes/class-newspack-popups-inserter.php:913
 msgid "Prompts Hidden"
 msgstr ""
 
@@ -113,15 +113,50 @@ msgstr ""
 msgid "Full-Width"
 msgstr ""
 
-#: includes/class-newspack-popups-model.php:873
+#. translators: archive page
+#: includes/class-newspack-popups-model.php:553
+msgid "Categories"
+msgstr ""
+
+#. translators: archive page
+#: includes/class-newspack-popups-model.php:558
+msgid "Tags"
+msgstr ""
+
+#. translators: archive page
+#: includes/class-newspack-popups-model.php:563
+msgid "Authors"
+msgstr ""
+
+#. translators: archive page
+#: includes/class-newspack-popups-model.php:568
+msgid "Date"
+msgstr ""
+
+#. translators: archive page
+#: includes/class-newspack-popups-model.php:573
+msgid "Custom Post Types"
+msgstr ""
+
+#. translators: archive page
+#: includes/class-newspack-popups-model.php:578
+msgid "Taxonomies"
+msgstr ""
+
+#. translators: the "Posts page" configured under Settings > Reading when a static front page is set.
+#: includes/class-newspack-popups-model.php:583
+msgid "Posts Page"
+msgstr ""
+
+#: includes/class-newspack-popups-model.php:897
 msgid "scheduled"
 msgstr ""
 
-#: includes/class-newspack-popups-model.php:874
+#: includes/class-newspack-popups-model.php:898
 msgid "draft"
 msgstr ""
 
-#: includes/class-newspack-popups-model.php:1162
+#: includes/class-newspack-popups-model.php:1186
 msgid "Close Pop-up"
 msgstr ""
 
@@ -278,28 +313,28 @@ msgstr ""
 msgid "No Prompts found in Trash."
 msgstr ""
 
-#: includes/class-newspack-popups.php:631
+#: includes/class-newspack-popups.php:632
 msgid "Campaigns"
 msgstr ""
 
-#: includes/class-newspack-popups.php:632
+#: includes/class-newspack-popups.php:633
 msgid "Campaign"
 msgstr ""
 
-#: includes/class-newspack-popups.php:633
+#: includes/class-newspack-popups.php:634
 msgid "Add Campaign"
 msgstr ""
 
-#: includes/class-newspack-popups.php:809
+#: includes/class-newspack-popups.php:810
 #: dist/editor.js:43
 #: src/editor/Sidebar.js:75
 msgid "Inline"
 msgstr ""
 
 #. translators: %s: Duplicate prompt title
-#: includes/class-newspack-popups.php:1215
-#: includes/class-newspack-popups.php:1221
-#: includes/class-newspack-popups.php:1248
+#: includes/class-newspack-popups.php:1217
+#: includes/class-newspack-popups.php:1223
+#: includes/class-newspack-popups.php:1250
 #, php-format
 msgid "%s copy"
 msgstr ""

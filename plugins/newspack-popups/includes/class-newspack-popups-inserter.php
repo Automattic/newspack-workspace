@@ -62,6 +62,7 @@ final class Newspack_Popups_Inserter {
 		add_action( 'wp_body_open', [ $this, 'insert_before_header' ] );
 		add_filter( 'render_block_core/template-part', [ $this, 'insert_before_header_in_template_part' ], 10, 2 );
 		add_action( 'after_archive_post', [ $this, 'insert_inline_prompt_in_archive_pages' ] );
+		add_filter( 'render_block', [ $this, 'insert_inline_prompt_in_block_theme_archives' ], 10, 3 );
 		add_action( 'wp_before_admin_bar_render', [ $this, 'add_preview_toggle' ] );
 
 		// Always enqueue scripts, since this plugin's scripts are handling pageview sending via GTAG.
@@ -687,19 +688,36 @@ final class Newspack_Popups_Inserter {
 	 * @return void
 	 */
 	public static function insert_inline_prompt_in_archive_pages( $post_count ) {
+		echo self::get_inline_prompt_html_for_archive_pages( $post_count, 'article', null, 'class="entry"' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+	}
+
+	/**
+	 * Get the HTML for an inline prompt on archive pages.
+	 *
+	 * @param integer $post_count      Order of the post in the posts loop.
+	 * @param string  $tag             Wrapper element tag name. Defaults to 'article'.
+	 * @param array   $archives_popups Pre-filtered list of archive popups. If null, popups_for_post() is filtered internally.
+	 * @param string  $attrs           Optional HTML attributes string for the wrapper element (e.g. 'class="entry"').
+	 * @return string HTML output, or empty string.
+	 */
+	public static function get_inline_prompt_html_for_archive_pages( $post_count, $tag = 'article', $archives_popups = null, $attrs = '' ) {
 		global $wp_query;
 
-		$archives_popups = array_filter( self::popups_for_post(), [ 'Newspack_Popups_Model', 'should_be_inserted_in_archive_pages' ] );
+		if ( null === $archives_popups ) {
+			$archives_popups = array_filter( self::popups_for_post(), [ 'Newspack_Popups_Model', 'should_be_inserted_in_archive_pages' ] );
+		}
+		$output = '';
 		foreach ( $archives_popups as $popup ) {
-			// insert popup only on selected archive page types.
-			if ( is_category() && ! in_array( 'category', $popup['options']['archive_page_types'] )
-				|| ( is_tag() && ! in_array( 'tag', $popup['options']['archive_page_types'] ) ) // phpcs:ignore Generic.CodeAnalysis.RequireExplicitBooleanOperatorPrecedence.MissingParentheses
-				|| ( is_author() && ! in_array( 'author', $popup['options']['archive_page_types'] ) )
-				|| ( is_date() && ! in_array( 'date', $popup['options']['archive_page_types'] ) )
-				|| ( is_post_type_archive() && ! in_array( 'post-type', $popup['options']['archive_page_types'] ) )
-				|| ( is_tax() && ! in_array( 'taxonomy', $popup['options']['archive_page_types'] ) )
+			$page_types = $popup['options']['archive_page_types'];
+			if ( ( is_home() && ! in_array( 'home', $page_types ) )
+				|| ( is_category() && ! in_array( 'category', $page_types ) )
+				|| ( is_tag() && ! in_array( 'tag', $page_types ) )
+				|| ( is_author() && ! in_array( 'author', $page_types ) )
+				|| ( is_date() && ! in_array( 'date', $page_types ) )
+				|| ( is_post_type_archive() && ! in_array( 'post-type', $page_types ) )
+				|| ( is_tax() && ! in_array( 'taxonomy', $page_types ) )
 			) {
-					return;
+				continue;
 			}
 
 			$archive_insertion_posts_count = intval( $popup['options']['archive_insertion_posts_count'] );
@@ -710,10 +728,79 @@ final class Newspack_Popups_Inserter {
 				|| ( $popup['options']['archive_insertion_is_repeating'] && 0 === $post_count % $archive_insertion_posts_count )
 				|| ( $archive_insertion_posts_count >= $wp_query->post_count && $post_count === $wp_query->post_count )
 			) {
-				// Wrapping the popup in an article with `entry` class element to keep the archive page markup.
-				echo '<article class="entry">' . Newspack_Popups_Model::generate_popup( $popup ) . '</article>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					$open_tag = ! empty( $attrs ) ? $tag . ' ' . $attrs : $tag;
+				$output  .= '<' . $open_tag . '>' . Newspack_Popups_Model::generate_popup( $popup ) . '</' . $tag . '>';
 			}
 		}
+		return $output;
+	}
+
+	/**
+	 * Insert inline prompts into a rendered core/post-template block on archive/home pages.
+	 *
+	 * Uses the render_block filter so this works with block themes. Only targets
+	 * the primary Query Loop (the one that inherits the global/main query) so
+	 * that secondary loops like "featured posts" or "you may also like" don't
+	 * receive prompt injection.
+	 *
+	 * @param string   $block_content Rendered block HTML.
+	 * @param array    $block         Block data array, including 'blockName'.
+	 * @param WP_Block $instance      The block instance (available since WP 5.9).
+	 * @return string Filtered block HTML.
+	 */
+	public static function insert_inline_prompt_in_block_theme_archives( $block_content, $block, $instance = null ) {
+		if ( 'core/post-template' !== $block['blockName'] ) {
+			return $block_content;
+		}
+
+		if ( ! is_archive() && ! is_home() ) {
+			return $block_content;
+		}
+
+		// Only inject into the Query Loop that inherits the main/global query.
+		// Secondary loops (custom queryId, inherit=false) should not get prompts.
+		if ( $instance instanceof WP_Block ) {
+			$query_context = $instance->context['query'] ?? [];
+			$inherits_main = ! empty( $query_context['inherit'] );
+			if ( ! $inherits_main ) {
+				return $block_content;
+			}
+		}
+
+		$archives_popups = array_filter( self::popups_for_post(), [ 'Newspack_Popups_Model', 'should_be_inserted_in_archive_pages' ] );
+
+		// Split on each post item boundary. core/post-template wraps each post in
+		// <li class="wp-block-post ...">. Use [\s"'] to avoid false matches on child element
+		// classes like wp-block-post-title, wp-block-post-excerpt, etc.
+		$parts = preg_split( '/(?=<li[^>]*\bwp-block-post[\s"\'])/', $block_content );
+
+		if ( ! $parts || count( $parts ) < 2 ) {
+			return $block_content;
+		}
+
+		// $parts[0] is the opening <ul>; $parts[1..n] are the post items.
+		$post_count = count( $parts ) - 1;
+
+		// The closing </ul> (and any content that follows it) lives in the last part because
+		// preg_split's lookahead puts everything after the final post item there. Strip it off
+		// so that any injected prompt <li> elements are inserted before </ul>, not after it.
+		$trailing = '';
+		$close_ul = strripos( $parts[ $post_count ], '</ul' );
+		if ( false !== $close_ul ) {
+			$trailing            = substr( $parts[ $post_count ], $close_ul );
+			$parts[ $post_count ] = substr( $parts[ $post_count ], 0, $close_ul );
+		}
+
+		$output = $parts[0];
+
+		for ( $i = 1; $i <= $post_count; $i++ ) {
+			$output .= $parts[ $i ];
+			$output .= self::get_inline_prompt_html_for_archive_pages( $i, 'li', $archives_popups );
+		}
+
+		$output .= $trailing;
+
+		return $output;
 	}
 
 	/**

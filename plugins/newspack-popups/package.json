@@ -1,6 +1,6 @@
 {
 	"name": "newspack-popups",
-	"version": "3.10.2",
+	"version": "3.11.0",
 	"author": "Automattic",
 	"main": "srsc/view/index.js",
 	"scripts": {

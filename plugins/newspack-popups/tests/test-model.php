@@ -53,7 +53,7 @@ class ModelTest extends WP_UnitTestCase {
 				'archive_insertion_is_repeating' => false,
 				'utm_suppression'                => null,
 				'post_types'                     => [ 'post', 'page' ],
-				'archive_page_types'             => [ 'category', 'tag', 'author', 'date', 'post-type', 'taxonomy' ],
+				'archive_page_types'             => [ 'home', 'category', 'tag', 'author', 'date', 'post-type', 'taxonomy' ],
 				'additional_classes'             => '',
 				'excluded_categories'            => [],
 				'excluded_tags'                  => [],

@@ -436,6 +436,12 @@ $width__tablet: 782px;
 	}
 }
 
+// In block theme grid layouts, campaigns should span all columns.
+.wp-block-post-template.wp-block-post-template-is-layout-grid > li:has(.newspack-popup-container) {
+	grid-column: 1/-1;
+	width: 100%;
+}
+
 .newspack-inline-popup {
 	display: block;
 	border: 1px solid rgba(black, 0.2);
