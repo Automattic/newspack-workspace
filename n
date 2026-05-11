@@ -111,7 +111,7 @@ start() {
         lo0_addrs=$(ifconfig lo0 2>/dev/null)
         for octet in $(seq 2 100); do
             ip="127.0.0.$octet"
-            if ! echo "$lo0_addrs" | grep -q "$ip"; then
+            if ! echo "$lo0_addrs" | grep -qE "inet $ip( |$)"; then
                 missing_aliases+=("$ip")
             fi
         done
