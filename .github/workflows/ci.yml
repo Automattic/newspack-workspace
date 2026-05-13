@@ -48,7 +48,12 @@ jobs:
           fi
 
           # pnpm's change filter already handles transitive dependency graphs.
-          CHANGED=$(pnpm --silent --filter "...[$BASE_REF]" exec node -e 'console.log(process.env.npm_package_name)' 2>/dev/null | sort -u || true)
+          # PNPM_PACKAGE_NAME (uppercase) is what pnpm exposes to pnpm exec;
+          # npm_package_name is only set when pnpm runs a package script, not
+          # bare exec. Using the wrong one prints "undefined" for every package,
+          # which produces a matrix of {package: "undefined"} that silently
+          # matches nothing downstream — CI then appears green without running.
+          CHANGED=$(pnpm --silent --filter "...[$BASE_REF]" exec node -e 'console.log(process.env.PNPM_PACKAGE_NAME)' 2>/dev/null | sort -u || true)
 
           if [ -z "$CHANGED" ]; then
             echo "js-matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
