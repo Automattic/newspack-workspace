@@ -53,7 +53,10 @@ jobs:
           # bare exec. Using the wrong one prints "undefined" for every package,
           # which produces a matrix of {package: "undefined"} that silently
           # matches nothing downstream — CI then appears green without running.
-          CHANGED=$(pnpm --silent --filter "...[$BASE_REF]" exec node -e 'console.log(process.env.PNPM_PACKAGE_NAME)' 2>/dev/null | sort -u || true)
+          # Exclude the root workspace package — it has no plugin-shaped
+          # lint/build/test scripts, and changes to .github/ or root configs
+          # otherwise spawn a job that just fails.
+          CHANGED=$(pnpm --silent --filter "...[$BASE_REF]" exec node -e 'console.log(process.env.PNPM_PACKAGE_NAME)' 2>/dev/null | grep -v '^newspack-workspace$' | sort -u || true)
 
           if [ -z "$CHANGED" ]; then
             echo "js-matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"

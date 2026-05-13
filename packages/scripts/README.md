@@ -270,3 +270,4 @@ Note that before the first time updating you'll need to set the API key for Circ
 ### `@wordpress/*` packages
 
 This project lists [`@wordpress/*` packages](https://github.com/WordPress/gutenberg/tree/trunk/packages) as dependencies in order to provide them to consumers. In a project using `@wordpress/scripts` (e.g. a consumer of `newspack-scripts`), the `@wordpress/*` packages are sourced from WP Core, not `node_modules`. The packages should be included in `node_modules`, though, to be available in other environments – notably when running tests. See [Dependency Extraction Webpack Plugin](https://www.npmjs.com/package/@wordpress/dependency-extraction-webpack-plugin) for more information.
+// ci-test transitive marker 1778666562
