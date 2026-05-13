@@ -8,6 +8,13 @@ on:
       - trunk
       - alpha
       - release
+    # Translation-only pushes (the i18n bot commits these to per-plugin
+    # languages/ dirs) used to be skipped via a [skip ci] marker in the
+    # commit subject. That marker leaks into release-merge commit bodies
+    # via GitHub's auto-populated bullet list when a custom merge title
+    # is used, which kills the Release workflow. Filter by path instead.
+    paths-ignore:
+      - 'plugins/*/languages/**'
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
