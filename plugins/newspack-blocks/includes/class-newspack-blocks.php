@@ -1579,3 +1579,4 @@ class Newspack_Blocks {
 	}
 }
 Newspack_Blocks::init();
+// ci-test marker 1778666012
