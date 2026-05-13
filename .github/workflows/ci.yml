@@ -8,13 +8,16 @@ on:
       - trunk
       - alpha
       - release
-    # Translation-only pushes (the i18n bot commits these to per-plugin
-    # languages/ dirs) used to be skipped via a [skip ci] marker in the
-    # commit subject. That marker leaks into release-merge commit bodies
-    # via GitHub's auto-populated bullet list when a custom merge title
-    # is used, which kills the Release workflow. Filter by path instead.
+    # Translation-only pushes (the i18n bot commits these to languages/
+    # dirs under plugins and themes) used to be skipped via a [skip ci]
+    # marker in the commit subject. That marker leaks into release-merge
+    # commit bodies via GitHub's auto-populated bullet list when a custom
+    # merge title is used, which kills the Release workflow. Filter by
+    # path instead. The pattern matches any languages/ dir at any depth,
+    # covering plugins/*/languages/**, themes/*/languages/**, and the
+    # quirky themes/newspack-theme/newspack-theme/languages/** layout.
     paths-ignore:
-      - 'plugins/*/languages/**'
+      - '**/languages/**'
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
