@@ -2,8 +2,7 @@
 #
 # lib.sh — shared helpers for the legacy → monorepo migration scripts.
 #
-# Sourced by sync-legacy.sh (daily trunk sync) and transplant-pr.sh (per-PR
-# transplant on cutover day). Provides:
+# Sourced by sync-legacy.sh (daily trunk sync). Provides:
 #
 #   • The legacy-repo manifest: name → target subdir in the monorepo.
 #   • Path-rewrite / merge helpers used to land legacy commits cleanly:
@@ -16,7 +15,6 @@
 #         plugins/newspack-plugin/packages/{colors,components,icons}/* to
 #         packages/<pkg>/* (those package homes moved during extraction).
 #   • Dry-run wrappers around git push and gh pr create.
-#   • Helpers to look up the manifest entry for a given legacy repo name.
 #
 # The whole bin/migration/ tree is intended to be deleted after cutover —
 # none of this code is needed once development has moved to the monorepo.
@@ -41,19 +39,6 @@ LEGACY_REPOS=(
   newspack-block-theme:themes/newspack-block-theme
   newspack-scripts:packages/scripts
 )
-
-# Look up the monorepo target subdir for a legacy repo name. Echoes the
-# subdir on stdout, returns 1 if the name isn't in the manifest.
-legacy_repo_target() {
-  local name=$1 entry
-  for entry in "${LEGACY_REPOS[@]}"; do
-    if [ "${entry%%:*}" = "$name" ]; then
-      echo "${entry#*:}"
-      return 0
-    fi
-  done
-  return 1
-}
 
 # Wrap git push so DRY_RUN=1 prints the intended push instead of running it.
 # Callers set DRY_RUN themselves; we read it from the environment.

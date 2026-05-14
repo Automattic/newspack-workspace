@@ -65,14 +65,8 @@ rm -rf "$OUTPUT_DIR"
 mkdir -p "$(dirname "$OUTPUT_DIR")"
 
 # --mirror preserves all refs so we can pick trunk out reliably even when
-# the source is a working copy with a different HEAD. --no-hardlinks
-# prevents a race condition that bites when transplant-pr.sh runs many
-# PRs of the same legacy repo concurrently: they all clone-mirror from the
-# same bare source, and git's default hardlink optimization can fail with
-# "hardlink different from source" if pack files get rewritten between
-# the link calls. The disk-space cost of a real copy is fine at the scale
-# we care about (one filtered repo per PR).
-git clone --mirror --no-hardlinks --quiet "$SOURCE" "$OUTPUT_DIR"
+# the source is a working copy with a different HEAD.
+git clone --mirror --quiet "$SOURCE" "$OUTPUT_DIR"
 
 cd "$OUTPUT_DIR"
 

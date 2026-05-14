@@ -48,7 +48,7 @@ SCRATCH_DIR="${SCRATCH_DIR:-/tmp/sync-legacy}"
 PARALLEL_FILTER_JOBS="${PARALLEL_FILTER_JOBS:-5}"
 
 # Shared helpers (manifest, structural overrides, dry-run wrappers, etc.)
-# live in lib.sh so transplant-pr.sh can reuse them at cutover time.
+# live in lib.sh.
 # shellcheck source=lib.sh
 . "$SCRIPT_DIR/lib.sh"
 
