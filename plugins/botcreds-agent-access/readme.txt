@@ -89,7 +89,7 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 * Updated text domain to botcred-application-passwords.
 
 = 2.0.0 =
-* Rebranded from ClawPress to Agent Access.
+* Rebranded and relaunched as BotCreds Agent Access.
 * Removed provisioner and theme-bridge (available as separate add-ons).
 * Security hardening (escaping, nonces, input validation).
 * Added object caching for content stats.
