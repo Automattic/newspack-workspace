@@ -48,7 +48,7 @@ class Agent_Access_Admin {
 			__( 'BotCreds', 'botcreds-agent-access' ),
 			__( 'BotCreds', 'botcreds-agent-access' ),
 			'manage_options',
-			'agent-access',
+			'botcreds-agent-access',
 			array( $this, 'render_admin_page' )
 		);
 	}
@@ -326,57 +326,213 @@ class Agent_Access_Admin {
 	 * Render the Tools → Agent Access admin page.
 	 */
 	public function render_admin_page() {
-		$users_with_passwords = $this->get_all_openclaw_users();
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$current_tab = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'connections';
 		?>
 		<div class="wrap">
 			<h1>
 				<span>&#129438;</span>
 				<?php esc_html_e( 'BotCreds', 'botcreds-agent-access' ); ?>
 			</h1>
-			<p><?php esc_html_e( 'All users with active agent connections on this site.', 'botcreds-agent-access' ); ?></p>
 
-			<?php if ( empty( $users_with_passwords ) ) : ?>
-				<p><em><?php esc_html_e( 'No users have connected an agent yet.', 'botcreds-agent-access' ); ?></em></p>
+			<nav class="nav-tab-wrapper">
+				<a href="<?php echo esc_url( add_query_arg( 'tab', 'connections', menu_page_url( 'botcreds-agent-access', false ) ) ); ?>"
+				   class="nav-tab <?php echo 'connections' === $current_tab ? 'nav-tab-active' : ''; ?>">
+					<?php esc_html_e( 'Connections', 'botcreds-agent-access' ); ?>
+				</a>
+				<a href="<?php echo esc_url( add_query_arg( 'tab', 'activity', menu_page_url( 'botcreds-agent-access', false ) ) ); ?>"
+				   class="nav-tab <?php echo 'activity' === $current_tab ? 'nav-tab-active' : ''; ?>">
+					<?php esc_html_e( 'Activity Log', 'botcreds-agent-access' ); ?>
+				</a>
+			</nav>
+
+			<?php if ( 'activity' === $current_tab ) : ?>
+				<?php $this->render_activity_log_tab(); ?>
 			<?php else : ?>
-				<table class="widefat striped">
-					<thead>
-						<tr>
-							<th><?php esc_html_e( 'User', 'botcreds-agent-access' ); ?></th>
-							<th><?php esc_html_e( 'Role', 'botcreds-agent-access' ); ?></th>
-							<th><?php esc_html_e( 'Created', 'botcreds-agent-access' ); ?></th>
-							<th><?php esc_html_e( 'Last Used', 'botcreds-agent-access' ); ?></th>
-							<th><?php esc_html_e( 'Posts', 'botcreds-agent-access' ); ?></th>
-							<th><?php esc_html_e( 'Media', 'botcreds-agent-access' ); ?></th>
-						</tr>
-					</thead>
-					<tbody>
-						<?php foreach ( $users_with_passwords as $entry ) : ?>
-							<tr>
-								<td>
-									<strong>
-										<a href="<?php echo esc_url( get_edit_user_link( $entry['user']->ID ) ); ?>">
-											<?php echo esc_html( $entry['user']->display_name ); ?>
-										</a>
-									</strong>
-									<br>
-									<span class="description"><?php echo esc_html( $entry['user']->user_login ); ?></span>
-								</td>
-								<td>
-									<span class="agent-access-badge agent-access-badge--<?php echo esc_attr( $entry['role_slug'] ); ?>">
-										<?php echo esc_html( $entry['role_name'] ); ?>
-									</span>
-								</td>
-								<td><?php echo esc_html( $entry['created'] ); ?></td>
-								<td><?php echo esc_html( $entry['last_used'] ); ?></td>
-								<td><?php echo esc_html( $entry['stats']['post_count'] ); ?></td>
-								<td><?php echo esc_html( $entry['stats']['media_count'] ); ?></td>
-							</tr>
-						<?php endforeach; ?>
-					</tbody>
-				</table>
+				<?php $this->render_connections_tab(); ?>
 			<?php endif; ?>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Render the Connections tab (formerly the full admin page).
+	 */
+	private function render_connections_tab() {
+		$users_with_passwords = $this->get_all_openclaw_users();
+		?>
+		<p><?php esc_html_e( 'All users with active agent connections on this site.', 'botcreds-agent-access' ); ?></p>
+
+		<?php if ( empty( $users_with_passwords ) ) : ?>
+			<p><em><?php esc_html_e( 'No users have connected an agent yet.', 'botcreds-agent-access' ); ?></em></p>
+		<?php else : ?>
+			<table class="widefat striped">
+				<thead>
+					<tr>
+						<th><?php esc_html_e( 'User', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Role', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Created', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Last Used', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Posts', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Media', 'botcreds-agent-access' ); ?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $users_with_passwords as $entry ) : ?>
+						<tr>
+							<td>
+								<strong>
+									<a href="<?php echo esc_url( get_edit_user_link( $entry['user']->ID ) ); ?>">
+										<?php echo esc_html( $entry['user']->display_name ); ?>
+									</a>
+								</strong>
+								<br>
+								<span class="description"><?php echo esc_html( $entry['user']->user_login ); ?></span>
+							</td>
+							<td>
+								<span class="agent-access-badge agent-access-badge--<?php echo esc_attr( $entry['role_slug'] ); ?>">
+									<?php echo esc_html( $entry['role_name'] ); ?>
+								</span>
+							</td>
+							<td><?php echo esc_html( $entry['created'] ); ?></td>
+							<td><?php echo esc_html( $entry['last_used'] ); ?></td>
+							<td><?php echo esc_html( $entry['stats']['post_count'] ); ?></td>
+							<td><?php echo esc_html( $entry['stats']['media_count'] ); ?></td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+		<?php endif;
+	}
+
+	/**
+	 * Render the Activity Log tab.
+	 */
+	private function render_activity_log_tab() {
+		$per_page = 50;
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$paged    = max( 1, isset( $_GET['paged'] ) ? (int) $_GET['paged'] : 1 );
+		$source   = isset( $_GET['source'] ) ? sanitize_key( $_GET['source'] ) : '';
+		$method   = isset( $_GET['method'] ) ? strtoupper( sanitize_key( $_GET['method'] ) ) : '';
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+		$filter_args = array(
+			'source' => $source,
+			'method' => $method,
+		);
+
+		$total   = Agent_Access_Activity_Log::count_entries( $filter_args );
+		$entries = Agent_Access_Activity_Log::get_entries( array_merge( $filter_args, array(
+			'limit'  => $per_page,
+			'offset' => ( $paged - 1 ) * $per_page,
+		) ) );
+
+		$base_url = add_query_arg( 'tab', 'activity', menu_page_url( 'botcreds-agent-access', false ) );
+		?>
+
+		<form method="get" style="margin: 1em 0;">
+			<input type="hidden" name="page" value="agent-access">
+			<input type="hidden" name="tab" value="activity">
+
+			<select name="source">
+				<option value=""><?php esc_html_e( 'All sources', 'botcreds-agent-access' ); ?></option>
+				<option value="agent-access" <?php selected( $source, 'agent-access' ); ?>><?php esc_html_e( 'Agent Access', 'botcreds-agent-access' ); ?></option>
+				<option value="wordpress-mcp" <?php selected( $source, 'wordpress-mcp' ); ?>><?php esc_html_e( 'WordPress.com MCP', 'botcreds-agent-access' ); ?></option>
+			</select>
+
+			<select name="method">
+				<option value=""><?php esc_html_e( 'All methods', 'botcreds-agent-access' ); ?></option>
+				<?php foreach ( array( 'GET', 'POST', 'PUT', 'PATCH', 'DELETE' ) as $m ) : ?>
+					<option value="<?php echo esc_attr( $m ); ?>" <?php selected( $method, $m ); ?>><?php echo esc_html( $m ); ?></option>
+				<?php endforeach; ?>
+			</select>
+
+			<?php submit_button( __( 'Filter', 'botcreds-agent-access' ), 'secondary', '', false ); ?>
+		</form>
+
+		<p>
+			<?php
+			printf(
+				/* translators: %d: total log entries */
+				esc_html__( '%d total log entries.', 'botcreds-agent-access' ),
+				(int) $total
+			);
+			?>
+		</p>
+
+		<?php if ( empty( $entries ) ) : ?>
+			<p><em><?php esc_html_e( 'No activity logged yet.', 'botcreds-agent-access' ); ?></em></p>
+		<?php else : ?>
+			<table class="widefat striped" style="font-size:13px;">
+				<thead>
+					<tr>
+						<th><?php esc_html_e( 'Time', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Source', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'User', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Method', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Route', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Object', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'IP', 'botcreds-agent-access' ); ?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $entries as $row ) : ?>
+						<tr>
+							<td style="white-space:nowrap;"><?php echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $row->created_at ) ) ); ?></td>
+							<td>
+								<span class="agent-access-badge agent-access-badge--<?php echo esc_attr( str_replace( '-', '', $row->source ) ); ?>">
+									<?php echo esc_html( 'botcreds-agent-access' === $row->source ? 'Agent Access' : 'WP.com MCP' ); ?>
+								</span>
+							</td>
+							<td>
+								<?php if ( $row->user_id ) : ?>
+									<a href="<?php echo esc_url( get_edit_user_link( $row->user_id ) ); ?>">
+										<?php echo esc_html( $row->display_name ?: $row->user_login ?: '#' . $row->user_id ); ?>
+									</a>
+								<?php else : ?>
+									&mdash;
+								<?php endif; ?>
+							</td>
+							<td><code><?php echo esc_html( $row->method ); ?></code></td>
+							<td style="word-break:break-all;"><code><?php echo esc_html( $row->route ); ?></code></td>
+							<td>
+								<?php if ( $row->object_id ) : ?>
+									<a href="<?php echo esc_url( get_edit_post_link( $row->object_id ) ?: '' ); ?>">
+										<?php echo esc_html( $row->object_type . ' #' . $row->object_id ); ?>
+									</a>
+								<?php elseif ( $row->object_type ) : ?>
+									<?php echo esc_html( $row->object_type ); ?>
+								<?php else : ?>
+									&mdash;
+								<?php endif; ?>
+							</td>
+							<td><?php echo esc_html( $row->ip ); ?></td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+
+			<?php
+			// Simple pagination.
+			$total_pages = (int) ceil( $total / $per_page );
+			if ( $total_pages > 1 ) {
+				echo '<div class="tablenav"><div class="tablenav-pages">';
+				for ( $p = 1; $p <= $total_pages; $p++ ) {
+					$url = add_query_arg( array_filter( array(
+						'paged'  => $p > 1 ? $p : false,
+						'source' => $source ?: false,
+						'method' => $method ?: false,
+					) ), $base_url );
+					if ( $p === $paged ) {
+						echo '<span class="page-numbers current">' . (int) $p . '</span> ';
+					} else {
+						echo '<a class="page-numbers" href="' . esc_url( $url ) . '">' . (int) $p . '</a> ';
+					}
+				}
+				echo '</div></div>';
+			}
+			?>
+		<?php endif;
 	}
 
 	/**
