@@ -63,17 +63,19 @@ gh_pr_create() {
   fi
 }
 
-# Drop legacy per-plugin .github/ (CI runs at the monorepo root) and
+# Drop legacy per-plugin .github/ (CI runs at the monorepo root),
 # package-lock.json (the monorepo uses pnpm-lock.yaml at the root; per-plugin
 # lockfiles are vestigial and would otherwise be re-added on every sync run
-# that touches them upstream). Also restore workspace:* in any conflicting
-# plugin/theme package.json — the legacy repo bumps newspack-{scripts,
-# components,colors,icons} to concrete versions, which would break the
-# pnpm workspace if landed.
+# that touches them upstream), and commitlint.config.js (root package.json
+# declares commitlint config workspace-wide). Also restore workspace:* in any
+# conflicting plugin/theme package.json — the legacy repo bumps
+# newspack-{scripts,components,colors,icons} to concrete versions, which
+# would break the pnpm workspace if landed.
 apply_structural_overrides() {
   local target=$1
   git rm -rf --ignore-unmatch \
     "$target/.github" "$target/package-lock.json" \
+    "$target/commitlint.config.js" \
     > /dev/null 2>&1 || true
   while IFS= read -r f; do
     case "$f" in
