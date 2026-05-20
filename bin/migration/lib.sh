@@ -119,7 +119,7 @@ normalize_package_repos() {
         changed.push(pj);
       }
     }
-    process.stdout.write(changed.join("\0"));
+    for (const f of changed) process.stdout.write(f + "\0");
   ' | while IFS= read -r -d "" f; do
     git add -- "$f"
   done
@@ -162,7 +162,7 @@ restore_workspace_deps() {
         changed.push(pj);
       }
     }
-    process.stdout.write(changed.join("\0"));
+    for (const f of changed) process.stdout.write(f + "\0");
   ' | while IFS= read -r -d "" f; do
     git add -- "$f"
   done
