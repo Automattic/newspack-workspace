@@ -50,6 +50,14 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y git-filter-repo
+      # pnpm + node so the sync script can refresh pnpm-lock.yaml after merges
+      # that change plugin/theme package.json files.
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: integration/.nvmrc
       - name: Configure git
         working-directory: integration
         run: |
