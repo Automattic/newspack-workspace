@@ -30,3 +30,15 @@ validate_port() {
         exit 1
     fi
 }
+
+# Logging helpers — mirror the colored output used by bin/site-setup.sh.
+NP_RED='\033[0;31m'
+NP_GREEN='\033[0;32m'
+NP_YELLOW='\033[1;33m'
+NP_BLUE='\033[0;34m'
+NP_NC='\033[0m'
+
+log_info() { echo -e "${NP_BLUE}[INFO]${NP_NC} ${1}"; }
+log_success() { echo -e "${NP_GREEN}[SUCCESS]${NP_NC} ${1}"; }
+log_warning() { echo -e "${NP_YELLOW}[WARNING]${NP_NC} ${1}"; }
+log_error() { echo -e "${NP_RED}[ERROR]${NP_NC} ${1}"; }

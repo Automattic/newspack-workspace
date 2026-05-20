@@ -355,6 +355,19 @@ MIGRATE
         done
         if ! docker exec "$container_name" wp --allow-root core is-installed 2>/dev/null; then
             echo "Warning: WordPress may not be fully installed. Run 'n env up $env_name' to retry."
+        elif docker exec "$container_name" test -f /var/www/html/wp-config.php 2>/dev/null; then
+            # Ensure pretty permalinks work. A fresh isolated env installs with WP's
+            # default (plain) permalink structure, so the .htaccess rewrite block stays
+            # empty — and a later `wp rewrite flush --hard` with an empty structure
+            # rewrites .htaccess down to a bare "# BEGIN/END WordPress" marker, 404-ing
+            # every pretty permalink. Set a structure and flush --hard so the rewrite
+            # rules are written out, then hand the file back to the Apache user so WP can
+            # keep it updated. The main-site path does this via site-setup.sh; envs skip
+            # that and install WordPress directly, so it has to happen here too.
+            run_user="${USE_CUSTOM_APACHE_USER:-www-data}"
+            docker exec "$container_name" wp --allow-root rewrite structure '/%year%/%monthnum%/%day%/%postname%/' --hard >/dev/null 2>&1
+            docker exec "$container_name" wp --allow-root rewrite flush --hard >/dev/null 2>&1
+            docker exec "$container_name" chown "$run_user":"$run_user" /var/www/html/.htaccess 2>/dev/null || true
         fi
         # Reload Apache to pick up SSL config (it's running by now).
         docker exec "$container_name" apachectl graceful 2>/dev/null
@@ -576,10 +589,15 @@ MIGRATE
             "$NABSPATH/bin/env.sh" destroy "$name"
         done
         ;;
+    e2e-setup)
+        shift
+        exec "$NABSPATH/bin/setup-local-e2e.sh" "$@"
+        ;;
     *)
-        echo "Usage: n env <create|up|down|destroy|list|cleanup>"
+        echo "Usage: n env <create|up|down|destroy|list|cleanup|e2e-setup>"
         echo "  up <name> [--build]      Start an environment"
         echo "  up --all [--build]       Start all environments"
         echo "  cleanup [--all] [--yes]  Remove environments (--all selects everything, --yes skips confirmation)"
+        echo "  e2e-setup <name> [opts]  Build a ready-to-run local e2e-tests environment (see --help)"
         ;;
 esac

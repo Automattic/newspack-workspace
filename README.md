@@ -326,6 +326,42 @@ This installs a locked-down wrapper script (`newspack-manage-host`) that only al
 
 To undo: `sudo rm /etc/sudoers.d/newspack-manage-host /usr/local/bin/newspack-manage-host`
 
+### Running the e2e test suite locally
+
+The [newspack-e2e-tests](https://github.com/Automattic/newspack-e2e-tests) Playwright suite normally runs in CI against staging. You can run it against a local isolated environment instead, to reproduce and fix failures without a CI round-trip:
+
+```BASH
+n env e2e-setup <name>
+```
+
+This one command does everything needed to go from nothing to a runnable e2e site:
+
+1. Creates worktrees on `release` for the plugins the suite needs (`newspack-plugin`, `newspack-blocks`, `newspack-popups`, `newspack-newsletters`, `newspack-ads`, `newspack-theme`) and an isolated environment that mounts them.
+2. Starts the environment, installs WordPress, and writes working permalink rewrite rules.
+3. Builds any worktree that's missing compiled assets (it doesn't assume `repos/` is built).
+4. Installs the e2e helper plugin and runs `e2e-reset.sh` (Newspack setup, sample content, snapshots, WooCommerce) — both pulled from the e2e-tests checkout, not vendored here.
+5. Points the e2e repo's `.env` at the new site (`SITE_URL`, admin credentials), preserving any other keys.
+
+It's safe to re-run: an existing environment is reused, and only worktrees missing assets are rebuilt.
+
+```BASH
+# Options:
+n env e2e-setup <name> \
+  --branch <branch>   # branch to check out per plugin (default: release)
+  --domain <domain>   # site domain (default: <name>.local)
+  --e2e-repo <path>   # path to the newspack-e2e-tests checkout
+                      #   (default: a sibling of this workspace)
+```
+
+When it finishes, run the suite against the new environment:
+
+```BASH
+cd ../newspack-e2e-tests
+npx playwright test --project="Vanilla in Desktop Chrome"
+```
+
+By default the suite expects the e2e-tests checkout to sit alongside this workspace (`../newspack-e2e-tests`); pass `--e2e-repo` if yours lives elsewhere.
+
 ## Newspack Manager
 
 This Docker environment will launch two sites by default. One is the site you will be working on to develop all plugins, and the other is the one that will run the Newspack Manager Client.
