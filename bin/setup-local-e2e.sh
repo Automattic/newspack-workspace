@@ -98,6 +98,18 @@ fi
 container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
 compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
 
+# Upsert a KEY="value" line into an env file (in-place replace, or append).
+upsert_env_var() {
+    local key="$1" value="$2" file="$3"
+    if [[ -f "$file" ]] && grep -q "^${key}=" "$file"; then
+        # In-place replace; handle both BSD and GNU sed.
+        sed -i '' "s|^${key}=.*|${key}=\"${value}\"|" "$file" 2>/dev/null \
+            || sed -i "s|^${key}=.*|${key}=\"${value}\"|" "$file"
+    else
+        echo "${key}=\"${value}\"" >> "$file"
+    fi
+}
+
 log_info "Setting up local e2e environment '$env_name' (branch: $branch, domain: $domain)"
 
 # The isolated-env compose files reference an external Docker network; create it
@@ -155,6 +167,27 @@ for repo in "${E2E_PLUGINS[@]}"; do
     fi
 done
 
+# 3b. Wire Stripe test keys into the e2e repo's .env so the donations test can run
+#     locally. e2e-reset.sh reads STRIPE_PUB_KEY / STRIPE_SECRECT_KEY from the site's
+#     .env (which we copy into the container in step 4). The keys are sourced from
+#     newspack-workspace/bin/secrets.json — the workspace's canonical secrets file.
+#     (Today this lives in newspack-docker; once the e2e suite is merged into the
+#     workspace, that same secrets.json will be the single home for these keys.)
+secrets_file="$NABSPATH/bin/secrets.json"
+if [[ -f "$secrets_file" ]] && command -v jq >/dev/null 2>&1; then
+    stripe_pub=$(jq -r '.stripe.testPublishableKey // empty' "$secrets_file")
+    stripe_secret=$(jq -r '.stripe.testSecretKey // empty' "$secrets_file")
+    if [[ -n "$stripe_pub" && -n "$stripe_secret" ]]; then
+        log_info "Wiring Stripe test keys from secrets.json into $e2e_repo/.env..."
+        touch "$e2e_repo/.env"
+        upsert_env_var "STRIPE_PUB_KEY" "$stripe_pub" "$e2e_repo/.env"
+        # Note: e2e-reset.sh expects the (misspelled) STRIPE_SECRECT_KEY var name.
+        upsert_env_var "STRIPE_SECRECT_KEY" "$stripe_secret" "$e2e_repo/.env"
+    else
+        log_warning "No Stripe test keys in secrets.json — the donations test will fail locally."
+    fi
+fi
+
 # 4. Install the e2e helper plugin and run the e2e reset script, both pulled from
 #    the e2e-tests repo (not vendored here). e2e-reset.sh resolves the WordPress
 #    install from its working directory, so it runs from the web root.
@@ -189,16 +222,6 @@ docker exec "$container_name" wp --allow-root cache flush >/dev/null 2>&1 || tru
 # 6. Point the e2e repo's .env at this environment, preserving any other keys
 #    (e.g. Stripe credentials) already present.
 log_info "Configuring $e2e_repo/.env..."
-upsert_env_var() {
-    local key="$1" value="$2" file="$3"
-    if [[ -f "$file" ]] && grep -q "^${key}=" "$file"; then
-        # In-place replace; handle both BSD and GNU sed.
-        sed -i '' "s|^${key}=.*|${key}=\"${value}\"|" "$file" 2>/dev/null \
-            || sed -i "s|^${key}=.*|${key}=\"${value}\"|" "$file"
-    else
-        echo "${key}=\"${value}\"" >> "$file"
-    fi
-}
 touch "$e2e_repo/.env"
 upsert_env_var "SITE_URL" "https://${domain}" "$e2e_repo/.env"
 upsert_env_var "ADMIN_USER" "admin" "$e2e_repo/.env"
