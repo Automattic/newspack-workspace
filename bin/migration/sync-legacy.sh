@@ -235,6 +235,7 @@ integrate_all() {
     fi
 
     normalize_package_repos
+    restore_workspace_deps
 
     if [ -z "$(git diff --name-only --diff-filter=U)" ]; then
       git commit --no-edit > /dev/null
@@ -250,6 +251,7 @@ integrate_all() {
   done
 
   if [ "$(git rev-parse HEAD)" != "$START" ]; then
+    regenerate_lockfile
     echo "==> Pushing $(git rev-list --count "$START..HEAD") new commits to monorepo-integration"
     git_push origin HEAD:monorepo-integration
   else
