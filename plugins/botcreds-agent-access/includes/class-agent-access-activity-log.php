@@ -99,7 +99,7 @@ class Agent_Access_Activity_Log {
 		}
 
 		// ---- WP.com MCP via User-Agent ----
-		$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? $_SERVER['HTTP_USER_AGENT'] : '';
+		$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
 
 		/**
 		 * Filters the User-Agent substrings used to identify WP.com MCP requests.
@@ -203,7 +203,7 @@ class Agent_Access_Activity_Log {
 	 */
 	public static function get_entries( $args = array() ) {
 		global $wpdb;
-		$table = $wpdb->prefix . self::TABLE_NAME;
+		$table = esc_sql( $wpdb->prefix . self::TABLE_NAME );
 
 		$defaults = array(
 			'limit'   => 50,
@@ -240,8 +240,8 @@ class Agent_Access_Activity_Log {
 		        ORDER BY l.created_at DESC
 		        LIMIT %d OFFSET %d";
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		return $wpdb->get_results( $wpdb->prepare( $sql, $values ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return $wpdb->get_results( $wpdb->prepare( $sql, $values ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -252,7 +252,7 @@ class Agent_Access_Activity_Log {
 	 */
 	public static function count_entries( $args = array() ) {
 		global $wpdb;
-		$table = $wpdb->prefix . self::TABLE_NAME;
+		$table = esc_sql( $wpdb->prefix . self::TABLE_NAME );
 
 		$where  = array( '1=1' );
 		$values = array();
@@ -322,8 +322,9 @@ class Agent_Access_Activity_Log {
 	 */
 	public static function uninstall_table() {
 		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}" . self::TABLE_NAME );
+		$table_name = esc_sql( $wpdb->prefix . self::TABLE_NAME );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
+		$wpdb->query( "DROP TABLE IF EXISTS `{$table_name}`" );
 	}
 
 	// -------------------------------------------------------------------------

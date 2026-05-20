@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.6
 Tested up to: 6.9
 Requires PHP: 7.4
-Stable tag: 2.0.3
+Stable tag: 2.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -75,6 +75,11 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.1.0 =
+* Added activity log for Agent Access app passwords and WP.com MCP connections.
+* Activity Log tab in Tools → Agent Access — filterable by source and HTTP method, paginated.
+* Removed ClawPress references — rebranded to BotCreds Agent Access.
 
 = 2.0.3 =
 * Fixed text domain mismatch in all includes (botcreds-agent-access).
