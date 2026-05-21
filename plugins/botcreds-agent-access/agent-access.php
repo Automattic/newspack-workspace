@@ -28,10 +28,6 @@ require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-tracker.php'
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-mentions.php';
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-activity-log.php';
 
-if ( file_exists( AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-chat.php' ) ) {
-	require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-chat.php';
-}
-
 /**
  * Initialize the plugin.
  */
@@ -46,9 +42,6 @@ function agent_access_init() {
 	$mentions->init();
 	$activity_log->init();
 
-	if ( class_exists( 'Agent_Access_Chat' ) ) {
-		Agent_Access_Chat::init();
-	}
 }
 add_action( 'plugins_loaded', 'agent_access_init' );
 
