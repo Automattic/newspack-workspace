@@ -473,8 +473,7 @@ class Agent_Access_Admin {
 						<th><?php esc_html_e( 'User', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Method', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Route', 'botcreds-agent-access' ); ?></th>
-						<th><?php esc_html_e( 'Object', 'botcreds-agent-access' ); ?></th>
-						<th><?php esc_html_e( 'IP', 'botcreds-agent-access' ); ?></th>
+						<th style="min-width:140px;"><?php esc_html_e( 'Object', 'botcreds-agent-access' ); ?></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -516,7 +515,6 @@ class Agent_Access_Admin {
 									&mdash;
 								<?php endif; ?>
 							</td>
-							<td><?php echo esc_html( $row->ip ); ?></td>
 						</tr>
 					<?php endforeach; ?>
 				</tbody>
