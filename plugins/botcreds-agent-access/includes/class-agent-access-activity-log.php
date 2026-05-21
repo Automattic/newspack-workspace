@@ -258,14 +258,18 @@ class Agent_Access_Activity_Log {
 		$values[] = (int) $args['limit'];
 		$values[] = (int) $args['offset'];
 
-		$sql = "SELECT l.*, u.user_login, u.display_name
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$sql = $wpdb->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			"SELECT l.*, u.user_login, u.display_name
 		        FROM {$table} l
 		        LEFT JOIN {$wpdb->users} u ON l.user_id = u.ID
 		        WHERE " . implode( ' AND ', $where ) . "
 		        ORDER BY l.created_at DESC
-		        LIMIT %d OFFSET %d";
+		        LIMIT %d OFFSET %d",
+			$values
+		);
 
-		return $wpdb->get_results( $wpdb->prepare( $sql, $values ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return $wpdb->get_results( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	/**
@@ -309,9 +313,13 @@ class Agent_Access_Activity_Log {
 			return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
 		}
 
-		$sql = "SELECT COUNT(*) FROM {$table} WHERE " . implode( ' AND ', $where );
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$sql = $wpdb->prepare( // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			"SELECT COUNT(*) FROM {$table} WHERE " . implode( ' AND ', $where ),
+			$values
+		);
 
-		return (int) $wpdb->get_var( $wpdb->prepare( $sql, $values ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (int) $wpdb->get_var( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 	}
 
 	// -------------------------------------------------------------------------
