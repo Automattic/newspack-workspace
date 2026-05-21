@@ -162,7 +162,7 @@ View the comment:
 
 —
 Agent Access @ %6\$s",
-				'agent-access'
+				'botcreds-agent-access'
 			),
 			$user->display_name,
 			$author,
