@@ -222,9 +222,10 @@ class Agent_Access_Activity_Log {
 		$defaults = array(
 			'limit'   => 50,
 			'offset'  => 0,
-			'source'  => '',
-			'user_id' => 0,
-			'method'  => '',
+			'source'          => '',
+			'user_id'         => 0,
+			'method'          => '',
+			'exclude_methods' => array(),
 		);
 		$args = wp_parse_args( $args, $defaults );
 
@@ -242,6 +243,12 @@ class Agent_Access_Activity_Log {
 		if ( ! empty( $args['method'] ) ) {
 			$where[]  = 'method = %s';
 			$values[] = strtoupper( $args['method'] );
+		} elseif ( ! empty( $args['exclude_methods'] ) ) {
+			$placeholders = implode( ', ', array_fill( 0, count( $args['exclude_methods'] ), '%s' ) );
+			$where[]      = "method NOT IN ({$placeholders})";
+			foreach ( $args['exclude_methods'] as $excl ) {
+				$values[] = strtoupper( $excl );
+			}
 		}
 		if ( ! empty( $args['exclude_route_prefix'] ) ) {
 			$where[]  = 'route NOT LIKE %s';
@@ -285,6 +292,12 @@ class Agent_Access_Activity_Log {
 		if ( ! empty( $args['method'] ) ) {
 			$where[]  = 'method = %s';
 			$values[] = strtoupper( $args['method'] );
+		} elseif ( ! empty( $args['exclude_methods'] ) ) {
+			$placeholders = implode( ', ', array_fill( 0, count( $args['exclude_methods'] ), '%s' ) );
+			$where[]      = "method NOT IN ({$placeholders})";
+			foreach ( $args['exclude_methods'] as $excl ) {
+				$values[] = strtoupper( $excl );
+			}
 		}
 		if ( ! empty( $args['exclude_route_prefix'] ) ) {
 			$where[]  = 'route NOT LIKE %s';

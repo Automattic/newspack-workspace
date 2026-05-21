@@ -417,8 +417,9 @@ class Agent_Access_Admin {
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 		$filter_args = array(
-			'source' => $source,
-			'method' => $method,
+			'source'          => $source,
+			'method'          => $method,
+			'exclude_methods' => empty( $method ) ? array( 'GET' ) : array(),
 		);
 
 		$total   = Agent_Access_Activity_Log::count_entries( $filter_args );
@@ -442,8 +443,8 @@ class Agent_Access_Admin {
 			</select>
 
 			<select name="method">
-				<option value=""><?php esc_html_e( 'All methods', 'botcreds-agent-access' ); ?></option>
-				<?php foreach ( array( 'GET', 'POST', 'PUT', 'PATCH', 'DELETE' ) as $m ) : ?>
+				<option value=""><?php esc_html_e( 'Writes (POST/PUT/PATCH/DELETE)', 'botcreds-agent-access' ); ?></option>
+				<?php foreach ( array( 'POST', 'PUT', 'PATCH', 'DELETE' ) as $m ) : ?>
 					<option value="<?php echo esc_attr( $m ); ?>" <?php selected( $method, $m ); ?>><?php echo esc_html( $m ); ?></option>
 				<?php endforeach; ?>
 			</select>
