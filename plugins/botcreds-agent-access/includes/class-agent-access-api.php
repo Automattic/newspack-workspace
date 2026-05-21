@@ -23,7 +23,7 @@ class Agent_Access_API {
 		if ( $existing ) {
 			return new WP_Error(
 				'agent_access_exists',
-				__( 'An agent Application Password already exists. Revoke it first before creating a new one./', 'botcreds-agent-access' )
+				__( 'An agent Application Password already exists. Revoke it first before creating a new one.', 'botcreds-agent-access' )
 			);
 		}
 
@@ -60,7 +60,7 @@ class Agent_Access_API {
 		if ( ! $existing ) {
 			return new WP_Error(
 				'agent_access_not_found',
-				__( 'No agent Application Password found to revoke./', 'botcreds-agent-access' )
+				__( 'No agent Application Password found to revoke.', 'botcreds-agent-access' )
 			);
 		}
 

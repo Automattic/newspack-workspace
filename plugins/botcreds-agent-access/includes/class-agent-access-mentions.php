@@ -134,14 +134,14 @@ class Agent_Access_Mentions {
 		}
 
 		$post    = get_post( $comment->comment_post_ID );
-		$author  = sanitize_text_field( $comment->comment_author ?: __( 'Someone/', 'botcreds-agent-access' ) );
+		$author  = sanitize_text_field( $comment->comment_author ?: __( 'Someone', 'botcreds-agent-access' ) );
 		$excerpt = wp_trim_words( wp_strip_all_tags( $comment->comment_content ), 40 );
 
-		$post_title = $post ? sanitize_text_field( $post->post_title ) : __( 'a post/', 'botcreds-agent-access' );
+		$post_title = $post ? sanitize_text_field( $post->post_title ) : __( 'a post', 'botcreds-agent-access' );
 
 		$subject = sprintf(
 			/* translators: 1: comment author name, 2: post title */
-			__( '%1$s mentioned you on "%2$s"/', 'botcreds-agent-access' ),
+			__( '%1$s mentioned you on "%2$s"', 'botcreds-agent-access' ),
 			$author,
 			$post_title
 		);
