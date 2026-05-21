@@ -438,6 +438,7 @@ class Agent_Access_Admin {
 				<option value=""><?php esc_html_e( 'All sources/', 'botcreds-agent-access' ); ?></option>
 				<option value="agent-access" <?php selected( $source, 'agent-access' ); ?>><?php esc_html_e( 'Agent Access/', 'botcreds-agent-access' ); ?></option>
 				<option value="wordpress-mcp" <?php selected( $source, 'wordpress-mcp' ); ?>><?php esc_html_e( 'WordPress.com MCP/', 'botcreds-agent-access' ); ?></option>
+				<option value="rest-api" <?php selected( $source, 'rest-api' ); ?>><?php esc_html_e( 'REST API/', 'botcreds-agent-access' ); ?></option>
 			</select>
 
 			<select name="method">
@@ -480,8 +481,16 @@ class Agent_Access_Admin {
 						<tr>
 							<td style="white-space:nowrap;"><?php echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $row->created_at ) ) ); ?></td>
 							<td>
+								<?php
+								$source_labels = array(
+									'agent-access'  => 'Agent Access',
+									'wordpress-mcp' => 'WP.com MCP',
+									'rest-api'      => 'REST API',
+								);
+								$source_label = isset( $source_labels[ $row->source ] ) ? $source_labels[ $row->source ] : $row->source;
+								?>
 								<span class="agent-access-badge agent-access-badge--<?php echo esc_attr( str_replace( '-', '', $row->source ) ); ?>">
-									<?php echo esc_html( 'agent-access' === $row->source ? 'Agent Access' : 'WP.com MCP' ); ?>
+									<?php echo esc_html( $source_label ); ?>
 								</span>
 							</td>
 							<td>

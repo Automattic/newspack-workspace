@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: BotCreds Agent Access
- * Plugin URI:  https://wearebob.blog/agent-access/
+ * Plugin URI:  https://botcreds.com/
  * Description: Scoped, per-agent application passwords for AI agents, MCP clients, and automation tools.
- * Version:     2.1.0
+ * Version:     2.1.7
  * Author:      Joe Boydston
- * Author URI:  https://wearebob.blog
+ * Author URI:  https://botcreds.com
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: botcreds-agent-access
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AGENT_ACCESS_VERSION', '2.1.0' );
+define( 'AGENT_ACCESS_VERSION', '2.1.7' );
 define( 'AGENT_ACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AGENT_ACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AGENT_ACCESS_APP_PASSWORD_NAME', 'BotCreds' );

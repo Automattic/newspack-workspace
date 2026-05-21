@@ -15,6 +15,7 @@ class Agent_Access_Activity_Log {
 	const TABLE_NAME     = 'agent_access_log';
 	const SOURCE_AA      = 'agent-access';
 	const SOURCE_WP_MCP  = 'wordpress-mcp';
+	const SOURCE_REST    = 'rest-api';
 
 	/**
 	 * Register hooks.
@@ -22,6 +23,7 @@ class Agent_Access_Activity_Log {
 	public function init() {
 		add_filter( 'rest_pre_dispatch', array( $this, 'log_request' ), 10, 3 );
 	}
+
 
 	// -------------------------------------------------------------------------
 	// Logging
@@ -123,8 +125,15 @@ class Agent_Access_Activity_Log {
 		}
 
 		// ---- WP.com MCP via Jetpack connection headers ----
-		// Jetpack-proxied requests carry X-Jetpack-Signature or similar headers.
 		if ( isset( $_SERVER['HTTP_X_JETPACK_SIGNATURE'] ) || isset( $_SERVER['HTTP_X_JP_SIGNATURE'] ) ) {
+			return array(
+				'source'            => self::SOURCE_WP_MCP,
+				'app_password_name' => null,
+			);
+		}
+
+		// ---- WP.com MCP via Automattic IP ranges ----
+		if ( $this->is_automattic_ip( $this->get_client_ip() ) ) {
 			return array(
 				'source'            => self::SOURCE_WP_MCP,
 				'app_password_name' => null,
@@ -133,55 +142,60 @@ class Agent_Access_Activity_Log {
 
 		// ---- Agent Access or MCP via Application Password ----
 		$app_password_uuid = rest_get_authenticated_app_password();
-		if ( empty( $app_password_uuid ) ) {
-			return null;
-		}
 
-		$user_id   = get_current_user_id();
-		$passwords = WP_Application_Passwords::get_user_application_passwords( $user_id );
+		if ( ! empty( $app_password_uuid ) ) {
+			$user_id   = get_current_user_id();
+			$passwords = WP_Application_Passwords::get_user_application_passwords( $user_id );
 
-		foreach ( $passwords as $item ) {
-			if ( $item['uuid'] !== $app_password_uuid ) {
-				continue;
-			}
+			foreach ( $passwords as $item ) {
+				if ( $item['uuid'] !== $app_password_uuid ) {
+					continue;
+				}
 
-			$name = $item['name'];
+				$name = $item['name'];
 
-			// Check for the Agent Access app password.
-			if ( $name === AGENT_ACCESS_APP_PASSWORD_NAME ) {
-				return array(
-					'source'            => self::SOURCE_AA,
-					'app_password_name' => $name,
-				);
-			}
-
-			/**
-			 * Filters the app-password name substrings used to identify WP.com MCP.
-			 *
-			 * Useful when the user creates a dedicated password named e.g. "WordPress.com MCP".
-			 *
-			 * @param string[] $patterns Case-insensitive substring patterns.
-			 */
-			$mcp_name_patterns = apply_filters( 'agent_access_mcp_name_patterns', array(
-				'wordpress.com',
-				'wpcom',
-				'mcp',
-			) );
-
-			foreach ( $mcp_name_patterns as $pattern ) {
-				if ( '' !== $pattern && false !== stripos( $name, $pattern ) ) {
+				// Agent Access managed credential.
+				if ( $name === AGENT_ACCESS_APP_PASSWORD_NAME ) {
 					return array(
-						'source'            => self::SOURCE_WP_MCP,
+						'source'            => self::SOURCE_AA,
 						'app_password_name' => $name,
 					);
 				}
-			}
 
-			// Different app password — not tracked.
-			return null;
+				/**
+				 * Filters the app-password name substrings used to identify WP.com MCP.
+				 *
+				 * @param string[] $patterns Case-insensitive substring patterns.
+				 */
+				$mcp_name_patterns = apply_filters( 'agent_access_mcp_name_patterns', array(
+					'wordpress.com',
+					'wpcom',
+					'mcp',
+				) );
+
+				foreach ( $mcp_name_patterns as $pattern ) {
+					if ( '' !== $pattern && false !== stripos( $name, $pattern ) ) {
+						return array(
+							'source'            => self::SOURCE_WP_MCP,
+							'app_password_name' => $name,
+						);
+					}
+				}
+
+				// Unrecognised app password — log it anyway, labelled as generic REST.
+				return array(
+					'source'            => self::SOURCE_REST,
+					'app_password_name' => $name,
+				);
+			}
 		}
 
-		return null;
+		// Authenticated via session cookie (logged-in admin/editor making REST call).
+		// Log these too so nothing slips through.
+		return array(
+			'source'            => self::SOURCE_REST,
+			'app_password_name' => null,
+		);
 	}
 
 	// -------------------------------------------------------------------------
@@ -229,6 +243,10 @@ class Agent_Access_Activity_Log {
 			$where[]  = 'method = %s';
 			$values[] = strtoupper( $args['method'] );
 		}
+		if ( ! empty( $args['exclude_route_prefix'] ) ) {
+			$where[]  = 'route NOT LIKE %s';
+			$values[] = $wpdb->esc_like( $args['exclude_route_prefix'] ) . '%';
+		}
 
 		$values[] = (int) $args['limit'];
 		$values[] = (int) $args['offset'];
@@ -268,6 +286,10 @@ class Agent_Access_Activity_Log {
 		if ( ! empty( $args['method'] ) ) {
 			$where[]  = 'method = %s';
 			$values[] = strtoupper( $args['method'] );
+		}
+		if ( ! empty( $args['exclude_route_prefix'] ) ) {
+			$where[]  = 'route NOT LIKE %s';
+			$values[] = $wpdb->esc_like( $args['exclude_route_prefix'] ) . '%';
 		}
 
 		if ( empty( $values ) ) {
@@ -330,6 +352,40 @@ class Agent_Access_Activity_Log {
 	// -------------------------------------------------------------------------
 	// Utilities
 	// -------------------------------------------------------------------------
+
+	/**
+	 * Check if an IP address falls within a known Automattic/WP.com proxy range.
+	 *
+	 * @param string $ip IPv4 address.
+	 * @return bool
+	 */
+	private function is_automattic_ip( $ip ) {
+		if ( empty( $ip ) || ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
+			return false;
+		}
+
+		/**
+		 * Filters the CIDR blocks used to identify Automattic/WP.com proxy IPs.
+		 *
+		 * @param string[] $ranges CIDR notation blocks.
+		 */
+		$ranges = apply_filters( 'agent_access_automattic_ip_ranges', array(
+			'192.0.64.0/18',   // WP.com primary
+			'192.0.99.0/24',   // WP.com API proxy (observed)
+			'198.181.116.0/22', // Automattic
+		) );
+
+		$ip_long = ip2long( $ip );
+		foreach ( $ranges as $cidr ) {
+			list( $base, $bits ) = explode( '/', $cidr );
+			$mask = -1 << ( 32 - (int) $bits );
+			if ( ( $ip_long & $mask ) === ( ip2long( $base ) & $mask ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
 
 	/**
 	 * Get the client IP, respecting common proxy headers.
