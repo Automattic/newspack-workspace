@@ -27,7 +27,7 @@ $auth = [
     'base64_encoded' => base64_encode( $wp_user . ':' . $app_pass ),
 ];
 
-$site_url = 'http://' . $site_name . '.local/wp-json/';
+$site_url = 'http://' . $site_name . '.test/wp-json/';
 
 echo "Connecting Distributor in site $this_site to $site_url\n";
 
