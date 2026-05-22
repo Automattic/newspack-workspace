@@ -322,7 +322,7 @@ Run the one-time setup script to allow these specific operations without a passw
 ./bin/setup-networking.sh
 ```
 
-This installs a locked-down wrapper script (`newspack-manage-host`) that only allows adding/removing `127.0.0.*` loopback aliases and `*.test` hosts entries, and creates a sudoers rule so your user can run it without a password. After this, `n start`, `n env create`, `n env up`, and `n env destroy` will manage networking automatically -- no password prompts, even from non-interactive terminals.
+This installs a locked-down wrapper script (`newspack-manage-host`) that only allows adding/removing `127.0.0.*` loopback aliases and `*.test` (and legacy `*.local`) hosts entries, and creates a sudoers rule so your user can run it without a password. After this, `n start`, `n env create`, `n env up`, and `n env destroy` will manage networking automatically -- no password prompts, even from non-interactive terminals.
 
 > **Already ran this before the `.test` migration?** Re-run `./bin/setup-networking.sh` to install the updated wrapper -- the previous version only accepts `.local` domains and will reject newly-created `.test` environments.
 

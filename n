@@ -318,7 +318,7 @@ case $1 in
         ;;
     sites-add)
         docker exec $DOCKER_IT $TARGET_CONTAINER sh -c "/var/scripts/sites-add.sh $2"
-        if ! grep -q "\s$2.test" /etc/hosts; then
+        if ! grep -q "[[:space:]]$2\.test" /etc/hosts; then
             read -p "Do you want to add this domain to your local hosts file? (Y/n): " choice
             choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
             if [[ "$choice" != "n" ]]; then
