@@ -1,5 +1,5 @@
 === BotCreds Agent Access ===
-Contributors: jboydston
+Contributors: jboydston, droyal
 Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.6
 Tested up to: 7.0
