@@ -163,7 +163,7 @@ The main container is `newspack_dev`. For isolated environments, the container n
 
 ### Multi-Site
 ```bash
-n sites-add <name>            # Create additional site at name.local
+n sites-add <name>            # Create additional site at name.test
 n sites-list                  # List additional sites
 n sites-drop <name>           # Remove site
 ```
@@ -220,14 +220,14 @@ Each isolated environment gets its own Docker container, WordPress installation,
 n env create myenv --worktree newspack-plugin:mybranch
 n env up myenv
 n setup --env myenv --yes     # fully configured Newspack site
-# → https://myenv.local/  (override with --domain)
+# → https://myenv.test/  (override with --domain)
 ```
 
 ### Environment Commands
 ```bash
 n env create <name> [options]  # Create environment config
   --worktree <repo>:<branch>   #   Mount a worktree (repeatable for multiple repos)
-  --domain <domain>            #   Custom domain (default: <name>.local)
+  --domain <domain>            #   Custom domain (default: <name>.test)
   --up                         #   Start the environment immediately after creation
 n env up <name> [--build]      # Start environment (creates DB, installs WP, sets up SSL)
 n env up --all [--build]       # Start all existing environments at once
