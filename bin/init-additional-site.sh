@@ -53,19 +53,19 @@ cp /var/scripts/newspack-docker-mu.php "/var/www/additional-sites-html/$SITE_NAM
 /var/scripts/link-repos.sh "/var/www/additional-sites-html/$SITE_NAME/wp-content"
 
 # SSL
-sudo /usr/local/bin/ssl "${SITE_NAME}.local"
+sudo /usr/local/bin/ssl "${SITE_NAME}.test"
 
 # check if a VirtualHost block for the site already exists
-if ! grep -q "ServerName ${SITE_NAME}.local:443" /etc/apache2/sites-available/002-additional.conf; then
+if ! grep -q "ServerName ${SITE_NAME}.test:443" /etc/apache2/sites-available/002-additional.conf; then
 echo "Adding SSL VirtualHost block to the apache config file for ${SITE_NAME}…"
 # https://stackoverflow.com/questions/41979785/how-to-configure-multiple-ssl-certs-on-apache-virtual-host-with-aliases
 sudo cat <<EOF >> /etc/apache2/sites-available/002-additional.conf
 <VirtualHost *:443>
-	ServerName ${SITE_NAME}.local:443
+	ServerName ${SITE_NAME}.test:443
 	DocumentRoot /var/www/additional-sites-html/${SITE_NAME}
 	SSLEngine on
-	SSLCertificateFile /etc/ssl/certs/${SITE_NAME}.local.pem
-	SSLCertificateKeyFile /etc/ssl/certs/${SITE_NAME}.local-key.pem
+	SSLCertificateFile /etc/ssl/certs/${SITE_NAME}.test.pem
+	SSLCertificateKeyFile /etc/ssl/certs/${SITE_NAME}.test-key.pem
 	<Directory /var/www/additional-sites-html/${SITE_NAME}>
         AllowOverride All
         Require all granted

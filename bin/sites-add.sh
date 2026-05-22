@@ -15,7 +15,7 @@ if [ ! -d "/var/www/additional-sites-html/$name" ]; then
     sudo -E -u $user /var/scripts/reset-site.sh /var/www/additional-sites-html/$name
 
     echo
-    echo "Site $name created!. Open https://${name}.local"
+    echo "Site $name created!. Open https://${name}.test"
     echo
 else
     echo
