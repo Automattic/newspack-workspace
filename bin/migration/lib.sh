@@ -245,15 +245,19 @@ route_extracted_packages() {
     fi
     git show "$theirs_blob" > "$theirs_src"
 
-    if git merge-file -p "$theirs_src" "$base_src" "$target" > "$merged" 2>/dev/null; then
-      cp "$merged" "$target"
-      git add "$target"
-      git rm -f -- "$path" > /dev/null
-    else
-      cp "$merged" "$target"
-      git rm -f -- "$path" > /dev/null
-      rc=1
-    fi
+    # 3-way merge legacy's change onto the workspace file, resolving any
+    # conflicting hunk in legacy's favor (--ours, where "ours" is the first
+    # argument $theirs_src = legacy). This mirrors the run-wide "legacy wins"
+    # -Xtheirs policy: non-conflicting monorepo-side edits still merge in, but
+    # a line both sides touched takes legacy. Without --ours a divergent edit
+    # to the same line (e.g. packages/components/src/card-feature/index.tsx)
+    # leaves conflict markers and re-escalates this whole repo every sync run.
+    # With --ours the merge always resolves, so escalation is reserved for the
+    # genuinely unmergeable cases handled above (modified file, no target).
+    git merge-file --ours -p "$theirs_src" "$base_src" "$target" > "$merged" 2>/dev/null || true
+    cp "$merged" "$target"
+    git add "$target"
+    git rm -f -- "$path" > /dev/null
     rm -f "$base_src" "$theirs_src" "$merged"
   done < <(git diff --name-only --diff-filter=U)
 
@@ -272,6 +276,33 @@ route_extracted_packages() {
     'plugins/newspack-plugin/packages/colors/*' \
     'plugins/newspack-plugin/packages/components/*' \
     'plugins/newspack-plugin/packages/icons/*')
+
+  # Resolve the directory/file conflict the extraction shim creates. The
+  # monorepo keeps plugins/newspack-plugin/packages/{colors,components,icons}
+  # as symlinks into the workspace home (../../../packages/<pkg>); legacy still
+  # carries real directories there. When legacy diverges under one, the merge
+  # can't keep a symlink and a directory at the same path, so it renames our
+  # symlink to <pkg>~HEAD (an unmerged stage-2 entry) and unpacks legacy's tree
+  # at <pkg>/. The loops above route that tree's files to the workspace home;
+  # here we restore our symlink at the canonical path and drop the ~HEAD
+  # artifact, so the in-plugin shim survives and no unmerged entry is left to
+  # escalate on. Packages that merged cleanly (still a stage-0 symlink) have no
+  # ~HEAD artifact and are skipped.
+  while IFS= read -r artifact; do
+    [ -z "$artifact" ] && continue
+    local canon="${artifact%\~HEAD}"
+    local sym_blob
+    sym_blob=$(git ls-files -s -- "$artifact" | awk '$3==2{print $2; exit}')
+    git rm -q --cached --ignore-unmatch -- "$artifact" > /dev/null 2>&1 || true
+    rm -f -- "$artifact" 2> /dev/null || true
+    if [ -n "$sym_blob" ]; then
+      git update-index --add --cacheinfo "120000,$sym_blob,$canon"
+      git checkout-index -f -- "$canon" 2> /dev/null || true
+    fi
+  done < <(git ls-files -- \
+    'plugins/newspack-plugin/packages/colors~HEAD' \
+    'plugins/newspack-plugin/packages/components~HEAD' \
+    'plugins/newspack-plugin/packages/icons~HEAD')
 
   return "$rc"
 }
