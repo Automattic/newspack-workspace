@@ -7,7 +7,7 @@
 
 namespace Newspack\Tests\Content_Gate;
 
-use Newspack\Newsletters_Access;
+use Newspack\Content_Gate\Newsletters_Access;
 
 /**
  * Tests for Newsletters_Access HMAC signing and verification.
@@ -180,7 +180,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that handle_inbound_request() returns 'verified' with the newsletter_id
+	 * Test that process_inbound_request() returns 'verified' with the newsletter_id
 	 * when a valid npnl token is present in the query string.
 	 */
 	public function test_handle_inbound_returns_verified_when_token_valid() {
@@ -189,35 +189,35 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$post_id = $this->create_newsletter( time() );
 		$token   = Newsletters_Access::sign( $post_id );
 		$_GET[ Newsletters_Access::QUERY_PARAM ] = $token;
-		$result = Newsletters_Access::handle_inbound_request( false );
+		$result = Newsletters_Access::process_inbound_request( false );
 		unset( $_GET[ Newsletters_Access::QUERY_PARAM ] );
 		$this->assertSame( 'verified', $result['action'] );
 		$this->assertSame( $post_id, $result['newsletter_id'] );
 	}
 
 	/**
-	 * Test that handle_inbound_request() returns 'skipped' when no npnl param is present.
+	 * Test that process_inbound_request() returns 'skipped' when no npnl param is present.
 	 */
 	public function test_handle_inbound_returns_skipped_when_no_param_present() {
 		unset( $_GET[ Newsletters_Access::QUERY_PARAM ] );
-		$result = Newsletters_Access::handle_inbound_request( false );
+		$result = Newsletters_Access::process_inbound_request( false );
 		$this->assertSame( 'skipped', $result['action'] );
 	}
 
 	/**
-	 * Test that handle_inbound_request() returns 'invalid' for a garbage token.
+	 * Test that process_inbound_request() returns 'invalid' for a garbage token.
 	 */
 	public function test_handle_inbound_returns_invalid_for_bad_token() {
 		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
 		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
 		$_GET[ Newsletters_Access::QUERY_PARAM ] = 'garbage';
-		$result = Newsletters_Access::handle_inbound_request( false );
+		$result = Newsletters_Access::process_inbound_request( false );
 		unset( $_GET[ Newsletters_Access::QUERY_PARAM ] );
 		$this->assertSame( 'invalid', $result['action'] );
 	}
 
 	/**
-	 * Test that handle_inbound_request() returns 'invalid' for a cryptographically
+	 * Test that process_inbound_request() returns 'invalid' for a cryptographically
 	 * valid token whose newsletter has never been sent (no newsletter_sent meta).
 	 */
 	public function test_handle_inbound_returns_invalid_for_unsent_newsletter() {
@@ -226,13 +226,13 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		// Cryptographically valid token, but the newsletter was never sent.
 		$post_id = $this->create_newsletter( null );
 		$_GET[ Newsletters_Access::QUERY_PARAM ] = Newsletters_Access::sign( $post_id );
-		$result = Newsletters_Access::handle_inbound_request( false );
+		$result = Newsletters_Access::process_inbound_request( false );
 		unset( $_GET[ Newsletters_Access::QUERY_PARAM ] );
 		$this->assertSame( 'invalid', $result['action'] );
 	}
 
 	/**
-	 * Test that handle_inbound_request() returns 'skipped' when the current user
+	 * Test that process_inbound_request() returns 'skipped' when the current user
 	 * is a logged-in editor (who bypasses the gate via capability checks).
 	 */
 	public function test_handle_inbound_skips_for_logged_in_editor() {
@@ -242,7 +242,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		wp_set_current_user( $editor );
 		$post_id = $this->create_newsletter( time() );
 		$_GET[ Newsletters_Access::QUERY_PARAM ] = Newsletters_Access::sign( $post_id );
-		$result = Newsletters_Access::handle_inbound_request( false );
+		$result = Newsletters_Access::process_inbound_request( false );
 		unset( $_GET[ Newsletters_Access::QUERY_PARAM ] );
 		wp_set_current_user( 0 );
 		$this->assertSame( 'skipped', $result['action'] );
@@ -273,7 +273,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that handle_utm_fallback_request() grants a single-post bypass when
+	 * Test that process_utm_fallback_request() grants a single-post bypass when
 	 * utm_medium=email, utm_source matches a valid list ID, and the current URL
 	 * appears in a recently-sent newsletter for that list.
 	 */
@@ -298,13 +298,15 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		// Stub is_valid_send_list_id to accept our test list ID; in production this
 		// queries Subscription_Lists.
 		add_filter(
-			'newspack_newsletters_access_test_valid_list_ids',
-			function() {
-				return [ 'list_abc' ];
-			}
+			'newspack_newsletters_access_is_valid_send_list_id',
+			function( $valid, $list_id ) {
+				return 'list_abc' === $list_id ? true : null;
+			},
+			10,
+			2
 		);
 
-		$result = Newsletters_Access::handle_utm_fallback_request( false );
+		$result = Newsletters_Access::process_utm_fallback_request( false );
 
 		unset( $_GET['utm_medium'], $_GET['utm_source'] );
 		$this->assertSame( 'verified', $result['action'] );
@@ -312,7 +314,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that handle_utm_fallback_request() returns 'invalid' when utm_source
+	 * Test that process_utm_fallback_request() returns 'invalid' when utm_source
 	 * does not match any known send list ID.
 	 */
 	public function test_utm_fallback_rejects_unknown_list_id() {
@@ -328,14 +330,14 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		);
 		$this->go_to( $request_url );
 
-		$result = Newsletters_Access::handle_utm_fallback_request( false );
+		$result = Newsletters_Access::process_utm_fallback_request( false );
 
 		unset( $_GET['utm_medium'], $_GET['utm_source'] );
 		$this->assertSame( 'invalid', $result['action'] );
 	}
 
 	/**
-	 * Test that handle_utm_fallback_request() returns 'invalid' when the current
+	 * Test that process_utm_fallback_request() returns 'invalid' when the current
 	 * URL does not appear in any newsletter sent to the given list.
 	 */
 	public function test_utm_fallback_rejects_when_url_not_in_any_newsletter() {
@@ -356,20 +358,22 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$this->go_to( $request_url );
 
 		add_filter(
-			'newspack_newsletters_access_test_valid_list_ids',
-			function() {
-				return [ 'list_abc' ];
-			}
+			'newspack_newsletters_access_is_valid_send_list_id',
+			function( $valid, $list_id ) {
+				return 'list_abc' === $list_id ? true : null;
+			},
+			10,
+			2
 		);
 
-		$result = Newsletters_Access::handle_utm_fallback_request( false );
+		$result = Newsletters_Access::process_utm_fallback_request( false );
 
 		unset( $_GET['utm_medium'], $_GET['utm_source'] );
 		$this->assertSame( 'invalid', $result['action'] );
 	}
 
 	/**
-	 * Test that handle_utm_fallback_request() returns 'disabled' when the
+	 * Test that process_utm_fallback_request() returns 'disabled' when the
 	 * newsletter link bypass setting is turned off.
 	 */
 	public function test_utm_fallback_skips_when_setting_disabled() {
@@ -386,14 +390,14 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$this->create_sent_newsletter_with_link( 'list_abc', get_permalink( $post_id ) );
 		$this->go_to( $request_url );
 
-		$result = Newsletters_Access::handle_utm_fallback_request( false );
+		$result = Newsletters_Access::process_utm_fallback_request( false );
 
 		unset( $_GET['utm_medium'], $_GET['utm_source'] );
 		$this->assertSame( 'disabled', $result['action'] );
 	}
 
 	/**
-	 * Test that handle_utm_fallback_request() returns 'skipped' for a logged-in
+	 * Test that process_utm_fallback_request() returns 'skipped' for a logged-in
 	 * editor, who bypasses the gate via capability checks.
 	 */
 	public function test_utm_fallback_skips_for_logged_in_editor() {
@@ -412,7 +416,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$this->create_sent_newsletter_with_link( 'list_abc', get_permalink( $post_id ) );
 		$this->go_to( $request_url );
 
-		$result = Newsletters_Access::handle_utm_fallback_request( false );
+		$result = Newsletters_Access::process_utm_fallback_request( false );
 
 		unset( $_GET['utm_medium'], $_GET['utm_source'] );
 		wp_set_current_user( 0 );
@@ -420,7 +424,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that handle_utm_fallback_request() returns 'skipped' when
+	 * Test that process_utm_fallback_request() returns 'skipped' when
 	 * utm_medium is absent or not 'email'.
 	 */
 	public function test_utm_fallback_skips_when_no_email_utm() {
@@ -429,18 +433,18 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$post_id = $this->factory->post->create( [ 'post_type' => 'post' ] );
 		$this->go_to( get_permalink( $post_id ) );
 
-		$result = Newsletters_Access::handle_utm_fallback_request( false );
+		$result = Newsletters_Access::process_utm_fallback_request( false );
 
 		$this->assertSame( 'skipped', $result['action'] );
 	}
 
 	/**
-	 * Regression: the URL matcher must use boundary characters so that one URL
-	 * being a substring of another (e.g., `?p=5` inside `?p=599`, or
+	 * Regression: the URL matcher must use DOMDocument-parsed hrefs so that one
+	 * URL being a substring of another (e.g., `?p=5` inside `?p=599`, or
 	 * `my-article/` inside `my-article-extended/`) doesn't cause a false-positive
 	 * bypass. This test exercises a representative case via a crafted collision
-	 * URL; the boundary check protects both numeric-prefix and slug-prefix forms
-	 * through the same code path.
+	 * URL; the href-extraction approach protects both numeric-prefix and
+	 * slug-prefix forms through the same code path.
 	 */
 	public function test_utm_fallback_rejects_slug_prefix_collision() {
 		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
@@ -480,13 +484,15 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$this->go_to( $request_url );
 
 		add_filter(
-			'newspack_newsletters_access_test_valid_list_ids',
-			function() {
-				return [ 'list_abc' ];
-			}
+			'newspack_newsletters_access_is_valid_send_list_id',
+			function( $valid, $list_id ) {
+				return 'list_abc' === $list_id ? true : null;
+			},
+			10,
+			2
 		);
 
-		$result = Newsletters_Access::handle_utm_fallback_request( false );
+		$result = Newsletters_Access::process_utm_fallback_request( false );
 
 		unset( $_GET['utm_medium'], $_GET['utm_source'] );
 		$this->assertSame( 'invalid', $result['action'], 'slug-prefix collision must not grant bypass' );
@@ -644,17 +650,19 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$this->go_to( get_permalink( $post_id ) . '?utm_medium=email&utm_source=list_abc' );
 
 		add_filter(
-			'newspack_newsletters_access_test_valid_list_ids',
-			function() {
-				return [ 'list_abc' ];
-			}
+			'newspack_newsletters_access_is_valid_send_list_id',
+			function( $valid, $list_id ) {
+				return 'list_abc' === $list_id ? true : null;
+			},
+			10,
+			2
 		);
 
 		// Clear the single-post cookie so we can detect whether the handler
 		// would have set it.
 		unset( $_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 
-		$result = Newsletters_Access::handle_utm_fallback_request( false );
+		$result = Newsletters_Access::process_utm_fallback_request( false );
 
 		unset( $_GET['utm_medium'], $_GET['utm_source'] );
 		unset( $_COOKIE[ Newsletters_Access::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
@@ -727,6 +735,11 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	 * registered with accepted_args = 2.
 	 */
 	public function test_wc_memberships_filter_registered_with_two_accepted_args() {
+		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
+		// Re-init with the option flipped on so the conditional hook registration takes effect.
+		Newsletters_Access::init();
+
 		global $wp_filter;
 		$found = false;
 		foreach ( $wp_filter['wc_memberships_is_post_public']->callbacks[20] ?? [] as $cb ) {
@@ -807,12 +820,12 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
 		// Remove any test-only list-validation filters so anonymous callbacks
 		// added inside individual tests don't leak into subsequent tests.
-		remove_all_filters( 'newspack_newsletters_access_test_valid_list_ids' );
+		remove_all_filters( 'newspack_newsletters_access_is_valid_send_list_id' );
 		parent::tear_down();
 	}
 
 	/**
-	 * Test that handle_inbound_request() returns 'disabled' when the bypass
+	 * Test that process_inbound_request() returns 'disabled' when the bypass
 	 * setting is turned off, even with a valid token present.
 	 */
 	public function test_handle_inbound_short_circuits_when_setting_disabled() {
@@ -820,7 +833,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
 		$post_id = $this->create_newsletter( time() );
 		$_GET[ Newsletters_Access::QUERY_PARAM ] = Newsletters_Access::sign( $post_id );
-		$result = Newsletters_Access::handle_inbound_request( false );
+		$result = Newsletters_Access::process_inbound_request( false );
 		unset( $_GET[ Newsletters_Access::QUERY_PARAM ] );
 		$this->assertSame( 'disabled', $result['action'] );
 	}
@@ -853,7 +866,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that handle_inbound_request() proceeds to verification when the
+	 * Test that process_inbound_request() proceeds to verification when the
 	 * bypass setting is enabled and a valid token is present.
 	 */
 	public function test_handle_inbound_proceeds_when_setting_enabled() {
@@ -861,29 +874,55 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
 		$post_id = $this->create_newsletter( time() );
 		$_GET[ Newsletters_Access::QUERY_PARAM ] = Newsletters_Access::sign( $post_id );
-		$result = Newsletters_Access::handle_inbound_request( false );
+		$result = Newsletters_Access::process_inbound_request( false );
 		unset( $_GET[ Newsletters_Access::QUERY_PARAM ] );
 		$this->assertSame( 'verified', $result['action'] );
 	}
 
 	/**
-	 * Bug regression: the signed inbound handler must be registered with
-	 * accepted_args=0 so WordPress's empty-string padding on do_action('init')
-	 * doesn't pass a falsy value as $with_side_effects.
+	 * Verify the signed-path inbound action is registered with the thin
+	 * wrapper that doesn't take args, so WP's empty-string padding on
+	 * do_action('init') cannot break it.
 	 */
-	public function test_init_action_registered_with_zero_accepted_args() {
+	public function test_init_action_registered_with_thin_wrapper() {
+		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
+		// Re-init with the option flipped on so the conditional hook registration takes effect.
+		Newsletters_Access::init();
+
 		global $wp_filter;
 		$found = false;
 		foreach ( $wp_filter['init']->callbacks[2] ?? [] as $cb ) {
 			if ( is_array( $cb['function'] )
 				&& $cb['function'][0] === Newsletters_Access::class
-				&& $cb['function'][1] === 'handle_inbound_request'
+				&& $cb['function'][1] === 'handle_inbound_request_action'
 			) {
 				$found = true;
-				$this->assertSame( 0, $cb['accepted_args'], 'handle_inbound_request must use accepted_args=0' );
 			}
 		}
-		$this->assertTrue( $found, 'handle_inbound_request must be registered on init priority 2' );
+		$this->assertTrue( $found, 'handle_inbound_request_action must be registered on init priority 2' );
+	}
+
+	/**
+	 * Verify the UTM-fallback action is registered with the thin wrapper.
+	 */
+	public function test_wp_action_registered_with_thin_wrapper() {
+		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
+		// Re-init with the option flipped on so the conditional hook registration takes effect.
+		Newsletters_Access::init();
+
+		global $wp_filter;
+		$found = false;
+		foreach ( $wp_filter['wp']->callbacks[10] ?? [] as $cb ) {
+			if ( is_array( $cb['function'] )
+				&& $cb['function'][0] === Newsletters_Access::class
+				&& $cb['function'][1] === 'handle_utm_fallback_request_action'
+			) {
+				$found = true;
+			}
+		}
+		$this->assertTrue( $found, 'handle_utm_fallback_request_action must be registered on wp priority 10' );
 	}
 
 	/**

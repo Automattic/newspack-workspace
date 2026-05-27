@@ -15,7 +15,7 @@
  * @package Newspack
  */
 
-namespace Newspack;
+namespace Newspack\Content_Gate;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -62,11 +62,22 @@ class Newsletters_Access {
 
 	/**
 	 * Initialize hooks.
+	 *
+	 * Signing always registers so the toggle can be flipped on later and
+	 * recent campaigns still grant bypass. Verification + bypass hooks only
+	 * register when the toggle is on.
 	 */
 	public static function init() {
+		// Signing always happens so the toggle can be flipped on later and
+		// recent campaigns still grant bypass.
 		add_filter( 'newspack_newsletters_process_link', [ __CLASS__, 'append_signature_to_link' ], 20, 3 );
-		add_action( 'init', [ __CLASS__, 'handle_inbound_request' ], 2, 0 );
-		add_action( 'wp', [ __CLASS__, 'handle_utm_fallback_request' ], 10, 0 );
+
+		// Verification + bypass paths only fire when the toggle is on.
+		if ( ! self::is_verification_enabled() ) {
+			return;
+		}
+		add_action( 'init', [ __CLASS__, 'handle_inbound_request_action' ], 2 );
+		add_action( 'wp', [ __CLASS__, 'handle_utm_fallback_request_action' ], 10 );
 		add_filter( 'newspack_is_post_restricted', [ __CLASS__, 'filter_post_restricted' ], 20, 3 );
 		add_filter( 'wc_memberships_is_post_public', [ __CLASS__, 'filter_wc_memberships_is_post_public' ], 20, 2 );
 	}
@@ -133,6 +144,20 @@ class Newsletters_Access {
 	}
 
 	/**
+	 * Build the canonical HMAC payload for a newsletter ID. Includes the
+	 * current blog ID so tokens minted on one site of a multisite network
+	 * cannot be replayed against another site, regardless of whether
+	 * AUTH_KEY / AUTH_SALT differ across sites.
+	 *
+	 * @param int $newsletter_id Newsletter post ID.
+	 *
+	 * @return string
+	 */
+	private static function build_payload( $newsletter_id ) {
+		return (int) get_current_blog_id() . '|' . (int) $newsletter_id;
+	}
+
+	/**
 	 * Sign a newsletter ID and return a URL-safe token.
 	 *
 	 * The signature is deterministic — same ID always produces the same
@@ -144,9 +169,9 @@ class Newsletters_Access {
 	 * @return string Base64url-encoded token of form "id|hmac".
 	 */
 	public static function sign( $newsletter_id ) {
-		$payload = (string) $newsletter_id;
+		$payload = self::build_payload( $newsletter_id );
 		$hmac    = hash_hmac( 'sha256', $payload, self::get_secret() );
-		return self::base64url_encode( $payload . '|' . $hmac );
+		return self::base64url_encode( (string) $newsletter_id . '|' . $hmac );
 	}
 
 	/**
@@ -180,7 +205,7 @@ class Newsletters_Access {
 			return false;
 		}
 		$newsletter_id = (int) $id_raw;
-		$expected_hmac = hash_hmac( 'sha256', $id_raw, self::get_secret() );
+		$expected_hmac = hash_hmac( 'sha256', self::build_payload( $newsletter_id ), self::get_secret() );
 		if ( ! hash_equals( $expected_hmac, $provided_hmac ) ) {
 			return false;
 		}
@@ -231,6 +256,15 @@ class Newsletters_Access {
 	}
 
 	/**
+	 * Action callback for the `init` hook. Thin wrapper around
+	 * process_inbound_request() so the action signature doesn't need to
+	 * accommodate WordPress's empty-string arg padding.
+	 */
+	public static function handle_inbound_request_action() {
+		self::process_inbound_request( true );
+	}
+
+	/**
 	 * Inbound request handler. Validates the npnl token, sets the bypass
 	 * cookie, cancels page cache for the redirect response, and redirects
 	 * to the same URL with the token stripped from the address bar.
@@ -241,7 +275,7 @@ class Newsletters_Access {
 	 *
 	 * @return array{action: string, newsletter_id?: int}
 	 */
-	public static function handle_inbound_request( $with_side_effects = true ) {
+	public static function process_inbound_request( $with_side_effects = true ) {
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended
 		if ( ! isset( $_GET[ self::QUERY_PARAM ] ) ) {
 			return [ 'action' => 'skipped' ];
@@ -272,8 +306,16 @@ class Newsletters_Access {
 			}
 			nocache_headers();
 			$clean_url = remove_query_arg( self::QUERY_PARAM );
-			wp_safe_redirect( $clean_url );
-			exit;
+			if ( wp_safe_redirect( $clean_url ) ) {
+				exit;
+			}
+			// Redirect rejected — fall through to return so the page renders
+			// normally (the bypass cookie is still set, so the gate is bypassed
+			// on this request).
+			return [
+				'action'        => 'verified',
+				'newsletter_id' => $verified['newsletter_id'],
+			];
 		}
 
 		return [
@@ -287,23 +329,34 @@ class Newsletters_Access {
 	 * at the platform layer; the cookie value itself is just '1'.
 	 */
 	private static function set_bypass_cookie() {
-		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie,WordPress.PHP.NoSilencedErrors.Discouraged -- @ suppresses the "headers already sent" E_WARNING in unit-test environments where PHP output has been flushed; it has no effect in production where this method is called during init before any output.
-		@setcookie(
-			self::COOKIE_NAME,
-			'1',
-			[
-				'expires'  => time() + self::BYPASS_TTL,
-				'path'     => COOKIEPATH,
-				'domain'   => COOKIE_DOMAIN,
-				'secure'   => is_ssl(),
-				'httponly' => true,
-				'samesite' => 'Lax',
-			]
-		);
+		if ( ! headers_sent() ) {
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
+			setcookie(
+				self::COOKIE_NAME,
+				'1',
+				[
+					'expires'  => time() + self::BYPASS_TTL,
+					'path'     => COOKIEPATH,
+					'domain'   => COOKIE_DOMAIN,
+					'secure'   => is_ssl(),
+					'httponly' => true,
+					'samesite' => 'Lax',
+				]
+			);
+		}
 		// Make the cookie visible to the rest of this request — setcookie() only
 		// queues the response header, but filters that run later in the same
 		// request need to see the value via $_COOKIE.
 		$_COOKIE[ self::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * Action callback for the `wp` hook. Thin wrapper around
+	 * process_utm_fallback_request() so the action signature doesn't need to
+	 * accommodate WordPress's empty-string arg padding.
+	 */
+	public static function handle_utm_fallback_request_action() {
+		self::process_utm_fallback_request( true );
 	}
 
 	/**
@@ -318,7 +371,7 @@ class Newsletters_Access {
 	 *
 	 * @return array{action: string, post_id?: int}
 	 */
-	public static function handle_utm_fallback_request( $with_side_effects = true ) {
+	public static function process_utm_fallback_request( $with_side_effects = true ) {
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		if ( 'email' !== ( $_GET['utm_medium'] ?? '' ) ) {
 			return [ 'action' => 'skipped' ];
@@ -388,27 +441,37 @@ class Newsletters_Access {
 	 * @return bool
 	 */
 	private static function is_verification_enabled() {
-		$settings = Content_Gate_Advanced_Settings::get_settings();
+		$settings = \Newspack\Content_Gate_Advanced_Settings::get_settings();
 		return ! empty( $settings['newsletter_link_bypass_enabled'] );
 	}
 
 	/**
 	 * Whether the given send-list ID is known to Newspack Newsletters' list registry.
 	 *
-	 * In tests, consults the `newspack_newsletters_access_test_valid_list_ids` filter
-	 * to avoid needing a configured ESP connection. In production, delegates to
-	 * `Newspack\Newsletters\Subscription_List::from_remote_id()` — a non-null return
-	 * value confirms the list exists in the connected ESP.
+	 * Applies the `newspack_newsletters_access_is_valid_send_list_id` filter
+	 * first, allowing callers (including tests) to short-circuit the registry
+	 * lookup by returning true or false. Returning null defers to the
+	 * Subscription_List registry.
 	 *
 	 * @param string $list_id Send list ID from utm_source.
 	 *
 	 * @return bool
 	 */
 	private static function is_valid_send_list_id( $list_id ) {
-		// Test-only escape hatch — see Task 4b unit tests.
-		if ( defined( 'WP_TESTS_DOMAIN' ) ) {
-			$test_ids = apply_filters( 'newspack_newsletters_access_test_valid_list_ids', [] );
-			return in_array( $list_id, (array) $test_ids, true );
+		/**
+		 * Filter the validity of a send-list ID for the newsletter-link-bypass
+		 * UTM fallback path. Return true/false to short-circuit the registry
+		 * lookup, or null to delegate to Newspack\Newsletters\Subscription_List.
+		 *
+		 * Production code should generally leave this alone; tests apply the
+		 * filter to avoid needing a configured ESP connection.
+		 *
+		 * @param bool|null $valid   Override decision: true, false, or null to defer.
+		 * @param string    $list_id Send list ID from utm_source.
+		 */
+		$filtered = apply_filters( 'newspack_newsletters_access_is_valid_send_list_id', null, $list_id );
+		if ( null !== $filtered ) {
+			return (bool) $filtered;
 		}
 		if ( ! class_exists( '\Newspack\Newsletters\Subscription_List' ) ) {
 			return false;
@@ -430,6 +493,7 @@ class Newsletters_Access {
 		return get_posts(
 			[
 				'post_type'              => 'newspack_nl_cpt',
+				'post_status'            => [ 'publish', 'private' ],
 				'posts_per_page'         => 50,
 				'fields'                 => 'ids',
 				'no_found_rows'          => true,
@@ -454,30 +518,75 @@ class Newsletters_Access {
 	}
 
 	/**
-	 * Whether the given email HTML contains the given URL, with a boundary
-	 * check to prevent prefix-collision false positives (e.g., `my-article`
-	 * matching `my-article-extended/`, or `?p=99` matching `?p=999`).
+	 * Whether the email HTML contains the given URL as the target of an
+	 * anchor tag (href attribute). Compares by normalized URL (path
+	 * compared, query string stripped), with a fallback to the URL-encoded
+	 * form for cases where MJML/block patterns encoded the href value.
 	 *
-	 * The URL is considered "in" the HTML only if the character immediately
-	 * after the match is a typical URL terminator: `/`, `?`, `&`, `#`, `"`,
-	 * or `'` — the natural boundary characters at the end of an href value.
-	 *
-	 * @param string $html Email HTML.
-	 * @param string $url  Canonical post URL (e.g., from get_permalink()).
+	 * @param string $html        Email HTML.
+	 * @param string $current_url Inbound request URL.
 	 *
 	 * @return bool
 	 */
-	private static function email_html_contains_url( $html, $url ) {
-		$needle = untrailingslashit( $url );
+	private static function email_html_contains_url( $html, $current_url ) {
+		$needle = untrailingslashit( strtok( $current_url, '?' ) );
 		if ( '' === $needle ) {
 			return false;
 		}
-		foreach ( [ '/', '?', '&', '#', '"', "'" ] as $boundary ) {
-			if ( false !== stripos( $html, $needle . $boundary ) ) {
+		$hrefs = self::extract_hrefs_from_html( $html );
+		if ( empty( $hrefs ) ) {
+			return false;
+		}
+		$encoded_needle = rawurlencode( $needle );
+		foreach ( $hrefs as $href ) {
+			$href_normalized = untrailingslashit( strtok( $href, '?' ) );
+			if ( '' === $href_normalized ) {
+				continue;
+			}
+			if ( 0 === strcasecmp( $href_normalized, $needle ) ) {
+				return true;
+			}
+			// Fall back to the URL-encoded form for block-pattern-encoded hrefs.
+			// Mirrors the pattern at Click::handle_click line 168.
+			if ( 0 === strcasecmp( $href_normalized, $encoded_needle ) ) {
 				return true;
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Extract all href attribute values from anchor tags in the given HTML.
+	 *
+	 * Uses DOMDocument so we match only real link targets — not URLs that
+	 * happen to appear in plain text body, in comments, or inside other
+	 * attributes — which would widen the bypass eligibility beyond
+	 * "actually clicked the newsletter link."
+	 *
+	 * @param string $html Email HTML.
+	 *
+	 * @return string[] List of href values (raw, may be HTML-entity-encoded).
+	 */
+	private static function extract_hrefs_from_html( $html ) {
+		if ( '' === $html ) {
+			return [];
+		}
+		$dom = new \DOMDocument();
+		// Suppress libxml warnings about the email HTML (often has minor
+		// well-formedness issues — MJML output, encoded entities, etc.).
+		$prior = libxml_use_internal_errors( true );
+		$dom->loadHTML( '<?xml encoding="UTF-8">' . $html, LIBXML_NOWARNING | LIBXML_NOERROR );
+		libxml_clear_errors();
+		libxml_use_internal_errors( $prior );
+
+		$hrefs = [];
+		foreach ( $dom->getElementsByTagName( 'a' ) as $anchor ) {
+			$href = $anchor->getAttribute( 'href' );
+			if ( '' !== $href ) {
+				$hrefs[] = html_entity_decode( $href, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			}
+		}
+		return $hrefs;
 	}
 
 	/**
@@ -543,8 +652,7 @@ class Newsletters_Access {
 	 * compare against `$post_id`, not `get_queried_object_id()`, to scope the
 	 * single-post bypass correctly.
 	 *
-	 * The hook is registered unconditionally — if WC Memberships isn't active,
-	 * the filter is never dispatched and this method is inert.
+	 * The hook is registered only when verification is enabled (see init()).
 	 *
 	 * @param bool     $is_public Whether the post is publicly accessible.
 	 * @param int|null $post_id   Post ID being evaluated by WC. Null in some
@@ -577,19 +685,21 @@ class Newsletters_Access {
 	 * @param int $post_id Verified post ID.
 	 */
 	private static function set_single_post_bypass_cookie( $post_id ) {
-		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie,WordPress.PHP.NoSilencedErrors.Discouraged -- see the note in set_bypass_cookie().
-		@setcookie(
-			self::SINGLE_POST_COOKIE_NAME,
-			(string) $post_id,
-			[
-				'expires'  => time() + self::BYPASS_TTL,
-				'path'     => COOKIEPATH,
-				'domain'   => COOKIE_DOMAIN,
-				'secure'   => is_ssl(),
-				'httponly' => true,
-				'samesite' => 'Lax',
-			]
-		);
+		if ( ! headers_sent() ) {
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
+			setcookie(
+				self::SINGLE_POST_COOKIE_NAME,
+				(string) $post_id,
+				[
+					'expires'  => time() + self::BYPASS_TTL,
+					'path'     => COOKIEPATH,
+					'domain'   => COOKIE_DOMAIN,
+					'secure'   => is_ssl(),
+					'httponly' => true,
+					'samesite' => 'Lax',
+				]
+			);
+		}
 		// Make the cookie visible to the rest of this request — see the note
 		// in set_bypass_cookie().
 		$_COOKIE[ self::SINGLE_POST_COOKIE_NAME ] = (string) $post_id; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
