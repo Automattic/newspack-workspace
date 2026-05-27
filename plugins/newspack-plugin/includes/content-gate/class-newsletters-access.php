@@ -619,11 +619,32 @@ class Newsletters_Access {
 	}
 
 	/**
+	 * Resolve a URL to its corresponding post ID, preferring the cached
+	 * VIP helper when available, falling back to WordPress core.
+	 *
+	 * The fallback's per-call cost is bounded by the outer (list_id, url)
+	 * memo in find_matching_newsletter_for_url() and the 50-candidate cap
+	 * on the newsletter lookup, so it's safe to use even on VIP-equipped
+	 * sites where the rule would otherwise prefer the cached variant.
+	 *
+	 * @param string $url URL to resolve.
+	 *
+	 * @return int Post ID, or 0 if no match.
+	 */
+	private static function resolve_url_to_post_id( $url ) {
+		if ( function_exists( 'wpcom_vip_url_to_postid' ) ) {
+			return (int) wpcom_vip_url_to_postid( $url );
+		}
+		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.url_to_postid_url_to_postid -- VIP variant used above when available; this fallback is bounded by the outer memo + 50-candidate cap.
+		return (int) url_to_postid( $url );
+	}
+
+	/**
 	 * Whether the email HTML contains an anchor pointing to the same post
-	 * as the given URL. Comparison is by resolved post ID (via
-	 * url_to_postid), which works correctly under both pretty permalinks
-	 * (`/article-slug/`) and plain permalinks (`/?p=N`) and is naturally
-	 * immune to UTM / npnl query-string noise on either side.
+	 * as the given URL. Comparison is by resolved post ID, which works
+	 * correctly under both pretty permalinks (`/article-slug/`) and plain
+	 * permalinks (`/?p=N`) and is naturally immune to UTM / npnl
+	 * query-string noise on either side.
 	 *
 	 * @param string $html        Email HTML.
 	 * @param string $current_url Inbound request URL (typically the
@@ -632,7 +653,7 @@ class Newsletters_Access {
 	 * @return bool
 	 */
 	private static function email_html_contains_url( $html, $current_url ) {
-		$current_post_id = url_to_postid( $current_url );
+		$current_post_id = self::resolve_url_to_post_id( $current_url );
 		if ( ! $current_post_id ) {
 			return false;
 		}
@@ -641,7 +662,7 @@ class Newsletters_Access {
 			return false;
 		}
 		foreach ( $hrefs as $href ) {
-			if ( url_to_postid( $href ) === $current_post_id ) {
+			if ( self::resolve_url_to_post_id( $href ) === $current_post_id ) {
 				return true;
 			}
 		}
