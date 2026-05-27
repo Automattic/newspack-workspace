@@ -384,7 +384,9 @@ window.newspackRAS.push( function ( readerActivation ) {
 							verificationNonce: data.verification_nonce,
 							onSendCode: () => {
 								container.setFormAction( 'otp', true );
-								authModal.style.display = '';
+								if ( authModal ) {
+									authModal.style.display = '';
+								}
 							},
 							onDismiss: () => {
 								callback?.( message, data );

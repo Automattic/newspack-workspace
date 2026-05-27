@@ -2164,6 +2164,24 @@ final class Reader_Activation {
 			);
 		}
 
+		if ( ! in_array( $action, self::AUTH_FORM_OPTIONS, true ) ) {
+			return self::send_auth_form_response( new \WP_Error( 'invalid_request', __( 'Invalid request.', 'newspack-plugin' ) ) );
+		}
+
+		if ( empty( $email ) ) {
+			return self::send_auth_form_response( new \WP_Error( 'invalid_email', __( 'You must enter a valid email address.', 'newspack-plugin' ) ) );
+		}
+
+		$user = \get_user_by( 'email', $email );
+
+		// The auth form has a single entry point: a 'signin' submission with an unknown email
+		// is treated as a registration so the reader doesn't have to pick between two flows.
+		// This conversion must happen BEFORE the captcha check below so the captcha runs server-side
+		// for the unified form's new-email path (the frontend already solves the captcha for it).
+		if ( 'signin' === $action && ! $user ) {
+			$action = 'register';
+		}
+
 		// reCAPTCHA test on account registration only.
 		$should_verify_captcha = apply_filters( 'newspack_recaptcha_verify_captcha', Recaptcha::can_use_captcha(), $current_page_url, 'auth_modal' );
 		if ( 'register' === $action && $should_verify_captcha ) {
@@ -2173,23 +2191,7 @@ final class Reader_Activation {
 			}
 		}
 
-		if ( ! in_array( $action, self::AUTH_FORM_OPTIONS, true ) ) {
-			return self::send_auth_form_response( new \WP_Error( 'invalid_request', __( 'Invalid request.', 'newspack-plugin' ) ) );
-		}
-
-		if ( empty( $email ) ) {
-			return self::send_auth_form_response( new \WP_Error( 'invalid_email', __( 'You must enter a valid email address.', 'newspack-plugin' ) ) );
-		}
-
 		self::set_auth_intention_cookie( $email );
-
-		$user = \get_user_by( 'email', $email );
-
-		// The auth form has a single entry point: a 'signin' submission with an unknown email
-		// is treated as a registration so the reader doesn't have to pick between two flows.
-		if ( 'signin' === $action && ! $user ) {
-			$action = 'register';
-		}
 
 		if ( ! $user && 'register' !== $action ) {
 			return self::send_auth_form_response( new \WP_Error( 'unauthorized', __( 'Account not found.', 'newspack-plugin' ) ) );
