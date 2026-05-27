@@ -704,7 +704,8 @@ class IP_Access_Rule {
 	 * @return bool True if a valid signed cookie is present on this request.
 	 */
 	public static function is_cookie_set() {
-		$raw = $_COOKIE[ self::COOKIE_NAME ] ?? ''; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- HMAC-verified below; sanitization not applicable.
+		$raw = $_COOKIE[ self::COOKIE_NAME ] ?? '';
 		if ( ! is_string( $raw ) || '' === $raw ) {
 			return false;
 		}

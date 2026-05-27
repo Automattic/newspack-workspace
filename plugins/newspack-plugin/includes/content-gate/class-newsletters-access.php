@@ -169,7 +169,15 @@ class Newsletters_Access {
 	 * @return string
 	 */
 	private static function newsletter_cpt_slug() {
-		return class_exists( '\Newspack_Newsletters' ) ? \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT : 'newspack_nl_cpt';
+		// `defined()` with the class-constant FQN is the safe runtime check —
+		// `class_exists()` alone can return true for a class that is loadable
+		// but doesn't (yet) have the constant available, which produced
+		// Undefined-constant errors in the newspack-plugin standalone test
+		// environment.
+		if ( defined( '\Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT' ) ) {
+			return \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT;
+		}
+		return 'newspack_nl_cpt';
 	}
 
 	/**
@@ -689,7 +697,8 @@ class Newsletters_Access {
 	 * @return bool
 	 */
 	public static function is_cookie_set() {
-		$raw = $_COOKIE[ self::COOKIE_NAME ] ?? ''; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- HMAC-verified below; sanitization not applicable.
+		$raw = $_COOKIE[ self::COOKIE_NAME ] ?? '';
 		if ( ! is_string( $raw ) || '' === $raw ) {
 			return false;
 		}
@@ -705,7 +714,8 @@ class Newsletters_Access {
 	 * @return int|null
 	 */
 	public static function get_single_post_bypass_id() {
-		$raw = $_COOKIE[ self::SINGLE_POST_COOKIE_NAME ] ?? ''; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- HMAC-verified below; sanitization not applicable.
+		$raw = $_COOKIE[ self::SINGLE_POST_COOKIE_NAME ] ?? '';
 		if ( ! is_string( $raw ) || '' === $raw ) {
 			return null;
 		}

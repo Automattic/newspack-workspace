@@ -899,10 +899,12 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 			$_GET['utm_medium'],
 			$_GET['utm_source']
 		);
+		// phpcs:disable WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		unset(
 			$_COOKIE[ Newsletters_Access::COOKIE_NAME ],
 			$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ]
 		);
+		// phpcs:enable WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 
 		parent::tear_down();
 	}
