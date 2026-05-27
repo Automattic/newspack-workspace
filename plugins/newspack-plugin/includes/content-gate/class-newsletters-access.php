@@ -12,6 +12,14 @@
  * Future Newsletters-related access features can live alongside the
  * existing methods in this class.
  *
+ * Note on secret rotation: tokens are signed with HMAC keys derived from
+ * the site's WordPress salts (AUTH_KEY, AUTH_SALT, etc.). Rotating those
+ * salts invalidates every in-flight signed npnl token AND every active
+ * bypass cookie immediately — readers mid-bypass will see the gate
+ * return until they click a freshly-signed link. This is intentional
+ * (token rotation IS the security feature) but worth knowing if a
+ * rotation appears to "break" the feature.
+ *
  * @package Newspack
  */
 
@@ -95,6 +103,8 @@ class Newsletters_Access {
 		if ( ! self::is_verification_enabled() ) {
 			return;
 		}
+		// Priority 2 (matching Click::handle_click) so Data Events and
+		// ActionScheduler are initialized before we redirect.
 		add_action( 'init', [ __CLASS__, 'handle_inbound_request_action' ], 2 );
 		add_action( 'wp', [ __CLASS__, 'handle_utm_fallback_request_action' ], 10 );
 		add_filter( 'newspack_is_post_restricted', [ __CLASS__, 'filter_post_restricted' ], 20, 3 );
@@ -105,8 +115,8 @@ class Newsletters_Access {
 	 * Filter callback: append a signed npnl param to newsletter links.
 	 *
 	 * Skips when the post isn't a newsletter (e.g., newsletter ads, which the
-	 * Click class proxies — those carry the signature through after Task 9
-	 * adds 'npnl' to the proxy's allow-list).
+	 * Click class proxies — those carry the signature through via the proxy's
+	 * forwarded-params allow-list).
 	 *
 	 * @param string        $url          Processed URL (may already carry utm_* params).
 	 * @param string        $original_url Original URL before any processing.
@@ -152,6 +162,17 @@ class Newsletters_Access {
 	}
 
 	/**
+	 * Return the newsletter CPT slug. Uses the constant from the Newsletters
+	 * plugin when available, so the two stay in sync automatically; falls back
+	 * to the hard-coded string on sites without the Newsletters plugin.
+	 *
+	 * @return string
+	 */
+	private static function newsletter_cpt_slug() {
+		return class_exists( '\Newspack_Newsletters' ) ? \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT : 'newspack_nl_cpt';
+	}
+
+	/**
 	 * Whether the given post is a newsletter (i.e., the newsletter CPT).
 	 *
 	 * @param \WP_Post $post Post object.
@@ -159,7 +180,7 @@ class Newsletters_Access {
 	 * @return bool
 	 */
 	private static function is_newsletter_post( $post ) {
-		return 'newspack_nl_cpt' === $post->post_type;
+		return self::newsletter_cpt_slug() === $post->post_type;
 	}
 
 	/**
@@ -265,11 +286,19 @@ class Newsletters_Access {
 	/**
 	 * Base64url decode. Returns false on malformed input.
 	 *
+	 * Re-pads to a multiple of 4 before calling base64_decode in strict mode,
+	 * because base64url_encode strips padding ("=") and strict-mode
+	 * base64_decode returns false for unpadded input.
+	 *
 	 * @param string $data URL-safe base64 string.
 	 *
 	 * @return string|false
 	 */
 	private static function base64url_decode( $data ) {
+		$padding = strlen( $data ) % 4;
+		if ( $padding > 0 ) {
+			$data .= str_repeat( '=', 4 - $padding );
+		}
 		$decoded = base64_decode( strtr( $data, '-_', '+/' ), true );
 		return $decoded;
 	}
@@ -522,7 +551,7 @@ class Newsletters_Access {
 		$cutoff = time() - self::SIGNATURE_TTL;
 		$ids    = get_posts(
 			[
-				'post_type'              => 'newspack_nl_cpt',
+				'post_type'              => self::newsletter_cpt_slug(),
 				'post_status'            => [ 'publish', 'private' ],
 				'posts_per_page'         => 50,
 				'fields'                 => 'ids',

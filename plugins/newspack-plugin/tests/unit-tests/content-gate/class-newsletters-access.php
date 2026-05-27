@@ -103,6 +103,34 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Regression: verify() must handle base64url-encoded tokens whose
+	 * length is not a multiple of 4 (i.e., would require padding "=" in
+	 * strict-mode base64_decode). base64url_encode strips padding, so
+	 * decoding has to re-pad before strict decode.
+	 */
+	public function test_verify_handles_unpadded_base64url_token() {
+		$post_id = $this->create_newsletter( time() );
+		// Iterate post IDs until we find one whose token's unpadded length
+		// requires re-padding (length % 4 !== 0). Most do — the format
+		// "<id>|<hex hmac>" plus base64 padding makes this common.
+		$found_unpadded = false;
+		for ( $i = 0; $i < 20; $i++ ) {
+			$test_id = $post_id + $i;
+			// Mark as sent.
+			update_post_meta( $test_id, 'newsletter_sent', time() );
+			$token = Newsletters_Access::sign( $test_id );
+			if ( 0 !== strlen( $token ) % 4 ) {
+				$found_unpadded = true;
+				$result         = Newsletters_Access::verify( $token );
+				$this->assertIsArray( $result, 'unpadded base64url token must decode and verify' );
+				$this->assertSame( $test_id, $result['newsletter_id'] );
+				break;
+			}
+		}
+		$this->assertTrue( $found_unpadded, 'failed to find an unpadded token to test (unlikely)' );
+	}
+
+	/**
 	 * Test that verify() returns false when the newsletter was sent beyond SIGNATURE_TTL.
 	 */
 	public function test_verify_rejects_signature_past_send_window() {
@@ -774,6 +802,24 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Regression: filter_wc_memberships_is_post_public should not turn a
+	 * `false` return from another callback into `true` simply by being
+	 * registered. Without a bypass cookie or single-post match, the
+	 * incoming value should pass through unchanged.
+	 */
+	public function test_wc_memberships_filter_passes_through_when_no_bypass() {
+		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
+		// Re-init to register the verification hooks under the conditional registration.
+		Newsletters_Access::init();
+
+		// No cookies set, no single-post cookie. Filter should be a pass-through.
+		unset( $_COOKIE[ Newsletters_Access::COOKIE_NAME ], $_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->assertFalse( Newsletters_Access::filter_wc_memberships_is_post_public( false, 123 ) );
+		$this->assertTrue( Newsletters_Access::filter_wc_memberships_is_post_public( true, 123 ) );
+	}
+
+	/**
 	 * Bug regression: append_signature_to_link() must NOT sign URLs that
 	 * point to external domains. Appending the npnl token to a third-party
 	 * URL would leak a replayable bypass credential into their server logs.
@@ -845,6 +891,18 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$memo_property = new \ReflectionProperty( Newsletters_Access::class, 'utm_verification_memo' );
 		$memo_property->setAccessible( true );
 		$memo_property->setValue( null, [] );
+
+		// Belt-and-suspenders: clean superglobals so a failed assertion
+		// in one test doesn't bleed into the next.
+		unset(
+			$_GET[ Newsletters_Access::QUERY_PARAM ],
+			$_GET['utm_medium'],
+			$_GET['utm_source']
+		);
+		unset(
+			$_COOKIE[ Newsletters_Access::COOKIE_NAME ],
+			$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ]
+		);
 
 		parent::tear_down();
 	}

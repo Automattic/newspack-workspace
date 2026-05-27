@@ -153,23 +153,23 @@ class Newsletters_Tracking_Test extends WP_UnitTestCase {
 		};
 		add_action( 'newspack_newsletters_tracking_click', $capture_callback, 10, 3 );
 
-		$_GET['np_newsletters_click'] = 1;
-		$_GET['id']                   = $post_id;
-		$_GET['em']                   = 'reader@example.com';
-		$_GET['url']                  = 'https://google.com/article/';
-		$_GET['npnl']                 = 'fake-token-string';
+		$_GET['np_newsletters_click']              = 1;
+		$_GET['id']                                = $post_id;
+		$_GET['em']                                = 'reader@example.com';
+		$_GET['url']                               = 'https://google.com/article/';
+		$_GET[ Click::FORWARDED_NPNL_PARAM ]       = 'fake-token-string';
 		Click::handle_click( false );
 
 		// Verify the npnl param was appended to the destination URL.
 		$this->assertNotNull( $captured_url, 'Tracking action should have fired.' );
 		$parsed = \wp_parse_url( $captured_url );
 		\wp_parse_str( $parsed['query'] ?? '', $query_args );
-		$this->assertArrayHasKey( 'npnl', $query_args, 'npnl param should be present in the proxied URL.' );
-		$this->assertEquals( 'fake-token-string', $query_args['npnl'] );
+		$this->assertArrayHasKey( Click::FORWARDED_NPNL_PARAM, $query_args, 'npnl param should be present in the proxied URL.' );
+		$this->assertEquals( 'fake-token-string', $query_args[ Click::FORWARDED_NPNL_PARAM ] );
 
 		// Clean up.
 		remove_action( 'newspack_newsletters_tracking_click', $capture_callback, 10 );
-		unset( $_GET['np_newsletters_click'], $_GET['id'], $_GET['em'], $_GET['url'], $_GET['npnl'] );
+		unset( $_GET['np_newsletters_click'], $_GET['id'], $_GET['em'], $_GET['url'], $_GET[ Click::FORWARDED_NPNL_PARAM ] );
 	}
 
 	/**

@@ -16,6 +16,14 @@ final class Click {
 	const QUERY_VAR = 'np_newsletters_click';
 
 	/**
+	 * Query parameter forwarded by the click proxy in addition to UTMs.
+	 * Mirrors `Newspack\Content_Gate\Newsletters_Access::QUERY_PARAM` in
+	 * the foundation plugin — must stay in sync. We can't import the
+	 * foundation constant directly without coupling the two plugins.
+	 */
+	const FORWARDED_NPNL_PARAM = 'npnl';
+
+	/**
 	 * Initialize hooks.
 	 *
 	 * @codeCoverageIgnore
@@ -179,7 +187,7 @@ final class Click {
 		 * plugin's Newsletters_Access class and must survive the proxy redirect
 		 * so the destination site can verify it.
 		 */
-		$forwarded_params = [ 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'npnl' ];
+		$forwarded_params = [ 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', self::FORWARDED_NPNL_PARAM ];
 		foreach ( $forwarded_params as $param ) {
 			if ( isset( $_GET[ $param ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				$url = \add_query_arg( $param, \sanitize_text_field( \wp_unslash( $_GET[ $param ] ) ), $url ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
