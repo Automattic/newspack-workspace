@@ -385,25 +385,25 @@ class Newsletters_Access {
 	 * at the platform layer; the value is HMAC-signed to prevent forgery.
 	 */
 	private static function set_bypass_cookie() {
-		if ( headers_sent() ) {
-			return;
-		}
 		$expiry = time() + self::BYPASS_TTL;
 		$value  = self::build_signed_cookie_value( '1', $expiry );
-		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
-		setcookie(
-			self::COOKIE_NAME,
-			$value,
-			[
-				'expires'  => $expiry,
-				'path'     => COOKIEPATH,
-				'domain'   => COOKIE_DOMAIN,
-				'secure'   => is_ssl(),
-				'httponly' => true,
-				'samesite' => 'Lax',
-			]
-		);
-		// Make the cookie visible to the rest of this request.
+		if ( ! headers_sent() ) {
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
+			setcookie(
+				self::COOKIE_NAME,
+				$value,
+				[
+					'expires'  => $expiry,
+					'path'     => COOKIEPATH,
+					'domain'   => COOKIE_DOMAIN,
+					'secure'   => is_ssl(),
+					'httponly' => true,
+					'samesite' => 'Lax',
+				]
+			);
+		}
+		// Unconditionally update $_COOKIE so same-request filters can see
+		// the bypass even in test environments where headers are already sent.
 		$_COOKIE[ self::COOKIE_NAME ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 	}
 
@@ -796,24 +796,25 @@ class Newsletters_Access {
 	 * @param int $post_id Verified post ID.
 	 */
 	private static function set_single_post_bypass_cookie( $post_id ) {
-		if ( headers_sent() ) {
-			return;
-		}
 		$expiry = time() + self::BYPASS_TTL;
 		$value  = self::build_signed_cookie_value( (string) (int) $post_id, $expiry );
-		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
-		setcookie(
-			self::SINGLE_POST_COOKIE_NAME,
-			$value,
-			[
-				'expires'  => $expiry,
-				'path'     => COOKIEPATH,
-				'domain'   => COOKIE_DOMAIN,
-				'secure'   => is_ssl(),
-				'httponly' => true,
-				'samesite' => 'Lax',
-			]
-		);
+		if ( ! headers_sent() ) {
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
+			setcookie(
+				self::SINGLE_POST_COOKIE_NAME,
+				$value,
+				[
+					'expires'  => $expiry,
+					'path'     => COOKIEPATH,
+					'domain'   => COOKIE_DOMAIN,
+					'secure'   => is_ssl(),
+					'httponly' => true,
+					'samesite' => 'Lax',
+				]
+			);
+		}
+		// Unconditionally update $_COOKIE so same-request filters can see
+		// the bypass even in test environments where headers are already sent.
 		$_COOKIE[ self::SINGLE_POST_COOKIE_NAME ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 	}
 

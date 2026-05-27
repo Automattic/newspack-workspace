@@ -720,24 +720,25 @@ class IP_Access_Rule {
 	 * setcookie() calls that this helper replaces).
 	 */
 	private static function set_cookie() {
-		if ( headers_sent() ) {
-			return;
-		}
 		$expiry = time() + MONTH_IN_SECONDS;
 		$value  = self::build_signed_cookie_value( '1', $expiry );
-		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
-		setcookie(
-			self::COOKIE_NAME,
-			$value,
-			[
-				'expires'  => $expiry,
-				'path'     => COOKIEPATH,
-				'domain'   => COOKIE_DOMAIN,
-				'secure'   => is_ssl(),
-				'httponly' => true,
-				'samesite' => 'Lax',
-			]
-		);
+		if ( ! headers_sent() ) {
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
+			setcookie(
+				self::COOKIE_NAME,
+				$value,
+				[
+					'expires'  => $expiry,
+					'path'     => COOKIEPATH,
+					'domain'   => COOKIE_DOMAIN,
+					'secure'   => is_ssl(),
+					'httponly' => true,
+					'samesite' => 'Lax',
+				]
+			);
+		}
+		// Unconditionally update $_COOKIE so same-request filters can see
+		// the bypass even in test environments where headers are already sent.
 		$_COOKIE[ self::COOKIE_NAME ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 	}
 

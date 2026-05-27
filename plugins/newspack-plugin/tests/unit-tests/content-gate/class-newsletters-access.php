@@ -906,6 +906,14 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		);
 		// phpcs:enable WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 
+		// B3 transient cache cleanup — the 1-hour transient persists across
+		// tests in object cache, so leftover cached newsletter IDs from one
+		// test would silently grant 'verified' to another using the same
+		// list_id.
+		foreach ( [ 'list_abc', 'list_cache_test', 'list_populate_test', 'list_memo_test', 'fake_list_xyz' ] as $list_id ) {
+			delete_transient( 'newspack_nl_access_list_' . md5( $list_id ) );
+		}
+
 		parent::tear_down();
 	}
 
