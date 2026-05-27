@@ -347,7 +347,16 @@ window.newspackRAS.push( function ( readerActivation ) {
 
 					let callback;
 					if ( ! container.config?.skipNewslettersSignup && data?.registered && container.authCallback ) {
+						// One-shot guard: this callback may run twice — once from the "Continue"
+						// click on the success screen, and again when `container.authCallback()`
+						// fires `close()` which in turn fires `config.onClose`. Without the guard
+						// we'd re-open the newsletter modal and re-reload the page.
+						let newslettersShown = false;
 						callback = ( authMessage, authData ) => {
+							if ( newslettersShown ) {
+								return;
+							}
+							newslettersShown = true;
 							openNewslettersSignupModal( {
 								onSuccess: () => {
 									container.authCallback( authMessage, authData );
@@ -358,6 +367,9 @@ window.newspackRAS.push( function ( readerActivation ) {
 								onDismiss: () => window.location.reload(),
 							} );
 						};
+						// Also fire the chain if the reader dismisses the success screen via Escape
+						// / backdrop / close button without clicking Continue. The guard above
+						// prevents the double-fire when they did click Continue.
 						container.config.onClose = callback;
 					} else {
 						callback = container.authCallback;
@@ -379,16 +391,25 @@ window.newspackRAS.push( function ( readerActivation ) {
 						} );
 						form.style.opacity = 1;
 
+						// Restore the auth modal's inline display before invoking any callback
+						// that might close or re-open it. Skipping this leaves data-state='open'
+						// on an element still styled `display:none`, making the modal appear
+						// broken on subsequent re-opens.
+						const restoreAuthModal = () => {
+							if ( authModal ) {
+								authModal.style.display = '';
+							}
+						};
+
 						openVerificationModal( {
 							email: data.email,
 							verificationNonce: data.verification_nonce,
 							onSendCode: () => {
+								restoreAuthModal();
 								container.setFormAction( 'otp', true );
-								if ( authModal ) {
-									authModal.style.display = '';
-								}
 							},
 							onDismiss: () => {
+								restoreAuthModal();
 								callback?.( message, data );
 								form.isVerifying = false;
 							},

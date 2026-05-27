@@ -21,12 +21,22 @@ function sendVerificationOTP( nonce ) {
 		method: 'POST',
 		headers: { Accept: 'application/json' },
 		body,
-	} ).then( res => {
-		if ( ! res.ok ) {
-			throw new Error( res.statusText );
-		}
-		return res.json();
-	} );
+	} )
+		.then( res => {
+			if ( ! res.ok ) {
+				throw new Error( res.statusText );
+			}
+			return res.json();
+		} )
+		.then( json => {
+			// wp_send_json_error() returns HTTP 200 with { success: false }. Reject so the
+			// caller's .catch() runs and the "Send code" button is re-enabled, instead of the
+			// modal silently advancing to OTP entry for an OTP that was never sent.
+			if ( ! json?.success ) {
+				throw new Error( json?.data || 'Failed to send verification code.' );
+			}
+			return json;
+		} );
 }
 
 /**
