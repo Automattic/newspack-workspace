@@ -43,10 +43,12 @@ class Content_Gate_Advanced_Settings {
 			return self::$settings;
 		}
 
-		// RSS.
+		// Cast each option to int so consumers (including the React UI, whose
+		// TS types declare these as boolean) don't misinterpret a stringy
+		// '0' returned by get_option() as truthy.
 		$settings = [
-			'restrict_feeds'                 => get_option( self::OPTION_PREFIX . 'restrict_feeds', 1 ),
-			'newsletter_link_bypass_enabled' => get_option( self::OPTION_PREFIX . 'newsletter_link_bypass_enabled', 0 ),
+			'restrict_feeds'                 => (int) get_option( self::OPTION_PREFIX . 'restrict_feeds', 1 ),
+			'newsletter_link_bypass_enabled' => (int) get_option( self::OPTION_PREFIX . 'newsletter_link_bypass_enabled', 0 ),
 		];
 
 		self::$settings = $settings;

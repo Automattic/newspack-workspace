@@ -144,16 +144,14 @@ class Newsletters_Tracking_Test extends WP_UnitTestCase {
 		);
 		update_post_meta( $post_id, 'newspack_email_html', $content );
 
-		// Capture the final redirect URL via the tracking action.
-		$captured_url = null;
-		add_action(
-			'newspack_newsletters_tracking_click',
-			function( $newsletter_id, $email_address, $url ) use ( &$captured_url ) {
-				$captured_url = $url;
-			},
-			10,
-			3
-		);
+		// Capture the final redirect URL via the tracking action. Store the
+		// callback in a variable so we can remove_action() it precisely at
+		// the end of the test and avoid leaking into subsequent tests.
+		$captured_url     = null;
+		$capture_callback = function( $newsletter_id, $email_address, $url ) use ( &$captured_url ) {
+			$captured_url = $url;
+		};
+		add_action( 'newspack_newsletters_tracking_click', $capture_callback, 10, 3 );
 
 		$_GET['np_newsletters_click'] = 1;
 		$_GET['id']                   = $post_id;
@@ -170,6 +168,7 @@ class Newsletters_Tracking_Test extends WP_UnitTestCase {
 		$this->assertEquals( 'fake-token-string', $query_args['npnl'] );
 
 		// Clean up.
+		remove_action( 'newspack_newsletters_tracking_click', $capture_callback, 10 );
 		unset( $_GET['np_newsletters_click'], $_GET['id'], $_GET['em'], $_GET['url'], $_GET['npnl'] );
 	}
 

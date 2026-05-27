@@ -445,34 +445,20 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	public function test_utm_fallback_rejects_slug_prefix_collision() {
 		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
 
-		// Create two posts. In a plain-permalink environment their canonical
-		// URLs are ?p=<id>, so two posts with IDs where one is a numeric prefix
-		// of the other (e.g., 99 and 999) reproduce the false-positive.
-		// We rely on the DB auto-increment to give us two distinct IDs; the
-		// short-ID post is created first so its ID is numerically shorter.
+		// Create the short-slug post the reader will visit. We don't need a
+		// second real post — instead we craft a collision URL directly by
+		// appending characters to the short URL, simulating real-world cases
+		// like `?p=5` appearing as a substring of `?p=599`, or `/slug/`
+		// appearing as a substring of `/slug-extended/`.
 		$short_post_id = $this->factory->post->create( [ 'post_type' => 'post' ] );
-		// Insert enough posts so the next ID is at least one digit longer,
-		// guaranteeing a numeric prefix relationship without assuming IDs.
-		// Instead, build the newsletter HTML by hand so we control the collision.
-		$long_post_id = $this->factory->post->create( [ 'post_type' => 'post' ] );
+		$short_url     = get_permalink( $short_post_id );
+		$short_needle  = untrailingslashit( $short_url );
 
-		$short_url = get_permalink( $short_post_id );
-		$long_url  = get_permalink( $long_post_id );
-
-		// Manually craft newsletter HTML that contains ONLY the long-post URL
-		// followed by a quote boundary (as esc_url produces). The short URL
-		// must not appear in the HTML at all — only its numeric prefix does,
-		// embedded inside the longer URL string.
-		//
-		// We build the HTML so that $short_url stripped of its trailing slash
-		// appears as a substring of $long_url (the false-positive condition).
-		// Concretely: replace the long-post ?p=N with a value that starts with
-		// the short-post ID, e.g., short_id=5 → long_id becomes "50" or we
-		// just embed a crafted URL directly.
-		$short_needle = untrailingslashit( $short_url );
 		// Build a fake linked URL whose un-slashed form starts with $short_needle
-		// but is longer — simulating ?p=5 vs ?p=50 or /slug vs /slug-extended/.
-		$colliding_linked_url = $short_needle . '99/'; // e.g., ?p=599 if short_url ended in ?p=5.
+		// but is longer. The newsletter HTML below contains ONLY this colliding
+		// URL — never $short_url itself — so a naive substring search would
+		// false-positive and the boundary check must reject it.
+		$colliding_linked_url = $short_needle . '99/';
 
 		$newsletter_id = $this->factory->post->create( [ 'post_type' => 'newspack_nl_cpt' ] );
 		update_post_meta( $newsletter_id, 'send_list_id', 'list_abc' );
@@ -683,6 +669,9 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	public function tear_down() {
 		delete_option( 'newspack_content_gate_newsletter_link_bypass_enabled' );
 		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
+		// Remove any test-only list-validation filters so anonymous callbacks
+		// added inside individual tests don't leak into subsequent tests.
+		remove_all_filters( 'newspack_newsletters_access_test_valid_list_ids' );
 		parent::tear_down();
 	}
 
