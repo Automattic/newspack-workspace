@@ -11,7 +11,7 @@ A card component for presenting a named feature or setting with a predictable, s
 
 | State | Condition | Button | Dropdown | Badge |
 |---|---|---|---|---|
-| **Unmet requirements** | `requirements` is set | "Enable" — disabled | Hidden | Error badge with `requirements` text |
+| **Unmet requirements** | `requirements` is set | "Enable" — disabled (clickable if `requirementsActionable`) | Hidden | Error badge with `requirements` text |
 | **Disabled** | `!enabled`, no requirements | "Enable" | Hidden | None |
 | **Enabled** | `enabled`, no requirements | "Configure" | Shown if `moreControls` provided | Success badge ("Enabled") |
 
@@ -155,6 +155,7 @@ import { __ } from '@wordpress/i18n';
 | `icon` | `CardFeatureIcon` | — | Icon displayed on the right. See `CardFeatureIcon` below. |
 | `enabled` | `boolean` | `false` | Whether the feature is currently enabled |
 | `requirements` | `string` | — | When set, enters the unmet-requirements state; value is used as the error badge text |
+| `requirementsActionable` | `boolean` | `false` | When `requirements` is set, keep the primary button clickable so it can remediate the unmet requirement |
 | `enableLabel` | `string` | `"Enable"` | Primary button label when not enabled |
 | `configureLabel` | `string` | `"Configure"` | Primary button label when enabled |
 | `onEnable` | `() => void` | — | Called when the primary button is clicked and the feature is not enabled |

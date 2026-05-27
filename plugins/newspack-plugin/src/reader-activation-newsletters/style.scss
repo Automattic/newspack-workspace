@@ -6,10 +6,14 @@
 
 	.newspack-newsletters-signup {
 		margin-top: var(--newspack-ui-spacer-5);
+	}
+}
 
-		.newsletter-list-container {
-			transition: max-height 250ms ease-in-out;
-		}
+.newspack-newsletters-signup .newsletter-list-container {
+	transition: max-height 250ms ease-in-out;
+
+	.newspack-ui__input-card.hidden {
+		display: none !important;
 	}
 }
 

@@ -1199,4 +1199,254 @@ class Test_Integrations extends \WP_UnitTestCase {
 		Integrations::register_my_account_endpoints();
 		$this->assertSame( [ 'two-page' ], get_option( Integrations::MY_ACCOUNT_ENDPOINTS_OPTION ) );
 	}
+
+	/**
+	 * OAuth settings field value: scalar strings are sanitized through sanitize_text_field.
+	 */
+	public function test_sanitize_settings_field_value_oauth_scalar() {
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+		$field       = [
+			'key'  => 'token',
+			'type' => 'oauth',
+		];
+
+		$this->assertSame(
+			'abc123',
+			$integration->test_sanitize_settings_field_value( $field, 'abc123' )
+		);
+		// Tags stripped by sanitize_text_field.
+		$this->assertSame(
+			'token',
+			$integration->test_sanitize_settings_field_value( $field, '<b>token</b>' )
+		);
+		// Non-string scalars are coerced to a string then sanitized.
+		$this->assertSame(
+			'42',
+			$integration->test_sanitize_settings_field_value( $field, 42 )
+		);
+	}
+
+	/**
+	 * OAuth settings field value: non-scalar payloads are rejected and the default is returned.
+	 */
+	public function test_sanitize_settings_field_value_oauth_non_scalar_returns_default() {
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+
+		// No default declared: falls back to empty string.
+		$this->assertSame(
+			'',
+			$integration->test_sanitize_settings_field_value(
+				[
+					'key'  => 'token',
+					'type' => 'oauth',
+				],
+				[ 'unexpected' => 'array' ]
+			)
+		);
+		// Explicit default is honored.
+		$this->assertSame(
+			'fallback',
+			$integration->test_sanitize_settings_field_value(
+				[
+					'key'     => 'token',
+					'type'    => 'oauth',
+					'default' => 'fallback',
+				],
+				(object) [ 'unexpected' => 'object' ]
+			)
+		);
+	}
+
+	/**
+	 * Hidden settings field value: scalar strings are sanitized, non-scalars return the default.
+	 */
+	public function test_sanitize_settings_field_value_hidden() {
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+		$field       = [
+			'key'  => 'secret',
+			'type' => 'hidden',
+		];
+
+		$this->assertSame(
+			'opaque-id',
+			$integration->test_sanitize_settings_field_value( $field, 'opaque-id' )
+		);
+		// Non-scalar rejected.
+		$this->assertSame(
+			'',
+			$integration->test_sanitize_settings_field_value( $field, [ 'nope' ] )
+		);
+		// Explicit default honored on non-scalar payload.
+		$this->assertSame(
+			'kept',
+			$integration->test_sanitize_settings_field_value(
+				[
+					'key'     => 'secret',
+					'type'    => 'hidden',
+					'default' => 'kept',
+				],
+				[ 'nope' ]
+			)
+		);
+	}
+
+	/**
+	 * The REST settings save entry point (update_integration_settings) drops
+	 * oauth/hidden keys so admin clients can't overwrite server-managed values
+	 * such as OAuth tokens. Other field types pass through.
+	 */
+	public function test_update_integration_settings_skips_managed_field_types() {
+		Sample_Integration::$declared_settings_fields = [
+			[
+				'key'     => 'api_label',
+				'type'    => 'text',
+				'default' => '',
+			],
+			[
+				'key'     => 'access_token',
+				'type'    => 'hidden',
+				'default' => '',
+			],
+			[
+				'key'     => 'connection',
+				'type'    => 'oauth',
+				'default' => '',
+			],
+		];
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+		Integrations::register( $integration );
+
+		// Pre-seed the managed fields as if a server-side OAuth callback had
+		// written them. The REST endpoint must not overwrite these.
+		\update_option( Integration::SETTINGS_OPTION_PREFIX . 'test-id_access_token', 'server-managed-token' );
+		\update_option( Integration::SETTINGS_OPTION_PREFIX . 'test-id_connection', 'connected' );
+
+		$result = Integrations::update_integration_settings(
+			'test-id',
+			[
+				'api_label'    => 'My Label',
+				'access_token' => 'attempted-override',
+				'connection'   => 'attempted-override',
+			]
+		);
+
+		$this->assertTrue( $result );
+
+		// The non-managed field was written through.
+		$this->assertSame(
+			'My Label',
+			\get_option( Integration::SETTINGS_OPTION_PREFIX . 'test-id_api_label' )
+		);
+
+		// The managed fields kept their server-managed values.
+		$this->assertSame(
+			'server-managed-token',
+			\get_option( Integration::SETTINGS_OPTION_PREFIX . 'test-id_access_token' )
+		);
+		$this->assertSame(
+			'connected',
+			\get_option( Integration::SETTINGS_OPTION_PREFIX . 'test-id_connection' )
+		);
+	}
+
+	/**
+	 * Server-side writers (e.g., an OAuth callback) calling
+	 * update_settings_field_value() directly bypass the REST-path filter and
+	 * can still write oauth/hidden values.
+	 */
+	public function test_update_settings_field_value_writes_managed_field_types_directly() {
+		Sample_Integration::$declared_settings_fields = [
+			[
+				'key'     => 'access_token',
+				'type'    => 'hidden',
+				'default' => '',
+			],
+			[
+				'key'     => 'connection',
+				'type'    => 'oauth',
+				'default' => '',
+			],
+		];
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+
+		$integration->update_settings_field_value( 'access_token', 'fresh-token' );
+		$integration->update_settings_field_value( 'connection', 'connected' );
+
+		$this->assertSame(
+			'fresh-token',
+			\get_option( Integration::SETTINGS_OPTION_PREFIX . 'test-id_access_token' )
+		);
+		$this->assertSame(
+			'connected',
+			\get_option( Integration::SETTINGS_OPTION_PREFIX . 'test-id_connection' )
+		);
+	}
+
+	/**
+	 * Integrations that don't override get_required_plugins() report an empty
+	 * required_plugins array in the settings payload, so the audience UI renders
+	 * them without a requirements badge.
+	 */
+	public function test_get_all_integration_settings_defaults_required_plugins_to_empty_array() {
+		$integration = new Sample_Integration( 'no-overrides', 'No Overrides' );
+		Integrations::register( $integration );
+
+		$settings = Integrations::get_all_integration_settings();
+
+		$this->assertArrayHasKey( 'no-overrides', $settings );
+		$this->assertArrayHasKey( 'required_plugins', $settings['no-overrides'] );
+		$this->assertSame( [], $settings['no-overrides']['required_plugins'] );
+	}
+
+	/**
+	 * A child integration overriding get_required_plugins() has its declaration
+	 * surfaced verbatim in the settings payload that drives the audience UI card.
+	 */
+	public function test_get_all_integration_settings_surfaces_required_plugins_override() {
+		$declared    = [
+			[
+				'slug'         => 'some-dependency',
+				'name'         => 'Some Dependency',
+				'is_active'    => false,
+				'is_installed' => true,
+			],
+		];
+		$integration = new class( 'with-deps', 'With Deps', $declared ) extends Sample_Integration {
+			/**
+			 * Declared required-plugins payload returned by the override.
+			 *
+			 * @var array
+			 */
+			private $declared;
+
+			/**
+			 * Capture the declaration the test wants returned, then defer
+			 * construction to the parent.
+			 *
+			 * @param string $id       Integration id.
+			 * @param string $name     Integration name.
+			 * @param array  $declared Required-plugins payload to return.
+			 */
+			public function __construct( $id, $name, $declared ) {
+				$this->declared = $declared;
+				parent::__construct( $id, $name );
+			}
+
+			/**
+			 * Return the test-supplied required-plugins payload.
+			 *
+			 * @return array
+			 */
+			public function get_required_plugins() {
+				return $this->declared;
+			}
+		};
+
+		Integrations::register( $integration );
+
+		$settings = Integrations::get_all_integration_settings();
+
+		$this->assertArrayHasKey( 'with-deps', $settings );
+		$this->assertSame( $declared, $settings['with-deps']['required_plugins'] );
+	}
 }

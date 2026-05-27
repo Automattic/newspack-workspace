@@ -65,6 +65,23 @@ class ESP extends Integration {
 	}
 
 	/**
+	 * Get the plugins this integration depends on, with their install/active status.
+	 *
+	 * @return array List of associative arrays with keys `slug`, `name`, `is_active`, `is_installed`.
+	 */
+	public function get_required_plugins() {
+		$status = \Newspack\Plugin_Manager::get_managed_plugin_status( 'newspack-newsletters' );
+		return [
+			[
+				'slug'         => 'newspack-newsletters',
+				'name'         => __( 'Newspack Newsletters', 'newspack-plugin' ),
+				'is_active'    => 'active' === $status,
+				'is_installed' => 'uninstalled' !== $status,
+			],
+		];
+	}
+
+	/**
 	 * Register the settings fields declared by this integration.
 	 *
 	 * Returns ALL possible ESP fields unconditionally as static

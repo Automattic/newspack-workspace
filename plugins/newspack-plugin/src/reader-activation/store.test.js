@@ -99,6 +99,24 @@ describe( 'Store', () => {
 		store.rehydrate();
 		expect( store.get( 'foo' ) ).toEqual( 'bar' );
 	} );
+	it( 'should fall back to the server value when a merge strategy throws', () => {
+		window.newspack_reader_data = {
+			items: {
+				flaky: '"server"',
+			},
+		};
+		const store = Store();
+		store.register( 'flaky', {
+			merge: () => {
+				throw new Error( 'boom' );
+			},
+		} );
+		const warn = jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		expect( () => store.rehydrate() ).not.toThrow();
+		expect( store.get( 'flaky' ) ).toEqual( 'server' );
+		expect( warn ).toHaveBeenCalledWith( expect.stringContaining( 'Unable to rehydrate flaky' ), expect.any( Error ) );
+		warn.mockRestore();
+	} );
 	describe( 'getAll', () => {
 		beforeEach( () => {
 			window.newspack_reader_data = {};

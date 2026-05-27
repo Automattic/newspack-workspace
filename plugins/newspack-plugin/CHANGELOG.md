@@ -1,3 +1,10 @@
+## [6.41.3](https://github.com/Automattic/newspack-plugin/compare/v6.41.2...v6.41.3) (2026-05-25)
+
+
+### Bug Fixes
+
+* **editor:** exclude Customizer Additional CSS from iframed editor ([#4750](https://github.com/Automattic/newspack-plugin/issues/4750)) ([3aaf8f6](https://github.com/Automattic/newspack-plugin/commit/3aaf8f627974a282b7c74ef29d65b94af005d1e2))
+
 ## [6.41.2](https://github.com/Automattic/newspack-plugin/compare/v6.41.1...v6.41.2) (2026-05-21)
 
 
