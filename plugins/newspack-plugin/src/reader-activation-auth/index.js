@@ -14,8 +14,16 @@ window.newspackRAS.push( readerActivation => {
 	domReady( function () {
 		/** Expose the openAuthModal function to the RAS scope */
 		readerActivation._openAuthModal = openAuthModal;
-		/** Expose the openVerificationModal function to the RAS scope (consumed cross-plugin). */
-		readerActivation._openVerificationModal = openVerificationModal;
+		/**
+		 * Expose the openVerificationModal function to the RAS scope (consumed cross-plugin).
+		 * Injects readerActivation.setOTPTimer so the helper doesn't reach back through the
+		 * window global.
+		 */
+		readerActivation._openVerificationModal = config =>
+			openVerificationModal( {
+				setOTPTimer: readerActivation.setOTPTimer,
+				...config,
+			} );
 
 		/**
 		 * Handle hash change.

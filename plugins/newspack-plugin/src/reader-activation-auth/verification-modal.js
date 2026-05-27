@@ -1,4 +1,9 @@
-/* globals newspack_ras_config */
+/* globals newspack_ras_config, newspack_reader_activation_labels */
+
+/**
+ * Internal dependencies.
+ */
+import * as a11y from './accessibility.js';
 
 /**
  * Helpers for the post-registration verification modal rendered in wp_footer
@@ -45,6 +50,7 @@ function sendVerificationOTP( nonce ) {
  * @param {Object}   config
  * @param {string}   config.email             Email to display in the modal copy.
  * @param {string}   config.verificationNonce Nonce authorizing the OTP request (typically the fresh nonce returned by the register response).
+ * @param {Function} [config.setOTPTimer]     Called when the OTP send succeeds, to mark the OTP timer. Typically `readerActivation.setOTPTimer`. When omitted the helper is a no-op for timing.
  * @param {Function} [config.onSendCode]      Called once the OTP request succeeds, after the modal closes.
  * @param {Function} [config.onDismiss]       Called when the modal closes without a successful OTP request.
  *
@@ -77,8 +83,8 @@ export function openVerificationModal( config = {} ) {
 		sendVerificationOTP( config.verificationNonce )
 			.then( () => {
 				codeSent = true;
-				if ( window.newspackReaderActivation?.setOTPTimer ) {
-					window.newspackReaderActivation.setOTPTimer();
+				if ( typeof config.setOTPTimer === 'function' ) {
+					config.setOTPTimer();
 				}
 				modal.setAttribute( 'data-state', 'closed' );
 				cleanup();
@@ -91,7 +97,7 @@ export function openVerificationModal( config = {} ) {
 				sendOtpButton.textContent = sendOtpButton.textContent.trim();
 				const errorP = modal.querySelector( '.newspack-ui__box p:not(:has(button))' );
 				if ( errorP ) {
-					errorP.textContent = 'Something went wrong. Please try again.';
+					errorP.textContent = newspack_reader_activation_labels?.verification_error || '';
 				}
 			} );
 	}
@@ -111,5 +117,6 @@ export function openVerificationModal( config = {} ) {
 	modal.addEventListener( 'closeModal', handleClose );
 
 	modal.setAttribute( 'data-state', 'open' );
+	a11y.trapFocus( modal );
 	return true;
 }

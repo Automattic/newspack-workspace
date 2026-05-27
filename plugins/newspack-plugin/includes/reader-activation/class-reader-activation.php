@@ -282,6 +282,7 @@ final class Reader_Activation {
 				'blocked_popup'            => __( 'The popup has been blocked. Allow popups for the site and try again.', 'newspack-plugin' ),
 				'code_sent'                => __( 'Code sent! Check your inbox.', 'newspack-plugin' ),
 				'code_resent'              => __( 'Code resent! Check your inbox.', 'newspack-plugin' ),
+				'verification_error'       => __( 'Something went wrong. Please try again.', 'newspack-plugin' ),
 				'create_account'           => __( 'Create an account', 'newspack-plugin' ),
 				'signin'                   => [
 					'title'           => __( 'Sign in or register', 'newspack-plugin' ),
@@ -2350,27 +2351,38 @@ final class Reader_Activation {
 	 * block, newsletters subscribe block, etc.) so they share a single source of
 	 * truth for the verification contract.
 	 *
+	 * The return shape is stable: both keys are always present. `verified` is null when the
+	 * user is invalid or not a reader; `verification_nonce` is an empty string when no
+	 * verification flow should be triggered. This lets cross-plugin consumers consume the
+	 * fields without `isset()` ladders.
+	 *
 	 * @param \WP_User|int $user_or_id The user (or user ID) to inspect.
 	 * @return array {
-	 *     Empty array if the user is invalid or not a reader. Otherwise:
-	 *
-	 *     @type bool   $verified           Whether the reader's email is already verified.
-	 *     @type string $verification_nonce Nonce for the verification OTP request. Only present
-	 *                                      when the reader is unverified AND the post-registration
-	 *                                      verification flow should be shown.
+	 *     @type bool|null $verified           Whether the reader's email is already verified.
+	 *                                         Null when the user is invalid or not a reader.
+	 *     @type string    $verification_nonce Nonce for the verification OTP request, or an
+	 *                                         empty string when no verification flow should run
+	 *                                         (already verified, not a reader, or the post-
+	 *                                         registration verification feature is disabled).
 	 * }
 	 */
 	public static function get_verification_payload( $user_or_id ) {
 		$user = is_numeric( $user_or_id ) ? \get_user_by( 'id', (int) $user_or_id ) : $user_or_id;
 		if ( ! $user instanceof \WP_User || ! self::is_user_reader( $user ) ) {
-			return [];
+			return [
+				'verified'           => null,
+				'verification_nonce' => '',
+			];
 		}
-		$verified = self::is_reader_verified( $user );
-		$payload  = [ 'verified' => $verified ];
+		$verified           = self::is_reader_verified( $user );
+		$verification_nonce = '';
 		if ( ! $verified && self::show_post_registration_verification() ) {
-			$payload['verification_nonce'] = \wp_create_nonce( 'newspack_reader_registration_verification' );
+			$verification_nonce = \wp_create_nonce( 'newspack_reader_registration_verification' );
 		}
-		return $payload;
+		return [
+			'verified'           => $verified,
+			'verification_nonce' => $verification_nonce,
+		];
 	}
 
 	/**

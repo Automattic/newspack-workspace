@@ -85,19 +85,6 @@ window.newspackRAS.push( function ( readerActivation ) {
 						messageContentElement.classList.add( 'newspack-ui__helper-text' );
 					}
 					messageContentElement.style.display = 'block';
-
-					// If the message includes a registration toggle, hide the message when clicked.
-					messageContentElement.querySelectorAll( 'a[data-set-action="register"], a[data-set-action="signin"]' ).forEach( registerLink => {
-						registerLink.parentNode.setAttribute( 'data-action', 'signin' );
-
-						registerLink.addEventListener(
-							'click',
-							function () {
-								messageContentElement.innerHTML = '';
-							},
-							false
-						);
-					} );
 				} else {
 					messageContentElement.style.display = 'none';
 					messageContentElement.innerHTML = '';

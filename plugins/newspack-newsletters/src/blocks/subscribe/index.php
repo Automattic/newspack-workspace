@@ -563,12 +563,13 @@ function process_form() {
 
 	// Surface registration + verification state so the frontend can trigger the
 	// post-registration verification flow when a brand-new reader account was created.
+	// `get_verification_payload()` always returns both `verified` and `verification_nonce`
+	// keys (with empty/null sentinels when not applicable); the frontend gates on the
+	// `verification_nonce` being a non-empty string.
 	if ( $registered_user ) {
 		$result['email']      = $email;
 		$result['registered'] = 1;
-		if ( ! empty( $verification_payload ) ) {
-			$result = array_merge( $result, $verification_payload );
-		}
+		$result               = array_merge( $result, $verification_payload );
 	}
 
 	return send_form_response( $result );
