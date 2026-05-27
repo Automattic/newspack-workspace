@@ -326,6 +326,26 @@ describe( 'A segment with conflicting prompts', () => {
 		expect( notice2.textContent ).toEqual( `${ PROMPTS.overlaysUncategorized[ 0 ].title }: ${ noticeText }` );
 	} );
 
+	it( 'decodes HTML entities in conflicting prompt titles', async () => {
+		SEGMENT.prompts = [
+			{ ...PROMPTS.overlaysUncategorized[ 0 ], id: 13, title: 'Donate &amp; Subscribe' },
+			{ ...PROMPTS.overlaysUncategorized[ 1 ], id: 14, title: 'Tom &amp; Jerry' },
+		];
+
+		// Expected warning text.
+		const noticeText = 'If multiple overlays are rendered on the same pageview, only the most recent one will be displayed.';
+		const props = {
+			campaignData: CAMPAIGN.campaignData,
+			campaign: CAMPAIGN.campaignId,
+			segment: SEGMENT,
+		};
+		const { getByTestId } = render( <SegmentGroup { ...props } /> );
+
+		// Each notice lists the *other* prompt's title, decoded.
+		expect( getByTestId( 'conflict-warning-13' ).textContent ).toEqual( `Tom & Jerry: ${ noticeText }` );
+		expect( getByTestId( 'conflict-warning-14' ).textContent ).toEqual( `Donate & Subscribe: ${ noticeText }` );
+	} );
+
 	it( 'renders a conflict notice for multiple above-header prompts in the same segment', async () => {
 		SEGMENT.prompts = PROMPTS.aboveHeadersUncategorized;
 

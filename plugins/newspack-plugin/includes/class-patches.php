@@ -44,6 +44,11 @@ class Patches {
 
 		// Fix an issue when running The Events Calendar where all posts block items have same date.
 		add_action( 'tribe_events_views_v2_after_make_view', [ __CLASS__, 'remove_tec_extra_excerpt_filtering' ], 1 );
+
+		// Prevent Customizer "Additional CSS" from leaking into the iframed block editor in WP 7.0+.
+		if ( version_compare( get_bloginfo( 'version' ), '7.0', '>=' ) ) {
+			add_filter( 'block_editor_settings_all', [ __CLASS__, 'strip_customizer_css_from_editor' ], 999 );
+		}
 	}
 
 	/**
@@ -517,6 +522,50 @@ class Patches {
 	 */
 	public static function remove_tec_extra_excerpt_filtering() {
 		remove_all_actions( 'tribe_events_views_v2_after_make_view' );
+	}
+
+	/**
+	 * Remove the Customizer "Additional CSS" entry from the block editor styles array.
+	 *
+	 * WP core injects `wp_get_custom_css()` into the editor's styles array as
+	 * `[ '__unstableType' => 'user', 'isGlobalStyles' => false ]`. Since WP 7.0
+	 * iframes the post editor when all blocks use Block API v3+, any front-end
+	 * `body { ... }` rule in Customizer → Additional CSS now lands on the
+	 * editor canvas. The front-end is unaffected — that copy is printed by
+	 * `wp_custom_css_cb()` on `wp_head`.
+	 *
+	 * @param array $settings Block editor settings.
+	 * @return array
+	 */
+	public static function strip_customizer_css_from_editor( $settings ) {
+		if ( empty( $settings['styles'] ) || ! is_array( $settings['styles'] ) ) {
+			return $settings;
+		}
+
+		/**
+		 * Filters whether to strip Customizer Additional CSS from the editor iframe.
+		 *
+		 * @param bool $strip Default true.
+		 */
+		if ( ! apply_filters( 'newspack_strip_customizer_css_in_editor', true ) ) {
+			return $settings;
+		}
+
+		// Note: `__unstableType` is a private WP core key. Re-verify on WP upgrades.
+		$settings['styles'] = array_values(
+			array_filter(
+				$settings['styles'],
+				function ( $entry ) {
+					return ! (
+						isset( $entry['__unstableType'] )
+						&& 'user' === $entry['__unstableType']
+						&& empty( $entry['isGlobalStyles'] )
+					);
+				}
+			)
+		);
+
+		return $settings;
 	}
 
 	/**

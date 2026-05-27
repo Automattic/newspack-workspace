@@ -39,10 +39,18 @@ const mergeStrategies = new Map();
  */
 function rehydrateItem( key, serverValue ) {
 	const merge = mergeStrategies.get( key );
-	if ( merge ) {
-		const clientValue = _get( key );
-		_set( key, merge( serverValue, clientValue ) );
-	} else {
+	try {
+		if ( merge ) {
+			const clientValue = _get( key );
+			_set( key, merge( serverValue, clientValue ) );
+		} else {
+			_set( key, serverValue );
+		}
+	} catch ( err ) {
+		// eslint-disable-next-line no-console
+		console.warn( `Unable to rehydrate ${ key }`, err );
+		// Fall back to overwriting with the server value so a failing merge
+		// strategy can't leave the store in an inconsistent/missing state.
 		_set( key, serverValue );
 	}
 }
