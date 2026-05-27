@@ -821,7 +821,101 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		// Remove any test-only list-validation filters so anonymous callbacks
 		// added inside individual tests don't leak into subsequent tests.
 		remove_all_filters( 'newspack_newsletters_access_is_valid_send_list_id' );
+
+		// Reset the in-request UTM-verification memo.
+		$memo_property = new \ReflectionProperty( Newsletters_Access::class, 'utm_verification_memo' );
+		$memo_property->setAccessible( true );
+		$memo_property->setValue( null, [] );
+
 		parent::tear_down();
+	}
+
+	/**
+	 * Cache regression: find_recent_sent_newsletters_for_list must consult
+	 * the 1-hour transient cache before running the meta_query. Once the
+	 * transient is populated, subsequent calls return the cached IDs even
+	 * if new newsletters were added in the meantime — which is the
+	 * intended behavior (1-hour staleness for the UTM fallback path).
+	 *
+	 * Uses reflection to invoke the private method directly.
+	 */
+	public function test_find_recent_sent_newsletters_uses_transient_cache() {
+		$reflection = new \ReflectionMethod( Newsletters_Access::class, 'find_recent_sent_newsletters_for_list' );
+		$reflection->setAccessible( true );
+
+		// Pre-populate the transient with a known sentinel value.
+		$list_id   = 'list_cache_test';
+		$cache_key = 'newspack_nl_access_list_' . md5( $list_id );
+		set_transient( $cache_key, [ 99999 ], HOUR_IN_SECONDS );
+
+		$result = $reflection->invoke( null, $list_id );
+
+		// Should return the cached value, not query the DB (no posts exist for this list).
+		$this->assertSame( [ 99999 ], $result, 'Transient cache must be consulted before the DB.' );
+
+		delete_transient( $cache_key );
+	}
+
+	/**
+	 * Cache regression: when no transient exists, the query runs and the
+	 * result is stored in the transient for subsequent calls.
+	 */
+	public function test_find_recent_sent_newsletters_populates_transient_on_miss() {
+		$list_id   = 'list_populate_test';
+		$cache_key = 'newspack_nl_access_list_' . md5( $list_id );
+		delete_transient( $cache_key );
+
+		// Create a sent newsletter for this list.
+		$newsletter_id = $this->factory->post->create( [ 'post_type' => 'newspack_nl_cpt' ] );
+		update_post_meta( $newsletter_id, 'send_list_id', $list_id );
+		update_post_meta( $newsletter_id, 'newsletter_sent', time() );
+
+		$reflection = new \ReflectionMethod( Newsletters_Access::class, 'find_recent_sent_newsletters_for_list' );
+		$reflection->setAccessible( true );
+		$result = $reflection->invoke( null, $list_id );
+
+		$this->assertContains( $newsletter_id, $result );
+
+		// Transient should now be populated.
+		$cached = get_transient( $cache_key );
+		$this->assertIsArray( $cached );
+		$this->assertContains( $newsletter_id, $cached );
+
+		delete_transient( $cache_key );
+	}
+
+	/**
+	 * Memo regression: find_matching_newsletter_for_url must memoize the
+	 * (list_id, url) → matched_post decision so multiple restriction
+	 * filter dispatches in the same request don't repeat the HTML scan.
+	 */
+	public function test_find_matching_newsletter_for_url_memoizes_result() {
+		$list_id = 'list_memo_test';
+		$post_id = $this->factory->post->create( [ 'post_type' => 'post' ] );
+		$url     = get_permalink( $post_id );
+		$this->create_sent_newsletter_with_link( $list_id, $url );
+
+		// First call: populates memo.
+		$reflection = new \ReflectionMethod( Newsletters_Access::class, 'find_matching_newsletter_for_url' );
+		$reflection->setAccessible( true );
+		$first = $reflection->invoke( null, $list_id, $url );
+		$this->assertNotNull( $first );
+
+		// Inspect the memo property to confirm it was populated.
+		$memo_property = new \ReflectionProperty( Newsletters_Access::class, 'utm_verification_memo' );
+		$memo_property->setAccessible( true );
+		$memo = $memo_property->getValue();
+		$this->assertArrayHasKey( $list_id . '|' . $url, $memo );
+
+		// Reset the memo and re-populate the transient with a sentinel value to prove
+		// the memo (when populated) short-circuits before the candidate scan.
+		$memo_property->setValue( null, [ $list_id . '|' . $url => 12345 ] );
+		$second = $reflection->invoke( null, $list_id, $url );
+		$this->assertSame( 12345, $second, 'Memo must short-circuit the candidate scan.' );
+
+		// Cleanup.
+		$memo_property->setValue( null, [] );
+		delete_transient( 'newspack_nl_access_list_' . md5( $list_id ) );
 	}
 
 	/**

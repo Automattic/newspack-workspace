@@ -61,6 +61,17 @@ class Newsletters_Access {
 	const SALT_KEY = 'newspack_newsletters_access_link_bypass';
 
 	/**
+	 * In-request memo for UTM-fallback verification: maps a key
+	 * derived from list_id + normalized request URL to either the
+	 * matched post ID (int) or false (no match). Avoids repeating
+	 * the HTML scan when multiple restriction filters fire in the
+	 * same request.
+	 *
+	 * @var array<string,int|false>
+	 */
+	private static $utm_verification_memo = [];
+
+	/**
 	 * Initialize hooks.
 	 *
 	 * Signing always registers so the toggle can be flipped on later and
@@ -415,21 +426,18 @@ class Newsletters_Access {
 			return [ 'action' => 'invalid' ];
 		}
 
-		$candidates  = self::find_recent_sent_newsletters_for_list( $list_id );
-		$current_url = get_permalink( $current_post_id );
-		foreach ( $candidates as $newsletter_id ) {
-			$html = (string) get_post_meta( $newsletter_id, 'newspack_email_html', true );
-			if ( '' !== $html && self::email_html_contains_url( $html, $current_url ) ) {
-				if ( $with_side_effects ) {
-					self::set_single_post_bypass_cookie( $current_post_id );
-				}
-				return [
-					'action'  => 'verified',
-					'post_id' => $current_post_id,
-				];
-			}
+		$current_url     = get_permalink( $current_post_id );
+		$matched_post_id = self::find_matching_newsletter_for_url( $list_id, $current_url );
+		if ( null === $matched_post_id ) {
+			return [ 'action' => 'invalid' ];
 		}
-		return [ 'action' => 'invalid' ];
+		if ( $with_side_effects ) {
+			self::set_single_post_bypass_cookie( $current_post_id );
+		}
+		return [
+			'action'  => 'verified',
+			'post_id' => $current_post_id,
+		];
 	}
 
 	/**
@@ -484,13 +492,26 @@ class Newsletters_Access {
 	/**
 	 * Find newsletter post IDs sent to the given list within the SIGNATURE_TTL window.
 	 *
+	 * Results are cached in a 1-hour transient keyed by list ID. Newsletters
+	 * aren't sent more than a couple of times per day per list, so a stale
+	 * cache simply omits the most recent send for up to an hour — at which
+	 * point the cache refreshes naturally. For freshly-sent newsletters the
+	 * signed-token (npnl) path covers bypass independently, so cache staleness
+	 * only affects UTM-fallback grants on pre-deploy campaigns.
+	 *
 	 * @param string $list_id Send list ID.
 	 *
 	 * @return int[]
 	 */
 	private static function find_recent_sent_newsletters_for_list( $list_id ) {
+		$cache_key = 'newspack_nl_access_list_' . md5( $list_id );
+		$cached    = get_transient( $cache_key );
+		if ( false !== $cached && is_array( $cached ) ) {
+			return $cached;
+		}
+
 		$cutoff = time() - self::SIGNATURE_TTL;
-		return get_posts(
+		$ids    = get_posts(
 			[
 				'post_type'              => 'newspack_nl_cpt',
 				'post_status'            => [ 'publish', 'private' ],
@@ -515,6 +536,40 @@ class Newsletters_Access {
 				],
 			]
 		);
+
+		set_transient( $cache_key, $ids, HOUR_IN_SECONDS );
+		return $ids;
+	}
+
+	/**
+	 * Locate the candidate newsletter whose email HTML contains the given URL.
+	 * Memoized in-request so multiple restriction filter dispatches in the
+	 * same request don't repeat the HTML scan.
+	 *
+	 * @param string $list_id     Send list ID (already validated upstream).
+	 * @param string $current_url Inbound request URL.
+	 *
+	 * @return int|null Matched newsletter post ID, or null if no match.
+	 */
+	private static function find_matching_newsletter_for_url( $list_id, $current_url ) {
+		$memo_key = $list_id . '|' . $current_url;
+		if ( array_key_exists( $memo_key, self::$utm_verification_memo ) ) {
+			$cached = self::$utm_verification_memo[ $memo_key ];
+			return false === $cached ? null : $cached;
+		}
+
+		$matched    = false;
+		$candidates = self::find_recent_sent_newsletters_for_list( $list_id );
+		foreach ( $candidates as $newsletter_id ) {
+			$html = (string) get_post_meta( $newsletter_id, 'newspack_email_html', true );
+			if ( '' !== $html && self::email_html_contains_url( $html, $current_url ) ) {
+				$matched = $newsletter_id;
+				break;
+			}
+		}
+
+		self::$utm_verification_memo[ $memo_key ] = $matched;
+		return false === $matched ? null : $matched;
 	}
 
 	/**
