@@ -3,6 +3,7 @@
  * Internal dependencies
  */
 import { SIGN_IN_MODAL_HASHES, getModalContainer, openAuthModal } from './auth-modal.js';
+import { openVerificationModal } from './verification-modal.js';
 
 import { domReady } from '../utils';
 
@@ -13,6 +14,8 @@ window.newspackRAS.push( readerActivation => {
 	domReady( function () {
 		/** Expose the openAuthModal function to the RAS scope */
 		readerActivation._openAuthModal = openAuthModal;
+		/** Expose the openVerificationModal function to the RAS scope (consumed cross-plugin). */
+		readerActivation._openVerificationModal = openVerificationModal;
 
 		/**
 		 * Handle hash change.
@@ -31,7 +34,7 @@ window.newspackRAS.push( readerActivation => {
 					ev.preventDefault();
 				}
 
-				container.setFormAction( currentHash === 'register_modal' ? 'register' : 'signin' );
+				container.setFormAction( 'signin' );
 				openAuthModal( { closeOnSuccess: true } );
 			}
 		}

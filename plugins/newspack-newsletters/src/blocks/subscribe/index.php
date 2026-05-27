@@ -494,7 +494,8 @@ function process_form() {
 		$metadata['status'] = 'pending';
 	}
 
-	$registered_user = false;
+	$registered_user      = false;
+	$verification_payload = [];
 	if ( ! \is_user_logged_in() && \class_exists( '\Newspack\Reader_Activation' ) && \Newspack\Reader_Activation::is_enabled() ) {
 		$metadata = array_merge( $metadata, [ 'registration_method' => 'newsletters-subscription' ] );
 		if ( $popup_id ) {
@@ -503,6 +504,13 @@ function process_form() {
 		$registered_user = \Newspack\Reader_Activation::register_reader( $email, $name, true, $metadata );
 		if ( $registered_user ) {
 			$metadata['registered'] = '1';
+
+			// Surface verification state so the frontend can trigger the post-registration
+			// verification flow. Guarded with method_exists so we degrade gracefully when running
+			// against an older newspack-plugin that doesn't expose the helper yet.
+			if ( method_exists( '\Newspack\Reader_Activation', 'get_verification_payload' ) ) {
+				$verification_payload = \Newspack\Reader_Activation::get_verification_payload( (int) $registered_user );
+			}
 		}
 	}
 
@@ -552,6 +560,16 @@ function process_form() {
 
 	// Append additional metadata to the result.
 	$result['metadata'] = $metadata;
+
+	// Surface registration + verification state so the frontend can trigger the
+	// post-registration verification flow when a brand-new reader account was created.
+	if ( $registered_user ) {
+		$result['email']      = $email;
+		$result['registered'] = 1;
+		if ( ! empty( $verification_payload ) ) {
+			$result = array_merge( $result, $verification_payload );
+		}
+	}
 
 	return send_form_response( $result );
 }
