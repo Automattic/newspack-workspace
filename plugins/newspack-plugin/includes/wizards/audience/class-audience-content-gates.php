@@ -174,6 +174,7 @@ class Audience_Content_Gates extends Wizard {
 						'type'       => 'object',
 						'properties' => [
 							'restrict_feeds' => [ 'type' => 'boolean' ],
+							'newsletter_link_bypass_enabled' => [ 'type' => 'boolean' ],
 						],
 					],
 				],

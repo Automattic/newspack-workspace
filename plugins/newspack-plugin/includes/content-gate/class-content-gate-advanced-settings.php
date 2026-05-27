@@ -45,7 +45,8 @@ class Content_Gate_Advanced_Settings {
 
 		// RSS.
 		$settings = [
-			'restrict_feeds' => get_option( self::OPTION_PREFIX . 'restrict_feeds', 1 ),
+			'restrict_feeds'                 => get_option( self::OPTION_PREFIX . 'restrict_feeds', 1 ),
+			'newsletter_link_bypass_enabled' => get_option( self::OPTION_PREFIX . 'newsletter_link_bypass_enabled', 0 ),
 		];
 
 		self::$settings = $settings;
@@ -60,6 +61,9 @@ class Content_Gate_Advanced_Settings {
 	public static function update_settings( $settings ) {
 		if ( isset( $settings['restrict_feeds'] ) ) {
 			update_option( self::OPTION_PREFIX . 'restrict_feeds', boolval( $settings['restrict_feeds'] ) ? 1 : 0, false );
+		}
+		if ( isset( $settings['newsletter_link_bypass_enabled'] ) ) {
+			update_option( self::OPTION_PREFIX . 'newsletter_link_bypass_enabled', boolval( $settings['newsletter_link_bypass_enabled'] ) ? 1 : 0, false );
 		}
 		self::reset_cache();
 		return self::get_settings();

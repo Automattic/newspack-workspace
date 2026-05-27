@@ -83,6 +83,15 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 						checked={ config?.restrict_feeds }
 						onChange={ value => setConfig( { ...config, restrict_feeds: value } ) }
 					/>
+					<ToggleControl
+						label={ __( 'Bypass restrictions for newsletter links', 'newspack-plugin' ) }
+						help={ __(
+							'Readers who click a link in a recent newsletter sent via Newspack Newsletters will bypass Access Control restrictions for one hour. Signatures are valid for 30 days from the date the newsletter was sent.',
+							'newspack-plugin'
+						) }
+						checked={ config?.newsletter_link_bypass_enabled }
+						onChange={ value => setConfig( { ...config, newsletter_link_bypass_enabled: value } ) }
+					/>
 					<HStack justify="end">
 						<Button variant="tertiary" disabled={ isFetching } onClick={ closeModal }>
 							{ __( 'Cancel', 'newspack-plugin' ) }
