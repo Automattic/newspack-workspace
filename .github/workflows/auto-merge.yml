@@ -1,0 +1,47 @@
+name: Dependabot auto-merge
+
+# Auto-approve and enable auto-merge for Dependabot PRs that only bump minor or
+# patch versions. Major bumps are left for a human to review. Merge waits on the
+# required CI checks via --auto, and squashes to match the repo merge strategy.
+
+on:
+  pull_request_target:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Auto-merge minor and patch Dependabot PRs
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      # GH_TOKEN is a PAT: the approval must come from an identity other than
+      # the GITHUB_TOKEN/dependabot bot, and enabling auto-merge needs the same
+      # elevated scope.
+      - name: Approve the PR
+        if: >-
+          (contains(steps.metadata.outputs.update-type, 'version-update:semver-minor') ||
+          contains(steps.metadata.outputs.update-type, 'version-update:semver-patch')) &&
+          !contains(steps.metadata.outputs.update-type, 'version-update:semver-major')
+        run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Enable auto-merge for minor and patch updates
+        if: >-
+          (contains(steps.metadata.outputs.update-type, 'version-update:semver-minor') ||
+          contains(steps.metadata.outputs.update-type, 'version-update:semver-patch')) &&
+          !contains(steps.metadata.outputs.update-type, 'version-update:semver-major')
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
