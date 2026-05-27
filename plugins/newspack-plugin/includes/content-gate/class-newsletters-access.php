@@ -61,6 +61,14 @@ class Newsletters_Access {
 	const SALT_KEY = 'newspack_newsletters_access_link_bypass';
 
 	/**
+	 * Salt key used to derive the cookie-signing HMAC secret via wp_salt().
+	 * Separate from SALT_KEY (npnl token signing) so the two secrets
+	 * rotate independently and so a token can't be replayed as a cookie
+	 * or vice versa.
+	 */
+	const COOKIE_SALT_KEY = 'newspack_newsletters_access_cookie';
+
+	/**
 	 * In-request memo for UTM-fallback verification: maps a key
 	 * derived from list_id + normalized request URL to either the
 	 * matched post ID (int) or false (no match). Avoids repeating
@@ -337,28 +345,29 @@ class Newsletters_Access {
 
 	/**
 	 * Set the bypass cookie. The wp_nocache_* prefix triggers cache bypass
-	 * at the platform layer; the cookie value itself is just '1'.
+	 * at the platform layer; the value is HMAC-signed to prevent forgery.
 	 */
 	private static function set_bypass_cookie() {
-		if ( ! headers_sent() ) {
-			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
-			setcookie(
-				self::COOKIE_NAME,
-				'1',
-				[
-					'expires'  => time() + self::BYPASS_TTL,
-					'path'     => COOKIEPATH,
-					'domain'   => COOKIE_DOMAIN,
-					'secure'   => is_ssl(),
-					'httponly' => true,
-					'samesite' => 'Lax',
-				]
-			);
+		if ( headers_sent() ) {
+			return;
 		}
-		// Make the cookie visible to the rest of this request — setcookie() only
-		// queues the response header, but filters that run later in the same
-		// request need to see the value via $_COOKIE.
-		$_COOKIE[ self::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$expiry = time() + self::BYPASS_TTL;
+		$value  = self::build_signed_cookie_value( '1', $expiry );
+		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
+		setcookie(
+			self::COOKIE_NAME,
+			$value,
+			[
+				'expires'  => $expiry,
+				'path'     => COOKIEPATH,
+				'domain'   => COOKIE_DOMAIN,
+				'secure'   => is_ssl(),
+				'httponly' => true,
+				'samesite' => 'Lax',
+			]
+		);
+		// Make the cookie visible to the rest of this request.
+		$_COOKIE[ self::COOKIE_NAME ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 	}
 
 	/**
@@ -645,29 +654,37 @@ class Newsletters_Access {
 	}
 
 	/**
-	 * Whether the bypass cookie was sent on the current request.
-	 *
-	 * The cookie's wp_nocache_* prefix already excludes this request from
-	 * the platform page cache, so a cookie-bearing reader will always hit
-	 * PHP and see this check.
+	 * Whether a valid (correctly signed, non-expired) site-wide bypass
+	 * cookie was sent on the current request.
 	 *
 	 * @return bool
 	 */
 	public static function is_cookie_set() {
-		return isset( $_COOKIE[ self::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$raw = $_COOKIE[ self::COOKIE_NAME ] ?? ''; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		if ( ! is_string( $raw ) || '' === $raw ) {
+			return false;
+		}
+		$payload = self::verify_signed_cookie_value( $raw );
+		return null !== $payload && '1' === $payload;
 	}
 
 	/**
-	 * Read the post ID from the single-post bypass cookie, or null if absent/invalid.
+	 * Verify the single-post bypass cookie and return the post ID it
+	 * authorizes, or null if the cookie is absent, malformed, tampered,
+	 * or expired.
 	 *
 	 * @return int|null
 	 */
 	public static function get_single_post_bypass_id() {
-		$raw = $_COOKIE[ self::SINGLE_POST_COOKIE_NAME ] ?? ''; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		if ( ! is_string( $raw ) || ! ctype_digit( $raw ) ) {
+		$raw = $_COOKIE[ self::SINGLE_POST_COOKIE_NAME ] ?? ''; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		if ( ! is_string( $raw ) || '' === $raw ) {
 			return null;
 		}
-		return (int) $raw;
+		$payload = self::verify_signed_cookie_value( $raw );
+		if ( null === $payload || ! ctype_digit( $payload ) ) {
+			return null;
+		}
+		return (int) $payload;
 	}
 
 	/**
@@ -735,29 +752,78 @@ class Newsletters_Access {
 	}
 
 	/**
-	 * Set the per-post bypass cookie with the post ID as its value.
+	 * Set the per-post bypass cookie with a signed value encoding the post ID.
 	 *
 	 * @param int $post_id Verified post ID.
 	 */
 	private static function set_single_post_bypass_cookie( $post_id ) {
-		if ( ! headers_sent() ) {
-			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
-			setcookie(
-				self::SINGLE_POST_COOKIE_NAME,
-				(string) $post_id,
-				[
-					'expires'  => time() + self::BYPASS_TTL,
-					'path'     => COOKIEPATH,
-					'domain'   => COOKIE_DOMAIN,
-					'secure'   => is_ssl(),
-					'httponly' => true,
-					'samesite' => 'Lax',
-				]
-			);
+		if ( headers_sent() ) {
+			return;
 		}
-		// Make the cookie visible to the rest of this request — see the note
-		// in set_bypass_cookie().
-		$_COOKIE[ self::SINGLE_POST_COOKIE_NAME ] = (string) $post_id; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$expiry = time() + self::BYPASS_TTL;
+		$value  = self::build_signed_cookie_value( (string) (int) $post_id, $expiry );
+		// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
+		setcookie(
+			self::SINGLE_POST_COOKIE_NAME,
+			$value,
+			[
+				'expires'  => $expiry,
+				'path'     => COOKIEPATH,
+				'domain'   => COOKIE_DOMAIN,
+				'secure'   => is_ssl(),
+				'httponly' => true,
+				'samesite' => 'Lax',
+			]
+		);
+		$_COOKIE[ self::SINGLE_POST_COOKIE_NAME ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * Build a signed cookie value of the form "<payload>.<expiry>|<hmac>"
+	 * where the HMAC binds both the payload and the expiry timestamp to
+	 * the class's COOKIE_SALT_KEY-derived secret.
+	 *
+	 * @param string $payload Cookie payload (sentinel "1" or post ID as string).
+	 * @param int    $expiry  Unix timestamp at which the cookie expires.
+	 *
+	 * @return string
+	 */
+	private static function build_signed_cookie_value( $payload, $expiry ) {
+		$body = $payload . '.' . (int) $expiry;
+		$hmac = hash_hmac( 'sha256', $body, wp_salt( self::COOKIE_SALT_KEY ) );
+		return $body . '|' . $hmac;
+	}
+
+	/**
+	 * Verify a signed cookie value and return the inner payload string,
+	 * or null on malformed input, bad signature, or expired cookie.
+	 *
+	 * @param string $value Raw cookie value as received in $_COOKIE.
+	 *
+	 * @return string|null
+	 */
+	private static function verify_signed_cookie_value( $value ) {
+		$parts = explode( '|', $value, 2 );
+		if ( 2 !== count( $parts ) ) {
+			return null;
+		}
+		list( $body, $provided_hmac ) = $parts;
+		$expected_hmac = hash_hmac( 'sha256', $body, wp_salt( self::COOKIE_SALT_KEY ) );
+		if ( ! hash_equals( $expected_hmac, $provided_hmac ) ) {
+			return null;
+		}
+		$body_parts = explode( '.', $body );
+		if ( 2 !== count( $body_parts ) ) {
+			return null;
+		}
+		list( $payload, $expiry_raw ) = $body_parts;
+		if ( ! ctype_digit( $expiry_raw ) ) {
+			return null;
+		}
+		if ( (int) $expiry_raw <= time() ) {
+			return null;
+		}
+		return $payload;
 	}
 }
 Newsletters_Access::init();

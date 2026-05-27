@@ -499,12 +499,31 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Build a signed cookie value the way Newsletters_Access does in production.
+	 * Used by tests that need to seed $_COOKIE with a valid signed value.
+	 *
+	 * @param string   $payload Cookie payload ("1" or post ID as string).
+	 * @param int|null $expiry  Unix timestamp at which the cookie expires.
+	 *                          Defaults to 1 hour in the future.
+	 *
+	 * @return string
+	 */
+	private function build_signed_cookie_value( $payload, $expiry = null ) {
+		if ( null === $expiry ) {
+			$expiry = time() + HOUR_IN_SECONDS;
+		}
+		$body = $payload . '.' . $expiry;
+		$hmac = hash_hmac( 'sha256', $body, wp_salt( Newsletters_Access::COOKIE_SALT_KEY ) );
+		return $body . '|' . $hmac;
+	}
+
+	/**
 	 * Test that filter_post_restricted() returns false when the site-wide bypass cookie is set.
 	 */
 	public function test_bypass_filter_returns_false_when_cookie_present() {
 		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
 		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
-		$_COOKIE[ Newsletters_Access::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$_COOKIE[ Newsletters_Access::COOKIE_NAME ] = $this->build_signed_cookie_value( '1' ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$result = Newsletters_Access::filter_post_restricted( true, 123, 0 );
 		unset( $_COOKIE[ Newsletters_Access::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$this->assertFalse( $result );
@@ -525,7 +544,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	public function test_is_cookie_set_reads_cookie_superglobal() {
 		unset( $_COOKIE[ Newsletters_Access::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$this->assertFalse( Newsletters_Access::is_cookie_set() );
-		$_COOKIE[ Newsletters_Access::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$_COOKIE[ Newsletters_Access::COOKIE_NAME ] = $this->build_signed_cookie_value( '1' ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$this->assertTrue( Newsletters_Access::is_cookie_set() );
 		unset( $_COOKIE[ Newsletters_Access::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 	}
@@ -536,7 +555,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	public function test_bypass_filter_returns_false_for_matching_single_post_cookie() {
 		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
 		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
-		$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] = '42'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] = $this->build_signed_cookie_value( '42' ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$result = Newsletters_Access::filter_post_restricted( true, 42, 0 );
 		unset( $_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$this->assertFalse( $result );
@@ -546,7 +565,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	 * Test that filter_post_restricted() preserves the value when the single-post cookie is for a different post.
 	 */
 	public function test_bypass_filter_preserves_value_for_nonmatching_single_post_cookie() {
-		$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] = '42'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] = $this->build_signed_cookie_value( '42' ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		// Reader has bypass for post 42, but is now viewing post 99 — stay gated.
 		$result = Newsletters_Access::filter_post_restricted( true, 99, 0 );
 		unset( $_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
@@ -570,7 +589,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	public function test_wc_memberships_filter_returns_true_when_cookie_present() {
 		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
 		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
-		$_COOKIE[ Newsletters_Access::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$_COOKIE[ Newsletters_Access::COOKIE_NAME ] = $this->build_signed_cookie_value( '1' ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$result = Newsletters_Access::filter_wc_memberships_is_post_public( false );
 		unset( $_COOKIE[ Newsletters_Access::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$this->assertTrue( $result );
@@ -594,7 +613,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	public function test_wc_memberships_filter_short_circuits_when_setting_disabled() {
 		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 0, false );
 		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
-		$_COOKIE[ Newsletters_Access::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$_COOKIE[ Newsletters_Access::COOKIE_NAME ] = $this->build_signed_cookie_value( '1' ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$result = Newsletters_Access::filter_wc_memberships_is_post_public( false );
 		unset( $_COOKIE[ Newsletters_Access::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$this->assertFalse( $result );
@@ -609,7 +628,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
 		$post_id = $this->factory->post->create();
 		$this->go_to( get_permalink( $post_id ) );
-		$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] = (string) $post_id; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] = $this->build_signed_cookie_value( (string) $post_id ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$result = Newsletters_Access::filter_wc_memberships_is_post_public( false );
 		unset( $_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$this->assertTrue( $result );
@@ -623,7 +642,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$cookie_post  = $this->factory->post->create();
 		$viewing_post = $this->factory->post->create();
 		$this->go_to( get_permalink( $viewing_post ) );
-		$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] = (string) $cookie_post; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] = $this->build_signed_cookie_value( (string) $cookie_post ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$result = Newsletters_Access::filter_wc_memberships_is_post_public( false );
 		unset( $_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$this->assertFalse( $result );
@@ -643,7 +662,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$this->create_sent_newsletter_with_link( 'list_abc', get_permalink( $post_id ) );
 
 		// Reader already has the site-wide cookie from the signed path.
-		$_COOKIE[ Newsletters_Access::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$_COOKIE[ Newsletters_Access::COOKIE_NAME ] = $this->build_signed_cookie_value( '1' ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 
 		$_GET['utm_medium'] = 'email';
 		$_GET['utm_source'] = 'list_abc';
@@ -686,7 +705,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$this->go_to( get_permalink( $queried_post ) );
 
 		// Reader has single-post bypass for $cookie_post.
-		$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] = (string) $cookie_post; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] = $this->build_signed_cookie_value( (string) $cookie_post ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
 		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
 
@@ -720,7 +739,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$cookie_post = $this->factory->post->create( [ 'post_type' => 'post' ] );
 		$this->go_to( get_permalink( $cookie_post ) );
 
-		$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] = (string) $cookie_post; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] = $this->build_signed_cookie_value( (string) $cookie_post ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
 		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
 
@@ -1028,7 +1047,9 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$method = new \ReflectionMethod( Newsletters_Access::class, 'set_bypass_cookie' );
 		$method->setAccessible( true );
 		$method->invoke( null );
-		$this->assertSame( '1', $_COOKIE[ Newsletters_Access::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.InputNotValidated
+		// Cookie must be a signed value that is_cookie_set() accepts.
+		$this->assertArrayHasKey( Newsletters_Access::COOKIE_NAME, $_COOKIE ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->assertTrue( Newsletters_Access::is_cookie_set(), 'set_bypass_cookie must set a value that is_cookie_set() accepts' );
 		unset( $_COOKIE[ Newsletters_Access::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 	}
 
@@ -1040,7 +1061,68 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$method = new \ReflectionMethod( Newsletters_Access::class, 'set_single_post_bypass_cookie' );
 		$method->setAccessible( true );
 		$method->invoke( null, 42 );
-		$this->assertSame( '42', $_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized,WordPress.Security.ValidatedSanitizedInput.InputNotValidated
+		// Cookie must be a signed value that get_single_post_bypass_id() can decode to 42.
+		$this->assertSame( 42, Newsletters_Access::get_single_post_bypass_id(), 'set_single_post_bypass_cookie must set a value that get_single_post_bypass_id() returns as the post ID' );
+		unset( $_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * Bug regression: a presence-only cookie value (no signature) must
+	 * not be honored as authorization. Anyone who knows the cookie name
+	 * could otherwise set "1" in DevTools and bypass the gate.
+	 */
+	public function test_is_cookie_set_rejects_unsigned_value() {
+		$_COOKIE[ Newsletters_Access::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->assertFalse( Newsletters_Access::is_cookie_set() );
+		unset( $_COOKIE[ Newsletters_Access::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * Bug regression: a presence-only single-post cookie value (no
+	 * signature) must not be honored as authorization.
+	 */
+	public function test_get_single_post_bypass_id_rejects_unsigned_value() {
+		$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] = '42'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->assertNull( Newsletters_Access::get_single_post_bypass_id() );
+		unset( $_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * Bug regression: tampering the payload portion of a signed cookie
+	 * value (without re-signing) must invalidate the cookie.
+	 */
+	public function test_is_cookie_set_rejects_tampered_value() {
+		$valid                                      = $this->build_signed_cookie_value( '1' );
+		list( $body, $hmac )                        = explode( '|', $valid );
+		// Mutate the body but keep the original HMAC.
+		$tampered                                   = '2.' . explode( '.', $body )[1] . '|' . $hmac;
+		$_COOKIE[ Newsletters_Access::COOKIE_NAME ] = $tampered; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->assertFalse( Newsletters_Access::is_cookie_set() );
+		unset( $_COOKIE[ Newsletters_Access::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * Bug regression: an expired signed cookie (expiry in the past) must
+	 * not be honored, even with a correct HMAC.
+	 */
+	public function test_is_cookie_set_rejects_expired_value() {
+		$expired_value                              = $this->build_signed_cookie_value( '1', time() - 60 );
+		$_COOKIE[ Newsletters_Access::COOKIE_NAME ] = $expired_value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->assertFalse( Newsletters_Access::is_cookie_set() );
+		unset( $_COOKIE[ Newsletters_Access::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * Bug regression: a single-post cookie value signed with a different
+	 * secret (or class's salt key) must be rejected.
+	 */
+	public function test_get_single_post_bypass_id_rejects_foreign_signature() {
+		// Sign with the wrong salt key (mimicking a cookie minted by a
+		// different feature or an attacker without our secret).
+		$body                                                   = '42.' . ( time() + HOUR_IN_SECONDS );
+		$wrong_hmac                                             = hash_hmac( 'sha256', $body, wp_salt( 'some_other_key' ) );
+		$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] = $body . '|' . $wrong_hmac; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->assertNull( Newsletters_Access::get_single_post_bypass_id() );
 		unset( $_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 	}
 }

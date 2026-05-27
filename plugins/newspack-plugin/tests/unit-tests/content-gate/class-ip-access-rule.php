@@ -647,6 +647,59 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Build a signed cookie value the way IP_Access_Rule does in production.
+	 * Used by tests that need to seed $_COOKIE with a valid signed value.
+	 *
+	 * @param string   $payload Cookie payload ("1").
+	 * @param int|null $expiry  Unix timestamp at which the cookie expires.
+	 *                          Defaults to 1 month in the future.
+	 *
+	 * @return string
+	 */
+	private function build_signed_cookie_value( $payload, $expiry = null ) {
+		if ( null === $expiry ) {
+			$expiry = time() + MONTH_IN_SECONDS;
+		}
+		$body = $payload . '.' . $expiry;
+		$hmac = hash_hmac( 'sha256', $body, wp_salt( IP_Access_Rule::COOKIE_SALT_KEY ) );
+		return $body . '|' . $hmac;
+	}
+
+	/**
+	 * Bug regression: a presence-only cookie value (no signature) must
+	 * not be honored as authorization. Anyone who knows the cookie name
+	 * could otherwise set "1" in DevTools and bypass the gate.
+	 */
+	public function test_is_cookie_set_rejects_unsigned_value() {
+		$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->assertFalse( IP_Access_Rule::is_cookie_set() );
+		unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * Bug regression: tampering the payload portion of a signed cookie
+	 * value (without re-signing) must invalidate the cookie.
+	 */
+	public function test_is_cookie_set_rejects_tampered_value() {
+		$valid                                  = $this->build_signed_cookie_value( '1' );
+		list( $body, $hmac )                    = explode( '|', $valid );
+		$tampered                               = '2.' . explode( '.', $body )[1] . '|' . $hmac;
+		$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = $tampered; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->assertFalse( IP_Access_Rule::is_cookie_set() );
+		unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * Bug regression: an expired signed cookie (expiry in the past) must
+	 * not be honored, even with a correct HMAC.
+	 */
+	public function test_is_cookie_set_rejects_expired_value() {
+		$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = $this->build_signed_cookie_value( '1', time() - 60 ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->assertFalse( IP_Access_Rule::is_cookie_set() );
+		unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
 	 * Test the `newspack_content_gate_ip_allowlist` filter is applied and
 	 * receives the built institution list as input.
 	 */
