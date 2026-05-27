@@ -137,7 +137,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		// Signing itself does not depend on send state — see the next test.
 		update_post_meta( $post->ID, 'newsletter_sent', time() );
 
-		$url    = 'https://example.test/some-article/';
+		$url    = home_url( '/some-article/' );
 		$result = Newsletters_Access::append_signature_to_link( $url, $url, $post );
 		$this->assertStringContainsString( 'npnl=', $result );
 		$query = wp_parse_url( $result, PHP_URL_QUERY );
@@ -156,7 +156,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		// the resulting token (no send time meta), but signing itself is a
 		// pure function of the post ID.
 		$post = $this->factory->post->create_and_get( [ 'post_type' => 'newspack_nl_cpt' ] );
-		$url    = 'https://example.test/foo/';
+		$url    = home_url( '/foo/' );
 		$result = Newsletters_Access::append_signature_to_link( $url, $url, $post );
 		$this->assertStringContainsString( 'npnl=', $result );
 	}
@@ -742,6 +742,63 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Bug regression: append_signature_to_link() must NOT sign URLs that
+	 * point to external domains. Appending the npnl token to a third-party
+	 * URL would leak a replayable bypass credential into their server logs.
+	 */
+	public function test_append_signature_skips_external_urls() {
+		$post = $this->factory->post->create_and_get(
+			[
+				'post_type' => 'newspack_nl_cpt',
+			]
+		);
+		update_post_meta( $post->ID, 'newsletter_sent', time() );
+
+		$external_url = 'https://nytimes.com/article/';
+		$result       = Newsletters_Access::append_signature_to_link( $external_url, $external_url, $post );
+
+		$this->assertSame( $external_url, $result, 'external URLs must not be signed' );
+		$this->assertStringNotContainsString( 'npnl=', $result );
+	}
+
+	/**
+	 * Bug regression: append_signature_to_link() must sign URLs whose
+	 * host matches the site's home_url() host (first-party).
+	 */
+	public function test_append_signature_signs_first_party_urls() {
+		$post = $this->factory->post->create_and_get(
+			[
+				'post_type' => 'newspack_nl_cpt',
+			]
+		);
+		update_post_meta( $post->ID, 'newsletter_sent', time() );
+
+		$home_host    = wp_parse_url( home_url(), PHP_URL_HOST );
+		$internal_url = 'https://' . $home_host . '/some-article/';
+		$result       = Newsletters_Access::append_signature_to_link( $internal_url, $internal_url, $post );
+
+		$this->assertStringContainsString( 'npnl=', $result, 'first-party URLs must be signed' );
+	}
+
+	/**
+	 * Bug regression: append_signature_to_link() must sign relative URLs
+	 * (no host) since those resolve to the current site.
+	 */
+	public function test_append_signature_signs_relative_urls() {
+		$post = $this->factory->post->create_and_get(
+			[
+				'post_type' => 'newspack_nl_cpt',
+			]
+		);
+		update_post_meta( $post->ID, 'newsletter_sent', time() );
+
+		$relative_url = '/some-article/';
+		$result       = Newsletters_Access::append_signature_to_link( $relative_url, $relative_url, $post );
+
+		$this->assertStringContainsString( 'npnl=', $result, 'relative URLs must be signed' );
+	}
+
+	/**
 	 * Clean up the bypass-enabled option and the settings cache after every test
 	 * so option state doesn't bleed between tests.
 	 */
@@ -790,7 +847,7 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 0, false );
 		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
 		$post = $this->factory->post->create_and_get( [ 'post_type' => 'newspack_nl_cpt' ] );
-		$url  = 'https://example.test/article/';
+		$url  = home_url( '/article/' );
 		$result = Newsletters_Access::append_signature_to_link( $url, $url, $post );
 		$this->assertStringContainsString( 'npnl=', $result );
 	}

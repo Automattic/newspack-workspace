@@ -88,8 +88,37 @@ class Newsletters_Access {
 		if ( ! $post || ! self::is_newsletter_post( $post ) ) {
 			return $url;
 		}
+		if ( ! self::is_first_party_url( $url ) ) {
+			return $url;
+		}
 		$token = self::sign( $post->ID );
 		return add_query_arg( self::QUERY_PARAM, $token, $url );
+	}
+
+	/**
+	 * Whether the given URL points to this site, by host comparison.
+	 *
+	 * Newsletter HTML can contain links to arbitrary third-party domains
+	 * (e.g., "Read more at nytimes.com" callouts). Appending the signed
+	 * npnl token to those URLs would leak a replayable bypass credential
+	 * into third-party logs, analytics, and Referer headers. The token is
+	 * only meaningful for verification against this site's HMAC secret,
+	 * so leaving external URLs unsigned costs nothing and closes the leak.
+	 *
+	 * Relative URLs are treated as first-party.
+	 *
+	 * @param string $url URL to test.
+	 *
+	 * @return bool
+	 */
+	private static function is_first_party_url( $url ) {
+		$url_host = wp_parse_url( $url, PHP_URL_HOST );
+		if ( empty( $url_host ) ) {
+			// Relative URL — same site by definition.
+			return true;
+		}
+		$site_host = wp_parse_url( home_url(), PHP_URL_HOST );
+		return strcasecmp( $url_host, (string) $site_host ) === 0;
 	}
 
 	/**
