@@ -68,7 +68,7 @@ class Newsletters_Access {
 		add_action( 'init', [ __CLASS__, 'handle_inbound_request' ], 2, 0 );
 		add_action( 'wp', [ __CLASS__, 'handle_utm_fallback_request' ], 10, 0 );
 		add_filter( 'newspack_is_post_restricted', [ __CLASS__, 'filter_post_restricted' ], 20, 3 );
-		add_filter( 'wc_memberships_is_post_public', [ __CLASS__, 'filter_wc_memberships_is_post_public' ], 20 );
+		add_filter( 'wc_memberships_is_post_public', [ __CLASS__, 'filter_wc_memberships_is_post_public' ], 20, 2 );
 	}
 
 	/**
@@ -505,20 +505,26 @@ class Newsletters_Access {
 
 	/**
 	 * Filter: tell WooCommerce Memberships to treat the post as public when
-	 * the bypass cookie is present.
+	 * either bypass cookie applies to the post under evaluation.
 	 *
-	 * WC Memberships' restriction stack (the_content body wipe, the_post
-	 * restrict_post, comment restrictions) all defer to this filter. Returning
-	 * true here is the single point that short-circuits all of them.
+	 * WC Memberships dispatches this filter with `$is_public, $post_id`. The
+	 * `$post_id` arg is the authoritative subject of the check — it can refer
+	 * to an arbitrary post (cap checks, restrict_post in loops, REST output,
+	 * widget/related-posts queries) that is not the main queried object. We must
+	 * compare against `$post_id`, not `get_queried_object_id()`, to scope the
+	 * single-post bypass correctly.
 	 *
 	 * The hook is registered unconditionally — if WC Memberships isn't active,
 	 * the filter is never dispatched and this method is inert.
 	 *
-	 * @param bool $is_public Whether the post is publicly accessible.
+	 * @param bool     $is_public Whether the post is publicly accessible.
+	 * @param int|null $post_id   Post ID being evaluated by WC. Null in some
+	 *                            edge dispatches, in which case we fall back
+	 *                            to the queried object.
 	 *
 	 * @return bool
 	 */
-	public static function filter_wc_memberships_is_post_public( $is_public ) {
+	public static function filter_wc_memberships_is_post_public( $is_public, $post_id = null ) {
 		if ( ! self::is_verification_enabled() ) {
 			return $is_public;
 		}
@@ -526,7 +532,11 @@ class Newsletters_Access {
 			return true;
 		}
 		$single = self::get_single_post_bypass_id();
-		if ( null !== $single && (int) get_queried_object_id() === $single ) {
+		if ( null === $single ) {
+			return $is_public;
+		}
+		$eval_post_id = $post_id ? (int) $post_id : (int) get_queried_object_id();
+		if ( $eval_post_id === $single ) {
 			return true;
 		}
 		return $is_public;

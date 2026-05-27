@@ -663,6 +663,85 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Bug regression: filter_wc_memberships_is_post_public must use the
+	 * $post_id arg dispatched by WC Memberships (not get_queried_object_id)
+	 * so that single-post bypass is correctly scoped during cap checks,
+	 * loop restrict_post, REST output, and widget queries that ask about
+	 * a post unrelated to the main queried object.
+	 */
+	public function test_wc_memberships_filter_honors_post_id_arg_over_queried_object() {
+		$cookie_post  = $this->factory->post->create( [ 'post_type' => 'post' ] );
+		$queried_post = $this->factory->post->create( [ 'post_type' => 'post' ] );
+		$other_post   = $this->factory->post->create( [ 'post_type' => 'post' ] );
+
+		// Simulate being on the queried_post page in the main query.
+		$this->go_to( get_permalink( $queried_post ) );
+
+		// Reader has single-post bypass for $cookie_post.
+		$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] = (string) $cookie_post; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
+
+		// WC asks: is $cookie_post public? With the $post_id arg honored, YES.
+		$this->assertTrue(
+			Newsletters_Access::filter_wc_memberships_is_post_public( false, $cookie_post ),
+			'WC dispatching with the cookie-scoped post must grant bypass regardless of the main query.'
+		);
+
+		// WC asks: is $other_post public? With the $post_id arg honored, NO.
+		$this->assertFalse(
+			Newsletters_Access::filter_wc_memberships_is_post_public( false, $other_post ),
+			'WC dispatching with an unrelated post must NOT grant bypass even on a single-post-cookie page.'
+		);
+
+		// WC asks: is $queried_post public (the page being viewed)? NO, the cookie isn't for it.
+		$this->assertFalse(
+			Newsletters_Access::filter_wc_memberships_is_post_public( false, $queried_post ),
+			'WC dispatching with the queried post must NOT grant bypass when the cookie is for a different post.'
+		);
+
+		unset( $_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * Bug regression: when WC dispatches the filter without a $post_id
+	 * (some edge call sites), fall back to get_queried_object_id() so
+	 * legacy "1-arg" behavior still works on a singular page.
+	 */
+	public function test_wc_memberships_filter_falls_back_to_queried_object_when_post_id_null() {
+		$cookie_post = $this->factory->post->create( [ 'post_type' => 'post' ] );
+		$this->go_to( get_permalink( $cookie_post ) );
+
+		$_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] = (string) $cookie_post; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
+
+		$this->assertTrue( Newsletters_Access::filter_wc_memberships_is_post_public( false ) );
+		$this->assertTrue( Newsletters_Access::filter_wc_memberships_is_post_public( false, null ) );
+
+		unset( $_COOKIE[ Newsletters_Access::SINGLE_POST_COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * Bug regression: the wc_memberships_is_post_public hook must be
+	 * registered with accepted_args = 2.
+	 */
+	public function test_wc_memberships_filter_registered_with_two_accepted_args() {
+		global $wp_filter;
+		$found = false;
+		foreach ( $wp_filter['wc_memberships_is_post_public']->callbacks[20] ?? [] as $cb ) {
+			if ( is_array( $cb['function'] )
+				&& $cb['function'][0] === Newsletters_Access::class
+				&& $cb['function'][1] === 'filter_wc_memberships_is_post_public'
+			) {
+				$found = true;
+				$this->assertSame( 2, $cb['accepted_args'], 'filter_wc_memberships_is_post_public must register accepted_args=2' );
+			}
+		}
+		$this->assertTrue( $found, 'filter_wc_memberships_is_post_public must be registered on wc_memberships_is_post_public priority 20' );
+	}
+
+	/**
 	 * Clean up the bypass-enabled option and the settings cache after every test
 	 * so option state doesn't bleed between tests.
 	 */
