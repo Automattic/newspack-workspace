@@ -619,37 +619,29 @@ class Newsletters_Access {
 	}
 
 	/**
-	 * Whether the email HTML contains the given URL as the target of an
-	 * anchor tag (href attribute). Compares by normalized URL (path
-	 * compared, query string stripped), with a fallback to the URL-encoded
-	 * form for cases where MJML/block patterns encoded the href value.
+	 * Whether the email HTML contains an anchor pointing to the same post
+	 * as the given URL. Comparison is by resolved post ID (via
+	 * url_to_postid), which works correctly under both pretty permalinks
+	 * (`/article-slug/`) and plain permalinks (`/?p=N`) and is naturally
+	 * immune to UTM / npnl query-string noise on either side.
 	 *
 	 * @param string $html        Email HTML.
-	 * @param string $current_url Inbound request URL.
+	 * @param string $current_url Inbound request URL (typically the
+	 *                            canonical permalink of the queried post).
 	 *
 	 * @return bool
 	 */
 	private static function email_html_contains_url( $html, $current_url ) {
-		$needle = untrailingslashit( strtok( $current_url, '?' ) );
-		if ( '' === $needle ) {
+		$current_post_id = url_to_postid( $current_url );
+		if ( ! $current_post_id ) {
 			return false;
 		}
 		$hrefs = self::extract_hrefs_from_html( $html );
 		if ( empty( $hrefs ) ) {
 			return false;
 		}
-		$encoded_needle = rawurlencode( $needle );
 		foreach ( $hrefs as $href ) {
-			$href_normalized = untrailingslashit( strtok( $href, '?' ) );
-			if ( '' === $href_normalized ) {
-				continue;
-			}
-			if ( 0 === strcasecmp( $href_normalized, $needle ) ) {
-				return true;
-			}
-			// Fall back to the URL-encoded form for block-pattern-encoded hrefs.
-			// Mirrors the pattern at Click::handle_click line 168.
-			if ( 0 === strcasecmp( $href_normalized, $encoded_needle ) ) {
+			if ( url_to_postid( $href ) === $current_post_id ) {
 				return true;
 			}
 		}
