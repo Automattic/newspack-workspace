@@ -1649,7 +1649,6 @@ final class Reader_Activation {
 	 * @return bool
 	 */
 	private static function should_render_auth_modal() {
-
 		/**
 		 * Filters whether to render reader auth form.
 		 *
@@ -2367,7 +2366,7 @@ final class Reader_Activation {
 	 * }
 	 */
 	public static function get_verification_payload( $user_or_id ) {
-		$user = is_numeric( $user_or_id ) ? \get_user_by( 'id', (int) $user_or_id ) : $user_or_id;
+		$user = $user_or_id instanceof \WP_User ? $user_or_id : \get_user_by( 'id', (int) $user_or_id );
 		if ( ! $user instanceof \WP_User || ! self::is_user_reader( $user ) ) {
 			return [
 				'verified'           => null,

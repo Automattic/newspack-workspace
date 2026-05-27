@@ -37,6 +37,9 @@ window.newspackRAS.push( readerActivation => {
 			}
 
 			const currentHash = window.location.hash.replace( '#', '' );
+			// Both #signin_modal and #register_modal open the unified form. The form decides
+			// signin vs register server-side based on whether the submitted email already
+			// belongs to an account, so the two hashes are functionally equivalent here.
 			if ( SIGN_IN_MODAL_HASHES.includes( currentHash ) ) {
 				if ( ev ) {
 					ev.preventDefault();
