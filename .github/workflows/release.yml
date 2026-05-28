@@ -68,6 +68,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # setup-node's registry-url writes an .npmrc using ${NODE_AUTH_TOKEN};
+          # without this it stays the literal "XXXXX-..." placeholder and npm
+          # auth 401s. Set it to the same secret so npm actually authenticates.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=12288
 
   # Branch maintenance after a stable release: reset alpha and sync release into
@@ -113,6 +117,7 @@ jobs:
     with:
       plugin-name: super-cool-ad-inserter-plugin
       plugin-path: plugins/super-cool-ad-inserter-plugin
+      wporg-slug: super-cool-ad-inserter
     secrets:
       WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
       WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}

@@ -4,9 +4,17 @@ name: Sync legacy repos
 #
 # bin/migration/sync-legacy.sh runs end-to-end: filters each legacy repo's
 # trunk into the monorepo layout, publishes per-repo sync/<name> branches,
-# and merges them into monorepo-integration with auto-resolution and per-repo
-# escalation (draft PR with @adekbadek as reviewer) for any repo that
-# can't be merged automatically. See that script for the policy.
+# and integrates them onto main. Clean merges are pushed to the
+# sync/legacy-incoming branch and landed via a PR the job admin-merges once CI
+# passes (merge commit,
+# never squash, so per-commit types survive for release versioning); repos that
+# can't be merged automatically escalate to a draft PR (@adekbadek reviewer).
+# See that script for the policy.
+#
+# Post-cutover there is no monorepo-integration branch (it was merged into main
+# and deleted). main is the integration target; the sync lands legacy commits
+# that merged on the now-frozen legacy trunks (new legacy PRs are blocked, but
+# already-open ones still merge upstream and must keep flowing in).
 #
 # The same script runs locally — DRY_RUN=1 bin/migration/sync-legacy.sh from
 # any worktree skips git push and gh pr create.
@@ -32,23 +40,24 @@ jobs:
     name: Filter, publish, and integrate
     runs-on: ubuntu-latest
     steps:
-      # Sync scripts live on main; the working tree the script merges into
-      # is monorepo-integration. Two checkouts keep them separate.
+      # Sync scripts and the working tree are both main now. Two checkouts keep
+      # the read-only script copy (scripts-src) separate from the working tree
+      # the script integrates into and pushes from (integration).
       - name: Check out main (sync scripts)
         uses: actions/checkout@v4
         with:
           ref: main
           path: scripts-src
-      - name: Check out monorepo-integration (working tree)
+      - name: Check out main (working tree)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          # Use a PAT (not GITHUB_TOKEN) so the sync's pushes to
-          # monorepo-integration trigger CI. Commits pushed with GITHUB_TOKEN
-          # do not start new workflow runs, which would leave synced changes
-          # (and PR #70's checks) silently un-validated.
+          # Use the matticbot PAT (not GITHUB_TOKEN) so the sync's push to
+          # sync/legacy-incoming triggers CI (GITHUB_TOKEN pushes don't start
+          # workflow runs) and so the auto-merge runs as matticbot — the
+          # identity allowed to bypass main's required review.
           token: ${{ secrets.GH_TOKEN }}
-          ref: monorepo-integration
+          ref: main
           path: integration
       - name: Install git-filter-repo
         run: |
@@ -70,7 +79,10 @@ jobs:
       - name: Run sync
         working-directory: integration
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # matticbot PAT: it opens and auto-merges the PR to main (it is the
+          # bypass-allowed identity for main's required review) and its branch
+          # push triggers CI.
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
           # Org-scoped token for cloning private legacy repos (currently
           # only newspack-story-budget). The default GITHUB_TOKEN is scoped
           # to this repo and can't read other private Automattic repos.

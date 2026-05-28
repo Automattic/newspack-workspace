@@ -31,6 +31,14 @@ module.exports = function releaseConfig( { name, phpFile, npmPublish = false } )
 			[
 				'@semantic-release/github',
 				{
+					// Migrated commits reference legacy-repo PR numbers that don't
+					// exist as monorepo issues; the success step resolves those refs
+					// to comment on AND label them, failing the release job. Disable
+					// both. Re-enable post-migration (NPPM-2752 Phase 6).
+					successComment: false,
+					releasedLabels: false,
+					failComment: false,
+					failTitle: false,
 					assets: [
 						{
 							path: `./release/${ name }.zip`,

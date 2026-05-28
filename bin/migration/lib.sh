@@ -214,47 +214,26 @@ route_extracted_packages() {
 
     local rel="${path#plugins/newspack-plugin/packages/}"
     local target="packages/$rel"
-    local base_blob theirs_blob
-    base_blob=$(git ls-files -s -- "$path" | awk '$3==1{print $2}')
+    local theirs_blob
     theirs_blob=$(git ls-files -s -- "$path" | awk '$3==3{print $2}')
 
+    # Legacy deleted the file: drop it from the workspace path too.
     if [ -z "$theirs_blob" ]; then
       git rm -f -- "$path" > /dev/null
       continue
     fi
 
-    if [ ! -e "$target" ]; then
-      if [ -z "$base_blob" ]; then
-        mkdir -p "$(dirname "$target")"
-        git show "$theirs_blob" > "$target"
-        git add "$target"
-        git rm -f -- "$path" > /dev/null
-      else
-        rc=1
-      fi
-      continue
-    fi
-
-    local base_src=/tmp/sync-base-$$
-    local theirs_src=/tmp/sync-theirs-$$
-    local merged=/tmp/sync-merged-$$
-    if [ -n "$base_blob" ]; then
-      git show "$base_blob" > "$base_src"
-    else
-      : > "$base_src"
-    fi
-    git show "$theirs_blob" > "$theirs_src"
-
-    if git merge-file -p "$theirs_src" "$base_src" "$target" > "$merged" 2>/dev/null; then
-      cp "$merged" "$target"
-      git add "$target"
-      git rm -f -- "$path" > /dev/null
-    else
-      cp "$merged" "$target"
-      git rm -f -- "$path" > /dev/null
-      rc=1
-    fi
-    rm -f "$base_src" "$theirs_src" "$merged"
+    # Take legacy's version of the routed file wholesale, mirroring the run-wide
+    # "legacy wins" -Xtheirs policy. A hunk-level 3-way merge here is wrong: when
+    # legacy and the monorepo's extracted copy both touched overlapping regions
+    # (e.g. packages/components/src/card-feature/index.tsx after #4721), splicing
+    # the two sides yields an internally inconsistent file — referencing an
+    # identifier only one side declares — which Babel/ESLint on .tsx won't catch
+    # and only breaks at runtime. Replacing wholesale keeps the file consistent.
+    mkdir -p "$(dirname "$target")"
+    git show "$theirs_blob" > "$target"
+    git add "$target"
+    git rm -f -- "$path" > /dev/null
   done < <(git diff --name-only --diff-filter=U)
 
   # Sweep any remaining cleanly-merged files under the extracted dirs (the
@@ -272,6 +251,33 @@ route_extracted_packages() {
     'plugins/newspack-plugin/packages/colors/*' \
     'plugins/newspack-plugin/packages/components/*' \
     'plugins/newspack-plugin/packages/icons/*')
+
+  # Resolve the directory/file conflict the extraction shim creates. The
+  # monorepo keeps plugins/newspack-plugin/packages/{colors,components,icons}
+  # as symlinks into the workspace home (../../../packages/<pkg>); legacy still
+  # carries real directories there. When legacy diverges under one, the merge
+  # can't keep a symlink and a directory at the same path, so it renames our
+  # symlink to <pkg>~HEAD (an unmerged stage-2 entry) and unpacks legacy's tree
+  # at <pkg>/. The loops above route that tree's files to the workspace home;
+  # here we restore our symlink at the canonical path and drop the ~HEAD
+  # artifact, so the in-plugin shim survives and no unmerged entry is left to
+  # escalate on. Packages that merged cleanly (still a stage-0 symlink) have no
+  # ~HEAD artifact and are skipped.
+  while IFS= read -r artifact; do
+    [ -z "$artifact" ] && continue
+    local canon="${artifact%\~HEAD}"
+    local sym_blob
+    sym_blob=$(git ls-files -s -- "$artifact" | awk '$3==2{print $2; exit}')
+    git rm -q --cached --ignore-unmatch -- "$artifact" > /dev/null 2>&1 || true
+    rm -f -- "$artifact" 2> /dev/null || true
+    if [ -n "$sym_blob" ]; then
+      git update-index --add --cacheinfo "120000,$sym_blob,$canon"
+      git checkout-index -f -- "$canon" 2> /dev/null || true
+    fi
+  done < <(git ls-files -- \
+    'plugins/newspack-plugin/packages/colors~HEAD' \
+    'plugins/newspack-plugin/packages/components~HEAD' \
+    'plugins/newspack-plugin/packages/icons~HEAD')
 
   return "$rc"
 }

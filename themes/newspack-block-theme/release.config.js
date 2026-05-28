@@ -40,6 +40,13 @@ module.exports = {
 		[
 			'@semantic-release/github',
 			{
+				// Migrated commits reference legacy-repo PR numbers absent from the
+				// monorepo; disable PR/issue comment+label resolution so the release
+				// job doesn't fail. Re-enable post-migration (NPPM-2752 Phase 6).
+				successComment: false,
+				releasedLabels: false,
+				failComment: false,
+				failTitle: false,
 				assets: [
 					{
 						path: './release/newspack-block-theme.zip',

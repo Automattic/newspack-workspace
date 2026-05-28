@@ -1727,14 +1727,18 @@ final class Reader_Activation {
 					<input type="hidden" name="<?php echo \esc_attr( self::NEWSLETTERS_SIGNUP_FORM_ACTION ); ?>" value="1" />
 					<input type="hidden" name="email_address" value="<?php echo esc_attr( $email_address ); ?>" />
 
-					<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-2 overflow-hidden position-relative newsletter-list-container" data-list-default-size="<?php echo esc_attr( $default_list_size ); ?>">
+					<?php $has_overflow = count( $newsletters_lists ) > (int) $default_list_size; ?>
+					<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-2 overflow-hidden position-relative newsletter-list-container">
 					<?php
 					foreach ( $newsletters_lists as $list ) {
-						$checkbox_id = sprintf( 'newspack-plugin-list-%s', $list['id'] );
-						$is_hidden   = $loop_index <= $default_list_size ? '' : 'hidden';
+						$checkbox_id   = sprintf( 'newspack-plugin-list-%s', $list['id'] );
+						$is_peek       = $loop_index === (int) $default_list_size;
+						$is_hidden     = $loop_index > (int) $default_list_size;
+						$label_classes = 'newspack-ui__input-card' . ( $is_hidden ? ' hidden' : '' );
+						$label_inert   = ( $is_peek || $is_hidden ) ? ' inert' : '';
 						$loop_index++;
 						?>
-						<label class="newspack-ui__input-card <?php echo esc_attr( $is_hidden ); ?>" for="<?php echo \esc_attr( $checkbox_id ); ?>">
+						<label class="<?php echo esc_attr( $label_classes ); ?>" for="<?php echo \esc_attr( $checkbox_id ); ?>"<?php echo esc_attr( $label_inert ); ?>>
 							<input
 								type="checkbox"
 								name="lists[]"
@@ -1752,17 +1756,15 @@ final class Reader_Activation {
 							<?php endif; ?>
 						</label>
 						<?php
-						if ( $loop_index === (int) $default_list_size && count( $newsletters_lists ) > $default_list_size ) :
-							?>
-							<div class="newspack-ui__gradient-divider"></div>
-							<?php
-						endif;
 					}
 					?>
+					<?php if ( $has_overflow ) : ?>
+						<div class="newspack-ui__gradient-divider"></div>
+					<?php endif; ?>
 					</div>
 
 					<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-2 newspack-ui__spacing-top--5">
-						<?php if ( count( $newsletters_lists ) > $default_list_size ) : ?>
+						<?php if ( $has_overflow ) : ?>
 							<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--secondary see-all-button" aria-label="<?php esc_attr_e( 'See all newsletters', 'newspack-plugin' ); ?>">
 								<span aria-hidden="true"><?php esc_html_e( 'See all', 'newspack-plugin' ); ?></span>
 								<?php Newspack_UI_Icons::print_svg( 'chevronDownSmall' ); ?>

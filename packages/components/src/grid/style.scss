@@ -117,6 +117,11 @@
 			grid-template-columns: repeat(6, 1fr);
 		}
 
+		// Columns 12
+		&__columns-12 {
+			grid-template-columns: repeat(12, 1fr);
+		}
+
 		// Gutter 48
 		&__gutter-48 {
 			grid-gap: 48px;

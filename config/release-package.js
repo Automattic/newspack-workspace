@@ -23,7 +23,7 @@ module.exports = {
 		'@semantic-release/commit-analyzer',
 		'@semantic-release/release-notes-generator',
 		'@semantic-release/npm',
-		'@semantic-release/github',
+		[ '@semantic-release/github', { successComment: false, releasedLabels: false, failComment: false, failTitle: false } ],
 	],
 	prepare: [
 		'@semantic-release/changelog',

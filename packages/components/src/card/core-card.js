@@ -48,6 +48,7 @@ const CoreCard = ( {
 	noMargin,
 	children = null,
 	hasGreyHeader,
+	hasHeaderBorder = true,
 	...otherProps
 } ) => {
 	const classes = classNames(
@@ -82,7 +83,11 @@ const CoreCard = ( {
 			{ ( header || icon ) && (
 				<CardHeader
 					as={ onHeaderClick ? 'button' : undefined }
-					className={ classNames( 'newspack-card--core__header', isDraggable && 'newspack-card--core__header--is-draggable' ) }
+					className={ classNames(
+						'newspack-card--core__header',
+						isDraggable && 'newspack-card--core__header--is-draggable',
+						! hasHeaderBorder && 'newspack-card--core__header--no-border'
+					) }
 					style={ headerStyle }
 					size={ sizeProps }
 					gap={ 4 }
@@ -196,7 +201,10 @@ const CoreCard = ( {
 				</CardHeader>
 			) }
 			{ children && (
-				<div className="newspack-card--core__body" style={ childrenStyle }>
+				<div
+					className={ classNames( 'newspack-card--core__body', ! hasHeaderBorder && 'newspack-card--core__body--no-header-border' ) }
+					style={ childrenStyle }
+				>
 					{ children }
 				</div>
 			) }

@@ -49,10 +49,17 @@ type CardFeatureProps = {
 	/** Whether the feature is currently enabled. */
 	enabled?: boolean;
 	/**
-	 * When set, the card enters the "unmet requirements" state: the primary
-	 * button is disabled and an error badge displays this string.
+	 * When set, the card enters the "unmet requirements" state: an error
+	 * badge displays this string and the title/description are muted. By
+	 * default the primary button is disabled — set `requirementsActionable`
+	 * if the primary button is the remediation for the unmet requirement.
 	 */
 	requirements?: string;
+	/**
+	 * When `requirements` is set, keep the primary button clickable so the
+	 * user can remediate the unmet requirement from this card.
+	 */
+	requirementsActionable?: boolean;
 	/** Primary button label when not enabled. Default: "Enable". */
 	enableLabel?: string;
 	/** Primary button label when enabled. Default: "Configure". */
@@ -83,6 +90,7 @@ const CardFeature = ( {
 	icon,
 	enabled = false,
 	requirements,
+	requirementsActionable = false,
 	enableLabel,
 	configureLabel,
 	onEnable,
@@ -104,11 +112,11 @@ const CardFeature = ( {
 		badge = { text: badgeText ?? __( 'Enabled', 'newspack-plugin' ), level: badgeLevel };
 	}
 
-	const buttonLabel =
-		enabled && ! requirements ? configureLabel ?? __( 'Configure', 'newspack-plugin' ) : enableLabel ?? __( 'Enable', 'newspack-plugin' );
+	const isConfigureState = enabled && ! requirements;
+	const buttonLabel = isConfigureState ? configureLabel ?? __( 'Configure', 'newspack-plugin' ) : enableLabel ?? __( 'Enable', 'newspack-plugin' );
 
 	const handleButtonClick = () => {
-		if ( enabled && ! requirements ) {
+		if ( isConfigureState ) {
 			onConfigure?.();
 		} else {
 			onEnable?.();
@@ -149,11 +157,21 @@ const CardFeature = ( {
 						</HStack>
 						<HStack alignment="edge">
 							<HStack expanded={ false } spacing="8px">
-								<Button variant="secondary" disabled={ isMuted } onClick={ handleButtonClick }>
+								<Button
+									variant={ isConfigureState ? 'tertiary' : 'secondary' }
+									disabled={ isMuted && ! requirementsActionable }
+									onClick={ handleButtonClick }
+									size="compact"
+								>
 									{ buttonLabel }
 								</Button>
-								{ enabled && ! requirements && !! moreControls?.length && (
-									<DropdownMenu icon={ moreVertical } label={ __( 'More', 'newspack-plugin' ) } controls={ moreControls } />
+								{ isConfigureState && !! moreControls?.length && (
+									<DropdownMenu
+										icon={ moreVertical }
+										label={ __( 'More', 'newspack-plugin' ) }
+										controls={ moreControls }
+										toggleProps={ { size: 'compact' } }
+									/>
 								) }
 							</HStack>
 							{ badge && <Badge text={ badge.text } level={ badge.level } /> }

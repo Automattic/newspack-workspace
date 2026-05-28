@@ -7,7 +7,7 @@ import { CheckboxControl, ExternalLink, TextareaControl } from '@wordpress/compo
 /**
  * Internal dependencies.
  */
-import { Grid, SelectControl, TextControl } from '../../../../../packages/components/src';
+import { Button, Grid, SelectControl, TextControl } from '../../../../../packages/components/src';
 
 /**
  * Render a single settings field.
@@ -32,6 +32,34 @@ export const SettingsField = ( { field, value, onChange } ) => {
 	);
 
 	switch ( type ) {
+		case 'hidden':
+			return null;
+		case 'oauth': {
+			const isConnected = !! value;
+			const oauthUrl = field.oauth_url || '';
+			return (
+				<div key={ key } className="newspack-oauth-field">
+					<p>
+						<strong>{ label }</strong>
+					</p>
+					{ ( description || helpUrl ) && <p>{ help }</p> }
+					{ isConnected ? (
+						<>
+							<p>{ value }</p>
+							{ field.disconnect_url && (
+								<Button variant="secondary" isDestructive href={ field.disconnect_url }>
+									{ __( 'Disconnect', 'newspack-plugin' ) }
+								</Button>
+							) }
+						</>
+					) : (
+						<Button variant="primary" href={ oauthUrl || undefined } disabled={ ! oauthUrl }>
+							{ __( 'Connect', 'newspack-plugin' ) }
+						</Button>
+					) }
+				</div>
+			);
+		}
 		case 'metadata': {
 			const selectedFields = Array.isArray( value ) ? value : [];
 			const normalizedOptions = ( options || [] ).map( option =>

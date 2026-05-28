@@ -16,6 +16,11 @@ on:
         description: 'Path to the plugin within the monorepo, e.g. plugins/newspack-newsletters.'
         required: true
         type: string
+      wporg-slug:
+        description: 'WordPress.org slug, if it differs from plugin-name. Defaults to plugin-name.'
+        required: false
+        default: ''
+        type: string
     secrets:
       WP_ORG_USERNAME:
         required: true
@@ -53,16 +58,21 @@ jobs:
         run: pnpm run build:packages
       - name: Build plugin and release artifact
         run: |
-          pnpm --filter "{${{ inputs.plugin-path }}}" run build
+          pnpm --filter "{${{ inputs.plugin-path }}}" run --if-present build
           pnpm --filter "{${{ inputs.plugin-path }}}" run release:archive
       - name: Resolve released version
         id: ver
         run: echo "version=$(node -p "require('./${{ inputs.plugin-path }}/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Install Subversion
+        # ubuntu-latest no longer ships svn; the deploy script needs it (both
+        # the already-published check and the commit).
+        run: sudo apt-get update && sudo apt-get install -y subversion
       - name: Deploy to WordPress.org
         working-directory: ${{ inputs.plugin-path }}
         env:
           WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
           WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}
           WP_ORG_PLUGIN_NAME: ${{ inputs.plugin-name }}
+          WP_ORG_PLUGIN_SLUG: ${{ inputs.wporg-slug != '' && inputs.wporg-slug || inputs.plugin-name }}
           WP_ORG_PLUGIN_VERSION: ${{ steps.ver.outputs.version }}
         run: ${{ github.workspace }}/.github/scripts/release-wporg.sh

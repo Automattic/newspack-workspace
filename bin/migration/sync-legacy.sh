@@ -32,11 +32,11 @@
 #   bin/sync-legacy.sh                # full run (CI default)
 #   DRY_RUN=1 bin/sync-legacy.sh      # local: no git push, no gh pr create
 #
-# Run from any worktree whose HEAD is the integration target. CI uses
-# monorepo-integration; locally you can test against any tip.
+# Run from any worktree whose HEAD is the integration target. CI uses main;
+# locally you can test against any tip.
 #
-# Required tools: git, git-filter-repo, gh (only when DRY_RUN!=1 and a
-# conflict triggers escalation).
+# Required tools: git, git-filter-repo, gh (gh is used on a real run to open
+# and auto-merge the PR to main, and to escalate conflicts).
 
 set -euo pipefail
 
@@ -53,17 +53,17 @@ PARALLEL_FILTER_JOBS="${PARALLEL_FILTER_JOBS:-5}"
 . "$SCRIPT_DIR/lib.sh"
 
 # In dry-run mode, transparently re-execute inside a fresh detached-HEAD
-# worktree based off the integration target (origin/monorepo-integration by
-# default; override with DRY_RUN_BASE) so the caller's working tree and HEAD
-# are left untouched, and so dry-runs reproduce CI semantics regardless of
-# the branch the user happens to be on.
+# worktree based off the integration target (origin/main by default; override
+# with DRY_RUN_BASE) so the caller's working tree and HEAD are left untouched,
+# and so dry-runs reproduce CI semantics regardless of the branch the user
+# happens to be on.
 #
 # Trap cleans up the worktree and scratch dir on any exit, including SIGINT.
 if [ "$DRY_RUN" = "1" ] && [ "${SYNC_LEGACY_DRY_RUN_ISOLATED:-0}" != "1" ]; then
-  DRY_RUN_BASE="${DRY_RUN_BASE:-origin/monorepo-integration}"
+  DRY_RUN_BASE="${DRY_RUN_BASE:-origin/main}"
   if ! git rev-parse --verify --quiet "$DRY_RUN_BASE" > /dev/null; then
     echo "ERROR: DRY_RUN_BASE '$DRY_RUN_BASE' not found." >&2
-    echo "       Either fetch it (git fetch origin monorepo-integration) or" >&2
+    echo "       Either fetch it (git fetch origin main) or" >&2
     echo "       override: DRY_RUN_BASE=<ref> DRY_RUN=1 bin/sync-legacy.sh" >&2
     exit 2
   fi
@@ -174,7 +174,7 @@ escalate() {
 
   git add -A
   git commit --no-edit \
-    -m "sync(conflict): unresolved merge of ${name} into monorepo-integration"
+    -m "sync(conflict): unresolved merge of ${name} into main"
 
   local marker_files
   marker_files=$(git grep -lE '^<<<<<<< |^>>>>>>> ' HEAD -- 2>/dev/null | head -50 || true)
@@ -182,12 +182,12 @@ escalate() {
   git_push origin "HEAD:refs/heads/$branch"
 
   gh_pr_create \
-    --base monorepo-integration \
+    --base main \
     --head "$branch" \
     --draft \
     --reviewer adekbadek \
     --title "sync conflict: $name" \
-    --body "$(printf 'Daily legacy-sync job hit unresolvable conflicts merging \`%s\` into \`monorepo-integration\`.\n\n**To resolve:**\n\n```\ngh pr checkout %s\ngit grep -lE %s | xargs -r $EDITOR   # fix conflict markers\ngit add -A\ngit commit --amend --no-edit\ngit push --force-with-lease\n```\n\nThen mark this PR ready for review and merge.\n\nFiles with conflict markers:\n\n```\n%s\n```\n' "$name" "$branch" "'^<<<<<<< |^>>>>>>> '" "${marker_files:-(none — only structural conflicts)}")"
+    --body "$(printf 'Daily legacy-sync job hit unresolvable conflicts merging \`%s\` into \`main\`.\n\n**To resolve:**\n\n```\ngh pr checkout %s\ngit grep -lE %s | xargs -r $EDITOR   # fix conflict markers\ngit add -A\ngit commit --amend --no-edit\ngit push --force-with-lease\n```\n\nThen mark this PR ready for review and merge.\n\nFiles with conflict markers:\n\n```\n%s\n```\n' "$name" "$branch" "'^<<<<<<< |^>>>>>>> '" "${marker_files:-(none — only structural conflicts)}")"
 
   git reset --hard "$saved"
 }
@@ -252,10 +252,52 @@ integrate_all() {
 
   if [ "$(git rev-parse HEAD)" != "$START" ]; then
     regenerate_lockfile
-    echo "==> Pushing $(git rev-list --count "$START..HEAD") new commits to monorepo-integration"
-    git_push origin HEAD:monorepo-integration
+    land_on_main "$START"
   else
-    echo "==> No clean merges this run; nothing to push to monorepo-integration"
+    echo "==> No clean merges this run; nothing to land on main"
+  fi
+}
+
+# Land the integrated commits on main via an auto-merging PR. main is protected
+# (no direct pushes), so the sync force-updates the standing sync/legacy-incoming
+# branch, ensures a PR to main is open, and enables auto-merge with a MERGE
+# commit. Squash is never used: it would collapse the per-plugin merge commits
+# (and the individual legacy commits they carry), and semantic-release would then
+# mis-compute version bumps. Auto-merge clears main's required review because the
+# matticbot identity (whose token runs gh here) is on main's bypass list; it
+# completes once the required CI check passes.
+INCOMING_BRANCH="${INCOMING_BRANCH:-sync/legacy-incoming}"
+land_on_main() {
+  local start=$1
+  local n
+  n=$(git rev-list --count "$start..HEAD")
+  echo "==> Landing $n new commits on main via PR (branch: $INCOMING_BRANCH)"
+  if [ "$DRY_RUN" = "1" ]; then
+    echo "    [dry-run] would force-push HEAD:$INCOMING_BRANCH, open/refresh a PR to main, wait for its CI, then admin-merge"
+    return 0
+  fi
+  git_push origin --force "HEAD:refs/heads/$INCOMING_BRANCH"
+  # Open the PR if one isn't already open for the branch (the force-push above
+  # updates an existing one in place).
+  if ! gh pr view "$INCOMING_BRANCH" --json state --jq '.state' 2>/dev/null | grep -q OPEN; then
+    gh pr create \
+      --base main \
+      --head "$INCOMING_BRANCH" \
+      --title "sync: land legacy trunk commits" \
+      --body "$(printf 'Automated daily sync of commits that merged on the (frozen) legacy trunks into the monorepo.\n\nLanded automatically by the sync job (admin merge with a **merge commit** after CI passes — never squash, which would collapse the per-plugin commits and break semantic-release version computation).')" \
+      || echo "WARN: gh pr create failed; branch is on origin for manual handling"
+  fi
+  # Wait for the PR's required checks, then admin-merge with a merge commit.
+  # GitHub auto-merge can't be used: it ignores bypass allowances and would block
+  # on main's required review. matticbot is a repo admin, so --admin merges past
+  # the review once CI is green. On CI failure the PR is left open for review.
+  echo "    waiting for CI on $INCOMING_BRANCH ..."
+  if gh pr checks "$INCOMING_BRANCH" --watch --fail-fast > /dev/null 2>&1; then
+    gh pr merge "$INCOMING_BRANCH" --merge --admin \
+      && echo "    landed on main (admin merge after green CI)" \
+      || echo "WARN: admin merge failed; PR is open on origin for manual merge"
+  else
+    echo "WARN: CI failed or incomplete on $INCOMING_BRANCH; leaving PR open for review"
   fi
 }
 
