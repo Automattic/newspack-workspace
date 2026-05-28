@@ -3,26 +3,27 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 @use "../../../colors/colors.module" as colors;
 
 .newspack-card--core,
 .newspack-wizard .newspack-card--core {
-	background: white;
+	background: wp-colors.$white;
 	position: relative;
 	transition: background-color 125ms ease-in-out, box-shadow 125ms ease-in-out, color 125ms ease-in-out;
 	svg {
 		transition: fill 125ms ease-in-out;
 	}
 	&__icon {
-		border-radius: 50%;
+		border-radius: wp-vars.$radius-round;
 		display: grid;
-		height: 48px;
+		height: wp-vars.$grid-unit-60;
 		place-items: center;
-		width: 48px;
+		width: wp-vars.$grid-unit-60;
 		svg {
 			fill: var(--wp-admin-theme-color);
-			height: 40px;
-			width: 40px;
+			height: wp-vars.$grid-unit-50;
+			width: wp-vars.$grid-unit-50;
 		}
 		.newspack-card--core__has-icon-background-color & {
 			background: var(--wp-admin-theme-color-lighter-10);
@@ -35,15 +36,21 @@
 		h4,
 		h5,
 		h6 {
-			font-size: 14px;
-			font-weight: 500;
+			font-size: wp-vars.$font-size-large;
 		}
-		.newspack-card--core__icon {
-			height: 40px;
-			width: 40px;
-			svg {
-				height: 24px;
-				width: 24px;
+		.newspack-card--core {
+			&__header-content {
+				* {
+					line-height: wp-vars.$font-line-height-small;
+				}
+			}
+			&__icon {
+				height: wp-vars.$grid-unit-50;
+				width: wp-vars.$grid-unit-50;
+				svg {
+					height: wp-vars.$grid-unit-30;
+					width: wp-vars.$grid-unit-30;
+				}
 			}
 		}
 	}
@@ -114,6 +121,16 @@
 			}
 		}
 	}
+	// Two classes beat the single-class .components-card__header border-bottom
+	// rule from WP Core without needing !important.
+	&__header.newspack-card--core__header--no-border {
+		border-bottom: none;
+	}
+	&__body.newspack-card--core__body--no-header-border {
+		> div:not(.components-card__body):not(.components-card__media):not(.components-card__divider) {
+			padding-top: 0;
+		}
+	}
 	&__header--has-actions {
 		.newspack-card--core__header {
 			padding-right: 70px;
@@ -149,7 +166,7 @@
 		h6 {
 			align-items: center;
 			color: wp-colors.$gray-900;
-			font-weight: 500;
+			font-weight: 600;
 			display: flex;
 			gap: 8px;
 			a {

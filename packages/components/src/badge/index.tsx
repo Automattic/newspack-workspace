@@ -8,9 +8,11 @@ import './style.scss';
  */
 import classnames from 'classnames';
 
+export type BadgeLevel = 'default' | 'info' | 'success' | 'warning' | 'error';
+
 type BadgeProps = {
 	text: string;
-	level?: 'default' | 'info' | 'success' | 'warning' | 'error';
+	level?: BadgeLevel;
 };
 
 /**

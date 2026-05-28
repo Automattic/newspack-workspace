@@ -1,25 +1,24 @@
 {
 	"$schema": "https://schemas.wp.org/trunk/block.json",
 	"apiVersion": 3,
-	"name": "newspack/my-account-button",
-	"title": "My Account Button",
+	"name": "newspack/overlay-search",
+	"title": "Overlay Search",
 	"category": "newspack",
-	"description": "Button linking readers to their account or sign-in modal.",
+	"description": "A search button that opens a full-screen overlay containing a search form. Hands off to Jetpack Instant Search when active.",
 	"keywords": [
-		"account",
-		"signin",
-		"login",
-		"button"
+		"search",
+		"overlay",
+		"jetpack"
 	],
 	"textdomain": "newspack-plugin",
 	"attributes": {
-		"signedInLabel": {
+		"triggerText": {
 			"type": "string",
-			"default": "My Account"
+			"default": "Search"
 		},
-		"signedOutLabel": {
+		"overlayColor": {
 			"type": "string",
-			"default": "Sign in"
+			"default": ""
 		},
 		"className": {
 			"type": "string",
@@ -29,6 +28,7 @@
 	"supports": {
 		"anchor": true,
 		"align": false,
+		"html": false,
 		"color": {
 			"background": true,
 			"text": true
@@ -57,6 +57,6 @@
 		{ "name": "text-only", "label": "Text only" }
 	],
 	"editorStyle": "file:../../../dist/blocks.css",
-	"style": "file:../../../dist/blocks.css"
+	"style": "file:../../../dist/blocks.css",
+	"viewScript": "file:../../../dist/overlay-search-block.js"
 }
-

@@ -24,6 +24,7 @@ import * as copyrightDate from './copyright-date';
 import * as overlayMenu from './overlay-menu';
 import * as overlayMenuTrigger from './overlay-menu/trigger';
 import * as overlayMenuPanel from './overlay-menu/panel';
+import * as overlaySearch from './overlay-search';
 
 /**
  * Block Scripts
@@ -47,6 +48,7 @@ export const blocks = [
 	overlayMenu,
 	overlayMenuTrigger,
 	overlayMenuPanel,
+	overlaySearch,
 ];
 
 const readerActivationBlocks = [ 'newspack/reader-registration', 'newspack/my-account-button' ];
@@ -64,6 +66,7 @@ const blockThemeBlocks = [
 	'newspack/overlay-menu-trigger',
 	'newspack/overlay-menu-panel',
 	'newspack/my-account-button',
+	'newspack/overlay-search',
 ];
 
 /**
