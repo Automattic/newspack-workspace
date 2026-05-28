@@ -1,0 +1,63 @@
+@use "../variables-site/transitions";
+
+/* Social menu */
+
+.social-navigation,
+.social-links-menu {
+	align-items: center;
+	display: flex;
+}
+
+.social-links-menu {
+	margin: 0;
+	padding: 0;
+
+	li {
+		list-style: none;
+
+		&:nth-child(n + 2) {
+			margin-left: 0.5em;
+		}
+
+		a {
+			border-bottom: 1px solid transparent;
+			display: block;
+			color: inherit;
+			margin-bottom: -1px;
+			transition: opacity transitions.$link_transition ease-in-out;
+
+			&:hover,
+			&:active {
+				opacity: 0.7;
+			}
+
+			&:focus {
+				opacity: 1;
+				border-bottom: 1px solid currentcolor;
+			}
+
+			svg {
+				display: block;
+				width: 24px;
+				height: 24px;
+
+				// Prevent icons from jumping in Safari using hardware acceleration.
+				transform: translateZ(0);
+
+				&#ui-icon-link {
+					transform: rotate(-45deg);
+				}
+			}
+		}
+	}
+}
+
+.social-navigation .social-links-menu {
+	flex-wrap: nowrap;
+	overflow: visible;
+}
+
+.h-sh .top-header-contain .social-links-menu li a svg {
+	height: 20px;
+	width: 20px;
+}

@@ -1,0 +1,117 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack-blocks/checkout-button",
+	"title": "Checkout Button",
+	"category": "newspack",
+	"description": "Modal checkout button for WooCommerce products.",
+	"keywords": [
+		"woocommerce",
+		"product",
+		"checkout",
+		"button"
+	],
+	"textdomain": "newspack-blocks",
+	"attributes": {
+		"product": {
+			"type": "string"
+		},
+		"variation": {
+			"type": "string"
+		},
+		"is_variable": {
+			"type": "boolean",
+			"default": false
+		},
+		"price": {
+			"type": "string"
+		},
+		"text": {
+			"type": "string"
+		},
+		"placeholder": {
+			"type": "string"
+		},
+		"backgroundColor": {
+			"type": "string"
+		},
+		"textColor": {
+			"type": "string"
+		},
+		"gradient": {
+			"type": "string"
+		},
+		"afterSuccessBehavior": {
+			"type": "string"
+		},
+		"afterSuccessButtonLabel": {
+			"type": "string",
+			"default": "Continue"
+		},
+		"afterSuccessURL": {
+			"type": "string"
+		},
+		"width": {
+			"type": "number"
+		}
+	},
+	"supports": {
+		"anchor": true,
+		"align": [
+			"center",
+			"wide"
+		],
+		"color": {
+			"__experimentalSkipSerialization": true,
+			"gradients": true,
+			"__experimentalDefaultControls": {
+				"background": true,
+				"text": true
+			}
+		},
+		"typography": {
+			"fontSize": true,
+			"lineHeight": true,
+			"__experimentalFontFamily": true,
+			"__experimentalFontWeight": true,
+			"__experimentalFontStyle": true,
+			"__experimentalTextTransform": true,
+			"__experimentalTextDecoration": true,
+			"__experimentalLetterSpacing": true,
+			"__experimentalDefaultControls": {
+				"fontSize": true
+			}
+		},
+		"shadow": true,
+		"spacing": {
+			"__experimentalSkipSerialization": true,
+			"padding": [
+				"horizontal",
+				"vertical"
+			],
+			"__experimentalDefaultControls": {
+				"padding": true
+			}
+		},
+		"__experimentalBorder": {
+			"radius": true,
+			"__experimentalSkipSerialization": true,
+			"__experimentalDefaultControls": {
+				"radius": true
+			}
+		}
+	},
+	"styles": [
+		{
+			"name": "fill",
+			"label": "Fill",
+			"isDefault": true
+		},
+		{
+			"name": "outline",
+			"label": "Outline"
+		}
+	],
+	"editorStyle": "newspack-checkout-button-editor",
+	"style": "newspack-checkout-block-button"
+}

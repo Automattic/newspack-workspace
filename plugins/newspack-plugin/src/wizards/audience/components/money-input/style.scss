@@ -1,0 +1,60 @@
+/**
+ * Money Input
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-donations-wizard {
+	&__money-input {
+		align-items: stretch;
+		display: flex;
+		margin: 8px 0 0;
+
+		.currency {
+			border: 1px solid wp-colors.$gray-700;
+			border-right: 0;
+			align-items: center;
+			background: wp-colors.$gray-100;
+			border-radius: 2px 0 0 2px;
+			display: flex;
+			flex: 0 0 14px;
+			height: auto;
+			justify-content: center;
+			line-height: 1;
+			margin: 0;
+			padding: 0 8px;
+			text-align: center;
+		}
+
+		.newspack-text-control {
+			margin: 0 !important;
+			width: 100%;
+
+			@media screen and ( min-width: 1054px ) {
+				max-width: 100%;
+			}
+
+			input[type="number"] {
+				border-radius: 0 2px 2px 0;
+			}
+
+			.components-base-control__field {
+				margin-bottom: 0;
+			}
+		}
+
+		&-container {
+			.input-label {
+				font-size: 11px;
+				font-weight: 500;
+				line-height: 1.4;
+				text-transform: uppercase;
+			}
+		}
+
+		&-error {
+			color: wp-colors.$alert-red;
+			padding-top: 8px;
+		}
+	}
+}

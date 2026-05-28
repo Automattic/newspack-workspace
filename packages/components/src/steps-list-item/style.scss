@@ -1,0 +1,46 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.steps-list-item {
+	align-items: center;
+	display: grid;
+	grid-template-columns: 28px auto;
+	gap: 24px;
+	position: relative;
+
+	&::before {
+		border: 1px solid #f0f0f0;
+		bottom: -16px;
+		content: "";
+		display: block;
+		left: 14px;
+		position: absolute;
+		top: -16px;
+	}
+
+	&:first-child::before {
+		top: 50%;
+	}
+
+	&:last-child::before {
+		bottom: 50%;
+	}
+
+	+ .steps-list-item {
+		margin-top: 32px;
+	}
+
+	&__number {
+		align-items: center;
+		background: #fff;
+		border: 1px solid currentcolor;
+		border-radius: 100%;
+		color: var(--wp-admin-theme-color);
+		display: flex;
+		height: 28px;
+		justify-content: center;
+		outline: 8px solid #fff;
+		position: relative;
+		width: 28px;
+		z-index: 2;
+	}
+}

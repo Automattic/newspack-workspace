@@ -1,0 +1,57 @@
+.newspack-reader {
+    /**
+	 * Account Link
+	 */
+     &__account-link {
+		color: inherit;
+		position: relative;
+
+		span {
+			display: inline-block;
+		}
+
+		&__mobile {
+			display: flex;
+			justify-content: center;
+			margin-left: 0.5rem;
+
+			@media screen and (min-width: 960px) {
+				display: none;
+			}
+
+			a {
+				display: flex;
+				padding: 0.4em;
+			}
+		}
+
+		&__icon {
+			height: 24px;
+			width: 24px;
+
+			@media screen and (min-width: 960px) {
+				margin-left: -4px;
+				margin-top: -12px;
+				position: absolute;
+				top: 50%;
+			}
+		}
+
+		&__label {
+			margin-left: calc(16px + 0.4rem);
+
+			@media screen and (max-width: 959px) {
+				border: 0;
+				clip: rect(1px, 1px, 1px, 1px);
+				clip-path: inset(50%);
+				width: 1px;
+				height: 1px;
+				margin: -1px;
+				overflow: hidden;
+				padding: 0;
+				position: absolute !important;
+				word-wrap: normal !important; /* Many screen reader and browser combinations announce broken words as they would appear visually. */
+			}
+		}
+	}
+}

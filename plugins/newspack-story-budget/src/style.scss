@@ -1,0 +1,505 @@
+/* stylelint-disable no-invalid-position-at-import-rule */
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@import "@wordpress/dataviews/build-style/style.css";
+
+body.toplevel_page_newspack-story-budget {
+	background: #fff;
+	--wp-components-color-accent: #003da5;
+	--wp-components-color-accent-darker-10: #00296e;
+	--wp-components-color-accent-darker-20: #001f53;
+	--wp-admin-theme-color: #003da5;
+}
+
+.wrap {
+	margin: 0 0 0 -20px;
+	position: relative;
+	z-index: 1;
+}
+
+/* Fix fullscreen modal content area */
+.components-modal__frame.is-full-screen .components-modal__content > div:not(.components-modal__header) {
+	height: 100%;
+}
+
+.components-modal__frame.newspack-story-budget__modal-page__story .components-modal__content {
+	padding: 0;
+	overflow: hidden;
+}
+
+.newspack-story-budget {
+	$parent-selector: &;
+
+	&__content {
+		padding: 32px 0 0;
+	}
+	&__loading {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		max-width: 400px;
+		height: auto;
+		margin: 30vh auto 0;
+		text-align: center;
+		> div {
+			width: 100%;
+			> div {
+				left: 0; // Fix progress indicator position.
+			}
+		}
+
+		&-icon {
+			background-color: wp-colors.$gray-100;
+			border-radius: 50%;
+			color: wp-colors.$gray-900;
+			display: grid;
+			height: 40px;
+			place-items: center;
+			width: 40px;
+
+			svg {
+				display: block;
+				fill: currentcolor;
+				margin: 8px;
+			}
+
+			&:has(+ [class*="--success"]) {
+				background-color: wp-colors.$alert-green;
+				color: wp-colors.$white;
+			}
+
+			&:has(+ [class*="--error"]) {
+				background-color: wp-colors.$alert-red;
+				color: wp-colors.$white;
+			}
+		}
+	}
+	&__refresh-button-is-busy {
+		animation: refresh-rotate 1s infinite;
+	}
+
+	@keyframes refresh-rotate {
+		0% {
+			transform: rotate(0deg);
+		}
+		50% {
+			transform: rotate(-180deg);
+		}
+		100% {
+			transform: rotate(-180deg);
+		}
+	}
+	&__field-row {
+		max-width: 280px;
+		align-items: flex-start !important;
+		justify-content: flex-start !important;
+		> *:first-child {
+			width: 40%;
+			padding: 6px 0;
+		}
+		.newspack-story-budget__field {
+			width: 60%;
+		}
+	}
+	&__field {
+		&__value {
+			white-space: normal !important;
+			line-height: inherit;
+			text-align: left;
+			display: inline-flex;
+			padding: 6px 12px;
+			margin: 0;
+		}
+		&__button {
+			white-space: normal !important;
+			line-height: inherit;
+			text-align: left;
+			height: auto;
+			&:disabled {
+				color: inherit !important;
+			}
+		}
+		&__empty-value {
+			color: #a0a0a0;
+			font-style: italic;
+			font-size: 12px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 4px;
+			svg {
+				fill: var(--wp-admin-color-alert-red);
+			}
+		}
+		&__popover .components-popover__content {
+			min-width: 320px;
+			padding: 16px;
+			.block-editor-inspector-popover-header {
+				margin-bottom: 16px;
+			}
+		}
+		&__value-tooltip {
+			max-width: 300px;
+			text-align: left;
+		}
+	}
+	&__field-description {
+		color: wp-colors.$gray-700;
+		font-size: 12px;
+		margin: 0;
+	}
+	&__table-row-field {
+		margin: 0 -8px;
+		position: relative;
+		.newspack-story-budget__field__button,
+		.newspack-story-budget__field__value {
+			padding: 4px 8px;
+		}
+		.newspack-story-budget__table-row-field-error {
+			fill: wp-colors.$alert-red;
+		}
+	}
+	&__story {
+		border: 1px solid rgba(0, 0, 0, 0.133);
+		.components-modal__content & {
+			height: 100%;
+			border: 0;
+		}
+	}
+	&__sidebar {
+		flex: 0 0 280px;
+		outline: 1px solid #0000;
+		box-shadow: -1px 0 0 0 rgba(0, 0, 0, 0.133);
+		z-index: 3;
+	}
+	&__post-status-info {
+		margin: 0;
+	}
+	&__control {
+		&__checkbox-option,
+		&__radio-option {
+			display: flex;
+			align-items: flex-start;
+			justify-content: flex-start;
+			gap: 8px;
+			input {
+				margin: 0;
+				flex-shrink: 0;
+			}
+			label {
+				margin: 0;
+				flex-grow: 1;
+			}
+		}
+	}
+	&__dropdown-menu {
+		.components-dropdown-menu__toggle {
+			svg {
+				margin-right: -6px;
+			}
+			&.is-opened {
+				svg {
+					transform: rotate(180deg);
+				}
+			}
+		}
+	}
+	&__budget {
+		border-radius: 4px;
+		margin: 0;
+
+		&-title {
+			&__name {
+				font-weight: 500;
+				color: wp-colors.$gray-900;
+			}
+		}
+
+		#{$parent-selector}__field {
+			&__popover-button {
+				align-self: flex-start;
+
+				h2 {
+					color: var(--wp-components-color-accent);
+					font-weight: 500;
+					white-space: nowrap;
+					margin: 0;
+				}
+			}
+			&__dropdown-buttons {
+				display: inline-flex;
+				flex-direction: column;
+			}
+			&__button {
+				color: var(--wp-components-color-accent);
+				padding: 4px 8px;
+			}
+			&__auto-archive--set {
+				color: var(--wp-components-color-accent);
+			}
+		}
+
+		&-wrapper {
+			&.is-dragging {
+				opacity: 0.5;
+				transition: opacity 0.2s ease-in-out;
+			}
+
+			&.is-drag-over {
+				opacity: 0.5;
+				position: relative;
+
+				&::after {
+					content: "";
+					position: absolute;
+					top: 0;
+					left: 0;
+					right: 0;
+					bottom: 0;
+					border: 2px dashed var(--wp-admin-theme-color);
+					pointer-events: none;
+				}
+			}
+
+			&[draggable="true"] {
+				user-select: none;
+				-webkit-user-drag: element;
+			}
+		}
+
+		&-drag-handle {
+			cursor: move;
+
+			&:active {
+				cursor: move;
+			}
+		}
+
+		&__sort-buttons {
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+			align-items: center;
+
+			button {
+				align-items: center;
+				background: transparent;
+				border: none;
+				cursor: pointer;
+				display: flex;
+				height: 18px;
+				margin: 0;
+				padding: 0;
+
+				&:disabled {
+					cursor: default;
+					opacity: 0.3;
+				}
+			}
+		}
+
+		&-actions {
+			.components-dropdown-menu__menu-item[aria-label="budget-archive"] {
+				color: wp-colors.$alert-red;
+			}
+		}
+
+		/**
+		 * Overrides for the Newspack Action Card component to match the design.
+		 */
+		.newspack-action-card {
+			&__badge {
+				color: #f0f0f0 !important;
+				background-color: var(--wp-components-color-accent) !important;
+				border-radius: 999px !important;
+			}
+		}
+		.newspack-action-card__region.newspack-action-card__region-top {
+			padding: 0 24px;
+			height: 80px;
+		}
+	}
+
+	&__budgets {
+		padding: 16px 48px;
+		&-actions {
+			margin-bottom: 16px;
+
+			&__primary {
+				width: auto !important;
+			}
+
+			#{$parent-selector}__search {
+				min-width: 240px;
+			}
+
+			#{$parent-selector}__divider {
+				height: 32px;
+				color: wp-colors.$gray-300;
+			}
+
+			#{$parent-selector}__status-filter {
+				text-transform: uppercase;
+
+				select {
+					min-width: 140px;
+				}
+			}
+		}
+	}
+
+	&__pagination {
+		padding: 12px 24px;
+
+		&__page-text {
+			align-items: center;
+			font-size: 11px;
+			font-weight: 500;
+			text-transform: uppercase;
+
+			* {
+				margin: 0 !important;
+			}
+
+			.components-select-control__input {
+				font-size: 11px !important;
+			}
+		}
+
+		button.is-secondary {
+			box-shadow: none;
+			color: unset;
+
+			&:disabled {
+				opacity: 0.5;
+				cursor: not-allowed;
+				box-shadow: none !important;
+			}
+		}
+	}
+	&__modal-page {
+		&__create-new-story,
+		&__create-budget {
+			max-width: 512px !important;
+		}
+	}
+	&__error-message {
+		color: wp-colors.$alert-red;
+	}
+
+	&__field-label {
+		font-size: 11px;
+		font-weight: 500;
+		line-height: 1.4;
+		text-transform: uppercase;
+		display: block;
+		margin-bottom: calc(8px);
+		padding: 0;
+	}
+
+	&__notices {
+		position: fixed;
+		bottom: 24px;
+		padding-left: 24px;
+		z-index: 99999;
+		pointer-events: none;
+
+		.components-snackbar__action.components-button {
+			margin-left: 8px;
+		}
+	}
+
+	/**
+	 * Remote sites list.
+	*/
+	&__sites-list {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+
+	&__site-card {
+		display: flex;
+		flex-direction: row;
+		gap: 16px;
+		justify-content: space-between;
+		align-items: center;
+		&:not(:first-child) {
+			border-top: 1px solid wp-colors.$gray-300;
+			padding-top: 16px;
+		}
+	}
+
+	&__site-card-header {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	&__site-card-header-title {
+		font-size: 16px;
+		font-weight: 500;
+	}
+
+	&__site-card-header-url {
+		color: wp-colors.$gray-700;
+	}
+
+	&__site-card-actions {
+		display: flex;
+		flex-direction: row;
+		gap: 16px;
+	}
+
+	&__authorizing {
+		&--success {
+			color: wp-colors.$alert-green;
+		}
+		&--error {
+			color: wp-colors.$alert-red;
+		}
+	}
+}
+
+/**
+ * Newspack Wizard Tweaks
+ */
+.newspack-wizard {
+	&__header {
+		&__inner {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			border-bottom: 1px solid wp-colors.$gray-300;
+		}
+		&__actions {
+			padding: 0 16px;
+			display: flex;
+			flex: 1 1 auto;
+			flex-direction: row-reverse;
+			align-items: center;
+			gap: 8px;
+		}
+	}
+	&__title {
+		border-bottom: 0;
+	}
+}
+// Fix Tabbed Navigation
+.newspack-tabbed-navigation {
+	z-index: 10;
+	position: static;
+	li a {
+		box-sizing: border-box;
+	}
+}
+// Fix header logo background color.
+.newspack-wizard__title svg {
+	background: var(--wp-components-color-accent) !important;
+}
+
+// Fix menu item cursor.
+div[role="menuitem"] {
+	cursor: pointer;
+}

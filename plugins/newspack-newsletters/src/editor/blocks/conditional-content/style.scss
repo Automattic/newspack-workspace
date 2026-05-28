@@ -1,0 +1,103 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+:root {
+	/* stylelint-disable value-keyword-case */
+	--newspack-system-font:
+		-apple-system,
+		BlinkMacSystemFont,
+		"Segoe UI",
+		Roboto,
+		Oxygen-Sans,
+		Ubuntu,
+		Cantarell,
+		"Helvetica Neue",
+		sans-serif;
+	/* stylelint-enable value-keyword-case */
+}
+
+.newsletters-block__conditional-content {
+	height: auto;
+	margin-bottom: 0;
+	margin-top: 0;
+	min-height: calc(1.5em + 22px);
+	padding: 0 !important;
+	position: relative;
+	transition: min-height 0.25s ease-in-out;
+
+	&::before {
+		border-radius: 1px;
+		box-shadow: 0 0 0 var(--wp-admin-border-width-focus) wp-colors.$alert-yellow;
+		content: "";
+		pointer-events: none;
+		position: absolute;
+		inset: 1px;
+	}
+
+	&::after {
+		clear: both;
+		content: "";
+		display: table;
+	}
+
+	&__label {
+		background: wp-colors.$alert-yellow;
+		border-radius: 2px;
+		color: wp-colors.$gray-900;
+		display: flex;
+		font-family: var(--newspack-system-font);
+		font-size: 10px;
+		line-height: 1.6;
+		padding: 2px 4px;
+		pointer-events: none;
+		position: absolute;
+		transition: margin 0.25s ease-in-out;
+		z-index: 22;
+		button {
+			border: 0;
+			background: transparent;
+			color: inherit;
+			cursor: pointer;
+			display: inline-block;
+			font-family: inherit;
+			font-size: inherit;
+			line-height: inherit;
+			margin-left: 0.25em;
+			padding: 0;
+			pointer-events: all;
+			text-decoration: underline;
+
+			&:focus {
+				outline: 1px solid;
+			}
+		}
+
+		&__before {
+			top: 3px;
+			left: 3px;
+			.newsletters-block__conditional-content--selected & {
+				margin-top: -25px;
+			}
+		}
+		&__after {
+			top: 100%;
+			right: 3px;
+			margin-top: -23px;
+			.newsletters-block__conditional-content--selected & {
+				margin-top: 3px;
+			}
+		}
+
+		.newsletters-block__conditional-content--error & {
+			background: wp-colors.$alert-red;
+			color: white;
+		}
+	}
+	&--selected {
+		min-height: 1.5em;
+	}
+	&--error {
+		&::before {
+			box-shadow: 0 0 0 var(--wp-admin-border-width-focus) wp-colors.$alert-red;
+		}
+	}
+}

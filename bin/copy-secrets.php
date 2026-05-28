@@ -65,3 +65,35 @@ foreach ( $secrets->constants as $constant_name => $constant_value ) {
 		$wpconfig->update( 'constant', $constant_name, $constant_value, [ 'raw' => ! is_string( $constant_value ) ] );
     }
 }
+
+// If any ESP credentials were imported, activate newspack-newsletters and
+// default the service provider to the first ESP with a complete credential set.
+$esp_providers = [
+    'active_campaign'  => [ 'newspack_newsletters_active_campaign_key', 'newspack_newsletters_active_campaign_url' ],
+    'mailchimp'        => [ 'newspack_mailchimp_api_key' ],
+    'constant_contact' => [ 'newspack_newsletters_constant_contact_api_key', 'newspack_newsletters_constant_contact_api_secret' ],
+    'campaign_monitor' => [ 'newspack_newsletters_campaign_monitor_api_key', 'newspack_newsletters_campaign_monitor_client_id' ],
+];
+$configured_esps = [];
+foreach ( $esp_providers as $slug => $required_options ) {
+    $complete = true;
+    foreach ( $required_options as $option ) {
+        if ( empty( get_option( $option ) ) ) {
+            $complete = false;
+            break;
+        }
+    }
+    if ( $complete ) {
+        $configured_esps[] = $slug;
+    }
+}
+if ( ! empty( $configured_esps ) ) {
+    if ( ! is_plugin_active( 'newspack-newsletters/newspack-newsletters.php' ) ) {
+        activate_plugin( 'newspack-newsletters/newspack-newsletters.php' );
+        echo "Activated newspack-newsletters\n";
+    }
+    if ( empty( get_option( 'newspack_newsletters_service_provider' ) ) ) {
+        update_option( 'newspack_newsletters_service_provider', $configured_esps[0] );
+        echo "Service provider set to " . $configured_esps[0] . "\n";
+    }
+}

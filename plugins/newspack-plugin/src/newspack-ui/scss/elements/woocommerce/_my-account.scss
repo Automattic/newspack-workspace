@@ -1,0 +1,193 @@
+/**
+ * Extend Newspack UI styles to My Account elements.
+ */
+
+@use "../forms";
+@use "../typography";
+@use "../../variables/breakpoints";
+
+.woocommerce-account.newspack-my-account.newspack-ui {
+	p.woocommerce-form-row {
+		margin: var(--newspack-ui-spacer-3) 0;
+	}
+	.button,
+	.woocommerce-Button {
+		@extend .newspack-ui__button;
+		@extend .newspack-ui__button--primary;
+		&.secondary,
+		&.button-secondary {
+			@extend .newspack-ui__button--secondary;
+		}
+		&.cancel,
+		&.delete {
+			@extend .newspack-ui__button--destructive;
+		}
+		&.ghost {
+			@extend .newspack-ui__button--ghost;
+		}
+	}
+	.show-password-input {
+		&::before {
+			background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M8.45445 21.2079L16.4544 3.70787L15.545 3.29211L13.6684 7.39709C13.1436 7.30253 12.5877 7.25 12.0002 7.25C9.00263 7.25 6.82674 8.61759 5.42047 9.9569C4.71796 10.626 4.20044 11.2938 3.85754 11.7956C3.68571 12.0471 3.55665 12.2584 3.4692 12.4096C3.42544 12.4852 3.39202 12.5459 3.36878 12.5892C3.35716 12.6108 3.34808 12.6282 3.34152 12.6408L3.33357 12.6563L3.33101 12.6614L3.33008 12.6632C3.32991 12.6635 3.32939 12.6646 4.00021 13C4.66465 13.3322 4.67085 13.3357 4.67078 13.3359L4.67358 13.3305C4.67681 13.3242 4.68244 13.3135 4.69048 13.2985C4.70655 13.2686 4.7322 13.2218 4.76755 13.1608C4.8383 13.0385 4.94752 12.8592 5.09601 12.6419C5.39372 12.2062 5.84496 11.624 6.45495 11.0431C7.67368 9.88241 9.49779 8.75 12.0002 8.75C12.3537 8.75 12.6937 8.7726 13.0204 8.81469L12.8842 9.11259C12.6018 9.03911 12.3056 9 12.0002 9C10.0672 9 8.50021 10.567 8.50021 12.5C8.50021 13.6967 9.10084 14.7532 10.0171 15.3844L7.54497 20.7921L8.45445 21.2079Z' fill='%231E1E1E'/%3E%3Cpath d='M15.5002 12.5C15.5002 14.1262 14.3911 15.4934 12.8881 15.8864L15.1421 10.9559C15.3714 11.4216 15.5002 11.9458 15.5002 12.5Z' fill='%231E1E1E'/%3E%3Cpath d='M17.5455 11.0431C17.0416 10.5632 16.4341 10.0881 15.7181 9.6959L16.343 8.32884C17.2328 8.80341 17.9771 9.38275 18.58 9.9569C19.2825 10.626 19.8 11.2938 20.1429 11.7956C20.3147 12.0471 20.4438 12.2584 20.5312 12.4096C20.575 12.4852 20.6084 12.5459 20.6316 12.5892C20.6363 12.5978 20.6405 12.6057 20.6443 12.6129C20.6484 12.6207 20.652 12.6276 20.6552 12.6337L20.6589 12.6408L20.6694 12.6614L20.6707 12.664C20.6709 12.6643 20.671 12.6646 20.0002 13C19.3414 13.3294 19.3297 13.3356 19.3297 13.3359L19.3268 13.3305C19.3236 13.3242 19.318 13.3135 19.3099 13.2985C19.2939 13.2686 19.2682 13.2218 19.2329 13.1608C19.1621 13.0385 19.0529 12.8592 18.9044 12.6419C18.6067 12.2062 18.1555 11.624 17.5455 11.0431Z' fill='%231E1E1E'/%3E%3C/svg%3E");
+			height: 24px;
+			width: 24px;
+		}
+		&.display-password::before {
+			background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M3.99961 13C4.67043 13.3354 4.6703 13.3357 4.67017 13.3359L4.67298 13.3305C4.67621 13.3242 4.68184 13.3135 4.68988 13.2985C4.70595 13.2686 4.7316 13.2218 4.76695 13.1608C4.8377 13.0385 4.94692 12.8592 5.09541 12.6419C5.39312 12.2062 5.84436 11.624 6.45435 11.0431C7.67308 9.88241 9.49719 8.75 11.9996 8.75C14.502 8.75 16.3261 9.88241 17.5449 11.0431C18.1549 11.624 18.6061 12.2062 18.9038 12.6419C19.0523 12.8592 19.1615 13.0385 19.2323 13.1608C19.2676 13.2218 19.2933 13.2686 19.3093 13.2985C19.3174 13.3135 19.323 13.3242 19.3262 13.3305L19.3291 13.3359C19.3289 13.3357 19.3288 13.3354 19.9996 13C20.6704 12.6646 20.6703 12.6643 20.6701 12.664L20.6688 12.6614L20.6662 12.6563L20.6583 12.6408C20.6517 12.6282 20.6427 12.6108 20.631 12.5892C20.6078 12.5459 20.5744 12.4852 20.5306 12.4096C20.4432 12.2584 20.3141 12.0471 20.1423 11.7956C19.7994 11.2938 19.2819 10.626 18.5794 9.9569C17.1731 8.61759 14.9972 7.25 11.9996 7.25C9.00203 7.25 6.82614 8.61759 5.41987 9.9569C4.71736 10.626 4.19984 11.2938 3.85694 11.7956C3.68511 12.0471 3.55605 12.2584 3.4686 12.4096C3.42484 12.4852 3.39142 12.5459 3.36818 12.5892C3.35656 12.6108 3.34748 12.6282 3.34092 12.6408L3.33297 12.6563L3.33041 12.6614L3.32948 12.6632C3.32931 12.6635 3.32879 12.6646 3.99961 13ZM11.9996 16C13.9326 16 15.4996 14.433 15.4996 12.5C15.4996 10.567 13.9326 9 11.9996 9C10.0666 9 8.49961 10.567 8.49961 12.5C8.49961 14.433 10.0666 16 11.9996 16Z' fill='%231E1E1E'/%3E%3C/svg%3E");
+		}
+	}
+	table {
+		border-collapse: collapse;
+		table-layout: auto;
+		width: 100%;
+
+		tr {
+			border-bottom: 1px solid #ddd;
+		}
+	}
+	.shop_table {
+		th,
+		td {
+			padding-bottom: var(--newspack-ui-spacer-2);
+			padding-top: var(--newspack-ui-spacer-2);
+			vertical-align: middle;
+
+			@media ( min-width: breakpoints.$tablet_width ) {
+				&:not(:last-child) {
+					padding-right: var(--newspack-ui-spacer-2);
+				}
+			}
+		}
+		th {
+			color: var(--newspack-ui-color-neutral-60);
+			font-weight: 600;
+		}
+		button,
+		.button,
+		.woocommerce-Button {
+			@extend .newspack-ui__button--secondary;
+			@extend .newspack-ui__button--x-small;
+			margin-top: calc(var(--newspack-ui-spacer-1) / 2);
+			margin-bottom: calc(var(--newspack-ui-spacer-1) / 2);
+			&.newspack-ui__button--ghost {
+				@extend .newspack-ui__button--ghost;
+			}
+		}
+		* + button,
+		* + .button,
+		* + .woocommerce-Button {
+			margin-left: calc(var(--newspack-ui-spacer-1) / 2);
+			margin-top: calc(var(--newspack-ui-spacer-1) / 2);
+			@media only screen and ( min-width: breakpoints.$tablet_width ) {
+				margin-top: 0;
+			}
+		}
+		.newspack-ui__dropdown {
+			* + button,
+			* + .button,
+			* + .woocommerce-Button {
+				margin: 0;
+			}
+		}
+		.newspack-ui__dropdown .newspack-ui__dropdown__toggle {
+			margin: 0;
+			padding: 0;
+		}
+		.product-quantity {
+			margin-right: var(--newspack-ui-spacer-1);
+			+ .button {
+				margin-bottom: 0;
+				margin-top: 0;
+			}
+		}
+		& + *:not(.newspack-ui__modal-container):not(.clear) {
+			margin-top: var(--newspack-ui-spacer-5);
+		}
+	}
+	.is-destructive {
+		color: var(--newspack-ui-color-error-50);
+	}
+	.woocommerce-pagination {
+		.button {
+			margin-bottom: 0;
+		}
+	}
+	.payment-method,
+	.woocommerce-Address {
+		padding: var(--newspack-ui-spacer-3);
+		> h3,
+		> p {
+			margin: 0;
+			overflow-wrap: break-word;
+			word-wrap: break-word;
+		}
+	}
+	.woocommerce-PaymentBox {
+		p {
+			@extend .newspack-ui__font--xs;
+			color: var(--newspack-ui-color-neutral-60);
+			margin: 0 0 var(--newspack-ui-spacer-2);
+			&:last-child,
+			label.checkbox {
+				margin-bottom: 0;
+			}
+		}
+		fieldset {
+			border: none;
+			margin-left: 0;
+			margin-top: var(--newspack-ui-spacer-2);
+			padding: 0 !important;
+			&[style*="display: none"],
+			&[style*="display:none"] {
+				+ p {
+					margin-top: var(--newspack-ui-spacer-2);
+				}
+			}
+		}
+	}
+	#payment-methods {
+		.newspack-ui__dropdown:has( ul > li:only-child .disabled ) {
+			display: none;
+		}
+		.newspack-ui__row > .payment-method {
+			min-height: 106px;
+		}
+	}
+
+	#wcpay-upe-element,
+	.wcpay-upe-element {
+		margin-bottom: var(--newspack-ui-spacer-2);
+		padding: 0;
+	}
+	.select2-container .select2-selection--single {
+		border-color: var(--newspack-ui-color-input-border);
+		height: auto;
+		padding: calc(var(--newspack-ui-spacer-2) - 3px);
+		.select2-selection__arrow {
+			height: 100%;
+		}
+	}
+	.woocommerce form .form-row label,
+	.woocommerce-page form .form-row label {
+		display: inline-flex;
+	}
+	label:has(input[type="checkbox"]):not(.newspack-ui__input-card),
+	label:has(input[type="radio"]):not(.newspack-ui__input-card) {
+		display: inline-flex !important;
+		gap: 0;
+		> :first-child {
+			margin-right: var(--newspack-ui-spacer-1);
+		}
+		input {
+			margin-bottom: calc(var(--newspack-ui-spacer-1) / 2);
+			vertical-align: middle;
+		}
+	}
+	address {
+		font-style: normal;
+	}
+	/* stylelint-disable-next-line selector-id-pattern */
+	#registration-link_field .regenerate-link {
+		margin-left: var(--newspack-ui-spacer-3);
+	}
+}

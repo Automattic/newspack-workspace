@@ -1,0 +1,23 @@
+@use "../mixins/utilities";
+
+a {
+	@include utilities.link-transition;
+
+	color: var(--newspack-theme-color-text-light);
+
+	&:visited {
+		color: inherit;
+	}
+
+	&:hover,
+	&:active {
+		color: var(--newspack-theme-color-text-main);
+		outline: 0;
+		text-decoration: none;
+	}
+
+	&:focus {
+		outline: thin dotted;
+		text-decoration: underline;
+	}
+}

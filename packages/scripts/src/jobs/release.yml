@@ -1,0 +1,21 @@
+description: >
+  Release new version.
+
+executor: default
+
+steps:
+  - checkout_with_workspace
+  - set_node_version
+  - run:
+      name: Install rsync
+      command: sudo apt-get update && sudo apt-get install rsync
+  - run:
+      name: Install PHP packages
+      command: composer install --no-dev --no-scripts
+  - run:
+      name: Release new version
+      command: npm run release
+  - persist_to_workspace:
+      root: ~/
+      paths:
+        - project

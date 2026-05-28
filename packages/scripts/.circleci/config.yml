@@ -1,0 +1,30 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: "circleci/node:latest"
+    steps:
+      - checkout
+      - run:
+          name: Install nvm and use the node version defined in .nvmrc
+          command: |
+            # https://support.circleci.com/hc/en-us/articles/360051656632-Swap-node-version-on-CircleCI-convenience-image
+            set +e
+            wget -qO- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.2/install.sh | bash
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+            nvm install
+            nvm use
+            # https://stackoverflow.com/a/61823737/3772847
+            NODE_DIR=$(dirname $(which node))
+            echo "export PATH=$NODE_DIR:\$PATH" >> $BASH_ENV
+      - run:
+          name: Check node version (should match the version set in project's .nvmrc file)
+          command: node --version
+      - run:
+          name: install
+          command: npm install --legacy-peer-deps
+      - run:
+          name: release
+          command: npm run semantic-release || true

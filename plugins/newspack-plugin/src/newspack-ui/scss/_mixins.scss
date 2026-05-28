@@ -1,0 +1,33 @@
+@use "variables/breakpoints";
+
+@mixin newspack-ui-elevation( $size: 1 ) {
+	@if $size == 1 {
+		box-shadow: 0 1px 10px rgba(0, 0, 0, 0.07);
+	}
+	@else if $size == 2 {
+		box-shadow: 0 2px 20px rgba(0, 0, 0, 0.14);
+	}
+	@else if $size == 3 {
+		box-shadow: 0 3px 30px rgba(0, 0, 0, 0.21);
+	}
+}
+
+@mixin media( $res ) {
+	@if mobile == $res {
+		@media only screen and ( min-width: breakpoints.$mobile_width ) {
+			@content;
+		}
+	}
+
+	@if tablet == $res {
+		@media only screen and ( min-width: breakpoints.$tablet_width ) {
+			@content;
+		}
+	}
+
+	@if desktop == $res {
+		@media only screen and ( min-width: breakpoints.$desktop_width ) {
+			@content;
+		}
+	}
+}

@@ -1,0 +1,11 @@
+github_checks:
+  annotations: false
+
+coverage:
+  status:
+    patch:
+      default:
+        target: 0% # Allow patches not to be covered.
+    project:
+      default:
+        threshold: 1% # Allow coverage to drop by <1%.

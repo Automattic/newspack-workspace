@@ -1,0 +1,56 @@
+/* Directory Archives */
+.archive.newspack-listings-grid {
+	#main {
+		align-content: flex-start;
+		display: flex;
+		flex-wrap: wrap;
+
+		@media ( min-width: 600px ) {
+			margin-left: -1rem;
+			margin-right: -1rem;
+		}
+		@media ( min-width: 782px ) {
+			width: calc(65% + 40px);
+		}
+	}
+
+	.navigation.pagination {
+		width: 100%;
+	}
+
+	.site-main > article {
+		display: block;
+		margin: 0 0 3rem;
+		position: relative;
+		width: 100%;
+
+		.listing-label {
+			position: absolute;
+			top: -0.5rem;
+		}
+
+		.entry-title {
+			font-size: 0.75rem;
+			text-transform: uppercase;
+		}
+
+		@media ( min-width: 600px ) {
+			border: 1rem solid transparent;
+			flex: 1 0 50%;
+			max-width: 50%;
+		}
+		@media ( min-width: 1200px ) {
+			flex: 1 0 33%;
+			max-width: 33%;
+		}
+	}
+
+	.has-post-thumbnail .post-thumbnail {
+		margin-bottom: 0.5rem;
+		max-width: 100%;
+
+		img {
+			object-position: 0 0;
+		}
+	}
+}

@@ -1,0 +1,72 @@
+/**
+ * Plugin Installer
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-card {
+	.newspack-plugin-installer__status {
+		align-items: center;
+		display: flex;
+
+		.newspack-checkbox-icon {
+			margin-left: 4px;
+
+			svg {
+				height: inherit;
+				width: inherit;
+			}
+		}
+	}
+
+	&.newspack-plugin-installer__status-active,
+	&.newspack-plugin-installer__status-error,
+	&.newspack-plugin-installer__status-installing,
+	&.newspack-plugin-installer__status-none {
+		.newspack-action-card__region-top {
+			padding-left: 28px;
+		}
+
+		&.is-small {
+			.newspack-action-card__region-top {
+				padding-left: 20px;
+			}
+		}
+	}
+
+	&.newspack-plugin-installer__status-active {
+		box-shadow: inset 4px 0 0 wp-colors.$alert-green;
+
+		.newspack-plugin-installer__checkbox {
+			background: wp-colors.$alert-green;
+			box-shadow: none;
+		}
+
+		svg {
+			fill: white;
+		}
+	}
+
+	&.newspack-plugin-installer__status-error {
+		box-shadow: inset 4px 0 0 wp-colors.$alert-red;
+	}
+
+	&.newspack-plugin-installer__status-installing,
+	&.newspack-plugin-installer__status-none {
+		box-shadow: inset 4px 0 0 wp-colors.$gray-100;
+	}
+
+	// Is Small
+	&.is-small {
+		.newspack-plugin-installer__status {
+			.newspack-checkbox-icon {
+				height: 16px;
+				width: 16px;
+			}
+		}
+	}
+}
+
+.newspack-plugin-installer_is-waiting {
+	display: flex;
+}

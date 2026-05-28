@@ -1,0 +1,106 @@
+.wp-block-newspack-blocks-author-list {
+	.newspack-blocks__author-list-container {
+		margin: 0;
+
+		.newspack-blocks__author-list-item {
+			container-type: inline-size;
+			container-name: author;
+			margin-bottom: var(--wp--preset--spacing--80);
+
+			&:has(.wp-block-newspack-blocks-author-profile) + .newspack-blocks__author-list-item:has(.wp-block-newspack-blocks-author-profile) {
+				margin-top: calc(-1 * var(--wp--preset--spacing--80));
+				padding-top: var(--wp--preset--spacing--50);
+			}
+
+			&:has(.newspack-blocks__author-list-separator) {
+				margin-bottom: var(--wp--preset--spacing--50);
+			}
+
+			&:last-child {
+				margin-bottom: 0;
+			}
+		}
+
+		&.is-columns {
+			display: grid;
+			gap: var(--wp--preset--spacing--50);
+			grid-template-columns: repeat(2, 1fr);
+
+			.newspack-blocks__author-list-item {
+				margin-bottom: 0;
+
+				&:has(.wp-block-newspack-blocks-author-profile) + .newspack-blocks__author-list-item:has(.wp-block-newspack-blocks-author-profile) {
+					margin-top: 0;
+					padding-top: 0;
+				}
+
+				&:has(.newspack-blocks__author-list-separator) {
+					grid-column: span 2;
+					margin: calc(-1 * var(--wp--preset--spacing--50)) 0 0;
+					padding-top: var(--wp--preset--spacing--80);
+				}
+			}
+
+			@container author (max-width: 300px) {
+				.wp-block-newspack-blocks-author-profile {
+					display: grid;
+					gap: var(--wp--preset--spacing--30);
+
+					&.avatar-right {
+						&::after {
+							display: none;
+						}
+					}
+
+					&__avatar {
+						margin: 0;
+						max-width: 100%;
+						order: 0;
+						overflow: hidden;
+
+						figure {
+							height: auto !important;
+							max-width: 100%;
+						}
+					}
+
+					&__bio {
+						overflow: hidden;
+					}
+				}
+			}
+
+			&.columns-3 {
+				grid-template-columns: repeat(3, 1fr);
+
+				.newspack-blocks__author-list-item:has(.newspack-blocks__author-list-separator) {
+					grid-column: span 3;
+				}
+			}
+
+			&.columns-4 {
+				grid-template-columns: repeat(4, 1fr);
+
+				.newspack-blocks__author-list-item:has(.newspack-blocks__author-list-separator) {
+					grid-column: span 4;
+				}
+			}
+
+			&.columns-5 {
+				grid-template-columns: repeat(5, 1fr);
+
+				.newspack-blocks__author-list-item:has(.newspack-blocks__author-list-separator) {
+					grid-column: span 5;
+				}
+			}
+
+			&.columns-6 {
+				grid-template-columns: repeat(6, 1fr);
+
+				.newspack-blocks__author-list-item:has(.newspack-blocks__author-list-separator) {
+					grid-column: span 6;
+				}
+			}
+		}
+	}
+}

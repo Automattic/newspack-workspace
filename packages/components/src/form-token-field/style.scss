@@ -1,0 +1,32 @@
+/**
+ * Form Token Field
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-form-token-field {
+	width: 100%;
+
+	// Help
+
+	&__help {
+		color: wp-colors.$gray-700;
+		font-size: 12px;
+		margin: 8px 0 0 !important;
+	}
+
+	// Hidden Elements
+
+	&--label-hidden {
+		label {
+			display: none;
+		}
+	}
+
+	&--help-hidden {
+		.components-form-token-field__help,
+		div.i {
+			display: none;
+		}
+	}
+}

@@ -1,0 +1,16 @@
+.newspack-newsletters__layout-preview {
+	border: 2px solid transparent;
+	height: 100%;
+	position: absolute;
+	width: 100%;
+}
+
+.newspack-newsletters-modal__preview .newspack-newsletters__layout-preview {
+	overflow: auto;
+}
+
+.block-editor-block-preview__content-iframe
+.editor-styles-wrapper
+.block-editor-block-list__layout.is-root-container {
+	overflow: hidden;
+}

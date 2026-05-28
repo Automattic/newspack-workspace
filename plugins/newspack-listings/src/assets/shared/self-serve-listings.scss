@@ -1,0 +1,191 @@
+@use "variables.scss";
+
+.newspack-listings__self-serve-form.wpbnbd {
+	border: 1px solid var(--newspack-listings--border);
+
+	.frequencies {
+		font-size: 0.8em;
+		padding-top: 7.65em;
+		padding-top: calc(3 * ( 0.76rem + 1.6em + 1px ));
+		position: relative;
+
+		@media only screen and ( min-width: variables.$tablet_width ) {
+			padding-top: 2.55em;
+			padding-top: calc(0.76rem + 1.6em + 1px);
+		}
+
+		input[type="radio"] {
+			display: none;
+		}
+	}
+
+	.frequency {
+		.freq-label {
+			align-items: center;
+			border: 0 solid var(--newspack-listings--border);
+			border-width: 0 0 1px;
+			color: var(--newspack-listings--text-light);
+			cursor: pointer;
+			display: flex;
+			font-weight: bold;
+			left: 0;
+			padding: 0.38rem 0.76rem;
+			position: absolute;
+			text-overflow: ellipsis;
+			text-transform: uppercase;
+			top: 0;
+			white-space: nowrap;
+			width: 100%;
+			z-index: 1;
+
+			&:focus,
+			&:hover {
+				background: var(--newspack-listings--background-screen);
+				color: var(--newspack-listings--text-main);
+			}
+
+			&::before {
+				border: 2px solid currentcolor;
+				border-radius: 100%;
+				content: "";
+				display: block;
+				height: 20px;
+				padding: 3px;
+				margin-right: 0.25rem;
+				width: 20px;
+			}
+
+			&.listing-subscription {
+				left: 50%;
+				top: calc(0.76rem + 1.6em + 1px);
+
+				@media only screen and ( min-width: variables.$tablet_width ) {
+					border-left-width: 1px;
+					top: 0;
+				}
+			}
+		}
+
+		@media only screen and ( min-width: variables.$tablet_width ) {
+			.freq-label {
+				justify-content: center;
+				width: 50%;
+
+				&::before {
+					display: none;
+				}
+			}
+		}
+	}
+
+	input[type="radio"]:checked {
+		+ .freq-label {
+			color: inherit;
+
+			&::before {
+				background: var(--newspack-listings--text-main);
+				background-clip: content-box;
+			}
+
+			@media only screen and ( min-width: variables.$tablet_width ) {
+				border-bottom-color: transparent;
+			}
+
+			&:hover {
+				background: var(--newspack-listings--background);
+			}
+		}
+	}
+
+	form {
+		display: flex;
+		flex-direction: column;
+	}
+
+	hr {
+		background-color: var(--newspack-listings--border-light);
+		max-width: none;
+	}
+
+	.input-container {
+		display: none;
+		margin: 0.76rem;
+
+		@media only screen and ( min-width: variables.$tablet_width ) {
+			margin: 1.5rem 1.5rem 0.76rem;
+		}
+	}
+
+	input[type="radio"]:checked ~ .input-container {
+		display: block;
+	}
+
+	.listing-details {
+		label {
+			display: inline-block;
+			font-size: 20px;
+		}
+
+		input[type="text"],
+		select {
+			display: block;
+			margin-bottom: 24px;
+			padding: 6px;
+			width: 100%;
+		}
+
+		input[type="checkbox"] {
+			display: inline-block;
+			margin-right: 8px;
+		}
+
+		input,
+		select {
+			font-size: 20px;
+		}
+	}
+
+	p {
+		font-size: 20px;
+
+		&.newspack-listings__help {
+			color: var(--newspack-listings--grey-medium);
+			font-size: 16px;
+			margin-top: 0;
+		}
+	}
+
+	button {
+		align-self: flex-end;
+		background: var(--newspack-listings--secondary);
+		border: none;
+		border-radius: 5px;
+		box-sizing: border-box;
+		color: var(--newspack-listings--background);
+		font-size: 16px;
+		font-weight: bold;
+		outline: none;
+		margin: 24px 32px;
+		padding-left: 20px;
+		padding-right: 20px;
+
+		span {
+			line-height: 48px;
+		}
+	}
+
+	&.single-only,
+	&.subscription-only {
+		.frequencies {
+			padding-top: 0;
+
+			.freq-label {
+				display: none;
+			}
+		}
+
+		.input-container {
+			display: block;
+		}
+	}
+}

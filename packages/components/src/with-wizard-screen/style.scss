@@ -1,0 +1,227 @@
+/**
+ * With Wizard Screen
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "../../../colors/colors.module" as colors;
+
+.newspack-wizard {
+	// Color
+	--wp-admin-theme-color: #{colors.$primary-600};
+	--wp-admin-theme-color--rgb: #{colors.$primary-600--rgb};
+	--wp-admin-theme-color-darker-10: #{colors.$primary-700};
+	--wp-admin-theme-color-darker-10--rgb: #{colors.$primary-700--rgb};
+	--wp-admin-theme-color-darker-20: #{colors.$primary-800};
+	--wp-admin-theme-color-darker-20--rgb: #{colors.$primary-800--rgb};
+	--wp-admin-theme-color-lighter-10: #{colors.$primary-000};
+	--wp-admin-theme-color-lighter-10--rgb: #{colors.$primary-000--rgb};
+
+	color: wp-colors.$gray-900;
+
+	// Headings
+	h1,
+	h2,
+	h3 {
+		color: inherit;
+	}
+
+	h1 {
+		line-height: 1.4;
+	}
+
+	// Links
+	a {
+		color: var(--wp-admin-theme-color);
+
+		&:active,
+		&:focus,
+		&:hover {
+			color: var(--wp-admin-theme-color-darker-10);
+		}
+
+		&:focus {
+			box-shadow: 0 0 0 var(--wp-admin-border-width-focus) var(--wp-admin-theme-color);
+			outline: 3px solid transparent;
+		}
+	}
+
+	&__header {
+		align-items: center;
+		background: white;
+		border-bottom: 1px solid wp-colors.$gray-300;
+		display: flex;
+		.newspack-wizard__fixed-header & {
+			position: sticky;
+			top: 0;
+			width: 100%;
+			z-index: 1000;
+			.admin-bar & {
+				@media only screen and ( min-width: 601px ) {
+					top: 46px;
+				}
+				@media only screen and ( min-width: 782px ) {
+					top: 32px;
+				}
+			}
+		}
+		&__inner {
+			flex: 1 1 100%;
+		}
+		&__actions {
+			align-items: center;
+			display: flex;
+			gap: 8px;
+			justify-content: flex-end;
+			padding: 0 24px 0 0;
+			> .newspack-wizard__header__actions__main {
+				display: none;
+			}
+			@media only screen and ( min-width: 782px ) {
+				flex: 1 1 auto;
+				> .newspack-wizard__header__actions__main {
+					display: flex;
+				}
+				&__more {
+					&--primary-only,
+					.newspack-wizard__header__actions__more__main {
+						display: none;
+					}
+				}
+			}
+		}
+	}
+
+	&__main {
+		overflow-x: hidden;
+		padding-bottom: 1px; /* Prevents borders from being cut off */
+	}
+
+
+	&__title {
+		align-items: center;
+		display: flex;
+
+		h2 {
+			margin: 0;
+			padding: 0;
+		}
+
+		> div {
+			align-items: baseline;
+			display: flex;
+			padding: 0 24px;
+
+			> span {
+				color: wp-colors.$gray-700;
+				display: none;
+				margin-left: 8px;
+
+				@media screen and ( min-width: 744px ) {
+					display: block;
+				}
+			}
+		}
+
+		svg {
+			fill: white;
+			margin: 0 !important;
+
+			&.newspack-icon {
+				flex: 0 0 36px;
+				margin-bottom: -1px !important;
+			}
+
+			&:not(.newspack-icon) {
+				background: var(--wp-admin-theme-color);
+				left: 50%;
+				margin: -28px 0 0 -28px !important;
+				opacity: 0;
+				padding: 10px;
+				position: absolute;
+				top: 50%;
+				transition: opacity 125ms ease-in-out;
+			}
+		}
+
+		.components-button.has-icon {
+			padding: 0;
+			position: relative;
+
+			&:hover {
+				svg {
+					opacity: 1;
+				}
+			}
+
+			&:focus-visible {
+				outline: none !important;
+
+				&::before {
+					border: 2px solid white;
+					border-radius: 2px;
+					content: "";
+					display: block;
+					inset: 6px 6px 5px;
+					position: absolute;
+				}
+			}
+		}
+	}
+
+	&__section-header {
+		margin: 0 auto 32px;
+		max-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
+		&:not(.newspack-section-header--has-primary-action) {
+			@media (min-width: 782px) {
+				.newspack-section-header__title-container + p {
+					max-width: 50%;
+				}
+			}
+		}
+	}
+
+	&__content {
+		margin: 0 auto;
+		max-width: calc(calc(var(--newspack-wizard-section-space) * 2) + var(--newspack-wizard-section-width));
+		padding: calc(var(--newspack-wizard-section-space) * 2) var(--newspack-wizard-section-space) 0;
+
+		// Typography
+
+		strong {
+			font-weight: bold;
+		}
+
+		small {
+			font-size: 12px;
+			line-height: 1.4;
+		}
+
+		// Thematic Break
+
+		hr:not(.newspack-divider) {
+			background: wp-colors.$gray-300;
+			border: 0;
+			height: 1px;
+			margin: 32px 0;
+
+			@media screen and ( min-width: 744px ) {
+				margin: 64px 0;
+			}
+		}
+		&:not(.newspack-wizard__content--full-width) {
+			.newspack-dataviews {
+				margin-left: -24px;
+				margin-right: -24px;
+				@media (min-width: 380px) {
+					margin-left: -48px;
+					margin-right: -48px;
+				}
+			}
+		}
+	}
+
+	&__above-header {
+		border-radius: 0;
+		margin: 0;
+	}
+}

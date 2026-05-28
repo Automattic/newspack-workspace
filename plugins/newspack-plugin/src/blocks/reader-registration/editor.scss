@@ -1,0 +1,168 @@
+@use "./style";
+@use "../../reader-activation-auth/style" as auth;
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-registration {
+	&__state-bar {
+		align-items: center;
+		background: white;
+		border: 1px solid wp-colors.$gray-900;
+		border-radius: 2px;
+		display: none;
+		font-family: system-ui, sans-serif;
+		flex-wrap: wrap;
+		font-size: 13px;
+		gap: 8px;
+		justify-content: space-between;
+		line-height: 1.4;
+		margin-bottom: 12px;
+		padding: 7px 8px;
+		button {
+			background: none !important;
+			border-radius: 2px !important;
+			box-shadow: none !important;
+			color: wp-colors.$gray-900 !important;
+			height: 32px !important;
+			&[data-is-active="true"] {
+				background: wp-colors.$gray-900 !important;
+				color: white !important;
+			}
+			&:hover:not([data-is-active="true"]) {
+				color: var(--wp-admin-theme-color) !important;
+			}
+		}
+		span {
+			font-weight: 500;
+		}
+		div {
+			display: flex;
+			gap: 4px;
+		}
+	}
+
+	& &__title {
+		font-family: var(--newspack-ui-font-family);
+	}
+
+	&__main {
+		gap: 0;
+
+		button[class*="oauth"] {
+			svg {
+				display: block;
+			}
+		}
+	}
+
+	&__form-content {
+		&:not(:has(.newspack-ui__helper-text)) {
+			.newspack-ui__input-card {
+				border-bottom-width: 0 !important;
+				border-radius: 0 !important;
+				border-top-width: 0 !important;
+
+				strong {
+					font-weight: 400;
+				}
+
+				&:has(input[type="checkbox"]:checked) {
+					background: transparent;
+					border-color: var(--newspack-ui-color-border);
+				}
+
+				&:first-of-type {
+					border-top-left-radius: var(--newspack-ui-border-radius-m) !important;
+					border-top-right-radius: var(--newspack-ui-border-radius-m) !important;
+					border-top-width: 1px !important;
+				}
+
+				&:last-of-type {
+					border-bottom-left-radius: var(--newspack-ui-border-radius-m) !important;
+					border-bottom-right-radius: var(--newspack-ui-border-radius-m) !important;
+					border-bottom-width: 1px !important;
+				}
+
+				+ .newspack-ui__input-card {
+					margin-top: calc(-1 * var(--newspack-ui-spacer-2)) !important;
+					padding-top: 0 !important;
+				}
+			}
+		}
+	}
+
+	&__inputs,
+	&__have-account {
+		.newspack-ui__button {
+			cursor: default;
+			font-family: var(--newspack-ui-font-family) !important;
+
+			&:focus {
+				box-shadow: none;
+				outline: unset;
+			}
+		}
+
+		.rich-text [data-rich-text-placeholder] {
+			width: 100%;
+
+			&::after {
+				opacity: 1;
+			}
+		}
+	}
+
+	&__help-text {
+		.rich-text {
+			font-size: var(--newspack-ui-font-size-xs);
+			line-height: var(--newspack-ui-line-height-xs);
+		}
+	}
+
+	&__response {
+		display: none;
+	}
+
+	button:focus,
+	a:focus {
+		outline: none !important;
+	}
+
+	.newspack-ui__box--success {
+		font-size: var(--newspack-ui-font-size-s);
+		font-weight: 600;
+		line-height: var(--newspack-ui-line-height-s);
+		margin: 0 !important;
+
+		.block-list-appender {
+			position: relative;
+			width: 100%;
+		}
+
+		p {
+			font-size: inherit;
+			font-weight: inherit;
+			line-height: inherit;
+		}
+
+		> * {
+			margin-bottom: var(--newspack-ui-spacer-2);
+			margin-top: var(--newspack-ui-spacer-2);
+		}
+
+		> :first-child {
+			margin-top: 0;
+		}
+
+		> :last-child {
+			margin-bottom: 0;
+		}
+	}
+}
+
+.wp-block-newspack-reader-registration {
+	&.is-selected {
+		.newspack-registration__state-bar {
+			display: flex;
+		}
+	}
+}

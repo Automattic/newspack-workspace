@@ -1,0 +1,46 @@
+/**
+ * Footer
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-footer {
+	background: white;
+	border: 0 solid wp-colors.$gray-300;
+	border-width: 1px 0;
+	bottom: 0;
+	color: wp-colors.$gray-700;
+	display: flex;
+	font-size: 12px;
+	left: 0;
+	line-height: 16px;
+	position: absolute;
+	right: 0;
+
+	@media screen and ( min-width: 783px ) {
+		bottom: 40px;
+	}
+
+	ul {
+		display: flex;
+		flex-wrap: wrap;
+		margin: 0;
+		padding: 7px 8px;
+	}
+
+	li {
+		margin: 8px;
+
+		a {
+			align-items: flex-end;
+			color: inherit;
+			display: flex;
+
+			&:active,
+			&:focus,
+			&:hover {
+				color: wp-colors.$gray-900;
+			}
+		}
+	}
+}

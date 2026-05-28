@@ -1,0 +1,58 @@
+@use "../shared/curated-list";
+
+.newspack-listings {
+	&__curated-list {
+		position: relative;
+		transition: opacity 0.25s ease-in-out;
+
+		.error,
+		.loading {
+			display: none;
+		}
+
+		&.is-error .error {
+			display: block;
+		}
+
+		&.is-loading {
+			cursor: not-allowed;
+			opacity: 0.5;
+			pointer-events: none;
+
+			/* stylelint-disable selector-type-no-unknown  */
+			amp-script & {
+				cursor: not-allowed;
+				opacity: 0.5;
+				pointer-events: none;
+			}
+		}
+	}
+
+	&__list-container {
+		list-style: none;
+		margin: 1rem 0;
+		padding: 0;
+
+		.newspack-listings__listing {
+			padding: 1rem 0;
+		}
+
+		.newspack-listings__listing + .newspack-listings__listing {
+			border-top: 1px solid var(--newspack-listings--border-dark);
+		}
+
+		.has-dark-background & {
+			.newspack-listings__listing + .newspack-listings__listing {
+				border-top-color: var(--newspack-listings--border-light);
+			}
+		}
+	}
+
+	&__load-more-button {
+		display: none;
+
+		.has-more-button & {
+			display: block;
+		}
+	}
+}

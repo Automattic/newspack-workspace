@@ -1,0 +1,915 @@
+# Copyright (C) 2026 Automattic
+# This file is distributed under the GNU General Public License v2 or later.
+msgid ""
+msgstr ""
+"Project-Id-Version: Newspack Block Theme 1.28.1\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/theme/newspack-block-theme\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-05-27T09:03:27+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: newspack-block-theme\n"
+
+#. Theme Name of the theme
+#: dist
+msgid "Newspack Block Theme"
+msgstr ""
+
+#. Theme URI of the theme
+#: dist
+msgid "https://github.com/automattic/newspack-block-theme"
+msgstr ""
+
+#. Description of the theme
+#: dist
+msgid "A forward-looking news theme designed and developed to be highly customizable with the WordPress block editor. Brought to you by Newspack: https://newspack.com"
+msgstr ""
+
+#. Author of the theme
+#: dist
+msgid "Automattic"
+msgstr ""
+
+#. Author URI of the theme
+#: dist
+msgid "https://newspack.com"
+msgstr ""
+
+#: includes/class-core.php:67
+msgid "Close Menu"
+msgstr ""
+
+#: includes/class-core.php:68
+msgid "Close Search"
+msgstr ""
+
+#: includes/class-core.php:69
+msgid "You are posting comments too quickly. Please wait a moment before trying again."
+msgstr ""
+
+#: includes/class-core.php:124
+msgid "Single Newsletter"
+msgstr ""
+
+#: includes/class-core.php:125
+msgid "Newsletter Archive"
+msgstr ""
+
+#: includes/class-core.php:152
+msgid "Search posts, categories, authors, ..."
+msgstr ""
+
+#: includes/class-patterns.php:125
+msgid "Newspack Theme"
+msgstr ""
+
+#: includes/class-patterns.php:126
+msgid "Patterns bundled with the Newspack Block Theme."
+msgstr ""
+
+#: includes/class-patterns.php:133
+msgid "Newspack Theme - Author Bio"
+msgstr ""
+
+#: includes/class-patterns.php:134
+msgid "Patterns bundled with the Newspack Block Theme, specifically built for the author biography."
+msgstr ""
+
+#: includes/class-patterns.php:141
+msgid "Newspack Theme - Post Header"
+msgstr ""
+
+#: includes/class-patterns.php:142
+msgid "Patterns bundled with the Newspack Block Theme, specifically built for the post header."
+msgstr ""
+
+#: includes/class-patterns.php:149
+msgid "Newspack Theme - Post Meta"
+msgstr ""
+
+#: includes/class-patterns.php:150
+msgid "Patterns bundled with the Newspack Block Theme, specifically built for the post meta."
+msgstr ""
+
+#: patterns/404.php
+msgctxt "Pattern title"
+msgid "A 404 page"
+msgstr ""
+
+#: patterns/404.php:13
+msgid "Page not found"
+msgstr ""
+
+#: patterns/404.php:17
+msgid "It looks like nothing was found at this location. Maybe try a search?"
+msgstr ""
+
+#: patterns/author-bio/author-bio-avatar.php
+msgctxt "Pattern title"
+msgid "Author Bio with Avatar"
+msgstr ""
+
+#: patterns/author-bio/author-bio-avatar.php:15
+#: patterns/author-bio/author-bio.php:15
+msgid "Author Bio"
+msgstr ""
+
+#: patterns/author-bio/author-bio-avatar.php:28
+#: patterns/author-bio/author-bio.php:28
+#: patterns/footer/footer-desktop-style-1.php:18
+#: patterns/footer/footer-desktop-style-2.php:18
+#: patterns/footer/footer-desktop-style-3.php:18
+#: patterns/footer/footer-desktop-style-4.php:18
+#: patterns/footer/footer-desktop-style-5.php:18
+#: patterns/footer/footer-mobile-style-1.php:19
+msgid "Content"
+msgstr ""
+
+#: patterns/author-bio/author-bio.php
+msgctxt "Pattern title"
+msgid "Author Bio"
+msgstr ""
+
+#: patterns/comments.php
+msgctxt "Pattern title"
+msgid "Comments"
+msgstr ""
+
+#: patterns/footer/footer-desktop-style-1.php
+msgctxt "Pattern title"
+msgid "Footer (Desktop) - Style 1"
+msgstr ""
+
+#: patterns/footer/footer-desktop-style-1.php:12
+#: patterns/footer/footer-desktop-style-2.php:12
+#: patterns/footer/footer-desktop-style-3.php:12
+#: patterns/footer/footer-desktop-style-4.php:12
+#: patterns/footer/footer-desktop-style-5.php:12
+#: patterns/footer/footer-mobile-style-1.php:13
+msgid "Footer"
+msgstr ""
+
+#: patterns/footer/footer-desktop-style-1.php:22
+#: patterns/footer/footer-desktop-style-2.php:38
+#: patterns/footer/footer-mobile-style-1.php:23
+msgid "Description"
+msgstr ""
+
+#: patterns/footer/footer-desktop-style-1.php:25
+#: patterns/footer/footer-desktop-style-2.php:41
+#: patterns/footer/footer-desktop-style-4.php:27
+#: patterns/footer/footer-desktop-style-5.php:27
+#: patterns/footer/footer-mobile-style-1.php:26
+msgid "Our online newspaper delivers the latest news and insightful analysis. Our experienced journalists ensure accurate and impartial reporting. Stay informed with our engaging and informative articles."
+msgstr ""
+
+#: patterns/footer/footer-desktop-style-1.php:44
+#: patterns/footer/footer-desktop-style-2.php:52
+#: patterns/footer/footer-desktop-style-3.php:72
+#: patterns/footer/footer-desktop-style-4.php:71
+#: patterns/footer/footer-desktop-style-5.php:73
+#: patterns/footer/footer-mobile-style-1.php:45
+msgid "Credits"
+msgstr ""
+
+#: patterns/footer/footer-desktop-style-1.php:52
+#: patterns/footer/footer-desktop-style-2.php:60
+#: patterns/footer/footer-desktop-style-3.php:80
+#: patterns/footer/footer-desktop-style-4.php:79
+#: patterns/footer/footer-desktop-style-5.php:81
+#: patterns/footer/footer-mobile-style-1.php:53
+msgid "Copyright"
+msgstr ""
+
+#: patterns/footer/footer-desktop-style-1.php:60
+#: patterns/footer/footer-desktop-style-2.php:68
+#: patterns/footer/footer-desktop-style-3.php:88
+#: patterns/footer/footer-desktop-style-4.php:87
+#: patterns/footer/footer-desktop-style-5.php:89
+#: patterns/footer/footer-mobile-style-1.php:61
+msgid "Powered By"
+msgstr ""
+
+#: patterns/footer/footer-desktop-style-1.php:61
+#: patterns/footer/footer-desktop-style-2.php:69
+#: patterns/footer/footer-desktop-style-3.php:89
+#: patterns/footer/footer-desktop-style-4.php:88
+#: patterns/footer/footer-desktop-style-5.php:90
+#: patterns/footer/footer-mobile-style-1.php:62
+msgid "Powered by Newspack"
+msgstr ""
+
+#: patterns/footer/footer-desktop-style-2.php
+msgctxt "Pattern title"
+msgid "Footer (Desktop) - Style 2"
+msgstr ""
+
+#: patterns/footer/footer-desktop-style-3.php
+msgctxt "Pattern title"
+msgid "Footer (Desktop) - Style 3"
+msgstr ""
+
+#: patterns/footer/footer-desktop-style-3.php:43
+msgid "Links"
+msgstr ""
+
+#: patterns/footer/footer-desktop-style-3.php:53
+msgid "About"
+msgstr ""
+
+#: patterns/footer/footer-desktop-style-3.php:63
+msgid "Join"
+msgstr ""
+
+#: patterns/footer/footer-desktop-style-4.php
+msgctxt "Pattern title"
+msgid "Footer (Desktop) - Style 4"
+msgstr ""
+
+#: patterns/footer/footer-desktop-style-5.php
+msgctxt "Pattern title"
+msgid "Footer (Desktop) - Style 5"
+msgstr ""
+
+#: patterns/footer/footer-mobile-style-1.php
+msgctxt "Pattern title"
+msgid "Footer (Mobile) - Style 1"
+msgstr ""
+
+#: patterns/header/header-desktop-style-1.php
+msgctxt "Pattern title"
+msgid "Header (Desktop) - Style 1"
+msgstr ""
+
+#: patterns/header/header-desktop-style-1.php:12
+#: patterns/header/header-desktop-style-2.php:12
+#: patterns/header/header-desktop-style-3.php:12
+#: patterns/header/header-desktop-style-4.php:12
+#: patterns/header/header-desktop-style-5.php:12
+msgid "Header (Desktop)"
+msgstr ""
+
+#: patterns/header/header-desktop-style-2.php
+msgctxt "Pattern title"
+msgid "Header (Desktop) - Style 2"
+msgstr ""
+
+#: patterns/header/header-desktop-style-2.php:42
+#: patterns/header/header-desktop-style-3.php:15
+msgid "Menu"
+msgstr ""
+
+#: patterns/header/header-desktop-style-2.php:45
+#: patterns/header/header-desktop-style-3.php:26
+#: patterns/header/header-desktop-style-4.php:20
+msgid "MENU"
+msgstr ""
+
+#: patterns/header/header-desktop-style-3.php
+msgctxt "Pattern title"
+msgid "Header (Desktop) - Style 3"
+msgstr ""
+
+#: patterns/header/header-desktop-style-4.php
+msgctxt "Pattern title"
+msgid "Header (Desktop) - Style 4"
+msgstr ""
+
+#: patterns/header/header-desktop-style-4.php:39
+msgid "Donate"
+msgstr ""
+
+#: patterns/header/header-desktop-style-5.php
+msgctxt "Pattern title"
+msgid "Header (Desktop) - Style 5"
+msgstr ""
+
+#: patterns/header/header-desktop-style-5.php:15
+msgid "Top"
+msgstr ""
+
+#: patterns/header/header-desktop-style-5.php:33
+msgid "Middle"
+msgstr ""
+
+#: patterns/header/header-desktop-style-5.php:47
+msgid "Bottom"
+msgstr ""
+
+#: patterns/header/header-mobile-style-1.php
+msgctxt "Pattern title"
+msgid "Header (Mobile) - Style 1"
+msgstr ""
+
+#: patterns/header/header-mobile-style-1.php:13
+#: patterns/header/header-mobile-style-2.php:13
+#: patterns/header/header-mobile-style-3.php:13
+#: patterns/header/header-mobile-style-4.php:13
+#: patterns/header/header-mobile-style-5.php:13
+#: patterns/header/header-mobile-style-6.php:13
+msgid "Header (Mobile)"
+msgstr ""
+
+#: patterns/header/header-mobile-style-2.php
+msgctxt "Pattern title"
+msgid "Header (Mobile) - Style 2"
+msgstr ""
+
+#: patterns/header/header-mobile-style-3.php
+msgctxt "Pattern title"
+msgid "Header (Mobile) - Style 3"
+msgstr ""
+
+#: patterns/header/header-mobile-style-4.php
+msgctxt "Pattern title"
+msgid "Header (Mobile) - Style 4"
+msgstr ""
+
+#: patterns/header/header-mobile-style-5.php
+msgctxt "Pattern title"
+msgid "Header (Mobile) - Style 5"
+msgstr ""
+
+#: patterns/header/header-mobile-style-6.php
+msgctxt "Pattern title"
+msgid "Header (Mobile) - Style 6"
+msgstr ""
+
+#: patterns/hidden-no-results-content.php
+msgctxt "Pattern title"
+msgid "Hidden No Results Content"
+msgstr ""
+
+#: patterns/hidden-no-results-content.php:16
+msgctxt "Message explaining that there are no results returned from a search"
+msgid "Sorry, but nothing matched your search terms. Please try again with some different keywords."
+msgstr ""
+
+#: patterns/hidden-no-results-content.php:21
+msgid "Latest articles"
+msgstr ""
+
+#: patterns/plugins/jetpack/sharing-buttons-center.php
+#: patterns/plugins/jetpack/sharing-buttons.php
+msgctxt "Pattern title"
+msgid "Jetpack sharing buttons"
+msgstr ""
+
+#: patterns/post-header/post-header-style-1-default.php
+msgctxt "Pattern title"
+msgid "Post Header - Style 1"
+msgstr ""
+
+#: patterns/post-header/post-header-style-1-default.php:14
+#: patterns/post-header/post-header-style-1-wide.php:13
+#: patterns/post-header/post-header-style-2-default.php:14
+#: patterns/post-header/post-header-style-2-wide.php:13
+msgid "Post Header"
+msgstr ""
+
+#: patterns/post-header/post-header-style-1-wide.php
+msgctxt "Pattern title"
+msgid "Post Header - Style 1 (Wide)"
+msgstr ""
+
+#: patterns/post-header/post-header-style-2-default.php
+msgctxt "Pattern title"
+msgid "Post Header - Style 2"
+msgstr ""
+
+#: patterns/post-header/post-header-style-2-wide.php
+msgctxt "Pattern title"
+msgid "Post Header - Style 2 (Wide)"
+msgstr ""
+
+#: patterns/post-meta/post-meta-compact.php
+msgctxt "Pattern title"
+msgid "Compact Byline and Date"
+msgstr ""
+
+#: patterns/post-meta/post-meta-multiple-lines-avatar.php
+msgctxt "Pattern title"
+msgid "Avatar, Byline and Date on multiple lines"
+msgstr ""
+
+#: patterns/post-meta/post-meta-multiple-lines.php
+msgctxt "Pattern title"
+msgid "Byline and Date on multiple lines"
+msgstr ""
+
+#: patterns/post-meta/post-meta-single-line-avatar.php
+msgctxt "Pattern title"
+msgid "Avatar, Byline and Date on the same line"
+msgstr ""
+
+#: patterns/post-meta/post-meta-single-line.php
+msgctxt "Pattern title"
+msgid "Byline and Date on the same line"
+msgstr ""
+
+#: dist/subtitle-block-site-editor.js:1
+#: includes/blocks/subtitle-block/site-editor.js:22
+msgid "Article Subtitle"
+msgstr ""
+
+#: dist/subtitle-block-site-editor.js:1
+#: includes/blocks/subtitle-block/site-editor.js:17
+msgid "Article subtitle"
+msgstr ""
+
+#: includes/blocks/subtitle-block/block.json
+msgctxt "block title"
+msgid "Article Subtitle"
+msgstr ""
+
+#: theme.json
+#: styles/02-arc.json
+#: styles/03-arc-alt.json
+#: styles/04-bulletin.json
+#: styles/05-bulletin-alt.json
+#: styles/06-foundry.json
+#: styles/07-foundry-alt.json
+#: styles/08-ledger.json
+#: styles/09-ledger-alt.json
+#: styles/10-nocturne.json
+#: styles/11-nocturne-alt.json
+msgctxt "Color name"
+msgid "Accent"
+msgstr ""
+
+#: theme.json
+#: styles/02-arc.json
+#: styles/03-arc-alt.json
+#: styles/04-bulletin.json
+#: styles/05-bulletin-alt.json
+#: styles/06-foundry.json
+#: styles/07-foundry-alt.json
+#: styles/08-ledger.json
+#: styles/09-ledger-alt.json
+#: styles/10-nocturne.json
+#: styles/11-nocturne-alt.json
+msgctxt "Color name"
+msgid "Accent / Two"
+msgstr ""
+
+#: theme.json
+#: styles/02-arc.json
+#: styles/03-arc-alt.json
+#: styles/04-bulletin.json
+#: styles/05-bulletin-alt.json
+#: styles/06-foundry.json
+#: styles/07-foundry-alt.json
+#: styles/08-ledger.json
+#: styles/09-ledger-alt.json
+#: styles/10-nocturne.json
+#: styles/11-nocturne-alt.json
+msgctxt "Color name"
+msgid "Accent / Three"
+msgstr ""
+
+#: theme.json
+#: styles/02-arc.json
+#: styles/03-arc-alt.json
+#: styles/04-bulletin.json
+#: styles/05-bulletin-alt.json
+#: styles/06-foundry.json
+#: styles/07-foundry-alt.json
+#: styles/08-ledger.json
+#: styles/09-ledger-alt.json
+#: styles/10-nocturne.json
+#: styles/11-nocturne-alt.json
+msgctxt "Color name"
+msgid "Base"
+msgstr ""
+
+#: theme.json
+#: styles/02-arc.json
+#: styles/03-arc-alt.json
+#: styles/04-bulletin.json
+#: styles/05-bulletin-alt.json
+#: styles/06-foundry.json
+#: styles/07-foundry-alt.json
+#: styles/08-ledger.json
+#: styles/09-ledger-alt.json
+#: styles/10-nocturne.json
+#: styles/11-nocturne-alt.json
+msgctxt "Color name"
+msgid "Base / Two"
+msgstr ""
+
+#: theme.json
+#: styles/02-arc.json
+#: styles/03-arc-alt.json
+#: styles/04-bulletin.json
+#: styles/05-bulletin-alt.json
+#: styles/06-foundry.json
+#: styles/07-foundry-alt.json
+#: styles/08-ledger.json
+#: styles/09-ledger-alt.json
+#: styles/10-nocturne.json
+#: styles/11-nocturne-alt.json
+msgctxt "Color name"
+msgid "Base / Three"
+msgstr ""
+
+#: theme.json
+#: styles/02-arc.json
+#: styles/03-arc-alt.json
+#: styles/04-bulletin.json
+#: styles/05-bulletin-alt.json
+#: styles/06-foundry.json
+#: styles/07-foundry-alt.json
+#: styles/08-ledger.json
+#: styles/09-ledger-alt.json
+#: styles/10-nocturne.json
+#: styles/11-nocturne-alt.json
+msgctxt "Color name"
+msgid "Base / Four"
+msgstr ""
+
+#: theme.json
+#: styles/02-arc.json
+#: styles/03-arc-alt.json
+#: styles/04-bulletin.json
+#: styles/05-bulletin-alt.json
+#: styles/06-foundry.json
+#: styles/07-foundry-alt.json
+#: styles/08-ledger.json
+#: styles/09-ledger-alt.json
+#: styles/10-nocturne.json
+#: styles/11-nocturne-alt.json
+msgctxt "Color name"
+msgid "Base / Five"
+msgstr ""
+
+#: theme.json
+#: styles/02-arc.json
+#: styles/03-arc-alt.json
+#: styles/04-bulletin.json
+#: styles/05-bulletin-alt.json
+#: styles/06-foundry.json
+#: styles/07-foundry-alt.json
+#: styles/08-ledger.json
+#: styles/09-ledger-alt.json
+#: styles/10-nocturne.json
+#: styles/11-nocturne-alt.json
+msgctxt "Color name"
+msgid "Contrast"
+msgstr ""
+
+#: theme.json
+#: styles/02-arc.json
+#: styles/03-arc-alt.json
+#: styles/04-bulletin.json
+#: styles/05-bulletin-alt.json
+#: styles/06-foundry.json
+#: styles/07-foundry-alt.json
+#: styles/08-ledger.json
+#: styles/09-ledger-alt.json
+#: styles/10-nocturne.json
+#: styles/11-nocturne-alt.json
+msgctxt "Color name"
+msgid "Contrast / Two"
+msgstr ""
+
+#: theme.json
+#: styles/02-arc.json
+#: styles/03-arc-alt.json
+#: styles/04-bulletin.json
+#: styles/05-bulletin-alt.json
+#: styles/06-foundry.json
+#: styles/07-foundry-alt.json
+#: styles/08-ledger.json
+#: styles/09-ledger-alt.json
+#: styles/10-nocturne.json
+#: styles/11-nocturne-alt.json
+msgctxt "Color name"
+msgid "Contrast / Three"
+msgstr ""
+
+#: theme.json
+msgctxt "Shadow name"
+msgid "Elevation 1"
+msgstr ""
+
+#: theme.json
+msgctxt "Shadow name"
+msgid "Elevation 2"
+msgstr ""
+
+#: theme.json
+msgctxt "Shadow name"
+msgid "Elevation 3"
+msgstr ""
+
+#: theme.json
+msgctxt "Shadow name"
+msgid "Elevation 4"
+msgstr ""
+
+#: theme.json
+msgctxt "Shadow name"
+msgid "inset 1"
+msgstr ""
+
+#: theme.json
+msgctxt "Shadow name"
+msgid "inset 2"
+msgstr ""
+
+#: theme.json
+msgctxt "Space size name"
+msgid "1"
+msgstr ""
+
+#: theme.json
+msgctxt "Space size name"
+msgid "2"
+msgstr ""
+
+#: theme.json
+msgctxt "Space size name"
+msgid "3"
+msgstr ""
+
+#: theme.json
+msgctxt "Space size name"
+msgid "4"
+msgstr ""
+
+#: theme.json
+msgctxt "Space size name"
+msgid "5"
+msgstr ""
+
+#: theme.json
+msgctxt "Space size name"
+msgid "6"
+msgstr ""
+
+#: theme.json
+msgctxt "Space size name"
+msgid "7"
+msgstr ""
+
+#: theme.json
+#: styles/02-arc.json
+#: styles/03-arc-alt.json
+#: styles/04-bulletin.json
+#: styles/05-bulletin-alt.json
+#: styles/06-foundry.json
+#: styles/07-foundry-alt.json
+#: styles/08-ledger.json
+#: styles/09-ledger-alt.json
+#: styles/10-nocturne.json
+#: styles/11-nocturne-alt.json
+msgctxt "Font family name"
+msgid "Inter"
+msgstr ""
+
+#: theme.json
+msgctxt "Font family name"
+msgid "JetBrainsMono"
+msgstr ""
+
+#: theme.json
+msgctxt "Font size name"
+msgid "2X-Small"
+msgstr ""
+
+#: theme.json
+msgctxt "Font size name"
+msgid "X-Small"
+msgstr ""
+
+#: theme.json
+msgctxt "Font size name"
+msgid "Small"
+msgstr ""
+
+#: theme.json
+msgctxt "Font size name"
+msgid "Medium"
+msgstr ""
+
+#: theme.json
+msgctxt "Font size name"
+msgid "Large"
+msgstr ""
+
+#: theme.json
+msgctxt "Font size name"
+msgid "X-Large"
+msgstr ""
+
+#: theme.json
+msgctxt "Font size name"
+msgid "2X-Large"
+msgstr ""
+
+#: theme.json
+msgctxt "Font size name"
+msgid "3X-Large"
+msgstr ""
+
+#: theme.json
+msgctxt "Font size name"
+msgid "4X-Large"
+msgstr ""
+
+#: theme.json
+msgctxt "Font size name"
+msgid "5X-Large"
+msgstr ""
+
+#: theme.json
+msgctxt "Font size name"
+msgid "6X-Large"
+msgstr ""
+
+#: theme.json
+msgctxt "Custom template name"
+msgid "Page (Wide)"
+msgstr ""
+
+#: theme.json
+msgctxt "Custom template name"
+msgid "Page - Blank"
+msgstr ""
+
+#: theme.json
+msgctxt "Custom template name"
+msgid "Page - Blank with Footer"
+msgstr ""
+
+#: theme.json
+msgctxt "Custom template name"
+msgid "Page - No Title"
+msgstr ""
+
+#: theme.json
+msgctxt "Custom template name"
+msgid "Page (Wide) - No Title"
+msgstr ""
+
+#: theme.json
+msgctxt "Custom template name"
+msgid "Single - Large Image (964px)"
+msgstr ""
+
+#: theme.json
+msgctxt "Custom template name"
+msgid "Single - Wide Image (1296px)"
+msgstr ""
+
+#: theme.json
+msgctxt "Custom template name"
+msgid "Single - Full Width Image"
+msgstr ""
+
+#: theme.json
+msgctxt "Custom template name"
+msgid "Single - 50/50 Image/Header"
+msgstr ""
+
+#: theme.json
+msgctxt "Custom template name"
+msgid "Single - Sidebar Layout"
+msgstr ""
+
+#: theme.json
+msgctxt "Template part name"
+msgid "Header"
+msgstr ""
+
+#: theme.json
+msgctxt "Template part name"
+msgid "Header (Desktop)"
+msgstr ""
+
+#: theme.json
+msgctxt "Template part name"
+msgid "Header (Mobile)"
+msgstr ""
+
+#: theme.json
+msgctxt "Template part name"
+msgid "Footer"
+msgstr ""
+
+#: theme.json
+msgctxt "Template part name"
+msgid "Footer (Desktop)"
+msgstr ""
+
+#: theme.json
+msgctxt "Template part name"
+msgid "Footer (Mobile)"
+msgstr ""
+
+#: styles/01-theme-alt.json
+msgctxt "Style variation name"
+msgid "Default alt"
+msgstr ""
+
+#: styles/02-arc.json
+msgctxt "Style variation name"
+msgid "Arc"
+msgstr ""
+
+#: styles/02-arc.json
+#: styles/03-arc-alt.json
+msgctxt "Font family name"
+msgid "Nunito"
+msgstr ""
+
+#: styles/03-arc-alt.json
+msgctxt "Style variation name"
+msgid "Arc alt"
+msgstr ""
+
+#: styles/04-bulletin.json
+msgctxt "Style variation name"
+msgid "Bulletin"
+msgstr ""
+
+#: styles/04-bulletin.json
+#: styles/05-bulletin-alt.json
+msgctxt "Font family name"
+msgid "Fraunces"
+msgstr ""
+
+#: styles/04-bulletin.json
+#: styles/05-bulletin-alt.json
+msgctxt "Font family name"
+msgid "DM Sans"
+msgstr ""
+
+#: styles/05-bulletin-alt.json
+msgctxt "Style variation name"
+msgid "Bulletin alt"
+msgstr ""
+
+#: styles/06-foundry.json
+msgctxt "Style variation name"
+msgid "Foundry"
+msgstr ""
+
+#: styles/06-foundry.json
+#: styles/07-foundry-alt.json
+msgctxt "Font family name"
+msgid "EB Garamond"
+msgstr ""
+
+#: styles/07-foundry-alt.json
+msgctxt "Style variation name"
+msgid "Foundry alt"
+msgstr ""
+
+#: styles/08-ledger.json
+msgctxt "Style variation name"
+msgid "Ledger"
+msgstr ""
+
+#: styles/08-ledger.json
+#: styles/09-ledger-alt.json
+msgctxt "Font family name"
+msgid "Jost"
+msgstr ""
+
+#: styles/08-ledger.json
+#: styles/09-ledger-alt.json
+msgctxt "Font family name"
+msgid "Newsreader"
+msgstr ""
+
+#: styles/09-ledger-alt.json
+msgctxt "Style variation name"
+msgid "Ledger alt"
+msgstr ""
+
+#: styles/10-nocturne.json
+msgctxt "Style variation name"
+msgid "Nocturne"
+msgstr ""
+
+#: styles/10-nocturne.json
+#: styles/11-nocturne-alt.json
+msgctxt "Font family name"
+msgid "Plus Jakarta Sans"
+msgstr ""
+
+#: styles/10-nocturne.json
+#: styles/11-nocturne-alt.json
+msgctxt "Font family name"
+msgid "Public Sans"
+msgstr ""
+
+#: styles/11-nocturne-alt.json
+msgctxt "Style variation name"
+msgid "Nocturne alt"
+msgstr ""

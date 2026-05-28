@@ -1,0 +1,119 @@
+.newspack-settings {
+	&__card {
+		&.newspack-card.newspack-action-card {
+			.newspack-action-card__region-top {
+				padding: 32px 32px 16px;
+			}
+
+			.newspack-action-card__region-children {
+				padding: 0 32px 32px;
+
+				> .newspack-grid {
+					margin: 0;
+				}
+			}
+
+			.newspack-action-card__notification {
+				padding-bottom: 16px;
+			}
+		}
+
+		.newspack-form-token-field {
+			margin: 0;
+
+			.components-form-token-field {
+				width: 100%;
+			}
+		}
+
+		.newspack-settings__section {
+			&__title {
+				align-items: center;
+				display: flex;
+				margin: 0;
+
+				span {
+					line-height: 24px;
+				}
+			}
+			&__content {
+				> div,
+				.newspack-settings__min-max {
+					margin: 0;
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					flex-wrap: wrap;
+					> *:not([class*="help"], [class*="label"]) {
+						margin: 0;
+					}
+				}
+				.newspack-autocomplete-tokenfield,
+				.newspack-settings__min-max {
+					width: 100%;
+				}
+				.newspack-autocomplete-tokenfield {
+					display: block;
+					margin: 0;
+
+					label:empty {
+						display: none;
+					}
+				}
+				.newspack-text-control,
+				.newspack-checkbox-control {
+					margin: 0 !important;
+				}
+				.newspack-select-control {
+					.components-base-control {
+						width: 100%;
+					}
+				}
+			}
+		}
+		.newspack-settings__min-max {
+			gap: 8px;
+
+			.newspack-checkbox-control {
+				flex: 0 0 auto;
+			}
+
+			.newspack-text-control {
+				flex: 1 1 auto;
+
+				.components-text-control__input {
+					text-align: right;
+				}
+			}
+
+			+ .newspack-settings__min-max {
+				margin-top: 16px !important;
+			}
+		}
+	}
+
+	&__no-border {
+		&.newspack-card.newspack-action-card {
+			border: 0;
+
+			.newspack-action-card__region-top,
+			.newspack-action-card__region-children {
+				padding-left: 0;
+				padding-right: 0;
+				padding-top: 0;
+			}
+
+			.newspack-action-card__region-children {
+				padding-bottom: 0;
+			}
+
+			.newspack-action-card__notification {
+				padding-bottom: 16px;
+			}
+
+			& + & {
+				margin-top: 64px;
+			}
+		}
+	}
+}

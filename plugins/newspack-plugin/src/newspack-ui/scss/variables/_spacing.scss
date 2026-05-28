@@ -1,0 +1,16 @@
+:root {
+	// Spacing - not ems because the font size of the element itself caused a cascade
+	--newspack-ui-spacer-base: 8px;
+	--newspack-ui-spacer-1: var(--newspack-ui-spacer-base); // 8px
+	--newspack-ui-spacer-2: calc(var(--newspack-ui-spacer-base) * 1.5); // 12px
+	--newspack-ui-spacer-3: calc(var(--newspack-ui-spacer-base) * 2); // 16px
+	--newspack-ui-spacer-4: calc(var(--newspack-ui-spacer-base) * 2.5); // 20px
+	--newspack-ui-spacer-5: calc(var(--newspack-ui-spacer-base) * 3); // 24px
+	--newspack-ui-spacer-6: calc(var(--newspack-ui-spacer-base) * 4); // 32px - TODO: clamp?
+	--newspack-ui-spacer-7: calc(var(--newspack-ui-spacer-base) * 4.5); // 36px - TODO: clamp?
+	--newspack-ui-spacer-8: calc(var(--newspack-ui-spacer-base) * 5); // 40px - TODO: clamp?
+	--newspack-ui-spacer-9: calc(var(--newspack-ui-spacer-base) * 6); // 48px - TODO: clamp?
+	--newspack-ui-spacer-10: calc(var(--newspack-ui-spacer-base) * 7); // 56px - TODO: clamp?
+	--newspack-ui-spacer-11: calc(var(--newspack-ui-spacer-base) * 8); // 64px - TODO: clamp?
+	--newspack-ui-spacer-12: calc(var(--newspack-ui-spacer-base) * 9); // 72px - TODO: clamp?
+}

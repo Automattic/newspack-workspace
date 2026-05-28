@@ -1,0 +1,51 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack/tabs",
+	"title": "Tabs",
+	"description": "Display sections of content with brief headings in a compact tab layout that shows one section at a time.",
+	"text-domain": "newspack-ads",
+	"category": "newspack",
+	"example": {
+		"innerBlocks": [
+			{
+				"name": "newspack/tabs-item",
+				"attributes": {
+					"header": "Tab Header"
+				},
+				"innerBlocks": [
+					{
+						"name": "core/paragraph",
+						"attributes": {
+							"content": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent et eros eu felis."
+						}
+					}
+				]
+			},
+			{
+				"name": "newspack/tabs-item",
+				"attributes": {
+					"header": "Tab Two Header"
+				},
+				"innerBlocks": [
+					{
+						"name": "core/paragraph",
+						"attributes": {
+							"content": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Praesent et eros eu felis."
+						}
+					},
+					{
+						"name": "core/image",
+						"attributes": {
+							"url": "https://s.w.org/images/core/5.3/Windbuchencom.jpg"
+						}
+					}
+				]
+			}
+		]
+	},
+	"supports": {
+		"html": false,
+		"align": [ "wide" ]
+	}
+}

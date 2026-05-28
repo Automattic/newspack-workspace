@@ -1,0 +1,15 @@
+.newspack-listings {
+	&__list-container {
+		.newspack-listings__info {
+			margin: 0;
+		}
+	}
+
+	&__list-container-spinner .components-spinner {
+		margin: 0 auto 1rem;
+	}
+}
+
+[data-type="newspack-listings/list-container"]:focus::after {
+	box-shadow: none !important;
+}

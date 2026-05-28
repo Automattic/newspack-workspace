@@ -1,0 +1,13 @@
+@use "newspack-colors" as np-colors;
+@use "../../../shared/sass/variables";
+@use "../../../shared/sass/mixins";
+
+.wp-block-group {
+	&.is-style-border {
+		border: 1px solid np-colors.$neutral-300;
+
+		&:not(.has-background) {
+			padding: 20px 30px;
+		}
+	}
+}

@@ -1,0 +1,36 @@
+/**
+ * Badge
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "../../../colors/colors.module" as colors;
+
+$badge-colors: (
+	"info": colors.$primary-600,
+	"warning": wp-colors.$alert-yellow,
+	"error": wp-colors.$alert-red,
+	"success": wp-colors.$alert-green,
+);
+
+.newspack-badge {
+	background-color: color-mix(in srgb, wp-colors.$white 90%, var(--base-color));
+	border-radius: 2px;
+	color: color-mix(in srgb, wp-colors.$black 50%, var(--base-color));
+	display: block;
+	flex: 0 0 auto;
+	font-size: 12px;
+	line-height: 1.5;
+	padding: 1px 4px;
+
+	&:where(.is-default) {
+		background-color: wp-colors.$gray-100;
+		color: wp-colors.$gray-800;
+	}
+
+	// Generate color variants
+	@each $type, $color in $badge-colors {
+		&.is-#{$type} {
+			--base-color: #{$color};
+		}
+	}
+}

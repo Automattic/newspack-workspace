@@ -1,0 +1,27 @@
+.wp-block-newspack-collections {
+	// Categories.
+	.wp-block-newspack-collections__categories {
+		margin: 0 0 8px;
+		line-height: var(--newspack-ui-font-size-2xs);
+
+		.wp-block-newspack-collections__category {
+			display: inline-block;
+			margin-right: 0.5em;
+			padding: 0.5em;
+			background: var(--newspack-ui-color-neutral-10);
+			font-size: var(--newspack-ui-font-size-2xs);
+			text-decoration: none;
+			border-radius: var(--newspack-ui-border-radius-s);
+			text-transform: uppercase;
+
+			&:hover {
+				background: var(--newspack-ui-color-neutral-20);
+			}
+
+			&:last-child {
+				margin-right: 0;
+			}
+		}
+	}
+}
+

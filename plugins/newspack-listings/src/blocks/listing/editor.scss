@@ -1,0 +1,58 @@
+@use "../../assets/shared/listing";
+
+.newspack-listings {
+	&__listing-editor {
+		.components-spinner {
+			display: block;
+			float: none;
+			margin: 1.75rem auto;
+		}
+
+		+ .newspack-listings__listing-editor {
+			margin-top: 1.75rem;
+		}
+	}
+
+	&__listing-search {
+		font-family:
+			-apple-system,
+			BlinkMacSystemFont,
+			"Segoe UI",
+			Roboto,
+			Oxygen-Sans,
+			Ubuntu,
+			Cantarell,
+			"Helvetica Neue",
+			sans-serif;
+
+		.autocomplete-tokenfield__help {
+			margin-top: 4px;
+		}
+
+		.components-placeholder__fieldset {
+			flex-direction: column;
+		}
+
+		.components-spinner {
+			position: absolute;
+			right: 0;
+			top: 2rem;
+		}
+
+		&.is-loading .components-spinner {
+			margin: auto;
+			position: relative;
+		}
+	}
+
+	&__error {
+		margin: 1rem auto 2rem;
+	}
+}
+
+.editor-styles-wrapper ul.newspack-listings__event-dates {
+	font-weight: bold;
+	list-style: none;
+	margin: 1rem 0;
+	padding: 0;
+}

@@ -1,0 +1,31 @@
+# Editors
+project.xml
+project.properties
+/nbproject/private/
+.buildpath
+.project
+.settings*
+.idea
+.vscode
+*.sublime-project
+*.sublime-workspace
+.sublimelinterrc
+
+# OS X metadata
+.DS_Store
+
+# Windows junk
+Thumbs.db
+
+# Composer
+/vendor/
+/node_modules/
+/dist/
+.DS_Store
+release
+.cache
+
+# Tests
+codecov/
+coverage/
+.phpunit.result.cache

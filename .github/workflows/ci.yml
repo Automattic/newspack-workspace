@@ -1,0 +1,289 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - trunk
+      - alpha
+      - release
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Pinned via package.json's packageManager field; this is just a fallback.
+  PNPM_VERSION: 10.33.0
+
+jobs:
+  # ----------------------------------------------------------------------------
+  # Detect which workspace packages are affected by this push/PR.
+  # ----------------------------------------------------------------------------
+  changed-packages:
+    name: Detect changed packages
+    runs-on: ubuntu-latest
+    outputs:
+      js-matrix: ${{ steps.detect.outputs.js-matrix }}
+      php-matrix: ${{ steps.detect.outputs.php-matrix }}
+      any: ${{ steps.detect.outputs.any }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - id: detect
+        name: Compute package matrices
+        run: |
+          set -euo pipefail
+          BASE_REF="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$BASE_REF" ] || [ "$BASE_REF" = "0000000000000000000000000000000000000000" ]; then
+            BASE_REF=$(git merge-base HEAD origin/main || echo HEAD~1)
+          fi
+
+          # pnpm's change filter already handles transitive dependency graphs.
+          # PNPM_PACKAGE_NAME (uppercase) is what pnpm exposes to pnpm exec;
+          # npm_package_name is only set when pnpm runs a package script, not
+          # bare exec. Using the wrong one prints "undefined" for every package,
+          # which produces a matrix of {package: "undefined"} that silently
+          # matches nothing downstream — CI then appears green without running.
+          # Exclude the root workspace package — it has no plugin-shaped
+          # lint/build/test scripts, and changes to .github/ or root configs
+          # otherwise spawn a job that just fails.
+          CHANGED=$(pnpm --silent --filter "...[$BASE_REF]" exec node -e 'console.log(process.env.PNPM_PACKAGE_NAME)' 2>/dev/null | grep -v '^newspack-workspace$' | sort -u || true)
+
+          if [ -z "$CHANGED" ]; then
+            echo "js-matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
+            echo "php-matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
+            echo "any=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          JS_INCLUDE=$(printf '%s\n' "$CHANGED" | jq -R -s -c 'split("\n") | map(select(length>0)) | map({package: .})')
+          echo "js-matrix={\"include\":$JS_INCLUDE}" >> "$GITHUB_OUTPUT"
+
+          # PHP matrix: packages with a phpunit config or composer.json.
+          PHP_INCLUDE=$(printf '%s\n' "$CHANGED" | while read -r pkg; do
+            dir=$(pnpm --silent --filter "$pkg" exec pwd 2>/dev/null || true)
+            [ -n "$dir" ] || continue
+            if [ -f "$dir/phpunit.xml" ] || [ -f "$dir/phpunit.xml.dist" ] || [ -f "$dir/composer.json" ]; then
+              printf '%s\n' "$pkg"
+            fi
+          done | jq -R -s -c 'split("\n") | map(select(length>0)) | map({package: .})')
+          echo "php-matrix={\"include\":$PHP_INCLUDE}" >> "$GITHUB_OUTPUT"
+          echo "any=true" >> "$GITHUB_OUTPUT"
+
+  # ----------------------------------------------------------------------------
+  # Shared root install cache. Everything downstream reuses it.
+  # ----------------------------------------------------------------------------
+  install:
+    name: Install deps
+    needs: changed-packages
+    if: needs.changed-packages.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+  # ----------------------------------------------------------------------------
+  # JS/TS lint, build, test — one job per affected package.
+  # ----------------------------------------------------------------------------
+  js:
+    name: JS / ${{ matrix.package }}
+    needs: [changed-packages, install]
+    if: needs.changed-packages.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.changed-packages.outputs.js-matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      # --if-present skips packages whose package.json doesn't define the
+       # script (e.g. newspack-colors has no lint:js, newspack-scripts has no
+       # build). Without it pnpm exits non-zero on a missing script.
+      - run: pnpm --filter "${{ matrix.package }}" run --if-present lint:js
+        continue-on-error: false
+      - run: pnpm --filter "${{ matrix.package }}" run --if-present build
+      - run: pnpm --filter "${{ matrix.package }}" run --if-present test
+        continue-on-error: true
+
+  # ----------------------------------------------------------------------------
+  # PHP lint and PHPUnit — one job per affected package that has PHP.
+  # ----------------------------------------------------------------------------
+  php-lint:
+    name: PHPCS / ${{ matrix.package }}
+    needs: changed-packages
+    if: needs.changed-packages.outputs.any == 'true' && needs.changed-packages.outputs.php-matrix != '{"include":[]}'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.changed-packages.outputs.php-matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer, cs2pr
+          coverage: none
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - name: composer install (root)
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: phpcs
+        run: |
+          dir=$(pnpm --silent --filter "${{ matrix.package }}" exec pwd)
+          composer phpcs -- "$dir"
+
+  php-test:
+    name: PHPUnit / ${{ matrix.package }}
+    needs: changed-packages
+    if: needs.changed-packages.outputs.any == 'true' && needs.changed-packages.outputs.php-matrix != '{"include":[]}'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.changed-packages.outputs.php-matrix) }}
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: wordpress_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      WP_TESTS_DIR: /tmp/wordpress-tests-lib
+      WP_CORE_DIR: /tmp/wordpress
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer
+          extensions: mysqli
+          coverage: none
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+      - name: Resolve package directory
+        id: pkg
+        run: |
+          dir=$(pnpm --silent --filter "${{ matrix.package }}" exec pwd)
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          name=$(basename "$dir")
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+      - name: Check for phpunit config
+        id: check
+        run: |
+          dir="${{ steps.pkg.outputs.dir }}"
+          if [ -f "$dir/phpunit.xml" ] || [ -f "$dir/phpunit.xml.dist" ]; then
+            echo "has_tests=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_tests=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install WordPress test suite
+        if: steps.check.outputs.has_tests == 'true'
+        run: |
+          # svn isn't on ubuntu-latest runners by default; the WP develop
+          # repo's phpunit test library is published over svn.
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq subversion
+          # Download WP core and test library.
+          mkdir -p "$WP_TESTS_DIR"
+          WP_TESTS_TAG=$(curl -s "https://api.wordpress.org/core/version-check/1.7/" | jq -r '.offers[0].version')
+
+          # The tarball's top-level directory is "wordpress/". Extract to
+          # $WP_CORE_DIR's parent and strip that prefix so files land at
+          # $WP_CORE_DIR directly. Avoids the "mv: same file" failure when
+          # $WP_CORE_DIR happens to be /tmp/wordpress.
+          rm -rf "$WP_CORE_DIR"
+          mkdir -p "$WP_CORE_DIR"
+          curl -s "https://wordpress.org/wordpress-$WP_TESTS_TAG.tar.gz" \
+            | tar xz --strip-components=1 -C "$WP_CORE_DIR"
+
+          svn co --quiet "https://develop.svn.wordpress.org/tags/$WP_TESTS_TAG/tests/phpunit/includes/" "$WP_TESTS_DIR/includes"
+          svn co --quiet "https://develop.svn.wordpress.org/tags/$WP_TESTS_TAG/tests/phpunit/data/" "$WP_TESTS_DIR/data"
+
+          # Write wp-tests-config.php.
+          cat > "$WP_TESTS_DIR/wp-tests-config.php" << 'WPCFG'
+          <?php
+          define( 'ABSPATH', '/tmp/wordpress/' );
+          define( 'DB_NAME', 'wordpress_test' );
+          define( 'DB_USER', 'root' );
+          define( 'DB_PASSWORD', 'root' );
+          define( 'DB_HOST', '127.0.0.1' );
+          define( 'DB_CHARSET', 'utf8' );
+          define( 'DB_COLLATE', '' );
+          $table_prefix = 'wptests_';
+          define( 'WP_TESTS_DOMAIN', 'example.org' );
+          define( 'WP_TESTS_EMAIL', 'admin@example.org' );
+          define( 'WP_TESTS_TITLE', 'Test Blog' );
+          define( 'WP_PHP_BINARY', 'php' );
+          WPCFG
+      - name: composer install (root)
+        if: steps.check.outputs.has_tests == 'true'
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: composer install (package)
+        if: steps.check.outputs.has_tests == 'true'
+        run: |
+          dir="${{ steps.pkg.outputs.dir }}"
+          if [ -f "$dir/composer.json" ]; then
+            cd "$dir" && composer install --no-interaction --no-progress --prefer-dist
+          fi
+      - name: PHPUnit
+        if: steps.check.outputs.has_tests == 'true'
+        run: |
+          dir="${{ steps.pkg.outputs.dir }}"
+          config=""
+          [ -f "$dir/phpunit.xml" ] && config="$dir/phpunit.xml"
+          [ -f "$dir/phpunit.xml.dist" ] && config="$dir/phpunit.xml.dist"
+          ./vendor/bin/phpunit -c "$config"
+
+  # ----------------------------------------------------------------------------
+  # Summary gate: fail the workflow if any needed job failed.
+  # ----------------------------------------------------------------------------
+  ci-ok:
+    name: CI OK
+    needs: [js, php-lint, php-test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            echo "One or more jobs failed or were cancelled."
+            exit 1
+          fi
+          echo "All jobs passed (or no affected packages)."

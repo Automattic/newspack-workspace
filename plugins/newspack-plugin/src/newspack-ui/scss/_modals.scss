@@ -1,0 +1,143 @@
+@use "mixins";
+
+.newspack-ui {
+	&__modal-container {
+		position: fixed;
+		z-index: -1;
+		inset: 0;
+		overflow: hidden;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		visibility: hidden;
+		pointer-events: none;
+		&__overlay {
+			position: absolute;
+			z-index: 1;
+			inset: 0;
+			opacity: 0;
+			background: rgba(0, 0, 0, 0.7);
+			transition: opacity 0.125s linear;
+		}
+		.newspack-ui__modal {
+			position: relative;
+			z-index: 2;
+			width: 100%;
+			transform: translateY(50px);
+			opacity: 0;
+			transition: transform 0.125s linear, opacity 0.125s linear;
+			@include mixins.newspack-ui-elevation( 3 );
+		}
+		&[data-state="open"] {
+			z-index: 99999;
+			visibility: visible;
+			pointer-events: auto;
+			.newspack-ui__modal-container__overlay {
+				opacity: 1;
+			}
+			.newspack-ui__modal {
+				opacity: 1;
+				transform: translateY(0);
+			}
+			@at-root body:has(&) {
+				overflow: hidden;
+			}
+		}
+	}
+
+	&__modal {
+		// Modal styles
+		background: var(--newspack-ui-color-body-bg);
+		border-radius: var(--newspack-ui-border-radius-l);
+		display: flex;
+		flex-direction: column;
+		max-height: 90%;
+		max-width: var(--newspack-ui-modal-width-m);
+		overflow: auto;
+
+		// Modal header & footer
+		&__header,
+		&__footer {
+			padding: var(--newspack-ui-spacer-4) var(--newspack-ui-spacer-5);
+		}
+
+		&__header {
+			align-items: center;
+			background: var(--newspack-ui-color-body-bg);
+			border-bottom: 1px solid var(--newspack-ui-color-border);
+			color: var(--newspack-ui-color-neutral-90);
+			display: flex;
+			justify-content: space-between;
+			position: sticky;
+			top: 0;
+			z-index: 10;
+
+			h2 {
+				color: inherit;
+				font-family: var(--newspack-ui-font-family);
+				font-size: var(--newspack-ui-font-size-s);
+				line-height: var(--newspack-ui-line-height-s);
+				margin: 0;
+			}
+		}
+
+		&__close {
+			.newspack-ui__modal__header & {
+				margin: -6px -6px -6px 0 !important; // Accounts for the header padding. TODO: Can this be improved to work w/variables?
+			}
+		}
+
+		&__content {
+			backface-visibility: visible;
+			color: var(--newspack-ui-color-neutral-90);
+			padding: var(--newspack-ui-spacer-5);
+
+			// Make sure there's enough space above the first button in modals.
+			// Ignore a tag buttons as they will never be first.
+			.newspack-ui__button:not(:first-child, a.newspack-ui__button):first-of-type {
+				margin-top: var(--newspack-ui-spacer-5);
+			}
+		}
+
+		&__footer {
+			background: var(--newspack-ui-color-neutral-5);
+			color: var(--newspack-ui-color-neutral-60);
+			font-size: var(--newspack-ui-font-size-xs);
+			line-height: var(--newspack-ui-line-height-xs);
+			a {
+				text-decoration: underline;
+			}
+		}
+
+		// Narrow modal
+		&--small {
+			max-width: var(--newspack-ui-modal-width-s);
+		}
+
+		// Contents
+		h3 {
+			font-size: var(--newspack-ui-font-size-s);
+		}
+
+		&__footer,
+		&__content {
+			> *:first-child {
+				margin-top: 0;
+			}
+
+			> *:last-child {
+				margin-bottom: 0;
+			}
+		}
+
+		h1,
+		h2,
+		h3,
+		h4,
+		h5,
+		h6,
+		strong {
+			font-weight: 600;
+		}
+	}
+}

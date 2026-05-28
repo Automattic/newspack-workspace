@@ -1,0 +1,45 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack/overlay-menu-trigger",
+	"title": "Overlay Button",
+	"category": "newspack",
+	"description": "The trigger element that opens and closes the associated panel. Customize the label, icon, or style to match your design.",
+	"textdomain": "newspack-plugin",
+	"parent": [ "newspack/overlay-menu" ],
+	"usesContext": [ "newspack-overlay-menu/instanceId" ],
+	"attributes": {
+		"triggerText": { "type": "string", "default": "Menu" },
+		"lock": { "type": "object", "default": { "move": true, "remove": true } }
+	},
+	"supports": {
+		"html": false,
+		"lock": false,
+		"color": {
+			"background": true,
+			"text": true
+		},
+		"typography": {
+			"fontSize": true
+		},
+		"spacing": {
+			"padding": true,
+			"__experimentalDefaultControls": {
+				"padding": false
+			}
+		},
+		"__experimentalBorder": {
+			"radius": true,
+			"__experimentalDefaultControls": {
+				"radius": false
+			}
+		}
+	},
+	"styles": [
+		{ "name": "default", "label": "Default", "isDefault": true },
+		{ "name": "icon-only", "label": "Icon only" },
+		{ "name": "text-only", "label": "Text only" }
+	],
+	"editorStyle": "file:../../../../dist/blocks.css",
+	"style": "file:../../../../dist/blocks.css"
+}

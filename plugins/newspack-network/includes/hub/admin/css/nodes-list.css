@@ -1,0 +1,9 @@
+.manage-column.column-links,
+.links.column-links {
+    width: 40%;
+    text-align: left;
+}
+.dashicons-info-outline{
+    cursor: help;
+    opacity: 0.8;
+}

@@ -1,0 +1,42 @@
+.newspack-newsletters {
+	&__lists {
+		flex: 1 1 100%;
+		font-size: 0.8rem;
+		border-radius: 2px;
+		margin: 0 0 1rem;
+
+		ul {
+			list-style: none;
+			padding: 0;
+			margin: 0;
+			display: flex;
+			flex-wrap: wrap;
+			min-width: 250px;
+			li {
+				flex: 1 1 100%;
+				display: flex;
+				min-width: 200px;
+				box-sizing: border-box;
+				margin: 0;
+				padding: 0.5rem 1rem 0.5rem 0;
+			}
+		}
+
+		&__checkbox {
+			flex: 0 0 auto;
+			margin: 0 0.5rem 0 0;
+		}
+
+		&__title {
+			display: block;
+			font-weight: 600;
+		}
+
+		&__description {
+			display: block;
+			font-size: 0.8rem;
+			color: #757575;
+			margin: 0;
+		}
+	}
+}

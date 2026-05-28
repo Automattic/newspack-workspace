@@ -1,0 +1,32 @@
+{
+	"name": "republication-tracker-tool",
+	"version": "2.8.2",
+	"main": "Gruntfile.js",
+	"author": "Automattic",
+	"scripts": {
+		"start": "npm ci",
+		"cm": "newspack-scripts commit",
+		"build": "newspack-scripts wp-scripts build",
+		"i18n": "grunt i18n",
+		"lint:js": "newspack-scripts wp-scripts lint-js src",
+		"readme": "grunt readme",
+		"semantic-release": "newspack-scripts release --files=republication-tracker-tool.php",
+		"release:archive": "rm -rf release && mkdir -p release && rsync -r . ./release/republication-tracker-tool --exclude-from='./.distignore' && cd release && zip -r republication-tracker-tool.zip republication-tracker-tool",
+		"release": "npm run semantic-release"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Automattic/newspack-workspace.git",
+		"directory": "plugins/republication-tracker-tool"
+	},
+	"license": "GPL-2.0-or-later",
+	"bugs": {
+		"url": "https://github.com/Automattic/republication-tracker-tool/issues"
+	},
+	"devDependencies": {
+		"grunt": "~1.6.1",
+		"grunt-wp-i18n": "~1.0.3",
+		"grunt-wp-readme-to-markdown": "~2.1.0",
+		"newspack-scripts": "workspace:*"
+	}
+}

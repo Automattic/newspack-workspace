@@ -1,0 +1,19 @@
+// *********************************
+// Newspack Collections breakpoints
+// *********************************
+
+// Base breakpoint values for newspack-collections.
+$breakpoint-xs: 0;
+$breakpoint-sm: 600px;
+$breakpoint-md: 782px;
+$breakpoint-lg: 960px;
+
+// Media query strings.
+$media-sm-up: "screen and (min-width: #{$breakpoint-sm})";
+$media-md-up: "screen and (min-width: #{$breakpoint-md})";
+$media-lg-up: "screen and (min-width: #{$breakpoint-lg})";
+
+$media-xs-only: "screen and (max-width: #{$breakpoint-sm - 1px})";
+$media-sm-only: "screen and (min-width: #{$breakpoint-sm}) and (max-width: #{$breakpoint-md - 1px})";
+$media-md-only: "screen and (min-width: #{$breakpoint-md}) and (max-width: #{$breakpoint-lg - 1px})";
+$media-lg-only: "screen and (min-width: #{$breakpoint-lg})";

@@ -1,0 +1,99 @@
+@use "../variables-site/structure";
+
+.wp-caption {
+	margin-bottom: calc(1.5 * #{structure.$size__spacing-unit});
+}
+
+.wp-caption img[class*="wp-image-"] {
+	display: block;
+	margin-left: auto;
+	margin-right: auto;
+}
+
+figcaption,
+.wp-caption-text,
+.swiper-pagination-simple {
+	color: var(--newspack-theme-color-text-light);
+	margin: 0 auto;
+	padding: 0;
+	text-align: left;
+}
+
+// Override some specific styles coming from WordPress.
+:root :where(.wp-block-image figcaption) {
+	color: var(--newspack-theme-color-text-light);
+	font-size: var(--newspack-theme-font-size-xs);
+}
+
+.has-text-color {
+	figcaption,
+	.wp-caption-text {
+		color: inherit;
+	}
+}
+
+figcaption,
+.wp-caption-text,
+.amp-image-lightbox-caption,
+.swiper-pagination-simple {
+	font-size: var(--newspack-theme-font-size-xs);
+	font-family: var(--newspack-theme-font-heading);
+	line-height: var(--newspack-theme-font-line-height-body);
+}
+
+/* Hack to address a bug that affects caption positioning in Safari only. Targets Safari 9+ only. */
+@supports ( -webkit-hyphens: none ) {
+	.wp-block-image [class^="align"] > figcaption {
+		display: block;
+	}
+}
+
+.entry-content {
+	.wp-caption-text,
+	figcaption {
+		max-width: 780px;
+	}
+
+	.alignfull,
+	.alignwide {
+		> figcaption {
+			width: min(90vw, 780px);
+		}
+	}
+
+	.wp-block-column {
+		figcaption,
+		.alignfull > figcaption,
+		.alignwide > figcaption {
+			max-width: 100%;
+			width: 100%;
+		}
+	}
+}
+
+.newspack-front-page,
+.post-template-single-wide,
+.page-template-single-wide {
+	.entry-content {
+		.wp-caption-text,
+		figcaption {
+			max-width: 1200px;
+		}
+	}
+
+	.alignfull,
+	.alignwide {
+		> figcaption {
+			width: min(90vw, 1200px);
+		}
+	}
+
+	.entry-content .wp-block-column {
+		figcaption,
+		.alignfull > figcaption,
+		.alignwide > figcaption {
+			max-width: 100%;
+			width: 100%;
+		}
+	}
+}

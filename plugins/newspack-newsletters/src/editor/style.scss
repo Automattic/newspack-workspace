@@ -1,0 +1,493 @@
+:root {
+	--newspack-newsletters-header-font: arial, sans-serif;
+	--newspack-newsletters-body-font: georgia, serif;
+	--newspack-newsletters-max-width: 600px;
+	--newspack-header-font: var(--newspack-newsletters-header-font);
+	--newspack-body-font: var(--newspack-newsletters-body-font);
+	--newspack-max-width: var(--newspack-newsletters-max-width);
+	--wp--style--global--content-size: 600px;
+	--wp--style--global--wide-size: 600px;
+}
+
+.wp-block {
+	box-sizing: border-box;
+	margin-left: auto;
+	margin-right: auto;
+	max-width: var(--newspack-newsletters-max-width);
+	padding: 12px;
+}
+
+// Override block theme layout constraints — all newsletter blocks
+// should use the same max-width (600px) regardless of theme settings.
+.is-layout-constrained > * {
+	max-width: var(--newspack-newsletters-max-width) !important;
+}
+
+// Override block theme global-padding layout rule that sets negative
+// margins on full-width blocks to break them out of the container.
+// In the newsletter editor, full-width blocks should stay centered at 600px.
+.has-global-padding > .alignfull {
+	margin-left: auto !important;
+	margin-right: auto !important;
+}
+
+.editor-styles-wrapper {
+	&.block-editor-writing-flow {
+		font-size: 16px;
+	}
+
+	.editor-post-title {
+		font-family: var(--newspack-newsletters-header-font);
+		line-height: 1.5;
+	}
+
+	.block-editor-block-list__layout {
+		--wp--preset--font-size--xx-small: 8px;
+		--wp--preset--font-size--x-small: 10px;
+		--wp--preset--font-size--small: 12px;
+		--wp--preset--font-size--normal: 16px;
+		--wp--preset--font-size--medium: 16px;
+		--wp--preset--font-size--large: 24px;
+		--wp--preset--font-size--x-large: 36px;
+		--wp--preset--font-size--huge: 36px;
+		--wp--preset--font-size--xx-large: 40px;
+		--wp--preset--font-size--xxx-large: 48px;
+		--wp--preset--font-size--xxxx-large: 56px;
+		--wp--preset--font-size--xxxxx-large: 64px;
+		--wp--preset--font-size--xxxxxx-large: 72px;
+
+		--wp--preset--spacing--20: 8px;
+		--wp--preset--spacing--30: 16px;
+		--wp--preset--spacing--40: 24px;
+		--wp--preset--spacing--50: 32px;
+		--wp--preset--spacing--60: 32px;
+		--wp--preset--spacing--70: 48px;
+		--wp--preset--spacing--80: 64px;
+
+		&.is-root-container {
+			// Root padding is zeroed, so zero the CSS variables core uses
+			// for the alignfull break-out negative margin — otherwise full-
+			// width blocks push 8px past the canvas and cause horizontal
+			// scroll.
+			--wp--style--root--padding-left: 0;
+			--wp--style--root--padding-right: 0;
+			padding-left: 0;
+			padding-right: 0;
+
+			> :where(:not([data-align="left"]):not([data-align="right"]):not([data-align="full"])) {
+				max-width: var(--newspack-newsletters-max-width);
+			}
+
+			// Classic themes use `is-layout-flow` on the root container, so
+			// core's constrained-layout CSS that resets alignfull to full width
+			// doesn't apply. Force it here, and zero the -8px margin core's
+			// classic.css applies to alignfull children of the root container.
+			> .wp-block[data-align="full"] {
+				margin-left: 0;
+				margin-right: 0;
+				max-width: none;
+			}
+		}
+
+		* {
+			line-height: 1.5;
+
+			&:not(code) {
+				font-family: var(--newspack-newsletters-body-font);
+			}
+		}
+
+		.block-editor-block-list__block .components-placeholder,
+		.block-editor-block-list__block .components-placeholder div {
+			font-family: "Noto Serif", helvetica, arial, sans-serif;
+		}
+
+		h1,
+		h2,
+		h3,
+		h4,
+		h5,
+		h6 {
+			font-family: var(--newspack-newsletters-header-font);
+			line-height: 1.5;
+		}
+
+		h1 {
+			font-size: 2.44em;
+			line-height: 1.24;
+		}
+
+		h2 {
+			font-size: 1.95em;
+			line-height: 1.36;
+		}
+
+		h3 {
+			font-size: 1.56em;
+			line-height: 1.44;
+		}
+
+		h4 {
+			font-size: 1.25em;
+			line-height: 1.6;
+		}
+
+		h5 {
+			font-size: 1em;
+		}
+
+		h6 {
+			font-size: 0.8em;
+			line-height: 1.56;
+		}
+
+		a {
+			font-family: inherit;
+			text-decoration: underline;
+		}
+
+		a:not(:is(.wp-block-paragraph.has-link-color a, .wp-block-paragraph.has-link-color * a)) {
+			color: inherit;
+		}
+
+		code {
+			background: none;
+			color: inherit;
+		}
+
+		.block-editor-block-list__block,
+		.wp-block[data-align="center"] {
+			margin-bottom: 0;
+			margin-top: 0;
+		}
+
+		h1,
+		h2,
+		h3,
+		h4,
+		h5,
+		h6,
+		p {
+			&.has-background {
+				padding: 12px;
+			}
+		}
+
+		.wp-block-group {
+			padding-left: 0;
+			padding-right: 0;
+
+			&.has-background {
+				padding-bottom: 0;
+				padding-top: 0;
+			}
+
+			.block-list-appender {
+				margin: 0 20px;
+			}
+		}
+
+		.wp-block-buttons {
+			font-weight: bold;
+			text-align: center;
+
+			.block-list-appender {
+				margin: 0;
+			}
+
+			.wp-block-button__link {
+				font-size: 1em;
+				padding: 0.75em 1.5em;
+			}
+
+			// Default to left alignment styles.
+			.wp-block-button {
+				margin-left: 0 !important;
+				margin-right: auto !important;
+			}
+
+			&.is-content-justification-right {
+				.wp-block-button {
+					margin-left: auto !important;
+					margin-right: 0 !important;
+				}
+			}
+
+			&.is-content-justification-center {
+				.wp-block-button {
+					margin-left: auto !important;
+					margin-right: auto !important;
+				}
+			}
+		}
+
+		.wp-block-button {
+			padding: 0;
+		}
+
+		.wp-block-social-links {
+			gap: 0 !important;
+
+			&.is-style-circle-black {
+				.wp-social-link {
+					background: black;
+					color: white;
+				}
+			}
+
+			&.is-style-filled-black {
+				.wp-social-link {
+					background: transparent;
+					color: black;
+				}
+			}
+
+			&.is-style-circle-white {
+				.wp-social-link {
+					background: white;
+					color: black;
+				}
+			}
+
+			&.is-style-filled-white {
+				.wp-social-link {
+					background: transparent;
+					color: white;
+				}
+			}
+		}
+
+		.wp-social-link {
+			border-radius: 19px;
+			height: 38px;
+			margin: 4px;
+			padding: 7px;
+			width: 38px;
+		}
+
+		.wp-block-quote {
+			margin: 0 auto;
+
+			&::before {
+				left: 12px;
+			}
+
+			p {
+				margin: 0;
+				padding: 8px 0;
+			}
+
+			&__citation {
+				color: #767676;
+				font-size: inherit;
+				font-style: italic;
+				margin-top: 0;
+				text-align: inherit;
+			}
+
+			&:not(.is-style-plain, .is-style-large) {
+				border: 0;
+				margin: 12px auto;
+				padding: 0;
+				padding-left: calc(24px + 0.25em);
+				position: relative;
+
+				&::before {
+					background: currentcolor;
+					bottom: 0;
+					content: "";
+					display: block;
+					position: absolute;
+					left: 12px;
+					top: 0;
+					width: 0.25em;
+				}
+
+				+ .wp-block-quote:not(.is-style-plain, .is-style-large) {
+					margin-top: 24px;
+				}
+			}
+
+			&.is-style-large {
+				padding: 12px;
+			}
+		}
+
+		.wp-block-heading {
+			> span {
+				font-family: inherit;
+			}
+		}
+
+		.wp-block-columns {
+			padding: 0;
+
+			.block-list-appender {
+				margin: 0;
+			}
+
+			.components-placeholder {
+				margin: 20px;
+			}
+		}
+
+		.wp-block-column {
+			&:not(:first-child) {
+				margin-left: 0;
+			}
+
+			.wp-block {
+				padding: 0;
+
+				&.has-background {
+					padding: 12px;
+				}
+			}
+		}
+
+		.wp-block {
+			padding: 6px 12px;
+
+			&[data-type="core/button"] {
+				padding: 0;
+			}
+
+			// More specific styles for the list block.
+			&[data-type="core/list"] {
+				padding: 6px 12px 6px 30px;
+				li:first-child {
+					padding: 12px 7px 0;
+				}
+				li {
+					padding: 0 7px;
+				}
+			}
+
+			&[data-type="core/separator"],
+			.wp-block-separator {
+				background: none !important;
+				border-bottom: 1px solid;
+				max-width: calc(var(--newspack-newsletters-max-width) - 24px);
+				margin-bottom: 12px;
+				opacity: 1;
+				padding-top: 12px;
+
+				&:not(.is-style-wide, .is-style-dots) {
+					border-bottom-width: 1px;
+					width: 128px;
+				}
+
+				hr {
+					margin-bottom: 0;
+					margin-top: 0;
+				}
+			}
+
+			&[data-type="core/spacer"] {
+				.components-resizable-box__container {
+					margin-bottom: 0;
+				}
+			}
+
+			&[data-align="full"] {
+				margin: 0;
+				padding: 0;
+
+				.wp-block-group.has-background {
+					padding-top: 12px;
+					padding-bottom: 12px;
+				}
+			}
+
+			&[data-align="center"] {
+				.wp-block-social-links {
+					margin-left: 8px;
+					margin-right: 0;
+				}
+			}
+
+			&[data-align="left"] {
+				.wp-block-social-links {
+					margin-left: 0;
+				}
+			}
+
+			&[data-align="right"] {
+				.wp-block-social-links {
+					margin-right: 0;
+				}
+			}
+
+			.wp-social-link {
+				align-items: center;
+				display: flex;
+				justify-content: center;
+				padding: 0;
+
+				&:not([contenteditable]):focus::after {
+					right: 0;
+				}
+			}
+		}
+		.has-xx-small-font-size {
+			font-size: var(--wp--preset--font-size--xx-small);
+		}
+		.has-x-small-font-size {
+			font-size: var(--wp--preset--font-size--x-small);
+		}
+		.has-small-font-size {
+			font-size: var(--wp--preset--font-size--small);
+		}
+		.has-normal-font-size {
+			font-size: var(--wp--preset--font-size--normal);
+		}
+		.has-medium-font-size {
+			font-size: var(--wp--preset--font-size--medium);
+		}
+		.has-large-font-size {
+			font-size: var(--wp--preset--font-size--large);
+		}
+		.has-x-large-font-size {
+			font-size: var(--wp--preset--font-size--x-large);
+		}
+		.has-huge-font-size {
+			font-size: var(--wp--preset--font-size--huge);
+		}
+		.has-xx-large-font-size {
+			font-size: var(--wp--preset--font-size--xx-large);
+		}
+		.has-xxx-large-font-size {
+			font-size: var(--wp--preset--font-size--xxx-large);
+		}
+		.has-xxxx-large-font-size {
+			font-size: var(--wp--preset--font-size--xxxx-large);
+		}
+		.has-xxxxx-large-font-size {
+			font-size: var(--wp--preset--font-size--xxxxx-large);
+		}
+		.has-xxxxxx-large-font-size {
+			font-size: var(--wp--preset--font-size--xxxxxx-large);
+		}
+	}
+}
+
+/* Hide visibility options to avoid confusion with is_public meta toggle. */
+.edit-post-post-visibility {
+	display: none;
+}
+
+.newspack-newsletters {
+	&__modal {
+		p,
+		.components-notice {
+			margin: 0;
+		}
+
+		.newspack-newsletters__modal-buttons {
+			display: flex;
+			flex-direction: row-reverse;
+			gap: 12px;
+			margin-top: 24px;
+		}
+	}
+}

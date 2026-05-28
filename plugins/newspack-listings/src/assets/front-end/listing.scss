@@ -1,0 +1,15 @@
+@use "../shared/listing";
+
+.entry-content {
+	a.newspack-listings__listing-link,
+	a:visited.newspack-listings__listing-link {
+		color: currentcolor;
+		text-decoration: none;
+	}
+
+	ul.newspack-listings__event-dates {
+		font-weight: bold;
+		list-style: none;
+		padding: 0;
+	}
+}

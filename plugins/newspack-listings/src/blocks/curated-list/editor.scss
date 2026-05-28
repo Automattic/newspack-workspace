@@ -1,0 +1,52 @@
+@use "../../assets/shared/curated-list";
+
+.newspack-listings {
+	&__curated-list-editor {
+		border-radius: 2px;
+		clear: both;
+		margin-left: -1rem;
+		margin-right: -1rem;
+		padding: 0 1rem;
+
+		label,
+		.newspack-listings__label {
+			display: block;
+			font-size: 13px;
+			line-height: 1.5;
+			margin-bottom: 8px;
+		}
+
+		.wp-block[data-type^="newspack-listings"] + .wp-block[data-type^="newspack-listings"]
+		.newspack-listings__listing-editor,
+		.newspack-listings__listing-editor + .newspack-listings__listing-editor {
+			border-top: 1px solid var(--newspack-listings--border-dark);
+			padding-top: 1rem;
+		}
+
+		.has-dark-background {
+			.wp-block[data-type^="newspack-listings"] + .wp-block[data-type^="newspack-listings"]
+			.newspack-listings__listing-editor,
+			.newspack-listings__listing-editor + .newspack-listings__listing-editor {
+				border-top-color: var(--newspack-listings--border-light);
+			}
+		}
+
+		.query-mode .newspack-listings__list-container {
+			display: none;
+		}
+	}
+
+	&__placeholder {
+		.components-button.has-icon {
+			padding: 12px;
+		}
+
+		li {
+			align-items: center;
+			display: flex;
+			flex-direction: column;
+			justify-content: flex-start;
+			margin-right: 0;
+		}
+	}
+}

@@ -1,0 +1,35 @@
+/**
+ * Color Picker
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+.newspack-color-picker {
+	position: relative;
+	&__expander {
+		box-shadow: inset 0 0 0 1px rgba(wp-colors.$black, 0.54);
+		border-radius: wp-vars.$radius-small;
+		height: wp-vars.$grid-unit-80;
+		padding: wp-vars.$grid-unit-10;
+		text-align: right;
+		text-transform: uppercase;
+
+		&:focus-visible {
+			box-shadow: 0 0 0 var(--wp-admin-border-width-focus) var(--wp-admin-theme-color);
+			border-color: wp-colors.$white;
+		}
+	}
+
+	&__main {
+		background: wp-colors.$white;
+		box-shadow: wp-vars.$elevation-small;
+		margin: wp-vars.$grid-unit-10 0 0;
+		position: absolute;
+		z-index: 2;
+
+		&:empty {
+			display: none;
+		}
+	}
+}

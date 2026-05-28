@@ -1,0 +1,29 @@
+$spacing-steps: (
+	"0": 0,
+	"1": var(--newspack-ui-spacer-1),
+	"2": var(--newspack-ui-spacer-2),
+	"3": var(--newspack-ui-spacer-3),
+	"4": var(--newspack-ui-spacer-4),
+	"5": var(--newspack-ui-spacer-5),
+	"6": var(--newspack-ui-spacer-6),
+	"7": var(--newspack-ui-spacer-7),
+	"8": var(--newspack-ui-spacer-8),
+	"9": var(--newspack-ui-spacer-9),
+	"10": var(--newspack-ui-spacer-10),
+	"11": var(--newspack-ui-spacer-11),
+	"12": var(--newspack-ui-spacer-12),
+);
+
+$spacing-sides: "bottom", "left", "right", "top";
+
+.newspack-ui {
+	.newspack-ui {
+		@each $side in $spacing-sides {
+			@each $size, $value in $spacing-steps {
+				&__spacing-#{$side}--#{$size} {
+					margin-#{$side}: $value;
+				}
+			}
+		}
+	}
+}

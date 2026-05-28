@@ -1,0 +1,68 @@
+{
+	"apiVersion": 3,
+	"name": "newspack/byline",
+	"title": "Byline",
+	"category": "newspack",
+	"description": "Display post author(s) with support for custom bylines and CoAuthors Plus.",
+	"textdomain": "newspack-plugin",
+	"usesContext": [ "postId", "postType" ],
+	"attributes": {
+		"prefix": {
+			"type": "string",
+			"default": "By"
+		},
+		"linkToAuthorArchive": {
+			"type": "boolean",
+			"default": true
+		}
+	},
+	"supports": {
+		"html": false,
+		"color": {
+			"text": true,
+			"background": true,
+			"link": true,
+			"__experimentalDefaultControls": {
+				"text": true,
+				"link": true
+			}
+		},
+		"spacing": {
+			"margin": true,
+			"padding": true,
+			"__experimentalDefaultControls": {
+				"margin": false,
+				"padding": false
+			}
+		},
+		"typography": {
+			"fontSize": true,
+			"lineHeight": true,
+			"__experimentalFontFamily": true,
+			"__experimentalFontWeight": true,
+			"__experimentalFontStyle": true,
+			"__experimentalTextTransform": true,
+			"__experimentalTextDecoration": true,
+			"__experimentalLetterSpacing": true,
+			"__experimentalDefaultControls": {
+				"fontSize": true,
+				"fontAppearance": true
+			}
+		},
+		"__experimentalBorder": {
+			"radius": true,
+			"width": true,
+			"color": true,
+			"style": true,
+			"__experimentalDefaultControls": {
+				"radius": false,
+				"width": false,
+				"color": false,
+				"style": false
+			}
+		},
+		"interactivity": {
+			"clientNavigation": true
+		}
+	}
+}

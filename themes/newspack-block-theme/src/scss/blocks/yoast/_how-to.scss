@@ -1,0 +1,54 @@
+.wp-block-yoast-how-to-block {
+	.schema-how-to-total-time,
+	.schema-how-to-duration {
+		font-weight: 700;
+	}
+
+	.schema-how-to-description {
+		margin-top: var(--wp--preset--spacing--30);
+	}
+
+	.schema-how-to-steps {
+		list-style: none;
+		margin-top: var(--wp--preset--spacing--50);
+		padding: 0;
+
+		.schema-how-to-step-number {
+			display: none;
+		}
+	}
+
+	.schema-how-to-step {
+		border: 1px solid var(--wp--preset--color--base-3);
+		border-radius: var(--wp--custom--border--radius-medium);
+		font-size: var(--wp--preset--font-size--small);
+		line-height: var(--wp--custom--line-height--small);
+		padding: var(--wp--preset--spacing--30);
+
+		.schema-how-to-step-text {
+			color: var(--wp--preset--color--contrast-3);
+			margin: var(--wp--preset--spacing--30) 0 0;
+
+			> * {
+				margin-top: var(--wp--preset--spacing--20);
+			}
+
+			img {
+				display: block;
+			}
+
+			.has-text-color & {
+				color: inherit;
+			}
+		}
+
+		+ .schema-how-to-step {
+			margin-top: var(--wp--preset--spacing--30);
+		}
+
+		.has-background & {
+			border-color: currentcolor; // Fallback
+			border-color: color-mix(in srgb, currentcolor 15%, transparent); // #DDDDDD if currentcolor is #1E1E1E
+		}
+	}
+}

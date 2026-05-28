@@ -1,0 +1,51 @@
+{
+	"name": "automattic/newspack-plugin",
+	"description": "An advanced open-source publishing and revenue-generating platform for news organizations",
+	"homepage": "https://newspack.com/",
+	"type": "wordpress-plugin",
+	"license": "GPL-2.0-or-later",
+	"support": {
+		"issues": "https://github.com/Automattic/newspack-plugin/issues"
+	},
+	"require": {
+		"composer/installers": "~2.0",
+		"google/auth": "^1.15",
+		"woocommerce/action-scheduler": "^3.9"
+	},
+	"require-dev": {
+		"automattic/vipwpcs": "^3.0",
+		"wp-coding-standards/wpcs": "^3.0",
+		"dealerdirect/phpcodesniffer-composer-installer": "*",
+		"phpcompatibility/phpcompatibility-wp": "*",
+		"yoast/phpunit-polyfills": "^3.0",
+		"phpunit/phpunit": "^9.5",
+		"php-stubs/wordpress-stubs": "^6.8",
+		"php-stubs/wordpress-tests-stubs": "^6.8"
+	},
+	"autoload": {
+		"classmap": [
+			"includes"
+		]
+	},
+	"scripts": {
+		"post-update-cmd": [
+			"vendor/bin/cghooks update"
+		]
+	},
+	"extra": {
+		"installer-paths": {
+			"vendor/{$vendor}/{$name}": [
+				"woocommerce/action-scheduler"
+			]
+		}
+	},
+	"config": {
+		"platform": {
+			"php": "8.3"
+		},
+		"allow-plugins": {
+			"composer/installers": true,
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		}
+	}
+}

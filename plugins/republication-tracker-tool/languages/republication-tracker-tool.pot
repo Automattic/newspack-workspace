@@ -1,0 +1,380 @@
+# Copyright (C) 2026 INN Labs
+# This file is distributed under the same license as the Republication Tracker Tool plugin.
+msgid ""
+msgstr ""
+"Project-Id-Version: Republication Tracker Tool 2.8.2\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/republication-tracker-tool\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-05-19T21:30:11+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: republication-tracker-tool\n"
+
+#. Plugin Name of the plugin
+#: republication-tracker-tool.php
+#: includes/class-article-settings.php:144
+#: includes/class-widget.php:29
+msgid "Republication Tracker Tool"
+msgstr ""
+
+#. Description of the plugin
+#: republication-tracker-tool.php
+msgid "Allow readers to share your content via a creative commons license."
+msgstr ""
+
+#. Author of the plugin
+#: republication-tracker-tool.php
+msgid "INN Labs"
+msgstr ""
+
+#. Author URI of the plugin
+#: republication-tracker-tool.php
+msgid "https://labs.inn.org"
+msgstr ""
+
+#: includes/class-article-settings.php:153
+msgid "Hide Republication Widget"
+msgstr ""
+
+#: includes/class-article-settings.php:239
+#: includes/class-article-settings.php:252
+#: dist/index.js:4
+#: src/index.js:90
+msgid "Republished URL"
+msgstr ""
+
+#: includes/class-article-settings.php:240
+#: includes/class-article-settings.php:253
+#: dist/index.js:4
+#: src/index.js:96
+msgid "Views"
+msgstr ""
+
+#: includes/class-article-settings.php:257
+#: dist/index.js:4
+#: src/index.js:119
+msgid "There are no shares to display."
+msgstr ""
+
+#: includes/class-article-settings.php:290
+msgid "Hide the Republication sharing widget on this post?"
+msgstr ""
+
+#: includes/class-article-settings.php:303
+#: includes/class-article-settings.php:314
+msgid "Total Views"
+msgstr ""
+
+#: includes/class-content.php:145
+#: templates/republish-template.php:50
+msgid "By "
+msgstr ""
+
+#: includes/class-settings.php:43
+msgid "Republication Tracker Tool Settings"
+msgstr ""
+
+#: includes/class-settings.php:51
+msgid "Policy"
+msgstr ""
+
+#: includes/class-settings.php:56
+msgid "Google Analytics 4 ID"
+msgstr ""
+
+#: includes/class-settings.php:61
+msgid "Google Analytics 4 API Secret"
+msgstr ""
+
+#: includes/class-settings.php:66
+msgid "Display attribution"
+msgstr ""
+
+#: includes/class-settings.php:71
+msgid "Media Distribution"
+msgstr ""
+
+#: includes/class-settings.php:81
+msgid "License"
+msgstr ""
+
+#: includes/class-settings.php:86
+msgid "Additional Tracking Code"
+msgstr ""
+
+#: includes/class-settings.php:92
+msgid "Hide republication widgets on posts by default"
+msgstr ""
+
+#: includes/class-settings.php:97
+msgid "Enable plain text option"
+msgstr ""
+
+#: includes/class-settings.php:148
+msgid "Use placeholders: <strong>{{post-id}}</strong> will be replaced with the post ID, and <strong>{{post-url}}</strong> will be replaced with the post URL."
+msgstr ""
+
+#: includes/class-settings.php:154
+msgid "The additional Tracking Code field is where you will be able to input your additional tracking code that will be appended to your copied content."
+msgstr ""
+
+#: includes/class-settings.php:155
+msgid "Allowed HTML: script, img, iframe, noscript, div, span, p with safe attributes only."
+msgstr ""
+
+#: includes/class-settings.php:174
+msgid "The Republication Tracker Tool Policy field is where you will be able to input your rules and policies for users to see before they copy and paste your content to republish.As an example of a republication policy hat uses a Creative Commons license, check out the list in this plugin's <a href=\"https://github.com/Automattic/republication-tracker-tool/blob/trunk/docs/configuring-plugin-settings.md#republication-tracker-tool-policy\" target=\"_blank\">documentation</a> on GitHub."
+msgstr ""
+
+#: includes/class-settings.php:186
+msgid "Your Google Analytics Universal Analytics ID. Note that <a href=\"https://support.google.com/analytics/answer/11583528\">this will be deprecated on July 1, 2023</a>, so add a GA4 ID and API secret below to avoid interruptions in analytics tracking."
+msgstr ""
+
+#: includes/class-settings.php:199
+msgid "Your Google Analytics 4 tag ID. <a href=\"https://support.google.com/analytics/answer/9539598\">How to get this</a>."
+msgstr ""
+
+#: includes/class-settings.php:212
+msgid "Your Google Analytics 4 API secret. <a href=\"https://developers.google.com/analytics/devguides/collection/protocol/ga4/sending-events?client_type=gtag#required_parameters\">How to get this</a>."
+msgstr ""
+
+#: includes/class-settings.php:230
+msgid "If checked, an attribution statement will be appended to the copied content."
+msgstr ""
+
+#: includes/class-settings.php:249
+msgid "Distribute all media"
+msgstr ""
+
+#: includes/class-settings.php:251
+msgid "When you check the box, all the media from the original article will be included in the republished article. If you don’t want this to happen, mark media elements with “Can distribute?” toggle in your media library and leave this box unchecked. This way, republished articles will only show the elements you’ve marked as distributable."
+msgstr ""
+
+#: includes/class-settings.php:270
+msgid "Mark media as distributable by default"
+msgstr ""
+
+#: includes/class-settings.php:272
+msgid "If checked, all new uploaded images will have their “Can distribute?” option enabled by default."
+msgstr ""
+
+#: includes/class-settings.php:313
+msgid "No License"
+msgstr ""
+
+#: includes/class-settings.php:337
+msgid "If checked, \"Hide Republication Widget\" will be enabled by default for new posts."
+msgstr ""
+
+#: includes/class-settings.php:356
+msgid "Offer plain text version alongside HTML"
+msgstr ""
+
+#: includes/class-settings.php:358
+msgid "If checked, users will be able to copy both HTML and plain text versions of the republishable content."
+msgstr ""
+
+#: includes/class-widget.php:81
+#: includes/class-widget.php:88
+msgid "Republish This Story"
+msgstr ""
+
+#: includes/class-widget.php:97
+msgid "Creative Commons License"
+msgstr ""
+
+#: includes/class-widget.php:142
+msgid "This widget will only display on single articles."
+msgstr ""
+
+#: includes/class-widget.php:144
+msgid "Republish our articles for free, online or in print, under a Creative Commons license."
+msgstr ""
+
+#: includes/class-widget.php:148
+msgid "Title:"
+msgstr ""
+
+#: includes/class-widget.php:157
+msgid "Modal"
+msgstr ""
+
+#: includes/class-widget.php:161
+msgid "Page"
+msgstr ""
+
+#. translators: %1$s is the post title, %2$s is the byline, %3$s is the site name, %4$s is the date in the format F j, Y.
+#: includes/shareable-content.php:36
+#, php-format
+msgid "<h1>%1$s</h1><p class=\"byline\">by %2$s, %3$s <br />%4$s</p>"
+msgstr ""
+
+#: includes/shareable-content.php:85
+msgid "Close window"
+msgstr ""
+
+#: includes/shareable-content.php:86
+#: templates/republish-template.php:179
+msgid "Republish this article"
+msgstr ""
+
+#. translators: %1$s is the URL to the particular Creative Commons license.
+#. translators: %1$s is the URL to the particular Creative Commons license, %2$s is the license description.
+#: includes/shareable-content.php:97
+#: templates/republish-template.php:193
+#, php-format
+msgid "This work is licensed under a <a rel=\"noreferrer license\" target=\"_blank\" href=\"%1$s\">%2$s</a>."
+msgstr ""
+
+#: includes/shareable-content.php:118
+#: templates/republish-template.php:212
+msgid "HTML format"
+msgstr ""
+
+#: includes/shareable-content.php:119
+#: templates/republish-template.php:213
+msgid "HTML"
+msgstr ""
+
+#: includes/shareable-content.php:121
+#: templates/republish-template.php:215
+msgid "Plain text format"
+msgstr ""
+
+#: includes/shareable-content.php:122
+#: templates/republish-template.php:216
+msgid "Plain Text"
+msgstr ""
+
+#: includes/shareable-content.php:134
+#: templates/republish-template.php:229
+msgid "Republish this article (HTML format)"
+msgstr ""
+
+#: includes/shareable-content.php:141
+#: templates/republish-template.php:236
+msgid "Canonical Tag:"
+msgstr ""
+
+#: includes/shareable-content.php:149
+msgid "Canonical tag for this article"
+msgstr ""
+
+#: includes/shareable-content.php:151
+#: templates/republish-template.php:246
+msgid "Copy canonical URL"
+msgstr ""
+
+#: includes/shareable-content.php:152
+#: templates/republish-template.php:247
+msgid "Copy Tag"
+msgstr ""
+
+#: includes/shareable-content.php:158
+#: templates/republish-template.php:253
+msgid "Article Content:"
+msgstr ""
+
+#: includes/shareable-content.php:165
+#: templates/republish-template.php:260
+msgid "Plain text article content"
+msgstr ""
+
+#: includes/shareable-content.php:167
+#: templates/republish-template.php:262
+msgid "Copy article content"
+msgstr ""
+
+#: includes/shareable-content.php:168
+#: templates/republish-template.php:263
+msgid "Copy Content"
+msgstr ""
+
+#: includes/shareable-content.php:174
+msgid "Tracking snippet:"
+msgstr ""
+
+#: includes/shareable-content.php:181
+#: templates/republish-template.php:276
+msgid "Tracking snippet"
+msgstr ""
+
+#: includes/shareable-content.php:184
+#: templates/republish-template.php:279
+msgid "Copy tracking snippet"
+msgstr ""
+
+#: includes/shareable-content.php:185
+#: templates/republish-template.php:280
+msgid "Copy Snippet"
+msgstr ""
+
+#: includes/shareable-content.php:195
+msgid "Copy to Clipboard"
+msgstr ""
+
+#. translators: %1$s is the site title, %2$s is the license description.
+#: republication-tracker-tool.php:344
+#, php-format
+msgid "This article first appeared on %1$s and is republished here under a %2$s."
+msgstr ""
+
+#. translators: %1$s is a URL, %2$s is the site home URL, %3$s is the site title. %4$s is the license URL, %5$s is the license description.
+#: republication-tracker-tool.php:352
+#, php-format
+msgid "This <a target=\"_blank\" href=\"%1$s\">article</a> first appeared on <a target=\"_blank\" href=\"%2$s\">%3$s</a> and is republished here under a <a target=\"_blank\" href=\"%4$s\">%5$s</a>."
+msgstr ""
+
+#. translators: %s is the site title.
+#: republication-tracker-tool.php:365
+#, php-format
+msgid "This article first appeared on %s."
+msgstr ""
+
+#. translators: %1$s is a URL, %2$s is the site home URL, %3$s is the site title.
+#: republication-tracker-tool.php:373
+#, php-format
+msgid "This <a target=\"_blank\" href=\"%1$s\">article</a> first appeared on <a target=\"_blank\" href=\"%2$s\">%3$s</a>."
+msgstr ""
+
+#: templates/republish-template.php:20
+msgid "Invalid post ID."
+msgstr ""
+
+#: templates/republish-template.php:244
+msgid "Canonical Tag for this article"
+msgstr ""
+
+#: templates/republish-template.php:269
+msgid "Tracking Snippet:"
+msgstr ""
+
+#: templates/republish-template.php:287
+#: templates/republish-template.php:288
+msgid "Copy to clipboard"
+msgstr ""
+
+#: dist/index.js:1
+#: src/index.js:41
+msgid "Republication Widget Settings"
+msgstr ""
+
+#: dist/index.js:1
+#: src/index.js:47
+msgid "Hide Republication widget"
+msgstr ""
+
+#. translators: <a> and </a> tags represent a link to the Republication Tracker README file on GitHub.
+#: dist/index.js:4
+#: src/index.js:62
+msgid "The Republication sharing widget on this post is programmatically disabled through the <code>hide_republication_widget</code> filter. <a>Read more about this filter</a>."
+msgstr ""
+
+#: dist/index.js:4
+#: src/index.js:82
+msgid "Total number of views:"
+msgstr ""

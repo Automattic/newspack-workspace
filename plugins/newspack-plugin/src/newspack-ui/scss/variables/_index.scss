@@ -1,0 +1,21 @@
+@use "breakpoints";
+@use "colors";
+@use "fonts";
+@use "spacing";
+
+// TODO: Some misc styles that need a home!
+:root {
+	// Modal widths
+	--newspack-ui-modal-width-l: 964px;
+	--newspack-ui-modal-width-m: 632px;
+	--newspack-ui-modal-width-s: 410px;
+
+	// Border radius - not ems because the font size of the element itself caused a cascade.
+	--newspack-ui-border-radius-2xl: 12px;
+	--newspack-ui-border-radius-xl: 10px;
+	--newspack-ui-border-radius-l: 8px;
+	--newspack-ui-border-radius-m: 6px;
+	--newspack-ui-border-radius-s: 4px;
+	--newspack-ui-border-radius-xs: 3px;
+	--newspack-ui-border-radius-2xs: 2px;
+}

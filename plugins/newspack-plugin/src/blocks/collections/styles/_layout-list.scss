@@ -1,0 +1,184 @@
+@use "../../../collections/frontend/breakpoints" as bp;
+
+.wp-block-newspack-collections {
+	// Layout: List.
+	&.layout-list {
+		.wp-block-newspack-collections__item {
+			display: grid;
+			grid-template-columns: 1fr;
+			gap: 16px;
+			margin-bottom: 2em;
+			align-items: flex-start;
+
+			&:last-child {
+				margin-bottom: 0;
+			}
+
+			@media #{bp.$media-sm-up} {
+				grid-template-columns: repeat(3, minmax(0, 1fr));
+			}
+
+			@media #{bp.$media-lg-up} {
+				grid-template-columns: repeat(6, minmax(0, 1fr));
+				gap: 32px;
+			}
+		}
+
+		&.image-left,
+		&.image-right {
+			// Small size (default).
+			&.image-size-small {
+				.wp-block-newspack-collections__image {
+					grid-column: span 1;
+				}
+
+				.wp-block-newspack-collections__content {
+					@media #{bp.$media-sm-up} {
+						grid-column: span 2;
+					}
+
+					@media #{bp.$media-lg-up} {
+						grid-column: span 5;
+					}
+				}
+			}
+
+			// Medium size - slightly larger image.
+			&.image-size-medium {
+				.wp-block-newspack-collections__image {
+					grid-column: span 1;
+
+					@media #{bp.$media-lg-up} {
+						grid-column: span 2;
+					}
+				}
+
+				.wp-block-newspack-collections__content {
+					@media #{bp.$media-sm-up} {
+						grid-column: span 2;
+					}
+
+					@media #{bp.$media-lg-up} {
+						grid-column: span 4;
+					}
+				}
+			}
+
+			// Large size - larger image.
+			&.image-size-large {
+				.wp-block-newspack-collections__image {
+					grid-column: span 1;
+
+					@media #{bp.$media-sm-up} {
+						grid-column: span 2;
+					}
+
+					@media #{bp.$media-lg-up} {
+						grid-column: span 3;
+					}
+				}
+
+				.wp-block-newspack-collections__content {
+					@media #{bp.$media-sm-up} {
+						grid-column: span 1;
+					}
+
+					@media #{bp.$media-lg-up} {
+						grid-column: span 3;
+					}
+				}
+			}
+		}
+
+		// For the right alignment, reorder the grid items.
+		&.image-right {
+			.wp-block-newspack-collections__item {
+				.wp-block-newspack-collections__image {
+					order: 2;
+				}
+				.wp-block-newspack-collections__content {
+					order: 1;
+				}
+			}
+		}
+
+		// For the top alignment, stack the grid items vertically.
+		&.image-top {
+			.wp-block-newspack-collections__item {
+				grid-template-columns: 1fr;
+			}
+
+			.wp-block-newspack-collections__image,
+			.wp-block-newspack-collections__content {
+				grid-column: span 1;
+			}
+
+			.wp-block-newspack-collections__image {
+				max-width: 100%;
+			}
+
+			// Apply size constraints only on larger screens.
+			@media #{bp.$media-sm-up} {
+				&.image-size-small .wp-block-newspack-collections__image {
+					max-width: 30%;
+				}
+				&.image-size-medium .wp-block-newspack-collections__image {
+					max-width: 50%;
+				}
+				&.image-size-large .wp-block-newspack-collections__image {
+					max-width: 70%;
+				}
+			}
+		}
+
+
+		.wp-block-newspack-collections__title {
+			font-size: var(--newspack-theme-font-size-lg);
+			margin: 0;
+
+			@media #{bp.$media-md-up} {
+				font-size: var(--newspack-theme-font-size-xl);
+			}
+		}
+
+		.wp-block-newspack-collections__content {
+			display: flex;
+			flex-direction: column;
+			gap: 0.5em;
+		}
+
+		.wp-block-newspack-collections__meta {
+			margin: 0;
+			p {
+				margin: 0;
+			}
+		}
+
+		.wp-block-newspack-collections__excerpt {
+			margin: 22px 0;
+		}
+
+		.wp-block-newspack-collections__ctas {
+			a {
+				@media #{bp.$media-md-up} {
+					width: auto;
+				}
+			}
+		}
+	}
+}
+
+/* Single Collection styles */
+.single-newspack_collection {
+	&.has-sidebar .site-main {
+		display: block;
+	}
+
+	.wp-block-newspack-collections.layout-list {
+		margin-bottom: 32px;
+
+		@media #{bp.$media-lg-up} {
+			margin-bottom: 64px;
+		}
+	}
+}

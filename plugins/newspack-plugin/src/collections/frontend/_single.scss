@@ -1,0 +1,53 @@
+@use "breakpoints" as bp;
+@use "intro";
+@use "recent";
+
+/* Single collection template styles */
+.single-newspack_collection {
+	#main hr {
+		flex: 0 0 100%;
+		margin: 32px 0 62px;
+	}
+
+	.collection-section {
+		margin: 0 0 32px;
+
+		.entry-title {
+			font-size: var(--newspack-theme-font-size-base);
+		}
+
+		&.is-cover-section {
+			.entry-title {
+				font-size: var(--newspack-theme-font-size-lg);
+			}
+		}
+
+		&:not(.is-cover-section) {
+			p {
+				font-size: var(--newspack-theme-font-size-sm);
+			}
+		}
+
+		.wp-block-newspack-blocks-homepage-articles {
+			margin: 0;
+
+			article {
+				display: block;
+
+				@media #{bp.$media-lg-up} {
+					display: flex;
+				}
+			}
+		}
+
+		.article-section-title {
+			border: none;
+			margin: 0 0 calc(0.5em - var(--wpnbha-col-gap));
+			padding: 0;
+
+			span {
+				font-size: var(--newspack-theme-font-size-base);
+			}
+		}
+	}
+}

@@ -15,6 +15,12 @@ add_filter(
 );
 
 /**
+ * Prevent WooCommerce from assuming that this is a duplicate site.
+ * On "duplicate sites", all subscriptions will be treated as manual, to prevent automatic renewals.
+ */
+add_filter('woocommerce_subscriptions_is_duplicate_site', '__return_false');
+
+/**
  * Disable SSL for local WP development
  *
  * Plugin Name: Disable SSL for local WP development

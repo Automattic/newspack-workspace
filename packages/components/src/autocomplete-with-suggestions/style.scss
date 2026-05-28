@@ -1,0 +1,163 @@
+/**
+* Styles for AutocompleteWithSuggestions component.
+*/
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-autocomplete-with-suggestions {
+	width: 100%;
+
+	&.hide-help {
+		> .components-base-control,
+		> .newspack-autocomplete-tokenfield,
+		> .newspack-autocomplete-with-suggestions__search-suggestions,
+		> .newspack-autocomplete-with-suggestions__search-suggestions-multiselect {
+			margin-top: 16px;
+		}
+	}
+	.components-select-control__input {
+		max-width: none;
+	}
+
+	.components-input-control__backdrop {
+		border-color: wp-colors.$gray-700 !important;
+	}
+
+	.newspack-autocomplete-with-suggestions__label,
+	.components-form-token-field__label,
+	.components-input-control__label,
+	.components-checkbox-control__label {
+		color: wp-colors.$gray-900 !important;
+	}
+
+	&__suggestions-spinner {
+		background: wp-colors.$gray-100;
+		border: 1px solid wp-colors.$gray-700;
+		border-radius: 2px;
+		cursor: progress;
+		margin: 16px 0;
+		padding: 32px;
+
+		.components-spinner {
+			display: block;
+			margin: 0 auto;
+			position: relative;
+			right: auto;
+			top: 0;
+		}
+	}
+
+	.newspack-autocomplete-tokenfield__help {
+		font-size: inherit;
+		margin-bottom: 8px !important;
+	}
+
+	.components-form-token-field {
+		&__input-container {
+			border-color: wp-colors.$gray-700;
+		}
+
+		&__suggestions-list {
+			border-top-color: wp-colors.$gray-700;
+			margin: 4px -4px -2px;
+		}
+
+		&__suggestion {
+			padding: 8px;
+		}
+	}
+
+	p.newspack-autocomplete-with-suggestions__label {
+		font-size: inherit;
+		margin: 0 0 8px;
+	}
+
+	&__selected-items {
+		border-bottom: 1px solid wp-colors.$gray-700;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-bottom: 16px;
+		padding-bottom: 12px;
+
+		p.newspack-autocomplete-with-suggestions__label {
+			flex: 0 0 100%;
+			margin: 0;
+		}
+	}
+
+	&__selected-item-button.components-button.is-tertiary {
+		background-color: wp-colors.$gray-300;
+		border-radius: 2px;
+		color: wp-colors.$gray-900;
+		font-size: 13px;
+		height: auto;
+		margin: 0;
+		padding-left: 8px;
+		padding-right: 8px;
+
+		&::after {
+			content: "✕";
+			margin-left: 8px;
+		}
+
+		&:hover {
+			box-shadow: none;
+			color: black;
+		}
+	}
+
+	&__search-suggestions,
+	&__search-suggestions-multiselect {
+		border-radius: 2px;
+		border: 1px solid wp-colors.$gray-700;
+		max-height: 178px;
+		overflow: visible auto;
+		padding: 8px 8px 0;
+
+		.components-button {
+			display: block;
+			line-height: normal;
+			margin: auto;
+
+			&.is-link {
+				color: wp-colors.$gray-900;
+				padding: 8px;
+				text-decoration: none;
+				width: 100%;
+
+				&:active:not(:disabled),
+				&:hover:not(:disabled) {
+					background: wp-colors.$gray-900;
+					background: var(--wp-admin-theme-color);
+					color: white;
+				}
+			}
+			&.is-secondary {
+				margin-bottom: 8px;
+				margin-top: 8px;
+				width: 100%;
+			}
+		}
+	}
+
+	&__search-suggestions {
+		border-radius: 2px;
+		border: 1px solid wp-colors.$gray-700;
+		padding: 0;
+
+		.components-button {
+			line-height: normal;
+
+			&:focus:not(:disabled) {
+				border-radius: 0;
+				box-shadow: inset 0 0 0 1.5px wp-colors.$gray-900;
+				box-shadow: inset 0 0 0 var(--wp-admin-border-width-focus) var(--wp-admin-theme-color);
+			}
+
+			&.is-secondary {
+				width: calc(100% - 16px);
+			}
+		}
+	}
+}

@@ -1,0 +1,32 @@
+.wp-block-newspack-collections {
+	// Image.
+	.wp-block-newspack-collections__image {
+		a {
+			display: block;
+			width: 100%;
+			text-decoration: none;
+		}
+
+		img {
+			width: 100%;
+			height: auto;
+			display: block;
+			aspect-ratio: 3 / 4;
+			object-fit: cover;
+			transition: opacity 0.2s ease;
+		}
+
+		a:hover img {
+			opacity: 0.9;
+		}
+	}
+
+	// Placeholder for missing featured images.
+	.wp-block-newspack-collections__placeholder {
+		aspect-ratio: 3 / 4;
+		background-color: var(--newspack-theme-color-bg-light);
+		display: block;
+		width: 100%;
+	}
+}
+

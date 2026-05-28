@@ -1,0 +1,134 @@
+// Admin byline sidebar panel.
+.newspack-byline {
+	.newspack-byline-toggle {
+		margin-top: 1em;
+	}
+	.newspack-byline-textarea {
+		margin-top: 1em;
+	}
+	.newspack-byline-author {
+		text-decoration: underline;
+	}
+	.newspack-byline-customize-btn {
+		justify-content: center;
+		margin-bottom: 1em;
+		width: 100%;
+	}
+}
+
+// Specificity to override core styles.
+.interface-complementary-area .newspack-byline .newspack-byline-preview {
+	margin: 2em 0;
+}
+
+// Admin byline customization modal.
+.newspack-byline-customize-modal {
+	@media (min-width: 960px) {
+		width: 30%;
+	}
+
+	.newspack-byline-textarea {
+		padding: 1em;
+		border: 1px solid #e1e1e1;
+		line-height: 2.3;
+		margin-bottom: 1em;
+		/* stylelint-disable property-no-unknown */
+		white-space: preserve-spaces;
+
+		.token-inline-block {
+			white-space: nowrap;
+
+			.components-button {
+				svg {
+					width: 1em;
+					pointer-events: none;
+				}
+			}
+		}
+	}
+
+	.tokens {
+		margin-bottom: 1em;
+	}
+
+	.components-button svg {
+		display: block;
+	}
+
+	/**
+	* The component uses classes from FormTokenField to make it stylized according to it.
+	* See: https://wordpress.github.io/gutenberg/?path=/docs/components-formtokenfield--docs
+	*/
+	.token-inline-block.components-form-token-field__token {
+		display: inline-grid;
+		grid-template-columns: 1fr auto;
+		margin-right: 0.1em;
+	}
+
+	.components-form-token-field__remove-token {
+		padding: 0;
+		width: 24px;
+	}
+
+	// Copied .components-form-token-field__remove-token styles to apply to insert-token
+	.components-form-token-field__insert-token {
+		border-radius: 0 1px 1px 0;
+		color: #1e1e1e;
+		cursor: pointer;
+		overflow: initial;
+		padding: 0 2px;
+		background: #ddd;
+		display: inline-block;
+		height: auto;
+		line-height: 10px;
+		min-width: unset;
+		transition: all 0.2 cubic-bezier (0.4, 1, 0.4, 1);
+	}
+
+	.newspack-byline-customize-modal-btns {
+		text-align: right;
+	}
+}
+
+.newspack-byline-textarea {
+	padding: 1em;
+	border: 1px solid #e1e1e1;
+	margin-bottom: 1em;
+
+	.token-inline-block {
+		.components-button {
+			svg {
+				pointer-events: none;
+			}
+		}
+	}
+}
+
+.tokens {
+	margin-bottom: 1em;
+}
+
+/**
+ * The component uses classes from FormTokenField to make it stylized according to it.
+ * See: https://wordpress.github.io/gutenberg/?path=/docs/components-formtokenfield--docs
+ */
+
+.token-inline-block.components-form-token-field__token {
+	display: inline-grid;
+	grid-template-columns: 1fr auto;
+}
+
+// Copied .components-form-token-field__remove-token styles to apply to intert-token
+.components-form-token-field__insert-token {
+	border-radius: 0 1px 1px 0;
+	color: #1e1e1e;
+	cursor: pointer;
+	overflow: initial;
+	padding: 0 2px;
+	background: #ddd;
+	display: inline-block;
+	height: auto;
+	line-height: 24px;
+	min-width: unset;
+	transition: all 0.2 cubic-bezier (0.4, 1, 0.4, 1);
+}

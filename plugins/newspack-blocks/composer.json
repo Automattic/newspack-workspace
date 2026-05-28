@@ -1,0 +1,33 @@
+{
+	"name": "automattic/newspack-blocks",
+	"description": "Gutenberg blocks for Newspack.",
+	"type": "wordpress-plugin",
+	"require-dev": {
+		"composer/installers": "~2.0",
+		"automattic/vipwpcs": "^3.0",
+		"wp-coding-standards/wpcs": "^3.0",
+		"dealerdirect/phpcodesniffer-composer-installer": "*",
+		"phpcompatibility/phpcompatibility-wp": "*",
+		"sirbrillig/phpcs-variable-analysis": "^2.10",
+		"yoast/phpunit-polyfills": "^3.0",
+		"phpunit/phpunit": "^7.0 || ^9.5"
+	},
+	"license": "GPL-2.0-or-later",
+	"scripts": {
+		"pre-push": "./.hooks/pre-push",
+		"post-update-cmd": [
+			"vendor/bin/cghooks update"
+		],
+		"lint": "phpcs ./"
+	},
+	"extra": {},
+	"config": {
+		"platform": {
+			"php": "8.0"
+		},
+		"allow-plugins": {
+			"composer/installers": true,
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		}
+	}
+}

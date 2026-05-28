@@ -1,0 +1,166 @@
+.experimental-tools__configure {
+	padding-left: 40px;
+}
+
+.experimental-tools__configure-header {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	margin-left: -40px;
+
+	button,
+	button:hover,
+	button:focus {
+		color: #1e1e1e !important;
+	}
+
+	h1 {
+		margin: 0;
+	}
+}
+
+.experimental-tools__configure-fields {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	margin-bottom: 24px;
+}
+
+.experimental-tools__help-with-restore {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+
+.experimental-tools__restore-default {
+	font-size: inherit;
+	padding: 0;
+	height: auto;
+	min-height: 0;
+
+	&:disabled {
+		color: #757575;
+		cursor: default;
+		text-decoration: none;
+	}
+}
+
+.experimental-tools__usage-note {
+	color: rgb( 117, 117, 117 );
+	font-size: 13px;
+	margin-top: 16px;
+}
+
+.experimental-tools__display-field {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 8px 0;
+	border-bottom: 1px solid var( --wp-admin-theme-color-darker-10, #ddd );
+	font-size: 14px;
+}
+
+.experimental-tools__logs-field {
+	margin-top: 24px;
+	border-top: 1px solid #ddd;
+	padding-top: 16px;
+
+	> strong {
+		display: block;
+		font-size: 14px;
+		margin-bottom: 8px;
+	}
+}
+
+.experimental-tools__logs-help {
+	font-size: 13px;
+	color: #757575;
+	margin: 0 0 12px;
+}
+
+.experimental-tools__logs-empty {
+	font-size: 13px;
+	color: #757575;
+	font-style: italic;
+}
+
+.experimental-tools__logs-list {
+	border: 1px solid #ddd;
+	border-radius: 2px;
+	max-height: 400px;
+	overflow-y: auto;
+}
+
+.experimental-tools__log-entry {
+	border-bottom: 1px solid #ddd;
+
+	&:last-child {
+		border-bottom: none;
+	}
+}
+
+.experimental-tools__log-header {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	padding: 10px 12px;
+	background: none;
+	border: none;
+	cursor: pointer;
+	font-size: 13px;
+	text-align: left;
+
+	&:hover {
+		background: #f6f7f7;
+	}
+
+	.components-button {
+		margin-left: auto;
+	}
+}
+
+.experimental-tools__log-date {
+	font-weight: 500;
+	color: #1e1e1e;
+}
+
+.experimental-tools__log-meta {
+	color: #757575;
+}
+
+.experimental-tools__log-details {
+	padding: 12px;
+	background: #f6f7f7;
+	border-top: 1px solid #ddd;
+}
+
+.experimental-tools__log-section {
+	margin-bottom: 12px;
+
+	&:last-child {
+		margin-bottom: 0;
+	}
+
+	> strong {
+		display: block;
+		font-size: 12px;
+		text-transform: uppercase;
+		color: #757575;
+		margin-bottom: 4px;
+	}
+
+	> pre {
+		background: #fff;
+		border: 1px solid #ddd;
+		border-radius: 2px;
+		padding: 8px;
+		margin: 0;
+		font-size: 12px;
+		white-space: pre-wrap;
+		word-break: break-word;
+		max-height: 200px;
+		overflow-y: auto;
+	}
+}

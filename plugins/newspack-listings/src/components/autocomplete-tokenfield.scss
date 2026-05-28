@@ -1,0 +1,18 @@
+/**
+* Style overrides for AutocompleteTokenfield component.
+*/
+.newspack-autocomplete-tokenfield {
+	.components-spinner {
+		position: absolute;
+		top: 2em;
+		right: 0;
+	}
+
+	.components-form-token-field__suggestions-list {
+		margin: 4px -4px -4px;
+	}
+
+	.components-form-token-field__suggestion {
+		padding: 8px;
+	}
+}

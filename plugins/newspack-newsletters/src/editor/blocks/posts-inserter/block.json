@@ -1,0 +1,113 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack-newsletters/posts-inserter",
+	"category": "newspack",
+	"supports": [
+		"align"
+	],
+	"attributes": {
+		"areBlocksInserted": {
+			"type": "boolean",
+			"default": false
+		},
+		"postsToShow": {
+			"type": "number",
+			"default": 3
+		},
+		"preventDeduplication": {
+			"type": "boolean",
+			"default": false
+		},
+		"displayPostSubtitle": {
+			"type": "boolean",
+			"default": false
+		},
+		"displayAuthor": {
+			"type": "boolean",
+			"default": false
+		},
+		"displayPostExcerpt": {
+			"type": "boolean",
+			"default": true
+		},
+		"excerptLength": {
+			"type": "number",
+			"default": 15
+		},
+		"displayPostDate": {
+			"type": "boolean",
+			"default": false
+		},
+		"displayFeaturedImage": {
+			"type": "boolean",
+			"default": true
+		},
+		"displayContinueReading": {
+			"type": "boolean",
+			"default": false
+		},
+		"displaySponsoredPosts": {
+			"type": "boolean",
+			"default": true
+		},
+		"innerBlocksToInsert": {
+			"type": "array",
+			"default": []
+		},
+		"featuredImageAlignment": {
+			"type": "string",
+			"default": "left"
+		},
+		"featuredImageSize": {
+			"type": "string",
+			"default": "large"
+		},
+		"isDisplayingSpecificPosts": {
+			"type": "boolean",
+			"default": false
+		},
+		"specificPosts": {
+			"type": "array",
+			"default": []
+		},
+		"textFontSize": {
+			"type": "string"
+		},
+		"headingFontSize": {
+			"type": "string"
+		},
+		"subHeadingFontSize": {
+			"type": "string"
+		},
+		"textColor": {
+			"type": "string"
+		},
+		"headingColor": {
+			"type": "string"
+		},
+		"subHeadingColor": {
+			"type": "string"
+		},
+		"postType": {
+			"type": "string",
+			"default": "post"
+		},
+		"tags": {
+			"type": "array",
+			"default": []
+		},
+		"tagExclusions": {
+			"type": "array",
+			"default": []
+		},
+		"categories": {
+			"type": "array",
+			"default": []
+		},
+		"categoryExclusions": {
+			"type": "array",
+			"default": []
+		}
+	}
+}

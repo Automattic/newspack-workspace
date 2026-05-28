@@ -1,0 +1,62 @@
+/**
+ * General layout styles
+ */
+
+@use "variables";
+@use "components";
+@use "modals";
+@use "navigation";
+@use "content";
+@use "forms";
+@use "addresses";
+@use "subscriptions";
+@use "group-subscriptions";
+
+.newspack-my-account {
+	&--logged-in {
+		background-color: var(--newspack-ui-color-body-bg);
+
+		.site-content {
+			margin-top: 0;
+		}
+		#primary {
+			max-width: none;
+			width: auto;
+		}
+		.woocommerce {
+			padding: 0 var(--newspack-ui-spacer-3) var(--newspack-ui-spacer-3);
+
+			/* WooCommerce breakpoint is 768px. */
+			@media ( min-width: 768px ) {
+				padding: var(--newspack-ui-spacer-11) var(--newspack-ui-spacer-5);
+			}
+		}
+		.woocommerce-MyAccount-navigation,
+		.woocommerce-MyAccount-content {
+			float: none;
+		}
+	}
+
+	// Payment methods and addresses specific styling.
+	.payment-method {
+		.payment-method__content {
+			h3,
+			p {
+				margin: 0;
+			}
+		}
+	}
+
+	.payment-method,
+	.woocommerce-Address {
+		// When there are no badges, push dropdown to bottom.
+		.newspack-ui__box__actions:not(:has(.newspack-ui__box__badges)) {
+			justify-content: flex-end;
+		}
+	}
+}
+
+/* stylelint-disable-next-line */
+#wc-stripe-update-subs-payment-method-card_field {
+	display: none;
+}

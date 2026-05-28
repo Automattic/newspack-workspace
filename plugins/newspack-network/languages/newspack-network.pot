@@ -1,0 +1,1447 @@
+# Copyright (C) 2026 Automattic
+# This file is distributed under the GPL3.
+msgid ""
+msgstr ""
+"Project-Id-Version: Newspack Network 2.20.1\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-network\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-05-19T02:58:44+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: newspack-network\n"
+
+#. Plugin Name of the plugin
+#: newspack-network.php
+#: includes/class-admin.php:124
+#: includes/class-admin.php:125
+#: includes/woocommerce-memberships/class-admin.php:151
+#: includes/woocommerce/class-product-admin.php:70
+msgid "Newspack Network"
+msgstr ""
+
+#. Description of the plugin
+#: newspack-network.php
+msgid "The Newspack Network plugin."
+msgstr ""
+
+#. Author of the plugin
+#: newspack-network.php
+msgid "Automattic"
+msgstr ""
+
+#. Author URI of the plugin
+#: newspack-network.php
+msgid "https://newspack.com/"
+msgstr ""
+
+#: includes/class-admin.php:60
+msgid "Newspack Network Settings"
+msgstr ""
+
+#: includes/class-admin.php:68
+#: includes/class-admin.php:133
+msgid "Site Role"
+msgstr ""
+
+#: includes/class-admin.php:110
+msgid "This site is a node in a network"
+msgstr ""
+
+#: includes/class-admin.php:111
+msgid "This site acts as the Network Hub"
+msgstr ""
+
+#: includes/class-initializer.php:81
+msgid "Network Reader"
+msgstr ""
+
+#: includes/class-user-manual-sync.php:98
+msgid "Newspack Network Tools"
+msgstr ""
+
+#: includes/class-user-manual-sync.php:102
+msgid "Manually sync user"
+msgstr ""
+
+#: includes/class-user-manual-sync.php:106
+msgid "Sync user across network"
+msgstr ""
+
+#: includes/class-user-manual-sync.php:109
+msgid "Manually sync this user's information across all sites in your network, including their role. If this is a new user, clicking this button will also propagate the user account across your network."
+msgstr ""
+
+#: includes/class-user-manual-sync.php:129
+msgid "This user is scheduled to be synced."
+msgstr ""
+
+#: includes/class-users.php:38
+msgid "Newspack Network Activity"
+msgstr ""
+
+#: includes/class-users.php:40
+msgid "Network Original User"
+msgstr ""
+
+#: includes/class-users.php:86
+msgid "Last Activity"
+msgstr ""
+
+#: includes/class-users.php:89
+msgid "View all"
+msgstr ""
+
+#: includes/class-users.php:102
+msgid "View activity"
+msgstr ""
+
+#: includes/class-users.php:135
+msgid "Sync across network"
+msgstr ""
+
+#. translators: %d is the users count.
+#: includes/class-users.php:178
+#, php-format
+msgid "Scheduled %d user to be synced across the network."
+msgid_plural "Scheduled %d users to be synced across the network."
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/content-distribution/class-admin.php:93
+#: includes/content-distribution/class-admin.php:120
+#: dist/incoming-post.js:1
+#: dist/outgoing-post.js:1
+#: dist/outgoing-post.js:22
+#: src/content-distribution/content-distribution-panel/index.js:19
+#: src/content-distribution/outgoing-post/index.js:325
+msgid "Distribute"
+msgstr ""
+
+#: includes/content-distribution/class-admin.php:130
+msgid "Node the Canonical URLs should point to"
+msgstr ""
+
+#: includes/content-distribution/class-admin.php:137
+msgid "Roles Allowed to Distribute"
+msgstr ""
+
+#: includes/content-distribution/class-admin.php:143
+msgid "Default Post Status for Distribution"
+msgstr ""
+
+#: includes/content-distribution/class-admin.php:171
+msgid "Default"
+msgstr ""
+
+#: includes/content-distribution/class-admin.php:175
+msgid "By default, canonical URLs will point to the site where the post was created. Modify this setting if you want them to point to one of the nodes."
+msgstr ""
+
+#: includes/content-distribution/class-admin.php:179
+msgid "Note: This assumes that all sites use the same permalink structure for posts."
+msgstr ""
+
+#: includes/content-distribution/class-admin.php:224
+msgid "Select the roles of users on this site that will be allowed to distribute content to sites in the network."
+msgstr ""
+
+#: includes/content-distribution/class-admin.php:237
+#: dist/story-budget.js:1
+#: src/story-budget/components/pull-story.js:89
+msgid "Draft"
+msgstr ""
+
+#: includes/content-distribution/class-admin.php:238
+#: includes/node/class-settings.php:389
+#: dist/story-budget.js:1
+#: src/story-budget/components/pull-story.js:93
+msgid "Pending"
+msgstr ""
+
+#: includes/content-distribution/class-admin.php:239
+msgid "Publish"
+msgstr ""
+
+#: includes/content-distribution/class-admin.php:259
+msgid "Select the default status to be used upon publishing distributed posts."
+msgstr ""
+
+#: includes/content-distribution/class-admin.php:260
+msgid "Note: Editors will still be able to modify the status upon distribution of a post."
+msgstr ""
+
+#: includes/content-distribution/class-api.php:156
+msgid "Data Events class not found."
+msgstr ""
+
+#: includes/content-distribution/class-api.php:166
+msgid "Post is currently an auto-draft. Save before distributing it."
+msgstr ""
+
+#: includes/content-distribution/class-cli.php:42
+msgid "Distribute a post to all the network or the specified sites"
+msgstr ""
+
+#. translators: %s: list of supported post types.
+#: includes/content-distribution/class-cli.php:49
+#, php-format
+msgid "The ID of the post to distribute. Supported post types are: %s"
+msgstr ""
+
+#: includes/content-distribution/class-cli.php:61
+msgid "Networked site url(s) comma separated to distribute the post to – or 'all' to distribute to all sites in the network."
+msgstr ""
+
+#: includes/content-distribution/class-cli.php:77
+msgid "Migrate posts from Distributor to Newspack Network's content distribution"
+msgstr ""
+
+#: includes/content-distribution/class-cli.php:82
+msgid "The ID of the post to migrate."
+msgstr ""
+
+#: includes/content-distribution/class-cli.php:89
+msgid "Migrate all posts."
+msgstr ""
+
+#: includes/content-distribution/class-cli.php:95
+msgid "Number of posts to migrate in each batch."
+msgstr ""
+
+#: includes/content-distribution/class-cli.php:102
+msgid "Whether to only migrate if all distributed posts can be migrated."
+msgstr ""
+
+#: includes/content-distribution/class-cli.php:108
+msgid "Whether to deactivate and delete the Distributor plugin after migrating all posts. This will only take effect if all posts were able to migrate."
+msgstr ""
+
+#: includes/content-distribution/class-cli.php:114
+msgid "Whether to run the migration in dry-run mode."
+msgstr ""
+
+#: includes/content-distribution/class-distributor-migrator.php:107
+msgid "Editing distributed posts is temporarily disabled due to a recent migration. Editing should be restored in a few minutes."
+msgstr ""
+
+#: includes/content-distribution/class-distributor-migrator.php:141
+#: includes/content-distribution/class-distributor-migrator.php:384
+msgid "Post not found."
+msgstr ""
+
+#: includes/content-distribution/class-distributor-migrator.php:146
+msgid "Original post ID not found."
+msgstr ""
+
+#: includes/content-distribution/class-distributor-migrator.php:151
+msgid "Original site URL not found."
+msgstr ""
+
+#. translators: original site URL.
+#: includes/content-distribution/class-distributor-migrator.php:160
+#, php-format
+msgid "Site URL \"%s\" is not networked."
+msgstr ""
+
+#: includes/content-distribution/class-distributor-migrator.php:248
+msgid "No connections found."
+msgstr ""
+
+#: includes/content-distribution/class-distributor-migrator.php:252
+msgid "This post contains internal connections, which are not supported."
+msgstr ""
+
+#: includes/content-distribution/class-distributor-migrator.php:257
+msgid "Subscriptions not found."
+msgstr ""
+
+#: includes/content-distribution/class-distributor-migrator.php:293
+#: includes/content-distribution/class-distributor-migrator.php:416
+msgid "Data Events not found."
+msgstr ""
+
+#: includes/content-distribution/class-distributor-migrator.php:297
+msgid "Invalid post IDs."
+msgstr ""
+
+#. translators: post ID.
+#: includes/content-distribution/class-distributor-migrator.php:310
+#, php-format
+msgid "No subscriptions found for post %d."
+msgstr ""
+
+#: includes/content-distribution/class-distributor-migrator.php:378
+msgid "Subscription not found."
+msgstr ""
+
+#: includes/content-distribution/class-distributor-migrator.php:389
+msgid "Target URL not found."
+msgstr ""
+
+#. translators: target URL.
+#: includes/content-distribution/class-distributor-migrator.php:398
+#, php-format
+msgid "Target URL \"%s\" is not networked."
+msgstr ""
+
+#: includes/content-distribution/class-distributor-migrator.php:420
+msgid "Invalid subscription IDs."
+msgstr ""
+
+#: includes/content-distribution/class-editor.php:179
+msgid "Content Distribution"
+msgstr ""
+
+#. translators: %s is the original site URL.
+#: includes/content-distribution/class-editor.php:225
+#, php-format
+msgid "Originally posted and linked to %s."
+msgstr ""
+
+#. translators: %s is the original site URL.
+#: includes/content-distribution/class-editor.php:230
+#, php-format
+msgid "Originally posted in %s and currently unlinked."
+msgstr ""
+
+#: includes/content-distribution/class-editor.php:233
+msgid "Click to visit the original post."
+msgstr ""
+
+#. translators: %s is the number of network sites the post has been distributed to.
+#: includes/content-distribution/class-editor.php:247
+#, php-format
+msgid "This post has been distributed to %d network site."
+msgid_plural "This post has been distributed to %d network sites."
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/content-distribution/class-incoming-post.php:130
+msgid "Missing email on incoming author creation"
+msgstr ""
+
+#: includes/content-distribution/class-incoming-post.php:217
+msgid "Invalid post payload."
+msgstr ""
+
+#: includes/content-distribution/class-incoming-post.php:221
+msgid "Post is not configured for distribution."
+msgstr ""
+
+#: includes/content-distribution/class-incoming-post.php:226
+msgid "Post is not configured for distribution on this site."
+msgstr ""
+
+#: includes/content-distribution/class-incoming-post.php:252
+msgid "Partial payload requires an existing post."
+msgstr ""
+
+#: includes/content-distribution/class-incoming-post.php:354
+#: includes/content-distribution/class-outgoing-post.php:42
+msgid "Invalid post."
+msgstr ""
+
+#: includes/content-distribution/class-incoming-post.php:562
+msgid "Mismatched post ID."
+msgstr ""
+
+#: includes/content-distribution/class-incoming-post.php:662
+msgid "Linked post content is newer than the post payload."
+msgstr ""
+
+#: includes/content-distribution/class-incoming-post.php:763
+msgid "Error inserting post."
+msgstr ""
+
+#. translators: unsupported post type for content distribution
+#: includes/content-distribution/class-outgoing-post.php:47
+#, php-format
+msgid "Post type %s is not supported as a distributed outgoing post."
+msgstr ""
+
+#: includes/content-distribution/class-outgoing-post.php:127
+msgid "Cannot distribute to own site."
+msgstr ""
+
+#. translators: %s: list of non-networked URLs
+#: includes/content-distribution/class-outgoing-post.php:136
+#, php-format
+msgid "Non-networked URLs were passed to config: %s"
+msgstr ""
+
+#: includes/content-distribution/class-outgoing-post.php:154
+msgid "No site URLs provided."
+msgstr ""
+
+#: includes/content-distribution/class-outgoing-post.php:174
+#: includes/content-distribution/class-outgoing-post.php:206
+msgid "Failed to update post distribution."
+msgstr ""
+
+#: includes/content-distribution/class-outgoing-post.php:195
+msgid "Site URL not found in post distribution."
+msgstr ""
+
+#: includes/content-distribution/class-outgoing-post.php:332
+msgid "Key not found in payload."
+msgstr ""
+
+#. translators: %s: Site URL
+#: includes/content-gate/class-limit-purchase.php:93
+#: includes/woocommerce-memberships/class-limit-purchase.php:112
+#, php-format
+msgid "You can't buy this subscription because you already have it active on %s"
+msgstr ""
+
+#: includes/content-gate/class-limit-purchase.php:133
+#: includes/woocommerce-memberships/class-limit-purchase.php:152
+msgid "Oops! You already have a subscription on another site in this network that grants you access to this site as well. Please log in using the same email address."
+msgstr ""
+
+#: includes/distributor-customizations/class-yoast-primary-cat.php:81
+msgid "No matching category found on the Hub site."
+msgstr ""
+
+#: includes/hub/admin/class-event-log-list-table.php:34
+msgid "ID"
+msgstr ""
+
+#: includes/hub/admin/class-event-log-list-table.php:35
+#: includes/hub/admin/class-orders.php:30
+msgid "Date"
+msgstr ""
+
+#: includes/hub/admin/class-event-log-list-table.php:36
+msgid "Summary"
+msgstr ""
+
+#: includes/hub/admin/class-event-log-list-table.php:37
+msgid "Node"
+msgstr ""
+
+#: includes/hub/admin/class-event-log-list-table.php:38
+msgid "Action name"
+msgstr ""
+
+#: includes/hub/admin/class-event-log-list-table.php:39
+msgid "Data"
+msgstr ""
+
+#: includes/hub/admin/class-event-log-list-table.php:103
+msgid "All Actions"
+msgstr ""
+
+#: includes/hub/admin/class-event-log-list-table.php:124
+msgid "All users"
+msgstr ""
+
+#: includes/hub/admin/class-event-log-list-table.php:133
+msgid "Filter"
+msgstr ""
+
+#: includes/hub/admin/class-event-log-list-table.php:156
+#: includes/hub/admin/class-event-log.php:60
+msgid "Copy to clipboard"
+msgstr ""
+
+#: includes/hub/admin/class-event-log.php:32
+#: includes/hub/admin/class-event-log.php:82
+msgid "Event Log"
+msgstr ""
+
+#: includes/hub/admin/class-event-log.php:61
+msgid "Copying..."
+msgstr ""
+
+#: includes/hub/admin/class-event-log.php:62
+msgid "Copied ✓"
+msgstr ""
+
+#: includes/hub/admin/class-membership-plans-table.php:25
+msgid "Name"
+msgstr ""
+
+#: includes/hub/admin/class-membership-plans-table.php:27
+msgid "Site URL"
+msgstr ""
+
+#: includes/hub/admin/class-membership-plans-table.php:28
+#: includes/woocommerce-memberships/class-admin.php:168
+#: includes/woocommerce/class-product-admin.php:86
+msgid "Network ID"
+msgstr ""
+
+#: includes/hub/admin/class-membership-plans-table.php:30
+msgid "Active Memberships"
+msgstr ""
+
+#: includes/hub/admin/class-membership-plans-table.php:31
+msgid "Membership Discrepancies"
+msgstr ""
+
+#: includes/hub/admin/class-membership-plans-table.php:42
+msgid "Active Subscriptions tied to this membership plan"
+msgstr ""
+
+#. translators: %d is the sum of active subscriptions.
+#: includes/hub/admin/class-membership-plans-table.php:45
+#, php-format
+msgid "Active Subscriptions (%d)"
+msgstr ""
+
+#: includes/hub/admin/class-membership-plans-table.php:96
+msgid "None"
+msgstr ""
+
+#: includes/hub/admin/class-membership-plans.php:33
+#: includes/hub/admin/class-membership-plans.php:46
+msgid "Membership Plans"
+msgstr ""
+
+#. translators: last fetch date.
+#: includes/hub/admin/class-membership-plans.php:58
+#, php-format
+msgid "Plans were last fetched on %s."
+msgstr ""
+
+#: includes/hub/admin/class-membership-plans.php:219
+#: includes/woocommerce-memberships/class-admin.php:110
+msgid "Only displayed for plans with a Network ID."
+msgstr ""
+
+#. translators: list of user roles which will entail synchronization
+#: includes/hub/admin/class-nodes-list.php:58
+#, php-format
+msgid "Users with the following roles: %1$s (%2$d on the Hub)"
+msgstr ""
+
+#. translators: %d is the synchronizable users count.
+#: includes/hub/admin/class-nodes-list.php:64
+#, php-format
+msgid "Synchronizable Users (%d)"
+msgstr ""
+
+#: includes/hub/admin/class-nodes-list.php:66
+msgid "Discrepancies in Sync. Users"
+msgstr ""
+
+#. translators: list of user roles which will entail synchronization
+#: includes/hub/admin/class-nodes-list.php:73
+#, php-format
+msgid "Users with roles different than the following roles: %1$s (%2$d on the Hub)"
+msgstr ""
+
+#: includes/hub/admin/class-nodes-list.php:78
+msgid "Non-synchronizable Users"
+msgstr ""
+
+#: includes/hub/admin/class-nodes-list.php:80
+msgid "Links"
+msgstr ""
+
+#. translators: %d - users on the Hub only, %d on the Node only
+#: includes/hub/admin/class-nodes-list.php:136
+#, php-format
+msgid "%1$d on the Hub only, %2$d on the Node only"
+msgstr ""
+
+#: includes/hub/admin/class-orders.php:29
+msgid "Order"
+msgstr ""
+
+#: includes/hub/admin/class-orders.php:31
+#: includes/hub/admin/class-subscriptions.php:37
+#: includes/woocommerce-subscriptions/class-my-account.php:130
+msgid "Status"
+msgstr ""
+
+#: includes/hub/admin/class-orders.php:32
+msgid "Subscription Relationship"
+msgstr ""
+
+#: includes/hub/admin/class-orders.php:33
+#: includes/hub/admin/class-subscriptions.php:40
+msgid "Total"
+msgstr ""
+
+#: includes/hub/admin/class-orders.php:80
+#: includes/hub/database/class-orders.php:65
+msgid "Parent Order"
+msgstr ""
+
+#: includes/hub/admin/class-orders.php:83
+#: includes/hub/admin/class-orders.php:86
+msgid "Renewal Order"
+msgstr ""
+
+#: includes/hub/admin/class-orders.php:89
+msgid "Resubscribe Order"
+msgstr ""
+
+#: includes/hub/admin/class-orders.php:92
+msgid "Normal Order"
+msgstr ""
+
+#: includes/hub/admin/class-subscriptions.php:38
+#: includes/woocommerce-subscriptions/class-my-account.php:129
+msgid "Subscription"
+msgstr ""
+
+#: includes/hub/admin/class-subscriptions.php:39
+msgid "Items"
+msgstr ""
+
+#: includes/hub/admin/class-subscriptions.php:41
+msgid "Start Date"
+msgstr ""
+
+#: includes/hub/admin/class-subscriptions.php:42
+msgid "Trial End"
+msgstr ""
+
+#: includes/hub/admin/class-subscriptions.php:43
+msgid "Next Payment"
+msgstr ""
+
+#: includes/hub/admin/class-subscriptions.php:44
+msgid "Last Order Date"
+msgstr ""
+
+#: includes/hub/admin/class-subscriptions.php:45
+msgid "End Date"
+msgstr ""
+
+#: includes/hub/admin/class-subscriptions.php:46
+#: includes/hub/database/class-orders.php:61
+#: includes/hub/database/class-orders.php:62
+#: includes/hub/database/class-orders.php:63
+#: includes/hub/database/class-orders.php:64
+#: includes/hub/database/class-orders.php:66
+#: includes/hub/database/class-orders.php:88
+msgid "Orders"
+msgstr ""
+
+#: includes/hub/class-nodes.php:107
+msgctxt "Post Type General Name"
+msgid "Nodes"
+msgstr ""
+
+#: includes/hub/class-nodes.php:108
+msgctxt "Post Type Singular Name"
+msgid "Node"
+msgstr ""
+
+#: includes/hub/class-nodes.php:109
+#: includes/hub/class-nodes.php:110
+#: includes/hub/class-nodes.php:111
+#: includes/hub/class-nodes.php:112
+#: includes/hub/class-nodes.php:114
+#: includes/hub/class-nodes.php:136
+msgid "Nodes"
+msgstr ""
+
+#: includes/hub/class-nodes.php:113
+msgid "Parent Node"
+msgstr ""
+
+#: includes/hub/class-nodes.php:115
+msgid "Add new Node"
+msgstr ""
+
+#: includes/hub/class-nodes.php:116
+#: includes/hub/database/class-orders.php:68
+#: includes/hub/database/class-subscriptions.php:68
+msgid "Add New"
+msgstr ""
+
+#: includes/hub/class-nodes.php:117
+msgid "New Node"
+msgstr ""
+
+#: includes/hub/class-nodes.php:118
+msgid "Edit Node"
+msgstr ""
+
+#: includes/hub/class-nodes.php:119
+msgid "Update Node"
+msgstr ""
+
+#: includes/hub/class-nodes.php:120
+msgid "View Node"
+msgstr ""
+
+#: includes/hub/class-nodes.php:121
+msgid "View Nodes"
+msgstr ""
+
+#: includes/hub/class-nodes.php:122
+msgid "Search Node"
+msgstr ""
+
+#: includes/hub/class-nodes.php:123
+#: includes/hub/database/class-orders.php:75
+#: includes/hub/database/class-subscriptions.php:75
+msgid "Not found"
+msgstr ""
+
+#: includes/hub/class-nodes.php:124
+#: includes/hub/database/class-orders.php:76
+#: includes/hub/database/class-subscriptions.php:76
+msgid "Not found in Trash"
+msgstr ""
+
+#: includes/hub/class-nodes.php:125
+#: includes/hub/database/class-orders.php:77
+#: includes/hub/database/class-subscriptions.php:77
+msgid "Featured Image"
+msgstr ""
+
+#: includes/hub/class-nodes.php:126
+#: includes/hub/database/class-orders.php:78
+#: includes/hub/database/class-subscriptions.php:78
+msgid "Set featured image"
+msgstr ""
+
+#: includes/hub/class-nodes.php:127
+#: includes/hub/database/class-orders.php:79
+#: includes/hub/database/class-subscriptions.php:79
+msgid "Remove featured image"
+msgstr ""
+
+#: includes/hub/class-nodes.php:128
+#: includes/hub/database/class-orders.php:80
+#: includes/hub/database/class-subscriptions.php:80
+msgid "Use as featured image"
+msgstr ""
+
+#: includes/hub/class-nodes.php:129
+#: includes/hub/database/class-orders.php:81
+#: includes/hub/database/class-subscriptions.php:81
+msgid "Insert into item"
+msgstr ""
+
+#: includes/hub/class-nodes.php:130
+#: includes/hub/database/class-orders.php:82
+#: includes/hub/database/class-subscriptions.php:82
+msgid "Uploaded to this item"
+msgstr ""
+
+#: includes/hub/class-nodes.php:131
+#: includes/hub/database/class-orders.php:83
+#: includes/hub/database/class-subscriptions.php:83
+msgid "Items list"
+msgstr ""
+
+#: includes/hub/class-nodes.php:132
+#: includes/hub/database/class-orders.php:84
+#: includes/hub/database/class-subscriptions.php:84
+msgid "Items list navigation"
+msgstr ""
+
+#: includes/hub/class-nodes.php:133
+#: includes/hub/database/class-orders.php:85
+#: includes/hub/database/class-subscriptions.php:85
+msgid "Filter items list"
+msgstr ""
+
+#: includes/hub/class-nodes.php:137
+msgid "Newspack Nodes"
+msgstr ""
+
+#: includes/hub/class-nodes.php:180
+msgid "All Nodes"
+msgstr ""
+
+#: includes/hub/class-nodes.php:186
+msgid "Hub (this site)"
+msgstr ""
+
+#: includes/hub/class-nodes.php:221
+msgid "Link the site"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:59
+msgctxt "Post Type General Name"
+msgid "Orders"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:60
+msgctxt "Post Type Singular Name"
+msgid "Order"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:67
+msgid "Add new Order"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:69
+msgid "New Order"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:70
+msgid "Edit Order"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:71
+msgid "Update Order"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:72
+msgid "View Order"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:73
+msgid "View Orders"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:74
+msgid "Search Order"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:89
+msgid "Node Orders"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:114
+msgctxt "Order status"
+msgid "Pending"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:115
+msgctxt "Order status"
+msgid "Processing"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:116
+msgctxt "Order status"
+msgid "Completed"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:117
+msgctxt "Order status"
+msgid "On hold"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:118
+msgctxt "Order status"
+msgid "Cancelled"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:119
+msgctxt "Order status"
+msgid "Refunded"
+msgstr ""
+
+#: includes/hub/database/class-orders.php:120
+msgctxt "Order status"
+msgid "Failed"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:59
+msgctxt "Post Type General Name"
+msgid "Subscriptions"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:60
+msgctxt "Post Type Singular Name"
+msgid "Subscription"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:61
+#: includes/hub/database/class-subscriptions.php:62
+#: includes/hub/database/class-subscriptions.php:63
+#: includes/hub/database/class-subscriptions.php:64
+#: includes/hub/database/class-subscriptions.php:66
+#: includes/hub/database/class-subscriptions.php:88
+#: includes/woocommerce-subscriptions/class-my-account.php:99
+msgid "Subscriptions"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:65
+msgid "Parent Subscription"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:67
+msgid "Add new Subscription"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:69
+msgid "New Subscription"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:70
+msgid "Edit Subscription"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:71
+msgid "Update Subscription"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:72
+msgid "View Subscription"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:73
+msgid "View Subscriptions"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:74
+msgid "Search Subscription"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:89
+msgid "Node Subscriptions"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:114
+msgctxt "Subscription status"
+msgid "Pending"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:115
+msgctxt "Subscription status"
+msgid "Active"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:116
+msgctxt "Subscription status"
+msgid "On hold"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:117
+msgctxt "Subscription status"
+msgid "Cancelled"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:118
+msgctxt "Subscription status"
+msgid "Switched"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:119
+msgctxt "Subscription status"
+msgid "Expired"
+msgstr ""
+
+#: includes/hub/database/class-subscriptions.php:120
+msgctxt "Subscription status"
+msgid "Pending Cancellation"
+msgstr ""
+
+#. translators: $s is the new URL
+#: includes/hub/stores/event-log-items/class-canonical-url-updated.php:25
+#, php-format
+msgid "The distributor Canonical Url option was updated to: %s"
+msgstr ""
+
+#. translators: 1: email 2: site url
+#: includes/hub/stores/event-log-items/class-generic.php:27
+#, php-format
+msgid "Event triggered by %1$s on %2$s"
+msgstr ""
+
+#: includes/hub/stores/event-log-items/class-nodes-synced.php:23
+msgid "Node data synced"
+msgstr ""
+
+#. translators: 1: Order ID 2: Previous status, 3: New status, 4: site url
+#: includes/hub/stores/event-log-items/class-order-changed.php:26
+#, php-format
+msgid "Order #%1$d updated its status from %2$s to %3$s on %4$s"
+msgstr ""
+
+#. translators: 1: Product name 2: Network ID 3: site url
+#: includes/hub/stores/event-log-items/class-product-updated.php:27
+#, php-format
+msgid "Product \"%1$s\" (Network ID: %2$s) updated on %3$s"
+msgstr ""
+
+#: includes/hub/stores/event-log-items/class-product-updated.php:28
+msgid "Unknown"
+msgstr ""
+
+#: includes/hub/stores/event-log-items/class-product-updated.php:29
+msgid "none"
+msgstr ""
+
+#. translators: 1: email 2: site url
+#: includes/hub/stores/event-log-items/class-reader-registered.php:27
+#, php-format
+msgid "New reader registered with email %1$s on %2$s"
+msgstr ""
+
+#. translators: 1: Subscription ID 2: Previous status, 3: New status, 4: site url
+#: includes/hub/stores/event-log-items/class-subscription-changed.php:26
+#, php-format
+msgid "Subscription #%1$d updated its status from %2$s to %3$s on %4$s"
+msgstr ""
+
+#. translators: 1: email 2: site url
+#: includes/hub/stores/event-log-items/class-user-manually-synced.php:26
+#, php-format
+msgid "User %1$s profile has been synced on %2$s"
+msgstr ""
+
+#. translators: 1: email 2: site url
+#: includes/hub/stores/event-log-items/class-user-updated.php:26
+#, php-format
+msgid "User %1$s profile has been updated on %2$s"
+msgstr ""
+
+#. translators: 1: previous owner email, 2: new owner email, 3: site URL.
+#: includes/incoming-events/class-woocommerce-membership-updated.php:227
+#, php-format
+msgid "Membership transferred from %1$s to %2$s via Newspack Network. Propagated from %3$s."
+msgstr ""
+
+#. translators: %s is the site URL.
+#: includes/incoming-events/class-woocommerce-membership-updated.php:262
+#, php-format
+msgid "Membership has been unlinked via Newspack Network. Unlinked from %s"
+msgstr ""
+
+#. translators: 1: membership status, 2: site URL.
+#: includes/incoming-events/class-woocommerce-membership-updated.php:278
+#, php-format
+msgid "Membership status updated to %1$s via Newspack Network. Propagated from %2$s."
+msgstr ""
+
+#. translators: %d is the number of seconds.
+#: includes/node/class-pulling.php:62
+#, php-format
+msgid "Newspack Network Pull Interval: %d seconds"
+msgstr ""
+
+#: includes/node/class-pulling.php:92
+msgid "Latest data pulled successfully."
+msgstr ""
+
+#: includes/node/class-pulling.php:253
+msgid "The Hub returned an unsigned pull response. Make sure the Hub is up to date."
+msgstr ""
+
+#: includes/node/class-pulling.php:259
+msgid "Could not verify the Hub pull response signature."
+msgstr ""
+
+#: includes/node/class-pulling.php:265
+msgid "The Hub returned a signed pull response with an unexpected structure."
+msgstr ""
+
+#: includes/node/class-settings.php:81
+msgid "Node Settings"
+msgstr ""
+
+#: includes/node/class-settings.php:108
+msgid "Newspack Network Node Settings"
+msgstr ""
+
+#: includes/node/class-settings.php:116
+msgid "Hub URL"
+msgstr ""
+
+#: includes/node/class-settings.php:124
+msgid "Secret key"
+msgstr ""
+
+#: includes/node/class-settings.php:200
+msgid "The URL is not valid."
+msgstr ""
+
+#: includes/node/class-settings.php:220
+msgid "Invalid Secret key:"
+msgstr ""
+
+#: includes/node/class-settings.php:256
+msgid "Link this site to the Hub"
+msgstr ""
+
+#. translators: %s is the Hub URL
+#: includes/node/class-settings.php:262
+#, php-format
+msgid "Are you sure you want to connect this site as Node to the Hub at %s?"
+msgstr ""
+
+#. translators: %s is the Hub URL
+#: includes/node/class-settings.php:272
+#, php-format
+msgid "WARNING: This will reset your current connection to %s."
+msgstr ""
+
+#: includes/node/class-settings.php:328
+msgid "No recent errors."
+msgstr ""
+
+#: includes/node/class-settings.php:331
+msgid "Debug Tools"
+msgstr ""
+
+#: includes/node/class-settings.php:335
+msgid "Last Processed Item ID"
+msgstr ""
+
+#: includes/node/class-settings.php:339
+msgid "Last Error From Server"
+msgstr ""
+
+#: includes/node/class-settings.php:347
+msgid "Synchronize latest data"
+msgstr ""
+
+#: includes/node/class-settings.php:371
+msgid "Scheduled Events"
+msgstr ""
+
+#: includes/node/class-settings.php:374
+msgid "The following events are scheduled to be sent or have recently been sent to the Hub."
+msgstr ""
+
+#: includes/node/class-settings.php:392
+msgid "Sent"
+msgstr ""
+
+#: includes/node/class-settings.php:406
+msgid "Decryption Error!"
+msgstr ""
+
+#: includes/node/class-settings.php:408
+msgid "Data is unencrypted and cannot be processed."
+msgstr ""
+
+#. translators: %s: scheduled date
+#: includes/node/class-settings.php:422
+#, php-format
+msgid "Scheduled for %s"
+msgstr ""
+
+#. translators: %s is the number of errors
+#: includes/node/class-settings.php:434
+#, php-format
+msgid "There was %s failed attempt to send this request"
+msgid_plural "There were %s failed attempts to send this request"
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/node/class-settings.php:536
+msgid "Error connecting to the Hub"
+msgstr ""
+
+#: includes/node/class-settings.php:544
+msgid "Invalid response from the Hub"
+msgstr ""
+
+#: includes/node/class-settings.php:555
+msgid "Site connected!"
+msgstr ""
+
+#: includes/node/class-settings.php:561
+msgid "Go back to the Hub"
+msgstr ""
+
+#: includes/node/class-settings.php:576
+msgid "Error connecting the site"
+msgstr ""
+
+#: includes/utils/class-requests.php:73
+msgid "Bad request."
+msgstr ""
+
+#: includes/utils/class-requests.php:80
+msgid "Bad request. Site not registered in this Hub"
+msgstr ""
+
+#: includes/utils/class-requests.php:87
+msgid "Bad request. Invalid signature."
+msgstr ""
+
+#: includes/utils/class-sites.php:122
+msgid "Dashboard"
+msgstr ""
+
+#: includes/utils/class-sites.php:134
+msgid "Posts"
+msgstr ""
+
+#: includes/utils/class-sites.php:138
+msgid "Users"
+msgstr ""
+
+#: includes/utils/class-sites.php:142
+msgid "Plugins"
+msgstr ""
+
+#: includes/utils/class-sites.php:146
+msgid "Settings"
+msgstr ""
+
+#: includes/woocommerce-memberships/class-admin.php:170
+msgid "If a Network ID is set, the user memberships will be propagated on the network. Users will be granted the membership with the matching Network ID in all other sites in the network."
+msgstr ""
+
+#. translators: %s is the site URL with a link to edit the post.
+#: includes/woocommerce-memberships/class-admin.php:285
+#, php-format
+msgid "Managed in %s"
+msgstr ""
+
+#. translators: %s is the list of emails
+#: includes/woocommerce-memberships/class-admin.php:378
+#, php-format
+msgid "Filtering memberships by emails (%d email addresses in the query)."
+msgstr ""
+
+#: includes/woocommerce-subscriptions/class-my-account.php:99
+msgid "Other Subscriptions"
+msgstr ""
+
+#: includes/woocommerce-subscriptions/class-my-account.php:124
+msgid "Here you can view and manage the subscriptions you have purchased in other sites in our network."
+msgstr ""
+
+#. translators: %1$s is the subscription name, %2$s is the site label where the subscription was purchased.
+#: includes/woocommerce-subscriptions/class-my-account.php:150
+#, php-format
+msgid "%1$s (%2$s) on %3$s"
+msgstr ""
+
+#: includes/woocommerce-subscriptions/class-my-account.php:154
+msgid "Manage"
+msgstr ""
+
+#: includes/woocommerce/class-product-admin.php:88
+msgid "If set, this product will be linked to products with the same Network ID on other sites in the network. Users with an active subscription to any linked product will be granted access across all sites."
+msgstr ""
+
+#. translators: %s: original site URL.
+#: dist/incoming-post.js:4
+#: src/content-distribution/incoming-post/index.js:67
+#, js-format
+msgid "Originally distributed from %s."
+msgstr ""
+
+#. translators: %s: original site URL.
+#: dist/incoming-post.js:7
+#: src/content-distribution/incoming-post/index.js:75
+#, js-format
+msgid "Distributed from %s."
+msgstr ""
+
+#. translators: %1$s: post type
+#: dist/incoming-post.js:10
+#: src/content-distribution/incoming-post/index.js:160
+#, js-format
+msgid "This %1$s has been unlinked from its origin. Edits to the origin %1$s will not update this version."
+msgstr ""
+
+#. translators: %1$s: post type
+#: dist/incoming-post.js:13
+#: src/content-distribution/incoming-post/index.js:168
+#, js-format
+msgid "This %1$s is linked to its origin. Edits to the origin %1$s will update this version."
+msgstr ""
+
+#. translators: %s: post type
+#: dist/incoming-post.js:16
+#: src/content-distribution/incoming-post/index.js:184
+#, js-format
+msgid "Edit origin %s"
+msgstr ""
+
+#: dist/incoming-post.js:16
+#: src/content-distribution/incoming-post/index.js:198
+msgid "Relinking…"
+msgstr ""
+
+#: dist/incoming-post.js:16
+#: src/content-distribution/incoming-post/index.js:199
+msgid "Unlinking…"
+msgstr ""
+
+#. translators: %s: post type
+#: dist/incoming-post.js:19
+#: src/content-distribution/incoming-post/index.js:211
+#, js-format
+msgid "Relink to origin %s"
+msgstr ""
+
+#. translators: %s: post type
+#: dist/incoming-post.js:22
+#: src/content-distribution/incoming-post/index.js:203
+#, js-format
+msgid "Unlink from origin %s"
+msgstr ""
+
+#. translators: %s: post type
+#: dist/incoming-post.js:25
+#: src/content-distribution/incoming-post/index.js:139
+#, js-format
+msgid "%s has been unlinked"
+msgstr ""
+
+#: dist/incoming-post.js:25
+#: src/content-distribution/incoming-post/index.js:230
+msgid "Relink"
+msgstr ""
+
+#: dist/incoming-post.js:25
+#: src/content-distribution/incoming-post/index.js:231
+msgid "Unlink"
+msgstr ""
+
+#. translators: %s: post type
+#: dist/incoming-post.js:28
+#: src/content-distribution/incoming-post/index.js:238
+#, js-format
+msgid "Are you sure you want to relink this %s to its origin? Any changes you've made will be lost."
+msgstr ""
+
+#. translators: %s: post type
+#: dist/incoming-post.js:31
+#: src/content-distribution/incoming-post/index.js:246
+#, js-format
+msgid "Are you sure you want to unlink this %s from its origin?"
+msgstr ""
+
+#. translators: %s: post type; %d: number of network sites
+#: dist/outgoing-post.js:7
+#: src/content-distribution/outgoing-post/index.js:77
+#, js-format
+msgid "This %s is distributed to one network site."
+msgid_plural "This %s is distributed to %d network sites."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: post type; %d: number of network sites
+#: dist/outgoing-post.js:10
+#: src/content-distribution/outgoing-post/index.js:131
+#, js-format
+msgid "%s distributed to one network site."
+msgid_plural "%s distributed to %d network sites."
+msgstr[0] ""
+msgstr[1] ""
+
+#: dist/outgoing-post.js:10
+#: src/content-distribution/outgoing-post/index.js:161
+msgid "Save the post at least once before distributing it."
+msgstr ""
+
+#. translators: %s: post type; %d: number of network sites
+#: dist/outgoing-post.js:13
+#: src/content-distribution/outgoing-post/index.js:193
+#, js-format
+msgid "This %s has been distributed to one network site."
+msgid_plural "This %s has been distributed to %d network sites."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: post type
+#: dist/outgoing-post.js:16
+#: src/content-distribution/outgoing-post/index.js:174
+#, js-format
+msgid "This %s has not been distributed to your network site yet."
+msgstr ""
+
+#. translators: %s: post type
+#: dist/outgoing-post.js:19
+#: src/content-distribution/outgoing-post/index.js:182
+#, js-format
+msgid "This %s has not been distributed to any network sites yet."
+msgstr ""
+
+#: dist/outgoing-post.js:19
+#: src/content-distribution/outgoing-post/index.js:207
+msgid "Search available network sites"
+msgstr ""
+
+#: dist/outgoing-post.js:19
+#: src/content-distribution/outgoing-post/index.js:225
+msgid "Select all"
+msgstr ""
+
+#. translators: %d: number of network sites
+#: dist/outgoing-post.js:22
+#: src/content-distribution/outgoing-post/index.js:273
+msgid "One network site selected."
+msgid_plural "%d network sites selected."
+msgstr[0] ""
+msgstr[1] ""
+
+#: dist/outgoing-post.js:22
+#: dist/story-budget.js:4
+#: src/content-distribution/outgoing-post/index.js:294
+#: src/story-budget/components/pull-story.js:146
+msgid "Status on publish"
+msgstr ""
+
+#: dist/outgoing-post.js:22
+#: src/content-distribution/outgoing-post/index.js:299
+msgid "Which status to set the post when it's published."
+msgstr ""
+
+#: dist/outgoing-post.js:22
+#: src/content-distribution/outgoing-post/index.js:322
+msgid "Distributing…"
+msgstr ""
+
+#: dist/outgoing-post.js:22
+#: src/content-distribution/outgoing-post/index.js:324
+msgid "Save & Distribute"
+msgstr ""
+
+#: dist/story-budget.js:1
+#: src/story-budget/components/local-budgets-control.js:34
+msgid "Budget"
+msgstr ""
+
+#: dist/story-budget.js:1
+#: src/story-budget/components/local-budgets-control.js:39
+msgid "Select a budget"
+msgstr ""
+
+#: dist/story-budget.js:1
+#: src/story-budget/components/pull-story.js:97
+msgid "Published"
+msgstr ""
+
+#: dist/story-budget.js:1
+#: src/story-budget/components/pull-story.js:107
+msgid "Pull Stories"
+msgstr ""
+
+#. translators: %s is the story title.
+#: dist/story-budget.js:4
+#: src/story-budget/components/pull-story.js:110
+#, js-format
+msgid "Pull “%s”"
+msgstr ""
+
+#: dist/story-budget.js:4
+#: src/story-budget/components/pull-story.js:124
+msgid "The following stories will be pulled:"
+msgstr ""
+
+#: dist/story-budget.js:4
+#: src/story-budget/components/pull-story.js:163
+msgid "Pull story"
+msgstr ""
+
+#. translators: %d is the number of stories.
+#: dist/story-budget.js:7
+#: src/story-budget/components/pull-story.js:166
+#, js-format
+msgid "Pull %d stories"
+msgstr ""
+
+#: dist/story-budget.js:7
+#: src/story-budget/components/pull-story.js:175
+msgid "Cancel"
+msgstr ""
+
+#: dist/story-budget.js:7
+#: src/story-budget/index.js:30
+msgid "Pull Story"
+msgstr ""

@@ -1,0 +1,8 @@
+// Re-adds some modal-like spacing for when the sign up form ends up embedded in a page.
+.newspack-ui {
+	&.newspack-reader-auth {
+		.newspack-ui__button:not(:first-child, a.newspack-ui__button):first-of-type {
+			margin-top: var(--newspack-ui-spacer-5);
+		}
+	}
+}

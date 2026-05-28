@@ -1,0 +1,24 @@
+@use "scss/variables";
+@use "scss/elements";
+@use "scss/modals";
+
+.newspack-ui {
+	// Need better spot for this
+	&__color-text-gray {
+		color: var(--newspack-ui-color-neutral-60);
+	}
+
+	// Overrides for theme styles -- to move to theme?
+	h2:not([class*="font-size"]),
+	h3:not([class*="font-size"]) {
+		font-size: var(--newspack-ui-font-size-s);
+		line-height: var(--newspack-ui-line-height-s);
+	}
+
+	a,
+	a:hover {
+		&:not(.newspack-ui__button) {
+			color: inherit;
+		}
+	}
+}

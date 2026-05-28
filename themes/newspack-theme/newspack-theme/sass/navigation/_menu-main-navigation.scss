@@ -1,0 +1,91 @@
+@use "../variables-site/structure";
+
+/** === Main menu === */
+
+.nav1 {
+	.main-menu {
+		> li {
+			> a {
+				color: inherit;
+				padding: #{0.25 * structure.$size__spacing-unit} #{0.5 * structure.$size__spacing-unit};
+				font-weight: 700;
+
+				&:hover {
+					opacity: 0.75;
+				}
+			}
+		}
+	}
+}
+
+/* Desktop-specific styles */
+.site-header {
+	.nav1 {
+		font-size: var(--newspack-theme-font-size-xs);
+
+		.main-menu {
+			display: inline-block;
+
+			> li {
+				color: #555;
+				display: inline-block;
+				line-height: 1.25;
+				margin-right: #{0.25 * structure.$size__spacing-unit};
+
+				> a {
+					color: inherit;
+				}
+
+				&:first-child > a {
+					padding-left: 0;
+				}
+			}
+		}
+	}
+}
+
+// Header Center Logo; default height
+.h-cl.h-dh {
+	.site-header {
+		#site-navigation {
+			flex-basis: 100%;
+			text-align: center;
+
+			ul ul {
+				text-align: left;
+			}
+		}
+
+		.nav1 .main-menu > li:last-child {
+			margin-right: 0;
+
+			a {
+				padding-right: 0;
+			}
+
+			.submenu-expand {
+				margin-right: -5px; // offset spacing next to svg icon.
+			}
+		}
+	}
+}
+
+// Header - default height
+.h-dh .site-header .nav1 .main-menu > li {
+	padding: calc(#{structure.$size__spacing-unit} * 0.5) 0;
+}
+
+// Header - short height
+.h-sh {
+	.site-header .nav1 .main-menu > li {
+		padding: #{0.25 * structure.$size__spacing-unit} 0;
+
+		> .sub-menu {
+			padding-top: 20px;
+
+			&::before {
+				top: 12px;
+			}
+		}
+	}
+}

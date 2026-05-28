@@ -4,15 +4,19 @@ This file provides guidance to AI coding agents working with code in this reposi
 
 ## Overview
 
-newspack-workspace is a Docker-based local development environment for Newspack WordPress plugins and themes. It provides containerized PHP/Apache/MySQL with all dependencies needed to develop, build, and test Newspack projects.
+newspack-workspace is the Newspack monorepo. It contains all product plugins, themes, and shared packages in a single repository, plus a Docker-based local development environment with containerized PHP/Apache/MySQL.
 
-**This repository serves as a monorepo-like workspace** where all Newspack plugins and themes are cloned into the `repos/` directory. Agents can make changes across multiple plugins from this single location.
+**This is a pnpm workspace.** Plugins live in `plugins/`, themes in `themes/`, shared packages (newspack-scripts, newspack-components, newspack-colors, newspack-icons) in `packages/`. All workspace packages share a single lockfile and hoisted dependencies.
 
-## Working Across Multiple Repositories
+## Workspace Layout
 
-### Repository Locations
+### Directory Structure
 
-All Newspack repositories are cloned to `./repos/<project-name>/`. Each is an independent Git repository hosted at `github.com/Automattic/<project-name>`.
+- `plugins/<name>/` - Product plugins (12 total).
+- `themes/<name>/` - Themes (newspack-theme, newspack-block-theme).
+- `packages/<name>/` - Shared libraries (scripts, components, colors, icons).
+
+Each directory is a standalone WordPress plugin/theme that can be zipped and installed independently.
 
 ### Plugins and Themes
 
@@ -41,8 +45,8 @@ The Newspack product consists of these interconnected plugins and themes:
 - `newspack-multibranded-site` - Support for multiple brands within a single WordPress site
 
 **Manager (SaaS):**
-- `newspack-manager` - Server-side component for Newspack-as-a-service
-- `newspack-manager-client` - Client plugin that connects sites to Newspack Manager
+- `newspack-manager-admin` - Admin UI on the central hub site (newspack.com); manages and monitors all Newspack sites
+- `newspack-manager` - Companion plugin installed on every managed site; reports data back to the hub
 
 **Syndication:**
 - `republication-tracker-tool` - Tracks content republication across sites
@@ -117,10 +121,11 @@ n restart         # Stop and start
 cp default.env .env           # Create local config
 ./build-image.sh              # Build Docker image (PHP 8.3)
 ./build-image-82.sh           # Build PHP 8.2 image
-./clone-repos.sh              # Clone all Newspack repos to ./repos/
+./clone-repos.sh              # (legacy, no longer needed in the monorepo)
 n start                       # Launch containers
 n install                     # Install WordPress
 n ci-build all                # Build all projects
+n setup --yes                 # Bootstrap site with content and plugins
 ```
 
 ### Building Projects
@@ -167,6 +172,8 @@ n sites-list                  # List additional sites
 n sites-drop <name>           # Remove site
 ```
 
+**Note:** Additional sites run in the same container and share plugin code — use them for multi-site/manager workflows. For branch isolation (different plugin versions), use isolated environments instead (see below).
+
 ### Working Across Repos
 ```bash
 n pull                        # Git pull all repos
@@ -179,7 +186,9 @@ n release                     # Switch all repos to release
 ## Architecture
 
 ### Directory Structure
-- `repos/` - Cloned Newspack repositories (plugins + themes), mounted at `/newspack-repos/` in container
+- `plugins/` - Product plugins, mounted at `/newspack-plugins/` in container
+- `themes/` - Themes, mounted at `/newspack-themes/` in container
+- `packages/` - Shared libraries (scripts, components, colors, icons)
 - `html/` - Main WordPress site, mounted at `/var/www/html`
 - `additional-sites-html/` - Additional WordPress sites
 - `manager-html/` - Newspack Manager site
@@ -188,13 +197,13 @@ n release                     # Switch all repos to release
 
 ### Docker Services
 - `wordpress` (container: `newspack_dev`) - Apache + PHP + WordPress
-- `db` - MariaDB 10.8.2
+- `db` - MariaDB 11.8.6
 - `mailhog` - Email capture at http://localhost:8025
 - `adminer` - Database UI at http://localhost:8088
 
 ### Context-Aware Commands
 The `n` script detects your current working directory:
-- From `repos/<project>/` - commands target that project
+- From `plugins/<project>/` or `themes/<project>/` - commands target that project
 - From `additional-sites-html/<site>/` - commands target that site
 - From `manager-html/` - commands target the manager site
 - Otherwise - commands target the main site
@@ -206,16 +215,76 @@ Use `ncd <name>` (install with `n cd-install`) for quick navigation between proj
 - Batcache for page caching via `advanced-cache.php`
 
 ### Xdebug
-Configured on port 9003 with IDE key `DOCKERDEBUG`. Path mapping: `/newspack-repos/<project>` maps to local `repos/<project>`.
+Configured on port 9003 with IDE key `DOCKERDEBUG`. Path mapping: `/newspack-plugins/<project>` maps to local `plugins/<project>`, `/newspack-themes/<project>` maps to local `themes/<project>`.
 
 ## Isolated Environments for Parallel Development
 
-Use the `newspack` plugin skills to manage worktrees and isolated Docker environments:
-- `newspack:worktree` — Create or remove git worktrees for branch isolation
-- `newspack:env-create` — Create worktrees + isolated Docker environment on a separate port
-- `newspack:env-destroy` — Destroy environment and clean up worktrees
+Each isolated environment gets its own Docker container, WordPress installation, and database — completely independent of the main site. This enables parallel development and testing without interference.
 
-If the `newspack` plugin is not available, use the `n worktree` and `n env` commands directly. Run `n worktree --help` and `n env --help` for usage.
+### Quick Start
+```bash
+n env create myenv --worktree newspack-plugin:mybranch
+n env up myenv
+n setup --env myenv --yes     # fully configured Newspack site
+# → https://myenv.local/  (override with --domain)
+```
+
+### Environment Commands
+```bash
+n env create <name> [options]  # Create environment config
+  --worktree <repo>:<branch>   #   Mount a worktree (repeatable for multiple repos)
+  --domain <domain>            #   Custom domain (default: <name>.local)
+  --up                         #   Start the environment immediately after creation
+n env up <name> [--build]      # Start environment (creates DB, installs WP, sets up SSL)
+n env up --all [--build]       # Start all existing environments at once
+n env down <name>              # Stop environment
+n env destroy <name>           # Remove environment, DB, worktrees, and files
+n env list                     # List environments with status, URLs, and worktrees
+n env list --porcelain         # Machine-readable tab-separated output (name, status, url, worktrees)
+n env cleanup                  # Interactive bulk cleanup of environments
+```
+
+### Site Setup
+```bash
+n setup [options]              # Bootstrap current site with full Newspack config
+n setup --env <name> [options] # Bootstrap an isolated environment
+  --yes                        #   Skip confirmation (destructive: resets DB)
+  --url <url>                  #   Override site URL (default: auto-detect)
+  --block-theme                #   Use newspack-block-theme instead of newspack-theme
+  --woocommerce                #   Enable WooCommerce + donations + subscriptions (off by default)
+  --campaigns                  #   Enable campaign/prompt setup (off by default)
+  --no-posts                   #   Skip post/category creation
+  --posts-count N              #   Number of posts (default: 10)
+  --customers-count N          #   Number of WooCommerce customers (default: 10)
+```
+
+Run `n setup --help` for all available options.
+
+`n setup` resets the database and creates a site with: theme, Newspack plugins, posts with categories, homepage, users, and menus. Use `--woocommerce` to add donations/memberships/subscriptions, and `--campaigns` for prompts.
+
+### Shell Access
+```bash
+n sh                           # Shell into main container
+n sh <name>                    # Shell into environment container
+```
+
+### How It Works
+- Each env binds to a unique loopback IP (127.0.0.2+) on ports 80/443 with HTTPS via mkcert
+- Domain defaults to the loopback IP, overridable with `--domain`
+- `n start` pre-creates loopback aliases (127.0.0.2–100) so agents can create envs without sudo. If `newspack-manage-host` is installed (via `./bin/setup-networking.sh`), networking is set up without password prompts -- otherwise `sudo` is required
+- Each env mounts `envs/<name>/html/` as `/var/www/html` (isolated from `./html/`)
+- Each env gets its own database (`wordpress_<name>`) in the shared MariaDB server
+- Each env gets a unique `WP_CACHE_KEY_SALT` to prevent memcached key collisions
+- Worktrees override specific plugins (e.g., `newspack-plugin`) while sharing the rest from `./plugins/`
+- All env containers join a shared `newspack_envs` Docker bridge network with their domain as a DNS alias, enabling inter-container communication (e.g., hub/node setups)
+- `n env destroy` cleans up everything: container, DB, html dir, hosts entry, and worktrees
+
+### Claude Code Plugin Skills
+
+If the `newspack` Claude Code plugin is installed, these skills wrap the commands above:
+- `newspack:worktree` — Create or remove git worktrees for branch isolation
+- `newspack:env-create` — Create worktrees + isolated Docker environment with HTTPS domain
+- `newspack:env-destroy` — Destroy environment and clean up worktrees
 
 ## Cross-Repository Workflow
 
@@ -242,38 +311,23 @@ n build newspack-plugin
 n build newspack-popups
 
 # Run PHP tests for each
-cd repos/newspack-plugin && n test-php
-cd repos/newspack-popups && n test-php
+cd plugins/newspack-plugin && n test-php
+cd plugins/newspack-popups && n test-php
 ```
 
 ### 4. Git Workflow for Multi-Repo Changes
-Each repo in `repos/` is independent. For related changes:
-1. Create branches with the same name across repos for easier tracking
-2. Commit to each repo separately
-3. Reference related PRs in commit messages/PR descriptions
+Everything is in a single repository. Cross-plugin changes happen in one branch and one PR.
 
-Example:
+### 5. Finding Code Across Plugins
 ```bash
-# In each affected repo
-cd repos/newspack-plugin
-git checkout -b feature/my-feature
-# ... make changes, commit ...
-
-cd repos/newspack-newsletters
-git checkout -b feature/my-feature
-# ... make changes, commit ...
-```
-
-### 5. Finding Code Across Repos
-```bash
-# Search all repos for a hook
-grep -r "newspack_reader_logged_in" repos/
+# Search all plugins for a hook
+grep -r "newspack_reader_logged_in" plugins/
 
 # Find where a function is defined
-grep -rn "function get_reader_data" repos/
+grep -rn "function get_reader_data" plugins/
 
 # Find all usages of a class
-grep -rn "Newspack_Popups" repos/
+grep -rn "Newspack_Popups" plugins/
 ```
 
 ## Common Integration Points
@@ -313,7 +367,7 @@ newspack-plugin provides configuration managers for other plugins:
 ## Git & Commit Rules
 
 - **Merge strategy**: Always use **squash merge** (`gh pr merge --squash`) when merging PRs. The only exceptions are branch promotions (`trunk` to `alpha`, `alpha` to `release`, `release` to `trunk`, `release` to `alpha`), which use merge commits to preserve history.
-- **Commit messages**: Single line, max 72 characters. Conventional commit format: `<type>(<scope>): <subject>`. No body, no `Co-Authored-By`, no extra attributes.
+- **Commit messages**: Subject must be a single line, max 72 characters, in conventional commit format: `<type>(<scope>): <subject>`. No body. `Co-Authored-By` trailers are required after a blank line.
 - **Never push automatically**. Always ask for confirmation before pushing to remote.
 
 ## Claude Code Plugin

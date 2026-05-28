@@ -1,0 +1,72 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "../../colors/colors.module" as colors;
+
+:root {
+	// WP Admin
+	--wp-admin-theme-color: #{colors.$primary-600};
+	--wp-admin-theme-color--rgb: #{colors.$primary-600--rgb};
+	--wp-admin-theme-color-darker-10: #{colors.$primary-700};
+	--wp-admin-theme-color-darker-10--rgb: #{colors.$primary-700--rgb};
+	--wp-admin-theme-color-darker-20: #{colors.$primary-800};
+	--wp-admin-theme-color-darker-20--rgb: #{colors.$primary-800--rgb};
+	--wp-admin-theme-color-lighter-10: #{colors.$primary-000};
+	--wp-admin-theme-color-lighter-10--rgb: #{colors.$primary-000--rgb};
+}
+
+// Buttons Card
+
+.newspack-buttons-card {
+	display: flex;
+	flex-direction: row-reverse;
+	gap: 16px;
+	justify-content: flex-start;
+	align-items: center;
+	margin: 64px 0 32px;
+
+	&:empty {
+		display: none;
+	}
+
+	+ .newspack-card {
+		margin-top: 64px;
+	}
+}
+
+// Checkboxes
+.newspack-checkbox-control {
+	margin-top: 0 !important;
+	.components-checkbox-control__label {
+		font-weight: 600;
+	}
+
+	.components-base-control__help {
+		margin-left: 32px;
+		margin-top: 0;
+	}
+}
+
+// Checkbox Icon
+.newspack-checkbox-icon {
+	background: white;
+	border-radius: 50%;
+	box-shadow: inset 0 0 0 1px wp-colors.$gray-300;
+	display: block;
+	height: 24px;
+	width: 24px;
+
+	svg {
+		fill: wp-colors.$gray-700;
+	}
+
+	&--checked {
+		background: wp-colors.$alert-green;
+		box-shadow: none;
+
+		svg {
+			fill: white;
+		}
+	}
+	&--pending {
+		background: wp-colors.$alert-yellow;
+	}
+}

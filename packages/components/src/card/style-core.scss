@@ -1,0 +1,288 @@
+/**
+ * Card using WP Core component
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+@use "../../../colors/colors.module" as colors;
+
+.newspack-card--core,
+.newspack-wizard .newspack-card--core {
+	background: wp-colors.$white;
+	position: relative;
+	transition: background-color 125ms ease-in-out, box-shadow 125ms ease-in-out, color 125ms ease-in-out;
+	svg {
+		transition: fill 125ms ease-in-out;
+	}
+	&__icon {
+		border-radius: wp-vars.$radius-round;
+		display: grid;
+		height: wp-vars.$grid-unit-60;
+		place-items: center;
+		width: wp-vars.$grid-unit-60;
+		svg {
+			fill: var(--wp-admin-theme-color);
+			height: wp-vars.$grid-unit-50;
+			width: wp-vars.$grid-unit-50;
+		}
+		.newspack-card--core__has-icon-background-color & {
+			background: var(--wp-admin-theme-color-lighter-10);
+		}
+	}
+	&__is-small {
+		h1,
+		h2,
+		h3,
+		h4,
+		h5,
+		h6 {
+			font-size: wp-vars.$font-size-large;
+		}
+		.newspack-card--core {
+			&__header-content {
+				* {
+					line-height: wp-vars.$font-line-height-small;
+				}
+			}
+			&__icon {
+				height: wp-vars.$grid-unit-50;
+				width: wp-vars.$grid-unit-50;
+				svg {
+					height: wp-vars.$grid-unit-30;
+					width: wp-vars.$grid-unit-30;
+				}
+			}
+		}
+	}
+	&__no-margin .components-card__body {
+		padding: 0 !important;
+	}
+	&__header {
+		color: wp-colors.$gray-700;
+		flex-wrap: wrap;
+		position: relative;
+		.newspack-card--core__action {
+			margin: 0;
+			label {
+				border: 0;
+				clip-path: inset(50%);
+				height: 1px;
+				margin: -1px;
+				overflow: hidden;
+				padding: 0;
+				position: absolute !important;
+				width: 1px;
+				word-wrap: normal !important;
+			}
+		}
+		> .components-dropdown-menu {
+			aspect-ratio: 1;
+			border-left: 1px solid wp-colors.$gray-200;
+			display: grid;
+			height: 100%;
+			max-width: 50px;
+			padding: 4px;
+			place-items: center;
+			position: absolute;
+			right: 0;
+			top: 0;
+		}
+		&__action {
+			background-color: wp-colors.$white;
+			flex: 1 100%;
+			justify-content: center !important;
+		}
+	}
+	&__header--is-draggable {
+		padding-left: 80px !important;
+		.newspack-card--core__header__draggable-controls {
+			align-items: center;
+			border-right: 1px solid wp-colors.$gray-200;
+			display: flex;
+			height: 100%;
+			justify-content: space-between;
+			left: 0;
+			padding: 0 8px;
+			position: absolute;
+			top: 0;
+		}
+		.newspack-card--core__header__draggable-controls__drag-handle {
+			cursor: grab;
+			display: grid;
+			place-items: center;
+		}
+		.newspack-card--core__header__draggable-controls__move-buttons {
+			display: flex;
+			flex-direction: column;
+			.components-button.has-icon {
+				height: 16px;
+				padding: 0;
+				width: 100%;
+			}
+		}
+	}
+	// Two classes beat the single-class .components-card__header border-bottom
+	// rule from WP Core without needing !important.
+	&__header.newspack-card--core__header--no-border {
+		border-bottom: none;
+	}
+	&__body.newspack-card--core__body--no-header-border {
+		> div:not(.components-card__body):not(.components-card__media):not(.components-card__divider) {
+			padding-top: 0;
+		}
+	}
+	&__header--has-actions {
+		.newspack-card--core__header {
+			padding-right: 70px;
+		}
+	}
+	button.newspack-card--core__header {
+		appearance: none;
+		background-color: white;
+		border: none;
+		cursor: pointer;
+		text-align: left;
+	}
+	&__header-content {
+		display: grid;
+		flex: 1;
+		grid-gap: 8px;
+		h1,
+		h2,
+		h3,
+		h4,
+		h5,
+		h6,
+		p {
+			margin-bottom: 0;
+			margin-top: 0;
+			transition: color 125ms ease-in-out;
+		}
+		h1,
+		h2,
+		h3,
+		h4,
+		h5,
+		h6 {
+			align-items: center;
+			color: wp-colors.$gray-900;
+			font-weight: 600;
+			display: flex;
+			gap: 8px;
+			a {
+				color: inherit;
+				text-decoration: none;
+				&:hover {
+					text-decoration: underline;
+				}
+			}
+			.newspack-badge {
+				font-weight: 400;
+			}
+		}
+	}
+	&__is-active:not(.newspack-card--core__is-draggable) {
+		border-color: var(--wp-admin-theme-color);
+		box-shadow: var(--wp-admin-theme-color) 0 0 0 1px;
+		.newspack-card--core__header {
+			background-color: rgba( var(--wp-admin-theme-color--rgb), 0.04 );
+			color: var(--wp-admin-theme-color);
+			h1,
+			h2,
+			h3,
+			h4,
+			h5,
+			h6 {
+				color: var(--wp-admin-theme-color);
+			}
+			svg {
+				fill: var(--wp-admin-theme-color);
+			}
+		}
+
+		&.newspack-card--core__has-children {
+			.newspack-card--core__header {
+				border-bottom-left-radius: 0;
+				border-bottom-right-radius: 0;
+			}
+			.newspack-card--core__body {
+				border-top: 1px solid var(--wp-admin-theme-color);
+			}
+			.components-card__divider {
+				background: wp-colors.$gray-100;
+			}
+		}
+	}
+	&__buttons-card {
+		display: block;
+		text-decoration: none;
+		&:active,
+		&:hover {
+			border-color: var(--wp-admin-theme-color);
+			box-shadow: var(--wp-admin-theme-color) 0 0 0 1px;
+			.newspack-card--core__header {
+				color: var(--wp-admin-theme-color);
+				h1,
+				h2,
+				h3,
+				h4,
+				h5,
+				h6 {
+					color: var(--wp-admin-theme-color);
+				}
+				svg {
+					fill: var(--wp-admin-theme-color);
+				}
+			}
+		}
+	}
+	&.is-destructive {
+		.newspack-card--core__header {
+			h1,
+			h2,
+			h3,
+			h4,
+			h5,
+			h6 {
+				color: wp-colors.$alert-red;
+			}
+			&:hover,
+			&:focus {
+				background-color: wp-colors.$gray-100;
+			}
+		}
+		.newspack-card--core__action,
+		.newspack-card--core__action svg {
+			fill: wp-colors.$alert-red;
+		}
+	}
+	hr.components-card__divider {
+		margin: 0;
+	}
+	&__is-narrow {
+		margin-left: auto;
+		margin-right: auto;
+		@media screen and ( min-width: 615px ) {
+			max-width: 583px;
+		}
+	}
+	&__has-grey-header {
+		.newspack-card--core__header {
+			background-color: rgba(black, 0.025);
+		}
+	}
+	&__body {
+		> div:not(.components-card__body):not(.components-card__media):not(.components-card__divider) {
+			padding: 16px 24px;
+			.newspack-card--core__is-small & {
+				padding: 16px;
+			}
+			.newspack-card--core__no-margin & {
+				padding: 0;
+			}
+		}
+		> .components-card__media {
+			border-radius: 0 !important;
+		}
+	}
+}

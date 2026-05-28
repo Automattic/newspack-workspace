@@ -1,0 +1,432 @@
+# Copyright (C) 2026 Automattic
+# This file is distributed under the same license as the Newspack Sponsors plugin.
+msgid ""
+msgstr ""
+"Project-Id-Version: Newspack Sponsors 2.2.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-sponsors\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-02-03T18:36:57+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: newspack-sponsors\n"
+
+#. Plugin Name of the plugin
+#: newspack-sponsors.php
+msgid "Newspack Sponsors"
+msgstr ""
+
+#. Plugin URI of the plugin
+#. Author URI of the plugin
+#: newspack-sponsors.php
+msgid "https://newspack.com"
+msgstr ""
+
+#. Description of the plugin
+#: newspack-sponsors.php
+msgid "Add sponsors and sponsor info to posts. Allows special visual treatment for sponsored content."
+msgstr ""
+
+#. Author of the plugin
+#: newspack-sponsors.php
+msgid "Automattic"
+msgstr ""
+
+#: includes/class-core.php:124
+msgctxt "post type general name"
+msgid "Sponsors"
+msgstr ""
+
+#: includes/class-core.php:125
+msgctxt "post type singular name"
+msgid "Sponsor"
+msgstr ""
+
+#: includes/class-core.php:126
+msgctxt "admin menu"
+msgid "Sponsors"
+msgstr ""
+
+#: includes/class-core.php:127
+msgctxt "add new on admin bar"
+msgid "Sponsor"
+msgstr ""
+
+#: includes/class-core.php:128
+msgctxt "popup"
+msgid "Add New"
+msgstr ""
+
+#: includes/class-core.php:129
+#: includes/class-core.php:327
+msgid "Add New Sponsor"
+msgstr ""
+
+#: includes/class-core.php:130
+msgid "New Sponsor"
+msgstr ""
+
+#: includes/class-core.php:131
+#: includes/class-core.php:324
+msgid "Edit Sponsor"
+msgstr ""
+
+#: includes/class-core.php:132
+#: includes/class-core.php:325
+msgid "View Sponsor"
+msgstr ""
+
+#: includes/class-core.php:133
+msgid "All Sponsors"
+msgstr ""
+
+#: includes/class-core.php:134
+#: includes/class-core.php:320
+msgid "Search Sponsors"
+msgstr ""
+
+#: includes/class-core.php:135
+msgid "Parent Sponsors:"
+msgstr ""
+
+#: includes/class-core.php:136
+#: includes/class-core.php:329
+msgid "No sponsors found."
+msgstr ""
+
+#: includes/class-core.php:137
+msgid "No sponsors found in Trash."
+msgstr ""
+
+#: includes/class-core.php:138
+msgid "Sponsor Logo"
+msgstr ""
+
+#: includes/class-core.php:139
+msgid "Set sponsor logo"
+msgstr ""
+
+#: includes/class-core.php:140
+msgid "Remove sponsor logo"
+msgstr ""
+
+#: includes/class-core.php:141
+msgid "Use as sponsor logo"
+msgstr ""
+
+#: includes/class-core.php:166
+msgid "A URL to link to when displaying this sponsor’s info."
+msgstr ""
+
+#: includes/class-core.php:181
+msgid "(Optional) Text shown in category flag. This text will override site-wide default settings."
+msgstr ""
+
+#: includes/class-core.php:196
+msgid "(Optional) Text shown to explain sponsorship by this sponsor."
+msgstr ""
+
+#: includes/class-core.php:211
+msgid "(Optional) Text shown in lieu of a byline on sponsored posts. This is combined with the Sponsor Name to form a full byline."
+msgstr ""
+
+#: includes/class-core.php:225
+msgid "Scope of sponsorship this sponsor offers (native content vs. underwritten)."
+msgstr ""
+
+#: includes/class-core.php:239
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:98
+msgid "Display the sponsor only in the byline, or both the sponsor and post author."
+msgstr ""
+
+#: includes/class-core.php:254
+msgid "Display the sponsor only, or display categories alongside the sponsor."
+msgstr ""
+
+#: includes/class-core.php:269
+msgid "Display the underwriter blurb in standard or simple-text format."
+msgstr ""
+
+#: includes/class-core.php:284
+msgid "Display the underwriter blurb at the top or bottom of the post."
+msgstr ""
+
+#: includes/class-core.php:300
+msgid "If this value is true, this sponsor will not be shown on single posts unless directly assigned to a post. It will still appear on category/tag archive pages, if applicable."
+msgstr ""
+
+#: includes/class-core.php:318
+#: includes/class-core.php:319
+#: includes/class-core.php:321
+#: includes/class-core.php:334
+#: includes/class-core.php:335
+#: includes/class-core.php:336
+msgid "Sponsors"
+msgstr ""
+
+#: includes/class-core.php:322
+msgid "Parent Sponsor"
+msgstr ""
+
+#: includes/class-core.php:323
+msgid "Parent Sponsor:"
+msgstr ""
+
+#: includes/class-core.php:326
+msgid "Update Sponsor"
+msgstr ""
+
+#: includes/class-core.php:328
+msgid "New Sponsor Name"
+msgstr ""
+
+#: includes/class-core.php:330
+msgid "No sponsors"
+msgstr ""
+
+#: includes/class-core.php:331
+msgid "Sponsors list navigation"
+msgstr ""
+
+#: includes/class-core.php:332
+msgid "Sponsors list"
+msgstr ""
+
+#: includes/class-core.php:333
+msgid "&larr; Back to Sponsors"
+msgstr ""
+
+#: includes/class-settings.php:33
+msgid "Sponsored by"
+msgstr ""
+
+#: includes/class-settings.php:34
+msgid "Sponsored"
+msgstr ""
+
+#. Translators: Default value for Sponsor Disclaimer field.
+#: includes/class-settings.php:37
+#, php-format
+msgid "Advertiser content: This content was commissioned and paid for by [sponsor name]. The news and editorial staff of %s had no role in the creation or production of this story."
+msgstr ""
+
+#: includes/class-settings.php:89
+msgid "Default Sponsor Byline Prefix"
+msgstr ""
+
+#: includes/class-settings.php:95
+msgid "Default Sponsored Flag Label"
+msgstr ""
+
+#: includes/class-settings.php:101
+msgid "Default Sponsorship Disclaimer"
+msgstr ""
+
+#: includes/class-settings.php:107
+msgid "Suppress Ads for All Sponsored Posts"
+msgstr ""
+
+#: includes/class-settings.php:121
+#: includes/class-settings.php:135
+msgid "Newspack Sponsors: Site-Wide Settings"
+msgstr ""
+
+#: includes/class-settings.php:122
+msgid "Settings"
+msgstr ""
+
+#: includes/theme-helpers.php:226
+msgid "Please provide a $term_id if not invoking within a term archive page."
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:34
+msgid "Native content"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:35
+msgid "Underwritten content"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:39
+#: src/editor/sidebar/index.js:44
+msgid "Sponsor only"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:40
+msgid "Both sponsor and author byline"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:45
+msgid "Sponsor and categories"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:49
+msgid "Standard"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:50
+msgid "Simple"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:54
+msgid "Top"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:55
+msgid "Bottom"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:60
+msgid "Inherit from sponsor"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:73
+msgid "Sponsor Display Overrides"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:75
+msgid "The following settings optionally override the settings of assigned sponsors."
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:81
+msgid "Sponsorship Scope"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:85
+msgid "Generally, native content is authored by the sponsor, while underwritten content is authored by editorial staff but supported by the sponsor. This option allows you to select a different visual treatment for native vs. underwitten content."
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:94
+msgid "Sponsorship Byline Display"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:102
+msgid "Sponsorship Category Display"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:106
+msgid "Show the sponsor only, or the post’s categories alongside the \"sponsored\" flag."
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:114
+msgid "Underwriter blurb style"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:118
+msgid "Show the underwriter blurb in a standard or simplified style."
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:122
+msgid "Underwriter placement"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:126
+msgid "Show the underwriter blurb at the top or bottom of the post."
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:134
+msgid "Sponsor URL"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:135
+msgid "URL to link to for this sponsor"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:136
+msgid "Required if you want to show a link to an external URL."
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:143
+msgid "Sponsor Flag Override (Optional)"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:145
+msgid "The label for the flag that appears in lieu of category flags. If not empty, this field will override the site-wide setting."
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:155
+msgid "Sponsor Disclaimer Override (Optional)"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:157
+msgid "Text shown to explain sponsorship by this sponsor. If not empty, this field will override the site-wide setting."
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:166
+msgid "Sponsor Byline Prefix (Optional)"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/sidebar/index.js:167
+msgid "The prefix for the sponsor attribution that appears in lieu of author byline. If not empty, this field will override the site-wide setting."
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/taxonomy-panel/index.js:38
+msgid "Select one or more sponsors:"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/taxonomy-panel/index.js:46
+msgid "categories"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/editor/taxonomy-panel/index.js:46
+msgid "tags"
+msgstr ""
+
+#. translators: %1$s: "Select" or "Add", %2$s: taxonomy label, %3$s: taxonomy label.
+#: dist/editor.js:4
+#: src/editor/taxonomy-panel/index.js:49
+#, js-format
+msgid "%1$s one or more post %2$s to associate this sponsor with those %3$s."
+msgstr ""
+
+#: dist/editor.js:4
+#: src/editor/taxonomy-panel/index.js:50
+msgid "Select"
+msgstr ""
+
+#: dist/editor.js:4
+#: src/editor/taxonomy-panel/index.js:50
+msgid "Add"
+msgstr ""
+
+#: dist/editor.js:4
+#: src/editor/index.js:33
+msgid "Sponsor Settings"
+msgstr ""

@@ -1,0 +1,33 @@
+.newspack-card--core--settings-group {
+	.components-card__body {
+		> .newspack-notice {
+			margin: 16px 0;
+		}
+		> .components-base-control {
+			&:first-child {
+				margin-top: 0;
+			}
+			+ .components-base-control,
+			+ .newspack-form-token-field {
+				margin-top: 16px;
+			}
+		}
+
+		/** ToggleControl switch should appear after the label. */
+		> .components-toggle-control {
+			.components-h-stack {
+				.components-form-toggle {
+					order: 2;
+				}
+			}
+			.components-toggle-control__help {
+				margin-inline-start: auto;
+			}
+		}
+		.newspack-grid:last-child,
+		.components-base-control:last-child,
+		p:last-child {
+			margin-bottom: 0;
+		}
+	}
+}

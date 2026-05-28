@@ -1,0 +1,1514 @@
+# Copyright (C) 2026 Automattic
+# This file is distributed under the same license as the Newspack Campaigns plugin.
+msgid ""
+msgstr ""
+"Project-Id-Version: Newspack Campaigns 3.12.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-popups\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-05-19T01:34:42+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: newspack-popups\n"
+
+#. Plugin Name of the plugin
+#: newspack-popups.php
+msgid "Newspack Campaigns"
+msgstr ""
+
+#. Plugin URI of the plugin
+#. Author URI of the plugin
+#: newspack-popups.php
+msgid "https://newspack.com"
+msgstr ""
+
+#. Description of the plugin
+#: newspack-popups.php
+msgid "Build persuasive call-to-action prompts from scratch and display them as overlays, inline with the story, or above the site header."
+msgstr ""
+
+#. Author of the plugin
+#: newspack-popups.php
+msgid "Automattic"
+msgstr ""
+
+#: includes/class-newspack-popups-criteria.php:151
+msgid "Criteria already registered."
+msgstr ""
+
+#: includes/class-newspack-popups-custom-placements.php:102
+msgid "Invalid custom placement ID."
+msgstr ""
+
+#. Translators: %d is the number of pageviews in between prompt displays, if greater than 0 (every pageview).
+#: includes/class-newspack-popups-data-api.php:53
+#, php-format
+msgid "every %d pageviews"
+msgstr ""
+
+#. Translators: %d is the pageview when the prompt starts to be displayed, if greater than 0 (first pageview).
+#: includes/class-newspack-popups-data-api.php:57
+#, php-format
+msgid "starting on pageview %d"
+msgstr ""
+
+#. Translators: %d is the max number number of displays for the prompt, if greater than 0 (no max).
+#: includes/class-newspack-popups-data-api.php:61
+#, php-format
+msgid "max %d times"
+msgstr ""
+
+#. Translators: %s is the time period for when the prompt can be displayed again after the max number of displays.
+#: includes/class-newspack-popups-data-api.php:64
+#, php-format
+msgid "resetting every %s"
+msgstr ""
+
+#: includes/class-newspack-popups-inserter.php:912
+#: includes/class-newspack-popups-inserter.php:1212
+msgid "Prompts Visible"
+msgstr ""
+
+#: includes/class-newspack-popups-inserter.php:913
+msgid "Prompts Hidden"
+msgstr ""
+
+#: includes/class-newspack-popups-model.php:110
+#: includes/class-newspack-popups-model.php:151
+msgid "The prompt specified does not exist."
+msgstr ""
+
+#: includes/class-newspack-popups-model.php:120
+msgid "Invalid taxonomy."
+msgstr ""
+
+#: includes/class-newspack-popups-model.php:164
+msgid "Invalid frequency value."
+msgstr ""
+
+#: includes/class-newspack-popups-model.php:183
+msgid "Invalid placement value."
+msgstr ""
+
+#: includes/class-newspack-popups-model.php:526
+msgid "Extra Small"
+msgstr ""
+
+#: includes/class-newspack-popups-model.php:530
+msgid "Small"
+msgstr ""
+
+#: includes/class-newspack-popups-model.php:534
+msgid "Medium"
+msgstr ""
+
+#: includes/class-newspack-popups-model.php:538
+msgid "Large"
+msgstr ""
+
+#: includes/class-newspack-popups-model.php:542
+msgid "Full-Width"
+msgstr ""
+
+#. translators: archive page
+#: includes/class-newspack-popups-model.php:556
+msgid "Categories"
+msgstr ""
+
+#. translators: archive page
+#: includes/class-newspack-popups-model.php:561
+msgid "Tags"
+msgstr ""
+
+#. translators: archive page
+#: includes/class-newspack-popups-model.php:566
+msgid "Authors"
+msgstr ""
+
+#. translators: archive page
+#: includes/class-newspack-popups-model.php:571
+msgid "Date"
+msgstr ""
+
+#. translators: archive page
+#: includes/class-newspack-popups-model.php:576
+msgid "Custom Post Types"
+msgstr ""
+
+#. translators: archive page
+#: includes/class-newspack-popups-model.php:581
+msgid "Taxonomies"
+msgstr ""
+
+#. translators: the "Posts page" configured under Settings > Reading when a static front page is set.
+#: includes/class-newspack-popups-model.php:586
+msgid "Posts Page"
+msgstr ""
+
+#: includes/class-newspack-popups-model.php:900
+msgid "scheduled"
+msgstr ""
+
+#: includes/class-newspack-popups-model.php:901
+msgid "draft"
+msgstr ""
+
+#: includes/class-newspack-popups-model.php:1192
+msgid "Close Pop-up"
+msgstr ""
+
+#: includes/class-newspack-popups-presets.php:109
+#: includes/cli/class-import.php:63
+msgid "File not found or not readable."
+msgstr ""
+
+#: includes/class-newspack-popups-presets.php:115
+msgid "File is empty or invalid JSON."
+msgstr ""
+
+#: includes/class-newspack-popups-presets.php:275
+msgid "Invalid prompt slug."
+msgstr ""
+
+#: includes/class-newspack-popups-presets.php:290
+msgid "Invalid field name."
+msgstr ""
+
+#. Translators: %s is a list of missing required fields.
+#: includes/class-newspack-popups-presets.php:311
+#, php-format
+msgid "Missing required fields: %s"
+msgstr ""
+
+#: includes/class-newspack-popups-presets.php:358
+#: includes/class-newspack-popups-presets.php:381
+msgid "Error creating preset prompts and segments. Please try again."
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:30
+msgid "Campaigns Settings"
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:31
+#: dist/editor.js:47
+#: dist/settings.js:1
+#: src/editor/index.js:80
+#: src/settings/index.js:99
+msgid "Settings"
+msgstr ""
+
+#. Translators: error message if trying to update an invalid setting key.
+#: includes/class-newspack-popups-settings.php:73
+#, php-format
+msgid "Option %s does not exist."
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:87
+msgid "Error updating the settings."
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:123
+msgid "Invalid setting."
+msgstr ""
+
+#. translators: %s is the description of the option.
+#: includes/class-newspack-popups-settings.php:134
+#, php-format
+msgid "Invalid setting value for \"%s\"."
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:218
+msgid "-- None --"
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:247
+msgid "Donor Settings"
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:261
+msgid "Donor landing page"
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:262
+msgid "Set a page on your site as a donation landing page. Once a reader views this page, they will be considered a donor. This is helpful if you're using an off-site donation platform but still want to target donors as an audience segment."
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:274
+msgid "Mailchimp donor merge fields"
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:275
+msgid "A comma-delimited list of strings to match against Mailchimp merge field names. If a Mailchimp merge field name contains one of these strings and a subscriber has a true value in this field, the subscriber will be considered a donor for segmentation purposes."
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:295
+msgid "Dismiss overlays on background tap"
+msgstr ""
+
+#: includes/class-newspack-popups-settings.php:296
+msgid "If enabled, readers can dismiss overlay prompts by tapping on the colored overlay background underneath the prompt content. This will make it easier for readers to dismiss prompts, but potentially result in less reader engagement."
+msgstr ""
+
+#: includes/class-newspack-popups.php:151
+msgctxt "post type general name"
+msgid "Prompts"
+msgstr ""
+
+#: includes/class-newspack-popups.php:152
+msgctxt "post type singular name"
+msgid "Prompt"
+msgstr ""
+
+#: includes/class-newspack-popups.php:153
+msgctxt "admin menu"
+msgid "Prompts"
+msgstr ""
+
+#: includes/class-newspack-popups.php:154
+msgctxt "add new on admin bar"
+msgid "Prompt"
+msgstr ""
+
+#: includes/class-newspack-popups.php:155
+msgctxt "popup"
+msgid "Add New"
+msgstr ""
+
+#: includes/class-newspack-popups.php:156
+msgid "Add New Prompt"
+msgstr ""
+
+#: includes/class-newspack-popups.php:157
+msgid "New Prompt"
+msgstr ""
+
+#: includes/class-newspack-popups.php:158
+msgid "Edit Prompt"
+msgstr ""
+
+#: includes/class-newspack-popups.php:159
+msgid "View Prompt"
+msgstr ""
+
+#: includes/class-newspack-popups.php:160
+msgid "All Prompts"
+msgstr ""
+
+#: includes/class-newspack-popups.php:161
+msgid "Search Prompts"
+msgstr ""
+
+#: includes/class-newspack-popups.php:162
+msgid "Parent Prompts:"
+msgstr ""
+
+#: includes/class-newspack-popups.php:163
+msgid "No Prompts found."
+msgstr ""
+
+#: includes/class-newspack-popups.php:164
+msgid "No Prompts found in Trash."
+msgstr ""
+
+#: includes/class-newspack-popups.php:632
+msgid "Campaigns"
+msgstr ""
+
+#: includes/class-newspack-popups.php:633
+msgid "Campaign"
+msgstr ""
+
+#: includes/class-newspack-popups.php:634
+msgid "Add Campaign"
+msgstr ""
+
+#: includes/class-newspack-popups.php:810
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:75
+msgid "Inline"
+msgstr ""
+
+#. translators: %s: Duplicate prompt title
+#: includes/class-newspack-popups.php:1217
+#: includes/class-newspack-popups.php:1223
+#: includes/class-newspack-popups.php:1250
+#, php-format
+msgid "%s copy"
+msgstr ""
+
+#: includes/class-newspack-segments-model.php:39
+msgctxt "taxonomy general name"
+msgid "Segments"
+msgstr ""
+
+#: includes/class-newspack-segments-model.php:40
+msgctxt "taxonomy singular name"
+msgid "Segment"
+msgstr ""
+
+#: includes/class-newspack-segments-model.php:41
+msgid "Search Segments"
+msgstr ""
+
+#: includes/class-newspack-segments-model.php:42
+msgid "All Segments"
+msgstr ""
+
+#: includes/class-newspack-segments-model.php:43
+msgid "Parent Segment"
+msgstr ""
+
+#: includes/class-newspack-segments-model.php:44
+msgid "Parent Segment:"
+msgstr ""
+
+#: includes/class-newspack-segments-model.php:45
+msgid "Edit Segment"
+msgstr ""
+
+#: includes/class-newspack-segments-model.php:46
+msgid "Update Segment"
+msgstr ""
+
+#: includes/class-newspack-segments-model.php:47
+msgid "Add New Segment"
+msgstr ""
+
+#: includes/class-newspack-segments-model.php:48
+msgid "New Segment Name"
+msgstr ""
+
+#: includes/class-newspack-segments-model.php:49
+msgid "Segments"
+msgstr ""
+
+#: includes/class-newspack-segments-model.php:54
+msgid "Segments for popups"
+msgstr ""
+
+#: includes/class-newspack-segments-model.php:601
+msgid "Failed to sort due to outdated segment data. Please refresh and try again."
+msgstr ""
+
+#: includes/cli/class-delete-all.php:66
+msgid "Requested data deleted!"
+msgstr ""
+
+#: includes/cli/class-delete-all.php:81
+msgid "Deleted 1 campaign"
+msgstr ""
+
+#. translators: %d is the number of deleted campaigns.
+#: includes/cli/class-delete-all.php:84
+#, php-format
+msgid "Deleted %d campaigns"
+msgstr ""
+
+#: includes/cli/class-delete-all.php:100
+msgid "Deleted 1 segment"
+msgstr ""
+
+#. translators: %d is the number of deleted segments.
+#: includes/cli/class-delete-all.php:103
+#, php-format
+msgid "Deleted %d segments"
+msgstr ""
+
+#: includes/cli/class-delete-all.php:125
+msgid "Deleted 1 prompt"
+msgstr ""
+
+#. translators: %d is the number of deleted prompts.
+#: includes/cli/class-delete-all.php:128
+#, php-format
+msgid "Deleted %d prompts"
+msgstr ""
+
+#. translators: %d is the number of campaigns imported.
+#: includes/cli/class-export.php:55
+#, php-format
+msgid "%d campaign exported"
+msgid_plural "%d campaigns exported"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d is the number of segments exported.
+#: includes/cli/class-export.php:57
+#, php-format
+msgid "%d segment exported"
+msgid_plural "%d segments exported"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d is the number of prompts exported.
+#: includes/cli/class-export.php:59
+#, php-format
+msgid "%d prompt exported"
+msgid_plural "%d prompts exported"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s is the name of the output file.
+#: includes/cli/class-export.php:64
+#, php-format
+msgid "Exported to %s"
+msgstr ""
+
+#: includes/cli/class-export.php:65
+msgid "Export complete!"
+msgstr ""
+
+#: includes/cli/class-import.php:59
+msgid "You must either supply a json file path or use the --ras-defaults flag."
+msgstr ""
+
+#: includes/cli/class-import.php:68
+msgid "File is not valid JSON."
+msgstr ""
+
+#: includes/cli/class-import.php:71
+msgid "JSON file loaded, initializing the importer..."
+msgstr ""
+
+#. translators: %1$s is the name of the term, %2$s is the taxonomy (category or tag).
+#: includes/cli/class-import.php:85
+#, php-format
+msgid "The \"%1$s\" %2$s does not exist in this site. How do you want to proceed?"
+msgstr ""
+
+#: includes/cli/class-import.php:105
+msgid "Term created"
+msgstr ""
+
+#: includes/cli/class-import.php:112
+msgid "Term selected"
+msgstr ""
+
+#: includes/cli/class-import.php:119
+msgid "Ignoring"
+msgstr ""
+
+#: includes/cli/class-import.php:128
+msgid "Running the importer"
+msgstr ""
+
+#: includes/cli/class-import.php:136
+msgid "Could not import JSON file."
+msgstr ""
+
+#. translators: %d is the number of campaigns imported.
+#: includes/cli/class-import.php:153
+#, php-format
+msgid "%d campaign imported"
+msgid_plural "%d campaigns imported"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d is the number of segments imported.
+#: includes/cli/class-import.php:155
+#, php-format
+msgid "%d segment imported"
+msgid_plural "%d segments imported"
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %d is the number of prompts imported.
+#: includes/cli/class-import.php:157
+#, php-format
+msgid "%d prompt imported"
+msgid_plural "%d prompts imported"
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/cli/class-import.php:158
+msgid "Import complete!"
+msgstr ""
+
+#: includes/cli/class-import.php:169
+msgid "category"
+msgstr ""
+
+#: includes/cli/class-import.php:170
+msgid "tag"
+msgstr ""
+
+#: includes/cli/class-import.php:181
+msgid "1) Create it"
+msgstr ""
+
+#: includes/cli/class-import.php:182
+msgid "2) Choose an existing one"
+msgstr ""
+
+#: includes/cli/class-import.php:183
+msgid "3) Ignore"
+msgstr ""
+
+#: includes/cli/class-import.php:184
+msgid "Enter your choice (1, 2 or 3):"
+msgstr ""
+
+#: includes/cli/class-import.php:190
+msgid "Invalid choice. Please try again."
+msgstr ""
+
+#. translators: %s is the taxonomy (category or tag).
+#: includes/cli/class-import.php:204
+#, php-format
+msgid "Enter the existing %s name you want to use (or \"c\" to cancel):"
+msgstr ""
+
+#: includes/cli/class-import.php:217
+msgid "No term found with that name. Please try again."
+msgstr ""
+
+#. translators: %s is the taxonomy (category or tag).
+#: includes/cli/class-import.php:235
+#, php-format
+msgid "This %s already exists. Using it instead."
+msgstr ""
+
+#: includes/cli/class-prune-data.php:23
+msgid "Starting data pruning"
+msgstr ""
+
+#: includes/cli/class-prune-data.php:25
+msgid "Completed data pruning."
+msgstr ""
+
+#: includes/merge-tags/class-merge-tags.php:41
+msgid "Site Name"
+msgstr ""
+
+#: includes/merge-tags/class-merge-tags.php:42
+msgid "The name of this site"
+msgstr ""
+
+#: includes/merge-tags/class-merge-tags.php:51
+msgid "Site Description"
+msgstr ""
+
+#: includes/merge-tags/class-merge-tags.php:52
+msgid "The description of this site"
+msgstr ""
+
+#: includes/merge-tags/class-merge-tags.php:61
+msgid "Articles Read"
+msgstr ""
+
+#: includes/merge-tags/class-merge-tags.php:62
+msgid "Number of articles read in the last 30 day period"
+msgstr ""
+
+#: includes/merge-tags/class-merge-tags.php:69
+msgid "Articles Read in Session"
+msgstr ""
+
+#: includes/merge-tags/class-merge-tags.php:70
+msgid "Number of articles recently read before 30 minutes of inactivity"
+msgstr ""
+
+#: src/criteria/default/index.php:17
+msgid "Articles read"
+msgstr ""
+
+#: src/criteria/default/index.php:18
+msgid "Number of articles read in the last 30 day period."
+msgstr ""
+
+#: src/criteria/default/index.php:23
+msgid "Articles read in session"
+msgstr ""
+
+#: src/criteria/default/index.php:24
+msgid "Number of articles recently read before 30 minutes of inactivity."
+msgstr ""
+
+#: src/criteria/default/index.php:29
+msgid "Favorite Categories"
+msgstr ""
+
+#: src/criteria/default/index.php:30
+msgid "Most read categories of reader."
+msgstr ""
+
+#: src/criteria/default/index.php:36
+msgid "Devices"
+msgstr ""
+
+#: src/criteria/default/index.php:37
+msgid "The device the user is viewing the site on – e.g. mobile, tablet, etc."
+msgstr ""
+
+#: src/criteria/default/index.php:41
+msgid "Desktop - 1280 px and above"
+msgstr ""
+
+#: src/criteria/default/index.php:49
+msgid "Laptop - between 1024 and 1280 px wide"
+msgstr ""
+
+#: src/criteria/default/index.php:57
+msgid "Tablet - between 768 and 1024 px wide"
+msgstr ""
+
+#: src/criteria/default/index.php:65
+msgid "Mobile (large phones) - between 480 and 786 px wide"
+msgstr ""
+
+#: src/criteria/default/index.php:73
+msgid "Mobile (small phones) - 480 px and below wide"
+msgstr ""
+
+#: src/criteria/default/index.php:86
+msgid "User Account"
+msgstr ""
+
+#: src/criteria/default/index.php:90
+msgid "All users"
+msgstr ""
+
+#: src/criteria/default/index.php:94
+msgid "Has user account"
+msgstr ""
+
+#: src/criteria/default/index.php:98
+msgid "Does not have user account"
+msgstr ""
+
+#: src/criteria/default/index.php:104
+msgid "Newsletter"
+msgstr ""
+
+#: src/criteria/default/index.php:105
+msgid "Subscriber status based on any newsletter list."
+msgstr ""
+
+#: src/criteria/default/index.php:109
+msgid "Subscribers and non-subscribers"
+msgstr ""
+
+#: src/criteria/default/index.php:113
+msgid "Subscribers"
+msgstr ""
+
+#: src/criteria/default/index.php:117
+msgid "Non-subscribers"
+msgstr ""
+
+#: src/criteria/default/index.php:123
+msgid "Subscribed to newsletter lists"
+msgstr ""
+
+#: src/criteria/default/index.php:124
+msgid "If the reader is subscribed to any of the selected newsletter lists."
+msgstr ""
+
+#: src/criteria/default/index.php:130
+msgid "Not subscribed to newsletter lists"
+msgstr ""
+
+#: src/criteria/default/index.php:131
+msgid "If the reader is NOT subscribed to any of the selected newsletter lists."
+msgstr ""
+
+#: src/criteria/default/index.php:137
+msgid "Donation"
+msgstr ""
+
+#: src/criteria/default/index.php:138
+msgid "If the reader has completed an onsite donation."
+msgstr ""
+
+#: src/criteria/default/index.php:142
+msgid "Donors and non-donors"
+msgstr ""
+
+#: src/criteria/default/index.php:146
+msgid "Donors"
+msgstr ""
+
+#: src/criteria/default/index.php:150
+msgid "Non-donors"
+msgstr ""
+
+#: src/criteria/default/index.php:154
+msgid "Former donors (who cancelled a recurring donation)"
+msgstr ""
+
+#: src/criteria/default/index.php:160
+msgid "Has active subscription(s)"
+msgstr ""
+
+#: src/criteria/default/index.php:161
+msgid "If the reader is an active subscriber to non-donation products."
+msgstr ""
+
+#: src/criteria/default/index.php:167
+msgid "Does not have active subscription(s)"
+msgstr ""
+
+#: src/criteria/default/index.php:168
+msgid "If the reader is NOT an active subscriber to non-donation products."
+msgstr ""
+
+#: src/criteria/default/index.php:174
+msgid "Has active membership(s)"
+msgstr ""
+
+#: src/criteria/default/index.php:175
+msgid "If the reader is a member of membership plans."
+msgstr ""
+
+#: src/criteria/default/index.php:181
+msgid "Does not have active membership(s)"
+msgstr ""
+
+#: src/criteria/default/index.php:182
+msgid "If the reader is NOT a member of membership plans."
+msgstr ""
+
+#: src/criteria/default/index.php:191
+msgid "Sources to match"
+msgstr ""
+
+#: src/criteria/default/index.php:192
+msgid "Segment based on traffic source"
+msgstr ""
+
+#: src/criteria/default/index.php:193
+#: src/criteria/default/index.php:202
+msgid "A comma-separated list of domains."
+msgstr ""
+
+#: src/criteria/default/index.php:200
+msgid "Sources to exclude"
+msgstr ""
+
+#: src/criteria/default/index.php:201
+msgid "Segment based on traffic source - hide campaigns for visitors coming from specific sources."
+msgstr ""
+
+#: dist/blocks.js:1
+#: src/blocks/custom-placement/edit.js:20
+msgid "Choose a custom placement"
+msgstr ""
+
+#: dist/blocks.js:1
+#: src/blocks/custom-placement/edit.js:47
+msgid "There was an error fetching prompts for this custom placement."
+msgstr ""
+
+#: dist/blocks.js:1
+#: src/blocks/custom-placement/edit.js:83
+msgid "Custom Placement"
+msgstr ""
+
+#: dist/blocks.js:1
+#: src/blocks/custom-placement/edit.js:107
+msgid "No active prompts found for this custom placement."
+msgstr ""
+
+#. translators: %1$s: max number of popups displayed. %2$s: plural modifier.
+#: dist/blocks.js:4
+#: src/blocks/custom-placement/edit.js:115
+#, js-format
+msgid "This custom placement will display at most %1$sthe following active prompt%2$s, depending on the reader’s top-priority segment:"
+msgstr ""
+
+#. translators: %s: segment name.
+#: dist/blocks.js:7
+#: src/blocks/custom-placement/edit.js:134
+#, js-format
+msgid "Segment: %s"
+msgstr ""
+
+#: dist/blocks.js:7
+#: src/blocks/custom-placement/edit.js:140
+msgid "Segment:"
+msgstr ""
+
+#: dist/blocks.js:7
+#: src/blocks/custom-placement/edit.js:143
+msgid "else"
+msgstr ""
+
+#. translators: %s: an id of a popup.
+#: dist/blocks.js:19
+#: src/blocks/single-prompt/edit.js:41
+#, js-format
+msgid "No active prompts found with ID %s. Try choosing another prompt."
+msgstr ""
+
+#. translators: %s: an id of a popup.
+#: dist/blocks.js:22
+#: src/blocks/single-prompt/edit.js:55
+#, js-format
+msgid "There was an error fetching prompt with ID %s."
+msgstr ""
+
+#: dist/blocks.js:22
+#: src/blocks/single-prompt/edit.js:78
+msgid "Single Prompt"
+msgstr ""
+
+#. translators: %s: an id of a popup.
+#: dist/blocks.js:25
+#: src/blocks/single-prompt/edit.js:85
+#, js-format
+msgid "Loading prompt with ID %s…"
+msgstr ""
+
+#: dist/blocks.js:25
+#: src/blocks/single-prompt/edit.js:149
+msgid "(no title)"
+msgstr ""
+
+#: dist/blocks.js:25
+#: src/blocks/single-prompt/edit.js:150
+msgid "edit"
+msgstr ""
+
+#: dist/blocks.js:25
+#: src/blocks/custom-placement/index.js:33
+#: src/blocks/single-prompt/index.js:33
+msgid "newspack"
+msgstr ""
+
+#: dist/blocks.js:25
+#: src/blocks/custom-placement/index.js:34
+#: src/blocks/single-prompt/index.js:34
+msgid "campaigns"
+msgstr ""
+
+#: dist/blocks.js:25
+#: src/blocks/custom-placement/index.js:35
+#: src/blocks/single-prompt/index.js:35
+msgid "campaign"
+msgstr ""
+
+#: dist/blocks.js:25
+#: src/blocks/custom-placement/index.js:36
+#: src/blocks/single-prompt/index.js:37
+msgid "prompt"
+msgstr ""
+
+#: dist/blocks.js:25
+#: src/blocks/custom-placement/index.js:37
+msgid "custom"
+msgstr ""
+
+#: dist/blocks.js:25
+#: src/blocks/custom-placement/index.js:38
+msgid "placement"
+msgstr ""
+
+#: dist/blocks.js:25
+#: src/blocks/single-prompt/index.js:26
+msgid "Campaigns: Single Prompt"
+msgstr ""
+
+#: dist/blocks.js:25
+#: src/blocks/single-prompt/index.js:36
+msgid "single"
+msgstr ""
+
+#: dist/documentSettings.js:1
+#: src/document-settings/index.js:12
+msgid "Newspack Campaigns Settings"
+msgstr ""
+
+#: dist/documentSettings.js:1
+#: src/document-settings/index.js:16
+msgid "Disable prompts on this post or page"
+msgstr ""
+
+#. translators: Overlay Prompt Position
+#: dist/editor.js:3
+#: src/editor/PositionPlacementControl.js:22
+msgid "Top"
+msgstr ""
+
+#. translators: Overlay Prompt Position
+#: dist/editor.js:5
+#: dist/editor.js:17
+#: src/editor/PositionPlacementControl.js:27
+#: src/editor/PositionPlacementControl.js:59
+msgid "Center"
+msgstr ""
+
+#. translators: Overlay Prompt Position
+#: dist/editor.js:7
+#: src/editor/PositionPlacementControl.js:32
+msgid "Bottom"
+msgstr ""
+
+#. translators: Overlay Prompt Position
+#: dist/editor.js:9
+#: src/editor/PositionPlacementControl.js:39
+msgid "Top Left"
+msgstr ""
+
+#. translators: Overlay Prompt Position
+#: dist/editor.js:11
+#: src/editor/PositionPlacementControl.js:44
+msgid "Top Center"
+msgstr ""
+
+#. translators: Overlay Prompt Position
+#: dist/editor.js:13
+#: src/editor/PositionPlacementControl.js:49
+msgid "Top Right"
+msgstr ""
+
+#. translators: Overlay Prompt Position
+#: dist/editor.js:15
+#: src/editor/PositionPlacementControl.js:54
+msgid "Center Left"
+msgstr ""
+
+#. translators: Overlay Prompt Position
+#: dist/editor.js:19
+#: src/editor/PositionPlacementControl.js:64
+msgid "Center Right"
+msgstr ""
+
+#. translators: Overlay Prompt Position
+#: dist/editor.js:21
+#: src/editor/PositionPlacementControl.js:69
+msgid "Bottom Left"
+msgstr ""
+
+#. translators: Overlay Prompt Position
+#: dist/editor.js:23
+#: src/editor/PositionPlacementControl.js:74
+msgid "Bottom Center"
+msgstr ""
+
+#. translators: Overlay Prompt Position
+#: dist/editor.js:25
+#: src/editor/PositionPlacementControl.js:79
+msgid "Bottom Right"
+msgstr ""
+
+#: dist/editor.js:25
+#: src/editor/PositionPlacementControl.js:85
+msgid "Select Position"
+msgstr ""
+
+#: dist/editor.js:25
+#: src/editor/FrequencySidebar.js:19
+msgid "Once a month"
+msgstr ""
+
+#: dist/editor.js:25
+#: src/editor/FrequencySidebar.js:20
+msgid "Once a week"
+msgstr ""
+
+#: dist/editor.js:25
+#: src/editor/FrequencySidebar.js:21
+msgid "Once a day"
+msgstr ""
+
+#: dist/editor.js:25
+#: src/editor/FrequencySidebar.js:24
+msgid "Every pageview"
+msgstr ""
+
+#: dist/editor.js:25
+#: src/editor/FrequencySidebar.js:26
+msgid "Custom"
+msgstr ""
+
+#: dist/editor.js:25
+#: src/editor/Preview.js:48
+msgid "Preview"
+msgstr ""
+
+#: dist/editor.js:25
+#: dist/editor.js:28
+#: src/editor/Duplicate.js:38
+#: src/editor/Duplicate.js:131
+msgid "copy"
+msgstr ""
+
+#: dist/editor.js:25
+#: dist/editor.js:28
+#: src/editor/Duplicate.js:66
+#: src/editor/Duplicate.js:135
+msgid "Duplicate"
+msgstr ""
+
+#. translators: %s: title of the duplicated popup.
+#: dist/editor.js:25
+#: src/editor/Duplicate.js:72
+#, js-format
+msgid "Duplicate “%s”"
+msgstr ""
+
+#. translators: %s: title of the duplicated popup.
+#: dist/editor.js:28
+#: src/editor/Duplicate.js:85
+#, js-format
+msgid "Duplicate of “%s” created as a draft."
+msgstr ""
+
+#: dist/editor.js:28
+#: src/editor/Duplicate.js:91
+msgid "This prompt is currently not assigned to any campaign."
+msgstr ""
+
+#: dist/editor.js:28
+#: src/editor/Duplicate.js:96
+msgid "Close"
+msgstr ""
+
+#: dist/editor.js:28
+#: src/editor/Duplicate.js:99
+msgid "Edit"
+msgstr ""
+
+#: dist/editor.js:28
+#: src/editor/Duplicate.js:107
+msgid "This prompt will not be assigned to any campaign."
+msgstr ""
+
+#: dist/editor.js:28
+#: src/editor/Duplicate.js:112
+msgid "Title"
+msgstr ""
+
+#: dist/editor.js:28
+#: src/editor/Duplicate.js:124
+msgid "Cancel"
+msgstr ""
+
+#: dist/editor.js:28
+#: src/editor/Duplicate.js:53
+#: src/editor/Duplicate.js:59
+msgid "Error duplicating prompt."
+msgstr ""
+
+#: dist/editor.js:28
+#: src/editor/MergeTagsBlockControl.js:34
+msgid "Merge tags"
+msgstr ""
+
+#. translators: %s: custom placement name.
+#: dist/editor.js:31
+#: src/editor/utils.js:266
+#, js-format
+msgid "The prompt will appear where %s is inserted using the Custom Placement block."
+msgstr ""
+
+#: dist/editor.js:31
+#: src/editor/utils.js:267
+msgid "this custom placement"
+msgstr ""
+
+#: dist/editor.js:31
+#: src/editor/utils.js:273
+msgid "The prompt will be displayed as an overlay at the center of the viewport."
+msgstr ""
+
+#: dist/editor.js:31
+#: src/editor/utils.js:275
+msgid "The prompt will be displayed as an overlay at the center left of the viewport."
+msgstr ""
+
+#: dist/editor.js:31
+#: src/editor/utils.js:277
+msgid "The prompt will be displayed as an overlay at the center right of the viewport."
+msgstr ""
+
+#: dist/editor.js:31
+#: src/editor/utils.js:279
+msgid "The prompt will be displayed as an overlay at the top of the viewport."
+msgstr ""
+
+#: dist/editor.js:31
+#: src/editor/utils.js:281
+msgid "The prompt will be displayed as an overlay at the top left of the viewport."
+msgstr ""
+
+#: dist/editor.js:31
+#: src/editor/utils.js:283
+msgid "The prompt will be displayed as an overlay at the top right of the viewport."
+msgstr ""
+
+#: dist/editor.js:31
+#: src/editor/utils.js:285
+msgid "The prompt will be displayed as an overlay at the bottom of the viewport."
+msgstr ""
+
+#: dist/editor.js:31
+#: src/editor/utils.js:287
+msgid "The prompt will be displayed as an overlay at the bottom left of the viewport."
+msgstr ""
+
+#: dist/editor.js:31
+#: src/editor/utils.js:289
+msgid "The prompt will be displayed as an overlay at the bottom right of the viewport."
+msgstr ""
+
+#: dist/editor.js:31
+#: src/editor/utils.js:291
+msgid "The prompt will be automatically inserted at the very top of the page, above the header."
+msgstr ""
+
+#. translators: %s: blocks count until insertion.
+#: dist/editor.js:34
+#: src/editor/utils.js:296
+#, js-format
+msgid "The prompt will be automatically inserted after %s block of content."
+msgid_plural "The prompt will be automatically inserted after %s blocks of content."
+msgstr[0] ""
+msgstr[1] ""
+
+#. translators: %s: article percentage count until insertion.
+#: dist/editor.js:37
+#: src/editor/utils.js:306
+#, js-format
+msgid "The prompt will be automatically inserted about %s into article content."
+msgstr ""
+
+#. translators: %d: insertion period.
+#: dist/editor.js:40
+#: src/editor/utils.js:313
+#, js-format
+msgid "The prompt will be automatically inserted every %d articles in the archive pages."
+msgstr ""
+
+#. translators: %d: insertion period articles count.
+#: dist/editor.js:43
+#: src/editor/utils.js:318
+#, js-format
+msgid "The prompt will be automatically inserted after %d articles in the archive pages."
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/utils.js:322
+msgid "The prompt will appear only where inserted using the Single Prompt block or a shortcode."
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/utils.js:324
+msgid "The placement where the prompt can appear."
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:72
+msgid "Prompt type"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:76
+msgid "Overlay"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:83
+msgid "Size"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:90
+msgid "Position"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:104
+msgid "In article content"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:106
+msgid "Above site header"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:107
+msgid "Manual only"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:120
+msgid "Trigger"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:121
+msgid "The event to trigger the prompt."
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:124
+msgid "Timer"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:125
+msgid "Scroll Progress"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:131
+msgid "Scroll Progress (percent)"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:139
+msgid "Delay (seconds)"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:151
+msgid "Insertion position"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:152
+msgid "The position at which to insert the prompt."
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:155
+msgid "Percentage"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:156
+msgid "Blocks Count"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:162
+msgid "Number of blocks before the prompt"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:169
+msgid "Approximate Position (in percent)"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:181
+msgid "Number of articles before prompt"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:189
+msgid "Archive Page Types"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/Sidebar.js:205
+msgid "Repeat prompt"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/StylesSidebar.js:29
+msgid "Default"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/StylesSidebar.js:37
+msgid "Small Padding"
+msgstr ""
+
+#: dist/editor.js:43
+#: src/editor/StylesSidebar.js:37
+msgid "Hide Border"
+msgstr ""
+
+#. Translators: %s is "padding" if the prompt is inline, or "border" if not
+#: dist/editor.js:46
+#: src/editor/StylesSidebar.js:47
+#, js-format
+msgid "Large %s"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/StylesSidebar.js:48
+msgid "Padding"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/StylesSidebar.js:48
+msgid "Border"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/StylesSidebar.js:58
+msgid "No Padding"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/FrequencySidebar.js:84
+msgid "Start at pageview"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/FrequencySidebar.js:91
+msgid "Display every n pageviews"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/FrequencySidebar.js:98
+msgid "Limit number of displays"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/FrequencySidebar.js:106
+msgid "Max number of displays"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/FrequencySidebar.js:113
+msgid "Reset counter per:"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/FrequencySidebar.js:116
+msgid "Month"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/FrequencySidebar.js:117
+msgid "Week"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/FrequencySidebar.js:118
+msgid "Day"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/ColorsSidebar.js:27
+msgid "Content Background Color"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/ColorsSidebar.js:33
+msgid "Customize close button background"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/ColorsSidebar.js:42
+msgid "Close Button Background Color"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/ColorsSidebar.js:49
+msgid "Display overlay background"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/ColorsSidebar.js:59
+msgid "Overlay Background Color"
+msgstr ""
+
+#: dist/editor.js:46
+#: src/editor/ColorsSidebar.js:62
+msgid "Overlay Background Opacity"
+msgstr ""
+
+#. translators: %s is the expiration date
+#: dist/editor.js:47
+#: src/editor/ExpirationPanel.js:67
+msgid "If set, the prompt will be automatically unpublished at midnight on this date."
+msgstr ""
+
+#: dist/editor.js:47
+#: src/editor/AdvancedSidebar.js:22
+msgid "Additional CSS class(es)"
+msgstr ""
+
+#: dist/editor.js:47
+#: src/editor/AdvancedSidebar.js:23
+msgid "Separate multiple classes with spaces."
+msgstr ""
+
+#: dist/editor.js:47
+#: src/editor/AdvancedSidebar.js:33
+msgid "Excluded Categories"
+msgstr ""
+
+#: dist/editor.js:47
+#: src/editor/AdvancedSidebar.js:34
+msgid "The prompt will not be shown on posts that have any these categories."
+msgstr ""
+
+#: dist/editor.js:47
+#: src/editor/AdvancedSidebar.js:44
+msgid "Excluded Tags"
+msgstr ""
+
+#: dist/editor.js:47
+#: src/editor/AdvancedSidebar.js:45
+msgid "The prompt will not be shown on posts that have any these tags."
+msgstr ""
+
+#: dist/editor.js:47
+#: src/editor/index.js:71
+msgid "Styles"
+msgstr ""
+
+#: dist/editor.js:47
+#: src/editor/index.js:90
+msgid "Frequency"
+msgstr ""
+
+#: dist/editor.js:47
+#: src/editor/index.js:100
+msgid "Color"
+msgstr ""
+
+#: dist/editor.js:47
+#: src/editor/index.js:109
+msgid "Post Types"
+msgstr ""
+
+#: dist/editor.js:47
+#: src/editor/index.js:118
+msgid "Expiration"
+msgstr ""
+
+#: dist/editor.js:47
+#: src/editor/index.js:142
+msgid "Advanced Settings"
+msgstr ""
+
+#: dist/editor.js:47
+#: src/editor/index.js:215
+msgid "The prompt will be shown to all readers."
+msgstr ""
+
+#: dist/editor.js:47
+#: src/editor/index.js:217
+msgid "The prompt will be shown only to readers who match the selected segment."
+msgstr ""
+
+#: dist/editor.js:47
+#: src/editor/index.js:220
+msgid "The prompt will be shown only to readers who match the selected segments."
+msgstr ""
+
+#: dist/editor.js:47
+#: src/editor/index.js:225
+msgid "Manage segments"
+msgstr ""
+
+#: dist/settings.js:1
+#: src/settings/index.js:45
+msgid "Error updating settings."
+msgstr ""
+
+#: dist/settings.js:1
+#: src/settings/index.js:111
+msgid "Save"
+msgstr ""

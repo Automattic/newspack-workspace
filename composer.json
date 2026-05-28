@@ -1,0 +1,32 @@
+{
+	"name": "automattic/newspack-workspace",
+	"description": "Shared PHP dev tooling for the Newspack monorepo.",
+	"type": "project",
+	"license": "GPL-2.0-or-later",
+	"require": {
+		"php": ">=8.0"
+	},
+	"require-dev": {
+		"automattic/vipwpcs": "^3.0",
+		"wp-coding-standards/wpcs": "^3.0",
+		"phpcompatibility/phpcompatibility-wp": "^2.1",
+		"dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+		"phpunit/phpunit": "^9.5",
+		"yoast/phpunit-polyfills": "^4.0",
+		"brainmaestro/composer-git-hooks": "^3.0"
+	},
+	"scripts": {
+		"phpcs": "phpcs --standard=phpcs.xml",
+		"phpcbf": "phpcbf --standard=phpcs.xml",
+		"test": [
+			"@test:plugins"
+		],
+		"test:plugins": "for d in plugins/*/phpunit.xml*; do [ -f \"$d\" ] && phpunit -c \"$d\" || true; done"
+	},
+	"config": {
+		"allow-plugins": {
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		},
+		"sort-packages": true
+	}
+}

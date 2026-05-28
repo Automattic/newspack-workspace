@@ -1,0 +1,45 @@
+@use "newspack-colors" as np-colors;
+@use "../../../shared/sass/variables";
+@use "./style-variations";
+
+.wpbnbd {
+	&__button,
+	.tab-container .freq-label {
+		border: 0 solid np-colors.$neutral-300;
+		background: np-colors.$neutral-000;
+		color: np-colors.$neutral-600;
+		line-height: variables.$font__line-height-body;
+		text-overflow: ellipsis;
+		text-align: center;
+		&--active,
+		&:focus,
+		&:hover {
+			color: np-colors.$neutral-900;
+		}
+	}
+
+	&__tiers__amount__value,
+	.tier-frequency {
+		font-size: 13px;
+	}
+
+	.woocommerce-Price-amount,
+	.price-amount {
+		display: inline;
+		font-family: var(--newspack-theme-font-heading, sans-serif);
+		font-size: 29px;
+		font-weight: 700;
+	}
+
+	mark {
+		background-color: transparent;
+	}
+
+	&--selected {
+		&-other {
+			.wp-block-newspack-blocks-donate__frequency-label {
+				display: none;
+			}
+		}
+	}
+}

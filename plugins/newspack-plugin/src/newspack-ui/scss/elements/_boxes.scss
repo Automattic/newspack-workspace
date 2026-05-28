@@ -1,0 +1,92 @@
+@use "../mixins";
+
+.newspack-ui {
+	.newspack-ui {
+		&__box {
+			background: var(--newspack-ui-color-neutral-5);
+			border-radius: var(--newspack-ui-border-radius-m);
+			margin-bottom: var(--newspack-ui-spacer-5);
+			padding: var(--newspack-ui-spacer-5);
+			position: relative;
+
+			// Backgrounds & Borders
+			&--success {
+				background: var(--newspack-ui-color-success-0);
+			}
+
+			&--error {
+				background: var(--newspack-ui-color-error-0);
+			}
+
+			&--warning {
+				background: var(--newspack-ui-color-warning-0);
+			}
+
+			&--border {
+				background: transparent;
+				border: 1px solid var(--newspack-ui-color-border);
+			}
+
+			// Sizes
+			&--2x-small {
+				padding: var(--newspack-ui-spacer-1);
+			}
+			&--x-small {
+				padding: var(--newspack-ui-spacer-2);
+			}
+			&--small {
+				padding: var(--newspack-ui-spacer-3);
+			}
+			&--large {
+				padding: var(--newspack-ui-spacer-6);
+			}
+			&--x-large {
+				padding: var(--newspack-ui-spacer-7);
+			}
+
+			// Text alignments
+			&--text-center {
+				text-align: center;
+			}
+
+			// Some style resets.
+			h2:not([class*="font-size"]) {
+				font-size: 1em;
+			}
+
+			> *:first-child {
+				margin-top: 0;
+			}
+
+			> *:last-child {
+				margin-bottom: 0;
+			}
+
+			&__actions {
+				display: flex;
+				flex-direction: column;
+				gap: var(--newspack-ui-spacer-1);
+				justify-content: space-between;
+				> * {
+					margin: 0 !important;
+				}
+			}
+			&:has(.newspack-ui__dropdown) {
+				align-items: stretch;
+				display: flex;
+				justify-content: space-between;
+				gap: var(--newspack-ui-spacer-3);
+				> * {
+					margin: 0 !important;
+				}
+			}
+			.newspack-ui__dropdown {
+				align-self: end;
+			}
+			.newspack-ui__badge {
+				float: right;
+				margin-left: calc(var(--newspack-ui-spacer-1) / 2);
+			}
+		}
+	}
+}

@@ -1,0 +1,17 @@
+.wp-block-embed__newsletters-wrapper {
+	img {
+		margin: 0 auto;
+		display: block;
+	}
+	blockquote {
+		border-left: 4px solid #000;
+		margin: 0;
+		padding-left: 20px;
+		cite {
+			color: #767676;
+		}
+		p {
+			padding-bottom: 12px;
+		}
+	}
+}

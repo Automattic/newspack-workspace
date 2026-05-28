@@ -9,7 +9,7 @@ services:
   ## We map a local directory (data/mysql) so we can have the mysql data locally
   ## and reuse it if we need to remove containers and images for rebuilding from scratch.
   db:
-    image: mariadb:10.8.2
+    image: mariadb:11.8.6
     volumes:
       - ./data/newspack-dev_mysql:/var/lib/mysql
       - ./logs/newspack-dev/mysql:/var/log/mysql
@@ -19,7 +19,7 @@ services:
       - default.env
       - .env
     entrypoint: ["/bin/bash", "/var/scripts/docker-db-start-and-autoupgrade.sh"]
-    command: ["mysqld"]
+    command: ["mariadbd"]
 
   ## - The container wordpress is a very basic but custom container with WordPress and all of the tools we need
   ##   for development.
@@ -41,14 +41,16 @@ services:
       - ./logs/newspack-dev/apache2/:/var/log/apache2
       - ./logs/newspack-dev/php:/var/log/php
       - ./bin:/var/scripts
-      - ./repos:/newspack-repos
+      - .:/newspack-monorepo
+      - ./plugins:/newspack-plugins
+      - ./themes:/newspack-themes
       - ./html:/var/www/html
       - ./manager-html:/var/www/manager-html
       - ./additional-sites-html:/var/www/additional-sites-html
       - ./snapshots:/snapshots
     ports:
-      - "${PORT_WORDPRESS:-80}:80"
-      - "${PORT_WORDPRESS:-443}:443"
+      - "127.0.0.1:${PORT_WORDPRESS:-80}:80"
+      - "127.0.0.1:${PORT_WORDPRESS:-443}:443"
     env_file:
       - default.env
       - .env

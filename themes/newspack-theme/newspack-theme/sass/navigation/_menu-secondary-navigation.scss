@@ -1,0 +1,43 @@
+@use "../variables-site/structure";
+
+.nav2 {
+	ul,
+	li {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	a {
+		color: inherit;
+		padding: #{0.125 * structure.$size__spacing-unit} #{0.25 * structure.$size__spacing-unit};
+	}
+
+	> ul > li > a:hover {
+		opacity: 0.75;
+	}
+}
+
+/* Desktop-specific styles */
+.site-header {
+	.nav2 {
+		> ul,
+		> ul > li {
+			align-items: center;
+			display: flex;
+			flex-wrap: wrap;
+		}
+
+		li {
+			margin-right: #{structure.$size__spacing-unit};
+		}
+
+		> li:first-child a {
+			padding-left: 0;
+		}
+
+		a {
+			font-size: var(--newspack-theme-font-size-xs);
+		}
+	}
+}

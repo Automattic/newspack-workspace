@@ -1,0 +1,112 @@
+@use "vars" as gate;
+
+.newspack-content-gate {
+	&__gate {
+		position: relative;
+	}
+	&__overlay-gate {
+		position: fixed;
+		inset: 0;
+		z-index: 99999;
+		pointer-events: none;
+		overflow: hidden;
+		max-width: 100%;
+		&::before {
+			content: "";
+			position: fixed;
+			inset: 0;
+			background: #000;
+			opacity: 0;
+			transition: opacity 200ms ease;
+		}
+		&[data-visible="true"] {
+			pointer-events: auto;
+			&::before {
+				opacity: 0.75;
+			}
+		}
+		&__container {
+			position: absolute;
+			z-index: 10;
+			width: 100%;
+			max-height: 100%;
+			left: 50%;
+			bottom: 0;
+			transform: translate(-50%, 50px);
+			opacity: 0;
+			transition: transform 200ms ease, opacity 200ms ease;
+			[data-visible="true"] & {
+				transform: translate(-50%, 0);
+				opacity: 1;
+			}
+			[data-size="x-small"] & {
+				max-width: gate.$size__x-small;
+			}
+			[data-size="small"] & {
+				max-width: gate.$size__small;
+			}
+			[data-size="medium"] & {
+				max-width: gate.$size__medium;
+			}
+			[data-size="large"] & {
+				max-width: gate.$size__large;
+			}
+			[data-size="full-width"] & {
+				background: #fff;
+			}
+			@media ( min-width: 600px ) {
+				[data-position="center"] & {
+					bottom: auto;
+					top: 50%;
+					transform: translate(-50%, calc(-50% + 50px));
+				}
+				[data-position="center"][data-visible="true"] & {
+					transform: translate(-50%, -50%);
+				}
+			}
+		}
+		&__content {
+			max-width: gate.$size__large;
+			max-height: 100%;
+			padding: 5vw;
+			margin: 0 auto;
+			background: #fff;
+			overflow-y: auto;
+			@media ( min-width: 600px ) {
+				border-radius: 5px 5px 0 0;
+				padding: 32px;
+				[data-position="center"] & {
+					border-radius: 5px;
+				}
+			}
+		}
+	}
+	&__restricted-post-excerpt {
+		position: relative;
+		pointer-events: none;
+		width: 100%;
+		overflow: clip;
+	}
+	&__inline-gate {
+		max-width: 100%;
+	}
+	&__inline-fade {
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		height: 10em;
+		width: 100%;
+		background: linear-gradient(180deg, rgba(255,255,255,0) 14%, rgba(255,255,255,1) 76%);
+		z-index: 1;
+	}
+}
+
+// Hide the gate while the sign in or checkout modals are open.
+body {
+	&:has(.newspack-ui__modal-container[data-state="open"]),
+	&.newspack-content-gate__gate-passed {
+		.newspack-content-gate__overlay-gate {
+			display: none !important;
+		}
+	}
+}

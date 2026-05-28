@@ -1,0 +1,64 @@
+{
+	"name": "newspack",
+	"version": "6.41.3",
+	"description": "The Newspack plugin. https://newspack.com",
+	"bugs": {
+		"url": "https://github.com/Automattic/newspack-plugin/issues"
+	},
+	"homepage": "https://newspack.com",
+	"scripts": {
+		"cm": "newspack-scripts commit",
+		"semantic-release": "newspack-scripts release --files=newspack.php",
+		"clean": "rm -rf dist",
+		"build": "npm run clean && newspack-scripts wp-scripts build",
+		"start": "npm ci && npm run watch",
+		"watch": "npm run clean && newspack-scripts wp-scripts start",
+		"test": "newspack-scripts test",
+		"tsc": "tsc --watch",
+		"lint": "npm run lint:scss && npm run lint:js",
+		"lint:js": "newspack-scripts wp-scripts lint-js '**/{src,includes,packages}/**/*.{js,jsx,ts,tsx}'",
+		"lint:js:staged": "newspack-scripts wp-scripts lint-js --ext .js,.jsx,.ts,.tsx",
+		"fix:js": "newspack-scripts wp-scripts lint-js --fix '**/{src,includes,packages}/**/*.{js,jsx,ts,tsx}'",
+		"format:js": "newspack-scripts wp-scripts format '**/{src,includes,packages}/**/*.{js,jsx,ts,tsx}'",
+		"lint:php": "./vendor/bin/phpcs",
+		"lint:php:staged": "./vendor/bin/phpcs --filter=GitStaged",
+		"fix:php": "./vendor/bin/phpcbf",
+		"lint:scss": "newspack-scripts wp-scripts lint-style '**/*.scss' --customSyntax postcss-scss",
+		"lint:scss:staged": "newspack-scripts wp-scripts lint-style --customSyntax postcss-scss",
+		"format:scss": "newspack-scripts wp-scripts lint-style '**/{src,includes}/**/*.scss' --customSyntax postcss-scss --fix",
+		"release": "npm run build && npm run semantic-release",
+		"release:archive": "rm -rf release && mkdir -p release && rsync -r . ./release/newspack-plugin --exclude-from='./.distignore' && cd release && zip -r newspack-plugin.zip newspack-plugin"
+	},
+	"browserslist": [
+		"extends @wordpress/browserslist-config"
+	],
+	"lint-staged": {
+		"*.{js,jsx,ts,tsx}": "npm run lint:js:staged",
+		"*.scss": "npm run lint:scss:staged",
+		"*.php": "npm run lint:php:staged"
+	},
+	"dependencies": {
+		"classnames": "^2.5.1",
+		"colord": "^2.9.3",
+		"deep-map-keys": "^2.0.1",
+		"js-cookie": "^3.0.7",
+		"moment": "^2.30.1",
+		"moment-range": "^3.1.1",
+		"qs": "^6.15.2",
+		"react-router-dom": "^5.3.4",
+		"recursive-copy": "^2.0.14",
+		"tachyons": "^4.12.0"
+	},
+	"devDependencies": {
+		"clsx": "^2.1.0",
+		"lodash": "^4.17.0",
+		"newspack-scripts": "workspace:*",
+		"prop-types": "^15.8.0",
+		"react": "^18.0.0"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Automattic/newspack-workspace.git",
+		"directory": "plugins/newspack-plugin"
+	}
+}

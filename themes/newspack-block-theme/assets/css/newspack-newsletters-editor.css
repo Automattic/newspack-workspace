@@ -1,0 +1,8 @@
+/* Newspack Newsletters Block styles */
+.wp-block-image img {
+	display: block;
+}
+
+.wp-block-image figcaption {
+	text-align: left;
+}

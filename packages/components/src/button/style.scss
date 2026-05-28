@@ -1,0 +1,11 @@
+/**
+ * Button
+ */
+
+.components-button {
+	&.is-destructive {
+		&:hover:not(:disabled) {
+			box-shadow: none;
+		}
+	}
+}

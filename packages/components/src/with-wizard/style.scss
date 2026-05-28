@@ -1,0 +1,271 @@
+/**
+ * With Wizard
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "../../../colors/colors.module" as colors;
+
+// Styling for full-page-react Wizards (ignoring admin-header-only wizards).
+body.newspack-wizard-page:not(.newspack-admin-header) {
+	--wp-admin-theme-color: #{colors.$primary-600};
+	--wp-admin-theme-color--rgb: #{colors.$primary-600--rgb};
+	--wp-admin-theme-color-darker-10: #{colors.$primary-700};
+	--wp-admin-theme-color-darker-10--rgb: #{colors.$primary-700--rgb};
+	--wp-admin-theme-color-darker-20: #{colors.$primary-800};
+	--wp-admin-theme-color-darker-20--rgb: #{colors.$primary-800--rgb};
+	--wp-admin-theme-color-lighter-10: #{colors.$primary-000};
+	--wp-admin-theme-color-lighter-10--rgb: #{colors.$primary-000--rgb};
+	--wp-components-color-accent: #{colors.$primary-600};
+
+	background: #{wp-colors.$white};
+
+	// Reset Padding
+	#wpcontent {
+		padding-left: 0;
+	}
+
+	#wpbody-content {
+		padding-bottom: 220px;
+		min-height: 100vh;
+
+		@media screen and ( min-width: 600px ) {
+			min-height: calc(100vh - 46px);
+		}
+
+		@media screen and ( min-width: 783px ) {
+			min-height: calc(100vh - 32px);
+		}
+
+		// For admin notices directly ">" at top of page above the Wizard header.
+		// PHP code should hide these notices, but just incase add this style.
+		> .notice {
+			margin-bottom: 20px;
+			margin-left: 22px;
+		}
+
+		@media screen and ( min-width: 783px ) {
+			padding-bottom: 202px;
+		}
+
+		@media screen and ( min-width: 1054px ) {
+			padding-bottom: 136px;
+		}
+	}
+
+	.components-popover__content {
+		min-width: 192px;
+	}
+}
+
+// Styling for wizards that are admin-header-only.
+body.newspack-wizard-page.newspack-admin-header {
+
+	// For mobile.
+	@media screen and (max-width: 600px) {
+
+		// The header bar (and tabs) need padding.
+		#newspack-wizards-admin-header {
+			padding-top: 46px;
+		}
+
+		// Since the padding was added to the header bar, remove from body.
+		#wpbody {
+			padding-top: 0;
+		}
+	}
+}
+
+svg {
+	&.newspack--error {
+		fill: wp-colors.$alert-red;
+		transform: rotate(180deg);
+	}
+	&.newspack--success {
+		fill: wp-colors.$alert-green;
+	}
+}
+
+// Loading
+.newspack-wizard__is-loading {
+	background: white;
+	cursor: wait;
+	inset: 0;
+	position: absolute;
+
+	> * {
+		display: none !important;
+	}
+
+	&::before,
+	&::after {
+		animation: loading 2s ease-in-out infinite;
+		content: "";
+		display: block;
+	}
+
+	&::before {
+		background: var(--wp-admin-theme-color);
+		box-shadow:
+			24px 0 0 white,
+			69px 0 0 -15px wp-colors.$gray-900,
+			99px 0 0 -15px wp-colors.$gray-900,
+			129px 0 0 -15px wp-colors.$gray-900,
+			159px 0 0 -15px wp-colors.$gray-900,
+			189px 0 0 -15px wp-colors.$gray-900;
+		height: 60px;
+		width: 60px;
+	}
+
+	&::after {
+		background: wp-colors.$gray-900;
+		box-shadow:
+			inset -40vw 0 0 0 white,
+			0 64px 0 0 wp-colors.$gray-700,
+			40vw 96px 0 0 white,
+			0 96px 0 0 wp-colors.$gray-700;
+		height: 24px;
+		margin: 68px auto 0;
+		max-width: 1006px;
+		width: calc(100% - ( 32px * 2 ));
+
+		@media screen and ( min-width: 744px ) {
+			box-shadow:
+				inset -400px 0 0 0 white,
+				0 64px 0 0 wp-colors.$gray-700,
+				200px 96px 0 0 white,
+				0 96px 0 0 wp-colors.$gray-700;
+			width: calc(100% - ( 64px * 2 ));
+		}
+
+		@media screen and ( min-width: 1224px ) {
+			box-shadow:
+				inset -600px 0 0 0 white,
+				0 64px 0 0 wp-colors.$gray-700,
+				512px 96px 0 0 white,
+				0 96px 0 0 wp-colors.$gray-700;
+			width: calc(100% - ( 64px * 2 ));
+		}
+	}
+
+	// Quiet
+	&-quiet {
+		position: relative;
+
+		&::before,
+		&::after {
+			content: "";
+			cursor: wait;
+			display: block;
+			left: 0;
+			position: fixed;
+			top: 46px;
+
+			@media screen and ( min-width: 783px ) {
+				top: 32px;
+				margin-left: 160px;
+
+				body.auto-fold & {
+					margin-left: 36px;
+				}
+			}
+
+			@media screen and ( min-width: 961px ) {
+				body.auto-fold & {
+					margin-left: 160px;
+				}
+
+				body.folded & {
+					margin-left: 36px;
+				}
+			}
+		}
+
+		&::before {
+			animation: loading-quiet 1.25s ease-in-out infinite;
+			background: var(--wp-admin-theme-color);
+			height: 8px;
+			right: 100%;
+			z-index: 9999;
+		}
+
+		&::after {
+			background: rgba(white, 0.7);
+			bottom: 0;
+			right: 0;
+			z-index: 9998;
+		}
+	}
+}
+
+.newspack-wizard-section__is-loading {
+	background: white;
+	cursor: wait;
+	min-height: 150px;
+
+	> * {
+		display: none !important;
+	}
+
+	&::after {
+		animation: loading 2s ease-in-out infinite;
+		content: "";
+		display: block;
+		background: wp-colors.$gray-900;
+		box-shadow:
+			inset -40vw 0 0 0 white,
+			0 64px 0 0 wp-colors.$gray-700,
+			40vw 96px 0 0 white,
+			0 96px 0 0 wp-colors.$gray-700;
+		height: 24px;
+		margin: 0 auto;
+		max-width: 1006px;
+		width: 100%;
+
+		@media screen and ( min-width: 744px ) {
+			box-shadow:
+				inset -400px 0 0 0 white,
+				0 64px 0 0 wp-colors.$gray-700,
+				200px 96px 0 0 white,
+				0 96px 0 0 wp-colors.$gray-700;
+		}
+
+		@media screen and ( min-width: 1224px ) {
+			box-shadow:
+				inset -600px 0 0 0 white,
+				0 64px 0 0 wp-colors.$gray-700,
+				520px 96px 0 0 white,
+				0 96px 0 0 wp-colors.$gray-700;
+		}
+	}
+}
+
+@keyframes loading {
+	0% {
+		opacity: 1;
+	}
+
+	50% {
+		opacity: 0.1;
+	}
+
+	100% {
+		opacity: 1;
+	}
+}
+
+@keyframes loading-quiet {
+	0% {
+		left: 0;
+		right: 100%;
+	}
+
+	50% {
+		left: 0;
+		right: 0;
+	}
+
+	100% {
+		left: 100%;
+		right: 0;
+	}
+}

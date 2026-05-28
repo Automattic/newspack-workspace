@@ -1,0 +1,1427 @@
+# Copyright (C) 2026 Automattic
+# This file is distributed under the GPL2.
+msgid ""
+msgstr ""
+"Project-Id-Version: Newspack Ads 3.11.2\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-ads\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-05-19T17:35:37+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: newspack-ads\n"
+
+#. Plugin Name of the plugin
+#: newspack-ads.php
+msgid "Newspack Ads"
+msgstr ""
+
+#. Plugin URI of the plugin
+#: newspack-ads.php
+msgid "https://newspack.com"
+msgstr ""
+
+#. Description of the plugin
+#: newspack-ads.php
+msgid "Ad services integration."
+msgstr ""
+
+#. Author of the plugin
+#: newspack-ads.php
+msgid "Automattic"
+msgstr ""
+
+#: includes/bidders/class-medianet.php:43
+msgid "Media.net Customer ID"
+msgstr ""
+
+#: includes/bidders/class-medianet.php:44
+msgid "Your customer ID provided by Media.net"
+msgstr ""
+
+#: includes/bidders/class-openx.php:52
+msgid "OpenX Platform ID"
+msgstr ""
+
+#: includes/bidders/class-openx.php:53
+msgid "Platform id provided by your OpenX representative. E.g.: 555not5a-real-plat-form-id0123456789"
+msgstr ""
+
+#: includes/bidders/class-pubmatic.php:43
+msgid "PubMatic Publisher ID"
+msgstr ""
+
+#: includes/bidders/class-pubmatic.php:44
+msgid "Publisher ID provided by PubMatic."
+msgstr ""
+
+#: includes/blocks/class-ad-unit-block.php:97
+msgid "Could not determine ad unit for placement"
+msgstr ""
+
+#: includes/class-bidding.php:57
+msgid "Low"
+msgstr ""
+
+#: includes/class-bidding.php:66
+msgid "Medium"
+msgstr ""
+
+#: includes/class-bidding.php:75
+msgid "Auto"
+msgstr ""
+
+#: includes/class-bidding.php:92
+msgid "Dense"
+msgstr ""
+
+#: includes/class-bidding.php:668
+msgid "Header Bidding"
+msgstr ""
+
+#: includes/class-bidding.php:669
+msgid "Configure your settings to quickly implement header bidding."
+msgstr ""
+
+#: includes/class-bidding.php:680
+msgid "Debug mode"
+msgstr ""
+
+#: includes/class-bidding.php:681
+msgid "Run Prebid.js in debug mode."
+msgstr ""
+
+#: includes/class-custom-label.php:36
+msgid "Custom Ad Label"
+msgstr ""
+
+#: includes/class-custom-label.php:44
+msgid "Label"
+msgstr ""
+
+#: includes/class-custom-label.php:48
+msgid "Advertisement"
+msgstr ""
+
+#: includes/class-fixed-height.php:38
+msgid "Fixed height"
+msgstr ""
+
+#: includes/class-fixed-height.php:39
+msgid "If enabled, ad slots will be rendered with a fixed height determined by the unit's sizes configuration."
+msgstr ""
+
+#: includes/class-fixed-height.php:47
+msgid "Set a maximum fixed height"
+msgstr ""
+
+#: includes/class-fixed-height.php:48
+msgid "If enabled, rendered creatives larger than \"maximum fixed height\" will adjust the height accordingly and cause layout shift."
+msgstr ""
+
+#: includes/class-fixed-height.php:56
+msgid "Maximum fixed height"
+msgstr ""
+
+#: includes/class-fixed-height.php:57
+msgid "Maximum value for the fixed height applied to the ad slot, in pixels."
+msgstr ""
+
+#: includes/class-placements.php:370
+msgid "Global: Above Header"
+msgstr ""
+
+#: includes/class-placements.php:371
+msgid "Choose an ad unit to display above the header."
+msgstr ""
+
+#: includes/class-placements.php:375
+msgid "Global: Below Header"
+msgstr ""
+
+#: includes/class-placements.php:376
+msgid "Choose an ad unit to display below the header."
+msgstr ""
+
+#: includes/class-placements.php:380
+msgid "Global: Above Footer"
+msgstr ""
+
+#: includes/class-placements.php:381
+msgid "Choose an ad unit to display above the footer."
+msgstr ""
+
+#: includes/class-placements.php:385
+msgid "Sticky Footer"
+msgstr ""
+
+#: includes/class-placements.php:386
+msgid "Choose a sticky ad unit to display at the bottom of the viewport (recommended sizes are 728x90, 320x50, 300x50)"
+msgstr ""
+
+#: includes/class-placements.php:405
+msgid "Invalid placement."
+msgstr ""
+
+#: includes/class-placements.php:408
+msgid "Placement already exists."
+msgstr ""
+
+#: includes/class-placements.php:543
+msgid "This placement does not exist."
+msgstr ""
+
+#: includes/class-placements.php:681
+#: dist/editor.js:6
+#: src/blocks/ad-unit/edit.js:98
+msgid "Unknown size"
+msgstr ""
+
+#: includes/class-providers.php:84
+msgid "Invalid provider."
+msgstr ""
+
+#: includes/class-settings.php:78
+msgid "You cannot use this resource."
+msgstr ""
+
+#: includes/class-settings.php:279
+msgid "Invalid setting."
+msgstr ""
+
+#. translators: %s is the description of the option.
+#: includes/class-settings.php:291
+#, php-format
+msgid "Value for \"%s\" should be an array."
+msgstr ""
+
+#. translators: %s is the description of the option.
+#: includes/class-settings.php:302
+#, php-format
+msgid "Invalid setting value for \"%s\"."
+msgstr ""
+
+#. Translators: %s: The name of the sidebar.
+#: includes/class-sidebar-placements.php:142
+#, php-format
+msgid "Choose an ad unit to display in the \"%s\" widget area."
+msgstr ""
+
+#: includes/class-sidebar-placements.php:151
+msgid "Before Widget Area"
+msgstr ""
+
+#: includes/class-sidebar-placements.php:155
+msgid "After Widget Area"
+msgstr ""
+
+#: includes/class-widget.php:101
+#: includes/customizer/class-placement-customize-control.php:220
+#: dist/editor.js:6
+#: src/blocks/ad-unit/edit.js:105
+#: src/blocks/ad-unit/index.js:19
+msgid "Ad Unit"
+msgstr ""
+
+#: includes/class-widget.php:118
+msgid "Stick to top (only if the last widget in the sidebar)"
+msgstr ""
+
+#: includes/customizer/class-customizer.php:98
+msgid "Ad Placements"
+msgstr ""
+
+#: includes/customizer/class-customizer.php:99
+msgid "Customize your ad placements."
+msgstr ""
+
+#: includes/customizer/class-placement-customize-control.php:66
+msgid "No placement specified."
+msgstr ""
+
+#: includes/customizer/class-placement-customize-control.php:187
+msgid "Provider"
+msgstr ""
+
+#: includes/customizer/class-placement-customize-control.php:188
+msgid "Select which provider to use for this placement."
+msgstr ""
+
+#: includes/customizer/class-placement-customize-control.php:194
+msgid "&mdash; Select a provider &mdash;"
+msgstr ""
+
+#: includes/customizer/class-placement-customize-control.php:221
+msgid "Select an ad unit to display in this placement."
+msgstr ""
+
+#: includes/customizer/class-placement-customize-control.php:227
+msgid "&mdash; Select an ad unit &mdash;"
+msgstr ""
+
+#. translators: %s is the bidder name
+#. translators: %s: Bidder name.
+#: includes/customizer/class-placement-customize-control.php:254
+#: dist/editor.js:4
+#: src/placements/placement-control.js:133
+#, php-format,js-format
+msgid "%s Placement ID"
+msgstr ""
+
+#: includes/customizer/class-placement-customize-control.php:255
+msgid "Enter the bidder ID for this placement."
+msgstr ""
+
+#: includes/customizer/class-placement-customize-control.php:277
+msgid "Stick to top"
+msgstr ""
+
+#: includes/customizer/class-placement-customize-control.php:332
+msgid "Enabled"
+msgstr ""
+
+#: includes/customizer/class-placement-customize-control.php:333
+msgid "Enable this placement"
+msgstr ""
+
+#: includes/integrations/class-ad-refresh-control.php:137
+msgid "The \"Ad Refresh Control\" plugin is not active."
+msgstr ""
+
+#: includes/integrations/class-bidding-gam.php:296
+msgid "Invalid type."
+msgstr ""
+
+#: includes/integrations/class-bidding-gam.php:408
+msgid "Google Ad Manager is not connected."
+msgstr ""
+
+#: includes/integrations/class-bidding-gam.php:563
+#: includes/integrations/class-bidding-gam.php:688
+#: includes/integrations/class-bidding-gam.php:732
+msgid "Not authenticated."
+msgstr ""
+
+#: includes/integrations/class-bidding-gam.php:642
+msgid "Order not found."
+msgstr ""
+
+#: includes/integrations/class-bidding-gam.php:707
+msgid "Order not found in Google Ad Manager."
+msgstr ""
+
+#: includes/integrations/class-bidding-gam.php:775
+#: includes/integrations/class-bidding-gam.php:862
+msgid "Invalid price granularity"
+msgstr ""
+
+#: includes/integrations/class-bidding-gam.php:841
+#: includes/integrations/class-bidding-gam.php:1030
+msgid "Missing config"
+msgstr ""
+
+#: includes/integrations/class-bidding-gam.php:847
+msgid "Missing order ID"
+msgstr ""
+
+#: includes/integrations/class-bidding-gam.php:856
+#: includes/integrations/class-bidding-gam.php:1035
+#: includes/integrations/class-bidding-gam.php:1072
+msgid "Missing order config"
+msgstr ""
+
+#: includes/integrations/class-bidding-gam.php:917
+msgid "Unsupported amount of line items."
+msgstr ""
+
+#: includes/integrations/class-bidding-gam.php:1041
+msgid "Missing line item IDs."
+msgstr ""
+
+#: includes/integrations/class-bidding-gam.php:1080
+msgid "No creatives to associate."
+msgstr ""
+
+#: includes/integrations/class-scaip.php:81
+msgid "Post ad inserter settings"
+msgstr ""
+
+#: includes/integrations/class-scaip.php:82
+msgid "Configure how to display ads within your article content."
+msgstr ""
+
+#: includes/integrations/class-scaip.php:86
+msgid "Number of blocks before first insertion"
+msgstr ""
+
+#: includes/integrations/class-scaip.php:93
+msgid "Number of blocks between insertions"
+msgstr ""
+
+#: includes/integrations/class-scaip.php:100
+msgid "Number of times an ad widget area should be inserted in a post"
+msgstr ""
+
+#: includes/integrations/class-scaip.php:107
+msgid "Minimum number of blocks needed in a post to insert ads"
+msgstr ""
+
+#: includes/integrations/class-scaip.php:114
+msgid "Use legacy widgets for ad placement"
+msgstr ""
+
+#: includes/integrations/class-scaip.php:115
+msgid "Enable sidebars generated by Super Cool Ad Inserter to place ad widgets. Disables the post insertion placements provided by Newspack Ads."
+msgstr ""
+
+#: includes/integrations/class-scaip.php:122
+msgid "Allowed block types"
+msgstr ""
+
+#: includes/integrations/class-scaip.php:123
+msgid "Select which block types can be followed by an ad."
+msgstr ""
+
+#: includes/integrations/class-scaip.php:130
+msgid "Paragraph"
+msgstr ""
+
+#: includes/integrations/class-scaip.php:134
+#: includes/media-kit/block-patterns/why-us.php:14
+#: includes/media-kit/block-patterns/why-us.php:36
+#: includes/media-kit/block-patterns/why-us.php:60
+#: includes/media-kit/block-patterns/why-us.php:82
+msgid "Image"
+msgstr ""
+
+#: includes/integrations/class-scaip.php:138
+msgid "Heading"
+msgstr ""
+
+#: includes/integrations/class-scaip.php:142
+msgid "Embed"
+msgstr ""
+
+#. translators: %s is the number of the placement.
+#: includes/integrations/class-scaip.php:219
+#, php-format
+msgid "Post insertion #%s"
+msgstr ""
+
+#. translators: %s is the number of the placement.
+#: includes/integrations/class-scaip.php:221
+#, php-format
+msgid "Choose an ad unit to display in position #%s within your article content."
+msgstr ""
+
+#: includes/integrations/class-side-rail-placements.php:48
+msgid "Left Side Rail"
+msgstr ""
+
+#: includes/integrations/class-side-rail-placements.php:49
+msgid "Choose an ad unit to display in the left side rail."
+msgstr ""
+
+#: includes/integrations/class-side-rail-placements.php:57
+msgid "Right Side Rail"
+msgstr ""
+
+#: includes/integrations/class-side-rail-placements.php:58
+msgid "Choose an ad unit to display in the right side rail."
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:4
+#: includes/media-kit/block-patterns/ad-specs.php:7
+msgid "Ad Specs"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:13
+#: includes/media-kit/block-patterns/rates.php:15
+msgid "Standard Display"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:15
+#: includes/media-kit/block-patterns/ad-specs.php:21
+msgid "Ad Type"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:15
+#: includes/media-kit/block-patterns/ad-specs.php:21
+msgid "Dimensions"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:15
+#: includes/media-kit/block-patterns/ad-specs.php:21
+msgid "File/Creative Type"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:15
+#: includes/media-kit/block-patterns/ad-specs.php:21
+msgid "Device"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:15
+#: includes/utils.php:44
+msgid "Billboard"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:15
+msgid "Desktop"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:15
+msgid "Super Leaderboard"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:15
+#: includes/utils.php:48
+msgid "Leaderboard"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:15
+msgid "Desktop, Tablet"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:15
+#: includes/media-kit/block-patterns/ad-specs.php:21
+#: includes/utils.php:53
+msgid "Medium Rectangle"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:15
+#: includes/media-kit/block-patterns/ad-specs.php:21
+msgid "Desktop, Tablet, Mobile"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:15
+msgid "Half Page"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:15
+msgid "Small Mobile Banner"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:15
+msgid "Mobile"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:15
+msgid "Large Mobile Banner"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:19
+#: includes/media-kit/block-patterns/rates.php:15
+msgid "Newsletter"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:21
+msgid "Custom"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:25
+msgid "Native"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:27
+#: includes/media-kit/block-patterns/rates.php:15
+#: includes/media-kit/block-patterns/rates.php:21
+msgid "Type"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:27
+msgid "Word Count"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:27
+msgid "Placements"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:27
+msgid "Accompanying Banner Sizes"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:27
+#: includes/media-kit/block-patterns/rates.php:15
+msgid "Sponsored Content"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:27
+msgid "7-day dedicated homepage slot, 3 social media posts"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:27
+msgid "Sponsored Email Blast"
+msgstr ""
+
+#: includes/media-kit/block-patterns/ad-specs.php:27
+msgid "Sent to primary subscriber list of 10,000"
+msgstr ""
+
+#: includes/media-kit/block-patterns/audience.php:4
+#: includes/media-kit/block-patterns/audience.php:7
+#: includes/media-kit/block-patterns/why-us.php:24
+msgid "Audience"
+msgstr ""
+
+#: includes/media-kit/block-patterns/audience.php:5
+#: includes/media-kit/block-patterns/intro.php:4
+#: includes/media-kit/block-patterns/packages.php:5
+msgid "Intro"
+msgstr ""
+
+#: includes/media-kit/block-patterns/audience.php:11
+msgid "The News Paper is a prime local source, offering comprehensive community news and events coverage for residents. It keeps the population informed through in-depth neighborhood reporting."
+msgstr ""
+
+#: includes/media-kit/block-patterns/audience.php:15
+msgid "Data"
+msgstr ""
+
+#: includes/media-kit/block-patterns/audience.php:19
+msgid "2.5M"
+msgstr ""
+
+#: includes/media-kit/block-patterns/audience.php:23
+msgid "Monthly Unique Visitors"
+msgstr ""
+
+#: includes/media-kit/block-patterns/audience.php:29
+msgid "7M"
+msgstr ""
+
+#: includes/media-kit/block-patterns/audience.php:33
+msgid "Monthly Page Views"
+msgstr ""
+
+#: includes/media-kit/block-patterns/audience.php:39
+msgid "310K"
+msgstr ""
+
+#: includes/media-kit/block-patterns/audience.php:43
+msgid "Paid Subscribers"
+msgstr ""
+
+#: includes/media-kit/block-patterns/audience.php:51
+msgid "646K"
+msgstr ""
+
+#: includes/media-kit/block-patterns/audience.php:55
+msgid "Facebook Followers"
+msgstr ""
+
+#: includes/media-kit/block-patterns/audience.php:61
+msgid "389K"
+msgstr ""
+
+#: includes/media-kit/block-patterns/audience.php:65
+msgid "X Followers"
+msgstr ""
+
+#: includes/media-kit/block-patterns/audience.php:71
+msgid "72K"
+msgstr ""
+
+#: includes/media-kit/block-patterns/audience.php:75
+msgid "Instagram Followers"
+msgstr ""
+
+#: includes/media-kit/block-patterns/contact-compact.php:4
+msgid "Contact (Compact)"
+msgstr ""
+
+#: includes/media-kit/block-patterns/contact-compact.php:5
+#: includes/media-kit/block-patterns/packages.php:23
+#: includes/media-kit/block-patterns/packages.php:53
+#: includes/media-kit/block-patterns/packages.php:83
+#: includes/media-kit/block-patterns/why-us.php:22
+#: includes/media-kit/block-patterns/why-us.php:44
+#: includes/media-kit/block-patterns/why-us.php:68
+#: includes/media-kit/block-patterns/why-us.php:90
+msgid "Content"
+msgstr ""
+
+#: includes/media-kit/block-patterns/contact-compact.php:7
+#: includes/media-kit/block-patterns/contact.php:6
+msgid "Get started today"
+msgstr ""
+
+#: includes/media-kit/block-patterns/contact-compact.php:11
+msgid "Maximize brand reach with our tailored advertising solutions."
+msgstr ""
+
+#: includes/media-kit/block-patterns/contact-compact.php:17
+#: includes/media-kit/block-patterns/contact.php:15
+#: includes/media-kit/block-patterns/intro.php:15
+msgid "Get in touch"
+msgstr ""
+
+#: includes/media-kit/block-patterns/contact.php:4
+msgid "Contact"
+msgstr ""
+
+#: includes/media-kit/block-patterns/contact.php:10
+msgid "Our team is devoted to helping you harness The News Paper's advertising platforms. Connect today to explore tailored solutions amplifying your brand's reach."
+msgstr ""
+
+#: includes/media-kit/block-patterns/intro.php:10
+msgid "The News Paper delivers in-depth local reporting and engaging community stories to keep residents informed and connected."
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:4
+msgid "Packages"
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:7
+msgid "Our Packages"
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:11
+msgid "Amplify brand resonance with our strategic ad packages — expertly tailored for targeted reach, sustained visibility and seamless cross-platform integration, driving powerful messaging impact."
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:18
+#: includes/media-kit/block-patterns/packages.php:48
+#: includes/media-kit/block-patterns/packages.php:78
+#: includes/media-kit/block-patterns/why-us.php:27
+#: includes/media-kit/block-patterns/why-us.php:49
+#: includes/media-kit/block-patterns/why-us.php:73
+#: includes/media-kit/block-patterns/why-us.php:95
+msgid "Description"
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:20
+msgid "Package 1"
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:25
+msgid "You will be prominently featured on The News Paper, with a complete takeover of every available ad space on the homepage."
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:30
+msgid "60,0000 Guaranteed impressions"
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:34
+msgid "5x Guaranteed visibility with 100% share of voice"
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:41
+msgid "Total Cost: $750"
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:50
+msgid "Package 2"
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:55
+msgid "Your ads will display across The News Paper website and in every email newsletter sent within a 5 day period."
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:60
+msgid "130,0000 Guaranteed impressions"
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:64
+msgid "3x Reach across the two verticals — website and newsletter"
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:71
+msgid "Total Cost: $1,500"
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:80
+msgid "Package 3"
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:85
+msgid "With a 3-part sponsored content series + display, your ads will display across The News Paper website and be included in every email newsletter sent within a 30 day period."
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:90
+msgid "220,0000 Guaranteed impressions"
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:94
+msgid "10x Reach"
+msgstr ""
+
+#: includes/media-kit/block-patterns/packages.php:101
+msgid "Total Cost: $4,000"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:4
+msgid "Rates"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:7
+msgid "Our Rates"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:13
+msgid "Standard"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:15
+msgid "Impression Minimum"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:15
+#: includes/media-kit/block-patterns/rates.php:21
+msgid "Cost"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:15
+msgid "25,000"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:15
+msgid "$10 CPM"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:15
+msgid "N/A"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:15
+msgid "$350 per email"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:15
+msgid "$1,000"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:15
+msgid "Sponsored Content Series (3 posts)"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:15
+msgid "$2,500"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:21
+msgid "Minimum Required Assets"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:21
+msgid "Homepage Takeover"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:21
+msgid "$1,000 CPD"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:21
+msgid "Category/Tag Takeover"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:21
+msgid "$1,500 CPD"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:21
+msgid "Single Post Takeover"
+msgstr ""
+
+#: includes/media-kit/block-patterns/rates.php:21
+msgid "$500 CPD"
+msgstr ""
+
+#: includes/media-kit/block-patterns/why-us.php:4
+#: includes/media-kit/block-patterns/why-us.php:7
+msgid "Why Us?"
+msgstr ""
+
+#: includes/media-kit/block-patterns/why-us.php:29
+msgid "The News Paper is a premier local source, offering comprehensive community news coverage for area residents."
+msgstr ""
+
+#: includes/media-kit/block-patterns/why-us.php:46
+msgid "Capabilities"
+msgstr ""
+
+#: includes/media-kit/block-patterns/why-us.php:51
+msgid "The News Paper curates an engaging digital space, spotlighting brands and driving audience interaction."
+msgstr ""
+
+#: includes/media-kit/block-patterns/why-us.php:70
+msgid "Visibility"
+msgstr ""
+
+#: includes/media-kit/block-patterns/why-us.php:75
+msgid "Our ad units offer 70%+ viewability across platforms, surpassing traditional constraints for superior brand exposure."
+msgstr ""
+
+#: includes/media-kit/block-patterns/why-us.php:92
+msgid "Measure"
+msgstr ""
+
+#: includes/media-kit/block-patterns/why-us.php:97
+msgid "The News Paper's ads drive measurable ROI, boasting click-through rates above industry benchmarks."
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:30
+msgid "Newspack Media Kit"
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:40
+msgid "Media Kit - Intro"
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:41
+msgid "The intro section for the Media Kit page."
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:54
+msgid "Media Kit - Audience"
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:55
+msgid "A 3-column layout showing the audience."
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:68
+msgid "Media Kit - Why Us?"
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:69
+msgid "A 2-column layout for the \"Why Us?\" section."
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:82
+msgid "Media Kit - Ad Specs"
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:83
+msgid "Ad Specs tabular structure with tabs management."
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:96
+msgid "Media Kit - Rates"
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:97
+msgid "Rates tabular structure with tabs management."
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:110
+msgid "Media Kit - Packages"
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:111
+msgid "Packages layout with a short note and a 3-column layout."
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:124
+msgid "Media Kit - Contact (Compact)"
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:125
+msgid "A compact Call-To-Action to get in touch."
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:138
+msgid "Media Kit - Contact"
+msgstr ""
+
+#: includes/media-kit/class-media-kit-block-patterns.php:139
+msgid "A Call-To-Action to get in touch."
+msgstr ""
+
+#. translators: %s is the link to the Media Kit editing page.
+#: includes/media-kit/class-media-kit.php:48
+#, php-format
+msgid "A \"Media Kit\" page has been created! Please <a href=\"%s\">click here</a> to edit and publish the page."
+msgstr ""
+
+#: includes/media-kit/class-media-kit.php:160
+msgid "Media Kit"
+msgstr ""
+
+#: includes/media-kit/class-media-kit.php:231
+msgid "Media Kit page creation failed, and no existing page was found."
+msgstr ""
+
+#. translators: %d is the post ID.
+#: includes/media-kit/class-media-kit.php:235
+#, php-format
+msgid "Media Kit page already created - post ID: %d."
+msgstr ""
+
+#. translators: %d is the post ID.
+#: includes/media-kit/class-media-kit.php:239
+#, php-format
+msgid "Media Kit page created successfully - post ID: %d"
+msgstr ""
+
+#: includes/providers/gam/api/class-ad-units.php:159
+msgid "Unable to fetch ad units."
+msgstr ""
+
+#: includes/providers/gam/api/class-ad-units.php:329
+msgid "Ad Unit was not found."
+msgstr ""
+
+#: includes/providers/gam/api/class-ad-units.php:335
+#: includes/providers/gam/api/class-ad-units.php:339
+msgid "Ad Unit was not updated."
+msgstr ""
+
+#: includes/providers/gam/api/class-ad-units.php:356
+#: includes/providers/gam/api/class-ad-units.php:360
+msgid "Ad Unit was not created."
+msgstr ""
+
+#: includes/providers/gam/api/class-api.php:131
+msgid "Invalid authentication method."
+msgstr ""
+
+#: includes/providers/gam/api/class-api.php:185
+msgid "Name must be unique."
+msgstr ""
+
+#: includes/providers/gam/api/class-api.php:186
+msgid "Unexpected API error, please try again in 30 seconds."
+msgstr ""
+
+#: includes/providers/gam/api/class-api.php:187
+msgid "You do not have permission to perform this action. Make sure to connect an account with administrative access."
+msgstr ""
+
+#: includes/providers/gam/api/class-api.php:188
+msgid "The network code is invalid."
+msgstr ""
+
+#: includes/providers/gam/api/class-api.php:191
+msgid "API access for this GAM account is disabled."
+msgstr ""
+
+#: includes/providers/gam/api/class-api.php:193
+msgid "Enable API access in your GAM settings."
+msgstr ""
+
+#: includes/providers/gam/api/class-api.php:195
+msgid "You do not have access to any GAM networks."
+msgstr ""
+
+#: includes/providers/gam/api/class-api.php:205
+msgid "An unexpected error occurred"
+msgstr ""
+
+#: includes/providers/gam/api/class-api.php:223
+msgid "No credentials provided."
+msgstr ""
+
+#: includes/providers/gam/api/class-api.php:236
+msgid "Unable to fetch network code from GAM."
+msgstr ""
+
+#: includes/providers/gam/api/class-api.php:302
+msgid "Missing GAM Ad network."
+msgstr ""
+
+#: includes/providers/gam/api/class-line-items.php:252
+msgid "Unexpected error while creating creative associations."
+msgstr ""
+
+#: includes/providers/gam/api/class-orders.php:128
+msgid "Order was not created due to an unexpected error."
+msgstr ""
+
+#: includes/providers/gam/class-gam-ad-block-recovery.php:38
+msgid "Ad Block Recovery"
+msgstr ""
+
+#: includes/providers/gam/class-gam-ad-block-recovery.php:39
+msgid "Implement Ad Block Recovery functionality provided by Google Ad Manager"
+msgstr ""
+
+#: includes/providers/gam/class-gam-ad-block-recovery.php:47
+msgid "Pub"
+msgstr ""
+
+#: includes/providers/gam/class-gam-ad-block-recovery.php:48
+msgid "Numeric value after \"pub-\", provided by GAM. E.g.: 1234567891011121"
+msgstr ""
+
+#: includes/providers/gam/class-gam-lazy-load.php:38
+msgid "Lazy Loading"
+msgstr ""
+
+#: includes/providers/gam/class-gam-lazy-load.php:39
+msgid "Enables pages to load faster, reduces resource consumption and contention, and improves viewability rate."
+msgstr ""
+
+#: includes/providers/gam/class-gam-lazy-load.php:47
+msgid "Fetch margin percent"
+msgstr ""
+
+#: includes/providers/gam/class-gam-lazy-load.php:48
+msgid "Minimum distance from the current viewport a slot must be before we fetch the ad as a percentage of viewport size."
+msgstr ""
+
+#: includes/providers/gam/class-gam-lazy-load.php:56
+msgid "Render margin percent"
+msgstr ""
+
+#: includes/providers/gam/class-gam-lazy-load.php:57
+msgid "Minimum distance from the current viewport a slot must be before we render an ad."
+msgstr ""
+
+#: includes/providers/gam/class-gam-lazy-load.php:65
+msgid "Mobile scaling"
+msgstr ""
+
+#: includes/providers/gam/class-gam-lazy-load.php:66
+msgid "A multiplier applied to margins on mobile devices. This allows varying margins on mobile vs. desktop."
+msgstr ""
+
+#: includes/providers/gam/class-gam-model.php:651
+msgid "Not connected to GAM"
+msgstr ""
+
+#: includes/providers/gam/class-gam-model.php:696
+msgid "Unable to synchronize with GAM"
+msgstr ""
+
+#: includes/providers/gam/class-gam-model.php:1123
+msgid "Invalid credentials configuration."
+msgstr ""
+
+#: includes/providers/gam/class-gam-model.php:1130
+msgid "Unable to update GAM credentials"
+msgstr ""
+
+#: includes/providers/gam/class-gam-model.php:1144
+msgid "Unable to remove GAM credentials"
+msgstr ""
+
+#: includes/utils.php:45
+#: includes/utils.php:46
+msgid "Mobile banner"
+msgstr ""
+
+#: includes/utils.php:47
+msgid "Large mobile banner"
+msgstr ""
+
+#: includes/utils.php:49
+msgid "Super Leaderboard/Pushdown"
+msgstr ""
+
+#: includes/utils.php:50
+msgid "Portrait"
+msgstr ""
+
+#: includes/utils.php:51
+msgid "Skyscraper"
+msgstr ""
+
+#: includes/utils.php:52
+msgid "Half page"
+msgstr ""
+
+#: includes/utils.php:55
+#: includes/utils.php:56
+#: includes/utils.php:57
+msgid "Mobile Phone Interstitial"
+msgstr ""
+
+#: includes/utils.php:58
+msgid "Feature Phone Small Banner"
+msgstr ""
+
+#: includes/utils.php:59
+msgid "Feature Phone Medium Banner"
+msgstr ""
+
+#: includes/utils.php:60
+msgid "Feature Phone Large Banner"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/setup/visibility-warning.js:32
+msgid "A hidden block contains an ad unit. Ads and their containers must stay visible at all breakpoints to avoid penalties — use your ad provider settings to control ad visibility instead."
+msgstr ""
+
+#: dist/editor.js:1
+#: src/placements/placement-control.js:21
+msgid "Select a provider"
+msgstr ""
+
+#. translators: %s: Ad bidder name.
+#: dist/editor.js:4
+#: src/placements/placement-control.js:45
+msgid "Select an Ad Unit"
+msgstr ""
+
+#. translators: %s: Bidder name.
+#: dist/editor.js:6
+#: src/placements/placement-control.js:103
+msgid "There is no provider available."
+msgstr ""
+
+#: dist/editor.js:6
+#: src/blocks/ad-unit/index.js:29
+msgid "ad"
+msgstr ""
+
+#: dist/editor.js:6
+#: src/blocks/ad-unit/index.js:29
+msgid "advert"
+msgstr ""
+
+#: dist/editor.js:6
+#: src/blocks/ad-unit/index.js:29
+msgid "ads"
+msgstr ""
+
+#: dist/editor.js:6
+#: src/blocks/ad-unit/index.js:30
+msgid "Render an ad unit from your inventory."
+msgstr ""
+
+#: dist/editor.js:6
+#: dist/header-bidding-gam.js:1
+#: src/blocks/ad-unit/edit.js:77
+#: src/wizard-settings/header-bidding-gam/order-popover.js:43
+msgid "Edit"
+msgstr ""
+
+#: dist/editor.js:6
+#: src/blocks/ad-unit/edit.js:126
+msgid "Save"
+msgstr ""
+
+#: dist/editor.js:6
+#: src/blocks/tabs-item/edit.js:48
+#: src/blocks/tabs/edit.js:156
+#: src/blocks/tabs/edit.js:168
+msgid "Tab Header"
+msgstr ""
+
+#: dist/editor.js:6
+#: src/blocks/tabs/edit.js:192
+msgid "Add New Tab"
+msgstr ""
+
+#: dist/editor.js:6
+#: src/blocks/tabs/editor.js:18
+msgid "Tabs"
+msgstr ""
+
+#: dist/editor.js:6
+#: src/blocks/tabs/editor.js:19
+msgid "Add tabbed content."
+msgstr ""
+
+#: dist/editor.js:6
+#: src/blocks/tabs-item/editor.js:18
+msgid "Tab Item"
+msgstr ""
+
+#: dist/editor.js:6
+#: src/blocks/tabs-item/editor.js:19
+msgid "Add a new tab."
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/order.js:48
+msgid "Creating Order…"
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/order.js:50
+msgid "Creating Line Items…"
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/order.js:52
+msgid "Associating Creatives…"
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/order.js:223
+msgid "Create the order and line items on your Google Ad Manager network according to the pre-defined price bucket settings."
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/order.js:231
+msgid "Order name"
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/order.js:245
+msgid "Bidder Revenue Share"
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/order.js:246
+msgid "This is agreed upon revenue share between you and the bid partner. Input the percentage that goes to the bidder, i.e. 20 for 20%."
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/order.js:260
+msgid "Bidders"
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/order.js:263
+msgid "Which bidders to include in this order. Select bidders that all have the same revenue share and make sure to not include the same bidder in more than one header bidding order."
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/order.js:279
+msgid "Order exists but it's misconfigured."
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/order.js:282
+msgid "This may take up to 15 minutes, please do not close the window."
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: dist/header-bidding-gam.js:13
+#: src/wizard-settings/header-bidding-gam/index.js:220
+#: src/wizard-settings/header-bidding-gam/order.js:295
+msgid "Cancel"
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/order.js:310
+msgid "Fix issues"
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/order.js:39
+msgid "Update Order"
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: dist/header-bidding-gam.js:13
+#: src/wizard-settings/header-bidding-gam/index.js:113
+#: src/wizard-settings/header-bidding-gam/index.js:232
+#: src/wizard-settings/header-bidding-gam/order.js:39
+msgid "Create Order"
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/order-popover.js:33
+msgid "Close Popover"
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/order-popover.js:54
+msgid "Archive"
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/order-popover.js:58
+msgid "GAM Dashboard"
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/index.js:104
+msgid "Are you sure you want to leave this page?"
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: dist/header-bidding-gam.js:4
+#: src/wizard-settings/header-bidding-gam/index.js:113
+#: src/wizard-settings/header-bidding-gam/index.js:146
+msgid "Manage Orders"
+msgstr ""
+
+#: dist/header-bidding-gam.js:1
+#: src/wizard-settings/header-bidding-gam/index.js:119
+msgid "Google Ad Manager Integration"
+msgstr ""
+
+#. translators: %s: Number of line items in the order.
+#: dist/header-bidding-gam.js:4
+#: src/wizard-settings/header-bidding-gam/index.js:129
+#, js-format
+msgid "There is %s available order."
+msgid_plural "There are %s available orders."
+msgstr[0] ""
+msgstr[1] ""
+
+#: dist/header-bidding-gam.js:4
+#: src/wizard-settings/header-bidding-gam/index.js:73
+msgid "Loading…"
+msgstr ""
+
+#: dist/header-bidding-gam.js:4
+#: src/wizard-settings/header-bidding-gam/index.js:73
+msgid "There are no orders configured."
+msgstr ""
+
+#. translators: %1$d: the bidder revenue share for this order.
+#: dist/header-bidding-gam.js:7
+#: src/wizard-settings/header-bidding-gam/index.js:159
+#, js-format
+msgid "Bidder Revenue Share: %1$d%%"
+msgstr ""
+
+#. translators: %s: comma-separated list of adapters for the order or "any" if undefined.
+#: dist/header-bidding-gam.js:10
+#: src/wizard-settings/header-bidding-gam/index.js:165
+#, js-format
+msgid "Bidders: %s"
+msgstr ""
+
+#: dist/header-bidding-gam.js:10
+#: src/wizard-settings/header-bidding-gam/index.js:168
+msgid "any"
+msgstr ""
+
+#: dist/header-bidding-gam.js:10
+#: src/wizard-settings/header-bidding-gam/index.js:179
+msgid "Are you sure you'd like to archive this order?"
+msgstr ""
+
+#. Translators: %1 The name of the bidder. %2 The number of orders for the bidder.
+#: dist/header-bidding-gam.js:13
+#: src/wizard-settings/header-bidding-gam/index.js:209
+#, js-format
+msgid "%1$s is being targeted by %2$d orders."
+msgstr ""
+
+#: dist/header-bidding-gam.js:13
+#: src/wizard-settings/header-bidding-gam/index.js:232
+msgid "Edit Order"
+msgstr ""
+
+#: dist/header-bidding-gam.js:13
+#: src/wizard-settings/header-bidding-gam/index.js:238
+msgid "We were unable to fix the issues with this order and have archived it. Please create a new order below."
+msgstr ""
+
+#: dist/suppress-ads.js:1
+#: src/suppress-ads/index.js:29
+msgid "Newspack Ads Settings"
+msgstr ""
+
+#: dist/suppress-ads.js:1
+#: src/suppress-ads/index.js:33
+msgid "Don't show ads on this content"
+msgstr ""
+
+#: dist/suppress-ads.js:1
+#: src/suppress-ads/index.js:41
+msgid "Suppress specific placements:"
+msgstr ""
+
+#: dist/blocks/tabs/block.json
+#: src/blocks/tabs/block.json
+msgctxt "block title"
+msgid "Tabs"
+msgstr ""
+
+#: dist/blocks/tabs/block.json
+#: src/blocks/tabs/block.json
+msgctxt "block description"
+msgid "Display sections of content with brief headings in a compact tab layout that shows one section at a time."
+msgstr ""

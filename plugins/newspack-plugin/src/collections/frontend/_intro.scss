@@ -1,0 +1,66 @@
+@use "breakpoints" as bp;
+
+/* Collection intro styles */
+.collection-intro {
+	display: grid;
+	grid-template-columns: 1fr;
+	padding-bottom: 16px;
+	gap: 16px;
+
+	h1 {
+		margin: 0;
+		font-size: var(--newspack-theme-font-size-lg);
+
+		@media #{bp.$media-md-up} {
+			font-size: var(--newspack-theme-font-size-xl);
+		}
+	}
+
+	&__card {
+		grid-column: span 1;
+	}
+
+	&__content {
+		grid-column: auto;
+
+		&__meta {
+			display: flex;
+			flex-direction: column;
+			gap: 0.5em;
+
+			.latest-collection-heading {
+				margin: 0;
+				text-transform: uppercase;
+			}
+
+			a {
+				color: var(--newspack-theme-color-text-main);
+			}
+
+			p {
+				margin: 0;
+			}
+		}
+
+		&__description {
+			margin: 32px 0;
+		}
+	}
+
+	@media #{bp.$media-sm-up} {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+
+		&__content {
+			grid-column: span 2;
+		}
+	}
+
+	@media #{bp.$media-lg-up} {
+		grid-template-columns: repeat(6, minmax(0, 1fr));
+		gap: 32px;
+
+		&__content {
+			grid-column: span 5;
+		}
+	}
+}

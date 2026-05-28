@@ -1,0 +1,119 @@
+.newspack-site-status {
+	--np-sa-bg-color: #eee;
+	--np-sa-txt-color: #666;
+	--np-sa-space: 16px;
+
+	animation: none;
+	background-color: var(--np-sa-bg-color);
+	border-radius: 26px;
+	font-weight: 600;
+	overflow: hidden;
+	padding: var(--np-sa-space) 24px;
+	position: relative;
+	line-height: 16px;
+	text-overflow: ellipsis;
+	transition: background-color 0.4s;
+	white-space: nowrap;
+
+	// Dot
+	&::before {
+		content: "";
+		background-color: var(--np-sa-txt-color);
+		border-radius: 4px;
+		display: inline-block;
+		height: 8px;
+		margin-right: 8px;
+		width: 8px;
+		transition: background-color 0.4s;
+	}
+
+	// Status text i.e. Connect/Disconnected
+	span {
+		color: var(--np-sa-txt-color);
+	}
+
+	&:has(span.hidden):hover {
+		span {
+			display: none;
+
+			&.hidden {
+				display: contents;
+			}
+		}
+	}
+
+	// When loading
+	&.newspack-site-status__pending {
+		overflow: hidden;
+
+		&::after {
+			animation: gradient-left-to-right 2s infinite;
+			background-image: linear-gradient(90deg, rgba(#fff, 0) 0, rgba(#fff, 0.2) 20%, rgba(#fff, 0.6) 60%, rgba(#fff, 0));
+			content: "";
+			inset: 0;
+			position: absolute;
+			transform: translateX(-100%);
+		}
+	}
+
+	&.newspack-site-status__success {
+		--np-sa-bg-color: #e6f2e8;
+		--np-sa-txt-color: #007017;
+
+		background-color: var(--np-sa-bg-color);
+
+		span {
+			color: #007017;
+		}
+
+		&::before {
+			background-color: var(--np-sa-txt-color);
+		}
+	}
+
+	// Errors
+	&[class*="newspack-site-status__error"] {
+		--np-sa-bg-color: #f7ebec;
+		--np-sa-txt-color: #b32d2e;
+
+		background-color: var(--np-sa-bg-color);
+
+		span {
+			color: #b32d2e;
+		}
+
+		&::before {
+			background-color: var(--np-sa-txt-color);
+		}
+	}
+
+	// Dependency Error
+	&.newspack-site-status__error-dependencies {
+		--np-sa-bg-color: #f5f1e1;
+		--np-sa-txt-color: #755100;
+
+		background-color: var(--np-sa-bg-color);
+		border: 0;
+		cursor: pointer;
+		text-align: left;
+
+		span {
+			color: var(--np-sa-txt-color);
+		}
+
+		&::before {
+			background-color: var(--np-sa-txt-color);
+		}
+	}
+}
+
+a.newspack-site-status {
+	color: inherit;
+	text-decoration: none;
+
+	&:hover,
+	&:active,
+	&:focus {
+		color: inherit;
+	}
+}

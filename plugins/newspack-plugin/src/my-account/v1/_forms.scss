@@ -1,0 +1,92 @@
+/**
+ * Forms
+ */
+
+.newspack-my-account {
+	p.woocommerce-form-row,
+	.woocommerce-form-row p,
+	p.form-row {
+		color: var(--newspack-ui-color-neutral-60);
+		font-size: var(--newspack-ui-font-size-xs);
+		line-height: var(--newspack-ui-line-height-xs);
+		.select2 .selection {
+			font-size: var(--newspack-ui-font-size-s);
+		}
+		.legend {
+			display: block;
+			margin: var(--newspack-ui-spacer-1) 0;
+		}
+		small {
+			font-size: inherit;
+		}
+	}
+	.edit-profile {
+		display: grid;
+		gap: var(--newspack-ui-spacer-5);
+
+		@media ( min-width: 768px ) {
+			grid-template-columns: repeat(2, 1fr);
+
+			.form-row-wide {
+				grid-column: span 2;
+			}
+		}
+
+		> * {
+			margin: 0 !important;
+			width: 100% !important;
+		}
+
+		label {
+			display: block !important;
+		}
+
+		.legend {
+			margin-bottom: 0 !important;
+		}
+
+		.clear {
+			display: none;
+		}
+	}
+	/* stylelint-disable selector-id-pattern */
+	#billing_city_field,
+	#shipping_city_field,
+	#billing_state_field,
+	#shipping_state_field,
+	#billing_postcode_field,
+	#shipping_postcode_field {
+		width: 30%;
+		&:not(.form-row-last) {
+			margin-right: 5%;
+		}
+	}
+	/* stylelint-enable selector-id-pattern */
+	.woocommerce-password-strength {
+		display: block;
+		font-size: var(--newspack-ui-font-size-xs);
+		margin: var(--newspack-ui-spacer-1) 0;
+		& + small {
+			display: block;
+			margin-top: calc(var(--newspack-ui-spacer-1) * -1);
+		}
+		&.short,
+		&.bad {
+			color: var(--newspack-ui-color-error-50);
+		}
+		&.good {
+			color: var(--newspack-ui-color-warning-40);
+		}
+		&.strong {
+			color: var(--newspack-ui-color-success-50);
+		}
+	}
+
+	/* Hide the "Save as new payment method" checkbox on the Add Payment Method form. */
+	/* stylelint-disable selector-id-pattern */
+	#newspack-my-account__add-payment-method {
+		.woocommerce-SavedPaymentMethods-saveNew {
+			display: none;
+		}
+	}
+}

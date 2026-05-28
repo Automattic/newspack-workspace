@@ -1,0 +1,450 @@
+@use "theme-description";
+@use "variables-style/variables-style";
+@use "../../newspack-theme/sass/style-base";
+@use "../../newspack-theme/sass/mixins/utilities";
+@use "../../newspack-theme/sass/variables-site/structure";
+
+/* Child theme-specific overrides */
+
+.accent-header:not(.widget-title),
+.article-section-title,
+.cat-links,
+.page-title {
+	color: #666;
+	font-size: var(--newspack-theme-font-size-sm);
+
+	&::before {
+		background-color: var(--newspack-theme-color-primary);
+		content: "";
+		display: inline-block;
+		height: 0.75em;
+		margin: 0 0.5em 0 0;
+		width: 0.75em;
+	}
+}
+
+// Mobile CTA
+.button.mb-cta {
+	border-radius: 0;
+}
+
+.accent-header,
+.wp-block-columns .wp-block-column > .accent-header,
+div.wpnbha .article-section-title {
+	margin-bottom: 1em;
+}
+
+.cat-links {
+	font-family: var(--newspack-theme-font-heading);
+	font-size: var(--newspack-theme-font-size-sm);
+}
+
+#secondary .widget-title,
+#secondary .widgettitle {
+	font-size: var(--newspack-theme-font-size-lg);
+}
+
+/* Posts & Pages */
+
+@include utilities.media( tablet ) {
+	.featured-image-beside {
+		.cat-links::before {
+			background-color: var(--newspack-theme-color-against-primary);
+		}
+	}
+}
+
+.search,
+.blog,
+.archive {
+	.cat-links::before {
+		display: none;
+	}
+}
+
+.entry-meta .byline {
+	a,
+	a:visited {
+		color: var(--newspack-theme-color-text-light);
+	}
+
+	a:hover {
+		color: var(--newspack-theme-color-text-main);
+	}
+}
+
+.single {
+	.cat-links {
+		font-size: var(--newspack-theme-font-size-base);
+	}
+
+	@include utilities.media( tablet ) {
+		.entry-meta {
+			align-items: center;
+			display: flex;
+			flex-wrap: wrap;
+		}
+
+		&.single-featured-image-default .byline,
+		&.single-featured-image-above .byline {
+			margin-right: #{1.5 * structure.$size__spacing-unit};
+		}
+	}
+}
+
+/* Avatar */
+.avatar,
+.entry-content .wpnbha .avatar {
+	border-radius: 0;
+}
+
+/* Author Bio */
+
+.author-bio .accent-header {
+	color: var(--newspack-theme-color-text-main);
+	font-size: var(--newspack-theme-font-size-md);
+	margin: 0 0 #{0.25 * structure.$size__spacing-unit};
+
+	span {
+		font-size: var(--newspack-theme-font-size-xs);
+	}
+
+	&::before {
+		display: none;
+	}
+}
+
+/* Blocks */
+
+//! Paragraph
+.has-drop-cap:not(:focus)::first-letter {
+	font-family: var(--newspack-theme-font-heading);
+	font-weight: bold;
+}
+
+//! Pullquote
+.wp-block-pullquote {
+	border-width: 0;
+	font-family: var(--newspack-theme-font-heading);
+	font-weight: bold;
+	padding-top: #{4 * structure.$size__spacing-unit};
+	padding-bottom: 0;
+	position: relative;
+	text-align: center;
+
+	&.is-style-solid-color blockquote p,
+	blockquote p {
+		@include utilities.media( tablet ) {
+			font-size: var(--newspack-theme-font-size-xl);
+		}
+	}
+
+	&.has-text-align-right:not(.alignleft):not(.alignright),
+	&.has-text-align-left:not(.alignleft):not(.alignright) {
+		@include utilities.media( tablet ) {
+			p {
+				font-size: var(--newspack-theme-font-size-xl);
+			}
+		}
+	}
+
+	blockquote {
+		border-color: var(--newspack-theme-color-primary);
+
+		&::before,
+		&::after {
+			border-top: 2px solid;
+			border-color: inherit;
+			content: "";
+			display: block;
+			position: absolute;
+			opacity: 0.8;
+			top: #{2 * structure.$size__spacing-unit};
+		}
+
+		&::before {
+			left: 15%;
+			right: calc(50% + 2em);
+		}
+
+		&::after {
+			left: calc(50% + 2em);
+			right: 15%;
+		}
+
+		p:first-of-type::before {
+			color: var(--newspack-theme-color-primary);
+			content: "\201C";
+			display: inline-block;
+			font-size: calc(1rem * 5);
+			font-weight: normal;
+			left: calc(50% - 0.3em);
+			line-height: 0.75;
+			position: absolute;
+			text-align: center;
+			top: #{1.5 * structure.$size__spacing-unit};
+			width: 0.5em;
+			z-index: 1;
+
+			@include utilities.media( tablet ) {
+				font-size: calc(1rem * 7);
+			}
+		}
+	}
+
+	&.has-border-color blockquote {
+		border-color: inherit;
+	}
+
+	&.is-style-solid-color,
+	&.has-background {
+		blockquote {
+			&::before {
+				color: inherit;
+			}
+
+			&::after {
+				border-top-color: currentcolor;
+			}
+
+			&::before,
+			&::after {
+				border-top-color: currentcolor;
+			}
+
+			cite {
+				text-transform: uppercase;
+			}
+		}
+
+		p:first-of-type::before {
+			color: inherit;
+		}
+	}
+
+	cite {
+		font-size: var(--newspack-theme-font-size-sm);
+		font-weight: normal;
+		text-transform: uppercase;
+	}
+
+	&.has-text-align-left,
+	&.has-text-align-right {
+		blockquote::after {
+			display: none;
+		}
+
+		&,
+		&.is-style-solid-color,
+		&.has-background {
+			padding-top: #{3 * structure.$size__spacing-unit};
+		}
+	}
+
+	&.has-text-align-left {
+		blockquote {
+			&::before {
+				left: 3em;
+				right: 0;
+
+				@include utilities.media( tablet ) {
+					left: 4em;
+				}
+			}
+		}
+
+		p:first-of-type::before {
+			left: 0;
+		}
+
+		&.is-style-solid-color,
+		&.has-background {
+			p:first-of-type::before {
+				left: #{1.5 * structure.$size__spacing-unit};
+			}
+
+			blockquote::before {
+				left: 4em;
+			}
+		}
+	}
+
+	&.has-text-align-right {
+		blockquote {
+			&::before {
+				right: 3em;
+				left: 0;
+
+				@include utilities.media( tablet ) {
+					right: 4em;
+				}
+			}
+		}
+
+		p:first-of-type::before {
+			left: auto;
+			right: 0;
+		}
+
+		&.is-style-solid-color,
+		&.has-background {
+			p:first-of-type::before {
+				right: #{1.5 * structure.$size__spacing-unit};
+			}
+
+			blockquote::before {
+				right: 4em;
+			}
+		}
+	}
+
+	&.alignleft,
+	&.alignright {
+		text-align: left;
+
+		blockquote {
+			&::before {
+				left: 3em;
+				right: 15%;
+			}
+
+			&::after {
+				display: none;
+			}
+		}
+
+		&.is-style-solid-color blockquote p,
+		blockquote p {
+			font-size: var(--newspack-theme-font-size-md);
+		}
+
+		&,
+		&.is-style-solid-color,
+		&.has-background {
+			padding-top: #{3 * structure.$size__spacing-unit};
+		}
+
+		&[style*="border-"] {
+			padding-top: structure.$size__spacing-unit;
+		}
+
+		p:first-of-type::before {
+			font-size: calc(1rem * 5);
+			left: 0;
+			text-align: left;
+			width: 0.5em;
+		}
+
+		&.is-style-solid-color,
+		&.has-background {
+			p:first-of-type::before {
+				left: #{1.5 * structure.$size__spacing-unit};
+			}
+
+			blockquote::before {
+				left: 4.5em;
+			}
+		}
+	}
+
+	&[style*="border-"] {
+		blockquote {
+			margin-top: 0;
+		}
+
+		p:first-of-type::before,
+		blockquote::before,
+		blockquote::after {
+			display: none;
+		}
+	}
+}
+
+//! Newspack
+.wpnbha .cat-links::before {
+	display: none;
+}
+
+//! Newspack Article Carousel
+.wp-block-newspack-blocks-carousel {
+	.cat-links::before {
+		display: none;
+	}
+}
+
+// Archive
+.archive .page-title {
+	color: var(--newspack-theme-color-text-light);
+}
+
+// Widgets
+.mobile-sidebar,
+.site-footer {
+	.article-section-title,
+	.accent-header {
+		color: inherit;
+	}
+}
+
+/* Footer */
+
+#colophon {
+	&,
+	.social-navigation a {
+		color: var(--newspack-theme-color-text-main);
+	}
+
+	.widget-title {
+		color: var(--newspack-theme-color-text-main);
+		font-size: var(--newspack-theme-font-size-base);
+	}
+}
+
+.footer-branding .wrapper,
+.footer-widgets:first-child {
+	border-top: 3px solid currentcolor;
+}
+
+.af-widget {
+	.footer-branding .wrapper,
+	.footer-widgets:first-child {
+		border: 0;
+	}
+}
+
+// If custom font is set, `#colophon .site-info` selector would override it
+// (See issue #663)
+.site-info {
+	font-family: var(--newspack-theme-font-heading);
+}
+
+/* Yoast Breadcrumbs */
+
+.site-breadcrumb {
+	.wrapper {
+		> span::before {
+			background-color: var(--newspack-theme-color-primary);
+			content: "";
+			display: inline-block;
+			height: 0.75em;
+			margin: 0 0.5em 0 0;
+			width: 0.75em;
+		}
+	}
+}
+
+// Trust label
+.entry-subhead {
+	.trust-label {
+		margin-bottom: 5px;
+	}
+}
+
+// Sponsored Content
+.single .sponsor-label {
+	font-size: var(--newspack-theme-font-size-sm);
+
+	+ .cat-links {
+		font-size: 0.9rem;
+	}
+}

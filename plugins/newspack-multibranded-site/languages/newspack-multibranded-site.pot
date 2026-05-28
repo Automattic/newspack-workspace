@@ -1,0 +1,271 @@
+# Copyright (C) 2026 Automattic
+# This file is distributed under the GPL3.
+msgid ""
+msgstr ""
+"Project-Id-Version: Newspack Multibranded Site 2.2.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-multibranded-site\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-02-03T18:38:16+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: newspack-multibranded-site\n"
+
+#. Plugin Name of the plugin
+#: newspack-multibranded-site.php
+msgid "Newspack Multibranded Site"
+msgstr ""
+
+#. Description of the plugin
+#: newspack-multibranded-site.php
+msgid "Brand different content and sections of your site with unique colors and navigation."
+msgstr ""
+
+#. Author of the plugin
+#: newspack-multibranded-site.php
+msgid "Automattic"
+msgstr ""
+
+#. Author URI of the plugin
+#: newspack-multibranded-site.php
+msgid "https://newspack.com/"
+msgstr ""
+
+#: includes/admin/class-cat-primary-brand.php:44
+#: includes/admin/class-user-primary-brand.php:68
+msgid "Primary Brand"
+msgstr ""
+
+#: includes/admin/class-cat-primary-brand.php:47
+#: includes/admin/class-user-primary-brand.php:73
+#: dist/postPrimaryBrand.js:1
+#: src/post-primary-brand/index.js:78
+msgid "None"
+msgstr ""
+
+#: includes/admin/class-cat-primary-brand.php:55
+msgid "The primary brand defines what brand will be applied to the term's archive. (added by Newspack Multibranded site)"
+msgstr ""
+
+#. translators: %s: Brand name
+#: includes/admin/class-show-page-on-front.php:47
+#, php-format
+msgid "Front page for %s"
+msgstr ""
+
+#: includes/admin/class-user-primary-brand.php:62
+msgid "Multibranded site Options"
+msgstr ""
+
+#: includes/admin/class-user-primary-brand.php:63
+msgid "The user primary brand defines what brand will be applied to the user's archive."
+msgstr ""
+
+#: includes/class-admin.php:58
+#: includes/class-admin.php:59
+msgid "Multibranded site"
+msgstr ""
+
+#: includes/class-taxonomy.php:90
+msgctxt "taxonomy general name"
+msgid "Brands"
+msgstr ""
+
+#: includes/class-taxonomy.php:91
+msgctxt "taxonomy singular name"
+msgid "Brand"
+msgstr ""
+
+#: includes/class-taxonomy.php:92
+msgid "Search Brands"
+msgstr ""
+
+#: includes/class-taxonomy.php:93
+msgid "All Brands"
+msgstr ""
+
+#: includes/class-taxonomy.php:94
+msgid "Parent Brand"
+msgstr ""
+
+#: includes/class-taxonomy.php:95
+msgid "Parent Brand:"
+msgstr ""
+
+#: includes/class-taxonomy.php:96
+msgid "Edit Brand"
+msgstr ""
+
+#: includes/class-taxonomy.php:97
+msgid "Update Brand"
+msgstr ""
+
+#: includes/class-taxonomy.php:98
+msgid "Add New Brand"
+msgstr ""
+
+#: includes/class-taxonomy.php:99
+msgid "New Brand Name"
+msgstr ""
+
+#: includes/class-taxonomy.php:100
+#: dist/postPrimaryBrand.js:1
+#: src/post-primary-brand/index.js:71
+msgid "Brands"
+msgstr ""
+
+#: includes/meta/class-category-primary-brand.php:42
+msgid "The primary brand for a category"
+msgstr ""
+
+#: includes/meta/class-logo.php:32
+msgid "The ID of the attachment to be used as a logo for this brand"
+msgstr ""
+
+#: includes/meta/class-menus.php:32
+msgid "An array containing objects describing which menu should be displayed in which location"
+msgstr ""
+
+#: includes/meta/class-post-primary-brand.php:40
+msgid "The primary brand for a post, if a post belongs to more than one brand"
+msgstr ""
+
+#: includes/meta/class-show-page-on-front.php:32
+#: includes/meta/class-url.php:32
+msgid "Whether the brand URL should be at the root of the site (yes) or at the default taxonomy URL (no)"
+msgstr ""
+
+#: includes/meta/class-tag-primary-brand.php:42
+msgid "The primary brand for a tag"
+msgstr ""
+
+#: includes/meta/class-theme-colors.php:32
+msgid "An array of customizable colors defined by the theme. Each item has a name, which refers to the theme_mod name, and a value, which is a color hex code."
+msgstr ""
+
+#: includes/meta/class-user-primary-brand.php:40
+msgid "The primary brand for a user"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:137
+msgid "Brand"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:138
+msgid "Set your brand identity"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:143
+msgid "Name"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:152
+msgid "Logo"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:161
+msgid "Colors"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:162
+msgid "These are the colors you can customize for this brand in the active theme"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:177
+msgid "Reset default color"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:189
+msgid "Settings"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:193
+msgid "URL Base"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:196
+msgid "Homepage"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:197
+msgid "Default"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:205
+msgid "Slug"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:217
+msgid "Show on Front"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:220
+msgid "Latest posts"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:221
+msgid "A page"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:227
+msgid "Homepage URL"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:231
+msgid "Select a Page"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:247
+msgid "Menus"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:248
+msgid "Customize the menus for this brand"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:258
+msgid "Same as site"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:270
+msgid "Save"
+msgstr ""
+
+#: dist/admin.js:1
+#: src/admin/views/brands/Brand.js:273
+msgid "Cancel"
+msgstr ""
+
+#: dist/postPrimaryBrand.js:1
+#: src/post-primary-brand/index.js:74
+msgid "Primary brand"
+msgstr ""
+
+#: dist/postPrimaryBrand.js:1
+#: src/post-primary-brand/index.js:91
+msgid "Manage Brands"
+msgstr ""

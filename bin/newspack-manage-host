@@ -1,0 +1,67 @@
+#!/bin/bash
+# Wrapper script for managing loopback aliases and /etc/hosts entries.
+# Intended to be granted passwordless sudo via a sudoers drop-in,
+# so that non-interactive processes (e.g. AI agents) can set up
+# networking for isolated environments without a password prompt.
+#
+# Only allows:
+#   - Adding/removing loopback aliases on lo0 (127.0.0.*)
+#   - Adding /etc/hosts entries for 127.0.0.* -> *.local domains
+#   - Removing /etc/hosts entries for *.local domains
+
+set -euo pipefail
+
+usage() {
+    echo "Usage:"
+    echo "  $0 alias-add <127.0.0.X>"
+    echo "  $0 alias-remove <127.0.0.X>"
+    echo "  $0 host-add <127.0.0.X> <domain.local>"
+    echo "  $0 host-remove <domain.local>"
+    exit 1
+}
+
+validate_loopback_ip() {
+    if [[ ! "$1" =~ ^127\.0\.0\.[0-9]+$ ]]; then
+        echo "Error: invalid loopback IP '$1' (must be 127.0.0.X)" >&2
+        exit 1
+    fi
+}
+
+validate_local_domain() {
+    if [[ ! "$1" =~ ^[a-zA-Z0-9._-]+\.local$ ]]; then
+        echo "Error: invalid domain '$1' (must end in .local)" >&2
+        exit 1
+    fi
+}
+
+[[ $# -lt 2 ]] && usage
+
+case "$1" in
+    alias-add)
+        validate_loopback_ip "$2"
+        ifconfig lo0 alias "$2"
+        ;;
+    alias-remove)
+        validate_loopback_ip "$2"
+        ifconfig lo0 -alias "$2"
+        ;;
+    host-add)
+        [[ $# -lt 3 ]] && usage
+        validate_loopback_ip "$2"
+        validate_local_domain "$3"
+        # Don't add if already present.
+        if ! grep -q "[[:space:]]${3}$" /etc/hosts 2>/dev/null; then
+            echo "$2 $3" >> /etc/hosts
+        fi
+        ;;
+    host-remove)
+        validate_local_domain "$2"
+        escaped="${2//./\\.}"
+        # BSD sed first, fall back to GNU sed.
+        sed -i '' "/[[:space:]]${escaped}$/d" /etc/hosts 2>/dev/null || \
+            sed -i "/[[:space:]]${escaped}$/d" /etc/hosts
+        ;;
+    *)
+        usage
+        ;;
+esac

@@ -1,0 +1,199 @@
+@use "../mixins/utilities";
+@use "../variables-site/structure";
+
+/** === Layout === */
+
+#page {
+	display: flex;
+	flex-direction: column;
+	min-height: 100vh;
+	> *:not(#content) {
+		flex-grow: 0;
+	}
+}
+#content {
+	flex: 1;
+}
+
+.admin-bar #page {
+	min-height: calc(100vh - 46px);
+
+	@include utilities.media( tablet ) {
+		min-height: calc(100vh - 32px);
+	}
+}
+
+.wrapper {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	margin: auto;
+	max-width: 90vw;
+	width: structure.$size__site-main;
+
+	@include utilities.media( tablet ) {
+		flex-wrap: nowrap;
+	}
+}
+
+.site-content {
+	min-height: 30vh;
+	margin-top: #{1.5 * structure.$size__spacing-unit};
+
+	@include utilities.media( tablet ) {
+		margin-top: #{4 * structure.$size__spacing-unit};
+	}
+}
+
+.post-template-single-feature,
+.page-template-single-feature,
+.page-template-no-header-footer,
+.post-template-single-wide,
+.page-template-single-wide,
+.newspack-front-page {
+	.site-content {
+		overflow: hidden;
+	}
+}
+
+// These image positions use 100vw widths that overflow on browsers with classic
+// scrollbars. Use 'hidden' as a safe fallback, then prefer 'clip' (where supported)
+// to contain the overflow without creating a new block formatting context that would
+// break position: sticky on descendant elements (e.g. sticky ads in the sidebar).
+.single-featured-image-behind,
+.single-featured-image-beside,
+.single-featured-image-above {
+	.site-content {
+		overflow: hidden;
+	}
+}
+
+@supports (overflow: clip) {
+	.single-featured-image-behind,
+	.single-featured-image-beside,
+	.single-featured-image-above {
+		.site-content {
+			overflow: clip;
+		}
+	}
+}
+
+#primary {
+	margin: auto;
+	max-width: 90vw;
+	width: structure.$size__site-main;
+}
+
+#secondary {
+	margin-top: structure.$size__spacing-unit;
+}
+
+.single,
+.page:not(.newspack-front-page) {
+	&.has-sidebar #main {
+		@include utilities.media( tablet ) {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: space-between;
+		}
+	}
+}
+
+.archive,
+.blog,
+.search {
+	&.has-sidebar #primary {
+		@include utilities.media( tablet ) {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: space-between;
+		}
+	}
+}
+
+.archive #main,
+.blog #main,
+.search #main,
+.page .main-content,
+.single .main-content {
+	@include utilities.media( tablet ) {
+		width: 65%;
+	}
+}
+
+.archive #secondary,
+.blog #secondary,
+.search #secondary,
+.page #secondary,
+.single #secondary {
+	@include utilities.media( tablet ) {
+		width: calc(35% - #{2 * structure.$size__spacing-unit});
+	}
+	@include utilities.media( desktop ) {
+		width: calc(35% - #{3 * structure.$size__spacing-unit});
+	}
+}
+
+.hide {
+	display: none;
+}
+
+// Single-column layouts
+.post-template-single-feature .main-content,
+.page-template-single-feature .main-content,
+.page-template-no-header-footer .main-content,
+.archive-one-column #main,
+.newspack-front-page.page-template-single-feature .site-main {
+	margin-left: auto;
+	margin-right: auto;
+	max-width: 780px;
+	width: 100%;
+}
+
+@include utilities.media( tablet ) {
+	.page-template-single-feature .entry-header,
+	.page-template-no-header-footer .entry-header,
+	.archive.archive-one-column .page-header {
+		margin-left: auto;
+		margin-right: auto;
+		max-width: 780px;
+		width: 100%;
+	}
+}
+
+.archive-one-column-wide #main {
+	width: 100%;
+}
+
+.newspack-front-page,
+.post-template-single-wide,
+.page-template-single-wide {
+	.main-content {
+		width: 100%;
+	}
+
+	@include utilities.media( tablet ) {
+		.author-bio,
+		.comments-area {
+			margin-left: auto;
+			margin-right: auto;
+			width: 65%;
+		}
+	}
+}
+
+/* 'No Header or Fotoer' page template */
+.page-template-no-header-footer {
+	&,
+	&.hide-page-title {
+		.site-content {
+			margin-top: 0;
+		}
+	}
+
+	&:not(.hide-page-title):not([class*="single-featured-image-"]) {
+		.entry-header {
+			margin-top: structure.$size__spacing-unit;
+		}
+	}
+}

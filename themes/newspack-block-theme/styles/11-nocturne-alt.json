@@ -1,0 +1,244 @@
+{
+	"title": "Nocturne alt",
+	"settings": {
+		"color": {
+			"palette": [
+				{
+					"color": "#FFC857",
+					"name": "Accent",
+					"slug": "accent"
+				},
+				{
+					"color": "#B8D2F0",
+					"name": "Accent / Two",
+					"slug": "accent-2"
+				},
+				{
+					"color": "#22324F",
+					"name": "Accent / Three",
+					"slug": "accent-3"
+				},
+				{
+					"color": "#1E1E1E",
+					"name": "Base",
+					"slug": "base"
+				},
+				{
+					"color": "#303030",
+					"name": "Base / Two",
+					"slug": "base-2"
+				},
+				{
+					"color": "#5D5D5D",
+					"name": "Base / Three",
+					"slug": "base-3"
+				},
+				{
+					"color": "#747474",
+					"name": "Base / Four",
+					"slug": "base-4"
+				},
+				{
+					"color": "#AFAFAF",
+					"name": "Base / Five",
+					"slug": "base-5"
+				},
+				{
+					"color": "#FFFFFF",
+					"name": "Contrast",
+					"slug": "contrast"
+				},
+				{
+					"color": "#E2E2E2",
+					"name": "Contrast / Two",
+					"slug": "contrast-2"
+				},
+				{
+					"color": "#CFCFCF",
+					"name": "Contrast / Three",
+					"slug": "contrast-3"
+				}
+			]
+		},
+		"layout": {
+			"contentSize": "800px",
+			"wideSize": "1216px"
+		},
+		"typography": {
+			"fluid": true,
+			"fontFamilies": [
+				{
+					"fontFace": [
+						{
+							"fontFamily": "Inter",
+							"fontStretch": "normal",
+							"fontStyle": "normal",
+							"fontWeight": "100 900",
+							"src": [
+								"file:./assets/fonts/inter/InterVariable.woff2"
+							]
+						},
+						{
+							"fontFamily": "Inter",
+							"fontStretch": "normal",
+							"fontStyle": "italic",
+							"fontWeight": "100 900",
+							"src": [
+								"file:./assets/fonts/inter/InterVariable-Italic.woff2"
+							]
+						}
+					],
+					"fontFamily": "\"Inter\", system-ui, sans-serif",
+					"name": "Inter",
+					"slug": "inter"
+				},
+				{
+					"fontFace": [
+						{
+							"fontFamily": "Plus Jakarta Sans",
+							"fontStretch": "normal",
+							"fontStyle": "normal",
+							"fontWeight": "100 900",
+							"src": [
+								"file:./assets/fonts/plus-jakarta-sans/PlusJakartaSans-VariableFont_wght.ttf"
+							]
+						},
+						{
+							"fontFamily": "Plus Jakarta Sans",
+							"fontStretch": "normal",
+							"fontStyle": "italic",
+							"fontWeight": "100 900",
+							"src": [
+								"file:./assets/fonts/plus-jakarta-sans/PlusJakartaSans-Italic-VariableFont_wght.ttf"
+							]
+						}
+					],
+					"fontFamily": "\"Plus Jakarta Sans\", system-ui, sans-serif",
+					"name": "Plus Jakarta Sans",
+					"slug": "plus-jakarta-sans"
+				},
+				{
+					"fontFace": [
+						{
+							"fontFamily": "Public Sans",
+							"fontStretch": "normal",
+							"fontStyle": "normal",
+							"fontWeight": "100 900",
+							"src": [
+								"file:./assets/fonts/public-sans/PublicSans-VariableFont_wght.ttf"
+							]
+						},
+						{
+							"fontFamily": "Public Sans",
+							"fontStretch": "normal",
+							"fontStyle": "italic",
+							"fontWeight": "100 900",
+							"src": [
+								"file:./assets/fonts/public-sans/PublicSans-Italic-VariableFont_wght.ttf"
+							]
+						}
+					],
+					"fontFamily": "\"Public Sans\", system-ui, sans-serif",
+					"name": "Public Sans",
+					"slug": "public-sans"
+				}
+			]
+		},
+		"custom": {
+			"className": "nocturne-alt"
+		}
+	},
+	"styles": {
+		"blocks": {
+			"core/button": {
+				"typography": {
+					"fontFamily": "var( --wp--preset--font-family--inter )"
+				}
+			},
+			"core/post-terms": {
+				"elements": {
+					"link": {
+						"color": {
+							"text": "var( --wp--preset--color--accent-2 )"
+						},
+						"typography": {
+							"textDecoration": "none"
+						},
+						":hover": {
+							"color": {
+								"text": "var( --wp--preset--color--contrast )"
+							},
+							"typography": {
+								"textDecoration": "none"
+							}
+						}
+					}
+				},
+				"typography": {
+					"fontFamily": "var( --wp--preset--font-family--plus-jakarta-sans )",
+					"fontWeight": "700",
+					"textTransform": "none"
+				}
+			},
+			"core/navigation": {
+				"typography": {
+					"fontFamily": "var( --wp--preset--font-family--public-sans )"
+				}
+			}
+		},
+		"typography": {
+			"fontFamily": "var( --wp--preset--font-family--public-sans )"
+		},
+		"elements": {
+			"button": {
+				"typography": {
+					"fontFamily": "var( --wp--preset--font-family--inter )"
+				}
+			},
+			"caption": {
+				"typography": {
+					"fontFamily": "var( --wp--preset--font-family--public-sans )"
+				}
+			},
+			"heading": {
+				"typography": {
+					"fontFamily": "var( --wp--preset--font-family--plus-jakarta-sans )"
+				}
+			},
+			"h5": {
+				"color": {
+					"text": "var( --wp--preset--color--accent-2 )"
+				},
+				":hover": {
+					"color": {
+						"text": "var( --wp--preset--color--contrast )"
+					}
+				},
+				"typography": {
+					"fontSize": "var( --wp--preset--font-size--medium )",
+					"fontWeight": "700",
+					"lineHeight": "var( --wp--custom--line-height--medium )",
+					"textTransform": "none"
+				}
+			},
+			"h6": {
+				"color": {
+					"text": "var( --wp--preset--color--accent-2 )"
+				},
+				":hover": {
+					"color": {
+						"text": "var( --wp--preset--color--contrast )"
+					}
+				},
+				"typography": {
+					"fontSize": "var( --wp--preset--font-size--small )",
+					"fontWeight": "700",
+					"lineHeight": "var( --wp--custom--line-height--small )",
+					"textTransform": "none"
+				}
+			}
+		}
+	},
+	"version": 2,
+	"$schema": "https://schemas.wp.org/wp/6.2/theme.json"
+}

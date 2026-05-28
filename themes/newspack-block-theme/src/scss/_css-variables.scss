@@ -1,0 +1,93 @@
+// Extra variables
+:root {
+	--wp--preset--spacing--00: 0;
+}
+
+// Apply the custom CSS variables defined in theme.json.
+.has-xx-small-font-size {
+	line-height: var(--wp--custom--line-height--xx-small);
+}
+
+.has-x-small-font-size {
+	line-height: var(--wp--custom--line-height--x-small);
+}
+
+.has-small-font-size {
+	line-height: var(--wp--custom--line-height--small);
+}
+
+.has-normal-font-size,
+.has-medium-font-size {
+	line-height: var(--wp--custom--line-height--medium);
+}
+
+.has-normal-font-size {
+	font-size: var(--wp--preset--font-size--medium) !important;
+}
+
+.has-large-font-size {
+	line-height: var(--wp--custom--line-height--large);
+}
+
+.has-x-large-font-size {
+	line-height: var(--wp--custom--line-height--x-large);
+}
+
+.has-huge-font-size,
+.has-xx-large-font-size {
+	line-height: var(--wp--custom--line-height--xx-large);
+}
+
+.has-huge-font-size {
+	font-size: var(--wp--preset--font-size--xx-large) !important;
+}
+
+.has-xxx-large-font-size {
+	line-height: var(--wp--custom--line-height--xxx-large);
+}
+
+.has-xxxx-large-font-size {
+	line-height: var(--wp--custom--line-height--xxxx-large);
+}
+
+.has-xxxxx-large-font-size {
+	line-height: var(--wp--custom--line-height--xxxxx-large);
+}
+
+.has-xxxxxx-large-font-size {
+	line-height: var(--wp--custom--line-height--xxxxxx-large);
+}
+
+// Backward compatibility with the Classic Theme
+$colors: (
+	"primary": var(--wp--preset--color--accent),
+	"primary-variation": color-mix(in srgb, var(--wp--preset--color--accent) 80%, black),
+	"secondary": var(--wp--preset--color--accent-2),
+	"secondary-variation": color-mix(in srgb, var(--wp--preset--color--accent-2) 80%, black),
+	"dark-gray": var(--wp--preset--color--contrast),
+	"medium-gray": var(--wp--preset--color--contrast-3),
+	"light-gray": var(--wp--preset--color--base-2),
+	"white": var(--wp--preset--color--base),
+);
+
+@each $name, $var in $colors {
+	//! Custom background colors
+	.has-#{$name}-background-color {
+		background-color: $var !important;
+	}
+
+	//! Custom foreground colors
+	.has-#{$name}-color {
+		color: $var !important;
+	}
+
+	//! Custom border colors
+	.has-#{$name}-border-color {
+		border-color: $var !important;
+	}
+}
+
+// Custom Classes
+.align-items--baseline {
+	align-items: baseline !important;
+}

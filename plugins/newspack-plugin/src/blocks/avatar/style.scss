@@ -1,0 +1,54 @@
+[data-type="newspack/avatar"],
+.wp-block-newspack-avatar {
+	display: flex;
+	gap: 0.5rem;
+
+	&.is-style-overlapped,
+	&[class*="is-style-overlapped"] {
+		gap: 0;
+
+		.newspack-avatar-wrapper:not(:last-of-type) {
+			margin-right: calc(var(--avatar-size) * -0.175);
+
+			img {
+				mask-image: var(--overlap-mask);
+				mask-size: 100% 100%;
+				mask-repeat: no-repeat;
+			}
+		}
+	}
+
+	.newspack-avatar-wrapper {
+		height: var(--avatar-size);
+		position: relative;
+		width: var(--avatar-size);
+
+		a {
+			border-radius: 50%;
+			display: flex;
+		}
+	}
+
+	.newspack-avatar-wrapper--placeholder {
+		border-radius: 50%;
+		overflow: hidden;
+		&::before,
+		svg {
+			inset: 0;
+			position: absolute;
+		}
+
+		&::before {
+			background: currentcolor;
+			content: "";
+			opacity: 0.1;
+			pointer-events: none;
+		}
+
+		svg {
+			box-sizing: initial;
+			opacity: 0.25;
+			stroke: currentcolor;
+		}
+	}
+}

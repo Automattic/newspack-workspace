@@ -1,0 +1,34 @@
+/**
+ * Category Autocomplete
+ */
+
+.newspack-category-autocomplete {
+	position: relative;
+
+	.components-form-token-field__help {
+		display: none;
+	}
+
+	// Within a Grid
+
+	.newspack-grid & .newspack-form-token-field__input-container {
+		margin: 0;
+	}
+
+	// Loading state spinner
+	&__suggestions-spinner {
+		position: absolute;
+		right: 1px;
+		top: calc(1.4em + 8px);
+		z-index: 2;
+
+		[class*="--label-hidden"] + & {
+			top: 0;
+		}
+
+		.components-spinner {
+			display: block;
+			margin: 7px;
+		}
+	}
+}

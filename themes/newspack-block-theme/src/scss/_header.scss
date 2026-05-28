@@ -1,0 +1,20 @@
+@use "sass-utils";
+@use "mixins";
+
+/**
+ * Mobile Header and Menu
+ */
+.header-mobile {
+	width: 100%;
+
+	> .wp-block-group {
+		width: inherit;
+	}
+}
+
+// Header margin
+.wp-site-blocks {
+	> header + * {
+		margin-top: 0;
+	}
+}

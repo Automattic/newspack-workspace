@@ -1,0 +1,277 @@
+/**
+ * Newspack Colors
+ * A collection of color tokens for Newspack projects
+ */
+
+@use "sass:color";
+
+@function to-rgb($color) {
+	@return color.channel($color, "red", $space: rgb) + ", " + color.channel($color, "green", $space: rgb) + ", " + color.channel($color, "blue", $space: rgb);
+}
+
+// Primary: Hex
+$primary-000: #dfe7f4;
+$primary-050: #bfcfe9;
+$primary-100: #9fb6dd;
+$primary-200: #809ed2;
+$primary-300: #6086c7;
+$primary-400: #406ebc;
+$primary-500: #2055b0;
+$primary-600: #003da5;
+$primary-700: #00296e;
+$primary-800: #001f53;
+$primary-900: #001437;
+$primary-1000: #000a1c;
+
+// Primary: RGB
+$primary-000--rgb: to-rgb($primary-000);
+$primary-050--rgb: to-rgb($primary-050);
+$primary-100--rgb: to-rgb($primary-100);
+$primary-200--rgb: to-rgb($primary-200);
+$primary-300--rgb: to-rgb($primary-300);
+$primary-400--rgb: to-rgb($primary-400);
+$primary-500--rgb: to-rgb($primary-500);
+$primary-600--rgb: to-rgb($primary-600);
+$primary-700--rgb: to-rgb($primary-700);
+$primary-800--rgb: to-rgb($primary-800);
+$primary-900--rgb: to-rgb($primary-900);
+$primary-1000--rgb: to-rgb($primary-1000);
+
+// Secondary: Hex
+$secondary-000: #eff9f2;
+$secondary-050: #ddf3e3;
+$secondary-100: #c8ecd4;
+$secondary-200: #b1e6c3;
+$secondary-300: #95dfaf;
+$secondary-400: #6fd898;
+$secondary-500: #26d07c;
+$secondary-600: #1fb36a;
+$secondary-700: #1ba25f;
+$secondary-800: #178e53;
+$secondary-900: #117644;
+$secondary-1000: #09552f;
+
+// Secondary: RGB
+$secondary-000--rgb: to-rgb($secondary-000);
+$secondary-050--rgb: to-rgb($secondary-050);
+$secondary-100--rgb: to-rgb($secondary-100);
+$secondary-200--rgb: to-rgb($secondary-200);
+$secondary-300--rgb: to-rgb($secondary-300);
+$secondary-400--rgb: to-rgb($secondary-400);
+$secondary-500--rgb: to-rgb($secondary-500);
+$secondary-600--rgb: to-rgb($secondary-600);
+$secondary-700--rgb: to-rgb($secondary-700);
+$secondary-800--rgb: to-rgb($secondary-800);
+$secondary-900--rgb: to-rgb($secondary-900);
+$secondary-1000--rgb: to-rgb($secondary-1000);
+
+// Tertiary: Hex
+$tertiary-000: #fff4f6;
+$tertiary-050: #fee8ed;
+$tertiary-100: #fedbe3;
+$tertiary-200: #fcded8;
+$tertiary-300: #fdbfcd;
+$tertiary-400: #fcaec0;
+$tertiary-500: #fc9bb3;
+$tertiary-600: #d9859a;
+$tertiary-700: #c5788b;
+$tertiary-800: #ad697a;
+$tertiary-900: #905665;
+$tertiary-1000: #683d48;
+
+// Tertiary: RGB
+$tertiary-000--rgb: to-rgb($tertiary-000);
+$tertiary-050--rgb: to-rgb($tertiary-050);
+$tertiary-100--rgb: to-rgb($tertiary-100);
+$tertiary-200--rgb: to-rgb($tertiary-200);
+$tertiary-300--rgb: to-rgb($tertiary-300);
+$tertiary-400--rgb: to-rgb($tertiary-400);
+$tertiary-500--rgb: to-rgb($tertiary-500);
+$tertiary-600--rgb: to-rgb($tertiary-600);
+$tertiary-700--rgb: to-rgb($tertiary-700);
+$tertiary-800--rgb: to-rgb($tertiary-800);
+$tertiary-900--rgb: to-rgb($tertiary-900);
+$tertiary-1000--rgb: to-rgb($tertiary-1000);
+
+// Quaternary: Hex
+$quaternary-000: #fff5ee;
+$quaternary-050: #ffeadc;
+$quaternary-100: #ffdec7;
+$quaternary-200: #ffd1af;
+$quaternary-300: #ffc392;
+$quaternary-400: #ffb46a;
+$quaternary-500: #ffa300;
+$quaternary-600: #dc8c00;
+$quaternary-700: #c77e00;
+$quaternary-800: #af6e00;
+$quaternary-900: #925b00;
+$quaternary-1000: #6a4100;
+
+// Quaternary: RGB
+$quaternary-000--rgb: to-rgb($quaternary-000);
+$quaternary-050--rgb: to-rgb($quaternary-050);
+$quaternary-100--rgb: to-rgb($quaternary-100);
+$quaternary-200--rgb: to-rgb($quaternary-200);
+$quaternary-300--rgb: to-rgb($quaternary-300);
+$quaternary-400--rgb: to-rgb($quaternary-400);
+$quaternary-500--rgb: to-rgb($quaternary-500);
+$quaternary-600--rgb: to-rgb($quaternary-600);
+$quaternary-700--rgb: to-rgb($quaternary-700);
+$quaternary-800--rgb: to-rgb($quaternary-800);
+$quaternary-900--rgb: to-rgb($quaternary-900);
+$quaternary-1000--rgb: to-rgb($quaternary-1000);
+
+// Neutral: Hex
+$neutral-000: #fff;
+$neutral-050: #f7f7f7;
+$neutral-100: #f0f0f0;
+$neutral-200: #e0e0e0;
+$neutral-300: #ddd;
+$neutral-400: #ccc;
+$neutral-500: #949494;
+$neutral-600: #6c6c6c;
+$neutral-700: #000000b3;
+$neutral-800: #3e3e3e;
+$neutral-900: #1e1e1e;
+$neutral-1000: #000;
+
+// Neutral: RGB
+$neutral-000--rgb: to-rgb($neutral-000);
+$neutral-050--rgb: to-rgb($neutral-050);
+$neutral-100--rgb: to-rgb($neutral-100);
+$neutral-200--rgb: to-rgb($neutral-200);
+$neutral-300--rgb: to-rgb($neutral-300);
+$neutral-400--rgb: to-rgb($neutral-400);
+$neutral-500--rgb: to-rgb($neutral-500);
+$neutral-600--rgb: to-rgb($neutral-600);
+$neutral-700--rgb: to-rgb($neutral-700);
+$neutral-800--rgb: to-rgb($neutral-800);
+$neutral-900--rgb: to-rgb($neutral-900);
+$neutral-1000--rgb: to-rgb($neutral-1000);
+
+// Success: Hex
+$success-000: #edfaef;
+$success-050: #b8e6bf;
+$success-500: #008a20;
+$success-600: #007017;
+
+// Success: RGB
+$success-000--rgb: to-rgb($success-000);
+$success-050--rgb: to-rgb($success-050);
+$success-500--rgb: to-rgb($success-500);
+$success-600--rgb: to-rgb($success-600);
+
+// Error: Hex
+$error-000: #fcf0f1;
+$error-050: #facfd2;
+$error-500: #d63638;
+$error-600: #b32d2e;
+
+// Error: RGB
+$error-000--rgb: to-rgb($error-000);
+$error-050--rgb: to-rgb($error-050);
+$error-500--rgb: to-rgb($error-500);
+$error-600--rgb: to-rgb($error-600);
+
+// Warning: Hex
+$warning-000: #fcf9e8;
+$warning-050: #f5e6ab;
+$warning-300: #dba617;
+$warning-400: #bd8600;
+
+// Warning: RGB
+$warning-000--rgb: to-rgb($warning-000);
+$warning-050--rgb: to-rgb($warning-050);
+$warning-300--rgb: to-rgb($warning-300);
+$warning-400--rgb: to-rgb($warning-400);
+
+// Export for JavaScript/CSS Modules consumption
+:export {
+	// Primary
+	primary-000: $primary-000;
+	primary-050: $primary-050;
+	primary-100: $primary-100;
+	primary-200: $primary-200;
+	primary-300: $primary-300;
+	primary-400: $primary-400;
+	primary-500: $primary-500;
+	primary-600: $primary-600;
+	primary-700: $primary-700;
+	primary-800: $primary-800;
+	primary-900: $primary-900;
+	primary-1000: $primary-1000;
+
+	// Secondary
+	secondary-000: $secondary-000;
+	secondary-050: $secondary-050;
+	secondary-100: $secondary-100;
+	secondary-200: $secondary-200;
+	secondary-300: $secondary-300;
+	secondary-400: $secondary-400;
+	secondary-500: $secondary-500;
+	secondary-600: $secondary-600;
+	secondary-700: $secondary-700;
+	secondary-800: $secondary-800;
+	secondary-900: $secondary-900;
+	secondary-1000: $secondary-1000;
+
+	// Tertiary
+	tertiary-000: $tertiary-000;
+	tertiary-050: $tertiary-050;
+	tertiary-100: $tertiary-100;
+	tertiary-200: $tertiary-200;
+	tertiary-300: $tertiary-300;
+	tertiary-400: $tertiary-400;
+	tertiary-500: $tertiary-500;
+	tertiary-600: $tertiary-600;
+	tertiary-700: $tertiary-700;
+	tertiary-800: $tertiary-800;
+	tertiary-900: $tertiary-900;
+	tertiary-1000: $tertiary-1000;
+
+	// Quaternary
+	quaternary-000: $quaternary-000;
+	quaternary-050: $quaternary-050;
+	quaternary-100: $quaternary-100;
+	quaternary-200: $quaternary-200;
+	quaternary-300: $quaternary-300;
+	quaternary-400: $quaternary-400;
+	quaternary-500: $quaternary-500;
+	quaternary-600: $quaternary-600;
+	quaternary-700: $quaternary-700;
+	quaternary-800: $quaternary-800;
+	quaternary-900: $quaternary-900;
+	quaternary-1000: $quaternary-1000;
+
+	// Neutral
+	neutral-000: $neutral-000;
+	neutral-050: $neutral-050;
+	neutral-100: $neutral-100;
+	neutral-200: $neutral-200;
+	neutral-300: $neutral-300;
+	neutral-400: $neutral-400;
+	neutral-500: $neutral-500;
+	neutral-600: $neutral-600;
+	neutral-700: $neutral-700;
+	neutral-800: $neutral-800;
+	neutral-900: $neutral-900;
+	neutral-1000: $neutral-1000;
+
+	// Success
+	success-000: $success-000;
+	success-050: $success-050;
+	success-500: $success-500;
+	success-600: $success-600;
+
+	// Error
+	error-000: $error-000;
+	error-050: $error-050;
+	error-500: $error-500;
+	error-600: $error-600;
+
+	// Warning
+	warning-000: $warning-000;
+	warning-050: $warning-050;
+	warning-300: $warning-300;
+	warning-400: $warning-400;
+}

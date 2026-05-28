@@ -1,0 +1,38 @@
+{
+	"name": "automattic/newspack-story-budget",
+	"description": "Story budgeting by Newspack.",
+	"homepage": "https://newspack.com/",
+	"type": "wordpress-plugin",
+	"license": "GPL-2.0-or-later",
+	"support": {
+		"issues": "https://github.com/Automattic/newspack-story-budget/issues"
+	},
+	"require-dev": {
+		"automattic/vipwpcs": "^3.0",
+		"wp-coding-standards/wpcs": "^3.0",
+		"dealerdirect/phpcodesniffer-composer-installer": "*",
+		"phpcompatibility/phpcompatibility-wp": "*",
+		"yoast/phpunit-polyfills": "^4.0",
+		"phpunit/phpunit": "^9.5"
+	},
+	"autoload": {
+		"classmap": [
+			"includes"
+		]
+	},
+	"scripts": {
+		"post-update-cmd": [
+			"vendor/bin/cghooks update"
+		]
+	},
+	"extra": {},
+	"config": {
+		"platform": {
+			"php": "8.3"
+		},
+		"allow-plugins": {
+			"composer/installers": true,
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		}
+	}
+}

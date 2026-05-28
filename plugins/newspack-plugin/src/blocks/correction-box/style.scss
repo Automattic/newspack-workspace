@@ -1,0 +1,10 @@
+.wp-block-newspack-correction-box {
+
+	p {
+		margin: 0;
+	}
+
+	p.correction + p.correction {
+		margin-block-start: var(--wp--preset--spacing--30);
+	}
+}

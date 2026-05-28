@@ -1,0 +1,125 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack/collections",
+	"version": "1.0.0",
+	"title": "Collections",
+	"category": "newspack",
+	"description": "An advanced block that allows displaying collections based on different parameters and visual configurations.",
+	"keywords": [ "collections", "issues", "publications", "magazines", "groups" ],
+	"supports": {
+		"html": false,
+		"align": [ "wide", "full" ],
+		"spacing": {
+			"margin": true,
+			"padding": true
+		}
+	},
+	"attributes": {
+		"queryType": {
+			"type": "string",
+			"default": "recent"
+		},
+		"numberOfItems": {
+			"type": "number",
+			"default": 4
+		},
+		"offset": {
+			"type": "number",
+			"default": 0
+		},
+		"selectedCollections": {
+			"type": "array",
+			"default": []
+		},
+		"includeCategories": {
+			"type": "array",
+			"default": []
+		},
+		"excludeCategories": {
+			"type": "array",
+			"default": []
+		},
+		"layout": {
+			"type": "string",
+			"default": "grid"
+		},
+		"columns": {
+			"type": "number",
+			"default": 4
+		},
+		"imageAlignment": {
+			"type": "string",
+			"default": "left"
+		},
+		"imageSize": {
+			"type": "string",
+			"default": "small"
+		},
+		"showFeaturedImage": {
+			"type": "boolean",
+			"default": true
+		},
+		"showTitle": {
+			"type": "boolean",
+			"default": true
+		},
+		"showCategory": {
+			"type": "boolean",
+			"default": true
+		},
+		"showExcerpt": {
+			"type": "boolean",
+			"default": false
+		},
+		"showPeriod": {
+			"type": "boolean",
+			"default": true
+		},
+		"showVolume": {
+			"type": "boolean",
+			"default": true
+		},
+		"showNumber": {
+			"type": "boolean",
+			"default": true
+		},
+		"showCTAs": {
+			"type": "boolean",
+			"default": true
+		},
+		"numberOfCTAs": {
+			"type": "number",
+			"default": 1
+		},
+		"showSubscriptionUrl": {
+			"type": "boolean",
+			"default": true
+		},
+		"showOrderUrl": {
+			"type": "boolean",
+			"default": true
+		},
+		"specificCTAs": {
+			"type": "string",
+			"default": ""
+		}
+	},
+	"example": {
+		"attributes": {
+			"queryType": "recent",
+			"numberOfItems": 4,
+			"layout": "grid",
+			"columns": 4,
+			"showFeaturedImage": true,
+			"showTitle": true,
+			"showPeriod": true,
+			"showVolume": true,
+			"showNumber": true,
+			"showCTAs": true,
+			"numberOfCTAs": 1
+		}
+	},
+	"textdomain": "newspack-plugin",
+	"editorScript": "file:./index.js"
+}

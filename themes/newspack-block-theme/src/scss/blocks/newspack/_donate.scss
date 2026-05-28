@@ -1,0 +1,15 @@
+.wp-block-newspack-blocks-donate {
+	&.is-style-modern {
+		&.wpbnbd--tiers-based {
+			.wpbnbd__tiers__tier:not(& .wpbnbd__tiers__tier--recommended) {
+				button[type="submit"],
+				.submit-button {
+					&:hover {
+						border-color: currentcolor !important;
+						color: var(--newspack-ui-color-neutral-90, #1e1e1e) !important;
+					}
+				}
+			}
+		}
+	}
+}

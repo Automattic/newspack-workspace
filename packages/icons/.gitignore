@@ -1,0 +1,13 @@
+node_modules/
+*.log
+.DS_Store
+
+# TypeScript build artifacts (auto-generated during npm publish)
+build-types/
+*.d.ts
+*.tsbuildinfo
+
+# Build artifacts
+build/
+dist/
+types/

@@ -1,0 +1,63 @@
+.newspack-wizard-ads-placements__snackbar {
+	bottom: 16px;
+	left: 50%;
+	position: fixed;
+	transform: translateX( -50% );
+	z-index: 99999;
+}
+
+.newspack-ads-display-ads {
+	.newspack-button-card .newspack-notice {
+		margin: 24px 0 0;
+	}
+
+	.newspack-category-autocomplete + .components-toggle-control {
+		margin-top: 16px;
+	}
+
+	&__ad-unit-fluid {
+		align-items: center;
+		display: flex;
+		font-size: 12px;
+		grid-column: 2 / 4;
+		line-height: 16px;
+	}
+
+	.newspack-grid {
+		&__thead,
+		&__tbody {
+			align-items: center;
+			grid-template-columns: repeat(3, calc(33.33% - 24px)) 36px;
+		}
+
+		.newspack-button.has-icon:not(.has-text) {
+			height: 48px;
+			min-width: 48px;
+			width: 48px;
+		}
+
+		+ .newspack-card__header-actions {
+			margin-top: 64px;
+		}
+	}
+
+	.newspack-section-header {
+		margin: 0;
+	}
+
+	.newspack-section-header__container {
+		margin-bottom: 40px;
+
+		.heading-1 :is(h1, h2, h3, h4, h5, h6) {
+			font-size: 2rem;
+			font-weight: 400;
+			line-height: 1.25;
+		}
+	}
+
+	.newspack-plugin-settings {
+		:nth-last-child(1 of .newspack-card) {
+			margin-bottom: 64px;
+		}
+	}
+}

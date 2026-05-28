@@ -1,0 +1,233 @@
+@use "../../mixins/utilities";
+@use "../../variables-site/structure";
+@use "../../variables-site/transitions";
+
+/* Site footer */
+
+.site-footer {
+	margin: #{2 * structure.$size__spacing-unit} 0 0;
+
+	a {
+		color: var(--newspack-theme-color-text-light);
+		transition: opacity transitions.$link_transition ease-in-out;
+	}
+
+	.footer-widgets {
+		padding: structure.$size__spacing-unit 0 #{1.5 * structure.$size__spacing-unit};
+
+		.wrapper {
+			flex-wrap: wrap;
+			justify-content: space-between;
+		}
+	}
+
+	.footer-widgets .widget {
+		width: 100%;
+
+		@include utilities.media( mobile ) {
+			flex: 1 0 0;
+			margin-right: #{2 * structure.$size__spacing-unit};
+			min-width: calc(50% - #{2 * structure.$size__spacing-unit});
+		}
+
+		@include utilities.media( tablet ) {
+			min-width: calc(25% - #{2 * structure.$size__spacing-unit});
+		}
+
+		&:last-child {
+			margin-right: 0;
+		}
+	}
+
+	.widget-title,
+	.widgettitle {
+		color: var(--newspack-theme-color-text-light);
+		font-size: inherit;
+	}
+}
+
+.af-widget .site-footer {
+	margin-top: 0;
+}
+
+/* When the Customizer option is enabled, override the footer columns layout */
+.fw-stacked .footer-widgets .wrapper {
+	display: block;
+}
+
+.footer-branding {
+	.wrapper {
+		padding-top: structure.$size__spacing-unit;
+	}
+
+	.custom-logo-link,
+	.footer-logo-link {
+		max-height: 76px;
+		max-width: 200px;
+
+		img {
+			max-height: inherit;
+			width: auto;
+		}
+
+		/* stylelint-disable selector-type-no-unknown  */
+		amp-img.amp-wp-enforced-sizes[layout="intrinsic"] > img {
+			object-position: left center;
+		}
+		/* stylelint-enable */
+	}
+
+	.footer-logo-small & {
+		.custom-logo-link,
+		.footer-logo-link {
+			max-height: 48px;
+			max-width: 160px;
+		}
+	}
+
+	.footer-logo-large & {
+		@include utilities.media( tablet ) {
+			.custom-logo-link,
+			.footer-logo-link {
+				max-height: 120px;
+				max-width: 304px;
+			}
+		}
+	}
+
+	.footer-logo-xlarge & {
+		@include utilities.media( tablet ) {
+			.custom-logo-link,
+			.footer-logo-link {
+				max-height: 160px;
+				max-width: 368px;
+			}
+		}
+	}
+}
+
+.site-info {
+	color: var(--newspack-theme-color-text-light);
+	padding-bottom: structure.$size__spacing-unit;
+
+	.wrapper {
+		display: block;
+
+		@include utilities.media( tablet ) {
+			display: flex;
+
+			&.site-info-contain {
+				justify-content: flex-start;
+
+				> *:not(:first-child) {
+					margin-left: structure.$size__spacing-unit;
+				}
+
+				> *:last-child {
+					margin-left: auto;
+				}
+			}
+		}
+	}
+
+	a {
+		color: inherit;
+		display: block;
+
+		&:hover {
+			color: var(--newspack-theme-color-primary-against-white);
+			text-decoration: none;
+		}
+	}
+
+	a,
+	.copyright {
+		margin: #{0.25 * structure.$size__spacing-unit} 0;
+	}
+
+	.site-info-contain:first-child {
+		border-top: 1px solid var(--newspack-theme-color-border);
+		padding-top: structure.$size__spacing-unit;
+	}
+
+	.widget-area {
+		.wrapper {
+			border-top: 1px solid var(--newspack-theme-color-border);
+			justify-content: space-between;
+			padding: structure.$size__spacing-unit 0 #{0.5 * structure.$size__spacing-unit};
+		}
+
+		.widget {
+			font-size: inherit;
+
+			@include utilities.media( mobile ) {
+				margin: 0 structure.$size__spacing-unit 0 0;
+
+				&:last-child {
+					margin-right: 0;
+				}
+			}
+		}
+
+		.widget-title,
+		.widgettitle {
+			display: inline-block;
+			margin: 0 structure.$size__spacing-unit 0 0;
+		}
+
+		a {
+			display: inline;
+			margin: 0;
+		}
+
+		ul,
+		li {
+			list-style: none;
+			margin: 0;
+			padding: 0;
+		}
+
+		ul {
+			@include utilities.media( mobile ) {
+				display: inline;
+			}
+
+			li {
+				margin: #{0.3 * structure.$size__spacing-unit} 0;
+
+				@include utilities.media( mobile ) {
+					display: inline-block;
+					margin: 0 structure.$size__spacing-unit 0 0;
+
+					ul {
+						display: inline-block;
+						margin-left: structure.$size__spacing-unit;
+					}
+
+					&:last-child {
+						margin-right: 0;
+					}
+				}
+			}
+
+			a {
+				display: inline-block;
+				padding: #{0.25 * structure.$size__spacing-unit} 0;
+
+				@include utilities.media( mobile ) {
+					padding: #{0.125 * structure.$size__spacing-unit} 0;
+				}
+			}
+		}
+
+		p {
+			margin: 0;
+		}
+	}
+}
+
+#colophon .site-info .widget-title,
+#colophon .site-info .widgettitle {
+	color: inherit;
+	font-size: 1em;
+}

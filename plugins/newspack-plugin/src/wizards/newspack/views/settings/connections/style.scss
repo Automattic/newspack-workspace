@@ -1,0 +1,107 @@
+@use "sass:color";
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+/** Webhooks */
+.newspack-webhooks {
+	.newspack-webhooks__endpoint {
+		.newspack-webhooks__endpoint-action {
+			font-weight: 700;
+			font-family: Consolas, monaco, monospace;
+			background: wp-colors.$gray-100;
+			color: wp-colors.$gray-900;
+			display: inline-block;
+			margin-right: 4px;
+			padding: 2px 4px;
+			font-size: 0.8em;
+		}
+
+		.newspack-webhooks__label {
+			margin-right: 8px;
+		}
+
+		.newspack-webhooks__url {
+			font-family: Consolas, monaco, monospace;
+			font-size: 0.8em;
+			color: wp-colors.$gray-900;
+		}
+
+		.newspack-action-card__title {
+			display: flex;
+			align-items: center;
+		}
+	}
+
+	.newspack-webhooks__requests {
+		border-collapse: collapse;
+		white-space: nowrap;
+		width: 100%;
+
+		th {
+			text-align: left;
+		}
+
+		tr:nth-child(odd) td {
+			background-color: wp-colors.$gray-100;
+		}
+
+		th,
+		td {
+			border-bottom: 1px solid wp-colors.$gray-300;
+			padding: 6px;
+		}
+
+		td {
+			color: wp-colors.$gray-900;
+			font-size: 12px;
+
+			&:last-child {
+				text-align: right;
+			}
+		}
+
+		.status {
+			.status--finished {
+				fill: wp-colors.$alert-green;
+			}
+
+			.status--killed {
+				fill: wp-colors.$alert-red;
+			}
+
+			.status--pending {
+				fill: wp-colors.$alert-yellow;
+			}
+
+			svg {
+				display: block;
+			}
+		}
+
+		.action-name {
+			font-weight: 700;
+			font-family: Consolas, monaco, monospace;
+		}
+
+		&.has-error {
+			.error {
+				width: 100%;
+				white-space: normal;
+			}
+
+			.error-count {
+				background: rgba(black, 0.025);
+				color: color.adjust(wp-colors.$gray-700, $lightness: -0.75%);
+				padding: 1px 3px;
+				margin-right: 4px;
+				border-radius: 1px;
+				display: inline-block;
+			}
+		}
+
+		&:not(.has-error) {
+			.action-name {
+				width: 100%;
+			}
+		}
+	}
+}

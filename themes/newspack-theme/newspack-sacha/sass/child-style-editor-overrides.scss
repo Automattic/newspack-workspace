@@ -1,0 +1,20 @@
+/*!
+ * Newspack Sacha Editor Overrides
+ *
+ * This CSS files contains Gutenberg editor styles that need to reference classes on the body tag.
+ */
+
+/** === Single Posts === */
+
+body.post-type-post {
+	.editor-post-title__block,
+	.edit-post-visual-editor__post-title-wrapper,
+	.editor-styles-wrapper h1.wp-block-post-title {
+		max-width: 1020px; // 85% of 1200px.
+	}
+
+	.editor-post-title__block .editor-post-title__input,
+	.editor-styles-wrapper h1.wp-block-post-title {
+		text-align: center;
+	}
+}

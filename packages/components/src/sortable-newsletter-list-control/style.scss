@@ -1,0 +1,55 @@
+.newspack__newsletter-list-control {
+	grid-column: span 3;
+
+	&__selected {
+		.newspack-card {
+			display: flex;
+			justify-content: center;
+			min-height: 40px;
+			flex-direction: row;
+			&:first-of-type {
+				margin-top: 0 !important;
+			}
+			.newspack-action-card__region {
+				align-items: center;
+				display: flex;
+				justify-content: space-between;
+				margin: 0;
+			}
+			.newspack-action-card__region-top {
+				flex: 1;
+				order: 2;
+
+				.newspack-grid {
+					margin: 0;
+				}
+			}
+			.newspack-action-card__region-children {
+				padding: 12px !important;
+			}
+		}
+
+	}
+	&__sort-handle {
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		align-items: center;
+		button {
+			background: transparent;
+			border: none;
+			margin: 0;
+			padding: 0;
+			height: 20px;
+			&.disabled {
+				cursor: default;
+				opacity: 0.3;
+			}
+		}
+	}
+	&__lists {
+		button {
+			margin-right: 0.5rem;
+		}
+	}
+}

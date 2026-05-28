@@ -1,0 +1,65 @@
+{
+	"apiVersion": 3,
+	"name": "newspack/copyright-date",
+	"title": "Copyright Date",
+	"category": "newspack",
+	"description": "Display the current year with configurable prefix and suffix text.",
+	"textdomain": "newspack-plugin",
+	"attributes": {
+		"prefix": {
+			"type": "string",
+			"default": "\u00a9 "
+		},
+		"suffix": {
+			"type": "string",
+			"default": ""
+		}
+	},
+	"supports": {
+		"html": false,
+		"color": {
+			"text": true,
+			"background": true,
+			"__experimentalDefaultControls": {
+				"text": true
+			}
+		},
+		"spacing": {
+			"margin": true,
+			"padding": true,
+			"__experimentalDefaultControls": {
+				"margin": false,
+				"padding": false
+			}
+		},
+		"typography": {
+			"fontSize": true,
+			"lineHeight": true,
+			"__experimentalFontFamily": true,
+			"__experimentalFontWeight": true,
+			"__experimentalFontStyle": true,
+			"__experimentalTextTransform": true,
+			"__experimentalTextDecoration": true,
+			"__experimentalLetterSpacing": true,
+			"__experimentalDefaultControls": {
+				"fontSize": true,
+				"fontAppearance": true
+			}
+		},
+		"__experimentalBorder": {
+			"radius": true,
+			"width": true,
+			"color": true,
+			"style": true,
+			"__experimentalDefaultControls": {
+				"radius": false,
+				"width": false,
+				"color": false,
+				"style": false
+			}
+		},
+		"interactivity": {
+			"clientNavigation": true
+		}
+	}
+}

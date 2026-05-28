@@ -1,0 +1,162 @@
+{
+	"title": "Foundry alt",
+	"settings": {
+		"color": {
+			"palette": [
+				{
+					"color": "#375844",
+					"name": "Accent",
+					"slug": "accent"
+				},
+				{
+					"color": "#1B2A41",
+					"name": "Accent / Two",
+					"slug": "accent-2"
+				},
+				{
+					"color": "#E6C79C",
+					"name": "Accent / Three",
+					"slug": "accent-3"
+				},
+				{
+					"color": "#ffffff",
+					"name": "Base",
+					"slug": "base"
+				},
+				{
+					"color": "#F0F0F0",
+					"name": "Base / Two",
+					"slug": "base-2"
+				},
+				{
+					"color": "#DDDDDD",
+					"name": "Base / Three",
+					"slug": "base-3"
+				},
+				{
+					"color": "#CCCCCC",
+					"name": "Base / Four",
+					"slug": "base-4"
+				},
+				{
+					"color": "#949494",
+					"name": "Base / Five",
+					"slug": "base-5"
+				},
+				{
+					"color": "#1E1E1E",
+					"name": "Contrast",
+					"slug": "contrast"
+				},
+				{
+					"color": "#3E3E3E",
+					"name": "Contrast / Two",
+					"slug": "contrast-2"
+				},
+				{
+					"color": "#6C6C6C",
+					"name": "Contrast / Three",
+					"slug": "contrast-3"
+				}
+			]
+		},
+		"layout": {
+			"contentSize": "800px",
+			"wideSize": "1216px"
+		},
+		"typography": {
+			"fluid": true,
+			"fontFamilies": [
+				{
+					"fontFace": [
+						{
+							"fontFamily": "Inter",
+							"fontStretch": "normal",
+							"fontStyle": "normal",
+							"fontWeight": "100 900",
+							"src": [
+								"file:./assets/fonts/inter/InterVariable.woff2"
+							]
+						},
+						{
+							"fontFamily": "Inter",
+							"fontStretch": "normal",
+							"fontStyle": "italic",
+							"fontWeight": "100 900",
+							"src": [
+								"file:./assets/fonts/inter/InterVariable-Italic.woff2"
+							]
+						}
+					],
+					"fontFamily": "\"Inter\", system-ui, sans-serif",
+					"name": "Inter",
+					"slug": "inter"
+				},
+				{
+					"fontFace": [
+						{
+							"fontFamily": "EB Garamond",
+							"fontStretch": "normal",
+							"fontStyle": "normal",
+							"fontWeight": "100 900",
+							"src": [
+								"file:./assets/fonts/eb-garamond/EBGaramond-VariableFont_wght.ttf"
+							]
+						},
+						{
+							"fontFamily": "EB Garamond",
+							"fontStretch": "normal",
+							"fontStyle": "italic",
+							"fontWeight": "100 900",
+							"src": [
+								"file:./assets/fonts/eb-garamond/EBGaramond-Italic-VariableFont_wght.ttf"
+							]
+						}
+					],
+					"fontFamily": "\"EB Garamond\", ui-serif, serif",
+					"name": "EB Garamond",
+					"slug": "eb-garamond"
+				}
+			]
+		},
+		"custom": {
+			"className": "foundry-alt"
+		}
+	},
+	"styles": {
+		"blocks": {
+			"core/button": {
+				"typography": {
+					"fontFamily": "var( --wp--preset--font-family--inter )"
+				}
+			},
+			"core/navigation": {
+				"typography": {
+					"fontFamily": "var( --wp--preset--font-family--eb-garamond )"
+				}
+			}
+		},
+		"typography": {
+			"fontFamily": "var( --wp--preset--font-family--eb-garamond )"
+		},
+		"elements": {
+			"button": {
+				"typography": {
+					"fontFamily": "var( --wp--preset--font-family--inter )"
+				}
+			},
+			"caption": {
+				"typography": {
+					"fontFamily": "var( --wp--preset--font-family--eb-garamond )"
+				}
+			},
+			"heading": {
+				"typography": {
+					"fontFamily": "var( --wp--preset--font-family--eb-garamond )"
+				}
+			}
+		}
+	},
+	"version": 2,
+	"$schema": "https://schemas.wp.org/wp/6.2/theme.json"
+}

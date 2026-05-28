@@ -1,0 +1,78 @@
+$stack-align: (
+	"start": flex-start,
+	"center": center,
+	"end": flex-end,
+	"stretch": stretch,
+	"baseline": baseline,
+);
+
+$stack-justify: (
+	"start": flex-start,
+	"center": center,
+	"end": flex-end,
+	"between": space-between,
+);
+
+$stack-gaps: (
+	"0": 0,
+	"1": var(--newspack-ui-spacer-1),
+	"2": var(--newspack-ui-spacer-2),
+	"3": var(--newspack-ui-spacer-3),
+	"4": var(--newspack-ui-spacer-4),
+	"5": var(--newspack-ui-spacer-5),
+	"6": var(--newspack-ui-spacer-6),
+	"7": var(--newspack-ui-spacer-7),
+	"8": var(--newspack-ui-spacer-8),
+	"9": var(--newspack-ui-spacer-9),
+	"10": var(--newspack-ui-spacer-10),
+	"11": var(--newspack-ui-spacer-11),
+	"12": var(--newspack-ui-spacer-12),
+);
+
+.newspack-ui {
+	&__stack {
+		display: flex;
+		flex-direction: row;
+		gap: var(--newspack-ui-spacer-2);
+
+		&--horizontal {
+			flex-direction: row;
+
+			> :not([class*="newspack-ui__spacing-"]) {
+				margin-left: 0 !important;
+				margin-right: 0 !important;
+			}
+		}
+
+		&--vertical {
+			flex-direction: column;
+
+			> :not([class*="newspack-ui__spacing-"]) {
+				margin-bottom: 0 !important;
+				margin-top: 0 !important;
+			}
+		}
+
+		@each $name, $value in $stack-align {
+			&--align-#{$name} {
+				align-items: $value;
+			}
+		}
+
+		@each $name, $value in $stack-justify {
+			&--justify-#{$name} {
+				justify-content: $value;
+			}
+		}
+
+		&--wrap {
+			flex-wrap: wrap;
+		}
+
+		@each $name, $value in $stack-gaps {
+			&--gap-#{$name} {
+				gap: $value;
+			}
+		}
+	}
+}

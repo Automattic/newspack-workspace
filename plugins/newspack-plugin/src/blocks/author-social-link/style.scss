@@ -1,0 +1,17 @@
+@use "../../shared/scss/mixins";
+
+.wp-block-newspack-author-social-link {
+	a {
+		@include mixins.socialButton;
+	}
+
+	// Fallback text for unsupported services (keeps old styling)
+	.service-name {
+		background: #f0f0f0;
+		border-radius: 3px;
+		display: block;
+		font-size: 0.7em;
+		padding: 0.4em 0.6em;
+		text-transform: uppercase;
+	}
+}

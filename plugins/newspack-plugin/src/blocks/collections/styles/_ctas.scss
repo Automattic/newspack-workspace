@@ -1,0 +1,15 @@
+.wp-block-newspack-collections {
+	// CTAs.
+	.wp-block-newspack-collections__ctas {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+
+		a {
+			align-content: center;
+			display: flex;
+			justify-content: center;
+			width: 100%;
+		}
+	}
+}

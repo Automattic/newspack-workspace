@@ -1,0 +1,69 @@
+/**
+ * Popup Action Card styles
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-audience-campaigns {
+	.newspack-action-card {
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+		min-height: 40px;
+
+		.newspack-popover {
+			.components-menu-group + .components-menu-group {
+				border-top: 1px solid wp-colors.$gray-300;
+			}
+		}
+
+		&__container {
+			align-items: center;
+		}
+	}
+
+	&__buttons {
+		> .newspack-button + .newspack-button {
+			margin-left: 2px;
+		}
+	}
+
+	&__analytics-data {
+		&--icon {
+			align-items: center;
+			display: flex;
+			flex: 0 0 auto;
+			height: auto;
+			justify-content: center;
+			margin: 0;
+			margin-right: 2px;
+			min-height: 36px;
+			min-width: 36px;
+			width: auto;
+
+			svg {
+				fill: wp-colors.$gray-900;
+			}
+		}
+
+		&--value {
+			margin: 0 8px;
+			text-align: center;
+
+			&:first-of-type {
+				margin-left: 16px;
+			}
+
+			&:last-of-type {
+				margin-right: 16px;
+			}
+
+			strong {
+				color: wp-colors.$gray-900;
+				display: block;
+				font-size: 17px;
+				line-height: 24px;
+			}
+		}
+	}
+}

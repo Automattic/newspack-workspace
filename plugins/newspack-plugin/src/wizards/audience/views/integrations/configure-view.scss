@@ -1,0 +1,23 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-configure-view {
+	// Align section headers to the top of the grid row.
+	.newspack-grid .newspack-section-header {
+		margin-top: 0;
+		margin-bottom: 0;
+	}
+
+	// Accordion overrides: top/bottom borders only, no box border.
+	.newspack-accordion {
+		border: none;
+		border-top: 1px solid wp-colors.$gray-300;
+
+		&:first-child {
+			border-top: none;
+		}
+
+		&:last-child {
+			border-bottom: none;
+		}
+	}
+}

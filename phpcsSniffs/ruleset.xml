@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<ruleset name="phpcsSniffs">
+	<description>Newspack-specific custom PHPCS sniffs.</description>
+</ruleset>

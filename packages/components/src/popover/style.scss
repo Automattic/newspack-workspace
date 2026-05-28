@@ -1,0 +1,160 @@
+/**
+ * Popover
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-popover {
+	.components-popover__content {
+		min-width: 238px;
+
+		.newspack-button {
+			color: wp-colors.$gray-700;
+			display: flex;
+			font-weight: normal;
+			padding: 6px 8px;
+
+			&:hover {
+				color: var(--wp-admin-theme-color);
+
+				.components-menu-items__item-icon {
+					fill: currentcolor;
+				}
+			}
+
+			&:focus:not(:disabled) {
+				box-shadow: inset 0 0 0 2px var(--wp-admin-theme-color);
+				position: relative;
+				z-index: 1;
+			}
+
+			&.is-link {
+				border-radius: 2px;
+				padding: 6px 8px;
+				text-decoration: none;
+
+				&:not(.is-destructive) {
+					color: wp-colors.$gray-700;
+
+					&:active,
+					&:active:enabled,
+					&:focus,
+					&:focus:enabled &:hover,
+					&:not(:disabled, [aria-disabled="true"], .is-default):hover {
+						color: var(--wp-admin-theme-color);
+					}
+				}
+
+				&:focus,
+				&:focus:enabled {
+					outline: none;
+				}
+			}
+
+			&.is-destructive:not(:focus) {
+				box-shadow: none !important;
+			}
+
+			.components-menu-items__item-icon {
+				fill: wp-colors.$gray-900;
+			}
+
+			.components-menu-item__item {
+				display: flex;
+				width: 100%;
+			}
+		}
+
+		.components-menu-group__label {
+			color: wp-colors.$gray-900;
+			font-size: 12px;
+			font-weight: bold;
+			line-height: 16px;
+			margin: 0;
+			padding: 10px 8px;
+		}
+
+		.screen-reader-text {
+			opacity: 0;
+		}
+
+		.newspack-select-control {
+			margin: 0;
+			width: 100%;
+
+			.components-select-control {
+				select.components-select-control__input {
+					height: 36px;
+					min-height: 36px;
+
+					&:focus ~ div.components-input-control__backdrop {
+						border-color: var(--wp-admin-theme-color);
+						box-shadow: inset 0 0 0 1px var(--wp-admin-theme-color);
+					}
+				}
+
+				div.components-input-control__backdrop {
+					padding: 0;
+				}
+			}
+		}
+
+		.newspack-form-token-field {
+			margin: 0;
+			text-align: left;
+
+			.newspack-form-token-field__input-container {
+				min-height: 36px;
+				padding: 3px 5px;
+			}
+
+			.components-form-token-field__suggestions-list {
+				margin: 5px -3px -11px;
+			}
+
+			.components-form-token-field__label {
+				display: block;
+			}
+		}
+
+		.newspack-toggle-control {
+			margin: 0;
+
+			.components-base-control__field {
+				margin: 3px 0;
+			}
+
+			.components-form-toggle {
+				border-top: 0;
+			}
+		}
+	}
+
+	&:not(.is-without-arrow)::before {
+		border-color: wp-colors.$gray-300;
+	}
+
+	&.is-from-bottom {
+		margin-bottom: 2px;
+	}
+
+	&.is-from-top {
+		margin-top: 2px;
+	}
+
+	&.components-animate__appear {
+		animation: none;
+	}
+
+	&__padding-8 {
+		.components-popover__content {
+			padding: 8px;
+		}
+	}
+
+	&__padding-16 {
+		.components-popover__content {
+			padding: 16px;
+		}
+	}
+}

@@ -1,0 +1,49 @@
+{
+	"name": "newspack-block-theme",
+	"version": "1.28.1",
+	"description": "A forward-looking news theme designed and developed to be highly customizable with the WordPress block editor. Brought to you by Newspack: https://newspack.com",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Automattic/newspack-workspace.git",
+		"directory": "themes/newspack-block-theme"
+	},
+	"author": "Newspack",
+	"license": "GPL-2.0-or-later",
+	"bugs": {
+		"url": "https://github.com/Automattic/newspack-block-theme/issues"
+	},
+	"homepage": "https://github.com/Automattic/newspack-block-theme#readme",
+	"browserslist": [
+		"extends @wordpress/browserslist-config"
+	],
+	"lint-staged": {
+		"*.{js,jsx,ts,tsx}": "npm run lint:js:staged",
+		"*.scss": "npm run lint:scss:staged",
+		"*.php": "npm run lint:php:staged"
+	},
+	"scripts": {
+		"cm": "newspack-scripts commit",
+		"semantic-release": "semantic-release",
+		"start": "npm ci && npm run watch",
+		"clean": "rm -rf dist ; rm -f style.css",
+		"build": "npm run clean && newspack-scripts wp-scripts build",
+		"watch": "npm run clean && newspack-scripts wp-scripts start",
+		"lint": "npm run lint:scss && npm run lint:js",
+		"lint:js": "newspack-scripts wp-scripts lint-js '**/src/**/*.{js,jsx}'",
+		"lint:js:staged": "newspack-scripts wp-scripts lint-js --ext .js,.jsx",
+		"fix:js": "newspack-scripts wp-scripts lint-js --fix '**/src/**/*.{js,jsx}'",
+		"format:js": "newspack-scripts wp-scripts format '**/src/**/*.{js,jsx}'",
+		"lint:php": "./vendor/bin/phpcs",
+		"lint:php:staged": "./vendor/bin/phpcs --filter=GitStaged",
+		"fix:php": "./vendor/bin/phpcbf",
+		"lint:scss": "newspack-scripts wp-scripts lint-style '**/src/**/*.scss' --customSyntax postcss-scss",
+		"lint:scss:staged": "newspack-scripts wp-scripts lint-style --customSyntax postcss-scss",
+		"format:scss": "newspack-scripts wp-scripts lint-style '**/src/**/*.scss' --customSyntax postcss-scss --fix",
+		"release:archive": "rm -rf release && mkdir -p release && rsync -r . ./release/newspack-block-theme --exclude-from='./.distignore' && cd release && zip -r newspack-block-theme.zip newspack-block-theme",
+		"release": "npm run build && npm run semantic-release"
+	},
+	"devDependencies": {
+		"newspack-components": "workspace:*",
+		"newspack-scripts": "workspace:*"
+	}
+}

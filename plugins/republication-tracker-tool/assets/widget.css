@@ -1,0 +1,262 @@
+/**
+ * Styles for the Republication Tracker Tool widget.
+ *
+ * .side-widget on passblue.com replaces standard wordpress .widget class
+ */
+.side-widget.republication_tracker_tool,
+.widget.republication_tracker_tool {
+	text-align: center;
+	max-width: 300px;
+	margin: 0 auto;
+}
+
+.side-widget.republication_tracker_tool p,
+.widget.republication_tracker_tool p {
+	margin-bottom: 1em;
+}
+
+.side-widget.republication_tracker_tool a.license,
+.widget.republication_tracker_tool a.license {
+	border-top: 3px double #ddd;
+	border-bottom: 3px double #ddd;
+	padding: 1em 0;
+	min-width: 100%;
+	display: block;
+}
+
+.side-widget.republication_tracker_tool button.republication-tracker-tool-button,
+.widget.republication_tracker_tool button.republication-tracker-tool-button {
+	width: 100%;
+	background: #2a7ac2;
+	border: 1px solid #255b98;
+	color: #fff;
+	padding: 1em;
+	font-size: 1.25em;
+	margin: 0 0 1em 0;
+	display: block;
+	border-radius: 0.25em;
+	font-weight: bold;
+	text-shadow: 1px 1px 1px #255b98;
+}
+
+.side-widget.republication_tracker_tool button.republication-tracker-tool-button:hover,
+.widget.republication_tracker_tool button.republication-tracker-tool-button:hover {
+	background-color: #2863a7;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+#republication-tracker-tool-modal {
+	position: fixed;
+	z-index: 999999999;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: rgba(0, 0, 0, 0.75);
+}
+
+#republication-tracker-tool-modal-content {
+	position: absolute;
+	width: 90%;
+	max-width: 800px;
+	max-height: 90%;
+	overflow: auto;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+	background-color: #fff;
+	padding: 2em;
+	text-align: left;
+	border-radius: 0.25em;
+}
+
+#republication-tracker-tool-modal-content textarea {
+	font-family: monospace;
+	font-size: smaller;
+	box-sizing: border-box;
+	width: 100%;
+	margin: 0.5em 0;
+	cursor: auto;
+	background-color: inherit;
+	border-color: inherit;
+}
+
+#republication-tracker-tool-modal-content h2,
+#republication-tracker-tool-modal-content .cc-license,
+#republication-tracker-tool-modal-content .cc-policy {
+	border-bottom: 1px solid #ccc;
+	padding-bottom: 1em;
+}
+
+#republication-tracker-tool-modal-content .cc-license,
+#republication-tracker-tool-modal-content .cc-policy {
+	margin-bottom: 2em;
+}
+
+#republication-tracker-tool-modal-content .cc-license img {
+	margin-bottom: 1em;
+}
+
+#republication-tracker-tool-modal-content .article-info h1 {
+	margin-bottom: 0;
+}
+
+#republication-tracker-tool-modal-content .republish-modal-label {
+	margin-top: 0;
+}
+
+.republication-tracker-tool-close {
+	background: transparent !important;
+	border: 0 !important;
+	color: #000 !important;
+	font-size: 1rem;
+	padding: 0 !important;
+	position: absolute;
+	top: 0;
+	transition: all 125ms ease-in-out;
+	right: 0;
+}
+
+.republication-tracker-tool-close:hover {
+	cursor: pointer;
+	opacity: 0.8;
+}
+
+.republication-tracker-tool-close-icon {
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M13.0597 12L19.5297 5.52997L18.4697 4.46997L11.9997 10.94L5.52973 4.46997L4.46973 5.52997L10.9397 12L4.46973 18.47L5.52973 19.53L11.9997 13.06L18.4697 19.53L19.5297 18.47L13.0597 12Z' fill='%231E1E1E'/%3E%3C/svg%3E");
+	background-position: center;
+	background-size: 24px 24px;
+	background-repeat: no-repeat;
+	display: block;
+	height: 2em;
+	width: 2em;
+}
+
+.modal-open-disallow-scrolling {
+	overflow: hidden;
+}
+
+.republication_tracker_tool .license img {
+	width: 88px;
+}
+
+.screen-reader-text {
+	border: 0;
+	clip: rect( 1px, 1px, 1px, 1px );
+	clip-path: inset( 50% );
+	height: 1px;
+	margin: -1px;
+	overflow: hidden;
+	padding: 0;
+	position: absolute !important;
+	width: 1px;
+	word-wrap: normal !important; /* Many screen reader and browser combinations announce broken words as they would appear visually. */
+}
+
+.republish-format-tabs {
+	display: flex;
+	margin-bottom: 1.5rem;
+	border-bottom: 1px solid #e0e0e0;
+}
+
+.republish-format-tabs__button {
+	background: none;
+	border: none;
+	padding: 1rem 1.5rem;
+	cursor: pointer;
+	font-weight: 500;
+	color: #666;
+	position: relative;
+	transition: color 0.2s ease;
+	border-bottom: 2px solid transparent;
+	border-radius: 0;
+	font-size: 20px;
+
+	&:hover {
+		color: #e0e0e0;
+	}
+
+	&:focus {
+		outline: none;
+		color: #e0e0e0;
+	}
+}
+
+.republish-format-tabs__button--active {
+	color: #333;
+	border-bottom: 3px solid #333;
+}
+
+.republish-content {
+	display: none;
+}
+
+.republish-content--active {
+	display: block;
+}
+
+.republish-content-container {
+	position: relative;
+}
+
+.republish-content__textarea {
+	width: 100%;
+}
+
+.plain-text-field {
+	margin-bottom: 1.5rem;
+}
+
+.plain-text-field__label {
+	display: block;
+	margin-bottom: 0.75rem;
+	font-weight: 600;
+	color: #1e1e1e;
+	font-size: 16px;
+}
+
+.plain-text-field__input {
+	width: 100%;
+	padding: 0.5rem;
+	border: 1px solid #ccc;
+	border-radius: 4px;
+	font-family: monospace;
+	font-size: 14px;
+	background-color: #fff;
+	margin-bottom: 0.5rem;
+
+	&:focus {
+		outline: none;
+		border-color: #007cba;
+		box-shadow: 0 0 0 1px #007cba;
+	}
+}
+
+.plain-text-field__button {
+	background: #007cba;
+	border: none;
+	color: white;
+	padding: 0.5rem 1rem;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 14px;
+	transition: background-color 0.2s;
+
+	&:hover {
+		background: #005a87;
+	}
+
+	&:focus {
+		outline: 2px solid #007cba;
+		outline-offset: 2px;
+	}
+}
+
+.republication-tracker-tool__copy-button--main {
+	display: none;
+}
+
+.republication-tracker-tool__copy-button--main.show-for-html {
+	display: inline-block;
+}

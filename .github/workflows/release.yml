@@ -1,0 +1,135 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - release
+      - alpha
+      - 'hotfix/**'
+      - 'epic/**'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+env:
+  PNPM_VERSION: 10.33.0
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer
+      - name: Configure git
+        run: |
+          git config user.name "newspack-release-bot"
+          git config user.email "newspack-release-bot@users.noreply.github.com"
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build shared packages
+        run: pnpm run build:packages
+      - name: Build all
+        run: pnpm run build
+      # Install each plugin's production PHP dependencies so release:archive
+      # bundles vendor/ into the release zips. Without this the published zips
+      # are missing composer dependencies (e.g. newspack-ads' googleads lib).
+      - name: Install plugin PHP dependencies
+        run: |
+          for dir in plugins/*/; do
+            if [ -f "${dir}composer.json" ]; then
+              echo "==> composer install in ${dir}"
+              composer install --no-dev --no-interaction --no-scripts --working-dir="${dir}"
+            fi
+          done
+      - name: Release
+        run: pnpm exec multi-semantic-release --sequential-init
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # setup-node's registry-url writes an .npmrc using ${NODE_AUTH_TOKEN};
+          # without this it stays the literal "XXXXX-..." placeholder and npm
+          # auth 401s. Set it to the same secret so npm actually authenticates.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_OPTIONS: --max-old-space-size=12288
+
+  # Branch maintenance after a stable release: reset alpha and sync release into
+  # the default branch. Only runs on the release branch (not alpha/hotfix/epic).
+  post-release:
+    name: Post-release branch sync
+    if: github.ref == 'refs/heads/release'
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}
+      - name: Configure git
+        run: |
+          git config user.name "newspack-release-bot"
+          git config user.email "newspack-release-bot@users.noreply.github.com"
+      - name: Post-release branch maintenance
+        env:
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          SLACK_AUTH_TOKEN: ${{ secrets.SLACK_AUTH_TOKEN }}
+        run: ./.github/scripts/post-release.sh
+
+  # WP.org deploys are plugin-specific and only run on the release branch.
+  release-wporg-newsletters:
+    name: WP.org / newspack-newsletters
+    if: github.ref == 'refs/heads/release'
+    needs: release
+    uses: ./.github/workflows/_release-wporg.yml
+    with:
+      plugin-name: newspack-newsletters
+      plugin-path: plugins/newspack-newsletters
+    secrets:
+      WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
+      WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}
+
+  release-wporg-scaip:
+    name: WP.org / super-cool-ad-inserter-plugin
+    if: github.ref == 'refs/heads/release'
+    needs: release
+    uses: ./.github/workflows/_release-wporg.yml
+    with:
+      plugin-name: super-cool-ad-inserter-plugin
+      plugin-path: plugins/super-cool-ad-inserter-plugin
+      wporg-slug: super-cool-ad-inserter
+    secrets:
+      WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
+      WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}
+
+  release-wporg-rtt:
+    name: WP.org / republication-tracker-tool
+    if: github.ref == 'refs/heads/release'
+    needs: release
+    uses: ./.github/workflows/_release-wporg.yml
+    with:
+      plugin-name: republication-tracker-tool
+      plugin-path: plugins/republication-tracker-tool
+    secrets:
+      WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
+      WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}

@@ -1,0 +1,23 @@
+@use "newspack-colors" as np-colors;
+@use "../../shared/sass/placeholder";
+
+/**
+ * Prevents interaction with the player until the block is focused.
+ */
+.wpbnbvp__overlay {
+	align-content: center;
+	background-color: rgba(np-colors.$neutral-000, 0.9);
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	left: 0;
+	height: 100%;
+	position: absolute;
+	text-align: center;
+	top: 0;
+	width: 100%;
+}
+
+.wpbnbvp-preview {
+	position: relative;
+}

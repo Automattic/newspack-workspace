@@ -1,0 +1,8 @@
+version: 2.1
+
+description: >
+  Newspack shared CI config.
+
+display:
+  home_url: "https://newspack.com"
+  source_url: "https://www.github.com/Automattic/newspack-scripts"

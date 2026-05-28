@@ -1,0 +1,39 @@
+@use "../sass-utils";
+
+.wp-block-post-content {
+	.has-global-padding > &.alignwide {
+		padding-left: 0;
+		padding-right: 0;
+
+		> .alignfull {
+			margin-left: calc(50% - 50vw);
+			margin-right: calc(50% - 50vw);
+		}
+	}
+
+	main:not(:has(.post-footer)) & {
+		> :last-child:is(.alignfull):is(.has-background),
+		> :last-child:is(.alignfull):is(.wp-block-cover) {
+			margin-bottom: calc(-1 * var(--wp--preset--spacing--80)) !important;
+		}
+	}
+
+	> .alignfull {
+		margin-left: calc(-1 * var(--wp--preset--spacing--30));
+		margin-right: calc(-1 * var(--wp--preset--spacing--30));
+		padding-left: var(--wp--preset--spacing--30);
+		padding-right: var(--wp--preset--spacing--30);
+	}
+
+	.page-template-no-title &,
+	.home.page & {
+		> :first-child:is(.alignfull):is(.has-background),
+		> :first-child:is(.alignfull):is(.wp-block-cover) {
+			margin-top: calc(-1 * var(--wp--preset--spacing--50)) !important;
+
+			@include sass-utils.media(medium) {
+				margin-top: calc(-1 * var(--wp--preset--spacing--80)) !important;
+			}
+		}
+	}
+}

@@ -1,0 +1,75 @@
+/**
+ * CardFeature
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+.newspack-card-feature {
+	height: 100%;
+
+	.newspack-card--core__header {
+		height: 100%;
+	}
+
+	.newspack-card--core__header-content {
+		gap: 16px;
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+
+		// Push the action row (buttons + badge) to the bottom.
+		> :last-child {
+			margin-top: auto;
+		}
+	}
+
+	&__content {
+		flex: 1;
+		min-width: 0; // prevent flex blowout on long words
+	}
+
+	&__title {
+		font-size: wp-vars.$font-size-x-large;
+		line-height: wp-vars.$font-line-height-x-large;
+		text-align: left;
+	}
+
+	&__description {
+		text-align: left;
+	}
+
+	&__icon {
+		align-items: center;
+		display: flex;
+		flex: 0 0 40px;
+		height: 40px;
+		justify-content: center;
+
+		svg {
+			display: block;
+			fill: currentcolor;
+			height: 24px;
+			width: 24px;
+		}
+
+		&--radius-small {
+			border-radius: wp-vars.$radius-small;
+		}
+
+		&--radius-full {
+			border-radius: wp-vars.$radius-round;
+		}
+	}
+
+	// Unmet requirements state: lighter border, muted content.
+	&.newspack-card-feature--muted {
+		border-color: wp-colors.$gray-100;
+		box-shadow: wp-colors.$gray-100 0 0 0 1px;
+
+		.newspack-card-feature__title,
+		.newspack-card-feature__description {
+			color: wp-colors.$gray-700;
+		}
+	}
+}

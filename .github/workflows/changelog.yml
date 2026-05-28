@@ -1,0 +1,36 @@
+name: "Pull Request Labeler"
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  labeler:
+    if: github.event.pull_request.merged == true && (github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'alpha' || github.event.pull_request.base.ref == 'release') && github.event.pull_request.user.login != 'dependabot[bot]'
+    permissions:
+      contents: read
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/labeler@v5
+
+  comment_pr:
+    if: github.event.pull_request.merged == true && (github.event.pull_request.base.ref == 'main' || github.event.pull_request.base.ref == 'alpha' || github.event.pull_request.base.ref == 'release') && github.event.pull_request.user.login != 'dependabot[bot]'
+    permissions:
+      contents: read
+      pull-requests: write
+    runs-on: ubuntu-latest
+    name: Comment about the change log label
+    steps:
+      - name: Comment PR
+        uses: thollander/actions-comment-pull-request@v3
+        with:
+          message: |
+            Hey @${{ github.event.pull_request.user.login }}, good job getting this PR merged! :tada:
+
+            Now, the `needs-changelog` label has been added to it.
+
+            Please check if this PR needs to be included in the "Upcoming Changes" and "Release Notes" doc. If it doesn't, simply remove the label.
+
+            If it does, please add an entry to our shared document, with screenshots and testing instructions if applicable, then remove the label.
+
+            Thank you! :heart:

@@ -1,0 +1,252 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+// stylelint-disable-next-line no-invalid-position-at-import-rule,import-notation
+@import "style-variations";
+
+.newspack-newsletters-subscribe {
+	&.alignleft,
+	&.alignright {
+		max-width: 420px;
+	}
+
+	&.alignleft {
+		float: left;
+		margin-right: 2em;
+	}
+
+	&.alignright {
+		float: right;
+		margin-left: 2em;
+	}
+
+	form {
+		width: 100%;
+		align-items: center;
+		margin: 0;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+
+		@media ( min-width: 782px ) {
+			gap: 0.4rem;
+		}
+
+		&.in-progress {
+			button[type="submit"] {
+				position: relative;
+
+				span.submit {
+					visibility: hidden;
+				}
+
+				span.spinner {
+					--animation-duration: 900ms;
+					--animation-timing-function: linear;
+					--color-spinner-primary: transparent;
+					--color-spinner-background: currentcolor;
+					--size: 18px;
+					--stroke-width: 1.5px;
+
+					animation: var(--animation-timing-function) var(--animation-duration) infinite spin;
+					border-color:
+						var(--color-spinner-primary) var(--color-spinner-primary)
+						var(--color-spinner-background) var(--color-spinner-background);
+					border-radius: 50%;
+					border-style: solid;
+					border-width: var(--stroke-width);
+					height: var(--size);
+					left: calc(50% - ( var(--size) / 2 ));
+					position: absolute;
+					top: calc(50% - ( var(--size) / 2 ));
+					transform: rotate(0deg);
+					width: var(--size);
+				}
+			}
+		}
+	}
+	.newspack-newsletters-name-input,
+	.newspack-newsletters-email-input {
+		display: flex;
+		flex: 1 1 100%;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+
+		@media ( min-width: 782px ) {
+			gap: 0.4rem;
+		}
+
+		.newspack-newsletters-name-input-item {
+			display: flex;
+			flex: 1 1 100%;
+			flex-wrap: wrap;
+			gap: 0.5rem;
+			@media ( min-width: 782px ) {
+				flex-basis: auto;
+				gap: 0.4rem;
+			}
+		}
+	}
+	.newspack-newsletters-name-input + .newspack-newsletters-email-input {
+		margin-top: 0.25rem;
+	}
+	label {
+		font-size: 0.9rem;
+		font-weight: 700;
+		flex: 1 1 100%;
+		margin-bottom: -0.15rem;
+	}
+	input[type="text"],
+	input[type="email"] {
+		flex: 1 1 100%;
+		width: 100%;
+
+		@media ( min-width: 782px ) {
+			flex-basis: auto;
+			width: auto;
+		}
+
+		&[aria-hidden="true"] {
+			width: 0;
+		}
+	}
+	button[type="submit"] {
+		background-color: #d33;
+		color: white;
+		cursor: pointer;
+		flex: 1 1 100%;
+
+		@media ( min-width: 782px ) {
+			flex: 0 0 auto;
+		}
+	}
+	input[disabled] {
+		opacity: 0.5;
+	}
+	.newspack-newsletters-lists {
+		background: white;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 2px;
+		box-sizing: border-box;
+		color: var(--newspack-ui-color-neutral-90, #1e1e1e);
+		flex: 1 1 100%;
+		font-size: 0.8rem;
+		padding: 0.5em;
+
+		ul {
+			list-style: none;
+			margin: 0;
+			padding: 0;
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0.5em;
+			min-width: 100%;
+			li {
+				flex: 1 1 33.3333%;
+				display: flex;
+				min-width: 142px;
+				box-sizing: border-box;
+				margin: 0.5rem;
+				padding: 0;
+			}
+		}
+
+		.list-checkbox {
+			align-items: center;
+			display: flex;
+			flex: 0 0 auto;
+			height: 1.6em;
+			margin: 0 0.5rem 0 0;
+		}
+
+		.list-title {
+			display: block;
+		}
+
+		.list-description {
+			display: block;
+			font-size: 0.8rem;
+			color: wp-colors.$gray-700;
+			margin: 0;
+		}
+	}
+
+	&__response {
+		display: grid;
+		gap: 1.2rem;
+		justify-items: center;
+
+		.newspack-newsletters-subscribe[data-status="200"] & {
+			p {
+				text-align: center;
+				font-size: 0.8em;
+				margin: 0;
+			}
+		}
+	}
+
+	&__icon {
+		align-items: center;
+		background: var(--newspack-ui-color-success-50, #008a20);
+		border-radius: 50%;
+		display: flex;
+		height: 40px;
+		justify-content: center;
+		margin: 0;
+		width: 40px;
+
+		.newspack-newsletters-subscribe:not([data-status="200"]) & {
+			display: none;
+		}
+
+		&::before {
+			background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M16.7 7.1l-6.3 8.5-3.3-2.5-.9 1.2 4.5 3.4L17.9 8z' fill='white'/%3E%3C/svg%3E");
+			content: "";
+			display: block;
+			height: 24px;
+			width: 24px;
+		}
+	}
+
+	&__message {
+		p {
+			font-size: 0.8em;
+			margin: 0;
+
+			&.status-400,
+			&.status-500 {
+				color: var(--newspack-ui-color-error-50, #d63638);
+			}
+		}
+	}
+
+	.nphp {
+		border: 0;
+		clip: rect(1px, 1px, 1px, 1px);
+		clip-path: inset(50%);
+		height: 1px;
+		margin: -1px;
+		overflow: hidden;
+		padding: 0;
+		position: absolute !important;
+		width: 1px;
+		word-wrap: normal !important;
+	}
+}
+
+.newspack-recaptcha-error {
+	width: 100%;
+	p {
+		text-align: center;
+		font-size: 0.8em;
+		margin: 0;
+		color: var(--newspack-ui-color-error-50, #d63638);
+	}
+}
+
+@keyframes spin {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(360deg);
+	}
+}

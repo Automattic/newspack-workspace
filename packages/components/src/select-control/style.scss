@@ -1,0 +1,108 @@
+/**
+ * Select Control
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.components-select-control {
+	&__input {
+		max-width: 100% !important;
+
+		&[multiple] {
+			height: auto !important;
+			min-height: 70px !important;
+			padding: 0 !important;
+
+			+ .components-input-control__suffix {
+				display: none;
+			}
+
+			option {
+				min-height: 1.4em;
+				padding: 8px;
+
+				&:checked {
+					background: var(--wp-admin-theme-color);
+					color: white;
+				}
+			}
+		}
+	}
+
+	.components-base-control__field {
+		width: 100%;
+	}
+
+	.components-input-control__label {
+		line-height: inherit;
+	}
+}
+
+// Grouped
+
+.newspack-grouped-select-control {
+	position: relative;
+
+	.components-select-control {
+		&__input {
+			appearance: none;
+			background: transparent;
+			border: 1px solid wp-colors.$gray-700;
+			border-radius: 2px;
+			box-shadow: none !important;
+			box-sizing: border-box;
+			display: block;
+			font-size: inherit;
+			margin: 0;
+			max-width: 100%;
+			outline: none;
+			padding: 0 24px 0 7px;
+			width: 100%;
+
+			&:hover {
+				color: inherit;
+			}
+
+			&:focus {
+				border-color: var(--wp-admin-theme-color-darker-10) !important;
+				box-shadow: inset 0 0 0 1px var(--wp-admin-theme-color-darker-10) !important;
+				color: inherit;
+			}
+		}
+
+		&__arrow-wrapper {
+			align-items: center;
+			display: flex;
+			height: 24px;
+			justify-content: center;
+			margin-top: -12px;
+			position: absolute;
+			right: 1px;
+			top: 50%;
+			width: 24px;
+		}
+	}
+}
+
+// Buttons
+
+.newspack-buttons-select-control {
+	.components-base-control__label {
+		display: inline-flex;
+		margin-bottom: 8px;
+	}
+
+	.components-button-group {
+		display: flex;
+	}
+
+	&.icon-only {
+		.components-button {
+			align-items: center;
+			height: 36px;
+			justify-content: center;
+			padding: 0 !important;
+			width: 36px;
+		}
+	}
+}

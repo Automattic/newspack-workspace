@@ -1,62 +1,63 @@
 #!/bin/bash
 
 source /var/scripts/repos.sh
+source /var/scripts/resolve-project-path.sh
 
 set -e
 
 WP_PATH=$1
-# if WP_PATH is empty, use default
 if [ -z "$WP_PATH" ]; then
 	WP_PATH="/var/www/html/wp-content"
 fi
-
-CODE_PATH="/newspack-repos"
 
 if [ ! -d "${WP_PATH}" ]; then
 	echo "$WP_PATH directory does not exist"
 	exit 1
 fi
 
-# Link all directories in /newspack-repos
-readarray -t NEWSPACK_REPOS_DIRS < <(ls -d $CODE_PATH/*/)
-for dir in "${NEWSPACK_REPOS_DIRS[@]}"
-do :
-	dir=$(basename "$dir")
-	link="$WP_PATH/plugins/$dir"
+# Symlink all plugins from /newspack-plugins/ into wp-content/plugins/.
+for dir in "$PLUGINS_PATH"/*/; do
+	name=$(basename "$dir")
+	link="$WP_PATH/plugins/$name"
 	if [ -e "${link}" ]; then
-		echo "$dir already symlinked"
+		echo "$name already symlinked"
 	else
-		echo "Symlinking $dir"
-		ln -s "$CODE_PATH/$dir" "$link"
+		echo "Symlinking plugin $name"
+		ln -s "$dir" "$link" || true
 	fi
 done
 
-for dir in "${newspack_themes[@]}"
-do :
-	link="$WP_PATH/themes/$dir"
-	if [ -L "${link}" ]; then
-		echo "$dir already symlinked"
+# Symlink themes. The classic theme contains child themes as subdirectories.
+for dir in "$THEMES_PATH"/*/; do
+	name=$(basename "$dir")
+	if [ "$name" = "newspack-theme" ]; then
+		# Classic theme: symlink each child theme directory.
+		for child in "$dir"newspack-*/; do
+			[ -d "$child" ] || continue
+			child_name=$(basename "$child")
+			link="$WP_PATH/themes/$child_name"
+			if [ -L "${link}" ]; then
+				echo "$child_name already symlinked"
+			else
+				echo "Symlinking theme $child_name"
+				ln -s "$child" "$link" || true
+			fi
+		done
+		# Also symlink the base theme directory itself.
+		link="$WP_PATH/themes/$name"
+		if [ -L "${link}" ]; then
+			echo "$name already symlinked"
+		else
+			echo "Symlinking theme $name"
+			ln -s "${dir}newspack-theme" "$link" || true
+		fi
 	else
-		echo "Symlinking $dir"
-		ln -s "$CODE_PATH/newspack-theme/$dir" "$link"
+		link="$WP_PATH/themes/$name"
+		if [ -L "${link}" ]; then
+			echo "$name already symlinked"
+		else
+			echo "Symlinking theme $name"
+			ln -s "$dir" "$link" || true
+		fi
 	fi
 done
-
-for dir in "${newspack_block_theme[@]}"
-do :
-	link="$WP_PATH/themes/$dir"
-	if [ -L "${link}" ]; then
-		echo "$dir already symlinked"
-	else
-		echo "Symlinking $dir"
-		ln -s "$CODE_PATH/$dir" "$link"
-	fi
-done
-
-link="/var/www/manager-html/wp-content/plugins/newspack-manager-client"
-if [ -L "${link}" ]; then
-	echo "newspack-manager-client already symlinked"
-else
-	echo "Symlinking newspack-manager-client"
-	ln -s "$CODE_PATH/newspack-manager-client" "$link"
-fi

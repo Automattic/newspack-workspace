@@ -1,0 +1,50 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack/author-profile-social",
+	"title": "Author Social Links",
+	"category": "newspack",
+	"ancestor": [ "newspack-blocks/author-profile" ],
+	"description": "Display the author's social media links and email.",
+	"usesContext": [ "newspack-blocks/author" ],
+	"providesContext": {
+		"newspack-blocks/iconSize": "iconSize"
+	},
+	"textdomain": "newspack-plugin",
+	"attributes": {
+		"showEmail": {
+			"type": "boolean",
+			"default": false
+		},
+		"iconSize": {
+			"type": "number",
+			"default": 24
+		}
+	},
+	"styles": [
+		{ "name": "default", "label": "Default", "isDefault": true },
+		{ "name": "brand", "label": "Brand" }
+	],
+	"supports": {
+		"color": {
+			"enableContrastChecker": false,
+			"background": true,
+			"text": true,
+			"link": false,
+			"__experimentalSkipSerialization": [ "text", "background" ]
+		},
+		"html": false,
+		"layout": {
+			"allowSwitching": false,
+			"allowInheriting": false,
+			"allowVerticalAlignment": false,
+			"default": {
+				"type": "flex"
+			}
+		},
+		"spacing": {
+			"blockGap": [ "horizontal", "vertical" ],
+			"margin": true
+		}
+	}
+}

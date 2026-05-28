@@ -1,0 +1,18 @@
+.wp-block-media-text {
+	& &__content {
+		padding: var(--wp--preset--spacing--80);
+
+		> * {
+			margin-bottom: var(--wp--preset--spacing--50);
+			margin-top: var(--wp--preset--spacing--50);
+
+			&:first-child {
+				margin-top: 0;
+			}
+
+			&:last-child {
+				margin-bottom: 0;
+			}
+		}
+	}
+}

@@ -1,0 +1,9 @@
+.wp-block-audio {
+	audio {
+		display: block;
+	}
+
+	figcaption {
+		margin: var(--wp--preset--spacing--20) 0 0;
+	}
+}

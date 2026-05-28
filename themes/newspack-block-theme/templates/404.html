@@ -1,0 +1,37 @@
+<!-- wp:template-part {"slug":"header","theme":"newspack-block-theme","tagName":"header"} /-->
+
+<!-- wp:group {"tagName":"main","metadata":{"name":"Page Content"},"layout":{"type":"constrained"}} -->
+<main class="wp-block-group">
+
+	<!-- wp:group {"style":{"spacing":{"blockGap":"var:preset|spacing|30"}},"layout":{"type":"flex","orientation":"vertical","justifyContent":"stretch"}} -->
+	<div class="wp-block-group">
+		<!-- wp:heading {"level":1} -->
+		<h1 class="wp-block-heading">Page not found</h1>
+		<!-- /wp:heading -->
+
+		<!-- wp:paragraph {"fontSize":"large"} -->
+		<p class="has-large-font-size">It looks like nothing was found at this location. Maybe try a&nbsp;search?</p>
+		<!-- /wp:paragraph -->
+	</div>
+	<!-- /wp:group -->
+
+	<!-- wp:search {"label":"","fontSize":"small"} /-->
+
+	<!-- wp:paragraph {"style":{"elements":{"link":{"color":{"text":"var:preset|color|contrast-3"}}}},"textColor":"contrast-3","fontSize":"small"} -->
+	<p class="has-contrast-3-color has-text-color has-link-color has-small-font-size"><a href="/">No thanks, take me to the homepage</a>.</p>
+	<!-- /wp:paragraph -->
+
+</main>
+<!-- /wp:group -->
+
+<!-- wp:group {"metadata":{"name":"Posts"},"style":{"spacing":{"margin":{"top":"var:preset|spacing|80"}}},"layout":{"type":"constrained"}} -->
+<div class="wp-block-group" style="margin-top:var(--wp--preset--spacing--80)">
+	<!-- wp:heading {"level":3,"align":"wide"} -->
+	<h3 class="wp-block-heading alignwide">Latest articles</h3>
+	<!-- /wp:heading -->
+
+	<!-- wp:newspack-blocks/homepage-articles {"showAvatar":false,"postLayout":"grid","columns":4,"postsToShow":4,"typeScale":3,"align":"wide"} /-->
+</div>
+<!-- /wp:group -->
+
+<!-- wp:template-part {"slug":"footer","theme":"newspack-block-theme","tagName":"footer"} /-->

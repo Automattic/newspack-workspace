@@ -1,0 +1,44 @@
+@use "../sass-utils";
+@use "../mixins";
+
+/**
+ * Comments menu styles
+ */
+.comments-menu {
+	&__contents {
+		&:not(:has(.comment-respond)) {
+			.wp-block-comments-title {
+				margin-top: 0;
+			}
+		}
+
+		&:has(#disqus_thread) { /* stylelint-disable-line selector-id-pattern */
+			max-width:
+				calc((var(--wp--style--global--content-size) - (var(--wp--preset--spacing--50) * 5)) / 6 * 7 +
+				(var(--wp--preset--spacing--50) * 6));
+		}
+
+		.newspack-ui__notice {
+			margin-bottom: 0;
+		}
+	}
+
+	&__toggle {
+		&:not(.newspack-icon-close) {
+			.wp-block-button__link {
+				align-items: center;
+				display: inline-flex;
+				gap: var(--wp--preset--spacing--20);
+				justify-content: center;
+
+				&::before {
+					background: currentcolor;
+					content: "";
+					height: var(--wp--preset--spacing--40);
+					mask: url("../../assets/images/icon-comments.svg") 0 0 no-repeat;
+					width: var(--wp--preset--spacing--40);
+				}
+			}
+		}
+	}
+}

@@ -1,0 +1,11 @@
+description: >
+  Run JS tests.
+
+executor: default
+
+steps:
+  - checkout_with_workspace
+  - set_node_version
+  - run:
+      name: Run JS Tests
+      command: npm run test

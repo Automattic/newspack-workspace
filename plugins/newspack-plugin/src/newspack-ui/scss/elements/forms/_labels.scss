@@ -1,0 +1,84 @@
+.newspack-ui {
+	label {
+		color: var(--newspack-ui-label-color);
+		display: block;
+		font-family: var(--newspack-ui-font-family);
+		font-size: var(--newspack-ui-font-size-s);
+		font-weight: 600;
+		line-height: var(--newspack-ui-line-height-s);
+		margin: 0 0 var(--newspack-ui-spacer-1);
+
+		// For labels containing radio, checkbox inputs:
+		&:has(input[type="checkbox"]),
+		&:has(input[type="radio"]) {
+			display: grid !important;
+			gap: 0 var(--newspack-ui-spacer-1);
+			grid-template-columns: var(--newspack-ui-spacer-4) 1fr;
+
+			> *:not(input) {
+				grid-column: 2 / span 1;
+			}
+
+			input {
+				margin-top: 0.125em; // TODO: improve the way alignment is being achieved here.
+			}
+
+			// For creating a bordered 'list' of radio, checkbox inputs:
+			&.newspack-ui__input-card {
+				border: 1px solid var(--newspack-ui-color-border);
+				border-radius: var(--newspack-ui-border-radius-m);
+				cursor: pointer;
+				font-weight: normal;
+				gap: 0 var(--newspack-ui-spacer-3);
+				margin-bottom: var(--newspack-ui-spacer-5);
+				padding: var(--newspack-ui-spacer-3);
+				transition: background-color 125ms ease-in-out, border-color 125ms ease-in-out;
+
+				&:has(> input:checked) {
+					background: var(--newspack-ui-color-neutral-5);
+					border-color: var(--newspack-ui-color-neutral-90);
+				}
+
+				+ .newspack-ui__input-card {
+					margin-top: calc(var(--newspack-ui-spacer-2) * -1);
+				}
+
+				.newspack-ui__helper-text {
+					margin-top: 0;
+				}
+			}
+
+			// 'Selected' badge
+			&:has(.newspack-ui__badge) {
+				grid-template-columns: var(--newspack-ui-spacer-4) 1fr min-content;
+			}
+
+			.newspack-ui__badge {
+				align-self: start;
+				grid-column-start: 3;
+				grid-row-start: 1;
+			}
+		}
+
+		a {
+			text-decoration: underline;
+		}
+
+		.required {
+			color: var(--newspack-ui-color-error-50);
+		}
+	}
+
+	&__label-optional {
+		color: var(--newspack-ui-color-neutral-60);
+		font-weight: 400;
+	}
+
+	&__required {
+		color: var(--newspack-ui-color-error-50);
+
+		&[title] {
+			text-decoration: none;
+		}
+	}
+}

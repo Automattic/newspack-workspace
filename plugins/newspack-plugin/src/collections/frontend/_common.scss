@@ -1,0 +1,30 @@
+@use "breakpoints";
+
+/* Common collection elements */
+
+.collection-image {
+	a {
+		display: block;
+		width: 100%;
+	}
+
+	img {
+		width: 100%;
+		height: auto;
+		display: block;
+		aspect-ratio: 3 / 4;
+		object-fit: cover;
+	}
+}
+
+.collection-placeholder {
+	aspect-ratio: 3 / 4;
+}
+
+
+.wp-block-newspack-collections__ctas {
+	a.cta--subscribe_link {
+		background-color: var(--newspack-primary-color);
+		color: var(--newspack-primary-contrast-color);
+	}
+}

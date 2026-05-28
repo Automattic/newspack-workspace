@@ -1,0 +1,187 @@
+{
+	"title": "Ledger alt",
+	"settings": {
+		"color": {
+			"palette": [
+				{
+					"color": "#C93A00",
+					"name": "Accent",
+					"slug": "accent"
+				},
+				{
+					"color": "#297373",
+					"name": "Accent / Two",
+					"slug": "accent-2"
+				},
+				{
+					"color": "#E6A57E",
+					"name": "Accent / Three",
+					"slug": "accent-3"
+				},
+				{
+					"color": "#F2F0EA",
+					"name": "Base",
+					"slug": "base"
+				},
+				{
+					"color": "#E4E2DC",
+					"name": "Base / Two",
+					"slug": "base-2"
+				},
+				{
+					"color": "#D3D1CC",
+					"name": "Base / Three",
+					"slug": "base-3"
+				},
+				{
+					"color": "#C3C1BC",
+					"name": "Base / Four",
+					"slug": "base-4"
+				},
+				{
+					"color": "#8F8C86",
+					"name": "Base / Five",
+					"slug": "base-5"
+				},
+				{
+					"color": "#000000",
+					"name": "Contrast",
+					"slug": "contrast"
+				},
+				{
+					"color": "#383734",
+					"name": "Contrast / Two",
+					"slug": "contrast-2"
+				},
+				{
+					"color": "#6E6D6A",
+					"name": "Contrast / Three",
+					"slug": "contrast-3"
+				}
+			]
+		},
+		"layout": {
+			"contentSize": "800px",
+			"wideSize": "1216px"
+		},
+		"typography": {
+			"fluid": true,
+			"fontFamilies": [
+				{
+					"fontFace": [
+						{
+							"fontFamily": "Inter",
+							"fontStretch": "normal",
+							"fontStyle": "normal",
+							"fontWeight": "100 900",
+							"src": [
+								"file:./assets/fonts/inter/InterVariable.woff2"
+							]
+						},
+						{
+							"fontFamily": "Inter",
+							"fontStretch": "normal",
+							"fontStyle": "italic",
+							"fontWeight": "100 900",
+							"src": [
+								"file:./assets/fonts/inter/InterVariable-Italic.woff2"
+							]
+						}
+					],
+					"fontFamily": "\"Inter\", system-ui, sans-serif",
+					"name": "Inter",
+					"slug": "inter"
+				},
+				{
+					"fontFace": [
+						{
+							"fontFamily": "Jost",
+							"fontStretch": "normal",
+							"fontStyle": "normal",
+							"fontWeight": "100 900",
+							"src": [
+								"file:./assets/fonts/jost/Jost-VariableFont_wght.ttf"
+							]
+						},
+						{
+							"fontFamily": "Jost",
+							"fontStretch": "normal",
+							"fontStyle": "italic",
+							"fontWeight": "100 900",
+							"src": [
+								"file:./assets/fonts/jost/Jost-Italic-VariableFont_wght.ttf"
+							]
+						}
+					],
+					"fontFamily": "\"Jost\", system-ui, sans-serif",
+					"name": "Jost",
+					"slug": "jost"
+				},
+				{
+					"fontFace": [
+						{
+							"fontFamily": "Newsreader",
+							"fontStretch": "normal",
+							"fontStyle": "normal",
+							"fontWeight": "200 800",
+							"src": [
+								"file:./assets/fonts/newsreader/Newsreader-VariableFont_opsz,wght.ttf"
+							]
+						},
+						{
+							"fontFamily": "Newsreader",
+							"fontStretch": "normal",
+							"fontStyle": "italic",
+							"fontWeight": "200 800",
+							"src": [
+								"file:./assets/fonts/newsreader/Newsreader-Italic-VariableFont_opsz,wght.ttf"
+							]
+						}
+					],
+					"fontFamily": "\"Newsreader\", ui-serif, serif",
+					"name": "Newsreader",
+					"slug": "newsreader"
+				}
+			]
+		},
+		"custom": {
+			"className": "ledger-alt"
+		}
+	},
+	"styles": {
+		"blocks": {
+			"core/button": {
+				"typography": {
+					"fontFamily": "var( --wp--preset--font-family--inter )"
+				}
+			},
+			"core/navigation": {
+				"typography": {
+					"fontFamily": "var( --wp--preset--font-family--newsreader )"
+				}
+			}
+		},
+		"typography": {
+			"fontFamily": "var( --wp--preset--font-family--newsreader )"
+		},
+		"elements": {
+			"button": {
+				"typography": {
+					"fontFamily": "var( --wp--preset--font-family--newsreader )"
+				}
+			},
+			"caption": {
+				"typography": {
+					"fontFamily": "var( --wp--preset--font-family--newsreader )"
+				}
+			},
+			"heading": {
+				"typography": {
+					"fontFamily": "var( --wp--preset--font-family--jost )"
+				}
+			}
+		}
+	},
+	"version": 2,
+	"$schema": "https://schemas.wp.org/wp/6.2/theme.json"
+}

@@ -1,0 +1,653 @@
+{
+	"prompts": [
+		{
+			"status": "draft",
+			"slug": "ras_registration_overlay",
+			"title": "Registration Overlay",
+			"content": "<!-- wp:newspack\/reader-registration {\"title\":\"{{heading}}\",\"description\":\"{{body}}\",\"label\":\"{{button_label}}\",\"hideSubscriptionInput\":true,{{lists}}} -->\n<div class=\"wp-block-newspack-reader-registration\"><!-- wp:paragraph {\"align\":\"center\"} --><p class=\"has-text-align-center\">{{success_message}}</p><!-- /wp:paragraph --><\/div>\n<!-- \/wp:newspack\/reader-registration -->",
+			"segments": [
+				{
+					"id": 1003,
+					"name": "Not registered and not signed up for a newsletter"
+				}
+			],
+			"options": {
+				"background_color": "#FFFFFF",
+				"hide_border": false,
+				"large_border": false,
+				"no_padding": false,
+				"frequency": "custom",
+				"frequency_max": 0,
+				"frequency_start": 0,
+				"frequency_between": "3",
+				"frequency_reset": "day",
+                "close_button_background_color": "#00000000",
+                "enable_close_button_background": false,
+				"overlay_color": "#000000",
+				"overlay_opacity": "30",
+				"overlay_size": "medium",
+				"no_overlay_background": false,
+				"placement": "center",
+				"trigger_type": "time",
+				"trigger_delay": "2",
+				"trigger_scroll_progress": 0,
+				"trigger_blocks_count": "3",
+				"archive_insertion_posts_count": 1,
+				"archive_insertion_is_repeating": false,
+				"post_types": [
+					"post",
+					"page",
+					"product",
+					"newspack_nl_cpt"
+				],
+				"archive_page_types": [
+					"category",
+					"tag",
+					"author",
+					"date",
+					"post-type",
+					"taxonomy"
+				],
+				"additional_classes": "",
+				"excluded_categories": [],
+				"excluded_tags": []
+			},
+			"categories": [],
+			"tags": false,
+			"campaign_groups": [
+				{
+					"id": 30,
+					"name": "Audience Management Defaults"
+				}
+			],
+			"user_input_fields": [
+				{
+					"name": "heading",
+					"type": "string",
+					"label": "Heading",
+					"description": "A heading to describe the prompt.",
+					"required": true,
+					"default": "Join our community for free. Sign up now.",
+					"max_length": 120
+				},
+				{
+					"name": "body",
+					"type": "string",
+					"label": "Body",
+					"description": "The primary call to action for the prompt.",
+					"required": true,
+					"default": "Register today to stay up-to-date with the latest news.",
+					"max_length": 300
+				},
+				{
+					"name": "button_label",
+					"type": "string",
+					"label": "Button Label",
+					"description": "The label for the primary CTA button.",
+					"required": true,
+					"default": "Sign up",
+					"max_length": 40
+				},
+				{
+					"name": "success_message",
+					"type": "string",
+					"label": "Success Message",
+					"description": "The message shown to readers after completing the signup.",
+					"required": true,
+					"default": "Thank you for registering!",
+					"max_length": 300
+				},
+				{
+					"name": "featured_image_id",
+					"type": "int",
+					"label": "Header Image (optional)",
+					"description": "Banner image to show at the top of the prompt.",
+					"default": 0
+				},
+				{
+					"name": "lists",
+					"type": "array",
+					"label": "Select Newsletters",
+					"description": "Newsletter lists the reader can subscribe to.",
+					"required": true,
+					"default": []
+				}
+			],
+			"help_info": {
+				"screenshot": "reg-overlay.png",
+				"description": "The <strong>Registration Overlay</strong> is shown to readers who have not yet registered nor signed up for a newsletter. It’s triggered on the first pageview, and then again every four pageviews.",
+				"recommendations": [
+					"Focus on the benefits of creating an account.",
+					"Highlight the value that the reader will get for free.",
+					"Use action-oriented verbs like “join,” “register,” and “sign up.”",
+					"Create a sense of urgency/Encourage readers to take immediate action by using words like “now” and “today.”"
+				],
+				"url": "https://help.newspack.com/engagement/audience-management-system/"
+			}
+		},
+		{
+			"status": "draft",
+			"slug": "ras_newsletter_overlay",
+			"title": "Newsletter Signup Overlay",
+			"content": "<!-- wp:heading -->\n<h2>{{heading}}<\/h2>\n<!-- \/wp:heading -->\n\n<!-- wp:paragraph -->\n<p>{{body}}<\/p>\n<!-- \/wp:paragraph -->\n\n<!-- wp:newspack-newsletters/subscribe {\"className\":\"is-style-modern\",\"label\":\"{{button_label}}\",\"successMessage\":\"{{success_message}}\",{{lists}}} /-->",
+			"segments": [
+				{
+					"id": 1002,
+					"name": "Registered but not signed up for a newsletter"
+				}
+			],
+			"options": {
+				"background_color": "#FFFFFF",
+				"hide_border": false,
+				"large_border": false,
+				"no_padding": false,
+				"frequency": "custom",
+				"frequency_max": 0,
+				"frequency_start": 0,
+				"frequency_between": "3",
+				"frequency_reset": "day",
+                "close_button_background_color": "#00000000",
+                "enable_close_button_background": false,
+                "overlay_color": "#000000",
+				"overlay_opacity": "30",
+				"overlay_size": "medium",
+				"no_overlay_background": false,
+				"placement": "center",
+				"trigger_type": "time",
+				"trigger_delay": "2",
+				"trigger_scroll_progress": 0,
+				"trigger_blocks_count": "3",
+				"archive_insertion_posts_count": 1,
+				"archive_insertion_is_repeating": false,
+				"post_types": [
+					"post",
+					"page",
+					"product",
+					"newspack_nl_cpt"
+				],
+				"archive_page_types": [
+					"category",
+					"tag",
+					"author",
+					"date",
+					"post-type",
+					"taxonomy"
+				],
+				"additional_classes": "",
+				"excluded_categories": [],
+				"excluded_tags": []
+			},
+			"categories": [],
+			"tags": false,
+			"campaign_groups": [
+				{
+					"id": 30,
+					"name": "Audience Management Defaults"
+				}
+			],
+			"user_input_fields": [
+				{
+					"name": "heading",
+					"type": "string",
+					"label": "Heading",
+					"description": "A heading to describe the prompt.",
+					"required": true,
+					"default": "Stay in the know",
+					"max_length": 120
+				},
+				{
+					"name": "body",
+					"type": "string",
+					"label": "Body",
+					"description": "The primary call to action for the prompt.",
+					"required": true,
+					"default": "Sign up to our free newsletter to get the latest news delivered straight to your inbox.",
+					"max_length": 300
+				},
+				{
+					"name": "button_label",
+					"type": "string",
+					"label": "Button Label",
+					"description": "The label for the primary CTA button.",
+					"required": true,
+					"default": "Sign up",
+					"max_length": 40
+				},
+				{
+					"name": "success_message",
+					"type": "string",
+					"label": "Success Message",
+					"description": "The message shown to readers after completing the signup.",
+					"required": true,
+					"default": "Thank you for signing up!",
+					"max_length": 300
+				},
+				{
+					"name": "featured_image_id",
+					"type": "int",
+					"label": "Header Image (optional)",
+					"description": "Banner image to show at the top of the prompt.",
+					"default": 0
+				},
+				{
+					"name": "lists",
+					"type": "array",
+					"label": "Select Newsletters",
+					"description": "Newsletter lists the reader can subscribe to.",
+					"required": true,
+					"default": []
+				}
+			],
+			"help_info": {
+				"screenshot": "newsletter-overlay.png",
+				"description": "The <strong>Newsletter Signup Overlay</strong> is shown to readers who have registered but not yet signed up for a newsletter. It’s triggered on the first pageview, and then again every four pageviews.",
+				"recommendations": [
+					"Highlight the value the reader will get from the newsletter(s).",
+					"Emphasize that signing up is free.",
+					"Use action-oriented verbs like “join,” “register,” and “sign up.”",
+					"Create a sense of urgency. Encourage readers to take immediate action by using words like “now” and “today.”"
+				],
+				"url": "https://help.newspack.com/engagement/audience-management-system/"
+			}
+		},
+		{
+			"status": "draft",
+			"slug": "ras_donation_overlay",
+			"title": "Donation Overlay",
+			"content": "<!-- wp:heading -->\n<h2>{{heading}}<\/h2>\n<!-- \/wp:heading -->\n\n<!-- wp:paragraph -->\n<p>{{body}}<\/p>\n<!-- \/wp:paragraph -->\n\n<!-- wp:newspack-blocks\/donate {\"className\":\"is-style-modern\",\"amounts\":{\"once\":[9,20,90,20],\"month\":[7,15,30,15],\"year\":[84,180,360,180]},\"disabledFrequencies\":{\"once\":false,\"month\":false,\"year\":false},\"thanksText\":\"{{thanks_message}}\",\"buttonText\": \"{{button_label}}\",\"minimumDonation\":5} \/-->",
+			"segments": [
+				{
+					"id": 1001,
+					"name": "Registered, signed up for at least one newsletter, but has not donated"
+				}
+			],
+			"options": {
+				"background_color": "#FFFFFF",
+				"hide_border": false,
+				"large_border": false,
+				"no_padding": false,
+				"frequency": "custom",
+				"frequency_max": 0,
+				"frequency_start": 0,
+				"frequency_between": "3",
+				"frequency_reset": "day",
+                "close_button_background_color": "#00000000",
+                "enable_close_button_background": false,
+                "overlay_color": "#000000",
+				"overlay_opacity": "30",
+				"overlay_size": "medium",
+				"no_overlay_background": false,
+				"placement": "center",
+				"trigger_type": "time",
+				"trigger_delay": "2",
+				"trigger_scroll_progress": 0,
+				"trigger_blocks_count": "3",
+				"archive_insertion_posts_count": 1,
+				"archive_insertion_is_repeating": false,
+				"post_types": [
+					"post",
+					"page",
+					"product",
+					"newspack_nl_cpt"
+				],
+				"archive_page_types": [
+					"category",
+					"tag",
+					"author",
+					"date",
+					"post-type",
+					"taxonomy"
+				],
+				"additional_classes": "",
+				"excluded_categories": [],
+				"excluded_tags": []
+			},
+			"categories": [],
+			"tags": false,
+			"campaign_groups": [
+				{
+					"id": 30,
+					"name": "Audience Management Defaults"
+				}
+			],
+			"user_input_fields": [
+				{
+					"name": "heading",
+					"type": "string",
+					"label": "Heading",
+					"description": "A heading to describe the prompt.",
+					"required": true,
+					"default": "Support our work",
+					"max_length": 120
+				},
+				{
+					"name": "body",
+					"type": "string",
+					"label": "Body",
+					"description": "The primary call to action for the prompt.",
+					"required": true,
+					"default": "As an independent publication, we rely on contributions from readers like you to fund our journalism.",
+					"max_length": 300
+				},
+				{
+					"name": "thanks_message",
+					"type": "string",
+					"label": "Thanks Message",
+					"description": "A message to thank the reader for their contribution.",
+					"required": true,
+					"default": "Thanks for your contribution!",
+					"max_length": 300
+				},
+				{
+					"name": "button_label",
+					"type": "string",
+					"label": "Button Label",
+					"description": "The label for the primary CTA button.",
+					"required": true,
+					"default": "Contribute Now",
+					"max_length": 40
+				},
+				{
+					"name": "featured_image_id",
+					"type": "int",
+					"label": "Header Image (optional)",
+					"description": "Banner image to show at the top of the prompt.",
+					"default": 0
+				}
+			],
+			"help_info": {
+				"screenshot": "donation-overlay.png",
+				"description": "The <strong>Donation Overlay</strong> is shown to readers who have registered and are signed up for at least one newsletter, but haven’t contributed yet. It’s triggered on the first pageview, and then again every four pageviews.",
+				"recommendations": [
+					"Highlight the importance of supporting your publication.",
+					"Focus on the value readers add by contributing financially.",
+					"Use action-oriented verbs like “donate,” “give,” and “contribute.”",
+					"Create a sense of urgency. Encourage readers to take immediate action by using words like “now” and “today.”"
+				],
+				"url": "https://help.newspack.com/engagement/audience-management-system/"
+			}
+		},
+		{
+			"status": "draft",
+			"slug": "ras_newsletter_inline",
+			"title": "Inline Newsletter Signup (secondary)",
+			"content": "<!-- wp:paragraph -->\n<p>{{body}}</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:newspack-newsletters/subscribe {\"className\":\"is-style-modern\",\"label\":\"{{button_label}}\",\"successMessage\":\"{{success_message}}\",{{lists}}} /-->",
+			"segments": [
+				{
+					"id": 1002,
+					"name": "Registered but not signed up for a newsletter"
+				},
+				{
+					"id": 1003,
+					"name": "Not registered and not signed up for a newsletter"
+				}
+			],
+			"options": {
+				"background_color": "#FFFFFF",
+				"hide_border": false,
+				"large_border": false,
+				"no_padding": false,
+				"frequency": "always",
+				"frequency_max": 0,
+				"frequency_start": 0,
+				"frequency_between": 0,
+				"frequency_reset": "month",
+                "close_button_background_color": "#00000000",
+                "enable_close_button_background": false,
+                "overlay_color": "#000000",
+				"overlay_opacity": "30",
+				"overlay_size": "medium",
+				"no_overlay_background": false,
+				"placement": "inline",
+				"trigger_type": "blocks_count",
+				"trigger_delay": "3",
+				"trigger_scroll_progress": 0,
+				"trigger_blocks_count": 2,
+				"archive_insertion_posts_count": 1,
+				"archive_insertion_is_repeating": false,
+				"post_types": [
+					"post"
+				],
+				"archive_page_types": [
+					"category",
+					"tag",
+					"author",
+					"date",
+					"post-type",
+					"taxonomy"
+				],
+				"additional_classes": "",
+				"excluded_categories": [],
+				"excluded_tags": []
+			},
+			"categories": [],
+			"tags": false,
+			"campaign_groups": [
+				{
+					"id": 30,
+					"name": "Audience Management Defaults"
+				}
+			],
+			"user_input_fields": [
+				{
+					"name": "body",
+					"type": "string",
+					"label": "Body",
+					"description": "The primary call to action for the prompt.",
+					"required": true,
+					"default": "Sign up for our free newsletter.",
+					"max_length": 300
+				},
+				{
+					"name": "button_label",
+					"type": "string",
+					"label": "Button Label",
+					"description": "The label for the primary CTA button.",
+					"required": true,
+					"default": "Sign up",
+					"max_length": 40
+				},
+				{
+					"name": "success_message",
+					"type": "string",
+					"label": "Success Message",
+					"description": "The message shown to readers after completing the signup.",
+					"required": true,
+					"default": "Thank you for signing up!",
+					"max_length": 300
+				},
+				{
+					"name": "lists",
+					"type": "array",
+					"label": "Select Newsletters",
+					"description": "Newsletter lists the reader can subscribe to.",
+					"required": true,
+					"default": []
+				}
+			],
+			"help_info": {
+				"screenshot": "newsletter-inline.png",
+				"description": "The <strong>Inline Newsletter Signup</strong> is embedded within articles and shown to readers who have not yet signed up for a newsletter whether they are registered or not. It’s triggered on the first pageview, and then again every four pageviews and is inserted after the second paragraph block in every article.",
+				"recommendations": [
+					"Highlight the value the reader will get from the newsletter(s).",
+					"Emphasize that signing up is free.",
+					"Use action-oriented verbs like “join,” “register,” and “sign up.”",
+					"Consider including the sending frequency to set expectations."
+				],
+				"url": "https://help.newspack.com/engagement/audience-management-system/"
+			}
+		},
+		{
+			"status": "draft",
+			"slug": "ras_donation_inline",
+			"title": "Inline Donation (secondary)",
+			"content": "<!-- wp:separator -->\n<hr class=\"wp-block-separator has-alpha-channel-opacity\"\/>\n<!-- \/wp:separator -->\n\n<!-- wp:heading -->\n<h2>{{heading}}<\/h2>\n<!-- \/wp:heading -->\n\n<!-- wp:paragraph -->\n<p>{{body}}<\/p>\n<!-- \/wp:paragraph -->\n\n<!-- wp:newspack-blocks\/donate {\"className\":\"is-style-modern\",\"amounts\":{\"once\":[9,20,90,20],\"month\":[7,15,30,15],\"year\":[84,180,360,180]},\"disabledFrequencies\":{\"once\":false,\"month\":false,\"year\":false},\"thanksText\":\"{{thanks_message}}\",\"buttonText\": \"{{button_label}}\",\"minimumDonation\":5} \/-->",
+			"options": {
+				"background_color": "#FFFFFF",
+				"hide_border": true,
+				"large_border": false,
+				"no_padding": false,
+				"frequency": "always",
+				"frequency_max": 0,
+				"frequency_start": 0,
+				"frequency_between": 0,
+				"frequency_reset": "month",
+                "close_button_background_color": "#00000000",
+                "enable_close_button_background": false,
+                "overlay_color": "#000000",
+				"overlay_opacity": "30",
+				"overlay_size": "medium",
+				"no_overlay_background": false,
+				"placement": "inline",
+				"trigger_type": "scroll",
+				"trigger_delay": "3",
+				"trigger_scroll_progress": "100",
+				"trigger_blocks_count": 0,
+				"archive_insertion_posts_count": 1,
+				"archive_insertion_is_repeating": false,
+				"post_types": [
+					"post"
+				],
+				"archive_page_types": [
+					"category",
+					"tag",
+					"author",
+					"date",
+					"post-type",
+					"taxonomy"
+				],
+				"additional_classes": "",
+				"excluded_categories": [],
+				"excluded_tags": []
+			},
+			"categories": [],
+			"tags": false,
+			"campaign_groups": [
+				{
+					"id": 30,
+					"name": "Audience Management Defaults"
+				}
+			],
+			"user_input_fields": [
+				{
+					"name": "heading",
+					"type": "string",
+					"label": "Heading",
+					"description": "A heading to describe the prompt.",
+					"required": true,
+					"default": "Support our work",
+					"max_length": 120
+				},
+				{
+					"name": "body",
+					"type": "string",
+					"label": "Body",
+					"description": "The primary call to action for the prompt.",
+					"required": true,
+					"default": "As an independent publication, we rely on contributions from readers like you to fund our journalism.",
+					"max_length": 300
+				},
+				{
+					"name": "thanks_message",
+					"type": "string",
+					"label": "Thanks Message",
+					"description": "A message to thank the reader for their contribution.",
+					"required": true,
+					"default": "Thanks for your contribution!",
+					"max_length": 300
+				},
+				{
+					"name": "button_label",
+					"type": "string",
+					"label": "Button Label",
+					"description": "The label for the primary CTA button.",
+					"required": true,
+					"default": "Contribute Now",
+					"max_length": 40
+				}
+			],
+			"help_info": {
+				"screenshot": "donation-inline.png",
+				"description": "The <strong>Inline Donation prompt</strong> is shown to all readers. It’s placed on every page below the content.",
+				"recommendations": [
+					"Focus on the value readers add by contributing financially.",
+					"Highlight the importance of supporting your publication.",
+					"Use action-oriented verbs like “donate,” “give,” and “contribute.”",
+					"Create a sense of urgency. Encourage readers to take immediate action by using words like “now” and “today.”"
+				],
+				"url": "https://help.newspack.com/engagement/audience-management-system/"
+			}
+		}
+	],
+	"segments": [
+		{
+			"name": "Registered, signed up for at least one newsletter, but has not donated",
+			"configuration": {
+				"min_posts": 0,
+				"max_posts": 0,
+				"min_session_posts": 0,
+				"max_session_posts": 0,
+				"is_subscribed": true,
+				"is_not_subscribed": false,
+				"is_donor": false,
+				"is_not_donor": true,
+				"is_former_donor": false,
+				"is_logged_in": true,
+				"is_not_logged_in": false,
+				"favorite_categories": [],
+				"referrers": "",
+				"referrers_not": ""
+			},
+			"id": "1001",
+			"priority": 0
+		},
+		{
+			"name": "Registered but not signed up for a newsletter",
+			"configuration": {
+				"min_posts": 0,
+				"max_posts": 0,
+				"min_session_posts": 0,
+				"max_session_posts": 0,
+				"is_subscribed": false,
+				"is_not_subscribed": true,
+				"is_donor": false,
+				"is_not_donor": false,
+				"is_former_donor": false,
+				"is_logged_in": true,
+				"is_not_logged_in": false,
+				"favorite_categories": [],
+				"referrers": "",
+				"referrers_not": ""
+			},
+			"id": "1002",
+			"priority": 1
+		},
+		{
+			"name": "Not registered and not signed up for a newsletter",
+			"configuration": {
+				"min_posts": 0,
+				"max_posts": 0,
+				"min_session_posts": 0,
+				"max_session_posts": 0,
+				"is_subscribed": false,
+				"is_not_subscribed": true,
+				"is_donor": false,
+				"is_not_donor": false,
+				"is_former_donor": false,
+				"is_logged_in": false,
+				"is_not_logged_in": true,
+				"favorite_categories": [],
+				"referrers": "",
+				"referrers_not": ""
+			},
+			"id": "1003",
+			"priority": 2
+		}
+	],
+	"campaigns": [
+		{
+			"id": 30,
+			"name": "Audience Management Defaults"
+		}
+	]
+}

@@ -1,0 +1,87 @@
+/**
+ * Setup
+ */
+
+.newspack-action-card.newspack--error-actioncard {
+	.newspack-action-card__secondary_button {
+		font-size: 12px;
+		line-height: 1.4;
+	}
+}
+
+.newspack-wizard__welcome,
+.newspack-wizard__completed {
+	.newspack-wizard__header,
+	.newspack-tabbed-navigation {
+		display: none;
+	}
+}
+
+// Welcome Screen
+
+.newspack-wizard__welcome {
+	.newspack-icon {
+		margin: 0 auto;
+	}
+
+	.newspack-card {
+		&.loading {
+			cursor: wait;
+		}
+
+		&__footer {
+			align-items: center;
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: flex-end;
+
+			&:empty {
+				display: none;
+			}
+
+			.components-button {
+				margin-left: auto;
+			}
+		}
+
+		h1 {
+			align-items: center;
+			display: flex;
+			flex-wrap: wrap;
+
+			.newspack--error,
+			.newspack-checkbox-icon {
+				line-height: 24px;
+				margin-right: 8px;
+			}
+		}
+	}
+
+	.newspack-buttons-card {
+		margin: 0;
+	}
+}
+
+.newspack-site-profile {
+	grid-template-columns: 1fr;
+
+	@media screen and ( min-width: 744px ) {
+		grid-template-columns: 102px auto calc(( 100% - 64px ) / 3);
+	}
+}
+
+.newspack-wizard {
+	&__title {
+		a {
+			pointer-events: none;
+		}
+
+		svg:not(.newspack-icon) {
+			display: none;
+		}
+	}
+}
+
+.newspack-footer {
+	display: none;
+}

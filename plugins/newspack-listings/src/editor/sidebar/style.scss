@@ -1,0 +1,12 @@
+.newspack-listings {
+	&__event-time-toggle {
+		margin-bottom: 0.5rem;
+	}
+
+	&__toggle-control {
+		.components-base-control__help {
+			font-style: italic;
+			margin-top: 0.5rem;
+		}
+	}
+}

@@ -1,0 +1,40 @@
+{
+	"name": "automattic/newspack-popups",
+	"description": "AMP-compatible popup notifications.",
+	"type": "wordpress-plugin",
+	"require-dev": {
+		"automattic/vipwpcs": "^3.0",
+		"wp-coding-standards/wpcs": "^3.0",
+		"phpcompatibility/phpcompatibility-wp": "^2.1",
+		"composer/installers": "^2.0",
+		"dealerdirect/phpcodesniffer-composer-installer": "^1.0.0",
+		"yoast/phpunit-polyfills": "^3.0",
+		"phpunit/phpunit": "^9.5",
+		"dms/phpunit-arraysubset-asserts": "^0.5.0"
+	},
+	"license": "GPL-2.0-or-later",
+	"scripts": {
+		"post-update-cmd": [
+			"vendor/bin/cghooks update"
+		]
+	},
+	"extra": {},
+	"autoload": {
+		"classmap": [
+			"includes",
+			"includes/schemas"
+		]
+	},
+	"require": {
+		"drewm/mailchimp-api": "^2.5"
+	},
+	"config": {
+		"platform": {
+			"php": "8.3"
+		},
+		"allow-plugins": {
+			"composer/installers": true,
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		}
+	}
+}

@@ -1,0 +1,30 @@
+/**
+ * Main content area
+ */
+
+.newspack-my-account {
+	.woocommerce-MyAccount-content {
+		transition: transform 125ms ease-in-out;
+		@media ( min-width: 768px ) {
+			border: none;
+			margin-left: auto;
+			margin-right: auto;
+			max-width: calc(301px + 768px);
+			padding-bottom: 0;
+			padding-left: 301px;
+			padding-top: 0;
+			transition: none;
+			width: 100%;
+		}
+		&.is-loading {
+			opacity: 0.5;
+			pointer-events: none;
+		}
+		section + section {
+			margin-top: var(--newspack-ui-spacer-11);
+		}
+		.wp-block-details + .wp-block-details {
+			margin-top: 0;
+		}
+	}
+}

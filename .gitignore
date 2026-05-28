@@ -14,5 +14,14 @@ bin/newspack-network/nodes-keys.json
 bin/newspack-network/service-accounts.secret
 rootCA.pem
 worktrees
+envs
 docker-compose.env-*.yml
 .claude/settings.local.json
+node_modules/
+vendor/
+composer.lock
+packages/*/dist/
+packages/*/build/
+plugins/*/package-lock.json
+themes/*/package-lock.json
+packages/*/package-lock.json

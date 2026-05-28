@@ -1,0 +1,25 @@
+# Editors
+project.xml
+project.properties
+/nbproject/private/
+.buildpath
+.project
+.settings*
+.idea
+.vscode
+*.sublime-project
+*.sublime-workspace
+.sublimelinterrc
+
+# NPM
+.cache
+node_modules
+
+# orb.yml is "packed" from source, and not published directly from the repository.
+orb.yml
+
+# OS X metadata
+.DS_Store
+
+# Windows junk
+Thumbs.db

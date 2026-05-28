@@ -1,0 +1,19 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+.newspack-newsletters-constant_contact-lists {
+	max-height: 14em;
+	overflow-y: auto;
+}
+
+.newspack-newsletters-cc__send-mode {
+	width: 100%;
+	margin-bottom: 12px;
+}
+
+.newspack-newsletters-cc__send-mode .newspack-newsletters-cc__send-mode-button {
+	width: 50%;
+	display: inline;
+	box-shadow: inset 0 0 0 1px wp-colors.$gray-900;
+	&.is-secondary {
+		color: wp-colors.$gray-900;
+	}
+}

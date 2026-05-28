@@ -1,0 +1,25 @@
+description: >
+  Build the distributable files, so they are available as CI artifacts.
+
+executor: default
+
+parameters:
+  archive-name:
+    type: string
+    default: ""
+    description: "Name of the ZIP archive distributable."
+
+steps:
+  - checkout_with_workspace
+  - set_node_version
+  - run:
+      name: Install rsync
+      command: sudo apt-get update && sudo apt-get install rsync
+  - run:
+      name: Install PHP packages
+      command: composer install --no-dev --no-scripts
+  - run:
+      name: Build plugin files
+      command: npm run build && npm run release:archive
+  - store_artifacts:
+      path: release/<<parameters.archive-name>>.zip

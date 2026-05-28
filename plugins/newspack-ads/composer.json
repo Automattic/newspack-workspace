@@ -1,0 +1,40 @@
+{
+	"name": "automattic/newspack-ads",
+	"description": "Newspack Ad integrations.",
+	"type": "wordpress-plugin",
+	"require-dev": {
+		"composer/installers": "~2.1",
+		"automattic/vipwpcs": "^3.0",
+		"wp-coding-standards/wpcs": "^3.0",
+		"dealerdirect/phpcodesniffer-composer-installer": "*",
+		"phpcompatibility/phpcompatibility-wp": "*",
+		"yoast/phpunit-polyfills": "^4.0",
+		"phpunit/phpunit": "^7.0 || ^9.5"
+	},
+	"license": "GPL-2.0-or-later",
+	"scripts": {
+		"pre-push": "./.hooks/pre-push",
+		"post-update-cmd": [
+			"vendor/bin/cghooks update"
+		]
+	},
+	"extra": {},
+	"require": {
+		"googleads/googleads-php-lib": "^71.0"
+	},
+	"config": {
+		"platform": {
+			"php": "8.0"
+		},
+		"allow-plugins": {
+			"composer/installers": true,
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		},
+		"audit": {
+			"ignore": {
+				"PKSA-y2cr-5h3j-g3ys": "firebase/php-jwt advisory does not affect this package (transitive dependency of googleads-php-lib)",
+				"PKSA-2kqm-ps5x-s4f5": "firebase/php-jwt advisory does not affect this package (transitive dependency of googleads-php-lib)"
+			}
+		}
+	}
+}

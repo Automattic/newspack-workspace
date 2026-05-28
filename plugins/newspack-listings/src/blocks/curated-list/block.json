@@ -1,0 +1,137 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack-listings/curated-list",
+	"category": "newspack",
+	"attributes": {
+		"className": {
+			"type": "string",
+			"default": ""
+		},
+		"isSelected": {
+			"type": "boolean",
+			"default": false
+		},
+		"showNumbers": {
+			"type": "boolean",
+			"default": true
+		},
+		"showMap": {
+			"type": "boolean",
+			"default": false
+		},
+		"showSortUi": {
+			"type": "boolean",
+			"default": false
+		},
+		"showAuthor": {
+			"type": "boolean",
+			"default": false
+		},
+		"showExcerpt": {
+			"type": "boolean",
+			"default": true
+		},
+		"showImage": {
+			"type": "boolean",
+			"default": true
+		},
+		"showCaption": {
+			"type": "boolean",
+			"default": false
+		},
+		"imageShape": {
+			"type": "string",
+			"default": "landscape"
+		},
+		"minHeight": {
+			"type": "integer",
+			"default": 0
+		},
+		"showCategory": {
+			"type": "boolean",
+			"default": false
+		},
+		"showTags": {
+			"type": "boolean",
+			"default": false
+		},
+		"mediaPosition": {
+			"type": "string",
+			"default": "top"
+		},
+		"categories": {
+			"type": "array",
+			"default": [],
+			"items": { "type": "integer" }
+		},
+		"tags": {
+			"type": "array",
+			"default": [],
+			"items": { "type": "integer" }
+		},
+		"tagExclusions": {
+			"type": "array",
+			"default": [],
+			"items": { "type": "integer" }
+		},
+		"typeScale": {
+			"type": "integer",
+			"default": 4
+		},
+		"imageScale": {
+			"type": "integer",
+			"default": 3
+		},
+		"textColor": {
+			"type": "string",
+			"default": ""
+		},
+		"backgroundColor": {
+			"type": "string",
+			"default": ""
+		},
+		"hasDarkBackground": {
+			"type": "boolean",
+			"default": false
+		},
+		"startup": {
+			"type": "boolean",
+			"default": true
+		},
+		"queryMode": {
+			"type": "boolean",
+			"default": false
+		},
+		"queryOptions": {
+			"type": "object",
+			"default": {
+				"type": null,
+				"authors": [],
+				"categories": [],
+				"tags": [],
+				"categoryExclusions": [],
+				"tagExclusions": [],
+				"maxItems": 10,
+				"sortBy": "date",
+				"order": "DESC"
+			}
+		},
+		"listingIds": {
+			"type": "array",
+			"default": []
+		},
+		"queriedListings": {
+			"type": "array",
+			"default": []
+		},
+		"showLoadMore": {
+			"type": "boolean",
+			"default": false
+		},
+		"loadMoreText": {
+			"type": "string",
+			"default": "Load more listings"
+		}
+	}
+}

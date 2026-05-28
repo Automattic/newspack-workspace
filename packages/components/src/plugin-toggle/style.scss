@@ -1,0 +1,20 @@
+/**
+ * Plugin Toggle
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-action-card {
+	&.in-flight,
+	&.loading {
+		opacity: 0.5;
+
+		.newspack-action-card__region-right {
+			.newspack-button {
+				color: wp-colors.$gray-700;
+				pointer-events: none;
+				text-decoration: none;
+			}
+		}
+	}
+}

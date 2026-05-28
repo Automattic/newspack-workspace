@@ -1,0 +1,69 @@
+@use "accordion";
+@use "buttons";
+@use "checkbox-radio";
+@use "labels";
+@use "select";
+@use "spinner";
+@use "text-inputs";
+
+// TODO: Find a better home for this stuff.
+.newspack-ui {
+	form {
+		position: relative;
+		> *:last-child {
+			margin-bottom: 0;
+		}
+	}
+
+	& &__last-child {
+		margin-bottom: 0;
+	}
+
+	// Container for displaying grid of inputs.
+	& &__code-input {
+		display: flex;
+		gap: var(--newspack-ui-spacer-1);
+		input {
+			text-align: center;
+		}
+	}
+
+	// Form inline text - helper and error.
+	& &__helper-text,
+	& &__inline-error {
+		color: var(--newspack-ui-color-neutral-60);
+		display: block;
+		font-size: var(--newspack-ui-font-size-xs);
+		font-weight: normal;
+		line-height: var(--newspack-ui-line-height-xs);
+		margin: var(--newspack-ui-spacer-1) 0 0;
+		a {
+			text-decoration: underline;
+		}
+
+		& + & {
+			margin-top: 0;
+		}
+
+		label & {
+			margin: 0;
+		}
+	}
+
+	& &__inline-error {
+		color: var(--newspack-ui-color-error-50);
+	}
+
+	// Error class to apply to specific fields.
+	& &__field-error,
+	[data-form-status="400"] {
+		// Attribute added to sign-up modal form on failure.
+		--newspack-ui-color-input-border: var(--newspack-ui-color-error-50);
+		--newspack-ui-color-input-border-focus: var(--newspack-ui-color-error-50);
+		--newspack-ui-label-color: var(--newspack-ui-color-error-50);
+
+		.newspack-ui__label-optional {
+			color: inherit;
+		}
+	}
+}

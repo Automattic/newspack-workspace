@@ -1,0 +1,7 @@
+/* Corrections Single */
+.newspack-corrections-module {
+	.correction {
+		color: var(--newspack-theme-color-text-light, var(--wp--preset--color--contrast-3));
+		font-size: var(--newspack-theme-font-size-sm, var(--wp--preset--font-size--small));
+	}
+}

@@ -1,0 +1,23 @@
+.wp-block-newspack-my-account-button {
+	&__icon {
+		display: grid;
+		place-items: center;
+	}
+
+	svg {
+		fill: currentcolor;
+		height: max(24px, 1.5em);
+		width: max(24px, 1.5em);
+	}
+
+	&:not(:has(.screen-reader-text)) {
+		svg {
+			margin-left: calc( max(4px, 0.25em) * -1);
+			margin-right: calc( max(4px, 0.25em) * -1);
+		}
+	}
+
+	.wp-block-buttons > .wp-block-button:has(&) {
+		display: inline-flex;
+	}
+}

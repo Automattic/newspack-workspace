@@ -1,0 +1,95 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+/**
+ * Group Subscriptions admin CSS.
+ */
+
+.postbox#newspack-group-subscription {
+	.show_if_newspack_group_subscription_enabled {
+		display: none;
+	}
+	&.enabled {
+		.show_if_newspack_group_subscription_enabled {
+			display: block;
+		}
+	}
+	h3 {
+		font-size: 14px;
+	}
+	input[type="number"],
+	.select2-container {
+		display: block;
+		margin-top: 3px;
+	}
+	@media screen and ( min-width: 768px ) {
+		.newspack-group-subscription__container {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 24px;
+		}
+		.newspack-group-subscription__settings,
+		.newspack-group-subscription__members,
+		.newspack-group-subscription__add-member {
+			flex: 1;
+			min-width: 250px;
+		}
+	}
+	.newspack-group-subscription__members-list {
+		list-style: none;
+		max-height: 300px;
+		overflow-y: auto;
+		padding: 0;
+		margin-bottom: 16px;
+	}
+	a.newspack-group-subscription__remove-member,
+	a.newspack-group-subscription__cancel-invite {
+		color: #666;
+		display: inline-block;
+		font-size: 14px;
+		font-weight: 600;
+		padding: 4px;
+		text-decoration: none;
+		&:focus {
+			box-shadow: none;
+			outline: none;
+		}
+	}
+	.newspack-group-subscription__to-remove {
+		a.newspack-group-subscription__member-user-link,
+		.newspack-group-subscription__pending-invite {
+			color: #666;
+			pointer-events: none;
+			text-decoration: line-through;
+		}
+		.newspack-group-subscription__remove-member,
+		.newspack-group-subscription__cancel-invite {
+			opacity: 0;
+		}
+	}
+	.error,
+	.success {
+		background-color: transparent;
+		display: block;
+		margin: 4px 0;
+		padding: 0;
+		.dashicons {
+			margin-right: 2px;
+		}
+	}
+	.success {
+		color: wp-colors.$alert-green;
+	}
+	.error {
+		color: wp-colors.$alert-red;
+	}
+	.select2-container {
+		max-width: 100%;
+		width: 100% !important;
+	}
+	.newspack-group-subscription__invite-member {
+		margin-top: 16px;
+		input {
+			margin-bottom: 8px;
+		}
+	}
+}

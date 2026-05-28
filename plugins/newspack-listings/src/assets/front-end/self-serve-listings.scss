@@ -1,0 +1,17 @@
+@use "../shared/self-serve-listings";
+
+.woocommerce-info .showlogin {
+	margin-left: 0.25rem;
+}
+
+.woocommerce-orders-table__cell-order-actions {
+	.button {
+		margin-bottom: 0.125rem;
+		margin-top: 0.125rem;
+
+		+ .button {
+			display: inline-block;
+			margin-left: 0.25rem;
+		}
+	}
+}

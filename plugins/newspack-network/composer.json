@@ -1,0 +1,31 @@
+{
+	"name": "automattic/newspack-network",
+	"description": "The Newspack Network plugin",
+	"type": "wordpress-plugin",
+	"license": "GPL-2.0-or-later",
+	"require-dev": {
+		"automattic/vipwpcs": "^3.0",
+		"wp-coding-standards/wpcs": "^3.0",
+		"dealerdirect/phpcodesniffer-composer-installer": "*",
+		"phpcompatibility/phpcompatibility-wp": "*",
+		"yoast/phpunit-polyfills": "^2.0",
+		"phpunit/phpunit": "^7.0 || ^9.5"
+	},
+	"autoload": {
+		"classmap": [
+			"./includes"
+		],
+		"files": [
+			"./includes/constants.php"
+		]
+	},
+	"config": {
+		"platform": {
+			"php": "8.0"
+		},
+		"allow-plugins": {
+			"composer/installers": true,
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		}
+	}
+}

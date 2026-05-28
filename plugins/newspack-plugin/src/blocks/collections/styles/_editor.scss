@@ -1,0 +1,24 @@
+.wp-block-newspack-collections {
+	// Editor-specific styles.
+	.block-editor-page & {
+		// Disable pointer events on links in editor to prevent navigation.
+		a {
+			pointer-events: none;
+			cursor: default;
+
+			&:hover {
+				color: inherit;
+				text-decoration: none;
+			}
+		}
+
+		// Re-enable pointer events for RichText components.
+		.rich-text {
+			a {
+				pointer-events: auto;
+				cursor: text;
+			}
+		}
+	}
+}
+

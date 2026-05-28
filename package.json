@@ -1,0 +1,57 @@
+{
+	"name": "newspack-workspace",
+	"private": true,
+	"description": "Monorepo containing the Newspack suite of plugins, themes, and shared packages, plus the Docker-based local development environment.",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Automattic/newspack-workspace.git"
+	},
+	"license": "GPL-2.0-or-later",
+	"packageManager": "pnpm@10.33.0",
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"build:packages": "pnpm --filter './packages/*' run --if-present build",
+		"build": "pnpm run build:packages && pnpm --filter './plugins/*' --filter './themes/*' run build",
+		"build:changed": "pnpm run build:packages && pnpm --filter '...[origin/main]' run build",
+		"prepare": "pnpm run build:packages",
+		"lint": "pnpm --filter './plugins/*' --filter './themes/*' run lint:js && composer phpcs",
+		"lint:changed": "pnpm --filter '...[origin/main]' run lint:js",
+		"test:js": "pnpm --filter './plugins/*' --filter './themes/*' run test",
+		"test:php": "composer test",
+		"format": "pnpm --filter './plugins/*' --filter './themes/*' run format:js",
+		"cm": "commit"
+	},
+	"devDependencies": {
+		"newspack-scripts": "workspace:*",
+		"multi-semantic-release": "^3.0.2",
+		"@commitlint/cli": "^20.1.0",
+		"@commitlint/config-conventional": "^19.8.1",
+		"commitizen": "^4.3.1",
+		"cz-conventional-changelog": "^3.3.0",
+		"husky": "^9.1.7",
+		"lint-staged": "^16.2.6",
+		"prettier": "^3.3.3"
+	},
+	"config": {
+		"commitizen": {
+			"path": "cz-conventional-changelog"
+		}
+	},
+	"commitlint": {
+		"extends": [
+			"@commitlint/config-conventional"
+		]
+	},
+	"lint-staged": {
+		"*.{js,jsx,ts,tsx}": "eslint --fix",
+		"*.{css,scss}": "stylelint --fix",
+		"*.php": "composer phpcbf --"
+	},
+	"pnpm": {
+		"overrides": {
+			"@typescript-eslint/parser": "8.58.2"
+		}
+	}
+}

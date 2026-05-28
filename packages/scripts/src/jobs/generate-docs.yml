@@ -1,0 +1,30 @@
+description: >
+  Generate documentation. This will create a new branch called docs and push the HTML documentation to it, as /docs directory.
+  To make this work with GH pages, visit <repo-url>/settings/pages, set branch to "docs", and folder to "/docs".
+
+executor: php-81
+
+steps:
+  - checkout
+  - run:
+      name: Install dependencies
+      command: |
+        sudo apt-get update && sudo apt-get install -y graphviz plantuml
+  - run:
+      name: Download PHPDocumentor
+      command: |
+        curl -L -o ./phpdocumentor https://phpdoc.org/phpDocumentor.phar
+        chmod +x ./phpdocumentor
+  - run:
+      name: Generate documentation
+      command: |
+        ./phpdocumentor run -d . -t ./docs
+  - run:
+      name: Switch to docs branch, commit, and push
+      command: |
+        git config user.name "${GIT_COMMITTER_NAME}"
+        git config user.email "${GITHUB_COMMITER_EMAIL}"
+        git checkout -b docs
+        git add -f docs
+        git commit -m "Update the docs"
+        git push "https://${GITHUB_TOKEN}@github.com/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}.git" --force

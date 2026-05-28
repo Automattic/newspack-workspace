@@ -1,0 +1,30 @@
+.newspack-ui {
+	table {
+		border: 0;
+		font-family: var(--newspack-ui-font-family);
+		font-size: var(--newspack-ui-font-size-xs); // Prevent relative font size
+		line-height: var(--newspack-ui-line-height-xs);
+		margin: calc(var(--newspack-ui-spacer-1) / -2) 0; // Offset cell padding.
+		table-layout: fixed;
+		border-collapse: collapse;
+		th,
+		td {
+			background: transparent;
+			border-color: var(--newspack-ui-color-border);
+			border-width: 0 0 1px;
+			font-size: var(--newspack-ui-font-size-xs); // Prevent relative font size
+			padding: calc(var(--newspack-ui-spacer-1) / 2) 0;
+			vertical-align: top;
+		}
+		th {
+			font-weight: 600;
+			text-align: left;
+		}
+		tfoot tr:last-child {
+			th,
+			td {
+				border-bottom: 0;
+			}
+		}
+	}
+}

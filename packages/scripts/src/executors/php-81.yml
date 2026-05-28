@@ -1,0 +1,8 @@
+description: PHP executor
+docker:
+  - image: "cimg/php:<<parameters.tag>>"
+parameters:
+  tag:
+    default: 8.1-node
+    description: PHP image version
+    type: string

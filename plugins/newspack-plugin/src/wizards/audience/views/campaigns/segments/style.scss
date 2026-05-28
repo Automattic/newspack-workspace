@@ -1,0 +1,35 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-campaigns-wizard-segments {
+	&__list {
+		margin: 32px 0;
+
+		&.is-loading {
+			pointer-events: none;
+		}
+
+		.newspack-popover {
+			margin-left: -4px;
+		}
+
+		.newspack-action-card {
+			flex-direction: row;
+		}
+	}
+
+	&__title {
+		padding-bottom: 32px;
+
+		.components-base-control__field {
+			margin: 0;
+		}
+	}
+
+	&__recorded-visitors {
+		margin: -48px 0 0;
+
+		+ .newspack-card {
+			margin-top: 64px;
+		}
+	}
+}

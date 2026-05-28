@@ -1,0 +1,906 @@
+# Copyright (C) 2026 Automattic
+# This file is distributed under the GPL2.
+msgid ""
+msgstr ""
+"Project-Id-Version: Newspack Story Budget 1.0.0\n"
+"Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-story-budget\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"POT-Creation-Date: 2026-04-30T19:36:48+00:00\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"X-Generator: WP-CLI 2.12.0\n"
+"X-Domain: newspack-story-budget\n"
+
+#. Plugin Name of the plugin
+#: newspack-story-budget.php
+msgid "Newspack Story Budget"
+msgstr ""
+
+#. Description of the plugin
+#: newspack-story-budget.php
+msgid "Story budgeting by Newspack."
+msgstr ""
+
+#. Author of the plugin
+#: newspack-story-budget.php
+msgid "Automattic"
+msgstr ""
+
+#. Author URI of the plugin
+#: newspack-story-budget.php
+msgid "https://newspack.com/"
+msgstr ""
+
+#: includes/class-admin.php:50
+#: includes/class-admin.php:51
+#: includes/class-budgets.php:54
+#: dist/story-budget-app.js:158
+#: src/app/index.js:83
+msgid "Story Budget"
+msgstr ""
+
+#: includes/class-admin.php:226
+#: includes/class-admin.php:252
+#: includes/class-admin.php:338
+#: includes/fields/class-fields.php:150
+#: dist/story-budget-app.js:155
+#: src/components/create-new-story.js:100
+msgid "Budget"
+msgstr ""
+
+#: includes/class-admin.php:228
+#: dist/story-budget-app.js:143
+#: dist/story-budget-editor.js:1
+#: src/components/story-field-control.js:60
+msgid "No budget"
+msgstr ""
+
+#: includes/class-admin.php:254
+msgid "No change"
+msgstr ""
+
+#: includes/class-admin.php:255
+msgid "Clear budget"
+msgstr ""
+
+#: includes/class-api.php:49
+msgid "Whether to include metadata in the response."
+msgstr ""
+
+#: includes/class-api.php:53
+msgid "Number of stories to return."
+msgstr ""
+
+#: includes/class-api.php:57
+#: includes/class-api.php:281
+msgid "Offset."
+msgstr ""
+
+#: includes/class-api.php:61
+msgid "Array of story IDs to fetch."
+msgstr ""
+
+#: includes/class-api.php:68
+msgid "Date in UNIX timestamp format to fetch stories modified since this time."
+msgstr ""
+
+#: includes/class-api.php:117
+msgid "Array of story IDs to fetch meta for."
+msgstr ""
+
+#: includes/class-api.php:136
+#: includes/class-api.php:303
+#: includes/class-api.php:364
+msgid "Search query."
+msgstr ""
+
+#: includes/class-api.php:152
+msgid "Array of story IDs to update."
+msgstr ""
+
+#: includes/class-api.php:157
+msgid "Array of fields to update."
+msgstr ""
+
+#: includes/class-api.php:210
+msgid "The post ID of the story to update."
+msgstr ""
+
+#: includes/class-api.php:214
+msgid "The slug of the field to update."
+msgstr ""
+
+#: includes/class-api.php:218
+msgid "The value to update the field with."
+msgstr ""
+
+#: includes/class-api.php:234
+msgid "Array of field slugs to return. If not provided, all fields will be returned."
+msgstr ""
+
+#: includes/class-api.php:252
+msgid "The ID of the budget to update."
+msgstr ""
+
+#: includes/class-api.php:256
+msgid "The name of the budget."
+msgstr ""
+
+#: includes/class-api.php:260
+msgid "Whether the budget is archived."
+msgstr ""
+
+#: includes/class-api.php:276
+msgid "Number of budgets to return."
+msgstr ""
+
+#: includes/class-api.php:286
+msgid "Whether to include archived budgets."
+msgstr ""
+
+#: includes/class-api.php:319
+msgid "Array of budget IDs to set as active."
+msgstr ""
+
+#: includes/class-api.php:338
+msgid "Name of the budget."
+msgstr ""
+
+#: includes/class-api.php:489
+msgid "Story title cannot be empty."
+msgstr ""
+
+#: includes/class-api.php:497
+msgid "At least one budget must be selected."
+msgstr ""
+
+#: includes/class-api.php:558
+msgid "Invalid story."
+msgstr ""
+
+#: includes/class-api.php:645
+#: includes/class-api.php:664
+msgid "Story not found."
+msgstr ""
+
+#. translators: %d is the story ID.
+#: includes/class-api.php:728
+#: includes/class-api.php:774
+#, php-format
+msgid "Story with ID \"%d\" not found."
+msgstr ""
+
+#. Translators: field data type.
+#: includes/class-api.php:747
+#: includes/class-api.php:790
+#, php-format
+msgid "Invalid value for field type \"%s\"."
+msgstr ""
+
+#: includes/class-api.php:782
+msgid "Missing field."
+msgstr ""
+
+#: includes/class-api.php:868
+msgid "Budget name cannot be empty."
+msgstr ""
+
+#: includes/class-api.php:894
+#: includes/class-api.php:929
+#: includes/class-budget.php:118
+msgid "Budget not found."
+msgstr ""
+
+#. translators: %d is the budget ID.
+#: includes/class-api.php:990
+#, php-format
+msgid "Budget with ID \"%d\" not found."
+msgstr ""
+
+#: includes/class-budget.php:123
+msgid "This is not a budget."
+msgstr ""
+
+#. Translators: post ID.
+#: includes/class-budget.php:172
+#: includes/class-budget.php:207
+#, php-format
+msgid "Invalid story ID \"%d\"."
+msgstr ""
+
+#: includes/class-budgets.php:53
+msgid "Story Budgets"
+msgstr ""
+
+#: includes/class-budgets.php:55
+msgid "Edit Story Budget"
+msgstr ""
+
+#: includes/class-budgets.php:56
+msgid "Add New Story Budget"
+msgstr ""
+
+#: includes/class-budgets.php:57
+msgid "All Budgets"
+msgstr ""
+
+#: includes/class-budgets.php:58
+msgid "No Budgets"
+msgstr ""
+
+#. Translators: %s is the budget ID or slug.
+#: includes/class-story.php:88
+#, php-format
+msgid "Invalid budget ID or slug \"%s\"."
+msgstr ""
+
+#. Translators: field slug.
+#: includes/class-story.php:138
+#, php-format
+msgid "Invalid field \"%s\"."
+msgstr ""
+
+#. Translators: field slug.
+#: includes/class-story.php:153
+#, php-format
+msgid "Failed to update field \"%s\"."
+msgstr ""
+
+#: includes/class-story.php:163
+msgid "No fields updated."
+msgstr ""
+
+#. Translators: the field slug.
+#: includes/fields/class-abstract-field.php:210
+#, php-format
+msgid "The field slug \"%s\" is too long. Please use a shorter slug."
+msgstr ""
+
+#: includes/fields/class-abstract-field.php:224
+msgid "The field is not editable, so the save_value_callback cannot be set."
+msgstr ""
+
+#: includes/fields/class-abstract-field.php:235
+msgid "post_save_callback is only allowed for read only fields."
+msgstr ""
+
+#. Translators: 1: Field type passed in configuration, 2: Allowed field types.
+#: includes/fields/class-abstract-field.php:305
+#, php-format
+msgid "Invalid field type \"%1$s\". Must be one of: %2$s"
+msgstr ""
+
+#. Translators: %s is the field slug.
+#: includes/fields/class-fields.php:79
+#, php-format
+msgid "Encountered errors registering field: %s."
+msgstr ""
+
+#: includes/fields/class-fields.php:101
+msgid "An internal name for the story."
+msgstr ""
+
+#: includes/fields/class-fields.php:106
+#: dist/story-budget-app.js:155
+#: src/components/create-new-story.js:89
+msgid "Story Name"
+msgstr ""
+
+#: includes/fields/class-fields.php:115
+msgid "The post title."
+msgstr ""
+
+#: includes/fields/class-fields.php:119
+msgid "Title"
+msgstr ""
+
+#: includes/fields/class-fields.php:126
+msgid "An internal description for the story."
+msgstr ""
+
+#: includes/fields/class-fields.php:130
+msgid "Description"
+msgstr ""
+
+#: includes/fields/class-fields.php:139
+msgid "Story budgets this story is assigned to."
+msgstr ""
+
+#: includes/fields/class-fields.php:139
+msgid "Story budget this story is assigned to."
+msgstr ""
+
+#: includes/fields/class-fields.php:150
+#: dist/story-budget-app.js:158
+#: src/app/index.js:75
+msgid "Budgets"
+msgstr ""
+
+#: includes/fields/class-fields.php:173
+msgid "The current editorial status of the story."
+msgstr ""
+
+#: includes/fields/class-fields.php:177
+msgid "Status"
+msgstr ""
+
+#: includes/fields/class-fields.php:189
+msgid "The word count of the story."
+msgstr ""
+
+#: includes/fields/class-fields.php:192
+msgid "Length"
+msgstr ""
+
+#: includes/fields/class-fields.php:201
+msgid "Number of images in story content, not including the featured image."
+msgstr ""
+
+#: includes/fields/class-fields.php:204
+msgid "Images"
+msgstr ""
+
+#: includes/fields/class-fields.php:213
+msgid "Time of last modification."
+msgstr ""
+
+#: includes/fields/class-fields.php:217
+msgid "Last modified"
+msgstr ""
+
+#: includes/fields/class-fields.php:224
+msgid "The date the story was published online."
+msgstr ""
+
+#: includes/fields/class-fields.php:228
+msgid "Publish date"
+msgstr ""
+
+#: includes/fields/class-fields.php:235
+msgid "The user who published the story online."
+msgstr ""
+
+#: includes/fields/class-fields.php:238
+msgid "Published by"
+msgstr ""
+
+#: includes/fields/class-fields.php:246
+msgid "Authors assigned to the post."
+msgstr ""
+
+#: includes/fields/class-fields.php:251
+msgid "Authors"
+msgstr ""
+
+#: includes/fields/class-fields.php:259
+msgid "Categories assigned to the post."
+msgstr ""
+
+#: includes/fields/class-fields.php:262
+msgid "Categories"
+msgstr ""
+
+#: includes/fields/class-fields.php:267
+msgid "Whether the story is currently being edited by another user."
+msgstr ""
+
+#: includes/fields/class-fields.php:271
+msgid "Locked"
+msgstr ""
+
+#: includes/fields/class-fields.php:279
+msgid "The status of the post in WordPress."
+msgstr ""
+
+#: includes/fields/class-fields.php:283
+msgid "WP Status"
+msgstr ""
+
+#. Translators: the post ID.
+#: includes/fields/class-fields.php:429
+#, php-format
+msgid "Story #%d"
+msgstr ""
+
+#: includes/fields/class-read-only-field.php:31
+msgid "Read-only fields must receive a callback function to calculate their value."
+msgstr ""
+
+#: includes/fields/class-read-only-field.php:86
+msgid "Cannot update a read-only field's value."
+msgstr ""
+
+#: includes/fields/class-status.php:95
+msgid "Status slug is required."
+msgstr ""
+
+#: includes/fields/class-status.php:111
+msgid "Invalid status slug."
+msgstr ""
+
+#: includes/fields/class-statuses.php:47
+msgid "Story Statuses"
+msgstr ""
+
+#: includes/fields/class-statuses.php:48
+#: dist/story-budget-editor.js:1
+#: src/editor/index.js:80
+msgid "Story Status"
+msgstr ""
+
+#: includes/fields/class-statuses.php:49
+msgid "Edit Story Status"
+msgstr ""
+
+#: includes/fields/class-statuses.php:50
+msgid "Add New Story Status"
+msgstr ""
+
+#: includes/fields/class-statuses.php:62
+msgid "Required capability to use this status"
+msgstr ""
+
+#: includes/fields/class-statuses.php:84
+msgid "Writing"
+msgstr ""
+
+#: includes/fields/class-statuses.php:91
+msgid "Editing"
+msgstr ""
+
+#: includes/fields/class-statuses.php:97
+msgid "Fact-checking"
+msgstr ""
+
+#: includes/fields/class-statuses.php:103
+msgid "Approved"
+msgstr ""
+
+#: includes/fields/class-statuses.php:109
+msgid "Published"
+msgstr ""
+
+#: includes/fields/class-statuses.php:230
+msgid "Status already exists."
+msgstr ""
+
+#: includes/fields/class-statuses.php:266
+msgid "Invalid status."
+msgstr ""
+
+#: includes/fields/class-statuses.php:273
+msgid "You do not have permission to set this status."
+msgstr ""
+
+#: includes/fields/class-taxonomy-field.php:65
+msgid "Taxonomy is required."
+msgstr ""
+
+#: includes/fields/class-taxonomy-field.php:72
+msgid "Invalid taxonomy."
+msgstr ""
+
+#: includes/fields/class-taxonomy-field.php:77
+msgid "Non-hierarchical taxonomies are not supported."
+msgstr ""
+
+#. translators: %s: field label
+#: dist/story-budget-app.js:143
+#: dist/story-budget-data.js:1
+#: dist/story-budget-editor.js:1
+#: src/utils/fields.js:17
+msgid "Yes"
+msgstr ""
+
+#: dist/story-budget-app.js:143
+#: dist/story-budget-data.js:1
+#: dist/story-budget-editor.js:1
+#: src/utils/fields.js:18
+msgid "No"
+msgstr ""
+
+#: dist/story-budget-app.js:143
+#: dist/story-budget-editor.js:1
+#: src/components/story-field.js:109
+msgid "Click to set"
+msgstr ""
+
+#: dist/story-budget-app.js:143
+#: dist/story-budget-app.js:152
+#: dist/story-budget-editor.js:1
+#: src/components/story-field.js:167
+#: src/hooks/index.js:130
+msgid "View"
+msgstr ""
+
+#: dist/story-budget-app.js:143
+#: dist/story-budget-app.js:152
+#: dist/story-budget-editor.js:1
+#: src/components/story-field.js:172
+#: src/hooks/index.js:159
+msgid "Edit Post"
+msgstr ""
+
+#: dist/story-budget-app.js:143
+#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:155
+#: dist/story-budget-editor.js:1
+#: src/components/budget-field/budget-field-auto-archive-date.js:96
+#: src/components/budget-field/budget-field-name.js:65
+#: src/components/create-budget-modal.js:74
+#: src/components/create-new-story.js:147
+#: src/components/story-field.js:183
+#: src/components/story.js:162
+msgid "Save"
+msgstr ""
+
+#: dist/story-budget-app.js:143
+#: dist/story-budget-app.js:152
+#: dist/story-budget-app.js:155
+#: dist/story-budget-editor.js:1
+#: src/components/budget-field/budget-field-auto-archive-date.js:110
+#: src/components/budget-field/budget-field-name.js:68
+#: src/components/create-budget-modal.js:71
+#: src/components/create-new-story.js:139
+#: src/components/stories-edit.js:269
+#: src/components/story-field.js:193
+#: src/components/story.js:166
+msgid "Cancel"
+msgstr ""
+
+#: dist/story-budget-app.js:143
+#: src/components/stories-edit.js:41
+msgid "Clear field"
+msgstr ""
+
+#: dist/story-budget-app.js:143
+#: src/components/stories-edit.js:44
+msgid "Cancel changes"
+msgstr ""
+
+#. translators: %d: number of stories
+#: dist/story-budget-app.js:144
+#: src/components/stories-edit.js:79
+#, js-format
+msgid "%d stories"
+msgstr ""
+
+#. translators: %1$s: first item title, %2$s: second item title
+#: dist/story-budget-app.js:145
+#: src/components/stories-edit.js:89
+#, js-format
+msgid "%1$s and %2$s"
+msgstr ""
+
+#. translators: %1$s: comma-separated list of item titles, %2$s: last item title
+#: dist/story-budget-app.js:146
+#: src/components/stories-edit.js:98
+#, js-format
+msgid "%1$s, and %2$s"
+msgstr ""
+
+#. translators: %s is the title of the story.
+#. translators: %s is the title for the selected stories.
+#: dist/story-budget-app.js:149
+#: src/components/stories-edit.js:180
+#: src/components/stories-edit.js:185
+#, js-format
+msgid "Editing %s"
+msgstr ""
+
+#: dist/story-budget-app.js:149
+#: src/components/stories-edit.js:237
+msgid "The following fields will be updated:"
+msgstr ""
+
+#: dist/story-budget-app.js:149
+#: src/components/stories-edit.js:249
+msgid "Will be empty"
+msgstr ""
+
+#: dist/story-budget-app.js:149
+#: src/components/stories-edit.js:261
+msgid "Save story"
+msgstr ""
+
+#. translators: %d is the number of stories.
+#: dist/story-budget-app.js:152
+#: src/components/stories-edit.js:264
+#, js-format
+msgid "Save %d stories"
+msgstr ""
+
+#: dist/story-budget-app.js:152
+#: src/hooks/index.js:139
+msgid "Edit Fields"
+msgstr ""
+
+#: dist/story-budget-app.js:152
+#: src/hooks/index.js:147
+msgid "Refresh"
+msgstr ""
+
+#: dist/story-budget-app.js:152
+#: src/components/stories.js:113
+msgid "Fetching Stories…"
+msgstr ""
+
+#: dist/story-budget-app.js:152
+#: src/components/stories.js:124
+msgid "Something went wrong"
+msgstr ""
+
+#: dist/story-budget-app.js:152
+#: src/components/stories.js:143
+msgid "Reconnect"
+msgstr ""
+
+#: dist/story-budget-app.js:152
+#: src/components/stories.js:146
+msgid "Leave remote site"
+msgstr ""
+
+#: dist/story-budget-app.js:152
+#: src/components/stories.js:156
+msgid "Reload page"
+msgstr ""
+
+#: dist/story-budget-app.js:152
+#: src/components/stories.js:186
+msgid "Loading stories…"
+msgstr ""
+
+#: dist/story-budget-app.js:152
+#: src/components/stories.js:187
+msgid "Refresh all stories"
+msgstr ""
+
+#: dist/story-budget-app.js:152
+#: src/components/stories.js:195
+msgid "Edit mode"
+msgstr ""
+
+#: dist/story-budget-app.js:152
+#: src/components/story.js:100
+msgid "Preview is unavailable when accessing remotely"
+msgstr ""
+
+#: dist/story-budget-app.js:152
+#: src/components/story.js:103
+msgid "Preview in a new tab"
+msgstr ""
+
+#: dist/story-budget-app.js:152
+#: src/components/story.js:108
+msgid "Preview is unavailable"
+msgstr ""
+
+#: dist/story-budget-app.js:152
+#: src/components/story.js:166
+msgid "Close"
+msgstr ""
+
+#: dist/story-budget-app.js:152
+#: src/components/story.js:171
+msgid "Edit post"
+msgstr ""
+
+#. translators: 1: Current page number, 2: Total number of pages.
+#: dist/story-budget-app.js:155
+#: src/components/budget-pagination.js:28
+msgid "Current page"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budget-pagination.js:49
+msgid "Previous page"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budget-pagination.js:59
+msgid "Next page"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budget-field/budget-field-name.js:51
+msgid "Edit Budget"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budget-field/budget-field-name.js:56
+msgid "Name"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budget-field/budget-field-auto-archive-date.js:63
+#: src/components/budget-rows.js:236
+msgid "Auto-archive set for "
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budget-field/budget-field-auto-archive-date.js:69
+msgid "Click to set an auto-archive date"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budget-field/budget-field-auto-archive-date.js:77
+msgid "Auto-Archive"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budget-field/budget-field-auto-archive-date.js:90
+msgid "Automatically archive on "
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budget-field/budget-field-auto-archive-date.js:106
+msgid "Reset"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budget-rows.js:159
+msgid "View Stories"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budget-rows.js:169
+msgid "Unarchive"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budget-rows.js:169
+msgid "Archive"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budget-rows.js:254
+msgid "Actions"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budget-rows.js:266
+msgid "No budgets found."
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budgets.js:46
+msgid "Loading…"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budgets.js:47
+msgid "Fetching Budgets…"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budgets.js:107
+msgid "Search"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budgets.js:114
+msgid "Budget Status"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budgets.js:118
+msgid "Active"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budgets.js:122
+msgid "Archived"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/budgets.js:132
+msgid "Edit Mode"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/create-new-story.js:42
+msgid "Select a budget"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/create-new-story.js:46
+msgid "Add new budget"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/create-new-story.js:113
+msgid "New Budget Name"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/create-budget-modal.js:55
+msgid "Budget Name"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/sites.js:25
+msgid "Connect"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/authorizing-site.js:46
+msgid "Connection authorized"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/authorizing-site.js:46
+msgid "Connection denied"
+msgstr ""
+
+#: dist/story-budget-app.js:155
+#: src/components/authorizing-site.js:50
+msgid "Redirecting…"
+msgstr ""
+
+#. translators: %s is the name of the site.
+#: dist/story-budget-app.js:158
+#: src/components/sites-nav.js:27
+#, js-format
+msgid "Leave %s"
+msgstr ""
+
+#: dist/story-budget-app.js:158
+#: src/app/index.js:124
+#: src/components/sites-nav.js:37
+msgid "Connect to remote site"
+msgstr ""
+
+#: dist/story-budget-app.js:158
+#: src/app/index.js:71
+msgid "Stories"
+msgstr ""
+
+#: dist/story-budget-app.js:158
+#: src/app/index.js:115
+#: src/app/index.js:133
+msgid "Add New Story"
+msgstr ""
+
+#: dist/story-budget-app.js:158
+#: src/app/index.js:145
+#: src/app/index.js:152
+msgid "Add New Budget"
+msgstr ""
+
+#: dist/story-budget-data.js:1
+#: src/store/actions.js:181
+msgid "Error creating budget."
+msgstr ""
+
+#: dist/story-budget-data.js:1
+#: src/store/actions.js:238
+msgid "Error creating story."
+msgstr ""
+
+#: dist/story-budget-data.js:1
+#: src/store/actions.js:288
+msgid "Error fetching stories. Please try again."
+msgstr ""
+
+#: dist/story-budget-data.js:1
+#: src/store/actions.js:349
+msgid "Error refreshing stories. Please try again."
+msgstr ""
+
+#: dist/story-budget-data.js:1
+#: src/store/actions.js:389
+msgid "Error fetching story. Please try again."
+msgstr ""
+
+#: dist/story-budget-data.js:1
+#: src/store/actions.js:479
+msgid "Error saving story."
+msgstr ""
+
+#: dist/story-budget-data.js:1
+#: src/store/actions.js:498
+msgid "Error saving field."
+msgstr ""

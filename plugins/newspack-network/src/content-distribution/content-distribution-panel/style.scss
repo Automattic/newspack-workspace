@@ -1,0 +1,76 @@
+.newspack-network-content-distribution-panel {
+	height: calc(100% - 47px);
+
+	.components-panel {
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.components-panel__body:not(.content-distribution-panel-buttons) {
+		border: 0;
+	}
+
+	.content-distribution-panel-header {
+
+		> *:last-child,
+		.components-base-control__field {
+			margin: 0;
+		}
+	}
+
+	.content-distribution-panel-body {
+		flex: 1 1 100%;
+		overflow-y: auto;
+		padding-top: 0;
+	}
+
+	.content-distribution-panel__button-column {
+
+		p:first-child {
+			margin-bottom: 0;
+		}
+
+		.components-button {
+			justify-content: center;
+		}
+	}
+
+	.components-checkbox-control {
+		padding: 12px 0;
+
+		.components-base-control__field {
+			margin-bottom: 0;
+		}
+
+		label {
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+		}
+
+		&:has(input:disabled) {
+			opacity: 0.5;
+		}
+
+		&:has(input[name="select-all"]) label {
+			font-weight: 600;
+		}
+	}
+
+	.selected-sites {
+		display: flex;
+		justify-content: space-between;
+		margin: 0;
+	}
+}
+
+.editor-header {
+
+	.components-button.is-pressed {
+
+		path[fill="#406ebc"] {
+			fill: currentcolor;
+		}
+	}
+}

@@ -1,0 +1,34 @@
+.newspack-ui {
+	&__word-divider {
+		align-items: center;
+		display: flex;
+		font-size: var(--newspack-ui-font-size-xs);
+		gap: var(--newspack-ui-spacer-2);
+		justify-content: space-evenly;
+		margin: var(--newspack-ui-spacer-5) 0;
+
+		&::before,
+		&::after {
+			border-top: 1px solid var(--newspack-ui-color-border);
+			content: "";
+			display: block;
+			width: 100%;
+		}
+	}
+
+	&__gradient-divider {
+		background: linear-gradient(to top, var(--newspack-ui-color-divider-start), var(--newspack-ui-color-divider-end));
+		bottom: 0;
+		height: var(--newspack-ui-spacer-6);
+		left: 0;
+		position: absolute;
+		right: 0;
+	}
+
+	hr {
+		background: var(--newspack-ui-color-border);
+		border: 0;
+		height: 1px;
+		margin: var(--newspack-ui-spacer-6) 0;
+	}
+}

@@ -1,0 +1,56 @@
+@use "../boxes";
+
+.newspack-ui {
+	.newspack-ui__accordion {
+		ul {
+			list-style: none;
+			margin: 0;
+			padding: 0;
+			> li {
+				@extend .newspack-ui__box;
+				@extend .newspack-ui__box--border;
+				padding: var(--newspack-ui-spacer-3) var(--newspack-ui-spacer-3) var(--newspack-ui-spacer-3) calc(var(--newspack-ui-spacer-3) + var(--newspack-ui-spacer-7));
+				position: relative;
+				> input[type="radio"] {
+					position: absolute;
+					left: var(--newspack-ui-spacer-3);
+					top: var(--newspack-ui-spacer-3);
+				}
+				> label {
+					display: flex;
+					gap: var(--newspack-ui-spacer-1);
+					justify-content: space-between;
+				}
+				> div {
+					transition: max-height 0.4s ease-in-out, opacity 0.4s ease-in-out;
+					max-height: 0;
+					opacity: 0;
+					overflow: hidden;
+				}
+				&.active {
+					background-color: var(--newspack-ui-color-neutral-5);
+					border-color: var(--newspack-ui-color-neutral-90);
+					> div {
+						max-height: 1000px;
+						opacity: 1;
+					}
+				}
+				&:only-child {
+					background: none;
+					border: none;
+					padding: 0;
+					> input[type="radio"] {
+						display: none;
+						+ label {
+							display: none;
+						}
+					}
+					> div {
+						max-height: 1000px;
+						opacity: 1;
+					}
+				}
+			}
+		}
+	}
+}

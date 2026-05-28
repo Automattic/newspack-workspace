@@ -1,0 +1,16 @@
+@use "../assets/shared/patterns";
+
+.hide-time .components-datetime__time {
+	display: none;
+}
+
+@media ( min-width: 782px ) {
+	.editor-styles-wrapper .newspack-listings__column-reverse {
+		.block-editor-block-list__block.wp-block-column:first-child {
+			margin-left: 32px;
+		}
+		.block-editor-block-list__block.wp-block-column:last-child {
+			margin-left: 0;
+		}
+	}
+}

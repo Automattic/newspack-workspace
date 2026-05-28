@@ -1,0 +1,136 @@
+@use "sass:color";
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "../shared/scss/mixins";
+
+.newspack-reader-auth {
+	.nphp,
+	input[type="email"].nphp {
+		@include mixins.visuallyHidden;
+	}
+
+	.response-container {
+		margin-bottom: 12px;
+	}
+}
+
+.entry-content .newspack-reader,
+.newspack-reader {
+	/**
+	 * Newsletters subscription lists.
+	 */
+	&__lists {
+		flex: 1 1 100%;
+		font-size: 0.8rem;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 2px;
+		padding: 0.5em;
+		box-sizing: border-box;
+		max-height: 21vh;
+		overflow-y: scroll;
+		h3 {
+			display: none;
+		}
+		ul {
+			list-style: none;
+			margin: 0;
+			padding: 0;
+			display: flex;
+			flex-wrap: wrap;
+			min-width: 100%;
+			li {
+				flex: 1 1 33.3333%;
+				display: flex;
+				min-width: 142px;
+				box-sizing: border-box;
+				margin: 0.5em;
+				padding: 0;
+			}
+		}
+
+		&__checkbox {
+			align-items: center;
+			display: flex;
+			flex: 0 0 auto;
+			height: 1.6em;
+			margin: 0 0.5rem 0 0;
+		}
+
+		&__title {
+			display: block;
+		}
+
+		&__description {
+			display: block;
+			font-size: 0.8rem;
+			color: #757575;
+			margin: 0;
+		}
+	}
+
+	/**
+	 * Third party auth.
+	 */
+	&__logins {
+		font-size: 1rem;
+		margin-top: 0.8rem;
+		&--disabled {
+			button {
+				opacity: 0.5;
+				pointer-events: none;
+			}
+		}
+		button {
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			width: 100%;
+			background-color: wp-colors.$gray-100;
+			color: black;
+			transition: all 300ms;
+			span {
+				padding-left: 10px;
+			}
+		}
+	}
+}
+
+/**
+ * Hide desktop account link on mobile.
+ */
+ul.newspack-reader__account-menu,
+li.menu-item .newspack-reader__account-link {
+	@media screen and (max-width: 959px) {
+		display: none !important;
+	}
+}
+
+/**
+ * Handle header with solid background.
+ */
+.h-sb {
+	.newspack-reader__account-link a {
+		color: #fff;
+	}
+}
+
+/**
+ * Hide WooCommerce page title on My Account pages.
+ */
+.woocommerce-account .entry-header .entry-title {
+	display: none;
+}
+
+/**
+ * Hide login links when logged in.
+ */
+body.logged-in {
+	a[href="#signin_modal"],
+	a[href="#register_modal"] {
+		display: none;
+	}
+
+	.wp-block-buttons:has(> .wp-block-button:only-child > a[href="#signin_modal"]),
+	.wp-block-buttons:has(> .wp-block-button:only-child > a[href="#register_modal"]) {
+		display: none;
+	}
+}

@@ -1,0 +1,38 @@
+@use "breakpoints" as bp;
+
+/* Collection post indicators styles */
+.entry-content {
+	> p.collection-link {
+		color: var(--newspack-theme-color-text-light, var(--wp--preset--color--contrast-3));
+		margin-bottom: -24px;
+
+		a {
+			color: inherit;
+		}
+	}
+}
+
+.collection-card {
+	&__columns,
+	&__content-column .wp-block-group {
+		gap: calc(var(--wp--preset--spacing--20) + 0.5em) !important;
+	}
+
+	&__columns {
+		padding: var(--wp--preset--spacing--20) 0;
+	}
+
+	.collection-image {
+		width: 72px;
+	}
+
+	@media #{bp.$media-md-up} {
+		&__content-column {
+			flex-basis: 75% !important;
+		}
+
+		&__buttons-column {
+			flex-basis: 25% !important;
+		}
+	}
+}

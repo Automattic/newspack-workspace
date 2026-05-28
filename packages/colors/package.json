@@ -1,0 +1,34 @@
+{
+	"name": "newspack-colors",
+	"version": "1.1.0",
+	"description": "A collection of SCSS color tokens for Newspack projects",
+	"main": "colors.module.scss",
+	"sass": "colors.module.scss",
+	"style": "colors.module.scss",
+	"sideEffects": false,
+	"keywords": [
+		"wordpress",
+		"newspack",
+		"colors",
+		"design-tokens",
+		"scss",
+		"sass"
+	],
+	"author": "Newspack",
+	"license": "GPL-2.0-or-later",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Automattic/newspack-workspace.git",
+		"directory": "packages/colors"
+	},
+	"bugs": {
+		"url": "https://github.com/Automattic/newspack-plugin/issues"
+	},
+	"homepage": "https://github.com/Automattic/newspack-plugin/tree/trunk/packages/colors",
+	"files": [
+		"colors.module.scss"
+	],
+	"publishConfig": {
+		"access": "public"
+	}
+}

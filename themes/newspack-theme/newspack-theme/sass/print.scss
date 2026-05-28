@@ -1,0 +1,218 @@
+/*!
+Theme Name: Newspack Theme
+
+Adding print support. The print styles are based on the the great work of
+Andreas Hecht in https://www.jotform.com/blog/css-perfect-print-stylesheet-98272/.
+*/
+
+/* --------------------------------------------------------------
+>>> TABLE OF CONTENTS:
+----------------------------------------------------------------
+# Margins
+# Typography
+# Page breaks
+# Links
+# Visibility
+-------------------------------------------------------------- */
+
+@media print {
+	/* Margins */
+	@page {
+		margin: 1cm 0;
+	}
+
+	#page {
+		display: block;
+		margin: auto;
+		max-width: 94%;
+		width: 94%;
+	}
+
+	#primary,
+	.post-template-single-feature .main-content,
+	.wrapper {
+		max-width: 100%;
+		width: 100%;
+	}
+
+	#page,
+	.admin-bar #page {
+		min-height: 0;
+	}
+
+	#primary {
+		padding: 0;
+	}
+
+	.entry {
+		margin-top: 1em;
+	}
+
+	.entry .entry-header,
+	.site-footer .site-info {
+		margin: 0;
+	}
+
+	/* Borders */
+
+	#page .site-header,
+	#primary {
+		border: 0;
+	}
+
+	/* Fonts */
+
+	body {
+		font: 13pt "Times New Roman", Times, Georgia, serif;
+		line-height: 1.4;
+		background: #fff;
+		color: #000;
+		outline: 0;
+		padding: 0;
+	}
+
+	h1 {
+		font-size: 24pt;
+	}
+
+	h2,
+	h3,
+	h4,
+	.has-regular-font-size,
+	.has-large-font-size,
+	h2.author-title,
+	p.author-bio,
+	.comments-title {
+		font-size: 14pt;
+		margin-top: 25px;
+	}
+
+	/* Page breaks */
+	a,
+	blockquote {
+		page-break-inside: avoid;
+	}
+
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		page-break-after: avoid;
+		page-break-inside: avoid;
+	}
+
+	img {
+		page-break-inside: avoid;
+		page-break-after: avoid;
+	}
+
+	table,
+	pre {
+		page-break-inside: avoid;
+	}
+
+	ul,
+	ol,
+	dl {
+		page-break-before: avoid;
+	}
+
+	/* Links */
+
+	.entry-content a:link,
+	.entry-content a:visited,
+	.entry-content a {
+		background: transparent;
+		font-weight: bold;
+		text-decoration: underline;
+		text-align: left;
+	}
+
+	.entry .entry-content .wp-block-button .wp-block-button__link,
+	.entry .entry-content .button {
+		color: #000;
+		background: transparent;
+	}
+
+	/* Header */
+	.h-stk .site-header {
+		box-shadow: none;
+		position: static;
+	}
+
+	/* Footer */
+	.site-info {
+		background: #fff;
+		color: #000;
+	}
+
+	/* stylelint-disable selector-id-pattern */
+	.nav1,
+	.nav2,
+	.nav3,
+	.highlight-menu-contain,
+	.mobile-menu-toggle,
+	.desktop-menu-toggle,
+	.subpage-toggle,
+	.mobile-sidebar,
+	.desktop-sidebar,
+	.subpage-sidebar,
+	.newspack-reader__account-link__mobile,
+	.jp-relatedposts-i2,
+	.social-navigation,
+	.subpage-toggle-contain,
+	.header-search-contain,
+	.top-header-contain,
+	.bottom-header-contain,
+	.button.mb-cta,
+	.sharedaddy,
+	.entry-footer,
+	.author-bio,
+	.post-navigation,
+	.comments-area .comments-title-wrap,
+	.comment-form-flex,
+	.comment-reply,
+	#respond,
+	.comment .comment-metadata .edit-link,
+	.site-info a.privacy-policy-link,
+	.wc-memberships-frontend-banner,
+	#atomic-proxy-bar,
+	// Ads
+	.widget_newspack-ads-widget,
+	.scaip,
+	//Widgets
+	.widget-area,
+	.above-content.widget,
+	.below-content.widget,
+	.above-footer-widgets,
+	.footer-branding,
+	// Campaigns
+	.newspack-lightbox,
+	.newspack-popup,
+	.newspack-inline-popup {
+		display: none;
+	}
+
+	// Third-party elements to hide
+	broadstreet-zone-container,
+	.bs_zones,
+	.newspack_global_ad,
+	.newspack_amp_sticky_ad,
+	.newspack-ads-blocks-ad-unit,
+	#pico_header,
+	#pico_prompt,
+	#pico_launcher {
+		display: none !important; // !important to override styles loaded after the theme's styles, or inline styles.
+	}
+	/* stylelint-enable */
+
+	/* AMP */
+	/* stylelint-disable selector-type-no-unknown  */
+	amp-ads,
+	amp-next-page {
+		display: none;
+	}
+	/* stylelint-enable */
+}

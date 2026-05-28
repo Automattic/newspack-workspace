@@ -1,0 +1,111 @@
+.wp-block-post-terms {
+	a {
+		transition: color 125ms ease-in-out;
+
+		.has-link-color &:hover {
+			color: color-mix(in srgb, currentcolor 80%, transparent);
+		}
+	}
+
+	&.is-style-buttons {
+		align-items: center;
+		display: flex;
+		flex-wrap: wrap;
+		font-size: var(--wp--preset--font-size--x-small);
+		font-weight: 400;
+		gap: var(--wp--custom--spacing--10);
+		text-transform: none;
+
+		a,
+		> span:not([class*="wp-block-post-terms__"]) {
+			background: var(--wp--preset--color--base-2);
+			border-radius: var(--wp--custom--border--radius-small);
+			color: var(--wp--preset--color--contrast);
+			display: grid;
+			font-weight: 600;
+			min-height: var(--wp--preset--spacing--50);
+			padding: var(--wp--custom--spacing--10) var(--wp--preset--spacing--20);
+			place-items: center;
+			transition:
+				background 125ms ease-in-out,
+				color 125ms ease-in-out,
+				outline 125ms ease-in-out,
+				text-decoration 125ms ease-in-out;
+
+			&:hover {
+				background: var(--wp--preset--color--base-3);
+				text-decoration: none;
+			}
+
+			&:focus {
+				outline: none;
+			}
+
+			&:focus-visible {
+				outline: 2px solid;
+				outline-offset: 1px;
+			}
+		}
+
+		.wp-block-post-terms__prefix {
+			padding-right: var(--wp--custom--spacing--10);
+		}
+
+		.wp-block-post-terms__suffix {
+			padding-left: var(--wp--custom--spacing--10);
+		}
+
+		.wp-block-post-terms__separator {
+			display: none;
+		}
+
+		&:not([class*="-font-size"]) {
+			line-height: var(--wp--custom--line-height--x-small);
+		}
+
+		&[class*="-font-size"] {
+			a,
+			> span:not([class*="wp-block-post-terms__"]) {
+				padding: var(--wp--custom--spacing--25) var(--wp--preset--spacing--40);
+			}
+		}
+
+		&.has-background {
+			a,
+			> span:not([class*="wp-block-post-terms__"]) {
+				background: color-mix(in srgb, currentcolor 15%, transparent);
+				color: currentcolor;
+
+				&:hover {
+					background: color-mix(in srgb, currentcolor 20%, transparent);
+				}
+			}
+		}
+	}
+
+	&.is-style-links {
+		color: var(--wp--preset--color--contrast-3);
+		font-size: var(--wp--preset--font-size--x-small);
+		font-weight: 400;
+		line-height: var(--wp--custom--line-height--x-small);
+		text-transform: none;
+
+		a {
+			text-decoration: underline;
+
+			&:hover {
+				text-decoration: none;
+			}
+		}
+
+		> span:not([class*="wp-block-post-terms__"]) {
+			text-decoration: underline;
+		}
+
+		&:not(.has-link-color) {
+			a {
+				color: inherit;
+			}
+		}
+	}
+}

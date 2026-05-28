@@ -1,0 +1,107 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack-newsletters/subscribe",
+	"title": "Newsletter Subscription Form",
+	"category": "newspack",
+	"description": "Subscribe an email to a newsletter list.",
+	"textdomain": "newspack-newsletters",
+	"attributes": {
+		"displayInputLabels": {
+			"type": "boolean",
+			"default": false
+		},
+		"placeholder": {
+			"type": "string",
+			"default": "Email Address"
+		},
+		"emailLabel": {
+			"type": "string",
+			"default": "Email Address"
+		},
+		"displayNameField": {
+			"type": "boolean",
+			"default": false
+		},
+		"displayLastNameField": {
+			"type": "boolean",
+			"default": false
+		},
+		"namePlaceholder": {
+			"type": "string",
+			"default": "Name"
+		},
+		"nameLabel": {
+			"type": "string",
+			"default": "Name"
+		},
+		"lastNamePlaceholder": {
+			"type": "string",
+			"default": "Last Name"
+		},
+		"lastNameLabel": {
+			"type": "string",
+			"default": "Last Name"
+		},
+		"label": {
+			"type": "string",
+			"default": "Sign up"
+		},
+		"displayDescription": {
+			"type": "boolean",
+			"default": true
+		},
+		"lists": {
+			"type": "array",
+			"default": [],
+			"items": {
+				"type": "string"
+			}
+		},
+		"listsCheckboxes": {
+			"type": "object",
+			"default": {}
+		},
+		"mailchimpDoubleOptIn": {
+			"type": "boolean",
+			"default": false
+		},
+		"successMessage": {
+			"type": "string",
+			"default": "Thank you for signing up!"
+		},
+		"className": {
+			"type": "string"
+		},
+		"textColor": {
+			"type": "string",
+			"default": "#ffffff"
+		},
+		"textColorName": {
+			"type": "string",
+			"default": ""
+		},
+		"backgroundColor": {
+			"type": "string",
+			"default": "#dd3333"
+		},
+		"backgroundColorName": {
+			"type": "string",
+			"default": ""
+		}
+	},
+	"supports": {
+		"html": false,
+		"align": true
+	},
+	"styles": [
+		{
+			"name": "modern",
+			"label": "Modern"
+		},
+		{
+			"name": "modern--grid",
+			"label": "Modern Grid"
+		}
+	]
+}

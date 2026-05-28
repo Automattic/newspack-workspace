@@ -1,0 +1,5 @@
+.has-drop-cap:not(:focus)::first-letter {
+	font-size: 5.625rem;
+	font-weight: inherit;
+	margin: 0.13em 0.1em var(--wp--preset--spacing--50);
+}

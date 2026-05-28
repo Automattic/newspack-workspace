@@ -1,0 +1,85 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+@use "../vars" as gate;
+
+.edit-post-post-visibility {
+	display: none;
+}
+
+.components-base-control {
+	margin-bottom: 16px;
+	&:last-child {
+		margin-bottom: 0;
+	}
+}
+
+.wp-block {
+	.editor-styles-wrapper[data-overlay-size="x-small"] & {
+		max-width: gate.$size__x-small;
+	}
+	.editor-styles-wrapper[data-overlay-size="small"] & {
+		max-width: gate.$size__small;
+	}
+	.editor-styles-wrapper[data-overlay-size="medium"] & {
+		max-width: gate.$size__medium;
+	}
+	.editor-styles-wrapper[data-overlay-size="large"] &,
+	.editor-styles-wrapper[data-overlay-size="full-width"] & {
+		max-width: gate.$size__large;
+	}
+}
+
+.newspack-content-gate-style-selector {
+	display: grid;
+	gap: 8px;
+	grid-template-columns: repeat(2, 1fr);
+	margin-bottom: 16px;
+
+	.components-button {
+		justify-content: center;
+
+		&.is-secondary {
+			box-shadow: inset 0 0 0 1px wp-colors.$gray-400;
+			color: wp-colors.$gray-900;
+		}
+	}
+}
+
+.newspack-content-gate-access-rules {
+	.components-card__divider {
+		margin: 0;
+	}
+}
+
+/**
+ * Hide the title input for the gate layout post type.
+ */
+.post-type-np_gate_layout .editor-post-title {
+	display: none;
+}
+
+/**
+ * Access control block visibility panel.
+ */
+.newspack-access-control-block-visibility-panel {
+	.components-base-control,
+	.components-form-token-field {
+		width: 100%;
+	}
+	// Gutenberg's `.block-editor-block-inspector p:not(.components-base-control__help)` rule
+	// strips the emotion margin-top on FormTokenField's help text. Nested here to bump
+	// specificity above Gutenberg's and restore the gap.
+	.components-form-token-field .components-form-token-field__help {
+		margin-top: wp-vars.$grid-unit-10;
+	}
+	.components-toggle-control {
+		margin-top: wp-vars.$grid-unit-10;
+		width: 100%;
+		.components-base-control__field {
+			margin-bottom: wp-vars.$grid-unit-05;
+		}
+		.components-base-control__help {
+			margin-top: 0;
+		}
+	}
+}

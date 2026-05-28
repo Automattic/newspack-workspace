@@ -1,0 +1,16 @@
+.newspack-newsletters {
+	&__testing-controls {
+		display: flex;
+
+		.components-button {
+			flex: 1 1 100%;
+			justify-content: center;
+		}
+	}
+
+	&-button--full-width {
+		display: flex;
+		flex: 1 1 100%;
+		justify-content: center;
+	}
+}

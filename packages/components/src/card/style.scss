@@ -1,0 +1,168 @@
+/**
+ * Card
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-card {
+	border-radius: 2px;
+	border: 1px solid wp-colors.$gray-300;
+	color: wp-colors.$gray-900;
+	margin: 32px 0;
+	padding: 16px 48px;
+
+	@media screen and ( min-width: 744px ) {
+		padding: 32px 64px;
+	}
+
+	// Buttons Card
+
+	&__buttons-card {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 16px;
+		margin: 32px 0;
+	}
+
+	// Header Actions Card
+
+	&__header-actions {
+		align-items: center;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+		justify-content: space-between;
+		margin-bottom: -16px;
+
+		> * {
+			margin-bottom: 0 !important;
+			margin-top: 0 !important;
+		}
+
+		.newspack-select-control {
+			.components-base-control__field {
+				margin-bottom: 0;
+			}
+		}
+	}
+
+	// Is Narrow
+
+	&__is-narrow {
+		margin-left: auto;
+		margin-right: auto;
+
+		@media screen and ( min-width: 615px ) {
+			max-width: 583px;
+		}
+	}
+
+	// Is Small
+
+	&__is-small {
+		padding: 16px;
+
+		> *:first-child {
+			margin-top: 0 !important;
+		}
+
+		> *:last-child {
+			margin-bottom: 0 !important;
+		}
+
+		> p {
+			margin: 16px 0 !important;
+		}
+
+		& + & {
+			margin-top: -16px;
+		}
+	}
+
+	// Is Medium
+
+	&__is-medium {
+		padding: 32px;
+
+		> *:first-child {
+			margin-top: 0 !important;
+		}
+
+		> *:last-child {
+			margin-bottom: 0 !important;
+		}
+	}
+
+	// Is White
+
+	&__is-white {
+		background: white;
+		border: 0;
+	}
+
+	// No Border
+
+	&__no-border {
+		border-radius: 0;
+		border: 0;
+		padding: 0;
+	}
+
+	// Margin
+
+	&.mt64 {
+		margin-top: 64px;
+	}
+
+	&.mt16 {
+		margin-top: 16px;
+	}
+
+	// Typography
+
+	small {
+		font-size: 12px;
+		line-height: 1.4;
+	}
+
+	code {
+		background: wp-colors.$gray-100;
+		color: wp-colors.$gray-900;
+		padding: 0 0.5em;
+	}
+
+	// Thematic Break
+
+	hr:not(.newspack-divider) {
+		background: wp-colors.$gray-300;
+		border: 0;
+		height: 1px;
+		margin: 32px 0;
+
+		@media screen and ( min-width: 744px ) {
+			margin: 64px 0;
+		}
+	}
+
+	// Separator
+
+	.sep {
+		background: wp-colors.$gray-300;
+		height: 1px;
+		margin-left: 8px;
+		margin-right: 8px;
+		width: 12px;
+
+		&__inline {
+			display: inline-block;
+			line-height: 1.5;
+			vertical-align: middle;
+		}
+	}
+
+	// Error
+
+	.newspack-error {
+		color: wp-colors.$alert-red;
+	}
+}

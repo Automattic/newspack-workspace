@@ -1,0 +1,77 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "author-profile",
+	"category": "newspack",
+	"usesContext": [ "postId", "postType" ],
+	"attributes": {
+		"className": {
+			"type": "string",
+			"default": ""
+		},
+		"authorId": {
+			"type": "number",
+			"default": 0
+		},
+		"isContextual": {
+			"type": "boolean",
+			"default": false
+		},
+		"layoutVersion": {
+			"type": "number",
+			"default": 1
+		},
+		"showEmptyBio": {
+			"type": "boolean",
+			"default": true
+		},
+		"isGuestAuthor": {
+			"type": "boolean",
+			"default": true
+		},
+		"showBio": {
+			"type": "boolean",
+			"default": true
+		},
+		"showSocial": {
+			"type": "boolean",
+			"default": true
+		},
+		"showEmail": {
+			"type": "boolean",
+			"default": true
+		},
+		"showArchiveLink": {
+			"type": "boolean",
+			"default": true
+		},
+		"textSize": {
+			"type": "string",
+			"default": "medium"
+		},
+		"showAvatar": {
+			"type": "boolean",
+			"default": true
+		},
+		"avatarAlignment": {
+			"type": "string",
+			"default": "left"
+		},
+		"avatarBorderRadius": {
+			"type": "string",
+			"default": "50%"
+		},
+		"avatarSize": {
+			"type": "number",
+			"default": 128
+		},
+		"avatarHideDefault": {
+			"type": "boolean",
+			"default": false
+		},
+		"variation": {
+			"type": "string",
+			"default": ""
+		}
+	}
+}

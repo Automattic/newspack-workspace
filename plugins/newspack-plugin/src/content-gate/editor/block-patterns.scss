@@ -1,0 +1,103 @@
+.editor-styles-wrapper .newspack-content-gate,
+.newspack-content-gate {
+	/**
+	 * Apply RAS CTA color to outline button.
+	 */
+	.is-style-outline,
+	.is-style-outline .wp-block-button__link:not(.has-text-color) {
+		color: #cc1818;
+		border-color: #cc1818;
+	}
+	/**
+	 * Feature list.
+	 */
+	.newspack-feature-list {
+		list-style: none;
+		padding-left: 0;
+		li {
+			position: relative;
+			padding-left: 24px;
+			&::before {
+				content: "";
+				position: absolute;
+				left: 0;
+				top: 5px;
+				width: 12px;
+				height: 12px;
+				background:
+					url("data:image/svg+xml;utf8,<?xml version='1.0' encoding='utf-8'?><svg width='12' height='12' viewBox='0 0 12 12' xmlns='http://www.w3.org/2000/svg'><path d='M10.7 0.599976L4.39995 9.09998L1.09995 6.59998L0.199951 7.79998L4.69995 11.2L11.9 1.49998L10.7 0.599976Z'/></svg>")
+					no-repeat;
+				background-position: center;
+			}
+		}
+	}
+	/**
+	 * Logged-out only content.
+	 */
+	.logged-in & {
+		.newspack-sign-in {
+			display: none;
+		}
+	}
+	/**
+	 * Donate block tweaks.
+	 */
+	.wpbnbd--tiers-based {
+		&.is-style-minimal form {
+			text-align: left;
+		}
+		&.is-style-minimal button[type="submit"] {
+			margin: 0;
+			width: 100%;
+		}
+		.wpbnbd {
+			&__tiers {
+				&__options {
+					background: rgb(238, 238, 238);
+					margin: 0;
+					padding: 10px;
+				}
+				&__tier {
+					background: transparent;
+					border: 0;
+					position: relative;
+					&:not(:last-child)::after {
+						@media only screen and ( min-width: 782px ) {
+							content: "";
+							position: absolute;
+							border-right: 1px solid #ccc;
+							bottom: 19px;
+							top: 19px;
+							right: -10px;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	/**
+	 * Reader Registration block.
+	 */
+	.newspack-registration {
+		&__have-account {
+			display: none;
+		}
+		.newspack-reader__lists {
+			font-size: 16px;
+			background: rgb(238, 238, 238);
+			border: 0;
+			padding-left: 1em;
+			padding-right: 1em;
+		}
+	}
+
+	/**
+	 * Columns block tweaks.
+	 */
+	@media only screen and ( max-width: 781px ) {
+		.wp-block-column:empty {
+			display: none;
+		}
+	}
+}

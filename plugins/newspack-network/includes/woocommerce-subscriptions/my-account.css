@@ -1,0 +1,13 @@
+#newspack-network-subscriptions table {
+    margin-top: 24px;
+}
+
+#newspack-network-subscriptions td {
+    padding: 16px 0px;
+    word-break: break-word;
+}
+
+#newspack-network-subscriptions th.newspack-network-subscriptions-status,
+#newspack-network-subscriptions td.newspack-network-subscriptions-status {
+    padding-left: 16px;
+}

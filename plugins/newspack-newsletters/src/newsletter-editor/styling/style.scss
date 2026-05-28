@@ -1,0 +1,63 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-newsletters {
+	&__color-panel {
+		> .components-base-control {
+			max-width: 100%;
+			min-width: 100%;
+		}
+
+		.components-color-picker__inputs-wrapper {
+			min-width: 100%;
+		}
+
+		.components-color-picker__body {
+			padding-left: 0;
+			padding-right: 0;
+		}
+
+		label {
+			margin-right: 0;
+			max-width: 100%;
+		}
+	}
+
+	&__css-panel {
+		.components-base-control {
+			max-width: 100%;
+		}
+		.block-editor-plain-text {
+			background: #fff !important;
+			border: 1px solid #1e1e1e !important;
+			border-radius: 2px !important;
+			box-shadow: none !important;
+			box-sizing: border-box;
+			color: #1e1e1e !important;
+			direction: ltr;
+			font-family: Menlo, Consolas, monaco, monospace !important;
+			font-size: 16px !important;
+			max-height: 250px;
+			padding: 12px !important;
+		}
+		@media (min-width: 600px) {
+			.block-editor-plain-text {
+				font-size: 13px !important;
+			}
+		}
+		.block-editor-plain-text:focus {
+			border-color: var(--wp-admin-theme-color) !important;
+			box-shadow: 0 0 0 1px var(--wp-admin-theme-color) !important;
+			outline: 2px solid #0000 !important;
+		}
+	}
+}
+
+.interface-complementary-area {
+	& > &-header {
+		border-top: 0;
+	}
+
+	&__pin-unpin-item {
+		display: none !important;
+	}
+}

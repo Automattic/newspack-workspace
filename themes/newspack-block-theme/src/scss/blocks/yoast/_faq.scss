@@ -1,0 +1,36 @@
+.wp-block-yoast-faq-block {
+	font-size: var(--wp--preset--font-size--small);
+	line-height: var(--wp--custom--line-height--small);
+
+	.schema-faq-section {
+		border: 1px solid var(--wp--preset--color--base-3);
+		border-radius: var(--wp--custom--border--radius-medium);
+		padding: var(--wp--preset--spacing--30);
+
+		.schema-faq-answer {
+			color: var(--wp--preset--color--contrast-3);
+			margin: var(--wp--preset--spacing--30) 0 0;
+
+			> * {
+				margin-top: var(--wp--preset--spacing--20);
+			}
+
+			img {
+				display: block;
+			}
+
+			.has-text-color & {
+				color: inherit;
+			}
+		}
+
+		+ .schema-faq-section {
+			margin-top: var(--wp--preset--spacing--30);
+		}
+
+		.has-background & {
+			border-color: currentcolor; // Fallback
+			border-color: color-mix(in srgb, currentcolor 15%, transparent); // #DDDDDD if currentcolor is #1E1E1E
+		}
+	}
+}

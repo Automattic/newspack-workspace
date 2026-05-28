@@ -1,0 +1,48 @@
+@use "breakpoints" as bp;
+@use "intro";
+
+/* Collections archive template styles */
+.post-type-archive-newspack_collection {
+	main#main {
+		width: 100%;
+
+		hr {
+			margin: 16px 0;
+			width: 100%;
+		}
+	}
+
+	.collections-filter {
+		font-size: var(--newspack-theme-font-size-base-sm);
+		gap: 16px;
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: right;
+		margin-bottom: 16px;
+		width: 100%;
+
+		&__select {
+			align-items: center;
+			display: inline-flex;
+			flex: 1 1 100%;
+			flex-wrap: wrap;
+			gap: 0.5em;
+
+			select {
+				width: 100%;
+			}
+
+			@media #{bp.$media-sm-up} {
+				flex: 1;
+			}
+
+			@media #{bp.$media-md-up} {
+				flex: 0 0 auto;
+
+				select {
+					width: 128px;
+				}
+			}
+		}
+	}
+}

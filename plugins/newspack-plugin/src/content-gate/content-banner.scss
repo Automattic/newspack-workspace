@@ -1,0 +1,169 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "../../packages/colors/colors.module" as colors;
+@use "../newspack-ui/scss/mixins" as mixins;
+
+.sd-social-icon .sd-content ul li[class*="share-"].share-newspack-gift-article .option a.no-text span::after {
+	content: "Gift this article";
+	margin-left: calc(-6px - 0.25em);
+}
+
+li.service.share-newspack-gift-article span::before,
+.sd-social-icon .sd-content ul li.share-newspack-gift-article a::before,
+.sd-social-text .sd-content ul li.share-newspack-gift-article a::before,
+.sd-content ul li.share-newspack-gift-article div.option.option-smart-off a::before,
+.sd-social-icon-text .sd-content li.share-newspack-gift-article a::before,
+.sd-social-official .sd-content li.share-newspack-gift-article a::before {
+	content: url("data:image/svg+xml,%3Csvg width='18' height='18' viewBox='0 0 18 18' fill='none' xmlns='http://www.w3.org/2000/svg' aria-hidden='true' focusable='false'%3E%3Cpath d='M12.333 1C13.6677 1 14.75 2.0823 14.75 3.41699V3.75C14.75 4.20058 14.6394 4.62468 14.4473 5H15.5C16.2767 5 16.9154 5.59028 16.9922 6.34668L17 6.5V15.5C17 16.3284 16.3284 17 15.5 17H2.5C1.72334 17 1.08461 16.4097 1.00781 15.6533L1 15.5V6.5L1.00781 6.34668C1.07949 5.64069 1.64069 5.07949 2.34668 5.00781L2.5 5H3.55273C3.36065 4.62468 3.25 4.20058 3.25 3.75V3.41699C3.25 2.0823 4.3323 1 5.66699 1C7.0436 1.00011 8.2604 1.68183 9 2.72559C9.7396 1.68183 10.9564 1.00011 12.333 1ZM2.5 15.5H8.25V6.5H2.5V15.5ZM9.75 15.5H15.5V6.5H9.75V15.5ZM5.66699 2.5C5.16073 2.5 4.75 2.91073 4.75 3.41699V3.75C4.75 4.44036 5.30964 5 6 5H8.2461C8.2021 3.61198 7.0657 2.50017 5.66699 2.5ZM12.333 2.5C10.9343 2.50017 9.7979 3.61198 9.7539 5H12C12.6904 5 13.25 4.44036 13.25 3.75V3.41699C13.25 2.91073 12.8393 2.5 12.333 2.5Z' fill='%232C3338'/%3E%3C/svg%3E");
+}
+
+.sd-social-icon .sd-content ul li[class*="share-"].share-newspack-gift-article a.sd-button {
+	background: var(--newspack-theme-color-primary-against-white, var(--newspack-ui-color-primary-60, #{colors.$primary-600})) !important;
+	color: var(--newspack-theme-color-against-primary, var(--newspack-ui-color-neutral-0, #{colors.$neutral-000})) !important;
+
+	&::before {
+		content: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg' aria-hidden='true' focusable='false'%3E%3Cpath d='M15.333 4C16.6677 4 17.75 5.0823 17.75 6.41699V6.75C17.75 7.20058 17.6394 7.62468 17.4473 8H18.5C19.2767 8 19.9154 8.59028 19.9922 9.34668L20 9.5V18.5C20 19.3284 19.3284 20 18.5 20H5.5C4.72334 20 4.08461 19.4097 4.00781 18.6533L4 18.5V9.5L4.00781 9.34668C4.07949 8.64069 4.64069 8.07949 5.34668 8.00781L5.5 8H6.55273C6.36065 7.62468 6.25 7.20058 6.25 6.75V6.41699C6.25 5.0823 7.3323 4 8.66699 4C10.0436 4.00011 11.2604 4.68183 12 5.72559C12.7396 4.68183 13.9564 4.00011 15.333 4ZM5.5 18.5H11.25V9.5H5.5V18.5ZM12.75 18.5H18.5V9.5H12.75V18.5ZM8.66699 5.5C8.16073 5.5 7.75 5.91073 7.75 6.41699V6.75C7.75 7.44036 8.30964 8 9 8H11.2461C11.2021 6.61198 10.0657 5.50017 8.66699 5.5ZM15.333 5.5C13.9343 5.50017 12.7979 6.61198 12.7539 8H15C15.6904 8 16.25 7.44036 16.25 6.75V6.41699C16.25 5.91073 15.8393 5.5 15.333 5.5Z' fill='%23FFFFFF'/%3E%3C/svg%3E");
+		left: 8px;
+		top: 4px;
+		position: absolute;
+	}
+}
+
+// Override Jetpack "Icon only" sharing button styles.
+.sd-social-icon .sd-content ul li[class*="share-"].share-newspack-gift-article a,
+.sd-social-icon .sd-content ul li[class*="share-"].share-newspack-gift-article a:hover,
+.sd-social-icon .sd-content ul li[class*="share-"].share-newspack-gift-article div.option a {
+	border-radius: 999em;
+	margin-top: 0 !important;
+	max-width: none;
+	padding: 6px 12px 6px 34px;
+	position: relative;
+	top: 1px !important;
+
+	span:not([hidden]) {
+		font-family: var(--newspack-ui-font-family, system-ui, sans-serif);
+		font-size: var(--newspack-ui-font-size-xs, 14px);
+		font-weight: 600;
+		line-height: var(--newspack-ui-line-height-xs, 1.4286);
+		margin-top: 0 !important;
+	}
+}
+body .sd-social-icon .sd-content ul li[class*="share-"].share-newspack-gift-article a.sd-button.share-icon.no-text span:not(.custom-sharing-span,[hidden]) {
+	display: inline-block;
+	margin-top: 1px;
+}
+
+body.newspack-is-gifted-post,
+body.newspack-has-countdown-banner {
+	.site {
+		padding-bottom: var(--newspack-content-banner-cta-offset, 72px);
+	}
+
+	.newspack-lightbox-placement-bottom {
+		bottom: var(--newspack-content-banner-cta-offset, 72px);
+	}
+}
+
+.newspack-content-gifting,
+.newspack-countdown-banner {
+	&__cta {
+		bottom: 0;
+		left: 0;
+		padding: var(--newspack-ui-spacer-2) var(--newspack-ui-spacer-3);
+		position: fixed;
+		right: 0;
+		transition: opacity 0.3s ease-in-out;
+		z-index: 99999;
+		@include mixins.newspack-ui-elevation( 3 );
+
+		&--hidden {
+			opacity: 0;
+		}
+
+		&__content {
+			align-items: center;
+			color: inherit;
+			display: flex;
+			gap: var(--newspack-ui-spacer-2);
+			justify-content: space-between;
+			min-height: var(--newspack-ui-spacer-9);
+
+			&__wrapper {
+				> span {
+					display: block;
+				}
+				a {
+					text-decoration: underline;
+				}
+			}
+
+			&__message {
+				color: var(--newspack-content-banner-message-color, inherit);
+			}
+			.newspack-ui__button {
+				width: 100%;
+
+				@include mixins.media( mobile ) {
+					width: auto;
+				}
+			}
+			strong {
+				font-weight: 600;
+			}
+			a {
+				color: var(--newspack-ui-color-primary-60);
+				text-decoration: underline;
+			}
+
+			&__links {
+				color: var(--newspack-content-banner__cta__content__links--color, inherit);
+			}
+		}
+
+		&.is-style-light {
+			--newspack-content-banner-message-color: var(--newspack-ui-color-neutral-60);
+			--newspack-content-banner__cta__content__links--color: var(--newspack-ui-color-neutral-60);
+			background: var(--newspack-ui-color-neutral-0);
+			color: var(--newspack-ui-color-neutral-90);
+		}
+
+		&.is-style-dark {
+			background: var(--newspack-ui-color-neutral-90);
+			color: var(--newspack-ui-color-neutral-0);
+		}
+
+		.newspack-wizard & {
+			box-shadow: none;
+			position: relative;
+			z-index: 0;
+
+			&-preview {
+				border: 1px solid var(--wp-components-color-gray-600, #{wp-colors.$gray-600});
+				border-radius: 2px;
+				padding: 3px;
+				pointer-events: none;
+			}
+		}
+	}
+
+	&__gift-button {
+		float: right;
+
+		svg {
+			margin-left: -4px;
+		}
+	}
+
+	&__copy-button {
+		margin-top: var(--newspack-ui-spacer-2) !important;
+	}
+}
+
+#newspack-content-gifting-modal {
+	.newspack-ui__spinner {
+		opacity: 1 !important;
+	}
+
+	.newspack-ui__notice {
+		margin-bottom: 0;
+	}
+}

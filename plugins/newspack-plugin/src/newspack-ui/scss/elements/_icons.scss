@@ -1,0 +1,38 @@
+/**
+ * SVG icons.
+ */
+.newspack-ui {
+	&__icon {
+		align-items: center;
+		border-radius: 100%;
+		display: flex;
+		height: var(--newspack-ui-spacer-8);
+		justify-content: center;
+		margin: 0 auto var(--newspack-ui-spacer-2);
+		width: var(--newspack-ui-spacer-8);
+
+		&--neutral {
+			background-color: var(--newspack-ui-color-neutral-90);
+			color: var(--newspack-ui-color-body-bg);
+		}
+
+		&--success {
+			background: var(--newspack-ui-color-success-50);
+			color: var(--newspack-ui-color-body-bg);
+		}
+
+		&--error {
+			background: var(--newspack-ui-color-error-50);
+			color: var(--newspack-ui-color-body-bg);
+		}
+
+		&--warning {
+			background: var(--newspack-ui-color-warning-30);
+			color: var(--newspack-ui-color-body-bg);
+		}
+
+		svg {
+			fill: currentcolor;
+		}
+	}
+}

@@ -1,0 +1,185 @@
+/*!
+ * Newspack Theme Editor Overrides
+ *
+ * This CSS files contains Gutenberg editor styles that need to reference classes on the body tag.
+ */
+
+/** === Includes === */
+
+@use "variables-site/variables-site";
+@use "mixins/mixins-main";
+@use "mixins/utilities";
+@use "variables-site/structure";
+
+/** === Default Template === */
+
+@include utilities.media( mobile ) {
+	body.admin-color-newspack-default-template
+	.block-editor-block-list__layout.is-root-container > .wp-block[data-align="full"] {
+		margin-left: auto;
+		margin-right: auto;
+	}
+}
+
+/** === One Column Templates === */
+
+@include utilities.media( desktop ) {
+	body.admin-color-newspack-single-column-template .wp-block[data-align="wide"] {
+		max-width: 1230px;
+	}
+}
+
+/** === One-Column Template === */
+
+body.admin-color-newspack-single-column-template .wp-block-column.wp-block {
+	max-width: 100%;
+}
+
+/** === Wide Templates === */
+
+body.admin-color-newspack-static-front-page,
+body.admin-color-newspack-single-wide-template {
+	.wp-block {
+		max-width: 1230px; // 1200px + 30px to offset padding
+
+		&.wp-block-group.is-layout-flex > * {
+			max-width: 100%;
+		}
+	}
+
+	.wp-block[data-align="wide"] {
+		max-width: 1430px; // 1400px + 30px to offset padding
+	}
+
+	.wp-block[data-type="core/group"][data-align="wide"],
+	.wp-block[data-type="core/group"][data-align="full"] {
+		.wp-block:not([data-align="wide"]):not([data-align="full"]) {
+			max-width: 1230px; // 1200px + 30px to offset padding
+		}
+
+		.wp-block[data-align="wide"] {
+			max-width: 1430px; // 1400px + 30px to offset padding
+		}
+	}
+
+	figcaption,
+	.swiper-pagination-simple {
+		max-width: 1230px;
+	}
+
+	.wp-block-column {
+		&,
+		.wp-block {
+			max-width: 100%;
+		}
+	}
+}
+
+/** === Wide Blocks === */
+
+body.admin-color-newspack-static-front-page,
+body.admin-color-newspack-single-wide-template,
+body.admin-color-newspack-single-column-template {
+	.wp-block[data-align="full"] {
+		max-width: 100vw;
+		width: auto;
+
+		.wp-block-group:not(.has-background):not(.is-style-border) {
+			padding-left: #{0.5 * structure.$size__spacing-unit};
+			padding-right: #{0.5 * structure.$size__spacing-unit};
+		}
+	}
+
+	.wp-block[data-align="left"] {
+		position: relative;
+
+		@include utilities.media( desktop ) {
+			left: #{-1 * structure.$size__spacing-unit};
+		}
+		@include utilities.media( wide ) {
+			left: #{-2 * structure.$size__spacing-unit};
+		}
+
+		@include utilities.media( tablet ) {
+			> .wp-block-image {
+				margin-right: 0;
+			}
+		}
+	}
+
+	.wp-block .wp-block[data-align="left"] {
+		left: auto;
+	}
+
+	.wp-block[data-align="right"] {
+		position: relative;
+
+		@include utilities.media( desktop ) {
+			right: #{-2 * structure.$size__spacing-unit};
+		}
+		@include utilities.media( wide ) {
+			right: #{-4 * structure.$size__spacing-unit};
+		}
+
+		@include utilities.media( tablet ) {
+			> .wp-block-image {
+				margin-left: 0;
+			}
+		}
+	}
+
+	.wp-block .wp-block[data-align="right"] {
+		right: auto;
+	}
+}
+
+/** === Single Posts === */
+
+body.post-type-post {
+	.editor-post-title__block,
+	.edit-post-visual-editor__post-title-wrapper,
+	.editor-styles-wrapper h1.wp-block-post-title,
+	.editor-post-title__input,
+	#newspack-post-subtitle-element {
+		max-width: 1200px;
+	}
+
+	.edit-post-visual-editor__post-title-wrapper,
+	#newspack-post-subtitle-element {
+		margin-left: auto;
+		margin-right: auto;
+	}
+
+	.editor-post-title__block .editor-post-title__input,
+	.editor-styles-wrapper h1.wp-block-post-title {
+		font-size: var(--newspack-theme-font-size-xl);
+
+		@include utilities.media( mobile ) {
+			font-size: var(--newspack-theme-font-size-xxl);
+		}
+
+		@include utilities.media( tablet ) {
+			font-size: var(--newspack-theme-font-size-xxxl);
+		}
+
+		@include utilities.media( desktop ) {
+			font-size: var(--newspack-theme-font-size-xxxxl);
+		}
+	}
+}
+
+/** === Post Meta Toggles === */
+
+.components-panel__row.newspack__post-meta-toggles {
+	flex-direction: column;
+
+	> div {
+		display: flex;
+		justify-content: space-between;
+		width: 100%;
+
+		+ div {
+			margin-top: 1rem;
+		}
+	}
+}

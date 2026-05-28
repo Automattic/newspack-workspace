@@ -1,0 +1,69 @@
+name: Publish baseline releases
+
+# One-shot cutover step: publish each package's CURRENT production release as a
+# real GitHub release on the monorepo, so newspack-wpcloud-externals reaches
+# production parity before Atomic flips its source to the monorepo. Zip assets
+# are sourced (downloaded) from each plugin/theme's latest legacy release — no
+# rebuild — EXCEPT for shipping packages that have never been released (e.g.
+# newspack-story-budget), which are built from the tree. The created
+# `<pkgName>@<version>` tags double as the multi-semantic-release baseline, so
+# this run also replaces seed-baseline-tags.sh. Manual trigger only.
+# See publish-baseline-releases-plan.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Commit/branch to tag the monorepo releases at (default: the ref this workflow runs on).'
+        required: false
+        default: ''
+      dry_run:
+        description: 'Dry run: resolve + list, but create no releases.'
+        type: boolean
+        default: false
+
+concurrency:
+  group: publish-baseline-releases
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  PNPM_VERSION: 10.33.0
+
+jobs:
+  publish-baseline:
+    name: Publish baseline releases
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.ref }}
+          token: ${{ secrets.GH_TOKEN }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer
+      # Most packages are sourced from legacy release zips (no build). The
+      # install + shared-package build is needed only so never-released shipping
+      # packages (e.g. newspack-story-budget) can be built from the tree.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build shared packages
+        run: pnpm run build:packages
+      - name: Publish baseline releases
+        run: ./.github/scripts/publish-baseline-releases.sh
+        env:
+          # TARGET defaults to HEAD = the checked-out commit, the correct cutover
+          # commit for either an empty or explicit `ref`.
+          DRY_RUN: ${{ github.event.inputs.dry_run == 'true' && '1' || '0' }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}

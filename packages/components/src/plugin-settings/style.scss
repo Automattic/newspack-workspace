@@ -1,0 +1,7 @@
+.newspack-card:not(.newspack-settings__no-border) {
+	.newspack-action-card__region-children {
+		> .newspack-grid {
+			margin: 32px 0 0 !important;
+		}
+	}
+}

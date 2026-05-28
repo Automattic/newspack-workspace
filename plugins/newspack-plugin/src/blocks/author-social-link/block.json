@@ -1,0 +1,21 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack/author-social-link",
+	"title": "Author Social Link",
+	"category": "newspack",
+	"parent": [ "newspack/author-profile-social" ],
+	"description": "Display a single social media icon for the author.",
+	"usesContext": [ "newspack-blocks/author", "newspack-blocks/iconSize" ],
+	"textdomain": "newspack-plugin",
+	"attributes": {
+		"service": {
+			"type": "string",
+			"default": ""
+		}
+	},
+	"supports": {
+		"html": false,
+		"reusable": false
+	}
+}

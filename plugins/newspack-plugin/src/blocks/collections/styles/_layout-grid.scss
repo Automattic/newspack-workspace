@@ -1,0 +1,75 @@
+@use "../../../collections/frontend/breakpoints" as bp;
+
+.wp-block-newspack-collections {
+	// Layout: Grid.
+	&.layout-grid {
+		display: grid;
+		gap: 32px;
+
+		// Mobile first: 2 columns.
+		&:not(.columns-1) {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		// Tablet: 3 columns.
+		@media #{bp.$media-sm-up} {
+			&:not(.columns-1, .columns-2) {
+				grid-template-columns: repeat(3, minmax(0, 1fr));
+				gap: 16px;
+			}
+		}
+
+		// Medium screens: restore larger gap
+		@media #{bp.$media-md-up} {
+			gap: 32px;
+		}
+
+		// Desktop: respect column setting.
+		@media #{bp.$media-lg-up} {
+			&.columns-1 {
+				grid-template-columns: 1fr;
+			}
+			&.columns-2 {
+				grid-template-columns: repeat(2, minmax(0, 1fr));
+			}
+			&.columns-3 {
+				grid-template-columns: repeat(3, minmax(0, 1fr));
+			}
+			&.columns-4 {
+				grid-template-columns: repeat(4, minmax(0, 1fr));
+			}
+			&.columns-5 {
+				grid-template-columns: repeat(5, minmax(0, 1fr));
+			}
+			&.columns-6 {
+				grid-template-columns: repeat(6, minmax(0, 1fr));
+			}
+		}
+
+		.wp-block-newspack-collections__item {
+			display: flex;
+			flex-direction: column;
+			height: 100%;
+		}
+
+		.wp-block-newspack-collections__categories {
+			margin: 24px 0 -16px;
+		}
+
+		.wp-block-newspack-collections__title {
+			margin: 24px 0 0;
+			font-size: var(--newspack-theme-font-size-base);
+		}
+
+		.wp-block-newspack-collections__period {
+			display: block;
+		}
+	}
+}
+
+/* Archive specific styles */
+.post-type-archive-newspack_collection {
+	.wp-block-newspack-collections.layout-grid {
+		margin-top: 32px;
+	}
+}

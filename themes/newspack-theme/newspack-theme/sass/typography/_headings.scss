@@ -1,0 +1,226 @@
+@use "../mixins/mixins-main";
+@use "../mixins/utilities";
+
+.comment-metadata,
+.comment-reply-link,
+.comment-reply-login,
+.comments-title,
+.comment-author .fn,
+.discussion-meta-info,
+.entry-meta,
+.cat-links,
+.entry-footer,
+.author-bio .author-link,
+.author-meta,
+.nav1,
+.secondary-menu,
+.nav3,
+.no-comments,
+.not-found .page-title,
+.error-404 .page-title,
+.page-links,
+.page-description,
+.pagination .nav-links,
+.post-navigation,
+.site-title,
+.site-description,
+.site-info,
+#cancel-comment-reply-link,
+.use-header-font,
+#mobile-sidebar,
+.woocommerce-breadcrumb,
+.woocommerce-pagination,
+.woocommerce .onsale,
+.woocommerce .price,
+.woocommerce .product_meta,
+.woocommerce-review-link,
+.woocommerce .first-payment-date,
+.woocommerce-grouped-product-list,
+.woocommerce-message,
+.woocommerce-error,
+.woocommerce-info,
+.woocommerce-Reviews .comment-reply-title,
+ul.products .added_to_cart,
+.woocommerce-tabs ul,
+.woocommerce-MyAccount-navigation,
+.product .nyp,
+.woocommerce-results-wrapper,
+.wpbnbd .freq-label,
+.wpbnbd .tier-label,
+.wp-block-post-date,
+.wp-block-post-terms,
+.wp-block-query-pagination,
+.wp-block-loginout,
+.wp-block-navigation,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	font-family: var(--newspack-theme-font-heading);
+}
+
+/* stylelint-disable selector-type-no-unknown  */
+amp-script .cat-links {
+	font-family: var(--newspack-theme-font-heading);
+}
+/* stylelint-enable */
+
+.page-description,
+.not-found .page-title,
+.error-404 .page-title,
+.pagination .nav-links,
+.wp-block-query-pagination,
+.comments-title,
+.cat-links,
+.comment-author .fn,
+.no-comments,
+.site-title,
+.post-navigation .post-title,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	font-weight: 700;
+	line-height: var(--newspack-theme-font-line-height-heading);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+.nav1 {
+	line-height: var(--newspack-theme-font-line-height-heading);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+.site-branding,
+.social-navigation,
+.author-description .author-bio,
+.nav-links {
+	line-height: 1.25;
+}
+
+h1,
+.page-description {
+	font-size: var(--newspack-theme-font-size-xxl);
+
+	@include utilities.media( tablet ) {
+		font-size: var(--newspack-theme-font-size-xxxl);
+	}
+}
+
+.entry-title,
+.not-found .page-title,
+.error-404 .page-title,
+.has-larger-font-size,
+.archive:not(.paged).feature-latest article.entry:first-of-type .entry-title,
+h2 {
+	font-size: var(--newspack-theme-font-size-lg);
+
+	@include utilities.media( tablet ) {
+		font-size: var(--newspack-theme-font-size-xl);
+	}
+}
+
+.has-regular-font-size,
+.has-large-font-size,
+.comments-title,
+.archive .entry-title,
+.search .entry-title,
+.blog .entry-title {
+	font-size: var(--newspack-theme-font-size-lg);
+}
+
+h3 {
+	font-size: calc(1em * 1.3);
+
+	@include utilities.media( tablet ) {
+		font-size: var(--newspack-theme-font-size-lg);
+	}
+}
+
+.site-title,
+.site-description,
+.comment-author .fn,
+.no-comments,
+h2.author-title,
+p.author-bio,
+.post-navigation .post-title,
+h4 {
+	font-size: var(--newspack-theme-font-size-md);
+}
+
+.page-title {
+	font-size: var(--newspack-theme-font-size-sm);
+	letter-spacing: 0.01em;
+
+	@include utilities.media( tablet ) {
+		font-size: var(--newspack-theme-font-size-base);
+	}
+}
+
+.entry-meta,
+.nav-links,
+.wp-block-post-date,
+.wp-block-post-terms,
+.wp-block-query-pagination,
+.wp-block-loginout label,
+.wp-block-loginout a,
+.comment-content,
+h5 {
+	font-size: var(--newspack-theme-font-size-sm);
+}
+
+.discussion-meta-info,
+.has-small-font-size,
+.comment-reply-link,
+.comment-reply-login,
+.comment-metadata,
+.comment-notes,
+#cancel-comment-reply-link,
+img::after,
+.site-info,
+h6 {
+	font-size: var(--newspack-theme-font-size-xs);
+}
+
+.site-title {
+	font-weight: normal;
+}
+
+.page-links a {
+	font-weight: bold;
+}
+
+.entry-title,
+.comments-title {
+	hyphens: auto;
+	word-break: break-word;
+}
+
+/* Do not hyphenate entry title on tablet view and bigger. */
+.entry-title {
+	@include utilities.media( tablet ) {
+		hyphens: none;
+	}
+}
+
+.page-header {
+	width: 100%;
+}
+
+.page-description {
+	text-transform: none;
+}
+
+.accent-header,
+#secondary .widgettitle {
+	margin-bottom: 0.5em;
+
+	+ * {
+		margin-top: 0;
+	}
+}

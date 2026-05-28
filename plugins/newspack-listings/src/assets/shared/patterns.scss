@@ -1,0 +1,59 @@
+/* Styles and overrides for block patterns. */
+.newspack-listings {
+	/* Real Estate: Pattern 1 */
+	&__real-estate-pattern-1 {
+		.wp-block-media-text {
+			.wp-block-media-text__content {
+				padding: 0 0 0 4px;
+			}
+
+			&.has-media-on-the-right {
+				.wp-block-media-text__content {
+					padding: 0 4px 0 0;
+				}
+			}
+
+			.wp-block-jetpack-tiled-gallery {
+				margin-bottom: 0;
+			}
+		}
+
+		&__details p {
+			margin-bottom: 0 !important;
+			margin-top: 0 !important;
+		}
+	}
+
+	/* Real Estate: Pattern 2 */
+	&__real-estate-pattern-2__gallery {
+		.wp-block-image {
+			margin-bottom: 4px;
+
+			+ .wp-block-jetpack-tiled-gallery {
+				margin-top: 4px;
+			}
+		}
+	}
+
+	/* Classified Ads: Pattern 1 */
+	&__classified-ads-1__images {
+		.wp-block-image {
+			margin-bottom: 4px;
+		}
+
+		.wp-block-jetpack-tiled-gallery {
+			margin-top: 4px;
+		}
+	}
+
+	/* Classified Ads: Pattern 2 */
+	&__classified-ads-2 {
+		&__gallery {
+			margin-right: 2px;
+		}
+
+		&__image {
+			margin-left: 2px;
+		}
+	}
+}

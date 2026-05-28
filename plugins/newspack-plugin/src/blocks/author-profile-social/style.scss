@@ -1,0 +1,71 @@
+@use "../../shared/scss/mixins";
+
+.wp-block-newspack-author-profile-social {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+
+	li {
+		line-height: 0;
+	}
+
+	a {
+		@include mixins.socialButton;
+	}
+
+	// Fallback text for unsupported services (keeps old styling)
+	.service-name {
+		background: var(--wp--preset--color--base-2, #f0f0f0);
+		border-radius: var(--wp--custom--border--radius-small, 0.25rem);
+		display: block;
+		font-size: var(--wp--preset--font-size--xx-small, 0.75rem);
+		line-height: var(--wp--custom--line-height--xx-small, 1.3333);
+		padding: var(--wp--custom--spacing--10, 0.25rem) var(--wp--custom--spacing--25, 0.75rem);
+		text-transform: uppercase;
+	}
+
+	// Brand style: per-service colors override --icon-background / --icon-color
+	&.is-style-brand {
+		--icon-color: #fff;
+
+		li[data-service="bluesky"] {
+			--icon-background: #0a7aff;
+		}
+		li[data-service="email"] {
+			--icon-background: #1e1e1e;
+		}
+		li[data-service="facebook"] {
+			--icon-background: #0866ff;
+		}
+		li[data-service="instagram"] {
+			--icon-background: #f00075;
+		}
+		li[data-service="linkedin"] {
+			--icon-background: #0d66c2;
+		}
+		li[data-service="myspace"] {
+			--icon-background: #000;
+		}
+		li[data-service="phone"] {
+			--icon-background: #1e1e1e;
+		}
+		li[data-service="pinterest"] {
+			--icon-background: #e60122;
+		}
+		li[data-service="soundcloud"] {
+			--icon-background: #ff5600;
+		}
+		li[data-service="tumblr"] {
+			--icon-background: #011835;
+		}
+		li[data-service="twitter"] {
+			--icon-background: #000;
+		}
+		li[data-service="wikipedia"] {
+			--icon-background: #000;
+		}
+		li[data-service="youtube"] {
+			--icon-background: #f00;
+		}
+	}
+}

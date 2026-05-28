@@ -1,0 +1,10 @@
+// The Event Calendar CSS override
+// See: https://theeventscalendar.com/knowledgebase/k/basic-font-and-color-changes-with-css/
+
+// Import TEC baseline styles
+@use "../../newspack-theme/sass/plugins/the-events-calendar";
+
+// Theme-specific styles
+.tribe_community_edit .button.mb-cta {
+	border-radius: 0;
+}

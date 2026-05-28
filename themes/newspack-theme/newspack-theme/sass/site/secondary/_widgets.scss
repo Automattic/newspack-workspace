@@ -1,0 +1,301 @@
+@use "../../mixins/mixins-main";
+@use "../../mixins/utilities";
+@use "../../variables-site/structure";
+
+.widget {
+	font-family: var(--newspack-theme-font-heading);
+	font-size: var(--newspack-theme-font-size-sm);
+	margin: 0 0 structure.$size__spacing-unit;
+	word-wrap: break-word;
+
+	@include utilities.media( tablet ) {
+		margin: 0 0 #{structure.$size__spacing-unit * 3};
+
+		&.widget_block {
+			margin: 0 0 32px;
+		}
+	}
+
+	.widget {
+		font-size: inherit;
+		margin-bottom: 32px;
+	}
+
+	&:last-child {
+		margin-bottom: 0;
+	}
+
+	/* Make sure select elements fit in widgets. */
+	select {
+		max-width: 100%;
+	}
+
+	a {
+		&:hover {
+			color: var(--newspack-theme-color-secondary-variation);
+		}
+	}
+}
+
+.widget_archive,
+.widget_categories,
+.widget_meta,
+.widget_nav_menu,
+.widget_pages,
+.widget_recent_comments,
+.widget_recent_entries,
+.widget_rss {
+	ul {
+		padding: 0;
+		list-style: none;
+
+		li {
+			font-family: var(--newspack-theme-font-heading);
+			margin: #{0.125 * structure.$size__spacing-unit} 0;
+
+			@include utilities.media( mobile ) {
+				margin: 0;
+			}
+
+			ul {
+				margin-left: 1.5em;
+			}
+		}
+
+		a {
+			display: inline-block;
+			padding: #{0.25 * structure.$size__spacing-unit} 0;
+
+			@include utilities.media( mobile ) {
+				padding: #{0.125 * structure.$size__spacing-unit} 0;
+			}
+		}
+	}
+}
+
+.widget_recent_comments,
+.widget_recent_entries {
+	ul li {
+		margin-bottom: #{0.75 * structure.$size__spacing-unit};
+	}
+}
+
+.widget_recent_entries {
+	a {
+		color: inherit;
+		font-size: var(--newspack-theme-font-size-lg);
+		font-weight: 700;
+		line-height: var(--newspack-theme-font-line-height-heading);
+	}
+
+	.post-date {
+		color: inherit;
+		font-size: var(--newspack-theme-font-size-sm);
+		display: block;
+		opacity: 0.8;
+	}
+}
+
+.widget_calendar .calendar_wrap {
+	text-align: center;
+
+	table td,
+	table th {
+		border: none;
+	}
+
+	a {
+		text-decoration: underline;
+	}
+}
+
+.widgets-list-layout {
+	.widgets-list-layout-blavatar {
+		width: auto;
+	}
+
+	.widgets-list-layout-links {
+		width: calc(100% - 60px);
+	}
+}
+
+.jetpack_subscription_widget {
+	.error,
+	div {
+		background-color: var(--newspack-theme-color-bg-pre);
+		padding: structure.$size__spacing-unit;
+
+		p {
+			margin: 0;
+		}
+	}
+}
+
+.widget_authors.widget {
+	a {
+		align-items: center;
+		display: flex;
+	}
+
+	img {
+		margin-right: #{0.5 * structure.$size__spacing-unit};
+	}
+
+	ul ul {
+		margin: 0 0 #{1.5 * structure.$size__spacing-unit} #{1.5 * structure.$size__spacing-unit};
+	}
+}
+
+// Top Posts & Pages
+.jetpack_top_posts_widget,
+.widget_top-posts {
+	p {
+		font-style: italic;
+		font-size: var(--newspack-theme-font-size-sm);
+	}
+
+	ul,
+	li {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	li {
+		&::after {
+			@include mixins-main.clearfix;
+			@include mixins-main.clearfix-after;
+		}
+
+		&:not(:last-child) {
+			margin: 0 0 0.75em;
+		}
+
+		a {
+			color: var(--newspack-theme-color-text-main);
+			display: block;
+			font-family: var(--newspack-theme-font-heading);
+			font-weight: bold;
+			line-height: 1.2;
+			text-decoration: none;
+		}
+	}
+
+	.widgets-list-layout img {
+		float: left;
+		height: auto;
+		max-width: 80px;
+		width: 30%;
+	}
+
+	.widgets-list-layout .widgets-list-layout-links {
+		float: right;
+		width: calc(100% - 95px);
+	}
+
+	.widget-grid-view-image {
+		float: left;
+		max-width: 50%;
+
+		a {
+			display: inline-block;
+			margin: 0 4px 2px 0;
+		}
+
+		&:nth-child(2n) {
+			float: right;
+
+			a {
+				margin: 0 0 2px 4px;
+			}
+		}
+	}
+}
+
+.widget.widget_top-posts {
+	.widgets-list-layout img {
+		max-width: 60px;
+	}
+
+	.widgets-list-layout .widgets-list-layout-links {
+		width: calc(100% - 75px);
+	}
+}
+
+#secondary {
+	section:first-child,
+	section:first-child > div {
+		> *:first-child {
+			margin-top: 0;
+		}
+	}
+
+	.widget-title,
+	.widgettitle {
+		font-size: var(--newspack-theme-font-size-md);
+	}
+}
+
+.single #secondary {
+	padding-top: calc(#{structure.$size__spacing-unit} * 1.5);
+}
+
+.page #secondary {
+	padding-top: structure.$size__spacing-unit;
+}
+
+.above-content {
+	margin: structure.$size__spacing-unit 0 0;
+}
+
+// Header widgets
+.header-widget,
+.above-footer-widgets {
+	.wrapper {
+		display: block;
+	}
+
+	.widget:first-of-type {
+		margin-top: 0;
+	}
+
+	.widget:last-of-type {
+		margin-bottom: 0;
+	}
+
+	.alignfull {
+		margin-left: calc(50% - 50vw);
+		margin-right: calc(50% - 50vw);
+		max-width: 100vw;
+		width: auto;
+	}
+
+	.alignwide {
+		margin-left: calc(25% - 25vw);
+		margin-right: calc(25% - 25vw);
+		max-width: 100vw;
+	}
+
+	[class*="__inner-container"] {
+		margin: 0 auto;
+		max-width: 1200px;
+	}
+}
+
+.above-footer-widgets {
+	margin-top: #{2 * structure.$size__spacing-unit};
+}
+
+.h-db .above-header-widgets {
+	border-bottom: 1px solid var(--newspack-theme-color-border);
+}
+
+// The Subpage header + special featured image placements also can't really support an ad in this spot.
+.h-sub {
+	&.single-featured-image-beside,
+	&.single-featured-image-behind {
+		.below-header-widgets {
+			display: none;
+		}
+	}
+}

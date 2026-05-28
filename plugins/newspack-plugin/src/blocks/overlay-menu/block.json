@@ -1,0 +1,38 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack/overlay-menu",
+	"title": "Overlay Menu",
+	"category": "newspack",
+	"description": "A container block that pairs a trigger button with a content panel. The panel can appear as a side overlay or expand to fill the entire screen. Multiple instances can be used on the same page.",
+	"keywords": [
+		"menu",
+		"overlay",
+		"drawer",
+		"navigation",
+		"hamburger"
+	],
+	"textdomain": "newspack-plugin",
+	"attributes": {
+		"instanceId": {
+			"type": "string",
+			"default": ""
+		}
+	},
+	"providesContext": {
+		"newspack-overlay-menu/instanceId": "instanceId"
+	},
+	"supports": {
+		"html": false,
+		"anchor": true,
+		"spacing": {
+			"margin": true,
+			"__experimentalDefaultControls": {
+				"margin": false
+			}
+		}
+	},
+	"editorStyle": "file:../../../dist/blocks.css",
+	"style": "file:../../../dist/blocks.css",
+	"viewScript": "file:../../../dist/overlay-menu-block.js"
+}

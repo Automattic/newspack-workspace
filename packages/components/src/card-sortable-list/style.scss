@@ -1,0 +1,48 @@
+$collapse-duration: 200ms;
+$shift-duration: 150ms;
+$drop-duration: 400ms; /* must match DROP_ANIMATION_DURATION in index.tsx */
+
+.newspack-card--core--sortable-list {
+	&__item {
+		cursor: grab;
+
+		/*
+		 * Animate items sliding to fill/make space around the dragged item.
+		 */
+		transition: transform $shift-duration ease;
+
+		/*
+		 * Collapse the source item's content — the wrapper stays in layout as the
+		 * anchor point, and the container height is locked via inline style in JS.
+		 */
+		&.is-source {
+			cursor: grabbing;
+			opacity: 0;
+			transition: opacity $collapse-duration ease;
+		}
+
+		/*
+		 * Drop landing animation: brief fade-in and scale on the newly placed item.
+		 */
+		&.is-dropped {
+			animation: newspack-sortable-drop $drop-duration ease forwards;
+			opacity: 0;
+		}
+
+	}
+}
+
+@keyframes newspack-sortable-drop {
+	0% {
+		opacity: 0;
+		transform: scale(0.98);
+	}
+	60% {
+		opacity: 1;
+		transform: scale(1.01);
+	}
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+}

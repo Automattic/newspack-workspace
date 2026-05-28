@@ -1,0 +1,47 @@
+/**
+ * Handoff Banner
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+@use "../../../packages/colors/colors.module" as colors;
+
+#newspack-handoff-banner {
+	clear: both;
+	display: block;
+	position: relative;
+	z-index: 1000;
+
+	&:empty {
+		display: none;
+	}
+}
+
+.newspack-handoff-banner {
+	align-items: center;
+	background: colors.$primary-600;
+	box-sizing: border-box;
+	color: wp-colors.$white;
+	display: flex;
+	gap: wp-vars.$grid-unit-30;
+	justify-content: space-between;
+	padding: wp-vars.$grid-unit-15 wp-vars.$grid-unit-20;
+	width: 100%;
+
+	&__text {
+		font-size: wp-vars.$font-size-medium;
+		font-weight: 600;
+	}
+
+	&__buttons {
+		--wp-admin-theme-color: #{wp-colors.$white};
+		--wp-components-color-accent: #{wp-colors.$white};
+		--wp-components-color-accent-inverted: #{colors.$primary-600};
+		--wp-admin-theme-color-darker-10: color-mix(in srgb, #{wp-colors.$white} 85%, #{colors.$primary-600});
+		--wp-admin-theme-color-darker-20: color-mix(in srgb, #{wp-colors.$white} 70%, #{colors.$primary-600});
+
+		display: flex;
+		flex-shrink: 0;
+		gap: wp-vars.$grid-unit-10;
+	}
+}

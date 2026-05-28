@@ -1,0 +1,40 @@
+.newspack-brand {
+	&__header {
+		&__logo {
+			.newspack-image-upload__image {
+				border-color: rgba(black, 0.54);
+				height: 98px;
+			}
+		}
+	}
+
+	&__base-url-radio-control {
+		margin-bottom: 16px;
+
+		.components-base-control__field > div,
+		.components-radio-control__group-wrapper {
+			justify-content: flex-start;
+			flex-direction: row;
+
+			.components-radio-control__option {
+				margin-right: 20px;
+
+				&:last-child {
+					margin-right: 0;
+				}
+			}
+		}
+	}
+
+	&__base-url-component {
+		display: flex;
+		align-items: baseline;
+	}
+
+	&__theme-mod-color-picker {
+		.newspack-color-picker__label {
+			display: flex;
+			justify-content: space-between;
+		}
+	}
+}

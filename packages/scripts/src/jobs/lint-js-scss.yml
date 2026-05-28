@@ -1,0 +1,11 @@
+description: >
+  Lint the JS & SCSS (temporarily skipped) files.
+
+executor: default
+
+steps:
+  - checkout_with_workspace
+  - set_node_version
+  - run:
+      name: Run Linter
+      command: npm run lint:js # Temporarily skip linting SCSS due to stylelint config updates. Remove :js when ready to re-enable linting of SCSS.

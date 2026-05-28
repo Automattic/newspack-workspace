@@ -1,0 +1,103 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "donate",
+	"category": "newspack",
+	"attributes": {
+		"className": {
+			"type": "string"
+		},
+		"manual": {
+			"type": "boolean"
+		},
+		"tiered": {
+			"type": "boolean",
+			"default": true
+		},
+		"amounts": {
+			"type": "object",
+			"default": {}
+		},
+		"disabledFrequencies": {
+			"type": "object",
+			"default": {}
+		},
+		"thanksText": {
+			"type": "string",
+			"default": "Your contribution is appreciated."
+		},
+		"buttonText": {
+			"type": "string",
+			"default": "Donate Now"
+		},
+		"defaultFrequency": {
+			"type": "string",
+			"default": "month"
+		},
+		"campaign": {
+			"type": "string"
+		},
+		"buttonColor": {
+			"type": "string",
+			"default": "#dd3333"
+		},
+		"suggestedAmounts": {
+			"type": "array"
+		},
+		"suggestedAmountUntiered": {
+			"type": "number"
+		},
+		"minimumDonation": {
+			"type": "number"
+		},
+		"layoutOption": {
+			"type": "string",
+			"default": "frequency"
+		},
+		"tierStyle": {
+			"type": "string",
+			"default": "grid"
+		},
+		"useModalCheckout": {
+			"type": "boolean",
+			"default": true
+		},
+		"tiersBasedOptions": {
+			"type": "array",
+			"default": [
+				{
+					"heading": "Small",
+					"description": "",
+					"buttonText": "Select",
+					"recommendLabel": ""
+				},
+				{
+					"heading": "Medium",
+					"description": "",
+					"buttonText": "Select",
+					"recommendLabel": "BEST VALUE"
+				},
+				{
+					"heading": "Large",
+					"description": "",
+					"buttonText": "Select",
+					"recommendLabel": ""
+				}
+			]
+		},
+		"afterSuccessBehavior": {
+			"type": "string"
+		},
+		"afterSuccessButtonLabel": {
+			"type": "string",
+			"default": "Continue"
+		},
+		"afterSuccessURL": {
+			"type": "string"
+		}
+	},
+	"supports": {
+		"html": false,
+		"align": false
+	}
+}

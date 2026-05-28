@@ -1,0 +1,309 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "../../shared/scss/mixins";
+
+.newspack-registration {
+	container: registration / inline-size;
+
+	.has-background & {
+		background: var(--newspack-ui-color-body-bg);
+		border-radius: var(--newspack-ui-border-radius-m);
+		overflow: hidden;
+		padding: var(--newspack-ui-spacer-5);
+
+		.newspack-registration__help-text {
+			background: var(--newspack-ui-color-neutral-5);
+			margin:
+				var(--newspack-ui-spacer-5) calc(-1 * var(--newspack-ui-spacer-5))
+				calc(-1 * var(--newspack-ui-spacer-5));
+			padding: var(--newspack-ui-spacer-4) var(--newspack-ui-spacer-5);
+		}
+	}
+
+	a {
+		color: inherit;
+		text-decoration: underline;
+
+		&:active,
+		&:focus,
+		&:hover {
+			color: inherit;
+			text-decoration: none;
+		}
+	}
+
+	form {
+		> p {
+			margin: 1em 0;
+		}
+	}
+
+	@media only screen and ( min-width: 782px ) {
+		&.is-style-columns {
+			.newspack-registration__main {
+				flex: 1 1 63.4146%;
+			}
+			.newspack-reader__lists {
+				flex: 1 1 31.7073%;
+				h3 {
+					display: block;
+					margin: 0.4rem 0.4rem 0.8rem;
+				}
+				ul li {
+					flex: 1 1 100%;
+				}
+			}
+		}
+	}
+
+	&__form-content,
+	&__main,
+	&__inputs,
+	&__have-account {
+		display: grid;
+		gap: var(--newspack-ui-spacer-2);
+	}
+
+	&__form-content {
+		margin: 0;
+		transition: opacity 250ms ease-in-out;
+
+		.newspack-ui__input-card {
+			margin: 0 !important;
+		}
+
+		.newspack-ui__box.newspack-ui__box--border {
+			display: grid;
+			gap: var(--newspack-ui-spacer-3);
+			margin: 0;
+			padding: var(--newspack-ui-spacer-3);
+
+			.newspack-ui__input-card {
+				background: transparent !important;
+				border: 0;
+				border-radius: 0;
+				padding: 0;
+
+				strong {
+					font-weight: 400;
+				}
+			}
+		}
+
+		.newspack-ui__helper-text:empty {
+			margin: 0;
+		}
+	}
+
+	&__inputs {
+		gap: var(--newspack-ui-spacer-5);
+
+		.newspack-ui__button {
+			margin-bottom: 0 !important;
+		}
+
+		.newspack-ui__button--loading {
+			display: none !important;
+		}
+	}
+
+	&__header {
+		margin-bottom: var(--newspack-ui-spacer-5);
+
+		&:has(+ p) {
+			margin-bottom: var(--newspack-ui-spacer-1);
+		}
+	}
+
+	& &__main {
+		.newspack-ui {
+			button {
+				font-family: inherit;
+			}
+		}
+	}
+
+	& &__title {
+		font-size: var(--newspack-ui-font-size-l) !important;
+		line-height: var(--newspack-ui-line-height-l) !important;
+		margin: 0;
+	}
+
+	& &__description {
+		font-size: var(--newspack-ui-font-size-s);
+		line-height: var(--newspack-ui-line-height-s);
+		margin: 0 0 var(--newspack-ui-spacer-5);
+	}
+
+	&__have-account {
+		margin-top: var(--newspack-ui-spacer-2);
+		text-align: center;
+
+		&:has(em) {
+			border-top: 1px solid var(--newspack-ui-color-border);
+			gap: calc(var(--newspack-ui-spacer-1) / 2);
+			padding-top: var(--newspack-ui-spacer-2);
+		}
+
+		em {
+			color: var(--newspack-ui-color-neutral-60);
+		}
+	}
+
+	&__help-text {
+		color: var(--newspack-ui-color-neutral-60);
+		font-size: var(--newspack-ui-font-size-xs);
+		line-height: var(--newspack-ui-line-height-xs);
+		margin-top: var(--newspack-ui-spacer-2);
+
+		> :first-child {
+			margin-top: 0;
+		}
+
+		> :last-child {
+			margin-bottom: 0;
+		}
+	}
+
+	&__login-success,
+	&__registration-success {
+		font-weight: 600;
+		margin: 0 !important;
+	}
+
+	&--error {
+		.newspack-registration__response {
+			color: var(--newspack-ui-color-error-50);
+			font-size: var(--newspack-ui-font-size-xs);
+			line-height: var(--newspack-ui-line-height-xs);
+
+			p {
+				margin: var(--newspack-ui-spacer-1) 0 0;
+			}
+		}
+
+		.newspack-registration__inputs {
+			input[type="email"] {
+				border-color: var(--newspack-ui-color-error-50);
+
+				&:focus {
+					outline-color: var(--newspack-ui-color-error-50);
+				}
+			}
+		}
+	}
+
+	&--success {
+		.newspack-registration__logins {
+			display: none;
+		}
+	}
+
+	.newspack-ui__box--success {
+		.block-editor-block-list__layout,
+		.wp-block-newspack-reader-registration {
+			font-weight: 600;
+			margin: var(--newspack-ui-spacer-2) 0;
+
+			> * {
+				margin-bottom: var(--newspack-ui-spacer-2);
+				margin-top: var(--newspack-ui-spacer-2);
+			}
+
+			> :first-child {
+				margin-top: 0;
+			}
+
+			> :last-child {
+				margin-bottom: 0;
+			}
+		}
+
+		.wp-block-list {
+			text-align: initial;
+		}
+	}
+
+	&--in-progress {
+		body:has(&) {
+			cursor: wait;
+		}
+
+		* {
+			pointer-events: none;
+		}
+
+		button[type="submit"] {
+			position: relative;
+
+			span.submit {
+				visibility: hidden;
+			}
+
+			span.spinner {
+				--animation-duration: 900ms;
+				--animation-timing-function: linear;
+				--color-spinner-primary: transparent;
+				--color-spinner-background: currentcolor;
+				--size: 18px;
+				--stroke-width: 1.5px;
+
+				animation: var(--animation-timing-function) var(--animation-duration) infinite spin;
+				border-color: var(--color-spinner-primary) var(--color-spinner-primary) var(--color-spinner-background) var(--color-spinner-background);
+				border-radius: 50%;
+				border-style: solid;
+				border-width: var(--stroke-width);
+				height: var(--size);
+				transform: rotate(0deg);
+				width: var(--size);
+				position: absolute;
+				left: calc(50% - ( var(--size) / 2 ));
+			}
+		}
+	}
+
+	&--hidden,
+	+ div:empty:not(.wp-block-spacer) {
+		display: none;
+	}
+
+	.nphp,
+	input[type="email"].nphp {
+		@include mixins.visuallyHidden;
+	}
+
+}
+
+@container registration ( width > 568px ) {
+	.newspack-registration__inputs {
+		gap: var(--newspack-ui-spacer-2);
+		grid-template-columns: 1fr auto;
+	}
+}
+
+.newspack-registration.is-style-inline,
+.wp-block-newspack-reader-registration.is-style-inline .newspack-registration {
+	.newspack-registration__inputs {
+		gap: var(--newspack-ui-spacer-2);
+		grid-template-columns: 1fr auto;
+	}
+}
+
+/* Sepcific styles to apply to Reader Registration when part of a Prompt */
+.newspack-popup__content {
+	.newspack-registration__header {
+		padding-right: 36px;
+
+		@media screen and ( min-width: 600px ) {
+			padding-right: 0;
+		}
+	}
+}
+
+@keyframes spin {
+	from {
+		transform: rotate(0deg);
+	}
+	to {
+		transform: rotate(360deg);
+	}
+}

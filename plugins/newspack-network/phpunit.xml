@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" bootstrap="tests/bootstrap.php" backupGlobals="false" colors="true" convertErrorsToExceptions="true" convertNoticesToExceptions="true" convertWarningsToExceptions="true" verbose="true" xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.3/phpunit.xsd">
+  <coverage includeUncoveredFiles="true">
+    <include>
+      <directory suffix=".php">./includes</directory>
+    </include>
+    <exclude>
+      <directory suffix=".php">./node_modules</directory>
+      <directory suffix=".php">./tests</directory>
+      <directory suffix=".php">./vendor</directory>
+    </exclude>
+  </coverage>
+  <testsuites>
+    <testsuite name="Newspack Test Suite">
+      <directory suffix=".php">./tests/unit-tests</directory>
+    </testsuite>
+  </testsuites>
+</phpunit>

@@ -1,0 +1,80 @@
+@use "../../../../packages/colors/colors.module" as colors;
+
+:root {
+	// Neutral:
+	--newspack-ui-color-neutral-0: #{colors.$neutral-000};
+	--newspack-ui-color-neutral-5: #{colors.$neutral-050};
+	--newspack-ui-color-neutral-10: #{colors.$neutral-100};
+	--newspack-ui-color-neutral-20: #{colors.$neutral-200};
+	--newspack-ui-color-neutral-30: #{colors.$neutral-300};
+	--newspack-ui-color-neutral-40: #{colors.$neutral-400};
+	--newspack-ui-color-neutral-50: #{colors.$neutral-500};
+	--newspack-ui-color-neutral-60: #{colors.$neutral-600};
+	--newspack-ui-color-neutral-70: #{colors.$neutral-700};
+	--newspack-ui-color-neutral-80: #{colors.$neutral-800};
+	--newspack-ui-color-neutral-90: #{colors.$neutral-900};
+	--newspack-ui-color-neutral-100: #{colors.$neutral-1000};
+
+	// Primary:
+	--newspack-ui-color-primary-0: #{colors.$primary-000};
+	--newspack-ui-color-primary-5: #{colors.$primary-050};
+	--newspack-ui-color-primary-10: #{colors.$primary-100};
+	--newspack-ui-color-primary-20: #{colors.$primary-200};
+	--newspack-ui-color-primary-30: #{colors.$primary-300};
+	--newspack-ui-color-primary-40: #{colors.$primary-400};
+	--newspack-ui-color-primary-50: #{colors.$primary-500};
+	--newspack-ui-color-primary-60: #{colors.$primary-600};
+	--newspack-ui-color-primary-70: #{colors.$primary-700};
+	--newspack-ui-color-primary-80: #{colors.$primary-800};
+	--newspack-ui-color-primary-90: #{colors.$primary-900};
+	--newspack-ui-color-primary-100: #{colors.$primary-1000};
+
+	// Success:
+	--newspack-ui-color-success-0: #{colors.$success-000};
+	--newspack-ui-color-success-5: #{colors.$success-050};
+	--newspack-ui-color-success-50: #{colors.$success-500};
+	--newspack-ui-color-success-60: #{colors.$success-600};
+
+	// Error:
+	--newspack-ui-color-error-0: #{colors.$error-000};
+	--newspack-ui-color-error-5: #{colors.$error-050};
+	--newspack-ui-color-error-50: #{colors.$error-500};
+	--newspack-ui-color-error-60: #{colors.$error-600};
+
+	//Warning:
+	--newspack-ui-color-warning-0: #{colors.$warning-000};
+	--newspack-ui-color-warning-5: #{colors.$warning-050};
+	--newspack-ui-color-warning-30: #{colors.$warning-300};
+	--newspack-ui-color-warning-40: #{colors.$warning-400};
+
+	// Theme variables - from the classic and block themes; overridden in class-newspack-ui.php for block theme.
+	--newspack-ui-color-primary: var(--newspack-theme-color-primary, var(--newspack-ui-color-primary-60));
+	--newspack-ui-color-against-primary: var(--newspack-theme-color-against-primary, var(--newspack-ui-color-neutral-0));
+
+	// Specific assignments - general:
+	--newspack-ui-color-border: var(--newspack-ui-color-neutral-30);
+	--newspack-ui-color-body-bg: var(--newspack-ui-color-neutral-0);
+	--newspack-ui-color-divider-start: var(--newspack-ui-color-neutral-0);
+	--newspack-ui-color-divider-end: transparent;
+
+	// Specific assignments - form elements - buttons:
+	--newspack-ui-color-button-bg: var(--newspack-ui-color-neutral-90);
+	--newspack-ui-color-button-bg-hover: var(--newspack-ui-color-neutral-60);
+	--newspack-ui-color-button-text: var(--newspack-ui-color-neutral-0);
+	--newspack-ui-color-button-text-hover: var(--newspack-ui-color-neutral-0);
+
+	// Specific assignments - form elements - inputs:
+	--newspack-ui-color-input-border: var(--newspack-ui-color-neutral-40);
+	--newspack-ui-color-input-border-focus: var(--newspack-ui-color-neutral-90);
+	--newspack-ui-color-input-border-disabled: var(--newspack-ui-color-neutral-40);
+	--newspack-ui-color-input-bg: var(--newspack-ui-color-neutral-0);
+	--newspack-ui-color-input-bg-disabled: var(--newspack-ui-color-neutral-10);
+	--newspack-ui-label-color: var(--newspack-ui-color-neutral-90);
+
+	// Alternatives for when prefers-contrast is set to 'more':
+	@media (prefers-contrast: more) {
+		--newspack-ui-color-input-border: var(--newspack-ui-color-neutral-60);
+		--newspack-ui-color-input-border-disabled: var(--newspack-ui-color-neutral-50);
+		--newspack-ui-color-input-bg-disabled: var(--newspack-ui-color-neutral-30);
+	}
+}

@@ -1,0 +1,12 @@
+.DS_Store
+*.cache
+Thumbs.db
+wp-cli.local.yml
+node_modules/
+vendor/
+dist/
+release/
+*.sql
+*.tar.gz
+*.zip
+codecov/

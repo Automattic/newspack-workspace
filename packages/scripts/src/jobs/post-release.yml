@@ -1,0 +1,10 @@
+description: >
+  Perform post-release tasks.
+
+executor: default
+
+steps:
+  - checkout_with_workspace
+  - run:
+      name: Perform post-release chores
+      command: ./node_modules/newspack-scripts/scripts/github/post-release.sh

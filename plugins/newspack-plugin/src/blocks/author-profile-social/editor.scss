@@ -1,0 +1,7 @@
+// Editor-specific styles for horizontal layout.
+.wp-block-newspack-author-profile-social {
+	// Remove default block margins in horizontal layout
+	.wp-block {
+		margin: 0;
+	}
+}

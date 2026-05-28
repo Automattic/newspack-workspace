@@ -1,0 +1,106 @@
+.newspack-ui {
+	&__segmented-control {
+		align-items: center;
+		display: flex;
+		flex-direction: column;
+		gap: var(--newspack-ui-spacer-2);
+
+		&__form-control {
+			display: grid;
+			gap: var(--newspack-ui-spacer-1);
+			width: 100%;
+
+			label {
+				margin: 0;
+			}
+
+			.newspack-ui__segmented-control__tabs {
+				flex-wrap: nowrap;
+			}
+
+			.newspack-ui__button {
+				flex: 1 1 100%;
+			}
+		}
+
+		&__tabs {
+			background: var(--newspack-ui-color-neutral-10);
+			border-radius: var(--newspack-ui-border-radius-m);
+			display: flex;
+			flex-wrap: wrap;
+			gap: var(--newspack-ui-spacer-1);
+			justify-content: center;
+			padding: var(--newspack-ui-spacer-1);
+
+			&:has([class*="--x-small"]) {
+				gap: calc(var(--newspack-ui-spacer-1) * 0.75);
+				padding: calc(var(--newspack-ui-spacer-1) * 0.75);
+			}
+
+			&:has([class*="--small"]) {
+				gap: calc(var(--newspack-ui-spacer-1) / 2);
+				padding: calc(var(--newspack-ui-spacer-1) / 2);
+			}
+
+			.newspack-ui__button {
+				background: transparent;
+				border: 1px solid transparent;
+				border-radius: var(--newspack-ui-border-radius-s);
+				color: var(--newspack-ui-color-neutral-60);
+				cursor: pointer;
+				padding:
+					calc(var(--newspack-ui-spacer-2) - 1px)
+					calc(var(--newspack-ui-spacer-5) - 1px);
+
+				&[class*="--x-small"] {
+					padding:
+						calc(var(--newspack-ui-spacer-1) * 0.75 - 1px)
+						calc(var(--newspack-ui-spacer-2) - 1px);
+				}
+
+				&[class*="--small"] {
+					padding:
+						calc(var(--newspack-ui-spacer-1) - 1px)
+						calc(var(--newspack-ui-spacer-3) - 1px);
+				}
+
+				&:hover {
+					background: transparent;
+				}
+
+				&:focus {
+					outline: none;
+				}
+
+				&:focus-visible {
+					outline: 2px solid var(--newspack-ui-color-button-bg);
+					outline-offset: 1px;
+				}
+
+				&:not(:last-child) {
+					margin: 0;
+				}
+
+				&.selected {
+					background: var(--newspack-ui-color-neutral-0);
+					border-color: var(--newspack-ui-color-neutral-30);
+					color: var(--newspack-ui-color-neutral-90);
+				}
+			}
+		}
+
+		&__content {
+			width: 100%;
+		}
+
+		&__panel {
+			&:not(.selected) {
+				display: none;
+			}
+
+			> *:last-child {
+				margin-bottom: 0 !important;
+			}
+		}
+	}
+}

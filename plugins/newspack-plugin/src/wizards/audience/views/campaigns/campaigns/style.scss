@@ -1,0 +1,98 @@
+/**
+ * Campaign group
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-campaigns__campaign-group {
+	&__card {
+		& > &__segment {
+			margin: -16px -16px 16px !important;
+			padding: 8px 16px;
+		}
+
+		&__segment {
+			align-items: center;
+			background: wp-colors.$gray-100;
+			border-bottom: 1px solid wp-colors.$gray-300;
+			display: flex;
+			justify-content: space-between;
+		}
+	}
+
+	&__filter-group-actions {
+		align-items: center;
+		display: flex;
+
+		&__button {
+			margin-left: 8px;
+
+			.newspack-popover {
+				margin-left: calc(25px - 36px / 2); // 25px is set by Gutenberg, 36px / 2 is half of the button's width
+			}
+		}
+	}
+
+	&__filter-group-segmentation {
+		.components-popover {
+			margin-left: -20px;
+
+			&__content {
+				padding: 8px;
+
+				> div {
+					display: flex;
+					flex-wrap: wrap;
+					justify-content: flex-end;
+				}
+
+				.newspack-toggle-control {
+					margin: 8px 0;
+					width: 100%;
+				}
+
+				.newspack-button.is-link {
+					color: var(--newspack-ui-color-primary);
+					padding: 0;
+					text-decoration: underline;
+
+					&:hover {
+						color: var(--newspack-ui-color-primary);
+					}
+				}
+			}
+		}
+	}
+}
+
+.newspack-card__buttons-prompt {
+	.newspack-button {
+		color: wp-colors.$gray-900;
+		display: flex;
+		flex-direction: column;
+		padding: 0 !important;
+		text-align: center;
+		width: 96px;
+
+		&:active,
+		&:focus,
+		&:hover {
+			color: var(--newspack-ui-color-primary);
+
+			svg {
+				background: wp-colors.$gray-100;
+				border-color: var(--newspack-ui-color-primary);
+			}
+		}
+
+		svg {
+			border: 1px solid wp-colors.$gray-300;
+			border-radius: 2px;
+			display: block;
+			fill: var(--newspack-ui-color-primary);
+			margin: 0 0 8px;
+			padding: 23px;
+			transition: background-color 125ms ease-in-out, border-color 125ms ease-in-out;
+		}
+	}
+}

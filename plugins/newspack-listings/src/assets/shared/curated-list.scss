@@ -1,0 +1,83 @@
+@use "variables.scss";
+
+.newspack-listings {
+	&__curated-list {
+		counter-reset: list;
+
+		&.show-numbers .newspack-listings__listing::before {
+			color: #767676;
+			color: currentcolor;
+			content: counter(list) ". ";
+			counter-increment: list;
+			display: block;
+			font-weight: bold;
+			margin-bottom: 0.5rem;
+		}
+
+		&.has-background-color {
+			padding: 1em;
+		}
+	}
+
+	&__load-more {
+		display: block;
+		margin: 1rem auto;
+	}
+
+	&__sort-ui {
+		font-size: 0.75rem;
+		margin-top: 1.5rem;
+
+		section,
+		div {
+			align-items: center;
+			display: flex;
+
+			&.full-width {
+				width: 100%;
+			}
+		}
+
+		section {
+			margin-bottom: 0.5rem;
+		}
+
+		div + div {
+			margin-left: 1rem;
+		}
+
+		&-label,
+		&-label-inner {
+			margin-bottom: 0;
+		}
+
+		&-label {
+			font-weight: bold;
+			margin-right: 0.5rem;
+		}
+
+		input[type="radio"] {
+			margin-right: 0.25rem;
+		}
+
+		@media only screen and ( min-width: variables.$tablet_width ) {
+			display: flex;
+			flex-wrap: wrap;
+
+			section + section:not(.full-width) {
+				margin-left: 1.5rem;
+			}
+		}
+	}
+
+	&__sort-order-container {
+		&.is-hidden {
+			display: none;
+
+			/* stylelint-disable selector-type-no-unknown  */
+			amp-script & {
+				display: none;
+			}
+		}
+	}
+}

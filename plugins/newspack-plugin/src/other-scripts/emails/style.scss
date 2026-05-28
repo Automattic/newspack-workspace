@@ -1,0 +1,16 @@
+.editor-post-title {
+	display: none;
+}
+
+// See #3326.
+.editor-styles-wrapper .block-editor-block-list__layout {
+	:not(code) {
+		font-family: Arial, Helvetica, sans-serif !important;
+	}
+
+	.wp-block-button {
+		margin-left: 0 !important;
+		margin-right: 0 !important;
+		padding: 0 !important;
+	}
+}

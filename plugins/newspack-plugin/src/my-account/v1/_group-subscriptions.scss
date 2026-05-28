@@ -1,0 +1,60 @@
+.newspack-ui .newspack-my-account__group_subscription {
+	&__segmented-control {
+		align-items: flex-start;
+		margin-bottom: var(--newspack-ui-spacer-5);
+
+		.newspack-ui__button {
+			display: inline-flex;
+			align-items: center;
+			gap: var(--newspack-ui-spacer-2);
+		}
+	}
+
+	// Enter animation for invite-link controls revealed after the link is created.
+	&__entering {
+		animation: newspack-group-subscription-enter 125ms ease both;
+
+		@media (prefers-reduced-motion: reduce) {
+			animation: none;
+		}
+	}
+
+	&__members,
+	&__invites {
+		margin-top: var(--newspack-ui-spacer-5);
+
+		// Match populated row height for empty-state cells.
+		td[colspan]::after {
+			content: '';
+			display: inline-block;
+			vertical-align: middle;
+			min-height: var(--newspack-ui-spacer-7);
+		}
+	}
+	&__members--actions,
+	&__invites--actions {
+		&--manager {
+			display: none !important;
+			@media ( min-width: 768px ) {
+				display: table-cell !important;
+				&::after {
+					content: '';
+					display: inline-block;
+					vertical-align: middle;
+					min-height: var(--newspack-ui-spacer-7);
+				}
+			}
+		}
+	}
+}
+
+@keyframes newspack-group-subscription-enter {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}

@@ -13,17 +13,17 @@ ncd() {
 		return
 	fi
 
-	# The complete name of a repo:
-	if [[ -d "$NEWSPACK_DOCKER_ROOT/repos/$1" ]]; then
-		cd "$NEWSPACK_DOCKER_ROOT/repos/$1"
-		return
-	fi
-
-	# The name of a repo without the newspack- prefix:
-	if [[ -d "$NEWSPACK_DOCKER_ROOT/repos/newspack-$1" ]]; then
-		cd "$NEWSPACK_DOCKER_ROOT/repos/newspack-$1"
-		return
-	fi
+	# Monorepo layout: check plugins/, themes/, then packages/.
+	for dir in plugins themes packages; do
+		if [[ -d "$NEWSPACK_DOCKER_ROOT/$dir/$1" ]]; then
+			cd "$NEWSPACK_DOCKER_ROOT/$dir/$1"
+			return
+		fi
+		if [[ -d "$NEWSPACK_DOCKER_ROOT/$dir/newspack-$1" ]]; then
+			cd "$NEWSPACK_DOCKER_ROOT/$dir/newspack-$1"
+			return
+		fi
+	done
 
 	# An additional site:
 	if [[ -d "$NEWSPACK_DOCKER_ROOT/additional-sites-html/$1" ]]; then

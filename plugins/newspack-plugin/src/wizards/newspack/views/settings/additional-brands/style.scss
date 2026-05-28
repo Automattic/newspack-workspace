@@ -1,0 +1,32 @@
+.newspack-brand {
+	&__header {
+		&__logo {
+			.newspack-image-upload__image {
+				border-color: rgba(black, 0.54);
+				height: 98px;
+			}
+		}
+	}
+
+	&__base-url-radio-control {
+		margin-bottom: 16px;
+
+		.components-base-control__field > div {
+			justify-content: flex-start;
+			flex-direction: row;
+
+			.components-radio-control__option {
+				margin-right: 32px;
+
+				&:last-child {
+					margin-right: 0;
+				}
+			}
+		}
+	}
+
+	&__base-url-component {
+		display: flex;
+		align-items: baseline;
+	}
+}

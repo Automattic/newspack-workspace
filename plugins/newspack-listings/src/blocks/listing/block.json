@@ -1,0 +1,20 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack-listings/listing",
+	"category": "newspack",
+	"attributes": {
+		"className": {
+			"type": "string",
+			"default": ""
+		},
+		"listing": {
+			"type": "string",
+			"default": ""
+		},
+		"locations": {
+			"type": "array",
+			"default": []
+		}
+	}
+}

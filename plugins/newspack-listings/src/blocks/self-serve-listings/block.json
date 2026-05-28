@@ -1,0 +1,57 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack-listings/self-serve-listings",
+	"category": "newspack",
+	"attributes": {
+		"allowedSingleListingTypes": {
+			"type": "array",
+			"default": [
+				{
+					"slug": "blank",
+					"name": "Blank listing (start from scratch)"
+				},
+				{
+					"slug": "event",
+					"name": "Event"
+				},
+				{
+					"slug": "classified",
+					"name": "Classified Ad"
+				},
+				{
+					"slug": "job",
+					"name": "Job Listing"
+				},
+				{
+					"slug": "real-estate",
+					"name": "Real Estate Listing"
+				}
+			]
+		},
+		"allowSubscription": {
+			"type": "boolean",
+			"default": true
+		},
+		"allowedPurchases": {
+			"type": "string",
+			"default": "both"
+		},
+		"buttonText": {
+			"type": "string",
+			"default": "Next"
+		},
+		"clientId": {
+			"type": "string",
+			"default": ""
+		},
+		"singleDescription": {
+			"type": "string",
+			"default": "Purchase a single Marketplace or Event listing."
+		},
+		"subscriptionDescription": {
+			"type": "string",
+			"default": "Purchase a monthly subscription for a listing to represent your business or organization."
+		}
+	}
+}

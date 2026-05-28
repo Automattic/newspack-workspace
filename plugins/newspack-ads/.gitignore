@@ -1,0 +1,43 @@
+# Editors
+project.xml
+project.properties
+/nbproject/private/
+.buildpath
+.project
+.settings*
+.idea
+.vscode
+*.sublime-project
+*.sublime-workspace
+.sublimelinterrc
+
+# NPM
+.cache
+/node_modules/
+
+# Sass
+.sass-cache/
+
+# OS X metadata
+.DS_Store
+
+# Windows junk
+Thumbs.db
+
+# Composer
+/vendor/
+
+# Built files
+/dist
+/src/components/dist
+/src/components/shared
+/src/components/node_modules
+release
+
+# Tests
+codecov/
+coverage/
+.phpunit.result.cache
+
+# Misc
+tsconfig.tsbuildinfo

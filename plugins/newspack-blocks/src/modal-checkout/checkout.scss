@@ -1,0 +1,1064 @@
+@use "newspack-colors" as np-colors;
+
+// stylelint-disable-next-line selector-id-pattern
+#newspack_modal_checkout_container {
+	outline: none;
+	background: var(--newspack-ui-color-neutral-0, np-colors.$neutral-000);
+	padding: var(--newspack-ui-spacer-5, 24px);
+
+	a,
+	a:hover {
+	  text-decoration: none;
+    }
+
+	form p {
+		margin: 0 0 var(--newspack-ui-spacer-5, 24px);
+
+		&:last-child,
+		&.form-row-first:has(+ .form-row-last:last-child) {
+			margin-bottom: 0;
+		}
+	}
+
+	table.woocommerce-checkout-review-order-table {
+		tr,
+		th {
+			font-weight: normal;
+		}
+
+		thead > tr > th {
+			font-weight: var(--newspack-ui-font-weight-strong, 600);
+		}
+
+		tfoot > tr.order-total > th,
+		tfoot > tr.recurring-totals > th {
+			font-weight: var(--newspack-ui-font-weight-strong, 600);
+		}
+
+		td.product-name {
+			padding-right: 1em;
+		}
+	}
+
+	.order-review-wrapper.hidden {
+		display: none;
+	}
+
+	// Remove support for "Allow customers to log into an existing account during checkout"
+	.woocommerce-form-login-toggle {
+		display: none;
+	}
+
+	// Required fields.
+	.woocommerce form .form-row .required {
+		color: var(--newspack-ui-color-error-50, np-colors.$error-500);
+	}
+
+	// Billing & Shipping fields
+	// Make sure there's not a small orphan row
+	.woocommerce form {
+		.form-row-first:not(:has(+ .form-row-last)),
+		.form-row-last + .form-row-last,
+		.form-row-wide + .form-row-last {
+			clear: both;
+			float: none;
+			width: 100%;
+		}
+	}
+
+	.woocommerce-checkout {
+		h3 {
+			font-size: var(--newspack-ui-font-size-s, 16px);
+			line-height: var(--newspack-ui-line-height-s, 1.5);
+			margin: 0 0 var(--newspack-ui-spacer-5, 24px);
+		}
+
+		.woocommerce-billing-fields h3 {
+			margin: 0 0 var(--newspack-ui-spacer-5, 24px);
+		}
+
+		// After Customer Details
+		// stylelint-disable-next-line selector-id-pattern
+		#after_customer_details {
+			h3 {
+				margin-bottom: var(--newspack-ui-spacer-2, 12px);
+			}
+
+			// PayPal Payments buttons.
+			#ppc-button-ppcp-gateway {
+				margin-top: var(--newspack-ui-spacer-5, 24px);
+			}
+			#ppc-button-ppcp-gateway,
+			#ppc-button-applepay-container,
+			#ppc-button-googlepay-container {
+				margin-bottom: var(--newspack-ui-spacer-2, 12px);
+			}
+
+			.order-review-wrapper {
+				// Collapse and expand Transaction Details.
+				// stylelint-disable-next-line selector-id-pattern
+				#order_review_heading {
+					border-radius: 0;
+					min-height: 0;
+					padding: 0;
+
+					&:hover {
+						background: transparent;
+						color: var(--newspack-ui-color-neutral-60);
+					}
+
+					&:focus-visible {
+						outline: 0;
+						text-decoration: underline;
+					}
+
+					svg {
+						margin: 0 -8px;
+						transition: rotate 125ms ease-in-out;
+					}
+				}
+
+				// stylelint-disable-next-line selector-id-pattern
+				#order_review {
+					margin: 0;
+				}
+
+				.transaction-details-content {
+					display: grid;
+					grid-template-rows: 0fr;
+					margin-bottom: var(--newspack-ui-spacer-2, 12px);
+					transition: grid-template-rows 250ms ease-in-out;
+				}
+
+				.transaction-details-content-inner {
+					overflow: hidden;
+				}
+			}
+
+			&.transaction-details-expanded {
+				// stylelint-disable-next-line selector-id-pattern
+				#order_review_heading svg {
+					rotate: 180deg;
+				}
+
+				.transaction-details-content {
+					grid-template-rows: 1fr;
+					margin-bottom: var(--newspack-ui-spacer-5, 24px);
+				}
+			}
+		}
+
+		// Override label styles from theme
+		.woocommerce-billing-fields,
+		.woocommerce-account-fields,
+		.woocommerce-shipping-fields,
+		.woocommerce-additional-fields {
+			label {
+				font-size: var(--newspack-ui-font-size-s, 16px);
+				line-height: var(--newspack-ui-line-height-s, 1.5);
+			}
+
+			// A hacky way to hide these fields if they have no children; :empty is not working since they contain line breaks when empty.
+			&:not(:has(> *)) {
+				display: none;
+			}
+		}
+
+		.woocommerce-billing-fields__field-wrapper {
+			&::after {
+				clear: both;
+				content: "";
+				display: table;
+			}
+
+			& ~ .form-row {
+				margin: var(--newspack-ui-spacer-5, 24px) 0 0;
+			}
+		}
+
+		// Additional fields
+		.woocommerce-additional-fields {
+			margin: var(--newspack-ui-spacer-5, 24px) 0 0;
+
+			h3 {
+				display: none;
+			}
+		}
+	}
+
+	// Override billing details spacing.
+	// stylelint-disable-next-line selector-id-pattern
+	#checkout_details {
+		margin-bottom: var(--newspack-ui-spacer-5, 24px);
+
+		h3 {
+			margin: 0 0 var(--newspack-ui-spacer-base, 8px);
+		}
+	}
+
+	.billing-details,
+	.shipping-details,
+	.gift-details {
+		&:not(:last-child) {
+			margin-bottom: var(--newspack-ui-spacer-5, 24px);
+		}
+
+		p {
+			margin: 0;
+		}
+	}
+
+	// Country dropdown when displaying a single country.
+	/* stylelint-disable selector-id-pattern */
+	#billing_country_field,
+	#shipping_country_field {
+		&:has(input[readonly][autocomplete="country"]) {
+			.required {
+				display: none;
+			}
+
+			strong {
+				font-weight: normal;
+			}
+		}
+	}
+	/* stylelint-enable */
+
+	// Different shipping address toggle
+	#ship-to-different-address {
+		margin: var(--newspack-ui-spacer-5, 24px) 0 0;
+		label {
+			display: flex;
+			font-weight: 600;
+			margin: 0;
+
+			input[type="checkbox"] {
+				display: grid;
+			}
+		}
+
+		span {
+			font-weight: unset;
+
+			&::before,
+			&::after {
+				display: none;
+			}
+		}
+	}
+
+	.shipping_address {
+		margin-top: var(--newspack-ui-spacer-5, 24px);
+	}
+
+	// Gift Subscriptions
+	.newspack-wcsg {
+		&--wrapper {
+			margin: var(--newspack-ui-spacer-5, 24px) 0 0;
+		}
+
+		&--gift-toggle {
+			align-items: center;
+			display: flex;
+			font-weight: 700;
+			margin-bottom: 0;
+
+			label {
+				display: flex !important;
+				margin-bottom: 0;
+			}
+
+			.woocommerce-input-wrapper {
+				line-height: 0.5;
+				margin-right: 0.25rem;
+			}
+		}
+
+		&--gift-email {
+			max-height: 0;
+			overflow: hidden;
+			transition: max-height 0.25s ease-in-out;
+			visibility: hidden;
+
+			&.visible {
+				margin: var(--newspack-ui-spacer-5, 24px) 0 0;
+				max-height: initial;
+				visibility: visible;
+			}
+		}
+	}
+
+	// Create an account
+	.woocommerce-account-fields {
+		margin: var(--newspack-ui-spacer-5, 24px) 0 0;
+
+		h3:has(+ .create-account) {
+			display: none;
+		}
+
+		.create-account {
+			label:has(input[type="checkbox"]) {
+				display: grid;
+				gap: 0 var(--newspack-ui-spacer-base, 8px);
+				grid-template-columns: var(--newspack-ui-spacer-4, 20px) 1fr;
+				margin: var(--newspack-ui-spacer-5, 24px) 0 0;
+			}
+
+			.woocommerce-password-strength {
+				font-size: var(--newspack-ui-font-size-xs, 14px);
+				line-height: var(--newspack-ui-line-height-xs, 1.4286);
+				margin: var(--newspack-ui-spacer-base, 8px) 0 0;
+
+				&.short,
+				&.bad {
+					color: var(--newspack-ui-color-error-50, np-colors.$error-500);
+				}
+
+				&.good {
+					color: var(--newspack-ui-color-warning-40, np-colors.$warning-400);
+				}
+
+				&.strong {
+					color: var(--newspack-ui-color-success-50, np-colors.$success-500);
+				}
+			}
+
+			.woocommerce-password-hint {
+				color: var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
+				font-size: var(--newspack-ui-font-size-xs, 14px);
+				line-height: var(--newspack-ui-line-height-xs, 1.4286);
+			}
+
+			> p.form-row:last-of-type {
+				margin-bottom: 0;
+			}
+		}
+	}
+
+	// Name Your Price styles
+	.name-your-price {
+		margin-bottom: var(--newspack-ui-spacer-5, 24px);
+	}
+
+	.modal_checkout_nyp {
+		h3 {
+			color: var(--newspack-ui-label-color, inherit);
+			margin-bottom: var(--newspack-ui-spacer-base, 8px);
+		}
+
+		.input-price {
+			display: flex;
+			align-items: center;
+			flex-wrap: nowrap;
+			gap: 0.5em;
+			margin: 0 0 8px;
+
+			label {
+				display: flex;
+				align-items: center;
+				margin: 0;
+				position: relative;
+				width: 100%;
+
+				span.currency {
+					padding-left: 16px;
+					position: absolute;
+					left: 0;
+				}
+
+				input {
+					padding-left: 32px;
+				}
+			}
+
+			button {
+				margin-top: 0;
+			}
+		}
+	}
+
+	// Coupon Styles
+	.woocommerce-form-coupon {
+		margin-bottom: var(--newspack-ui-spacer-5, 24px);
+
+		h3 {
+			color: var(--newspack-ui-label-color, inherit);
+			margin-bottom: var(--newspack-ui-spacer-base, 8px);
+		}
+
+		p:first-of-type {
+			align-items: center;
+			display: flex;
+			gap: var(--newspack-ui-spacer-base, np-colors.$neutral-900);
+
+			input,
+			button {
+				margin: 0 !important;
+			}
+
+			+ .newspack-ui__helper-text {
+				margin-top: calc(var(--newspack-ui-spacer-3, 16px) * -1);
+			}
+		}
+	}
+
+	// Processing styles
+	.modal_checkout_nyp,
+	.modal_checkout_coupon {
+		&.modal-processing {
+			opacity: 0.5;
+		}
+	}
+
+	// Checkout form heading.
+	.woocommerce .order-details-summary {
+		// Top margin not needed in newspack ui modal.
+		h2 {
+			margin-top: 0;
+		}
+	}
+
+	// Override checkout payment method box.
+
+	.wc_payment_methods {
+		margin: var(--newspack-ui-spacer-5, 24px) 0;
+
+		.wc_payment_method {
+			+ .wc_payment_method {
+				margin-top: var(--newspack-ui-spacer-2, 12px);
+			}
+
+			&:only-child {
+				> span.newspack-ui__input-card {
+					grid-template-columns: 0;
+					gap: 0;
+					border: none;
+					padding: 0;
+					background-color: transparent;
+
+					> label {
+						display: none;
+					}
+				}
+			}
+
+			.payment_box {
+				background: transparent;
+				font-weight: normal;
+				padding: 0;
+
+				p {
+					color: var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
+					font-size: var(--newspack-ui-font-size-xs, 14px);
+					line-height: var(--newspack-ui-line-height-xs, 1.4286);
+				}
+
+				ul.wc-saved-payment-methods {
+					margin: var(--newspack-ui-spacer-3, 16px) 0 0;
+					padding: 0;
+
+					li {
+						display: flex;
+
+						&:not(:last-child) {
+							margin-bottom: var(--newspack-ui-spacer-3, 16px);
+						}
+
+						label {
+							font-size: var(--newspack-ui-font-size-s, 16px);
+							font-weight: normal;
+							line-height: var(--newspack-ui-line-height-s, 1.5);
+							margin: 0;
+						}
+
+						input {
+							margin-right: var(--newspack-ui-spacer-base, 8px);
+							margin-top: calc((var(--newspack-ui-font-size-s, 16px) * var(--newspack-ui-line-height-s, 1.5) - 20px) / 2);
+						}
+					}
+				}
+
+				fieldset {
+					margin: var(--newspack-ui-spacer-3, 16px) 0 0;
+					padding: 0 !important; // To override inline styles.
+
+					&.wc-payment-form {
+						margin-top: var(--newspack-ui-spacer-3, 16px);
+					}
+
+					p {
+						font-size: var(--newspack-ui-font-size-xs, 14px);
+						line-height: var(--newspack-ui-line-height-xs, 1.4286);
+						margin-bottom: 0;
+
+						&.form-row {
+							display: flex;
+							gap: var(--newspack-ui-spacer-2, 12px);
+							align-items: flex-start;
+
+							input {
+								margin: 0;
+							}
+
+							label {
+								margin-bottom: 0;
+								font-weight: normal;
+							}
+						}
+					}
+				}
+
+				.newspack-cover-fees,
+				.woocommerce-SavedPaymentMethods-saveNew {
+					label {
+						font-size: var(--newspack-ui-font-size-s, 16px);
+						line-height: var(--newspack-ui-line-height-s, 1.5);
+					}
+
+					&::before {
+						display: none;
+					}
+				}
+			}
+		}
+
+		// Largely copied and reorganized from newspack-ui/forms/_labels.scss
+		// since WooCommerce forms are different from our standard forms.
+		span.newspack-ui__input-card {
+			border: 1px solid var(--newspack-ui-color-border, #ddd);
+			border-radius: var(--newspack-ui-border-radius-m);
+			color: var(--newspack-ui-label-color, #000);
+			cursor: pointer;
+			display: block;
+			font-family: var(--newspack-ui-font-family, system-ui);
+			font-size: var(--newspack-ui-font-size-s, 16px);
+			font-weight: 600;
+			gap: 0 var(--newspack-ui-spacer-3, 16px);
+			line-height: var(--newspack-ui-line-height-s, 1.5);
+			margin-bottom: var(--newspack-ui-spacer-5);
+			margin-top: calc(var(--newspack-ui-spacer-2) * -1);
+			padding: var(--newspack-ui-spacer-3, 16px);
+			transition: background-color 125ms ease-in-out, border-color 125ms ease-in-out;
+
+			&:has(> input) {
+				background: var(--newspack-ui-color-neutral-0, #fff);
+				border-color: var(--newspack-ui-color-border, #ddd);
+			}
+
+			&:has(> input:checked) {
+				background: var(--newspack-ui-color-neutral-5, #f7f7f7);
+				border-color: var(--newspack-ui-color-neutral-90, #1e1e1e);
+			}
+
+			// For labels containing radio, checkbox inputs:
+			&:has(input[type="checkbox"]),
+			&:has(input[type="radio"]) {
+				display: grid !important;
+				grid-template-columns: var(--newspack-ui-spacer-4, 20px) 1fr;
+
+				> *:not(input) {
+					grid-column: 2 / span 1;
+				}
+
+				> label {
+					grid-column: 1 / span 2;
+
+					&::before {
+						margin-right: var(--newspack-ui-spacer-3, 16px);
+						transform: translateY(0) !important; // Align label text with custom input styles.
+					}
+				}
+
+				> input {
+					margin-top: 0.125em;
+				}
+			}
+
+			> input + label::before {
+				background: var(--newspack-ui-color-neutral-0, #fff) !important;
+				border: 1px solid var(--newspack-ui-color-input-border, #ccc) !important;
+				box-shadow: none;
+				height: var(--newspack-ui-spacer-4, 20px);
+				width: var(--newspack-ui-spacer-4, 20px);
+				margin: auto 0;
+			}
+
+			> input:checked + label::before {
+				border: 6px solid var(--newspack-ui-color-neutral-90, #1e1e1e) !important;
+			}
+
+			> label {
+				margin: unset;
+				display: flex;
+				align-items: center;
+				font-weight: var(--newspack-ui-font-weight-strong, 600);
+
+				img {
+					margin-left: auto;
+				}
+			}
+
+			a {
+				text-decoration: underline;
+			}
+
+			.required {
+				color: var(--newspack-ui-color-error-50);
+			}
+
+			+ span.newspack-ui__input-card {
+				margin-top: calc(var(--newspack-ui-spacer-2, 12px) * -1);
+			}
+		}
+	}
+
+	// WooCommerce Payments
+	#payment {
+		.payment_method_woocommerce_payments {
+
+			.testmode-info {
+				margin-bottom: 0;
+			}
+
+			// stylelint-disable-next-line selector-id-pattern
+			#wc-woocommerce_payments-upe-form {
+				margin-top: var(--newspack-ui-spacer-3, 16px);
+			}
+
+			// Fix icon alignment and display.
+			label:has(.woopayments-rich-payment-method-label) {
+				align-items: unset;
+
+				.woopayments-rich-payment-method-label {
+					img {
+						margin: 0;
+					}
+
+					.payment-method-title {
+						margin-left: -0.25em; // Fix space in label string.
+						vertical-align: unset;
+					}
+				}
+
+				span > img {
+					display: none;
+				}
+			}
+		}
+	}
+
+	// Stripe inputs
+	.wc-credit-card-form {
+		.form-row-wide {
+			margin-bottom: var(--newspack-ui-spacer-base, 8px);
+		}
+		.wc-stripe-elements-field,
+		.wc-stripe-iban-element-field {
+			border: 1px solid var(--newspack-ui-color-input-border, np-colors.$neutral-300);
+			border-radius: var(--newspack-ui-border-radius-m, 6px);
+			display: block;
+			font-family: var(--newspack-ui-font-family, system-ui);
+			font-size: var(--newspack-ui-font-size-s, 16px);
+			line-height: var(--newspack-ui-line-height-s, 1.5);
+			padding: calc(var(--newspack-ui-spacer-2, 12px) - 1px) calc(var(--newspack-ui-spacer-3, 16px) - 1px);
+		}
+
+		&:has(div.stripe-source-errors[role="alert"]:not(:empty)) {
+			.wc-stripe-elements-field,
+			.wc-stripe-iban-element-field {
+				border-color: var(--newspack-ui-color-error-50, np-colors.$error-500);
+			}
+
+			label {
+				color: var(--newspack-ui-color-error-50, np-colors.$error-500);
+			}
+
+			.woocommerce_error {
+				background: transparent;
+				color: var(--newspack-ui-color-error-50, np-colors.$error-500);
+				font-family: var(--newspack-ui-font-family, system-ui);
+				font-size: var(--newspack-ui-font-size-xs, 14px);
+				line-height: var(--newspack-ui-line-height-xs, 1.4286);
+				padding: 0;
+			}
+		}
+
+		@media (max-width: 440px) {
+			&#wc-stripe-cc-form {
+				.form-row-first,
+				.form-row-last {
+					float: none;
+					width: 100%;
+				}
+			}
+		}
+	}
+
+	#stripe-payment-data ~ fieldset {
+		margin: var(--newspack-ui-spacer-3, 16px) 0 0;
+	}
+
+	// Hide 'Save New' checkbox container if the credit card form is hidden -- this means the checkbox is also hidden and gets rid of extra space.
+	fieldset:has(.woocommerce-SavedPaymentMethods-saveNew[style*="display: none"]) {
+		display: none;
+	}
+
+	// WooPayments inputs
+	#wcpay-upe-element,
+	.wcpay-upe-element {
+		margin: 0;
+		padding: 0;
+
+		+ div:has(.woocommerce-SavedPaymentMethods-saveNew) {
+			margin-top: var(--newspack-ui-spacer-3, 16px);
+		}
+	}
+
+	.payment_method_woocommerce_payments {
+		// WooPayments test credit card number
+		.js-woopayments-copy-test-number {
+			font-size: inherit;
+			font-style: inherit;
+			font-weight: normal;
+			line-height: var(--newspack-ui-line-height-xs, 1.4286);
+			padding: 0;
+			vertical-align: unset;
+
+			&:hover,
+			&:focus {
+				color: inherit;
+				filter: none;
+			}
+
+			i {
+				height: 1em;
+				width: 1em;
+			}
+		}
+
+		.testmode-info a {
+			text-decoration: underline;
+		}
+	}
+
+	// Fix Link payment processor icon placement
+	.woocommerce-input-wrapper:has(.stripe-gateway-stripelink-modal-trigger) {
+		display: block;
+		position: relative;
+
+		.stripe-gateway-stripelink-modal-trigger {
+			inset: calc(50% - 24px) 20px auto auto !important; // !important override inline styles.
+		}
+	}
+
+	// Braintree styles
+	li.payment_method_braintree_credit_card,
+	li.payment_method_braintree_paypal {
+		.sv-wc-payment-gateway-card-icons {
+			float: right;
+		}
+
+		.sv-wc-payment-gateway-payment-form-manage-payment-methods {
+			display: none;
+		}
+
+		& > p.form-row {
+			margin-top: var(--newspack-ui-spacer-3, 16px);
+		}
+
+		.form-row {
+			&::before,
+			&::after {
+				display: none;
+			}
+
+			input[type="radio"] + label {
+				display: inline-block;
+			}
+		}
+
+		.payment_method_braintree_credit_card,
+		.payment_method_braintree_paypal {
+			.form-row {
+				display: block;
+				margin: var(--newspack-ui-spacer-base, 8px) 0;
+				padding: 0 !important;
+
+				label {
+					font-size: var(--newspack-ui-font-size-s, 16px);
+					font-weight: 600;
+					line-height: var(--newspack-ui-line-height-s, 1.5);
+					margin: 0 0 var(--newspack-ui-spacer-base, 8px);
+				}
+
+				.wc-braintree-hosted-field-card-number {
+					margin-bottom: var(--newspack-ui-spacer-base, 8px);
+				}
+
+				&:has(label[for="wc-braintree-credit-card-context-hosted"]) {
+					margin: 0;
+				}
+
+				// Hiding the test input, since it's distracted and unneeded.
+				&:has(label[for="wc-braintree-credit-card-test-amount"]),
+				&:has(label[for="wc-braintree-paypal-test-amount"]) {
+					display: none;
+				}
+
+				// This can be done via My Account, removing the link for consistency.
+				.sv-wc-payment-gateway-payment-form-manage-payment-methods {
+					display: none;
+				}
+
+				&:has(#wc-braintree-credit-card-tokenize-payment-method),
+				&:has(#wc-braintree-paypal-tokenize-payment-method) {
+					display: grid !important;
+					gap: 0 var(--newspack-ui-spacer-base, 8px);
+					grid-template-columns: var(--newspack-ui-spacer-4, 20px) 1fr;
+
+					label {
+						font-weight: 600;
+						margin: 0;
+					}
+				}
+
+				&:last-child label {
+					margin: 0;
+				}
+			}
+		}
+	}
+
+	// Order review table.
+	.woocommerce-checkout-review-order-table {
+		width: 100%;
+
+		th,
+		td,
+		label,
+		small {
+			font-size: var(--newspack-ui-font-size-xs, 14px) !important;
+			line-height: var(--newspack-ui-line-height-xs, 1.4286) !important;
+		}
+
+		thead th,
+		.recurring-totals th {
+			background: transparent;
+		}
+
+		// stylelint-disable-next-line selector-id-pattern
+		.woocommerce-shipping-totals #shipping_method {
+			li,
+			label {
+				margin: 0;
+			}
+		}
+
+		td,
+		th {
+			border: 1px solid var(--newspack-ui-color-border, #ddd);
+			border-width: 0 0 1px;
+			word-break: break-all;
+		}
+
+        tfoot {
+          tr:last-child {
+              td,
+              th {
+                  border-bottom: 0;
+              }
+          }
+        }
+	}
+
+	.woocommerce .first-payment-date {
+		font-family: var(--newspack-ui-font-family, system-ui);
+	}
+
+	// Errors
+	.woocommerce-invalid {
+		input,
+		textarea,
+		.select2-container--default .select2-selection--single {
+			border-color: var(--newspack-ui-color-error-50, np-colors.$error-500);
+
+			&:focus {
+				outline-color: var(--newspack-ui-color-error-50, np-colors.$error-500);
+			}
+		}
+
+		label {
+			color: var(--newspack-ui-color-error-50, np-colors.$error-500);
+		}
+	}
+
+	// Terms and Conditions section
+	.woocommerce-terms-and-conditions-wrapper {
+		margin-bottom: 0;
+
+		// Privacy Policy
+		.woocommerce-privacy-policy-text {
+			color: var(--newspack-ui-color-neutral-60, np-colors.$neutral-600);
+		}
+
+		.woocommerce-terms-and-conditions {
+			margin-top: var(--newspack-ui-spacer-5, 24px);
+
+			*:first-child {
+				margin-top: 0;
+			}
+		}
+	}
+
+	// Subscriptions confirmation checkbox
+	// stylelint-disable-next-line selector-id-pattern
+	p#newspack_subscription_confirmation_field,
+	//Terms and Conditions checkbox
+	.woocommerce-terms-and-conditions-wrapper > p.form-row {
+		background: var(--newspack-ui-color-neutral-5, np-colors.$neutral-050);
+		border-color: var(--newspack-ui-color-border, np-colors.$neutral-300);
+		box-shadow: none;
+		font-size: var(--newspack-ui-font-size-xs, 14px);
+		line-height: var(--newspack-ui-line-height-xs, 1.4286);
+		margin-top: var(--newspack-ui-spacer-5, 24px);
+		padding: var(--newspack-ui-spacer-5, 24px);
+
+		label {
+			display: flex !important; // to override grid on more generic labels with checkboxes.
+			justify-content: flex-start;
+			align-items: center;
+			height: 20px;
+			margin: 0;
+			padding: 0;
+			gap: 0;
+
+			> input {
+				margin: 0 var(--newspack-ui-spacer-2, 12px) 0 0;
+			}
+
+			> span {
+				font-size: var(--newspack-ui-font-size-xs, 14px);
+				line-height: var(--newspack-ui-line-height-xs, 1.4286);
+				margin-bottom: 0;
+			}
+		}
+	}
+
+	// Subscription confirmation checkbox
+	form .newspack-subscription-confirmation-checkbox,
+	// Automate Woo Opt in
+	form .automatewoo-optin {
+		margin: var(--newspack-ui-spacer-5, 24px) 0 0;
+	}
+
+	// Buttons - adjust spacing
+	#place-order {
+		margin-bottom: 0;
+	}
+
+	// Express checkout dividers.
+	// This is being replaced with JavaScript so it can be styled correctly.
+	#wcpay-express-checkout-button-separator,
+	#wc-stripe-payment-request-button-separator,
+	#wc-stripe-express-checkout-button-separator {
+		display: none !important; // !important needed to override inline styles.
+
+		&[style*="display:none"] + .newspack-ui__word-divider {
+			display: none;
+		}
+	}
+
+	// stylelint-disable-next-line selector-id-pattern
+	#checkout_edit_billing {
+		margin-top: 0;
+	}
+
+	// stylelint-disable-next-line selector-id-pattern
+	#checkout_cancel {
+		margin-top: var(--newspack-ui-spacer-2);
+		margin-bottom: 0;
+	}
+
+	// stylelint-disable-next-line selector-id-pattern
+	#checkout_error_back {
+		margin-bottom: 0;
+	}
+
+	form.checkout .woocommerce-NoticeGroup,
+	.woocommerce .woocommerce-notices-wrapper {
+		scroll-margin-top: var(--newspack-ui-spacer-10, 64px);
+
+		li div {
+			display: block; // Overrides display: flex from theme with listed errors.
+		}
+
+		.woocommerce-message,
+		.woocommerce-error,
+		.woocommerce-info {
+			background: none;
+			color: inherit;
+			font-family: var(--newspack-ui-font-family, system-ui);
+			font-size: var(--newspack-ui-font-size-xs, 14px);
+			list-style-type: none;
+			margin: 0;
+			padding: 0;
+
+			li {
+				width: 100%;
+			}
+		}
+	}
+
+	.woocommerce .woocommerce-notices-wrapper:not(:empty) {
+		margin-bottom: var(--newspack-ui-spacer-5, 24px);
+		margin-top: 0;
+		/* Prevent duplicated padding and border from Newspack UI notices */
+		padding: 0 !important;
+		border-left: none;
+	}
+
+	.woocommerce .woocommerce-notices-wrapper .woocommerce-error.newspack-ui__notice--error {
+		padding: var(--newspack-ui-spacer-2, 12px);
+	}
+
+	.modal-processing {
+		opacity: 0.5;
+	}
+
+	// Hide address-validation-and-auto-complete field.
+	/* stylelint-disable-next-line selector-id-pattern */
+	#address_rdi_field {
+		display: none;
+	}
+
+	/**
+	 * Change Payment Method form.
+	 */
+	/* stylelint-disable-next-line selector-id-pattern */
+	.woocommerce-info:has(+ #order_review.change-payment-method) {
+		background: transparent;
+		font-size: var(--newspack-ui-font-size-s, 16px);
+		line-height: var(--newspack-ui-line-height-s, 1.5);
+		padding: 0;
+	}
+	/* stylelint-disable-next-line selector-id-pattern */
+	#order_review.change-payment-method {
+		.payment_box ul.wc-saved-payment-methods {
+			margin-top: 0;
+		}
+
+		.update-all-subscriptions-payment-method-wrap {
+			label {
+				font-weight: normal;
+				font-size: var(--newspack-ui-font-size-s, 16px);
+				line-height: var(--newspack-ui-line-height-s, 1.5);
+			}
+		}
+	}
+	/* stylelint-disable-next-line selector-id-pattern */
+	#update_all_subscriptions_payment_method_field {
+		label {
+			margin-bottom: 0;
+		}
+	}
+}

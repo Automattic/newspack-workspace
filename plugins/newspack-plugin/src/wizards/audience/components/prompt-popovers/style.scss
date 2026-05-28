@@ -1,0 +1,22 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-popover__campaigns {
+	&__toggle-control {
+		width: 100%;
+		display: flex;
+		justify-content: space-between;
+	}
+
+	&__primary-popover {
+		margin-left: calc(-25px + 74px / 2); // 25px is set by Gutenberg, 74px / 2 is half of the container's width
+	}
+
+	&__info {
+		background: wp-colors.$gray-100;
+		color: wp-colors.$gray-900;
+		font-size: 12px;
+		line-height: 16px;
+		padding: 4px 8px;
+		text-align: left;
+	}
+}

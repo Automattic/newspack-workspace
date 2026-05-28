@@ -1,0 +1,25 @@
+.wp-block-newspack-collections {
+	// Loading state and empty state.
+	.collections-loading,
+	.no-collections {
+		min-height: 200px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		grid-column: 1 / -1;
+
+		svg {
+			margin: 0;
+		}
+
+		.components-placeholder__label {
+			gap: 4px;
+		}
+	}
+
+	// Collection item base.
+	.wp-block-newspack-collections__item {
+		position: relative;
+	}
+}
+

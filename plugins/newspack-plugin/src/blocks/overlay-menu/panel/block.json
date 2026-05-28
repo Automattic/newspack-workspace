@@ -1,0 +1,50 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack/overlay-menu-panel",
+	"title": "Menu Panel",
+	"category": "newspack",
+	"description": "The panel that appears when the Overlay Button is triggered. Accepts any blocks as content, making it suitable for navigation menus, search forms, or any custom layout.",
+	"textdomain": "newspack-plugin",
+	"parent": [
+		"newspack/overlay-menu"
+	],
+	"usesContext": [
+		"newspack-overlay-menu/instanceId"
+	],
+	"attributes": {
+		"slideDirection": {
+			"type": "string",
+			"enum": [ "left", "right" ],
+			"default": "left"
+		},
+		"isFullScreen": {
+			"type": "boolean",
+			"default": false
+		},
+		"panelWidth": {
+			"type": "string",
+			"enum": [ "x-small", "small", "medium", "large", "x-large" ],
+			"default": "small"
+		},
+		"overlayColor": {
+			"type": "string",
+			"default": ""
+		},
+		"panelBackgroundColor": {
+			"type": "string",
+			"default": "var(--wp--preset--color--base, #ffffff)"
+		},
+		"panelTextColor": {
+			"type": "string",
+			"default": "var(--wp--preset--color--contrast, #1E1E1E)"
+		},
+		"lock": { "type": "object", "default": { "move": true, "remove": true } }
+	},
+	"supports": {
+		"html": false,
+		"lock": false
+	},
+	"editorStyle": "file:../../../../dist/blocks.css",
+	"style": "file:../../../../dist/blocks.css"
+}

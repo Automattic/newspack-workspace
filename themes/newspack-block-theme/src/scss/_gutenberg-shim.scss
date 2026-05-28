@@ -1,0 +1,67 @@
+// Add CSS for theme.json options that don't exist yet.
+
+/*
+ * Navigation styles
+ * Remove extra padding from navigation link when set to click to open.
+ * https://github.com/WordPress/gutenberg/issues/50722
+ */
+.wp-block-navigation {
+	&.is-vertical .wp-block-navigation-item.open-on-click {
+		.wp-block-navigation-submenu__toggle {
+			padding-left: 0;
+		}
+
+		.has-child .wp-block-navigation-submenu__toggle {
+			padding: 0.5em 1em;
+		}
+	}
+}
+
+/* Fix for hidden 'append' icons in editor */
+.has-background .wp-block-navigation .wp-block .wp-block .block-editor-button-block-appender {
+	color: inherit;
+}
+
+/*
+ * Link styles
+ * https://github.com/WordPress/gutenberg/issues/42319
+ */
+a {
+	text-decoration-thickness: 0.0625em !important;
+	text-underline-offset: 0.15em;
+}
+
+// Can't control the link element when inside of the caption element.
+// TODO: Find related Gutenberg issue (if one exists - no luck yet!)
+figcaption a {
+	color: inherit;
+}
+
+/*
+ * Term description - remove margin from first paragraph.
+ * The underlying issue is that the author bio block lacks paragraphs,
+ * so its spacing and the term description spacing differ.
+ */
+.wp-block-term-description {
+	p {
+		&:first-child {
+			margin-top: 0;
+		}
+
+		&:last-child {
+			margin-bottom: 0;
+		}
+	}
+}
+
+/*
+ * Editor styles
+ *
+ * Fix spacing between title and editor content.
+ * In other themes, this comes from the spacing around the block, but we're using flex and gap.
+ */
+.edit-post-visual-editor {
+	&__post-title-wrapper {
+		margin-bottom: var(--wp--preset--spacing--50);
+	}
+}

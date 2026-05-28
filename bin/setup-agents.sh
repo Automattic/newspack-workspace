@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
 #
-# Set up AI agent tooling for Newspack development.
-# Reads marketplace and plugin configuration from .claude/settings.json
-# and installs everything at user scope.
+# Bootstrap AI agent tooling for Newspack contributors.
+#
+# For Claude Code: reads `extraKnownMarketplaces` and `enabledPlugins`
+# from .claude/settings.json and:
+#
+#   1. Registers each declared marketplace.
+#   2. Installs each plugin at user scope so it loads in every Claude
+#      Code session, not just inside this workspace.
+#   3. Removes any leftover project scope plugin record.
+#
+# Safe to re-run: existing installs are skipped; new entries in
+# .claude/settings.json are picked up on the next run.
 #
 # Usage: n setup-agents
 
@@ -46,16 +55,29 @@ jq -r '.extraKnownMarketplaces // {} | to_entries[] | select(.value.source.sourc
   claude plugin marketplace add "$m" 2>/dev/null || true
 done
 
-# Install plugins from enabledPlugins
+# Detect legacy project-scope copies. Abort on query failure so we don't silently skip cleanup.
+if ! plugin_list_json=$(claude plugin list --json); then
+  echo "==> Could not query installed plugins. See error above." >&2
+  exit 1
+fi
+needs_cleanup=$(jq -r --arg path "$ROOT_DIR" '[.[] | select(.scope == "project" and .projectPath == $path)] | length' <<< "$plugin_list_json")
+
+# Project-scope uninstall also strips entries from `enabledPlugins`, our source
+# of truth, so snapshot the file and let the trap restore it on any exit.
+if [[ "${needs_cleanup:-0}" -gt 0 ]]; then
+  settings_backup="$(mktemp "${SETTINGS_FILE}.bak.XXXXXX")"
+  cp "$SETTINGS_FILE" "$settings_backup"
+  trap 'mv -f "$settings_backup" "$SETTINGS_FILE"' EXIT; trap 'exit 130' INT; trap 'exit 143' TERM HUP
+fi
+
 echo ""
 echo -e "${cyan}🔌 Installing plugins...${reset}"
 jq -r '.enabledPlugins // {} | to_entries[] | select(.value == true) | .key' "$SETTINGS_FILE" | while read -r p; do
   echo -e "   ${dim}${p}${reset}"
-  if claude plugin install "$p" --scope user 2>/dev/null; then
-    echo -e "   ${green}✓${reset} ${p}"
-  else
-    echo -e "   ${yellow}⚠${reset} ${p} ${dim}(may already be installed)${reset}"
+  if [[ "${needs_cleanup:-0}" -gt 0 ]]; then
+    claude plugin uninstall "$p" --scope project -y >/dev/null 2>&1 || true
   fi
+  claude plugin install "$p" --scope user
 done
 
 echo ""

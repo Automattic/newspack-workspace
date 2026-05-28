@@ -1,0 +1,52 @@
+.grecaptcha-container {
+	display: flex;
+	justify-content: center;
+	width: 100%;
+
+	& > * {
+		margin: 16px 0;
+	}
+}
+
+// Hide reCAPTCHA badge
+.grecaptcha-container,
+.grecaptcha-badge {
+	inset: 0 !important; // Prevents an odd side-scroll issue in the registration modal & block.
+	width: 0 !important;
+	height: 0 !important;
+	display: none !important;
+	visibility: hidden !important;
+}
+
+.newspack-recaptcha-error {
+	&.newspack-ui__notice--error {
+		margin-top: 0 !important;
+	}
+}
+
+// Hide the "real" #place_order button but only in modal checkout and if we've rendered a v2 widget.
+/* stylelint-disable-next-line selector-id-pattern */
+#newspack_modal_checkout_container form[name="checkout"] {
+	&[data-recaptcha-widget-id] {
+		/* stylelint-disable-next-line selector-id-pattern */
+		#place_order {
+			display: none !important;
+		}
+	}
+}
+
+body:not(.newspack-ui) .woocommerce #payment,
+body:not(.newspack-ui) .woocommerce-page #payment {
+	/* stylelint-disable-next-line selector-id-pattern */
+	#place_order_clone {
+		@media only screen and (max-width: 768px) {
+			width: 100% !important;
+		}
+		float: right;
+
+		/* stylelint-disable-next-line selector-id-pattern */
+		& + #place_order {
+			display: none;
+		}
+	}
+}

@@ -91,24 +91,75 @@ start() {
             file="docker-compose-82.yml"
         fi
         docker compose -f $file up -d
+
+    # Create shared network for inter-container communication.
+    # Env containers join this network with their domain as an alias,
+    # so they can reach each other by domain name via Docker DNS.
+    if ! docker network inspect newspack_envs >/dev/null 2>&1; then
+        if ! docker network create newspack_envs >/dev/null; then
+            echo "Error: failed to create Docker network 'newspack_envs'. Is Docker running?" >&2
+            exit 1
+        fi
+        echo "Created shared network: newspack_envs"
+    fi
+
+    # macOS: set up loopback aliases for isolated environments.
+    # Pre-allocate 127.0.0.2–100 so agents can create envs without sudo later.
+    # These don't survive reboots, so this runs on every start.
+    if [[ "$(uname)" == "Darwin" ]]; then
+        missing_aliases=()
+        lo0_addrs=$(ifconfig lo0 2>/dev/null)
+        for octet in $(seq 2 100); do
+            ip="127.0.0.$octet"
+            if ! echo "$lo0_addrs" | grep -qE "inet $ip( |$)"; then
+                missing_aliases+=("$ip")
+            fi
+        done
+        missing_hosts=()
+        for f in "$NABSPATH"/docker-compose.env-*.yml; do
+            [[ -f "$f" ]] || continue
+            domain=$(grep 'WP_DOMAIN=' "$f" | head -1 | sed 's/.*WP_DOMAIN=//')
+            ip=$(grep -o '127\.0\.0\.[0-9]*' "$f" | head -1)
+            # Only add hosts entries for custom domains, not IP-based ones.
+            if [[ -n "$domain" && "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
+                missing_hosts+=("$ip $domain")
+            fi
+        done
+        if [[ ${#missing_aliases[@]} -gt 0 || ${#missing_hosts[@]} -gt 0 ]]; then
+            # Use the wrapper script if installed (passwordless sudo), otherwise fall back to raw sudo.
+            if command -v newspack-manage-host >/dev/null 2>&1; then
+                for ip in "${missing_aliases[@]}"; do
+                    sudo newspack-manage-host alias-add "$ip"
+                done
+                for entry in "${missing_hosts[@]}"; do
+                    read -r ip domain <<< "$entry"
+                    if [[ "$domain" == *.local ]]; then
+                        sudo newspack-manage-host host-add "$ip" "$domain"
+                    else
+                        echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
+                    fi
+                done
+            else
+                echo ""
+                echo "Setting up networking for isolated environments (requires sudo)..."
+                for ip in "${missing_aliases[@]}"; do
+                    sudo ifconfig lo0 alias "$ip"
+                done
+                for entry in "${missing_hosts[@]}"; do
+                    echo "$entry" | sudo tee -a /etc/hosts > /dev/null
+                done
+            fi
+            echo "Ready: loopback aliases 127.0.0.2–100, $(( ${#missing_hosts[@]} )) hosts entries."
+        fi
+    fi
 }
 stop() {
     docker compose down
 }
 
 switch_all_repos_to_branch() {
-    for dir in repos/*/; do
-        cd "$NABSPATH/$dir"
-        if [ -d ".git" ]; then
-            git checkout $1
-            echo "Updating repository to $1: $dir"
-            git pull
-            target=$(basename $dir)
-            echo $target
-            docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/build-repos.sh $target"
-        fi
-        cd ..
-    done
+    echo "In a monorepo, all code shares a single branch."
+    echo "Use 'git checkout $1' at the workspace root instead."
 }
 
 # NOTE: when adding a new command, update the 'help' case below.
@@ -124,7 +175,12 @@ case $1 in
         start "${@:2}"
         ;;
     sh)
-        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER /bin/bash
+        if [[ -n "$2" ]]; then
+            container=$(echo "newspack_env_${2}" | tr '-' '_')
+            docker exec $DOCKER_IT $USER_COMMAND "$container" /bin/bash
+        else
+            docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER /bin/bash
+        fi
         ;;
     rsh)
         docker exec $DOCKER_IT $TARGET_CONTAINER /bin/bash
@@ -176,6 +232,61 @@ case $1 in
         ;;
     reset-site)
         docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/reset-site.sh $current_site_path"
+        ;;
+    setup)
+        shift
+        setup_container="$TARGET_CONTAINER"
+        setup_env_name=""
+        setup_args=()
+        while [[ $# -gt 0 ]]; do
+            if [[ "$1" == "--env" ]]; then
+                if [[ $# -lt 2 || "$2" == --* ]]; then
+                    echo "Error: --env requires an environment name." >&2
+                    echo "Usage: n setup [--env ENV_NAME] [setup-args...]" >&2
+                    exit 1
+                fi
+                setup_env_name="$2"
+                setup_container=$(echo "newspack_env_${2}" | tr '-' '_')
+                current_site_path="/var/www/html"
+                shift 2
+            else
+                setup_args+=("$1")
+                shift
+            fi
+        done
+        # For isolated envs with --woocommerce, copy third-party plugins from the main site.
+        if [[ -n "$setup_env_name" ]] && [[ " ${setup_args[*]} " == *" --woocommerce "* ]]; then
+            main_plugins="$NABSPATH/html/wp-content/plugins"
+            env_plugins="$NABSPATH/envs/${setup_env_name}/html/wp-content/plugins"
+            mkdir -p "$env_plugins"
+            for plugin in "${woocommerce_plugins[@]}"; do
+                if [[ -e "$env_plugins/$plugin" ]]; then
+                    continue
+                elif [[ -d "$main_plugins/$plugin" || -L "$main_plugins/$plugin" ]]; then
+                    # Use -L to also match symlinks to container-only paths (e.g. /newspack-repos/).
+                    # Resolve symlinks via readlink so cp can follow the host-side path.
+                    src="$main_plugins/$plugin"
+                    if [[ -L "$src" ]]; then
+                        target="$(readlink "$src")"
+                        # Translate container path /newspack-plugins/<name> to host path plugins/<name>.
+                        if [[ "$target" == /newspack-plugins/* ]]; then
+                            src="$NABSPATH/plugins/${target#/newspack-plugins/}"
+                        elif [[ "$target" == /newspack-themes/* ]]; then
+                            src="$NABSPATH/themes/${target#/newspack-themes/}"
+                        fi
+                    fi
+                    if [[ -d "$src" ]]; then
+                        echo "Copying $plugin from main site to $setup_env_name..."
+                        cp -r "$src" "$env_plugins/$plugin" || echo "Warning: failed to copy $plugin." >&2
+                    else
+                        echo "Warning: $plugin symlink target not found. WooCommerce setup may be incomplete." >&2
+                    fi
+                else
+                    echo "Warning: $plugin not found in main site. WooCommerce setup may be incomplete." >&2
+                fi
+            done
+        fi
+        docker exec $DOCKER_IT $USER_COMMAND "$setup_container" /var/scripts/site-setup.sh "$current_site_path" "${setup_args[@]}"
         ;;
     tail)
         tail -f $current_site_relative_path/wp-content/debug.log
@@ -270,14 +381,8 @@ case $1 in
         docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER $cmd
         ;;
     pull)
-        for dir in repos/*/; do
-        cd "$NABSPATH/$dir"
-        if [ -d ".git" ]; then
-            echo "Updating repository: $dir"
-            git pull
-        fi
-        cd ..
-        done
+        echo "Pulling latest from origin..."
+        cd "$NABSPATH" && git pull
         ;;
     branch)
         switch_all_repos_to_branch $2
@@ -310,61 +415,62 @@ case $1 in
         echo "Available commands:"
         echo ""
         echo "Container Management:"
-        echo "  start [version]          Start the Docker containers. Optionally specify a PHP version (e.g. 8.2)."
-        echo "  stop                     Stop the Docker containers."
-        echo "  restart [version]        Restart the Docker containers. Optionally specify a PHP version (e.g. 8.2)."
-        echo "  sh                       Open a bash shell inside the container as the Apache user."
-        echo "  rsh                      Open a bash shell inside the container as root."
+        echo "  start [version]              Start the Docker containers. Optionally specify a PHP version (e.g. 8.2)."
+        echo "  stop                         Stop the Docker containers."
+        echo "  restart [version]            Restart the Docker containers. Optionally specify a PHP version (e.g. 8.2)."
+        echo "  sh                           Open a bash shell inside the container as the Apache user."
+        echo "  rsh                          Open a bash shell inside the container as root."
         echo ""
         echo "WordPress:"
-        echo "  install                  Run the installation script for the current site."
-        echo "  uninstall                Run the uninstallation script for the current site."
-        echo "  reset-site               Reset the current site to a clean state."
-        echo "  wp [args]                Run a WP-CLI command for the current site. Example: n wp plugin list"
-        echo "  db                       Open a WP-CLI database shell for the current site."
-        echo "  shell                    Open a WP-CLI shell for the current site."
-        echo "  tail                     Tail the debug.log file of the current site."
-        echo "  secrets                  Export current site secrets (API keys, options, constants) as JSON."
-        echo "  secrets-import           Import secrets from secrets.json into the current site."
-        echo "  snapshot [name]          Create a snapshot of the current site with the given name."
-        echo "  snapshot-load [name]     Load a snapshot with the given name into the current site."
+        echo "  install                      Run the installation script for the current site."
+        echo "  uninstall                    Run the uninstallation script for the current site."
+        echo "  reset-site                   Reset the current site to a clean state."
+        echo "  setup [--env name] [opts]    Bootstrap a Newspack site. Run 'n setup --help' for options."
+        echo "  wp [args]                    Run a WP-CLI command for the current site."
+        echo "  db                           Open a WP-CLI database shell for the current site."
+        echo "  shell                        Open a WP-CLI shell for the current site."
+        echo "  tail                         Tail the debug.log file of the current site."
+        echo "  secrets                      Export current site secrets (API keys, options, constants) as JSON."
+        echo "  secrets-import               Import secrets from secrets.json into the current site."
+        echo "  snapshot [name]              Create a snapshot of the current site with the given name."
+        echo "  snapshot-load [name]         Load a snapshot with the given name into the current site."
         echo ""
         echo "Building & Testing:"
-        echo "  build [folder]           Build the specified folder (plugin/theme) or all for every repo."
-        echo "  ci-build [folder]        Build for CI environment with specific optimizations."
-        echo "  watch                    Watch for changes in the current repo and rebuild automatically."
-        echo "  test-php [args]          Run PHP tests for the current repo with optional arguments."
-        echo "  test-js                  Run JavaScript tests for the current repo."
-        echo "  composer [args]          Run a composer command for the current repo. Example: n composer update"
-        echo "  npm [args]               Run an npm command for the current repo. Example: n npm install"
+        echo "  build [folder]               Build the specified folder (plugin/theme) or all for every repo."
+        echo "  ci-build [folder]            Build for CI environment with specific optimizations."
+        echo "  watch                        Watch for changes in the current repo and rebuild automatically."
+        echo "  test-php [args]              Run PHP tests for the current repo with optional arguments."
+        echo "  test-js                      Run JavaScript tests for the current repo."
+        echo "  composer [args]              Run a composer command for the current repo."
+        echo "  npm [args]                   Run an npm command for the current repo."
         echo ""
         echo "Multi-site:"
-        echo "  sites-add [name]         Add a new additional site with the given name."
-        echo "  sites-list               List all additional sites."
-        echo "  sites-drop [name]        Remove an additional site with the given name."
-        echo "  install-manager          Install WordPress on the Newspack Manager site."
-        echo "  setup-manager            Set up WordPress Manager plugin on the manager site."
-        echo "  setup-newspack-network   Set up Newspack Network Docker environment."
+        echo "  sites-add [name]             Add a new additional site with the given name."
+        echo "  sites-list                   List all additional sites."
+        echo "  sites-drop [name]            Remove an additional site with the given name."
+        echo "  install-manager              Install WordPress on the Newspack Manager site."
+        echo "  setup-manager                Set up WordPress Manager plugin on the manager site."
+        echo "  setup-newspack-network       Set up Newspack Network Docker environment."
         echo ""
         echo "Repository Management:"
-        echo "  pull                     Pull the latest changes for all repositories."
-        echo "  branch [name]            Switch all repositories to the specified branch."
-        echo "  trunk                    Switch all repositories to the trunk branch."
-        echo "  alpha                    Switch all repositories to the alpha branch."
-        echo "  release                  Switch all repositories to the release branch."
+        echo "  pull                         Pull the latest changes for all repositories."
+        echo "  branch [name]                Switch all repositories to the specified branch."
+        echo "  trunk                        Switch all repositories to the trunk branch."
+        echo "  alpha                        Switch all repositories to the alpha branch."
+        echo "  release                      Switch all repositories to the release branch."
         echo ""
         echo "Isolated Environments:"
-        echo "  worktree [args]          Manage isolated Git worktrees for repositories (add, list, remove)."
-        echo "  env [args]               Manage isolated development environments (create, up, down, destroy, list)."
+        echo "  worktree [args]              Manage Git worktrees for repositories (add, list, remove, cleanup)."
+        echo "  env [args]                   Manage isolated environments (create, up, down, destroy, list, cleanup)."
         echo ""
         echo "AI Agents:"
-        echo "  setup-agents             Set up AI agent tooling for Newspack development."
+        echo "  setup-agents                 Set up AI agent tooling for Newspack development."
         echo ""
         echo "Other:"
-        echo "  root                     Print the absolute path to the workspace root directory."
-        echo "  cd-install               Install the ncd command in your system for easy navigation to repos and sites."
-        echo "  jncp [args]              Copy selected plugins to a Jurassic Ninja site via SSH."
-        echo "  jninit [args]            Initialize a Jurassic Ninja site with core Newspack and WooCommerce plugins and runs setup."
+        echo "  root                         Print the absolute path to the workspace root directory."
+        echo "  cd-install                   Install the ncd command for easy navigation to repos and sites."
+        echo "  jncp [args]                  Copy selected plugins to a Jurassic Ninja site via SSH."
+        echo "  jninit [args]                Initialize a Jurassic Ninja site with Newspack and WooCommerce plugins."
         ;;
     *)
         echo "Unknown command: $1. Run 'n help' to see available commands."

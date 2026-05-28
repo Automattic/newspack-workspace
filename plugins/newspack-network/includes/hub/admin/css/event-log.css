@@ -1,0 +1,43 @@
+.wp-list-table .column-id {
+  width: 40px;
+}
+
+.newspack-network-data-column {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  position: relative;
+  min-height: 80px;
+}
+.newspack-network-data-column pre {
+  margin: 0;
+  flex: 1 1 100%;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(220, 220, 222, 0.75);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+  color: rgba(44, 51, 56, 0.8);
+  border-radius: 4px;
+  overflow: auto;
+}
+.newspack-network-data-column pre code {
+  font-size: 11px;
+  background: transparent;
+}
+.newspack-network-data-column textarea {
+  width: 100%;
+  height: 80px;
+  overflow: hidden;
+  font-size: 11px;
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+/* Add a fade effect to the textarea */
+.newspack-network-data-column textarea {
+  background-color: rgba(255, 255, 255, 0.5);
+  transition: background-color 0.5s;
+}
+.newspack-network-data-column button {
+  z-index: 2;
+}

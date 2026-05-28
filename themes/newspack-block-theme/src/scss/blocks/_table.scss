@@ -1,0 +1,52 @@
+.wp-block-table {
+	thead,
+	tfoot {
+		border-width: 0.25rem;
+	}
+
+	td,
+	th {
+		padding: var(--wp--preset--spacing--20);
+	}
+
+	table {
+		&[style*="border-width"] {
+			thead,
+			tfoot {
+				border-width: inherit;
+			}
+		}
+
+		&:not(.has-border-color) {
+			thead,
+			tfoot,
+			td,
+			th {
+				border-color: var(--wp--preset--color--base-3);
+			}
+		}
+	}
+
+	&.is-style-stripes {
+		border-bottom: 0;
+
+		tbody {
+			tr:nth-child(odd) {
+				background-color: var(--wp--preset--color--base-2);
+			}
+		}
+	}
+
+	&[style*="font-size"],
+	&[class*="font-size"] {
+		table {
+			font-size: inherit;
+		}
+	}
+
+	&[style*="line-height"] {
+		table {
+			line-height: inherit;
+		}
+	}
+}

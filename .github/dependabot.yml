@@ -1,0 +1,58 @@
+version: 2
+
+updates:
+  # Root npm dependencies (pnpm workspace).
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+    # Group minor/patch updates to reduce PR noise.
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Root composer dependencies (PHPCS, PHPUnit, etc.).
+  - package-ecosystem: "composer"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+
+  # GitHub Actions.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+
+  # Per-plugin production composer deps (only plugins that have them).
+  - package-ecosystem: "composer"
+    directory: "plugins/newspack-plugin"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+  - package-ecosystem: "composer"
+    directory: "plugins/newspack-ads"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+  - package-ecosystem: "composer"
+    directory: "plugins/newspack-newsletters"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+  - package-ecosystem: "composer"
+    directory: "plugins/newspack-popups"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"

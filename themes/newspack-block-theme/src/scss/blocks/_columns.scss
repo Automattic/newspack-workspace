@@ -1,0 +1,80 @@
+@use "../sass-utils";
+@use "../mixins";
+
+.wp-block-columns {
+	// Hide column block if empty on smaller screens.
+	.wp-block-column:empty {
+		display: none;
+
+		@include sass-utils.media(medium) {
+			display: inherit;
+		}
+	}
+
+	// 25-50-25 layout special conditions.
+	&:has(.wp-block-column[style*="50%"]):has(.wp-block-column[style*="25%"]:empty):not(.wp-block) {
+		// Hide empty 25% columns below large screen.
+		.wp-block-column[style*="25%"]:empty {
+			display: none;
+
+			@include sass-utils.media(large) {
+				display: inherit;
+			}
+		}
+
+		// Center the 50% column.
+		.wp-block-column[style*="50%"] {
+			margin-left: auto;
+			margin-right: auto;
+			max-width: var(--wp--style--global--content-size);
+		}
+
+		// Both 25% columns are empty → 50% takes 100%.
+		&:not(:has(.wp-block-column[style*="25%"]:not(:empty))) {
+			.wp-block-column[style*="50%"] {
+				flex-basis: 100% !important;
+			}
+		}
+
+		// Only one 25% column is empty → 50% takes 75% (50% + empty 25%).
+		&:has(.wp-block-column[style*="25%"]:not(:empty)) {
+			.wp-block-column[style*="50%"] {
+				flex-basis: 75% !important;
+			}
+		}
+	}
+
+	// 12-column grid layout.
+	@include mixins.columns-grid__selectors {
+		@include sass-utils.media(large) {
+			@include mixins.columns-grid__layout;
+		}
+	}
+
+	// Borders style.
+	&.is-style-borders {
+		gap: var(--wp--preset--spacing--80) !important;
+
+		> .wp-block-column::after {
+			border-color: var(--wp--preset--color--base-3);
+			bottom: calc(-1 * var(--wp--preset--spacing--80) / 2 - 0.5px);
+
+			@include sass-utils.media(medium) {
+				bottom: 0;
+				right: calc(-1 * var(--wp--preset--spacing--80) / 2 - 0.5px);
+			}
+
+			.has-background &,
+			.has-text-color & {
+				border-color: currentcolor; // Fallback
+				border-color: color-mix(in srgb, currentcolor 15%, transparent);
+			}
+		}
+
+		&.is-not-stacked-on-mobile {
+			> .wp-block-column::after {
+				right: calc(-1 * var(--wp--preset--spacing--80) / 2 - 0.5px);
+			}
+		}
+	}
+}

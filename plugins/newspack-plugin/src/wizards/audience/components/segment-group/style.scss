@@ -1,0 +1,78 @@
+/**
+ * Segment group
+ */
+
+@use "sass:color";
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-campaigns__segment-group {
+	&__select-control-group-header {
+		color: #ccc;
+	}
+	&__select-control-group-item {
+		padding-left: 36px;
+	}
+	&__description {
+		color: color.adjust(wp-colors.$gray-700, $lightness: -0.75%);
+		display: block;
+		font-size: 12px;
+		font-weight: normal;
+		line-height: 1.4;
+	}
+	&__card {
+		border-color: wp-colors.$gray-300;
+		overflow: hidden;
+		padding: 0;
+
+		&__segment {
+			align-items: center;
+			display: flex;
+			justify-content: space-between;
+
+			&-title {
+				display: grid;
+				flex: 1;
+				gap: 8px;
+
+				h3 {
+					margin: 0;
+
+					.components-button.is-link:not(.is-destructive) {
+						color: inherit;
+						font-size: inherit;
+						font-weight: inherit;
+						text-decoration: none;
+					}
+				}
+			}
+
+			&-actions {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 8px;
+				justify-content: flex-end;
+			}
+		}
+	}
+
+	&__action-cards {
+		margin: 0;
+
+		.newspack-card.newspack-action-card {
+			border-bottom: 0;
+			border-left: 0;
+			border-radius: 0;
+			border-right: 0;
+			margin-bottom: 0;
+			margin-block: 0 !important;
+
+			&:first-child {
+				border-top: 0;
+				margin-top: 0;
+			}
+		}
+	}
+	&__empty-segment-text {
+		margin: 0;
+	}
+}

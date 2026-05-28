@@ -1,0 +1,123 @@
+.page-title-action {
+    display: none;
+}
+
+.order-status {
+    display: inline-flex;
+    line-height: 2.5em;
+    color: #777;
+    background: #e5e5e5;
+    border-radius: 4px;
+    border-bottom: 1px solid rgba(0, 0, 0, .05);
+    margin: -.25em 0;
+    cursor: inherit !important;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+.order-status>span {
+    margin: 0 1em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.order-status.status-npn-completed {
+    background: #c8d7e1;
+    color: #2e4453;
+}
+
+.order-status.status-npn-on-hold {
+    background: #f8dda7;
+    color: #94660c;
+}
+
+.order-status.status-npn-failed {
+    background: #eba3a3;
+    color: #761919;
+}
+
+.order-status.status-npn-processing {
+    background: #c6e1c6;
+    color: #5b841b;
+}
+
+.order-status.status-npn-trash {
+    background: #eba3a3;
+    color: #761919;
+}
+.subscription-status.status-npn-active {
+    background: #c6e1c6;
+    color: #5b841b;
+}
+
+.subscription-status.status-npn-expired {
+    background: #bd94af;
+    color: #724663;
+}
+
+.subscription-status.status-npn-pending-cancel {
+    background: #bfbfbf;
+    color: #737373;
+}
+
+.subscription-status.status-npn-on-hold {
+    background: #f8dda7;
+    color: #94660c;
+}
+
+.subscription-status.status-npn-expired {
+    background: #bd94af;
+    color: #724663;
+}
+table.wp-list-table .subscription_head,
+table.wp-list-table .subscription_parent_order,
+table.wp-list-table .subscription_resubscribe_order,
+table.wp-list-table .subscription_renewal_order {
+    display: block;
+    text-indent: -9999px;
+    position: relative;
+    height: 1em;
+    width: 1em;
+}
+
+table.wp-list-table .subscription_head::after,
+table.wp-list-table .subscription_parent_order::after,
+table.wp-list-table .subscription_resubscribe_order::after,
+table.wp-list-table .subscription_renewal_order::after {
+    font-weight: 400;
+    margin: 0;
+    text-indent: 0;
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    text-align: center;
+    line-height: 16px;
+    top: 0;
+    speak: none;
+    font-variant: normal;
+    text-transform: none;
+    -webkit-font-smoothing: antialiased;
+    left: 0;
+}
+
+table.wp-list-table .subscription_head::after,
+table.wp-list-table .subscription_parent_order::after {
+    font-family: 'WooCommerce';
+    content: '\e014';
+}
+
+table.wp-list-table .subscription_resubscribe_order::after {
+    font-family: 'WooCommerce';
+    content: '\e014';
+    color: #999;
+}
+
+table.wp-list-table .subscription_renewal_order::after {
+    font-family: 'Dashicons';
+    content: '\f321';
+}
+
+table.wp-list-table .payment_retry::after {
+    font-family: 'WooCommerce';
+    content: '\e012';
+}

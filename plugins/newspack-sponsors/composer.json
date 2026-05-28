@@ -1,0 +1,28 @@
+{
+	"name": "automattic/newspack-sponsors",
+	"description": "Add sponsors and sponsor info to posts. Allows special visual treatment for sponsored content.",
+	"type": "wordpress-plugin",
+	"require": {},
+	"require-dev": {
+		"automattic/vipwpcs": "^3.0",
+		"wp-coding-standards/wpcs": "^3.0",
+		"dealerdirect/phpcodesniffer-composer-installer": "^1.0.0",
+		"phpcompatibility/phpcompatibility-wp": "^2.1"
+	},
+	"license": "GPL-2.0-or-later",
+	"scripts": {
+		"post-update-cmd": [
+			"vendor/bin/cghooks update"
+		]
+	},
+	"extra": {},
+	"config": {
+		"platform": {
+			"php": "8.0"
+		},
+		"allow-plugins": {
+			"composer/installers": true,
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		}
+	}
+}

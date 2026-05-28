@@ -1,0 +1,122 @@
+/**
+ * Web Preview
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "../../../colors/colors.module" as colors;
+
+.newspack-web-preview {
+	// Color
+	--wp-admin-theme-color: #{colors.$primary-600};
+	--wp-admin-theme-color--rgb: #{colors.$primary-600--rgb};
+	--wp-admin-theme-color-darker-10: #{colors.$primary-700};
+	--wp-admin-theme-color-darker-10--rgb: #{colors.$primary-700--rgb};
+	--wp-admin-theme-color-darker-20: #{colors.$primary-800};
+	--wp-admin-theme-color-darker-20--rgb: #{colors.$primary-800--rgb};
+	--wp-admin-theme-color-lighter-10: #{colors.$primary-000};
+	--wp-admin-theme-color-lighter-10--rgb: #{colors.$primary-000--rgb};
+
+	background: color-mix(in srgb, colors.$neutral-1000, transparent 65%);
+	box-sizing: border-box;
+	height: 100%;
+	left: 0;
+	margin: 0;
+	max-width: 100%;
+	padding: 32px;
+	position: fixed;
+	top: 0;
+	width: 100%;
+	z-index: 99999;
+
+	&.phone iframe {
+		max-width: 360px;
+	}
+
+	&.tablet iframe {
+		max-width: 780px;
+	}
+
+	&.is-loaded iframe {
+		opacity: 1;
+	}
+
+	&--open {
+		overflow: hidden;
+	}
+
+	&__interior {
+		animation: appear-animation 125ms ease-in-out;
+		animation-fill-mode: forwards;
+		background: white;
+		border-radius: 8px;
+		overflow: hidden;
+		height: 100%;
+		width: 100%;
+	}
+
+	&__content {
+		background: wp-colors.$gray-100;
+		height: calc(100% - 72px);
+		-webkit-overflow-scrolling: touch;
+		overflow-x: hidden;
+		width: 100%;
+
+		iframe {
+			background: white;
+			display: block;
+			height: 100%;
+			margin: 0 auto;
+			max-width: 100%;
+			opacity: 0;
+			padding: 0;
+			pointer-events: all;
+			transition: max-width 125ms ease-in-out, opacity 250ms ease-in-out;
+			width: 100%;
+		}
+	}
+
+	&__is-waiting {
+		align-items: center;
+		display: flex;
+		left: 50%;
+		margin: -12px 0 0;
+		position: absolute;
+		top: 50%;
+		transform: translateX(-50%);
+	}
+
+	&__toolbar {
+		align-items: center;
+		border-bottom: 1px solid wp-colors.$gray-300;
+		display: flex;
+		gap: 16px;
+		justify-content: space-between;
+		min-height: 71px;
+		padding: 12px 24px;
+
+		&-left {
+			display: flex;
+
+			h3 {
+				margin: 0;
+			}
+		}
+
+		&-right {
+			display: grid;
+			gap: 8px;
+			grid-template-columns: repeat(2, 1fr);
+			justify-self: end;
+			margin-left: auto;
+		}
+	}
+}
+
+@keyframes appear-animation {
+	from {
+		margin-top: 32px;
+	}
+	to {
+		margin-top: 0;
+	}
+}

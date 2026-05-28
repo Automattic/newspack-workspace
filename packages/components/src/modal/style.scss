@@ -1,0 +1,101 @@
+/**
+ * Modal
+ */
+
+@use "../../../colors/colors.module" as colors;
+
+.newspack-modal {
+	// Color
+	--wp-admin-theme-color: #{colors.$primary-600};
+	--wp-admin-theme-color--rgb: #{colors.$primary-600--rgb};
+	--wp-admin-theme-color-darker-10: #{colors.$primary-700};
+	--wp-admin-theme-color-darker-10--rgb: #{colors.$primary-700--rgb};
+	--wp-admin-theme-color-darker-20: #{colors.$primary-800};
+	--wp-admin-theme-color-darker-20--rgb: #{colors.$primary-800--rgb};
+	--wp-admin-theme-color-lighter-10: #{colors.$primary-000};
+	--wp-admin-theme-color-lighter-10--rgb: #{colors.$primary-000--rgb};
+
+	border-radius: 8px;
+	margin: auto;
+	max-height: calc(100% - 64px);
+	max-width: 512px;
+	width: calc(100% - 64px);
+
+	&--size-small {
+		max-width: 384px;
+
+		&.newspack-modal--hide-title {
+			max-width: 350px;
+		}
+	}
+
+	&--size-medium {
+		max-width: 512px;
+	}
+
+	&--size-large {
+		max-width: 840px;
+	}
+
+	&--size-x-large {
+		max-width: calc(var(--newspack-wizard-section-width) + 64px)
+	}
+
+	&--size-full {
+		max-width: 100%;
+	}
+
+	&--hide-title {
+		.components-modal__header {
+			display: none;
+		}
+
+		.components-modal__content {
+			margin-top: 0;
+			padding-top: 32px;
+		}
+	}
+
+	&--destructive {
+		.components-button.is-primary {
+			background-color: colors.$error-500;
+			color: colors.$neutral-000;
+			&:hover,
+			&:focus {
+				background-color: colors.$error-600;
+			}
+		}
+	}
+
+	// Links
+	a {
+		color: var(--wp-admin-theme-color);
+
+		&:active,
+		&:focus,
+		&:hover {
+			color: var(--wp-admin-theme-color-darker-10);
+		}
+
+		&:focus {
+			box-shadow: 0 0 0 var(--wp-admin-border-width-focus) var(--wp-admin-theme-color);
+			outline: 3px solid transparent;
+		}
+	}
+
+	.components-modal__content {
+		> * {
+			&:first-child {
+				margin-top: 0;
+			}
+
+			&:last-child {
+				margin-bottom: 0;
+			}
+		}
+	}
+}
+/** Hide dropdown menus when a modal is open */
+.modal-open .components-popover__content {
+	opacity: 0;
+}

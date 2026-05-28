@@ -1,0 +1,34 @@
+.newspack-my-account {
+	.woocommerce-MyAccount-content {
+		#addresses {
+			.newspack-ui__modal-container {
+				// Fix field ordering for city, state and postcode layout.
+				/* stylelint-disable selector-id-pattern */
+				#billing_city_field,
+				#shipping_city_field,
+				#billing_state_field,
+				#shipping_state_field,
+				#billing_postcode_field,
+				#shipping_postcode_field {
+					float: none !important;
+					display: inline-block;
+					vertical-align: top;
+					width: 30%;
+					margin-right: 5%;
+				}
+
+				// Remove margin from the last field (postcode).
+				#billing_postcode_field,
+				#shipping_postcode_field {
+					margin-right: 0;
+				}
+				/* stylelint-enable selector-id-pattern */
+			}
+		}
+	}
+
+	// Fix dropdown z-index issues.
+	.select2-container--open {
+		z-index: 100000;
+	}
+}

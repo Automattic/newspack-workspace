@@ -1,0 +1,9 @@
+.wp-block-post-featured-image {
+	a {
+		display: inline;
+	}
+
+	> a:has(img) {
+		display: block;
+	}
+}

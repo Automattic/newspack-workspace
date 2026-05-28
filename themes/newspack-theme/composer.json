@@ -1,0 +1,37 @@
+{
+	"name": "automattic/newspack-theme",
+	"description": "A theme for Newspack. https://newspack.com/",
+	"homepage": "https://newspack.com/",
+	"type": "package",
+	"license": "GPL-2.0-or-later",
+	"support": {
+		"issues": "https://github.com/Automattic/newspack-theme/issues"
+	},
+	"require-dev": {
+		"composer/installers": "~2.0",
+		"automattic/vipwpcs": "^3.0",
+		"wp-coding-standards/wpcs": "^3.0",
+		"phpcompatibility/phpcompatibility-wp": "^2.1",
+		"dealerdirect/phpcodesniffer-composer-installer": "^1.0.0",
+		"szepeviktor/phpstan-wordpress": "^2.0"
+	},
+	"scripts": {
+		"phpcs-i": "@php ./vendor/squizlabs/php_codesniffer/bin/phpcs -i",
+		"lint": "@php ./vendor/squizlabs/php_codesniffer/bin/phpcs",
+		"format": "@php ./vendor/squizlabs/php_codesniffer/bin/phpcbf",
+		"post-update-cmd": [
+			"vendor/bin/cghooks update",
+			"PHPStan\\WordPress\\Composer\\FixWpStubs::php73Polyfill"
+		]
+	},
+	"extra": {},
+	"config": {
+		"platform": {
+			"php": "8.0"
+		},
+		"allow-plugins": {
+			"composer/installers": true,
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		}
+	}
+}

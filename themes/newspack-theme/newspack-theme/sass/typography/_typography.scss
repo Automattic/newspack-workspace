@@ -1,0 +1,43 @@
+@use "sass:meta";
+@use "../mixins/mixins-main";
+@use "../mixins/utilities";
+
+html {
+	font-size: var(--newspack-theme-font-size-base-sm);
+
+	@include utilities.media( mobile ) {
+		font-size: var(--newspack-theme-font-size-base);
+	}
+}
+
+body {
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	color: var(--newspack-theme-color-text-main);
+	font-family: var(--newspack-theme-font-body);
+	font-weight: 400;
+	font-size: 1em;
+	line-height: var(--newspack-theme-font-line-height-body);
+	margin: 0;
+	text-rendering: optimizelegibility;
+}
+
+button,
+input,
+select,
+optgroup,
+textarea {
+	color: var(--newspack-theme-color-text-main);
+	font-family: var(--newspack-theme-font-body);
+	font-weight: 400;
+	line-height: var(--newspack-theme-font-line-height-body);
+	text-rendering: optimizelegibility;
+}
+
+.use-body-font {
+	font-family: var(--newspack-theme-font-body);
+}
+
+@include meta.load-css( "headings" );
+
+@include meta.load-css( "copy" );

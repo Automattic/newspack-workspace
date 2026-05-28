@@ -1,0 +1,17 @@
+.entry .entry-content .newspack-listings {
+	&__separator.wp-block-separator {
+		margin-bottom: 0.25rem;
+	}
+
+	&__related-section-title.accent-header {
+		border: none;
+		margin-top: 0.25rem;
+	}
+
+	&__related-listing.author-bio {
+		.avatar {
+			border-radius: 0;
+			width: auto;
+		}
+	}
+}

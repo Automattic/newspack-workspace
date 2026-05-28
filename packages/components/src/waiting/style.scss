@@ -1,0 +1,31 @@
+/**
+ * Waiting
+ */
+
+.newspack-waiting.components-spinner {
+	flex: 0 0 auto;
+	margin: 0;
+
+	&.is-left {
+		margin-right: 8px;
+	}
+
+	&.is-right {
+		margin-right: 8px;
+		order: -1;
+
+		@media screen and ( min-width: 744px ) {
+			margin-left: 8px;
+			margin-right: 0;
+			order: 1;
+		}
+	}
+
+	&.is-center {
+		margin: auto;
+	}
+
+	&.no-margin {
+		margin: 0;
+	}
+}

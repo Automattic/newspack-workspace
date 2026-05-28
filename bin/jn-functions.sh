@@ -30,7 +30,8 @@ process_newspack_plugin() {
     local plugin=$1
     local password=$2
 
-    cd /newspack-repos/$1
+    source /var/scripts/resolve-project-path.sh
+    cd "$(resolve_project_path "$1")"
     echo "Creating package for $plugin"
     npm run --silent release:archive > /dev/null
     echo Uploading...

@@ -1,0 +1,38 @@
+# Editors
+project.xml
+project.properties
+/nbproject/private/
+.buildpath
+.project
+.settings*
+.idea
+.vscode
+*.sublime-project
+*.sublime-workspace
+.sublimelinterrc
+
+# NPM
+/node_modules/
+.cache
+
+# Sass
+.sass-cache/
+
+# OS X metadata
+.DS_Store
+
+# Windows junk
+Thumbs.db
+
+# Composer
+/vendor/
+
+# Compiled CSS
+/styles/
+*.css
+
+# Compiled Javascript
+newspack-*/js/dist/
+
+# Release folder
+release/

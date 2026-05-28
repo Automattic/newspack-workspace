@@ -1,0 +1,61 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack/contribution-meter",
+	"title": "Contribution Meter",
+	"category": "newspack",
+	"description": "Display progress toward your goal. Works seamlessly with the Donate block.",
+	"keywords": ["donations", "fundraising", "revenue", "progress", "goal", "campaign"],
+	"textdomain": "newspack-plugin",
+	"supports": {
+		"html": false,
+		"align": ["wide", "full"],
+		"className": true
+	},
+	"attributes": {
+		"goalAmount": {
+			"type": "number",
+			"default": 1000
+		},
+		"startDate": {
+			"type": "string",
+			"default": ""
+		},
+		"endDate": {
+			"type": "string",
+			"default": ""
+		},
+		"progressBarColor": {
+			"type": "string",
+			"default": ""
+		},
+		"showGoal": {
+			"type": "boolean",
+			"default": true
+		},
+		"showAmountRaised": {
+			"type": "boolean",
+			"default": true
+		},
+		"showPercentage": {
+			"type": "boolean",
+			"default": true
+		},
+		"thickness": {
+			"type": "string",
+			"default": "s",
+			"enum": ["xs", "s", "m", "l"]
+		},
+		"previewMode": {
+			"type": "boolean",
+			"default": false
+		}
+	},
+	"example": {
+		"attributes": {
+			"previewMode": true,
+			"goalAmount": 2500
+		}
+	},
+	"style": "file:../../../dist/contribution-meter-block.css"
+}

@@ -1,0 +1,88 @@
+/**
+ * Custom Select Control
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-custom-select-control {
+	label {
+		display: block;
+		margin-bottom: 8px;
+	}
+
+	button {
+		border-color: wp-colors.$gray-700;
+		border-radius: 2px;
+		color: wp-colors.$gray-900;
+		font-size: inherit;
+		min-height: 30px;
+		min-width: 100%;
+		padding-right: 24px;
+
+		&:active,
+		&:focus,
+		&:hover,
+		&[aria-expanded="true"] {
+			color: wp-colors.$gray-900;
+		}
+
+		&:focus {
+			border-color: var(--wp-admin-theme-color);
+			box-shadow: inset 0 0 0 1px var(--wp-admin-theme-color);
+		}
+
+		&-icon {
+			right: 3px;
+			width: 18px;
+		}
+
+		&[aria-expanded="true"] svg {
+			transform: rotate(180deg);
+		}
+	}
+
+	button + div {
+		min-width: 200px;
+	}
+
+	.components-custom-select-control__menu {
+		border-color: wp-colors.$gray-700;
+		border-radius: 2px;
+		box-shadow: 0 4px 8px rgba(black, 0.08);
+		margin: 8px 0 0;
+		min-width: 222px;
+	}
+
+	.components-custom-select-control__item {
+		box-sizing: border-box;
+		cursor: pointer;
+		display: flex;
+		line-height: inherit;
+		padding: 6px 8px;
+		transition: color 125ms ease-in-out;
+
+		&:empty {
+			display: none;
+		}
+
+		&.is-header {
+			background: wp-colors.$gray-100;
+			cursor: default;
+			font-weight: bold;
+			margin-left: 0;
+			pointer-events: none;
+		}
+
+		&.is-highlighted {
+			background: white;
+			color: var(--wp-admin-theme-color);
+		}
+
+		&.is-selected {
+			margin-left: 0;
+			span svg {
+				fill: var(--wp-admin-theme-color);
+			}
+		}
+	}
+}

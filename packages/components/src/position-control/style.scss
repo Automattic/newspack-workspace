@@ -1,0 +1,66 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-position-placement-control {
+	margin-bottom: 1em;
+
+	.components-base-control__label {
+		margin-bottom: 8px;
+		margin-top: 1em;
+	}
+
+	.components-button-group {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		grid-template-rows: repeat(3, 1fr);
+
+		div {
+			padding: 1px;
+		}
+
+		.components-button {
+			border-radius: 0 !important;
+			height: 100%;
+			padding: 20px;
+			width: 100%;
+		}
+
+		div:nth-of-type(1) .components-button {
+			border-radius: 4px 0 0 !important;
+		}
+
+		div:nth-of-type(3) .components-button {
+			border-radius: 0 4px 0 0 !important;
+		}
+
+		div:nth-last-of-type(1) .components-button {
+			border-radius: 0 0 4px !important;
+		}
+
+		div:nth-last-of-type(3) .components-button {
+			border-radius: 0 0 0 4px !important;
+		}
+	}
+
+	&.size-full-width .components-button-group {
+		grid-template-columns: 1fr;
+
+		div:first-of-type .components-button {
+			border-radius: 4px 4px 0 0 !important;
+		}
+
+		div:nth-of-type(2) .components-button {
+			border-radius: 0 !important;
+		}
+
+		div:last-of-type .components-button {
+			border-radius: 0 0 4px 4px !important;
+		}
+	}
+
+	.components-base-control__help {
+		color: wp-colors.$gray-700;
+		font-size: 12px;
+		font-style: normal;
+		margin-top: 8px;
+	}
+}

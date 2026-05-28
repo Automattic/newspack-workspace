@@ -1,0 +1,252 @@
+/** Some general overrides for WooCommerce styles. */
+
+@use "../notices";
+
+.newspack-ui {
+	label .optional {
+		color: var(--newspack-ui-color-neutral-60);
+		font-weight: 400;
+	}
+
+	&__modal--small {
+		form p {
+			margin: 0 0 var(--newspack-ui-spacer-2);
+
+			&:last-child {
+				margin-bottom: 0;
+			}
+		}
+	}
+
+	.newspack-ui__input-card {
+		label {
+			display: block;
+		}
+	}
+
+	.form-row.woocommerce-SavedPaymentMethods-saveNew {
+		label {
+			font-weight: normal;
+		}
+	}
+	.woocommerce-notices-wrapper:not(:empty) {
+		display: grid;
+		gap: var(--newspack-ui-spacer-3);
+		grid-auto-rows: minmax(var(--newspack-ui-spacer-8), auto);
+		margin-bottom: var(--newspack-ui-spacer-6);
+		width: 100%;
+	}
+	.newspack-wc-message,
+	.woocommerce-message,
+	.woocommerce-info,
+	.woocommerce-error,
+	.wc-block-components-notice-banner {
+		@extend .newspack-ui__notice;
+		display: block;
+		list-style: none;
+		margin: 0;
+		min-height: auto;
+
+		> p:first-child {
+			margin-top: 0;
+			padding-top: 0;
+		}
+
+		> p:last-child {
+			margin-bottom: 0;
+			padding-bottom: 0;
+		}
+	}
+	.newspack-wc-message,
+	.woocommerce-message {
+		@extend .newspack-ui__notice--success;
+	}
+	.woocommerce-info {
+		@extend .newspack-ui__notice--warning;
+	}
+	.newspack-wc-message--error,
+	.woocommerce-error {
+		@extend .newspack-ui__notice--error;
+	}
+	.wc-block-components-notice-banner {
+		&.is-info,
+		&.is-error,
+		&.is-success {
+			background: var(--newspack-ui-color-warning-0);
+			border: none;
+			border-left: 3px solid var(--newspack-ui-color-warning-30);
+			font-family: var(--newspack-ui-font-family);
+
+			> svg {
+				display: none;
+			}
+		}
+
+		&.is-error {
+			background: var(--newspack-ui-color-error-0);
+			border-left-color: var(--newspack-ui-color-error-50);
+		}
+
+		&.is-success {
+			background: var(--newspack-ui-color-success-0);
+			border-left-color: var(--newspack-ui-color-success-50);
+		}
+	}
+	.woocommerce-NoticeGroup {
+		.newspack-wc-message,
+		.woocommerce-message,
+		.woocommerce-info,
+		.woocommerce-error {
+			border: none !important;
+		}
+	}
+
+	&.woocommerce-account.newspack-my-account {
+		.woocommerce-message {
+			.woocommerce-Button.button {
+				background: transparent;
+				border-radius: 0;
+				color: inherit;
+				float: none;
+				font-size: inherit;
+				font-weight: inherit;
+				min-height: auto;
+				padding: 0;
+				text-decoration: underline;
+			}
+		}
+	}
+
+	.wc_payment_methods {
+		padding-left: 0;
+	}
+
+	.wc_payment_method {
+		list-style: none;
+
+		.payment_box {
+			padding: 1rem;
+			background: var(--newspack-theme-color-bg-pre, var(--newspack-ui-color-neutral-20));
+			font-size: var(--newspack-theme-font-size-sm, var(--newspack-ui-font-size-s));
+
+			ul,
+			ol {
+				&:last-of-type {
+					margin-bottom: 0;
+				}
+			}
+
+			fieldset {
+				padding: 0;
+				border: 0;
+			}
+
+			li {
+				list-style: none;
+			}
+
+			p {
+				&:first-child {
+					margin-top: 0;
+				}
+
+				&:last-child {
+					margin-bottom: 0;
+				}
+			}
+		}
+
+		> label:first-of-type {
+			display: block;
+			margin: 1rem 0;
+
+			img {
+				max-height: 24px;
+				max-width: 200px;
+				float: right;
+			}
+		}
+
+		label {
+			cursor: pointer;
+		}
+
+		input.input-radio[name="payment_method"] {
+			display: none;
+
+			+ label {
+				&::before {
+					content: "";
+					display: inline-block;
+					width: 16px;
+					height: 16px;
+					border: 2px solid white;
+					box-shadow: 0 0 0 2px black;
+					box-sizing: border-box;
+					background: white;
+					margin-left: 4px;
+					margin-right: 0.5rem;
+					border-radius: 100%;
+					transform: translateY(2px);
+				}
+			}
+
+			&:checked + label {
+				&::before {
+					background: black;
+				}
+			}
+		}
+	}
+
+	.woocommerce-terms-and-conditions-wrapper {
+		font-size: var(--newspack-theme-font-size-sm, var(--newspack-ui-font-size-s));
+		margin-bottom: 2rem;
+
+		input[type="checkbox"] {
+			margin-right: 0.5rem;
+		}
+	}
+
+	.select2-container .select2-selection--single {
+		height: 48px;
+	}
+	.select2-container .select2-selection--single .select2-selection__rendered {
+		line-height: 48px;
+	}
+	.select2-container--default .select2-selection--single .select2-selection__arrow {
+		height: 46px;
+	}
+
+	/* stylelint-disable-next-line selector-id-pattern */
+	#add_payment_method {
+		iframe {
+			max-width: 100%;
+		}
+	}
+}
+
+/** See #3292. */
+.woocommerce-account {
+	/** Inline sign up form max-width. */
+	.woocommerce-notices-wrapper:has(+ .newspack-reader-auth__inline-wrapper),
+	.newspack-reader-auth__inline-wrapper {
+		margin-left: auto;
+		margin-right: auto;
+		max-width: var(--newspack-ui-modal-width-s);
+	}
+
+	.newspack-reader-auth__inline-wrapper {
+		h2 {
+			font-size: var(--newspack-ui-font-size-m);
+			font-weight: 600;
+		}
+
+		p {
+			font-size: var(--newspack-ui-font-size-s);
+		}
+	}
+	.woocommerce-account-join-team .woocommerce-privacy-policy-text {
+		clear: both;
+	}
+}

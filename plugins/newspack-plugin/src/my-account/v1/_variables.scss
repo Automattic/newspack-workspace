@@ -1,0 +1,8 @@
+/**
+ * Variables.
+ */
+
+:root {
+	--newspack--my-account--color--accent: var(--wp--preset--color--accent, var(--newspack-theme-color-primary, var(--newspack-ui-color-neutral-90, #1e1e1e)));
+	--newspack--my-account--color--contrast: var(--wp--preset--color--contrast, var(--newspack-theme-color-against-primary, var(--newspack-ui-color-neutral-0, white)));
+}

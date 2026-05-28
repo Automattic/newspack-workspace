@@ -1,0 +1,132 @@
+.newspack-ui {
+	color: var(--newspack-ui-color-neutral-90);
+	font-family: var(--newspack-ui-font-family);
+	font-size: var(--newspack-ui-font-size-s);
+	line-height: var(--newspack-ui-line-height-s);
+	-webkit-font-smoothing: antialiased;
+
+	p {
+		font-size: inherit;
+		line-height: inherit;
+		margin: var(--newspack-ui-spacer-2) 0;
+		&:first-child:not(.form-row) {
+			margin-top: 0;
+		}
+		> input[type="checkbox"],
+		> input[type="radio"] {
+			margin-bottom: 2px;
+			margin-right: 2px;
+			vertical-align: middle;
+		}
+	}
+
+	h1,
+	h2,
+	h3,
+	h4,
+	h5,
+	h6 {
+		font-family: var(--newspack-ui-font-family);
+		font-weight: var(--newspack-ui-font-weight-strong);
+		letter-spacing: unset;
+		text-transform: unset;
+	}
+
+	strong,
+	&__font--bold {
+		font-weight: var(--newspack-ui-font-weight-strong);
+	}
+
+	&__font--normal {
+		font-weight: normal;
+	}
+
+	& &__font--2xs {
+		font-size: var(--newspack-ui-font-size-2xs);
+		line-height: var(--newspack-ui-line-height-2xs);
+	}
+
+	& &__font--xs {
+		font-size: var(--newspack-ui-font-size-xs);
+		line-height: var(--newspack-ui-line-height-xs);
+	}
+
+	& &__font--s {
+		font-size: var(--newspack-ui-font-size-s);
+		line-height: var(--newspack-ui-line-height-s);
+	}
+
+	& &__font--m {
+		font-size: var(--newspack-ui-font-size-m);
+		line-height: var(--newspack-ui-line-height-m);
+	}
+
+	& &__font--l {
+		font-size: var(--newspack-ui-font-size-l);
+		line-height: var(--newspack-ui-line-height-l);
+	}
+
+	& &__font--xl {
+		font-size: var(--newspack-ui-font-size-xl);
+		line-height: var(--newspack-ui-line-height-xl);
+	}
+
+	& &__font--2xl {
+		font-size: var(--newspack-ui-font-size-2xl);
+		line-height: var(--newspack-ui-line-height-2xl);
+	}
+
+	& &__font--3xl {
+		font-size: var(--newspack-ui-font-size-3xl);
+		line-height: var(--newspack-ui-line-height-3xl);
+	}
+
+	& &__font--4xl {
+		font-size: var(--newspack-ui-font-size-4xl);
+		line-height: var(--newspack-ui-line-height-4xl);
+	}
+
+	& &__font--5xl {
+		font-size: var(--newspack-ui-font-size-5xl);
+		line-height: var(--newspack-ui-line-height-5xl);
+	}
+
+	& &__font--6xl {
+		font-size: var(--newspack-ui-font-size-6xl);
+		line-height: var(--newspack-ui-line-height-6xl);
+	}
+
+	/* Text meant only for screen readers. */
+	.screen-reader-text {
+		border: 0;
+		clip: rect(1px, 1px, 1px, 1px);
+		clip-path: inset(50%);
+		height: 1px;
+		margin: -1px;
+		overflow: hidden;
+		padding: 0;
+		position: absolute !important;
+		width: 1px;
+		word-wrap: normal !important; /* Many screen reader and browser combinations announce broken words as they would appear visually. */
+
+		&:focus {
+			background-color: var(--newspack-ui-color-neutral-10);
+			border-radius: 3px;
+			box-shadow: 0 0 2px 2px rgba(0, 0, 0, 0.6);
+			clip: auto !important;
+			clip-path: none;
+			color: var(--newspack-ui-color-neutral-90);
+			display: block;
+
+			font-weight: bold;
+			height: auto;
+			left: 5px;
+			line-height: normal;
+			padding: 15px 23px 14px;
+			text-decoration: none;
+			top: 5px;
+			width: auto;
+			z-index: 100000; /* Above WP toolbar. */
+		}
+	}
+}

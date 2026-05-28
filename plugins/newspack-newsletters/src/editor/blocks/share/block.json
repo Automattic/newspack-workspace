@@ -1,0 +1,37 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack-newsletters/share",
+	"title": "Share Newsletter",
+	"category": "newspack",
+	"description": "",
+	"textdomain": "newspack-newsletters",
+	"attributes": {
+		"content": {
+			"type": "string",
+			"source": "html",
+			"selector": "p",
+			"default": "Thanks for reading. If you liked it, please send to a friend!",
+			"__experimentalRole": "content",
+			"role": "content"
+		},
+		"shareMessage": {
+			"type": "string",
+			"default": "I'd like to share this newsletter with you: [LINK]"
+		},
+		"href": {
+			"type": "string",
+			"default": ""
+		}
+	},
+	"supports": {
+		"className": false,
+		"color": {
+			"link": true
+		},
+		"typography": {
+			"lineHeight": true,
+			"fontSize": true
+		}
+	}
+}

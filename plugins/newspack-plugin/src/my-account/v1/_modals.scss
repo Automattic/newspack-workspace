@@ -1,0 +1,21 @@
+/**
+ * Modals
+ */
+
+.newspack-ui__modal {
+	&__content {
+		a.newspack-ui__button {
+			margin-top: var(--newspack-ui-spacer-5);
+		}
+		.newspack-ui__button + .newspack-ui__button:not(:first-child):first-of-type {
+			margin-top: 0;
+		}
+		.form-row {
+			margin-top: var(--newspack-ui-spacer-5);
+			> button,
+			> .woocommerce-Button {
+				width: 100%;
+			}
+		}
+	}
+}
