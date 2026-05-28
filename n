@@ -28,16 +28,17 @@ get_target_container() {
                 # Mounts can take two shapes — pre-monorepo per-plugin worktrees
                 # (./worktrees/<repo>/<branch>:/newspack-repos/<repo>) and
                 # monorepo workspace worktrees (./worktrees/<safe_branch>/plugins/<name>:/newspack-plugins/<name>,
-                # or .../themes/<name>:/newspack-themes/<name>). The regex below
-                # covers all three container-path forms.
-                local rel="${mount#./}"
+                # or .../themes/<name>:/newspack-themes/<name>). The grep anchor
+                # below requires a leading `- ` so commented-out volume lines
+                # don't false-match.
+                local rel="${mount#*- ./}"
                 rel="${rel%%:*}"
                 local abs="$NABSPATH/$rel"
                 if [[ "$PWD" == "$abs" || "$PWD" == "$abs"/* ]] && [ ${#abs} -gt ${#best_match} ]; then
                     best_match="$abs"
                     best_env=$(basename "$f" | sed 's/docker-compose\.env-//;s/\.yml//')
                 fi
-            done < <(grep -oE '\./worktrees/[^:]+:/newspack-(repos|plugins|themes)/[^[:space:]]+' "$f")
+            done < <(grep -E '^[[:space:]]*-[[:space:]]*\./worktrees/[^[:space:]]+:/newspack-(repos|plugins|themes)/[^[:space:]]+' "$f" 2>/dev/null)
         done
         if [ -n "$best_env" ]; then
             echo "newspack_env_${best_env}" | tr '-' '_'
