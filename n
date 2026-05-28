@@ -28,14 +28,25 @@ get_target_container() {
                 # Mounts can take two shapes — pre-monorepo per-plugin worktrees
                 # (./worktrees/<repo>/<branch>:/newspack-repos/<repo>) and
                 # monorepo workspace worktrees (./worktrees/<safe_branch>/plugins/<name>:/newspack-plugins/<name>,
-                # or .../themes/<name>:/newspack-themes/<name>). The grep anchor
-                # below requires a leading `- ` so commented-out volume lines
-                # don't false-match.
+                # or .../themes/<name>:/newspack-themes/<name>). For the
+                # monorepo shape, the env mounts a per-plugin subdir but we
+                # also want to route correctly from elsewhere inside the
+                # worktree (its root, bin/, packages/, sibling plugins). Match
+                # by the enclosing worktree root instead of only the mounted
+                # subdir.
                 local rel="${mount#*- ./}"
+                local container="${rel#*:}"
                 rel="${rel%%:*}"
                 local abs="$NABSPATH/$rel"
-                if [[ "$PWD" == "$abs" || "$PWD" == "$abs"/* ]] && [ ${#abs} -gt ${#best_match} ]; then
-                    best_match="$abs"
+                local worktree_root="$abs"
+                case "$container" in
+                    /newspack-plugins/*|/newspack-themes/*)
+                        worktree_root="${abs%/plugins/*}"
+                        worktree_root="${worktree_root%/themes/*}"
+                        ;;
+                esac
+                if [[ "$PWD" == "$worktree_root" || "$PWD" == "$worktree_root"/* ]] && [ ${#worktree_root} -gt ${#best_match} ]; then
+                    best_match="$worktree_root"
                     best_env=$(basename "$f" | sed 's/docker-compose\.env-//;s/\.yml//')
                 fi
             done < <(grep -E '^[[:space:]]*-[[:space:]]*\./worktrees/[^[:space:]]+:/newspack-(repos|plugins|themes)/[^[:space:]]+' "$f" 2>/dev/null)
