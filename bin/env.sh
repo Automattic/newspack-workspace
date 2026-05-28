@@ -457,7 +457,10 @@ MIGRATE
         echo "Environment '$env_name' is ready at https://${domain}/"
         # Copy built assets from main repos into worktrees.
         if [[ "$auto_build" == true ]]; then
-            grep 'worktrees/' "$compose_file" | while read -r line; do
+            # Anchored regex (matching each_worktree_in_env / get_target_container
+            # in n) so commented-out volume lines don't false-match and trigger
+            # spurious copies.
+            grep -E '^[[:space:]]*-[[:space:]]+\./worktrees/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$compose_file" 2>/dev/null | while read -r line; do
                 # Parse volume line: "- ./worktrees/repo/branch:/newspack-{plugins,themes}/repo"
                 wt_path=$(echo "$line" | sed 's/^ *- //' | cut -d: -f1)
                 container_path=$(echo "$line" | cut -d: -f2)
