@@ -54,7 +54,7 @@ class Agent_Access_Admin {
 	}
 
 	public function enqueue_assets( $hook_suffix ) {
-		if ( ! in_array( $hook_suffix, array( 'profile.php', 'user-edit.php', 'tools_page_botcreds' ), true ) ) {
+		if ( ! in_array( $hook_suffix, array( 'profile.php', 'user-edit.php', 'tools_page_agent-access' ), true ) ) {
 			return;
 		}
 
@@ -142,17 +142,11 @@ class Agent_Access_Admin {
 			return;
 		}
 
-		$existing       = $this->api->get_existing_password();
-		$user_id        = get_current_user_id();
-		$error_message  = get_transient( 'agent_access_error_' . $user_id );
-		$created_info   = get_transient( 'agent_access_created_' . $user_id );
-		$just_created   = ! empty( $created_info );
-
+		$existing      = $this->api->get_existing_password();
+		$user_id       = get_current_user_id();
+		$error_message = get_transient( 'agent_access_error_' . $user_id );
 		if ( $error_message ) {
 			delete_transient( 'agent_access_error_' . $user_id );
-		}
-		if ( $just_created ) {
-			delete_transient( 'agent_access_created_' . $user_id );
 		}
 
 		?>
@@ -172,42 +166,12 @@ class Agent_Access_Admin {
 				</div>
 			<?php endif; ?>
 
-			<?php if ( $just_created ) : ?>
-				<?php $this->render_created_state( $created_info ); ?>
-			<?php elseif ( $existing ) : ?>
+			<?php if ( $existing ) : ?>
 				<?php $this->render_connected_state( $existing ); ?>
 			<?php else : ?>
 				<?php $this->render_disconnected_state(); ?>
 			<?php endif; ?>
 		</div>
-		<?php
-	}
-
-	/**
-	 * Render the "just created" state showing the password once.
-	 *
-	 * @param array $info Connection info with site_url, username, password.
-	 */
-	private function render_created_state( $info ) {
-		$json = wp_json_encode( $info, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
-		?>
-		<p><span class="agent-access-success-icon">&#10003;</span> <strong><?php esc_html_e( 'Connection Created!', 'botcreds-agent-access' ); ?></strong></p>
-
-		<div class="agent-access-warning-box">
-			<strong><?php esc_html_e( 'Important:', 'botcreds-agent-access' ); ?></strong>
-			<?php esc_html_e( 'This password will only be shown once. Copy the message below and send it to your AI agent.', 'botcreds-agent-access' ); ?>
-		</div>
-
-		<div class="agent-access-json-block">
-			<pre class="agent-access-json" id="agent-access-json"><?php echo esc_html( 'Save these WordPress Application Password credentials and use them to connect to my site via the WordPress REST API:' . "\n" . $json ); ?></pre>
-			<button type="button" class="button agent-access-copy-btn" data-target="agent-access-json">
-				<?php esc_html_e( 'Copy', 'botcreds-agent-access' ); ?>
-			</button>
-		</div>
-
-		<p class="agent-access-next-step">
-			<?php esc_html_e( 'Paste this into your Agent Access chat (Telegram, WhatsApp, etc.) and your agent will handle the rest.', 'botcreds-agent-access' ); ?>
-		</p>
 		<?php
 	}
 
@@ -359,9 +323,15 @@ class Agent_Access_Admin {
 	 * Render the Connections tab (formerly the full admin page).
 	 */
 	private function render_connections_tab() {
-		$users_with_passwords = $this->get_all_openclaw_users();
+		$users_with_passwords = $this->get_connected_users();
 		?>
 		<p><?php esc_html_e( 'All users with active agent connections on this site.', 'botcreds-agent-access' ); ?></p>
+
+		<?php if ( $this->connections_list_is_truncated() ) : ?>
+			<div class="notice notice-warning inline">
+				<p><?php esc_html_e( 'This site has more than 200 users. Only the first 200 are shown. Users with agent connections beyond this limit will not appear in this list.', 'botcreds-agent-access' ); ?></p>
+			</div>
+		<?php endif; ?>
 
 		<?php if ( empty( $users_with_passwords ) ) : ?>
 			<p><em><?php esc_html_e( 'No users have connected an agent yet.', 'botcreds-agent-access' ); ?></em></p>
@@ -521,23 +491,20 @@ class Agent_Access_Admin {
 			</table>
 
 			<?php
-			// Simple pagination.
+			// Windowed pagination — avoids emitting thousands of links if the log grows very large.
 			$total_pages = (int) ceil( $total / $per_page );
 			if ( $total_pages > 1 ) {
-				echo '<div class="tablenav"><div class="tablenav-pages">';
-				for ( $p = 1; $p <= $total_pages; $p++ ) {
-					$url = add_query_arg( array_filter( array(
-						'paged'  => $p > 1 ? $p : false,
-						'source' => $source ?: false,
-						'method' => $method ?: false,
-					) ), $base_url );
-					if ( $p === $paged ) {
-						echo '<span class="page-numbers current">' . (int) $p . '</span> ';
-					} else {
-						echo '<a class="page-numbers" href="' . esc_url( $url ) . '">' . (int) $p . '</a> ';
-					}
-				}
-				echo '</div></div>';
+				$pagination_links = paginate_links( array(
+					'base'      => add_query_arg( 'paged', '%#%', $base_url ),
+					'format'    => '',
+					'current'   => $paged,
+					'total'     => $total_pages,
+					'prev_text' => '&laquo;',
+					'next_text' => '&raquo;',
+					'type'      => 'plain',
+				) );
+				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- paginate_links() output is escaped by core.
+				echo '<div class="tablenav"><div class="tablenav-pages">' . $pagination_links . '</div></div>';
 			}
 			?>
 		<?php endif;
@@ -548,7 +515,25 @@ class Agent_Access_Admin {
 	 *
 	 * @return array
 	 */
-	private function get_all_openclaw_users() {
+	/**
+	 * Whether the Connections list may be truncated due to the 200-user fetch cap.
+	 *
+	 * @return bool
+	 */
+	private function connections_list_is_truncated() {
+		$counts = count_users();
+		return $counts['total_users'] > 200;
+	}
+
+	/**
+	 * Get users who have an Agent Access Application Password.
+	 *
+	 * Note: silently capped at 200 users. A truncation notice is shown when
+	 * the site has more users than this limit.
+	 *
+	 * @return array
+	 */
+	private function get_connected_users() {
 		$results = array();
 		$users   = get_users( array( 'number' => 200 ) );
 

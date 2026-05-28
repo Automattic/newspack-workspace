@@ -33,7 +33,7 @@ class Agent_Access_Tracker {
 			return;
 		}
 
-		if ( $this->is_openclaw_request() ) {
+		if ( $this->is_managed_agent_request() ) {
 			update_post_meta( $post_id, self::META_KEY, time() );
 			wp_cache_delete( 'agent_access_stats_' . get_current_user_id(), 'agent_access' );
 		}
@@ -45,7 +45,7 @@ class Agent_Access_Tracker {
 	 * @param int $attachment_id The attachment ID.
 	 */
 	public function maybe_tag_attachment( $attachment_id ) {
-		if ( $this->is_openclaw_request() ) {
+		if ( $this->is_managed_agent_request() ) {
 			update_post_meta( $attachment_id, self::META_KEY, time() );
 			wp_cache_delete( 'agent_access_stats_' . get_current_user_id(), 'agent_access' );
 		}
@@ -56,7 +56,7 @@ class Agent_Access_Tracker {
 	 *
 	 * @return bool
 	 */
-	private function is_openclaw_request() {
+	private function is_managed_agent_request() {
 		// Must be a REST API request
 		if ( ! defined( 'REST_REQUEST' ) || ! REST_REQUEST ) {
 			return false;

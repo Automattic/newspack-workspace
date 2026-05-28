@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.6
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.1.8
+Stable tag: 2.1.9
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -75,6 +75,20 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.1.9 =
+* Security: Uninstall now correctly revokes credentials minted as 'BotCreds' (and all legacy names from prior rebrands). Previously uninstalling the plugin left live credentials on every connected account.
+* Security: Activity log IP is now recorded from REMOTE_ADDR only — forwarded headers (CF-Connecting-IP, X-Forwarded-For) are client-controlled and were previously used, making the audit record forgeable.
+* Security: Removed unverified Jetpack signature header as a source-detection signal — an empty header was sufficient to have any authenticated write attributed to the wordpress-mcp source.
+* Fix: Admin page assets (admin.js / admin.css) were never loaded on the Tools page due to a hook suffix mismatch. Tools → BotCreds now renders correctly with all JS interactions working.
+* Fix: Uninstall now drops the activity log table and version option (were missing).
+* Fix: Windowed pagination for the activity log using core paginate_links() — prevents emitting thousands of page links on large sites.
+* Fix: @mention notifications no longer fire for pending/unapproved comments, preventing notification spam before moderation.
+* Fix: @mention regex now ignores email domains (foo@bar.com no longer extracts 'bar' as a mention).
+* Fix: Removed unreachable render_created_state() and dead transient reads — credentials are delivered via AJAX/JS only.
+* Improvement: Connections tab shows a warning when the site has more than 200 users (silent cap).
+* Code: Extracted shared WHERE clause builder in the activity log class.
+* Code: Renamed is_openclaw_request() to is_managed_agent_request(), get_all_openclaw_users() to get_connected_users().
 
 = 2.1.0 =
 * Added activity log for Agent Access app passwords and WP.com MCP connections.

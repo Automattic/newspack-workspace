@@ -3,7 +3,7 @@
  * Plugin Name: BotCreds Agent Access
  * Plugin URI:  https://botcreds.com/
  * Description: Scoped, per-agent application passwords for AI agents, MCP clients, and automation tools.
- * Version:     2.1.8
+ * Version:     2.1.9
  * Author:      Joe Boydston
  * Author URI:  https://botcreds.com
  * License:     GPL-2.0-or-later
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AGENT_ACCESS_VERSION', '2.1.8' );
+define( 'AGENT_ACCESS_VERSION', '2.1.9' );
 define( 'AGENT_ACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AGENT_ACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AGENT_ACCESS_APP_PASSWORD_NAME', 'BotCreds' );
@@ -41,6 +41,7 @@ function agent_access_init() {
 	$tracker->init();
 	$mentions->init();
 	$activity_log->init();
+
 
 }
 add_action( 'plugins_loaded', 'agent_access_init' );
