@@ -56,8 +56,6 @@ export default withWizardScreen( ( { wizardApiFetch } ) => {
 		return message;
 	};
 
-	console.log( config );
-
 	return (
 		<WizardsTab
 			title={ __( 'Content Gating', 'newspack-plugin' ) }
