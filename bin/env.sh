@@ -59,8 +59,13 @@ parse_worktree_mount() {
             branch="${host#./worktrees/$repo/}"
             ;;
         */newspack-plugins/*|*/newspack-themes/*)
-            branch="${host#./worktrees/}"
-            branch="${branch%/*/$repo}"
+            local safe_branch="${host#./worktrees/}"
+            safe_branch="${safe_branch%/*/$repo}"
+            # Look up the unsanitized branch from the worktree's git state;
+            # fall back to the safe-branch directory name if the worktree
+            # directory is missing or its branch ref can't be resolved.
+            branch=$(git -C "$NABSPATH/worktrees/$safe_branch" branch --show-current 2>/dev/null)
+            [[ -n "$branch" ]] || branch="$safe_branch"
             ;;
         *)
             return 1
