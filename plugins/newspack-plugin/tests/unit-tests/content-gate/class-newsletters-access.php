@@ -7,7 +7,7 @@
 
 namespace Newspack\Tests\Content_Gate;
 
-use Newspack\Content_Gate\Newsletters_Access;
+use Newspack\Newsletters_Access;
 
 /**
  * Tests for Newsletters_Access HMAC signing and verification.
