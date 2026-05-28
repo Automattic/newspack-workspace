@@ -218,10 +218,22 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 	 */
 	public function test_get_verification_payload_shape_for_invalid_user() {
 		$payload = Reader_Activation::get_verification_payload( 0 );
-		$this->assertSame( [ 'verified' => null, 'verification_nonce' => '' ], $payload );
+		$this->assertSame(
+			[
+				'verified'           => null,
+				'verification_nonce' => '',
+			],
+			$payload
+		);
 
 		$payload = Reader_Activation::get_verification_payload( 999999999 );
-		$this->assertSame( [ 'verified' => null, 'verification_nonce' => '' ], $payload );
+		$this->assertSame(
+			[
+				'verified'           => null,
+				'verification_nonce' => '',
+			],
+			$payload
+		);
 	}
 
 	/**
