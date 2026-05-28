@@ -6,7 +6,11 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { ToggleControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import {
+	ToggleControl,
+	__experimentalHStack as HStack,
+	__experimentalVStack as VStack,
+} from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
@@ -19,12 +23,26 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/w
 import { useWizardApiFetch } from '../../../hooks/use-wizard-api-fetch';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG } from './consts';
 
-const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; showModal: boolean } ) => {
-	const wizardData = useWizardData( AUDIENCE_CONTENT_GATES_WIZARD_SLUG ) as WizardData;
-	const initialConfig = { ...( wizardData?.config?.advanced_settings || {} ) };
-	const { wizardApiFetch, isFetching, resetError, setError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
-	const { addNotice, resetNotices, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
-	const [ config, setConfig ] = useState< AdvancedSettingsConfig >( initialConfig );
+const AdvancedSettings = ( {
+	closeModal,
+	showModal,
+}: {
+	closeModal: () => void;
+	showModal: boolean;
+} ) => {
+	const wizardData = useWizardData(
+		AUDIENCE_CONTENT_GATES_WIZARD_SLUG
+	) as WizardData;
+	const initialConfig = {
+		...( wizardData?.config?.advanced_settings || {} ),
+	};
+	const { wizardApiFetch, isFetching, resetError, setError } =
+		useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
+	const { addNotice, resetNotices, updateWizardSettings } = useDispatch(
+		WIZARD_STORE_NAMESPACE
+	);
+	const [ config, setConfig ] =
+		useState< AdvancedSettingsConfig >( initialConfig );
 
 	useEffect( () => {
 		if ( showModal ) {
@@ -32,7 +50,8 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 		}
 	}, [ showModal ] );
 
-	const updateConfig = useRef< ( _config: AdvancedSettingsConfig ) => void >();
+	const updateConfig =
+		useRef< ( _config: AdvancedSettingsConfig ) => void >();
 	const handleUpdateConfig = ( _config: AdvancedSettingsConfig ) => {
 		if ( isFetching ) {
 			return;
@@ -59,7 +78,13 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 						message: __( 'Settings updated.', 'newspack-plugin' ),
 						type: 'success',
 						id: 'content-gates-advanced-settings-updated',
-						actions: [ { label: __( 'Undo', 'newspack-plugin' ), onClick: () => updateConfig.current?.( initialConfig ) } ],
+						actions: [
+							{
+								label: __( 'Undo', 'newspack-plugin' ),
+								onClick: () =>
+									updateConfig.current?.( initialConfig ),
+							},
+						],
 					} );
 				},
 				onError: ( fetchError: WpFetchError ) => {
@@ -75,30 +100,62 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 	updateConfig.current = handleUpdateConfig;
 	return (
 		showModal && (
-			<Modal onClose={ closeModal } size="medium" title={ __( 'Advanced settings', 'newspack-plugin' ) } onRequestClose={ closeModal }>
+			<Modal
+				onClose={ closeModal }
+				size="medium"
+				title={ __( 'Advanced settings', 'newspack-plugin' ) }
+				onRequestClose={ closeModal }
+			>
 				<VStack>
 					<ToggleControl
-						label={ __( 'Restrict content in feeds', 'newspack-plugin' ) }
-						help={ __( 'Truncate restricted content in RSS feeds.', 'newspack-plugin' ) }
-						checked={ config?.restrict_feeds }
-						onChange={ value => setConfig( { ...config, restrict_feeds: value } ) }
-					/>
-					<ToggleControl
-						label={ __( 'Bypass restrictions for newsletter links', 'newspack-plugin' ) }
-						help={ __(
-							'Readers who click a link in a recent newsletter sent via Newspack Newsletters will bypass Access Control restrictions for one hour. Signatures are valid for 30 days from the date the newsletter was sent.',
+						label={ __(
+							'Restrict content in feeds',
 							'newspack-plugin'
 						) }
-						checked={ config?.newsletter_link_bypass_enabled }
-						onChange={ value => setConfig( { ...config, newsletter_link_bypass_enabled: value } ) }
+						help={ __(
+							'Truncate restricted content in RSS feeds.',
+							'newspack-plugin'
+						) }
+						checked={ config?.restrict_feeds }
+						onChange={ ( value ) =>
+							setConfig( { ...config, restrict_feeds: value } )
+						}
 					/>
+					{ wizardData?.config?.has_newsletters && (
+						<ToggleControl
+							label={ __(
+								'Bypass restrictions for newsletter links',
+								'newspack-plugin'
+							) }
+							help={ __(
+								'Inbound traffic from newsletters sent via Newspack Newsletters in the past 30 days can bypass Access Control restrictions for one hour.',
+								'newspack-plugin'
+							) }
+							checked={ config?.newsletter_link_bypass_enabled }
+							onChange={ ( value ) =>
+								setConfig( {
+									...config,
+									newsletter_link_bypass_enabled: value,
+								} )
+							}
+						/>
+					) }
 					<HStack justify="end">
-						<Button variant="tertiary" disabled={ isFetching } onClick={ closeModal }>
+						<Button
+							variant="tertiary"
+							disabled={ isFetching }
+							onClick={ closeModal }
+						>
 							{ __( 'Cancel', 'newspack-plugin' ) }
 						</Button>
 						<Button
 							variant="primary"
-							disabled={ isFetching || JSON.stringify( wizardData?.config?.advanced_settings || {} ) === JSON.stringify( config ) }
+							disabled={
+								isFetching ||
+								JSON.stringify(
+									wizardData?.config?.advanced_settings || {}
+								) === JSON.stringify( config )
+							}
 							loading={ isFetching }
 							onClick={ () => updateConfig.current?.( config ) }
 						>

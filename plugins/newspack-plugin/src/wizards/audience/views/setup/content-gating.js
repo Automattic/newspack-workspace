@@ -10,7 +10,11 @@ import { useEffect, useState } from '@wordpress/element';
  */
 import CountdownBanner from './countdown-banner';
 import ContentGifting from './content-gifting';
-import { ActionCard, Notice, withWizardScreen } from '../../../../../packages/components/src';
+import {
+	ActionCard,
+	Notice,
+	withWizardScreen,
+} from '../../../../../packages/components/src';
 import WizardsTab from '../../../wizards-tab';
 
 export default withWizardScreen( ( { wizardApiFetch } ) => {
@@ -26,13 +30,13 @@ export default withWizardScreen( ( { wizardApiFetch } ) => {
 		wizardApiFetch( {
 			path: '/newspack/v1/wizard/newspack-audience/content-gating',
 		} )
-			.then( data => {
+			.then( ( data ) => {
 				setConfig( data );
 			} )
 			.catch( setError );
 	};
 
-	const updateConfig = newConfig => {
+	const updateConfig = ( newConfig ) => {
 		setError( false );
 		wizardApiFetch( {
 			path: '/newspack/v1/wizard/newspack-audience/content-gating',
@@ -40,35 +44,61 @@ export default withWizardScreen( ( { wizardApiFetch } ) => {
 			quiet: true,
 			data: newConfig,
 		} )
-			.then( data => {
+			.then( ( data ) => {
 				setConfig( data );
 			} )
 			.catch( setError );
 	};
 
 	const getContentGateDescription = () => {
-		let message = __( 'Configure the gate rendered on content with restricted access.', 'newspack-plugin' );
+		let message = __(
+			'Configure the gate rendered on content with restricted access.',
+			'newspack-plugin'
+		);
 		if ( 'publish' === config?.gate_status ) {
-			message += ' ' + __( 'The gate is currently published.', 'newspack-plugin' );
-		} else if ( 'draft' === config?.gate_status || 'trash' === config?.gate_status ) {
-			message += ' ' + __( 'The gate is currently a draft.', 'newspack-plugin' );
+			message +=
+				' ' +
+				__( 'The gate is currently published.', 'newspack-plugin' );
+		} else if (
+			'draft' === config?.gate_status ||
+			'trash' === config?.gate_status
+		) {
+			message +=
+				' ' + __( 'The gate is currently a draft.', 'newspack-plugin' );
 		}
 		return message;
 	};
+
+	console.log( config );
 
 	return (
 		<WizardsTab
 			title={ __( 'Content Gating', 'newspack-plugin' ) }
 			description={
 				<>
-					{ __( 'WooCommerce Memberships integration to improve the reader experience with content gating. ', 'newspack-plugin' ) }
-					<ExternalLink href={ 'https://help.newspack.com/engagement/audience-management-system/content-gating/' }>
+					{ __(
+						'WooCommerce Memberships integration to improve the reader experience with content gating. ',
+						'newspack-plugin'
+					) }
+					<ExternalLink
+						href={
+							'https://help.newspack.com/engagement/audience-management-system/content-gating/'
+						}
+					>
 						{ __( 'Learn more', 'newspack-plugin' ) }
 					</ExternalLink>
 				</>
 			}
 		>
-			{ error && <Notice noticeText={ error?.message || __( 'Something went wrong.', 'newspack-plugin' ) } isError /> }
+			{ error && (
+				<Notice
+					noticeText={
+						error?.message ||
+						__( 'Something went wrong.', 'newspack-plugin' )
+					}
+					isError
+				/>
+			) }
 			<ActionCard
 				title={ __( 'Content Gate', 'newspack-plugin' ) }
 				titleLink={ config.edit_gate_url }
@@ -76,29 +106,64 @@ export default withWizardScreen( ( { wizardApiFetch } ) => {
 				description={ getContentGateDescription() }
 				actionText={ __( 'Configure', 'newspack-plugin' ) }
 			/>
-			<ContentGifting config={ config } setConfig={ setConfig } updateConfig={ updateConfig } />
-			<CountdownBanner config={ config } setConfig={ setConfig } updateConfig={ updateConfig } />
+			<ContentGifting
+				config={ config }
+				setConfig={ setConfig }
+				updateConfig={ updateConfig }
+			/>
+			<CountdownBanner
+				config={ config }
+				setConfig={ setConfig }
+				updateConfig={ updateConfig }
+			/>
 			{ config?.plans && 1 < config.plans.length && (
 				<ActionCard
-					title={ __( 'Require membership in all plans', 'newspack-plugin' ) }
+					title={ __(
+						'Require membership in all plans',
+						'newspack-plugin'
+					) }
 					description={ __(
 						'When enabled, readers must belong to all membership plans that apply to a restricted content item before they are granted access. Otherwise, they will be able to unlock access to that item with membership in any single plan that applies to it.',
 						'newspack-plugin'
 					) }
-					toggleOnChange={ value => updateConfig( { require_all_plans: value } ) }
+					toggleOnChange={ ( value ) =>
+						updateConfig( { require_all_plans: value } )
+					}
 					toggleChecked={ config.require_all_plans }
 					togglePosition="trailing"
 				/>
 			) }
-			{ config.has_memberships && (
+			<ActionCard
+				title={ __(
+					'Display memberships on the subscriptions tab',
+					'newspack-plugin'
+				) }
+				description={ __(
+					"Display memberships that don't have active subscriptions on the My Account Subscriptions tab, so readers can see information like expiration dates.",
+					'newspack-plugin'
+				) }
+				toggleOnChange={ ( value ) =>
+					updateConfig( { show_on_subscription_tab: value } )
+				}
+				toggleChecked={ config.show_on_subscription_tab }
+				togglePosition="trailing"
+			/>
+			{ config?.has_newsletters && (
 				<ActionCard
-					title={ __( 'Display memberships on the subscriptions tab', 'newspack-plugin' ) }
-					description={ __(
-						"Display memberships that don't have active subscriptions on the My Account Subscriptions tab, so readers can see information like expiration dates.",
+					title={ __(
+						'Bypass restrictions for newsletter links',
 						'newspack-plugin'
 					) }
-					toggleOnChange={ value => updateConfig( { show_on_subscription_tab: value } ) }
-					toggleChecked={ config.show_on_subscription_tab }
+					description={ __(
+						'Inbound traffic from newsletters sent via Newspack Newsletters in the past 30 days can bypass content restrictions for one hour.',
+						'newspack-plugin'
+					) }
+					toggleOnChange={ ( value ) =>
+						updateConfig( {
+							newsletter_link_bypass_enabled: value,
+						} )
+					}
+					toggleChecked={ config.newsletter_link_bypass_enabled }
 					togglePosition="trailing"
 				/>
 			) }

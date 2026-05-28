@@ -17,7 +17,7 @@ final class Click {
 
 	/**
 	 * Query parameter forwarded by the click proxy in addition to UTMs.
-	 * Mirrors `Newspack\Content_Gate\Newsletters_Access::QUERY_PARAM` in
+	 * Mirrors `Newspack\Newsletters_Access::QUERY_PARAM` in
 	 * the foundation plugin — must stay in sync. We can't import the
 	 * foundation constant directly without coupling the two plugins.
 	 */

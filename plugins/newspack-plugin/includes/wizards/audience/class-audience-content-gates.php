@@ -379,6 +379,7 @@ class Audience_Content_Gates extends Wizard {
 				'countdown_banner'  => Metering_Countdown::get_settings(),
 				'content_gifting'   => Content_Gifting::get_settings(),
 				'advanced_settings' => $advanced_settings_response,
+				'has_newsletters'   => Reader_Activation::is_esp_configured(),
 			],
 		];
 		return rest_ensure_response( $config );

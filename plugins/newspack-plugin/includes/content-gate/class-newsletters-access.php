@@ -23,7 +23,7 @@
  * @package Newspack
  */
 
-namespace Newspack\Content_Gate;
+namespace Newspack;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -494,7 +494,7 @@ class Newsletters_Access {
 	 *
 	 * @return bool
 	 */
-	private static function is_verification_enabled() {
+	public static function is_verification_enabled() {
 		$settings = \Newspack\Content_Gate_Advanced_Settings::get_settings();
 		return ! empty( $settings['newsletter_link_bypass_enabled'] );
 	}
