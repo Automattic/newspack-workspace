@@ -42,6 +42,42 @@ ip_for_env() {
     grep -o '127\.0\.0\.[0-9]*' "$1" | head -1
 }
 
+# Parse a docker-compose volume line for a worktree mount and emit "repo|branch".
+# Handles both shapes:
+#   legacy (pre-monorepo): "- ./worktrees/<repo>/<branch>:/newspack-repos/<repo>"
+#   monorepo:              "- ./worktrees/<safe_branch>/plugins/<repo>:/newspack-plugins/<repo>"
+#                          "- ./worktrees/<safe_branch>/themes/<repo>:/newspack-themes/<repo>"
+# Returns non-zero for lines that don't match either shape.
+parse_worktree_mount() {
+    local line="$1"
+    local host="${line#*- }"; host="${host%%:*}"
+    local container="${line#*:}"
+    local repo="${container##*/}"
+    local branch=""
+    case "$container" in
+        */newspack-repos/*)
+            branch="${host#./worktrees/$repo/}"
+            ;;
+        */newspack-plugins/*|*/newspack-themes/*)
+            branch="${host#./worktrees/}"
+            branch="${branch%/*/$repo}"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+    [[ -n "$repo" && -n "$branch" ]] || return 1
+    echo "$repo|$branch"
+}
+
+# Iterate worktree mount lines in a compose file and yield "repo|branch" pairs.
+each_worktree_in_env() {
+    local file="$1"
+    while IFS= read -r line; do
+        parse_worktree_mount "$line"
+    done < <(grep -E '^[[:space:]]*-[[:space:]]*\./worktrees/[^[:space:]]+:/newspack-(repos|plugins|themes)/[^[:space:]]+' "$file" 2>/dev/null)
+}
+
 case $1 in
     create)
         env_name="$2"
@@ -510,22 +546,18 @@ MIGRATE
             fi
             # Collect worktrees as repo:branch pairs.
             worktrees=""
-            while read -r repo; do
-                wt_path=$(grep "newspack-repos/$repo" "$f" | sed 's/^ *- //' | cut -d: -f1)
-                branch=$(echo "$wt_path" | sed "s|.*worktrees/${repo}/||")
+            while IFS='|' read -r repo branch; do
                 [[ -n "$worktrees" ]] && worktrees="$worktrees,"
                 worktrees="${worktrees}${repo}:${branch}"
-            done < <(grep 'worktrees/' "$f" 2>/dev/null | sed 's|.*/newspack-repos/||')
+            done < <(each_worktree_in_env "$f")
             if [[ "$porcelain" == true ]]; then
                 printf '%s\t%s\thttps://%s/\t%s\n' "$name" "$status" "$domain" "$worktrees"
             else
                 echo "  $name ($status) https://${domain}/"
                 # Show worktrees mounted by this environment.
-                grep 'worktrees/' "$f" 2>/dev/null | sed 's|.*/newspack-repos/||' | while read -r repo; do
-                    wt_path=$(grep "newspack-repos/$repo" "$f" | sed 's/^ *- //' | cut -d: -f1)
-                    branch=$(echo "$wt_path" | sed "s|.*worktrees/${repo}/||")
+                while IFS='|' read -r repo branch; do
                     echo "    └ $repo ($branch)"
-                done
+                done < <(each_worktree_in_env "$f")
             fi
         done
         ;;
