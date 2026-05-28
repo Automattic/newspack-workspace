@@ -329,6 +329,16 @@ export default function Store() {
 		}
 	}
 
+	/**
+	 * Drain both the in-memory and persisted sync queues so no stale
+	 * write fires on a subsequent sync tick. Module-internal — called by
+	 * clear() but not exposed on the public store API.
+	 */
+	function drainSyncQueue() {
+		syncQueue.length = 0;
+		_set( 'unsynced', [], true );
+	}
+
 	return {
 		/**
 		 * Get a value from the store.
@@ -366,6 +376,36 @@ export default function Store() {
 				}
 			}
 			return data;
+		},
+		/**
+		 * Intended for init()'s post-logout divergence handler only.
+		 * Reachable as ras.store.clear() due to closure-access constraints; third-
+		 * party invocation would silently destroy reader state. See NPPM-2721.
+		 *
+		 * @internal
+		 */
+		clear: () => {
+			const prefix = getStorePrefix( false );
+			const keysToRemove = [];
+			for ( let i = 0; i < config.storage.length; i++ ) {
+				const storageKey = config.storage.key( i );
+				if ( storageKey && storageKey.startsWith( prefix ) ) {
+					keysToRemove.push( storageKey );
+				}
+			}
+			for ( const storageKey of keysToRemove ) {
+				config.storage.removeItem( storageKey );
+			}
+			drainSyncQueue();
+			// Reset the in-memory server-known-items cache that syncItem
+			// reads to short-circuit no-op writes.
+			if ( window.newspack_reader_data ) {
+				window.newspack_reader_data.items = {};
+			}
+			// Reseed via _set (not public set) so the reseed itself doesn't enqueue
+			// a server write — and so init()'s trailing equality check skips its
+			// own store.set('reader', ...) call.
+			_set( 'reader', { authenticated: false } );
 		},
 		/**
 		 * Set a value in the store.

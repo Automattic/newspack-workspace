@@ -673,7 +673,21 @@ function init() {
 	const data = newspack_ras_config;
 	const initialEmail = data?.authenticated_email || getCookie( 'np_auth_intention' );
 	const authenticated = !! data?.authenticated_email;
-	const currentReader = getReader();
+	let currentReader = getReader();
+
+	// NPPM-2721: post-logout pageload detection. Two states fire the clear:
+	// 1) storedClaimsAuth — fresh logout, persisted reader.authenticated still true.
+	// 2) storedEmailIsOrphaned — already-contaminated browser left behind by the
+	//    pre-fix init() with reader.email set but authenticated already flipped to
+	//    false; intention cookie absent or doesn't match the stored email.
+	const serverSaysAnonymous = ! data?.authenticated_email;
+	const storedClaimsAuth = currentReader?.authenticated === true;
+	const storedEmailIsOrphaned = !! currentReader?.email && currentReader.email !== initialEmail;
+	if ( serverSaysAnonymous && ( storedClaimsAuth || storedEmailIsOrphaned ) ) {
+		store.clear();
+		currentReader = getReader();
+	}
+
 	const reader = { email: initialEmail || currentReader?.email, authenticated };
 	if ( currentReader?.email !== reader?.email || currentReader?.authenticated !== reader?.authenticated ) {
 		store.set( 'reader', reader, false );

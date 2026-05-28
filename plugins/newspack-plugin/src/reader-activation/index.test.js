@@ -95,3 +95,109 @@ describe( 'newspackReaderActivation', () => {
 		expect( callback ).toHaveBeenCalled();
 	} );
 } );
+
+describe( 'init() post-logout clearing (NPPM-2721)', () => {
+	function bootInit( { storage = {}, config = {}, cookies = {} } = {} ) {
+		// Reset singleton flags and storage backing.
+		delete window.newspackRASInitialized;
+		delete window.newspackReaderActivation;
+		localStorage.clear();
+		// Expire all cookies first.
+		document.cookie.split( ';' ).forEach( c => {
+			const name = c.split( '=' )[ 0 ].trim();
+			if ( name ) {
+				document.cookie = `${ name }=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+			}
+		} );
+		Object.entries( storage ).forEach( ( [ k, v ] ) => {
+			localStorage.setItem( k, JSON.stringify( v ) );
+		} );
+		Object.entries( cookies ).forEach( ( [ k, v ] ) => {
+			document.cookie = `${ k }=${ v }; path=/`;
+		} );
+		window.newspack_ras_config = { cid_cookie: 'np_cid', ...config };
+		jest.isolateModules( () => require( './index' ) );
+	}
+
+	it( 'fresh-logout divergence triggers the clear', () => {
+		bootInit( {
+			storage: {
+				np_reader_reader: { email: 'old@example.com', authenticated: true },
+				np_reader_activity: [ { action: 'article_view', data: { post_id: 1 }, timestamp: 0 } ],
+				np_reader_is_donor: true,
+			},
+			config: { authenticated_email: '' },
+		} );
+		expect( localStorage.getItem( 'np_reader_activity' ) ).toBeNull();
+		expect( localStorage.getItem( 'np_reader_is_donor' ) ).toBeNull();
+		const reader = JSON.parse( localStorage.getItem( 'np_reader_reader' ) );
+		expect( reader.email ).toBeUndefined();
+		expect( reader.authenticated ).toBe( false );
+	} );
+
+	it( 'already-contaminated divergence triggers the clear', () => {
+		// State left behind by the pre-fix init(): authenticated already false,
+		// but the prior email and identity artifacts are still there.
+		bootInit( {
+			storage: {
+				np_reader_reader: { email: 'old@example.com', authenticated: false },
+				np_reader_activity: [ { action: 'article_view', data: { post_id: 1 }, timestamp: 0 } ],
+				np_reader_is_donor: true,
+			},
+			config: { authenticated_email: '' },
+		} );
+		expect( localStorage.getItem( 'np_reader_activity' ) ).toBeNull();
+		expect( localStorage.getItem( 'np_reader_is_donor' ) ).toBeNull();
+		const reader = JSON.parse( localStorage.getItem( 'np_reader_reader' ) );
+		expect( reader.email ).toBeUndefined();
+	} );
+
+	it( 'anonymous-with-intention preserves activity (no clear)', () => {
+		bootInit( {
+			storage: {
+				np_reader_reader: { email: 'pending@example.com', authenticated: false },
+				np_reader_activity: [ { action: 'article_view', data: { post_id: 1 }, timestamp: 0 } ],
+			},
+			cookies: { np_auth_intention: 'pending@example.com' },
+			config: { authenticated_email: '' },
+		} );
+		expect( localStorage.getItem( 'np_reader_activity' ) ).not.toBeNull();
+	} );
+
+	it( 'authenticated reader page refresh preserves activity (no clear)', () => {
+		bootInit( {
+			storage: {
+				np_reader_reader: { email: 'still@example.com', authenticated: true },
+				np_reader_activity: [ { action: 'article_view', data: { post_id: 1 }, timestamp: 0 } ],
+			},
+			config: { authenticated_email: 'still@example.com' },
+		} );
+		expect( localStorage.getItem( 'np_reader_activity' ) ).not.toBeNull();
+	} );
+
+	it( 'post-clear init() does not enqueue a reader re-write', () => {
+		bootInit( {
+			storage: {
+				np_reader_reader: { email: 'old@example.com', authenticated: true },
+				np_reader_activity: [ { action: 'article_view', data: { post_id: 1 }, timestamp: 0 } ],
+			},
+			config: { authenticated_email: '' },
+		} );
+		// The reseed double-duty invariant: clear()'s _set('reader', ...) leaves
+		// the equality check in init() satisfied so the trailing store.set is
+		// skipped — and 'reader' must not appear in the persisted unsynced queue.
+		const unsynced = JSON.parse( localStorage.getItem( 'np_reader__unsynced' ) || '[]' );
+		expect( unsynced ).not.toContain( 'reader' );
+	} );
+
+	it( 'pure anonymous bootstrap with no prior data does not throw', () => {
+		expect( () =>
+			bootInit( {
+				config: { authenticated_email: '' },
+			} )
+		).not.toThrow();
+		const reader = JSON.parse( localStorage.getItem( 'np_reader_reader' ) );
+		expect( reader.authenticated ).toBe( false );
+		expect( reader.email ).toBeUndefined();
+	} );
+} );

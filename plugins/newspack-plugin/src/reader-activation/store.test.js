@@ -1,6 +1,7 @@
 // @jest-environment jsdom
 
 import Store from './store';
+import { EVENTS, on, off } from './events';
 
 describe( 'Store', () => {
 	beforeEach( () => {
@@ -204,6 +205,83 @@ describe( 'Store', () => {
 			Store();
 			const unsynced = JSON.parse( localStorage.getItem( 'np_reader__unsynced' ) );
 			expect( unsynced ).toEqual( [ 'custom_key' ] );
+		} );
+	} );
+	describe( 'clear', () => {
+		it( 'should remove every prefixed key (non-internal and internal) and leave unrelated keys alone', () => {
+			localStorage.setItem( 'np_reader_reader', JSON.stringify( { email: 'old@example.com', authenticated: true } ) );
+			localStorage.setItem( 'np_reader_activity', JSON.stringify( [ { action: 'article_view' } ] ) );
+			localStorage.setItem( 'np_reader_pageviews', JSON.stringify( { day: { count: 1 } } ) );
+			localStorage.setItem( 'np_reader__unsynced', JSON.stringify( [ 'pageviews' ] ) );
+			localStorage.setItem( 'unrelated_key', 'untouched' );
+			const store = Store();
+			store.clear();
+			expect( localStorage.getItem( 'np_reader_activity' ) ).toBeNull();
+			expect( localStorage.getItem( 'np_reader_pageviews' ) ).toBeNull();
+			expect( localStorage.getItem( 'unrelated_key' ) ).toEqual( 'untouched' );
+		} );
+		it( 'should re-seed the reader key as an anonymous stub', () => {
+			localStorage.setItem( 'np_reader_reader', JSON.stringify( { email: 'old@example.com', authenticated: true } ) );
+			const store = Store();
+			store.clear();
+			expect( store.get( 'reader' ) ).toEqual( { authenticated: false } );
+		} );
+		it( 'should fire a data event so consumer caches invalidate', () => {
+			const callback = jest.fn();
+			on( EVENTS.data, callback );
+			const store = Store();
+			store.clear();
+			off( EVENTS.data, callback );
+			expect( callback ).toHaveBeenCalled();
+		} );
+		it( 'should drain the sync queue so deleted keys are not POSTed on the next tick', () => {
+			jest.useFakeTimers();
+			// items has a known stale server value for the key so the bail-on-match
+			// shortcut in syncItem cannot mask a missing drain — a stale dequeue
+			// would resolve to a DELETE XHR.
+			window.newspack_reader_data = {
+				api_url: 'http://test/api',
+				nonce: 'abc',
+				items: { pageviews: '{"day":{"count":99}}' },
+			};
+			const openSpy = jest.spyOn( XMLHttpRequest.prototype, 'open' );
+			const store = Store();
+			store.set( 'pageviews', { day: { count: 1 } } );
+			store.clear();
+			jest.advanceTimersByTime( 1500 );
+			expect( openSpy ).not.toHaveBeenCalled();
+			openSpy.mockRestore();
+			jest.useRealTimers();
+		} );
+		it( 'should reseed the reader key without enqueueing a server write', () => {
+			jest.useFakeTimers();
+			window.newspack_reader_data = {
+				api_url: 'http://test/api',
+				nonce: 'abc',
+				items: { reader: '{"email":"old@example.com","authenticated":true}' },
+			};
+			const openSpy = jest.spyOn( XMLHttpRequest.prototype, 'open' );
+			const store = Store();
+			store.clear();
+			jest.advanceTimersByTime( 1500 );
+			// Confirm no XHR targets the reseeded reader key.
+			const readerOpens = openSpy.mock.calls.filter( call => /reader/.test( JSON.stringify( call ) ) );
+			expect( openSpy ).not.toHaveBeenCalled();
+			expect( readerOpens.length ).toBe( 0 );
+			openSpy.mockRestore();
+			jest.useRealTimers();
+		} );
+		it( 'should reset the in-memory newspack_reader_data.items cache', () => {
+			window.newspack_reader_data = { items: { is_donor: '"true"', reader: '{"email":"x"}' } };
+			const store = Store();
+			store.clear();
+			expect( window.newspack_reader_data.items ).toEqual( {} );
+		} );
+		it( 'should empty the persisted _unsynced array', () => {
+			localStorage.setItem( 'np_reader__unsynced', JSON.stringify( [ 'pageviews' ] ) );
+			const store = Store();
+			store.clear();
+			expect( localStorage.getItem( 'np_reader__unsynced' ) ).toEqual( '[]' );
 		} );
 	} );
 } );
