@@ -219,6 +219,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 							openVerificationModal( {
 								email: data.email,
 								verificationNonce: reader_registration_block_config.verification_nonce,
+								setOTPTimer: readerActivation.setOTPTimer,
 								onSendCode: openAuthForVerification,
 								onDismiss: reloadAfterNewslettersSignup,
 							} );

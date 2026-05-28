@@ -391,6 +391,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 						openVerificationModal( {
 							email: data.email,
 							verificationNonce: data.verification_nonce,
+							setOTPTimer: readerActivation.setOTPTimer,
 							onSendCode: () => {
 								restoreAuthModal();
 								container.setFormAction( 'otp', true );
