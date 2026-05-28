@@ -15,7 +15,6 @@ class Agent_Access_Activity_Log {
 	const TABLE_NAME     = 'agent_access_log';
 	const SOURCE_AA      = 'agent-access';
 	const SOURCE_WP_MCP  = 'wordpress-mcp';
-	const SOURCE_REST    = 'rest-api';
 
 	/**
 	 * Register hooks.
@@ -23,7 +22,6 @@ class Agent_Access_Activity_Log {
 	public function init() {
 		add_filter( 'rest_pre_dispatch', array( $this, 'log_request' ), 10, 3 );
 	}
-
 
 	// -------------------------------------------------------------------------
 	// Logging
@@ -58,23 +56,38 @@ class Agent_Access_Activity_Log {
 			$object_type = rtrim( $m[1], 's' );
 		}
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-		$wpdb->insert(
-			$table,
-			array(
-				'user_id'           => (int) get_current_user_id(),
-				'source'            => $detected['source'],
-				'app_password_name' => $detected['app_password_name'],
-				'method'            => strtoupper( $request->get_method() ),
-				'route'             => substr( $route, 0, 500 ),
-				'object_type'       => $object_type,
-				'object_id'         => $object_id,
-				'user_agent'        => isset( $_SERVER['HTTP_USER_AGENT'] ) ? substr( sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ), 0, 500 ) : null,
-				'ip'                => $this->get_client_ip(),
-				'created_at'        => current_time( 'mysql' ),
-			),
-			array( '%d', '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s' )
+		// Always record REMOTE_ADDR as the audit IP. Forwarded headers
+		// (CF-Connecting-IP, X-Forwarded-For) are client-controlled and cannot
+		// be trusted for audit-log integrity on a site not behind a known proxy.
+		$audit_ip = isset( $_SERVER['REMOTE_ADDR'] )
+			? substr( sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ), 0, 45 )
+			: '';
+
+		// Build the row; omit object_id when null so the column stores NULL
+		// (its schema default) rather than 0, which %d would cast it to.
+		$row_data    = array(
+			'user_id'           => (int) get_current_user_id(),
+			'source'            => $detected['source'],
+			'app_password_name' => $detected['app_password_name'],
+			'method'            => strtoupper( $request->get_method() ),
+			'route'             => substr( $route, 0, 500 ),
+			'object_type'       => $object_type,
+			'user_agent'        => isset( $_SERVER['HTTP_USER_AGENT'] ) ? substr( sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ), 0, 500 ) : null,
+			'ip'                => $audit_ip,
+			'created_at'        => current_time( 'mysql' ),
 		);
+		$row_formats = array( '%d', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' );
+
+		if ( null !== $object_id ) {
+			// Splice object_id in after object_type (position 6).
+			$row_data    = array_slice( $row_data, 0, 6, true )
+				+ array( 'object_id' => (int) $object_id )
+				+ array_slice( $row_data, 6, null, true );
+			array_splice( $row_formats, 6, 0, '%d' );
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->insert( $table, $row_data, $row_formats );
 
 		return $result;
 	}
@@ -101,7 +114,7 @@ class Agent_Access_Activity_Log {
 		}
 
 		// ---- WP.com MCP via User-Agent ----
-		$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
+		$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? $_SERVER['HTTP_USER_AGENT'] : '';
 
 		/**
 		 * Filters the User-Agent substrings used to identify WP.com MCP requests.
@@ -124,83 +137,97 @@ class Agent_Access_Activity_Log {
 			}
 		}
 
-		// ---- WP.com MCP via Jetpack connection headers ----
-		if ( isset( $_SERVER['HTTP_X_JETPACK_SIGNATURE'] ) || isset( $_SERVER['HTTP_X_JP_SIGNATURE'] ) ) {
-			return array(
-				'source'            => self::SOURCE_WP_MCP,
-				'app_password_name' => null,
-			);
-		}
-
-		// ---- WP.com MCP via Automattic IP ranges ----
-		if ( $this->is_automattic_ip( $this->get_client_ip() ) ) {
-			return array(
-				'source'            => self::SOURCE_WP_MCP,
-				'app_password_name' => null,
-			);
-		}
+		// NOTE: Jetpack signature headers (X-Jetpack-Signature / X-JP-Signature)
+		// are NOT used as a detection signal here. The signature is never verified
+		// before this point, so any authenticated client can set the header and
+		// have their writes attributed to the wordpress-mcp source, defeating the
+		// audit log's integrity. Use only the verified app-password name below.
 
 		// ---- Agent Access or MCP via Application Password ----
 		$app_password_uuid = rest_get_authenticated_app_password();
+		if ( empty( $app_password_uuid ) ) {
+			return null;
+		}
 
-		if ( ! empty( $app_password_uuid ) ) {
-			$user_id   = get_current_user_id();
-			$passwords = WP_Application_Passwords::get_user_application_passwords( $user_id );
+		$user_id   = get_current_user_id();
+		$passwords = WP_Application_Passwords::get_user_application_passwords( $user_id );
 
-			foreach ( $passwords as $item ) {
-				if ( $item['uuid'] !== $app_password_uuid ) {
-					continue;
-				}
+		foreach ( $passwords as $item ) {
+			if ( $item['uuid'] !== $app_password_uuid ) {
+				continue;
+			}
 
-				$name = $item['name'];
+			$name = $item['name'];
 
-				// Agent Access managed credential.
-				if ( $name === AGENT_ACCESS_APP_PASSWORD_NAME ) {
-					return array(
-						'source'            => self::SOURCE_AA,
-						'app_password_name' => $name,
-					);
-				}
-
-				/**
-				 * Filters the app-password name substrings used to identify WP.com MCP.
-				 *
-				 * @param string[] $patterns Case-insensitive substring patterns.
-				 */
-				$mcp_name_patterns = apply_filters( 'agent_access_mcp_name_patterns', array(
-					'wordpress.com',
-					'wpcom',
-					'mcp',
-				) );
-
-				foreach ( $mcp_name_patterns as $pattern ) {
-					if ( '' !== $pattern && false !== stripos( $name, $pattern ) ) {
-						return array(
-							'source'            => self::SOURCE_WP_MCP,
-							'app_password_name' => $name,
-						);
-					}
-				}
-
-				// Unrecognised app password — log it anyway, labelled as generic REST.
+			// Check for the Agent Access app password.
+			if ( $name === AGENT_ACCESS_APP_PASSWORD_NAME ) {
 				return array(
-					'source'            => self::SOURCE_REST,
+					'source'            => self::SOURCE_AA,
 					'app_password_name' => $name,
 				);
 			}
+
+			/**
+			 * Filters the app-password name substrings used to identify WP.com MCP.
+			 *
+			 * Useful when the user creates a dedicated password named e.g. "WordPress.com MCP".
+			 *
+			 * @param string[] $patterns Case-insensitive substring patterns.
+			 */
+			$mcp_name_patterns = apply_filters( 'agent_access_mcp_name_patterns', array(
+				'wordpress.com',
+				'wpcom',
+				'mcp',
+			) );
+
+			foreach ( $mcp_name_patterns as $pattern ) {
+				if ( '' !== $pattern && false !== stripos( $name, $pattern ) ) {
+					return array(
+						'source'            => self::SOURCE_WP_MCP,
+						'app_password_name' => $name,
+					);
+				}
+			}
+
+			// Different app password — not tracked.
+			return null;
 		}
 
-		// Authenticated via session cookie (logged-in admin/editor making REST call).
-		// Log these too so nothing slips through.
-		return array(
-			'source'            => self::SOURCE_REST,
-			'app_password_name' => null,
-		);
+		return null;
 	}
 
 	// -------------------------------------------------------------------------
 	// Query helpers
 	// -------------------------------------------------------------------------
+
+	/**
+	 * Build a WHERE clause and its bound values from common filter args.
+	 *
+	 * Shared by get_entries() and count_entries() so the filter contract
+	 * stays in one place and can't drift between count and fetch.
+	 *
+	 * @param array $args Filter arguments: source, user_id, method.
+	 * @return array{ 0: string[], 1: array } [ $where_clauses, $values ]
+	 */
+	private static function build_where( $args ) {
+		$where  = array( '1=1' );
+		$values = array();
+
+		if ( ! empty( $args['source'] ) ) {
+			$where[]  = 'source = %s';
+			$values[] = $args['source'];
+		}
+		if ( ! empty( $args['user_id'] ) ) {
+			$where[]  = 'user_id = %d';
+			$values[] = (int) $args['user_id'];
+		}
+		if ( ! empty( $args['method'] ) ) {
+			$where[]  = 'method = %s';
+			$values[] = strtoupper( $args['method'] );
+		}
+
+		return array( $where, $values );
+	}
 
 	/**
 	 * Get recent log entries.
@@ -217,49 +244,22 @@ class Agent_Access_Activity_Log {
 	 */
 	public static function get_entries( $args = array() ) {
 		global $wpdb;
-		$table = esc_sql( $wpdb->prefix . self::TABLE_NAME );
+		$table = $wpdb->prefix . self::TABLE_NAME;
 
 		$defaults = array(
 			'limit'   => 50,
 			'offset'  => 0,
-			'source'          => '',
-			'user_id'         => 0,
-			'method'          => '',
-			'exclude_methods' => array(),
+			'source'  => '',
+			'user_id' => 0,
+			'method'  => '',
 		);
 		$args = wp_parse_args( $args, $defaults );
 
-		$where  = array( '1=1' );
-		$values = array();
-
-		if ( ! empty( $args['source'] ) ) {
-			$where[]  = 'source = %s';
-			$values[] = $args['source'];
-		}
-		if ( ! empty( $args['user_id'] ) ) {
-			$where[]  = 'user_id = %d';
-			$values[] = (int) $args['user_id'];
-		}
-		if ( ! empty( $args['method'] ) ) {
-			$where[]  = 'method = %s';
-			$values[] = strtoupper( $args['method'] );
-		} elseif ( ! empty( $args['exclude_methods'] ) ) {
-			$placeholders = implode( ', ', array_fill( 0, count( $args['exclude_methods'] ), '%s' ) );
-			$where[]      = "method NOT IN ({$placeholders})";
-			foreach ( $args['exclude_methods'] as $excl ) {
-				$values[] = strtoupper( $excl );
-			}
-		}
-		if ( ! empty( $args['exclude_route_prefix'] ) ) {
-			$where[]  = 'route NOT LIKE %s';
-			$values[] = $wpdb->esc_like( $args['exclude_route_prefix'] ) . '%';
-		}
+		list( $where, $values ) = self::build_where( $args );
 
 		$values[] = (int) $args['limit'];
 		$values[] = (int) $args['offset'];
 
-		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-		// Table name is a known constant prefixed by $wpdb->prefix; WHERE array uses %s/%d placeholders with values passed via spread.
 		$sql = "SELECT l.*, u.user_login, u.display_name
 		        FROM {$table} l
 		        LEFT JOIN {$wpdb->users} u ON l.user_id = u.ID
@@ -267,8 +267,8 @@ class Agent_Access_Activity_Log {
 		        ORDER BY l.created_at DESC
 		        LIMIT %d OFFSET %d";
 
-		return $wpdb->get_results( $wpdb->prepare( $sql, ...$values ) );
-		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return $wpdb->get_results( $wpdb->prepare( $sql, $values ) );
 	}
 
 	/**
@@ -279,44 +279,19 @@ class Agent_Access_Activity_Log {
 	 */
 	public static function count_entries( $args = array() ) {
 		global $wpdb;
-		$table = esc_sql( $wpdb->prefix . self::TABLE_NAME );
+		$table = $wpdb->prefix . self::TABLE_NAME;
 
-		$where  = array( '1=1' );
-		$values = array();
-
-		if ( ! empty( $args['source'] ) ) {
-			$where[]  = 'source = %s';
-			$values[] = $args['source'];
-		}
-		if ( ! empty( $args['user_id'] ) ) {
-			$where[]  = 'user_id = %d';
-			$values[] = (int) $args['user_id'];
-		}
-		if ( ! empty( $args['method'] ) ) {
-			$where[]  = 'method = %s';
-			$values[] = strtoupper( $args['method'] );
-		} elseif ( ! empty( $args['exclude_methods'] ) ) {
-			$placeholders = implode( ', ', array_fill( 0, count( $args['exclude_methods'] ), '%s' ) );
-			$where[]      = "method NOT IN ({$placeholders})";
-			foreach ( $args['exclude_methods'] as $excl ) {
-				$values[] = strtoupper( $excl );
-			}
-		}
-		if ( ! empty( $args['exclude_route_prefix'] ) ) {
-			$where[]  = 'route NOT LIKE %s';
-			$values[] = $wpdb->esc_like( $args['exclude_route_prefix'] ) . '%';
-		}
+		list( $where, $values ) = self::build_where( $args );
 
 		if ( empty( $values ) ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
 		}
 
-		// phpcs:disable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$sql = "SELECT COUNT(*) FROM {$table} WHERE " . implode( ' AND ', $where );
 
-		return (int) $wpdb->get_var( $wpdb->prepare( $sql, ...$values ) );
-		// phpcs:enable WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		return (int) $wpdb->get_var( $wpdb->prepare( $sql, $values ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -360,65 +335,12 @@ class Agent_Access_Activity_Log {
 	 */
 	public static function uninstall_table() {
 		global $wpdb;
-		$table_name = esc_sql( $wpdb->prefix . self::TABLE_NAME );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-		$wpdb->query( "DROP TABLE IF EXISTS `{$table_name}`" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}" . self::TABLE_NAME );
 	}
 
 	// -------------------------------------------------------------------------
 	// Utilities
 	// -------------------------------------------------------------------------
 
-	/**
-	 * Check if an IP address falls within a known Automattic/WP.com proxy range.
-	 *
-	 * @param string $ip IPv4 address.
-	 * @return bool
-	 */
-	private function is_automattic_ip( $ip ) {
-		if ( empty( $ip ) || ! filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) ) {
-			return false;
-		}
-
-		/**
-		 * Filters the CIDR blocks used to identify Automattic/WP.com proxy IPs.
-		 *
-		 * @param string[] $ranges CIDR notation blocks.
-		 */
-		$ranges = apply_filters( 'agent_access_automattic_ip_ranges', array(
-			'192.0.64.0/18',   // WP.com primary
-			'192.0.99.0/24',   // WP.com API proxy (observed)
-			'198.181.116.0/22', // Automattic
-		) );
-
-		$ip_long = ip2long( $ip );
-		foreach ( $ranges as $cidr ) {
-			list( $base, $bits ) = explode( '/', $cidr );
-			$mask = -1 << ( 32 - (int) $bits );
-			if ( ( $ip_long & $mask ) === ( ip2long( $base ) & $mask ) ) {
-				return true;
-			}
-		}
-
-		return false;
-	}
-
-	/**
-	 * Get the client IP, respecting common proxy headers.
-	 *
-	 * @return string
-	 */
-	private function get_client_ip() {
-		foreach ( array( 'HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR' ) as $key ) {
-			if ( ! empty( $_SERVER[ $key ] ) ) {
-				$ip = sanitize_text_field( wp_unslash( $_SERVER[ $key ] ) );
-				// X-Forwarded-For can be a comma-separated list; take the first.
-				if ( false !== strpos( $ip, ',' ) ) {
-					$ip = trim( explode( ',', $ip )[0] );
-				}
-				return substr( $ip, 0, 45 );
-			}
-		}
-		return '';
-	}
 }

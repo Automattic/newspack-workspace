@@ -31,7 +31,7 @@ class Agent_Access_API {
 			$user_id,
 			array(
 				'name'   => AGENT_ACCESS_APP_PASSWORD_NAME,
-				'app_id' => 'agent-access',
+				'app_id' => 'botcreds-agent-access',
 			)
 		);
 

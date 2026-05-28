@@ -15,7 +15,10 @@ class Agent_Access_Mentions {
 	 * Regex pattern to match @mentions.
 	 * Matches @username where username is 1-60 chars of letters, numbers, underscores, hyphens, or dots.
 	 */
-	const MENTION_PATTERN = '/@([a-zA-Z0-9_.\-]{1,60})/';
+	// The negative lookbehind (?<!\w) prevents matching the domain portion of
+	// email addresses (e.g. foo@bar.com would otherwise extract "bar" as a
+	// mention), while still matching @username at a real word boundary.
+	const MENTION_PATTERN = '/(?<!\w)@([a-zA-Z0-9_.\-]{1,60})\b/';
 
 	/**
 	 * Register hooks.
@@ -47,8 +50,10 @@ class Agent_Access_Mentions {
 	 * @param WP_Comment $comment    The comment object.
 	 */
 	public function handle_new_comment( $comment_id, $comment ) {
-		// Skip spam and trash.
-		if ( in_array( $comment->comment_approved, array( 'spam', 'trash' ), true ) ) {
+		// Only notify for approved comments. Skip spam, trash, and held/pending
+		// comments ('0') to prevent unauthenticated visitors from triggering
+		// notification emails before a moderator has reviewed the content.
+		if ( '1' !== (string) $comment->comment_approved ) {
 			return;
 		}
 

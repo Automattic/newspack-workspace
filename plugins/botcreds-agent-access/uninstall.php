@@ -25,12 +25,20 @@ $wpdb->query( $wpdb->prepare(
 	$wpdb->esc_like( '_transient_timeout_agent_access_' ) . '%'
 ) );
 
-// Remove Agent Access-managed Application Passwords.
+// Remove all plugin-managed Application Passwords.
+// Covers the current name and legacy names from previous rebrands so that
+// uninstalling the plugin actually revokes every credential it ever minted.
+$agent_access_managed_names = array(
+	'BotCreds Agent Access',         // current (AGENT_ACCESS_APP_PASSWORD_NAME as of 2.0)
+	'BotCreds',                      // interim name during rebrand
+	'Agent Access',                  // pre-2.0 legacy name
+	'Agent Access Auto-Provisioned', // legacy provisioner name
+);
 $agent_access_user_ids = get_users( array( 'fields' => 'ID' ) );
 foreach ( $agent_access_user_ids as $agent_access_uid ) {
 	$agent_access_passwords = WP_Application_Passwords::get_user_application_passwords( $agent_access_uid );
 	foreach ( $agent_access_passwords as $agent_access_item ) {
-		if ( in_array( $agent_access_item['name'], array( 'Agent Access', 'Agent Access Auto-Provisioned' ), true ) ) {
+		if ( in_array( $agent_access_item['name'], $agent_access_managed_names, true ) ) {
 			WP_Application_Passwords::delete_application_password( $agent_access_uid, $agent_access_item['uuid'] );
 		}
 	}
@@ -57,3 +65,8 @@ $wpdb->delete( $wpdb->commentmeta, array( 'meta_key' => '_agent_access_mentions'
 
 // Remove rate limit option.
 delete_option( '_agent_access_rate_limits' );
+
+// Drop the activity log table.
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}agent_access_log" );
+delete_option( 'agent_access_log_db_version' );
