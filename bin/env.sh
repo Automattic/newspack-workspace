@@ -50,25 +50,27 @@ ip_for_env() {
 # Returns non-zero for lines that don't match either shape.
 parse_worktree_mount() {
     local line="$1"
-    local host="${line#*- }"; host="${host%%:*}"
-    local container="${line#*:}"
-    local repo="${container##*/}"
+    # Use regex extraction so the parser tolerates exactly what the grep
+    # admits (tabs / multi-space after the dash) and cuts cleanly at the
+    # next `:` — so mount-mode suffixes (`:ro`, `:cached`) and trailing
+    # comments don't fold into the captured fields.
+    [[ "$line" =~ ^[[:space:]]*-[[:space:]]+\./worktrees/([^[:space:]:]+):/newspack-(repos|plugins|themes)/([^[:space:]:]+) ]] || return 1
+    local host_rel="worktrees/${BASH_REMATCH[1]}"
+    local container_type="${BASH_REMATCH[2]}"
+    local repo="${BASH_REMATCH[3]}"
     local branch=""
-    case "$container" in
-        */newspack-repos/*)
-            branch="${host#./worktrees/$repo/}"
+    case "$container_type" in
+        repos)
+            branch="${host_rel#worktrees/$repo/}"
             ;;
-        */newspack-plugins/*|*/newspack-themes/*)
-            local safe_branch="${host#./worktrees/}"
+        plugins|themes)
+            local safe_branch="${host_rel#worktrees/}"
             safe_branch="${safe_branch%/*/$repo}"
             # Look up the unsanitized branch from the worktree's git state;
             # fall back to the safe-branch directory name if the worktree
             # directory is missing or its branch ref can't be resolved.
             branch=$(git -C "$NABSPATH/worktrees/$safe_branch" branch --show-current 2>/dev/null)
             [[ -n "$branch" ]] || branch="$safe_branch"
-            ;;
-        *)
-            return 1
             ;;
     esac
     [[ -n "$repo" && -n "$branch" ]] || return 1
@@ -80,7 +82,7 @@ each_worktree_in_env() {
     local file="$1"
     while IFS= read -r line; do
         parse_worktree_mount "$line"
-    done < <(grep -E '^[[:space:]]*-[[:space:]]*\./worktrees/[^[:space:]]+:/newspack-(repos|plugins|themes)/[^[:space:]]+' "$file" 2>/dev/null)
+    done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$file" 2>/dev/null)
 }
 
 case $1 in

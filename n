@@ -33,14 +33,16 @@ get_target_container() {
                 # also want to route correctly from elsewhere inside the
                 # worktree (its root, bin/, packages/, sibling plugins). Match
                 # by the enclosing worktree root instead of only the mounted
-                # subdir.
-                local rel="${mount#*- ./}"
-                local container="${rel#*:}"
-                rel="${rel%%:*}"
+                # subdir. Regex extraction tolerates tabs/multi-space and cuts
+                # cleanly at the next `:` so mount-mode suffixes (`:ro`) and
+                # trailing comments don't corrupt the captured paths.
+                [[ "$mount" =~ ^[[:space:]]*-[[:space:]]+\./worktrees/([^[:space:]:]+):/newspack-(repos|plugins|themes)/[^[:space:]:]+ ]] || continue
+                local rel="worktrees/${BASH_REMATCH[1]}"
+                local container_type="${BASH_REMATCH[2]}"
                 local abs="$NABSPATH/$rel"
                 local worktree_root="$abs"
-                case "$container" in
-                    /newspack-plugins/*|/newspack-themes/*)
+                case "$container_type" in
+                    plugins|themes)
                         worktree_root="${abs%/plugins/*}"
                         worktree_root="${worktree_root%/themes/*}"
                         ;;
@@ -49,7 +51,7 @@ get_target_container() {
                     best_match="$worktree_root"
                     best_env=$(basename "$f" | sed 's/docker-compose\.env-//;s/\.yml//')
                 fi
-            done < <(grep -E '^[[:space:]]*-[[:space:]]*\./worktrees/[^[:space:]]+:/newspack-(repos|plugins|themes)/[^[:space:]]+' "$f" 2>/dev/null)
+            done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$f" 2>/dev/null)
         done
         if [ -n "$best_env" ]; then
             echo "newspack_env_${best_env}" | tr '-' '_'
