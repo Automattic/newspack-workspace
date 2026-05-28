@@ -1,0 +1,73 @@
+name: Dependabot auto-merge
+
+# Auto-approve and enable auto-merge for Dependabot PRs that only bump minor or
+# patch versions. Major bumps are left for a human to review. Merge waits on the
+# required CI checks via --auto, and squashes to match the repo merge strategy.
+
+on:
+  pull_request_target:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Auto-merge minor and patch Dependabot PRs
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      # Grouped Dependabot updates report an empty update-type. Parse the PR
+      # body for "from X to Y" version pairs and flag any major bumps.
+      - name: Check for major version bumps in PR body
+        if: steps.metadata.outputs.update-type == ''
+        id: check-major
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          HAS_MAJOR=false
+          while IFS= read -r line; do
+            from_ver=$(echo "$line" | sed -n 's/.*from \([0-9][0-9.]*\) to \([0-9][0-9.]*\).*/\1/p')
+            to_ver=$(echo "$line" | sed -n 's/.*from \([0-9][0-9.]*\) to \([0-9][0-9.]*\).*/\2/p')
+            [ -z "$from_ver" ] && continue
+            from_major="${from_ver%%.*}"
+            to_major="${to_ver%%.*}"
+            if [ "$from_major" != "$to_major" ]; then
+              echo "Major bump detected: $from_ver -> $to_ver"
+              HAS_MAJOR=true
+            fi
+          done <<< "$PR_BODY"
+          echo "has_major=$HAS_MAJOR" >> "$GITHUB_OUTPUT"
+
+      # GH_TOKEN is a PAT: the approval must come from an identity other than
+      # the GITHUB_TOKEN/dependabot bot, and enabling auto-merge needs the same
+      # elevated scope.
+      - name: Approve the PR
+        if: >-
+          ((contains(steps.metadata.outputs.update-type, 'version-update:semver-minor') ||
+          contains(steps.metadata.outputs.update-type, 'version-update:semver-patch')) &&
+          !contains(steps.metadata.outputs.update-type, 'version-update:semver-major')) ||
+          (steps.metadata.outputs.update-type == '' &&
+          steps.check-major.outputs.has_major != 'true')
+        run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Enable auto-merge for minor and patch updates
+        if: >-
+          ((contains(steps.metadata.outputs.update-type, 'version-update:semver-minor') ||
+          contains(steps.metadata.outputs.update-type, 'version-update:semver-patch')) &&
+          !contains(steps.metadata.outputs.update-type, 'version-update:semver-major')) ||
+          (steps.metadata.outputs.update-type == '' &&
+          steps.check-major.outputs.has_major != 'true')
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}

@@ -515,8 +515,8 @@ importers:
         specifier: ^18.0.0
         version: 18.3.1(react@18.3.1)
       react-router-dom:
-        specifier: ^6.0.0
-        version: 6.30.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: ^5.3.4
+        version: 5.3.4(react@18.3.1)
       redux:
         specifier: ^5.0.0
         version: 5.0.1

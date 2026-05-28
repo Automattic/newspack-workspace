@@ -41,11 +41,11 @@ for site in $(ls -d /var/www/additional-sites-html/*/); do
     NODES="$NODES,$site_name"
     # Create the service account
     if ! wp --allow-root user application-password exists 1 $APP_NAME --path=$site; then
-        echo "Creating service account for $site_name.local"
+        echo "Creating service account for $site_name.test"
         PASSWORD=$(wp --allow-root user application-password create 1 $APP_NAME --porcelain --path=$site)
         echo "$site_name:$PASSWORD" >> $SERVICE_ACCOUNTS_FILE
     else
-        echo "Service account for $site_name.local already exists"
+        echo "Service account for $site_name.test already exists"
     fi
 done
 

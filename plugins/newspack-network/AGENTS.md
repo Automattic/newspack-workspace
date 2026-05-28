@@ -1,6 +1,6 @@
 # Agent guidelines for newspack-network
 
-This file covers what is specific to `newspack-plugin`. Shared conventions (Docker commands, `n` script, coding standards, git rules, etc.) are in the root `newspack-workspace/AGENTS.md`.
+This file covers what is specific to `newspack-network`. Shared conventions (Docker commands, `n` script, coding standards, git rules, etc.) are in the root `newspack-workspace/AGENTS.md`.
 
 See DEV_NOTES.md for additional guidelines.
 

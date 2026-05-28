@@ -6,8 +6,8 @@
 #
 # Only allows:
 #   - Adding/removing loopback aliases on lo0 (127.0.0.*)
-#   - Adding /etc/hosts entries for 127.0.0.* -> *.local domains
-#   - Removing /etc/hosts entries for *.local domains
+#   - Adding /etc/hosts entries for 127.0.0.* -> *.test / *.local domains
+#   - Removing /etc/hosts entries for *.test / *.local domains
 
 set -euo pipefail
 
@@ -15,8 +15,8 @@ usage() {
     echo "Usage:"
     echo "  $0 alias-add <127.0.0.X>"
     echo "  $0 alias-remove <127.0.0.X>"
-    echo "  $0 host-add <127.0.0.X> <domain.local>"
-    echo "  $0 host-remove <domain.local>"
+    echo "  $0 host-add <127.0.0.X> <domain.test>"
+    echo "  $0 host-remove <domain.test>"
     exit 1
 }
 
@@ -28,8 +28,8 @@ validate_loopback_ip() {
 }
 
 validate_local_domain() {
-    if [[ ! "$1" =~ ^[a-zA-Z0-9._-]+\.local$ ]]; then
-        echo "Error: invalid domain '$1' (must end in .local)" >&2
+    if [[ ! "$1" =~ ^[a-zA-Z0-9._-]+\.(test|local)$ ]]; then
+        echo "Error: invalid domain '$1' (must end in .test or .local)" >&2
         exit 1
     fi
 }

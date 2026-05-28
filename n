@@ -133,7 +133,7 @@ start() {
                 done
                 for entry in "${missing_hosts[@]}"; do
                     read -r ip domain <<< "$entry"
-                    if [[ "$domain" == *.local ]]; then
+                    if [[ "$domain" == *.test || "$domain" == *.local ]]; then
                         sudo newspack-manage-host host-add "$ip" "$domain"
                     else
                         echo "$ip $domain" | sudo tee -a /etc/hosts > /dev/null
@@ -310,11 +310,11 @@ case $1 in
         ;;
     sites-add)
         docker exec $DOCKER_IT $TARGET_CONTAINER sh -c "/var/scripts/sites-add.sh $2"
-        if ! grep -q "\s$2.local" /etc/hosts; then
+        if ! grep -q "[[:space:]]$2\.test" /etc/hosts; then
             read -p "Do you want to add this domain to your local hosts file? (Y/n): " choice
             choice=$(echo "$choice" | tr '[:upper:]' '[:lower:]')
             if [[ "$choice" != "n" ]]; then
-              echo "127.0.0.1 $2.local" | sudo tee -a /etc/hosts
+              echo "127.0.0.1 $2.test" | sudo tee -a /etc/hosts
             fi
         fi
 
