@@ -336,8 +336,7 @@ class Agent_Access_Activity_Log {
 	 */
 	public static function uninstall_table() {
 		global $wpdb;
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared
-		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}" . self::TABLE_NAME ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- table name is a constant, not user input.
+		$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}" . self::TABLE_NAME ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared -- DROP TABLE; table name is a hardcoded constant.
 	}
 
 	// -------------------------------------------------------------------------
