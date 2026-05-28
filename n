@@ -47,7 +47,15 @@ get_target_container() {
                         worktree_root="${worktree_root%/themes/*}"
                         ;;
                 esac
-                if [[ "$PWD" == "$worktree_root" || "$PWD" == "$worktree_root"/* ]] && [ ${#worktree_root} -gt ${#best_match} ]; then
+                # Prefer the deeper mounted-subpath match (more specific) so
+                # PWD inside a mounted plugin/theme routes to that env even
+                # when a sibling env mounts a different plugin from the same
+                # worktree. Fall back to the worktree root for PWDs in
+                # shared dirs (bin/, packages/, the worktree root itself).
+                if [[ "$PWD" == "$abs" || "$PWD" == "$abs"/* ]] && [ ${#abs} -gt ${#best_match} ]; then
+                    best_match="$abs"
+                    best_env=$(basename "$f" | sed 's/docker-compose\.env-//;s/\.yml//')
+                elif [[ "$PWD" == "$worktree_root" || "$PWD" == "$worktree_root"/* ]] && [ ${#worktree_root} -gt ${#best_match} ]; then
                     best_match="$worktree_root"
                     best_env=$(basename "$f" | sed 's/docker-compose\.env-//;s/\.yml//')
                 fi
