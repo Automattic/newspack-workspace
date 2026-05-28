@@ -33,56 +33,22 @@ class Agent_Access_Tracker {
 			return;
 		}
 
-		if ( $this->is_managed_agent_request() ) {
+		if ( null !== Agent_Access_Activity_Log::detect_source() ) {
 			update_post_meta( $post_id, self::META_KEY, time() );
 			wp_cache_delete( 'agent_access_stats_' . get_current_user_id(), 'agent_access' );
 		}
 	}
 
 	/**
-	 * Tag an attachment if uploaded via Agent Access Application Password.
+	 * Tag an attachment if uploaded via a tracked agent source.
 	 *
 	 * @param int $attachment_id The attachment ID.
 	 */
 	public function maybe_tag_attachment( $attachment_id ) {
-		if ( $this->is_managed_agent_request() ) {
+		if ( null !== Agent_Access_Activity_Log::detect_source() ) {
 			update_post_meta( $attachment_id, self::META_KEY, time() );
 			wp_cache_delete( 'agent_access_stats_' . get_current_user_id(), 'agent_access' );
 		}
-	}
-
-	/**
-	 * Check if the current request is authenticated via the Agent Access Application Password.
-	 *
-	 * @return bool
-	 */
-	private function is_managed_agent_request() {
-		// Must be a REST API request
-		if ( ! defined( 'REST_REQUEST' ) || ! REST_REQUEST ) {
-			return false;
-		}
-
-		// Must be authenticated
-		$user_id = get_current_user_id();
-		if ( ! $user_id ) {
-			return false;
-		}
-
-		// Check if authenticated via Application Password
-		$app_password_uuid = rest_get_authenticated_app_password();
-		if ( empty( $app_password_uuid ) ) {
-			return false;
-		}
-
-		// Verify it's the Agent Access app password specifically
-		$passwords = WP_Application_Passwords::get_user_application_passwords( $user_id );
-		foreach ( $passwords as $item ) {
-			if ( $item['uuid'] === $app_password_uuid ) {
-				return $item['name'] === AGENT_ACCESS_APP_PASSWORD_NAME;
-			}
-		}
-
-		return false;
 	}
 
 	/**
@@ -151,5 +117,130 @@ class Agent_Access_Tracker {
 		wp_cache_set( $cache_key, $stats, 'agent_access', 300 );
 
 		return $stats;
+	}
+
+	/**
+	 * Get paginated content created via Agent Access for a specific user.
+	 *
+	 * @param int   $user_id  The user ID.
+	 * @param int   $limit    Results per page.
+	 * @param int   $offset   Offset.
+	 * @param string $post_type Optional post type filter ('post', 'page', 'attachment', or '' for all).
+	 * @return array{items: array, total: int}
+	 */
+	/**
+	 * Get paginated content created via Agent Access for a specific user.
+	 *
+	 * @param int    $user_id   The user ID.
+	 * @param int    $limit     Results per page.
+	 * @param int    $offset    Offset.
+	 * @param string $post_type Optional post type filter ('post', 'page', 'attachment', or '' for all).
+	 * @return array{items: array, total: int}
+	 */
+	public static function get_user_content_paged( $user_id, $limit = 10, $offset = 0, $post_type = '' ) {
+		global $wpdb;
+
+		// Build complete SQL with all placeholders before calling prepare().
+		$type_sql      = $post_type ? ' AND p.post_type = %s' : " AND p.post_type IN ('post', 'page', 'attachment')";
+		$count_sql     = "SELECT COUNT(*) FROM {$wpdb->posts} p
+		                  INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+		                  WHERE p.post_author = %d AND pm.meta_key = %s AND p.post_status != 'trash'" . $type_sql;
+		$select_sql    = "SELECT p.ID, p.post_title, p.post_date, p.post_status, p.post_type
+		                  FROM {$wpdb->posts} p
+		                  INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+		                  WHERE p.post_author = %d AND pm.meta_key = %s AND p.post_status != 'trash'" . $type_sql . '
+		                  ORDER BY p.post_date DESC LIMIT %d OFFSET %d';
+
+		$base_params   = array( (int) $user_id, self::META_KEY );
+		$type_params   = $post_type ? array( $post_type ) : array();
+		$count_params  = array_merge( $base_params, $type_params );
+		$select_params = array_merge( $base_params, $type_params, array( $limit, $offset ) );
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+		$total = (int) $wpdb->get_var( $wpdb->prepare( $count_sql, $count_params ) );
+		$items = $wpdb->get_results( $wpdb->prepare( $select_sql, $select_params ) ) ?: array();
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+
+		return array( 'items' => $items, 'total' => $total );
+	}
+
+	/**
+	 * Count all Agent Access content across all users.
+	 *
+	 * @param array $args Optional filters: user_id, post_type.
+	 * @return int
+	 */
+	public static function count_all_content( $args = array() ) {
+		global $wpdb;
+
+		$cache_key = 'agent_access_content_count_' . md5( wp_json_encode( $args ) );
+		$cached    = wp_cache_get( $cache_key, 'agent_access' );
+		if ( false !== $cached ) {
+			return (int) $cached;
+		}
+
+		list( $sql, $params ) = self::build_all_content_query( 'COUNT(*)', $args );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+		$count = (int) $wpdb->get_var( $wpdb->prepare( $sql, $params ) );
+		wp_cache_set( $cache_key, $count, 'agent_access', 300 );
+
+		return $count;
+	}
+
+	/**
+	 * Get all Agent Access content across all users (paginated).
+	 *
+	 * @param array $args Optional: user_id, post_type, limit, offset.
+	 * @return array
+	 */
+	public static function get_all_content( $args = array() ) {
+		global $wpdb;
+
+		$limit  = isset( $args['limit'] ) ? (int) $args['limit'] : 50;
+		$offset = isset( $args['offset'] ) ? (int) $args['offset'] : 0;
+
+		$select = 'p.ID, p.post_title, p.post_date, p.post_status, p.post_type, u.ID as user_id, u.display_name, u.user_login';
+		list( $base_sql, $params ) = self::build_all_content_query( $select, $args );
+
+		$sql      = $base_sql . ' ORDER BY p.post_date DESC LIMIT %d OFFSET %d';
+		$params[] = $limit;
+		$params[] = $offset;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+		return $wpdb->get_results( $wpdb->prepare( $sql, $params ) ) ?: array();
+	}
+
+	/**
+	 * Build a complete SELECT/COUNT SQL string and params array for all-content queries.
+	 * All dynamic values use %d/%s placeholders — safe for $wpdb->prepare().
+	 *
+	 * @param string $select_expr Column list or COUNT(*).
+	 * @param array  $args        Filter args: user_id, post_type.
+	 * @return array{0: string, 1: array} [$sql, $params]
+	 */
+	private static function build_all_content_query( $select_expr, $args ) {
+		global $wpdb;
+
+		$sql    = "SELECT {$select_expr}
+		           FROM {$wpdb->posts} p
+		           INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+		           INNER JOIN {$wpdb->users} u ON p.post_author = u.ID
+		           WHERE pm.meta_key = %s AND p.post_status != 'trash'";
+		$params = array( self::META_KEY );
+
+		if ( ! empty( $args['user_id'] ) ) {
+			$sql     .= ' AND p.post_author = %d';
+			$params[] = (int) $args['user_id'];
+		}
+
+		if ( ! empty( $args['post_type'] ) ) {
+			$sql     .= ' AND p.post_type = %s';
+			$params[] = $args['post_type'];
+		} else {
+			$sql .= " AND p.post_type IN ('post', 'page', 'attachment')";
+		}
+
+		return array( $sql, $params );
 	}
 }

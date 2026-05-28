@@ -33,6 +33,8 @@ class Agent_Access_Admin {
 		add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
 		add_action( 'wp_ajax_agent_access_create', array( $this, 'handle_create_ajax' ) );
 		add_action( 'wp_ajax_agent_access_revoke', array( $this, 'handle_revoke_ajax' ) );
+		add_action( 'wp_ajax_agent_access_admin_create', array( $this, 'handle_admin_create_ajax' ) );
+		add_action( 'wp_ajax_agent_access_admin_revoke', array( $this, 'handle_admin_revoke_ajax' ) );
 	}
 
 	/**
@@ -74,19 +76,22 @@ class Agent_Access_Admin {
 		);
 
 		wp_localize_script( 'agent-access-admin', 'agentAccess', array(
-			'ajax_url'       => admin_url( 'admin-ajax.php' ),
-			'create_nonce'   => wp_create_nonce( 'agent_access_create' ),
-			'revoke_nonce'   => wp_create_nonce( 'agent_access_revoke' ),
-			'confirm_msg'    => __( 'Are you sure you want to revoke the agent connection? You will need to reconfigure your agent with a new password.', 'botcreds-agent-access' ),
-			'creating_text'  => __( 'Connecting…', 'botcreds-agent-access' ),
-			'revoking_text'  => __( 'Revoking…', 'botcreds-agent-access' ),
-			'copied_text'    => __( 'Copied!', 'botcreds-agent-access' ),
-			'copy_text'      => __( 'Copy', 'botcreds-agent-access' ),
+			'ajax_url'            => admin_url( 'admin-ajax.php' ),
+			'create_nonce'        => wp_create_nonce( 'agent_access_create' ),
+			'revoke_nonce'        => wp_create_nonce( 'agent_access_revoke' ),
+			'admin_create_nonce'  => current_user_can( 'manage_options' ) ? wp_create_nonce( 'agent_access_admin_create' ) : '',
+			'admin_revoke_nonce'  => current_user_can( 'manage_options' ) ? wp_create_nonce( 'agent_access_admin_revoke' ) : '',
+			'confirm_msg'         => __( 'Are you sure you want to revoke the agent connection? You will need to reconfigure your agent with a new password.', 'botcreds-agent-access' ),
+			'confirm_admin_msg'   => __( 'Are you sure you want to revoke this user\'s agent connection? They will need new credentials to reconnect.', 'botcreds-agent-access' ),
+			'creating_text'       => __( 'Connecting…', 'botcreds-agent-access' ),
+			'revoking_text'       => __( 'Revoking…', 'botcreds-agent-access' ),
+			'copied_text'         => __( 'Copied!', 'botcreds-agent-access' ),
+			'copy_text'           => __( 'Copy', 'botcreds-agent-access' ),
 		) );
 	}
 
 	/**
-	 * Handle the AJAX create request.
+	 * Handle the AJAX create request (own profile).
 	 */
 	public function handle_create_ajax() {
 		if ( ! current_user_can( 'edit_posts' ) ) {
@@ -110,7 +115,7 @@ class Agent_Access_Admin {
 	}
 
 	/**
-	 * Handle the AJAX revoke request.
+	 * Handle the AJAX revoke request (own profile).
 	 */
 	public function handle_revoke_ajax() {
 		if ( ! current_user_can( 'edit_posts' ) ) {
@@ -132,13 +137,86 @@ class Agent_Access_Admin {
 	}
 
 	/**
+	 * Handle the admin AJAX create request (on behalf of another user).
+	 */
+	public function handle_admin_create_ajax() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( __( 'You do not have permission to do this.', 'botcreds-agent-access' ) );
+		}
+
+		check_ajax_referer( 'agent_access_admin_create', 'nonce' );
+
+		$user_id = isset( $_POST['user_id'] ) ? (int) $_POST['user_id'] : 0;
+		if ( ! $user_id || ! get_userdata( $user_id ) ) {
+			wp_send_json_error( __( 'Invalid user.', 'botcreds-agent-access' ) );
+		}
+
+		$result = $this->api->create_password( $user_id );
+
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( $result->get_error_message() );
+		}
+
+		$connection_info = $this->api->get_connection_info( $result['password'], $user_id );
+
+		$target_user = get_userdata( $user_id );
+		do_action( 'agent_access_audit', 'app_password_created', array(
+			'username'      => $target_user->user_login,
+			'created_by'    => wp_get_current_user()->user_login,
+			'admin_action'  => true,
+		) );
+
+		wp_send_json_success( $connection_info );
+	}
+
+	/**
+	 * Handle the admin AJAX revoke request (on behalf of another user).
+	 */
+	public function handle_admin_revoke_ajax() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( __( 'You do not have permission to do this.', 'botcreds-agent-access' ) );
+		}
+
+		check_ajax_referer( 'agent_access_admin_revoke', 'nonce' );
+
+		$user_id = isset( $_POST['user_id'] ) ? (int) $_POST['user_id'] : 0;
+		if ( ! $user_id || ! get_userdata( $user_id ) ) {
+			wp_send_json_error( __( 'Invalid user.', 'botcreds-agent-access' ) );
+		}
+
+		$result = $this->api->revoke_password( $user_id );
+
+		if ( is_wp_error( $result ) ) {
+			wp_send_json_error( $result->get_error_message() );
+		}
+
+		$target_user = get_userdata( $user_id );
+		do_action( 'agent_access_audit', 'app_password_revoked', array(
+			'username'      => $target_user->user_login,
+			'revoked_by'    => wp_get_current_user()->user_login,
+			'admin_action'  => true,
+		) );
+
+		wp_send_json_success( __( 'Agent connection revoked successfully.', 'botcreds-agent-access' ) );
+	}
+
+	/**
 	 * Render the Agent Access section on the profile page.
 	 *
 	 * @param WP_User $user The user being edited.
 	 */
 	public function render_profile_section( $user ) {
-		// Only show on own profile
-		if ( get_current_user_id() !== $user->ID ) {
+		$is_own_profile = ( get_current_user_id() === $user->ID );
+		$is_admin       = current_user_can( 'manage_options' );
+
+		// Own profile: visible to anyone with edit_posts.
+		// Another user's profile: admins only.
+		if ( ! $is_own_profile && ! $is_admin ) {
+			return;
+		}
+
+		if ( ! $is_own_profile && $is_admin ) {
+			$this->render_admin_profile_section( $user );
 			return;
 		}
 
@@ -170,6 +248,96 @@ class Agent_Access_Admin {
 				<?php $this->render_connected_state( $existing ); ?>
 			<?php else : ?>
 				<?php $this->render_disconnected_state(); ?>
+			<?php endif; ?>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Render the BotCreds section on another user's profile page (admin only).
+	 *
+	 * @param WP_User $user The user being edited.
+	 */
+	private function render_admin_profile_section( $user ) {
+		$existing = $this->api->get_existing_password( $user->ID );
+		?>
+		<div id="agent-access" class="agent-access-profile-section">
+			<h2 class="agent-access-title">
+				<span class="agent-access-logo">&#129438;</span>
+				<?php esc_html_e( 'BotCreds', 'botcreds-agent-access' ); ?>
+				<span class="agent-access-admin-badge"><?php esc_html_e( 'Admin', 'botcreds-agent-access' ); ?></span>
+			</h2>
+			<p class="description">
+				<?php
+				echo wp_kses_post(
+					sprintf(
+						/* translators: %s: display name of the user being edited */
+						__( 'Generate or revoke BotCreds on behalf of %s.', 'botcreds-agent-access' ),
+						'<strong>' . esc_html( $user->display_name ) . '</strong>'
+					)
+				);
+				?>
+			</p>
+
+			<?php if ( $existing ) : ?>
+				<?php
+				$created_date = date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $existing['created'] );
+				$last_used    = ! empty( $existing['last_used'] )
+					? date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $existing['last_used'] )
+					: __( 'Never', 'botcreds-agent-access' );
+				?>
+				<div class="agent-access-notice-row">
+					<div class="agent-access-notice-box agent-access-notice-box--green">
+						<?php esc_html_e( 'Connected', 'botcreds-agent-access' ); ?>
+					</div>
+				</div>
+				<table class="agent-access-status-table">
+					<tr>
+						<th><?php esc_html_e( 'Created', 'botcreds-agent-access' ); ?></th>
+						<td><?php echo esc_html( $created_date ); ?></td>
+					</tr>
+					<tr>
+						<th><?php esc_html_e( 'Last Used', 'botcreds-agent-access' ); ?></th>
+						<td><?php echo esc_html( $last_used ); ?></td>
+					</tr>
+				</table>
+				<div class="agent-access-revoke-section">
+					<button type="button"
+						class="button agent-access-admin-revoke-btn"
+						data-user-id="<?php echo esc_attr( $user->ID ); ?>">
+						<?php esc_html_e( 'Revoke Connection', 'botcreds-agent-access' ); ?>
+					</button>
+					<span class="agent-access-revoke-hint">
+						<?php
+						printf(
+							/* translators: %s: display name */
+							esc_html__( 'This will disconnect %s\'s agent from their account.', 'botcreds-agent-access' ),
+							esc_html( $user->display_name )
+						);
+						?>
+					</span>
+				</div>
+				<?php $this->render_profile_content_table( $user->ID ); ?>
+			<?php else : ?>
+				<div id="agent-access-admin-card" data-user-id="<?php echo esc_attr( $user->ID ); ?>">
+					<p>
+						<button type="button"
+							class="button button-primary agent-access-admin-create-btn"
+							data-user-id="<?php echo esc_attr( $user->ID ); ?>"
+							data-display-name="<?php echo esc_attr( $user->display_name ); ?>">
+							<?php
+							printf(
+								/* translators: %s: display name */
+								esc_html__( 'Generate BotCreds for %s', 'botcreds-agent-access' ),
+								esc_html( $user->display_name )
+							);
+							?>
+						</button>
+					</p>
+					<p class="agent-access-create-hint">
+						<?php esc_html_e( 'This will generate a secure Application Password and display the credentials for you to share with the user or their agent.', 'botcreds-agent-access' ); ?>
+					</p>
+				</div>
 			<?php endif; ?>
 		</div>
 		<?php
@@ -231,32 +399,6 @@ class Agent_Access_Admin {
 			</tr>
 		</table>
 
-		<?php if ( ! empty( $stats['recent_posts'] ) ) : ?>
-			<h3><?php esc_html_e( 'Recent Agent Posts', 'botcreds-agent-access' ); ?></h3>
-			<table class="widefat striped agent-access-recent-table">
-				<thead>
-					<tr>
-						<th><?php esc_html_e( 'Title', 'botcreds-agent-access' ); ?></th>
-						<th><?php esc_html_e( 'Date', 'botcreds-agent-access' ); ?></th>
-						<th><?php esc_html_e( 'Status', 'botcreds-agent-access' ); ?></th>
-					</tr>
-				</thead>
-				<tbody>
-					<?php foreach ( $stats['recent_posts'] as $post ) : ?>
-						<tr>
-							<td>
-								<a href="<?php echo esc_url( get_edit_post_link( $post->ID ) ); ?>">
-									<?php echo esc_html( $post->post_title ?: __( '(no title)', 'botcreds-agent-access' ) ); ?>
-								</a>
-							</td>
-							<td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $post->post_date ) ) ); ?></td>
-							<td><span class="agent-access-badge agent-access-badge--<?php echo esc_attr( $post->post_status ); ?>"><?php echo esc_html( ucfirst( $post->post_status ) ); ?></span></td>
-						</tr>
-					<?php endforeach; ?>
-				</tbody>
-			</table>
-		<?php endif; ?>
-
 		<div class="agent-access-revoke-section">
 			<button type="button" class="button agent-access-revoke-btn" id="agent-access-revoke-btn">
 				<?php esc_html_e( 'Revoke Connection', 'botcreds-agent-access' ); ?>
@@ -264,6 +406,74 @@ class Agent_Access_Admin {
 			<span class="agent-access-revoke-hint">
 				<?php esc_html_e( 'This will disconnect your agent from your account.', 'botcreds-agent-access' ); ?>
 			</span>
+		</div>
+
+		<?php $this->render_profile_content_table( get_current_user_id() ); ?>
+		<?php
+	}
+
+	/**
+	 * Render the agent-created content table shown at the bottom of a user profile.
+	 *
+	 * @param int $user_id The user whose content to display.
+	 */
+	private function render_profile_content_table( $user_id ) {
+		$result = Agent_Access_Tracker::get_user_content_paged( $user_id, 10, 0 );
+		$items  = $result['items'];
+		$total  = $result['total'];
+
+		if ( empty( $items ) ) {
+			return;
+		}
+
+		$content_tab_url = add_query_arg(
+			array( 'tab' => 'content', 'user_id' => $user_id ),
+			menu_page_url( 'agent-access', false )
+		);
+		?>
+		<div class="agent-access-profile-content">
+			<h3 class="agent-access-content-heading">
+				<?php esc_html_e( 'Agent-Created Content', 'botcreds-agent-access' ); ?>
+				<?php if ( $total > 10 ) : ?>
+					<a href="<?php echo esc_url( $content_tab_url ); ?>" class="agent-access-view-all">
+						<?php
+						printf(
+							/* translators: %d: total content count */
+							esc_html__( 'View all %d in Content Log →', 'botcreds-agent-access' ),
+							(int) $total
+						);
+						?>
+					</a>
+				<?php elseif ( current_user_can( 'manage_options' ) ) : ?>
+					<a href="<?php echo esc_url( $content_tab_url ); ?>" class="agent-access-view-all">
+						<?php esc_html_e( 'View in Content Log →', 'botcreds-agent-access' ); ?>
+					</a>
+				<?php endif; ?>
+			</h3>
+			<table class="widefat striped agent-access-recent-table">
+				<thead>
+					<tr>
+						<th><?php esc_html_e( 'Title', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Type', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Date', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Status', 'botcreds-agent-access' ); ?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $items as $post ) : ?>
+						<tr>
+							<td>
+								<a href="<?php echo esc_url( get_edit_post_link( $post->ID ) ?: '' ); ?>">
+									<?php echo esc_html( $post->post_title ?: __( '(no title)', 'botcreds-agent-access' ) ); ?>
+								</a>
+							</td>
+							<td><?php echo esc_html( ucfirst( $post->post_type ) ); ?></td>
+							<td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $post->post_date ) ) ); ?></td>
+							<td><span class="agent-access-badge agent-access-badge--<?php echo esc_attr( $post->post_status ); ?>"><?php echo esc_html( ucfirst( $post->post_status ) ); ?></span></td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
 		</div>
 		<?php
 	}
@@ -308,10 +518,16 @@ class Agent_Access_Admin {
 				   class="nav-tab <?php echo 'activity' === $current_tab ? 'nav-tab-active' : ''; ?>">
 					<?php esc_html_e( 'Activity Log', 'botcreds-agent-access' ); ?>
 				</a>
+				<a href="<?php echo esc_url( add_query_arg( 'tab', 'content', menu_page_url( 'agent-access', false ) ) ); ?>"
+				   class="nav-tab <?php echo 'content' === $current_tab ? 'nav-tab-active' : ''; ?>">
+					<?php esc_html_e( 'Content', 'botcreds-agent-access' ); ?>
+				</a>
 			</nav>
 
 			<?php if ( 'activity' === $current_tab ) : ?>
 				<?php $this->render_activity_log_tab(); ?>
+			<?php elseif ( 'content' === $current_tab ) : ?>
+				<?php $this->render_content_tab(); ?>
 			<?php else : ?>
 				<?php $this->render_connections_tab(); ?>
 			<?php endif; ?>
@@ -372,6 +588,129 @@ class Agent_Access_Admin {
 					<?php endforeach; ?>
 				</tbody>
 			</table>
+		<?php endif;
+	}
+
+	/**
+	 * Render the Content tab — all agent-created content across all users.
+	 */
+	private function render_content_tab() {
+		$per_page = 50;
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		$paged            = max( 1, isset( $_GET['paged'] ) ? (int) $_GET['paged'] : 1 );
+		$filter_user      = isset( $_GET['user_id'] ) ? (int) $_GET['user_id'] : 0;
+		$filter_post_type = isset( $_GET['post_type'] ) ? sanitize_key( $_GET['post_type'] ) : '';
+		// phpcs:enable
+
+		$filter_args = array(
+			'user_id'   => $filter_user,
+			'post_type' => $filter_post_type,
+		);
+
+		$total   = Agent_Access_Tracker::count_all_content( $filter_args );
+		$entries = Agent_Access_Tracker::get_all_content( array_merge( $filter_args, array(
+			'limit'  => $per_page,
+			'offset' => ( $paged - 1 ) * $per_page,
+		) ) );
+
+		$base_url     = add_query_arg( 'tab', 'content', menu_page_url( 'agent-access', false ) );
+		$filter_users = get_users( array( 'number' => 200 ) );
+		?>
+
+		<form method="get" style="margin: 1em 0;">
+			<input type="hidden" name="page" value="agent-access">
+			<input type="hidden" name="tab" value="content">
+
+			<select name="user_id">
+				<option value=""><?php esc_html_e( 'All users', 'botcreds-agent-access' ); ?></option>
+				<?php foreach ( $filter_users as $u ) : ?>
+					<option value="<?php echo esc_attr( $u->ID ); ?>" <?php selected( $filter_user, $u->ID ); ?>>
+						<?php echo esc_html( $u->display_name . ' (' . $u->user_login . ')' ); ?>
+					</option>
+				<?php endforeach; ?>
+			</select>
+
+			<select name="post_type">
+				<option value=""><?php esc_html_e( 'All types', 'botcreds-agent-access' ); ?></option>
+				<option value="post" <?php selected( $filter_post_type, 'post' ); ?>><?php esc_html_e( 'Posts', 'botcreds-agent-access' ); ?></option>
+				<option value="page" <?php selected( $filter_post_type, 'page' ); ?>><?php esc_html_e( 'Pages', 'botcreds-agent-access' ); ?></option>
+				<option value="attachment" <?php selected( $filter_post_type, 'attachment' ); ?>><?php esc_html_e( 'Media', 'botcreds-agent-access' ); ?></option>
+			</select>
+
+			<?php submit_button( __( 'Filter', 'botcreds-agent-access' ), 'secondary', '', false ); ?>
+			<?php if ( $filter_user || $filter_post_type ) : ?>
+				<a href="<?php echo esc_url( $base_url ); ?>" class="button"><?php esc_html_e( 'Clear', 'botcreds-agent-access' ); ?></a>
+			<?php endif; ?>
+		</form>
+
+		<p>
+			<?php
+			printf(
+				/* translators: %d: total content count */
+				esc_html__( '%d total items created via Agent Access.', 'botcreds-agent-access' ),
+				(int) $total
+			);
+			?>
+		</p>
+
+		<?php if ( empty( $entries ) ) : ?>
+			<p><em><?php esc_html_e( 'No agent-created content found.', 'botcreds-agent-access' ); ?></em></p>
+		<?php else : ?>
+			<table class="widefat striped" style="font-size:13px;">
+				<thead>
+					<tr>
+						<th><?php esc_html_e( 'Title', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Type', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Author', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Status', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Date', 'botcreds-agent-access' ); ?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $entries as $row ) : ?>
+						<tr>
+							<td>
+								<a href="<?php echo esc_url( get_edit_post_link( $row->ID ) ?: '' ); ?>">
+									<?php echo esc_html( $row->post_title ?: __( '(no title)', 'botcreds-agent-access' ) ); ?>
+								</a>
+							</td>
+							<td><?php echo esc_html( ucfirst( $row->post_type ) ); ?></td>
+							<td>
+								<a href="<?php echo esc_url( add_query_arg( array( 'user_id' => $row->user_id, 'tab' => 'content' ), menu_page_url( 'agent-access', false ) ) ); ?>">
+									<?php echo esc_html( $row->display_name ?: $row->user_login ); ?>
+								</a>
+							</td>
+							<td>
+								<span class="agent-access-badge agent-access-badge--<?php echo esc_attr( $row->post_status ); ?>">
+									<?php echo esc_html( ucfirst( $row->post_status ) ); ?>
+								</span>
+							</td>
+							<td style="white-space:nowrap;"><?php echo esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $row->post_date ) ) ); ?></td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+
+			<?php
+			$total_pages = (int) ceil( $total / $per_page );
+			if ( $total_pages > 1 ) {
+				$pag_args = array( 'tab' => 'content' );
+				if ( $filter_user ) $pag_args['user_id'] = $filter_user;
+				if ( $filter_post_type ) $pag_args['post_type'] = $filter_post_type;
+
+				$pagination_links = paginate_links( array(
+					'base'      => add_query_arg( array_merge( $pag_args, array( 'paged' => '%#%' ) ), menu_page_url( 'agent-access', false ) ),
+					'format'    => '',
+					'current'   => $paged,
+					'total'     => $total_pages,
+					'prev_text' => '&laquo;',
+					'next_text' => '&raquo;',
+					'type'      => 'plain',
+				) );
+				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				echo '<div class="tablenav"><div class="tablenav-pages">' . $pagination_links . '</div></div>';
+			}
+			?>
 		<?php endif;
 	}
 

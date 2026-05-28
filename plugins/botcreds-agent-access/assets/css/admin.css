@@ -203,3 +203,38 @@
 	vertical-align: middle;
 	margin-right: 0.4em;
 }
+
+/* Admin badge on profile sections */
+.agent-access-admin-badge {
+	display: inline-block;
+	background: #2271b1;
+	color: #fff;
+	font-size: 11px;
+	font-weight: 600;
+	padding: 2px 7px;
+	border-radius: 3px;
+	vertical-align: middle;
+	margin-left: 8px;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+}
+
+/* Profile — agent-created content table */
+.agent-access-profile-content {
+	margin-top: 1.5em;
+	border-top: 1px solid #dcdcde;
+	padding-top: 1em;
+}
+
+.agent-access-content-heading {
+	display: flex;
+	align-items: center;
+	gap: 1em;
+	margin: 0 0 0.75em;
+}
+
+.agent-access-view-all {
+	font-size: 13px;
+	font-weight: normal;
+	text-decoration: none;
+}

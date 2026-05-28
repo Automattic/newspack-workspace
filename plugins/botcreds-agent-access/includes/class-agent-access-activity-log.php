@@ -36,7 +36,7 @@ class Agent_Access_Activity_Log {
 	 * @return mixed  Unchanged $result.
 	 */
 	public function log_request( $result, $server, $request ) {
-		$detected = $this->detect_source();
+		$detected = self::detect_source();
 		if ( null === $detected ) {
 			return $result;
 		}
@@ -99,10 +99,13 @@ class Agent_Access_Activity_Log {
 	/**
 	 * Detect whether the current request originated from a tracked source.
 	 *
+	 * Public static so other classes (e.g. Tracker) can reuse detection logic
+	 * without duplicating the UA / app-password patterns.
+	 *
 	 * @return array{source: string, app_password_name: string|null}|null
 	 *   Null if the request is not from a tracked source.
 	 */
-	private function detect_source() {
+	public static function detect_source() {
 		// Must be a REST API request.
 		if ( ! defined( 'REST_REQUEST' ) || ! REST_REQUEST ) {
 			return null;
@@ -143,6 +146,22 @@ class Agent_Access_Activity_Log {
 		// before this point, so any authenticated client can set the header and
 		// have their writes attributed to the wordpress-mcp source, defeating the
 		// audit log's integrity. Use only the verified app-password name below.
+
+		// ---- WP.com MCP via Jetpack token auth ----
+		// Jetpack-proxied requests (including WP.com MCP) use token-based auth
+		// instead of Application Passwords. They are identifiable by the combination
+		// of the "Jetpack by WordPress.com" User-Agent and the `_for=jetpack` query
+		// param that Jetpack appends to every proxied REST request.
+		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_URI'] ) ) : '';
+		if (
+			false !== stripos( $ua, 'jetpack' ) &&
+			false !== strpos( $request_uri, '_for=jetpack' )
+		) {
+			return array(
+				'source'            => self::SOURCE_WP_MCP,
+				'app_password_name' => null,
+			);
+		}
 
 		// ---- Agent Access or MCP via Application Password ----
 		$app_password_uuid = rest_get_authenticated_app_password();
