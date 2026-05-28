@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.6
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.1.9
+Stable tag: 2.1.10
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -75,6 +75,9 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.1.10 =
+* Fix Plugin Check warnings: add wp_unslash() to User-Agent read, add phpcs:ignore for schema-change DROP TABLE (NoCaching/NotPrepared false positives on constant table name), add PluginCheck.Security.DirectDB ignore on dynamic-but-prepared SQL in get_entries/count_entries.
 
 = 2.1.9 =
 * Security: Uninstall now correctly revokes credentials minted as 'BotCreds' (and all legacy names from prior rebrands). Previously uninstalling the plugin left live credentials on every connected account.
