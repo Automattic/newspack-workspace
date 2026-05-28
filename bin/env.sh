@@ -54,6 +54,14 @@ parse_worktree_mount() {
     # admits (tabs / multi-space after the dash) and cuts cleanly at the
     # next `:` — so mount-mode suffixes (`:ro`, `:cached`) and trailing
     # comments don't fold into the captured fields.
+    #
+    # The emitted `branch` is the *mount-derived* identifier — the directory
+    # name as it appears in the compose file's host path. Legacy mounts have
+    # the unsanitized branch in the directory name; monorepo mounts have the
+    # sanitized (safe) form. Use resolve_unsanitized_branch() to recover the
+    # display form for the monorepo case. Keeping the parser mount-path-only
+    # ensures filesystem operations (e.g., worktree.sh remove) get a stable
+    # identifier that doesn't drift when the worktree's git state changes.
     [[ "$line" =~ ^[[:space:]]*-[[:space:]]+\./worktrees/([^[:space:]:]+):/newspack-(repos|plugins|themes)/([^[:space:]:]+) ]] || return 1
     local host_rel="worktrees/${BASH_REMATCH[1]}"
     local container_type="${BASH_REMATCH[2]}"
@@ -61,20 +69,28 @@ parse_worktree_mount() {
     local branch=""
     case "$container_type" in
         repos)
+            # Legacy: host = ./worktrees/<repo>/<branch> (slashes preserved in directory name).
             branch="${host_rel#worktrees/$repo/}"
             ;;
         plugins|themes)
-            local safe_branch="${host_rel#worktrees/}"
-            safe_branch="${safe_branch%/*/$repo}"
-            # Look up the unsanitized branch from the worktree's git state;
-            # fall back to the safe-branch directory name if the worktree
-            # directory is missing or its branch ref can't be resolved.
-            branch=$(git -C "$NABSPATH/worktrees/$safe_branch" branch --show-current 2>/dev/null)
-            [[ -n "$branch" ]] || branch="$safe_branch"
+            # Monorepo: host = ./worktrees/<safe_branch>/{plugins,themes}/<repo>.
+            branch="${host_rel#worktrees/}"
+            branch="${branch%/*/$repo}"
             ;;
     esac
     [[ -n "$repo" && -n "$branch" ]] || return 1
     echo "$repo|$branch"
+}
+
+# Resolve the unsanitized git branch name for a worktree directory.
+# Display-only — never use the result as a filesystem identifier. Falls back
+# to the safe (directory-name) form when the worktree is missing or its
+# branch ref can't be resolved (e.g., detached HEAD).
+resolve_unsanitized_branch() {
+    local safe_branch="$1"
+    local resolved
+    resolved=$(git -C "$NABSPATH/worktrees/$safe_branch" branch --show-current 2>/dev/null)
+    [[ -n "$resolved" ]] && echo "$resolved" || echo "$safe_branch"
 }
 
 # Iterate worktree mount lines in a compose file and yield "repo|branch" pairs.
@@ -526,11 +542,13 @@ MIGRATE
         fi
         # Remove compose file before worktrees so worktree.sh doesn't see them as env-bound.
         rm -f "$compose_file"
-        # Remove worktrees that were mounted by this environment. worktree_entries
-        # holds "repo|branch" pairs from each_worktree_in_env; worktree.sh's
-        # remove command accepts the legacy <repo> <branch> form (repo ignored
-        # in the monorepo world; the branch is the authority for the directory
-        # to remove).
+        # Remove worktrees that were mounted by this environment. The branch
+        # here is the mount-derived (safe) form from parse_worktree_mount —
+        # the stable filesystem identifier, not the live git branch. This is
+        # deliberate: if the worktree was retargeted to a different branch
+        # via `git checkout` after env creation, we still want destroy to
+        # remove the worktree directory the env was bound to, not whatever
+        # branch is currently checked out there.
         for entry in "${worktree_entries[@]}"; do
             IFS='|' read -r wt_repo wt_branch <<< "$entry"
             "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
@@ -553,9 +571,14 @@ MIGRATE
             else
                 status="stopped"
             fi
-            # Collect worktrees as repo:branch pairs.
+            # Collect worktrees as repo:branch pairs. each_worktree_in_env
+            # yields the mount-derived safe branch; resolve_unsanitized_branch
+            # recovers the friendly display form (e.g., feat/foo) for monorepo
+            # worktrees while leaving filesystem-operation paths to the safe
+            # form.
             worktrees=""
-            while IFS='|' read -r repo branch; do
+            while IFS='|' read -r repo safe_branch; do
+                branch=$(resolve_unsanitized_branch "$safe_branch")
                 [[ -n "$worktrees" ]] && worktrees="$worktrees,"
                 worktrees="${worktrees}${repo}:${branch}"
             done < <(each_worktree_in_env "$f")
@@ -564,7 +587,8 @@ MIGRATE
             else
                 echo "  $name ($status) https://${domain}/"
                 # Show worktrees mounted by this environment.
-                while IFS='|' read -r repo branch; do
+                while IFS='|' read -r repo safe_branch; do
+                    branch=$(resolve_unsanitized_branch "$safe_branch")
                     echo "    └ $repo ($branch)"
                 done < <(each_worktree_in_env "$f")
             fi
