@@ -485,11 +485,9 @@ MIGRATE
         if [[ -f "$compose_file" ]]; then
             domain=$(domain_for_env "$compose_file")
             ip=$(ip_for_env "$compose_file")
-            while IFS= read -r line; do
-                # Extract repo and branch from worktree volume lines like: ./worktrees/repo/branch:/newspack-plugins/repo
-                wt=$(echo "$line" | grep -o 'worktrees/[^:]*' | sed 's|worktrees/||')
-                [[ -n "$wt" ]] && worktree_entries+=("$wt")
-            done < <(grep 'worktrees/' "$compose_file")
+            while IFS= read -r entry; do
+                worktree_entries+=("$entry")
+            done < <(each_worktree_in_env "$compose_file")
         fi
         docker stop "$container_name" 2>/dev/null
         docker rm "$container_name" 2>/dev/null
@@ -526,9 +524,13 @@ MIGRATE
         fi
         # Remove compose file before worktrees so worktree.sh doesn't see them as env-bound.
         rm -f "$compose_file"
-        # Remove worktrees that were mounted by this environment.
-        for wt in "${worktree_entries[@]}"; do
-            IFS='/' read -r wt_repo wt_branch <<< "$wt"
+        # Remove worktrees that were mounted by this environment. worktree_entries
+        # holds "repo|branch" pairs from each_worktree_in_env; worktree.sh's
+        # remove command accepts the legacy <repo> <branch> form (repo ignored
+        # in the monorepo world; the branch is the authority for the directory
+        # to remove).
+        for entry in "${worktree_entries[@]}"; do
+            IFS='|' read -r wt_repo wt_branch <<< "$entry"
             "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
         done
         echo "Destroyed environment '$env_name'"
