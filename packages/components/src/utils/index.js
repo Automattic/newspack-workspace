@@ -3,6 +3,11 @@
  */
 import { ENTER } from '@wordpress/keycodes';
 
+/**
+ * Internal dependencies
+ */
+import { addToolbarBackButton } from './editor-toolbar-back-button';
+
 const InteractiveDiv = ( { style = {}, ...props } ) => (
 	<div
 		tabIndex="0"
@@ -24,4 +29,5 @@ const confirmAction = message => {
 export default {
 	InteractiveDiv,
 	confirmAction,
+	addToolbarBackButton,
 };

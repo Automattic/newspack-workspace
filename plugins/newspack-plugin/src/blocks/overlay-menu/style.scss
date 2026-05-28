@@ -1,14 +1,7 @@
 @use "../../newspack-ui/scss/variables/breakpoints";
+@use "../../../packages/colors/colors.module" as colors;
 
 .wp-block-newspack-overlay-menu {
-	.overlay-menu__trigger {
-		align-items: center;
-		cursor: pointer;
-		display: inline-flex;
-		gap: var( --wp--preset--spacing--20 );
-		justify-content: center;
-	}
-
 	// ─── Block editor only ────────────────────────────────────────────────────
 
 	// Hidden panel state — keeps InnerBlocks in the DOM without being visible.
@@ -22,26 +15,11 @@
 // when the menu opens, removing it from the .wp-block-newspack-overlay-menu
 // ancestor. Styles nested inside the block wrapper would stop matching.
 
-// Icon used in trigger + close buttons.
-.overlay-menu__icon {
-	align-items: center;
-	display: inline-flex;
-	flex-shrink: 0;
-	height: 1.25em;
-	width: 1.25em;
-
-	svg {
-		fill: currentcolor;
-		height: 100%;
-		width: 100%;
-	}
-}
-
 // Close button wrapper — sits at the top of the panel, flush right.
 .overlay-menu__close-wrapper {
 	align-items: center;
 	display: flex;
-	height: var( --wp--custom--spacing--85, 3rem );
+	height: var( --wp--custom--spacing--85, 4rem );
 	justify-content: flex-end;
 	margin-right: calc( -1 * var( --wp--preset--spacing--30 ) );
 
@@ -55,13 +33,26 @@
 	align-items: center;
 	background: none;
 	border: none;
+	border-radius: var( --wp--custom--border--radius-small, 0.25rem );
 	color: inherit;
 	cursor: pointer;
 	display: inline-flex;
 	font-family: inherit;
 	font-size: inherit;
-	gap: var( --wp--preset--spacing--10, 0.25rem );
+	gap: var( --wp--custom--spacing--10, 0.25rem );
 	padding: var( --wp--preset--spacing--20 );
+
+	&:focus-visible {
+		outline: 2px solid;
+		outline-offset: 1px;
+	}
+
+	svg {
+		display: block;
+		width: var( --wp--preset--spacing--40, 1.5rem );
+		height: var( --wp--preset--spacing--40, 1.5rem );
+		fill: currentcolor;
+	}
 }
 
 // Panel content area.
@@ -74,35 +65,29 @@
 // no dependency on the theme's overlay-contents classes.
 
 .overlay-menu__panel {
-	background: var( --wp--preset--color--base, #fff );
+	// Slide duration scales with the panel width via per-modifier overrides below.
+	--overlay-menu-slide-duration: 250ms;
+
 	bottom: 0;
 	opacity: 0;
 	overflow-y: auto;
 	padding: var( --wp--preset--spacing--30, 1rem );
 	position: fixed;
-	top: 0;
+	top: var(--wp-admin--admin-bar--height, 0);
 	// Transition driven by CSS; JS only toggles the --open class.
 	transition:
 		opacity 125ms ease-in-out,
-		left 250ms ease-in-out,
-		right 250ms ease-in-out,
-		top 250ms ease-in-out,
-		bottom 250ms ease-in-out,
-		transform 250ms ease-in-out;
+		left var(--overlay-menu-slide-duration) ease-in-out,
+		right var(--overlay-menu-slide-duration) ease-in-out,
+		top var(--overlay-menu-slide-duration) ease-in-out,
+		bottom var(--overlay-menu-slide-duration) ease-in-out,
+		transform var(--overlay-menu-slide-duration) ease-in-out;
 	max-width: 90vw;
 	width: 100%;
-	z-index: 50;
+	z-index: 99998;
 
 	@media ( min-width: breakpoints.$tablet_width ) {
 		padding: var( --wp--preset--spacing--40, 1.5rem );
-	}
-
-	.admin-bar & {
-		top: 46px;
-
-		@media ( min-width: breakpoints.$tablet_width ) {
-			top: 32px;
-		}
 	}
 
 	// Side panels slide in from left or right.
@@ -121,7 +106,7 @@
 		left: 0;
 		max-width: 100%;
 		right: 0;
-		transition: opacity 125ms ease-in-out, visibility 0s 125ms;
+		transition: opacity 200ms ease-in-out, visibility 0s 200ms;
 		visibility: hidden;
 	}
 
@@ -139,7 +124,7 @@
 		}
 
 		&.overlay-menu__panel--full-screen {
-			transition: opacity 125ms ease-in-out, visibility 0s;
+			transition: opacity 200ms ease-in-out, visibility 0s;
 			visibility: visible;
 		}
 	}
@@ -156,12 +141,12 @@
 		}
 	}
 
-	&--width--x-small { @include panel-width( --wp--custom--width--x-small, 300px ); }
-	&--width--small   { @include panel-width( --wp--custom--width--small, 410px ); }
+	&--width--x-small { @include panel-width( --wp--custom--width--x-small, 300px ); --overlay-menu-slide-duration: 250ms; }
+	&--width--small   { @include panel-width( --wp--custom--width--small, 410px ); --overlay-menu-slide-duration: 275ms; }
 	// Medium intentionally maps to the theme's content size (from theme.json), not the --wp--custom--width-- family used by the other sizes.
-	&--width--medium  { @include panel-width( --wp--style--global--content-size, 632px ); }
-	&--width--large   { @include panel-width( --wp--custom--width--large, 964px ); }
-	&--width--x-large { @include panel-width( --wp--custom--width--x-large, 1296px ); }
+	&--width--medium  { @include panel-width( --wp--style--global--content-size, 632px ); --overlay-menu-slide-duration: 325ms; }
+	&--width--large   { @include panel-width( --wp--custom--width--large, 964px ); --overlay-menu-slide-duration: 400ms; }
+	&--width--x-large { @include panel-width( --wp--custom--width--x-large, 1296px ); --overlay-menu-slide-duration: 475ms; }
 }
 
 // ─── Scrim ────────────────────────────────────────────────────────────────────
@@ -169,13 +154,13 @@
 // editor preview (rendered as a React fragment sibling in edit.js).
 
 .overlay-menu__scrim {
-	background: rgba( 0, 0, 0, 0.5 );
+	background: var(--wp--custom--color--neutral-70, var(--newspack-ui-color-neutral-70, #{colors.$neutral-700}));
 	cursor: pointer;
 	inset: 0;
 	margin: 0 !important;
 	position: fixed;
 	transition: opacity 500ms ease-in-out;
-	z-index: 49;
+	z-index: 99997;
 }
 
 // Lock document scrolling while any overlay menu instance is open.
