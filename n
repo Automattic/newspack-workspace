@@ -33,7 +33,7 @@ get_target_container() {
                 local rel="${mount#./}"
                 rel="${rel%%:*}"
                 local abs="$NABSPATH/$rel"
-                if [[ "$PWD" == "$abs"* ]] && [ ${#abs} -gt ${#best_match} ]; then
+                if [[ "$PWD" == "$abs" || "$PWD" == "$abs"/* ]] && [ ${#abs} -gt ${#best_match} ]; then
                     best_match="$abs"
                     best_env=$(basename "$f" | sed 's/docker-compose\.env-//;s/\.yml//')
                 fi
