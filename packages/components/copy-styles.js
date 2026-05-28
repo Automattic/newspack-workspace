@@ -40,7 +40,8 @@ rcopy( path.join( dir, '../../plugins/newspack-plugin/src', 'shared' ), path.joi
 		console.log( 'Copied shared lib' );
 	} )
 	.catch( err => {
-		console.error( err );
+		console.error( 'Failed to copy shared lib:', err );
+		process.exit( 1 );
 	} );
 rcopy( path.join( dir, '../colors' ), path.join( dir, 'colors' ), copyOptions )
 	.then( () => {
