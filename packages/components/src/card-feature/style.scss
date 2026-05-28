@@ -3,7 +3,7 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
-@use "~@wordpress/base-styles/variables" as wp;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-card-feature {
 	height: 100%;
@@ -30,8 +30,8 @@
 	}
 
 	&__title {
-		font-size: wp.$font-size-x-large;
-		line-height: wp.$font-line-height-x-large;
+		font-size: wp-vars.$font-size-x-large;
+		line-height: wp-vars.$font-line-height-x-large;
 		text-align: left;
 	}
 
@@ -54,11 +54,11 @@
 		}
 
 		&--radius-small {
-			border-radius: wp.$radius-small;
+			border-radius: wp-vars.$radius-small;
 		}
 
 		&--radius-full {
-			border-radius: wp.$radius-round;
+			border-radius: wp-vars.$radius-round;
 		}
 	}
 
