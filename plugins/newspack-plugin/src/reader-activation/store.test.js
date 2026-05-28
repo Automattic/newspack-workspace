@@ -283,5 +283,23 @@ describe( 'Store', () => {
 			store.clear();
 			expect( localStorage.getItem( 'np_reader__unsynced' ) ).toEqual( '[]' );
 		} );
+		it( 'pins the _set no-sync contract: post-clear reseed is not enqueued in-memory or persisted', () => {
+			// _set is module-private; the reseed inside clear() is the cleanest
+			// observable surface for its "no server sync" contract. If _set
+			// regresses to push to syncQueue or call setPendingSync, this test
+			// fails by either an XHR firing or by 'reader' appearing in the
+			// persisted _unsynced array.
+			jest.useFakeTimers();
+			window.newspack_reader_data = { api_url: 'http://test/api', nonce: 'abc', items: {} };
+			const openSpy = jest.spyOn( XMLHttpRequest.prototype, 'open' );
+			const store = Store();
+			store.clear();
+			jest.advanceTimersByTime( 1500 );
+			expect( openSpy ).not.toHaveBeenCalled();
+			const unsynced = JSON.parse( localStorage.getItem( 'np_reader__unsynced' ) || '[]' );
+			expect( unsynced ).not.toContain( 'reader' );
+			openSpy.mockRestore();
+			jest.useRealTimers();
+		} );
 	} );
 } );
