@@ -119,7 +119,7 @@ case $1 in
         done
         ip=$(next_loopback_ip)
         if [[ -z "$domain" ]]; then
-            domain="${env_name}.local"
+            domain="${env_name}.test"
         fi
         compose_file="$NABSPATH/docker-compose.env-${env_name}.yml"
         container_name=$(echo "newspack_env_${env_name}" | tr '-' '_')
@@ -179,7 +179,7 @@ YAML
         fi
         # Custom domains (not IP-based) need a /etc/hosts entry.
         if [[ "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
-            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.local ]]; then
+            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.test || "$domain" == *.local ]]; then
                 # Passwordless via the locked-down wrapper — works without a TTY.
                 sudo newspack-manage-host host-add "$ip" "$domain"
             elif [ -t 0 ] && [ -t 1 ]; then
@@ -258,9 +258,9 @@ YAML
         ip=$(ip_for_env "$compose_file")
         # --- Migration: add shared network + domain if missing ---
         if ! grep -q 'newspack_envs' "$compose_file"; then
-            # Assign a .local domain if the env is IP-based.
+            # Assign a .test domain if the env is IP-based.
             if [[ "$domain" == "$ip" || -z "$domain" ]]; then
-                domain="${env_name}.local"
+                domain="${env_name}.test"
                 # Update WP_DOMAIN in the compose file.
                 sed -i '' "s|WP_DOMAIN=${ip}|WP_DOMAIN=${domain}|" "$compose_file" 2>/dev/null || \
                     sed -i "s|WP_DOMAIN=${ip}|WP_DOMAIN=${domain}|" "$compose_file"
@@ -298,7 +298,7 @@ MIGRATE
         fi
         # Custom domains (not IP-based) need a /etc/hosts entry.
         if [[ -n "$domain" && "$domain" != "$ip" ]] && ! grep -q "[[:space:]]${domain}" /etc/hosts 2>/dev/null; then
-            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.local ]]; then
+            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.test || "$domain" == *.local ]]; then
                 # Passwordless via the locked-down wrapper — works without a TTY.
                 sudo newspack-manage-host host-add "$ip" "$domain"
                 echo "Added $domain to /etc/hosts"
@@ -355,7 +355,7 @@ MIGRATE
                 # Check if core tables exist (wp core is-installed returns true even without them).
                 if docker exec "$container_name" wp --allow-root db query "SELECT 1 FROM wp_options LIMIT 1" 2>/dev/null | grep -q 1; then
                     echo "WordPress already installed."
-                    # Update site URL if domain changed (e.g., migration from IP to .local).
+                    # Update site URL if domain changed (e.g., migration from IP to .test).
                     current_url=$(docker exec "$container_name" wp --allow-root option get siteurl 2>/dev/null)
                     if [[ -n "$current_url" && "$current_url" != "https://${domain}" ]]; then
                         docker exec "$container_name" wp --allow-root search-replace "$current_url" "https://${domain}" --skip-columns=guid --quiet 2>/dev/null
@@ -474,7 +474,7 @@ MIGRATE
         fi
         # Remove /etc/hosts entry (only for custom domains, not IP-based).
         if [[ -n "$domain" && "$domain" != "$ip" ]] && grep -q "$domain" /etc/hosts 2>/dev/null; then
-            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.local ]]; then
+            if command -v newspack-manage-host >/dev/null 2>&1 && [[ "$domain" == *.test || "$domain" == *.local ]]; then
                 sudo newspack-manage-host host-remove "$domain"
             else
                 escaped_domain="${domain//./\\.}"

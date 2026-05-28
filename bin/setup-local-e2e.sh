@@ -11,7 +11,7 @@
 #
 # Options:
 #   --branch <branch>     Branch to check out for each plugin (default: release).
-#   --domain <domain>     Site domain (default: <name>.local).
+#   --domain <domain>     Site domain (default: <name>.test).
 #   --e2e-repo <path>     Path to the newspack-e2e-tests checkout
 #                         (default: a sibling of this workspace).
 #   -h, --help            Show this help.
@@ -84,7 +84,7 @@ fi
 validate_env_name "$env_name"
 validate_name "$branch" "branch"
 [[ -n "$domain" ]] && validate_domain "$domain"
-[[ -z "$domain" ]] && domain="${env_name}.local"
+[[ -z "$domain" ]] && domain="${env_name}.test"
 
 # Resolve the e2e-tests repo and the two files we pull from it.
 e2e_plugin_src="$e2e_repo/e2e-plugin.php"
@@ -141,7 +141,7 @@ log_info "Starting environment (this installs WordPress and seeds assets)..."
 # Ensure the domain resolves so Playwright (running on the host) can reach it.
 # `n env up` only adds /etc/hosts entries interactively; the e2e suite is usually
 # driven non-interactively, so add it here via the passwordless helper if present.
-if [[ "$domain" == *.local ]] && ! grep -q "[[:space:]]${domain}$" /etc/hosts 2>/dev/null; then
+if [[ "$domain" == *.test || "$domain" == *.local ]] && ! grep -q "[[:space:]]${domain}$" /etc/hosts 2>/dev/null; then
     ip=$(grep -o '127\.0\.0\.[0-9]*' "$compose_file" | head -1)
     if command -v newspack-manage-host >/dev/null 2>&1; then
         sudo newspack-manage-host host-add "$ip" "$domain" \

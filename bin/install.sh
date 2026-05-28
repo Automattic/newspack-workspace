@@ -6,7 +6,7 @@ SITE_TITLE=$WP_TITLE
 
 if [[ "$WP_PATH" == *"additional-sites-html"* ]]; then
     SITE_TITLE=$(echo $WP_PATH | sed -e 's/.*additional-sites-html\///' | cut -d'/' -f1)
-    DOMAIN_TO_INSTALL="$SITE_TITLE.local"
+    DOMAIN_TO_INSTALL="$SITE_TITLE.test"
 fi
 
 if wp --allow-root --path=$WP_PATH core is-installed; then
