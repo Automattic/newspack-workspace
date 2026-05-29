@@ -46,17 +46,50 @@ final class Default_Templates {
 	/**
 	 * Get the available template options for the active theme.
 	 *
+	 * Returns an array with 'post' and 'page' keys. For block themes, each key
+	 * contains the block template options for that post type (see
+	 * get_block_template_options()). For classic themes, both keys contain the
+	 * fixed legacy list from get_classic_template_options().
+	 *
 	 * @return array {
 	 *     @type array[] $post Options for posts.
 	 *     @type array[] $page Options for pages.
 	 * }
 	 */
 	public static function get_template_options() {
+		if ( wp_is_block_theme() ) {
+			return [
+				'post' => self::get_block_template_options( 'post' ),
+				'page' => self::get_block_template_options( 'page' ),
+			];
+		}
 		$classic = self::get_classic_template_options();
 		return [
 			'post' => $classic,
 			'page' => $classic,
 		];
+	}
+
+	/**
+	 * Get assignable block template options for a post type.
+	 *
+	 * Includes theme.json customTemplates and any site-created (DB) templates.
+	 *
+	 * @param string $post_type Post type slug.
+	 * @return array[] List of [ 'label' => string, 'value' => string ], "Default" first.
+	 */
+	public static function get_block_template_options( $post_type ) {
+		$default = [
+			[
+				'label' => __( 'Default', 'newspack-plugin' ),
+				'value' => 'default',
+			],
+		];
+		if ( ! function_exists( 'get_block_templates' ) ) {
+			return $default;
+		}
+		$templates = get_block_templates( [], 'wp_template' );
+		return array_merge( $default, self::filter_templates_for_post_type( $templates, $post_type ) );
 	}
 
 	/**

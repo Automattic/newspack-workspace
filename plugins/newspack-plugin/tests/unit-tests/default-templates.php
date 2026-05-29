@@ -86,4 +86,13 @@ class Newspack_Test_Default_Templates extends WP_UnitTestCase {
 		$options   = Default_Templates::filter_templates_for_post_type( $templates, 'post' );
 		$this->assertSame( [], $options );
 	}
+
+	/**
+	 * Block template options always begin with the "Default" entry.
+	 */
+	public function test_block_template_options_include_default_first() {
+		$options = Default_Templates::get_block_template_options( 'post' );
+		$this->assertNotEmpty( $options );
+		$this->assertSame( 'default', $options[0]['value'] );
+	}
 }
