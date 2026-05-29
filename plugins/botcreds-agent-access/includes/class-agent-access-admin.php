@@ -47,8 +47,8 @@ class Agent_Access_Admin {
 	 */
 	public function add_admin_menu() {
 		add_management_page(
-			__( 'BotCreds', 'botcreds-agent-access' ),
-			__( 'BotCreds', 'botcreds-agent-access' ),
+			__( 'Agent Access', 'botcreds-agent-access' ),
+			__( 'Agent Access', 'botcreds-agent-access' ),
 			'manage_options',
 			'agent-access',
 			array( $this, 'render_admin_page' )
@@ -231,7 +231,7 @@ class Agent_Access_Admin {
 		<div id="agent-access" class="agent-access-profile-section">
 			<h2 class="agent-access-title">
 				<span class="agent-access-logo">&#129438;</span>
-				<?php esc_html_e( 'BotCreds', 'botcreds-agent-access' ); ?>
+				<?php esc_html_e( 'Agent Access', 'botcreds-agent-access' ); ?>
 				<span class="dashicons dashicons-wordpress" style="font-size:1.2em;vertical-align:middle;opacity:0.7;"></span>
 			</h2>
 			<p class="description">
@@ -254,7 +254,7 @@ class Agent_Access_Admin {
 	}
 
 	/**
-	 * Render the BotCreds section on another user's profile page (admin only).
+	 * Render the Agent Access section on another user's profile page (admin only).
 	 *
 	 * @param WP_User $user The user being edited.
 	 */
@@ -264,7 +264,7 @@ class Agent_Access_Admin {
 		<div id="agent-access" class="agent-access-profile-section">
 			<h2 class="agent-access-title">
 				<span class="agent-access-logo">&#129438;</span>
-				<?php esc_html_e( 'BotCreds', 'botcreds-agent-access' ); ?>
+				<?php esc_html_e( 'Agent Access', 'botcreds-agent-access' ); ?>
 				<span class="agent-access-admin-badge"><?php esc_html_e( 'Admin', 'botcreds-agent-access' ); ?></span>
 			</h2>
 			<p class="description">
@@ -272,7 +272,7 @@ class Agent_Access_Admin {
 				echo wp_kses_post(
 					sprintf(
 						/* translators: %s: display name of the user being edited */
-						__( 'Generate or revoke BotCreds on behalf of %s.', 'botcreds-agent-access' ),
+						__( 'Connect or revoke Agent Access on behalf of %s.', 'botcreds-agent-access' ),
 						'<strong>' . esc_html( $user->display_name ) . '</strong>'
 					)
 				);
@@ -328,7 +328,7 @@ class Agent_Access_Admin {
 							<?php
 							printf(
 								/* translators: %s: display name */
-								esc_html__( 'Generate BotCreds for %s', 'botcreds-agent-access' ),
+								esc_html__( 'Generate Agent Access credentials for %s', 'botcreds-agent-access' ),
 								esc_html( $user->display_name )
 							);
 							?>
@@ -506,7 +506,7 @@ class Agent_Access_Admin {
 		<div class="wrap">
 			<h1>
 				<span>&#129438;</span>
-				<?php esc_html_e( 'BotCreds', 'botcreds-agent-access' ); ?>
+				<?php esc_html_e( 'Agent Access', 'botcreds-agent-access' ); ?>
 			</h1>
 
 			<nav class="nav-tab-wrapper">

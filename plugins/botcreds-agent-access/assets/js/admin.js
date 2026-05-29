@@ -144,7 +144,7 @@
 	}
 
 	/**
-	 * Admin: generate BotCreds on behalf of another user.
+	 * Admin: generate Agent Access credentials on behalf of another user.
 	 */
 	function initAdminCreateButtons() {
 		var buttons = document.querySelectorAll('.agent-access-admin-create-btn');
@@ -167,7 +167,7 @@
 					} catch (e) {
 						alert('Unexpected error. Please reload the page.');
 						btn.disabled    = false;
-						btn.textContent = 'Generate BotCreds for ' + displayName;
+						btn.textContent = 'Connect agent for ' + displayName;
 						return;
 					}
 
@@ -176,14 +176,14 @@
 					} else {
 						alert(response.data || 'An error occurred.');
 						btn.disabled    = false;
-						btn.textContent = 'Generate BotCreds for ' + displayName;
+						btn.textContent = 'Connect agent for ' + displayName;
 					}
 				};
 
 				xhr.onerror = function () {
 					alert('Network error. Please try again.');
 					btn.disabled    = false;
-					btn.textContent = 'Generate BotCreds for ' + displayName;
+					btn.textContent = 'Connect agent for ' + displayName;
 				};
 
 				xhr.send(
@@ -207,7 +207,7 @@
 		var uniqueId = 'agent-access-admin-json-' + userId;
 
 		card.innerHTML =
-			'<p><span class="agent-access-success-icon">&#10003;</span> <strong>BotCreds generated for ' + escapeHtml(displayName) + '!</strong></p>' +
+			'<p><span class="agent-access-success-icon">&#10003;</span> <strong>Agent Access credentials generated for ' + escapeHtml(displayName) + '!</strong></p>' +
 			'<div class="agent-access-warning-box">' +
 				'<strong>Important:</strong> This password will only be shown once. Copy and share these credentials with ' + escapeHtml(displayName) + ' or their agent.' +
 			'</div>' +
