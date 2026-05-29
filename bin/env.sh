@@ -462,7 +462,9 @@ MIGRATE
             # spurious copies.
             grep -E '^[[:space:]]*-[[:space:]]+\./worktrees/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$compose_file" 2>/dev/null | while read -r line; do
                 # Parse volume line: "- ./worktrees/repo/branch:/newspack-{plugins,themes}/repo"
-                wt_path=$(echo "$line" | sed 's/^ *- //' | cut -d: -f1)
+                # Strip leading whitespace + dash with the same [[:space:]] class
+                # the grep above uses, so a tab-indented mount parses correctly.
+                wt_path=$(echo "$line" | sed -E 's/^[[:space:]]*-[[:space:]]*//' | cut -d: -f1)
                 container_path=$(echo "$line" | cut -d: -f2)
                 repo=$(basename "$container_path")
                 # Resolve the source from the monorepo layout.
@@ -552,6 +554,13 @@ MIGRATE
         # via `git checkout` after env creation, we still want destroy to
         # remove the worktree directory the env was bound to, not whatever
         # branch is currently checked out there.
+        #
+        # Known follow-up: for monorepo worktrees the safe form (e.g. feat-foo)
+        # won't match the real branch (feat/foo) in worktree.sh's final
+        # `git branch -D`, so the local branch ref is left dangling after the
+        # worktree dir is removed. Harmless (re-create reuses it) but accrues
+        # across create/destroy cycles. A proper fix removes the dir by safe
+        # name and deletes the branch by its resolved real name separately.
         for entry in "${worktree_entries[@]}"; do
             IFS='|' read -r wt_repo wt_branch <<< "$entry"
             "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
