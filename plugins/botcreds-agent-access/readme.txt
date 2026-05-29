@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.6
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.1.15
+Stable tag: 2.1.16
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -75,6 +75,9 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.1.16 =
+* Activity log now records write methods only (POST, PUT, PATCH, DELETE) by default. Read requests (GET/HEAD) are skipped. Add `add_filter( 'agent_access_log_reads', '__return_true' )` to re-enable read logging.
 
 = 2.1.11 =
 * Fix phpcs:ignore comment placement for uninstall_table() DROP TABLE — moved inline so Plugin Check actually picks it up.

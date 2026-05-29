@@ -41,6 +41,23 @@ class Agent_Access_Activity_Log {
 			return $result;
 		}
 
+		// By default only log write methods. Pass `true` to log reads too.
+		$write_methods = array( 'POST', 'PUT', 'PATCH', 'DELETE' );
+		$method        = strtoupper( $request->get_method() );
+		if ( ! in_array( $method, $write_methods, true ) ) {
+			/**
+			 * Filters whether read (GET/HEAD) requests are included in the activity log.
+			 *
+			 * By default only write methods (POST, PUT, PATCH, DELETE) are logged.
+			 * Set this to true to also log read requests.
+			 *
+			 * @param bool $log_reads Default false.
+			 */
+			if ( ! apply_filters( 'agent_access_log_reads', false ) ) {
+				return $result;
+			}
+		}
+
 		global $wpdb;
 		$table = $wpdb->prefix . self::TABLE_NAME;
 
@@ -69,7 +86,7 @@ class Agent_Access_Activity_Log {
 			'user_id'           => (int) get_current_user_id(),
 			'source'            => $detected['source'],
 			'app_password_name' => $detected['app_password_name'],
-			'method'            => strtoupper( $request->get_method() ),
+			'method'            => $method,
 			'route'             => substr( $route, 0, 500 ),
 			'object_type'       => $object_type,
 			'user_agent'        => isset( $_SERVER['HTTP_USER_AGENT'] ) ? substr( sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ), 0, 500 ) : null,
