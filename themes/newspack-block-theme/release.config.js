@@ -15,9 +15,11 @@ module.exports = {
 		[
 			'semantic-release-version-bump',
 			{
-				// build script is run before semantic-release, so the version in *.css files
-				// have to be updated explicitly
-				files: [ 'src/scss/_theme-description.scss', 'functions.php' ],
+				// build script is run before semantic-release, so the version in the
+				// built (gitignored) *.css files has to be bumped explicitly here, before
+				// release:archive zips them — otherwise the theme's style.css Version
+				// header ships stale.
+				files: [ 'src/scss/_theme-description.scss', 'functions.php', 'style.css', 'style-rtl.css' ],
 				callback: 'npm run release:archive',
 			},
 		],
