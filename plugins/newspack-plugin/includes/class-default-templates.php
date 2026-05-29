@@ -166,4 +166,47 @@ final class Default_Templates {
 		}
 		update_post_meta( $post_id, '_wp_page_template', $template );
 	}
+
+	/**
+	 * Initialize hooks.
+	 */
+	public static function init() {
+		add_action( 'wp_insert_post', [ __CLASS__, 'maybe_set_default_template' ], 10, 3 );
+		add_action( 'rest_api_init', [ __CLASS__, 'register_rest_routes' ] );
+	}
+
+	/**
+	 * Register REST routes.
+	 */
+	public static function register_rest_routes() {
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/newspack-settings/default-templates',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ __CLASS__, 'api_get_template_options' ],
+				'permission_callback' => [ __CLASS__, 'api_permissions_check' ],
+			]
+		);
+	}
+
+	/**
+	 * Permission check for the endpoint.
+	 *
+	 * @return bool
+	 */
+	public static function api_permissions_check() {
+		return current_user_can( 'edit_theme_options' );
+	}
+
+	/**
+	 * GET callback: available template options for the active theme.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public static function api_get_template_options() {
+		return rest_ensure_response( self::get_template_options() );
+	}
 }
+
+Default_Templates::init();

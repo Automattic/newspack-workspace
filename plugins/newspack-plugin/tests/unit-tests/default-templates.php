@@ -139,4 +139,29 @@ class Newspack_Test_Default_Templates extends WP_UnitTestCase {
 		$this->assertSame( '', get_post_meta( $post_id, '_wp_page_template', true ) );
 		remove_theme_mod( 'post_template_default' );
 	}
+
+	/**
+	 * The default-templates route is registered with the post/page response shape.
+	 *
+	 * The WP_UnitTestCase_Base test harness saves/restores $wp_filter around
+	 * each test. If a prior test triggered autoloading of Default_Templates
+	 * (running init() and registering the rest_api_init hook), tear_down() will
+	 * have removed that hook before this test runs. We call init() here to
+	 * re-register the hook, then fire rest_api_init on a fresh server.
+	 */
+	public function test_rest_endpoint_returns_post_and_page_options() {
+		Default_Templates::init();
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server();
+		do_action( 'rest_api_init' );
+		$user_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $user_id );
+		$request  = new WP_REST_Request( 'GET', '/newspack/v1/wizard/newspack-settings/default-templates' );
+		$response = rest_get_server()->dispatch( $request );
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data();
+		$this->assertArrayHasKey( 'post', $data );
+		$this->assertArrayHasKey( 'page', $data );
+		wp_set_current_user( 0 );
+	}
 }
