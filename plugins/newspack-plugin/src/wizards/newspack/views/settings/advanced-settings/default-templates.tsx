@@ -22,13 +22,7 @@ export interface TemplateOptions {
 	page: TemplateOption[];
 }
 
-interface DefaultTemplatesProps {
-	data: AdvancedSettings;
-	update: ( value: Partial< AdvancedSettings > ) => void;
-	options: TemplateOptions;
-}
-
-export default function DefaultTemplates( { data, update, options }: DefaultTemplatesProps ) {
+export default function DefaultTemplates( { data, update, options }: ThemeModComponentProps< AdvancedSettings > & { options: TemplateOptions } ) {
 	return (
 		<Grid gutter={ 32 }>
 			<SelectControl
