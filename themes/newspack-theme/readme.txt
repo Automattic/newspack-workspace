@@ -1,7 +1,7 @@
 === Newspack Theme ===
 Contributors: Automattic
 Tags:
-Requires at least: 6.7
+Requires at least: 6.9
 Tested up to: WordPress 7.0
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html

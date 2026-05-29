@@ -1,6 +1,6 @@
 === Newspack Block Theme ===
 Contributors: Automattic
-Requires at least: 6.2
+Requires at least: 7.0
 Tested up to: 7.0
 Requires PHP: 8.0
 License: GPLv2 or later
