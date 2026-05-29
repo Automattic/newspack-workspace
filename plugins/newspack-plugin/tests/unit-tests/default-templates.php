@@ -13,24 +13,6 @@ use Newspack\Default_Templates;
 class Newspack_Test_Default_Templates extends WP_UnitTestCase {
 
 	/**
-	 * Build a stub object that looks like a WP_Block_Template.
-	 *
-	 * @param string   $slug       Template slug.
-	 * @param string   $title      Template title.
-	 * @param string[] $post_types Post types declared for the template.
-	 * @param string   $source     'theme' or 'custom'.
-	 * @return object
-	 */
-	private function make_template( $slug, $title, $post_types, $source ) {
-		return (object) [
-			'slug'       => $slug,
-			'title'      => $title,
-			'post_types' => $post_types,
-			'source'     => $source,
-		];
-	}
-
-	/**
 	 * Classic (non-block) themes get the fixed legacy list for both post types.
 	 */
 	public function test_classic_options_returned_when_not_block_theme() {
@@ -46,54 +28,55 @@ class Newspack_Test_Default_Templates extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A theme template whose post_types include the post type is offered.
-	 */
-	public function test_filter_includes_theme_template_matching_post_type() {
-		$templates = [ $this->make_template( 'single/large-image', 'Large Image', [ 'post' ], 'theme' ) ];
-		$options   = Default_Templates::filter_templates_for_post_type( $templates, 'post' );
-		$this->assertSame(
-			[ [ 'label' => 'Large Image', 'value' => 'single/large-image' ] ],
-			$options
-		);
-	}
-
-	/**
-	 * A site-created (custom) template is offered regardless of post_types.
-	 */
-	public function test_filter_includes_custom_template() {
-		$templates = [ $this->make_template( 'my-custom', 'My Custom', [], 'custom' ) ];
-		$options   = Default_Templates::filter_templates_for_post_type( $templates, 'page' );
-		$this->assertSame(
-			[ [ 'label' => 'My Custom', 'value' => 'my-custom' ] ],
-			$options
-		);
-	}
-
-	/**
-	 * Base hierarchy templates (theme source, no post_types) are not offered.
-	 */
-	public function test_filter_excludes_base_template() {
-		$templates = [ $this->make_template( 'single', 'Single Posts', [], 'theme' ) ];
-		$options   = Default_Templates::filter_templates_for_post_type( $templates, 'post' );
-		$this->assertSame( [], $options );
-	}
-
-	/**
-	 * A theme template declared for a different post type is not offered.
-	 */
-	public function test_filter_excludes_template_for_other_post_type() {
-		$templates = [ $this->make_template( 'page/wide', 'Wide Page', [ 'page' ], 'theme' ) ];
-		$options   = Default_Templates::filter_templates_for_post_type( $templates, 'post' );
-		$this->assertSame( [], $options );
-	}
-
-	/**
 	 * Block template options always begin with the "Default" entry.
 	 */
 	public function test_block_template_options_include_default_first() {
 		$options = Default_Templates::get_block_template_options( 'post' );
 		$this->assertNotEmpty( $options );
 		$this->assertSame( 'default', $options[0]['value'] );
+	}
+
+	/**
+	 * Edited hierarchy templates must NOT be offered as assignable options, while
+	 * genuine custom templates must be.
+	 *
+	 * Regression test: editing a hierarchy template (e.g. "single" or
+	 * "front-page") in the Site Editor creates a wp_template DB post with source
+	 * "custom" but is_custom === false. These must not appear in the dropdown.
+	 * get_block_templates() processes wp_template DB posts regardless of the
+	 * active theme, so this is exercised even under the classic test theme.
+	 */
+	public function test_block_template_options_exclude_edited_hierarchy_templates() {
+		$theme = get_stylesheet();
+
+		// An edited hierarchy template: slug matches a default template type.
+		$single_id = self::factory()->post->create(
+			[
+				'post_type'    => 'wp_template',
+				'post_name'    => 'single',
+				'post_title'   => 'Single Posts',
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:post-content /-->',
+			]
+		);
+		wp_set_object_terms( $single_id, $theme, 'wp_theme' );
+
+		// A genuine custom template (slug is not a default template type).
+		$custom_id = self::factory()->post->create(
+			[
+				'post_type'    => 'wp_template',
+				'post_name'    => 'newspack-test-custom',
+				'post_title'   => 'Newspack Test Custom',
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:post-content /-->',
+			]
+		);
+		wp_set_object_terms( $custom_id, $theme, 'wp_theme' );
+
+		$values = wp_list_pluck( Default_Templates::get_block_template_options( 'post' ), 'value' );
+
+		$this->assertNotContains( 'single', $values, 'Edited hierarchy templates must not be assignable.' );
+		$this->assertContains( 'newspack-test-custom', $values, 'Custom templates must be assignable.' );
 	}
 
 	/**

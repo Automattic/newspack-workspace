@@ -73,46 +73,31 @@ final class Default_Templates {
 	/**
 	 * Get assignable block template options for a post type.
 	 *
-	 * Includes theme.json customTemplates and any site-created (DB) templates.
+	 * Passing the post type to get_block_templates() lets WordPress core apply
+	 * the same filtering the block editor's "Template" panel uses: only custom
+	 * templates (is_custom) whose post_types match are returned, while hierarchy
+	 * templates (single, front-page, page, index, ...) are excluded — even when
+	 * they have been edited in the Site Editor (which gives them a "custom"
+	 * source but leaves is_custom false). This covers theme.json customTemplates
+	 * and site-created (DB) templates alike.
 	 *
 	 * @param string $post_type Post type slug.
 	 * @return array[] List of [ 'label' => string, 'value' => string ], "Default" first.
 	 */
 	public static function get_block_template_options( $post_type ) {
-		$default = [
+		$options = [
 			[
 				'label' => __( 'Default', 'newspack-plugin' ),
 				'value' => 'default',
 			],
 		];
 		if ( ! function_exists( 'get_block_templates' ) ) {
-			return $default;
+			return $options;
 		}
-		$templates = get_block_templates( [], 'wp_template' );
-		return array_merge( $default, self::filter_templates_for_post_type( $templates, $post_type ) );
-	}
-
-	/**
-	 * Reduce block templates to the ones assignable to a post type.
-	 *
-	 * Mirrors the block editor's "Template" panel: a template is assignable if
-	 * it is a site-created (custom) template, or if its post_types include the
-	 * post type. Base hierarchy templates (no post_types) are excluded.
-	 *
-	 * @param array  $templates Array of WP_Block_Template objects.
-	 * @param string $post_type Post type slug.
-	 * @return array[] List of [ 'label' => string, 'value' => string ].
-	 */
-	public static function filter_templates_for_post_type( $templates, $post_type ) {
-		$options = [];
+		$templates = get_block_templates( [ 'post_type' => $post_type ], 'wp_template' );
 		foreach ( $templates as $template ) {
-			$post_types = isset( $template->post_types ) && is_array( $template->post_types ) ? $template->post_types : [];
-			$is_custom  = isset( $template->source ) && 'custom' === $template->source;
-			if ( ! $is_custom && ! in_array( $post_type, $post_types, true ) ) {
-				continue;
-			}
 			$options[] = [
-				'label' => is_string( $template->title ) ? $template->title : $template->slug,
+				'label' => empty( $template->title ) ? $template->slug : $template->title,
 				'value' => $template->slug,
 			];
 		}
