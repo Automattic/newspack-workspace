@@ -193,10 +193,17 @@ final class Default_Templates {
 	/**
 	 * Permission check for the endpoint.
 	 *
-	 * @return bool
+	 * @return true|\WP_Error True if the request has access, WP_Error otherwise.
 	 */
 	public static function api_permissions_check() {
-		return current_user_can( 'edit_theme_options' );
+		if ( ! current_user_can( 'edit_theme_options' ) ) {
+			return new \WP_Error(
+				'newspack_rest_forbidden',
+				esc_html__( 'You cannot use this resource.', 'newspack-plugin' ),
+				[ 'status' => 403 ]
+			);
+		}
+		return true;
 	}
 
 	/**
