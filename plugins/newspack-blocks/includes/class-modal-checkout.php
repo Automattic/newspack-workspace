@@ -780,7 +780,7 @@ final class Modal_Checkout {
 		$products = array_keys( self::$products );
 		foreach ( $products as $product_id ) {
 			$product = wc_get_product( $product_id );
-			if ( ! $product || ( ! $product->is_type( 'variable' ) && ! $product->is_type( 'grouped' ) ) ) {
+			if ( ! $product || ( ! $product->is_type( 'variable' ) && ! $product->is_type( 'variable-subscription' ) && ! $product->is_type( 'grouped' ) ) ) {
 				continue;
 			}
 			?>
