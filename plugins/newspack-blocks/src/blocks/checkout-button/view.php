@@ -43,11 +43,8 @@ function render_callback( $attributes ) {
 	if ( $attributes['is_variable'] && ! empty( $attributes['variation'] ) ) {
 		$product_id = $attributes['variation'];
 	}
-	// For variable products, register the parent product (not the locked
-	// variation) so the variation picker is rendered. This lets a modal
-	// checkout URL trigger open any variation, not only the one the block is
-	// locked to. The button form below still carries the locked variation for
-	// direct clicks.
+	// Register the parent for variable buttons so the picker is rendered.
+	// The form still carries any locked variation for direct clicks.
 	$modal_product_id = ! empty( $attributes['is_variable'] ) && ! empty( $attributes['product'] )
 		? $attributes['product']
 		: $product_id;

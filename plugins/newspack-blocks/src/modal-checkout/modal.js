@@ -799,17 +799,12 @@ domReady( () => {
 	};
 
 	/**
-	 * Handle checkout button form triggers.
-	 *
-	 * Resolves the form to submit for a `checkout_button` URL trigger. An exact
-	 * variation request is served by a matching checkout button or by selecting
-	 * it in the variation picker; it is never substituted with a different
-	 * variation. Returns whether a form was actually submitted.
+	 * Handle checkout button URL triggers.
 	 *
 	 * @param {string}      productId   The product ID.
 	 * @param {string|null} variationId Optional. The variation ID.
 	 *
-	 * @return {boolean} Whether a checkout form was submitted.
+	 * @return {boolean} Whether a matching form was submitted.
 	 */
 	const triggerCheckoutButtonForm = ( productId, variationId = null ) => {
 		const form = resolveCheckoutButtonForm( document, productId, variationId, {

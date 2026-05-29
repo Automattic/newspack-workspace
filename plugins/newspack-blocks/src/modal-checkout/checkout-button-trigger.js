@@ -1,19 +1,10 @@
 /**
- * Helpers for resolving which form a modal checkout `checkout_button` URL
- * trigger should submit (NPPM-2872).
- *
- * These are pure DOM utilities: they read the page and, for the picker case,
- * check the matching radio. They never submit a form and never depend on the
- * modal bootstrap globals, so they can be unit tested in isolation. The
- * side-effecting submit stays in the modal module.
+ * Resolve the form submitted by a modal checkout `checkout_button` URL trigger.
  */
 
 /**
- * Safely parse a form's `data-checkout` attribute.
- *
- * Picker forms rendered by the subscription tiers UI do not carry a
- * `data-checkout` attribute, so this must never throw on a missing or
- * malformed value.
+ * Parse a form's `data-checkout` attribute without throwing.
+ * Picker forms do not carry `data-checkout`.
  *
  * @param {HTMLElement|null} form The form element.
  *
@@ -34,10 +25,8 @@ export function readCheckoutData( form ) {
 /**
  * Find a checkout button form matching the requested product.
  *
- * When `variationId` is provided, BOTH `product_id` and `variation_id` must
- * match, so an exact request is never served by a button locked to a different
- * variation. When `variationId` is omitted, the form is matched by
- * `product_id` only.
+ * Variation requests are never served by a button locked to a different
+ * variation.
  *
  * @param {Document|HTMLElement} root        The DOM root to search.
  * @param {string}               productId   The requested product ID.
@@ -47,6 +36,7 @@ export function readCheckoutData( form ) {
  */
 export function findCheckoutButtonForm( root, productId, variationId = null ) {
 	const buttons = root.querySelectorAll( '.wp-block-newspack-blocks-checkout-button' );
+	const hasVariation = variationId !== null && variationId !== undefined && String( variationId ) !== '';
 	let match = null;
 	buttons.forEach( button => {
 		if ( match ) {
@@ -60,7 +50,7 @@ export function findCheckoutButtonForm( root, productId, variationId = null ) {
 		if ( String( data.product_id ) !== String( productId ) ) {
 			return;
 		}
-		if ( variationId && String( data.variation_id ) !== String( variationId ) ) {
+		if ( hasVariation && String( data.variation_id ) !== String( variationId ) ) {
 			return;
 		}
 		match = form;
@@ -69,11 +59,8 @@ export function findCheckoutButtonForm( root, productId, variationId = null ) {
 }
 
 /**
- * Find the variation picker for a product, check the radio matching the
- * requested variation, and return the picker form to submit.
- *
- * The picker form carries no per-variation `data-checkout`; the selected radio
- * (`input[name="product_id"]`) drives which variation is purchased.
+ * Select the requested variation in a product picker.
+ * Picker forms use the selected radio value instead of `data-checkout`.
  *
  * @param {Document|HTMLElement} root                              The DOM root to search.
  * @param {string}               productId                         The parent product ID of the picker.
@@ -91,20 +78,22 @@ export function selectPickerForm( root, productId, variationId, options = {} ) {
 	if ( ! modal ) {
 		return null;
 	}
-	const radios = modal.querySelectorAll( 'input[name="product_id"]' );
+	const forms = modal.querySelectorAll( 'form' );
+	const form = iframeName ? [ ...forms ].find( el => el.getAttribute( 'target' ) === iframeName ) : forms[ 0 ];
+	if ( ! form ) {
+		return null;
+	}
+	const radios = form.querySelectorAll( 'input[type="radio"][name="product_id"]' );
 	const radio = [ ...radios ].find( input => String( input.value ) === String( variationId ) );
 	if ( ! radio ) {
 		return null;
 	}
 	radio.checked = true;
-	return radio.closest( 'form' ) || modal.querySelector( `form[target="${ iframeName }"]` );
+	return form;
 }
 
 /**
- * Contextual hidden fields a checkout button passes to the modal checkout.
- * These control post-checkout behavior, content gating, and popup attribution,
- * so they must travel with a picker form driven by a URL trigger, mirroring
- * what a manual click copies into the picker.
+ * Hidden fields copied from a source checkout button to a picker submission.
  *
  * @type {string[]}
  */
@@ -118,9 +107,8 @@ export const PICKER_CONTEXT_FIELDS = [
 ];
 
 /**
- * Copy contextual hidden fields from a source checkout button form into a
- * target picker form. Existing target fields are not overwritten, and missing
- * or empty source fields are skipped. Never throws on null forms.
+ * Copy context fields. Target values are preserved, empty source values are
+ * skipped, and null forms are ignored.
  *
  * @param {HTMLFormElement|null} sourceForm Checkout button form to read from.
  * @param {HTMLFormElement|null} targetForm Picker form to copy into.
@@ -133,18 +121,19 @@ export function copyContextFields( sourceForm, targetForm, fields = PICKER_CONTE
 		return;
 	}
 	const doc = targetForm.ownerDocument;
+	const sourceData = new FormData( sourceForm );
 	fields.forEach( name => {
 		if ( targetForm.querySelector( `input[name="${ name }"]` ) ) {
 			return;
 		}
-		const source = sourceForm.querySelector( `input[name="${ name }"]` );
-		if ( ! source || ! source.value ) {
+		const values = sourceData.getAll( name ).filter( value => typeof value === 'string' && value );
+		if ( ! values.length ) {
 			return;
 		}
 		const input = doc.createElement( 'input' );
 		input.type = 'hidden';
 		input.name = name;
-		input.value = source.value;
+		input.value = values[ values.length - 1 ];
 		targetForm.prepend( input );
 	} );
 }
@@ -152,14 +141,8 @@ export function copyContextFields( sourceForm, targetForm, fields = PICKER_CONTE
 /**
  * Resolve which form a `checkout_button` URL trigger should submit.
  *
- * Order of preference:
- *   1. An exact checkout button form (both product_id and variation_id).
- *   2. The variation picker, selecting the requested variation.
- *   3. A product-only checkout button, only when explicitly enabled.
- *
- * When no specific variation is requested, the form is matched by product_id.
- * Returns null when nothing satisfies the request, so the caller can avoid
- * submitting a different product than the URL asked for.
+ * Strict order: exact button, picker, then explicit product-only fallback.
+ * Returning null prevents silent substitution.
  *
  * @param {Document|HTMLElement} root        The DOM root to search.
  * @param {string}               productId   The requested product ID.
@@ -171,7 +154,7 @@ export function copyContextFields( sourceForm, targetForm, fields = PICKER_CONTE
  */
 export function resolveCheckoutButtonForm( root, productId, variationId, options = {} ) {
 	const { allowProductOnlyFallback = false } = options;
-	const hasVariation = !! variationId && String( variationId ) !== String( productId );
+	const hasVariation = variationId !== null && variationId !== undefined && String( variationId ) !== '';
 
 	if ( ! hasVariation ) {
 		return findCheckoutButtonForm( root, productId, null );
@@ -184,10 +167,8 @@ export function resolveCheckoutButtonForm( root, productId, variationId, options
 
 	const picker = selectPickerForm( root, productId, variationId, options );
 	if ( picker ) {
-		// Carry the source button's block context (after-success behavior,
-		// gating, popup attribution) into the picker, matching what a manual
-		// click copies. The source button may be locked to a different
-		// variation; it is used only as a context source and never submitted.
+		// The source button may be locked to another variation. Use it only
+		// for block context, then submit the picker.
 		copyContextFields( findCheckoutButtonForm( root, productId, null ), picker );
 		return picker;
 	}

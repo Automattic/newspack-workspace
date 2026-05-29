@@ -1,10 +1,5 @@
 /**
  * Tests for the checkout-button URL trigger resolution helpers.
- *
- * These cover NPPM-2872: a modal checkout URL of the form
- * `?checkout=1&type=checkout_button&product_id=NNN&variation_id=MMM` must open
- * the modal for the requested variation, must never substitute a different
- * variation, and must never throw on picker forms that carry no `data-checkout`.
  */
 
 import { readCheckoutData, findCheckoutButtonForm, selectPickerForm, resolveCheckoutButtonForm, copyContextFields } from './checkout-button-trigger';
@@ -31,7 +26,7 @@ const checkoutButton = ( checkoutData, label = 'Buy' ) => {
 
 /**
  * Build a variation picker modal, mirroring Subscriptions_Tiers::render_form output:
- * a single form with `target` set, radio inputs named product_id, and NO data-checkout.
+ * a single form with `target` set, radio inputs named product_id, and no data-checkout.
  *
  * @param {string}   productId Parent product id for the picker container.
  * @param {string[]} radioIds  Radio values (variation/child ids).
@@ -126,6 +121,23 @@ describe( 'selectPickerForm', () => {
 		const root = render( variationPicker( '1406', [ '1407', '1409' ] ) );
 		expect( selectPickerForm( root, '1406', '1408', PICKER_OPTIONS ) ).toBeNull();
 	} );
+
+	it( 'only selects radio inputs inside the checkout iframe form', () => {
+		const root = render(
+			`<div class="${ VARIATION_MODAL_CLASS_PREFIX }" data-product-id="1406">` +
+				'<form target="other_iframe"><input type="radio" name="product_id" value="1407"></form>' +
+				`<form target="${ IFRAME_NAME }">` +
+				'<input type="hidden" name="product_id" value="1407">' +
+				'<input type="radio" name="product_id" value="1408">' +
+				'</form>' +
+				'</div>'
+		);
+		const checkoutForm = root.querySelector( `form[target="${ IFRAME_NAME }"]` );
+
+		expect( selectPickerForm( root, '1406', '1407', PICKER_OPTIONS ) ).toBeNull();
+		expect( selectPickerForm( root, '1406', '1408', PICKER_OPTIONS ) ).toBe( checkoutForm );
+		expect( checkoutForm.querySelector( 'input[type="radio"][value="1408"]' ).checked ).toBe( true );
+	} );
 } );
 
 describe( 'resolveCheckoutButtonForm', () => {
@@ -163,6 +175,11 @@ describe( 'resolveCheckoutButtonForm', () => {
 	it( 'returns null for an invalid variation when product-only fallback is off (default)', () => {
 		const root = render( checkoutButton( { product_id: '158' }, 'Checkout' ) );
 		expect( resolveCheckoutButtonForm( root, '158', '160', PICKER_OPTIONS ) ).toBeNull();
+	} );
+
+	it( 'treats a variation_id equal to product_id as a strict variation request', () => {
+		const root = render( checkoutButton( { product_id: '158' }, 'Checkout' ) );
+		expect( resolveCheckoutButtonForm( root, '158', '158', PICKER_OPTIONS ) ).toBeNull();
 	} );
 
 	it( 'returns the product-only button for an invalid variation only when fallback is explicitly enabled', () => {
@@ -222,6 +239,22 @@ describe( 'copyContextFields', () => {
 		expect( target.querySelector( 'input[name="prompt_title"]' ).value ).toBe( 'Existing' );
 		// Missing on source -> not added.
 		expect( target.querySelector( 'input[name="gate_post_id"]' ) ).toBeNull();
+	} );
+
+	it( 'copies the last source value when a context field is duplicated', () => {
+		const root = render(
+			'<form id="src">' +
+				'<input type="hidden" name="after_success_url" value="/first/">' +
+				'<input type="hidden" name="after_success_url" value="/last/">' +
+				'</form>' +
+				'<form id="dst"></form>'
+		);
+		const source = root.querySelector( '#src' );
+		const target = root.querySelector( '#dst' );
+
+		copyContextFields( source, target );
+
+		expect( target.querySelector( 'input[name="after_success_url"]' ).value ).toBe( '/last/' );
 	} );
 
 	it( 'does not throw when source or target is null', () => {
