@@ -47,8 +47,6 @@ module.exports = {
 			path: '@semantic-release/git',
 			assets: [
 				...THEMES.map( name => `${ name }/sass/theme-description.scss` ),
-				'package.json',
-				'package-lock.json',
 				'CHANGELOG.md',
 			],
 			message: 'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',

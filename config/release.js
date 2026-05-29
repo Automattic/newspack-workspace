@@ -60,7 +60,7 @@ module.exports = function releaseConfig( { name, phpFile, npmPublish = false } )
 			],
 			{
 				path: '@semantic-release/git',
-				assets: [ phpFile, 'package.json', 'CHANGELOG.md' ],
+				assets: [ phpFile, 'CHANGELOG.md' ],
 				message:
 					'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
 			},
