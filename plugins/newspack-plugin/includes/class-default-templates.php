@@ -118,4 +118,52 @@ final class Default_Templates {
 		}
 		return $options;
 	}
+
+	/**
+	 * Whether a stored template value is currently available for a post type.
+	 *
+	 * @param string $template  Template slug (or 'default').
+	 * @param string $post_type Post type slug.
+	 * @return bool
+	 */
+	public static function validate_template( $template, $post_type ) {
+		$options = self::get_block_template_options( $post_type );
+		foreach ( $options as $option ) {
+			if ( $option['value'] === $template ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Apply the configured default template to a newly created post or page.
+	 *
+	 * Only runs for block themes; the classic Newspack theme applies its own
+	 * defaults via its own wp_insert_post handler.
+	 *
+	 * @param int      $post_id The post ID.
+	 * @param \WP_Post $post    The post object.
+	 * @param bool     $update  Whether this is an update to an existing post.
+	 */
+	public static function maybe_set_default_template( $post_id, $post, $update ) {
+		if ( $update ) {
+			return;
+		}
+		if ( ! wp_is_block_theme() ) {
+			return;
+		}
+		if ( ! in_array( $post->post_type, [ 'post', 'page' ], true ) ) {
+			return;
+		}
+		$mod_name = 'post' === $post->post_type ? 'post_template_default' : 'page_template_default';
+		$template = get_theme_mod( $mod_name, 'default' );
+		if ( empty( $template ) || 'default' === $template ) {
+			return;
+		}
+		if ( ! self::validate_template( $template, $post->post_type ) ) {
+			return;
+		}
+		update_post_meta( $post_id, '_wp_page_template', $template );
+	}
 }

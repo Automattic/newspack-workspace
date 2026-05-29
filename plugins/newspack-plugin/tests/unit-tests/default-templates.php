@@ -95,4 +95,48 @@ class Newspack_Test_Default_Templates extends WP_UnitTestCase {
 		$this->assertNotEmpty( $options );
 		$this->assertSame( 'default', $options[0]['value'] );
 	}
+
+	/**
+	 * "default" / empty / invalid values resolve to no validation match.
+	 */
+	public function test_validate_template_rejects_unknown_slug() {
+		$this->assertFalse( Default_Templates::validate_template( 'no-such-template', 'post' ) );
+	}
+
+	/**
+	 * The "default" sentinel is always a valid option value.
+	 */
+	public function test_validate_template_accepts_default() {
+		$this->assertTrue( Default_Templates::validate_template( 'default', 'post' ) );
+	}
+
+	/**
+	 * Updating an existing post never sets the template meta.
+	 */
+	public function test_no_template_set_on_update() {
+		$post_id = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		delete_post_meta( $post_id, '_wp_page_template' );
+		set_theme_mod( 'post_template_default', 'single/large-image' );
+		$post = get_post( $post_id );
+		Default_Templates::maybe_set_default_template( $post_id, $post, true );
+		$this->assertSame( '', get_post_meta( $post_id, '_wp_page_template', true ) );
+		remove_theme_mod( 'post_template_default' );
+	}
+
+	/**
+	 * On a non-block (classic) theme the plugin does not set the meta — the
+	 * theme's own handler owns that path.
+	 */
+	public function test_no_template_set_on_classic_theme() {
+		if ( wp_is_block_theme() ) {
+			$this->markTestSkipped( 'Active theme is a block theme.' );
+		}
+		$post_id = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		delete_post_meta( $post_id, '_wp_page_template' );
+		set_theme_mod( 'post_template_default', 'single-feature.php' );
+		$post = get_post( $post_id );
+		Default_Templates::maybe_set_default_template( $post_id, $post, false );
+		$this->assertSame( '', get_post_meta( $post_id, '_wp_page_template', true ) );
+		remove_theme_mod( 'post_template_default' );
+	}
 }
