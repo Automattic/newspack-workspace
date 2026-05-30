@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-05-27T09:03:02+00:00\n"
+"POT-Creation-Date: 2026-05-29T18:06:01+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-newsletters\n"
@@ -2471,7 +2471,11 @@ msgstr ""
 msgid "Drop cap"
 msgstr ""
 
-#: src/editor/blocks-validation/blocks-filters.js:84
+#: src/editor/blocks-validation/blocks-filters.js:91
+msgid "Unpublished synced pattern"
+msgstr ""
+
+#: src/editor/blocks-validation/blocks-filters.js:109
 msgid "These features will not be displayed correctly in an email, please remove them:"
 msgstr ""
 

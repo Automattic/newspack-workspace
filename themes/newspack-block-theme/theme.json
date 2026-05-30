@@ -971,6 +971,48 @@
 					"fontSize": "var( --wp--preset--font-size--x-small )",
 					"lineHeight": "var( --wp--custom--line-height--x-small )"
 				}
+			},
+			"newspack/my-account-button": {
+				"variations": {
+					"icon-only": {
+						"spacing": {
+							"padding": {
+								"bottom": "var( --wp--custom--spacing--25 )",
+								"left": "var( --wp--custom--spacing--25 )",
+								"right": "var( --wp--custom--spacing--25 )",
+								"top": "var( --wp--custom--spacing--25 )"
+							}
+						}
+					}
+				}
+			},
+			"newspack/overlay-menu-trigger": {
+				"variations": {
+					"icon-only": {
+						"spacing": {
+							"padding": {
+								"bottom": "var( --wp--custom--spacing--25 )",
+								"left": "var( --wp--custom--spacing--25 )",
+								"right": "var( --wp--custom--spacing--25 )",
+								"top": "var( --wp--custom--spacing--25 )"
+							}
+						}
+					}
+				}
+			},
+			"newspack/overlay-search": {
+				"variations": {
+					"icon-only": {
+						"spacing": {
+							"padding": {
+								"bottom": "var( --wp--custom--spacing--25 )",
+								"left": "var( --wp--custom--spacing--25 )",
+								"right": "var( --wp--custom--spacing--25 )",
+								"top": "var( --wp--custom--spacing--25 )"
+							}
+						}
+					}
+				}
 			}
 		},
 		"color": {

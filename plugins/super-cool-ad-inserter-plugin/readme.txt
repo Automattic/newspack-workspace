@@ -1,8 +1,8 @@
 === Super Cool Ad Inserter Plugin ===
 Contributors: innlabs, automattic
 Tags: ads, advertising,  widget, shortcode, google, post, page
-Requires at least: 5.3
-Tested up to: 6.4.3
+Requires at least: 6.9
+Tested up to: 7.0
 Requires PHP: 7.4
 Stable tag: trunk
 License: GPLv2 or later
