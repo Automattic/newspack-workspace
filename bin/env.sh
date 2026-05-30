@@ -463,7 +463,9 @@ MIGRATE
             grep -E '^[[:space:]]*-[[:space:]]+\./worktrees/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$compose_file" 2>/dev/null | while read -r line; do
                 # Parse volume line: "- ./worktrees/repo/branch:/newspack-{plugins,themes}/repo"
                 # Strip leading whitespace + dash with the same [[:space:]] class
-                # the grep above uses, so a tab-indented mount parses correctly.
+                # the grep above uses. `env create` only emits 6-space-indented
+                # mounts, so a tab here arises only from a hand-edited compose
+                # file — this keeps the strip in step with the grep for that case.
                 wt_path=$(echo "$line" | sed -E 's/^[[:space:]]*-[[:space:]]*//' | cut -d: -f1)
                 container_path=$(echo "$line" | cut -d: -f2)
                 repo=$(basename "$container_path")
