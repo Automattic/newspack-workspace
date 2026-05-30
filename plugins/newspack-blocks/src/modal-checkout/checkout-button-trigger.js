@@ -62,6 +62,9 @@ export function findCheckoutButtonForm( root, productId, variationId = null ) {
  * Select the requested variation in a product picker.
  * Picker forms use the selected radio value instead of `data-checkout`.
  *
+ * Side effect: when a matching radio is found it is checked (mutating the DOM)
+ * before the form is returned, so the form submits the requested variation.
+ *
  * @param {Document|HTMLElement} root                              The DOM root to search.
  * @param {string}               productId                         The parent product ID of the picker.
  * @param {string}               variationId                       The requested variation ID.
