@@ -64,14 +64,10 @@ case $WHAT_TO_BUILD in
     all)
         # Composer install per monorepo project (each plugin still has its own
         # composer.json for production deps; dev deps are hoisted to the root).
-        # Standalone repos/ checkouts build with their own toolchain.
+        # Standalone repos/ checkouts are not built here -- they're external and
+        # often distributed/pre-built; build one on demand with `n build <name>`.
         while IFS= read -r dir; do
-            [ -d "$dir" ] || continue
-            if [[ "$dir" == "$REPOS_PATH"/* ]]; then
-                build_standalone_repo "$dir"
-            else
-                composer install --working-dir "$dir"
-            fi
+            [ -d "$dir" ] && composer install --working-dir "$dir"
         done < <(get_all_project_dirs)
         pnpm run build
         ;;

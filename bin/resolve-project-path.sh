@@ -33,24 +33,17 @@ resolve_project_path() {
     fi
 }
 
-# For scripts that iterate all projects. Monorepo dirs come first; a repos/
-# checkout whose name duplicates a monorepo project is skipped (tracked wins).
+# For scripts that iterate all monorepo projects (e.g. `n ci-build all`).
+# Standalone repos/ checkouts are intentionally excluded: they're external and
+# often distributed/pre-built, so they build on demand via `n build <name>`
+# rather than in bulk.
 get_all_project_dirs() {
     local dirs=()
-    local seen=" "
-    local d name
-    for d in "$PLUGINS_PATH"/*/ "$THEMES_PATH"/*/; do
-        [ -d "$d" ] || continue
-        name=$(basename "$d")
-        dirs+=("$d")
-        seen="$seen$name "
+    for d in "$PLUGINS_PATH"/*/; do
+        [ -d "$d" ] && dirs+=("$d")
     done
-    for d in "$REPOS_PATH"/plugins/*/ "$REPOS_PATH"/themes/*/; do
-        [ -d "$d" ] || continue
-        name=$(basename "$d")
-        case "$seen" in *" $name "*) continue;; esac
-        dirs+=("$d")
-        seen="$seen$name "
+    for d in "$THEMES_PATH"/*/; do
+        [ -d "$d" ] && dirs+=("$d")
     done
     printf '%s\n' "${dirs[@]}"
 }
