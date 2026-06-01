@@ -181,7 +181,7 @@ final class Default_Templates {
 	 * @return true|\WP_Error True if the request has access, WP_Error otherwise.
 	 */
 	public static function api_permissions_check() {
-		if ( ! current_user_can( 'edit_theme_options' ) ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
 			return new \WP_Error(
 				'newspack_rest_forbidden',
 				esc_html__( 'You cannot use this resource.', 'newspack-plugin' ),
@@ -194,7 +194,7 @@ final class Default_Templates {
 	/**
 	 * GET callback: available template options for the active theme.
 	 *
-	 * @return WP_REST_Response
+	 * @return \WP_REST_Response
 	 */
 	public static function api_get_template_options() {
 		return rest_ensure_response( self::get_template_options() );
