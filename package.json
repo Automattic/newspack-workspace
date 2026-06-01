@@ -51,6 +51,7 @@
 	},
 	"pnpm": {
 		"overrides": {
+			"basic-ftp": "5.3.1",
 			"@typescript-eslint/parser": "8.58.2"
 		}
 	}

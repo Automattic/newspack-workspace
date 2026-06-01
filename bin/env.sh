@@ -42,6 +42,65 @@ ip_for_env() {
     grep -o '127\.0\.0\.[0-9]*' "$1" | head -1
 }
 
+# Parse a docker-compose volume line for a worktree mount and emit "repo|branch".
+# Handles both shapes:
+#   legacy (pre-monorepo): "- ./worktrees/<repo>/<branch>:/newspack-repos/<repo>"
+#   monorepo:              "- ./worktrees/<safe_branch>/plugins/<repo>:/newspack-plugins/<repo>"
+#                          "- ./worktrees/<safe_branch>/themes/<repo>:/newspack-themes/<repo>"
+# Returns non-zero for lines that don't match either shape.
+parse_worktree_mount() {
+    local line="$1"
+    # Use regex extraction so the parser tolerates exactly what the grep
+    # admits (tabs / multi-space after the dash) and cuts cleanly at the
+    # next `:` — so mount-mode suffixes (`:ro`, `:cached`) and trailing
+    # comments don't fold into the captured fields.
+    #
+    # The emitted `branch` is the *mount-derived* identifier — the directory
+    # name as it appears in the compose file's host path. Legacy mounts have
+    # the unsanitized branch in the directory name; monorepo mounts have the
+    # sanitized (safe) form. Use resolve_unsanitized_branch() to recover the
+    # display form for the monorepo case. Keeping the parser mount-path-only
+    # ensures filesystem operations (e.g., worktree.sh remove) get a stable
+    # identifier that doesn't drift when the worktree's git state changes.
+    [[ "$line" =~ ^[[:space:]]*-[[:space:]]+\./worktrees/([^[:space:]:]+):/newspack-(repos|plugins|themes)/([^[:space:]:]+) ]] || return 1
+    local host_rel="worktrees/${BASH_REMATCH[1]}"
+    local container_type="${BASH_REMATCH[2]}"
+    local repo="${BASH_REMATCH[3]}"
+    local branch=""
+    case "$container_type" in
+        repos)
+            # Legacy: host = ./worktrees/<repo>/<branch> (slashes preserved in directory name).
+            branch="${host_rel#worktrees/$repo/}"
+            ;;
+        plugins|themes)
+            # Monorepo: host = ./worktrees/<safe_branch>/{plugins,themes}/<repo>.
+            branch="${host_rel#worktrees/}"
+            branch="${branch%/*/$repo}"
+            ;;
+    esac
+    [[ -n "$repo" && -n "$branch" ]] || return 1
+    echo "$repo|$branch"
+}
+
+# Resolve the unsanitized git branch name for a worktree directory.
+# Display-only — never use the result as a filesystem identifier. Falls back
+# to the safe (directory-name) form when the worktree is missing or its
+# branch ref can't be resolved (e.g., detached HEAD).
+resolve_unsanitized_branch() {
+    local safe_branch="$1"
+    local resolved
+    resolved=$(git -C "$NABSPATH/worktrees/$safe_branch" branch --show-current 2>/dev/null)
+    [[ -n "$resolved" ]] && echo "$resolved" || echo "$safe_branch"
+}
+
+# Iterate worktree mount lines in a compose file and yield "repo|branch" pairs.
+each_worktree_in_env() {
+    local file="$1"
+    while IFS= read -r line; do
+        parse_worktree_mount "$line"
+    done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$file" 2>/dev/null)
+}
+
 case $1 in
     create)
         env_name="$2"
@@ -398,9 +457,16 @@ MIGRATE
         echo "Environment '$env_name' is ready at https://${domain}/"
         # Copy built assets from main repos into worktrees.
         if [[ "$auto_build" == true ]]; then
-            grep 'worktrees/' "$compose_file" | while read -r line; do
+            # Anchored regex (matching each_worktree_in_env / get_target_container
+            # in n) so commented-out volume lines don't false-match and trigger
+            # spurious copies.
+            grep -E '^[[:space:]]*-[[:space:]]+\./worktrees/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$compose_file" 2>/dev/null | while read -r line; do
                 # Parse volume line: "- ./worktrees/repo/branch:/newspack-{plugins,themes}/repo"
-                wt_path=$(echo "$line" | sed 's/^ *- //' | cut -d: -f1)
+                # Strip leading whitespace + dash with the same [[:space:]] class
+                # the grep above uses. `env create` only emits 6-space-indented
+                # mounts, so a tab here arises only from a hand-edited compose
+                # file — this keeps the strip in step with the grep for that case.
+                wt_path=$(echo "$line" | sed -E 's/^[[:space:]]*-[[:space:]]*//' | cut -d: -f1)
                 container_path=$(echo "$line" | cut -d: -f2)
                 repo=$(basename "$container_path")
                 # Resolve the source from the monorepo layout.
@@ -444,11 +510,9 @@ MIGRATE
         if [[ -f "$compose_file" ]]; then
             domain=$(domain_for_env "$compose_file")
             ip=$(ip_for_env "$compose_file")
-            while IFS= read -r line; do
-                # Extract repo and branch from worktree volume lines like: ./worktrees/repo/branch:/newspack-plugins/repo
-                wt=$(echo "$line" | grep -o 'worktrees/[^:]*' | sed 's|worktrees/||')
-                [[ -n "$wt" ]] && worktree_entries+=("$wt")
-            done < <(grep 'worktrees/' "$compose_file")
+            while IFS= read -r entry; do
+                worktree_entries+=("$entry")
+            done < <(each_worktree_in_env "$compose_file")
         fi
         docker stop "$container_name" 2>/dev/null
         docker rm "$container_name" 2>/dev/null
@@ -485,9 +549,22 @@ MIGRATE
         fi
         # Remove compose file before worktrees so worktree.sh doesn't see them as env-bound.
         rm -f "$compose_file"
-        # Remove worktrees that were mounted by this environment.
-        for wt in "${worktree_entries[@]}"; do
-            IFS='/' read -r wt_repo wt_branch <<< "$wt"
+        # Remove worktrees that were mounted by this environment. The branch
+        # here is the mount-derived (safe) form from parse_worktree_mount —
+        # the stable filesystem identifier, not the live git branch. This is
+        # deliberate: if the worktree was retargeted to a different branch
+        # via `git checkout` after env creation, we still want destroy to
+        # remove the worktree directory the env was bound to, not whatever
+        # branch is currently checked out there.
+        #
+        # Known follow-up: for monorepo worktrees the safe form (e.g. feat-foo)
+        # won't match the real branch (feat/foo) in worktree.sh's final
+        # `git branch -D`, so the local branch ref is left dangling after the
+        # worktree dir is removed. Harmless (re-create reuses it) but accrues
+        # across create/destroy cycles. A proper fix removes the dir by safe
+        # name and deletes the branch by its resolved real name separately.
+        for entry in "${worktree_entries[@]}"; do
+            IFS='|' read -r wt_repo wt_branch <<< "$entry"
             "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
         done
         echo "Destroyed environment '$env_name'"
@@ -508,24 +585,26 @@ MIGRATE
             else
                 status="stopped"
             fi
-            # Collect worktrees as repo:branch pairs.
+            # Collect worktrees as repo:branch pairs. each_worktree_in_env
+            # yields the mount-derived safe branch; resolve_unsanitized_branch
+            # recovers the friendly display form (e.g., feat/foo) for monorepo
+            # worktrees while leaving filesystem-operation paths to the safe
+            # form.
             worktrees=""
-            while read -r repo; do
-                wt_path=$(grep "newspack-repos/$repo" "$f" | sed 's/^ *- //' | cut -d: -f1)
-                branch=$(echo "$wt_path" | sed "s|.*worktrees/${repo}/||")
+            while IFS='|' read -r repo safe_branch; do
+                branch=$(resolve_unsanitized_branch "$safe_branch")
                 [[ -n "$worktrees" ]] && worktrees="$worktrees,"
                 worktrees="${worktrees}${repo}:${branch}"
-            done < <(grep 'worktrees/' "$f" 2>/dev/null | sed 's|.*/newspack-repos/||')
+            done < <(each_worktree_in_env "$f")
             if [[ "$porcelain" == true ]]; then
                 printf '%s\t%s\thttps://%s/\t%s\n' "$name" "$status" "$domain" "$worktrees"
             else
                 echo "  $name ($status) https://${domain}/"
                 # Show worktrees mounted by this environment.
-                grep 'worktrees/' "$f" 2>/dev/null | sed 's|.*/newspack-repos/||' | while read -r repo; do
-                    wt_path=$(grep "newspack-repos/$repo" "$f" | sed 's/^ *- //' | cut -d: -f1)
-                    branch=$(echo "$wt_path" | sed "s|.*worktrees/${repo}/||")
+                while IFS='|' read -r repo safe_branch; do
+                    branch=$(resolve_unsanitized_branch "$safe_branch")
                     echo "    └ $repo ($branch)"
-                done
+                done < <(each_worktree_in_env "$f")
             fi
         done
         ;;
