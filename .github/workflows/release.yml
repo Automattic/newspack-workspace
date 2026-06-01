@@ -83,7 +83,14 @@ jobs:
       # reverts the internal deps back to workspace:*, and commits them once.
       # The [skip ci] commit won't re-trigger this workflow, and post-release.sh's
       # ancestry check is unaffected by the extra commit.
+      #
+      # Skipped on hotfix/* and epic/* branches: those are out-of-schedule
+      # prereleases whose bumped files are deliberately kept off the branch (the
+      # release configs drop their @semantic-release/git commit there too), so
+      # the hotfix PR diff stays clean. The prerelease zip is built from the
+      # working tree regardless, so nothing downstream needs this commit.
       - name: Sync package.json versions
+        if: ${{ !startsWith( github.ref_name, 'hotfix/' ) && !startsWith( github.ref_name, 'epic/' ) }}
         run: |
           node .github/scripts/finalize-package-versions.cjs
           # The release is already published by this point, so the branch must not
