@@ -80,11 +80,25 @@ fi
 # Infer the current working project from the current folder;
 projects=("${newspack_plugins[@]}" "newspack-theme" "newspack-block-theme") # create a new list with the appended value
 target_folder=""
+# Match on path-segment boundaries (not a raw substring) so a checkout whose
+# name merely contains a monorepo slug (e.g. newspack-ads-pro) isn't
+# mis-identified as the monorepo project (newspack-ads).
 for plugin in "${projects[@]}"; do
-    if [[ "$PWD" == *"$plugin"* ]]; then
+    if [[ "$PWD" == *"/$plugin/"* || "$PWD" == *"/$plugin" ]]; then
         target_folder=$plugin
     fi
 done
+# Standalone/local checkouts under repos/{plugins,themes}/<name> need no
+# registration: derive the project from the path via parameter expansion (no
+# subprocess). Gated on no monorepo match above so a tracked project of the
+# same name still wins.
+if [[ -z "$target_folder" && "$PWD" == *"/repos/plugins/"* ]]; then
+    rest="${PWD##*/repos/plugins/}"
+    target_folder="${rest%%/*}"
+elif [[ -z "$target_folder" && "$PWD" == *"/repos/themes/"* ]]; then
+    rest="${PWD##*/repos/themes/}"
+    target_folder="${rest%%/*}"
+fi
 
 path_param=""
 current_site_path="/var/www/html"
