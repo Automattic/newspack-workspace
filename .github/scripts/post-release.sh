@@ -8,9 +8,10 @@
 #   - merge `release` back into the repository's default branch so they stay in
 #     sync, notifying Slack on conflict.
 #
-# workspace:* preservation is handled at release time (config/release.js's
-# version-bump callback reverts msr's dependency concretization before the
-# release commit), so no dependency restoration is needed here.
+# workspace:* preservation is handled by .github/scripts/finalize-package-versions.cjs,
+# which runs after multi-semantic-release (the "Sync package.json versions" step
+# in release.yml) and reverts msr's dependency concretization in its own commit,
+# so no dependency restoration is needed here.
 #
 # This lives in the monorepo (not packages/scripts, which mirrors the legacy
 # newspack-scripts repo and is overwritten by the daily sync) and targets the
@@ -45,7 +46,7 @@ notify_slack() {
 git pull origin release
 git fetch origin alpha
 
-git checkout alpha
+git checkout -B alpha origin/alpha
 
 # Decide alpha-branch maintenance by whether alpha holds any commit that release
 # does not:
@@ -61,7 +62,7 @@ git checkout alpha
 if git merge-base --is-ancestor origin/alpha release; then
   echo "[post-release] alpha is fully contained in release; resetting alpha onto release."
   git reset --hard release --
-  git push --force origin alpha
+  git push --force-with-lease=alpha:origin/alpha origin alpha
 else
   echo "[post-release] alpha has unreleased commits; merging release into alpha."
   if git merge --no-ff release -m "chore(release): merge in release $LATEST_VERSION_TAG"; then

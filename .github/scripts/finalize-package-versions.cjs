@@ -32,7 +32,7 @@
 
 const fs = require( 'fs' );
 const path = require( 'path' );
-const { execSync } = require( 'child_process' );
+const { execSync, execFileSync } = require( 'child_process' );
 
 const root = execSync( 'git rev-parse --show-toplevel', { encoding: 'utf8' } ).trim();
 process.chdir( root );
@@ -100,7 +100,7 @@ for ( const group of [ 'plugins', 'themes' ] ) {
 // Stage every plugin/theme manifest; git only records the ones that actually
 // differ from HEAD (msr-bumped version and/or the reverted deps).
 for ( const rel of changedPaths ) {
-	execSync( `git add ${ JSON.stringify( rel ) }` );
+	execFileSync( 'git', [ 'add', '--', rel ] );
 }
 
 const staged = execSync( 'git diff --cached --name-only', { encoding: 'utf8' } ).split( '\n' ).filter( Boolean );

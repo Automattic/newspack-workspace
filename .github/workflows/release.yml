@@ -86,7 +86,13 @@ jobs:
       - name: Sync package.json versions
         run: |
           node .github/scripts/finalize-package-versions.cjs
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          # The release is already published by this point, so the branch must not
+          # be left without the synced version. If a concurrent push to the same
+          # ref rejects ours, rebase the sync commit on top and retry.
+          git push origin "HEAD:${GITHUB_REF_NAME}" || {
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          }
 
   # Branch maintenance after a stable release: reset alpha and sync release into
   # the default branch. Only runs on the release branch (not alpha/hotfix/epic).
