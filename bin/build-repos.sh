@@ -55,7 +55,11 @@ cd "$MONOREPO_ROOT"
 # Workspace install: pnpm resolves `workspace:*` deps (e.g. newspack-scripts)
 # and links shared bins into each package's node_modules/.bin.
 if [ "$MODE" = "ci" ]; then
-    pnpm install --frozen-lockfile
+    # CI=true keeps pnpm non-interactive so a one-time node_modules re-layout
+    # (e.g. after a hoist-pattern change in .npmrc) auto-purges instead of
+    # blocking on a confirmation prompt -- `n` runs pnpm via `docker exec`
+    # without a TTY in non-interactive contexts, where that prompt aborts.
+    CI=true pnpm install --frozen-lockfile
 else
     pnpm install
 fi
