@@ -27,6 +27,26 @@ for dir in "$PLUGINS_PATH"/*/; do
 	fi
 done
 
+# Symlink standalone repos from /newspack-repos/ into wp-content/plugins/.
+# These are separate checkouts under the gitignored repos/ directory (e.g.
+# private or customer-specific plugins, newspack-manager) that live outside the
+# monorepo. The mount is optional, so skip silently when repos/ is empty/absent.
+REPOS_PATH="/newspack-repos"
+if [ -d "$REPOS_PATH" ]; then
+	for dir in "$REPOS_PATH"/*/; do
+		[ -d "$dir" ] || continue
+		name=$(basename "$dir")
+		link="$WP_PATH/plugins/$name"
+		# -L also catches dangling symlinks that -e (which follows links) misses.
+		if [ -L "${link}" ] || [ -e "${link}" ]; then
+			echo "$name already symlinked"
+		else
+			echo "Symlinking standalone repo $name"
+			ln -s "$dir" "$link" || true
+		fi
+	done
+fi
+
 # Symlink themes. The classic theme contains child themes as subdirectories.
 for dir in "$THEMES_PATH"/*/; do
 	name=$(basename "$dir")

@@ -1,4 +1,6 @@
 .env
+# Standalone/local plugin checkouts outside the monorepo (see AGENTS.md);
+# mounted at /newspack-repos and symlinked into the active site.
 repos
 logs
 html

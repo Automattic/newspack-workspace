@@ -15,6 +15,7 @@ newspack-workspace is the Newspack monorepo. It contains all product plugins, th
 - `plugins/<name>/` - Product plugins (12 total).
 - `themes/<name>/` - Themes (newspack-theme, newspack-block-theme).
 - `packages/<name>/` - Shared libraries (scripts, components, colors, icons).
+- `repos/<name>/` - Standalone/local plugin checkouts that live outside the monorepo (e.g. private or customer-specific plugins, `newspack-manager`). Gitignored; mounted at `/newspack-repos` and symlinked into the active site by `bin/link-repos.sh`. `repos/` may itself be a symlink to an existing checkouts directory (Docker follows the mount-source symlink).
 
 Each directory is a standalone WordPress plugin/theme that can be zipped and installed independently.
 
