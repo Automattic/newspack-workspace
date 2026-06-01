@@ -73,6 +73,26 @@ jobs:
           # auth 401s. Set it to the same secret so npm actually authenticates.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=12288
+      # package.json is deliberately excluded from the @semantic-release/git
+      # prepare commit: that keeps multi-semantic-release's concretized
+      # workspace:* deps off the branch (they'd break the next
+      # `pnpm install --frozen-lockfile`, since the root lockfile is keyed to
+      # workspace:*), while the npm publish phase still reads the concretized
+      # working tree. The only thing lost is an up-to-date version on the branch,
+      # which this step restores: it takes msr's working-tree version bumps,
+      # reverts the internal deps back to workspace:*, and commits them once.
+      # The [skip ci] commit won't re-trigger this workflow, and post-release.sh's
+      # ancestry check is unaffected by the extra commit.
+      - name: Sync package.json versions
+        run: |
+          node .github/scripts/finalize-package-versions.cjs
+          # The release is already published by this point, so the branch must not
+          # be left without the synced version. If a concurrent push to the same
+          # ref rejects ours, rebase the sync commit on top and retry.
+          git push origin "HEAD:${GITHUB_REF_NAME}" || {
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          }
 
   # Branch maintenance after a stable release: reset alpha and sync release into
   # the default branch. Only runs on the release branch (not alpha/hotfix/epic).
