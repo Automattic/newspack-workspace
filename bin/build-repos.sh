@@ -24,6 +24,23 @@ package_filter_for_dir() {
     basename "$1"
 }
 
+# Build a standalone repos/ checkout with its own toolchain. These live outside
+# the pnpm workspace, so `pnpm --filter` can't see them. Composer + JS deps are
+# installed in-place; a missing composer.json/package.json is a no-op.
+build_standalone_repo() {
+    local dir="$1"
+    echo "Building standalone repo $dir"
+    [ -f "$dir/composer.json" ] && composer install --working-dir "$dir"
+    [ -f "$dir/package.json" ] || return 0
+    local pm="npm"
+    [ -f "$dir/pnpm-lock.yaml" ] && pm="pnpm"
+    [ -f "$dir/yarn.lock" ] && pm="yarn"
+    ( cd "$dir" && "$pm" install )
+    if grep -q '"build"[[:space:]]*:' "$dir/package.json" 2>/dev/null; then
+        ( cd "$dir" && "$pm" run build )
+    fi
+}
+
 if [ $# -eq 0 ]; then
     echo "No arguments provided"
     echo "Possible arguments: all, theme, block-theme, or any plugin slug"
@@ -45,18 +62,28 @@ fi
 
 case $WHAT_TO_BUILD in
     all)
-        # Composer install per project (each plugin still has its own composer.json
-        # for production deps; dev deps are hoisted to the root composer.json).
+        # Composer install per monorepo project (each plugin still has its own
+        # composer.json for production deps; dev deps are hoisted to the root).
+        # Standalone repos/ checkouts build with their own toolchain.
         while IFS= read -r dir; do
-            [ -d "$dir" ] && composer install --working-dir "$dir"
+            [ -d "$dir" ] || continue
+            if [[ "$dir" == "$REPOS_PATH"/* ]]; then
+                build_standalone_repo "$dir"
+            else
+                composer install --working-dir "$dir"
+            fi
         done < <(get_all_project_dirs)
         pnpm run build
         ;;
     *)
         dir="$(find_project "$WHAT_TO_BUILD")"
-        pkg=$(package_filter_for_dir "$dir")
-        echo "Building $dir (package: $pkg)"
-        composer install --working-dir "$dir"
-        pnpm --filter "$pkg" run build
+        if [[ "$dir" == "$REPOS_PATH"/* ]]; then
+            build_standalone_repo "$dir"
+        else
+            pkg=$(package_filter_for_dir "$dir")
+            echo "Building $dir (package: $pkg)"
+            composer install --working-dir "$dir"
+            pnpm --filter "$pkg" run build
+        fi
         ;;
 esac

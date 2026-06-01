@@ -85,6 +85,14 @@ for plugin in "${projects[@]}"; do
         target_folder=$plugin
     fi
 done
+# Standalone/local checkouts under repos/{plugins,themes}/<name> need no
+# registration: derive the project from the path. Gated on no monorepo match
+# above so a tracked project of the same name still wins.
+if [[ -z "$target_folder" && "$PWD" == *"/repos/plugins/"* ]]; then
+    target_folder=$(echo "$PWD" | sed -e 's#.*/repos/plugins/##' | cut -d'/' -f1)
+elif [[ -z "$target_folder" && "$PWD" == *"/repos/themes/"* ]]; then
+    target_folder=$(echo "$PWD" | sed -e 's#.*/repos/themes/##' | cut -d'/' -f1)
+fi
 
 path_param=""
 current_site_path="/var/www/html"

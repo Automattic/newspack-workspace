@@ -1,7 +1,11 @@
 .env
-# Standalone/local plugin checkouts outside the monorepo (see AGENTS.md);
-# mounted at /newspack-repos and symlinked into the active site.
-repos
+# Standalone/local plugin & theme checkouts outside the monorepo (see AGENTS.md);
+# mounted at /newspack-repos and symlinked into the active site. The
+# repos/{plugins,themes} dirs are tracked (.gitkeep); their contents are not.
+repos/plugins/*
+repos/themes/*
+!repos/plugins/.gitkeep
+!repos/themes/.gitkeep
 logs
 html
 data

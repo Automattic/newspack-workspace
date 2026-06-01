@@ -27,26 +27,6 @@ for dir in "$PLUGINS_PATH"/*/; do
 	fi
 done
 
-# Symlink standalone repos from /newspack-repos/ into wp-content/plugins/.
-# These are separate checkouts under the gitignored repos/ directory (e.g.
-# private or customer-specific plugins, newspack-manager) that live outside the
-# monorepo. The mount is optional, so skip silently when repos/ is empty/absent.
-REPOS_PATH="/newspack-repos"
-if [ -d "$REPOS_PATH" ]; then
-	for dir in "$REPOS_PATH"/*/; do
-		[ -d "$dir" ] || continue
-		name=$(basename "$dir")
-		link="$WP_PATH/plugins/$name"
-		# -L also catches dangling symlinks that -e (which follows links) misses.
-		if [ -L "${link}" ] || [ -e "${link}" ]; then
-			echo "$name already symlinked"
-		else
-			echo "Symlinking standalone repo $name"
-			ln -s "$dir" "$link" || true
-		fi
-	done
-fi
-
 # Symlink themes. The classic theme contains child themes as subdirectories.
 for dir in "$THEMES_PATH"/*/; do
 	name=$(basename "$dir")
@@ -80,4 +60,39 @@ for dir in "$THEMES_PATH"/*/; do
 			ln -s "$dir" "$link" || true
 		fi
 	fi
+done
+
+# Symlink standalone/local plugins and themes from the gitignored repos/ dir.
+# These are separate checkouts that live outside the monorepo (e.g. private or
+# customer-specific plugins, newspack-manager, licensed WooCommerce extensions),
+# split by type so each lands in the right place:
+#   repos/plugins/<name> -> wp-content/plugins/<name>
+#   repos/themes/<name>  -> wp-content/themes/<name>
+# Any directory works -- no registration needed. This runs after the monorepo
+# loops above, so a name that also ships in plugins/ or themes/ is already
+# linked and is skipped here: the tracked (monorepo) copy takes precedence.
+# The mount is optional, so skip silently when a subdir is empty/absent.
+REPOS_PATH="/newspack-repos"
+for kind in plugins themes; do
+	src_base="$REPOS_PATH/$kind"
+	[ -d "$src_base" ] || continue
+	for dir in "$src_base"/*/; do
+		[ -d "$dir" ] || continue
+		name=$(basename "$dir")
+		link="$WP_PATH/$kind/$name"
+		# -L also catches dangling symlinks that -e (which follows links) misses.
+		if [ -L "${link}" ] || [ -e "${link}" ]; then
+			# Distinguish a tracked monorepo copy (which takes precedence) from a
+			# plain idempotent re-run where this same repos/ link already exists.
+			case "$(readlink "${link}" 2>/dev/null)" in
+				"$PLUGINS_PATH"/*|"$THEMES_PATH"/*)
+					echo "skipping repos/$kind/$name: tracked monorepo copy takes precedence" ;;
+				*)
+					echo "$name already symlinked" ;;
+			esac
+		else
+			echo "Symlinking standalone $kind $name"
+			ln -s "$dir" "$link" || true
+		fi
+	done
 done
