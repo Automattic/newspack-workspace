@@ -135,6 +135,12 @@
 	color: #996800;
 }
 
+/* Tooltip hint on role badges */
+.agent-access-badge--has-tooltip {
+	cursor: help;
+	border-bottom: 1px dotted currentColor;
+}
+
 .agent-access-badge--administrator {
 	background: #fef2f0;
 	color: #cc1818;

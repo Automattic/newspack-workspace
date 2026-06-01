@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.6
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.1.17
+Stable tag: 2.1.18
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -75,6 +75,9 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.1.18 =
+* Connections tab: role badges now show a tooltip on hover with a plain-English description of what that role can do (e.g. "Can publish and manage all posts, pages, categories, and comments."). Custom roles derive their tooltip from actual capabilities.
 
 = 2.1.17 =
 * Rebrand UI labels from "BotCreds" to "Agent Access" in Tools menu, settings page title, profile sections, and admin JS. Underlying credential name unchanged for backwards compatibility.

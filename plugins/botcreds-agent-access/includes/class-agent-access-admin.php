@@ -576,7 +576,10 @@ class Agent_Access_Admin {
 								<span class="description"><?php echo esc_html( $entry['user']->user_login ); ?></span>
 							</td>
 							<td>
-								<span class="agent-access-badge agent-access-badge--<?php echo esc_attr( $entry['role_slug'] ); ?>">
+								<?php $tooltip = $this->get_role_tooltip( $entry['role_slug'] ); ?>
+								<span class="agent-access-badge agent-access-badge--<?php echo esc_attr( $entry['role_slug'] ); ?><?php echo $tooltip ? ' agent-access-badge--has-tooltip' : ''; ?>"
+									<?php if ( $tooltip ) : ?>title="<?php echo esc_attr( $tooltip ); ?>"<?php endif; ?>
+								>
 									<?php echo esc_html( $entry['role_name'] ); ?>
 								</span>
 							</td>
@@ -854,6 +857,65 @@ class Agent_Access_Admin {
 	 *
 	 * @return array
 	 */
+	/**
+	 * Return a human-readable tooltip describing what a role can do.
+	 *
+	 * Returns hardcoded strings for the five WordPress core roles. For custom
+	 * roles it inspects the role's capabilities and builds a short summary.
+	 *
+	 * @param string $role_slug Role slug.
+	 * @return string Tooltip text, or empty string if none can be derived.
+	 */
+	private function get_role_tooltip( $role_slug ) {
+		$core = array(
+			'administrator' => __( 'Full site access: publish and manage all content, users, plugins, and settings.', 'botcreds-agent-access' ),
+			'editor'        => __( 'Can publish and manage all posts, pages, categories, and comments.', 'botcreds-agent-access' ),
+			'author'        => __( 'Can publish and manage their own posts only.', 'botcreds-agent-access' ),
+			'contributor'   => __( 'Can write posts but cannot publish — requires editor approval.', 'botcreds-agent-access' ),
+			'subscriber'    => __( 'Read-only access. Cannot create or edit content.', 'botcreds-agent-access' ),
+		);
+
+		if ( isset( $core[ $role_slug ] ) ) {
+			return $core[ $role_slug ];
+		}
+
+		// Custom role: derive from capabilities.
+		$role = get_role( $role_slug );
+		if ( ! $role ) {
+			return '';
+		}
+
+		$caps  = $role->capabilities;
+		$parts = array();
+
+		if ( ! empty( $caps['manage_options'] ) ) {
+			$parts[] = __( 'manage site settings', 'botcreds-agent-access' );
+		}
+		if ( ! empty( $caps['edit_others_posts'] ) ) {
+			$parts[] = __( 'edit all posts', 'botcreds-agent-access' );
+		} elseif ( ! empty( $caps['publish_posts'] ) ) {
+			$parts[] = __( 'publish own posts', 'botcreds-agent-access' );
+		} elseif ( ! empty( $caps['edit_posts'] ) ) {
+			$parts[] = __( 'draft own posts', 'botcreds-agent-access' );
+		}
+		if ( ! empty( $caps['upload_files'] ) ) {
+			$parts[] = __( 'upload media', 'botcreds-agent-access' );
+		}
+		if ( ! empty( $caps['manage_categories'] ) ) {
+			$parts[] = __( 'manage categories', 'botcreds-agent-access' );
+		}
+
+		if ( empty( $parts ) ) {
+			return __( 'Custom role — limited or read-only access.', 'botcreds-agent-access' );
+		}
+
+		return sprintf(
+			/* translators: %s: comma-separated list of capabilities */
+			__( 'Can: %s.', 'botcreds-agent-access' ),
+			implode( ', ', $parts )
+		);
+	}
+
 	/**
 	 * Whether the Connections list may be truncated due to the 200-user fetch cap.
 	 *
