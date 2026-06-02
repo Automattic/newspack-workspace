@@ -8,7 +8,7 @@ import { useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { ActionCard, Button, Modal, Notice, PluginInstaller, withWizardScreen } from '../../../../../packages/components/src';
+import { ActionCard, Button, Notice, PluginInstaller, useConfirmDialog, withWizardScreen } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
 import { NEWSPACK, NRH, OTHER } from '../../constants';
@@ -45,7 +45,15 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 	const { saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ installing, setInstalling ] = useState( null );
 	const [ installFailed, setInstallFailed ] = useState( false );
-	const [ showDisableConfirm, setShowDisableConfirm ] = useState( false );
+	const { confirmDialog: disableDialog, requestConfirm: requestDisable } = useConfirmDialog( {
+		title: __( 'Disable Audience Management?', 'newspack-plugin' ),
+		message: __(
+			'Disabling Audience Management turns off reader registration, the My Account dashboard, and related reader features. Your settings are preserved and you can re-enable it later.',
+			'newspack-plugin'
+		),
+		confirmButtonText: __( 'Disable', 'newspack-plugin' ),
+		isDestructive: true,
+	} );
 
 	const choose = value => {
 		saveWizardSettings( {
@@ -135,7 +143,7 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 									// Enabling moves the user forward to the configuration page.
 									saveConfig( { enabled: true } ).then( () => onComplete() );
 								} else {
-									setShowDisableConfirm( true );
+									requestDisable( () => saveConfig( { enabled: false } ) );
 								}
 							} }
 							disabled={ inFlight }
@@ -168,31 +176,7 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 					) }
 				</>
 			) }
-			{ showDisableConfirm && (
-				<Modal title={ __( 'Disable Audience Management?', 'newspack-plugin' ) } onRequestClose={ () => setShowDisableConfirm( false ) }>
-					<p>
-						{ __(
-							'Disabling Audience Management turns off reader registration, the My Account dashboard, and related reader features. Your settings are preserved and you can re-enable it later.',
-							'newspack-plugin'
-						) }
-					</p>
-					<div className="newspack-buttons-card">
-						<Button isSecondary onClick={ () => setShowDisableConfirm( false ) }>
-							{ __( 'Cancel', 'newspack-plugin' ) }
-						</Button>
-						<Button
-							isPrimary
-							isDestructive
-							onClick={ () => {
-								saveConfig( { enabled: false } );
-								setShowDisableConfirm( false );
-							} }
-						>
-							{ __( 'Disable', 'newspack-plugin' ) }
-						</Button>
-					</div>
-				</Modal>
-			) }
+			{ disableDialog }
 		</WizardsTab>
 	);
 };
