@@ -41,7 +41,7 @@ export const OPTIONS = [
 	},
 ];
 
-const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight, showEnableToggle, platform } ) => {
+const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight, showEnableToggle, platform, platformSelected } ) => {
 	const { saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ installing, setInstalling ] = useState( null );
 	const [ installFailed, setInstallFailed ] = useState( false );
@@ -141,18 +141,24 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 							disabled={ inFlight }
 						/>
 					) }
-					{ OPTIONS.map( option => (
-						<ActionCard
-							key={ option.value }
-							isMedium
-							title={ option.title }
-							description={ option.description }
-							badge={ option.value === platform ? __( 'Selected', 'newspack-plugin' ) : undefined }
-							badgeLevel={ option.value === platform ? 'success' : undefined }
-							actionText={ __( 'Select', 'newspack-plugin' ) }
-							onClick={ () => choose( option.value ) }
-						/>
-					) ) }
+					{ OPTIONS.map( option => {
+						// Only badge a platform once one has actually been chosen. The slug
+						// defaults to 'wc' (Newspack) before any selection, so without this
+						// guard Newspack would appear "Selected" on first run.
+						const isSelected = platformSelected && option.value === platform;
+						return (
+							<ActionCard
+								key={ option.value }
+								isMedium
+								title={ option.title }
+								description={ option.description }
+								badge={ isSelected ? __( 'Selected', 'newspack-plugin' ) : undefined }
+								badgeLevel={ isSelected ? 'success' : undefined }
+								actionText={ __( 'Select', 'newspack-plugin' ) }
+								onClick={ () => choose( option.value ) }
+							/>
+						);
+					} ) }
 					{ onCancel && (
 						<div className="newspack-buttons-card">
 							<Button isSecondary onClick={ onCancel }>

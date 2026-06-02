@@ -164,6 +164,7 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 								<PlatformSelection
 									{ ...props }
 									tabbedNavigation={ null }
+									platformSelected={ platformSelected }
 									showEnableToggle={ platformSelected }
 									onComplete={ () => {
 										setShowChooser( false );
