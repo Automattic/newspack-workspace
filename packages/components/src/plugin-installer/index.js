@@ -131,8 +131,7 @@ class PluginInstaller extends Component {
 			const { onStatus } = this.props;
 			this.setState(
 				prevState => ( {
-					pluginInfo:
-						typeof pluginInfoOrUpdater === 'function' ? pluginInfoOrUpdater( prevState.pluginInfo ) : pluginInfoOrUpdater,
+					pluginInfo: typeof pluginInfoOrUpdater === 'function' ? pluginInfoOrUpdater( prevState.pluginInfo ) : pluginInfoOrUpdater,
 				} ),
 				() => {
 					const { pluginInfo } = this.state;
