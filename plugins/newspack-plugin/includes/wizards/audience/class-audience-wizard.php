@@ -76,12 +76,13 @@ class Audience_Wizard extends Wizard {
 		parent::enqueue_scripts_and_styles();
 		$salesforce_settings = Salesforce::get_salesforce_settings();
 		$data = [
-			'has_memberships'         => Memberships::is_active(),
-			'reader_activation_url'   => admin_url( 'admin.php?page=newspack-audience#/' ),
-			'esp_metadata_fields'     => Reader_Activation\Sync\Metadata::get_default_fields(),
-			'can_use_salesforce'      => ! empty( $salesforce_settings['client_id'] ),
-			'salesforce_redirect_url' => Salesforce::get_redirect_url(),
-			'available_products'      => Content_Gate::get_purchasable_product_options(),
+			'has_memberships'               => Memberships::is_active(),
+			'reader_activation_url'         => admin_url( 'admin.php?page=newspack-audience#/' ),
+			'esp_metadata_fields'           => Reader_Activation\Sync\Metadata::get_default_fields(),
+			'can_use_salesforce'            => ! empty( $salesforce_settings['client_id'] ),
+			'salesforce_redirect_url'       => Salesforce::get_redirect_url(),
+			'available_products'            => Content_Gate::get_purchasable_product_options(),
+			'integrations_settings_enabled' => Audience_Integrations::is_enabled(),
 		];
 
 		if ( method_exists( 'Newspack\Newsletters\Subscription_Lists', 'get_add_new_url' ) ) {
