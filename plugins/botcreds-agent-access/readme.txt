@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.6
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.1.18
+Stable tag: 2.1.19
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -75,6 +75,9 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.1.19 =
+* "View details" modal now shows full plugin description, installation steps, FAQ, and changelog — populated locally via plugins_api filter instead of a WordPress.org API call.
 
 = 2.1.18 =
 * Connections tab: role badges now show a tooltip on hover with a plain-English description of what that role can do (e.g. "Can publish and manage all posts, pages, categories, and comments."). Custom roles derive their tooltip from actual capabilities.
