@@ -892,10 +892,11 @@ class Test_Integrations extends \WP_UnitTestCase {
 			$this->markTestSkipped( 'ActionScheduler not available.' );
 		}
 
-		$called = 0;
 		$integration = new class( 'pull-skip', 'Pull Skip' ) extends Sample_Integration {
 			/**
-			 * @var int Count of pull_contact_data calls.
+			 * Count of pull_contact_data calls.
+			 *
+			 * @var int
 			 */
 			public static $pull_count = 0;
 
@@ -910,10 +911,10 @@ class Test_Integrations extends \WP_UnitTestCase {
 				return [ 'favorite_color' => 'blue' ];
 			}
 		};
-		$integration::$pull_count                 = 0;
+		$integration::$pull_count = 0;
 		$integration->update_enabled_incoming_fields( [ 'favorite_color' ] );
 
-		Sample_Integration::$is_set_up_value      = false;
+		Sample_Integration::$is_set_up_value = false;
 
 		Integrations::register( $integration );
 		Integrations::enable( 'pull-skip' );
@@ -948,7 +949,9 @@ class Test_Integrations extends \WP_UnitTestCase {
 
 		$integration = new class( 'pull-retry-abort', 'Pull Retry Abort' ) extends Sample_Integration {
 			/**
-			 * @var int Count of pull_contact_data calls.
+			 * Count of pull_contact_data calls.
+			 *
+			 * @var int
 			 */
 			public static $pull_count = 0;
 
@@ -963,10 +966,10 @@ class Test_Integrations extends \WP_UnitTestCase {
 				return new \WP_Error( 'mock_error', 'Mock pull failed' );
 			}
 		};
-		$integration::$pull_count                 = 0;
+		$integration::$pull_count = 0;
 		$integration->update_enabled_incoming_fields( [ 'favorite_color' ] );
 
-		Sample_Integration::$is_set_up_value      = false;
+		Sample_Integration::$is_set_up_value = false;
 
 		Integrations::register( $integration );
 		Integrations::enable( 'pull-retry-abort' );
