@@ -625,4 +625,138 @@ class SegmentsTest extends WP_UnitTestCase {
 			$this->assertSame( $key, $last_segment['name'] );
 		}
 	}
+
+	/**
+	 * Disabled number-based criteria (`{ min: 0, max: 0 }`) should be dropped
+	 * from a segment's criteria so they never reach the front-end criteria
+	 * array. Regression test for NPPM-2890.
+	 */
+	public function test_update_segment_drops_disabled_criteria() {
+		Newspack_Popups_Segmentation::create_segment( $this->complete_and_valid );
+		$segment = Newspack_Popups_Segmentation::get_segments()[0];
+
+		$segment['criteria'] = [
+			[
+				'criteria_id' => 'articles_read',
+				'value'       => [
+					'min' => 5,
+					'max' => 20,
+				],
+			],
+			[
+				'criteria_id' => 'articles_read_in_session',
+				'value'       => [
+					'min' => 0,
+					'max' => 0,
+				],
+			],
+			[
+				'criteria_id' => 'favorite_categories',
+				'value'       => [],
+			],
+			[
+				'criteria_id' => 'newsletter',
+				'value'       => '',
+			],
+			[
+				'criteria_id' => 'donation',
+				'value'       => 'donors',
+			],
+		];
+
+		$result = Newspack_Popups_Segmentation::update_segment( $segment );
+
+		$this->assertCount(
+			2,
+			$result[0]['criteria'],
+			'Only criteria with non-empty values should be persisted.'
+		);
+		$criteria_ids = wp_list_pluck( $result[0]['criteria'], 'criteria_id' );
+		$this->assertSame( [ 'articles_read', 'donation' ], $criteria_ids );
+	}
+
+	/**
+	 * Already-stored disabled criteria should be filtered out on read so
+	 * publishers don't have to re-save every segment to recover.
+	 */
+	public function test_get_segment_filters_legacy_disabled_criteria() {
+		Newspack_Popups_Segmentation::create_segment( $this->complete_and_valid );
+		$segment_id = Newspack_Popups_Segmentation::get_segments()[0]['id'];
+
+		// Simulate legacy data: criteria written directly to term meta, bypassing the save-time filter.
+		update_term_meta(
+			$segment_id,
+			'criteria',
+			[
+				[
+					'criteria_id' => 'articles_read',
+					'value'       => [
+						'min' => 5,
+						'max' => 20,
+					],
+				],
+				[
+					'criteria_id' => 'articles_read_in_session',
+					'value'       => [
+						'min' => 0,
+						'max' => 0,
+					],
+				],
+				[
+					'criteria_id' => 'sources_to_match',
+					'value'       => [],
+				],
+			]
+		);
+
+		$segment = Newspack_Popups_Segmentation::get_segment( $segment_id );
+
+		$this->assertCount( 1, $segment['criteria'] );
+		$this->assertSame( 'articles_read', $segment['criteria'][0]['criteria_id'] );
+	}
+
+	/**
+	 * Partially-disabled range criteria (one of min/max set) must be preserved.
+	 */
+	public function test_filter_criteria_preserves_partial_range() {
+		$criteria = [
+			[
+				'criteria_id' => 'articles_read',
+				'value'       => [
+					'min' => 3,
+					'max' => 0,
+				],
+			],
+			[
+				'criteria_id' => 'articles_read_in_session',
+				'value'       => [
+					'min' => 0,
+					'max' => 5,
+				],
+			],
+		];
+
+		$filtered = Newspack_Segments_Model::filter_criteria( $criteria );
+
+		$this->assertCount( 2, $filtered );
+	}
+
+	/**
+	 * Criteria without a `criteria_id` or with non-array entries should be dropped.
+	 */
+	public function test_filter_criteria_drops_malformed_entries() {
+		$criteria = [
+			'not-an-array',
+			[ 'value' => 5 ],
+			[
+				'criteria_id' => 'articles_read',
+				'value'       => 5,
+			],
+		];
+
+		$filtered = Newspack_Segments_Model::filter_criteria( $criteria );
+
+		$this->assertCount( 1, $filtered );
+		$this->assertSame( 'articles_read', $filtered[0]['criteria_id'] );
+	}
 }

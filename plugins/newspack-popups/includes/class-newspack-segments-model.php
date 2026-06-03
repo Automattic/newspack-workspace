@@ -518,7 +518,75 @@ final class Newspack_Segments_Model {
 		}
 
 		// Ensure we got the segment in its latest version.
-		return Newspack_Segments_Migration::migrate_criteria_configuration( $segment );
+		$segment = Newspack_Segments_Migration::migrate_criteria_configuration( $segment );
+
+		// Drop disabled criteria (e.g. number-based criteria the editor saved with {min:0, max:0}).
+		if ( isset( $segment['criteria'] ) ) {
+			$segment['criteria'] = self::filter_criteria( $segment['criteria'] );
+		}
+
+		return $segment;
+	}
+
+	/**
+	 * Filter out disabled criteria from a segment's criteria array.
+	 *
+	 * A criterion is considered disabled when its value carries no constraint
+	 * (e.g. null, empty string, numeric `0`, empty array, or an associative
+	 * array whose entries are all themselves empty). This prevents disabled
+	 * number-based criteria like `{ min: 0, max: 0 }` from leaking through to
+	 * the front-end criteria array and being evaluated as active constraints.
+	 *
+	 * @param mixed $criteria Criteria array from segment meta. Non-arrays return [].
+	 * @return array Filtered criteria, re-indexed.
+	 */
+	public static function filter_criteria( $criteria ) {
+		if ( ! is_array( $criteria ) ) {
+			return [];
+		}
+		return array_values(
+			array_filter(
+				$criteria,
+				function( $item ) {
+					return is_array( $item )
+						&& isset( $item['criteria_id'] )
+						&& ! self::is_criteria_value_empty( $item['value'] ?? null );
+				}
+			)
+		);
+	}
+
+	/**
+	 * Determine whether a criterion value represents "no constraint".
+	 *
+	 * Walks arrays/objects so partially-disabled values (e.g. `{ min: 0, max: 0 }`)
+	 * are recognised as empty.
+	 *
+	 * @param mixed $value Criterion value.
+	 * @return bool True if the value carries no constraint.
+	 */
+	private static function is_criteria_value_empty( $value ) {
+		if ( null === $value ) {
+			return true;
+		}
+		if ( is_string( $value ) ) {
+			return '' === $value || '0' === $value;
+		}
+		if ( is_int( $value ) || is_float( $value ) ) {
+			return 0 === $value || 0.0 === $value;
+		}
+		if ( is_array( $value ) ) {
+			if ( [] === $value ) {
+				return true;
+			}
+			foreach ( $value as $sub ) {
+				if ( ! self::is_criteria_value_empty( $sub ) ) {
+					return false;
+				}
+			}
+			return true;
+		}
+		return false;
 	}
 
 	/**
@@ -579,7 +647,7 @@ final class Newspack_Segments_Model {
 		}
 
 		update_term_meta( $segment['id'], 'updated_at', gmdate( 'Y-m-d' ) );
-		update_term_meta( $segment['id'], 'criteria', $segment['criteria'] ?? [] );
+		update_term_meta( $segment['id'], 'criteria', self::filter_criteria( $segment['criteria'] ?? [] ) );
 		update_term_meta( $segment['id'], 'configuration', $segment['configuration'] );
 
 		return self::get_segments();
