@@ -109,15 +109,21 @@ jobs:
       # Post a release-success summary to Slack: stable releases (release branch)
       # go to the a8c workspace, alpha releases to the Newspack workspace. Only
       # these two branches notify; hotfix/* and epic/* publish silently.
+      # Only the workspace for this branch's release type gets its token, so an
+      # alpha run never sees the a8c token and vice versa (the empty fallback is
+      # fine: the script skips when its token/channel is unset). continue-on-error
+      # is a backstop so a notification hiccup can never fail an already-published
+      # release; the script also traps errors and exits 0 on its own.
       - name: Notify Slack of release
         if: ${{ success() && ( github.ref_name == 'release' || github.ref_name == 'alpha' ) }}
+        continue-on-error: true
         env:
           TAGS_BEFORE_FILE: ${{ runner.temp }}/tags-before.txt
-          SLACK_AUTH_TOKEN: ${{ secrets.SLACK_AUTH_TOKEN }}
-          SLACK_NEWSPACK_BOT_TOKEN: ${{ secrets.SLACK_NEWSPACK_BOT_TOKEN }}
+          SLACK_AUTH_TOKEN: ${{ github.ref_name == 'release' && secrets.SLACK_AUTH_TOKEN || '' }}
+          SLACK_NEWSPACK_BOT_TOKEN: ${{ github.ref_name == 'alpha' && secrets.SLACK_NEWSPACK_BOT_TOKEN || '' }}
           SLACK_A8C_RELEASE_CHANNEL_ID: ${{ vars.SLACK_A8C_RELEASE_CHANNEL_ID }}
           SLACK_NEWSPACK_RELEASE_CHANNEL_ID: ${{ vars.SLACK_NEWSPACK_RELEASE_CHANNEL_ID }}
-          SLACK_SUPPORT_TEAM_SUBTEAM_ID: ${{ vars.SLACK_SUPPORT_TEAM_SUBTEAM_ID }}
+          SLACK_SUPPORT_TEAM_SUBTEAM_ID: ${{ github.ref_name == 'release' && vars.SLACK_SUPPORT_TEAM_SUBTEAM_ID || '' }}
         run: ./.github/scripts/notify-release.sh
 
   # Branch maintenance after a stable release: reset alpha and sync release into

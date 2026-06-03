@@ -24,6 +24,13 @@
 
 set -euo pipefail
 
+# A failure here must never fail the release job (the release has already
+# happened). Any unhandled error under `set -e` degrades to a warning and a
+# clean exit, rather than turning the run red. Intentional control-flow
+# "failures" (grep -q, comm, the guarded curl) are exempt because bash does not
+# trigger ERR for commands whose status is tested.
+trap 'echo "[notify-release] WARNING: unexpected error in: ${BASH_COMMAND}. Skipping notification."; exit 0' ERR
+
 REF="${GITHUB_REF_NAME:-}"
 
 case "$REF" in
