@@ -2,7 +2,7 @@
 /**
  * Tests for the SCAIP metaboxes / sidebar panel module.
  *
- * @package super-cool-ad-inserter-plugin
+ * @package super-cool-ad-inserter
  */
 
 /**

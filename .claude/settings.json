@@ -1,7 +1,6 @@
 {
   "enabledPlugins": {
     "newspack@newspack-devkit": true,
-    "superpowers@claude-plugins-official": true,
     "context7@claude-plugins-official": true,
     "linear@claude-plugins-official": true,
     "figma@claude-plugins-official": true

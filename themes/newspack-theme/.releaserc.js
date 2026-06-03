@@ -1,3 +1,5 @@
+const { gitCommitStep } = require( '../../config/release-helpers' );
+
 const THEMES = [
 	'newspack-theme',
 	'newspack-joseph',
@@ -43,14 +45,10 @@ module.exports = {
 				callback: 'npm run release:archive',
 			},
 		],
-		{
-			path: '@semantic-release/git',
-			assets: [
-				...THEMES.map( name => `${ name }/sass/theme-description.scss` ),
-				'CHANGELOG.md',
-			],
-			message: 'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
-		},
+		...gitCommitStep( [
+			...THEMES.map( name => `${ name }/sass/theme-description.scss` ),
+			'CHANGELOG.md',
+		] ),
 	],
 	plugins: [
 		'@semantic-release/commit-analyzer',

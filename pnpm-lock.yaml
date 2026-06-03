@@ -537,7 +537,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/scripts
 
-  plugins/super-cool-ad-inserter-plugin:
+  plugins/super-cool-ad-inserter:
     devDependencies:
       newspack-scripts:
         specifier: workspace:*

@@ -116,9 +116,25 @@ class WP_UnitTestCase_PageWithPopups extends WP_UnitTestCase {
 		// Reset internal duplicate-prevention.
 		Newspack_Popups_Inserter::$the_content_has_rendered = false;
 
+		// Drain any overlays queued from previous renders in this test class.
+		ob_start();
+		Newspack_Popups_Inserter::print_queued_overlays();
+		ob_end_clean();
+
 		$content = get_post( $post_id )->post_content;
 
-		self::$post_content = apply_filters( 'the_content', $content );
+		$filtered_content = apply_filters( 'the_content', $content );
+
+		// Overlay prompts are now portaled to wp_footer rather than emitted
+		// inside post content. Concatenate the flushed footer output so the
+		// existing DOM-based assertions can still find overlay markup via the
+		// `newspack-popup-container` class, mirroring how the rendered page
+		// actually looks in the browser (post body + overlays before </body>).
+		ob_start();
+		Newspack_Popups_Inserter::print_queued_overlays();
+		$footer_overlays = ob_get_clean();
+
+		self::$post_content = $filtered_content . $footer_overlays;
 		$dom                = new DomDocument();
 		@$dom->loadHTML( self::$post_content ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
 		self::$dom_xpath = new DOMXpath( $dom );

@@ -1086,12 +1086,59 @@ final class Newspack_Popups_Model {
 	}
 
 	/**
+	 * Generate just the scroll-trigger page-position marker for an overlay popup.
+	 *
+	 * The marker is a `position: absolute; top: X%` element whose position is
+	 * computed against its nearest `position: relative` ancestor (typically the
+	 * post's `.entry-content`). An IntersectionObserver on this marker is what
+	 * reveals the scroll-triggered overlay. The lightbox is portaled to
+	 * wp_footer to escape ancestor stacking-context traps, but the marker
+	 * stays inline at the article container so its percentage offset still
+	 * encodes "scroll progress through the article".
+	 *
+	 * Returns the empty string for popups that aren't scroll-triggered overlays.
+	 *
+	 * @param array<string, mixed> $popup A fully-hydrated popup object as returned
+	 *                                    by {@see create_popup_object()}.
+	 * @return string Marker HTML, or '' when no marker is needed.
+	 */
+	public static function generate_position_marker( array $popup ): string {
+		if ( ! self::is_overlay( $popup ) ) {
+			return '';
+		}
+		$trigger_type = $popup['options']['trigger_type'] ?? '';
+		if ( 'scroll' !== $trigger_type ) {
+			return '';
+		}
+		$element_id = self::canonize_popup_id( $popup['id'] );
+		$progress   = absint( $popup['options']['trigger_scroll_progress'] ?? 0 );
+		return sprintf(
+			'<div id="page-position-marker_%1$s" class="page-position-marker" style="position: absolute; top: %2$d%%"></div>',
+			esc_attr( $element_id ),
+			$progress
+		);
+	}
+
+	/**
 	 * Generate markup and styles for an overlay popup.
 	 *
-	 * @param string $popup The popup object.
+	 * @param array<string, mixed> $popup                    A fully-hydrated popup object.
+	 * @param bool                 $include_position_marker  When true (default), the
+	 *                                                       returned markup includes the
+	 *                                                       scroll-trigger page-position
+	 *                                                       marker. Pass false when the
+	 *                                                       marker is emitted separately
+	 *                                                       at the content position via
+	 *                                                       {@see generate_position_marker()},
+	 *                                                       so the marker's percentage `top`
+	 *                                                       resolves against its
+	 *                                                       `position: relative` ancestor
+	 *                                                       (typically `.entry-content`)
+	 *                                                       rather than against the portaled
+	 *                                                       lightbox's footer position.
 	 * @return string The generated markup.
 	 */
-	public static function generate_popup( $popup ) {
+	public static function generate_popup( $popup, bool $include_position_marker = true ) {
 		$previewed_popup_id            = Newspack_Popups::previewed_popup_id();
 		$is_manual_or_custom_placement = self::is_manual_only( $popup ) || Newspack_Popups_Custom_Placements::is_custom_placement_or_manual( $popup );
 
@@ -1204,9 +1251,11 @@ final class Newspack_Popups_Model {
 				<?php endif; ?>
 			<?php endif; ?>
 		</div>
-		<?php if ( $is_scroll_triggered ) : ?>
-			<div id="page-position-marker_<?php echo esc_attr( $element_id ); ?>" class="page-position-marker" style="position: absolute; top: <?php echo esc_attr( $popup['options']['trigger_scroll_progress'] ); ?>%"></div>
-		<?php endif; ?>
+		<?php
+		if ( $include_position_marker ) {
+			echo self::generate_position_marker( $popup ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		}
+		?>
 		<?php
 		self::$current_popup = null;
 
