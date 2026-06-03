@@ -657,4 +657,106 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			'Pattern scan cron event should be scheduled.'
 		);
 	}
+
+	/**
+	 * Helper: build a health-check failure payload with the given codes.
+	 *
+	 * @param string   $integration_id Integration ID.
+	 * @param string[] $codes          WP_Error codes to attach.
+	 * @return array
+	 */
+	private function make_health_check_payload( $integration_id, array $codes ) {
+		$error = new \WP_Error();
+		foreach ( $codes as $code ) {
+			$error->add( $code, sprintf( 'Mock: %s', $code ) );
+		}
+		return [
+			'integration_id'   => $integration_id,
+			'integration_name' => 'Mock ' . $integration_id,
+			'error'            => $error,
+		];
+	}
+
+	/**
+	 * Test that a repeated health-check failure with the same integration +
+	 * error codes only triggers one Slack-bound newspack_alert within the
+	 * dedup interval.
+	 */
+	public function test_health_check_failed_dedupes_repeated_fires() {
+		$fire_count = 0;
+		add_action(
+			'newspack_alert',
+			function ( $data ) use ( &$fire_count ) {
+				if ( 'integration_health_check_failed' === ( $data['type'] ?? '' ) ) {
+					$fire_count++;
+				}
+			}
+		);
+
+		$payload = $this->make_health_check_payload( 'dedup-a', [ 'master_list_missing' ] );
+
+		do_action( 'newspack_integration_health_check_failed', $payload );
+		do_action( 'newspack_integration_health_check_failed', $payload );
+		do_action( 'newspack_integration_health_check_failed', $payload );
+
+		$this->assertEquals( 1, $fire_count, 'Identical health-check failures should dedupe to a single alert.' );
+	}
+
+	/**
+	 * Test that a different error-code set on the same integration fires a
+	 * fresh alert — the dedup is per signature, not per integration.
+	 */
+	public function test_health_check_failed_alerts_on_new_error_codes() {
+		$fire_count = 0;
+		add_action(
+			'newspack_alert',
+			function ( $data ) use ( &$fire_count ) {
+				if ( 'integration_health_check_failed' === ( $data['type'] ?? '' ) ) {
+					$fire_count++;
+				}
+			}
+		);
+
+		do_action(
+			'newspack_integration_health_check_failed',
+			$this->make_health_check_payload( 'dedup-b', [ 'master_list_missing' ] )
+		);
+		do_action(
+			'newspack_integration_health_check_failed',
+			$this->make_health_check_payload( 'dedup-b', [ 'master_list_missing' ] )
+		);
+		do_action(
+			'newspack_integration_health_check_failed',
+			$this->make_health_check_payload( 'dedup-b', [ 'connection_failed' ] )
+		);
+
+		$this->assertEquals( 2, $fire_count, 'A new error-code set on the same integration should bypass the dedup.' );
+	}
+
+	/**
+	 * Test that two distinct integrations alert independently even if they
+	 * fail with the same error codes.
+	 */
+	public function test_health_check_failed_alerts_per_integration() {
+		$fire_count = 0;
+		add_action(
+			'newspack_alert',
+			function ( $data ) use ( &$fire_count ) {
+				if ( 'integration_health_check_failed' === ( $data['type'] ?? '' ) ) {
+					$fire_count++;
+				}
+			}
+		);
+
+		do_action(
+			'newspack_integration_health_check_failed',
+			$this->make_health_check_payload( 'dedup-c1', [ 'master_list_missing' ] )
+		);
+		do_action(
+			'newspack_integration_health_check_failed',
+			$this->make_health_check_payload( 'dedup-c2', [ 'master_list_missing' ] )
+		);
+
+		$this->assertEquals( 2, $fire_count, 'Distinct integration IDs should each alert independently.' );
+	}
 }

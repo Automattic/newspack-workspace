@@ -744,11 +744,19 @@ class Integrations {
 	/**
 	 * Run health checks on all active integrations.
 	 *
+	 * Skips integrations that report themselves as not yet set up — a missing
+	 * provider or unconfigured master list is a setup-incomplete state, not a
+	 * runtime incident, and should surface in the integrations UI rather than
+	 * the alerts channel.
+	 *
 	 * Logs failures and fires an action for the Alert Manager.
 	 */
 	public static function run_health_checks() {
 		$active = self::get_active_integrations();
 		foreach ( $active as $integration ) {
+			if ( ! $integration->is_set_up() ) {
+				continue;
+			}
 			$result = $integration->health_check();
 			if ( is_wp_error( $result ) ) {
 				Logger::error(

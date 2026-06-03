@@ -824,6 +824,62 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test run_health_checks skips integrations that are not yet set up.
+	 *
+	 * An enabled-but-unconfigured integration (e.g. ESP enabled by default
+	 * but provider/master list never selected) is a setup-incomplete state,
+	 * not a runtime incident — the hourly cron must not generate an alert.
+	 */
+	public function test_run_health_checks_skips_unconfigured_integrations() {
+		$integration = new Sample_Integration( 'unconfigured', 'Unconfigured' );
+		Integrations::register( $integration );
+		Integrations::enable( 'unconfigured' );
+
+		Sample_Integration::$is_set_up_value      = false;
+		Sample_Integration::$can_sync_error_codes = [ 'ras_esp_master_list_id_not_found' ];
+
+		$fired = false;
+		add_action(
+			'newspack_integration_health_check_failed',
+			function () use ( &$fired ) {
+				$fired = true;
+			}
+		);
+
+		Integrations::run_health_checks();
+
+		$this->assertFalse( $fired, 'health_check_failed action must not fire when is_set_up() is false.' );
+	}
+
+	/**
+	 * Test run_health_checks fires the action for set-up integrations whose
+	 * health check fails — the control case for the skip behavior above.
+	 */
+	public function test_run_health_checks_fires_when_set_up_and_failing() {
+		$integration = new Sample_Integration( 'failing', 'Failing' );
+		Integrations::register( $integration );
+		Integrations::enable( 'failing' );
+
+		Sample_Integration::$is_set_up_value      = true;
+		Sample_Integration::$can_sync_error_codes = [ 'ras_esp_master_list_id_not_found' ];
+
+		$payload = null;
+		add_action(
+			'newspack_integration_health_check_failed',
+			function ( $data ) use ( &$payload ) {
+				$payload = $data;
+			}
+		);
+
+		Integrations::run_health_checks();
+
+		$this->assertNotNull( $payload, 'health_check_failed action must fire when is_set_up() is true and health_check fails.' );
+		$this->assertSame( 'failing', $payload['integration_id'] );
+		$this->assertInstanceOf( \WP_Error::class, $payload['error'] );
+		$this->assertContains( 'ras_esp_master_list_id_not_found', $payload['error']->get_error_codes() );
+	}
+
+	/**
 	 * Test get_metadata_prefix returns default 'NP_' when no custom prefix is set.
 	 */
 	public function test_get_metadata_prefix_default() {

@@ -32,6 +32,12 @@ class Alert_Manager {
 	const FAILURE_LOG_OPTION = 'newspack_alert_failure_log';
 
 	/**
+	 * Window during which a repeating health-check failure for the same
+	 * integration + error-code signature emits at most one Slack alert.
+	 */
+	const HEALTH_CHECK_DEDUP_INTERVAL = DAY_IN_SECONDS;
+
+	/**
 	 * Default pattern rules.
 	 * Each rule defines a grouping dimension, threshold, and time interval.
 	 */
@@ -454,10 +460,23 @@ class Alert_Manager {
 	/**
 	 * Handle integration health check failure.
 	 *
+	 * Deduplicates by integration + error-code signature for
+	 * HEALTH_CHECK_DEDUP_INTERVAL so an hourly cron does not repeat the
+	 * same Slack alert all day. A new error-code set on the same
+	 * integration falls outside the key and alerts immediately.
+	 *
 	 * @param array $payload Health check failure data.
 	 */
 	public static function handle_health_check_failed( $payload ) {
-		$error   = $payload['error'] ?? null;
+		$error          = $payload['error'] ?? null;
+		$integration_id = $payload['integration_id'] ?? 'unknown';
+		$error_codes    = is_wp_error( $error ) ? $error->get_error_codes() : [ 'unknown' ];
+
+		$dedup_key = self::get_health_check_dedup_key( $integration_id, $error_codes );
+		if ( get_transient( $dedup_key ) ) {
+			return;
+		}
+
 		$message = sprintf(
 			'Integration "%s" health check failed: %s',
 			$payload['integration_name'] ?? 'unknown',
@@ -475,6 +494,22 @@ class Alert_Manager {
 				'timestamp' => time(),
 			]
 		);
+
+		set_transient( $dedup_key, time(), self::HEALTH_CHECK_DEDUP_INTERVAL );
+	}
+
+	/**
+	 * Get the deduplication transient key for a health-check failure.
+	 *
+	 * @param string   $integration_id The integration identifier.
+	 * @param string[] $error_codes    The WP_Error codes from the failure.
+	 *
+	 * @return string Transient key.
+	 */
+	private static function get_health_check_dedup_key( $integration_id, $error_codes ) {
+		$codes = array_map( 'strval', $error_codes );
+		sort( $codes );
+		return 'newspack_alert_hc_' . md5( $integration_id . ':' . implode( ',', $codes ) );
 	}
 }
 Alert_Manager::init();
