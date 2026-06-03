@@ -759,4 +759,74 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 
 		$this->assertEquals( 2, $fire_count, 'Distinct integration IDs should each alert independently.' );
 	}
+
+	/**
+	 * Test that a same-code but escalated-message failure fires a fresh alert.
+	 *
+	 * The dedup key folds in `WP_Error::get_error_messages()` so an escalating
+	 * failure that retains the same code(s) but carries a worse message
+	 * (e.g. "list missing" → "auth fully revoked") still reaches Slack
+	 * instead of being suppressed for the full HEALTH_CHECK_DEDUP_INTERVAL.
+	 */
+	public function test_health_check_failed_alerts_on_new_error_messages() {
+		$fire_count = 0;
+		add_action(
+			'newspack_alert',
+			function ( $data ) use ( &$fire_count ) {
+				if ( 'integration_health_check_failed' === ( $data['type'] ?? '' ) ) {
+					$fire_count++;
+				}
+			}
+		);
+
+		$first  = [
+			'integration_id'   => 'dedup-msg',
+			'integration_name' => 'Mock dedup-msg',
+			'error'            => new \WP_Error( 'connection_failed', 'Provider returned 401: list missing.' ),
+		];
+		$second = [
+			'integration_id'   => 'dedup-msg',
+			'integration_name' => 'Mock dedup-msg',
+			'error'            => new \WP_Error( 'connection_failed', 'Provider returned 401: auth fully revoked.' ),
+		];
+
+		do_action( 'newspack_integration_health_check_failed', $first );
+		do_action( 'newspack_integration_health_check_failed', $first );
+		do_action( 'newspack_integration_health_check_failed', $second );
+
+		$this->assertEquals( 2, $fire_count, 'A same-code, changed-message failure should bypass the dedup.' );
+	}
+
+	/**
+	 * Test that the dedup transient is set BEFORE dispatching `newspack_alert`
+	 * so a handler that throws cannot leave the key unset and defeat dedup
+	 * on the next hourly cron.
+	 */
+	public function test_health_check_failed_sets_dedup_before_dispatch() {
+		$listener = function () {
+			throw new \RuntimeException( 'Simulated handler failure.' );
+		};
+		add_action( 'newspack_alert', $listener );
+
+		$payload = $this->make_health_check_payload( 'dedup-pre', [ 'master_list_missing' ] );
+
+		try {
+			try {
+				do_action( 'newspack_integration_health_check_failed', $payload );
+			} catch ( \RuntimeException $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
+				// Expected — handler is intentionally throwing.
+			}
+
+			// Reflect the dedup-key contract — the transient must exist even
+			// though dispatch threw.
+			$reflection = new \ReflectionMethod( Alert_Manager::class, 'get_health_check_dedup_key' );
+			$reflection->setAccessible( true );
+			$key = $reflection->invoke( null, 'dedup-pre', [ 'master_list_missing' ], [ 'Mock: master_list_missing' ] );
+
+			$this->assertNotFalse( get_transient( $key ), 'Dedup transient must be set even when alert handler throws.' );
+		} finally {
+			remove_action( 'newspack_alert', $listener );
+			delete_transient( $key ?? '' );
+		}
+	}
 }

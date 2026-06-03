@@ -460,10 +460,11 @@ class Alert_Manager {
 	/**
 	 * Handle integration health check failure.
 	 *
-	 * Deduplicates by integration + error-code signature for
-	 * HEALTH_CHECK_DEDUP_INTERVAL so an hourly cron does not repeat the
-	 * same Slack alert all day. A new error-code set on the same
-	 * integration falls outside the key and alerts immediately.
+	 * Deduplicates by integration + error-code + error-message signature
+	 * for HEALTH_CHECK_DEDUP_INTERVAL so an hourly cron does not repeat
+	 * the same Slack alert all day. A new error code OR a changed message
+	 * on the same integration (e.g. "list missing" escalating to "auth
+	 * fully revoked") falls outside the key and alerts immediately.
 	 *
 	 * @param array $payload Health check failure data.
 	 */
@@ -474,16 +475,22 @@ class Alert_Manager {
 		if ( empty( $error_codes ) ) {
 			$error_codes = [ 'unknown' ];
 		}
+		$error_messages = is_wp_error( $error ) ? $error->get_error_messages() : [];
 
-		$dedup_key = self::get_health_check_dedup_key( $integration_id, $error_codes );
+		$dedup_key = self::get_health_check_dedup_key( $integration_id, $error_codes, $error_messages );
 		if ( get_transient( $dedup_key ) ) {
 			return;
 		}
 
+		// Set the dedup transient BEFORE dispatch so a `newspack_alert`
+		// handler that throws (e.g. transient Slack POST failure) cannot
+		// defeat dedup by leaving the key unset for the next hourly cron.
+		set_transient( $dedup_key, time(), self::HEALTH_CHECK_DEDUP_INTERVAL );
+
 		$message = sprintf(
 			'Integration "%s" health check failed: %s',
 			$payload['integration_name'] ?? 'unknown',
-			is_wp_error( $error ) ? implode( '; ', $error->get_error_messages() ) : 'unknown error'
+			is_wp_error( $error ) ? implode( '; ', $error_messages ) : 'unknown error'
 		);
 
 		/** This action is documented in includes/class-alert-manager.php */
@@ -497,8 +504,6 @@ class Alert_Manager {
 				'timestamp' => time(),
 			]
 		);
-
-		set_transient( $dedup_key, time(), self::HEALTH_CHECK_DEDUP_INTERVAL );
 	}
 
 	/**
@@ -506,13 +511,16 @@ class Alert_Manager {
 	 *
 	 * @param string   $integration_id The integration identifier.
 	 * @param string[] $error_codes    The WP_Error codes from the failure.
+	 * @param string[] $error_messages The WP_Error messages from the failure.
 	 *
 	 * @return string Transient key.
 	 */
-	private static function get_health_check_dedup_key( $integration_id, $error_codes ) {
+	private static function get_health_check_dedup_key( $integration_id, $error_codes, $error_messages = [] ) {
 		$codes = array_map( 'strval', $error_codes );
 		sort( $codes );
-		return 'newspack_alert_hc_' . md5( $integration_id . ':' . implode( ',', $codes ) );
+		$messages = array_map( 'strval', $error_messages );
+		sort( $messages );
+		return 'newspack_alert_hc_' . md5( $integration_id . ':' . implode( ',', $codes ) . ':' . implode( '|', $messages ) );
 	}
 }
 Alert_Manager::init();
