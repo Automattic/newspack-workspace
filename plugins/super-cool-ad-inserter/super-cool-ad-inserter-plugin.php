@@ -9,7 +9,7 @@
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: scaip
  *
- * @package super-cool-ad-inserter-plugin
+ * @package super-cool-ad-inserter
  */
 
 // Plugin directory.

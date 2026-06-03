@@ -2,7 +2,7 @@
 /**
  * Unimplemented tests for the Super Cool Ad Inserter Plugin.
  *
- * @package super-cool-ad-inserter-plugin
+ * @package super-cool-ad-inserter
  */
 
 /**

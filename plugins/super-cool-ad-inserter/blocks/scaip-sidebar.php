@@ -3,7 +3,7 @@
  * Functions to register client-side assets (scripts and stylesheets) for the
  * Gutenberg block.
  *
- * @package super-cool-ad-inserter-plugin
+ * @package super-cool-ad-inserter
  */
 
 /**
