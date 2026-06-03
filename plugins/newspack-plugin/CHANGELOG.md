@@ -1,3 +1,10 @@
+## [6.42.1](https://github.com/Automattic/newspack-plugin/compare/v6.42.0...v6.42.1) (2026-06-02)
+
+
+### Bug Fixes
+
+* prevent content-gate editor.scss styles from getting chunked into the common.css file ([#4716](https://github.com/Automattic/newspack-plugin/issues/4716)) ([4d4c557](https://github.com/Automattic/newspack-plugin/commit/4d4c5572fb32a73b54c76e916273acc695f00163))
+
 # [6.42.0](https://github.com/Automattic/newspack-plugin/compare/v6.41.3...v6.42.0) (2026-06-01)
 
 

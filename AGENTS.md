@@ -39,7 +39,7 @@ The Newspack product consists of these interconnected plugins and themes:
 
 **Advertising:**
 - `newspack-ads` - Google Ad Manager integration and ad placement management
-- `super-cool-ad-inserter-plugin` - Programmatic ad insertion into content
+- `super-cool-ad-inserter` - Programmatic ad insertion into content
 
 **Multi-site & Network:**
 - `newspack-network` - Synchronization system for multi-site Newspack networks (Hub/Node architecture)

@@ -2,7 +2,7 @@
 /**
  * The settings page for the Super Cool Ad Inserter Plugin, and setting up the sidebars used by the shortcode to display ads.
  *
- * @package super-cool-ad-inserter-plugin
+ * @package super-cool-ad-inserter
  * @since 0.1
  */
 

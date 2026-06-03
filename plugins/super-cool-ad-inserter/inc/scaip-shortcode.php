@@ -2,7 +2,7 @@
 /**
  * The [ad] shortcode and its related functions
  *
- * @package super-cool-ad-inserter-plugin
+ * @package super-cool-ad-inserter
  */
 
 /**

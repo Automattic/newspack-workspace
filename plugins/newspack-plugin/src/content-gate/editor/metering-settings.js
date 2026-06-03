@@ -16,7 +16,11 @@ function MeteringSettings() {
 	} );
 	const { editPost } = useDispatch( 'core/editor' );
 	return (
-		<PluginDocumentSettingPanel name="content-gate-metering-panel" title={ __( 'Metering', 'newspack-plugin' ) }>
+		<PluginDocumentSettingPanel
+			name="content-gate-metering-panel"
+			className="newspack-content-gate-panel"
+			title={ __( 'Metering', 'newspack-plugin' ) }
+		>
 			<CheckboxControl
 				label={ __( 'Enable metering', 'newspack-plugin' ) }
 				checked={ meta.metering }

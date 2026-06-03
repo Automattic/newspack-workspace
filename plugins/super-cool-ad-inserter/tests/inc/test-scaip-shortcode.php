@@ -2,7 +2,7 @@
 /**
  * Test shortcode.
  *
- * @package super-cool-ad-inserter-plugin
+ * @package super-cool-ad-inserter
  */
 
 /**
