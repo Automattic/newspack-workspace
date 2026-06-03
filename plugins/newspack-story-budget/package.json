@@ -43,7 +43,7 @@
 		"lodash": "^4.17.0",
 		"newspack-components": "workspace:*",
 		"newspack-scripts": "workspace:*",
-		"react-dom": "^18.0.0",
+		"react-dom": "^19.2.7",
 		"react-router-dom": "^5.3.4",
 		"redux": "^5.0.0"
 	},
