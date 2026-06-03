@@ -121,9 +121,9 @@ jobs:
           TAGS_BEFORE_FILE: ${{ runner.temp }}/tags-before.txt
           SLACK_AUTH_TOKEN: ${{ github.ref_name == 'release' && secrets.SLACK_AUTH_TOKEN || '' }}
           SLACK_NEWSPACK_BOT_TOKEN: ${{ github.ref_name == 'alpha' && secrets.SLACK_NEWSPACK_BOT_TOKEN || '' }}
-          SLACK_A8C_RELEASE_CHANNEL_ID: ${{ vars.SLACK_A8C_RELEASE_CHANNEL_ID }}
-          SLACK_NEWSPACK_RELEASE_CHANNEL_ID: ${{ vars.SLACK_NEWSPACK_RELEASE_CHANNEL_ID }}
-          SLACK_SUPPORT_TEAM_SUBTEAM_ID: ${{ github.ref_name == 'release' && vars.SLACK_SUPPORT_TEAM_SUBTEAM_ID || '' }}
+          SLACK_A8C_RELEASE_CHANNEL_ID: ${{ secrets.SLACK_A8C_RELEASE_CHANNEL_ID }}
+          SLACK_NEWSPACK_RELEASE_CHANNEL_ID: ${{ secrets.SLACK_NEWSPACK_RELEASE_CHANNEL_ID }}
+          SLACK_SUPPORT_TEAM_SUBTEAM_ID: ${{ github.ref_name == 'release' && secrets.SLACK_SUPPORT_TEAM_SUBTEAM_ID || '' }}
         run: ./.github/scripts/notify-release.sh
 
   # Branch maintenance after a stable release: reset alpha and sync release into
