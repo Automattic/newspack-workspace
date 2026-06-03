@@ -179,6 +179,32 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test get_active_configured_integrations filters by is_set_up too.
+	 *
+	 * This is the central skip site for the integration-walking paths
+	 * (health checks, sync push, pull). A regression here silently
+	 * re-introduces the alert/retry flood on unconfigured integrations.
+	 */
+	public function test_get_active_configured_integrations_filters_by_is_set_up() {
+		$configured   = new Sample_Integration( 'configured', 'Configured' );
+		$unconfigured = new class( 'unconfigured', 'Unconfigured' ) extends Sample_Integration {
+			public function is_set_up() {
+				return false;
+			}
+		};
+
+		Integrations::register( $configured );
+		Integrations::register( $unconfigured );
+		Integrations::enable( 'configured' );
+		Integrations::enable( 'unconfigured' );
+
+		$result = Integrations::get_active_configured_integrations();
+
+		$this->assertArrayHasKey( 'configured', $result, 'A set-up integration must be included.' );
+		$this->assertArrayNotHasKey( 'unconfigured', $result, 'An unconfigured integration must be excluded.' );
+	}
+
+	/**
 	 * Test get_available_integrations returns all registered.
 	 */
 	public function test_get_available_integrations() {

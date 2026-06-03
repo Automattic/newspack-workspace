@@ -162,7 +162,7 @@ class Contact_Sync extends Sync {
 		 * @param string $context The context of the sync.
 		 */
 		$contact = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
-		$integrations = Integrations::get_active_integrations();
+		$integrations = Integrations::get_active_configured_integrations();
 		$errors       = [];
 
 		// Resolve user ID for retry scheduling.
@@ -177,9 +177,6 @@ class Contact_Sync extends Sync {
 		}
 
 		foreach ( $integrations as $integration_id => $integration ) {
-			if ( ! $integration->is_set_up() ) {
-				continue;
-			}
 			$integration_contact = $integration->prepare_contact( $contact );
 
 			// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.

@@ -158,13 +158,10 @@ class Contact_Pull {
 	 * @return true|\WP_Error True if all succeeded, WP_Error with combined messages.
 	 */
 	public static function pull_all( $user_id ) {
-		$active_integrations = Integrations::get_active_integrations();
+		$active_integrations = Integrations::get_active_configured_integrations();
 		$errors              = [];
 
 		foreach ( $active_integrations as $integration ) {
-			if ( ! $integration->is_set_up() ) {
-				continue;
-			}
 			$selected_fields = $integration->get_enabled_incoming_fields();
 			if ( empty( $selected_fields ) ) {
 				continue;
