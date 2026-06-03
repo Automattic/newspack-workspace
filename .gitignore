@@ -36,4 +36,3 @@ plugins/*/package-lock.json
 themes/*/package-lock.json
 packages/*/package-lock.json
 .cursorignore
-.vscode/

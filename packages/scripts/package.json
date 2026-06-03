@@ -83,6 +83,5 @@
 	},
 	"browserslist": [
 		"extends @wordpress/browserslist-config"
-	],
-	"prettier": "@wordpress/prettier-config"
+	]
 }

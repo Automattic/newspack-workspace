@@ -190,7 +190,7 @@ module.exports = {
 To configure Prettier rules, extend this repo's config by creating a `.prettierrc.js` file like so:
 
 ```js
-const baseConfig = require( './node_modules/newspack-scripts/config/prettier.config.js' );
+const baseConfig = require( 'newspack-scripts/config/prettier.config.js' );
 
 module.exports = {
 	...baseConfig,

@@ -15,6 +15,7 @@
 		"build:packages": "pnpm --filter './packages/*' run --if-present build",
 		"build": "pnpm run build:packages && pnpm --filter './plugins/*' --filter './themes/*' run build",
 		"build:changed": "pnpm run build:packages && pnpm --filter '...[origin/main]' run build",
+		"watch": "node ./bin/watch-all.mjs",
 		"prepare": "pnpm run build:packages",
 		"lint": "pnpm --filter './plugins/*' --filter './themes/*' run lint:js && composer phpcs",
 		"lint:changed": "pnpm --filter '...[origin/main]' run lint:js",
@@ -28,11 +29,12 @@
 		"multi-semantic-release": "^3.0.2",
 		"@commitlint/cli": "^20.1.0",
 		"@commitlint/config-conventional": "^19.8.1",
+		"chokidar": "^3.6.0",
 		"commitizen": "^4.3.1",
 		"cz-conventional-changelog": "^3.3.0",
 		"husky": "^9.1.7",
 		"lint-staged": "^16.2.6",
-		"prettier": "^3.3.3"
+		"prettier": "npm:wp-prettier@^3.0.3"
 	},
 	"config": {
 		"commitizen": {
@@ -52,7 +54,8 @@
 	"pnpm": {
 		"overrides": {
 			"basic-ftp": "5.3.1",
-			"@typescript-eslint/parser": "8.58.2"
+			"@typescript-eslint/parser": "8.58.2",
+			"prettier": "npm:wp-prettier@^3.0.3"
 		}
 	}
 }
