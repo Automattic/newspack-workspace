@@ -13,6 +13,17 @@ import * as a11y from './accessibility.js';
 const MODAL_ID = 'newspack-my-account__newspack-reader-verification';
 
 /**
+ * Module-level handle on the current invocation's AbortController so a later
+ * openVerificationModal() call can drop the previous invocation's listeners
+ * before attaching its own. Without this, repeated calls would stack click and
+ * closeModal handlers on the same DOM nodes — clicking "Send code" would fire
+ * one POST per stacked handler.
+ *
+ * @type {AbortController|null}
+ */
+let currentController = null;
+
+/**
  * Send the verification OTP email.
  *
  * @param {string} nonce Verification nonce.
@@ -66,16 +77,25 @@ export function openVerificationModal( config = {} ) {
 		return false;
 	}
 
+	// Abort any listeners attached by a previous openVerificationModal() call so the
+	// "Send code" button can't fan out multiple POSTs and so dismiss handlers don't
+	// fire for stale invocations.
+	if ( currentController ) {
+		currentController.abort();
+	}
+	currentController = new AbortController();
+	const { signal } = currentController;
+
 	const emailNode = modal.querySelector( '.email-address' );
 	if ( emailNode && config.email ) {
 		emailNode.textContent = config.email;
 	}
 
 	let codeSent = false;
-
-	const cleanup = () => {
-		sendOtpButton.removeEventListener( 'click', handleSendClick );
-		modal.removeEventListener( 'closeModal', handleClose );
+	const releaseController = () => {
+		if ( currentController && currentController.signal === signal ) {
+			currentController = null;
+		}
 	};
 
 	function handleSendClick() {
@@ -87,7 +107,8 @@ export function openVerificationModal( config = {} ) {
 					config.setOTPTimer();
 				}
 				modal.setAttribute( 'data-state', 'closed' );
-				cleanup();
+				currentController?.abort();
+				releaseController();
 				if ( typeof config.onSendCode === 'function' ) {
 					config.onSendCode();
 				}
@@ -106,15 +127,15 @@ export function openVerificationModal( config = {} ) {
 		if ( codeSent ) {
 			return;
 		}
-		cleanup();
+		releaseController();
 		if ( typeof config.onDismiss === 'function' ) {
 			config.onDismiss();
 		}
 	}
 
 	sendOtpButton.disabled = false;
-	sendOtpButton.addEventListener( 'click', handleSendClick );
-	modal.addEventListener( 'closeModal', handleClose );
+	sendOtpButton.addEventListener( 'click', handleSendClick, { signal } );
+	modal.addEventListener( 'closeModal', handleClose, { signal } );
 
 	modal.setAttribute( 'data-state', 'open' );
 	a11y.trapFocus( modal );

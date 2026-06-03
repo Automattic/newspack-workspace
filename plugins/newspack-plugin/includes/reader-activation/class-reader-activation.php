@@ -151,7 +151,6 @@ final class Reader_Activation {
 			'is_ras_enabled'               => self::is_enabled(),
 			'require_account_verification' => self::show_post_registration_verification(),
 			'verification_url'             => \admin_url( 'admin-ajax.php' ),
-			'verification_nonce'           => \wp_create_nonce( 'newspack_reader_registration_verification' ),
 		];
 
 		$script_data = array_merge( $script_data, Reader_Registration::get_script_data() );

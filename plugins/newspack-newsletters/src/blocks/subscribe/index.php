@@ -502,7 +502,9 @@ function process_form() {
 			$metadata['registration_method'] = 'newsletters-subscription-popup';
 		}
 		$registered_user = \Newspack\Reader_Activation::register_reader( $email, $name, true, $metadata );
-		if ( $registered_user ) {
+		// register_reader() can return false (existing user) or a WP_Error; only proceed when
+		// we got a positive integer user ID for a freshly-created reader.
+		if ( is_int( $registered_user ) && $registered_user > 0 ) {
 			$metadata['registered'] = '1';
 
 			// Surface verification state so the frontend can trigger the post-registration
@@ -566,7 +568,7 @@ function process_form() {
 	// `get_verification_payload()` always returns both `verified` and `verification_nonce`
 	// keys (with empty/null sentinels when not applicable); the frontend gates on the
 	// `verification_nonce` being a non-empty string.
-	if ( $registered_user ) {
+	if ( is_int( $registered_user ) && $registered_user > 0 ) {
 		$result['email']      = $email;
 		$result['registered'] = 1;
 		$result               = array_merge( $result, $verification_payload );
