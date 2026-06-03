@@ -162,6 +162,9 @@ class Contact_Pull {
 		$errors              = [];
 
 		foreach ( $active_integrations as $integration ) {
+			if ( ! $integration->is_set_up() ) {
+				continue;
+			}
 			$selected_fields = $integration->get_enabled_incoming_fields();
 			if ( empty( $selected_fields ) ) {
 				continue;
@@ -415,6 +418,11 @@ class Contact_Pull {
 		$integration = Integrations::get_integration( $integration_id );
 		if ( ! $integration || ! Integrations::is_enabled( $integration_id ) ) {
 			Logger::log( sprintf( 'Integration "%s" not found or not enabled on pull retry %d.', $integration_id, $retry_count ), self::LOGGER_HEADER, 'error' );
+			return;
+		}
+
+		if ( ! $integration->is_set_up() ) {
+			Logger::log( sprintf( 'Integration "%s" no longer set up on pull retry %d; aborting retry chain.', $integration_id, $retry_count ), self::LOGGER_HEADER );
 			return;
 		}
 

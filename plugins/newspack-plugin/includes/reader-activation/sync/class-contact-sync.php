@@ -177,6 +177,9 @@ class Contact_Sync extends Sync {
 		}
 
 		foreach ( $integrations as $integration_id => $integration ) {
+			if ( ! $integration->is_set_up() ) {
+				continue;
+			}
 			$integration_contact = $integration->prepare_contact( $contact );
 
 			// Added logging here to more easily monitor integration sync data. Can be removed once integrations are released.
@@ -369,6 +372,11 @@ class Contact_Sync extends Sync {
 		$integration = Integrations::get_integration( $integration_id );
 		if ( ! $integration ) {
 			Logger::log( sprintf( 'Integration "%s" not found on retry %d.', $integration_id, $retry_count ), 'NEWSPACK-SYNC', 'error' );
+			return;
+		}
+
+		if ( ! $integration->is_set_up() ) {
+			static::log( sprintf( 'Integration "%s" no longer set up on retry %d; aborting retry chain.', $integration_id, $retry_count ) );
 			return;
 		}
 

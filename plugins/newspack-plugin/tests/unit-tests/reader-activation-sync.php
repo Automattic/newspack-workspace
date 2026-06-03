@@ -577,6 +577,85 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that an unconfigured integration is skipped in push_to_integrations
+	 * so no retry is ever scheduled at the source — protects the AS table from
+	 * the enabled-but-unconfigured retry flood.
+	 */
+	public function test_push_to_integrations_skips_unconfigured() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		Failing_Sample_Integration::reset();
+		Failing_Sample_Integration::$should_fail     = true;
+		Failing_Sample_Integration::$is_set_up_value = false;
+		$this->register_failing_integration( 'push_skip_mock' );
+
+		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
+
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'push-skip@test.com' ] );
+		$contact = $this->get_sample_contact();
+		$contact['email'] = 'push-skip@test.com';
+
+		$method = new \ReflectionMethod( Contact_Sync::class, 'push_to_integrations' );
+		$method->setAccessible( true );
+		$method->invoke( null, $contact, 'Test' );
+
+		$this->assertSame( 0, Failing_Sample_Integration::$push_count, 'push_contact_data must not be called when is_set_up() is false.' );
+
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_HOOK,
+				'group'  => Integrations::get_action_group( 'push_skip_mock' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertEmpty( $pending, 'No retry should be scheduled for an unconfigured integration.' );
+	}
+
+	/**
+	 * Test that execute_integration_retry aborts the retry chain when the
+	 * integration becomes unconfigured between schedule and execute — drains
+	 * existing flood without scheduling further attempts.
+	 */
+	public function test_execute_integration_retry_aborts_when_not_set_up() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		Failing_Sample_Integration::reset();
+		Failing_Sample_Integration::$should_fail     = true;
+		Failing_Sample_Integration::$is_set_up_value = false;
+		$this->register_failing_integration( 'retry_abort_mock' );
+
+		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
+
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'retry-abort@test.com' ] );
+
+		Contact_Sync::execute_integration_retry(
+			[
+				'integration_id' => 'retry_abort_mock',
+				'user_id'        => $user_id,
+				'context'        => 'Test',
+				'retry_count'    => 1,
+			]
+		);
+
+		$this->assertSame( 0, Failing_Sample_Integration::$push_count, 'push_contact_data must not be called when is_set_up() returns false at retry time.' );
+
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_HOOK,
+				'group'  => Integrations::get_action_group( 'retry_abort_mock' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertEmpty( $pending, 'No new retry should be scheduled when integration becomes unconfigured mid-chain.' );
+	}
+
+	/**
 	 * Test that invalid retry data is handled gracefully.
 	 */
 	public function test_integration_retry_invalid_data() {

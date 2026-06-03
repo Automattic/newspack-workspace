@@ -882,6 +882,121 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test Contact_Pull::pull_all skips integrations whose is_set_up() is false.
+	 *
+	 * Mirrors the run_health_checks skip: an unconfigured integration must not
+	 * be invoked, must not generate retry rows in ActionScheduler.
+	 */
+	public function test_pull_all_skips_unconfigured_integrations() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$called = 0;
+		$integration = new class( 'pull-skip', 'Pull Skip' ) extends Sample_Integration {
+			/**
+			 * @var int Count of pull_contact_data calls.
+			 */
+			public static $pull_count = 0;
+
+			/**
+			 * Pull mock that counts invocations.
+			 *
+			 * @param int $user_id WordPress user ID.
+			 * @return array
+			 */
+			public function pull_contact_data( $user_id ) {
+				self::$pull_count++;
+				return [ 'favorite_color' => 'blue' ];
+			}
+		};
+		$integration::$pull_count                 = 0;
+		$integration->update_enabled_incoming_fields( [ 'favorite_color' ] );
+
+		Sample_Integration::$is_set_up_value      = false;
+
+		Integrations::register( $integration );
+		Integrations::enable( 'pull-skip' );
+
+		\as_unschedule_all_actions( Contact_Pull::RETRY_HOOK );
+
+		$user_id = $this->factory()->user->create();
+
+		Contact_Pull::pull_all( $user_id );
+
+		$this->assertSame( 0, $integration::$pull_count, 'pull_contact_data must not be called when is_set_up() is false.' );
+
+		$pending = \as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Pull::RETRY_HOOK,
+				'group'  => Integrations::get_action_group( 'pull-skip' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertEmpty( $pending, 'No pull retry should be scheduled for an unconfigured integration.' );
+	}
+
+	/**
+	 * Test Contact_Pull::execute_integration_retry aborts when the integration
+	 * is no longer set up — drains existing retry rows without scheduling more.
+	 */
+	public function test_pull_execute_integration_retry_aborts_when_not_set_up() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$integration = new class( 'pull-retry-abort', 'Pull Retry Abort' ) extends Sample_Integration {
+			/**
+			 * @var int Count of pull_contact_data calls.
+			 */
+			public static $pull_count = 0;
+
+			/**
+			 * Pull mock returning WP_Error so retry would be scheduled if reached.
+			 *
+			 * @param int $user_id WordPress user ID.
+			 * @return \WP_Error
+			 */
+			public function pull_contact_data( $user_id ) {
+				self::$pull_count++;
+				return new \WP_Error( 'mock_error', 'Mock pull failed' );
+			}
+		};
+		$integration::$pull_count                 = 0;
+		$integration->update_enabled_incoming_fields( [ 'favorite_color' ] );
+
+		Sample_Integration::$is_set_up_value      = false;
+
+		Integrations::register( $integration );
+		Integrations::enable( 'pull-retry-abort' );
+
+		\as_unschedule_all_actions( Contact_Pull::RETRY_HOOK );
+
+		$user_id = $this->factory()->user->create();
+
+		Contact_Pull::execute_integration_retry(
+			[
+				'integration_id' => 'pull-retry-abort',
+				'user_id'        => $user_id,
+				'retry_count'    => 1,
+			]
+		);
+
+		$this->assertSame( 0, $integration::$pull_count, 'pull_contact_data must not be called when is_set_up() returns false at retry time.' );
+
+		$pending = \as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Pull::RETRY_HOOK,
+				'group'  => Integrations::get_action_group( 'pull-retry-abort' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertEmpty( $pending, 'No new pull retry should be scheduled when integration becomes unconfigured mid-chain.' );
+	}
+
+	/**
 	 * Test get_metadata_prefix returns default 'NP_' when no custom prefix is set.
 	 */
 	public function test_get_metadata_prefix_default() {
