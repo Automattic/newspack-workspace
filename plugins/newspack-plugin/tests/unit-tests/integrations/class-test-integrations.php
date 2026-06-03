@@ -838,17 +838,18 @@ class Test_Integrations extends \WP_UnitTestCase {
 		Sample_Integration::$is_set_up_value      = false;
 		Sample_Integration::$can_sync_error_codes = [ 'ras_esp_master_list_id_not_found' ];
 
-		$fired = false;
-		add_action(
-			'newspack_integration_health_check_failed',
-			function () use ( &$fired ) {
-				$fired = true;
-			}
-		);
+		$fired    = false;
+		$listener = function () use ( &$fired ) {
+			$fired = true;
+		};
+		add_action( 'newspack_integration_health_check_failed', $listener );
 
-		Integrations::run_health_checks();
-
-		$this->assertFalse( $fired, 'health_check_failed action must not fire when is_set_up() is false.' );
+		try {
+			Integrations::run_health_checks();
+			$this->assertFalse( $fired, 'health_check_failed action must not fire when is_set_up() is false.' );
+		} finally {
+			remove_action( 'newspack_integration_health_check_failed', $listener );
+		}
 	}
 
 	/**
@@ -863,20 +864,21 @@ class Test_Integrations extends \WP_UnitTestCase {
 		Sample_Integration::$is_set_up_value      = true;
 		Sample_Integration::$can_sync_error_codes = [ 'ras_esp_master_list_id_not_found' ];
 
-		$payload = null;
-		add_action(
-			'newspack_integration_health_check_failed',
-			function ( $data ) use ( &$payload ) {
-				$payload = $data;
-			}
-		);
+		$payload  = null;
+		$listener = function ( $data ) use ( &$payload ) {
+			$payload = $data;
+		};
+		add_action( 'newspack_integration_health_check_failed', $listener );
 
-		Integrations::run_health_checks();
-
-		$this->assertNotNull( $payload, 'health_check_failed action must fire when is_set_up() is true and health_check fails.' );
-		$this->assertSame( 'failing', $payload['integration_id'] );
-		$this->assertInstanceOf( \WP_Error::class, $payload['error'] );
-		$this->assertContains( 'ras_esp_master_list_id_not_found', $payload['error']->get_error_codes() );
+		try {
+			Integrations::run_health_checks();
+			$this->assertNotNull( $payload, 'health_check_failed action must fire when is_set_up() is true and health_check fails.' );
+			$this->assertSame( 'failing', $payload['integration_id'] );
+			$this->assertInstanceOf( \WP_Error::class, $payload['error'] );
+			$this->assertContains( 'ras_esp_master_list_id_not_found', $payload['error']->get_error_codes() );
+		} finally {
+			remove_action( 'newspack_integration_health_check_failed', $listener );
+		}
 	}
 
 	/**
