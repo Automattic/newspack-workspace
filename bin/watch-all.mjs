@@ -27,8 +27,11 @@ import path from 'node:path';
 const ROOT = process.cwd();
 const AREAS = [ 'plugins', 'themes', 'packages' ];
 // Source files worth reacting to. PHP is interpreted (no build step) and is
-// served live off the bind mount, so it is intentionally excluded.
-const BUILD_RELEVANT = /\.(jsx?|tsx?|scss|css)$/;
+// served live off the bind mount, so it is intentionally excluded. block.json
+// is included: it is imported by block entrypoints (`import metadata from
+// './block.json'`) and is a real webpack input, so a cold unit whose first edit
+// is block metadata must still start its watcher.
+const BUILD_RELEVANT = /\.(jsx?|tsx?|scss|css)$|(^|\/)block\.json$/;
 // Directories never worth watching: VCS, dependencies and build outputs.
 const IGNORED_DIR = /(^|\/)(node_modules|vendor|\.git|dist|build)(\/|$)/;
 const DEBOUNCE_MS = 300;
@@ -40,6 +43,10 @@ const warmChildren = new Map(); // unit key -> spawned `npm run watch` child.
 const debounceTimers = new Map(); // unit key -> pending one-shot timer.
 const buildQueue = []; // units awaiting a serialized one-shot build.
 let building = false;
+let activeBuild = null; // the in-flight one-shot build child, for shutdown.
+// One-shot units whose non-src change we've already explained, so the notice
+// (see onChange) is logged at most once per unit rather than on every edit.
+const oneShotNonSrcNoticed = new Set();
 
 function log( message ) {
 	process.stdout.write( `[watch-all] ${ message }\n` );
@@ -87,6 +94,13 @@ function spawnWarmWatcher( unit ) {
 	warmChildren.set( unit.key, child );
 	prefixStream( child.stdout, unit.name );
 	prefixStream( child.stderr, unit.name );
+	// Without an 'error' listener a failed spawn (ENOENT/EACCES) throws as an
+	// unhandled exception and takes the whole dispatcher down.
+	child.on( 'error', ( error ) => {
+		log( `${ unit.name }: failed to start watcher (${ error.message }); will re-arm on next change` );
+		warmChildren.delete( unit.key );
+		unitState.delete( unit.key );
+	} );
 	child.on( 'exit', ( code ) => {
 		log( `${ unit.name }: watcher exited (code ${ code }); will re-arm on next change` );
 		warmChildren.delete( unit.key );
@@ -124,10 +138,22 @@ function drainBuildQueue() {
 		[ '--filter', unit.filter, 'run', '--if-present', 'build' ],
 		{ cwd: ROOT, stdio: 'inherit' }
 	);
-	child.on( 'exit', ( code ) => {
-		log( `${ unit.name }: build ${ code === 0 ? 'done' : `failed (code ${ code })` }` );
+	activeBuild = child;
+	// Release the queue whether the build finishes or fails to spawn; without
+	// the 'error' handler a spawn failure would leave `building` stuck true and
+	// silently wedge every later one-shot build.
+	const release = () => {
+		activeBuild = null;
 		building = false;
 		drainBuildQueue();
+	};
+	child.on( 'error', ( error ) => {
+		log( `${ unit.name }: build failed to start (${ error.message })` );
+		release();
+	} );
+	child.on( 'exit', ( code ) => {
+		log( `${ unit.name }: build ${ code === 0 ? 'done' : `failed (code ${ code })` }` );
+		release();
 	} );
 }
 
@@ -160,8 +186,14 @@ function onChange( relPath ) {
 	// One-shot units have no incremental watcher to own their output, so a build
 	// that writes build-relevant files (e.g. copied .scss) would re-trigger
 	// itself endlessly. Gate on src/ -- build outputs land in dist/build/etc.,
-	// never in src/ -- so only genuine source edits drive a rebuild.
+	// never in src/ -- so only genuine source edits drive a rebuild. A one-shot
+	// unit whose sources live outside src/ (e.g. at the package root or in lib/)
+	// is unsupported by this gate; surface that once so it isn't silent.
 	if ( ! relPath.startsWith( `${ unit.key }/src/` ) ) {
+		if ( ! oneShotNonSrcNoticed.has( unit.key ) ) {
+			oneShotNonSrcNoticed.add( unit.key );
+			log( `${ unit.name }: ignoring change outside src/ (${ relPath }); one-shot builds only react to ${ unit.key }/src/` );
+		}
 		return;
 	}
 	scheduleOneShotBuild( unit );
@@ -169,11 +201,29 @@ function onChange( relPath ) {
 
 function shutdown() {
 	log( 'shutting down watchers' );
+	// Drop pending debounced builds so nothing new is spawned mid-shutdown.
+	for ( const timer of debounceTimers.values() ) {
+		clearTimeout( timer );
+	}
+	debounceTimers.clear();
 	for ( const child of warmChildren.values() ) {
 		try {
-			process.kill( -child.pid, 'SIGTERM' );
+			// Guard against an undefined pid from a synchronous spawn failure.
+			if ( child.pid ) {
+				process.kill( -child.pid, 'SIGTERM' );
+			}
 		} catch {
 			// Child already gone -- nothing to clean up.
+		}
+	}
+	// The in-flight one-shot build inherits our stdio and isn't detached, so a
+	// terminal Ctrl-C reaches it already; signal it directly too for the
+	// programmatic SIGTERM path so it doesn't outlive the dispatcher.
+	if ( activeBuild && activeBuild.pid ) {
+		try {
+			activeBuild.kill( 'SIGTERM' );
+		} catch {
+			// Already exited -- nothing to clean up.
 		}
 	}
 	process.exit( 0 );

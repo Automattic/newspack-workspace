@@ -21,9 +21,20 @@ PROJECT_DIR=$(find_project "$1")
 # (e.g. node_modules/newspack-scripts -> ../../../packages/scripts) that only
 # resolve under /newspack-monorepo; the standalone /newspack-{plugins,themes}
 # mounts make those symlinks escape their root, breaking the watch toolchain.
-PROJECT_DIR="${PROJECT_DIR/#\/newspack-plugins//newspack-monorepo/plugins}"
-PROJECT_DIR="${PROJECT_DIR/#\/newspack-themes//newspack-monorepo/themes}"
-PROJECT_DIR="${PROJECT_DIR/#\/newspack-repos//newspack-monorepo/repos}"
+#
+# Only adopt the remap when it points at the SAME directory. In the main
+# container /newspack-plugins/<name> and /newspack-monorepo/plugins/<name> are
+# the same mount, so the remap is a safe prefix swap. In an isolated env a
+# worktree override is mounted at /newspack-plugins/<name> while
+# /newspack-monorepo/plugins/<name> is the base checkout -- remapping there would
+# silently watch the wrong branch, so the -ef guard keeps the worktree mount.
+remapped="$PROJECT_DIR"
+remapped="${remapped/#\/newspack-plugins//newspack-monorepo/plugins}"
+remapped="${remapped/#\/newspack-themes//newspack-monorepo/themes}"
+remapped="${remapped/#\/newspack-repos//newspack-monorepo/repos}"
+if [ "$remapped" != "$PROJECT_DIR" ] && [ "$remapped" -ef "$PROJECT_DIR" ]; then
+	PROJECT_DIR="$remapped"
+fi
 
 cd "$PROJECT_DIR"
 npm run watch

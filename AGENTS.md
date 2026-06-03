@@ -160,12 +160,12 @@ dispatcher that watches source files across `plugins/`, `themes/` and
 unit, that unit's own incremental watcher (`wp-scripts start`) is started and
 owns its rebuilds from then on — so only units you actually touch get a watcher,
 never all of them at once. Units without a `watch` script fall back to a one-off
-`build` per change; units with neither are skipped.
+`build` when files under their `src/` change; units with neither are skipped.
 
 When you're iterating hard on a single project, prefer `n watch <name>` (or
 `n watch` from inside it): the warm webpack watcher rebuilds incrementally in
 well under a second, whereas the global watch pays a fresh build the first time
-it sees each unit.
+it sees a unit that has no incremental `watch` script.
 
 ### WordPress CLI
 ```bash

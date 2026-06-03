@@ -398,7 +398,9 @@ case $1 in
         fi
         if [[ -z "$target_folder" ]]; then
             # No project: watch every unit from the monorepo root, spawning each
-            # unit's own watcher lazily on its first edit.
+            # unit's own watcher lazily on its first edit. Note this also covers
+            # running `n watch` from a non-project dir (e.g. additional-sites-html/
+            # or manager-html/), where cwd detection yields no target_folder.
             docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/watch-all.sh"
         else
             # Run the script directly (no `sh -c`) and quote the folder so a
