@@ -1,3 +1,5 @@
+const { gitCommitStep } = require( './release-helpers' );
+
 /**
  * Shared release config factory for multi-semantic-release.
  *
@@ -58,12 +60,7 @@ module.exports = function releaseConfig( { name, phpFile, npmPublish = false } )
 					callback: 'npm run release:archive',
 				},
 			],
-			{
-				path: '@semantic-release/git',
-				assets: [ phpFile, 'package.json', 'CHANGELOG.md' ],
-				message:
-					'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
-			},
+			...gitCommitStep( [ phpFile, 'CHANGELOG.md' ] ),
 		],
 	};
 };

@@ -123,8 +123,12 @@ $products_database = [];
 
 class WC_Order_Item_Product {
 	private $data = [];
+	private $meta = [];
 	public function __construct( $data = [] ) {
 		$this->data = $data;
+		if ( isset( $data['meta'] ) ) {
+			$this->meta = $data['meta'];
+		}
 	}
 	public function get_name() {
 		return $this->data['name'] ?? '';
@@ -135,10 +139,16 @@ class WC_Order_Item_Product {
 	public function get_subtotal() {
 		return $this->data['subtotal'] ?? 0;
 	}
+	public function get_total() {
+		return $this->data['total'] ?? 0;
+	}
 	public function get_product() {
 		global $products_database;
 		$product_id = $this->data['product_id'] ?? 0;
 		return $products_database[ $product_id ] ?? false;
+	}
+	public function get_meta( $key, $single = true ) {
+		return $this->meta[ $key ] ?? '';
 	}
 }
 
@@ -369,6 +379,9 @@ class WC_Subscription {
 	public function get_date( $type ) {
 		return $this->data['dates'][ $type ] ?? 0;
 	}
+	public function get_time( $type ) {
+		return $this->data['times'][ $type ] ?? 0;
+	}
 	public function calculate_date() {
 		$start    = strtotime( $this->get_date( 'start' ) );
 		$interval = $this->get_billing_interval();
@@ -393,6 +406,17 @@ class WC_Subscription {
 	public function get_items() {
 		return $this->data['items'] ?? [];
 	}
+	public function get_items_sign_up_fee( $item, $tax = 'exclusive_of_tax' ) {
+		global $wcs_mock_items_sign_up_fee, $wcs_mock_last_items_sign_up_fee_tax;
+		$wcs_mock_last_items_sign_up_fee_tax = $tax;
+		if ( is_object( $item ) && method_exists( $item, 'get_meta' ) ) {
+			$meta_value = $item->get_meta( '_subscription_sign_up_fee' );
+			if ( $meta_value !== '' && $meta_value !== null ) {
+				return (float) $meta_value;
+			}
+		}
+		return (float) ( $wcs_mock_items_sign_up_fee ?? 0 );
+	}
 	public function save() {
 		return true;
 	}
@@ -401,8 +425,110 @@ class WC_Subscription {
 class WC_Subscriptions {
 }
 
+if ( ! class_exists( 'WC_Subscriptions_Switcher' ) ) {
+	/**
+	 * Mock of WC_Subscriptions_Switcher.
+	 *
+	 * The calculate_total_paid_since_last_order() method returns the value of
+	 * the $wcs_mock_total_paid_including_signup_fee global so tests can drive
+	 * it, and records the arguments it was called with on
+	 * $wcs_mock_last_calculate_total_paid_args so tests can assert that the
+	 * caller passed the expected sign-up-fee mode and orders_to_include list.
+	 */
+	class WC_Subscriptions_Switcher {
+		public static function calculate_total_paid_since_last_order( $subscription, $subscription_item, $include_sign_up_fees = 'include_sign_up_fees', $orders_to_include = [] ) {
+			global $wcs_mock_total_paid_including_signup_fee, $wcs_mock_last_calculate_total_paid_args;
+			$wcs_mock_last_calculate_total_paid_args = [
+				'subscription'         => $subscription,
+				'subscription_item'    => $subscription_item,
+				'include_sign_up_fees' => $include_sign_up_fees,
+				'orders_to_include'    => $orders_to_include,
+			];
+			return $wcs_mock_total_paid_including_signup_fee ?? 0;
+		}
+	}
+}
+
 if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
+	/**
+	 * Mock of WC_Subscriptions_Product.
+	 *
+	 * The get_sign_up_fee() method reads the `_subscription_sign_up_fee` meta
+	 * from the product so tests can stage variations with specific sign-up fees.
+	 */
 	class WC_Subscriptions_Product {
+		public static function get_sign_up_fee( $product ) {
+			if ( ! is_object( $product ) || ! method_exists( $product, 'get_meta' ) ) {
+				return 0;
+			}
+			return (float) $product->get_meta( '_subscription_sign_up_fee' );
+		}
+		public static function get_price( $product ) {
+			if ( ! is_object( $product ) || ! method_exists( $product, 'get_meta' ) ) {
+				return 0;
+			}
+			return (float) $product->get_meta( '_subscription_price' );
+		}
+	}
+}
+
+/**
+ * Test double for WCS_Switch_Cart_Item exposing only the surface that the
+ * stepped-pricing sign-up fee filter reads from.
+ */
+class Mock_WCS_Switch_Cart_Item_For_Stepped_Pricing {
+	public $subscription;
+	public $existing_item;
+	public $product;
+	private $values;
+	public function __construct( $sub, $item, $product, $values ) {
+		$this->subscription  = $sub;
+		$this->existing_item = $item;
+		$this->product       = $product;
+		$this->values        = $values;
+	}
+	public function get_total_paid_for_current_period() {
+		return (float) $this->values['total_paid'];
+	}
+	public function get_days_in_old_cycle() {
+		return (int) $this->values['days_in_old_cycle'];
+	}
+	public function get_days_until_next_payment() {
+		return (int) $this->values['days_until_next'];
+	}
+	public function trial_periods_match() {
+		return ! empty( $this->values['trial_periods_match'] );
+	}
+	public function is_switch_to_one_payment_subscription() {
+		return ! empty( $this->values['one_payment'] );
+	}
+}
+
+/**
+ * Test double for an older WCS_Switch_Cart_Item that predates the
+ * trial_periods_match() and is_switch_to_one_payment_subscription() methods.
+ * Used to verify the integration fails safe (passes through) when it cannot
+ * confirm those conditions on the running WCS version.
+ */
+class Mock_WCS_Switch_Cart_Item_Legacy {
+	public $subscription;
+	public $existing_item;
+	public $product;
+	private $values;
+	public function __construct( $sub, $item, $product, $values = [] ) {
+		$this->subscription  = $sub;
+		$this->existing_item = $item;
+		$this->product       = $product;
+		$this->values        = $values;
+	}
+	public function get_total_paid_for_current_period() {
+		return (float) ( $this->values['total_paid'] ?? 0 );
+	}
+	public function get_days_in_old_cycle() {
+		return (int) ( $this->values['days_in_old_cycle'] ?? 30 );
+	}
+	public function get_days_until_next_payment() {
+		return (int) ( $this->values['days_until_next'] ?? 30 );
 	}
 }
 
@@ -497,11 +623,28 @@ function wcs_get_canonical_product_id( $item ) {
 	}
 	return null;
 }
+function wcs_get_days_in_cycle( $period, $interval ) {
+	$days_per_period = [
+		'day'   => 1,
+		'week'  => 7,
+		'month' => 30,
+		'year'  => 365,
+	];
+	return ( $days_per_period[ $period ] ?? 0 ) * (int) $interval;
+}
+function wcs_get_order_item( $item_id, $subscription ) {
+	global $wcs_mock_order_items;
+	return $wcs_mock_order_items[ $item_id ] ?? null;
+}
 function wc_string_to_bool( $string ) {
 	return is_bool( $string ) ? $string : ( 'yes' === strtolower( $string ) || '1' === $string || 'true' === strtolower( $string ) );
 }
 function wc_bool_to_string( $bool ) {
 	return $bool ? 'yes' : 'no';
+}
+function wc_prices_include_tax() {
+	global $wcs_mock_prices_include_tax;
+	return ! empty( $wcs_mock_prices_include_tax );
 }
 function wc_get_orders( $args ) {
 	global $orders_database;

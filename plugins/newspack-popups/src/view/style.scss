@@ -395,42 +395,32 @@ $width__tablet: 782px;
 	}
 }
 
-// Alignment
-.entry-content {
-	/* stylelint-disable-next-line no-duplicate-selectors */
-	.newspack-lightbox {
-		.newspack-popup__content-wrapper {
-			.alignfull,
-			.alignwide {
-				margin-left: 0;
-				margin-right: 0;
-				max-width: 100%;
-				padding-left: 0;
-				padding-right: 0;
-
-				@media only screen and ( min-width: $width__mobile ) {
-					&.wp-block-columns {
-						margin-left: -16px;
-						margin-right: -16px;
-						max-width: calc(100% + 32px);
-						width: calc(100% + 32px);
-					}
-				}
-
-				&.wp-block-columns,
-				&.wp-block-columns .wp-block-column {
-					padding-left: 0;
-					padding-right: 0;
-				}
-			}
+// Alignment for wide/full blocks inside overlay prompt content. The lightbox
+// renders as a direct child of <body> (see Newspack_Popups_Inserter::print_queued_overlays),
+// so these rules are no longer scoped to .entry-content.
+.newspack-lightbox {
+	.newspack-popup__content-wrapper {
+		.alignfull,
+		.alignwide {
+			margin-left: 0;
+			margin-right: 0;
+			max-width: 100%;
+			padding-left: 0;
+			padding-right: 0;
 
 			@media only screen and ( min-width: $width__mobile ) {
-				.alignfull.wp-block-columns {
+				&.wp-block-columns {
 					margin-left: -16px;
 					margin-right: -16px;
 					max-width: calc(100% + 32px);
 					width: calc(100% + 32px);
 				}
+			}
+
+			&.wp-block-columns,
+			&.wp-block-columns .wp-block-column {
+				padding-left: 0;
+				padding-right: 0;
 			}
 		}
 	}

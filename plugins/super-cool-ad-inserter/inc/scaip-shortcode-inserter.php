@@ -2,7 +2,7 @@
 /**
  * Functions for the automatic insertion of scaip shortcodes
  *
- * @package super-cool-ad-inserter-plugin
+ * @package super-cool-ad-inserter
  */
 
 /**
