@@ -99,6 +99,25 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that ESP::is_set_up() reads stored configuration only — never makes
+	 * a live provider call. Protects every gate that consults is_set_up()
+	 * (Integrations::get_active_configured_integrations and the retry-time
+	 * guards in Contact_Sync / Contact_Pull) from silently dropping traffic
+	 * on transient ESP failures, which the AS retry system is meant to survive.
+	 */
+	public function test_esp_is_set_up_reads_stored_state() {
+		$esp = new Integrations\ESP();
+
+		// Master list ID not stored → setup is incomplete.
+		$esp->update_settings_field_value( 'mailchimp_audience_id', '' );
+		$this->assertFalse( $esp->is_set_up(), 'is_set_up() must be false when master list ID is not stored.' );
+
+		// Admin selects a list → setup is complete.
+		$esp->update_settings_field_value( 'mailchimp_audience_id', '123' );
+		$this->assertTrue( $esp->is_set_up(), 'is_set_up() must be true when provider + master list are stored.' );
+	}
+
+	/**
 	 * Test contact data sync to ESP.
 	 */
 	public function test_sync_contact_data() {
