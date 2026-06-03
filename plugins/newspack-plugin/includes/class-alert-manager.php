@@ -34,8 +34,11 @@ class Alert_Manager {
 	/**
 	 * Window during which a repeating health-check failure for the same
 	 * integration + error-code signature emits at most one Slack alert.
+	 *
+	 * Private because no external caller needs to read it; keeping the
+	 * surface minimal lets the value evolve without breaking consumers.
 	 */
-	const HEALTH_CHECK_DEDUP_INTERVAL = DAY_IN_SECONDS;
+	private const HEALTH_CHECK_DEDUP_INTERVAL = DAY_IN_SECONDS;
 
 	/**
 	 * Default pattern rules.
@@ -465,6 +468,21 @@ class Alert_Manager {
 	 * the same Slack alert all day. A new error code OR a changed message
 	 * on the same integration (e.g. "list missing" escalating to "auth
 	 * fully revoked") falls outside the key and alerts immediately.
+	 *
+	 * Known boundaries of the dedup contract:
+	 * - Message text is part of the key, so locale shifts between cron
+	 *   passes (e.g. `switch_to_locale()` in a multilingual context) can
+	 *   produce a different key for the same underlying error and
+	 *   re-alert. Newspack ESP error messages are static per code today,
+	 *   so this is theoretical; revisit if dynamic content lands in
+	 *   error strings.
+	 * - The dedup key is stored as a transient, so on hosts backed by a
+	 *   persistent object cache (memcached) the entry can be evicted
+	 *   under LRU pressure before HEALTH_CHECK_DEDUP_INTERVAL elapses.
+	 *   The failure mode is re-alerting on the next hourly cron — the
+	 *   alternative (writing to the options table on every cron tick)
+	 *   has its own cost; transient + accepted re-alert risk is the
+	 *   intentional trade-off here.
 	 *
 	 * @param array $payload Health check failure data.
 	 */
