@@ -188,6 +188,11 @@ class Test_Integrations extends \WP_UnitTestCase {
 	public function test_get_active_configured_integrations_filters_by_is_set_up() {
 		$configured   = new Sample_Integration( 'configured', 'Configured' );
 		$unconfigured = new class( 'unconfigured', 'Unconfigured' ) extends Sample_Integration {
+			/**
+			 * Force this mock to report itself as not yet set up.
+			 *
+			 * @return bool
+			 */
 			public function is_set_up() {
 				return false;
 			}
