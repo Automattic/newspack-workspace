@@ -470,7 +470,10 @@ class Alert_Manager {
 	public static function handle_health_check_failed( $payload ) {
 		$error          = $payload['error'] ?? null;
 		$integration_id = $payload['integration_id'] ?? 'unknown';
-		$error_codes    = is_wp_error( $error ) ? $error->get_error_codes() : [ 'unknown' ];
+		$error_codes    = is_wp_error( $error ) ? $error->get_error_codes() : [];
+		if ( empty( $error_codes ) ) {
+			$error_codes = [ 'unknown' ];
+		}
 
 		$dedup_key = self::get_health_check_dedup_key( $integration_id, $error_codes );
 		if ( get_transient( $dedup_key ) ) {
