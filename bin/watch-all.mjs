@@ -94,17 +94,25 @@ function spawnWarmWatcher( unit ) {
 	warmChildren.set( unit.key, child );
 	prefixStream( child.stdout, unit.name );
 	prefixStream( child.stderr, unit.name );
+	// Disarm only if this exact child is still the unit's tracked watcher, so a
+	// late event from a replaced child can't delete a freshly re-armed one. Both
+	// handlers may run for the same child (Node doesn't guarantee 'error' and
+	// 'exit' are exclusive); the identity check makes that idempotent.
+	const disarm = () => {
+		if ( warmChildren.get( unit.key ) === child ) {
+			warmChildren.delete( unit.key );
+			unitState.delete( unit.key ); // allow a fresh spawn on next change.
+		}
+	};
 	// Without an 'error' listener a failed spawn (ENOENT/EACCES) throws as an
 	// unhandled exception and takes the whole dispatcher down.
 	child.on( 'error', ( error ) => {
 		log( `${ unit.name }: failed to start watcher (${ error.message }); will re-arm on next change` );
-		warmChildren.delete( unit.key );
-		unitState.delete( unit.key );
+		disarm();
 	} );
 	child.on( 'exit', ( code ) => {
 		log( `${ unit.name }: watcher exited (code ${ code }); will re-arm on next change` );
-		warmChildren.delete( unit.key );
-		unitState.delete( unit.key ); // allow a fresh spawn if it died.
+		disarm();
 	} );
 }
 
@@ -133,17 +141,29 @@ function drainBuildQueue() {
 	}
 	building = true;
 	log( `${ unit.name }: building (one-shot)` );
+	// detached so the child leads its own process group; killing -pid on
+	// shutdown takes down pnpm and the build tooling it spawns together.
 	const child = spawn(
 		'pnpm',
 		[ '--filter', unit.filter, 'run', '--if-present', 'build' ],
-		{ cwd: ROOT, stdio: 'inherit' }
+		{ cwd: ROOT, stdio: 'inherit', detached: true }
 	);
 	activeBuild = child;
 	// Release the queue whether the build finishes or fails to spawn; without
 	// the 'error' handler a spawn failure would leave `building` stuck true and
-	// silently wedge every later one-shot build.
+	// silently wedge every later one-shot build. Guard against running twice:
+	// Node does not guarantee 'error' and 'exit' are mutually exclusive, and a
+	// double release would null a *later* build's activeBuild and start a second
+	// concurrent build, breaking the one-build-at-a-time invariant.
+	let released = false;
 	const release = () => {
-		activeBuild = null;
+		if ( released ) {
+			return;
+		}
+		released = true;
+		if ( activeBuild === child ) {
+			activeBuild = null;
+		}
 		building = false;
 		drainBuildQueue();
 	};
@@ -208,7 +228,8 @@ function shutdown() {
 	debounceTimers.clear();
 	for ( const child of warmChildren.values() ) {
 		try {
-			// Guard against an undefined pid from a synchronous spawn failure.
+			// Guard against an undefined pid when spawn failed before a child
+			// process existed (e.g. ENOENT).
 			if ( child.pid ) {
 				process.kill( -child.pid, 'SIGTERM' );
 			}
@@ -216,12 +237,13 @@ function shutdown() {
 			// Child already gone -- nothing to clean up.
 		}
 	}
-	// The in-flight one-shot build inherits our stdio and isn't detached, so a
-	// terminal Ctrl-C reaches it already; signal it directly too for the
-	// programmatic SIGTERM path so it doesn't outlive the dispatcher.
+	// Kill the in-flight one-shot build's process group too. Like the warm
+	// watchers it is spawned detached, so -pid takes down pnpm and the build
+	// tooling it spawns together (a direct kill would leave those descendants
+	// orphaned on the programmatic SIGTERM path).
 	if ( activeBuild && activeBuild.pid ) {
 		try {
-			activeBuild.kill( 'SIGTERM' );
+			process.kill( -activeBuild.pid, 'SIGTERM' );
 		} catch {
 			// Already exited -- nothing to clean up.
 		}
