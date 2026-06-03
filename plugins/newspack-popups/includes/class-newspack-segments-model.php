@@ -559,7 +559,7 @@ final class Newspack_Segments_Model {
 	/**
 	 * Determine whether a criterion value represents "no constraint".
 	 *
-	 * Walks arrays/objects so partially-disabled values (e.g. `{ min: 0, max: 0 }`)
+	 * Walks nested arrays so fully-disabled values (e.g. `{ min: 0, max: 0 }`)
 	 * are recognised as empty.
 	 *
 	 * @param mixed $value Criterion value.
