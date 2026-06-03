@@ -63,6 +63,11 @@ jobs:
               composer install --no-dev --no-interaction --no-scripts --working-dir="${dir}"
             fi
           done
+      # Snapshot existing tags so the post-release Slack step can diff them
+      # against the tags multi-semantic-release creates and report exactly which
+      # packages were published.
+      - name: Snapshot existing tags
+        run: git tag > "$RUNNER_TEMP/tags-before.txt"
       - name: Release
         run: pnpm exec multi-semantic-release --sequential-init
         env:
@@ -100,6 +105,20 @@ jobs:
             git pull --rebase origin "${GITHUB_REF_NAME}"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           }
+
+      # Post a release-success summary to Slack: stable releases (release branch)
+      # go to the a8c workspace, alpha releases to the Newspack workspace. Only
+      # these two branches notify; hotfix/* and epic/* publish silently.
+      - name: Notify Slack of release
+        if: ${{ success() && ( github.ref_name == 'release' || github.ref_name == 'alpha' ) }}
+        env:
+          TAGS_BEFORE_FILE: ${{ runner.temp }}/tags-before.txt
+          SLACK_AUTH_TOKEN: ${{ secrets.SLACK_AUTH_TOKEN }}
+          SLACK_NEWSPACK_BOT_TOKEN: ${{ secrets.SLACK_NEWSPACK_BOT_TOKEN }}
+          SLACK_A8C_RELEASE_CHANNEL_ID: ${{ vars.SLACK_A8C_RELEASE_CHANNEL_ID }}
+          SLACK_NEWSPACK_RELEASE_CHANNEL_ID: ${{ vars.SLACK_NEWSPACK_RELEASE_CHANNEL_ID }}
+          SLACK_SUPPORT_TEAM_SUBTEAM_ID: ${{ vars.SLACK_SUPPORT_TEAM_SUBTEAM_ID }}
+        run: ./.github/scripts/notify-release.sh
 
   # Branch maintenance after a stable release: reset alpha and sync release into
   # the default branch. Only runs on the release branch (not alpha/hotfix/epic).
