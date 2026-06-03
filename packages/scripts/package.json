@@ -24,7 +24,7 @@
 		"@wordpress/block-editor": "^15.6.0",
 		"@wordpress/blocks": "^15.6.0",
 		"@wordpress/browserslist-config": "^6.33.0",
-		"@wordpress/components": "^30.6.0",
+		"@wordpress/components": "^34.0.0",
 		"@wordpress/compose": "^7.33.0",
 		"@wordpress/data": "^10.33.0",
 		"@wordpress/date": "^5.33.0",

@@ -24,7 +24,7 @@
 	},
 	"dependencies": {
 		"@wordpress/base-styles": "^6.0.0",
-		"@wordpress/components": "^32.0.0",
+		"@wordpress/components": "^34.0.0",
 		"@wordpress/element": "^6.0.0",
 		"@wordpress/i18n": "^6.0.0",
 		"@wordpress/icons": "^11.0.0",
