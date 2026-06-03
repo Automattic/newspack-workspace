@@ -532,10 +532,18 @@ final class Newspack_Segments_Model {
 	 * Filter out disabled criteria from a segment's criteria array.
 	 *
 	 * A criterion is considered disabled when its value carries no constraint
-	 * (e.g. null, empty string, numeric `0`, empty array, or an associative
-	 * array whose entries are all themselves empty). This prevents disabled
-	 * number-based criteria like `{ min: 0, max: 0 }` from leaking through to
-	 * the front-end criteria array and being evaluated as active constraints.
+	 * (`null`, empty string, string/numeric `0`, boolean `false`, empty array,
+	 * or a nested array whose entries are all themselves empty by these
+	 * rules). This prevents disabled number-based criteria like
+	 * `{ min: 0, max: 0 }` from leaking through to the front-end criteria
+	 * array and being evaluated as active constraints.
+	 *
+	 * Extensibility:
+	 * - `newspack_popups_is_criteria_value_empty` — short-circuit the
+	 *   per-value emptiness check (return a non-null boolean to override).
+	 * - `newspack_popups_filter_segment_criteria` — final filter over the
+	 *   returned criteria array, e.g. for custom criteria that need to
+	 *   survive the default filter.
 	 *
 	 * @param mixed $criteria Criteria array from segment meta. Non-arrays return [].
 	 * @return array Filtered criteria, re-indexed.
@@ -544,7 +552,7 @@ final class Newspack_Segments_Model {
 		if ( ! is_array( $criteria ) ) {
 			return [];
 		}
-		return array_values(
+		$filtered = array_values(
 			array_filter(
 				$criteria,
 				function( $item ) {
@@ -554,26 +562,60 @@ final class Newspack_Segments_Model {
 				}
 			)
 		);
+
+		/**
+		 * Filters the criteria array after disabled entries have been stripped.
+		 *
+		 * Lets custom criteria registered via `newspack_popups_default_criteria`
+		 * opt out of, or override, the default filtering — e.g. a criterion
+		 * whose semantically-meaningful value is `0` / `''` / `false`.
+		 *
+		 * @param array $filtered Criteria after the default empty-value filter.
+		 * @param array $criteria Raw criteria as received.
+		 */
+		return apply_filters( 'newspack_popups_filter_segment_criteria', $filtered, $criteria );
 	}
 
 	/**
 	 * Determine whether a criterion value represents "no constraint".
 	 *
 	 * Walks nested arrays so fully-disabled values (e.g. `{ min: 0, max: 0 }`)
-	 * are recognised as empty.
+	 * are recognised as empty. Booleans are treated as empty when `false` —
+	 * mirroring the convention used by the existing `is_disabled` toggles —
+	 * so custom boolean criteria don't need bespoke handling.
 	 *
 	 * @param mixed $value Criterion value.
 	 * @return bool True if the value carries no constraint.
 	 */
 	private static function is_criteria_value_empty( $value ) {
+		/**
+		 * Short-circuit the per-value emptiness check for `filter_criteria()`.
+		 *
+		 * Return a boolean to override; return `null` (default) to fall through
+		 * to the built-in rules. Useful when a custom criterion treats a
+		 * normally-empty value (e.g. `0`, `''`, `false`) as meaningful.
+		 *
+		 * @param mixed $value The criterion value being evaluated.
+		 */
+		$override = apply_filters( 'newspack_popups_is_criteria_value_empty', null, $value );
+		if ( is_bool( $override ) ) {
+			return $override;
+		}
+
 		if ( null === $value ) {
 			return true;
+		}
+		if ( is_bool( $value ) ) {
+			return false === $value;
 		}
 		if ( is_string( $value ) ) {
 			return '' === $value || '0' === $value;
 		}
-		if ( is_int( $value ) || is_float( $value ) ) {
-			return 0 === $value || 0.0 === $value;
+		if ( is_int( $value ) ) {
+			return 0 === $value;
+		}
+		if ( is_float( $value ) ) {
+			return 0.0 === $value;
 		}
 		if ( is_array( $value ) ) {
 			if ( [] === $value ) {

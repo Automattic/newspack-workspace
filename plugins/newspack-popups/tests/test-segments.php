@@ -673,6 +673,11 @@ class SegmentsTest extends WP_UnitTestCase {
 		);
 		$criteria_ids = wp_list_pluck( $result[0]['criteria'], 'criteria_id' );
 		$this->assertSame( [ 'articles_read', 'donation' ], $criteria_ids );
+
+		// Verify the raw term meta was written in its filtered form (not just the read path).
+		$raw_criteria = get_term_meta( $segment['id'], 'criteria', true );
+		$this->assertCount( 2, $raw_criteria, 'Disabled criteria should not be persisted to term meta.' );
+		$this->assertSame( [ 'articles_read', 'donation' ], wp_list_pluck( $raw_criteria, 'criteria_id' ) );
 	}
 
 	/**
@@ -758,5 +763,81 @@ class SegmentsTest extends WP_UnitTestCase {
 
 		$this->assertCount( 1, $filtered );
 		$this->assertSame( 'articles_read', $filtered[0]['criteria_id'] );
+	}
+
+	/**
+	 * Boolean criterion values: `false` is treated as empty (dropped),
+	 * `true` is preserved.
+	 */
+	public function test_filter_criteria_handles_booleans() {
+		$criteria = [
+			[
+				'criteria_id' => 'custom_bool_active',
+				'value'       => true,
+			],
+			[
+				'criteria_id' => 'custom_bool_inactive',
+				'value'       => false,
+			],
+		];
+
+		$filtered = Newspack_Segments_Model::filter_criteria( $criteria );
+
+		$this->assertSame(
+			[ 'custom_bool_active' ],
+			wp_list_pluck( $filtered, 'criteria_id' ),
+			'`true` should survive; `false` should be dropped.'
+		);
+	}
+
+	/**
+	 * Third parties can register a custom criterion whose semantically-meaningful
+	 * value is normally treated as empty (e.g. `0`). The
+	 * `newspack_popups_is_criteria_value_empty` filter lets them opt out per-value.
+	 */
+	public function test_filter_criteria_value_empty_filter_can_override() {
+		$callback = function ( $override, $value ) {
+			// Treat integer `0` as a meaningful value for any criterion.
+			if ( 0 === $value ) {
+				return false;
+			}
+			return $override;
+		};
+		add_filter( 'newspack_popups_is_criteria_value_empty', $callback, 10, 2 );
+
+		$filtered = Newspack_Segments_Model::filter_criteria(
+			[
+				[
+					'criteria_id' => 'zero_donations',
+					'value'       => 0,
+				],
+			]
+		);
+
+		remove_filter( 'newspack_popups_is_criteria_value_empty', $callback, 10 );
+
+		$this->assertCount( 1, $filtered, 'Override should keep the otherwise-empty criterion.' );
+	}
+
+	/**
+	 * Third parties can post-process the filtered criteria array via
+	 * `newspack_popups_filter_segment_criteria` — e.g. to inject defaults.
+	 */
+	public function test_filter_segment_criteria_filter_runs() {
+		$callback = function ( $filtered ) {
+			$filtered[] = [
+				'criteria_id' => 'injected',
+				'value'       => 'yes',
+			];
+			return $filtered;
+		};
+		add_filter( 'newspack_popups_filter_segment_criteria', $callback );
+
+		$filtered = Newspack_Segments_Model::filter_criteria( [] );
+
+		remove_filter( 'newspack_popups_filter_segment_criteria', $callback );
+
+		$this->assertCount( 1, $filtered );
+		$this->assertSame( 'injected', $filtered[0]['criteria_id'] );
 	}
 }
