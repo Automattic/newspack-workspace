@@ -913,6 +913,76 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test Contact_Pull::pull_sync defaults to set-up integrations only.
+	 *
+	 * The synchronous loopback path (run from Contact_Cron when the user's
+	 * last pull is stale) must NOT fire a loopback for an integration whose
+	 * `is_set_up()` is false — otherwise it both wastes a blocking remote
+	 * call and logs a spurious failure.
+	 */
+	public function test_pull_sync_skips_unconfigured_integrations() {
+		$user_id = $this->factory()->user->create();
+		wp_set_current_user( $user_id );
+
+		$configured = new class( 'sync-configured', 'Sync Configured' ) extends Sample_Integration {
+			/**
+			 * Pull mock returning data so the loopback would succeed if reached.
+			 *
+			 * @param int $user_id WordPress user ID.
+			 * @return array
+			 */
+			public function pull_contact_data( $user_id ) {
+				return [ 'favorite_color' => 'green' ];
+			}
+		};
+		$configured->update_enabled_incoming_fields( [ 'favorite_color' ] );
+		Integrations::register( $configured );
+		Integrations::enable( 'sync-configured' );
+
+		$unconfigured = new class( 'sync-unconfigured', 'Sync Unconfigured' ) extends Sample_Integration {
+			/**
+			 * Force this mock to report itself as not yet set up.
+			 *
+			 * @return bool
+			 */
+			public function is_set_up() {
+				return false;
+			}
+			/**
+			 * Pull mock that would return data if reached — must not be called.
+			 *
+			 * @param int $user_id WordPress user ID.
+			 * @return array
+			 */
+			public function pull_contact_data( $user_id ) {
+				return [ 'favorite_color' => 'red' ];
+			}
+		};
+		$unconfigured->update_enabled_incoming_fields( [ 'favorite_color' ] );
+		Integrations::register( $unconfigured );
+		Integrations::enable( 'sync-unconfigured' );
+
+		// Capture which integration_ids the loopback receives.
+		$loopback_hits = [];
+		$this->loopback_filter = function ( $preempt, $parsed_args, $url ) use ( &$loopback_hits ) {
+			if ( false === strpos( $url, 'action=' . Contact_Pull::AJAX_ACTION ) ) {
+				return $preempt;
+			}
+			$loopback_hits[] = $parsed_args['body']['integration_id'] ?? '';
+			return [
+				'response' => [ 'code' => 200 ],
+				'body'     => '{"success":true}',
+			];
+		};
+		add_filter( 'pre_http_request', $this->loopback_filter, 10, 3 );
+
+		Contact_Pull::pull_sync();
+
+		$this->assertContains( 'sync-configured', $loopback_hits, 'Configured integration must receive a loopback.' );
+		$this->assertNotContains( 'sync-unconfigured', $loopback_hits, 'Unconfigured integration must NOT receive a loopback.' );
+	}
+
+	/**
 	 * Test Contact_Pull::pull_all skips integrations whose is_set_up() is false.
 	 *
 	 * Mirrors the run_health_checks skip: an unconfigured integration must not
