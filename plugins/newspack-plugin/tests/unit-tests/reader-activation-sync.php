@@ -118,6 +118,27 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that ESP::is_set_up() returns false when no provider is selected —
+	 * the exact default-state scenario the hotfix targets (ESP auto-enabled on
+	 * fresh installs while `newspack_newsletters_service_provider` is unset).
+	 */
+	public function test_esp_is_set_up_returns_false_when_no_provider_selected() {
+		$esp = new Integrations\ESP();
+		$esp->update_settings_field_value( 'mailchimp_audience_id', '123' );
+
+		// Even with a master list stored, an unconfigured provider must short-circuit.
+		\Newspack_Newsletters::$is_service_provider_configured = false;
+		try {
+			$this->assertFalse(
+				$esp->is_set_up(),
+				'is_set_up() must be false when no provider is selected, even if a master list ID is stored.'
+			);
+		} finally {
+			\Newspack_Newsletters::reset_calls();
+		}
+	}
+
+	/**
 	 * Test contact data sync to ESP.
 	 */
 	public function test_sync_contact_data() {
