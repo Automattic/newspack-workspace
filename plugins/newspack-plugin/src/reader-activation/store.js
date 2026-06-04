@@ -31,6 +31,16 @@ const config = {
 const mergeStrategies = new Map();
 
 /**
+ * Module-scoped reference to the active store's internal clear() so the
+ * singleton guard in Store() can hand it back alongside the public store
+ * without exposing it on the public API. See NPPM-2721 and the tuple return
+ * from Store().
+ *
+ * @type {Function|undefined}
+ */
+let internalClear;
+
+/**
  * Rehydrate a single item from server data, using the registered merge
  * strategy if one exists. Falls back to a direct overwrite.
  *
@@ -261,14 +271,20 @@ function _set( key, value, internal = false ) {
 /**
  * Store.
  *
- * @return {Object} The store object.
+ * Returns a two-element tuple: the public store object (assigned to
+ * `readerActivation.store` and therefore reachable by third-party code) and an
+ * internal `clear()` that is deliberately kept off the public object. `clear()`
+ * wipes the whole reader namespace and bypasses read-only-key protections, so
+ * only init()'s post-logout handler should call it. See NPPM-2721.
+ *
+ * @return {[Object, Function]} `[ publicStore, internalClear ]`.
  */
 export default function Store() {
 	/**
 	 * There should only be one store instance.
 	 */
 	if ( window.newspackRASInitialized && window.newspackReaderActivation?.store ) {
-		return window.newspackReaderActivation.store;
+		return [ window.newspackReaderActivation.store, internalClear ];
 	}
 
 	/**
@@ -339,7 +355,57 @@ export default function Store() {
 		_set( 'unsynced', [], true );
 	}
 
-	return {
+	/**
+	 * Wipe the entire reader-data namespace from storage and reseed an
+	 * anonymous reader stub. Kept off the public store object (returned
+	 * separately from Store()) because it bypasses read-only-key protections
+	 * and would silently destroy reader state if called by third-party code.
+	 * Only init()'s post-logout divergence handler should call it (NPPM-2721).
+	 */
+	function clear() {
+		const prefix = getStorePrefix( false );
+		// Guard against an empty prefix: newspack_reader_data.store_prefix is
+		// PHP-filterable, and an accidental '' would make startsWith('') match
+		// every key in the storage backend — wiping unrelated app/3rd-party
+		// localStorage. Bail rather than nuke the whole origin.
+		if ( ! prefix ) {
+			return;
+		}
+		const internalPrefix = getStorePrefix( true );
+		const keysToRemove = [];
+		for ( let i = 0; i < config.storage.length; i++ ) {
+			const storageKey = config.storage.key( i );
+			if ( storageKey && storageKey.startsWith( prefix ) ) {
+				keysToRemove.push( storageKey );
+			}
+		}
+		for ( const storageKey of keysToRemove ) {
+			config.storage.removeItem( storageKey );
+			// Emit a per-key data event for each wiped public key, mirroring
+			// delete(), so consumers that invalidate caches keyed by detail.key
+			// don't silently keep stale data. Skip internal bookkeeping keys and
+			// the 'reader' key (reseeded below, which emits its own data event).
+			if ( ! storageKey.startsWith( internalPrefix ) ) {
+				const key = storageKey.slice( prefix.length );
+				if ( key && 'reader' !== key ) {
+					emit( EVENTS.data, { key, value: undefined } );
+				}
+			}
+		}
+		drainSyncQueue();
+		// Reset the in-memory server-known-items cache that syncItem reads to
+		// short-circuit no-op writes. window.newspack_reader_data is initialized
+		// at module load (top of this file), so no presence guard is needed.
+		window.newspack_reader_data.items = {};
+		// Reseed via _set (not public set) so the reseed itself doesn't enqueue a
+		// server write — and so init()'s trailing equality check skips its own
+		// store.set('reader', ...) call. _set emits EVENTS.data for 'reader';
+		// init() emits EVENTS.reader after calling clear(), so the reader-state
+		// change is signalled without clear() double-emitting it.
+		_set( 'reader', { authenticated: false } );
+	}
+
+	const publicStore = {
 		/**
 		 * Get a value from the store.
 		 *
@@ -376,36 +442,6 @@ export default function Store() {
 				}
 			}
 			return data;
-		},
-		/**
-		 * Intended for init()'s post-logout divergence handler only.
-		 * Reachable as ras.store.clear() due to closure-access constraints; third-
-		 * party invocation would silently destroy reader state. See NPPM-2721.
-		 *
-		 * @internal
-		 */
-		clear: () => {
-			const prefix = getStorePrefix( false );
-			const keysToRemove = [];
-			for ( let i = 0; i < config.storage.length; i++ ) {
-				const storageKey = config.storage.key( i );
-				if ( storageKey && storageKey.startsWith( prefix ) ) {
-					keysToRemove.push( storageKey );
-				}
-			}
-			for ( const storageKey of keysToRemove ) {
-				config.storage.removeItem( storageKey );
-			}
-			drainSyncQueue();
-			// Reset the in-memory server-known-items cache that syncItem
-			// reads to short-circuit no-op writes.
-			if ( window.newspack_reader_data ) {
-				window.newspack_reader_data.items = {};
-			}
-			// Reseed via _set (not public set) so the reseed itself doesn't enqueue
-			// a server write — and so init()'s trailing equality check skips its
-			// own store.set('reader', ...) call.
-			_set( 'reader', { authenticated: false } );
 		},
 		/**
 		 * Set a value in the store.
@@ -494,4 +530,10 @@ export default function Store() {
 		 */
 		rehydrate,
 	};
+
+	// Expose clear() only via the tuple's second element (and the module-scoped
+	// ref for the singleton guard above) — never on publicStore, so it isn't
+	// reachable as readerActivation.store.clear() by third-party code (NPPM-2721).
+	internalClear = clear;
+	return [ publicStore, clear ];
 }

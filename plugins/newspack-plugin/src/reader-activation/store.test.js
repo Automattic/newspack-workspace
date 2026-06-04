@@ -9,7 +9,7 @@ describe( 'Store', () => {
 		localStorage.clear();
 	} );
 	it( 'should return an object with methods', () => {
-		const store = Store();
+		const [ store ] = Store();
 		expect( typeof store ).toBe( 'object' );
 		expect( typeof store.get ).toBe( 'function' );
 		expect( typeof store.getAll ).toBe( 'function' );
@@ -18,7 +18,7 @@ describe( 'Store', () => {
 		expect( typeof store.delete ).toBe( 'function' );
 	} );
 	it( 'should store json stringified data in localStorage', () => {
-		const store = Store();
+		const [ store ] = Store();
 		store.set( 'string', 'foo' );
 		store.set( 'array', [ 1, 2, 3 ] );
 		store.set( 'object', { foo: 'bar' } );
@@ -31,7 +31,7 @@ describe( 'Store', () => {
 		expect( localStorage.getItem( 'np_reader_boolean' ) ).toEqual( 'false' );
 	} );
 	it( 'should not store undefined or null values', () => {
-		const store = Store();
+		const [ store ] = Store();
 		const storeUndefined = () => store.set( 'undefined', undefined );
 		const storeNull = () => store.set( 'null', null );
 		expect( storeUndefined ).toThrow( Error );
@@ -40,52 +40,52 @@ describe( 'Store', () => {
 		expect( localStorage.getItem( 'np_reader_null' ) ).toBeNull();
 	} );
 	it( 'should store data and return it', () => {
-		const store = Store();
+		const [ store ] = Store();
 		store.set( 'foo', 'bar' );
 		expect( store.get( 'foo' ) ).toEqual( 'bar' );
 	} );
 	it( 'should delete a key', () => {
-		const store = Store();
+		const [ store ] = Store();
 		store.set( 'foo', 'bar' );
 		store.delete( 'foo' );
 		expect( localStorage.getItem( 'np_reader_foo' ) ).toBeNull();
 		expect( store.get( 'foo' ) ).toBeNull();
 	} );
 	it( 'should add to a collection', () => {
-		const store = Store();
+		const [ store ] = Store();
 		const item = { foo: 'bar' };
 		store.add( 'my-collection', item );
 		expect( store.get( 'my-collection' ) ).toEqual( [ item ] );
 	} );
 	it( 'should not store more than 1000 items in a collection', () => {
-		const store = Store();
+		const [ store ] = Store();
 		for ( let i = 0; i < 1001; i++ ) {
 			store.add( 'my-collection', { foo: 'bar' } );
 		}
 		expect( store.get( 'my-collection' ).length ).toEqual( 1000 );
 	} );
 	it( 'should clear added items older than 30 days in a collection', () => {
-		const store = Store();
+		const [ store ] = Store();
 		const now = Date.now();
 		store.add( 'my-collection', { timestamp: 1 } ); // Old timestamp.
 		store.add( 'my-collection', { timestamp: now } ); // Setting new item clears old ones.
 		expect( store.get( 'my-collection' ) ).toEqual( [ { timestamp: now } ] );
 	} );
 	it( 'should not add to collection if key value is not an array', () => {
-		const store = Store();
+		const [ store ] = Store();
 		store.set( 'my-collection', 'not-an-array' );
 		const storeNotArray = () => store.add( 'my-collection', { foo: 'bar' } );
 		expect( storeNotArray ).toThrow( Error );
 		expect( store.get( 'my-collection' ) ).toEqual( 'not-an-array' );
 	} );
 	it( 'should not add to collection if key is empty', () => {
-		const store = Store();
+		const [ store ] = Store();
 		const storeEmptyKey = () => store.add( undefined, { foo: 'bar' } );
 		expect( storeEmptyKey ).toThrow( Error );
 		expect( store.get( 'my-collection' ) ).toBeNull();
 	} );
 	it( 'should not add to collection if value is empty', () => {
-		const store = Store();
+		const [ store ] = Store();
 		const storeEmptyValue = () => store.add( 'my-collection', undefined );
 		expect( storeEmptyValue ).toThrow( Error );
 		expect( store.get( 'my-collection' ) ).toBeNull();
@@ -96,7 +96,7 @@ describe( 'Store', () => {
 				foo: '"bar"',
 			},
 		};
-		const store = Store();
+		const [ store ] = Store();
 		store.rehydrate();
 		expect( store.get( 'foo' ) ).toEqual( 'bar' );
 	} );
@@ -106,7 +106,7 @@ describe( 'Store', () => {
 				flaky: '"server"',
 			},
 		};
-		const store = Store();
+		const [ store ] = Store();
 		store.register( 'flaky', {
 			merge: () => {
 				throw new Error( 'boom' );
@@ -123,7 +123,7 @@ describe( 'Store', () => {
 			window.newspack_reader_data = {};
 		} );
 		it( 'should return all store data as a plain object', () => {
-			const store = Store();
+			const [ store ] = Store();
 			store.set( 'name', 'Leo' );
 			store.set( 'prefs', { theme: 'dark' } );
 			store.set( 'scores', [ 1, 2, 3 ] );
@@ -135,7 +135,7 @@ describe( 'Store', () => {
 			} );
 		} );
 		it( 'should not include internal keys in getAll', () => {
-			const store = Store();
+			const [ store ] = Store();
 			store.set( 'visible', 'yes' );
 			const all = store.getAll();
 			expect( all.visible ).toEqual( 'yes' );
@@ -144,7 +144,7 @@ describe( 'Store', () => {
 			expect( localStorage.getItem( 'np_reader__unsynced' ) ).not.toBeNull();
 		} );
 		it( 'should return an empty object when store is empty', () => {
-			const store = Store();
+			const [ store ] = Store();
 			expect( store.getAll() ).toEqual( {} );
 		} );
 		it( 'should include rehydrated server items in getAll', () => {
@@ -154,7 +154,7 @@ describe( 'Store', () => {
 					active_memberships: '[1,2]',
 				},
 			};
-			const store = Store();
+			const [ store ] = Store();
 			store.rehydrate();
 			const all = store.getAll();
 			expect( all.is_donor ).toEqual( true );
@@ -168,15 +168,15 @@ describe( 'Store', () => {
 			};
 		} );
 		it( 'should throw when setting a read-only key', () => {
-			const store = Store();
+			const [ store ] = Store();
 			expect( () => store.set( 'is_donor', true ) ).toThrow( "Key 'is_donor' is read-only." );
 		} );
 		it( 'should throw when deleting a read-only key', () => {
-			const store = Store();
+			const [ store ] = Store();
 			expect( () => store.delete( 'active_memberships' ) ).toThrow( "Key 'active_memberships' is read-only." );
 		} );
 		it( 'should throw when adding to a read-only key', () => {
-			const store = Store();
+			const [ store ] = Store();
 			expect( () => store.add( 'is_donor', { foo: 'bar' } ) ).toThrow( "Key 'is_donor' is read-only." );
 		} );
 		it( 'should allow getting read-only keys populated via rehydration', () => {
@@ -186,12 +186,12 @@ describe( 'Store', () => {
 					is_donor: true,
 				},
 			};
-			const store = Store();
+			const [ store ] = Store();
 			store.rehydrate();
 			expect( store.get( 'is_donor' ) ).toEqual( true );
 		} );
 		it( 'should not affect non-read-only keys', () => {
-			const store = Store();
+			const [ store ] = Store();
 			store.set( 'custom_key', 'value' );
 			expect( store.get( 'custom_key' ) ).toEqual( 'value' );
 			store.delete( 'custom_key' );
@@ -214,25 +214,30 @@ describe( 'Store', () => {
 			localStorage.setItem( 'np_reader_pageviews', JSON.stringify( { day: { count: 1 } } ) );
 			localStorage.setItem( 'np_reader__unsynced', JSON.stringify( [ 'pageviews' ] ) );
 			localStorage.setItem( 'unrelated_key', 'untouched' );
-			const store = Store();
-			store.clear();
+			const [ , clearStore ] = Store();
+			clearStore();
 			expect( localStorage.getItem( 'np_reader_activity' ) ).toBeNull();
 			expect( localStorage.getItem( 'np_reader_pageviews' ) ).toBeNull();
 			expect( localStorage.getItem( 'unrelated_key' ) ).toEqual( 'untouched' );
 		} );
 		it( 'should re-seed the reader key as an anonymous stub', () => {
 			localStorage.setItem( 'np_reader_reader', JSON.stringify( { email: 'old@example.com', authenticated: true } ) );
-			const store = Store();
-			store.clear();
+			const [ store, clearStore ] = Store();
+			clearStore();
 			expect( store.get( 'reader' ) ).toEqual( { authenticated: false } );
 		} );
-		it( 'should fire a data event so consumer caches invalidate', () => {
-			const callback = jest.fn();
+		it( 'should fire a per-key data event for each wiped key so consumer caches invalidate', () => {
+			localStorage.setItem( 'np_reader_is_donor', JSON.stringify( true ) );
+			const events = [];
+			const callback = e => events.push( e.detail );
 			on( EVENTS.data, callback );
-			const store = Store();
-			store.clear();
+			const [ , clearStore ] = Store();
+			clearStore();
 			off( EVENTS.data, callback );
-			expect( callback ).toHaveBeenCalled();
+			// The wiped key emits a data event with an undefined value (mirroring
+			// delete()), and the reader reseed emits its own data event.
+			expect( events ).toContainEqual( { key: 'is_donor', value: undefined } );
+			expect( events ).toContainEqual( { key: 'reader', value: { authenticated: false } } );
 		} );
 		it( 'should drain the sync queue so deleted keys are not POSTed on the next tick', () => {
 			jest.useFakeTimers();
@@ -245,9 +250,9 @@ describe( 'Store', () => {
 				items: { pageviews: '{"day":{"count":99}}' },
 			};
 			const openSpy = jest.spyOn( XMLHttpRequest.prototype, 'open' );
-			const store = Store();
+			const [ store, clearStore ] = Store();
 			store.set( 'pageviews', { day: { count: 1 } } );
-			store.clear();
+			clearStore();
 			jest.advanceTimersByTime( 1500 );
 			expect( openSpy ).not.toHaveBeenCalled();
 			openSpy.mockRestore();
@@ -261,8 +266,8 @@ describe( 'Store', () => {
 				items: { reader: '{"email":"old@example.com","authenticated":true}' },
 			};
 			const openSpy = jest.spyOn( XMLHttpRequest.prototype, 'open' );
-			const store = Store();
-			store.clear();
+			const [ , clearStore ] = Store();
+			clearStore();
 			jest.advanceTimersByTime( 1500 );
 			// Confirm no XHR targets the reseeded reader key.
 			const readerOpens = openSpy.mock.calls.filter( call => /reader/.test( JSON.stringify( call ) ) );
@@ -273,14 +278,14 @@ describe( 'Store', () => {
 		} );
 		it( 'should reset the in-memory newspack_reader_data.items cache', () => {
 			window.newspack_reader_data = { items: { is_donor: '"true"', reader: '{"email":"x"}' } };
-			const store = Store();
-			store.clear();
+			const [ , clearStore ] = Store();
+			clearStore();
 			expect( window.newspack_reader_data.items ).toEqual( {} );
 		} );
 		it( 'should empty the persisted _unsynced array', () => {
 			localStorage.setItem( 'np_reader__unsynced', JSON.stringify( [ 'pageviews' ] ) );
-			const store = Store();
-			store.clear();
+			const [ , clearStore ] = Store();
+			clearStore();
 			expect( localStorage.getItem( 'np_reader__unsynced' ) ).toEqual( '[]' );
 		} );
 		it( 'pins the _set no-sync contract: post-clear reseed is not enqueued in-memory or persisted', () => {
@@ -292,8 +297,8 @@ describe( 'Store', () => {
 			jest.useFakeTimers();
 			window.newspack_reader_data = { api_url: 'http://test/api', nonce: 'abc', items: {} };
 			const openSpy = jest.spyOn( XMLHttpRequest.prototype, 'open' );
-			const store = Store();
-			store.clear();
+			const [ , clearStore ] = Store();
+			clearStore();
 			jest.advanceTimersByTime( 1500 );
 			expect( openSpy ).not.toHaveBeenCalled();
 			const unsynced = JSON.parse( localStorage.getItem( 'np_reader__unsynced' ) || '[]' );
