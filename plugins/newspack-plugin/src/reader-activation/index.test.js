@@ -282,3 +282,109 @@ describe( 'init() post-logout clearing (NPPM-2721)', () => {
 		expect( reader.email ).toBeUndefined();
 	} );
 } );
+
+describe( 'shouldClearReaderData (NPPM-2899)', () => {
+	let shouldClearReaderData;
+	beforeAll( () => {
+		// Pre-set the RAS-init guard so requiring the module doesn't run init().
+		window.newspackRASInitialized = true;
+		( { shouldClearReaderData } = require( './index' ) );
+	} );
+	afterAll( () => {
+		delete window.newspackRASInitialized;
+	} );
+
+	const reader = ( email, authenticated ) => ( { email, authenticated } );
+
+	it( 'clears on authenticated A→B switch', () => {
+		expect(
+			shouldClearReaderData( {
+				authenticatedEmail: 'b@example.com',
+				initialEmail: 'b@example.com',
+				storedReader: reader( 'a@example.com', true ),
+				hasAuthReaderCookie: true,
+			} )
+		).toBe( true );
+	} );
+
+	it( 'does NOT clear when an unauthenticated email lead logs in under a different email', () => {
+		expect(
+			shouldClearReaderData( {
+				authenticatedEmail: 'b@example.com',
+				initialEmail: 'b@example.com',
+				storedReader: reader( 'lead@example.com', false ),
+				hasAuthReaderCookie: true,
+			} )
+		).toBe( false );
+	} );
+
+	it( 'does NOT clear on same-reader re-auth (A→A), case-insensitively', () => {
+		expect(
+			shouldClearReaderData( {
+				authenticatedEmail: 'A@Example.com',
+				initialEmail: 'A@Example.com',
+				storedReader: reader( 'a@example.com', true ),
+				hasAuthReaderCookie: true,
+			} )
+		).toBe( false );
+	} );
+
+	it( 'does NOT clear on anonymous→login with no stored email', () => {
+		expect(
+			shouldClearReaderData( {
+				authenticatedEmail: 'a@example.com',
+				initialEmail: 'a@example.com',
+				storedReader: {},
+				hasAuthReaderCookie: true,
+			} )
+		).toBe( false );
+	} );
+
+	it( 'clears on fresh logout (server anonymous, stored still authenticated)', () => {
+		expect(
+			shouldClearReaderData( {
+				authenticatedEmail: '',
+				initialEmail: '',
+				storedReader: reader( 'a@example.com', true ),
+				hasAuthReaderCookie: false,
+			} )
+		).toBe( true );
+	} );
+
+	it( 'clears on orphaned leftover (server anonymous, stored email ≠ intention)', () => {
+		expect(
+			shouldClearReaderData( {
+				authenticatedEmail: '',
+				initialEmail: '',
+				storedReader: reader( 'old@example.com', false ),
+				hasAuthReaderCookie: false,
+			} )
+		).toBe( true );
+	} );
+
+	it( 'does NOT clear on a cached anonymous page served to a still-authenticated browser', () => {
+		expect(
+			shouldClearReaderData( {
+				authenticatedEmail: '',
+				initialEmail: '',
+				storedReader: reader( 'a@example.com', true ),
+				hasAuthReaderCookie: true,
+			} )
+		).toBe( false );
+	} );
+
+	it( 'does NOT clear on an orphaned email that matches the intention by casing only', () => {
+		expect(
+			shouldClearReaderData( {
+				authenticatedEmail: '',
+				initialEmail: 'A@Example.com',
+				storedReader: reader( 'a@example.com', false ),
+				hasAuthReaderCookie: false,
+			} )
+		).toBe( false );
+	} );
+
+	it( 'does NOT clear with empty inputs', () => {
+		expect( shouldClearReaderData( { authenticatedEmail: '', initialEmail: '', storedReader: {}, hasAuthReaderCookie: false } ) ).toBe( false );
+	} );
+} );

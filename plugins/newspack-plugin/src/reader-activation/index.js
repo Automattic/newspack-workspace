@@ -702,6 +702,51 @@ function handlePush( ...args ) {
 }
 
 /**
+ * Whether init() must clear the local reader namespace because the persisted
+ * reader identity no longer matches the current session. Pure — no storage/IO,
+ * no globals; all inputs are passed in so it can be unit-tested as a truth table.
+ *
+ * Three independent triggers:
+ *   - account switch (NPPM-2899): a previously-AUTHENTICATED reader is replaced by a
+ *     server-confirmed DIFFERENT reader. Gated on storedReader.authenticated === true
+ *     so an unauthenticated stored email (e.g. a newsletter lead) logging in under a
+ *     different email keeps its anonymous carryover. Keys on authenticated_email
+ *     (server-confirmed), never the intention cookie.
+ *   - logout (NPPM-2721): server anonymous AND a prior session was authenticated.
+ *   - orphaned (NPPM-2721): server anonymous AND a stale stored email != intention.
+ *
+ * @param {Object}  args
+ * @param {string}  args.authenticatedEmail  newspack_ras_config.authenticated_email ('' when anonymous).
+ * @param {string}  args.initialEmail        authenticated_email || np_auth_intention cookie.
+ * @param {Object}  args.storedReader        Persisted reader ({ email, authenticated }).
+ * @param {boolean} args.hasAuthReaderCookie Whether the np_auth_reader cookie is present.
+ * @return {boolean} Whether to clear the namespace.
+ */
+export function shouldClearReaderData( { authenticatedEmail, initialEmail, storedReader, hasAuthReaderCookie } ) {
+	const norm = email => ( email || '' ).trim().toLowerCase();
+	const authed = norm( authenticatedEmail );
+	const stored = norm( storedReader?.email );
+
+	// Account switch: a previously-authenticated reader is replaced by a different
+	// server-confirmed reader. The authenticated gate preserves carryover for an
+	// unauthenticated stored email logging in under a different address.
+	if ( storedReader?.authenticated === true && authed && stored && authed !== stored ) {
+		return true;
+	}
+
+	// Remaining triggers require the server to report anonymous. A present
+	// np_auth_reader cookie means "not anonymous" (NPPM-2721 cached-page guard).
+	// Use the normalized `authed` so a whitespace-only email is handled consistently.
+	const serverSaysAnonymous = ! authed && ! hasAuthReaderCookie;
+	if ( ! serverSaysAnonymous ) {
+		return false;
+	}
+	const storedClaimsAuth = storedReader?.authenticated === true;
+	const storedEmailIsOrphaned = !! stored && stored !== norm( initialEmail );
+	return storedClaimsAuth || storedEmailIsOrphaned;
+}
+
+/**
  * Initialize.
  */
 function init() {
