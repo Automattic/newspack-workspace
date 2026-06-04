@@ -179,6 +179,37 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test get_active_configured_integrations filters by is_set_up too.
+	 *
+	 * This is the central skip site for the integration-walking paths
+	 * (health checks, sync push, pull). A regression here silently
+	 * re-introduces the alert/retry flood on unconfigured integrations.
+	 */
+	public function test_get_active_configured_integrations_filters_by_is_set_up() {
+		$configured   = new Sample_Integration( 'configured', 'Configured' );
+		$unconfigured = new class( 'unconfigured', 'Unconfigured' ) extends Sample_Integration {
+			/**
+			 * Force this mock to report itself as not yet set up.
+			 *
+			 * @return bool
+			 */
+			public function is_set_up() {
+				return false;
+			}
+		};
+
+		Integrations::register( $configured );
+		Integrations::register( $unconfigured );
+		Integrations::enable( 'configured' );
+		Integrations::enable( 'unconfigured' );
+
+		$result = Integrations::get_active_configured_integrations();
+
+		$this->assertArrayHasKey( 'configured', $result, 'A set-up integration must be included.' );
+		$this->assertArrayNotHasKey( 'unconfigured', $result, 'An unconfigured integration must be excluded.' );
+	}
+
+	/**
 	 * Test get_available_integrations returns all registered.
 	 */
 	public function test_get_available_integrations() {
@@ -821,6 +852,252 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$this->assertWPError( $result );
 		$this->assertEquals( 'newspack_integration_connection_error', $result->get_error_code() );
 		$this->assertEquals( 'Fatal: something exploded', $result->get_error_message() );
+	}
+
+	/**
+	 * Test run_health_checks skips integrations that are not yet set up.
+	 *
+	 * An enabled-but-unconfigured integration (e.g. ESP enabled by default
+	 * but provider/master list never selected) is a setup-incomplete state,
+	 * not a runtime incident — the hourly cron must not generate an alert.
+	 */
+	public function test_run_health_checks_skips_unconfigured_integrations() {
+		$integration = new Sample_Integration( 'unconfigured', 'Unconfigured' );
+		Integrations::register( $integration );
+		Integrations::enable( 'unconfigured' );
+
+		Sample_Integration::$is_set_up_value      = false;
+		Sample_Integration::$can_sync_error_codes = [ 'ras_esp_master_list_id_not_found' ];
+
+		$fired    = false;
+		$listener = function () use ( &$fired ) {
+			$fired = true;
+		};
+		add_action( 'newspack_integration_health_check_failed', $listener );
+
+		try {
+			Integrations::run_health_checks();
+			$this->assertFalse( $fired, 'health_check_failed action must not fire when is_set_up() is false.' );
+		} finally {
+			remove_action( 'newspack_integration_health_check_failed', $listener );
+		}
+	}
+
+	/**
+	 * Test run_health_checks fires the action for set-up integrations whose
+	 * health check fails — the control case for the skip behavior above.
+	 */
+	public function test_run_health_checks_fires_when_set_up_and_failing() {
+		$integration = new Sample_Integration( 'failing', 'Failing' );
+		Integrations::register( $integration );
+		Integrations::enable( 'failing' );
+
+		Sample_Integration::$is_set_up_value      = true;
+		Sample_Integration::$can_sync_error_codes = [ 'ras_esp_master_list_id_not_found' ];
+
+		$payload  = null;
+		$listener = function ( $data ) use ( &$payload ) {
+			$payload = $data;
+		};
+		add_action( 'newspack_integration_health_check_failed', $listener );
+
+		try {
+			Integrations::run_health_checks();
+			$this->assertNotNull( $payload, 'health_check_failed action must fire when is_set_up() is true and health_check fails.' );
+			$this->assertSame( 'failing', $payload['integration_id'] );
+			$this->assertInstanceOf( \WP_Error::class, $payload['error'] );
+			$this->assertContains( 'ras_esp_master_list_id_not_found', $payload['error']->get_error_codes() );
+		} finally {
+			remove_action( 'newspack_integration_health_check_failed', $listener );
+		}
+	}
+
+	/**
+	 * Test Contact_Pull::pull_sync defaults to set-up integrations only.
+	 *
+	 * The synchronous loopback path (run from Contact_Cron when the user's
+	 * last pull is stale) must NOT fire a loopback for an integration whose
+	 * `is_set_up()` is false — otherwise it both wastes a blocking remote
+	 * call and logs a spurious failure.
+	 */
+	public function test_pull_sync_skips_unconfigured_integrations() {
+		$user_id = $this->factory()->user->create();
+		wp_set_current_user( $user_id );
+
+		$configured = new class( 'sync-configured', 'Sync Configured' ) extends Sample_Integration {
+			/**
+			 * Pull mock returning data so the loopback would succeed if reached.
+			 *
+			 * @param int $user_id WordPress user ID.
+			 * @return array
+			 */
+			public function pull_contact_data( $user_id ) {
+				return [ 'favorite_color' => 'green' ];
+			}
+		};
+		$configured->update_enabled_incoming_fields( [ 'favorite_color' ] );
+		Integrations::register( $configured );
+		Integrations::enable( 'sync-configured' );
+
+		$unconfigured = new class( 'sync-unconfigured', 'Sync Unconfigured' ) extends Sample_Integration {
+			/**
+			 * Force this mock to report itself as not yet set up.
+			 *
+			 * @return bool
+			 */
+			public function is_set_up() {
+				return false;
+			}
+			/**
+			 * Pull mock that would return data if reached — must not be called.
+			 *
+			 * @param int $user_id WordPress user ID.
+			 * @return array
+			 */
+			public function pull_contact_data( $user_id ) {
+				return [ 'favorite_color' => 'red' ];
+			}
+		};
+		$unconfigured->update_enabled_incoming_fields( [ 'favorite_color' ] );
+		Integrations::register( $unconfigured );
+		Integrations::enable( 'sync-unconfigured' );
+
+		// Capture which integration_ids the loopback receives.
+		$loopback_hits = [];
+		$this->loopback_filter = function ( $preempt, $parsed_args, $url ) use ( &$loopback_hits ) {
+			if ( false === strpos( $url, 'action=' . Contact_Pull::AJAX_ACTION ) ) {
+				return $preempt;
+			}
+			$loopback_hits[] = $parsed_args['body']['integration_id'] ?? '';
+			return [
+				'response' => [ 'code' => 200 ],
+				'body'     => '{"success":true}',
+			];
+		};
+		add_filter( 'pre_http_request', $this->loopback_filter, 10, 3 );
+
+		Contact_Pull::pull_sync();
+
+		$this->assertContains( 'sync-configured', $loopback_hits, 'Configured integration must receive a loopback.' );
+		$this->assertNotContains( 'sync-unconfigured', $loopback_hits, 'Unconfigured integration must NOT receive a loopback.' );
+	}
+
+	/**
+	 * Test Contact_Pull::pull_all skips integrations whose is_set_up() is false.
+	 *
+	 * Mirrors the run_health_checks skip: an unconfigured integration must not
+	 * be invoked, must not generate retry rows in ActionScheduler.
+	 */
+	public function test_pull_all_skips_unconfigured_integrations() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$integration = new class( 'pull-skip', 'Pull Skip' ) extends Sample_Integration {
+			/**
+			 * Count of pull_contact_data calls.
+			 *
+			 * @var int
+			 */
+			public static $pull_count = 0;
+
+			/**
+			 * Pull mock that counts invocations.
+			 *
+			 * @param int $user_id WordPress user ID.
+			 * @return array
+			 */
+			public function pull_contact_data( $user_id ) {
+				self::$pull_count++;
+				return [ 'favorite_color' => 'blue' ];
+			}
+		};
+		$integration::$pull_count = 0;
+		$integration->update_enabled_incoming_fields( [ 'favorite_color' ] );
+
+		Sample_Integration::$is_set_up_value = false;
+
+		Integrations::register( $integration );
+		Integrations::enable( 'pull-skip' );
+
+		\as_unschedule_all_actions( Contact_Pull::RETRY_HOOK );
+
+		$user_id = $this->factory()->user->create();
+
+		Contact_Pull::pull_all( $user_id );
+
+		$this->assertSame( 0, $integration::$pull_count, 'pull_contact_data must not be called when is_set_up() is false.' );
+
+		$pending = \as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Pull::RETRY_HOOK,
+				'group'  => Integrations::get_action_group( 'pull-skip' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertEmpty( $pending, 'No pull retry should be scheduled for an unconfigured integration.' );
+	}
+
+	/**
+	 * Test Contact_Pull::execute_integration_retry aborts when the integration
+	 * is no longer set up — drains existing retry rows without scheduling more.
+	 */
+	public function test_pull_execute_integration_retry_aborts_when_not_set_up() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$integration = new class( 'pull-retry-abort', 'Pull Retry Abort' ) extends Sample_Integration {
+			/**
+			 * Count of pull_contact_data calls.
+			 *
+			 * @var int
+			 */
+			public static $pull_count = 0;
+
+			/**
+			 * Pull mock returning WP_Error so retry would be scheduled if reached.
+			 *
+			 * @param int $user_id WordPress user ID.
+			 * @return \WP_Error
+			 */
+			public function pull_contact_data( $user_id ) {
+				self::$pull_count++;
+				return new \WP_Error( 'mock_error', 'Mock pull failed' );
+			}
+		};
+		$integration::$pull_count = 0;
+		$integration->update_enabled_incoming_fields( [ 'favorite_color' ] );
+
+		Sample_Integration::$is_set_up_value = false;
+
+		Integrations::register( $integration );
+		Integrations::enable( 'pull-retry-abort' );
+
+		\as_unschedule_all_actions( Contact_Pull::RETRY_HOOK );
+
+		$user_id = $this->factory()->user->create();
+
+		Contact_Pull::execute_integration_retry(
+			[
+				'integration_id' => 'pull-retry-abort',
+				'user_id'        => $user_id,
+				'retry_count'    => 1,
+			]
+		);
+
+		$this->assertSame( 0, $integration::$pull_count, 'pull_contact_data must not be called when is_set_up() returns false at retry time.' );
+
+		$pending = \as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Pull::RETRY_HOOK,
+				'group'  => Integrations::get_action_group( 'pull-retry-abort' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertEmpty( $pending, 'No new pull retry should be scheduled when integration becomes unconfigured mid-chain.' );
 	}
 
 	/**

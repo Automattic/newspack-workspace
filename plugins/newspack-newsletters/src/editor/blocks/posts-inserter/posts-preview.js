@@ -1,10 +1,12 @@
 /**
  * WordPress dependencies.
  */
+import { __ } from '@wordpress/i18n';
 import { useMergeRefs, useRefEffect } from '@wordpress/compose';
 import { BlockPreview } from '@wordpress/block-editor';
-import { Spinner } from '@wordpress/components';
+import { Placeholder, Spinner } from '@wordpress/components';
 import { forwardRef } from '@wordpress/element';
+import { pages } from '@wordpress/icons';
 import { useCustomFontsInIframe } from '../../../newsletter-editor/styling';
 
 /**
@@ -71,7 +73,15 @@ const PostsPreview = ( { isReady, blocks, className, viewportWidth }, ref ) => {
 			className={ classnames( 'newspack-posts-inserter__preview', className ) }
 			ref={ useMergeRefs( [ ref, useIframeBorderFix, useLayoutStyle, useCustomFontsInIframe() ] ) }
 		>
-			{ isReady ? <BlockPreview blocks={ blocks } viewportWidth={ viewportWidth } /> : <Spinner /> }
+			{ ! isReady && <Spinner /> }
+			{ isReady && blocks?.length > 0 && <BlockPreview blocks={ blocks } viewportWidth={ viewportWidth } /> }
+			{ isReady && ! blocks?.length && (
+				<Placeholder
+					icon={ pages }
+					label={ __( 'No posts found', 'newspack-newsletters' ) }
+					instructions={ __( 'Verify filter settings.', 'newspack-newsletters' ) }
+				/>
+			) }
 		</div>
 	);
 };

@@ -230,10 +230,10 @@ class Group_Subscription_Invite {
 	public static function get_link_invite_url( $subscription_id, $user_id, $key ) {
 		return add_query_arg(
 			[
-				'action' => self::LINK_QUERY_ARG,
-				's'      => (int) $subscription_id,
-				'm'      => (int) $user_id,
-				'k'      => rawurlencode( $key ),
+				'action'       => self::LINK_QUERY_ARG,
+				'subscription' => (int) $subscription_id,
+				'manager'      => (int) $user_id,
+				'key'          => rawurlencode( $key ),
 			],
 			home_url()
 		);
@@ -568,7 +568,7 @@ class Group_Subscription_Invite {
 			return;
 		}
 
-		$myaccount_url = function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'myaccount' ) : home_url();
+		$myaccount_url = function_exists( 'wc_get_account_endpoint_url' ) ? wc_get_account_endpoint_url( 'edit-account' ) : home_url();
 
 		// Case 1: User is logged in.
 		$current_user = wp_get_current_user();
@@ -683,16 +683,16 @@ class Group_Subscription_Invite {
 			return;
 		}
 
-		$subscription_id = isset( $_GET['s'] ) ? absint( $_GET['s'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$user_id         = isset( $_GET['m'] ) ? absint( $_GET['m'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$key             = isset( $_GET['k'] ) ? sanitize_text_field( wp_unslash( $_GET['k'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$subscription_id = isset( $_GET['subscription'] ) ? absint( $_GET['subscription'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$user_id         = isset( $_GET['manager'] ) ? absint( $_GET['manager'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$key             = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
 
 		// Compute "where do we send them on errors" for both auth states.
 		$current_user      = wp_get_current_user();
 		$is_logged_in      = (bool) $current_user->ID;
-		$myaccount_url     = function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'myaccount' ) : home_url();
+		$myaccount_url     = function_exists( 'wc_get_account_endpoint_url' ) ? wc_get_account_endpoint_url( 'edit-account' ) : home_url();
 		$error_target_url  = $is_logged_in ? $myaccount_url : home_url();
 
 		// Validate the link.
@@ -837,7 +837,7 @@ class Group_Subscription_Invite {
 	private static function redirect_with_result( $status, $target_url = null ) {
 		$args = [ self::RESULT_QUERY_ARG => $status ];
 		if ( null === $target_url ) {
-			$target_url = is_user_logged_in() && function_exists( 'wc_get_account_endpoint_url' ) ? \wc_get_account_endpoint_url( 'edit-account' ) : home_url();
+			$target_url = is_user_logged_in() && function_exists( 'wc_get_account_endpoint_url' ) ? wc_get_account_endpoint_url( 'edit-account' ) : home_url();
 		}
 		wp_safe_redirect( add_query_arg( $args, $target_url ) );
 		exit;

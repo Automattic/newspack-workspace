@@ -1,3 +1,17 @@
+## newspack-newsletters [3.33.6](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.33.5...newspack-newsletters@3.33.6) (2026-06-03)
+
+
+### Bug Fixes
+
+* **posts-inserter:** show placeholder when block has zero posts ([#166](https://github.com/Automattic/newspack-workspace/issues/166)) ([c269ff2](https://github.com/Automattic/newspack-workspace/commit/c269ff2e9f937a406aaeae4a833da3046cbc61ab))
+
+## newspack-newsletters [3.33.5](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.33.4...newspack-newsletters@3.33.5) (2026-06-01)
+
+
+### Bug Fixes
+
+* **esp:** abort send when configured segment cannot be resolved ([#2131](https://github.com/Automattic/newspack-workspace/issues/2131)) ([020528c](https://github.com/Automattic/newspack-workspace/commit/020528c406e03240d34fb8d9721947a9f7f12cad))
+
 ## [3.33.4](https://github.com/Automattic/newspack-newsletters/compare/v3.33.3...v3.33.4) (2026-05-22)
 
 

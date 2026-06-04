@@ -1,3 +1,10 @@
+## newspack-popups [3.12.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.12.0...newspack-popups@3.12.1) (2026-06-02)
+
+
+### Bug Fixes
+
+* **popups:** portal overlays to wp_footer to escape stacking contexts ([797c42c](https://github.com/Automattic/newspack-workspace/commit/797c42c6bd7af9245226205cd31382700b7827ad))
+
 # [3.12.0](https://github.com/Automattic/newspack-popups/compare/v3.11.0...v3.12.0) (2026-05-18)
 
 
