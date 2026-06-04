@@ -730,6 +730,15 @@ export function shouldClearReaderData( { authenticatedEmail, initialEmail, store
 	// Account switch: a previously-authenticated reader is replaced by a different
 	// server-confirmed reader. The authenticated gate preserves carryover for an
 	// unauthenticated stored email logging in under a different address.
+	//
+	// Unlike the anonymous triggers below, this does NOT consult np_auth_reader.
+	// The cookie guard exists because *anonymous* full-page-cached responses
+	// (Batcache/Varnish/CDN) can be served to a logged-in browser (NPPM-2721); but
+	// authenticated configs (non-empty authenticated_email) are not page-cached —
+	// logged-in requests bypass the full-page cache — so that concern doesn't apply
+	// here. The receiving browser's own auth cookie also can't distinguish a real
+	// switch from such a (non-occurring) cached-authenticated response, so gating on
+	// it would only risk suppressing legitimate A→B clears.
 	if ( storedReader?.authenticated === true && authed && stored && authed !== stored ) {
 		return true;
 	}
