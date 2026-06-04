@@ -126,7 +126,7 @@ class TestBlockProcessor extends \WP_UnitTestCase {
 		// version-dependent wrapper class (e.g. `wp-block-paragraph`), so match
 		// the `<p>` element with optional attributes rather than pinning the
 		// exact markup. `raw_content` below still pins the exact serialized block.
-		$this->assertMatchesRegularExpression( '/<p[^>]*>Outgoing Processed<\/p>/', $payload['post_data']['content'] );
+		$this->assertMatchesRegularExpression( '/<p\b[^>]*>Outgoing Processed<\/p>/', $payload['post_data']['content'] );
 		$this->assertEquals( '<!-- wp:paragraph {"outgoing":"test"} --><p>Outgoing Processed</p><!-- /wp:paragraph -->', $payload['post_data']['raw_content'] );
 	}
 
