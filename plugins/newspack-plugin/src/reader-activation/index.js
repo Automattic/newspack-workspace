@@ -210,6 +210,33 @@ export function openNewslettersSignupModal( config = {} ) {
 }
 
 /**
+ * Open the post-registration verification modal.
+ *
+ * Public cross-plugin entry point. The actual implementation is registered by
+ * the reader-activation-auth bundle via `_openVerificationModal`. Returns true
+ * when the modal was opened; calls `config.onDismiss` and returns false when the
+ * modal isn't available (older newspack-plugin or modal markup not rendered).
+ *
+ * @param {Object}   config
+ * @param {string}   config.email             Email to display in the modal copy.
+ * @param {string}   config.verificationNonce Nonce authorizing the OTP request.
+ * @param {Function} [config.onSendCode]      Called after the OTP is successfully sent.
+ * @param {Function} [config.onDismiss]       Called when the modal closes without sending a code.
+ *
+ * @return {boolean} Whether the modal was opened.
+ */
+export function openVerificationModal( config = {} ) {
+	if ( readerActivation?._openVerificationModal ) {
+		return readerActivation._openVerificationModal( config );
+	}
+	console.warn( 'Verification modal not available' ); // eslint-disable-line no-console
+	if ( config?.onDismiss && typeof config.onDismiss === 'function' ) {
+		config.onDismiss();
+	}
+	return false;
+}
+
+/**
  * Get the reader's OTP hash for the current authentication request.
  *
  * @return {string} OTP hash.
@@ -632,6 +659,7 @@ const readerActivation = {
 	refreshAuthentication,
 	getReader,
 	openNewslettersSignupModal,
+	openVerificationModal,
 	hasAuthLink,
 	getOTPHash,
 	setOTPTimer,

@@ -56,6 +56,7 @@ class WooCommerce_My_Account {
 		\add_filter( 'wc_stripe_update_subs_payment_method_card_statuses', [ __CLASS__, 'update_payment_methods_for_all_subs' ] );
 		\add_filter( 'wc_subscriptions_allow_subscription_token_deletion', [ __CLASS__, 'allow_braintree_token_deletion' ], 10, 2 );
 		\add_filter( 'woocommerce_payment_methods_list_item', [ __CLASS__, 'remove_braintree_edit_actions' ], 20, 2 );
+		\add_filter( 'woocommerce_order_button_text', [ __CLASS__, 'change_payment_method_button_text' ], 25 );
 
 		// Reader Activation mods.
 		if ( Reader_Activation::is_enabled() ) {
@@ -1053,6 +1054,19 @@ class WooCommerce_My_Account {
 			}
 		}
 		return $item;
+	}
+
+	/**
+	 * Override the order button text on the change-payment-method checkout page.
+	 *
+	 * @param string $text The button text.
+	 * @return string
+	 */
+	public static function change_payment_method_button_text( $text ) {
+		if ( self::is_payment_method_change_page() ) {
+			return __( 'Update payment method', 'newspack-plugin' );
+		}
+		return $text;
 	}
 
 	/**

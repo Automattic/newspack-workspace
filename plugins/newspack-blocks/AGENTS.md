@@ -1,6 +1,6 @@
 # AI Agent Instructions for newspack-blocks
 
-This file supplements the workspace-level instructions in [`../../AGENTS.md`](../../AGENTS.md). See that file for shared conventions (coding standards, commit format, build/test commands, git workflow, Docker environment). This document covers patterns and architecture specific to this repository.
+This file supplements the workspace-level instructions in [`../../AGENTS.md`](../../AGENTS.md). See that file for shared conventions (coding standards, commit format, build/test commands, git workflow, Docker environment). This document covers patterns and architecture specific to this plugin.
 
 ## Overview
 
