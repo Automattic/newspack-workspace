@@ -5,8 +5,16 @@ import { EVENTS, on, off } from './events';
 
 describe( 'Store', () => {
 	beforeEach( () => {
+		// Each Store() registers a 1s sync setInterval. Fake timers keep those
+		// inert (so a leaked interval from a prior spec can't fire mid-test and,
+		// e.g., trip the XHR-spy clear() specs) unless a spec advances them.
+		jest.useFakeTimers();
 		window.newspack_reader_data = window.newspack_reader_data || {};
 		localStorage.clear();
+	} );
+	afterEach( () => {
+		jest.clearAllTimers();
+		jest.useRealTimers();
 	} );
 	it( 'should return an object with methods', () => {
 		const [ store ] = Store();
