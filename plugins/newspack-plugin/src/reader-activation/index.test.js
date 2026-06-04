@@ -281,6 +281,44 @@ describe( 'init() post-logout clearing (NPPM-2721)', () => {
 		expect( reader.authenticated ).toBe( false );
 		expect( reader.email ).toBeUndefined();
 	} );
+
+	it( 'authenticated switch A→B wipes the prior reader data', () => {
+		bootInit( {
+			storage: {
+				reader: { email: 'a@example.com', authenticated: true },
+				activity: [ { action: 'article_view', data: { post_id: 1 }, timestamp: 0 } ],
+				is_donor: true,
+			},
+			config: { authenticated_email: 'b@example.com' },
+		} );
+		expect( readStore( 'activity' ) ).toBeNull();
+		expect( readStore( 'is_donor' ) ).toBeNull();
+		const reader = JSON.parse( readStore( 'reader' ) );
+		expect( reader.email ).toBe( 'b@example.com' );
+		expect( reader.authenticated ).toBe( true );
+	} );
+
+	it( 'same-reader re-auth (A→A) preserves activity', () => {
+		bootInit( {
+			storage: {
+				reader: { email: 'a@example.com', authenticated: true },
+				activity: [ { action: 'article_view', data: { post_id: 1 }, timestamp: 0 } ],
+			},
+			config: { authenticated_email: 'a@example.com' },
+		} );
+		expect( readStore( 'activity' ) ).not.toBeNull();
+	} );
+
+	it( 'unauthenticated email lead logging in under a different email preserves carryover', () => {
+		bootInit( {
+			storage: {
+				reader: { email: 'lead@example.com', authenticated: false },
+				activity: [ { action: 'article_view', data: { post_id: 1 }, timestamp: 0 } ],
+			},
+			config: { authenticated_email: 'different@example.com' },
+		} );
+		expect( readStore( 'activity' ) ).not.toBeNull();
+	} );
 } );
 
 describe( 'shouldClearReaderData (NPPM-2899)', () => {

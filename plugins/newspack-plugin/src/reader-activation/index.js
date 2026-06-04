@@ -755,27 +755,18 @@ function init() {
 	const authenticated = !! data?.authenticated_email;
 	let currentReader = getReader();
 
-	// NPPM-2721: post-logout pageload detection. Two states fire the clear:
-	// 1) storedClaimsAuth — fresh logout, persisted reader.authenticated still true.
-	// 2) storedEmailIsOrphaned — already-contaminated browser left behind by the
-	//    pre-fix init() with reader.email set but authenticated already flipped to
-	//    false; intention cookie absent or doesn't match the stored email.
-	//
-	// The np_auth_reader cookie is part of the anonymous signal: a full-page-cached
-	// HTML response (Batcache/Varnish/CDN) built while anonymous can be served to a
-	// browser that now holds a valid auth cookie. Without the cookie check, that
-	// stale config (empty authenticated_email) would wipe the authenticated reader's
-	// data, and attachAuthCookiesListener() then bails because the cookie is present,
-	// so nothing rehydrates it. Treat a present auth cookie as "not anonymous."
-	const serverSaysAnonymous = ! data?.authenticated_email && ! getCookie( 'np_auth_reader' );
-	const storedClaimsAuth = currentReader?.authenticated === true;
-	// Compare emails case-insensitively. Local-parts are technically case-sensitive
-	// per RFC 5321, but every major provider treats them as case-insensitive and the
-	// server normalizes — a casing-only difference (e.g. an in-progress auth flow with
-	// differently-cased intention cookie) must not be treated as an orphaned identity.
-	const normalizeEmail = email => ( email || '' ).trim().toLowerCase();
-	const storedEmailIsOrphaned = !! currentReader?.email && normalizeEmail( currentReader.email ) !== normalizeEmail( initialEmail );
-	if ( serverSaysAnonymous && ( storedClaimsAuth || storedEmailIsOrphaned ) ) {
+	// Clear the local reader namespace when the persisted identity no longer matches
+	// the current session — logout, an orphaned leftover, or an authenticated account
+	// switch (A→B). See shouldClearReaderData() for the full trigger set (NPPM-2721 +
+	// NPPM-2899).
+	if (
+		shouldClearReaderData( {
+			authenticatedEmail: data?.authenticated_email,
+			initialEmail,
+			storedReader: currentReader,
+			hasAuthReaderCookie: !! getCookie( 'np_auth_reader' ),
+		} )
+	) {
 		clearReaderStore();
 		// Re-read so currentReader reflects the post-clear reseed ({ authenticated:
 		// false }, no email); otherwise the reader object built below would pick the
