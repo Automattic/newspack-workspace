@@ -306,5 +306,21 @@ describe( 'Store', () => {
 			openSpy.mockRestore();
 			jest.useRealTimers();
 		} );
+		it( 'returns a working clear() from the singleton-guard path', () => {
+			// The singleton guard recovers clear() from the live store (stashed under
+			// a global-registry Symbol), so a caller that re-enters Store() after init
+			// still gets a functional clear — not undefined. Guards NPPM-2721's tuple
+			// return against a singleton-path regression.
+			const [ firstStore ] = Store();
+			window.newspackRASInitialized = true;
+			window.newspackReaderActivation = { store: firstStore };
+			const [ , guardClear ] = Store();
+			expect( typeof guardClear ).toBe( 'function' );
+			localStorage.setItem( 'np_reader_is_donor', JSON.stringify( true ) );
+			guardClear();
+			expect( localStorage.getItem( 'np_reader_is_donor' ) ).toBeNull();
+			delete window.newspackRASInitialized;
+			delete window.newspackReaderActivation;
+		} );
 	} );
 } );

@@ -31,14 +31,16 @@ const config = {
 const mergeStrategies = new Map();
 
 /**
- * Module-scoped reference to the active store's internal clear() so the
- * singleton guard in Store() can hand it back alongside the public store
- * without exposing it on the public API. See NPPM-2721 and the tuple return
- * from Store().
+ * Key under which each store's internal clear() is stashed on the public store
+ * object so the singleton guard in Store() can recover it. A global-registry
+ * Symbol ( Symbol.for ) is shared across separately-bundled copies of this
+ * module, so a fresh module instance that hits the singleton guard still finds
+ * the live store's clear() — without exposing it on the enumerable public API
+ * as readerActivation.store.clear(). See NPPM-2721.
  *
- * @type {Function|undefined}
+ * @type {symbol}
  */
-let internalClear;
+const INTERNAL_CLEAR = Symbol.for( 'newspack.reader_activation.store.internal_clear' );
 
 /**
  * Rehydrate a single item from server data, using the registered merge
@@ -284,7 +286,8 @@ export default function Store() {
 	 * There should only be one store instance.
 	 */
 	if ( window.newspackRASInitialized && window.newspackReaderActivation?.store ) {
-		return [ window.newspackReaderActivation.store, internalClear ];
+		const existingStore = window.newspackReaderActivation.store;
+		return [ existingStore, existingStore[ INTERNAL_CLEAR ] ];
 	}
 
 	/**
@@ -531,9 +534,11 @@ export default function Store() {
 		rehydrate,
 	};
 
-	// Expose clear() only via the tuple's second element (and the module-scoped
-	// ref for the singleton guard above) — never on publicStore, so it isn't
-	// reachable as readerActivation.store.clear() by third-party code (NPPM-2721).
-	internalClear = clear;
+	// Stash clear() on the store under a non-enumerable, global-registry Symbol so
+	// the singleton guard above can recover it from the live store (even from a
+	// separately-bundled module instance), without exposing it on the enumerable
+	// public API as readerActivation.store.clear() (NPPM-2721). Callers get it as
+	// the tuple's second element; third-party code iterating the store never sees it.
+	Object.defineProperty( publicStore, INTERNAL_CLEAR, { value: clear } );
 	return [ publicStore, clear ];
 }
