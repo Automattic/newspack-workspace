@@ -365,6 +365,29 @@ class Integrations {
 	}
 
 	/**
+	 * Get active integrations whose external prerequisites are also configured.
+	 *
+	 * Iteration sites that perform real I/O on each integration (health checks,
+	 * contact pushes, pulls, retries) MUST use this instead of
+	 * `get_active_integrations()` to avoid alerting on, or scheduling AS
+	 * retries for, integrations the admin has not yet finished setting up.
+	 *
+	 * `is_set_up()` is a stored-state check by contract — see ESP's override.
+	 * Treating it as a runtime probe here would silently drop traffic on
+	 * transient provider failures.
+	 *
+	 * @return Integration[] Integrations that are both enabled AND set up.
+	 */
+	public static function get_active_configured_integrations() {
+		return array_filter(
+			self::get_active_integrations(),
+			function ( $integration ) {
+				return $integration->is_set_up();
+			}
+		);
+	}
+
+	/**
 	 * Get a specific integration by ID.
 	 *
 	 * @param string $integration_id The integration ID.
@@ -752,13 +775,17 @@ class Integrations {
 	}
 
 	/**
-	 * Run health checks on all active integrations.
+	 * Run health checks on all active and configured integrations.
+	 *
+	 * Routed through `get_active_configured_integrations()` so a missing
+	 * provider or unconfigured master list — a setup-incomplete state, not a
+	 * runtime incident — surfaces in the integrations UI rather than the
+	 * alerts channel.
 	 *
 	 * Logs failures and fires an action for the Alert Manager.
 	 */
 	public static function run_health_checks() {
-		$active = self::get_active_integrations();
-		foreach ( $active as $integration ) {
+		foreach ( self::get_active_configured_integrations() as $integration ) {
 			$result = $integration->health_check();
 			if ( is_wp_error( $result ) ) {
 				Logger::error(

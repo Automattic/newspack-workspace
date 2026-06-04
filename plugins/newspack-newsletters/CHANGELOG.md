@@ -1,3 +1,10 @@
+## newspack-newsletters [3.33.6](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.33.5...newspack-newsletters@3.33.6) (2026-06-03)
+
+
+### Bug Fixes
+
+* **posts-inserter:** show placeholder when block has zero posts ([#166](https://github.com/Automattic/newspack-workspace/issues/166)) ([c269ff2](https://github.com/Automattic/newspack-workspace/commit/c269ff2e9f937a406aaeae4a833da3046cbc61ab))
+
 ## newspack-newsletters [3.33.5](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.33.4...newspack-newsletters@3.33.5) (2026-06-01)
 
 

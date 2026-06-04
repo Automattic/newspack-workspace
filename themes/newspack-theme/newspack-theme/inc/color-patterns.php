@@ -201,7 +201,8 @@ function newspack_custom_colors_css() {
 			.newspack_global_ad,
 			.newspack_global_ad.global_above_header,
 			.widget_newspack-ads-widget,
-			div[class*="newspack-ads-blocks-ad-unit"] {
+			div[class*="newspack-ads-blocks-ad-unit"],
+			broadstreet-zone-container {
 				background-color: ' . esc_attr( get_theme_mod( 'ads_color_hex', '#ffffff' ) ) . ';
 			}
 		';

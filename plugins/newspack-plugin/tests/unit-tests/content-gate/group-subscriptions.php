@@ -1305,7 +1305,7 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 			Group_Subscription_Invite::LINK_META,
 			[
 				$owner_id => [
-					'key'        => 'k',
+					'key'        => 'key',
 					'created_at' => time(),
 				],
 			]
@@ -1322,9 +1322,9 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$url = Group_Subscription_Invite::get_link_invite_url( 42, 7, 'thekey' );
 
 		$this->assertStringContainsString( 'action=' . Group_Subscription_Invite::LINK_QUERY_ARG, $url );
-		$this->assertStringContainsString( 's=42', $url );
-		$this->assertStringContainsString( 'm=7', $url );
-		$this->assertStringContainsString( 'k=thekey', $url );
+		$this->assertStringContainsString( 'subscription=42', $url );
+		$this->assertStringContainsString( 'manager=7', $url );
+		$this->assertStringContainsString( 'key=thekey', $url );
 	}
 
 	/**
@@ -1466,7 +1466,7 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	 * Test validate_link_invite() rejects an unknown subscription.
 	 */
 	public function test_validate_link_invite_unknown_subscription() {
-		$result = Group_Subscription_Invite::validate_link_invite( 99999, 1, 'k' );
+		$result = Group_Subscription_Invite::validate_link_invite( 99999, 1, 'key' );
 		$this->assertWPError( $result );
 	}
 
@@ -1477,7 +1477,7 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$owner_id = $this->create_reader_user();
 		$regular  = $this->create_regular_subscription( $owner_id );
 
-		$result = Group_Subscription_Invite::validate_link_invite( $regular, $owner_id, 'k' );
+		$result = Group_Subscription_Invite::validate_link_invite( $regular, $owner_id, 'key' );
 		$this->assertWPError( $result );
 	}
 
@@ -1488,7 +1488,7 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$owner_id  = $this->create_reader_user();
 		$group_sub = $this->create_group_subscription( $owner_id );
 
-		$result = Group_Subscription_Invite::validate_link_invite( $group_sub, $owner_id, 'k' );
+		$result = Group_Subscription_Invite::validate_link_invite( $group_sub, $owner_id, 'key' );
 		$this->assertWPError( $result );
 	}
 
@@ -1744,10 +1744,10 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		wp_set_current_user( $non_member_id );
 
 		$_GET = [
-			'action' => Group_Subscription_Invite::LINK_QUERY_ARG,
-			's'      => $group_sub->get_id(),
-			'm'      => $owner_id,
-			'k'      => $invite['key'],
+			'action'       => Group_Subscription_Invite::LINK_QUERY_ARG,
+			'subscription' => $group_sub->get_id(),
+			'manager'      => $owner_id,
+			'key'          => $invite['key'],
 		];
 
 		// Hook wp_redirect to capture the URL and abort before exit.
@@ -1806,10 +1806,10 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		wp_set_current_user( $non_member_id );
 
 		$_GET = [
-			'action' => Group_Subscription_Invite::LINK_QUERY_ARG,
-			's'      => $group_sub->get_id(),
-			'm'      => $owner_id,
-			'k'      => 'bogus-key',
+			'action'       => Group_Subscription_Invite::LINK_QUERY_ARG,
+			'subscription' => $group_sub->get_id(),
+			'manager'      => $owner_id,
+			'key'          => 'bogus-key',
 		];
 
 		$captured_url = null;
@@ -1871,10 +1871,10 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		wp_set_current_user( 0 );
 
 		$_GET = [
-			'action' => Group_Subscription_Invite::LINK_QUERY_ARG,
-			's'      => $group_sub->get_id(),
-			'm'      => $owner_id,
-			'k'      => $invite['key'],
+			'action'       => Group_Subscription_Invite::LINK_QUERY_ARG,
+			'subscription' => $group_sub->get_id(),
+			'manager'      => $owner_id,
+			'key'          => $invite['key'],
 		];
 
 		$captured_url = null;
@@ -1911,10 +1911,10 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 				$captured_url,
 				'Logged-out redirect should carry a redirect= query arg'
 			);
-			// The inner link URL's `&s=` must appear rawurlencoded as `%26s%3D` so the
+			// The inner link URL's `&subscription=` must appear rawurlencoded as `%26subscription%3D` so the
 			// link URL is preserved as a single value rather than leaking into outer args.
 			$this->assertStringContainsString(
-				'%26s%3D',
+				'%26subscription%3D',
 				$captured_url,
 				'Logged-out redirect should rawurlencode the inner link URL'
 			);
@@ -1953,10 +1953,10 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		wp_set_current_user( $member_id );
 
 		$_GET = [
-			'action' => Group_Subscription_Invite::LINK_QUERY_ARG,
-			's'      => $group_sub->get_id(),
-			'm'      => $owner_id,
-			'k'      => $invite['key'],
+			'action'       => Group_Subscription_Invite::LINK_QUERY_ARG,
+			'subscription' => $group_sub->get_id(),
+			'manager'      => $owner_id,
+			'key'          => $invite['key'],
 		];
 
 		$captured_url = null;
@@ -2034,10 +2034,10 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		wp_set_current_user( $visitor_id );
 
 		$_GET = [
-			'action' => Group_Subscription_Invite::LINK_QUERY_ARG,
-			's'      => $group_sub->get_id(),
-			'm'      => $owner_id,
-			'k'      => $invite['key'],
+			'action'       => Group_Subscription_Invite::LINK_QUERY_ARG,
+			'subscription' => $group_sub->get_id(),
+			'manager'      => $owner_id,
+			'key'          => $invite['key'],
 		];
 
 		$captured_url = null;
@@ -2091,10 +2091,10 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		wp_set_current_user( $visitor_id );
 
 		$_GET = [
-			'action' => Group_Subscription_Invite::LINK_QUERY_ARG,
-			's'      => 999999, // Non-existent.
-			'm'      => $visitor_id,
-			'k'      => 'whatever',
+			'action'       => Group_Subscription_Invite::LINK_QUERY_ARG,
+			'subscription' => 999999, // Non-existent.
+			'manager'      => $visitor_id,
+			'key'          => 'whatever',
 		];
 
 		$captured_url = null;
