@@ -5,6 +5,10 @@
  * last-90, this-month, last-month, custom). Custom mode reveals two date
  * inputs.
  *
+ * Uses @wordpress/components SelectControl for the preset dropdown per
+ * Newspack admin convention. The custom date inputs stay as
+ * <input type="date"> because WordPress doesn't ship a date control.
+ *
  * Component owns no state — caller wires it to useDateRange.
  */
 
@@ -12,6 +16,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { SelectControl } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -26,26 +31,21 @@ export interface DateRangePickerProps {
 }
 
 const DateRangePicker = ( { range, onPresetChange, onCustomChange, className }: DateRangePickerProps ) => {
-	const presetId = 'newspack-insights-date-range-preset';
 	const startId = 'newspack-insights-date-range-start';
 	const endId = 'newspack-insights-date-range-end';
+	const options = DATE_RANGE_PRESETS.map( p => ( { value: p.key, label: p.label } ) );
+
 	return (
 		<div className={ className ?? 'newspack-insights__date-range-picker' }>
-			<label className="newspack-insights__date-range-picker-label" htmlFor={ presetId }>
-				<span className="screen-reader-text">{ __( 'Date range', 'newspack-plugin' ) }</span>
-				<select
-					id={ presetId }
-					className="newspack-insights__date-range-picker-select"
-					value={ range.preset }
-					onChange={ e => onPresetChange( e.target.value as DateRangePreset ) }
-				>
-					{ DATE_RANGE_PRESETS.map( p => (
-						<option key={ p.key } value={ p.key }>
-							{ p.label }
-						</option>
-					) ) }
-				</select>
-			</label>
+			<SelectControl
+				className="newspack-insights__date-range-picker-select"
+				label={ __( 'Date range', 'newspack-plugin' ) }
+				hideLabelFromVision
+				__nextHasNoMarginBottom
+				value={ range.preset }
+				options={ options }
+				onChange={ value => onPresetChange( value as DateRangePreset ) }
+			/>
 
 			{ range.preset === 'custom' && (
 				<div className="newspack-insights__date-range-picker-custom">

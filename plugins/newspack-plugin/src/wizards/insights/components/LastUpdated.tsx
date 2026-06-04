@@ -19,8 +19,11 @@ export interface LastUpdatedProps {
 }
 
 const formatRelative = ( ts: Date, now: Date ): string => {
+	// Math.floor (not Math.round) so a 30-second-old timestamp stays in
+	// the "just now" branch instead of rounding up to "1 minute ago".
+	// Same reasoning applies to the hour / day branches below.
 	const diffMs = now.getTime() - ts.getTime();
-	const diffMin = Math.round( diffMs / ( 1000 * 60 ) );
+	const diffMin = Math.floor( diffMs / ( 1000 * 60 ) );
 	if ( diffMin < 1 ) {
 		return __( 'Updated just now', 'newspack-plugin' );
 	}
@@ -31,7 +34,7 @@ const formatRelative = ( ts: Date, now: Date ): string => {
 			diffMin
 		);
 	}
-	const diffHr = Math.round( diffMin / 60 );
+	const diffHr = Math.floor( diffMin / 60 );
 	if ( diffHr < 24 ) {
 		return sprintf(
 			/* translators: %d is number of hours */
@@ -39,7 +42,7 @@ const formatRelative = ( ts: Date, now: Date ): string => {
 			diffHr
 		);
 	}
-	const diffDay = Math.round( diffHr / 24 );
+	const diffDay = Math.floor( diffHr / 24 );
 	return sprintf(
 		/* translators: %d is number of days */
 		__( 'Updated %d days ago', 'newspack-plugin' ),

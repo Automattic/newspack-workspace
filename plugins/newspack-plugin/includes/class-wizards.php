@@ -69,7 +69,6 @@ class Wizards {
 			'audience-content-gates'  => new Audience_Content_Gates(),
 			'audience-donations'      => new Audience_Donations(),
 			'audience-integrations'   => new Audience_Integrations(),
-			'insights'                => new Insights_Wizard(),
 			'listings'                => new Listings_Wizard(),
 			'network'                 => new Network_Wizard(),
 			'newsletters'             => new Newsletters_Wizard(),
@@ -79,17 +78,24 @@ class Wizards {
 			self::$wizards['audience-subscriptions'] = new Audience_Subscriptions();
 		}
 
-		// Initialize Insights section classes. These are plain classes (not
-		// Wizard_Section subclasses) that hold the hook points for future
-		// per-tab REST endpoint registration as each tab's data layer lands.
-		Insights_Section_Audience::init();
-		Insights_Section_Engagement::init();
-		Insights_Section_Conversion::init();
-		Insights_Section_Gates::init();
-		Insights_Section_Prompts::init();
-		Insights_Section_Subscribers::init();
-		Insights_Section_Donors::init();
-		Insights_Section_Advertising::init();
+		// Insights wizard + section init are gated together. The wizard's
+		// own constructor short-circuits when the feature flag is off and
+		// each section's init() self-gates too, but registering the
+		// instance and firing eight no-op init()s leaves stale state in
+		// self::$wizards (which Wizards::get_url() and Wizards::menu_order()
+		// read from). Keeping the gate at this layer is the single source
+		// of truth.
+		if ( Insights_Wizard::is_enabled() ) {
+			self::$wizards['insights'] = new Insights_Wizard();
+			Insights_Section_Audience::init();
+			Insights_Section_Engagement::init();
+			Insights_Section_Conversion::init();
+			Insights_Section_Gates::init();
+			Insights_Section_Prompts::init();
+			Insights_Section_Subscribers::init();
+			Insights_Section_Donors::init();
+			Insights_Section_Advertising::init();
+		}
 	}
 
 	/**

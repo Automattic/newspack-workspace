@@ -37,7 +37,20 @@ export const DATE_RANGE_PRESETS: DateRangePresetDef[] = [
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-const isValidISODate = ( s: unknown ): s is string => typeof s === 'string' && ISO_DATE_RE.test( s );
+/**
+ * Validate a YYYY-MM-DD string. Checks both the shape AND that the parsed
+ * date round-trips back to the same string — otherwise inputs like
+ * '2026-99-99' would pass the regex and silently roll over to a future
+ * month when used as a Date.
+ */
+const isValidISODate = ( s: unknown ): s is string => {
+	if ( typeof s !== 'string' || ! ISO_DATE_RE.test( s ) ) {
+		return false;
+	}
+	const [ y, m, d ] = s.split( '-' ).map( Number );
+	const parsed = new Date( y, m - 1, d );
+	return parsed.getFullYear() === y && parsed.getMonth() === m - 1 && parsed.getDate() === d;
+};
 
 const isPreset = ( v: unknown ): v is DateRangePreset => typeof v === 'string' && DATE_RANGE_PRESETS.some( p => p.key === v );
 
@@ -187,7 +200,13 @@ const useDateRange = ( { defaultRange }: UseDateRangeOptions ): UseDateRangeRetu
 		if ( ! isValidISODate( start ) || ! isValidISODate( end ) ) {
 			return;
 		}
-		setRange( { preset: 'custom', start, end } );
+		// Normalize so the earlier date is always start. The picker has
+		// two independent <input type="date"> fields and editing one
+		// before the other can transiently produce start > end, which
+		// otherwise propagates a nonsensical range into the URL and
+		// breaks computePreviousRange.
+		const [ s, e ] = start <= end ? [ start, end ] : [ end, start ];
+		setRange( { preset: 'custom', start: s, end: e } );
 	}, [] );
 
 	return { range, setPreset, setCustom };

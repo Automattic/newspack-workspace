@@ -82,11 +82,12 @@ const writeUrl = ( enabled: boolean ) => {
 		return;
 	}
 	const params = new URLSearchParams( window.location.search );
-	if ( enabled ) {
-		params.set( 'compare', '1' );
-	} else {
-		params.delete( 'compare' );
-	}
+	// Persist both states explicitly. Previously the disabled state
+	// deleted the param, which meant an explicit user choice of
+	// "disabled" would silently revert to the boot config default on
+	// refresh whenever that default is true. `readUrl` already accepts
+	// '0' so this round-trips cleanly.
+	params.set( 'compare', enabled ? '1' : '0' );
 	const next = `${ window.location.pathname }?${ params.toString() }${ window.location.hash }`;
 	window.history.replaceState( window.history.state, '', next );
 };
