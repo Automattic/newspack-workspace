@@ -457,7 +457,17 @@ class Integrations {
 				'required_plugins' => $integration->get_required_plugins(),
 			];
 		}
-		return $result;
+
+		/**
+		 * Filters the integration settings list shown in the Audience → Integrations UI.
+		 *
+		 * Lets a registered integration hide another's card when a takeover is in
+		 * effect (e.g. a vendor-specific ESP integration superseding the built-in
+		 * one).
+		 *
+		 * @param array $result Keyed array of integration settings.
+		 */
+		return apply_filters( 'newspack_reader_activation_integration_settings', $result );
 	}
 
 	/**
