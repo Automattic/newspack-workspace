@@ -123,10 +123,10 @@ class TestBlockProcessor extends \WP_UnitTestCase {
 		$payload       = $outgoing_post->get_payload();
 
 		// `content` is rendered HTML; WP core's paragraph block render adds a
-		// version-dependent wrapper class (e.g. `wp-block-paragraph`), so assert
-		// the processed text is present rather than pinning the exact markup.
-		// `raw_content` below still pins the exact serialized block markup.
-		$this->assertStringContainsString( 'Outgoing Processed', $payload['post_data']['content'] );
+		// version-dependent wrapper class (e.g. `wp-block-paragraph`), so match
+		// the `<p>` element with optional attributes rather than pinning the
+		// exact markup. `raw_content` below still pins the exact serialized block.
+		$this->assertMatchesRegularExpression( '/<p[^>]*>Outgoing Processed<\/p>/', $payload['post_data']['content'] );
 		$this->assertEquals( '<!-- wp:paragraph {"outgoing":"test"} --><p>Outgoing Processed</p><!-- /wp:paragraph -->', $payload['post_data']['raw_content'] );
 	}
 
