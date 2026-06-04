@@ -433,10 +433,15 @@ class OverlayQueueingTest extends WP_UnitTestCase {
 
 		self::assertNotFalse( $overlay_priority, 'print_queued_overlays must be hooked to wp_footer.' );
 		self::assertNotFalse( $flush_priority, 'WordPress core must flush stored block-support styles on wp_footer.' );
-		self::assertLessThan(
-			$flush_priority,
-			$overlay_priority,
-			'Overlays must render before wp_enqueue_stored_styles flushes block-support styles, or their inline block styles are dropped (NPPM-2897).'
+		// A lower wp_footer priority runs earlier. Overlays must render before the
+		// style flush, so the overlay priority must be the smaller number.
+		self::assertTrue(
+			$overlay_priority < $flush_priority,
+			sprintf(
+				'Overlays must render before wp_enqueue_stored_styles flushes block-support styles, or their inline block styles are dropped (NPPM-2897). print_queued_overlays is at wp_footer priority %d; the style flush is at priority %d — the overlay priority must be lower.',
+				$overlay_priority,
+				$flush_priority
+			)
 		);
 	}
 }
