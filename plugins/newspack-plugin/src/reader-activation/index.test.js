@@ -384,7 +384,36 @@ describe( 'shouldClearReaderData (NPPM-2899)', () => {
 		).toBe( false );
 	} );
 
+	it( 'clears on authenticated A→B switch even with no auth cookie', () => {
+		expect(
+			shouldClearReaderData( {
+				authenticatedEmail: 'b@example.com',
+				initialEmail: 'b@example.com',
+				storedReader: reader( 'a@example.com', true ),
+				hasAuthReaderCookie: false,
+			} )
+		).toBe( true );
+	} );
+
+	it( 'treats a truthy-but-not-true authenticated flag as not authenticated', () => {
+		expect(
+			shouldClearReaderData( {
+				authenticatedEmail: '',
+				initialEmail: 'a@example.com',
+				storedReader: { email: 'a@example.com', authenticated: 1 },
+				hasAuthReaderCookie: false,
+			} )
+		).toBe( false );
+	} );
+
 	it( 'does NOT clear with empty inputs', () => {
-		expect( shouldClearReaderData( { authenticatedEmail: '', initialEmail: '', storedReader: {}, hasAuthReaderCookie: false } ) ).toBe( false );
+		expect(
+			shouldClearReaderData( {
+				authenticatedEmail: '',
+				initialEmail: '',
+				storedReader: {},
+				hasAuthReaderCookie: false,
+			} )
+		).toBe( false );
 	} );
 } );
