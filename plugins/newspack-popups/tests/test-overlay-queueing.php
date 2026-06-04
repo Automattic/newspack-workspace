@@ -417,4 +417,26 @@ class OverlayQueueingTest extends WP_UnitTestCase {
 		$second_footer = ob_get_clean();
 		self::assertStringContainsString( 'newspack-lightbox', $second_footer, 'After a flush, the re-queued overlay must also re-emit its lightbox at the footer.' );
 	}
+
+	/**
+	 * NPPM-2897: an overlay's blocks are rendered inside print_queued_overlays
+	 * via render_block(), which *stores* the block's layout/spacing CSS in the
+	 * style engine's `block-supports` store. WordPress flushes that store with
+	 * wp_enqueue_stored_styles() at wp_footer priority 1. If overlays render
+	 * after that priority, their inline block-support styles (e.g. a Row block's
+	 * `justify-content: space-between`) are stored too late and never printed.
+	 * Guard the ordering: the overlay flush must run before the style flush.
+	 */
+	public function test_overlays_render_before_block_support_style_flush() {
+		$overlay_priority = has_action( 'wp_footer', [ 'Newspack_Popups_Inserter', 'print_queued_overlays' ] );
+		$flush_priority   = has_action( 'wp_footer', 'wp_enqueue_stored_styles' );
+
+		self::assertNotFalse( $overlay_priority, 'print_queued_overlays must be hooked to wp_footer.' );
+		self::assertNotFalse( $flush_priority, 'WordPress core must flush stored block-support styles on wp_footer.' );
+		self::assertLessThan(
+			$flush_priority,
+			$overlay_priority,
+			'Overlays must render before wp_enqueue_stored_styles flushes block-support styles, or their inline block styles are dropped (NPPM-2897).'
+		);
+	}
 }

@@ -91,10 +91,15 @@ final class Newspack_Popups_Inserter {
 		// callback (with no surrounding container in the callback itself) lands
 		// the markup as a direct child of <body>, which is what lets it escape
 		// any ancestor stacking context that would otherwise trap its z-index.
-		// Priority 9 runs *before* wp_print_footer_scripts (priority 20), so any
-		// asset that an overlay's content block / shortcode enqueues at render
-		// time still makes it into the page's footer scripts.
-		add_action( 'wp_footer', [ __CLASS__, 'print_queued_overlays' ], 9 );
+		// Priority 0 runs *before* wp_enqueue_stored_styles (priority 1), which
+		// snapshots and resets the block-supports style store. Overlay blocks are
+		// rendered here via render_block(), which stores their layout/spacing CSS
+		// in that store; rendering before the flush lets those inline styles
+		// (e.g. a Row block's `justify-content: space-between`) reach the page
+		// (NPPM-2897). It is still well before wp_print_footer_scripts (priority
+		// 20), so any asset an overlay's content enqueues at render time also
+		// makes it into the page's footer scripts.
+		add_action( 'wp_footer', [ __CLASS__, 'print_queued_overlays' ], 0 );
 
 		// Always enqueue scripts, since this plugin's scripts are handling pageview sending via GTAG.
 		add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_scripts' ] );
