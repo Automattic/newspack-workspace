@@ -15,7 +15,22 @@ use Newspack\Newspack_UI;
 class IP_Access_Rule {
 
 	/**
-	 * The name of the cookie used to bypass cache and allow server side IP checking.
+	 * Cookie used to trigger a cache-exempt render for IP-based access checking.
+	 *
+	 * The `wp` 2-char prefix causes Batcache's advanced-cache.php to skip
+	 * page cache for requests carrying this cookie (rule: any cookie whose
+	 * name starts with `wp` is exempted, except the small allowlist that
+	 * defaults to `wordpress_test_cookie`). The cookie is a cache-skip
+	 * signal only — the actual IP-match check runs server-side on the
+	 * resulting uncached request, so a forged cookie just produces an
+	 * uncached render where the check rejects the visitor.
+	 *
+	 * NOT renamed in this PR: unlike the newsletter cookies (which are new),
+	 * this cookie may already be set on production sites; renaming would
+	 * invalidate in-flight cookies for current visitors. See miguelpeixe
+	 * review on PR #136.
+	 *
+	 * See: https://github.com/Automattic/batcache/blob/master/advanced-cache.php
 	 */
 	const COOKIE_NAME = 'wp_nocache_ip';
 

@@ -5,8 +5,8 @@
  *
  * The first capability provided here is newsletter link bypass: when a
  * reader clicks an HMAC-signed link from a Newspack Newsletters email,
- * this class verifies the signature, sets a short-lived cookie that the
- * Atomic platform recognizes as a cache-bypass cookie, and overrides the
+ * this class verifies the signature, sets a short-lived cookie whose `wp`
+ * prefix causes Batcache to exempt the request from page cache, and overrides the
  * `newspack_is_post_restricted` filter for the cookie's lifetime.
  *
  * Future Newsletters-related access features can live alongside the
@@ -32,18 +32,34 @@ defined( 'ABSPATH' ) || exit;
  */
 class Newsletters_Access {
 	/**
-	 * Site-wide bypass cookie name. Set by the signed-token path. Uses the
-	 * wp_nocache_* prefix so the Atomic platform skips page cache for
-	 * requests carrying it. Value is '1' (presence-checked).
+	 * Site-wide bypass cookie name. Set by the signed-token path.
+	 *
+	 * The `wp` 2-char prefix triggers cache exemption in Batcache's
+	 * advanced-cache.php: any cookie whose name starts with `wp` causes
+	 * Batcache to skip page cache for that request (with a small allowlist
+	 * — default only `wordpress_test_cookie` — that is explicitly NOT
+	 * exempted). The `_npnl_bypass` portion is purely human-readable
+	 * convention and has no technical effect on caching; it signals that
+	 * this cookie is an HMAC-verified bypass grant, not just a cache signal.
+	 *
+	 * See: https://github.com/Automattic/batcache/blob/master/advanced-cache.php
+	 *
+	 * Value is '1' (presence-checked; HMAC signature is embedded in the value).
 	 */
-	const COOKIE_NAME = 'wp_nocache_nl';
+	const COOKIE_NAME = 'wp_npnl_bypass';
 
 	/**
-	 * Single-post bypass cookie name. Set by the UTM-fallback path. Same
-	 * wp_nocache_* prefix; value carries the verified post ID so the
-	 * bypass scopes to that post only.
+	 * Single-post bypass cookie name. Set by the UTM-fallback path.
+	 *
+	 * Same `wp` prefix → Batcache cache exemption as COOKIE_NAME above (see
+	 * that constant's docblock for the full mechanism). The `_single` suffix
+	 * reflects that this cookie scopes the bypass to one post: its value
+	 * carries the verified post ID rather than the generic '1' sentinel, so
+	 * the server-side check can reject bypass attempts on any other post.
+	 *
+	 * See: https://github.com/Automattic/batcache/blob/master/advanced-cache.php
 	 */
-	const SINGLE_POST_COOKIE_NAME = 'wp_nocache_nl_single';
+	const SINGLE_POST_COOKIE_NAME = 'wp_npnl_bypass_single';
 
 	/**
 	 * Query parameter name carrying the signed token on newsletter links.
@@ -385,8 +401,11 @@ class Newsletters_Access {
 	}
 
 	/**
-	 * Set the bypass cookie. The wp_nocache_* prefix triggers cache bypass
-	 * at the platform layer; the value is HMAC-signed to prevent forgery.
+	 * Set the bypass cookie. The `wp` 2-char prefix triggers cache exemption
+	 * in Batcache's advanced-cache.php (any cookie matching /^wp/ skips
+	 * cache, with a small allowlist for `wordpress_test_cookie`). The value
+	 * is HMAC-signed to prevent forgery; a forged cookie still causes an
+	 * uncached render, but the signature check will reject the bypass.
 	 */
 	private static function set_bypass_cookie() {
 		$expiry = time() + self::BYPASS_TTL;
