@@ -20,13 +20,6 @@ class IP_Access_Rule {
 	const COOKIE_NAME = 'wp_nocache_ip';
 
 	/**
-	 * Salt key used to derive the cookie-signing HMAC secret via wp_salt().
-	 * Per-class so an IP-bypass cookie can't be replayed as a newsletter-bypass
-	 * cookie or vice versa.
-	 */
-	const COOKIE_SALT_KEY = 'newspack_ip_access_cookie';
-
-	/**
 	 * The endpoint for institutional access.
 	 */
 	const ENDPOINT = 'institutional-access';
@@ -693,40 +686,34 @@ class IP_Access_Rule {
 	}
 
 	/**
-	 * Whether a valid (correctly signed, non-expired) IP-access bypass cookie
-	 * was sent on the current request.
+	 * Whether the IP-access bypass cookie is present on the current request.
 	 *
-	 * The cookie is set after a successful institutional-access verification
-	 * (any of an institution's rules matching — IP range, email domain, or
-	 * reader data) and signals that downstream IP-rule checks may safely
-	 * run server-side without breaking the page cache.
+	 * The cookie is a cache-skip signal set after a successful institutional-access
+	 * verification. Its presence tells downstream code to run the IP check
+	 * server-side rather than serving a cached response. The actual access
+	 * decision is made by IP_Access_Rule::ip_matches_ranges(), not by this cookie.
 	 *
-	 * @return bool True if a valid signed cookie is present on this request.
+	 * @return bool True if the bypass cookie is present on this request.
 	 */
 	public static function is_cookie_set() {
-		// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- HMAC-verified below; sanitization not applicable.
-		$raw = $_COOKIE[ self::COOKIE_NAME ] ?? '';
-		if ( ! is_string( $raw ) || '' === $raw ) {
-			return false;
-		}
-		$payload = self::verify_signed_cookie_value( $raw );
-		return null !== $payload && '1' === $payload;
+		// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- presence-only check; the cookie is a cache-skip signal, not an auth grant.
+		return ! empty( $_COOKIE[ self::COOKIE_NAME ] );
 	}
 
 	/**
-	 * Set the IP-access bypass cookie with a signed value.
+	 * Set the IP-access bypass cookie.
 	 *
-	 * Uses MONTH_IN_SECONDS as TTL (matching the previous positional-form
-	 * setcookie() calls that this helper replaces).
+	 * The cookie value is a simple sentinel ('1'). It signals that the visitor
+	 * has previously passed the IP check and subsequent requests should skip
+	 * the page cache so the IP check can run server-side.
 	 */
 	private static function set_cookie() {
-		$expiry = time() + MONTH_IN_SECONDS;
-		$value  = self::build_signed_cookie_value( '1', $expiry );
+		$expiry = time() + HOUR_IN_SECONDS;
 		if ( ! headers_sent() ) {
 			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
 			setcookie(
 				self::COOKIE_NAME,
-				$value,
+				'1',
 				[
 					'expires'  => $expiry,
 					'path'     => COOKIEPATH,
@@ -737,61 +724,7 @@ class IP_Access_Rule {
 				]
 			);
 		}
-		// Unconditionally update $_COOKIE so same-request filters can see
-		// the bypass even in test environments where headers are already sent.
-		$_COOKIE[ self::COOKIE_NAME ] = $value; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
-	}
-
-	/**
-	 * Build a signed cookie value of the form "<payload>.<expiry>|<hmac>"
-	 * where the HMAC binds both the payload and the expiry timestamp to
-	 * the class's COOKIE_SALT_KEY-derived secret.
-	 *
-	 * TODO: Extract shared signed-cookie helpers to a trait/utility class.
-	 *
-	 * @param string $payload Cookie payload (sentinel "1").
-	 * @param int    $expiry  Unix timestamp at which the cookie expires.
-	 *
-	 * @return string
-	 */
-	private static function build_signed_cookie_value( $payload, $expiry ) {
-		$body = $payload . '.' . (int) $expiry;
-		$hmac = hash_hmac( 'sha256', $body, wp_salt( self::COOKIE_SALT_KEY ) );
-		return $body . '|' . $hmac;
-	}
-
-	/**
-	 * Verify a signed cookie value and return the inner payload string,
-	 * or null on malformed input, bad signature, or expired cookie.
-	 *
-	 * TODO: Extract shared signed-cookie helpers to a trait/utility class.
-	 *
-	 * @param string $value Raw cookie value as received in $_COOKIE.
-	 *
-	 * @return string|null
-	 */
-	private static function verify_signed_cookie_value( $value ) {
-		$parts = explode( '|', $value, 2 );
-		if ( 2 !== count( $parts ) ) {
-			return null;
-		}
-		list( $body, $provided_hmac ) = $parts;
-		$expected_hmac = hash_hmac( 'sha256', $body, wp_salt( self::COOKIE_SALT_KEY ) );
-		if ( ! hash_equals( $expected_hmac, $provided_hmac ) ) {
-			return null;
-		}
-		$body_parts = explode( '.', $body );
-		if ( 2 !== count( $body_parts ) ) {
-			return null;
-		}
-		list( $payload, $expiry_raw ) = $body_parts;
-		if ( ! ctype_digit( $expiry_raw ) ) {
-			return null;
-		}
-		if ( (int) $expiry_raw <= time() ) {
-			return null;
-		}
-		return $payload;
+		$_COOKIE[ self::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 	}
 }
 IP_Access_Rule::init();

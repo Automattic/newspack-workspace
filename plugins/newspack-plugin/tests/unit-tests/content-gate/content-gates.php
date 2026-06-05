@@ -1492,10 +1492,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		// phpcs:disable WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$_SERVER['REMOTE_ADDR'] = $ip;
 		if ( $with_cookie ) {
-			// B4 requires a properly signed value — raw '1' fails verify_signed_cookie_value().
-			$body = '1.' . ( time() + HOUR_IN_SECONDS );
-			$hmac = hash_hmac( 'sha256', $body, wp_salt( IP_Access_Rule::COOKIE_SALT_KEY ) );
-			$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = $body . '|' . $hmac;
+			$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		} else {
 			unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] );
 		}
