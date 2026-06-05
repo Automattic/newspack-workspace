@@ -438,9 +438,17 @@ class Newsletters_Access {
 			return [ 'action' => 'skipped' ];
 		}
 
-		// Unconditional cache defeat for any utm_medium=email request. Must
-		// happen BEFORE any other validation so cache poisoning is prevented
-		// even on bypass-rejection paths.
+		// Non-singular requests (homepage, archives, etc.) can never grant
+		// a per-post bypass, so they can't poison the cache. Bail before
+		// touching the cache so a `?utm_medium=email` on the homepage
+		// doesn't force an uncached render unnecessarily.
+		if ( ! is_singular() ) {
+			return [ 'action' => 'skipped' ];
+		}
+
+		// Cache defeat for any singular utm_medium=email request. Must
+		// happen BEFORE further validation so cache poisoning is prevented
+		// even on bypass-rejection paths that could still set a cookie.
 		if ( $with_side_effects ) {
 			if ( function_exists( 'batcache_cancel' ) ) {
 				batcache_cancel();
@@ -459,9 +467,6 @@ class Newsletters_Access {
 			return [ 'action' => 'disabled' ];
 		}
 		if ( is_user_logged_in() && current_user_can( 'edit_others_posts' ) ) {
-			return [ 'action' => 'skipped' ];
-		}
-		if ( ! is_singular() ) {
 			return [ 'action' => 'skipped' ];
 		}
 
