@@ -93,6 +93,14 @@ class Newsletters_Access {
 	const COOKIE_SALT_KEY = 'newspack_newsletters_access_cookie';
 
 	/**
+	 * Object-cache group for per-newsletter resolved-href maps used by
+	 * the UTM fallback's link-scan path. Cached entries are flushed on
+	 * newsletter post updates / deletions via the clean_post_cache and
+	 * before_delete_post hooks registered in init().
+	 */
+	const HREFS_CACHE_GROUP = 'newspack_newsletters_access_hrefs';
+
+	/**
 	 * In-request memo for UTM-fallback verification: maps a key
 	 * derived from list_id + normalized request URL to either the
 	 * matched post ID (int) or false (no match). Avoids repeating
@@ -125,6 +133,10 @@ class Newsletters_Access {
 		add_action( 'wp', [ __CLASS__, 'handle_utm_fallback_request_action' ], 10 );
 		add_filter( 'newspack_is_post_restricted', [ __CLASS__, 'filter_post_restricted' ], 20, 3 );
 		add_filter( 'wc_memberships_is_post_public', [ __CLASS__, 'filter_wc_memberships_is_post_public' ], 20, 2 );
+
+		// Invalidate per-newsletter href cache on mutations.
+		add_action( 'clean_post_cache', [ __CLASS__, 'maybe_flush_newsletter_hrefs_cache' ] );
+		add_action( 'before_delete_post', [ __CLASS__, 'maybe_flush_newsletter_hrefs_cache' ] );
 	}
 
 	/**
@@ -632,11 +644,17 @@ class Newsletters_Access {
 			return false === $cached ? null : $cached;
 		}
 
+		$current_post_id = self::resolve_url_to_post_id( $current_url );
+		if ( $current_post_id <= 0 ) {
+			self::$utm_verification_memo[ $memo_key ] = false;
+			return null;
+		}
+
 		$matched    = false;
 		$candidates = self::find_recent_sent_newsletters_for_list( $list_id );
 		foreach ( $candidates as $newsletter_id ) {
-			$html = (string) get_post_meta( $newsletter_id, 'newspack_email_html', true );
-			if ( '' !== $html && self::email_html_contains_url( $html, $current_url ) ) {
+			$linked_post_ids = self::get_linked_post_ids_for_newsletter( $newsletter_id );
+			if ( in_array( $current_post_id, $linked_post_ids, true ) ) {
 				$matched = $newsletter_id;
 				break;
 			}
@@ -668,33 +686,74 @@ class Newsletters_Access {
 	}
 
 	/**
-	 * Whether the email HTML contains an anchor pointing to the same post
-	 * as the given URL. Comparison is by resolved post ID, which works
-	 * correctly under both pretty permalinks (`/article-slug/`) and plain
-	 * permalinks (`/?p=N`) and is naturally immune to UTM / npnl
-	 * query-string noise on either side.
+	 * Resolved post IDs for every href in a newsletter's email HTML.
+	 * Cached in the object cache to skip the DOMDocument parse + N
+	 * url_to_postid calls on subsequent UTM-fallback requests that touch
+	 * the same newsletter.
 	 *
-	 * @param string $html        Email HTML.
-	 * @param string $current_url Inbound request URL (typically the
-	 *                            canonical permalink of the queried post).
+	 * Returned values are deduped (each linked post ID appears once).
+	 * Cache is invalidated on newsletter post update / delete via the
+	 * hooks registered in init() — there is no TTL because mutations
+	 * are reliably hook-fired.
 	 *
-	 * @return bool
+	 * @param int $newsletter_id Newsletter post ID.
+	 *
+	 * @return int[] Resolved (deduped) linked post IDs. Empty array if
+	 *               the newsletter has no email HTML or no hrefs that
+	 *               resolve to a post on this site.
 	 */
-	private static function email_html_contains_url( $html, $current_url ) {
-		$current_post_id = self::resolve_url_to_post_id( $current_url );
-		if ( ! $current_post_id ) {
-			return false;
+	private static function get_linked_post_ids_for_newsletter( $newsletter_id ) {
+		$newsletter_id = (int) $newsletter_id;
+		if ( $newsletter_id <= 0 ) {
+			return [];
 		}
+
+		$cached = wp_cache_get( $newsletter_id, self::HREFS_CACHE_GROUP );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+
+		$html = (string) get_post_meta( $newsletter_id, 'newspack_email_html', true );
+		if ( '' === $html ) {
+			wp_cache_set( $newsletter_id, [], self::HREFS_CACHE_GROUP );
+			return [];
+		}
+
 		$hrefs = self::extract_hrefs_from_html( $html );
-		if ( empty( $hrefs ) ) {
-			return false;
-		}
+		$ids   = [];
 		foreach ( $hrefs as $href ) {
-			if ( self::resolve_url_to_post_id( $href ) === $current_post_id ) {
-				return true;
+			$resolved = self::resolve_url_to_post_id( $href );
+			if ( $resolved > 0 ) {
+				$ids[ $resolved ] = true; // dedupe via assoc-key set
 			}
 		}
-		return false;
+		$ids = array_keys( $ids );
+
+		wp_cache_set( $newsletter_id, $ids, self::HREFS_CACHE_GROUP );
+		return $ids;
+	}
+
+	/**
+	 * Cache-invalidation callback for clean_post_cache / before_delete_post.
+	 *
+	 * Fires on every post mutation, so it short-circuits when the post
+	 * isn't a newsletter. Touching the email_html post meta also fires
+	 * clean_post_cache via WordPress's post-meta update path.
+	 *
+	 * @param int $post_id Post being updated/deleted.
+	 *
+	 * @return void
+	 */
+	public static function maybe_flush_newsletter_hrefs_cache( $post_id ) {
+		$post_id = (int) $post_id;
+		if ( $post_id <= 0 ) {
+			return;
+		}
+		$post_type = get_post_type( $post_id );
+		if ( ! $post_type || $post_type !== self::newsletter_cpt_slug() ) {
+			return;
+		}
+		wp_cache_delete( $post_id, self::HREFS_CACHE_GROUP );
 	}
 
 	/**

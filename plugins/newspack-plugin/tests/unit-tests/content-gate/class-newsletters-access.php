@@ -887,6 +887,12 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		// added inside individual tests don't leak into subsequent tests.
 		remove_all_filters( 'newspack_newsletters_access_is_valid_send_list_id' );
 
+		// Flush the per-newsletter href object cache so entries from one test
+		// don't bleed into the next.
+		if ( function_exists( 'wp_cache_flush_group' ) ) {
+			wp_cache_flush_group( Newsletters_Access::HREFS_CACHE_GROUP );
+		}
+
 		// Reset the in-request UTM-verification memo.
 		$memo_property = new \ReflectionProperty( Newsletters_Access::class, 'utm_verification_memo' );
 		$memo_property->setAccessible( true );
@@ -1030,6 +1036,36 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$result = Newsletters_Access::filter_post_restricted( true, 123, 0 );
 		unset( $_COOKIE[ Newsletters_Access::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$this->assertTrue( $result );
+	}
+
+	/**
+	 * Cache-invalidation regression: get_linked_post_ids_for_newsletter must
+	 * return a fresh result after clean_post_cache fires (e.g., when
+	 * newspack_email_html post meta is updated). If the cache is not
+	 * invalidated, a stale entry would grant bypass for links that are no
+	 * longer in the newsletter's email HTML.
+	 */
+	public function test_email_html_cache_invalidates_on_newsletter_update() {
+		$linked_post_id = $this->factory->post->create();
+		$newsletter_id  = $this->factory->post->create( [ 'post_type' => 'newspack_nl_cpt' ] );
+		update_post_meta( $newsletter_id, 'newspack_email_html', '<a href="' . esc_url( get_permalink( $linked_post_id ) ) . '">x</a>' );
+
+		// Prime the cache via reflection on the private method.
+		$method = new \ReflectionMethod( Newsletters_Access::class, 'get_linked_post_ids_for_newsletter' );
+		$method->setAccessible( true );
+		$primed = $method->invoke( null, $newsletter_id );
+		$this->assertContains( $linked_post_id, $primed, 'Initial cache must contain the linked post ID.' );
+
+		// Change the HTML to a different link.
+		$other_post_id = $this->factory->post->create();
+		update_post_meta( $newsletter_id, 'newspack_email_html', '<a href="' . esc_url( get_permalink( $other_post_id ) ) . '">y</a>' );
+		// Manually clean post cache to simulate the post-update hook firing
+		// (update_post_meta triggers clean_post_cache via WordPress core).
+		clean_post_cache( $newsletter_id );
+
+		$refreshed = $method->invoke( null, $newsletter_id );
+		$this->assertNotContains( $linked_post_id, $refreshed, 'Stale post ID must be absent after cache flush.' );
+		$this->assertContains( $other_post_id, $refreshed, 'Updated post ID must appear after cache flush.' );
 	}
 
 	/**
