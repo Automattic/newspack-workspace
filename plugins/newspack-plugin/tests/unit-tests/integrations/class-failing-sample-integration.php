@@ -26,6 +26,21 @@ class Failing_Sample_Integration extends Integration {
 	public static $push_count = 0;
 
 	/**
+	 * Count of pull_contact_data calls.
+	 *
+	 * @var int
+	 */
+	public static $pull_count = 0;
+
+	/**
+	 * Value returned by is_set_up(). Tests that simulate an
+	 * enabled-but-unconfigured integration set this to false.
+	 *
+	 * @var bool
+	 */
+	public static $is_set_up_value = true;
+
+	/**
 	 * Register settings fields (test implementation).
 	 */
 	public function register_settings_fields() {
@@ -56,7 +71,17 @@ class Failing_Sample_Integration extends Integration {
 	 * @return array
 	 */
 	public function pull_contact_data( $user_id ) {
+		self::$pull_count++;
 		return [];
+	}
+
+	/**
+	 * Whether this integration's external prerequisites are configured.
+	 *
+	 * @return bool
+	 */
+	public function is_set_up() {
+		return self::$is_set_up_value;
 	}
 
 	/**
@@ -82,7 +107,9 @@ class Failing_Sample_Integration extends Integration {
 	 * Reset state between tests.
 	 */
 	public static function reset() {
-		self::$should_fail = false;
-		self::$push_count  = 0;
+		self::$should_fail     = false;
+		self::$push_count      = 0;
+		self::$pull_count      = 0;
+		self::$is_set_up_value = true;
 	}
 }

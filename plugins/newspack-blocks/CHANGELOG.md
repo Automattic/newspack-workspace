@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.26.4](https://github.com/Automattic/newspack-workspace/compare/@automattic/newspack-blocks@4.26.3...@automattic/newspack-blocks@4.26.4) (2026-06-01)
+
+
+### Bug Fixes
+
+* ensure buttons pick up all colours, fonts sizes, font class styles ([#2337](https://github.com/Automattic/newspack-workspace/issues/2337)) ([418ede0](https://github.com/Automattic/newspack-workspace/commit/418ede038595c1d3b03d12baf301749897dc5a1a))
+
 ## [4.26.3](https://github.com/Automattic/newspack-blocks/compare/v4.26.2...v4.26.3) (2026-05-18)
 
 

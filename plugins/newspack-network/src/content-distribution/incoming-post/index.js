@@ -26,19 +26,16 @@ const unlinked = newspack_network_incoming_post.unlinked;
 
 function IncomingPost() {
 	const { createNotice } = useDispatch( 'core/notices' );
-	const { lockPostAutosaving, unlockPostAutosaving } =
-		useDispatch( 'core/editor' );
+	const { lockPostAutosaving, unlockPostAutosaving } = useDispatch( 'core/editor' );
 	const { openGeneralSidebar } = useDispatch( 'core/edit-post' );
 	const [ isUnLinkedToggling, setIsUnLinkedToggling ] = useState( false );
 	const [ isUnLinked, setIsUnLinked ] = useState( false );
-	const [ hasInitializedSidebar, setHasInitializedSidebar ] =
-		useState( false );
+	const [ hasInitializedSidebar, setHasInitializedSidebar ] = useState( false );
 	const [ showConfirmDialog, setShowConfirmDialog ] = useState( false );
 
-	const { postId, areMetaBoxesInitialized } = useSelect( ( select ) => {
+	const { postId, areMetaBoxesInitialized } = useSelect( select => {
 		const { getCurrentPostId } = select( 'core/editor' );
-		const { areMetaBoxesInitialized: _areMetaBoxesInitialized } =
-			select( 'core/edit-post' );
+		const { areMetaBoxesInitialized: _areMetaBoxesInitialized } = select( 'core/edit-post' );
 		return {
 			postId: getCurrentPostId(),
 			areMetaBoxesInitialized: _areMetaBoxesInitialized(),
@@ -51,9 +48,7 @@ function IncomingPost() {
 
 	useEffect( () => {
 		if ( ! hasInitializedSidebar && areMetaBoxesInitialized ) {
-			openGeneralSidebar(
-				'newspack-network-incoming-post/newspack-network-content-distribution-panel'
-			);
+			openGeneralSidebar( 'newspack-network-incoming-post/newspack-network-content-distribution-panel' );
 			setHasInitializedSidebar( true ); // We only want to strongarm this once.
 		}
 	}, [ areMetaBoxesInitialized ] );
@@ -64,10 +59,7 @@ function IncomingPost() {
 			isUnLinked
 				? sprintf(
 						// translators: %s: original site URL.
-						__(
-							'Originally distributed from %s.',
-							'newspack-network'
-						),
+						__( 'Originally distributed from %s.', 'newspack-network' ),
 						originalSiteUrl
 				  )
 				: sprintf(
@@ -88,15 +80,10 @@ function IncomingPost() {
 			lockPostAutosaving( lockName );
 		}
 		// Toggle the CSS overlay.
-		document
-			.querySelector( '#editor' )
-			?.classList.toggle(
-				'newspack-network-incoming-post-linked',
-				! isUnLinked
-			);
+		document.querySelector( '#editor' )?.classList.toggle( 'newspack-network-incoming-post-linked', ! isUnLinked );
 	}, [ isUnLinked ] );
 
-	const toggleUnlinkedState = async ( _unlinked ) => {
+	const toggleUnlinkedState = async _unlinked => {
 		return apiFetch( {
 			path: `newspack-network/v1/content-distribution/unlink/${ postId }`,
 			method: 'POST',
@@ -104,13 +91,13 @@ function IncomingPost() {
 				unlinked: _unlinked,
 			},
 		} )
-			.then( ( data ) => {
+			.then( data => {
 				setIsUnLinked( data.unlinked );
 			} )
-			.catch( ( error ) => createNotice( 'error', error.message ) );
+			.catch( error => createNotice( 'error', error.message ) );
 	};
 
-	const toggleUnlinkedClicked = ( _unlinked ) => {
+	const toggleUnlinkedClicked = _unlinked => {
 		setIsUnLinkedToggling( true );
 		if ( isUnLinked ) {
 			// For relinking, we need to save the post (it will be overwritten by the origin post)
@@ -120,9 +107,7 @@ function IncomingPost() {
 				.savePost()
 				.then( () => {
 					// Remove the 'draft saved' notice.
-					wp.data
-						.dispatch( 'core/notices' )
-						.removeNotice( 'SAVE_POST_NOTICE_ID' );
+					wp.data.dispatch( 'core/notices' ).removeNotice( 'SAVE_POST_NOTICE_ID' );
 					toggleUnlinkedState( _unlinked ).then( () => {
 						setIsUnLinkedToggling( false );
 						setIsUnLinked( false );
@@ -165,20 +150,13 @@ function IncomingPost() {
 						  )
 						: sprintf(
 								// translators: %1$s: post type
-								__(
-									'This %1$s is linked to its origin. Edits to the origin %1$s will update this version.',
-									'newspack-network'
-								),
+								__( 'This %1$s is linked to its origin. Edits to the origin %1$s will update this version.', 'newspack-network' ),
 								newspack_network_incoming_post.postTypeLabel.toLowerCase()
 						  )
 				}
 				buttons={
 					<>
-						<Button
-							variant="secondary"
-							target="_blank"
-							href={ originalPostEditUrl }
-						>
+						<Button variant="secondary" target="_blank" href={ originalPostEditUrl }>
 							{ sprintf(
 								// translators: %s: post type
 								__( 'Edit origin %s', 'newspack-network' ),
@@ -200,18 +178,12 @@ function IncomingPost() {
 								: ! isUnLinked
 								? sprintf(
 										// translators: %s: post type
-										__(
-											'Unlink from origin %s',
-											'newspack-network'
-										),
+										__( 'Unlink from origin %s', 'newspack-network' ),
 										newspack_network_incoming_post.postTypeLabel.toLowerCase()
 								  )
 								: sprintf(
 										// translators: %s: post type
-										__(
-											'Relink to origin %s',
-											'newspack-network'
-										),
+										__( 'Relink to origin %s', 'newspack-network' ),
 										newspack_network_incoming_post.postTypeLabel.toLowerCase()
 								  ) }
 						</Button>
@@ -225,28 +197,18 @@ function IncomingPost() {
 					setShowConfirmDialog( false );
 				} }
 				onCancel={ () => setShowConfirmDialog( false ) }
-				confirmButtonText={
-					isUnLinked
-						? __( 'Relink', 'newspack-network' )
-						: __( 'Unlink', 'newspack-network' )
-				}
+				confirmButtonText={ isUnLinked ? __( 'Relink', 'newspack-network' ) : __( 'Unlink', 'newspack-network' ) }
 				size="small"
 			>
 				{ isUnLinked
 					? sprintf(
 							// translators: %s: post type
-							__(
-								"Are you sure you want to relink this %s to its origin? Any changes you've made will be lost.",
-								'newspack-network'
-							),
+							__( "Are you sure you want to relink this %s to its origin? Any changes you've made will be lost.", 'newspack-network' ),
 							newspack_network_incoming_post.postTypeLabel.toLowerCase()
 					  )
 					: sprintf(
 							// translators: %s: post type
-							__(
-								'Are you sure you want to unlink this %s from its origin?',
-								'newspack-network'
-							),
+							__( 'Are you sure you want to unlink this %s from its origin?', 'newspack-network' ),
 							newspack_network_incoming_post.postTypeLabel.toLowerCase()
 					  ) }
 			</ConfirmDialog>

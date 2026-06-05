@@ -39,7 +39,7 @@ The Newspack product consists of these interconnected plugins and themes:
 
 **Advertising:**
 - `newspack-ads` - Google Ad Manager integration and ad placement management
-- `super-cool-ad-inserter-plugin` - Programmatic ad insertion into content
+- `super-cool-ad-inserter` - Programmatic ad insertion into content
 
 **Multi-site & Network:**
 - `newspack-network` - Synchronization system for multi-site Newspack networks (Hub/Node architecture)
@@ -100,6 +100,7 @@ Understanding how plugins interact is crucial for cross-plugin changes:
 - **PHP**: WordPress-Extra, WordPress-Docs, WordPress-VIP-Go standards. Short array syntax `[]` is allowed. Yoda conditions not required.
 - **JavaScript/TypeScript**: ESLint via `newspack-scripts`
 - **SCSS**: Stylelint via `newspack-scripts`
+- **Formatting**: Prettier — specifically the `wp-prettier` fork (the WordPress house style needs `parenSpacing`, e.g. `( value )`), pinned workspace-wide via a `pnpm` override so editors and CI use the same engine. Canonical config is `newspack-scripts/config/prettier.config.js`. See [docs/code-formatting.md](docs/code-formatting.md) for the editor settings required to keep IDE formatting and CI lint in agreement.
 - **Commits**: Conventional commits (`<type>(<scope>): <subject>`) enforced via commitlint. Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`. Releases are automated via semantic-release: `feat` triggers a minor release, `fix` triggers a patch release.
 - Pre-commit hooks run lint-staged automatically (requires `pnpm install` at the workspace root). Direct pushes to `main` are blocked.
 - Reference issue numbers in commits and PR descriptions.
@@ -148,10 +149,24 @@ n test-js                           # Run JS tests
 
 ### Development
 ```bash
-n watch                       # Watch mode for current project
+n watch <name>                # Watch & rebuild a single project (or run `n watch` from inside its folder)
+n watch                       # From the root: watch every plugin/theme/package and rebuild the changed unit
 n composer <cmd>              # Run composer in current project
 n npm <cmd>                   # Run npm in current project
 ```
+
+`n watch` with no project (run from the monorepo root) starts a single global
+dispatcher that watches source files across `plugins/`, `themes/` and
+`packages/`. Webpack watchers are spawned **lazily**: the first time you edit a
+unit, that unit's own incremental watcher (`wp-scripts start`) is started and
+owns its rebuilds from then on — so only units you actually touch get a watcher,
+never all of them at once. Units without a `watch` script fall back to a one-off
+`build` when files under their `src/` change; units with neither are skipped.
+
+When you're iterating hard on a single project, prefer `n watch <name>` (or
+`n watch` from inside it): the warm webpack watcher rebuilds incrementally in
+well under a second, whereas the global watch pays a fresh build the first time
+it sees a unit that has no incremental `watch` script.
 
 ### WordPress CLI
 ```bash
