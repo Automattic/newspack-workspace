@@ -19,36 +19,10 @@
 }
 
 .newspack_amp_sticky_ad {
-	&__container {
-		@include utilities.media( mobile ) {
-			display: none;
-		}
-	}
-
-	* {
-		margin: auto;
-	}
-
-	.amp-sticky-ad-top-padding {
-		display: none;
-	}
-
 	button,
 	.amp-sticky-ad-close-button {
 		background-color: var(--newspack-theme-color-bg-body);
-		background-image: none;
 		color: var(--newspack-theme-color-text-main);
-		font-size: 1.25rem;
-
-		&::before {
-			content: "×";
-			inset: 0;
-		}
-
-		&:focus,
-		&:hover {
-			background-color: inherit;
-		}
 	}
 }
 
@@ -107,25 +81,8 @@ body {
 		margin-top: 0;
 	}
 
-	.newspack_global_ad > * {
-		margin-bottom: 8px;
-		margin-top: 8px;
-	}
-
 	.widget_newspack-ads-widget .textwidget,
 	div[class*="newspack-ads-blocks-ad-unit"] {
-		padding: 8px;
-	}
-
-	// Match the ad background treatment for ads served by the standalone
-	// Broadstreet plugin, whose JS hydrates each zone into a
-	// <broadstreet-zone-container> custom element the theme's other selectors
-	// don't target. (selector-type-no-unknown is already disabled above, for
-	// amp-ad.) See NPPM-2829.
-	broadstreet-zone-container {
-		align-items: center;
-		display: flex;
-		justify-content: center;
 		padding: 8px;
 	}
 }
