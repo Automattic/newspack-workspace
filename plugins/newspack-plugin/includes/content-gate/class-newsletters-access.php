@@ -44,7 +44,9 @@ class Newsletters_Access {
 	 *
 	 * See: https://github.com/Automattic/batcache/blob/master/advanced-cache.php
 	 *
-	 * Value is '1' (presence-checked; HMAC signature is embedded in the value).
+	 * Value is the build_signed_cookie_value() output for the payload '1':
+	 * `1.<expiry>|<hmac>`. is_cookie_set() verifies the HMAC and expiry
+	 * before treating the cookie as a valid bypass grant.
 	 */
 	const COOKIE_NAME = 'wp_npnl_bypass';
 
@@ -134,9 +136,17 @@ class Newsletters_Access {
 		add_filter( 'newspack_is_post_restricted', [ __CLASS__, 'filter_post_restricted' ], 20, 3 );
 		add_filter( 'wc_memberships_is_post_public', [ __CLASS__, 'filter_wc_memberships_is_post_public' ], 20, 2 );
 
-		// Invalidate per-newsletter href cache on mutations.
+		// Invalidate per-newsletter href cache on mutations. We hook BOTH
+		// post-level events (clean_post_cache, before_delete_post — cover
+		// the wp_update_post / wp_delete_post paths) AND meta-level events
+		// (added/updated/deleted_post_meta scoped to newspack_email_html
+		// — cover bare update_post_meta() calls from sender-side code,
+		// since update_post_meta does NOT fire clean_post_cache in core).
 		add_action( 'clean_post_cache', [ __CLASS__, 'maybe_flush_newsletter_hrefs_cache' ] );
 		add_action( 'before_delete_post', [ __CLASS__, 'maybe_flush_newsletter_hrefs_cache' ] );
+		add_action( 'added_post_meta', [ __CLASS__, 'maybe_flush_newsletter_hrefs_cache_on_meta_update' ], 10, 3 );
+		add_action( 'updated_post_meta', [ __CLASS__, 'maybe_flush_newsletter_hrefs_cache_on_meta_update' ], 10, 3 );
+		add_action( 'deleted_post_meta', [ __CLASS__, 'maybe_flush_newsletter_hrefs_cache_on_meta_update' ], 10, 3 );
 	}
 
 	/**
@@ -724,7 +734,7 @@ class Newsletters_Access {
 		foreach ( $hrefs as $href ) {
 			$resolved = self::resolve_url_to_post_id( $href );
 			if ( $resolved > 0 ) {
-				$ids[ $resolved ] = true; // dedupe via assoc-key set
+				$ids[ $resolved ] = true; // Dedupe via assoc-key set.
 			}
 		}
 		$ids = array_keys( $ids );
@@ -737,8 +747,12 @@ class Newsletters_Access {
 	 * Cache-invalidation callback for clean_post_cache / before_delete_post.
 	 *
 	 * Fires on every post mutation, so it short-circuits when the post
-	 * isn't a newsletter. Touching the email_html post meta also fires
-	 * clean_post_cache via WordPress's post-meta update path.
+	 * isn't a newsletter. Covers the wp_update_post / wp_delete_post paths
+	 * (Gutenberg / REST editor saves).
+	 *
+	 * Bare update_post_meta() calls do NOT fire clean_post_cache in WP
+	 * core, so the meta-update siblings below cover that surface
+	 * separately for the newspack_email_html meta key.
 	 *
 	 * @param int $post_id Post being updated/deleted.
 	 *
@@ -754,6 +768,29 @@ class Newsletters_Access {
 			return;
 		}
 		wp_cache_delete( $post_id, self::HREFS_CACHE_GROUP );
+	}
+
+	/**
+	 * Cache-invalidation callback for the post-meta update actions
+	 * (added/updated/deleted_post_meta). Scoped to the newspack_email_html
+	 * key — that's the only meta whose value the per-newsletter href cache
+	 * depends on, and the meta actions fire for every key so an unscoped
+	 * handler would re-invalidate on noise.
+	 *
+	 * WP core fires these actions with (meta_id, object_id, meta_key,
+	 * meta_value). We only need the second and third.
+	 *
+	 * @param int    $meta_id   Meta row ID (unused).
+	 * @param int    $post_id   Post the meta is attached to.
+	 * @param string $meta_key  Meta key being mutated.
+	 *
+	 * @return void
+	 */
+	public static function maybe_flush_newsletter_hrefs_cache_on_meta_update( $meta_id, $post_id, $meta_key ) {
+		if ( 'newspack_email_html' !== $meta_key ) {
+			return;
+		}
+		self::maybe_flush_newsletter_hrefs_cache( $post_id );
 	}
 
 	/**

@@ -1040,12 +1040,22 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 
 	/**
 	 * Cache-invalidation regression: get_linked_post_ids_for_newsletter must
-	 * return a fresh result after clean_post_cache fires (e.g., when
-	 * newspack_email_html post meta is updated). If the cache is not
-	 * invalidated, a stale entry would grant bypass for links that are no
-	 * longer in the newsletter's email HTML.
+	 * return a fresh result after newspack_email_html post meta is updated.
+	 * If the cache isn't invalidated, a stale entry would grant bypass for
+	 * links that are no longer in the newsletter's email HTML.
+	 *
+	 * Exercises the meta-update path (added/updated_post_meta hooks), which
+	 * is the realistic mutation surface — sender-side code persists
+	 * newsletter HTML via bare update_post_meta(), and update_post_meta
+	 * does NOT fire clean_post_cache in WP core.
 	 */
 	public function test_email_html_cache_invalidates_on_newsletter_update() {
+		// The cache-invalidation hooks only register when bypass is enabled,
+		// so flip the toggle on and re-init like other tests in this class.
+		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
+		Newsletters_Access::init();
+
 		$linked_post_id = $this->factory->post->create();
 		$newsletter_id  = $this->factory->post->create( [ 'post_type' => 'newspack_nl_cpt' ] );
 		update_post_meta( $newsletter_id, 'newspack_email_html', '<a href="' . esc_url( get_permalink( $linked_post_id ) ) . '">x</a>' );
@@ -1056,16 +1066,40 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 		$primed = $method->invoke( null, $newsletter_id );
 		$this->assertContains( $linked_post_id, $primed, 'Initial cache must contain the linked post ID.' );
 
-		// Change the HTML to a different link.
+		// Update the meta — the updated_post_meta hook on
+		// 'newspack_email_html' should flush the cache automatically.
 		$other_post_id = $this->factory->post->create();
 		update_post_meta( $newsletter_id, 'newspack_email_html', '<a href="' . esc_url( get_permalink( $other_post_id ) ) . '">y</a>' );
-		// Manually clean post cache to simulate the post-update hook firing
-		// (update_post_meta triggers clean_post_cache via WordPress core).
-		clean_post_cache( $newsletter_id );
 
 		$refreshed = $method->invoke( null, $newsletter_id );
-		$this->assertNotContains( $linked_post_id, $refreshed, 'Stale post ID must be absent after cache flush.' );
-		$this->assertContains( $other_post_id, $refreshed, 'Updated post ID must appear after cache flush.' );
+		$this->assertNotContains( $linked_post_id, $refreshed, 'Stale post ID must be absent after meta update.' );
+		$this->assertContains( $other_post_id, $refreshed, 'Updated post ID must appear after meta update.' );
+	}
+
+	/**
+	 * The meta-update invalidation hook must IGNORE post-meta changes on
+	 * keys other than newspack_email_html — invalidating on every meta
+	 * mutation would defeat the cache.
+	 */
+	public function test_email_html_cache_only_invalidates_on_relevant_meta_key() {
+		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+		\Newspack\Content_Gate_Advanced_Settings::reset_cache();
+		Newsletters_Access::init();
+
+		$linked_post_id = $this->factory->post->create();
+		$newsletter_id  = $this->factory->post->create( [ 'post_type' => 'newspack_nl_cpt' ] );
+		update_post_meta( $newsletter_id, 'newspack_email_html', '<a href="' . esc_url( get_permalink( $linked_post_id ) ) . '">x</a>' );
+
+		$method = new \ReflectionMethod( Newsletters_Access::class, 'get_linked_post_ids_for_newsletter' );
+		$method->setAccessible( true );
+		$method->invoke( null, $newsletter_id );
+
+		// Mutate an unrelated meta key — should NOT invalidate the href cache.
+		update_post_meta( $newsletter_id, 'unrelated_meta_key', 'something-else' );
+
+		$still_cached = wp_cache_get( $newsletter_id, Newsletters_Access::HREFS_CACHE_GROUP );
+		$this->assertIsArray( $still_cached, 'Cache entry must survive an unrelated meta update.' );
+		$this->assertContains( $linked_post_id, $still_cached, 'Cached IDs must still include the original linked post.' );
 	}
 
 	/**
