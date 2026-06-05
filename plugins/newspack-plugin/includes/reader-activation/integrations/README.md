@@ -131,7 +131,7 @@ class My_Integration extends Integration {
 | `handle_logged_in_user_registration( $user, $request )` | Called when a logged-in user attempts to register again via the frontend. Use to update user data, link the account, record a new event, etc. Default is a no-op. |
 | `get_my_account_menu_item()` | Return `[ 'slug' => ..., 'label' => ..., 'position' => ... ]` to add a tab to the WooCommerce My Account page. Default returns `null` (no tab). |
 | `render_my_account_page( $value )` | Echo markup for the integration's My Account page. Called inside the WooCommerce account template. |
-| `get_required_plugins()` | Declare third-party plugins this integration depends on. Return an array of `[ 'slug' => ..., 'name' => ..., 'is_active' => ..., 'is_installed' => ... ]` entries. The Integrations UI uses this to surface a "Requires …" affordance and disable the card when a dependency is missing or inactive. Default `[]`. |
+| `get_required_plugins()` | Declare third-party plugins this integration depends on. Return an array of `[ 'slug' => ..., 'name' => ..., 'is_active' => ..., 'is_installed' => ... ]` entries. The Integrations UI uses this to gate the card: when every missing dependency is at least installed, it offers an **Activate** action; when any dependency is uninstalled, the card stays disabled with a "Requires …" affordance. Default `[]`. |
 
 ---
 
