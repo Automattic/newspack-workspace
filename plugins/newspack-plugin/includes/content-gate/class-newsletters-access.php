@@ -237,7 +237,11 @@ class Newsletters_Access {
 	 * @return array|false ['newsletter_id' => int, 'sent_at' => int] or false.
 	 */
 	public static function verify( $token ) {
-		if ( ! is_string( $token ) || '' === $token ) {
+		// Real tokens are ~90 bytes (20-char int ID + '|' + 64-char hex
+		// HMAC, base64url-encoded). Cap well above that to reject
+		// pathological inputs (e.g. ?npnl=<10MB>) before the base64
+		// decode pass, which is O(N) over the input length.
+		if ( ! is_string( $token ) || '' === $token || strlen( $token ) > 512 ) {
 			return false;
 		}
 		$decoded = self::base64url_decode( $token );
