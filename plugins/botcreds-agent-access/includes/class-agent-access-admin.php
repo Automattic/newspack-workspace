@@ -873,6 +873,7 @@ class Agent_Access_Admin {
 			'author'        => __( 'Can publish and manage their own posts only.', 'botcreds-agent-access' ),
 			'contributor'   => __( 'Can write posts but cannot publish — requires editor approval.', 'botcreds-agent-access' ),
 			'subscriber'    => __( 'Read-only access. Cannot create or edit content.', 'botcreds-agent-access' ),
+			'agent'         => __( 'AI agent account. Can publish posts and pages, upload media, and manage categories. No access to site settings or user management.', 'botcreds-agent-access' ),
 		);
 
 		if ( isset( $core[ $role_slug ] ) ) {

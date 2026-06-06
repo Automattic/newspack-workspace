@@ -3,7 +3,7 @@
  * Plugin Name: BotCreds Agent Access
  * Plugin URI:  https://botcreds.com/
  * Description: Scoped, per-agent application passwords for AI agents, MCP clients, and automation tools.
- * Version:     2.1.19
+ * Version:     2.1.20
  * Author:      Joe Boydston
  * Author URI:  https://botcreds.com
  * License:     GPL-2.0-or-later
@@ -17,11 +17,12 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AGENT_ACCESS_VERSION', '2.1.19' );
+define( 'AGENT_ACCESS_VERSION', '2.1.20' );
 define( 'AGENT_ACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AGENT_ACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AGENT_ACCESS_APP_PASSWORD_NAME', 'BotCreds' );
 
+require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-role.php';
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-api.php';
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-admin.php';
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-tracker.php';
@@ -131,6 +132,9 @@ function agent_access_plugins_api( $res, $action, $args ) {
 			'<p>BotCreds manages one Application Password per user. Revoke the existing one before creating a new connection, or create additional passwords directly in your WordPress profile.</p>',
 
 		'changelog' =>
+			'<h4>2.1.20</h4>' .
+			'<ul><li>New: Built-in <strong>Agent</strong> WordPress role. Create dedicated AI agent user accounts and assign them the Agent role — they appear with a clear Agent badge in the Connections dashboard. Default capabilities: publish posts/pages, upload media, manage categories. No access to site settings or user management. Capabilities can be further tuned with any role-management plugin.</li></ul>' .
+
 			'<h4>2.1.18</h4>' .
 			'<ul><li>Connections tab: role badges now show a tooltip on hover with a plain-English description of what that role can do. Custom roles derive their tooltip from actual capabilities.</li></ul>' .
 
@@ -183,10 +187,35 @@ function agent_access_plugins_api( $res, $action, $args ) {
 add_filter( 'plugins_api', 'agent_access_plugins_api', 10, 3 );
 
 /**
- * Create/upgrade the activity log table on activation.
+ * Create/upgrade the activity log table and register the Agent role on activation.
  */
 function agent_access_activate() {
 	require_once plugin_dir_path( __FILE__ ) . 'includes/class-agent-access-activity-log.php';
 	Agent_Access_Activity_Log::install_table();
+
+	require_once plugin_dir_path( __FILE__ ) . 'includes/class-agent-access-role.php';
+	Agent_Access_Role::register();
 }
 register_activation_hook( __FILE__, 'agent_access_activate' );
+
+/**
+ * Remove the Agent role on plugin deactivation.
+ *
+ * Note: existing users assigned the Agent role will become roleless.
+ * Reassign or delete agent accounts before deactivating if needed.
+ */
+function agent_access_deactivate() {
+	Agent_Access_Role::remove();
+}
+register_deactivation_hook( __FILE__, 'agent_access_deactivate' );
+
+/**
+ * Defensive role re-registration on every load.
+ *
+ * Handles edge cases where the role was dropped without going through the
+ * deactivation hook (e.g. manual DB reset, site migration). add_role() is a
+ * no-op when the role already exists, so this costs effectively nothing.
+ */
+add_action( 'plugins_loaded', function () {
+	Agent_Access_Role::register();
+} );

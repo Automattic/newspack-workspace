@@ -162,6 +162,12 @@
 	color: #50575e;
 }
 
+.agent-access-badge--agent {
+	background: #f5f3ff;
+	color: #6d28d9;
+	border: 1px solid #ddd6fe;
+}
+
 /* Connect button */
 .agent-access-create-btn {
 	background: #E74C3C !important;
