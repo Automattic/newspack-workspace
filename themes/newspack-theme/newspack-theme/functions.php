@@ -981,7 +981,7 @@ function newspack_register_meta() {
 		'post',
 		'newspack_article_summary_title',
 		array(
-			'default'      => esc_html__( 'Quick Take:', 'newspack-theme' ),
+			'default'      => esc_html__( 'Overview:', 'newspack-theme' ),
 			'show_in_rest' => true,
 			'single'       => true,
 			'type'         => 'string',
