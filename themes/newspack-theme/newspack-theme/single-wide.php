@@ -58,7 +58,7 @@ get_header();
 						if ( is_active_sidebar( 'article-above-comments' ) ) {
 							dynamic_sidebar( 'article-above-comments' );
 						}
-	
+
 						newspack_comments_template();
 					}
 
