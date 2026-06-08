@@ -52,6 +52,9 @@
 	"pnpm": {
 		"overrides": {
 			"@typescript-eslint/parser": "8.58.2"
+		},
+		"patchedDependencies": {
+			"multi-semantic-release": "patches/multi-semantic-release.patch"
 		}
 	}
 }
