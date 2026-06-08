@@ -56,6 +56,9 @@
 			"basic-ftp": "5.3.1",
 			"@typescript-eslint/parser": "8.58.2",
 			"prettier": "npm:wp-prettier@^3.0.3"
+		},
+		"patchedDependencies": {
+			"multi-semantic-release": "patches/multi-semantic-release.patch"
 		}
 	}
 }

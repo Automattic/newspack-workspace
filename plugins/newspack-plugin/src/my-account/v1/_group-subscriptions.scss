@@ -1,6 +1,5 @@
 .newspack-ui .newspack-my-account__group_subscription {
-	&__segmented-control {
-		align-items: flex-start;
+	&__tabs {
 		margin-bottom: var(--newspack-ui-spacer-5);
 
 		.newspack-ui__button {
@@ -22,14 +21,21 @@
 	&__members,
 	&__invites {
 		margin-top: var(--newspack-ui-spacer-5);
+	}
 
-		// Match populated row height for empty-state cells.
-		td[colspan]::after {
-			content: '';
-			display: inline-block;
-			vertical-align: middle;
-			min-height: var(--newspack-ui-spacer-7);
-		}
+	// Per-tab info line shown when one tab is empty but the other has content
+	// (e.g. "No pending invitations." on the Invitations tab when members exist).
+	&__panel-info {
+		color: var(--newspack-ui-color-neutral-60);
+		margin: var(--newspack-ui-spacer-5) 0;
+		text-align: center;
+	}
+
+	// Stacked buttons inside the big empty state — capped width so the buttons
+	// don't span the full container width on wide layouts.
+	&__empty-actions {
+		max-width: 410px;
+		width: 100%;
 	}
 	&__members--actions,
 	&__invites--actions {

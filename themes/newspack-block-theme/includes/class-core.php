@@ -23,7 +23,7 @@ final class Core {
 		\add_action( 'enqueue_block_assets', [ __CLASS__, 'enqueue_block_assets' ] );
 		\add_filter( 'body_class', [ __CLASS__, 'body_class' ] );
 		\add_filter( 'block_type_metadata', [ __CLASS__, 'block_variations' ] );
-		\add_filter( 'get_block_templates', [ __CLASS__, 'set_custom_template_titles' ], 10, 3 );
+		\add_filter( 'default_template_types', [ __CLASS__, 'register_newsletter_template_types' ] );
 	}
 
 	/**
@@ -65,12 +65,8 @@ final class Core {
 		// Strings for translation.
 		$newspack_l10n = array(
 			'close_menu'       => esc_html__( 'Close Menu', 'newspack-block-theme' ),
-			'close_search'     => esc_html__( 'Close Search', 'newspack-block-theme' ),
 			'comment_too_fast' => esc_html__( 'You are posting comments too quickly. Please wait a moment before trying again.', 'newspack-block-theme' ),
 		);
-		if ( wp_script_is( 'jetpack-instant-search', 'enqueued' ) ) {
-			$newspack_l10n['jetpack_instant_search'] = 'true';
-		}
 
 		// Enqueue front-end JavaScript.
 		wp_enqueue_script( 'newspack-main', get_theme_file_uri( '/dist/main.js' ), array(), wp_get_theme()->get( 'Version' ), true );
@@ -107,31 +103,25 @@ final class Core {
 	}
 
 	/**
-	 * Set human-readable titles for custom post type templates.
+	 * Register the newsletter post type's hierarchy templates as default template types.
 	 *
-	 * @param \WP_Block_Template[] $templates Array of block templates.
-	 * @param array                $query     Template query arguments.
-	 * @param string               $template_type Template type (wp_template or wp_template_part).
+	 * Marks them as hierarchy templates so they apply automatically to newsletters
+	 * rather than appearing as assignable templates for other post types.
 	 *
-	 * @return \WP_Block_Template[] Modified array of block templates.
+	 * @param array[] $template_types The default template types.
+	 * @return array[] Modified default template types.
 	 */
-	public static function set_custom_template_titles( $templates, $query, $template_type ) {
-		if ( 'wp_template' !== $template_type ) {
-			return $templates;
-		}
-
-		$titles = [
-			'single-newspack_nl_cpt'  => \__( 'Single Newsletter', 'newspack-block-theme' ),
-			'archive-newspack_nl_cpt' => \__( 'Newsletter Archive', 'newspack-block-theme' ),
+	public static function register_newsletter_template_types( $template_types ) {
+		$template_types['single-newspack_nl_cpt']  = [
+			'title'       => \__( 'Single Newsletter', 'newspack-block-theme' ),
+			'description' => \__( 'Displays a single newsletter.', 'newspack-block-theme' ),
+		];
+		$template_types['archive-newspack_nl_cpt'] = [
+			'title'       => \__( 'Newsletter Archive', 'newspack-block-theme' ),
+			'description' => \__( 'Displays the newsletter archive.', 'newspack-block-theme' ),
 		];
 
-		foreach ( $templates as $template ) {
-			if ( isset( $titles[ $template->slug ] ) && 'theme' === $template->source ) {
-				$template->title = $titles[ $template->slug ];
-			}
-		}
-
-		return $templates;
+		return $template_types;
 	}
 
 	/**
