@@ -19,31 +19,33 @@ $is_group_member_subscription = Group_Subscription::is_group_subscription( $subs
 <table class="shop_table subscription_details">
 	<tbody>
 		<?php // No status row. ?>
-		<?php do_action( 'wcs_subscription_details_table_before_dates', $subscription ); ?>
-		<?php
-		$dates_to_display = apply_filters(
-			'wcs_subscription_details_table_dates_to_display',
-			[
-				'start_date'              => _x( 'First payment', 'customer subscription table header', 'newspack-plugin' ),
-				'last_order_date_created' => _x( 'Latest payment', 'customer subscription table header', 'newspack-plugin' ),
-				'next_payment'            => _x( 'Next payment', 'customer subscription table header', 'newspack-plugin' ),
-				'end'                     => _x( 'End date', 'customer subscription table header', 'newspack-plugin' ),
-				'trial_end'               => _x( 'Trial end date', 'customer subscription table header', 'newspack-plugin' ),
-			],
-			$subscription
-		);
-		foreach ( $dates_to_display as $date_type => $date_title ) :
-			?>
-			<?php $date = $subscription->get_date( $date_type ); ?>
-			<?php if ( ! empty( $date ) || $date_type === 'next_payment' ) : ?>
+		<?php if ( ! $is_group_member_subscription ) : ?>
+			<?php do_action( 'wcs_subscription_details_table_before_dates', $subscription ); ?>
+			<?php
+			$dates_to_display = apply_filters(
+				'wcs_subscription_details_table_dates_to_display',
+				[
+					'start_date'              => _x( 'First payment', 'customer subscription table header', 'newspack-plugin' ),
+					'last_order_date_created' => _x( 'Latest payment', 'customer subscription table header', 'newspack-plugin' ),
+					'next_payment'            => _x( 'Next payment', 'customer subscription table header', 'newspack-plugin' ),
+					'end'                     => _x( 'End date', 'customer subscription table header', 'newspack-plugin' ),
+					'trial_end'               => _x( 'Trial end date', 'customer subscription table header', 'newspack-plugin' ),
+				],
+				$subscription
+			);
+			foreach ( $dates_to_display as $date_type => $date_title ) :
+				?>
+				<?php $date = $subscription->get_date( $date_type ); ?>
+				<?php if ( ! empty( $date ) || $date_type === 'next_payment' ) : ?>
 				<tr>
 					<td><?php echo esc_html( $date_title ); ?></td>
 					<td><?php echo esc_html( empty( $date ) ? '—' : $subscription->get_date_to_display( $date_type ) ); ?></td>
 				</tr>
 			<?php endif; ?>
-		<?php endforeach; ?>
-		<?php do_action( 'wcs_subscription_details_table_after_dates', $subscription ); ?>
-		<?php if ( \WCS_My_Account_Auto_Renew_Toggle::can_user_toggle_auto_renewal( $subscription ) ) : ?>
+			<?php endforeach; ?>
+			<?php do_action( 'wcs_subscription_details_table_after_dates', $subscription ); ?>
+		<?php endif; ?>
+		<?php if ( ! $is_group_member_subscription && \WCS_My_Account_Auto_Renew_Toggle::can_user_toggle_auto_renewal( $subscription ) ) : ?>
 			<tr>
 				<td><?php esc_html_e( 'Auto renew', 'newspack-plugin' ); ?></td>
 				<td>
@@ -74,20 +76,38 @@ $is_group_member_subscription = Group_Subscription::is_group_subscription( $subs
 		<?php endif; ?>
 		<?php
 		if ( $is_group_member_subscription ) :
+			$group_settings  = Group_Subscription_Settings::get_subscription_settings( $subscription );
+			$product_id      = WooCommerce_Subscriptions::get_subscription_product_id( $subscription );
+			$product_for_row = $product_id ? wc_get_product( $product_id ) : null;
+			$product_name    = $product_for_row ? trim( (string) $product_for_row->get_name() ) : '';
+			$group_name      = isset( $group_settings['name'] ) ? trim( (string) $group_settings['name'] ) : '';
+			if ( '' !== $group_name && $group_name !== $product_name ) :
+				?>
+				<tr>
+					<td><?php echo esc_html( Group_Subscription::get_label( 'singular' ) ); ?></td>
+					<td><?php echo esc_html( $group_name ); ?></td>
+				</tr>
+				<?php
+			endif;
 			$owner = get_user_by( 'id', $subscription->get_user_id() );
 			if ( $owner ) :
 				?>
 				<tr>
 					<td><?php esc_html_e( 'Subscription owner', 'newspack-plugin' ); ?></td>
-					<td>
-						<?php
-						echo wp_kses_post(
-							'<a href="mailto:' . esc_attr( sanitize_email( $owner->user_email ) ) . '">' . esc_html( $owner->display_name ? $owner->display_name : $owner->user_email ) . '</a>'
-						);
-						?>
-					</td>
+					<td><?php echo esc_html( newspack_get_user_display_label( $owner ) ); ?></td>
 				</tr>
-			<?php endif; ?>
+				<?php
+			endif;
+			$joined_at = Group_Subscription::get_member_joined_at( get_current_user_id(), $subscription );
+			if ( $joined_at ) :
+				?>
+				<tr>
+					<td><?php esc_html_e( 'Member since', 'newspack-plugin' ); ?></td>
+					<td><?php echo esc_html( wp_date( get_option( 'date_format' ), $joined_at ) ); ?></td>
+				</tr>
+				<?php
+			endif;
+			?>
 		<?php else : ?>
 			<?php do_action( 'wcs_subscription_details_table_before_payment_method', $subscription ); ?>
 		<tr>

@@ -19,6 +19,22 @@ class Sample_Integration extends Integration {
 	public static $handler_args = null;
 
 	/**
+	 * Value returned by is_set_up(). Tests that simulate an
+	 * enabled-but-unconfigured integration set this to false.
+	 *
+	 * @var bool
+	 */
+	public static $is_set_up_value = true;
+
+	/**
+	 * Error codes can_sync() should add when $return_errors is true.
+	 * Tests use this to drive the health check into a failure path.
+	 *
+	 * @var string[]
+	 */
+	public static $can_sync_error_codes = [];
+
+	/**
 	 * Menu item declaration returned by get_my_account_menu_item().
 	 *
 	 * @var array|null
@@ -77,7 +93,23 @@ class Sample_Integration extends Integration {
 	 * @return bool|WP_Error True if contacts can be synced, false otherwise. WP_Error if return_errors is true.
 	 */
 	public function can_sync( $return_errors = false ) {
-		return $return_errors ? new \WP_Error() : true;
+		if ( ! $return_errors ) {
+			return empty( self::$can_sync_error_codes );
+		}
+		$errors = new \WP_Error();
+		foreach ( self::$can_sync_error_codes as $code ) {
+			$errors->add( $code, sprintf( 'Mock can_sync error: %s', $code ) );
+		}
+		return $errors;
+	}
+
+	/**
+	 * Whether this integration's external prerequisites are configured.
+	 *
+	 * @return bool
+	 */
+	public function is_set_up() {
+		return self::$is_set_up_value;
 	}
 
 	/**
@@ -120,8 +152,9 @@ class Sample_Integration extends Integration {
 	 * Reset captured state between tests.
 	 */
 	public static function reset() {
-		self::$handler_args            = null;
-		self::$declared_settings_fields = [];
+		self::$handler_args         = null;
+		self::$is_set_up_value      = true;
+		self::$can_sync_error_codes = [];
 	}
 
 	/**

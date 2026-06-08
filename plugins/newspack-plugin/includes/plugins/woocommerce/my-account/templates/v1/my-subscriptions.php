@@ -48,7 +48,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 				if ( $is_group_subscription ) :
 					?>
 					<span class="newspack-ui__badge newspack-ui__badge--secondary">
-						<?php esc_html_e( 'Group', 'newspack-plugin' ); ?>
+						<?php echo esc_html( Group_Subscription::get_label( 'singular' ) ); ?>
 					</span>
 				<?php endif; ?>
 			</td>

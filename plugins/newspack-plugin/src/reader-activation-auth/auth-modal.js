@@ -160,7 +160,9 @@ export function openAuthModal( config = {} ) {
 
 	container.formActionCallback = action => {
 		const titleEl = modal.querySelector( 'h2' );
-		titleEl.textContent = 'register' === action ? config.labels.register.title : config.labels.signin.title;
+		if ( titleEl ) {
+			titleEl.textContent = config.labels.signin.title;
+		}
 
 		modal.querySelectorAll( '[data-action]' ).forEach( item => {
 			if ( 'none' !== item.style.display ) {
@@ -190,10 +192,6 @@ export function openAuthModal( config = {} ) {
 	let initialFormAction = 'signin';
 	if ( window.newspackReaderActivation?.hasAuthLink() ) {
 		initialFormAction = 'otp';
-	}
-	const currentHash = window.location.hash.replace( '#', '' );
-	if ( SIGN_IN_MODAL_HASHES.includes( currentHash ) ) {
-		initialFormAction = currentHash === 'register_modal' ? 'register' : 'signin';
 	}
 	if ( config.initialState ) {
 		initialFormAction = config.initialState;

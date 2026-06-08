@@ -5,6 +5,19 @@
 		&__dropdown {
 			display: inline-flex;
 			position: relative;
+
+			// Override the parent's `align-self` (e.g. inside `__box` which forces `end`).
+			// Chained class boosts specificity above the `__box .newspack-ui__dropdown` rule.
+			&.newspack-ui__dropdown--align-start {
+				align-self: start;
+			}
+			&.newspack-ui__dropdown--align-center {
+				align-self: center;
+			}
+			&.newspack-ui__dropdown--align-end {
+				align-self: end;
+			}
+
 			&__toggle {
 				margin: 0;
 			}

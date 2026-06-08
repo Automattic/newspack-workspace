@@ -9,8 +9,10 @@
  * while the npm/git-tag version advances, which is how newspack-scripts drifted
  * to 5.8.0 in-repo while publishing 5.9.x before the monorepo.
  *
- * Note: multi-semantic-release namespaces tags as `<pkgName>@<version>` and
- * ignores any tagFormat here.
+ * Note: multi-semantic-release derives tags from the package's npm name as
+ * `<npmName>@<version>` (with the npm scope stripped via patch) and ignores any
+ * tagFormat here. These libraries are all unscoped, so the patch is a no-op for
+ * them.
  */
 module.exports = {
 	branches: [

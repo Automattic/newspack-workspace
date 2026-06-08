@@ -430,14 +430,18 @@ final class Reader_Registration {
 			}
 		}
 
-		return new \WP_REST_Response(
-			[
-				'success' => true,
-				'status'  => 'created',
-				'email'   => $email,
-			],
-			201
-		);
+		$response_data = [
+			'success' => true,
+			'status'  => 'created',
+			'email'   => $email,
+		];
+
+		// Surface verification state so integration callers (via window.newspackReaderActivation.register())
+		// can opt into the post-registration verification modal when their UX warrants it. Callers that
+		// don't need it simply ignore these fields.
+		$response_data = array_merge( $response_data, Reader_Activation::get_verification_payload( $result ) );
+
+		return new \WP_REST_Response( $response_data, 201 );
 	}
 }
 Reader_Registration::init();

@@ -145,6 +145,7 @@ type MeteringCountdownConfig = {
 
 type AdvancedSettingsConfig = {
 	restrict_feeds: boolean;
+	newsletter_link_bypass_enabled: boolean;
 };
 
 type GateSettings = {
