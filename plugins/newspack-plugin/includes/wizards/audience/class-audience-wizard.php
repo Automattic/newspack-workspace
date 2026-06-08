@@ -380,6 +380,36 @@ class Audience_Wizard extends Wizard {
 			]
 		);
 
+		// Group label settings (publisher-overridable singular/plural for group subscriptions).
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/group-labels',
+			[
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_group_labels' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+			]
+		);
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/group-labels',
+			[
+				'methods'             => WP_REST_Server::EDITABLE,
+				'callback'            => [ $this, 'api_update_group_labels' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'label_singular' => [
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'label_plural'   => [
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+				],
+			]
+		);
+
 		// Cover fees settings.
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
@@ -1020,6 +1050,46 @@ class Audience_Wizard extends Wizard {
 		}
 
 		return $this->api_get_subscription_settings();
+	}
+
+	/**
+	 * Get the publisher-configurable group subscription labels. Empty values fall back
+	 * to the defaults baked into Group_Subscription::get_label().
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function api_get_group_labels() {
+		return rest_ensure_response(
+			[
+				'label_singular'         => (string) get_option( 'newspack_group_subscription_label_singular', '' ),
+				'label_plural'           => (string) get_option( 'newspack_group_subscription_label_plural', '' ),
+				'label_singular_default' => __( 'Group', 'newspack-plugin' ),
+				'label_plural_default'   => __( 'Groups', 'newspack-plugin' ),
+			]
+		);
+	}
+
+	/**
+	 * Update the publisher-configurable group subscription labels.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function api_update_group_labels( $request ) {
+		$params = $request->get_params();
+		foreach ( [ 'label_singular', 'label_plural' ] as $field ) {
+			if ( ! array_key_exists( $field, $params ) ) {
+				continue;
+			}
+			$value = trim( (string) $params[ $field ] );
+			if ( '' === $value ) {
+				delete_option( 'newspack_group_subscription_' . $field );
+			} else {
+				update_option( 'newspack_group_subscription_' . $field, $value );
+			}
+		}
+		return $this->api_get_group_labels();
 	}
 
 	/**

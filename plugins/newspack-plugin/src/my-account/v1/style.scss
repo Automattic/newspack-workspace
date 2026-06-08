@@ -11,6 +11,7 @@
 @use "addresses";
 @use "subscriptions";
 @use "group-subscriptions";
+@use "group";
 
 .newspack-my-account {
 	&--logged-in {
@@ -54,6 +55,7 @@
 			justify-content: flex-end;
 		}
 	}
+
 }
 
 /* stylelint-disable-next-line */

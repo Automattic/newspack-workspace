@@ -35,7 +35,7 @@ export default function OverlaySearchEdit( { attributes, setAttributes, clientId
 	const isIconVisible = ! isTextOnly;
 
 	const blockProps = useBlockProps( {
-		className: classnames( blockClassName, 'wp-element-button', 'wp-block-button__link', 'newspack-overlay-search__trigger' ),
+		className: classnames( 'wp-element-button', 'wp-block-button__link', 'newspack-overlay-search__trigger' ),
 		style: {
 			...spacingProps.style,
 		},
@@ -64,7 +64,7 @@ export default function OverlaySearchEdit( { attributes, setAttributes, clientId
 					__experimentalIsRenderedInSidebar
 				/>
 			</InspectorControls>
-			<div className={ classnames( 'wp-block-buttons', 'is-layout-flex', blockClassName ) }>
+			<div className="wp-block-buttons is-layout-flex">
 				<div className="wp-block-button">
 					<button { ...blockProps } type="button" onClick={ e => e.preventDefault() }>
 						{ isIconVisible && (

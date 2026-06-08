@@ -41,6 +41,71 @@ function newspack_string_to_bool( $string ) {
 }
 
 /**
+ * Best human-readable label for a user.
+ *
+ * Walks an ordered list of strategies and returns the first non-empty result.
+ * Strategies: 'display_name', 'first_name', 'last_name', 'full_name', 'email', 'login'.
+ *
+ * Default cascade: display_name → full_name → login. Email is never used by
+ * default to avoid leaking addresses; pass an explicit cascade to include it.
+ * A real (non-email) label always wins. An email-valued candidate is only used
+ * as a last resort and reduced to its local part (the bit before '@') unless the
+ * strategy is explicitly 'email', so an email display_name/login never leaks in full.
+ * For just the display name, pass `[ 'display_name' ]`.
+ * For first name only, pass `[ 'first_name' ]`.
+ *
+ * @param \WP_User|int|null $user    User object or user ID.
+ * @param string[]          $cascade Ordered strategies to try.
+ * @return string
+ */
+function newspack_get_user_display_label( $user, $cascade = [ 'display_name', 'full_name', 'login' ] ) {
+	if ( is_numeric( $user ) ) {
+		$user = \get_userdata( (int) $user );
+	}
+	if ( ! $user instanceof \WP_User ) {
+		return '';
+	}
+	$email_fallback = '';
+	foreach ( $cascade as $strategy ) {
+		$candidate = '';
+		switch ( $strategy ) {
+			case 'display_name':
+				$candidate = trim( (string) $user->display_name );
+				break;
+			case 'first_name':
+				$candidate = trim( (string) $user->first_name );
+				break;
+			case 'last_name':
+				$candidate = trim( (string) $user->last_name );
+				break;
+			case 'full_name':
+				$candidate = trim( $user->first_name . ' ' . $user->last_name );
+				break;
+			case 'email':
+				$candidate = (string) $user->user_email;
+				break;
+			case 'login':
+				$candidate = (string) $user->user_login;
+				break;
+		}
+		if ( '' === $candidate ) {
+			continue;
+		}
+		// A real label always wins. An email-valued display_name/login is held back
+		// as a last resort, reduced to its local part so the full address never leaks.
+		// The first email-shaped candidate in the cascade wins the fallback slot.
+		if ( 'email' !== $strategy && is_email( $candidate ) ) {
+			if ( '' === $email_fallback ) {
+				$email_fallback = (string) strstr( $candidate, '@', true );
+			}
+			continue;
+		}
+		return $candidate;
+	}
+	return $email_fallback;
+}
+
+/**
  * Currencies options, copied from WooCommerce.
  * https://github.com/woocommerce/woocommerce/blob/trunk/includes/wc-core-functions.php
  */
