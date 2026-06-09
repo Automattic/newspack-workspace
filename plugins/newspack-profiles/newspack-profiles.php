@@ -32,6 +32,10 @@ if ( ! defined( 'NEWSPACK_PROFILES_PLUGIN_FILE' ) ) {
 	define( 'NEWSPACK_PROFILES_PLUGIN_FILE', __FILE__ );
 }
 
+if ( ! function_exists( 'is_plugin_active' ) ) {
+	require_once ABSPATH . 'wp-admin/includes/plugin.php';
+}
+
 if ( ! is_plugin_active( 'remote-data-blocks/remote-data-blocks.php' ) ) {
 	add_action(
 		'admin_notices',
@@ -82,7 +86,6 @@ const BUILD_DIR     = __DIR__ . '/dist/';
 const BLOCKS_DIR    = BUILD_DIR . 'blocks/';
 const PATTERNS_DIR  = __DIR__ . '/patterns/';
 const TEMPLATES_DIR = __DIR__ . '/templates/';
-const ASSETS_DIR    = __DIR__ . '/assets/';
 
 Plugin::get_instance();
 

@@ -161,7 +161,7 @@ class Block_Registrar {
 
 		wp_enqueue_script(
 			'newspack-profiles-block-editor-script',
-			plugins_url( 'dist/block-editor.js', BUILD_DIR ),
+			plugins_url( 'dist/block-editor.js', NEWSPACK_PROFILES_PLUGIN_FILE ),
 			$assets_file['dependencies'],
 			$assets_file['version'],
 			true

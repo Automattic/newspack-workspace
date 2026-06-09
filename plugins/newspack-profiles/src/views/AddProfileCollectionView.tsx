@@ -24,8 +24,8 @@ export const AddProfileCollectionView = () => {
 				/>
 				<h2 className="m-0">
 					{ isEdit
-						? __( 'Edit Profile Collection', 'remote-data-blocks' )
-						: __( 'Add Profile Collection', 'remote-data-blocks' ) }
+						? __( 'Edit Profile Collection', 'newspack-profiles' )
+						: __( 'Add Profile Collection', 'newspack-profiles' ) }
 				</h2>
 			</div>
 			<ProfileOnboardingSteps />

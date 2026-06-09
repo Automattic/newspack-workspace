@@ -177,11 +177,11 @@ const SourceOption = ( {
 } ) => {
 	const info = [
 		{
-			label: 'Base/Spreadsheet',
+			label: __( 'Base/Spreadsheet', 'newspack-profiles' ),
 			value: source.spreadsheet ?? source.base,
 		},
 		{
-			label: 'Table/Sheet',
+			label: __( 'Table/Sheet', 'newspack-profiles' ),
 			value: source.sheet ?? source.table,
 		},
 	];

@@ -113,7 +113,7 @@ class Menu {
 
 		wp_enqueue_script(
 			'newspack-profiles-admin-script',
-			plugins_url( 'dist/index.js', BUILD_DIR ),
+			plugins_url( 'dist/index.js', NEWSPACK_PROFILES_PLUGIN_FILE ),
 			$assets_file['dependencies'],
 			$assets_file['version'],
 			true
@@ -127,7 +127,7 @@ class Menu {
 				'patterns'                        => Pattern_Config::get_all(),
 				'editPageURL'                     => admin_url( 'post.php?action=edit&post=' ),
 				'remoteDataBlocksSettingsPageURL' => admin_url( 'options-general.php?page=remote-data-blocks-settings' ),
-				'placeholderImageURL'             => plugins_url( 'assets/profile-placeholder.webp', ASSETS_DIR ),
+				'placeholderImageURL'             => plugins_url( 'assets/profile-placeholder.webp', NEWSPACK_PROFILES_PLUGIN_FILE ),
 				'basePath'                        => Rewrite_Rule_Registrar::get_instance()->get_base_path(),
 				'initialView'                     => ( self::PROFILE_COLLECTIONS_CREATE_SLUG === filter_input( INPUT_GET, 'page', FILTER_SANITIZE_FULL_SPECIAL_CHARS ) ) ? 'add' : 'list',
 				'profileCollectionsListURL'       => admin_url( 'admin.php?page=' . self::PROFILE_COLLECTIONS_LIST_SLUG ),
@@ -137,7 +137,7 @@ class Menu {
 
 		wp_enqueue_style(
 			'newspack-profiles-admin-style',
-			plugins_url( 'dist/style-index.css', BUILD_DIR ),
+			plugins_url( 'dist/style-index.css', NEWSPACK_PROFILES_PLUGIN_FILE ),
 			array(),
 			$assets_file['version']
 		);

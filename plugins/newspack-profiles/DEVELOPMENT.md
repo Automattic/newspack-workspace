@@ -69,7 +69,7 @@ This will:
 - Enable source maps for debugging
 - Run in development mode with unminified output
 
-**Output:** Files are built to the `/build` directory
+**Output:** Files are built to the `/dist` directory
 
 ### Production Build
 
@@ -86,7 +86,7 @@ This will:
 - Remove source maps
 - Tree-shake unused code
 
-**Output:** Optimized files in the `/build` directory
+**Output:** Optimized files in the `/dist` directory
 
 ## Available Scripts
 

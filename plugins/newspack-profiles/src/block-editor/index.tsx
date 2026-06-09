@@ -191,12 +191,12 @@ function BoundBlockEdit( props: any ) {
 		<>
 			<InspectorControls>
 				<PanelBody
-					title={ __( 'Newspack Remote Data', 'remote-data-blocks' ) }
+					title={ __( 'Newspack Remote Data', 'newspack-profiles' ) }
 				>
 					<p className="rdb-block-helper-text">
 						{ sprintf(
 							/* translators: %s is the remote data source title. */
-							__( 'Connected to %s', 'remote-data-blocks' ),
+							__( 'Connected to %s', 'newspack-profiles' ),
 							remoteDataTitle
 						) }
 					</p>

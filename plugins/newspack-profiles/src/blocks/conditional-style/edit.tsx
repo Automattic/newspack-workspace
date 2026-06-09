@@ -139,7 +139,10 @@ export const Edit = ( { attributes, context, setAttributes }: EditProps ) => {
 		<>
 			<InspectorControls>
 				<PanelBody
-					title="Conditional Style Settings"
+					title={ __(
+						'Conditional Style Settings',
+						'newspack-profiles'
+					) }
 					initialOpen={ true }
 				>
 					<SelectControl

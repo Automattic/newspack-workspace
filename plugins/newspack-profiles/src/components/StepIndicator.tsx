@@ -1,6 +1,12 @@
 import classNames from 'classnames';
+import { __ } from '@wordpress/i18n';
 
-const STEPS = [ 'Source', 'Fields', 'Pattern', 'URL & SEO' ];
+const STEPS = [
+	__( 'Source', 'newspack-profiles' ),
+	__( 'Fields', 'newspack-profiles' ),
+	__( 'Pattern', 'newspack-profiles' ),
+	__( 'URL & SEO', 'newspack-profiles' ),
+];
 
 /**
  * Component for displaying the step indicator in the onboarding process.
