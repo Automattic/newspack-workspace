@@ -86,6 +86,16 @@ class Insights_GAM_Test_Client extends Client {
 	}
 
 	/**
+	 * Expose friendly_api_error().
+	 *
+	 * @param \Exception $e The exception.
+	 * @return \RuntimeException
+	 */
+	public static function expose_friendly_api_error( \Exception $e ) {
+		return parent::friendly_api_error( $e );
+	}
+
+	/**
 	 * Overridable seam: whether newspack-ads is active.
 	 *
 	 * @return bool
@@ -110,6 +120,73 @@ class Insights_GAM_Test_Client extends Client {
 	 */
 	protected static function get_network_code() {
 		return self::$mock_network;
+	}
+}
+
+/**
+ * A single GAM API error with a getErrorString() accessor.
+ */
+class Insights_GAM_Fake_Api_Error {
+	/**
+	 * The error string.
+	 *
+	 * @var string
+	 */
+	private $error_string;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param string $error_string The error string.
+	 */
+	public function __construct( $error_string ) {
+		$this->error_string = $error_string;
+	}
+
+	/**
+	 * Get the error string.
+	 *
+	 * @return string
+	 */
+	public function getErrorString() { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- Mirrors the googleads SOAP accessor name.
+		return $this->error_string;
+	}
+}
+
+/**
+ * A fake GAM SOAP ApiException exposing getErrors().
+ */
+class Insights_GAM_Fake_Api_Exception extends \Exception {
+	/**
+	 * The error objects.
+	 *
+	 * @var Insights_GAM_Fake_Api_Error[]
+	 */
+	private $errors;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param string[] $error_strings Error strings to wrap.
+	 * @param string   $message       Exception message.
+	 */
+	public function __construct( array $error_strings, $message = 'fake api error' ) {
+		parent::__construct( $message );
+		$this->errors = array_map(
+			function ( $string ) {
+				return new Insights_GAM_Fake_Api_Error( $string );
+			},
+			$error_strings
+		);
+	}
+
+	/**
+	 * Get the error objects.
+	 *
+	 * @return Insights_GAM_Fake_Api_Error[]
+	 */
+	public function getErrors() { // phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- Mirrors the googleads SOAP accessor name.
+		return $this->errors;
 	}
 }
 
@@ -224,6 +301,18 @@ class Test_Insights_GAM_Client extends WP_UnitTestCase {
 					'end_date'   => '', // Missing end.
 				]
 			),
+			new Report_Query(
+				[
+					'start_date' => '2026-13-01', // Month 13 — well-formed but impossible.
+					'end_date'   => '2026-01-31',
+				]
+			),
+			new Report_Query(
+				[
+					'start_date' => '2026-02-01',
+					'end_date'   => '2026-02-30', // Feb 30 — impossible.
+				]
+			),
 		];
 		foreach ( $bad as $index => $query ) {
 			$threw = false;
@@ -263,6 +352,48 @@ class Test_Insights_GAM_Client extends WP_UnitTestCase {
 
 		// Empty input yields no rows.
 		$this->assertSame( [], Insights_GAM_Test_Client::expose_parse_gzipped_csv( '' ) );
+	}
+
+	/**
+	 * A corrupt gzip payload (valid magic bytes, garbage body) throws rather
+	 * than being parsed as text.
+	 */
+	public function test_parse_gzipped_csv_rejects_corrupt_gzip() {
+		$corrupt = "\x1f\x8b" . 'this is not really gzip-compressed data';
+		$this->expectException( \RuntimeException::class );
+		Insights_GAM_Test_Client::expose_parse_gzipped_csv( $corrupt );
+	}
+
+	/**
+	 * A leading UTF-8 BOM is stripped so the first header key is clean.
+	 */
+	public function test_parse_gzipped_csv_strips_bom() {
+		$csv  = "\xEF\xBB\xBFColumn.TOTAL_IMPRESSIONS\n7\n";
+		$rows = Insights_GAM_Test_Client::expose_parse_gzipped_csv( $csv );
+		$this->assertCount( 1, $rows );
+		$this->assertArrayHasKey( 'Column.TOTAL_IMPRESSIONS', $rows[0] );
+		$this->assertSame( '7', $rows[0]['Column.TOTAL_IMPRESSIONS'] );
+	}
+
+	/**
+	 * API-error translation maps known error codes and falls back otherwise.
+	 */
+	public function test_friendly_api_error() {
+		$mapped = Insights_GAM_Test_Client::expose_friendly_api_error(
+			new Insights_GAM_Fake_Api_Exception( [ 'AuthenticationError.NETWORK_NOT_FOUND' ] )
+		);
+		$this->assertInstanceOf( \RuntimeException::class, $mapped );
+		$this->assertStringContainsString( 'network code is invalid', $mapped->getMessage() );
+
+		$denied = Insights_GAM_Test_Client::expose_friendly_api_error(
+			new Insights_GAM_Fake_Api_Exception( [ 'PermissionError.PERMISSION_DENIED' ] )
+		);
+		$this->assertStringContainsString( 'permission', $denied->getMessage() );
+
+		// Unknown / plain exception falls back to the raw message.
+		$fallback = Insights_GAM_Test_Client::expose_friendly_api_error( new \Exception( 'boom' ) );
+		$this->assertStringContainsString( 'Google Ad Manager API error', $fallback->getMessage() );
+		$this->assertStringContainsString( 'boom', $fallback->getMessage() );
 	}
 
 	/**

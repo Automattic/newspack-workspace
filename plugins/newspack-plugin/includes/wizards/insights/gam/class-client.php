@@ -95,13 +95,15 @@ class Client {
 	}
 
 	/**
-	 * Whether a report can actually be run: GAM is active AND the Google
-	 * OAuth token carries the GAM scope AND a network code is configured.
+	 * Whether reporting is fully wired up: GAM is active AND the Google OAuth
+	 * token carries the GAM scope AND a network code is configured.
 	 *
-	 * This is the run-time precondition for submitting a report job —
-	 * distinct from {@see self::is_gam_active()}, which governs tab
-	 * visibility. The orchestrator (NPPD-1663) uses this to decide between
-	 * showing data and showing an in-tab "finish connecting" diagnostic.
+	 * The orchestrator (NPPD-1663) uses this to decide between showing data
+	 * and an in-tab "finish connecting" diagnostic. NOTE: this performs a
+	 * remote call (the scope check hits Google's tokeninfo endpoint), so call
+	 * it deliberately — e.g. once when rendering the tab — never inside a
+	 * report polling loop. The run-time guard before each report operation is
+	 * the cheaper {@see self::assert_can_run_reports()}.
 	 *
 	 * @return bool
 	 */
@@ -126,15 +128,20 @@ class Client {
 		self::assert_can_run_reports();
 		self::assert_own_network_code( $network_code );
 
+		// Build the session and job up front; failures here are precondition
+		// errors, not failed submissions, so they must NOT be audit-logged.
+		$service    = self::get_report_service( (int) $network_code );
+		$report_job = self::build_report_job( $query );
+
 		$job_id  = '';
 		$success = false;
 		try {
-			$service    = self::get_report_service( (int) $network_code );
-			$report_job = self::build_report_job( $query );
-			$result     = $service->runReportJob( $report_job );
-			$job_id     = (string) $result->getId();
-			$success    = true;
+			$result  = $service->runReportJob( $report_job );
+			$job_id  = (string) $result->getId();
+			$success = true;
 			return $job_id;
+		} catch ( \Exception $e ) {
+			throw self::friendly_api_error( $e ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- friendly_api_error() returns a RuntimeException with an already-escaped message.
 		} finally {
 			self::log_report_job( (int) $network_code, $query, $job_id, $success );
 		}
@@ -153,8 +160,7 @@ class Client {
 	public static function get_report_job_status( $network_code, $job_id ) {
 		self::assert_can_run_reports();
 		self::assert_own_network_code( $network_code );
-		$service = self::get_report_service( (int) $network_code );
-		return Report_Job_Status::normalize( $service->getReportJobStatus( $job_id ) );
+		return self::fetch_status( self::get_report_service( (int) $network_code ), $job_id );
 	}
 
 	/**
@@ -168,14 +174,38 @@ class Client {
 	 *                           conditions as {@see self::get_report_job_status()}.
 	 */
 	public static function get_report_download_url( $network_code, $job_id ) {
-		$status = self::get_report_job_status( $network_code, $job_id );
+		self::assert_can_run_reports();
+		self::assert_own_network_code( $network_code );
+
+		// One session for both the status check and the download, so we don't
+		// build a second service (and trigger a second OAuth refresh) and risk
+		// the token expiring between the two calls.
+		$service = self::get_report_service( (int) $network_code );
+		$status  = self::fetch_status( $service, $job_id );
 		if ( Report_Job_Status::COMPLETED !== $status ) {
 			throw new \RuntimeException(
 				esc_html( sprintf( 'GAM report job %s is not complete (status: %s).', (string) $job_id, $status ) )
 			);
 		}
-		$service = self::get_report_service( (int) $network_code );
-		return (string) $service->getReportDownloadUrlWithOptions( $job_id, self::build_download_options() );
+		return self::fetch_download_url( $service, $job_id );
+	}
+
+	/**
+	 * Fetch a completed report's download URL through a given service,
+	 * translating GAM API errors into clearer messages.
+	 *
+	 * @param \Google\AdsApi\AdManager\v202602\ReportService $service The service.
+	 * @param string                                         $job_id  The job ID.
+	 * @return string The download URL.
+	 *
+	 * @throws \RuntimeException On a (translated) API error.
+	 */
+	protected static function fetch_download_url( $service, $job_id ) {
+		try {
+			return (string) $service->getReportDownloadUrlWithOptions( $job_id, self::build_download_options() );
+		} catch ( \Exception $e ) {
+			throw self::friendly_api_error( $e ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- friendly_api_error() returns a RuntimeException with an already-escaped message.
+		}
 	}
 
 	/**
@@ -255,6 +285,56 @@ class Client {
 	}
 
 	/**
+	 * Fetch and normalize a report job's status through a given service,
+	 * translating GAM API errors into clearer messages.
+	 *
+	 * @param \Google\AdsApi\AdManager\v202602\ReportService $service The service.
+	 * @param string                                         $job_id  The job ID.
+	 * @return string One of the {@see Report_Job_Status} constants.
+	 *
+	 * @throws \RuntimeException On a (translated) API error.
+	 */
+	protected static function fetch_status( $service, $job_id ) {
+		try {
+			return Report_Job_Status::normalize( $service->getReportJobStatus( $job_id ) );
+		} catch ( \Exception $e ) {
+			throw self::friendly_api_error( $e ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- friendly_api_error() returns a RuntimeException with an already-escaped message.
+		}
+	}
+
+	/**
+	 * Translate a GAM SOAP exception into a RuntimeException with an
+	 * actionable message for the common, recognizable error conditions
+	 * (mirrors newspack-ads' GAM_Api error mapping). Unknown errors fall back
+	 * to the raw API message.
+	 *
+	 * @param \Exception $e The caught exception.
+	 * @return \RuntimeException
+	 */
+	protected static function friendly_api_error( \Exception $e ) {
+		$error_strings = [];
+		if ( method_exists( $e, 'getErrors' ) ) {
+			foreach ( (array) $e->getErrors() as $error ) {
+				if ( is_object( $error ) && method_exists( $error, 'getErrorString' ) ) {
+					$error_strings[] = $error->getErrorString();
+				}
+			}
+		}
+		$message_map = [
+			'AuthenticationError.NETWORK_NOT_FOUND'     => 'The configured GAM network code is invalid for the connected Google account.',
+			'AuthenticationError.NETWORK_API_ACCESS_DISABLED' => 'API access is disabled for this Google Ad Manager account.',
+			'AuthenticationError.NO_NETWORKS_TO_ACCESS' => 'The connected Google account has no accessible Google Ad Manager networks.',
+			'PermissionError.PERMISSION_DENIED'         => 'The connected Google account does not have permission to run Google Ad Manager reports.',
+		];
+		foreach ( $message_map as $code => $message ) {
+			if ( in_array( $code, $error_strings, true ) ) {
+				return new \RuntimeException( esc_html( $message ) );
+			}
+		}
+		return new \RuntimeException( esc_html( 'Google Ad Manager API error: ' . $e->getMessage() ) );
+	}
+
+	/**
 	 * Translate a {@see Report_Query} value object into a SOAP ReportJob.
 	 *
 	 * @param Report_Query $query The query.
@@ -314,6 +394,12 @@ class Client {
 					esc_html( sprintf( 'GAM report %s must be a YYYY-MM-DD date for a CUSTOM_DATE range; got "%s".', $label, (string) $value ) )
 				);
 			}
+			list( $year, $month, $day ) = self::parse_ymd( $value );
+			if ( ! checkdate( $month, $day, $year ) ) {
+				throw new \RuntimeException(
+					esc_html( sprintf( 'GAM report %s is not a valid calendar date: "%s".', $label, $value ) )
+				);
+			}
 		}
 	}
 
@@ -346,19 +432,36 @@ class Client {
 	/**
 	 * Decompress and parse a gzipped GAM CSV dump into associative rows.
 	 *
-	 * Tolerates already-decompressed input. Note: rows are split on
-	 * newlines, so CSV fields containing embedded newlines are not
-	 * supported (GAM CSV_DUMP exports do not use them); revisit if that
-	 * assumption ever breaks.
+	 * A gzip payload (what GAM returns) is detected by its magic bytes, so a
+	 * corrupt/truncated gzip is reported as an error rather than silently
+	 * parsed as text; non-gzip input is tolerated as already-decompressed.
+	 *
+	 * Notes: rows are split on newlines, so CSV fields containing embedded
+	 * newlines are not supported (GAM CSV_DUMP exports do not use them); and
+	 * header column names are assumed unique (GAM dumps qualify them, e.g.
+	 * `Dimension.DATE`), so duplicate names would collapse to one key.
 	 *
 	 * @param string $body Raw (gzipped) response body.
 	 * @return array<int,array<string,string>>
+	 *
+	 * @throws \RuntimeException If a gzip payload cannot be decompressed.
 	 */
 	protected static function parse_gzipped_csv( $body ) {
-		$decoded = function_exists( 'gzdecode' ) ? @gzdecode( $body ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- gzdecode warns on non-gzipped input; we fall back below.
-		$csv     = ( false === $decoded ) ? $body : $decoded;
+		$body = (string) $body;
+		if ( 0 === strncmp( $body, "\x1f\x8b", 2 ) ) {
+			$decoded = function_exists( 'gzdecode' ) ? @gzdecode( $body ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- gzdecode emits a warning on a corrupt payload; we convert that to a thrown error below.
+			if ( false === $decoded ) {
+				throw new \RuntimeException( 'Failed to decompress the GAM report download.' );
+			}
+			$csv = $decoded;
+		} else {
+			$csv = $body;
+		}
 
-		$lines = preg_split( '/\r\n|\r|\n/', trim( (string) $csv ) );
+		// Strip a leading UTF-8 BOM (trim() does not) so the first header key is clean.
+		$csv = (string) preg_replace( '/^\xEF\xBB\xBF/', '', $csv );
+
+		$lines = preg_split( '/\r\n|\r|\n/', trim( $csv ) );
 		if ( empty( $lines ) || '' === $lines[0] ) {
 			return [];
 		}
@@ -401,8 +504,14 @@ class Client {
 	/**
 	 * Resolve the publisher's GAM network code, server-side only.
 	 *
-	 * Never accepts a network code from request input. Multi-network
-	 * installations store codes comma-delimited; the first is used.
+	 * Never accepts a network code from request input. The authoritative
+	 * source is newspack-ads' GAM_Model::get_active_network_code(), which
+	 * returns the single active code. Only the raw-option fallback (used when
+	 * newspack-ads is unavailable) can be comma-delimited, in which case the
+	 * first entry is taken as a best effort. Both the run-time guard and the
+	 * site-isolation check ({@see self::assert_own_network_code()}) resolve
+	 * through this one method, so they always agree on "this publisher's
+	 * network".
 	 *
 	 * @return string The network code, or '' if none.
 	 */
@@ -420,16 +529,20 @@ class Client {
 	}
 
 	/**
-	 * Assert that a report can be run; throw otherwise.
+	 * Cheap, local-only guard run before each report operation.
+	 *
+	 * Deliberately does NOT re-verify the OAuth scope: that is a remote
+	 * tokeninfo call (see {@see self::can_run_reports()}) and must not run on
+	 * every poll. A missing/invalid scope instead surfaces as a translated
+	 * API error from the SOAP call itself.
 	 *
 	 * @return void
 	 *
-	 * @throws \RuntimeException If GAM is not active, the OAuth scope is
-	 *                           missing, or no network code is configured.
+	 * @throws \RuntimeException If GAM is not active or no network code is set.
 	 */
 	protected static function assert_can_run_reports() {
-		if ( ! self::can_run_reports() ) {
-			throw new \RuntimeException( 'Cannot run a GAM report: GAM is not active, the OAuth scope is missing, or no network code is configured.' );
+		if ( ! self::is_gam_active() || '' === self::get_network_code() ) {
+			throw new \RuntimeException( 'Cannot run a GAM report: GAM is not active or no network code is configured.' );
 		}
 	}
 
