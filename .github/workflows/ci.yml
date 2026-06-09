@@ -127,7 +127,7 @@ jobs:
         continue-on-error: false
       - run: pnpm --filter "${{ matrix.package }}" run --if-present build
       - run: pnpm --filter "${{ matrix.package }}" run --if-present test
-        continue-on-error: true
+        continue-on-error: false
 
   # ----------------------------------------------------------------------------
   # PHP lint and PHPUnit — one job per affected package that has PHP.
