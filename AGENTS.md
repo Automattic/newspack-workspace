@@ -30,6 +30,7 @@ The Newspack product consists of these interconnected plugins and themes:
 - `newspack-blocks` - Custom Gutenberg blocks for news sites (Homepage Posts, Carousel, Author List, etc.)
 - `newspack-listings` - Directory and listing functionality for events, places, and marketplaces
 - `newspack-sponsors` - Sponsored content management and labeling
+- `newspack-story-budget` - Newsroom editorial planning and story budgeting
 
 **Reader Revenue:**
 - `newspack-popups` - Campaigns/prompts system for reader engagement (popups, inline prompts, overlays)

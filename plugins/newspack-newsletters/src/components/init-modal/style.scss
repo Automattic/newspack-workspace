@@ -1,4 +1,10 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+// DataViews CSS must come through SCSS; the package's `sideEffects: false`
+// silently tree-shakes a JS import.
+/* stylelint-disable-next-line no-invalid-position-at-import-rule */
+@import "@wordpress/dataviews/build-style/style.css";
 
 // Modal
 .newspack-newsletters-modal {
@@ -153,124 +159,46 @@
 
 	&__layouts {
 		max-height: 100%;
-		padding: 32px;
 
 		@media only screen and (min-width: 783px) {
 			overflow-y: scroll;
 		}
 
-		&--loading {
-			display: flex;
-			justify-content: center;
-			align-items: center;
+		> .components-spinner {
+			display: block;
+			margin: wp-vars.$grid-unit-40 auto 0;
 		}
 
-		.newspack-newsletters-layouts {
-			display: grid;
-			gap: 16px;
-			grid-template-columns: repeat(2, 1fr);
-			grid-auto-rows: minmax(min-content, max-content);
-			overflow: hidden;
+		.dataviews-picker-wrapper {
+			height: 100%;
+			padding: wp-vars.$grid-unit-40;
+		}
+
+		.dataviews-view-grid-items {
 			padding: 0;
+		}
 
-			@media only screen and (min-width: 783px) {
-				grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-			}
+		// Picker stylesheet rounds `__media` but doesn't clip overflow.
+		.dataviews-view-picker-grid .dataviews-view-picker-grid__media {
+			overflow: hidden;
+		}
 
-			&__item {
-				cursor: pointer;
-				margin: 0;
-				width: 100%;
-				text-align: center;
+		.dataviews-view-picker-grid .dataviews-view-picker-grid__fields:not(:empty) {
+			padding-bottom: 0;
+		}
 
-				&.is-active {
-					.newspack-newsletters-layouts__item-preview {
-						pointer-events: none;
-						border-color: currentcolor;
-						position: relative;
+		.dataviews-view-picker-grid .dataviews-view-picker-grid__media::after {
+			box-shadow: inset 0 0 0 1px wp-colors.$gray-200;
+		}
 
-						&::before {
-							border: 1px solid;
-							content: "";
-							display: block;
-							position: absolute;
-							inset: 0;
-							z-index: 1;
-						}
-					}
-				}
+		// Single-select picker: the card highlight already shows state,
+		// so suppress the per-card checkbox affordance.
+		.dataviews-view-picker-grid .dataviews-selection-checkbox {
+			display: none;
+		}
 
-				button {
-					margin: 0;
-					height: 20px;
-					&.is-destructive {
-						color: wp-colors.$alert-red;
-						height: auto;
-					}
-				}
-			}
-
-			&__item-preview {
-				background: wp-colors.$white;
-				border: 1px solid wp-colors.$gray-300;
-				border-radius: 2px;
-				overflow: hidden;
-				padding: 0 0 75%;
-				position: relative;
-				width: 100%;
-
-				&::before {
-					border: 2px solid wp-colors.$white;
-					content: "";
-					display: block;
-					position: absolute;
-					inset: 0;
-					z-index: 1;
-				}
-
-				&:hover,
-				&:focus {
-					border-color: var(--wp-admin-theme-color);
-				}
-
-				&:hover {
-					.block-editor-block-preview__container {
-						margin-top: -25%;
-					}
-				}
-
-				.block-editor-block-preview__container,
-				.block-editor-block-preview__content-iframe {
-					cursor: pointer;
-					position: absolute;
-					inset: 0 auto auto;
-				}
-
-				.block-editor-block-preview__container {
-					transition: margin 500ms ease-in-out;
-				}
-			}
-
-			&__item-label {
-				padding: 4px 2px;
-				text-align: center;
-
-				&:empty {
-					display: none;
-				}
-			}
-
-			&--empty {
-				> * {
-					&:first-child {
-						margin-top: 0;
-					}
-
-					&:last-child {
-						margin-bottom: 0;
-					}
-				}
-			}
+		.dataviews-view-picker-grid .dataviews-view-picker-grid__card {
+			cursor: pointer;
 		}
 	}
 
@@ -300,6 +228,70 @@
 			}
 		}
 	}
+}
+
+// Mirrors `.newspack-newsletters-list__author*` from `admin-shell/style.scss`.
+.newspack-newsletters-list {
+	&__author {
+		align-items: center;
+		display: inline-flex;
+		gap: wp-vars.$grid-unit-10;
+		font-size: wp-vars.$grid-unit-15;
+	}
+
+	&__author-icon {
+		fill: currentcolor;
+		flex-shrink: 0;
+		margin: (-1 * wp-vars.$grid-unit-05);
+	}
+
+	&__author-avatar {
+		align-items: center;
+		display: inline-flex;
+		flex-shrink: 0;
+		height: wp-vars.$grid-unit-30;
+		justify-content: center;
+		width: wp-vars.$grid-unit-30;
+
+		img {
+			border-radius: 50%;
+			display: block;
+		}
+	}
+}
+
+.newspack-newsletters-layouts-picker {
+	&__preview {
+		height: 100%;
+		width: 100%;
+		position: relative;
+		overflow: hidden;
+
+		&--empty {
+			background: wp-colors.$gray-100;
+		}
+
+		// Anchor BlockPreview top-left in the aspect-ratio'd slot.
+		.block-editor-block-preview__content {
+			left: 0;
+			margin: 0;
+			min-height: auto;
+			overflow: visible;
+			top: 0;
+			transform-origin: top left;
+			width: 100%;
+		}
+
+		.block-editor-iframe__container {
+			height: 100%;
+			width: 100%;
+		}
+
+		.block-editor-iframe__scale-container {
+			height: 100%;
+		}
+	}
+
 }
 
 // Posts Inserter - Preview

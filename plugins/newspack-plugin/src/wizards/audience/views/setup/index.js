@@ -22,6 +22,7 @@ import ContentGating from './content-gating';
 import Payment from './payment';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import PlatformSelection from '../../components/platform-selection';
+import Groups from './groups';
 
 const { HashRouter, Redirect, Route, Switch } = Router;
 
@@ -109,6 +110,10 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 					label: __( 'Checkout & Payment', 'newspack-plugin' ),
 					path: '/payment',
 				},
+				{
+					label: __( 'Advanced settings', 'newspack-plugin' ),
+					path: '/groups',
+				},
 		  ];
 	tabs = tabs.filter( tab => tab );
 
@@ -179,6 +184,7 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 					/>
 					<Route path="/content-gating" render={ () => <ContentGating { ...props } /> } />
 					<Route path="/payment" render={ () => <Payment { ...props } /> } />
+					<Route path="/groups" render={ () => <Groups { ...props } /> } />
 					<Route
 						path="/campaign"
 						render={ () => ( configLoaded && ! config.enabled ? <Redirect to="/" /> : <Campaign { ...props } /> ) }

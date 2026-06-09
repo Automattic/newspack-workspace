@@ -655,4 +655,26 @@ class Subscription_List_Test extends WP_UnitTestCase {
 		$list = new Subscription_List( self::$posts['only_mailchimp'] );
 		$this->assertFalse( $list->is_active() );
 	}
+
+	/**
+	 * Non-string title/description must no-op rather than wipe the stored value.
+	 */
+	public function test_update_non_string_title_and_description_are_noops() {
+		$list = new Subscription_List( self::$posts['only_mailchimp'] );
+		$original_title       = $list->get_title();
+		$original_description = $list->get_description();
+
+		$this->assertFalse(
+			$list->update(
+				[
+					'title'       => null,
+					'description' => null,
+				]
+			)
+		);
+
+		$list = new Subscription_List( self::$posts['only_mailchimp'] );
+		$this->assertSame( $original_title, $list->get_title() );
+		$this->assertSame( $original_description, $list->get_description() );
+	}
 }

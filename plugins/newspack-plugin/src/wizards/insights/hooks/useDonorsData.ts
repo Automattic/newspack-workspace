@@ -1,0 +1,76 @@
+/**
+ * useDonorsData (NPPD-1617).
+ *
+ * Tab 7's data fetch lifecycle. Mirrors {@see useSubscribersData}: a
+ * request-id guard serializes overlapping calls so the latest range
+ * change wins, and idle / loading / success / error state is local to
+ * the tab so the wizard chrome stays interactive in all states.
+ */
+
+/**
+ * WordPress dependencies
+ */
+import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
+
+/**
+ * Internal dependencies
+ */
+import type { DateRange } from '../state/useDateRange';
+import { fetchDonorsData, type DonorsResponse } from '../api/donors';
+
+export type DonorsFetchStatus = 'idle' | 'loading' | 'success' | 'error';
+
+export interface UseDonorsDataResult {
+	status: DonorsFetchStatus;
+	data: DonorsResponse | null;
+	error: string | null;
+	refetch: () => void;
+}
+
+const errorMessage = ( e: unknown ): string => {
+	if ( e && typeof e === 'object' && 'message' in e && typeof ( e as { message: unknown } ).message === 'string' ) {
+		return ( e as { message: string } ).message;
+	}
+	return String( e );
+};
+
+const useDonorsData = ( range: DateRange, previousRange: DateRange | null ): UseDonorsDataResult => {
+	const [ status, setStatus ] = useState< DonorsFetchStatus >( 'idle' );
+	const [ data, setData ] = useState< DonorsResponse | null >( null );
+	const [ error, setError ] = useState< string | null >( null );
+
+	const requestIdRef = useRef( 0 );
+	const [ refetchTick, setRefetchTick ] = useState( 0 );
+	const refetch = useCallback( () => setRefetchTick( t => t + 1 ), [] );
+
+	useEffect( () => {
+		const myId = ++requestIdRef.current;
+		setStatus( 'loading' );
+		setError( null );
+
+		fetchDonorsData( {
+			start: range.start,
+			end: range.end,
+			compare_start: previousRange?.start,
+			compare_end: previousRange?.end,
+		} )
+			.then( response => {
+				if ( requestIdRef.current !== myId ) {
+					return;
+				}
+				setData( response );
+				setStatus( 'success' );
+			} )
+			.catch( e => {
+				if ( requestIdRef.current !== myId ) {
+					return;
+				}
+				setError( errorMessage( e ) );
+				setStatus( 'error' );
+			} );
+	}, [ range.start, range.end, previousRange?.start, previousRange?.end, refetchTick ] );
+
+	return { status, data, error, refetch };
+};
+
+export default useDonorsData;

@@ -120,3 +120,11 @@
 		}
 	}
 }
+
+.has-background-transparent:not([class*="-background-color"]) {
+	background-color: transparent;
+
+	&:hover {
+		background-color: color-mix(in srgb, currentcolor 3.5%, transparent);
+	}
+}

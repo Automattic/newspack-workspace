@@ -109,6 +109,10 @@ final class Sidebar_Placements {
 	 * Register sidebars as ad placements.
 	 */
 	public static function register_placements() {
+		if ( apply_filters( 'newspack_ads_is_block_theme', wp_is_block_theme() ) ) {
+			return;
+		}
+
 		$sidebars = $GLOBALS['wp_registered_sidebars'];
 
 		$disallowed_sidebars  = apply_filters( 'newspack_ads_disallowed_sidebar_placements', self::DISALLOWED_SIDEBARS );

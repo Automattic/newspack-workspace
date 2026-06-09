@@ -26,8 +26,8 @@ export default () =>
 			const [ errors, setErrors ] = useState( {} );
 			const { createSuccessNotice, createErrorNotice, removeNotice } = dispatch( 'core/notices' );
 			const { getNotices } = select( 'core/notices' );
-			const setInFlightForAsync = () => {
-				setInFlight( true );
+			const setInFlightForAsync = ( value = true ) => {
+				setInFlight( value );
 			};
 			const apiFetchWithErrorHandling = apiRequest => {
 				setInFlight( true );
