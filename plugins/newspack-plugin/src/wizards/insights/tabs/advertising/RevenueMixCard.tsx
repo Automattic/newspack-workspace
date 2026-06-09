@@ -83,7 +83,10 @@ const RevenueMixCard = ( { payload }: RevenueMixCardProps ) => {
 		);
 	}
 
-	return <MetricCard label={ label } value={ directShare } format="percent" secondary={ subtext } description={ description } />;
+	// Display the rounded share (directPct), not the raw fraction, so the headline
+	// value, the all-direct/all-programmatic edge cases, and the inline complement
+	// (otherPct) are always consistent — never "99.9%" next to "All … direct sales".
+	return <MetricCard label={ label } value={ directPct / 100 } format="percent" secondary={ subtext } description={ description } />;
 };
 
 export default RevenueMixCard;

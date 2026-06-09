@@ -101,4 +101,34 @@ describe( 'AdvertisingTab', () => {
 		// Data-as-of indicator present.
 		expect( screen.getByText( /Data as of/ ) ).toBeInTheDocument();
 	} );
+
+	it( 'shows the initial loading state before any data arrives', () => {
+		mockHook.mockReturnValue( { status: 'loading', data: null, error: null, refetch: () => {} } );
+		render( <AdvertisingTab range={ range } previousRange={ null } /> );
+		expect( screen.getByText( /Loading advertising data/ ) ).toBeInTheDocument();
+	} );
+
+	it( 'shows the error state with detail when the fetch fails', () => {
+		mockHook.mockReturnValue( { status: 'error', data: null, error: 'HTTP 500', refetch: () => {} } );
+		render( <AdvertisingTab range={ range } previousRange={ null } /> );
+		expect( screen.getByText( 'Could not load advertising data.' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'HTTP 500' ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders comparison deltas when a comparison range is active', () => {
+		const previousRange = { start: '2026-04-01', end: '2026-04-30', preset: 'last-30' } as unknown as DateRange;
+		mockHook.mockReturnValue( {
+			status: 'success',
+			error: null,
+			refetch: () => {},
+			data: {
+				current: baseWindow( { metrics: { total_impressions: { value: 120, computable: true, type: 'count' } } } ),
+				previous: baseWindow( { metrics: { total_impressions: { value: 100, computable: true, type: 'count' } } } ),
+			},
+		} );
+		render( <AdvertisingTab range={ range } previousRange={ previousRange } /> );
+		// +20% vs the prior window → up arrow + magnitude.
+		expect( screen.getByText( '20%' ) ).toBeInTheDocument();
+		expect( screen.getByText( '↑' ) ).toBeInTheDocument();
+	} );
 } );

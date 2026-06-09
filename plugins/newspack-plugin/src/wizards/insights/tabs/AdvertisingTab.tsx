@@ -86,11 +86,7 @@ const AdvertisingTab = ( { range, previousRange }: AdvertisingTabProps ) => {
 
 	return (
 		<div className="newspack-insights__advertising-tab">
-			<DataLagIndicator
-				dataAsOf={ current.data_as_of }
-				hasEstimatedData={ current.has_estimated_data }
-				estimatedWindowStartDate={ current.estimated_window_start_date }
-			/>
+			<DataLagIndicator dataAsOf={ current.data_as_of } hasEstimatedData={ current.has_estimated_data } />
 			<ReachRevenueSection current={ metrics } previous={ previous } />
 			<InventoryPerformanceSection current={ metrics } previous={ previous } />
 			<RevenueBreakdownSection current={ metrics } previous={ previous } />

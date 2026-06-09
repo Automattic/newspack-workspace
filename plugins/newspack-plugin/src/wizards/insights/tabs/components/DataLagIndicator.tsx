@@ -23,8 +23,6 @@ export interface DataLagIndicatorProps {
 	/** ISO YYYY-MM-DD of the most recent finalized data, or null/undefined. */
 	dataAsOf?: string | null;
 	hasEstimatedData?: boolean;
-	/** ISO YYYY-MM-DD from which data is estimated, or null. */
-	estimatedWindowStartDate?: string | null;
 }
 
 const dateFormatter = new Intl.DateTimeFormat( undefined, {

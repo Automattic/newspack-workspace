@@ -48,4 +48,34 @@ describe( 'RevenueMixCard', () => {
 		expect( screen.getByText( '0%' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'All of your ad revenue comes from programmatic auctions.' ) ).toBeInTheDocument();
 	} );
+
+	it( 'keeps the headline value consistent with the rounded edge-case description', () => {
+		// 99.9% direct rounds to 100% — headline and "All …" copy must agree.
+		render(
+			<RevenueMixCard
+				payload={ breakdown( [
+					{ label: 'direct', revenue: 999 },
+					{ label: 'programmatic', revenue: 1 },
+				] ) }
+			/>
+		);
+		expect( screen.getByText( '100%' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'All of your ad revenue comes from direct sales.' ) ).toBeInTheDocument();
+		expect( screen.queryByText( '99.9%' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'renders the no-revenue state when the window is empty', () => {
+		render( <RevenueMixCard payload={ breakdown( [] ) } /> );
+		expect( screen.getByText( 'No ad revenue in this timeframe.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'passes an overlay through to the graceful-failure note', () => {
+		render( <RevenueMixCard payload={ { overlay: { type: 'data_unavailable' } } as MetricPayload } /> );
+		expect( screen.getByText( 'Not available for this site.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'passes an error through to the graceful-failure note', () => {
+		render( <RevenueMixCard payload={ { error: 'boom' } as MetricPayload } /> );
+		expect( screen.getByText( 'Data temporarily unavailable.' ) ).toBeInTheDocument();
+	} );
 } );

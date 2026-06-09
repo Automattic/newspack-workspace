@@ -131,13 +131,14 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 		}
 
 		$advertisers = [];
-		// 12 advertisers (descending) so the table fills its 10-row default.
-		for ( $i = 1; $i <= 12; $i++ ) {
-			$weight  = 13 - $i;
-			$adv_rev = round( ( $revenue * 0.6 / 13 ) * $weight, 2 );
+		// 10 advertisers (descending) so Top Advertisers shows 5 collapsed and
+		// expands to 10 via "See more" (MetricTable defaultRowLimit 5, rowLimit 10).
+		for ( $i = 1; $i <= 10; $i++ ) {
+			$weight  = 11 - $i;
+			$adv_rev = round( ( $revenue * 0.6 / 11 ) * $weight, 2 );
 			$advertisers[] = [
 				'advertiser'  => sprintf( 'Advertiser %d', $i ),
-				'impressions' => (int) round( ( $impressions * 0.6 / 13 ) * $weight ),
+				'impressions' => (int) round( ( $impressions * 0.6 / 11 ) * $weight ),
 				'revenue'     => $adv_rev,
 			];
 		}
