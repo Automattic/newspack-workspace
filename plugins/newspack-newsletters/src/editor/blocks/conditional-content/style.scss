@@ -1,4 +1,5 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "../../../utilities/classes";
 
 :root {
 	/* stylelint-disable value-keyword-case */

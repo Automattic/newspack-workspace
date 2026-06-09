@@ -43,6 +43,7 @@ final class Newspack_Newsletters_Layouts {
 	public function __construct() {
 		add_action( 'init', [ __CLASS__, 'register_layout_cpt' ] );
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
+		add_action( 'rest_api_init', [ __CLASS__, 'register_rest_routes' ] );
 	}
 
 	/**
@@ -53,13 +54,164 @@ final class Newspack_Newsletters_Layouts {
 			return;
 		}
 
+		$labels = [
+			'name'               => __( 'Layouts', 'newspack-newsletters' ),
+			'singular_name'      => __( 'Layout', 'newspack-newsletters' ),
+			'add_new'            => __( 'Add New Layout', 'newspack-newsletters' ),
+			'add_new_item'       => __( 'Add New Layout', 'newspack-newsletters' ),
+			'edit_item'          => __( 'Edit Layout', 'newspack-newsletters' ),
+			'new_item'           => __( 'New Layout', 'newspack-newsletters' ),
+			'view_item'          => __( 'View Layout', 'newspack-newsletters' ),
+			'view_items'         => __( 'View Layouts', 'newspack-newsletters' ),
+			'search_items'       => __( 'Search Layouts', 'newspack-newsletters' ),
+			'not_found'          => __( 'No Layouts found.', 'newspack-newsletters' ),
+			'not_found_in_trash' => __( 'No Layouts found in Trash.', 'newspack-newsletters' ),
+			'all_items'          => __( 'All Layouts', 'newspack-newsletters' ),
+			'item_published'     => __( 'Layout published.', 'newspack-newsletters' ),
+			'item_updated'       => __( 'Layout updated.', 'newspack-newsletters' ),
+		];
+
 		$cpt_args = [
+			'labels'       => $labels,
 			'public'       => false,
+			'show_ui'      => true,
+			'show_in_menu' => false,
 			'show_in_rest' => true,
-			'supports'     => [ 'editor', 'title', 'custom-fields' ],
+			// `author` so `_embed` populates `_embedded.author[0]` for the list.
+			'supports'     => [ 'editor', 'title', 'custom-fields', 'author' ],
 			'taxonomies'   => [],
 		];
 		\register_post_type( self::NEWSPACK_NEWSLETTERS_LAYOUT_CPT, $cpt_args );
+	}
+
+	/**
+	 * Register the layout-specific test-send REST route — `wp_mail`s the
+	 * rendered HTML directly so layouts never touch an ESP campaign.
+	 */
+	public static function register_rest_routes() {
+		register_rest_route(
+			Newspack_Newsletters::API_NAMESPACE,
+			'/layouts/(?P<id>\d+)/test',
+			[
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => [ __CLASS__, 'rest_send_layout_test_email' ],
+				'permission_callback' => [ Newspack_Newsletters::class, 'api_authoring_permissions_check' ],
+				'args'                => [
+					'id'         => [
+						'sanitize_callback' => 'absint',
+						'validate_callback' => function ( $id, $request = null, $param = null ) {
+							unset( $request, $param );
+							$post = get_post( absint( $id ) );
+							return $post && self::NEWSPACK_NEWSLETTERS_LAYOUT_CPT === $post->post_type;
+						},
+					],
+					'test_email' => [
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+				],
+			]
+		);
+	}
+
+	/**
+	 * Send a preview of the layout to the supplied email address(es) via
+	 * `wp_mail` — bypasses the ESP entirely.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function rest_send_layout_test_email( $request ) {
+		$post_id = absint( $request['id'] );
+		$raw     = (string) $request->get_param( 'test_email' );
+		// Cap at 10 with explode limit 11 so parsing and outbound count are both bounded.
+		$emails = array_map(
+			static function ( $email ) {
+				return sanitize_email( trim( $email ) );
+			},
+			explode( ',', $raw, 11 )
+		);
+		$valid = array_slice( array_values( array_filter( $emails, 'is_email' ) ), 0, 10 );
+
+		if ( empty( $valid ) ) {
+			return new WP_Error(
+				'newspack_newsletters_invalid_email',
+				__( 'Please provide at least one valid email address.', 'newspack-newsletters' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		// Mirrors `update_user_test_emails` so the Testing panel default
+		// stays consistent across newsletter and layout sends.
+		$user_id   = get_current_user_id();
+		$user_info = $user_id ? get_userdata( $user_id ) : null;
+		$is_self   = $user_info && 1 === count( $valid ) && $user_info->user_email === $valid[0];
+		if ( $user_id && ! $is_self ) {
+			update_user_meta( $user_id, 'newspack_nl_test_emails', $valid );
+		}
+
+		$html = (string) get_post_meta( $post_id, Newspack_Newsletters::EMAIL_HTML_META, true );
+		if ( '' === $html ) {
+			return new WP_Error(
+				'newspack_newsletters_no_html',
+				__( 'This layout has no rendered preview yet — save the layout first, then send a test.', 'newspack-newsletters' ),
+				[ 'status' => 409 ]
+			);
+		}
+
+		$post    = get_post( $post_id );
+		$subject = sprintf(
+			/* translators: %s: layout title. */
+			__( '[Layout preview] %s', 'newspack-newsletters' ),
+			$post && $post->post_title ? $post->post_title : __( 'Untitled layout', 'newspack-newsletters' )
+		);
+		$headers = [ 'Content-Type: text/html; charset=UTF-8' ];
+
+		// One email per recipient so addresses aren't disclosed to other
+		// recipients via the To: header.
+		$failed = [];
+		foreach ( $valid as $recipient ) {
+			$sent = wp_mail( $recipient, $subject, $html, $headers ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
+			if ( ! $sent ) {
+				$failed[] = $recipient;
+			}
+		}
+
+		if ( count( $failed ) === count( $valid ) ) {
+			return new WP_Error(
+				'newspack_newsletters_mail_failed',
+				__( 'Failed to send the test email. Please try again.', 'newspack-newsletters' ),
+				[ 'status' => 500 ]
+			);
+		}
+
+		if ( ! empty( $failed ) ) {
+			return rest_ensure_response(
+				[
+					'message'           => sprintf(
+						/* translators: %s: comma-separated list of email addresses that failed. */
+						__( 'Test email sent, but delivery failed for: %s.', 'newspack-newsletters' ),
+						implode( ', ', $failed )
+					),
+					'failed_recipients' => $failed,
+				]
+			);
+		}
+
+		return rest_ensure_response(
+			[
+				'message'           => sprintf(
+					/* translators: %s: comma-separated list of email addresses. */
+					_n(
+						'Test email sent to %s.',
+						'Test email sent to %s.',
+						count( $valid ),
+						'newspack-newsletters'
+					),
+					implode( ', ', $valid )
+				),
+				'failed_recipients' => [],
+			]
+		);
 	}
 
 	/**
@@ -169,27 +321,27 @@ final class Newspack_Newsletters_Layouts {
 	}
 
 	/**
-	 * Get default layouts.
+	 * Get default layouts. ID is the number in `N.json` so deletions leave
+	 * gaps rather than renumbering stored `template_id` references.
 	 */
 	public static function get_default_layouts() {
 		$layouts_base_path = NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'includes/layouts/';
 		$layouts           = [];
-		// 1-indexed, because 0 denotes a blank layout.
-		$layout_id = 1;
 		foreach ( scandir( $layouts_base_path ) as $layout ) {
-			if ( strpos( $layout, '.json' ) !== false ) {
-				$decoded_layout  = json_decode( file_get_contents( $layouts_base_path . $layout, true ) ); //phpcs:ignore
-				$title          = '';
-				if ( property_exists( $decoded_layout, 'title' ) ) {
-					$title = $decoded_layout->title;
-				}
-				$layouts[] = array(
-					'ID'           => $layout_id,
-					'post_title'   => $title,
-					'post_content' => self::layout_token_replacement( $decoded_layout->content ),
-				);
-				$layout_id++;
+			if ( ! preg_match( '/^(\d+)\.json$/', $layout, $matches ) ) {
+				continue;
 			}
+			$layout_id      = (int) $matches[1];
+			$decoded_layout = json_decode( file_get_contents( $layouts_base_path . $layout, true ) ); //phpcs:ignore
+			if ( ! is_object( $decoded_layout ) || ! property_exists( $decoded_layout, 'content' ) ) {
+				continue;
+			}
+			$title = property_exists( $decoded_layout, 'title' ) ? $decoded_layout->title : '';
+			$layouts[] = array(
+				'ID'           => $layout_id,
+				'post_title'   => $title,
+				'post_content' => self::layout_token_replacement( $decoded_layout->content ),
+			);
 		}
 		return $layouts;
 	}
@@ -204,8 +356,9 @@ final class Newspack_Newsletters_Layouts {
 				'posts_per_page' => -1,
 			]
 		);
+		$author_cache  = [];
 		$user_layouts  = array_map(
-			function ( $post ) {
+			function ( $post ) use ( &$author_cache ) {
 				$post->meta = [
 					'background_color'  => get_post_meta( $post->ID, 'background_color', true ),
 					'text_color'        => get_post_meta( $post->ID, 'text_color', true ),
@@ -214,6 +367,20 @@ final class Newspack_Newsletters_Layouts {
 					'custom_css'        => get_post_meta( $post->ID, 'custom_css', true ),
 					'campaign_defaults' => get_post_meta( $post->ID, 'campaign_defaults', true ),
 					'disable_auto_ads'  => boolval( get_post_meta( $post->ID, 'disable_auto_ads', true ) ),
+				];
+
+				// Mirrors the REST v2 `_embed=author` shape; the add-new
+				// picker reuses the same chip JSX as the layouts list.
+				$author_id = (int) $post->post_author;
+				if ( ! isset( $author_cache[ $author_id ] ) ) {
+					$author_cache[ $author_id ] = [
+						'id'          => $author_id,
+						'name'        => $author_id ? get_the_author_meta( 'display_name', $author_id ) : '',
+						'avatar_urls' => $author_id ? rest_get_avatar_urls( $author_id ) : (object) [],
+					];
+				}
+				$post->_embedded = [ // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase
+					'author' => [ $author_cache[ $author_id ] ],
 				];
 
 				// Migrate layout defaults from legacy meta, if it exists.

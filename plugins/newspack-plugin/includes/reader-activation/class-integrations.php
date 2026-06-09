@@ -170,6 +170,30 @@ class Integrations {
 	}
 
 	/**
+	 * Get the AS action for the given ID if it belongs to the given integration.
+	 *
+	 * Combines existence + group-ownership checks so callers can do both in a
+	 * single DB read. Returns null for missing actions and for actions in other
+	 * groups — both cases the REST endpoints translate to a generic 404 so
+	 * other-group actions can't be probed.
+	 *
+	 * @param int    $action_id      The AS action ID.
+	 * @param string $integration_id The integration identifier.
+	 *
+	 * @return \ActionScheduler_Action|null
+	 */
+	public static function get_integration_action( $action_id, $integration_id ) {
+		$action = \Newspack\Action_Scheduler::get_action( (int) $action_id );
+		if ( ! $action ) {
+			return null;
+		}
+		if ( $action->get_group() !== self::get_action_group( $integration_id ) ) {
+			return null;
+		}
+		return $action;
+	}
+
+	/**
 	 * Get ActionScheduler actions for Newspack integrations.
 	 *
 	 * @param array $args {

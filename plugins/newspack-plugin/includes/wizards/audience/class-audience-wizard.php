@@ -690,6 +690,9 @@ class Audience_Wizard extends Wizard {
 				Content_Gifting_CTA::set_style( sanitize_text_field( $args['content_gifting']['style'] ) );
 			}
 		}
+		if ( isset( $args['newsletter_link_bypass_enabled'] ) ) {
+			Content_Gate_Advanced_Settings::update_settings( [ 'newsletter_link_bypass_enabled' => (bool) $args['newsletter_link_bypass_enabled'] ] );
+		}
 		return rest_ensure_response( self::get_memberships_settings() );
 	}
 
@@ -943,13 +946,15 @@ class Audience_Wizard extends Wizard {
 	 */
 	private static function get_memberships_settings() {
 		return [
-			'edit_gate_url'            => Memberships::get_edit_gate_url(),
-			'gate_status'              => get_post_status( Memberships::get_gate_post_id() ),
-			'plans'                    => Memberships::get_plans(),
-			'require_all_plans'        => Memberships::get_require_all_plans_setting(),
-			'show_on_subscription_tab' => Memberships::get_show_on_subscription_tab_setting(),
-			'countdown_banner'         => Metering_Countdown::get_settings(),
-			'content_gifting'          => Content_Gifting::get_settings(),
+			'edit_gate_url'                  => Memberships::get_edit_gate_url(),
+			'gate_status'                    => get_post_status( Memberships::get_gate_post_id() ),
+			'plans'                          => Memberships::get_plans(),
+			'require_all_plans'              => Memberships::get_require_all_plans_setting(),
+			'show_on_subscription_tab'       => Memberships::get_show_on_subscription_tab_setting(),
+			'countdown_banner'               => Metering_Countdown::get_settings(),
+			'content_gifting'                => Content_Gifting::get_settings(),
+			'has_newsletters'                => Reader_Activation::is_esp_configured(),
+			'newsletter_link_bypass_enabled' => Newsletters_Access::is_verification_enabled(),
 		];
 	}
 

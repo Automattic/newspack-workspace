@@ -23,12 +23,15 @@ import { PublicSettings } from './public';
 import registerEditorPlugin from './editor/';
 import withApiHandler from '../components/with-api-handler';
 import { registerStore, fetchNewsletterData, useNewsletterDataError } from './store';
-import { isManualESP, isSupportedESP } from './utils';
+import { isLayoutEditor, isManualESP, isSupportedESP } from './utils';
 import CampaignLink from './campaign-link';
 import './debug-send';
 
 registerStore();
-registerEditorPlugin();
+// Skip the editor subplugin (which mounts the send button) for layouts.
+if ( ! isLayoutEditor() ) {
+	registerEditorPlugin();
+}
 
 function NewsletterEdit( { apiFetchWithErrorHandling, setInFlightForAsync, inFlight } ) {
 	const { layoutId, postId } = useSelect( select => {
@@ -39,7 +42,11 @@ function NewsletterEdit( { apiFetchWithErrorHandling, setInFlightForAsync, inFli
 			postId: getCurrentPostId(),
 		};
 	} );
-	const [ shouldDisplaySettings, setShouldDisplaySettings ] = useState( window?.newspack_newsletters_data?.is_service_provider_configured !== '1' );
+	// InitModal is non-dismissible; skip the auto-show for layouts since
+	// they don't need an ESP (preview-to-email goes through `wp_mail`).
+	const [ shouldDisplaySettings, setShouldDisplaySettings ] = useState(
+		! isLayoutEditor() && window?.newspack_newsletters_data?.is_service_provider_configured !== '1'
+	);
 	const [ testEmail, setTestEmail ] = useState( window?.newspack_newsletters_data?.user_test_emails?.join( ',' ) || '' );
 	const [ isConnected, setIsConnected ] = useState( null );
 	const [ oauthUrl, setOauthUrl ] = useState( null );
@@ -66,8 +73,8 @@ function NewsletterEdit( { apiFetchWithErrorHandling, setInFlightForAsync, inFli
 	};
 
 	useEffect( () => {
-		// Fetch provider and campaign data.
-		if ( isSupportedESP() ) {
+		// Layouts have no ESP campaign — skip to avoid noisy 404s.
+		if ( isSupportedESP() && ! isLayoutEditor() ) {
 			fetchNewsletterData( postId );
 		}
 	}, [] );
@@ -90,15 +97,17 @@ function NewsletterEdit( { apiFetchWithErrorHandling, setInFlightForAsync, inFli
 		} else {
 			removeNotice( 'newspack-newsletters-newsletter-data-error' );
 		}
-	}, newsletterDataError );
+	}, [ newsletterDataError ] );
 
-	if ( ! isSupportedESP() ) {
+	const isLayout = isLayoutEditor();
+	// Layouts work without an ESP (wp_mail preview, provider-agnostic styling).
+	if ( ! isLayout && ! isSupportedESP() ) {
 		return null;
 	}
-
-	const isDisplayingInitModal = shouldDisplaySettings || -1 === layoutId;
+	// Layouts ARE templates, so skip the layout-picker branch.
+	const isDisplayingInitModal = shouldDisplaySettings || ( ! isLayout && -1 === layoutId );
 	const stylingId = 'newspack-newsletters-styling';
-	const stylingTitle = __( 'Newsletter Global Styles', 'newspack-newsletters' );
+	const stylingTitle = isLayout ? __( 'Layout Global Styles', 'newspack-newsletters' ) : __( 'Newsletter Global Styles', 'newspack-newsletters' );
 
 	return isDisplayingInitModal ? (
 		<InitModal shouldDisplaySettings={ shouldDisplaySettings } onSetupStatus={ setShouldDisplaySettings } />
@@ -111,26 +120,33 @@ function NewsletterEdit( { apiFetchWithErrorHandling, setInFlightForAsync, inFli
 				{ stylingTitle }
 			</PluginSidebarMoreMenuItem>
 
-			<PluginPostStatusInfo>{ isConnected && <PublicSettings /> }</PluginPostStatusInfo>
+			{ ! isLayout && <PluginPostStatusInfo>{ isConnected && <PublicSettings /> }</PluginPostStatusInfo> }
 
-			{ isSupportedESP() && ! isManualESP() && (
+			{ ! isLayout && isSupportedESP() && ! isManualESP() && (
 				<PluginDocumentSettingPanel name="newsletters-settings-panel" title={ __( 'Newsletter Campaign', 'newspack-newsletters' ) }>
 					<VStack spacing={ 4 }>
-						<CampaignLink />
 						<Sidebar inFlight={ inFlight } isConnected={ isConnected } oauthUrl={ oauthUrl } onAuthorize={ verifyToken } />
+						<CampaignLink />
 					</VStack>
 				</PluginDocumentSettingPanel>
 			) }
 
-			{ isSupportedESP() && ! isManualESP() && (
+			{ /* Newsletters need ESP for the per-provider /test route.
+			   Layouts hit a wp_mail-based endpoint, no ESP gate needed. */ }
+			{ ( isLayout || ( isSupportedESP() && ! isManualESP() ) ) && (
 				<PluginDocumentSettingPanel name="newsletters-testing-panel" title={ __( 'Testing', 'newspack-newsletters' ) }>
-					<Testing testEmail={ testEmail } onChangeEmail={ setTestEmail } disabled={ ! isConnected } />
+					<Testing testEmail={ testEmail } onChangeEmail={ setTestEmail } disabled={ ! isLayout && ! isConnected } />
 				</PluginDocumentSettingPanel>
 			) }
-			<PluginDocumentSettingPanel name="newsletters-layout-panel" title={ __( 'Layout', 'newspack-newsletters' ) }>
-				<Layout />
-			</PluginDocumentSettingPanel>
 
+			{ ! isLayout && (
+				<PluginDocumentSettingPanel name="newsletters-layout-panel" title={ __( 'Layout', 'newspack-newsletters' ) }>
+					<Layout />
+				</PluginDocumentSettingPanel>
+			) }
+
+			{ /* Renders nothing; pushes styling meta into the canvas via DOM
+			   side effects. Kept for layouts so the canvas reflects edits. */ }
 			<ApplyStyling />
 		</Fragment>
 	);

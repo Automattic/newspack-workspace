@@ -1,0 +1,546 @@
+/**
+ * Shared styles for the GA4-backed Insights tabs (Audience, Engagement — NPPD-1649):
+ * graceful-failure note, chart/table grids + per-section column modifiers,
+ * tab-local viz (pie/bar/line) with hover affordances, and the connect banner.
+ *
+ * Tables reuse the canonical `.newspack-insights__table` / `-wrap` chrome from
+ * components/sections.scss; nothing table-related is redefined here. Scorecard
+ * / metric-grid base styles also live in sections.scss.
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+// Categorical series palette for charts. Hardcoded because a chart needs
+// distinct, stable category colors; applied via the --series-color custom
+// property so each viz element can map it to fill / stroke / background.
+.is-series-0 { --series-color: #1c5ea8; }
+.is-series-1 { --series-color: #3eb24f; }
+.is-series-2 { --series-color: #d98b27; }
+.is-series-3 { --series-color: #8a4fbd; }
+.is-series-4 { --series-color: #c0392b; }
+.is-series-5 { --series-color: #1f8a8a; }
+.is-series-6 { --series-color: #6b7785; }
+
+.newspack-insights {
+	&__chart-grid {
+		display: grid;
+		grid-template-columns: repeat( auto-fit, minmax( 280px, 1fr ) );
+		gap: 24px;
+	}
+
+	&__table-grid {
+		display: grid;
+		grid-template-columns: repeat( auto-fit, minmax( 320px, 1fr ) );
+		gap: 24px;
+	}
+
+	&__chart-card {
+		display: flex;
+		flex-direction: column;
+		height: 100%; // stretch to the row's tallest card so pies can center
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 4px;
+		padding: 16px;
+		min-width: 0; // let charts shrink inside grid cells instead of overflowing
+
+		&-title {
+			font-size: 14px;
+			font-weight: 600;
+			line-height: 1.3;
+			margin: 0 0 4px;
+			color: wp-colors.$gray-900;
+			// Reserve two lines so single- and two-line titles align across a row.
+			min-height: calc( 14px * 1.3 * 2 );
+		}
+
+		&-caption {
+			font-size: 13px;
+			color: wp-colors.$gray-600;
+			margin: 0 0 12px;
+		}
+	}
+
+	// Table-in-card (e.g. Top Campaigns): the chart-card supplies the border, so
+	// drop the table-wrap's own frame to avoid a double border.
+	&__chart-card &__table-wrap {
+		border: 0;
+		border-radius: 0;
+	}
+
+	// Inline scope pill next to a table title (e.g. "Showing: United States") —
+	// full-pill shape, muted, vertically centered with the title text.
+	&__scope-pill {
+		display: inline-block;
+		margin-left: 8px;
+		padding: 2px 8px;
+		border-radius: 12px;
+		background: wp-colors.$gray-100;
+		color: wp-colors.$gray-700;
+		font-size: 12px;
+		font-weight: 500;
+		line-height: 1.4;
+		vertical-align: middle;
+		white-space: nowrap;
+	}
+
+	// Temporal-scope subhead above a chart title (e.g. "Day to day").
+	&__chart-card-subhead {
+		margin: 0 0 2px;
+		font-size: 13px;
+		font-weight: 400;
+		color: wp-colors.$gray-600;
+	}
+
+	// Engagement Reader Segments takeaway cards — scorecard chrome (border, top
+	// accent, padding) with a headline / sub / bottom-pinned mini-bar layout.
+	&__takeaway-card {
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+		min-height: 180px;
+		padding: 24px 28px;
+		background-color: #fff;
+		border: 1px solid wp-colors.$gray-200;
+		border-top: 3px solid var( --wp-admin-theme-color );
+		border-radius: 4px;
+	}
+
+	&__takeaway-headline {
+		margin: 0;
+		font-size: 18px;
+		font-weight: 500;
+		line-height: 1.35;
+		color: wp-colors.$gray-900;
+	}
+
+	&__takeaway-sub {
+		margin: 6px 0 0;
+		font-size: 13px;
+		color: wp-colors.$gray-700;
+	}
+
+	&__takeaway-empty {
+		margin: 0;
+		font-size: 13px;
+		color: wp-colors.$gray-600;
+	}
+
+	// Mini bar chart pinned to the card bottom (~60px tall).
+	&__takeaway-chart {
+		margin-top: auto;
+		padding-top: 16px;
+	}
+
+	&__takeaway-chart &__bars {
+		height: 60px;
+	}
+
+	// Standalone table heading (Geographic / Content performance, where each
+	// table has its own title above the canonical table-wrap).
+	&__table-grid &__chart-card-title {
+		margin-bottom: 8px;
+	}
+
+	// Shared graceful-failure note: informational, not code — muted sans-serif
+	// with a small info glyph. The custom-dimension param keeps an inline
+	// <code>, no block styling. No dash placeholder above it (NPPD-1649 fix #4).
+	&__metric-note {
+		display: flex;
+		align-items: flex-start;
+		gap: 6px;
+		margin: 8px 0 0;
+		font-size: 13px;
+		line-height: 1.4;
+		color: wp-colors.$gray-600;
+
+		code {
+			font-family: monospace;
+			font-size: 12px;
+			color: wp-colors.$gray-700;
+		}
+	}
+
+	&__metric-note-icon {
+		flex-shrink: 0;
+		color: wp-colors.$gray-600;
+	}
+
+	&__chart-empty {
+		font-size: 13px;
+		color: wp-colors.$gray-600;
+		padding: 24px 0;
+		text-align: center;
+	}
+
+	// Pie / donut — three-slot stack inside the card (NPPD-1649 alignment):
+	// title is the card's top slot; the figure fills the middle and centers the
+	// pie; the legend anchors to the bottom. Fills the card height so pies in a
+	// row line up vertically regardless of title/description length.
+	&__pie {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		min-height: 0;
+	}
+
+	// Middle slot: pie centered both axes in the remaining space.
+	&__pie-figure {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 0;
+		padding: 12px 0;
+	}
+
+	&__pie-svg {
+		width: 100%;
+		max-width: 150px;
+		height: auto;
+		aspect-ratio: 1 / 1;
+		transform: rotate( -90deg );
+	}
+
+	// Donut band thickness. The chart is a stroked circle (r=16 in a 42 viewBox),
+	// so stroke-width *is* the ring thickness; 8 makes the band ~2x thicker with
+	// a smaller hole than the original 4 (NPPD-1649 — "more color, less air").
+	&__pie-track {
+		fill: none;
+		stroke: wp-colors.$gray-100;
+		stroke-width: 8;
+	}
+
+	&__pie-segment {
+		fill: none;
+		stroke: var( --series-color );
+		stroke-width: 8;
+	}
+
+	// Bottom slot: legend anchored to the card bottom, left-aligned, full width.
+	&__pie-legend {
+		list-style: none;
+		margin: auto 0 0;
+		padding: 0;
+		width: 100%;
+
+		li {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			font-size: 12px;
+			margin-bottom: 6px;
+		}
+
+		li:last-child {
+			margin-bottom: 0;
+		}
+	}
+
+	&__legend-swatch {
+		display: inline-block;
+		width: 12px;
+		height: 12px;
+		border-radius: 2px;
+		background: var( --series-color );
+		flex-shrink: 0;
+	}
+
+	// Label and value sit next to each other (not justified to opposite edges).
+	&__legend-label {
+		color: wp-colors.$gray-800;
+	}
+
+	&__legend-value {
+		color: wp-colors.$gray-600;
+		font-variant-numeric: tabular-nums;
+	}
+
+	// Bars.
+	&__bars {
+		display: flex;
+		align-items: flex-end;
+		gap: 3px;
+		height: 160px;
+		// flex:1 1 0 + min-width:0 on the columns keeps the 24 hour-of-day bars
+		// inside the card; overflow stays visible so hover tooltips aren't clipped.
+	}
+
+	&__bar-col {
+		position: relative; // anchor for the hover tooltip
+		flex: 1 1 0;
+		min-width: 0; // allow columns to shrink so they fit the container
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		height: 100%;
+	}
+
+	&__bar-track {
+		flex: 1;
+		width: 100%;
+		display: flex;
+		align-items: flex-end;
+	}
+
+	&__bar-fill {
+		width: 100%;
+		background: var( --series-color );
+		border-radius: 2px 2px 0 0;
+		min-height: 1px;
+		transition: opacity 0.1s ease;
+
+		&:hover {
+			opacity: 0.8;
+		}
+	}
+
+	&__bar-label {
+		font-size: 9px;
+		color: wp-colors.$gray-600;
+		margin-top: 4px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 100%;
+	}
+
+	// Line.
+	&__line {
+		position: relative;
+	}
+
+	// The plot wrapper is exactly the SVG box, so the tooltip's percentage
+	// position maps to the chart area (not the area + meta row).
+	&__line-plot {
+		position: relative;
+	}
+
+	&__line-svg {
+		width: 100%;
+		height: 160px;
+		display: block;
+	}
+
+	&__line-hit {
+		fill: transparent;
+		cursor: pointer;
+	}
+
+	&__line-area {
+		fill: var( --series-color );
+		opacity: 0.12;
+	}
+
+	&__line-stroke {
+		stroke: var( --series-color );
+		stroke-width: 2;
+		vector-effect: non-scaling-stroke;
+	}
+
+	&__line-point {
+		fill: var( --series-color );
+		stroke: #fff;
+		stroke-width: 1;
+
+		&:hover {
+			stroke-width: 2;
+		}
+	}
+
+	&__line-meta {
+		display: flex;
+		justify-content: space-between;
+		font-size: 11px;
+		color: wp-colors.$gray-600;
+		margin-top: 4px;
+	}
+
+	// Dark hover panel shared by the line + bar charts (NPPD-1649 fix #5).
+	// Base = the line variant, positioned absolutely at a data point's
+	// coordinates (inline left/top) and floated above it.
+	&__chart-tooltip {
+		position: absolute;
+		z-index: 2;
+		transform: translate( -50%, calc( -100% - 10px ) );
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding: 6px 8px;
+		border-radius: 4px;
+		background: wp-colors.$gray-900;
+		color: #fff;
+		font-size: 11px;
+		line-height: 1.3;
+		white-space: nowrap;
+		pointer-events: none;
+		box-shadow: 0 2px 6px rgba( 0, 0, 0, 0.25 );
+
+		// Bar variant: anchored above the hovered column, revealed on hover.
+		&--bar {
+			left: 50%;
+			bottom: 100%;
+			margin-bottom: 6px;
+			transform: translateX( -50% );
+			display: none;
+		}
+	}
+
+	&__bar-col:hover &__chart-tooltip--bar {
+		display: flex;
+	}
+
+	&__chart-tooltip-label {
+		color: wp-colors.$gray-300;
+	}
+
+	// One row per series in a multi-line tooltip: swatch + name + value.
+	&__chart-tooltip-row {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	&__chart-tooltip-swatch {
+		width: 8px;
+		height: 8px;
+		border-radius: 2px;
+		background: var( --series-color );
+		flex-shrink: 0;
+	}
+
+	&__chart-tooltip-name {
+		color: wp-colors.$gray-300;
+	}
+
+	&__chart-tooltip-value {
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		margin-left: auto;
+	}
+
+	// Legend below a multi-series line chart.
+	&__line-legend {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 16px;
+		margin-top: 8px;
+		font-size: 12px;
+		color: wp-colors.$gray-700;
+	}
+
+	&__line-legend-item {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	// Connect banner (tab-level OAuth error).
+	&__connect-banner {
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 4px;
+		padding: 48px 24px;
+		text-align: center;
+		background: wp-colors.$white;
+
+		&-text {
+			font-size: 15px;
+			color: wp-colors.$gray-800;
+			margin: 0 0 16px;
+		}
+
+		&-cta {
+			font-weight: 600;
+		}
+	}
+}
+
+// Inter-section spacing for the GA4 tabs — matches Gates' tab wrapper so the
+// section headers get consistent breathing room above each card row instead of
+// butting against the previous one (NPPD-1649 fix #2).
+.newspack-insights__audience-tab,
+.newspack-insights__engagement-tab {
+	display: flex;
+	flex-direction: column;
+	gap: 32px;
+}
+
+// Per-section grid column modifiers. Compound selectors (0,2,0) so they win
+// over the single-class base rules regardless of stylesheet load order. Max 4
+// cards per row anywhere (NPPD-1649 fix #1).
+.newspack-insights__metric-grid.newspack-insights__metric-grid--cols-4 {
+	grid-template-columns: repeat( 4, minmax( 0, 1fr ) );
+
+	@media ( max-width: 1100px ) {
+		grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
+	}
+
+	@media ( max-width: 600px ) {
+		grid-template-columns: 1fr;
+	}
+}
+
+.newspack-insights__metric-grid.newspack-insights__metric-grid--cols-3 {
+	grid-template-columns: repeat( 3, minmax( 0, 1fr ) );
+
+	@media ( max-width: 782px ) {
+		grid-template-columns: 1fr;
+	}
+}
+
+.newspack-insights__metric-grid.newspack-insights__metric-grid--cols-2 {
+	grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
+
+	@media ( max-width: 782px ) {
+		grid-template-columns: 1fr;
+	}
+}
+
+.newspack-insights__chart-grid.newspack-insights__chart-grid--cols-2 {
+	grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
+
+	@media ( max-width: 782px ) {
+		grid-template-columns: 1fr;
+	}
+}
+
+.newspack-insights__chart-grid.newspack-insights__chart-grid--cols-3 {
+	grid-template-columns: repeat( 3, minmax( 0, 1fr ) );
+
+	@media ( max-width: 1100px ) {
+		grid-template-columns: 1fr;
+	}
+}
+
+.newspack-insights__chart-grid.newspack-insights__chart-grid--cols-4 {
+	grid-template-columns: repeat( 4, minmax( 0, 1fr ) );
+
+	@media ( max-width: 1100px ) {
+		grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
+	}
+
+	@media ( max-width: 600px ) {
+		grid-template-columns: 1fr;
+	}
+}
+
+.newspack-insights__table-grid.newspack-insights__table-grid--cols-2 {
+	grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
+
+	@media ( max-width: 782px ) {
+		grid-template-columns: 1fr;
+	}
+}
+
+// Traffic sources: channel-breakdown pie (~40%) reads as a unit with the
+// campaigns table (~60%) — NPPD-1649 fix #3.
+.newspack-insights__traffic-grid {
+	display: grid;
+	// Pie card ~35% (stacked, narrower-and-taller), campaigns table ~65%.
+	grid-template-columns: minmax( 0, 35fr ) minmax( 0, 65fr );
+	gap: 24px;
+	align-items: stretch;
+
+	@media ( max-width: 782px ) {
+		grid-template-columns: 1fr;
+	}
+}

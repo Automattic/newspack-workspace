@@ -1,0 +1,431 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+@use "~newspack-components/colors/colors.module" as np-colors;
+
+/* stylelint-disable-next-line no-invalid-position-at-import-rule */
+@import "@wordpress/dataviews/build-style/style.css";
+
+body.newspack-newsletters-admin-screen {
+	background: wp-colors.$white;
+
+	#wpcontent,
+	#wpbody-content {
+		background: wp-colors.$white;
+	}
+
+	// Cancel WP's 20px gutter and the admin-header's matching -20px offset
+	// so the React surface starts flush with the sidebar.
+	#wpcontent {
+		padding-left: 0;
+	}
+	#newspack-wizards-admin-header,
+	.newspack-wizards-admin-header {
+		margin-left: 0;
+	}
+
+	.notice-info {
+		box-shadow: 0 0 0 1px wp-colors.$gray-300;
+	}
+
+	// Pin the SectionHeader pageHeader icon to Newspack navy regardless of admin colour scheme.
+	.newspack-section-header.newspack-section-header--page-header .newspack-section-header__icon {
+		background-color: np-colors.$primary-000;
+
+		svg {
+			fill: np-colors.$primary-600;
+		}
+	}
+}
+
+// Bundled mode: tint WP component primaries to Newspack navy so the React
+// surface matches newspack-plugin's wizard chrome. Standalone defers to the
+// user's WP admin colour scheme.
+body.newspack-newsletters-admin-screen--bundled {
+	--wp-admin-theme-color: #{np-colors.$primary-600};
+	--wp-admin-theme-color--rgb: #{np-colors.$primary-600--rgb};
+	--wp-admin-theme-color-darker-10: #{np-colors.$primary-700};
+	--wp-admin-theme-color-darker-10--rgb: #{np-colors.$primary-700--rgb};
+	--wp-admin-theme-color-darker-20: #{np-colors.$primary-800};
+	--wp-admin-theme-color-darker-20--rgb: #{np-colors.$primary-800--rgb};
+	--wp-admin-theme-color-lighter-10: #{np-colors.$primary-000};
+	--wp-admin-theme-color-lighter-10--rgb: #{np-colors.$primary-000--rgb};
+
+	#newspack-wizards-admin-header .newspack-wizard__header {
+		align-items: center;
+		display: flex;
+
+		.newspack-wizard__header__inner {
+			flex: 1 1 100%;
+		}
+
+		.newspack-wizard__header__actions {
+			align-items: center;
+			display: flex;
+			flex: 1 1 auto;
+			gap: wp-vars.$grid-unit-10;
+			justify-content: flex-end;
+			padding: 0 wp-vars.$grid-unit-30 0 0;
+		}
+	}
+}
+
+.newspack-newsletters-admin-mount {
+	margin-top: wp-vars.$grid-unit-30;
+}
+
+body.newspack-newsletters-admin-screen--bundled .newspack-newsletters-admin-mount {
+	margin-top: wp-vars.$grid-unit-60;
+}
+
+.newspack-newsletters-admin {
+	background: wp-colors.$white;
+	padding-bottom: wp-vars.$grid-unit-40;
+	position: relative;
+
+	&:has(.newspack-newsletters-admin__empty-state) .newspack-newsletters-admin__header,
+	&:has(.newspack-newsletters-admin__loading) .newspack-newsletters-admin__header {
+		display: none;
+	}
+
+	// Mirror newspack-plugin's `--newspack-wizard-section-width: 1006px`
+	// constraint when an empty state or loading state is rendered, so the
+	// Grid centres against a predictable container width like the wizard's
+	// `.newspack-wizard__sections` does.
+	&:has(.newspack-newsletters-admin__empty-state) .newspack-newsletters-admin__main,
+	&:has(.newspack-newsletters-admin__loading) .newspack-newsletters-admin__main {
+		margin-left: auto;
+		margin-right: auto;
+		max-width: 1006px;
+	}
+
+	.components-base-control__help a {
+		color: var(--wp-components-color-accent, var(--wp-admin-theme-color, #3858e9));
+
+		&:hover {
+			color: var(--wp-admin-theme-color-darker-20);
+		}
+	}
+
+	&__header {
+		align-items: center;
+		display: flex;
+		gap: wp-vars.$grid-unit-30;
+		justify-content: space-between;
+		margin-bottom: wp-vars.$grid-unit-30;
+		padding: 0 wp-vars.$grid-unit-30;
+	}
+
+	&__title {
+		font-size: 23px;
+		font-weight: 400;
+		line-height: 1.3;
+		margin: 0;
+	}
+
+	&__header-actions {
+		display: flex;
+		gap: wp-vars.$grid-unit-10;
+	}
+
+	&__main {
+		max-width: none;
+	}
+
+	.dataviews-wrapper {
+		margin-top: -#{wp-vars.$grid-unit-20};
+
+		// DataViews wraps controls in `BaseControl` without
+		// `__nextHasNoMarginBottom`, leaving a 16px margin that pushes flex
+		// rows off-baseline (search vs Add-filter, Select-all vs count).
+		.components-base-control {
+			margin-bottom: 0;
+		}
+
+		// Pagination row's flex track is ~24px; the select's default
+		// line-height overflows it and the text floats below centre.
+		.dataviews-pagination__page-select .components-select-control__input {
+			line-height: 1;
+		}
+	}
+
+	&__placeholder {
+		background: wp-colors.$white;
+		border: 1px solid wp-colors.$gray-300;
+		border-radius: wp-vars.$grid-unit-05;
+		padding: wp-vars.$grid-unit-30;
+	}
+
+	&__loading {
+		align-items: center;
+		display: flex;
+		justify-content: center;
+		min-height: 200px;
+	}
+
+	// Viewport-centred; flex+`width: auto` overrides SnackbarList's
+	// default `width: 100%` so the chip centres instead of left-pinning.
+	&__notices {
+		align-items: center;
+		bottom: wp-vars.$grid-unit-15;
+		display: flex;
+		flex-direction: column;
+		gap: wp-vars.$grid-unit-10;
+		left: 50%;
+		position: fixed;
+		transform: translateX(-50%);
+		width: auto;
+		z-index: 100000;
+
+		> * {
+			width: auto;
+		}
+	}
+}
+
+.newspack-newsletters-settings {
+	margin: 0 auto;
+	max-width: calc(#{wp-vars.$grid-unit-10} * 79);
+	padding: 0 wp-vars.$grid-unit-30;
+
+	h2 {
+		margin: 0;
+	}
+
+	&__list-row {
+		// Match the form-toggle column so the per-row Edit link aligns with the toggle's label.
+		--row-input-offset: #{wp-vars.$grid-unit-50};
+
+		.components-toggle-control .components-h-stack {
+			align-items: flex-start;
+		}
+
+		.components-button.is-link:first-child {
+			margin-inline-start: var(--row-input-offset);
+		}
+	}
+
+	&__list-description {
+		display: block;
+		font-weight: normal;
+		margin-top: wp-vars.$grid-unit-10;
+	}
+}
+
+// Suppress DataViews' `::after` hairline on layout media tiles — our
+// preview wrapper already draws its own border, the two would double up.
+.dataviews-view-grid .dataviews-view-grid__media:has(.newspack-newsletters-layouts-list__preview)::after {
+	box-shadow: none;
+}
+
+// Side-mounted Quick Edit panel — mirrors Core's
+// `dataviews-action-modal__quick-edit` pattern in the Site Editor's
+// Pages route: overlay fade-in, frame slides in from the right, sticky
+// footer with 50/50 Cancel / Save buttons.
+@keyframes newspack-newsletters-quick-edit-fade-in {
+	0% { opacity: 0; }
+	100% { opacity: 1; }
+}
+
+@keyframes newspack-newsletters-quick-edit-slide-in-right {
+	0% { transform: translateX(100%); }
+	100% { transform: translateX(0); }
+}
+
+@keyframes newspack-newsletters-quick-edit-slide-out-right {
+	0% { transform: translateX(0); }
+	100% { transform: translateX(100%); }
+}
+
+.newspack-newsletters-quick-edit-modal__overlay {
+	align-items: stretch;
+	animation: 0.08s linear forwards newspack-newsletters-quick-edit-fade-in;
+	justify-content: flex-end;
+	padding: 0;
+}
+
+.components-modal__frame.newspack-newsletters-quick-edit-modal {
+	animation: 0.2s ease-out forwards newspack-newsletters-quick-edit-slide-in-right;
+	border-radius: 0;
+	box-shadow: -1px 0 16px rgb(0 0 0 / 8%);
+	height: 100vh;
+	margin: 0;
+	max-height: 100vh;
+	max-width: 100vw;
+	width: 350px;
+
+	@media (max-width: 600px) {
+		width: 100vw;
+	}
+
+	.components-modal__content {
+		display: flex;
+		flex-direction: column;
+		padding: 0;
+	}
+
+	.components-modal__children-container {
+		display: flex;
+		flex: 1 1 auto;
+		flex-direction: column;
+		min-height: 0;
+	}
+}
+
+.newspack-newsletters-quick-edit-modal__header {
+	flex: 0 0 auto;
+	padding: wp-vars.$grid-unit-30 wp-vars.$grid-unit-30 0;
+}
+
+.newspack-newsletters-quick-edit-modal__icon {
+	fill: currentcolor;
+	flex-shrink: 0;
+}
+
+.newspack-newsletters-quick-edit-modal__title {
+	flex: 1 1 auto;
+	font-size: inherit;
+	font-weight: 500;
+	line-height: inherit;
+	margin: 0;
+	min-width: 0;
+}
+
+.newspack-newsletters-quick-edit-modal__close {
+	flex-shrink: 0;
+}
+
+.newspack-newsletters-quick-edit-modal__form {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.newspack-newsletters-quick-edit-modal__content {
+	flex: 1 1 auto;
+	overflow-y: auto;
+	padding: wp-vars.$grid-unit-30;
+}
+
+.newspack-newsletters-quick-edit-modal__footer {
+	background: wp-colors.$white;
+	bottom: 0;
+	flex: 0 0 auto;
+	margin: 0;
+	padding: wp-vars.$grid-unit-20 wp-vars.$grid-unit-30;
+	position: sticky;
+	z-index: 1;
+
+	.components-button {
+		flex: 1;
+		justify-content: center;
+	}
+}
+
+// Mirror the open slide-in with a slide-out on close. Higher specificity
+// than @wp/components' default disappear-animation so our keyframes win
+// the cascade. Overlay animation suppressed because applying opacity to
+// the overlay propagates to the sliding frame and turns the motion into
+// a fade.
+.components-modal__screen-overlay.newspack-newsletters-quick-edit-modal__overlay.is-animating-out {
+	animation: none;
+}
+
+.components-modal__screen-overlay.newspack-newsletters-quick-edit-modal__overlay.is-animating-out .components-modal__frame {
+	animation: 0.2s ease-in forwards newspack-newsletters-quick-edit-slide-out-right;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.newspack-newsletters-quick-edit-modal__overlay,
+	.components-modal__frame.newspack-newsletters-quick-edit-modal,
+	.components-modal__screen-overlay.newspack-newsletters-quick-edit-modal__overlay.is-animating-out .components-modal__frame {
+		animation: none;
+	}
+}
+
+.newspack-newsletters-list {
+	&__author,
+	&__status,
+	&__visibility {
+		align-items: center;
+		display: inline-flex;
+		gap: wp-vars.$grid-unit-10;
+	}
+
+	&__author-icon,
+	&__status-icon,
+	&__visibility-icon {
+		fill: currentcolor;
+		flex-shrink: 0;
+	}
+
+	&__author-avatar {
+		align-items: center;
+		display: inline-flex;
+		flex-shrink: 0;
+		height: 24px;
+		justify-content: center;
+		width: 24px;
+
+		img {
+			border-radius: 50%;
+			display: block;
+		}
+	}
+}
+
+// WP icons have a 24px viewBox with 4px padding — negative margin pulls neighbours in to the visible 16px footprint without changing the icon's draw.
+.dataviews-view-table {
+	.newspack-newsletters-list__author-icon,
+	.newspack-newsletters-list__status-icon,
+	.newspack-newsletters-list__visibility-icon {
+		margin: -4px;
+	}
+
+	.newspack-newsletters-list__author-avatar {
+		height: 16px;
+		width: 16px;
+	}
+}
+
+.newspack-newsletters-layouts-list {
+	&__preview {
+		aspect-ratio: 1;
+		background: wp-colors.$white;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: wp-vars.$grid-unit-05;
+		box-sizing: border-box;
+		overflow: hidden;
+		position: relative;
+
+		// Admin pages don't enqueue `wp-block-editor` styles; inline the
+		// minimum BlockPreview rules so the scaled iframe anchors top-left.
+		.block-editor-block-preview__content {
+			left: 0;
+			margin: 0;
+			min-height: auto;
+			overflow: visible;
+			top: 0;
+			transform-origin: top left;
+			width: 100%;
+		}
+
+		.block-editor-iframe__container {
+			height: 100%;
+			width: 100%;
+		}
+
+		.block-editor-iframe__scale-container {
+			height: 100%;
+		}
+
+		&--empty {
+			align-items: center;
+			background: wp-colors.$gray-100;
+			color: wp-colors.$gray-700;
+			display: flex;
+			justify-content: center;
+		}
+	}
+
+}

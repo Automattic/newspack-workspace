@@ -16,6 +16,13 @@ name: Sync legacy repos
 # that merged on the now-frozen legacy trunks (new legacy PRs are blocked, but
 # already-open ones still merge upstream and must keep flowing in).
 #
+# Before admin-merging, the sync runs bin/migration/detect-sync-collisions.sh to
+# catch silent bad-merges (files blended from both sides into something matching
+# neither -- a dropped fix or orphaned code, with no conflict marker). It writes
+# a job summary every run; when a non-generated blend is present it HOLDS the
+# auto-merge (leaving the PR open) and pings Slack for review, since such a blend
+# can pass CI and would otherwise land unseen.
+#
 # The same script runs locally — DRY_RUN=1 bin/migration/sync-legacy.sh from
 # any worktree skips git push and gh pr create.
 #
@@ -87,6 +94,13 @@ jobs:
           # only newspack-story-budget). The default GITHUB_TOKEN is scoped
           # to this repo and can't read other private Automattic repos.
           LEGACY_SYNC_GH_TOKEN: ${{ secrets.LEGACY_SYNC_GH_TOKEN }}
+          # Slack creds for the silent-blend gate (a8c workspace), reused from
+          # the release notifier. When the integrated merge blends monorepo and
+          # legacy edits into a result matching neither side, the sync holds the
+          # auto-merge and pings here for review. Unset => the gate's ping no-ops
+          # (e.g. forks), never failing the sync.
+          SLACK_AUTH_TOKEN: ${{ secrets.SLACK_AUTH_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
         run: ../scripts-src/bin/migration/sync-legacy.sh
       - name: Upload sync logs on failure
         if: failure()

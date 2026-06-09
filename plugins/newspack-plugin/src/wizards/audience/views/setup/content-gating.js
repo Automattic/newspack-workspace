@@ -90,15 +90,29 @@ export default withWizardScreen( ( { wizardApiFetch } ) => {
 					togglePosition="trailing"
 				/>
 			) }
-			{ config.has_memberships && (
+			<ActionCard
+				title={ __( 'Display memberships on the subscriptions tab', 'newspack-plugin' ) }
+				description={ __(
+					"Display memberships that don't have active subscriptions on the My Account Subscriptions tab, so readers can see information like expiration dates.",
+					'newspack-plugin'
+				) }
+				toggleOnChange={ value => updateConfig( { show_on_subscription_tab: value } ) }
+				toggleChecked={ config.show_on_subscription_tab }
+				togglePosition="trailing"
+			/>
+			{ config?.has_newsletters && (
 				<ActionCard
-					title={ __( 'Display memberships on the subscriptions tab', 'newspack-plugin' ) }
+					title={ __( 'Bypass restrictions for newsletter links', 'newspack-plugin' ) }
 					description={ __(
-						"Display memberships that don't have active subscriptions on the My Account Subscriptions tab, so readers can see information like expiration dates.",
+						'Inbound traffic from newsletters sent via Newspack Newsletters in the past 30 days can bypass content restrictions for one hour.',
 						'newspack-plugin'
 					) }
-					toggleOnChange={ value => updateConfig( { show_on_subscription_tab: value } ) }
-					toggleChecked={ config.show_on_subscription_tab }
+					toggleOnChange={ value =>
+						updateConfig( {
+							newsletter_link_bypass_enabled: value,
+						} )
+					}
+					toggleChecked={ config.newsletter_link_bypass_enabled }
 					togglePosition="trailing"
 				/>
 			) }

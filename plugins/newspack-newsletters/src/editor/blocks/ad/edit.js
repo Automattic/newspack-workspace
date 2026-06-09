@@ -8,8 +8,6 @@ import { useState, useEffect, Fragment } from '@wordpress/element';
 import { SelectControl, PanelBody, Spinner, SVG } from '@wordpress/components';
 import { useBlockProps, InspectorControls } from '@wordpress/block-editor';
 
-import { NEWSLETTER_AD_CPT_SLUG } from '../../../utils/consts';
-
 import './editor.scss';
 
 export default function SubscribeEdit( { setAttributes, attributes: { adId } } ) {
@@ -32,7 +30,7 @@ export default function SubscribeEdit( { setAttributes, attributes: { adId } } )
 	useEffect( () => {
 		setInFlight( true );
 		apiFetch( {
-			path: `/wp/v2/${ NEWSLETTER_AD_CPT_SLUG }/config/?postId=${ postId }`,
+			path: `/newspack-newsletters/v1/ads/config?postId=${ postId }`,
 		} )
 			.then( response => {
 				setAdsConfig( response );

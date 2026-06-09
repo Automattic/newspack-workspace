@@ -131,6 +131,48 @@ class Newsletters_Tracking_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that the npnl param is forwarded through the click proxy redirect.
+	 */
+	public function test_handle_click_propagates_npnl_param() {
+		$content = "<!-- wp:paragraph -->\n<p><a href=\"https://google.com/article/\">Link</a><\/p>\n<!-- \/wp:paragraph -->";
+		$post_id = $this->factory->post->create(
+			[
+				'post_type'    => Ads::CPT,
+				'post_title'   => 'Ad with npnl test link.',
+				'post_content' => $content,
+			]
+		);
+		update_post_meta( $post_id, 'newspack_email_html', $content );
+
+		// Capture the final redirect URL via the tracking action. Store the
+		// callback in a variable so we can remove_action() it precisely at
+		// the end of the test and avoid leaking into subsequent tests.
+		$captured_url     = null;
+		$capture_callback = function( $newsletter_id, $email_address, $url ) use ( &$captured_url ) {
+			$captured_url = $url;
+		};
+		add_action( 'newspack_newsletters_tracking_click', $capture_callback, 10, 3 );
+
+		$_GET['np_newsletters_click']              = 1;
+		$_GET['id']                                = $post_id;
+		$_GET['em']                                = 'reader@example.com';
+		$_GET['url']                               = 'https://google.com/article/';
+		$_GET[ Click::FORWARDED_NPNL_PARAM ]       = 'fake-token-string';
+		Click::handle_click( false );
+
+		// Verify the npnl param was appended to the destination URL.
+		$this->assertNotNull( $captured_url, 'Tracking action should have fired.' );
+		$parsed = \wp_parse_url( $captured_url );
+		\wp_parse_str( $parsed['query'] ?? '', $query_args );
+		$this->assertArrayHasKey( Click::FORWARDED_NPNL_PARAM, $query_args, 'npnl param should be present in the proxied URL.' );
+		$this->assertEquals( 'fake-token-string', $query_args[ Click::FORWARDED_NPNL_PARAM ] );
+
+		// Clean up.
+		remove_action( 'newspack_newsletters_tracking_click', $capture_callback, 10 );
+		unset( $_GET['np_newsletters_click'], $_GET['id'], $_GET['em'], $_GET['url'], $_GET[ Click::FORWARDED_NPNL_PARAM ] );
+	}
+
+	/**
 	 * Test click tracking with a link that was not included in the newsletter.
 	 */
 	public function test_tracking_click_not_in_newsletter() {

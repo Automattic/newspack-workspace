@@ -1,0 +1,20 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack-ads/ad-slot",
+	"title": "Ad Slot",
+	"description": "Render an ad in a wizard-managed global placement (above header, sticky footer, etc.).",
+	"text-domain": "newspack-ads",
+	"category": "newspack",
+	"keywords": [ "ad", "slot", "placement", "ads" ],
+	"attributes": {
+		"placement": {
+			"type": "string",
+			"default": ""
+		}
+	},
+	"supports": {
+		"html": false,
+		"visibility": false
+	}
+}
