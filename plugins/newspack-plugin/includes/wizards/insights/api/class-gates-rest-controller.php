@@ -144,10 +144,11 @@ class Gates_REST_Controller extends WP_REST_Controller {
 	/**
 	 * Assemble the top-level response.
 	 *
-	 * `tab_pending` is true in Phase 1 (placeholder phase). React
-	 * uses it to render the top-of-tab banner; remove the flag (or
-	 * have it return false based on real data state) when Phase 2
-	 * wires up BigQuery.
+	 * `tab_pending` is computed from the current window: it is true only
+	 * when every metric in the window fell back to its placeholder/pending
+	 * payload. React uses it to render the top-of-tab banner, so the
+	 * banner disappears as soon as any metric returns real data and
+	 * reappears for no-data / misconfigured windows.
 	 *
 	 * @param Gates_Metric           $metric        Orchestrator.
 	 * @param DateTimeImmutable      $start         Current window start.
@@ -163,15 +164,39 @@ class Gates_REST_Controller extends WP_REST_Controller {
 		?DateTimeImmutable $compare_start,
 		?DateTimeImmutable $compare_end
 	): array {
+		$current  = $this->build_window( $metric, $start, $end );
 		$response = [
-			'tab_pending' => true,
-			'current'     => $this->build_window( $metric, $start, $end ),
+			'tab_pending' => self::is_window_all_pending( $current ),
+			'current'     => $current,
 			'previous'    => null,
 		];
 		if ( $compare_start && $compare_end ) {
 			$response['previous'] = $this->build_window( $metric, $compare_start, $compare_end );
 		}
 		return $response;
+	}
+
+	/**
+	 * Whether every scorecard/viz in a window payload is pending.
+	 *
+	 * Returns `true` as long as no metric reports `pending: false`. Treats
+	 * unrecognized payload shapes (no `pending` key, scalar values, etc.) as
+	 * pending — i.e. the banner stays up when in doubt. The `window` key is
+	 * date metadata, not a metric, so it's skipped.
+	 *
+	 * @param array $window The shape returned by `build_window()`.
+	 * @return bool
+	 */
+	private static function is_window_all_pending( array $window ): bool {
+		foreach ( $window as $key => $value ) {
+			if ( 'window' === $key ) {
+				continue;
+			}
+			if ( is_array( $value ) && isset( $value['pending'] ) && false === $value['pending'] ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
