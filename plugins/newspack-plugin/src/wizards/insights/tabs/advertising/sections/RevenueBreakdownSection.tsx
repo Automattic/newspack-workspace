@@ -1,11 +1,11 @@
 /**
  * Advertising › Top performers (NPPD-1618, Section 3).
  *
- * Two rows:
- *   Row 1 — Top Ad Units (left) and Top Advertisers (right) tables, equal width.
- *           Top Advertisers collapses to 5 rows with a "See more" toggle.
- *   Row 2 — the Performance by Device pie alone, constrained to ~30% width and
- *           left-aligned (a narrower related element beneath the tables).
+ * Top Ad Units (left) and Top Advertisers (right) tables, side by side at equal
+ * width. Top Advertisers collapses to 5 rows with a "See more" toggle.
+ *
+ * (`performance_by_device` is still returned by the orchestrator but has no UI
+ * consumer here — it may be surfaced differently later.)
  */
 
 /**
@@ -17,10 +17,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { InsightsWindow } from '../../../api/advertising';
-import ChartCard from '../../components/ChartCard';
 import MetricTable from '../../components/MetricTable';
-import { toSeries } from '../../components/metrics';
-import PieChart from '../../audience/viz/PieChart';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -33,7 +30,6 @@ const RevenueBreakdownSection = ( { current }: SectionProps ) => (
 			{ __( 'Top performers', 'newspack-plugin' ) }
 		</h2>
 		<p className="newspack-insights__section-caption">{ __( 'Where your ad dollars are coming from.', 'newspack-plugin' ) }</p>
-		{ /* Row 1: tables side by side. */ }
 		<div className="newspack-insights__table-grid newspack-insights__table-grid--cols-2">
 			<div>
 				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Ad Units', 'newspack-plugin' ) }</h3>
@@ -62,16 +58,6 @@ const RevenueBreakdownSection = ( { current }: SectionProps ) => (
 					] }
 				/>
 			</div>
-		</div>
-		{ /* Row 2: device pie alone, ~30% width, left-aligned. */ }
-		<div className="newspack-insights__advertising-device-pie">
-			<ChartCard
-				title={ __( 'Performance by Device', 'newspack-plugin' ) }
-				caption={ __( 'Revenue by device category', 'newspack-plugin' ) }
-				payload={ current.performance_by_device }
-			>
-				<PieChart segments={ toSeries( current.performance_by_device, 'device', 'revenue' ) } valueFormat="currency" />
-			</ChartCard>
 		</div>
 	</section>
 );

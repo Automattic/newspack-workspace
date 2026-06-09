@@ -72,16 +72,13 @@ describe( 'Advertising sections', () => {
 		expect( screen.getByText( 'Not available for this site.' ) ).toBeInTheDocument();
 	} );
 
-	it( 'RevenueBreakdownSection renders both tables and the device pie (no revenue-mix card)', () => {
+	it( 'RevenueBreakdownSection renders the two tables only (no device pie)', () => {
 		render( <RevenueBreakdownSection current={ metrics } previous={ null } /> );
-		// Row 1: tables.
 		expect( screen.getByText( 'Homepage Leaderboard' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Acme Co' ) ).toBeInTheDocument();
-		// Row 2: device pie only — revenue mix now lives in Reach & revenue.
-		expect( screen.getByText( 'Smartphone' ) ).toBeInTheDocument();
-		expect( screen.queryByText( 'Revenue Mix' ) ).not.toBeInTheDocument();
-		// Legend value is currency-formatted (revenue-by-device pie).
-		expect( screen.getByText( /\$2,400/ ) ).toBeInTheDocument();
+		// Performance by Device pie is no longer rendered on Tab 8.
+		expect( screen.queryByText( 'Performance by Device' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Smartphone' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'Top Advertisers collapses to 5 rows behind a See more toggle', () => {
