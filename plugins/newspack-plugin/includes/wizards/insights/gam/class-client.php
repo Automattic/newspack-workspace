@@ -267,6 +267,7 @@ class Client {
 		$report_query->setDateRangeType( $query->date_range_type );
 
 		if ( 'CUSTOM_DATE' === $query->date_range_type ) {
+			self::assert_valid_custom_dates( $query );
 			$report_query->setStartDate( self::to_gam_date( $query->start_date ) );
 			$report_query->setEndDate( self::to_gam_date( $query->end_date ) );
 		}
@@ -290,6 +291,30 @@ class Client {
 		$options->setExportFormat( \Google\AdsApi\AdManager\v202602\ExportFormat::CSV_DUMP );
 		$options->setUseGzipCompression( true );
 		return $options;
+	}
+
+	/**
+	 * Validate that a CUSTOM_DATE query carries well-formed start/end dates.
+	 * Guards against the default empty-string dates producing a SOAP
+	 * Date(0, 0, 0) and a hard-to-diagnose API error downstream.
+	 *
+	 * @param Report_Query $query The query.
+	 * @return void
+	 *
+	 * @throws \RuntimeException If either date is missing or not YYYY-MM-DD.
+	 */
+	protected static function assert_valid_custom_dates( Report_Query $query ) {
+		$dates = [
+			'start_date' => $query->start_date,
+			'end_date'   => $query->end_date,
+		];
+		foreach ( $dates as $label => $value ) {
+			if ( ! is_string( $value ) || 1 !== preg_match( '/^\d{4}-\d{2}-\d{2}$/', $value ) ) {
+				throw new \RuntimeException(
+					esc_html( sprintf( 'GAM report %s must be a YYYY-MM-DD date for a CUSTOM_DATE range; got "%s".', $label, (string) $value ) )
+				);
+			}
+		}
 	}
 
 	/**

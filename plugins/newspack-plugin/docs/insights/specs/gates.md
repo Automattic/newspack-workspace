@@ -42,11 +42,11 @@ Sections render in this order. Each has a header, section caption, and content. 
 
 ## Top-of-tab banner (Phase 1 only)
 
-A single dismissable banner appears above Section 1 during the placeholder phase. Copy:
+A single dismissible banner appears above Section 1 during the placeholder phase. Copy:
 
 > **This tab is live in preview mode.** Real-time metrics will populate once BigQuery integration is complete. The structure, sections, and visualizations are final.
 
-Style: light blue background, info icon, dismissable via X but reappears on page reload (don't persist dismissal).
+Style: light blue background, info icon, dismissible via X but reappears on page reload (don't persist dismissal).
 
 Remove this banner entirely when Phase 2 lands.
 
@@ -223,7 +223,7 @@ Remove this banner entirely when Phase 2 lands.
 
 ## About Direct vs Influenced
 
-Add as a small dismissable info callout immediately below the Phase 1 preview banner, above the Section 1 header. The Direct vs Influenced framing is foundational to Sections 2 and 3, so publishers should encounter it before reading any section that uses the terms. One-time display per session.
+Add as a small dismissible info callout immediately below the Phase 1 preview banner, above the Section 1 header. The Direct vs Influenced framing is foundational to Sections 2 and 3, so publishers should encounter it before reading any section that uses the terms. One-time display per session.
 
 > **About Direct vs Influenced conversion**
 > 

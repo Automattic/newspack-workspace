@@ -4,7 +4,7 @@ Newspack Insights is a native data hub being built into newspack-plugin that rep
 
 ## Status
 
-These docs currently live in `/Users/katie/Sites/insights-docs/` as a scratch location pending engineering decision on their permanent home in the monorepo — likely under `newspack-plugin/docs/insights/` or a dedicated docs repo. Treat the path as ephemeral; expect a move once engineering weighs in.
+These docs live in the monorepo at `plugins/newspack-plugin/docs/insights/` (migrated from a local scratch repo in NPPD-1615). They are planning/spec documentation for the Insights feature — not end-user documentation.
 
 ## Contents
 

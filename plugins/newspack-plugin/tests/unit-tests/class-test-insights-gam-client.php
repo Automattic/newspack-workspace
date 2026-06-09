@@ -76,6 +76,16 @@ class Insights_GAM_Test_Client extends Client {
 	}
 
 	/**
+	 * Expose assert_valid_custom_dates().
+	 *
+	 * @param Report_Query $query The query.
+	 * @return void
+	 */
+	public static function expose_assert_valid_custom_dates( Report_Query $query ) {
+		parent::assert_valid_custom_dates( $query );
+	}
+
+	/**
 	 * Overridable seam: whether newspack-ads is active.
 	 *
 	 * @return bool
@@ -179,6 +189,51 @@ class Test_Insights_GAM_Client extends WP_UnitTestCase {
 		$this->assertTrue( Report_Job_Status::is_terminal( Report_Job_Status::COMPLETED ) );
 		$this->assertTrue( Report_Job_Status::is_terminal( Report_Job_Status::FAILED ) );
 		$this->assertFalse( Report_Job_Status::is_terminal( Report_Job_Status::IN_PROGRESS ) );
+	}
+
+	/**
+	 * CUSTOM_DATE validation accepts well-formed dates.
+	 */
+	public function test_custom_date_validation_accepts_valid_dates() {
+		Insights_GAM_Test_Client::expose_assert_valid_custom_dates(
+			new Report_Query(
+				[
+					'start_date' => '2026-01-01',
+					'end_date'   => '2026-01-31',
+				]
+			)
+		);
+		$this->assertTrue( true ); // Reached here without throwing.
+	}
+
+	/**
+	 * CUSTOM_DATE validation rejects empty or malformed dates.
+	 */
+	public function test_custom_date_validation_rejects_bad_dates() {
+		$bad = [
+			new Report_Query(), // Empty defaults.
+			new Report_Query(
+				[
+					'start_date' => '2026-1-1', // Not zero-padded.
+					'end_date'   => '2026-01-31',
+				]
+			),
+			new Report_Query(
+				[
+					'start_date' => '2026-01-01',
+					'end_date'   => '', // Missing end.
+				]
+			),
+		];
+		foreach ( $bad as $index => $query ) {
+			$threw = false;
+			try {
+				Insights_GAM_Test_Client::expose_assert_valid_custom_dates( $query );
+			} catch ( \RuntimeException $e ) {
+				$threw = true;
+			}
+			$this->assertTrue( $threw, "Expected query #{$index} to be rejected." );
+		}
 	}
 
 	/**

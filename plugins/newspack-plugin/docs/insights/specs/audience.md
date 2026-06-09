@@ -20,7 +20,7 @@ When the publisher has no usable GA4 connection, replace the tab body with a sin
 
 > **Connect Google Analytics to see this tab.** Audience metrics come from your site's Google Analytics. Connect it in Newspack → Connections, then reload.
 
-Style: light blue background, info icon. Not dismissable (there's nothing behind it). This is distinct from the per-card custom-dimension overlay below, which applies when the connection works but a specific dimension isn't registered.
+Style: light blue background, info icon. Not dismissible (there's nothing behind it). This is distinct from the per-card custom-dimension overlay below, which applies when the connection works but a specific dimension isn't registered.
 
 ## Per-card custom-dimension overlay (v1)
 
