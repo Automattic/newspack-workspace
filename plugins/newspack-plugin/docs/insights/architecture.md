@@ -88,6 +88,8 @@ Storage backend dispatch and multisite prefix handling are independent — a pub
 
 ## Caching strategy
 
+> **Updated 2026-06-09 — the custom-table design below was canceled (NPPD-1605).** It was scoped for the original architecture where publisher sites queried BigQuery directly. Under the NPPD-1630 (Manager BQ-proxy) direction it was retired in favor of caching the assembled JSON payload in **WP transients**. The shipped orchestrators cache per-window payloads in transients: Audience/Engagement (NPPD-1648) compute synchronously and cache; Advertising (NPPD-1663) caches and uses an Action Scheduler job to refresh out-of-band, since GAM reports are asynchronous (submit → poll → download). The original design is preserved below for reference.
+
 - **Custom table** `wp_newspack_insights_cache` with columns: `cache_key`, `query_hash`, `query_signature`, `tab`, `metric`, `payload JSON`, `computed_at`, `expires_at`, `last_accessed_at`. Rejected transients (wp_options bloat at scale, no observability).
 - **Action Scheduler pre-warm** — hourly job iterates registered metrics and refreshes the cache. newspack-plugin already depends on `woocommerce/action-scheduler` ^3.9, so no new infrastructure.
 - **Stale-while-revalidate** — admin UI reads only from cache. Served payload includes `computed_at` and a `stale` flag; if expired, an async refresh is fired and the stale payload is returned for the current request.
@@ -95,7 +97,7 @@ Storage backend dispatch and multisite prefix handling are independent — a pub
 - **Cost guardrail** — every query is dry-run first to estimate bytes; jobs over a configurable byte ceiling (default 10 GiB) are refused before execution. Audit log records `total_bytes_processed` for after-the-fact spend visibility.
 - **Expensive query refresh cadence** — cohort retention (Tab 3, Tab 7) and reader-author affinity (Tab 2) refresh weekly rather than hourly. The pre-warm job inspects each metric's `refresh_interval` annotation.
 
-See NPPD-1605 (cache table + read/write API + SWR logic) and NPPD-1606 (Action Scheduler pre-warm + cost guardrails) for implementation issues.
+NPPD-1605 (cache table + read/write API + SWR logic) was **canceled** — superseded by the NPPD-1630 proxy architecture; orchestrators now cache the assembled payload in WP transients. NPPD-1606 (Action Scheduler pre-warm + cost guardrails) tracked the BQ-proxy pre-warm side. The Advertising tab (NPPD-1663) does run an Action Scheduler refresh — but to populate a transient with async GAM report results, not the canceled custom table.
 
 ## Component approach
 

@@ -65,3 +65,30 @@ The fixtures live at:
 They return the same `{ current, previous }` shape the live REST controllers
 assemble, and compute window/series dates relative to "today" so they never go
 stale. Edit them to change what the UI sees during smoke tests.
+
+## Advertising (Tab 8) fixture & render-path toggles
+
+Tab 8 reads Google Ad Manager via the async SOAP ReportService, so its fixture
+lives at
+`plugins/newspack-plugin/includes/wizards/insights/fixtures/advertising-fixture.php`
+and is served by the Advertising REST controller when
+`NEWSPACK_INSIGHTS_FIXTURE_MODE` is on. Note the tab only registers when
+`NEWSPACK_INSIGHTS_ADVERTISING_ENABLED` is also defined and true.
+
+The fixture returns the live `get_all()` envelope shape (`is_tab_visible`,
+`is_report_ready`, `readiness_issues`, `metrics`, `data_as_of`,
+`has_estimated_data`, `estimated_window_start_date`, plus `compare` when
+comparison mode is on). All dates are computed at runtime.
+
+Exercise each render path with the `_fixture_state` query param on
+`/wp-json/newspack-insights/v1/advertising?start=…&end=…&_fixture_state=…`:
+
+- **`populated`** (default) — full scorecards (~2.4M impressions, $4,200
+  revenue, ~$1.75 eCPM, 87% fill, 64% viewability), 10 ad units, 8 advertisers,
+  5 countries, 3 device categories, and a 60/40 direct/programmatic split. Add
+  `compare_start`/`compare_end` to get the comparison payload (mixed +/- deltas).
+- **`not_ready`** — `is_report_ready: false` with both `oauth_scope_missing`
+  and `network_code_missing` in `readiness_issues`.
+- **`zero`** — a zero-impression window: scorecards read 0, tables are empty.
+- **`no_viewability`** — the viewability scorecard renders as an
+  `overlay: { type: 'data_unavailable' }` (publisher without Active View).

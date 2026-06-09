@@ -99,6 +99,30 @@ class Insights_Wizard extends Wizard {
 	}
 
 	/**
+	 * Whether the Advertising tab (Tab 8 / NPPD-1663) is enabled for this
+	 * environment.
+	 *
+	 * Independent from {@see self::is_enabled()} so the GAM-backed Advertising
+	 * orchestrator (its REST route and Action Scheduler refresh) only registers
+	 * where wanted, separately from the broader Insights rollout.
+	 *
+	 * @return bool True when Tab 8's data layer should be active.
+	 */
+	public static function is_advertising_enabled(): bool {
+		/**
+		 * Enables the Advertising tab (Tab 8) GAM orchestrator.
+		 *
+		 * @constant NEWSPACK_INSIGHTS_ADVERTISING_ENABLED
+		 * @type     bool
+		 * @default  Advertising tab disabled
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_INSIGHTS_ADVERTISING_ENABLED', true );
+		 */
+		return defined( 'NEWSPACK_INSIGHTS_ADVERTISING_ENABLED' ) && NEWSPACK_INSIGHTS_ADVERTISING_ENABLED;
+	}
+
+	/**
 	 * Constructor.
 	 *
 	 * Bails before parent registration when the feature flag is disabled,
