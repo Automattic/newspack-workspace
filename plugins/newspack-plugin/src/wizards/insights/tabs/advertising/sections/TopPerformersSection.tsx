@@ -3,9 +3,6 @@
  *
  * Top Ad Units (left) and Top Advertisers (right) tables, side by side at equal
  * width. Top Advertisers collapses to 5 rows with a "See more" toggle.
- *
- * (`performance_by_device` is still returned by the orchestrator but has no UI
- * consumer here — it may be surfaced differently later.)
  */
 
 /**
@@ -24,7 +21,7 @@ export interface SectionProps {
 	previous: InsightsWindow | null;
 }
 
-const RevenueBreakdownSection = ( { current }: SectionProps ) => (
+const TopPerformersSection = ( { current }: SectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-performers">
 		<h2 id="newspack-insights-advertising-top-performers" className="newspack-insights__section-heading">
 			{ __( 'Top performers', 'newspack-plugin' ) }
@@ -62,4 +59,4 @@ const RevenueBreakdownSection = ( { current }: SectionProps ) => (
 	</section>
 );
 
-export default RevenueBreakdownSection;
+export default TopPerformersSection;

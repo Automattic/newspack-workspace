@@ -15,7 +15,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
@@ -33,18 +33,32 @@ const FinishConnectingDiagnostic = ( { issues, heading }: FinishConnectingDiagno
 		<h2 className="newspack-insights__finish-connecting-heading">
 			{ heading || __( 'Finish connecting Google Ad Manager to see ad data', 'newspack-plugin' ) }
 		</h2>
-		<ul className="newspack-insights__finish-connecting-list">
-			{ issues.map( issue => (
-				<li key={ issue.code } className="newspack-insights__finish-connecting-item">
-					<span className="newspack-insights__finish-connecting-message">{ issue.message }</span>
-					{ issue.remediation_url && (
-						<a className="newspack-insights__finish-connecting-cta" href={ issue.remediation_url }>
-							{ __( 'Fix this', 'newspack-plugin' ) } &rarr;
-						</a>
-					) }
-				</li>
-			) ) }
-		</ul>
+		{ issues.length > 0 ? (
+			<ul className="newspack-insights__finish-connecting-list">
+				{ issues.map( issue => (
+					<li key={ issue.code } className="newspack-insights__finish-connecting-item">
+						<span className="newspack-insights__finish-connecting-message">{ issue.message }</span>
+						{ issue.remediation_url && (
+							<a
+								className="newspack-insights__finish-connecting-cta"
+								href={ issue.remediation_url }
+								aria-label={ sprintf(
+									/* translators: %s: the readiness issue being remediated. */
+									__( 'Fix: %s', 'newspack-plugin' ),
+									issue.message
+								) }
+							>
+								{ __( 'Fix this', 'newspack-plugin' ) } &rarr;
+							</a>
+						) }
+					</li>
+				) ) }
+			</ul>
+		) : (
+			<p className="newspack-insights__finish-connecting-message">
+				{ __( 'Finish connecting Google Ad Manager in Newspack settings to see ad data.', 'newspack-plugin' ) }
+			</p>
+		) }
 	</div>
 );
 

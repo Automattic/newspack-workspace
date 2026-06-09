@@ -47,21 +47,28 @@ const formatIsoDate = ( iso?: string | null ): string => {
 const DataLagIndicator = ( { dataAsOf, hasEstimatedData }: DataLagIndicatorProps ) => {
 	const asOf = formatIsoDate( dataAsOf );
 
-	if ( ! asOf ) {
+	// Nothing to say only when there's neither an as-of date nor an estimate
+	// warning. A window with estimated data but no as-of date still warns.
+	if ( ! asOf && ! hasEstimatedData ) {
 		return null;
 	}
 
-	const text = hasEstimatedData
-		? sprintf(
-				/* translators: %s: a date, e.g. "May 10, 2026". */
-				__( 'Data as of %s. Recent days are estimated and may shift until Google finalizes.', 'newspack-plugin' ),
-				asOf
-		  )
-		: sprintf(
-				/* translators: %s: a date, e.g. "May 10, 2026". */
-				__( 'Data as of %s.', 'newspack-plugin' ),
-				asOf
-		  );
+	let text: string;
+	if ( asOf && hasEstimatedData ) {
+		text = sprintf(
+			/* translators: %s: a date, e.g. "May 10, 2026". */
+			__( 'Data as of %s. Recent days are estimated and may shift until Google finalizes.', 'newspack-plugin' ),
+			asOf
+		);
+	} else if ( asOf ) {
+		text = sprintf(
+			/* translators: %s: a date, e.g. "May 10, 2026". */
+			__( 'Data as of %s.', 'newspack-plugin' ),
+			asOf
+		);
+	} else {
+		text = __( 'Recent days are estimated and may shift until Google finalizes.', 'newspack-plugin' );
+	}
 
 	return (
 		<InfoCallout heading={ __( 'About this data', 'newspack-plugin' ) } dismissible={ false }>

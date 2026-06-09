@@ -23,7 +23,7 @@ import DataLagIndicator from './components/DataLagIndicator';
 import FinishConnectingDiagnostic from './components/FinishConnectingDiagnostic';
 import ReachRevenueSection from './advertising/sections/ReachRevenueSection';
 import InventoryPerformanceSection from './advertising/sections/InventoryPerformanceSection';
-import RevenueBreakdownSection from './advertising/sections/RevenueBreakdownSection';
+import TopPerformersSection from './advertising/sections/TopPerformersSection';
 import './advertising/advertising.scss';
 
 export interface AdvertisingTabProps {
@@ -89,7 +89,7 @@ const AdvertisingTab = ( { range, previousRange }: AdvertisingTabProps ) => {
 			<DataLagIndicator dataAsOf={ current.data_as_of } hasEstimatedData={ current.has_estimated_data } />
 			<ReachRevenueSection current={ metrics } previous={ previous } />
 			<InventoryPerformanceSection current={ metrics } previous={ previous } />
-			<RevenueBreakdownSection current={ metrics } previous={ previous } />
+			<TopPerformersSection current={ metrics } previous={ previous } />
 		</div>
 	);
 };

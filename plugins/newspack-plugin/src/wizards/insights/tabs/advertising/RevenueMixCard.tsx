@@ -23,9 +23,15 @@ export interface RevenueMixCardProps {
 	payload?: MetricPayload;
 }
 
-/** Sum the `revenue` of every row whose `label` matches. */
+/** Normalize a row label for matching (trim + lowercase). */
+const normLabel = ( value: unknown ): string =>
+	String( value ?? '' )
+		.trim()
+		.toLowerCase();
+
+/** Sum the `revenue` of every row whose `label` matches (case/space-insensitive). */
 const sumByLabel = ( rows: MetricRow[], label: string ): number =>
-	rows.filter( row => String( row.label ) === label ).reduce( ( sum, row ) => sum + ( Number( row.revenue ) || 0 ), 0 );
+	rows.filter( row => normLabel( row.label ) === label ).reduce( ( sum, row ) => sum + ( Number( row.revenue ) || 0 ), 0 );
 
 const RevenueMixCard = ( { payload }: RevenueMixCardProps ) => {
 	if ( ! payload || payload.hidden_in_v1 ) {

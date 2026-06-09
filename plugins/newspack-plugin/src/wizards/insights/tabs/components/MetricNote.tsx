@@ -36,8 +36,9 @@ const MetricNote = ( { overlay, notConfigured }: MetricNoteProps ) => {
 	if ( overlay && overlay.type === 'data_unavailable' ) {
 		// Dimension-less overlay (e.g. GAM viewability without Active View enabled).
 		body = __( 'Not available for this site.', 'newspack-plugin' );
-	} else if ( overlay ) {
-		const param = overlay.dimensions?.[ 0 ] ?? '';
+	} else if ( overlay && overlay.dimensions && overlay.dimensions.length > 0 ) {
+		// Missing GA4 custom dimension — name the first missing param.
+		const param = overlay.dimensions[ 0 ];
 		body = (
 			<>
 				{ __( 'Custom dimension', 'newspack-plugin' ) } <code>{ param }</code> { __( 'not detected.', 'newspack-plugin' ) }{ ' ' }

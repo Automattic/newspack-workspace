@@ -29,7 +29,9 @@ const ChartCard = ( { title, subhead, caption, payload, children }: ChartCardPro
 	}
 
 	let body: React.ReactNode = children;
-	if ( payload.overlay ) {
+	// A degraded payload's overlay is an informational note over a still-valid
+	// chart, not a replacement — keep the chart (matches MetricTable's guard).
+	if ( payload.overlay && ! payload.degraded ) {
 		body = <MetricNote overlay={ payload.overlay } />;
 	} else if ( payload.error ) {
 		body = <MetricNote error />;

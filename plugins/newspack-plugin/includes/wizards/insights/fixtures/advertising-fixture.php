@@ -85,16 +85,6 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 					'computable' => false,
 					'type'       => 'table',
 				],
-				'performance_by_device'  => [
-					'rows'       => [],
-					'computable' => false,
-					'type'       => 'table',
-				],
-				'top_countries'          => [
-					'rows'       => [],
-					'computable' => false,
-					'type'       => 'table',
-				],
 			];
 		}
 
@@ -142,73 +132,6 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 				'revenue'     => $adv_rev,
 			];
 		}
-
-		$devices = [
-			[
-				'device' => 'Smartphone',
-				'share'  => 0.58,
-			],
-			[
-				'device' => 'Desktop',
-				'share'  => 0.34,
-			],
-			[
-				'device' => 'Tablet',
-				'share'  => 0.08,
-			],
-		];
-		$device_rows = array_map(
-			function ( $d ) use ( $impressions, $revenue, $coded ) {
-				$imp = (int) round( $impressions * $d['share'] );
-				$rev = round( $revenue * $d['share'], 2 );
-				$cod = (int) round( $coded * $d['share'] );
-				return [
-					'device'      => $d['device'],
-					'impressions' => $imp,
-					'revenue'     => $rev,
-					'ecpm'        => $cod > 0 ? round( ( $rev / $cod ) * 1000, 2 ) : 0.0,
-					'ctr'         => 0.003,
-				];
-			},
-			$devices
-		);
-
-		$countries = [
-			[
-				'country' => 'United States',
-				'share'   => 0.82,
-			],
-			[
-				'country' => 'Canada',
-				'share'   => 0.07,
-			],
-			[
-				'country' => 'United Kingdom',
-				'share'   => 0.05,
-			],
-			[
-				'country' => 'Mexico',
-				'share'   => 0.04,
-			],
-			[
-				'country' => 'Germany',
-				'share'   => 0.02,
-			],
-		];
-		$country_rows = array_map(
-			function ( $c ) use ( $impressions, $revenue, $coded ) {
-				$imp = (int) round( $impressions * $c['share'] );
-				$rev = round( $revenue * $c['share'], 2 );
-				$cod = (int) round( $coded * $c['share'] );
-				return [
-					'country'     => $c['country'],
-					'impressions' => $imp,
-					'revenue'     => $rev,
-					'ecpm'        => $cod > 0 ? round( ( $rev / $cod ) * 1000, 2 ) : 0.0,
-				];
-			},
-			$countries
-		);
 
 		return [
 			'total_impressions'      => [
@@ -269,16 +192,6 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 			],
 			'top_advertisers'        => [
 				'rows'       => $advertisers,
-				'computable' => true,
-				'type'       => 'table',
-			],
-			'performance_by_device'  => [
-				'rows'       => $device_rows,
-				'computable' => true,
-				'type'       => 'table',
-			],
-			'top_countries'          => [
-				'rows'       => $country_rows,
 				'computable' => true,
 				'type'       => 'table',
 			],

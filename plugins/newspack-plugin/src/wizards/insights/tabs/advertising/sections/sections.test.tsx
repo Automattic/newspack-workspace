@@ -15,7 +15,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import type { InsightsWindow } from '../../../api/advertising';
 import ReachRevenueSection from './ReachRevenueSection';
 import InventoryPerformanceSection from './InventoryPerformanceSection';
-import RevenueBreakdownSection from './RevenueBreakdownSection';
+import TopPerformersSection from './TopPerformersSection';
 
 const metrics: InsightsWindow = {
 	total_impressions: { value: 2400000, computable: true, type: 'count' },
@@ -41,16 +41,6 @@ const metrics: InsightsWindow = {
 		computable: true,
 		rows: [ { advertiser: 'Acme Co', impressions: 300000, revenue: 600 } ],
 	},
-	performance_by_device: {
-		type: 'table',
-		computable: true,
-		rows: [ { device: 'Smartphone', impressions: 1400000, revenue: 2400, ecpm: 1.7 } ],
-	},
-	top_countries: {
-		type: 'table',
-		computable: true,
-		rows: [ { country: 'United States', impressions: 2000000, revenue: 3400, ecpm: 1.7 } ],
-	},
 };
 
 describe( 'Advertising sections', () => {
@@ -75,8 +65,8 @@ describe( 'Advertising sections', () => {
 		expect( screen.getByText( 'Not available for this site.' ) ).toBeInTheDocument();
 	} );
 
-	it( 'RevenueBreakdownSection renders the two tables only (no device pie)', () => {
-		render( <RevenueBreakdownSection current={ metrics } previous={ null } /> );
+	it( 'TopPerformersSection renders the two tables only (no device pie)', () => {
+		render( <TopPerformersSection current={ metrics } previous={ null } /> );
 		expect( screen.getByText( 'Homepage Leaderboard' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Acme Co' ) ).toBeInTheDocument();
 		// Performance by Device pie is no longer rendered on Tab 8.
@@ -93,7 +83,7 @@ describe( 'Advertising sections', () => {
 				rows: Array.from( { length: 8 }, ( _, i ) => ( { advertiser: `Adv ${ i + 1 }`, impressions: 100, revenue: 10 } ) ),
 			},
 		};
-		render( <RevenueBreakdownSection current={ many } previous={ null } /> );
+		render( <TopPerformersSection current={ many } previous={ null } /> );
 		expect( screen.getByText( 'Adv 5' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Adv 6' ) ).not.toBeInTheDocument();
 

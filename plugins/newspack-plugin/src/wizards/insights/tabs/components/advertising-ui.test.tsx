@@ -59,8 +59,13 @@ describe( 'DataLagIndicator', () => {
 		expect( screen.getByText( /Data as of .*\. Recent days are estimated and may shift until Google finalizes\./ ) ).toBeInTheDocument();
 	} );
 
-	it( 'renders nothing without an as-of date', () => {
-		const { container } = render( <DataLagIndicator dataAsOf={ null } hasEstimatedData /> );
+	it( 'still warns about estimated data when there is no as-of date', () => {
+		render( <DataLagIndicator dataAsOf={ null } hasEstimatedData /> );
+		expect( screen.getByText( 'Recent days are estimated and may shift until Google finalizes.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders nothing with neither an as-of date nor estimated data', () => {
+		const { container } = render( <DataLagIndicator dataAsOf={ null } hasEstimatedData={ false } /> );
 		expect( container ).toBeEmptyDOMElement();
 	} );
 } );
