@@ -3,8 +3,10 @@
  * Newspack Insights — Advertising (Tab 8) fixture.
  *
  * Returns a callable that produces a realistic, date-relative Advertising
- * payload matching {@see \Newspack\Insights\Advertising_Metric::get_all()} for
- * UI smoke testing without a GAM connection. Served by the REST controller when
+ * payload for UI smoke testing without a GAM connection. The shape matches the
+ * live REST response — `{ current, previous }`, where each is the
+ * {@see \Newspack\Insights\Advertising_Metric::get_all()} envelope (and
+ * `previous` is null without comparison). Served by the REST controller when
  * NEWSPACK_INSIGHTS_FIXTURE_MODE is on.
  *
  * Variants (via the `_fixture_state` query param — see dev-notes.md):
@@ -282,7 +284,7 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 
 	// Not-ready render path: tab visible, reporting not ready, both issues.
 	if ( 'not_ready' === $variant ) {
-		return [
+		$not_ready = [
 			'window'                      => [
 				'start' => $start_date,
 				'end'   => $end_date,
@@ -306,6 +308,11 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 			'has_estimated_data'          => false,
 			'estimated_window_start_date' => null,
 		];
+
+		return [
+			'current'  => $not_ready,
+			'previous' => null,
+		];
 	}
 
 	$envelope = [
@@ -322,6 +329,7 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 		'estimated_window_start_date' => $est_start,
 	];
 
+	$previous = null;
 	if ( $compare ) {
 		// Comparison window = the immediately-preceding window of equal length.
 		try {
@@ -337,14 +345,23 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 
 		// 0.85 scale → current is higher on volume (positive deltas) while a few
 		// per-row figures land lower, exercising both delta directions.
-		$envelope['compare'] = [
-			'window'  => [
+		$previous = [
+			'window'                      => [
 				'start' => $prior_start instanceof DateTimeImmutable ? $prior_start->format( 'Y-m-d' ) : $prior_start,
 				'end'   => $prior_end instanceof DateTimeImmutable ? $prior_end->format( 'Y-m-d' ) : $prior_end,
 			],
-			'metrics' => $metrics( 0.85, 'zero' === $variant ? 'populated' : $variant ),
+			'is_tab_visible'              => true,
+			'is_report_ready'             => true,
+			'readiness_issues'            => [],
+			'metrics'                     => $metrics( 0.85, 'zero' === $variant ? 'populated' : $variant ),
+			'data_as_of'                  => $data_as_of,
+			'has_estimated_data'          => true,
+			'estimated_window_start_date' => $est_start,
 		];
 	}
 
-	return $envelope;
+	return [
+		'current'  => $envelope,
+		'previous' => $previous,
+	];
 };

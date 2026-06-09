@@ -303,12 +303,14 @@ class Newspack_Test_Insights_Advertising_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Lists both the scope and network-code problems.
+	 * Short-circuits to empty readiness issues when GAM is inactive (tab hidden),
+	 * so it never makes the remote scope check for the common not-configured case.
 	 */
-	public function test_readiness_issues_lists_missing_scope_and_network() {
-		$codes = array_column( Advertising_Metric::readiness_issues(), 'code' );
-		$this->assertContains( 'oauth_scope_missing', $codes );
-		$this->assertContains( 'network_code_missing', $codes );
+	public function test_readiness_issues_empty_when_gam_inactive() {
+		// GAM is inactive in the test environment (newspack-ads absent), so the
+		// tab is hidden and there are no actionable readiness issues to surface.
+		$this->assertFalse( Advertising_Metric::is_tab_visible() );
+		$this->assertSame( [], Advertising_Metric::readiness_issues() );
 	}
 
 	/**
@@ -444,8 +446,9 @@ class Newspack_Test_Insights_Advertising_Metric extends WP_UnitTestCase {
 	 */
 	public function test_fixture_compare_window_is_prior_period() {
 		$payload = Advertising_Metric::get_fixture( '2026-02-01', '2026-02-28', true, 'populated' );
-		$this->assertArrayHasKey( 'compare', $payload );
-		$this->assertSame( '2026-01-31', $payload['compare']['window']['end'] );
-		$this->assertNotSame( $payload['window']['start'], $payload['compare']['window']['start'] );
+		$this->assertArrayHasKey( 'current', $payload );
+		$this->assertArrayHasKey( 'previous', $payload );
+		$this->assertSame( '2026-01-31', $payload['previous']['window']['end'] );
+		$this->assertNotSame( $payload['current']['window']['start'], $payload['previous']['window']['start'] );
 	}
 }

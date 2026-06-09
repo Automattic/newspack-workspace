@@ -55,7 +55,7 @@ defined( 'ABSPATH' ) || exit;
 class Advertising_Metric {
 
 	const CACHE_KEY_PREFIX = 'newspack_insights_advertising_v1:';
-	const CACHE_FRESH_TTL  = 30 * MINUTE_IN_SECONDS;
+	const CACHE_FRESH_TTL  = 15 * MINUTE_IN_SECONDS;
 	const CACHE_HARD_TTL   = DAY_IN_SECONDS;
 	const CACHE_RETRY_TTL  = 5 * MINUTE_IN_SECONDS;
 
@@ -160,7 +160,9 @@ class Advertising_Metric {
 	 * @return array<int,array<string,string>>
 	 */
 	public static function readiness_issues(): array {
-		if ( self::is_report_ready() ) {
+		// When GAM isn't even active the tab is hidden; skip the remote scope
+		// check entirely (is_tab_visible is a cheap, local-only signal).
+		if ( ! self::is_tab_visible() || self::is_report_ready() ) {
 			return [];
 		}
 		$issues = [];
@@ -455,8 +457,8 @@ class Advertising_Metric {
 					'columns'    => [ self::COL_IMPRESSIONS ],
 					'start_date' => $s,
 					'end_date'   => $e,
-				] 
-			) 
+				]
+			)
 		);
 		if ( isset( $rows['error'] ) || isset( $rows['overlay'] ) ) {
 			return $rows;
@@ -478,8 +480,8 @@ class Advertising_Metric {
 					'columns'    => [ self::COL_REVENUE ],
 					'start_date' => $s,
 					'end_date'   => $e,
-				] 
-			) 
+				]
+			)
 		);
 		if ( isset( $rows['error'] ) || isset( $rows['overlay'] ) ) {
 			return $rows;
@@ -506,8 +508,8 @@ class Advertising_Metric {
 					'columns'    => [ self::COL_REVENUE, self::COL_CODED ],
 					'start_date' => $s,
 					'end_date'   => $e,
-				] 
-			) 
+				]
+			)
 		);
 		if ( isset( $rows['error'] ) || isset( $rows['overlay'] ) ) {
 			return $rows;
@@ -537,8 +539,8 @@ class Advertising_Metric {
 					'columns'    => [ self::COL_CODED, self::COL_IMPRESSIONS ],
 					'start_date' => $s,
 					'end_date'   => $e,
-				] 
-			) 
+				]
+			)
 		);
 		if ( isset( $rows['error'] ) || isset( $rows['overlay'] ) ) {
 			return $rows;
@@ -569,8 +571,8 @@ class Advertising_Metric {
 					'columns'    => [ self::COL_AV_VIEWABLE, self::COL_AV_MEASURABLE ],
 					'start_date' => $s,
 					'end_date'   => $e,
-				] 
-			) 
+				]
+			)
 		);
 		if ( isset( $rows['error'] ) || isset( $rows['overlay'] ) ) {
 			return $rows;
@@ -1121,7 +1123,7 @@ class Advertising_Metric {
 	}
 
 	/*
-	 * Audit log (extends the GAM client's per-submission log with metric context)
+	 * Audit log (a parallel metric-context log, separate from the GAM client's own per-submission log)
 	 */
 
 	/**
