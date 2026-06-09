@@ -104,6 +104,7 @@ final class Core {
 		include_once NEWSPACK_ADS_ABSPATH . '/includes/integrations/class-complianz.php';
 		include_once NEWSPACK_ADS_ABSPATH . '/includes/integrations/class-ad-refresh-control.php';
 		include_once NEWSPACK_ADS_ABSPATH . '/includes/blocks/class-ad-unit-block.php';
+		include_once NEWSPACK_ADS_ABSPATH . '/includes/blocks/class-ad-slot-block.php';
 		include_once NEWSPACK_ADS_ABSPATH . '/includes/blocks/class-tabs-block.php';
 		include_once NEWSPACK_ADS_ABSPATH . '/includes/blocks/class-tabs-item-block.php';
 		include_once NEWSPACK_ADS_ABSPATH . '/includes/class-widget.php';

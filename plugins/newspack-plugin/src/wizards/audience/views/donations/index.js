@@ -35,7 +35,7 @@ const AudienceDonations = ( props, ref ) => {
 			sections={ sections }
 			apiSlug={ AUDIENCE_DONATIONS_WIZARD_SLUG }
 			renderAboveSections={ () => values( donation_data?.errors ).map( ( error, i ) => <Notice key={ i } isError noticeText={ error } /> ) }
-			requiredPlugins={ [ 'newspack-blocks' ] }
+			requiredPlugins={ [ 'newspack-blocks', 'woocommerce', 'woocommerce-subscriptions' ] }
 			ref={ ref }
 		/>
 	);

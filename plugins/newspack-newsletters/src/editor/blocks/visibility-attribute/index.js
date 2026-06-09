@@ -11,9 +11,9 @@ import { Fragment } from '@wordpress/element';
 import { compose, createHigherOrderComponent } from '@wordpress/compose';
 import { withSelect } from '@wordpress/data';
 import { BlockControls, InspectorControls } from '@wordpress/block-editor';
-import { MenuGroup, MenuItem, PanelBody, SelectControl, Toolbar, ToolbarDropdownMenu } from '@wordpress/components';
+import { MenuGroup, MenuItem, PanelBody, RadioControl, Toolbar, ToolbarDropdownMenu } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
-import { check } from '@wordpress/icons';
+import { check, seen } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -53,8 +53,8 @@ const withVisibilityControl = createHigherOrderComponent(
 	BlockEdit =>
 		compose(
 			withSelect( select => {
-				const { is_public } = select( 'core/editor' ).getEditedPostAttribute( 'meta' );
-				return { is_public };
+				const meta = select( 'core/editor' )?.getEditedPostAttribute?.( 'meta' ) || {};
+				return { is_public: meta.is_public };
 			} )
 		)( props => {
 			const { attributes, setAttributes } = props;
@@ -67,7 +67,7 @@ const withVisibilityControl = createHigherOrderComponent(
 				<Fragment>
 					<BlockControls>
 						<Toolbar>
-							<ToolbarDropdownMenu label={ __( 'Visibility', 'newspack-newsletters' ) } icon={ 'visibility' }>
+							<ToolbarDropdownMenu label={ __( 'Visibility', 'newspack-newsletters' ) } icon={ seen }>
 								{ ( { onClose } ) => (
 									<MenuGroup>
 										{ visibilityOptions.map( entry => {
@@ -97,23 +97,20 @@ const withVisibilityControl = createHigherOrderComponent(
 					<BlockEdit { ...props } />
 					<InspectorControls>
 						<PanelBody title={ __( 'Visibility', 'newspack-newsletters' ) }>
-							<SelectControl
-								label={ __( 'Where should this block be visible?', 'newspack-newsletters' ) }
-								value={ value }
-								options={ visibilityOptions }
-								onChange={ selected => {
-									setAttributes( { [ ATTRIBUTE_NAME ]: selected } );
-								} }
-								help={
-									isEmailOnlyBlock
-										? __( 'This block is only available in the email version of the newsletter.', 'newspack-newsletters' )
-										: __(
-												"If the newsletter is going to be viewable publicly on this site, select here if you'd like this block to be visible in a particular version.",
-												'newspack-newsletters'
-										  )
-								}
-								disabled={ isEmailOnlyBlock }
-							/>
+							{ isEmailOnlyBlock ? (
+								<p>{ __( 'This block is only available in the email version of the newsletter.', 'newspack-newsletters' ) }</p>
+							) : (
+								<RadioControl
+									label={ __( 'Where should this block be visible?', 'newspack-newsletters' ) }
+									hideLabelFromVision
+									selected={ value }
+									options={ visibilityOptions }
+									onChange={ selected => {
+										setAttributes( { [ ATTRIBUTE_NAME ]: selected } );
+									} }
+									help={ __( 'Choose where this block appears.', 'newspack-newsletters' ) }
+								/>
+							) }
 						</PanelBody>
 					</InspectorControls>
 				</Fragment>
@@ -126,8 +123,8 @@ const withVisibilityNotice = createHigherOrderComponent(
 	BlockListBlock =>
 		compose(
 			withSelect( select => {
-				const { is_public } = select( 'core/editor' ).getEditedPostAttribute( 'meta' );
-				return { is_public };
+				const meta = select( 'core/editor' )?.getEditedPostAttribute?.( 'meta' ) || {};
+				return { is_public: meta.is_public };
 			} )
 		)( props => {
 			const value = props.attributes[ ATTRIBUTE_NAME ];
@@ -149,6 +146,7 @@ const withVisibilityNotice = createHigherOrderComponent(
 								<>
 									{ __( 'Newsletter is not public, this block will not be visible.', 'newspack-newsletters' ) }
 									<button
+										type="button"
 										onClick={ () => {
 											props.setAttributes( { [ ATTRIBUTE_NAME ]: '' } );
 										} }

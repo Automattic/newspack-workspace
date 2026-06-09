@@ -51,6 +51,9 @@ export { default as withWizardScreen } from './with-wizard-screen';
 export { default as Router } from './proxied-imports/router';
 export { default as hooks } from './hooks';
 export { default as useConfirmDialog } from './hooks/use-confirm-dialog';
+export { default as useUnsavedChangesDialog } from './hooks/use-unsaved-changes-dialog';
+import * as integrationIcons from './integration-icons';
+export { integrationIcons };
 export { default as utils } from './utils';
 
 import './style.scss';

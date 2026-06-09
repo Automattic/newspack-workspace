@@ -29,6 +29,7 @@ Thumbs.db
 /vendor/
 
 # Built files
+/build
 /dist
 release
 

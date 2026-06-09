@@ -669,7 +669,6 @@ class Donations {
 	 * Remove all donation products from the cart.
 	 */
 	public static function remove_donations_from_cart() {
-		$donation_settings = self::get_donation_settings();
 		if ( ! self::is_platform_wc() || is_wp_error( self::is_woocommerce_suite_active() ) ) {
 			return;
 		}
@@ -694,6 +693,22 @@ class Donations {
 			self::set_platform_slug( $saved_slug );
 		}
 		return $saved_slug;
+	}
+
+	/**
+	 * Whether a reader revenue platform has been explicitly chosen.
+	 *
+	 * The platform option defaults to 'wc' and has no unset value, so first-run
+	 * is detected by whether the option was ever saved.
+	 *
+	 * Note: get_platform_slug() persists 'wc' when migrating a legacy 'stripe'
+	 * platform, which marks the option as saved. Such sites are treated as
+	 * having selected Newspack.
+	 *
+	 * @return bool
+	 */
+	public static function is_platform_selected(): bool {
+		return null !== get_option( self::NEWSPACK_READER_REVENUE_PLATFORM, null );
 	}
 
 	/**

@@ -13,17 +13,13 @@ import { useEffect, useState } from '@wordpress/element';
 import WizardsTab from '../../../wizards-tab';
 import { Button, Notice, Waiting, withWizardScreen } from '../../../../../packages/components/src';
 import Prompt from '../../components/prompt';
-import Router from '../../../../../packages/components/src/proxied-imports/router';
 import './style.scss';
 
-const { useHistory } = Router;
-
-const AudienceCampaign = withWizardScreen( ( { error, setError, skipPrerequisite } ) => {
+const AudienceCampaign = withWizardScreen( ( { error, setError } ) => {
 	const { reader_activation_url } = newspackAudience;
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ prompts, setPrompts ] = useState( null );
 	const [ allReady, setAllReady ] = useState( false );
-	const history = useHistory();
 
 	const fetchPrompts = () => {
 		setError( false );
@@ -66,22 +62,6 @@ const AudienceCampaign = withWizardScreen( ( { error, setError, skipPrerequisite
 					<Prompt key={ prompt.slug } prompt={ prompt } inFlight={ inFlight } setInFlight={ setInFlight } setPrompts={ setPrompts } />
 				) ) }
 			<div className="newspack-buttons-card">
-				<Button
-					variant={ 'secondary' }
-					isDestructive
-					disabled={ inFlight }
-					onClick={ () => {
-						skipPrerequisite(
-							{
-								prerequisite: 'ras_campaign',
-								skip: true,
-							},
-							() => history.push( '/complete' )
-						);
-					} }
-				>
-					{ __( 'Skip', 'newspack-plugin' ) }
-				</Button>
 				<Button isPrimary disabled={ inFlight || ! allReady } href={ `${ reader_activation_url }complete` }>
 					{ __( 'Continue', 'newspack-plugin' ) }
 				</Button>
