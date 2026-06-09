@@ -264,7 +264,20 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 	/**
 	 * Test user passing email domain rule with case insensitivity.
 	 */
+	/**
+	 * Test user passing email domain rule with case insensitivity.
+	 */
 	public function test_email_domain_pass_case_insensitive() {
+		global $wpdb;
+
+		// Force a mixed-case email in the DB to ensure the domain comparison is truly case-insensitive.
+		$wpdb->update( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			$wpdb->users,
+			[ 'user_email' => 'reader@ExAmPlE.com' ],
+			[ 'ID' => self::$user_id ]
+		);
+		clean_user_cache( self::$user_id );
+
 		$rules = [
 			[
 				[
