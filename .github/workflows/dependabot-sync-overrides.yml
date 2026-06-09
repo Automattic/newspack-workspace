@@ -1,0 +1,100 @@
+name: Dependabot pnpm.overrides sync
+
+# When Dependabot bumps a pnpm override (e.g. @typescript-eslint/parser), it
+# updates the `overrides:` block in pnpm-lock.yaml but does not touch the
+# matching `pnpm.overrides` block in package.json. That leaves
+# `pnpm install --frozen-lockfile` rejecting the lockfile, which the
+# `Install deps` job in ci.yml only catches when a source package also
+# changed -- so a lockfile-only Dependabot PR can auto-merge with a broken
+# state.
+#
+# This workflow patches package.json to match the lockfile and pushes the
+# fix back to the Dependabot branch before auto-merge completes. Pairs with
+# the path-trigger in ci.yml so manual lockfile edits are also caught.
+
+on:
+  pull_request_target:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Sync pnpm.overrides with lockfile
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      # PAT, not GITHUB_TOKEN: a push from GITHUB_TOKEN does not re-fire CI on
+      # the PR, which would leave required checks pending forever. Same reason
+      # as dependabot-branch-auto-update.yml.
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          fetch-depth: 0
+
+      - name: Skip if lockfile unchanged
+        id: lockfile
+        run: |
+          if git diff --name-only "${{ github.event.pull_request.base.sha }}...HEAD" \
+            | grep -qx 'pnpm-lock.yaml'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Sync overrides
+        if: steps.lockfile.outputs.changed == 'true'
+        id: sync
+        run: |
+          python3 <<'PY'
+          import json, os
+          import yaml  # PyYAML is preinstalled on ubuntu-latest runners.
+
+          with open('pnpm-lock.yaml') as f:
+              lock = yaml.safe_load(f)
+          with open('package.json') as f:
+              pkg = json.load(f)
+
+          lock_ov = lock.get('overrides', {}) or {}
+          pkg_ov  = pkg.get('pnpm', {}).get('overrides', {}) or {}
+
+          # Only sync keys already present in package.json. package.json is
+          # the source of truth for *which* deps we override; the lockfile is
+          # the source of truth for their resolved versions. Never add or
+          # remove keys -- those decisions require a human change.
+          changed = []
+          for key, val in pkg_ov.items():
+              if key in lock_ov and lock_ov[key] != val:
+                  changed.append(f'{key}: {val} -> {lock_ov[key]}')
+                  pkg_ov[key] = lock_ov[key]
+
+          out = os.environ['GITHUB_OUTPUT']
+          if changed:
+              pkg['pnpm']['overrides'] = pkg_ov
+              with open('package.json', 'w') as f:
+                  # package.json is tab-indented in this repo.
+                  json.dump(pkg, f, indent='\t')
+                  f.write('\n')
+              with open(out, 'a') as f:
+                  f.write('changed=true\n')
+              print('Synced overrides:')
+              for c in changed:
+                  print(f'  {c}')
+          else:
+              with open(out, 'a') as f:
+                  f.write('changed=false\n')
+              print('No mismatch found between package.json and pnpm-lock.yaml.')
+          PY
+
+      - name: Commit and push
+        if: steps.sync.outputs.changed == 'true'
+        run: |
+          git config user.name  'dependabot[bot]'
+          git config user.email '49699333+dependabot[bot]@users.noreply.github.com'
+          git add package.json
+          git commit -m 'build(deps): sync package.json pnpm.overrides with lockfile'
+          git push
