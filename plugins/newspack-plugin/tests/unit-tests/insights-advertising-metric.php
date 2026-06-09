@@ -60,6 +60,7 @@ class Newspack_Test_Insights_Advertising_Metric extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		Insights_Advertising_Test_Metric::$next_report = [ 'rows' => [] ];
+		Advertising_Metric::reset_readiness_cache();
 		parent::tear_down();
 	}
 
@@ -361,5 +362,90 @@ class Newspack_Test_Insights_Advertising_Metric extends WP_UnitTestCase {
 		$info = $this->invoke( 'data_lag_info', [ '2020-01-31' ] );
 		$this->assertFalse( $info['has_estimated_data'] );
 		$this->assertNull( $info['estimated_window_start_date'] );
+	}
+
+	/**
+	 * Only a structurally valid cache wrapper is returned, else null — the
+	 * single validity definition shared with the refresh guard.
+	 */
+	public function test_read_cache_entry_validates_structure() {
+		$key_ref = new ReflectionMethod( Advertising_Metric::class, 'cache_key' );
+		$key_ref->setAccessible( true );
+		$key = $key_ref->invoke( null, '2026-03-01', '2026-03-31' );
+
+		set_transient( $key, 'not-an-array', 60 );
+		$this->assertNull( $this->invoke( 'read_cache_entry', [ '2026-03-01', '2026-03-31' ] ) );
+
+		set_transient( $key, [ 'payload' => 'not-an-array' ], 60 );
+		$this->assertNull( $this->invoke( 'read_cache_entry', [ '2026-03-01', '2026-03-31' ] ) );
+
+		$valid = [
+			'computed_at' => time(),
+			'payload'     => [ 'metrics' => [] ],
+		];
+		set_transient( $key, $valid, 60 );
+		$got = $this->invoke( 'read_cache_entry', [ '2026-03-01', '2026-03-31' ] );
+		$this->assertIsArray( $got );
+		$this->assertSame( $valid['computed_at'], $got['computed_at'] );
+
+		delete_transient( $key );
+	}
+
+	/**
+	 * Reports a failure when at least one metric errored.
+	 */
+	public function test_any_failed() {
+		$this->assertTrue(
+			$this->invoke(
+				'any_failed',
+				[
+					[
+						'a' => [ 'value' => 1 ],
+						'b' => [ 'error' => 'x' ],
+					],
+				]
+			)
+		);
+		$this->assertFalse(
+			$this->invoke(
+				'any_failed',
+				[
+					[
+						'a' => [ 'value' => 1 ],
+						'b' => [ 'value' => 2 ],
+					],
+				]
+			)
+		);
+		$this->assertFalse( $this->invoke( 'any_failed', [ [] ] ) );
+	}
+
+	/**
+	 * Direct vs programmatic is computable with impressions but zero revenue
+	 * (house/unsold inventory must still render).
+	 */
+	public function test_direct_vs_programmatic_computable_with_impressions_no_revenue() {
+		$this->with_rows(
+			[
+				[
+					'LINE_ITEM_TYPE'                    => 'HOUSE',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => '0',
+					'TOTAL_IMPRESSIONS'                 => '5000',
+				],
+			]
+		);
+		$payload = Insights_Advertising_Test_Metric::direct_vs_programmatic( '2026-01-01', '2026-01-31' );
+		$this->assertTrue( $payload['computable'] );
+	}
+
+	/**
+	 * The fixture comparison window is the immediately-preceding period, not a
+	 * copy of the current window.
+	 */
+	public function test_fixture_compare_window_is_prior_period() {
+		$payload = Advertising_Metric::get_fixture( '2026-02-01', '2026-02-28', true, 'populated' );
+		$this->assertArrayHasKey( 'compare', $payload );
+		$this->assertSame( '2026-01-31', $payload['compare']['window']['end'] );
+		$this->assertNotSame( $payload['window']['start'], $payload['compare']['window']['start'] );
 	}
 }

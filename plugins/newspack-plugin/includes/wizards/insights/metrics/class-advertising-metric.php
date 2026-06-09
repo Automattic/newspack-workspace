@@ -57,6 +57,7 @@ class Advertising_Metric {
 	const CACHE_KEY_PREFIX = 'newspack_insights_advertising_v1:';
 	const CACHE_FRESH_TTL  = 30 * MINUTE_IN_SECONDS;
 	const CACHE_HARD_TTL   = DAY_IN_SECONDS;
+	const CACHE_RETRY_TTL  = 5 * MINUTE_IN_SECONDS;
 
 	const REFRESH_ACTION = 'newspack_insights_advertising_refresh';
 	const REFRESH_GROUP  = 'newspack-insights';
@@ -97,6 +98,22 @@ class Advertising_Metric {
 	const DIRECT_LINE_ITEM_TYPES       = [ 'SPONSORSHIP', 'STANDARD', 'BULK', 'PRICE_PRIORITY' ];
 	const PROGRAMMATIC_LINE_ITEM_TYPES = [ 'NETWORK', 'AD_EXCHANGE' ];
 
+	/**
+	 * Per-request memo of Client::can_run_reports() (which makes a remote OAuth
+	 * scope call), so a single request — including the current + comparison
+	 * windows and readiness_issues() — performs it at most once.
+	 *
+	 * @var bool|null
+	 */
+	private static $can_run_memo = null;
+
+	/**
+	 * Per-request memo of the GAM-scope check (remote tokeninfo call).
+	 *
+	 * @var bool|null
+	 */
+	private static $has_scope_memo = null;
+
 	/*
 	 * Visibility / readiness
 	 */
@@ -112,12 +129,28 @@ class Advertising_Metric {
 
 	/**
 	 * Whether a report can actually be run (GAM active + OAuth scope + network
-	 * code). Performs the OAuth scope check; call deliberately, not in a loop.
+	 * code). Memoized per request: the underlying Client::can_run_reports()
+	 * makes a remote OAuth scope call, so this is computed once even though
+	 * get_all() (current + previous windows) and readiness_issues() all consult it.
 	 *
 	 * @return bool
 	 */
 	public static function is_report_ready(): bool {
-		return Client::can_run_reports();
+		if ( null === self::$can_run_memo ) {
+			self::$can_run_memo = Client::can_run_reports();
+		}
+		return self::$can_run_memo;
+	}
+
+	/**
+	 * Reset the per-request readiness memos. Mainly for tests; harmless in
+	 * production (each request starts fresh).
+	 *
+	 * @return void
+	 */
+	public static function reset_readiness_cache(): void {
+		self::$can_run_memo   = null;
+		self::$has_scope_memo = null;
 	}
 
 	/**
@@ -157,8 +190,11 @@ class Advertising_Metric {
 	 * @return bool
 	 */
 	private static function has_admanager_scope(): bool {
-		return class_exists( '\Newspack\Google_OAuth' )
-			&& \Newspack\Google_OAuth::token_has_scope( Client::GAM_SCOPE );
+		if ( null === self::$has_scope_memo ) {
+			self::$has_scope_memo = class_exists( '\Newspack\Google_OAuth' )
+				&& \Newspack\Google_OAuth::token_has_scope( Client::GAM_SCOPE );
+		}
+		return self::$has_scope_memo;
 	}
 
 	/**
@@ -252,9 +288,9 @@ class Advertising_Metric {
 	 * @return array Window payload with `is_loading` / `is_stale` flags as relevant.
 	 */
 	private static function read_window( string $start_date, string $end_date ): array {
-		$cached = get_transient( self::cache_key( $start_date, $end_date ) );
+		$cached = self::read_cache_entry( $start_date, $end_date );
 
-		if ( ! is_array( $cached ) || ! isset( $cached['payload'], $cached['computed_at'] ) ) {
+		if ( null === $cached ) {
 			self::schedule_refresh( $start_date, $end_date );
 			$window               = self::empty_window( $start_date, $end_date );
 			$window['is_loading'] = true;
@@ -267,6 +303,24 @@ class Advertising_Metric {
 			$window['is_stale'] = true;
 		}
 		return $window;
+	}
+
+	/**
+	 * Read and validate a window's cache entry. Returns the
+	 * `[ computed_at, payload ]` wrapper only when well-formed, else null. The
+	 * single source of truth for "a usable cache entry exists", shared by
+	 * read_window() and the refresh guard.
+	 *
+	 * @param string $start_date YYYY-MM-DD.
+	 * @param string $end_date   YYYY-MM-DD.
+	 * @return array|null
+	 */
+	private static function read_cache_entry( string $start_date, string $end_date ): ?array {
+		$cached = get_transient( self::cache_key( $start_date, $end_date ) );
+		if ( is_array( $cached ) && isset( $cached['payload'], $cached['computed_at'] ) && is_array( $cached['payload'] ) ) {
+			return $cached;
+		}
+		return null;
 	}
 
 	/**
@@ -323,11 +377,12 @@ class Advertising_Metric {
 			return;
 		}
 
-		$metrics = self::compute_window( $start_date, $end_date );
+		$metrics      = self::compute_window( $start_date, $end_date );
+		$had_failures = self::any_failed( $metrics );
 
-		// If every metric failed (e.g. transient GAM/network outage), keep the
-		// previous payload rather than overwriting good data with errors.
-		if ( self::all_failed( $metrics ) && false !== get_transient( self::cache_key( $start_date, $end_date ) ) ) {
+		// If this refresh hit ANY failure and a valid prior payload exists, keep
+		// the prior payload rather than overwriting good data with errors.
+		if ( $had_failures && null !== self::read_cache_entry( $start_date, $end_date ) ) {
 			return;
 		}
 
@@ -344,13 +399,16 @@ class Advertising_Metric {
 			$lag
 		);
 
+		// A failure-containing payload (only written when there's no prior good
+		// entry) gets a short TTL so it self-expires and retries soon, instead of
+		// being served as "fresh" for the full hard TTL.
 		set_transient(
 			self::cache_key( $start_date, $end_date ),
 			[
 				'computed_at' => time(),
 				'payload'     => $window,
 			],
-			self::CACHE_HARD_TTL
+			$had_failures ? self::CACHE_RETRY_TTL : self::CACHE_HARD_TTL
 		);
 	}
 
@@ -589,10 +647,14 @@ class Advertising_Metric {
 				'impressions' => $vals['impressions'],
 			];
 		}
-		$total = array_sum( array_column( $out, 'revenue' ) );
+		// Computable when there's anything to show — revenue OR impressions.
+		// House/unsold inventory has real impressions at $0 revenue and should
+		// still render rather than being treated as "no data".
+		$total_revenue     = array_sum( array_column( $out, 'revenue' ) );
+		$total_impressions = array_sum( array_column( $out, 'impressions' ) );
 		return [
 			'rows'       => $out,
-			'computable' => $total > 0,
+			'computable' => $total_revenue > 0 || $total_impressions > 0,
 			'type'       => 'breakdown',
 		];
 	}
@@ -787,20 +849,39 @@ class Advertising_Metric {
 	}
 
 	/**
+	 * Maximum consecutive status-check errors tolerated before giving up on a
+	 * job (a single transient SOAP/OAuth hiccup must not kill a healthy job).
+	 */
+	const POLL_MAX_CONSECUTIVE_ERRORS = 3;
+
+	/**
 	 * Poll a report job until it reaches a terminal status or the time ceiling,
-	 * with capped exponential backoff.
+	 * with capped exponential backoff. Tolerates a few consecutive transient
+	 * status-check errors before re-throwing.
 	 *
 	 * @param string $network_code Network code.
 	 * @param string $job_id       Job ID.
 	 * @return string A {@see Report_Job_Status} value (UNKNOWN on timeout).
+	 *
+	 * @throws \Exception If status checks fail repeatedly in a row.
 	 */
 	private static function poll_until_terminal( string $network_code, string $job_id ): string {
-		$elapsed = 0;
-		$attempt = 0;
+		$elapsed             = 0;
+		$attempt             = 0;
+		$consecutive_errors  = 0;
 		while ( $elapsed < self::POLL_MAX_SECONDS ) {
-			$status = Client::get_report_job_status( $network_code, $job_id );
-			if ( Report_Job_Status::is_terminal( $status ) ) {
-				return $status;
+			try {
+				$status             = Client::get_report_job_status( $network_code, $job_id );
+				$consecutive_errors = 0;
+				if ( Report_Job_Status::is_terminal( $status ) ) {
+					return $status;
+				}
+			} catch ( \Exception $e ) {
+				// A transient blip shouldn't abort a healthy job; retry a few
+				// times before surfacing the error to the caller.
+				if ( ++$consecutive_errors >= self::POLL_MAX_CONSECUTIVE_ERRORS ) {
+					throw $e;
+				}
 			}
 			$wait     = self::POLL_BACKOFF_SECONDS[ min( $attempt, count( self::POLL_BACKOFF_SECONDS ) - 1 ) ];
 			$wait     = (int) min( $wait, self::POLL_MAX_SECONDS - $elapsed );
@@ -963,18 +1044,18 @@ class Advertising_Metric {
 	}
 
 	/**
-	 * Whether every metric in a computed window is a failure payload.
+	 * Whether any metric in a computed window is a failure (error) payload.
 	 *
 	 * @param array $metrics Keyed metric payloads.
 	 * @return bool
 	 */
-	private static function all_failed( array $metrics ): bool {
+	private static function any_failed( array $metrics ): bool {
 		foreach ( $metrics as $payload ) {
-			if ( ! isset( $payload['error'] ) ) {
-				return false;
+			if ( isset( $payload['error'] ) ) {
+				return true;
 			}
 		}
-		return ! empty( $metrics );
+		return false;
 	}
 
 	/**

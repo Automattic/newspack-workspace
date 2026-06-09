@@ -323,12 +323,24 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 	];
 
 	if ( $compare ) {
+		// Comparison window = the immediately-preceding window of equal length.
+		try {
+			$start       = new DateTimeImmutable( $start_date, $tz );
+			$end         = new DateTimeImmutable( $end_date, $tz );
+			$length_days = (int) $start->diff( $end )->format( '%a' ) + 1;
+			$prior_end   = $start->modify( '-1 day' );
+			$prior_start = $prior_end->modify( '-' . ( $length_days - 1 ) . ' days' );
+		} catch ( Exception $e ) {
+			$prior_start = $start_date;
+			$prior_end   = $end_date;
+		}
+
 		// 0.85 scale → current is higher on volume (positive deltas) while a few
 		// per-row figures land lower, exercising both delta directions.
 		$envelope['compare'] = [
 			'window'  => [
-				'start' => $start_date,
-				'end'   => $end_date,
+				'start' => $prior_start instanceof DateTimeImmutable ? $prior_start->format( 'Y-m-d' ) : $prior_start,
+				'end'   => $prior_end instanceof DateTimeImmutable ? $prior_end->format( 'Y-m-d' ) : $prior_end,
 			],
 			'metrics' => $metrics( 0.85, 'zero' === $variant ? 'populated' : $variant ),
 		];
