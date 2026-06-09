@@ -185,14 +185,8 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 					<Route path="/content-gating" render={ () => <ContentGating { ...props } /> } />
 					<Route path="/payment" render={ () => <Payment { ...props } /> } />
 					<Route path="/groups" render={ () => <Groups { ...props } /> } />
-					<Route
-						path="/campaign"
-						render={ () => ( configLoaded && ! config.enabled ? <Redirect to="/" /> : <Campaign { ...props } /> ) }
-					/>
-					<Route
-						path="/complete"
-						render={ () => ( configLoaded && ! config.enabled ? <Redirect to="/" /> : <Complete { ...props } /> ) }
-					/>
+					<Route path="/campaign" render={ () => ( configLoaded && ! config.enabled ? <Redirect to="/" /> : <Campaign { ...props } /> ) } />
+					<Route path="/complete" render={ () => ( configLoaded && ! config.enabled ? <Redirect to="/" /> : <Complete { ...props } /> ) } />
 					<Redirect to="/" />
 				</Switch>
 			</HashRouter>
