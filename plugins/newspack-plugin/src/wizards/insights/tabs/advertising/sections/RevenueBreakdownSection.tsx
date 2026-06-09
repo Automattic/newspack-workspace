@@ -1,13 +1,11 @@
 /**
- * Advertising › Revenue breakdown (NPPD-1618, Section 3).
+ * Advertising › Top performers (NPPD-1618, Section 3).
  *
  * Two rows:
  *   Row 1 — Top Ad Units (left) and Top Advertisers (right) tables, equal width.
- *   Row 2 — Direct vs Programmatic (left) and Performance by Device (right)
- *           pies, each width-constrained to ~50%, three-slot vertical layout.
- *
- * The device pie lives here (rather than a separate audience section) — grouping
- * both breakdown pies under "Revenue breakdown" is the right IA call for v1.
+ *           Top Advertisers collapses to 5 rows with a "See more" toggle.
+ *   Row 2 — the Revenue Mix scorecard (direct revenue share) and the
+ *           Performance by Device pie, each width-constrained to ~50%.
  */
 
 /**
@@ -23,6 +21,7 @@ import ChartCard from '../../components/ChartCard';
 import MetricTable from '../../components/MetricTable';
 import { toSeries } from '../../components/metrics';
 import PieChart from '../../audience/viz/PieChart';
+import RevenueMixCard from '../RevenueMixCard';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -30,11 +29,11 @@ export interface SectionProps {
 }
 
 const RevenueBreakdownSection = ( { current }: SectionProps ) => (
-	<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-revenue-breakdown">
-		<h2 id="newspack-insights-advertising-revenue-breakdown" className="newspack-insights__section-heading">
-			{ __( 'Revenue breakdown', 'newspack-plugin' ) }
+	<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-performers">
+		<h2 id="newspack-insights-advertising-top-performers" className="newspack-insights__section-heading">
+			{ __( 'Top performers', 'newspack-plugin' ) }
 		</h2>
-		<p className="newspack-insights__section-caption">{ __( 'What drives your ad revenue.', 'newspack-plugin' ) }</p>
+		<p className="newspack-insights__section-caption">{ __( 'Where your ad dollars are coming from.', 'newspack-plugin' ) }</p>
 		{ /* Row 1: tables side by side. */ }
 		<div className="newspack-insights__table-grid newspack-insights__table-grid--cols-2">
 			<div>
@@ -55,6 +54,8 @@ const RevenueBreakdownSection = ( { current }: SectionProps ) => (
 				<MetricTable
 					payload={ current.top_advertisers }
 					emptyMessage={ __( 'No advertiser data in this timeframe.', 'newspack-plugin' ) }
+					expandable
+					defaultRowLimit={ 5 }
 					columns={ [
 						{ key: 'advertiser', label: __( 'Advertiser', 'newspack-plugin' ) },
 						{ key: 'impressions', label: __( 'Impr.', 'newspack-plugin' ), format: 'number', align: 'right' },
@@ -63,15 +64,9 @@ const RevenueBreakdownSection = ( { current }: SectionProps ) => (
 				/>
 			</div>
 		</div>
-		{ /* Row 2: pies side by side, width-constrained to ~50% each. */ }
+		{ /* Row 2: revenue-mix scorecard + device pie, ~50% each. */ }
 		<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-2">
-			<ChartCard
-				title={ __( 'Direct vs Programmatic', 'newspack-plugin' ) }
-				caption={ __( 'Revenue by demand source', 'newspack-plugin' ) }
-				payload={ current.direct_vs_programmatic }
-			>
-				<PieChart segments={ toSeries( current.direct_vs_programmatic, 'label', 'revenue' ) } />
-			</ChartCard>
+			<RevenueMixCard payload={ current.direct_vs_programmatic } />
 			<ChartCard
 				title={ __( 'Performance by Device', 'newspack-plugin' ) }
 				caption={ __( 'Revenue by device category', 'newspack-plugin' ) }

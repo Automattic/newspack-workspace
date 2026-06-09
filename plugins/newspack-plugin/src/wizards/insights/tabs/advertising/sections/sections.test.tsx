@@ -7,7 +7,7 @@
 /**
  * External dependencies
  */
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -68,15 +68,35 @@ describe( 'Advertising sections', () => {
 		expect( screen.getByText( 'Not available for this site.' ) ).toBeInTheDocument();
 	} );
 
-	it( 'RevenueBreakdownSection renders both tables (row 1) and both pies (row 2)', () => {
+	it( 'RevenueBreakdownSection renders both tables, the revenue-mix card, and the device pie', () => {
 		render( <RevenueBreakdownSection current={ metrics } previous={ null } /> );
 		// Row 1: tables.
 		expect( screen.getByText( 'Homepage Leaderboard' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Acme Co' ) ).toBeInTheDocument();
-		// Row 2: both pie legends (direct/programmatic + device).
-		expect( screen.getByText( 'direct' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'programmatic' ) ).toBeInTheDocument();
+		// Row 2: revenue-mix scorecard (60% direct of 2520/4200) + device pie.
+		expect( screen.getByText( 'Revenue Mix' ) ).toBeInTheDocument();
+		expect( screen.getByText( '60%' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'direct sales' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Smartphone' ) ).toBeInTheDocument();
+	} );
+
+	it( 'Top Advertisers collapses to 5 rows behind a See more toggle', () => {
+		const many: InsightsWindow = {
+			...metrics,
+			top_advertisers: {
+				type: 'table',
+				computable: true,
+				rows: Array.from( { length: 8 }, ( _, i ) => ( { advertiser: `Adv ${ i + 1 }`, impressions: 100, revenue: 10 } ) ),
+			},
+		};
+		render( <RevenueBreakdownSection current={ many } previous={ null } /> );
+		expect( screen.getByText( 'Adv 5' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Adv 6' ) ).not.toBeInTheDocument();
+
+		fireEvent.click( screen.getByRole( 'button', { name: /See more/ } ) );
+
+		expect( screen.getByText( 'Adv 6' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Adv 8' ) ).toBeInTheDocument();
 	} );
 
 	it( 'handles a zero-impressions window without erroring', () => {

@@ -228,6 +228,24 @@
 		border-radius: 4px;
 	}
 
+	// "See more" / "See less" toggle below an expandable MetricTable.
+	&__table-toggle {
+		display: inline-block;
+		margin-top: 8px;
+		padding: 0;
+		background: transparent;
+		border: 0;
+		cursor: pointer;
+		font-size: 13px;
+		font-weight: 600;
+		color: var( --wp-admin-theme-color );
+
+		&:hover,
+		&:focus {
+			text-decoration: underline;
+		}
+	}
+
 	&__table {
 		width: 100%;
 		border-collapse: collapse;

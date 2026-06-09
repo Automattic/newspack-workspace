@@ -31,19 +31,19 @@ const InventoryPerformanceSection = ( { current, previous }: SectionProps ) => (
 		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
 			<Scorecard
 				label={ __( 'Average eCPM', 'newspack-plugin' ) }
-				description={ __( 'Revenue per thousand impressions', 'newspack-plugin' ) }
+				description={ __( 'Your ad rate', 'newspack-plugin' ) }
 				current={ current.avg_ecpm }
 				previous={ previous?.avg_ecpm }
 			/>
 			<Scorecard
 				label={ __( 'Fill Rate', 'newspack-plugin' ) }
-				description={ __( 'Share of requests that served an ad', 'newspack-plugin' ) }
+				description={ __( 'How often slots fill', 'newspack-plugin' ) }
 				current={ current.fill_rate }
 				previous={ previous?.fill_rate }
 			/>
 			<Scorecard
 				label={ __( 'Viewability Rate', 'newspack-plugin' ) }
-				description={ __( 'Share of impressions actually seen', 'newspack-plugin' ) }
+				description={ __( 'How often ads are seen', 'newspack-plugin' ) }
 				current={ current.viewability_rate }
 				previous={ previous?.viewability_rate }
 			/>

@@ -46,35 +46,28 @@ const formatIsoDate = ( iso?: string | null ): string => {
 	return dateFormatter.format( date );
 };
 
-const DataLagIndicator = ( { dataAsOf, hasEstimatedData, estimatedWindowStartDate }: DataLagIndicatorProps ) => {
+const DataLagIndicator = ( { dataAsOf, hasEstimatedData }: DataLagIndicatorProps ) => {
 	const asOf = formatIsoDate( dataAsOf );
 
 	if ( ! asOf ) {
 		return null;
 	}
 
-	const estimatedFrom = formatIsoDate( estimatedWindowStartDate );
+	const text = hasEstimatedData
+		? sprintf(
+				/* translators: %s: a date, e.g. "May 10, 2026". */
+				__( 'Data as of %s. Recent days are estimated and may shift until Google finalizes.', 'newspack-plugin' ),
+				asOf
+		  )
+		: sprintf(
+				/* translators: %s: a date, e.g. "May 10, 2026". */
+				__( 'Data as of %s.', 'newspack-plugin' ),
+				asOf
+		  );
 
 	return (
 		<InfoCallout heading={ __( 'About this data', 'newspack-plugin' ) } dismissible={ false }>
-			<p>
-				{ sprintf(
-					/* translators: %s: a date, e.g. "May 10, 2026". */
-					__( 'Data as of %s.', 'newspack-plugin' ),
-					asOf
-				) }
-			</p>
-			{ hasEstimatedData && (
-				<p>
-					{ estimatedFrom
-						? sprintf(
-								/* translators: %s: a date, e.g. "May 3, 2026". */
-								__( 'Figures from %s onward are estimated and may shift as Ad Exchange finalizes.', 'newspack-plugin' ),
-								estimatedFrom
-						  )
-						: __( 'Recent figures are estimated and may shift as Ad Exchange finalizes.', 'newspack-plugin' ) }
-				</p>
-			) }
+			<p>{ text }</p>
 		</InfoCallout>
 	);
 };

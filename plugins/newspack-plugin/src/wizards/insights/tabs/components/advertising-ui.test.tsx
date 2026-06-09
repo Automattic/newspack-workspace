@@ -54,9 +54,9 @@ describe( 'DataLagIndicator', () => {
 		expect( screen.queryByRole( 'button' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'adds the estimated-data note as a second line when estimated', () => {
-		render( <DataLagIndicator dataAsOf="2026-05-30" hasEstimatedData estimatedWindowStartDate="2026-05-23" /> );
-		expect( screen.getByText( /Figures from .* onward are estimated and may shift as Ad Exchange finalizes/ ) ).toBeInTheDocument();
+	it( 'appends the estimated-data note to the same line when estimated', () => {
+		render( <DataLagIndicator dataAsOf="2026-05-30" hasEstimatedData /> );
+		expect( screen.getByText( /Data as of .*\. Recent days are estimated and may shift until Google finalizes\./ ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders nothing without an as-of date', () => {
