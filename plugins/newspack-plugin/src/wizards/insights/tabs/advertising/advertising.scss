@@ -61,26 +61,5 @@
 	}
 }
 
-// Data-lag indicator: a full-width, single-line callout (info icon + one line).
-// Informational context, not a warning — quiet but legible.
-.newspack-insights__data-lag {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	padding: 8px 12px;
-	border-radius: 6px;
-	background-color: wp-colors.$gray-100;
-
-	&-icon {
-		flex: 0 0 auto;
-		font-size: 14px;
-		color: wp-colors.$gray-700;
-	}
-
-	&-text {
-		margin: 0;
-		font-size: 13px;
-		font-weight: 600;
-		color: wp-colors.$gray-700;
-	}
-}
+// The data-lag note now renders via the shared `.newspack-insights__info-callout`
+// (components/_insights-charts.scss) — see DataLagIndicator / InfoCallout.

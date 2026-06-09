@@ -46,14 +46,17 @@ describe( 'FinishConnectingDiagnostic', () => {
 } );
 
 describe( 'DataLagIndicator', () => {
-	it( 'renders the as-of date', () => {
+	it( 'renders the as-of date in an info callout, not dismissible', () => {
 		render( <DataLagIndicator dataAsOf="2026-05-30" hasEstimatedData={ false } /> );
+		expect( screen.getByText( 'About this data' ) ).toBeInTheDocument();
 		expect( screen.getByText( /Data as of/ ) ).toBeInTheDocument();
+		// Not dismissible — no close button.
+		expect( screen.queryByRole( 'button' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'combines the estimated-data note into the single as-of line', () => {
-		render( <DataLagIndicator dataAsOf="2026-05-30" hasEstimatedData /> );
-		expect( screen.getByText( /Data as of .* — figures from this date may shift as Ad Exchange finalizes/ ) ).toBeInTheDocument();
+	it( 'adds the estimated-data note as a second line when estimated', () => {
+		render( <DataLagIndicator dataAsOf="2026-05-30" hasEstimatedData estimatedWindowStartDate="2026-05-23" /> );
+		expect( screen.getByText( /Figures from .* onward are estimated and may shift as Ad Exchange finalizes/ ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders nothing without an as-of date', () => {

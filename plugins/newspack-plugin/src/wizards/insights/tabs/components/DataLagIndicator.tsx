@@ -1,17 +1,23 @@
 /**
  * DataLagIndicator (NPPD-1618).
  *
- * Small, muted informational line near the top of a tab body: when the
- * displayed figures were last finalized ("Data as of …"), plus — when the
- * window includes recent days GAM hasn't cleared yet — a footnote that those
- * recent figures are estimated and may shift. Informational context, not a
- * warning banner. Lives in shared `components/` for reuse by lagged-data tabs.
+ * Reporting-freshness context near the top of a tab body: when the displayed
+ * figures were last finalized ("Data as of …"), plus — when the window includes
+ * recent days the ad server hasn't cleared yet — a note that those recent
+ * figures are estimated and may shift. Renders via the shared {@see InfoCallout}
+ * and is deliberately NOT dismissible: the content varies with the selected date
+ * range, so the publisher should see it on every window.
  */
 
 /**
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
+
+/**
+ * Internal dependencies
+ */
+import InfoCallout from './InfoCallout';
 
 export interface DataLagIndicatorProps {
 	/** ISO YYYY-MM-DD of the most recent finalized data, or null/undefined. */
@@ -40,32 +46,36 @@ const formatIsoDate = ( iso?: string | null ): string => {
 	return dateFormatter.format( date );
 };
 
-const DataLagIndicator = ( { dataAsOf, hasEstimatedData }: DataLagIndicatorProps ) => {
+const DataLagIndicator = ( { dataAsOf, hasEstimatedData, estimatedWindowStartDate }: DataLagIndicatorProps ) => {
 	const asOf = formatIsoDate( dataAsOf );
 
 	if ( ! asOf ) {
 		return null;
 	}
 
-	const text = hasEstimatedData
-		? sprintf(
-				/* translators: %s: a date, e.g. "May 10, 2026". */
-				__( 'Data as of %s — figures from this date may shift as Ad Exchange finalizes', 'newspack-plugin' ),
-				asOf
-		  )
-		: sprintf(
-				/* translators: %s: a date, e.g. "May 10, 2026". */
-				__( 'Data as of %s', 'newspack-plugin' ),
-				asOf
-		  );
+	const estimatedFrom = formatIsoDate( estimatedWindowStartDate );
 
 	return (
-		<div className="newspack-insights__data-lag" role="note">
-			<span className="newspack-insights__data-lag-icon" aria-hidden="true">
-				&#9432;
-			</span>
-			<p className="newspack-insights__data-lag-text">{ text }</p>
-		</div>
+		<InfoCallout heading={ __( 'About this data', 'newspack-plugin' ) } dismissible={ false }>
+			<p>
+				{ sprintf(
+					/* translators: %s: a date, e.g. "May 10, 2026". */
+					__( 'Data as of %s.', 'newspack-plugin' ),
+					asOf
+				) }
+			</p>
+			{ hasEstimatedData && (
+				<p>
+					{ estimatedFrom
+						? sprintf(
+								/* translators: %s: a date, e.g. "May 3, 2026". */
+								__( 'Figures from %s onward are estimated and may shift as Ad Exchange finalizes.', 'newspack-plugin' ),
+								estimatedFrom
+						  )
+						: __( 'Recent figures are estimated and may shift as Ad Exchange finalizes.', 'newspack-plugin' ) }
+				</p>
+			) }
+		</InfoCallout>
 	);
 };
 
