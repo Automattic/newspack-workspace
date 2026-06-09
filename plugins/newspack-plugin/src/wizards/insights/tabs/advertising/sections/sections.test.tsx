@@ -59,6 +59,9 @@ describe( 'Advertising sections', () => {
 		expect( screen.getByText( 'Total Impressions' ) ).toBeInTheDocument();
 		expect( screen.getByText( '2,400,000' ) ).toBeInTheDocument();
 		expect( screen.getByText( '$4,200.00' ) ).toBeInTheDocument();
+		// Definitional descriptions fill the third slot (no short caption).
+		expect( screen.getByText( 'Total ad impressions served on your site in this timeframe.' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Total ad revenue earned in this timeframe, before fees.' ) ).toBeInTheDocument();
 		// Revenue Mix scorecard (60% direct of 2520/4200).
 		expect( screen.getByText( 'Revenue Mix' ) ).toBeInTheDocument();
 		expect( screen.getByText( '60%' ) ).toBeInTheDocument();

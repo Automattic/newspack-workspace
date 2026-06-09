@@ -32,13 +32,13 @@ const ReachRevenueSection = ( { current, previous }: SectionProps ) => (
 		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
 			<Scorecard
 				label={ __( 'Total Impressions', 'newspack-plugin' ) }
-				description={ __( 'Ad impressions served', 'newspack-plugin' ) }
+				description={ __( 'Total ad impressions served on your site in this timeframe.', 'newspack-plugin' ) }
 				current={ current.total_impressions }
 				previous={ previous?.total_impressions }
 			/>
 			<Scorecard
 				label={ __( 'Total Revenue', 'newspack-plugin' ) }
-				description={ __( 'Gross ad revenue', 'newspack-plugin' ) }
+				description={ __( 'Total ad revenue earned in this timeframe, before fees.', 'newspack-plugin' ) }
 				current={ current.total_revenue }
 				previous={ previous?.total_revenue }
 			/>
