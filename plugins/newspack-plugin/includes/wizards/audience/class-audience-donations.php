@@ -49,12 +49,12 @@ class Audience_Donations extends Wizard {
 	/**
 	 * Add Donations page.
 	 *
-	 * The Donations wizard requires either the WooCommerce platform (with WC installed)
-	 * or the News Revenue Hub platform. Without one of those the page cannot render
-	 * anything meaningful, so the submenu entry is hidden entirely.
+	 * The Donations wizard manages Newspack-platform (WooCommerce-backed) donations.
+	 * Other platforms (NRH, "other") are configured elsewhere, so the submenu entry
+	 * is hidden unless the reader revenue platform is Newspack.
 	 */
 	public function add_page() {
-		if ( ! function_exists( 'WC' ) && ! Donations::is_platform_nrh() ) {
+		if ( ! Donations::is_platform_wc() ) {
 			return;
 		}
 		add_submenu_page(
