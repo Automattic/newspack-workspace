@@ -36,19 +36,26 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	 * the TTL.
 	 */
 	public function test_window_cache_key_varies_by_property() {
-		update_option( 'googlesitekit_analytics-4_settings', [ 'propertyID' => '111111' ] );
-		$key_a = $this->invoke( 'window_cache_key', [ '2026-01-01', '2026-01-31', true ] );
+		$previous = get_option( 'googlesitekit_analytics-4_settings' );
+		try {
+			update_option( 'googlesitekit_analytics-4_settings', [ 'propertyID' => '111111' ] );
+			$key_a = $this->invoke( 'window_cache_key', [ '2026-01-01', '2026-01-31', true ] );
 
-		update_option( 'googlesitekit_analytics-4_settings', [ 'propertyID' => '222222' ] );
-		$key_b = $this->invoke( 'window_cache_key', [ '2026-01-01', '2026-01-31', true ] );
+			update_option( 'googlesitekit_analytics-4_settings', [ 'propertyID' => '222222' ] );
+			$key_b = $this->invoke( 'window_cache_key', [ '2026-01-01', '2026-01-31', true ] );
 
-		$this->assertNotSame( $key_a, $key_b, 'Different properties must produce different cache keys.' );
+			$this->assertNotSame( $key_a, $key_b, 'Different properties must produce different cache keys.' );
 
-		// Same property + window is stable.
-		update_option( 'googlesitekit_analytics-4_settings', [ 'propertyID' => '111111' ] );
-		$this->assertSame( $key_a, $this->invoke( 'window_cache_key', [ '2026-01-01', '2026-01-31', true ] ) );
-
-		delete_option( 'googlesitekit_analytics-4_settings' );
+			// Same property + window is stable.
+			update_option( 'googlesitekit_analytics-4_settings', [ 'propertyID' => '111111' ] );
+			$this->assertSame( $key_a, $this->invoke( 'window_cache_key', [ '2026-01-01', '2026-01-31', true ] ) );
+		} finally {
+			if ( false === $previous ) {
+				delete_option( 'googlesitekit_analytics-4_settings' );
+			} else {
+				update_option( 'googlesitekit_analytics-4_settings', $previous );
+			}
+		}
 	}
 
 	/**

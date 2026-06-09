@@ -165,8 +165,8 @@ final class Client {
 	 * indeterminate — we return no "missing" entries and let the Data API
 	 * respond, rather than blocking the metric on a transient state.
 	 *
-	 * @param string[]       $requested  Requested parameter names.
-	 * @param string[]|mixed $registered Registered names, or a WP_Error.
+	 * @param string[]           $requested  Requested parameter names.
+	 * @param string[]|\WP_Error $registered Registered names, or a WP_Error.
 	 * @return string[] Definitely-missing parameter names ([] if indeterminate).
 	 */
 	private static function missing_registered_dimensions( array $requested, $registered ): array {
