@@ -299,10 +299,13 @@ class Insights_Wizard extends Wizard {
 		$thirty_ago = $today->modify( '-29 days' );
 
 		return [
-			// Tab visibility. The audience/engagement/conversion/
-			// prompts/advertising tabs are stubbed to true until their
-			// data layers land (each needs BQ for proper feature
-			// detection, NPPD-1598). Subscribers stays all-on for now;
+			// Tab visibility. The audience/engagement/conversion/prompts
+			// tabs are stubbed to true until their data layers land (each
+			// needs BQ for proper feature detection, NPPD-1598).
+			// Advertising (Tab 8, NPPD-1618) has a real data layer: it shows
+			// only when its feature flag is enabled AND Google Ad Manager is
+			// the active ad provider (Advertising_Metric::is_tab_visible()
+			// === Client::is_gam_active()). Subscribers stays all-on for now;
 			// Tab 6 visibility detection (non-donation subscription
 			// product presence) is a separate follow-up. Donors hides
 			// when there's no donation activity — has_donation_activity()
@@ -319,7 +322,7 @@ class Insights_Wizard extends Wizard {
 				'prompts'     => true,
 				'subscribers' => true,
 				'donors'      => self::has_donation_activity(),
-				'advertising' => true,
+				'advertising' => self::is_advertising_enabled() && \Newspack\Insights\Advertising_Metric::is_tab_visible(),
 			],
 			'defaultDateRange'  => [
 				'preset' => 'last-30',
