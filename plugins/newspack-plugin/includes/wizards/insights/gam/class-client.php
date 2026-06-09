@@ -48,6 +48,15 @@ class Client {
 	const GAM_SCOPE = 'https://www.googleapis.com/auth/admanager';
 
 	/**
+	 * Option toggling Google Ad Manager as an active ad provider on the site
+	 * (set on the Newspack "Ad Providers" settings page). This is the same
+	 * option newspack-ads' GAM provider reads for its own is_active().
+	 *
+	 * @var string
+	 */
+	const GAM_ACTIVE_OPTION = '_newspack_advertising_service_google_ad_manager';
+
+	/**
 	 * Application name reported to the GAM API session.
 	 *
 	 * @var string
@@ -69,18 +78,37 @@ class Client {
 	const AUDIT_LOG_MAX = 500;
 
 	/**
-	 * Whether Tab 8's data source is available for this publisher.
+	 * Whether Tab 8 (Advertising) should be visible: whether Google Ad
+	 * Manager is active on the site.
 	 *
-	 * True iff (a) newspack-ads is active (it vendors the SOAP library and
-	 * owns the network code), (b) the Google OAuth token carries the GAM
-	 * scope, and (c) a non-empty network code is configured.
+	 * Mirrors newspack-ads' GAM provider "active" signal — the Ad Providers
+	 * settings toggle ({@see self::GAM_ACTIVE_OPTION}). This is the
+	 * tab-visibility gate; it intentionally does NOT require the OAuth scope
+	 * or a network code, so the tab still shows (with in-tab diagnostics)
+	 * when GAM is enabled but reporting isn't fully wired up yet.
 	 *
 	 * @return bool
 	 */
-	public static function is_publisher_connected() {
-		return self::is_newspack_ads_active()
-			&& self::has_gam_scope()
-			&& '' !== self::get_network_code();
+	public static function is_gam_active() {
+		return static::is_newspack_ads_active()
+			&& (bool) get_option( self::GAM_ACTIVE_OPTION, false );
+	}
+
+	/**
+	 * Whether a report can actually be run: GAM is active AND the Google
+	 * OAuth token carries the GAM scope AND a network code is configured.
+	 *
+	 * This is the run-time precondition for submitting a report job —
+	 * distinct from {@see self::is_gam_active()}, which governs tab
+	 * visibility. The orchestrator (NPPD-1663) uses this to decide between
+	 * showing data and showing an in-tab "finish connecting" diagnostic.
+	 *
+	 * @return bool
+	 */
+	public static function can_run_reports() {
+		return static::is_gam_active()
+			&& static::has_gam_scope()
+			&& '' !== static::get_network_code();
 	}
 
 	/**
@@ -95,7 +123,7 @@ class Client {
 	 *                           unavailable, or the API call fails.
 	 */
 	public static function run_report_job( $network_code, Report_Query $query ) {
-		self::assert_connected();
+		self::assert_can_run_reports();
 		self::assert_own_network_code( $network_code );
 
 		$job_id  = '';
@@ -123,7 +151,7 @@ class Client {
 	 *                           the publisher's own.
 	 */
 	public static function get_report_job_status( $network_code, $job_id ) {
-		self::assert_connected();
+		self::assert_can_run_reports();
 		self::assert_own_network_code( $network_code );
 		$service = self::get_report_service( (int) $network_code );
 		return Report_Job_Status::normalize( $service->getReportJobStatus( $job_id ) );
@@ -367,15 +395,16 @@ class Client {
 	}
 
 	/**
-	 * Assert that Tab 8's data source is available; throw otherwise.
+	 * Assert that a report can be run; throw otherwise.
 	 *
 	 * @return void
 	 *
-	 * @throws \RuntimeException If the publisher is not connected to GAM.
+	 * @throws \RuntimeException If GAM is not active, the OAuth scope is
+	 *                           missing, or no network code is configured.
 	 */
-	protected static function assert_connected() {
-		if ( ! self::is_publisher_connected() ) {
-			throw new \RuntimeException( 'GAM is not connected for this publisher (missing scope, network code, or newspack-ads).' );
+	protected static function assert_can_run_reports() {
+		if ( ! self::can_run_reports() ) {
+			throw new \RuntimeException( 'Cannot run a GAM report: GAM is not active, the OAuth scope is missing, or no network code is configured.' );
 		}
 	}
 

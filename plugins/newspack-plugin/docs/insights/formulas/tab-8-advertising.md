@@ -51,7 +51,7 @@ This tab was originally scoped against GAM Data Transfer Reports exported to Big
 
 ## CRITICAL caveats before any of this works
 
-1. **GAM connection presence is per-publisher.** A publisher has GAM data iff (a) the Google OAuth token carries the `admanager` scope and (b) a GAM network code is configured in `newspack-ads`. Tab 8 detects both at boot and hides entirely when either is absent. (This replaces the old "BQ export opt-in" detection — far more publishers qualify now, since the GAM scope ships with the standard Google connection.)
+1. **Tab visibility = GAM active on the site.** Tab 8 shows iff Google Ad Manager is active as an ad provider (newspack-ads' GAM provider `is_active()` — the "Ad Providers" settings toggle). Reporting *readiness* (OAuth `admanager` scope + a configured network code) is a separate, stricter check (`can_run_reports()`) evaluated inside the tab: when GAM is active but reporting isn't ready, the tab shows a "finish connecting" diagnostic rather than hiding. (This replaces the old "BQ export opt-in" detection — far more publishers qualify now.)
 
 2. **GAM report column/dimension enum verification is pending.** The report queries below are written against the documented `ReportService` `Column` and `Dimension` enums for API `v202602`. Exact enum names drift across API versions and account configurations. Verify against a real publisher's network before implementation. Fields most likely to need verification are noted inline.
 
@@ -61,15 +61,17 @@ This tab was originally scoped against GAM Data Transfer Reports exported to Big
 
 ## Tab visibility
 
-Probe at boot (no report job needed — cheap calls only):
+**Visibility is based on whether Google Ad Manager is active on the site** — i.e. GAM is enabled as an ad provider (the Newspack "Ad Providers" settings toggle). This mirrors newspack-ads' own GAM provider `is_active()` signal. It deliberately does NOT require the OAuth scope or a network code, so the tab still appears when GAM is enabled but reporting isn't fully wired up yet — in that case the tab renders an in-tab "finish connecting" diagnostic rather than hiding.
 
 ```php
-$has_scope   = \Newspack\Google_OAuth::token_has_scope( 'https://www.googleapis.com/auth/admanager' );
-$network_code = \Newspack_Ads\Providers\GAM_Model::get_active_network_code();
-$visible = $has_scope && ! empty( $network_code );
+// Tab visibility — GAM active on the site.
+\Newspack\Insights\GAM\Client::is_gam_active();
+
+// Reporting readiness — checked inside the tab to decide data vs. diagnostic.
+\Newspack\Insights\GAM\Client::can_run_reports(); // is_gam_active() + admanager scope + network code
 ```
 
-Optionally confirm the session is live with a single `NetworkService.getCurrentNetwork()` call (cheap, non-report). If not visible, hide Tab 8 entirely.
+`is_gam_active()` reads `_newspack_advertising_service_google_ad_manager` (guarded by newspack-ads being active). `can_run_reports()` is the stricter precondition the client enforces before submitting a report job (and that the orchestrator, NPPD-1663, uses to choose between showing data and showing a connect prompt).
 
 ## Conventions specific to this tab
 

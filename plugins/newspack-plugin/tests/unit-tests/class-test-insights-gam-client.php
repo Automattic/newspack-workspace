@@ -19,11 +19,35 @@ use Newspack\Insights\GAM\Report_Query;
 use Newspack\Insights\GAM\Report_Job_Status;
 
 /**
- * Exposes protected pure-logic methods of the client for testing.
+ * Exposes protected pure-logic methods of the client for testing, and
+ * overrides the external-state seams (newspack-ads active, OAuth scope,
+ * network code) so the visibility / reporting gates can be exercised
+ * without a live GAM connection.
  */
 class Insights_GAM_Test_Client extends Client {
 	/**
-	 * Expose get_network_code().
+	 * Mock value for is_newspack_ads_active().
+	 *
+	 * @var bool
+	 */
+	public static $mock_ads_active = false;
+
+	/**
+	 * Mock value for has_gam_scope().
+	 *
+	 * @var bool
+	 */
+	public static $mock_has_scope = false;
+
+	/**
+	 * Mock value for get_network_code() (when the gates resolve it).
+	 *
+	 * @var string
+	 */
+	public static $mock_network = '';
+
+	/**
+	 * Expose get_network_code() (the real implementation).
 	 *
 	 * @return string
 	 */
@@ -50,6 +74,33 @@ class Insights_GAM_Test_Client extends Client {
 	public static function expose_parse_ymd( $ymd ) {
 		return parent::parse_ymd( $ymd );
 	}
+
+	/**
+	 * Overridable seam: whether newspack-ads is active.
+	 *
+	 * @return bool
+	 */
+	protected static function is_newspack_ads_active() {
+		return self::$mock_ads_active;
+	}
+
+	/**
+	 * Overridable seam: whether the OAuth token carries the GAM scope.
+	 *
+	 * @return bool
+	 */
+	protected static function has_gam_scope() {
+		return self::$mock_has_scope;
+	}
+
+	/**
+	 * Overridable seam: the resolved network code.
+	 *
+	 * @return string
+	 */
+	protected static function get_network_code() {
+		return self::$mock_network;
+	}
 }
 
 /**
@@ -64,7 +115,11 @@ class Test_Insights_GAM_Client extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		delete_option( '_newspack_ads_gam_network_code' );
+		delete_option( Client::GAM_ACTIVE_OPTION );
 		delete_option( Client::AUDIT_LOG_OPTION );
+		Insights_GAM_Test_Client::$mock_ads_active = false;
+		Insights_GAM_Test_Client::$mock_has_scope  = false;
+		Insights_GAM_Test_Client::$mock_network    = '';
 		parent::tear_down();
 	}
 
@@ -206,13 +261,46 @@ class Test_Insights_GAM_Client extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The connection gate is false when newspack-ads is not active (its
-	 * GAM_Model class is absent in the unit-test environment), regardless
-	 * of any other state.
+	 * Tab visibility (is_gam_active) tracks the GAM provider toggle, and is
+	 * false when newspack-ads is inactive regardless of the toggle.
 	 */
-	public function test_is_publisher_connected_false_without_newspack_ads() {
-		update_option( '_newspack_ads_gam_network_code', '123456' );
-		$this->assertFalse( class_exists( '\Newspack_Ads\Providers\GAM_Model' ), 'Guard: newspack-ads must be absent in this env.' );
-		$this->assertFalse( Client::is_publisher_connected() );
+	public function test_is_gam_active() {
+		// newspack-ads inactive: false even when the provider toggle is on.
+		Insights_GAM_Test_Client::$mock_ads_active = false;
+		update_option( Client::GAM_ACTIVE_OPTION, '1' );
+		$this->assertFalse( Insights_GAM_Test_Client::is_gam_active() );
+
+		// newspack-ads active + toggle on: visible.
+		Insights_GAM_Test_Client::$mock_ads_active = true;
+		$this->assertTrue( Insights_GAM_Test_Client::is_gam_active() );
+
+		// Toggle off: hidden.
+		delete_option( Client::GAM_ACTIVE_OPTION );
+		$this->assertFalse( Insights_GAM_Test_Client::is_gam_active() );
+	}
+
+	/**
+	 * Reporting readiness requires GAM active AND scope AND a network code.
+	 */
+	public function test_can_run_reports_requires_all_preconditions() {
+		Insights_GAM_Test_Client::$mock_ads_active = true;
+		update_option( Client::GAM_ACTIVE_OPTION, '1' );
+		Insights_GAM_Test_Client::$mock_has_scope = true;
+		Insights_GAM_Test_Client::$mock_network   = '123456';
+		$this->assertTrue( Insights_GAM_Test_Client::can_run_reports() );
+
+		// Missing scope.
+		Insights_GAM_Test_Client::$mock_has_scope = false;
+		$this->assertFalse( Insights_GAM_Test_Client::can_run_reports() );
+		Insights_GAM_Test_Client::$mock_has_scope = true;
+
+		// Missing network code.
+		Insights_GAM_Test_Client::$mock_network = '';
+		$this->assertFalse( Insights_GAM_Test_Client::can_run_reports() );
+		Insights_GAM_Test_Client::$mock_network = '123456';
+
+		// GAM provider toggle off.
+		delete_option( Client::GAM_ACTIVE_OPTION );
+		$this->assertFalse( Insights_GAM_Test_Client::can_run_reports() );
 	}
 }
