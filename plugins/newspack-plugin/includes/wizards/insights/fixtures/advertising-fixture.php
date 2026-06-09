@@ -131,11 +131,13 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 		}
 
 		$advertisers = [];
-		for ( $i = 1; $i <= 8; $i++ ) {
-			$adv_rev = round( ( $revenue * 0.6 / 9 ) * ( 9 - $i ), 2 );
+		// 12 advertisers (descending) so the table fills its 10-row default.
+		for ( $i = 1; $i <= 12; $i++ ) {
+			$weight  = 13 - $i;
+			$adv_rev = round( ( $revenue * 0.6 / 13 ) * $weight, 2 );
 			$advertisers[] = [
 				'advertiser'  => sprintf( 'Advertiser %d', $i ),
-				'impressions' => (int) round( ( $impressions * 0.6 / 9 ) * ( 9 - $i ) ),
+				'impressions' => (int) round( ( $impressions * 0.6 / 13 ) * $weight ),
 				'revenue'     => $adv_rev,
 			];
 		}

@@ -51,13 +51,13 @@ describe( 'DataLagIndicator', () => {
 		expect( screen.getByText( /Data as of/ ) ).toBeInTheDocument();
 	} );
 
-	it( 'renders the estimated-data footnote with the boundary date', () => {
-		render( <DataLagIndicator dataAsOf="2026-05-30" hasEstimatedData estimatedWindowStartDate="2026-05-23" /> );
-		expect( screen.getByText( /onward are estimated/ ) ).toBeInTheDocument();
+	it( 'combines the estimated-data note into the single as-of line', () => {
+		render( <DataLagIndicator dataAsOf="2026-05-30" hasEstimatedData /> );
+		expect( screen.getByText( /Data as of .* — figures from this date may shift as Ad Exchange finalizes/ ) ).toBeInTheDocument();
 	} );
 
-	it( 'renders nothing without an as-of date or estimated data', () => {
-		const { container } = render( <DataLagIndicator dataAsOf={ null } hasEstimatedData={ false } /> );
+	it( 'renders nothing without an as-of date', () => {
+		const { container } = render( <DataLagIndicator dataAsOf={ null } hasEstimatedData /> );
 		expect( container ).toBeEmptyDOMElement();
 	} );
 } );
