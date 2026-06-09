@@ -341,9 +341,11 @@ final class Engagement_Metric {
 	 */
 
 	/**
-	 * Article Completion Rate — article reads that reached the end ÷ article
-	 * reads. A `scroll` event is the completion signal under GA4 default
-	 * enhanced measurement (it fires once a reader reaches the end of the page).
+	 * Completion Rate — page reads that reached the end ÷ total page reads. A
+	 * `scroll` event is the completion signal under GA4 default enhanced
+	 * measurement (it fires once a reader reaches the end of the page). Computed
+	 * across all pageviews (no post_id / singular filter), so it reflects
+	 * site-wide read-through, not just article posts.
 	 *
 	 * @param string $pid Property ID.
 	 * @param string $s   Start date.
@@ -352,22 +354,14 @@ final class Engagement_Metric {
 	 */
 	private static function article_completion_rate_via_ga4( string $pid, string $s, string $e ): array {
 		$num_body                    = self::body( $s, $e, [], [ 'eventCount' ] );
-		$num_body['dimensionFilter'] = [
-			'andGroup' => [
-				'expressions' => [
-					self::event_name_expression( 'scroll' ),
-					self::custom_event_present_expression( 'post_id' ),
-				],
-			],
-		];
-		$num = self::safe_run_report( $pid, $num_body );
+		$num_body['dimensionFilter'] = self::event_name_expression( 'scroll' );
+		$num                         = self::safe_run_report( $pid, $num_body );
 		if ( isset( $num['error'] ) || isset( $num['overlay'] ) ) {
 			return $num;
 		}
 
-		$den_body                    = self::body( $s, $e, [], [ 'screenPageViews' ] );
-		$den_body['dimensionFilter'] = self::custom_event_present_filter( 'post_id' );
-		$den = self::safe_run_report( $pid, $den_body );
+		$den_body = self::body( $s, $e, [], [ 'screenPageViews' ] );
+		$den      = self::safe_run_report( $pid, $den_body );
 		if ( isset( $den['error'] ) || isset( $den['overlay'] ) ) {
 			return $den;
 		}
@@ -384,10 +378,11 @@ final class Engagement_Metric {
 	}
 
 	/**
-	 * Most-Read Articles — ranked by a composite of reach, scroll completion,
-	 * and engagement time (scroll still factors into the ranking even though it
-	 * isn't a displayed column). Two reports joined and scored in PHP; the row
-	 * payload exposes readers + avg engagement time.
+	 * Most-Engaged Pages — grouped by pageTitle across all URL types, ranked by a
+	 * composite of reach, scroll completion, and engagement time (scroll still
+	 * factors into the ranking even though it isn't a displayed column). Two
+	 * reports joined and scored in PHP; the row payload exposes readers + avg
+	 * engagement time.
 	 *
 	 * @param string $pid Property ID.
 	 * @param string $s   Start date.
@@ -395,16 +390,15 @@ final class Engagement_Metric {
 	 * @return array
 	 */
 	private static function most_read_articles_via_ga4( string $pid, string $s, string $e ): array {
-		$reach_body                    = self::body( $s, $e, [ 'customEvent:post_id', 'pagePath', 'pageTitle' ], [ 'totalUsers', 'userEngagementDuration' ] );
-		$reach_body['dimensionFilter'] = self::custom_event_present_filter( 'post_id' );
-		$reach_body                   += self::order_by_metric_desc( 'totalUsers' );
-		$reach_body['limit']           = 200;
-		$reach                         = self::safe_run_report( $pid, $reach_body );
+		$reach_body          = self::body( $s, $e, [ 'pageTitle' ], [ 'totalUsers', 'userEngagementDuration' ] );
+		$reach_body         += self::order_by_metric_desc( 'totalUsers' );
+		$reach_body['limit'] = 200;
+		$reach               = self::safe_run_report( $pid, $reach_body );
 		if ( isset( $reach['error'] ) || isset( $reach['overlay'] ) ) {
 			return $reach;
 		}
 
-		$scroll_by_post = self::scroll_events_by_post( $pid, $s, $e );
+		$scroll_by_title = self::scroll_events_by_page_title( $pid, $s, $e );
 
 		$articles = [];
 		foreach ( $reach['raw']['rows'] ?? [] as $row ) {
@@ -412,16 +406,14 @@ final class Engagement_Metric {
 			if ( $readers < self::READER_THRESHOLD ) {
 				continue;
 			}
-			$post_id    = $row['dimensionValues'][0]['value'] ?? '';
+			$page_title = $row['dimensionValues'][0]['value'] ?? '';
 			$avg_eng    = $readers > 0 ? self::num( $row, 1 ) / $readers : 0;
-			$scroll     = $scroll_by_post[ $post_id ] ?? 0;
+			$scroll     = $scroll_by_title[ $page_title ] ?? 0;
 			// Scroll completion still feeds the composite ranking score, but is
 			// no longer surfaced as a displayed column.
 			$avg_scroll = $readers > 0 ? min( 1.0, $scroll / $readers ) : 0;
 			$articles[] = [
-				'post_id'                => $post_id,
-				'page_path'              => $row['dimensionValues'][1]['value'] ?? null,
-				'page_title'             => $row['dimensionValues'][2]['value'] ?? null,
+				'page_title'             => $page_title,
 				'unique_readers'         => $readers,
 				'avg_engagement_seconds' => $avg_eng,
 				'engagement_score'       => $readers * max( $avg_scroll, 0.1 ) * ( 1 + log( $avg_eng + 1 ) ),
@@ -441,7 +433,9 @@ final class Engagement_Metric {
 	}
 
 	/**
-	 * Articles by Completion Rate — scroll-to-90 events ÷ readers per article.
+	 * Pages by Completion Rate — scroll-completion events ÷ pageviews per page,
+	 * grouped by pageTitle across all URL types. completion_rate = (pageviews
+	 * that fired the `scroll` completion event) / (total pageviews).
 	 *
 	 * @param string $pid Property ID.
 	 * @param string $s   Start date.
@@ -449,15 +443,14 @@ final class Engagement_Metric {
 	 * @return array
 	 */
 	private static function articles_by_completion_rate_via_ga4( string $pid, string $s, string $e ): array {
-		$readers_body                    = self::body( $s, $e, [ 'customEvent:post_id', 'pagePath', 'pageTitle' ], [ 'totalUsers' ] );
-		$readers_body['dimensionFilter'] = self::custom_event_present_filter( 'post_id' );
-		$readers_body['limit']           = 1000;
-		$readers                         = self::safe_run_report( $pid, $readers_body );
+		$readers_body          = self::body( $s, $e, [ 'pageTitle' ], [ 'totalUsers', 'screenPageViews' ] );
+		$readers_body['limit'] = 1000;
+		$readers               = self::safe_run_report( $pid, $readers_body );
 		if ( isset( $readers['error'] ) || isset( $readers['overlay'] ) ) {
 			return $readers;
 		}
 
-		$scroll_by_post = self::scroll_events_by_post( $pid, $s, $e );
+		$scroll_by_title = self::scroll_events_by_page_title( $pid, $s, $e );
 
 		$rows = [];
 		foreach ( $readers['raw']['rows'] ?? [] as $row ) {
@@ -465,14 +458,13 @@ final class Engagement_Metric {
 			if ( $count < self::READER_THRESHOLD ) {
 				continue;
 			}
-			$post_id = $row['dimensionValues'][0]['value'] ?? '';
-			$scroll  = $scroll_by_post[ $post_id ] ?? 0;
-			$rows[]  = [
-				'post_id'         => $post_id,
-				'page_path'       => $row['dimensionValues'][1]['value'] ?? null,
-				'page_title'      => $row['dimensionValues'][2]['value'] ?? null,
+			$page_title = $row['dimensionValues'][0]['value'] ?? '';
+			$pageviews  = (int) self::num( $row, 1 );
+			$scroll     = $scroll_by_title[ $page_title ] ?? 0;
+			$rows[]     = [
+				'page_title'      => $page_title,
 				'readers'         => $count,
-				'completion_rate' => $count > 0 ? min( 1.0, $scroll / $count ) : 0,
+				'completion_rate' => $pageviews > 0 ? min( 1.0, $scroll / $pageviews ) : 0,
 			];
 		}
 		usort(
@@ -490,7 +482,9 @@ final class Engagement_Metric {
 	}
 
 	/**
-	 * Top Authors by Avg Engagement Time — customEvent:author + post_id.
+	 * Top Authors by Avg Engagement Time — customEvent:author. The author custom
+	 * dimension is auto-provisioned on every GA4-connected Newspack site, so it
+	 * stands on its own without a post_id co-requirement.
 	 *
 	 * @param string $pid Property ID.
 	 * @param string $s   Start date.
@@ -499,17 +493,10 @@ final class Engagement_Metric {
 	 */
 	private static function top_authors_by_avg_engagement_time_via_ga4( string $pid, string $s, string $e ): array {
 		$body                    = self::body( $s, $e, [ 'customEvent:author' ], [ 'totalUsers', 'userEngagementDuration' ] );
-		$body['dimensionFilter'] = [
-			'andGroup' => [
-				'expressions' => [
-					self::custom_event_present_expression( 'post_id' ),
-					self::custom_event_present_expression( 'author' ),
-				],
-			],
-		];
-		$body         += self::order_by_metric_desc( 'userEngagementDuration' );
-		$body['limit'] = 25;
-		$result        = self::safe_run_report( $pid, $body );
+		$body['dimensionFilter'] = self::custom_event_present_filter( 'author' );
+		$body                   += self::order_by_metric_desc( 'userEngagementDuration' );
+		$body['limit']           = 25;
+		$result                  = self::safe_run_report( $pid, $body );
 		if ( isset( $result['error'] ) || isset( $result['overlay'] ) ) {
 			return $result;
 		}
@@ -595,7 +582,7 @@ final class Engagement_Metric {
 	}
 
 	/**
-	 * Article-scoped scroll-event counts keyed by post_id. Empty array on
+	 * Scroll-completion event counts keyed by pageTitle. Empty array on
 	 * error/overlay (callers treat missing scroll data as zero completion).
 	 *
 	 * @param string $pid Property ID.
@@ -603,18 +590,11 @@ final class Engagement_Metric {
 	 * @param string $e   End date.
 	 * @return array<string,int>
 	 */
-	private static function scroll_events_by_post( string $pid, string $s, string $e ): array {
-		$body                    = self::body( $s, $e, [ 'customEvent:post_id' ], [ 'eventCount' ] );
-		$body['dimensionFilter'] = [
-			'andGroup' => [
-				'expressions' => [
-					self::event_name_expression( 'scroll' ),
-					self::custom_event_present_expression( 'post_id' ),
-				],
-			],
-		];
-		$body['limit'] = 1000;
-		$result        = self::safe_run_report( $pid, $body );
+	private static function scroll_events_by_page_title( string $pid, string $s, string $e ): array {
+		$body                    = self::body( $s, $e, [ 'pageTitle' ], [ 'eventCount' ] );
+		$body['dimensionFilter'] = self::event_name_expression( 'scroll' );
+		$body['limit']           = 1000;
+		$result                  = self::safe_run_report( $pid, $body );
 		if ( isset( $result['error'] ) || isset( $result['overlay'] ) ) {
 			return [];
 		}
@@ -776,16 +756,6 @@ final class Engagement_Metric {
 	}
 
 	/**
-	 * Whether a safe_run_report result is a custom_dimension_missing overlay.
-	 *
-	 * @param array $result safe_run_report result.
-	 * @return bool
-	 */
-	private static function is_custom_dimension_missing( array $result ): bool {
-		return isset( $result['overlay']['type'] ) && 'custom_dimension_missing' === $result['overlay']['type'];
-	}
-
-	/**
 	 * Transform a single scalar metric value.
 	 *
 	 * @param array  $result safe_run_report result.
@@ -837,25 +807,6 @@ final class Engagement_Metric {
 			'computable' => true,
 			'type'       => $type,
 		];
-	}
-
-	/**
-	 * Attach a degraded-state overlay to a successful rows payload.
-	 *
-	 * @param array  $payload rows() output.
-	 * @param string $message Overlay message.
-	 * @return array
-	 */
-	private static function mark_degraded( array $payload, string $message ): array {
-		if ( isset( $payload['error'] ) || isset( $payload['overlay'] ) ) {
-			return $payload;
-		}
-		$payload['degraded'] = true;
-		$payload['overlay']  = [
-			'type'    => 'degraded',
-			'message' => $message,
-		];
-		return $payload;
 	}
 
 	/**

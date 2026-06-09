@@ -55,7 +55,6 @@ export interface MetricPayload {
 	error?: string;
 	hidden_in_v1?: boolean;
 	not_configured?: boolean;
-	degraded?: boolean;
 }
 
 const typeToFormat = ( type?: MetricPayloadType ): MetricFormat => {

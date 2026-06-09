@@ -21,6 +21,8 @@ import type { MetricPayload } from '../../components/metrics';
 import BarChart from '../../audience/viz/BarChart';
 
 export interface TakeawayCardProps {
+	/** Card title, rendered even in the empty / failure states. */
+	title: string;
 	payload?: MetricPayload;
 	/** One-line comparison statement (may contain emphasized spans). */
 	headline?: React.ReactNode;
@@ -30,7 +32,7 @@ export interface TakeawayCardProps {
 	bars: { label: string; value: number }[];
 }
 
-const TakeawayCard = ( { payload, headline, sub, bars }: TakeawayCardProps ) => {
+const TakeawayCard = ( { title, payload, headline, sub, bars }: TakeawayCardProps ) => {
 	if ( ! payload || payload.hidden_in_v1 ) {
 		return null;
 	}
@@ -56,7 +58,12 @@ const TakeawayCard = ( { payload, headline, sub, bars }: TakeawayCardProps ) => 
 		);
 	}
 
-	return <div className="newspack-insights__takeaway-card">{ body }</div>;
+	return (
+		<div className="newspack-insights__takeaway-card">
+			<h3 className="newspack-insights__chart-card-title newspack-insights__takeaway-title">{ title }</h3>
+			{ body }
+		</div>
+	);
 };
 
 export default TakeawayCard;

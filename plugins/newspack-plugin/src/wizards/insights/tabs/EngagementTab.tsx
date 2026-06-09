@@ -8,9 +8,15 @@
  */
 
 /**
+ * External dependencies
+ */
+import classnames from 'classnames';
+
+/**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { Spinner } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -61,8 +67,19 @@ const EngagementTab = ( { range, previousRange }: EngagementTabProps ) => {
 	// Fixture mode returns a `previous` window unconditionally, so gate here.
 	const previous = previousRange ? data.previous ?? null : null;
 
+	// A refetch (date range / comparison toggle change) keeps the prior window's
+	// values on screen while the new ones load. Mute the populated sections and
+	// float a spinner so the change is clearly registering (NPPD fix #8).
+	const isRefreshing = status === 'loading' && !! data;
+
 	return (
-		<div className="newspack-insights__engagement-tab">
+		<div className={ classnames( 'newspack-insights__engagement-tab', { 'is-refreshing': isRefreshing } ) } aria-busy={ isRefreshing }>
+			{ isRefreshing && (
+				<div className="newspack-insights__tab-refreshing" role="status" aria-live="polite">
+					<Spinner />
+					<span className="screen-reader-text">{ __( 'Updating…', 'newspack-plugin' ) }</span>
+				</div>
+			) }
 			<QualitySection current={ current } previous={ previous } />
 			<ReaderSegmentsSection current={ current } previous={ previous } />
 			<ContentEngagementSection current={ current } previous={ previous } />

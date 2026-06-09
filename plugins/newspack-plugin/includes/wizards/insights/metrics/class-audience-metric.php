@@ -396,8 +396,12 @@ final class Audience_Metric {
 	 * @return array
 	 */
 	private static function readership_by_day_of_week_via_ga4( string $pid, string $s, string $e ): array {
-		$result = self::safe_run_report( $pid, self::body( $s, $e, [ 'dayOfWeekName' ], [ 'totalUsers' ] ) );
-		return self::rows( $result, [ 'day_of_week' ], [ 'active_readers' ], 'breakdown' );
+		// Query the numeric dayOfWeek alongside the name purely to order the rows
+		// chronologically (Monday → Sunday); the numeric key is stripped before
+		// returning. Bars must read chronologically, not by readership value.
+		$result  = self::safe_run_report( $pid, self::body( $s, $e, [ 'dayOfWeek', 'dayOfWeekName' ], [ 'totalUsers' ] ) );
+		$payload = self::rows( $result, [ 'day_of_week_index', 'day_of_week' ], [ 'active_readers' ], 'breakdown' );
+		return self::order_rows_chronologically( $payload, 'day_of_week_index', true );
 	}
 
 	/**
@@ -409,8 +413,12 @@ final class Audience_Metric {
 	 * @return array
 	 */
 	private static function readership_by_hour_of_day_via_ga4( string $pid, string $s, string $e ): array {
-		$result = self::safe_run_report( $pid, self::body( $s, $e, [ 'hour' ], [ 'totalUsers' ] ) );
-		return self::rows( $result, [ 'hour' ], [ 'active_readers' ], 'breakdown' );
+		// Order chronologically by hour (0 → 23), not by readership value. The
+		// `hour` value doubles as the chronological key and the display label, so
+		// it is sorted in place and kept.
+		$result  = self::safe_run_report( $pid, self::body( $s, $e, [ 'hour' ], [ 'totalUsers' ] ) );
+		$payload = self::rows( $result, [ 'hour' ], [ 'active_readers' ], 'breakdown' );
+		return self::order_rows_chronologically( $payload, 'hour', false, false );
 	}
 
 	/**
@@ -653,8 +661,10 @@ final class Audience_Metric {
 	}
 
 	/**
-	 * Top Pages — customEvent:post_id (degrade to all URLs if missing). Ranked by
-	 * unique readers; returns both reader and pageview counts.
+	 * Top Pages — grouped by pageTitle across all URL types (homepage, listings,
+	 * archives, articles). Ranked by unique readers; returns both reader and
+	 * pageview counts. No post_id / singular-content filter: this surfaces
+	 * whatever pages drive pageviews, not just article posts.
 	 *
 	 * @param string $pid Property ID.
 	 * @param string $s   Start date.
@@ -662,24 +672,17 @@ final class Audience_Metric {
 	 * @return array
 	 */
 	private static function top_pages_via_ga4( string $pid, string $s, string $e ): array {
-		$body                    = self::body( $s, $e, [ 'customEvent:post_id', 'pagePath', 'pageTitle' ], [ 'totalUsers', 'screenPageViews' ] );
-		$body['dimensionFilter'] = self::custom_event_present_filter( 'post_id' );
-		$body                   += self::order_by_metric_desc( 'totalUsers' );
-		$body['limit']           = 50;
-		$result                  = self::safe_run_report( $pid, $body );
-
-		if ( self::is_custom_dimension_missing( $result ) ) {
-			$degraded          = self::body( $s, $e, [ 'pagePath', 'pageTitle' ], [ 'totalUsers', 'screenPageViews' ] );
-			$degraded         += self::order_by_metric_desc( 'totalUsers' );
-			$degraded['limit'] = 50;
-			$out               = self::rows( self::safe_run_report( $pid, $degraded ), [ 'page_path', 'page_title' ], [ 'unique_readers', 'pageviews' ], 'table' );
-			return self::mark_degraded( $out, __( 'Singular content filter unavailable; showing all URLs.', 'newspack-plugin' ) );
-		}
-		return self::rows( $result, [ 'post_id', 'page_path', 'page_title' ], [ 'unique_readers', 'pageviews' ], 'table' );
+		$body          = self::body( $s, $e, [ 'pageTitle' ], [ 'totalUsers', 'screenPageViews' ] );
+		$body         += self::order_by_metric_desc( 'totalUsers' );
+		$body['limit'] = 50;
+		$result        = self::safe_run_report( $pid, $body );
+		return self::rows( $result, [ 'page_title' ], [ 'unique_readers', 'pageviews' ], 'table' );
 	}
 
 	/**
-	 * Top Authors by Reader Count — customEvent:author + post_id (overlay if missing).
+	 * Top Authors by Reader Count — customEvent:author (overlay if missing). The
+	 * author custom dimension is auto-provisioned on every GA4-connected Newspack
+	 * site, so it stands on its own without a post_id co-requirement.
 	 *
 	 * @param string $pid Property ID.
 	 * @param string $s   Start date.
@@ -688,17 +691,10 @@ final class Audience_Metric {
 	 */
 	private static function top_authors_by_reader_count_via_ga4( string $pid, string $s, string $e ): array {
 		$body                    = self::body( $s, $e, [ 'customEvent:author' ], [ 'totalUsers', 'screenPageViews' ] );
-		$body['dimensionFilter'] = [
-			'andGroup' => [
-				'expressions' => [
-					self::custom_event_present_expression( 'post_id' ),
-					self::custom_event_present_expression( 'author' ),
-				],
-			],
-		];
-		$body         += self::order_by_metric_desc( 'totalUsers' );
-		$body['limit'] = 25;
-		$result        = self::safe_run_report( $pid, $body );
+		$body['dimensionFilter'] = self::custom_event_present_filter( 'author' );
+		$body                   += self::order_by_metric_desc( 'totalUsers' );
+		$body['limit']           = 25;
+		$result                  = self::safe_run_report( $pid, $body );
 		return self::rows( $result, [ 'author' ], [ 'unique_readers', 'pageviews' ], 'table' );
 	}
 
@@ -821,13 +817,43 @@ final class Audience_Metric {
 	}
 
 	/**
-	 * Whether a safe_run_report result is a custom_dimension_missing overlay.
+	 * Reorder a breakdown payload's rows chronologically by a numeric key.
 	 *
-	 * @param array $result safe_run_report result.
-	 * @return bool
+	 * Time-based charts (day of week, hour of day) must read chronologically
+	 * rather than sorted by readership value. Error / overlay payloads pass
+	 * through untouched.
+	 *
+	 * @param array  $payload      rows() output.
+	 * @param string $order_key    Row key holding the numeric ordering value.
+	 * @param bool   $monday_first Remap GA4 weekday (0=Sun..6=Sat) to Monday-first.
+	 * @param bool   $drop_key     Strip the ordering key from the returned rows.
+	 * @return array
 	 */
-	private static function is_custom_dimension_missing( array $result ): bool {
-		return isset( $result['overlay']['type'] ) && 'custom_dimension_missing' === $result['overlay']['type'];
+	private static function order_rows_chronologically( array $payload, string $order_key, bool $monday_first = false, bool $drop_key = true ): array {
+		if ( ! isset( $payload['rows'] ) || ! is_array( $payload['rows'] ) ) {
+			return $payload;
+		}
+		$rows = $payload['rows'];
+		usort(
+			$rows,
+			static function ( $a, $b ) use ( $order_key, $monday_first ) {
+				$ai = (int) ( $a[ $order_key ] ?? 0 );
+				$bi = (int) ( $b[ $order_key ] ?? 0 );
+				if ( $monday_first ) {
+					$ai = ( $ai + 6 ) % 7;
+					$bi = ( $bi + 6 ) % 7;
+				}
+				return $ai <=> $bi;
+			}
+		);
+		if ( $drop_key ) {
+			foreach ( $rows as &$row ) {
+				unset( $row[ $order_key ] );
+			}
+			unset( $row );
+		}
+		$payload['rows'] = array_values( $rows );
+		return $payload;
 	}
 
 	/**
@@ -921,25 +947,6 @@ final class Audience_Metric {
 			'computable' => ( $yes + $no ) > 0,
 			'type'       => 'breakdown',
 		];
-	}
-
-	/**
-	 * Attach a degraded-state overlay to an otherwise-successful rows payload.
-	 *
-	 * @param array  $payload rows() output.
-	 * @param string $message Overlay message.
-	 * @return array
-	 */
-	private static function mark_degraded( array $payload, string $message ): array {
-		if ( isset( $payload['error'] ) || isset( $payload['overlay'] ) ) {
-			return $payload;
-		}
-		$payload['degraded'] = true;
-		$payload['overlay']  = [
-			'type'    => 'degraded',
-			'message' => $message,
-		];
-		return $payload;
 	}
 
 	/**

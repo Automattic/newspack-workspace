@@ -8,9 +8,15 @@
  */
 
 /**
+ * External dependencies
+ */
+import classnames from 'classnames';
+
+/**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { Spinner } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -65,8 +71,19 @@ const AudienceTab = ( { range, previousRange }: AudienceTabProps ) => {
 	// toggle here rather than on the response — matches Gates/Subscribers/Donors.
 	const previous = previousRange ? data.previous ?? null : null;
 
+	// A refetch (date range / comparison toggle change) keeps the prior window's
+	// values on screen while the new ones load. Mute the populated sections and
+	// float a spinner so the change is clearly registering (NPPD fix #8).
+	const isRefreshing = status === 'loading' && !! data;
+
 	return (
-		<div className="newspack-insights__audience-tab">
+		<div className={ classnames( 'newspack-insights__audience-tab', { 'is-refreshing': isRefreshing } ) } aria-busy={ isRefreshing }>
+			{ isRefreshing && (
+				<div className="newspack-insights__tab-refreshing" role="status" aria-live="polite">
+					<Spinner />
+					<span className="screen-reader-text">{ __( 'Updating…', 'newspack-plugin' ) }</span>
+				</div>
+			) }
 			<ReachSection current={ current } previous={ previous } />
 			<CompositionSection current={ current } previous={ previous } />
 			<TrafficSourcesSection current={ current } previous={ previous } />

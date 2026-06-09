@@ -161,4 +161,86 @@ class Newspack_Test_Insights_Audience_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'Not subscribed', $payload['rows'][1]['label'] );
 		$this->assertSame( 70, $payload['rows'][1]['value'] );
 	}
+
+	/**
+	 * Day-of-week rows are reordered Monday → Sunday by their numeric index, and
+	 * the ordering key is dropped from the output (chart reads chronologically).
+	 */
+	public function test_order_rows_chronologically_weekday_monday_first() {
+		$payload = [
+			'rows'       => [
+				[
+					'day_of_week_index' => '0', // Sunday.
+					'day_of_week'       => 'Sunday',
+					'active_readers'    => 10,
+				],
+				[
+					'day_of_week_index' => '6', // Saturday.
+					'day_of_week'       => 'Saturday',
+					'active_readers'    => 5,
+				],
+				[
+					'day_of_week_index' => '1', // Monday.
+					'day_of_week'       => 'Monday',
+					'active_readers'    => 20,
+				],
+			],
+			'computable' => true,
+			'type'       => 'breakdown',
+		];
+
+		$out   = $this->invoke( 'order_rows_chronologically', [ $payload, 'day_of_week_index', true ] );
+		$names = array_column( $out['rows'], 'day_of_week' );
+		$this->assertSame( [ 'Monday', 'Saturday', 'Sunday' ], $names );
+		$this->assertArrayNotHasKey( 'day_of_week_index', $out['rows'][0] );
+	}
+
+	/**
+	 * Hour-of-day rows are sorted 0 → 23 numerically, and the ordering key (which
+	 * is also the display label) is retained.
+	 */
+	public function test_order_rows_chronologically_hour_keeps_key() {
+		$payload = [
+			'rows'       => [
+				[
+					'hour'           => '9',
+					'active_readers' => 50,
+				],
+				[
+					'hour'           => '0',
+					'active_readers' => 10,
+				],
+				[
+					'hour'           => '23',
+					'active_readers' => 5,
+				],
+				[
+					'hour'           => '10',
+					'active_readers' => 30,
+				],
+			],
+			'computable' => true,
+			'type'       => 'breakdown',
+		];
+
+		$out   = $this->invoke( 'order_rows_chronologically', [ $payload, 'hour', false, false ] );
+		$hours = array_column( $out['rows'], 'hour' );
+		$this->assertSame( [ '0', '9', '10', '23' ], $hours );
+	}
+
+	/**
+	 * An error / overlay payload (no rows) passes through ordering untouched.
+	 */
+	public function test_order_rows_chronologically_passes_through_non_rows() {
+		$overlay = [
+			'value'      => null,
+			'computable' => false,
+			'overlay'    => [
+				'type'       => 'custom_dimension_missing',
+				'dimensions' => [ 'author' ],
+			],
+		];
+		$out = $this->invoke( 'order_rows_chronologically', [ $overlay, 'hour', false, false ] );
+		$this->assertSame( $overlay, $out );
+	}
 }

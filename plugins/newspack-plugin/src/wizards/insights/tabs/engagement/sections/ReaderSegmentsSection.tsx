@@ -163,14 +163,22 @@ const ReaderSegmentsSection = ( { current }: SectionProps ) => {
 			</h2>
 			<p className="newspack-insights__section-caption">{ __( 'How engagement varies by segment.', 'newspack-plugin' ) }</p>
 			<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-3">
-				<TakeawayCard payload={ current.engagement_by_device_type } headline={ device.headline } sub={ device.sub } bars={ device.bars } />
 				<TakeawayCard
+					title={ __( 'Engagement by device', 'newspack-plugin' ) }
+					payload={ current.engagement_by_device_type }
+					headline={ device.headline }
+					sub={ device.sub }
+					bars={ device.bars }
+				/>
+				<TakeawayCard
+					title={ __( 'New vs returning readers', 'newspack-plugin' ) }
 					payload={ current.engagement_by_returning_vs_new }
 					headline={ returning.headline }
 					sub={ returning.sub }
 					bars={ returning.bars }
 				/>
 				<TakeawayCard
+					title={ __( 'Engagement by newsletter status', 'newspack-plugin' ) }
 					payload={ current.engagement_by_newsletter_status }
 					headline={ newsletter.headline }
 					sub={ newsletter.sub }

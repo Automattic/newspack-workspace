@@ -18,7 +18,7 @@ export interface SectionProps {
 	previous: InsightsWindow | null;
 }
 
-const PAGE_COL = { key: 'page_title', label: __( 'Article', 'newspack-plugin' ) };
+const PAGE_COL = { key: 'page_title', label: __( 'Page', 'newspack-plugin' ) };
 
 const ContentEngagementSection = ( { current }: SectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-engagement-content">
@@ -31,10 +31,10 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 		     have width and the third doesn't stretch full-width. */ }
 		<div className="newspack-insights__table-grid newspack-insights__table-grid--cols-2">
 			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Most-Read Articles', 'newspack-plugin' ) }</h3>
+				<h3 className="newspack-insights__chart-card-title">{ __( 'Most-Engaged Pages', 'newspack-plugin' ) }</h3>
 				<MetricTable
 					payload={ current.most_read_articles }
-					emptyMessage={ __( 'No article engagement data in this timeframe.', 'newspack-plugin' ) }
+					emptyMessage={ __( 'No page engagement data in this timeframe.', 'newspack-plugin' ) }
 					columns={ [
 						PAGE_COL,
 						{ key: 'unique_readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
@@ -43,7 +43,7 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 				/>
 			</div>
 			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Articles by Completion Rate', 'newspack-plugin' ) }</h3>
+				<h3 className="newspack-insights__chart-card-title">{ __( 'Pages by Completion Rate', 'newspack-plugin' ) }</h3>
 				<MetricTable
 					payload={ current.articles_by_completion_rate }
 					emptyMessage={ __( 'No scroll-completion data in this timeframe.', 'newspack-plugin' ) }
