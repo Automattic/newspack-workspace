@@ -160,6 +160,9 @@ export function resolveCheckoutButtonForm( root, productId, variationId, options
 	const hasVariation = variationId !== null && variationId !== undefined && String( variationId ) !== '';
 
 	if ( ! hasVariation ) {
+		// No variation requested. If several buttons on the page share this
+		// parent product, the first in DOM order is used (along with its
+		// context); the URL gives no signal to prefer one over another.
 		return findCheckoutButtonForm( root, productId, null );
 	}
 
@@ -171,7 +174,10 @@ export function resolveCheckoutButtonForm( root, productId, variationId, options
 	const picker = selectPickerForm( root, productId, variationId, options );
 	if ( picker ) {
 		// The source button may be locked to another variation. Use it only
-		// for block context, then submit the picker.
+		// for block context, then submit the picker. The picker is only reached
+		// because no button matches the requested variation, so when several
+		// buttons share this parent product there is no single correct one to
+		// prefer: the first in DOM order supplies the context.
 		copyContextFields( findCheckoutButtonForm( root, productId, null ), picker );
 		return picker;
 	}
