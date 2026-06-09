@@ -1,10 +1,13 @@
 /**
  * Advertising › Revenue breakdown (NPPD-1618, Section 3).
  *
- * Where the revenue comes from: the direct-vs-programmatic split (pie), top ad
- * units, and top advertisers. 2-col grid with wrap — the pie and ad-units table
- * share row 1; the advertisers table wraps to row 2 at ~50% width (matching the
- * Engagement content-engagement layout).
+ * Two rows:
+ *   Row 1 — Top Ad Units (left) and Top Advertisers (right) tables, equal width.
+ *   Row 2 — Direct vs Programmatic (left) and Performance by Device (right)
+ *           pies, each width-constrained to ~50%, three-slot vertical layout.
+ *
+ * The device pie lives here (rather than a separate audience section) — grouping
+ * both breakdown pies under "Revenue breakdown" is the right IA call for v1.
  */
 
 /**
@@ -32,14 +35,8 @@ const RevenueBreakdownSection = ( { current }: SectionProps ) => (
 			{ __( 'Revenue breakdown', 'newspack-plugin' ) }
 		</h2>
 		<p className="newspack-insights__section-caption">{ __( 'What drives your ad revenue.', 'newspack-plugin' ) }</p>
+		{ /* Row 1: tables side by side. */ }
 		<div className="newspack-insights__table-grid newspack-insights__table-grid--cols-2">
-			<ChartCard
-				title={ __( 'Direct vs Programmatic', 'newspack-plugin' ) }
-				caption={ __( 'Revenue by demand source', 'newspack-plugin' ) }
-				payload={ current.direct_vs_programmatic }
-			>
-				<PieChart segments={ toSeries( current.direct_vs_programmatic, 'label', 'revenue' ) } />
-			</ChartCard>
 			<div>
 				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Ad Units', 'newspack-plugin' ) }</h3>
 				<MetricTable
@@ -65,6 +62,23 @@ const RevenueBreakdownSection = ( { current }: SectionProps ) => (
 					] }
 				/>
 			</div>
+		</div>
+		{ /* Row 2: pies side by side, width-constrained to ~50% each. */ }
+		<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-2">
+			<ChartCard
+				title={ __( 'Direct vs Programmatic', 'newspack-plugin' ) }
+				caption={ __( 'Revenue by demand source', 'newspack-plugin' ) }
+				payload={ current.direct_vs_programmatic }
+			>
+				<PieChart segments={ toSeries( current.direct_vs_programmatic, 'label', 'revenue' ) } />
+			</ChartCard>
+			<ChartCard
+				title={ __( 'Performance by Device', 'newspack-plugin' ) }
+				caption={ __( 'Revenue by device category', 'newspack-plugin' ) }
+				payload={ current.performance_by_device }
+			>
+				<PieChart segments={ toSeries( current.performance_by_device, 'device', 'revenue' ) } />
+			</ChartCard>
 		</div>
 	</section>
 );

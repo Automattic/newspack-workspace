@@ -61,12 +61,32 @@
 	}
 }
 
-// Data-lag indicator: a small muted "as of" line plus an estimated-data
-// footnote. Informational context, not a warning — kept visually quiet.
+// Data-lag indicator: a subtle, width-constrained callout box (info icon +
+// two muted lines). Informational context, not a warning — quiet and glanceable.
 .newspack-insights__data-lag {
 	display: flex;
-	flex-direction: column;
-	gap: 2px;
+	align-items: flex-start;
+	gap: 8px;
+	// Contain the callout instead of spanning the full tab width.
+	align-self: flex-start;
+	max-width: 480px;
+	padding: 8px 12px;
+	border-radius: 6px;
+	background-color: wp-colors.$gray-100;
+
+	&-icon {
+		flex: 0 0 auto;
+		font-size: 14px;
+		line-height: 1.5;
+		color: wp-colors.$gray-600;
+	}
+
+	&-text {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
 
 	&-asof {
 		margin: 0;
@@ -78,6 +98,7 @@
 	&-footnote {
 		margin: 0;
 		font-size: 12px;
+		line-height: 1.4;
 		color: wp-colors.$gray-600;
 	}
 }

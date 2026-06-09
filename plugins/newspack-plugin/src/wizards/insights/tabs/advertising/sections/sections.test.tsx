@@ -16,7 +16,6 @@ import type { InsightsWindow } from '../../../api/advertising';
 import ReachRevenueSection from './ReachRevenueSection';
 import InventoryPerformanceSection from './InventoryPerformanceSection';
 import RevenueBreakdownSection from './RevenueBreakdownSection';
-import AudienceReachSection from './AudienceReachSection';
 
 const metrics: InsightsWindow = {
 	total_impressions: { value: 2400000, computable: true, type: 'count' },
@@ -69,18 +68,15 @@ describe( 'Advertising sections', () => {
 		expect( screen.getByText( 'Not available for this site.' ) ).toBeInTheDocument();
 	} );
 
-	it( 'RevenueBreakdownSection renders the split pie legend and both tables', () => {
+	it( 'RevenueBreakdownSection renders both tables (row 1) and both pies (row 2)', () => {
 		render( <RevenueBreakdownSection current={ metrics } previous={ null } /> );
-		expect( screen.getByText( 'direct' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'programmatic' ) ).toBeInTheDocument();
+		// Row 1: tables.
 		expect( screen.getByText( 'Homepage Leaderboard' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Acme Co' ) ).toBeInTheDocument();
-	} );
-
-	it( 'AudienceReachSection renders the device pie and countries table', () => {
-		render( <AudienceReachSection current={ metrics } previous={ null } /> );
+		// Row 2: both pie legends (direct/programmatic + device).
+		expect( screen.getByText( 'direct' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'programmatic' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Smartphone' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'United States' ) ).toBeInTheDocument();
 	} );
 
 	it( 'handles a zero-impressions window without erroring', () => {

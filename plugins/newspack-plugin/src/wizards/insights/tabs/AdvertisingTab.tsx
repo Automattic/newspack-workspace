@@ -24,7 +24,6 @@ import FinishConnectingDiagnostic from './components/FinishConnectingDiagnostic'
 import ReachRevenueSection from './advertising/sections/ReachRevenueSection';
 import InventoryPerformanceSection from './advertising/sections/InventoryPerformanceSection';
 import RevenueBreakdownSection from './advertising/sections/RevenueBreakdownSection';
-import AudienceReachSection from './advertising/sections/AudienceReachSection';
 import './advertising/advertising.scss';
 
 export interface AdvertisingTabProps {
@@ -95,7 +94,6 @@ const AdvertisingTab = ( { range, previousRange }: AdvertisingTabProps ) => {
 			<ReachRevenueSection current={ metrics } previous={ previous } />
 			<InventoryPerformanceSection current={ metrics } previous={ previous } />
 			<RevenueBreakdownSection current={ metrics } previous={ previous } />
-			<AudienceReachSection current={ metrics } previous={ previous } />
 		</div>
 	);
 };

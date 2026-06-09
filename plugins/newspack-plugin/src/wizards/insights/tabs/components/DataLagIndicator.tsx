@@ -50,27 +50,32 @@ const DataLagIndicator = ( { dataAsOf, hasEstimatedData, estimatedWindowStartDat
 	const estimatedFrom = formatIsoDate( estimatedWindowStartDate );
 
 	return (
-		<div className="newspack-insights__data-lag">
-			{ asOf && (
-				<p className="newspack-insights__data-lag-asof">
-					{ sprintf(
-						/* translators: %s: a date, e.g. "May 10, 2026". */
-						__( 'Data as of %s', 'newspack-plugin' ),
-						asOf
-					) }
-				</p>
-			) }
-			{ hasEstimatedData && (
-				<p className="newspack-insights__data-lag-footnote">
-					{ estimatedFrom
-						? sprintf(
-								/* translators: %s: a date, e.g. "May 3, 2026". */
-								__( 'Figures from %s onward are estimated and may shift as Ad Exchange finalizes.', 'newspack-plugin' ),
-								estimatedFrom
-						  )
-						: __( 'Recent figures are estimated and may shift as Ad Exchange finalizes.', 'newspack-plugin' ) }
-				</p>
-			) }
+		<div className="newspack-insights__data-lag" role="note">
+			<span className="newspack-insights__data-lag-icon" aria-hidden="true">
+				&#9432;
+			</span>
+			<div className="newspack-insights__data-lag-text">
+				{ asOf && (
+					<p className="newspack-insights__data-lag-asof">
+						{ sprintf(
+							/* translators: %s: a date, e.g. "May 10, 2026". */
+							__( 'Data as of %s', 'newspack-plugin' ),
+							asOf
+						) }
+					</p>
+				) }
+				{ hasEstimatedData && (
+					<p className="newspack-insights__data-lag-footnote">
+						{ estimatedFrom
+							? sprintf(
+									/* translators: %s: a date, e.g. "May 3, 2026". */
+									__( 'Figures from %s onward are estimated and may shift as Ad Exchange finalizes.', 'newspack-plugin' ),
+									estimatedFrom
+							  )
+							: __( 'Recent figures are estimated and may shift as Ad Exchange finalizes.', 'newspack-plugin' ) }
+					</p>
+				) }
+			</div>
 		</div>
 	);
 };
