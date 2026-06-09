@@ -58,10 +58,25 @@ jobs:
           # otherwise spawn a job that just fails.
           CHANGED=$(pnpm --silent --filter "...[$BASE_REF]" exec node -e 'console.log(process.env.PNPM_PACKAGE_NAME)' 2>/dev/null | grep -v '^newspack-workspace$' | sort -u || true)
 
+          # Root-level dependency files don't appear in pnpm's --filter graph
+          # (no source package owns them), so a Dependabot PR that only bumps
+          # entries in pnpm-lock.yaml or root package.json would otherwise skip
+          # the install job and let a lockfile/package.json mismatch land on
+          # main unchecked. Force install to run when these files change.
+          ROOT_DEPS_CHANGED=false
+          if git diff --name-only "$BASE_REF...HEAD" 2>/dev/null \
+            | grep -qxE 'pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml'; then
+            ROOT_DEPS_CHANGED=true
+          fi
+
           if [ -z "$CHANGED" ]; then
             echo "js-matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
             echo "php-matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
-            echo "any=false" >> "$GITHUB_OUTPUT"
+            if [ "$ROOT_DEPS_CHANGED" = "true" ]; then
+              echo "any=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "any=false" >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
 
