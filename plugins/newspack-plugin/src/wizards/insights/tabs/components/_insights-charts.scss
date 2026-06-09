@@ -458,7 +458,8 @@
 // section headers get consistent breathing room above each card row instead of
 // butting against the previous one (NPPD-1649 fix #2).
 .newspack-insights__audience-tab,
-.newspack-insights__engagement-tab {
+.newspack-insights__engagement-tab,
+.newspack-insights__advertising-tab {
 	display: flex;
 	flex-direction: column;
 	gap: 32px;
