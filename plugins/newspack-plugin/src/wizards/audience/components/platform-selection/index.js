@@ -20,7 +20,7 @@ const PAYMENT_WIZARD_SLUG = 'newspack-audience/payment';
 export const PLATFORM_PLUGINS = {
 	[ NEWSPACK ]: [ 'woocommerce', 'woocommerce-subscriptions', 'newspack-blocks' ],
 	[ NRH ]: [ 'newspack-blocks' ],
-	[ OTHER ]: [],
+	[ OTHER ]: [ 'newspack-blocks' ],
 };
 
 export const OPTIONS = [

@@ -707,7 +707,7 @@ class Donations {
 	 *
 	 * @return bool
 	 */
-	public static function is_platform_selected() {
+	public static function is_platform_selected(): bool {
 		return null !== get_option( self::NEWSPACK_READER_REVENUE_PLATFORM, null );
 	}
 

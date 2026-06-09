@@ -641,7 +641,7 @@ class Audience_Wizard extends Wizard {
 	 * @param mixed $value A param value.
 	 * @return bool
 	 */
-	public function api_validate_platform( $value ) {
+	public function api_validate_platform( mixed $value ): bool {
 		return in_array( $value, [ 'nrh', 'wc', 'other' ], true );
 	}
 
@@ -669,7 +669,7 @@ class Audience_Wizard extends Wizard {
 	 * Set payment settings.
 	 *
 	 * @param WP_REST_Request $request Request object.
-	 * @return WP_REST_Response Boolean success.
+	 * @return WP_REST_Response Payment data array (see get_payment_data()).
 	 */
 	public function api_update_payment_settings( $request ) {
 		$params = $request->get_params();
