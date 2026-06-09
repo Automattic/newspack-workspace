@@ -561,14 +561,12 @@ final class Engagement_Metric {
 			$buckets[ $key ]['pages']    += self::num( $row, 1 ) * $sessions;
 			$buckets[ $key ]['eng']      += self::num( $row, 2 );
 		}
-		$labels = [
-			'subscriber'     => __( 'Newsletter subscriber', 'newspack-plugin' ),
-			'not_subscribed' => __( 'Not subscribed', 'newspack-plugin' ),
-		];
 		$out = [];
 		foreach ( $buckets as $key => $b ) {
+			// Emit a stable, non-translated segment key so the UI can match on it
+			// reliably and render its own translated labels. See ReaderSegmentsSection.
 			$out[] = [
-				'segment'                => $labels[ $key ],
+				'segment'                => $key,
 				'sessions'               => $b['sessions'],
 				'avg_pages_per_session'  => $b['sessions'] > 0 ? $b['pages'] / $b['sessions'] : 0,
 				'avg_engagement_seconds' => $b['sessions'] > 0 ? $b['eng'] / $b['sessions'] : 0,

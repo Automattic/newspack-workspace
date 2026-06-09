@@ -117,8 +117,11 @@ const returningTakeaway = ( payload?: MetricPayload ): Takeaway => {
 /** Newsletter status: subscriber vs non-subscriber avg engaged time. */
 const newsletterTakeaway = ( payload?: MetricPayload ): Takeaway => {
 	const rows = rowsOf( payload );
-	const subRow = findRow( rows, 'segment', 'Subscriber' );
-	const nonRow = findRow( rows, 'segment', 'Non-subscriber' );
+	// Match on the orchestrator's stable, non-translated segment keys (see
+	// Engagement_Metric::engagement_by_newsletter_status_via_ga4); the bar labels
+	// below carry the user-facing translated strings.
+	const subRow = findRow( rows, 'segment', 'subscriber' );
+	const nonRow = findRow( rows, 'segment', 'not_subscribed' );
 	const bars = [
 		{ label: __( 'Subscriber', 'newspack-plugin' ), value: num( subRow, 'avg_engagement_seconds' ) },
 		{ label: __( 'Non-subscriber', 'newspack-plugin' ), value: num( nonRow, 'avg_engagement_seconds' ) },

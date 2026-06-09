@@ -269,13 +269,13 @@ $build = function ( float $f ) use ( $scalar, $rate, $table, $hidden, $start, $e
 		'engagement_by_newsletter_status'       => $table(
 			[
 				[
-					'segment'                => 'Subscriber',
+					'segment'                => 'subscriber',
 					'sessions'               => (int) round( 61200 * $f ),
 					'avg_pages_per_session'  => round( 3.4 * $f, 2 ),
 					'avg_engagement_seconds' => round( 224 * $f ),
 				],
 				[
-					'segment'                => 'Non-subscriber',
+					'segment'                => 'not_subscribed',
 					'sessions'               => (int) round( 219800 * $f ),
 					'avg_pages_per_session'  => round( 2.0 * $f, 2 ),
 					'avg_engagement_seconds' => round( 121 * $f ),
