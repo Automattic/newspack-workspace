@@ -4,8 +4,8 @@
  * Two rows:
  *   Row 1 — Top Ad Units (left) and Top Advertisers (right) tables, equal width.
  *           Top Advertisers collapses to 5 rows with a "See more" toggle.
- *   Row 2 — the Revenue Mix scorecard (direct revenue share) and the
- *           Performance by Device pie, each width-constrained to ~50%.
+ *   Row 2 — the Performance by Device pie alone, constrained to ~30% width and
+ *           left-aligned (a narrower related element beneath the tables).
  */
 
 /**
@@ -21,7 +21,6 @@ import ChartCard from '../../components/ChartCard';
 import MetricTable from '../../components/MetricTable';
 import { toSeries } from '../../components/metrics';
 import PieChart from '../../audience/viz/PieChart';
-import RevenueMixCard from '../RevenueMixCard';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -64,9 +63,8 @@ const RevenueBreakdownSection = ( { current }: SectionProps ) => (
 				/>
 			</div>
 		</div>
-		{ /* Row 2: revenue-mix scorecard + device pie, ~50% each. */ }
-		<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-2">
-			<RevenueMixCard payload={ current.direct_vs_programmatic } />
+		{ /* Row 2: device pie alone, ~30% width, left-aligned. */ }
+		<div className="newspack-insights__advertising-device-pie">
 			<ChartCard
 				title={ __( 'Performance by Device', 'newspack-plugin' ) }
 				caption={ __( 'Revenue by device category', 'newspack-plugin' ) }

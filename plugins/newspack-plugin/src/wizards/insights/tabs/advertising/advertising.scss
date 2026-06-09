@@ -63,3 +63,15 @@
 
 // The data-lag note now renders via the shared `.newspack-insights__info-callout`
 // (components/_insights-charts.scss) — see DataLagIndicator / InfoCallout.
+
+// Performance-by-Device pie sits alone beneath the Top performers tables,
+// constrained to ~30% width and left-aligned — a narrower related element, not
+// a full-row card. Goes full width on narrow screens.
+.newspack-insights__advertising-device-pie {
+	width: 30%;
+	min-width: 260px;
+
+	@media ( max-width: 782px ) {
+		width: 100%;
+	}
+}

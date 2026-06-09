@@ -54,11 +54,15 @@ const metrics: InsightsWindow = {
 };
 
 describe( 'Advertising sections', () => {
-	it( 'ReachRevenueSection shows impressions and currency revenue', () => {
+	it( 'ReachRevenueSection shows impressions, revenue, and the revenue-mix card', () => {
 		render( <ReachRevenueSection current={ metrics } previous={ null } /> );
 		expect( screen.getByText( 'Total Impressions' ) ).toBeInTheDocument();
 		expect( screen.getByText( '2,400,000' ) ).toBeInTheDocument();
 		expect( screen.getByText( '$4,200.00' ) ).toBeInTheDocument();
+		// Revenue Mix scorecard (60% direct of 2520/4200).
+		expect( screen.getByText( 'Revenue Mix' ) ).toBeInTheDocument();
+		expect( screen.getByText( '60%' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'direct sales' ) ).toBeInTheDocument();
 	} );
 
 	it( 'InventoryPerformanceSection shows eCPM/fill and the viewability overlay', () => {
@@ -68,16 +72,14 @@ describe( 'Advertising sections', () => {
 		expect( screen.getByText( 'Not available for this site.' ) ).toBeInTheDocument();
 	} );
 
-	it( 'RevenueBreakdownSection renders both tables, the revenue-mix card, and the device pie', () => {
+	it( 'RevenueBreakdownSection renders both tables and the device pie (no revenue-mix card)', () => {
 		render( <RevenueBreakdownSection current={ metrics } previous={ null } /> );
 		// Row 1: tables.
 		expect( screen.getByText( 'Homepage Leaderboard' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Acme Co' ) ).toBeInTheDocument();
-		// Row 2: revenue-mix scorecard (60% direct of 2520/4200) + device pie.
-		expect( screen.getByText( 'Revenue Mix' ) ).toBeInTheDocument();
-		expect( screen.getByText( '60%' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'direct sales' ) ).toBeInTheDocument();
+		// Row 2: device pie only — revenue mix now lives in Reach & revenue.
 		expect( screen.getByText( 'Smartphone' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Revenue Mix' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'Top Advertisers collapses to 5 rows behind a See more toggle', () => {
