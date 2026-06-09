@@ -161,11 +161,36 @@ class Newspack_Test_Insights_GA4_Client extends WP_UnitTestCase {
 			],
 		];
 
-		$requested  = $this->invoke_private( 'extract_custom_dimensions', [ $body ] );
-		$registered = [ 'post_id' ];
-		$missing    = array_values( array_diff( $requested, $registered ) );
+		$requested = $this->invoke_private( 'extract_custom_dimensions', [ $body ] );
+		$missing   = $this->invoke_private( 'missing_registered_dimensions', [ $requested, [ 'post_id' ] ] );
 
 		$this->assertSame( [ 'author' ], $missing );
+	}
+
+	/**
+	 * The pre-check only blocks on a definitive registered set. An empty list
+	 * (e.g. a freshly connected property before async dimension provisioning
+	 * runs) or a WP_Error is indeterminate and must NOT report anything missing,
+	 * so the metric is not falsely suppressed.
+	 */
+	public function test_missing_registered_dimensions_indeterminate_cases() {
+		$requested = [ 'post_id', 'author' ];
+
+		$this->assertSame(
+			[],
+			$this->invoke_private( 'missing_registered_dimensions', [ $requested, [] ] ),
+			'Empty registered set must be treated as indeterminate.'
+		);
+		$this->assertSame(
+			[],
+			$this->invoke_private( 'missing_registered_dimensions', [ $requested, new WP_Error( 'lookup_failed', 'x' ) ] ),
+			'A WP_Error registered set must be treated as indeterminate.'
+		);
+		$this->assertSame(
+			[],
+			$this->invoke_private( 'missing_registered_dimensions', [ $requested, [ 'post_id', 'author' ] ] ),
+			'A fully registered set reports nothing missing.'
+		);
 	}
 
 	/**

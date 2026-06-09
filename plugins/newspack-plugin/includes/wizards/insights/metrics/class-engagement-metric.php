@@ -50,6 +50,22 @@ final class Engagement_Metric {
 	}
 
 	/**
+	 * Build the per-window transient cache key. Includes the GA4 property ID so
+	 * that a reconnect to a different property never serves the previous
+	 * property's cached payload within the TTL.
+	 *
+	 * @param string $start_date YYYY-MM-DD.
+	 * @param string $end_date   YYYY-MM-DD.
+	 * @param bool   $use_ga4    Whether the GA4 backend is active.
+	 * @return string
+	 */
+	private static function window_cache_key( string $start_date, string $end_date, bool $use_ga4 ): string {
+		return self::CACHE_KEY_PREFIX . md5(
+			self::resolve_property_id() . '|' . $start_date . '|' . $end_date . '|' . ( $use_ga4 ? 'ga4' : 'bq' )
+		);
+	}
+
+	/**
 	 * Tab-level connection check (GA4 path only).
 	 *
 	 * @return array|null
@@ -129,7 +145,7 @@ final class Engagement_Metric {
 	 */
 	private static function compute_window_cached( string $start_date, string $end_date ): array {
 		$use_ga4   = self::use_ga4();
-		$cache_key = self::CACHE_KEY_PREFIX . md5( $start_date . '|' . $end_date . '|' . ( $use_ga4 ? 'ga4' : 'bq' ) );
+		$cache_key = self::window_cache_key( $start_date, $end_date, $use_ga4 );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached ) {
 			return $cached;
