@@ -70,7 +70,7 @@ const RevenueBreakdownSection = ( { current }: SectionProps ) => (
 				caption={ __( 'Revenue by device category', 'newspack-plugin' ) }
 				payload={ current.performance_by_device }
 			>
-				<PieChart segments={ toSeries( current.performance_by_device, 'device', 'revenue' ) } />
+				<PieChart segments={ toSeries( current.performance_by_device, 'device', 'revenue' ) } valueFormat="currency" />
 			</ChartCard>
 		</div>
 	</section>

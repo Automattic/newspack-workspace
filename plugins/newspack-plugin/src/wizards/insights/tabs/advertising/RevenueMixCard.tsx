@@ -33,7 +33,7 @@ const RevenueMixCard = ( { payload }: RevenueMixCardProps ) => {
 	}
 
 	const label = __( 'Revenue Mix', 'newspack-plugin' );
-	const subtext = __( 'direct sales', 'newspack-plugin' );
+	const subtext = __( 'from direct sales', 'newspack-plugin' );
 
 	if ( payload.overlay ) {
 		return <MetricCard label={ label } overlay={ payload.overlay } />;
@@ -61,21 +61,27 @@ const RevenueMixCard = ( { payload }: RevenueMixCardProps ) => {
 	}
 
 	const directShare = direct / total;
-	const programmaticPct = Math.round( ( programmatic / total ) * 100 );
-	const restPct = Math.round( ( rest / total ) * 100 );
+	const directPct = Math.round( directShare * 100 );
+	const otherPct = 100 - directPct;
 
-	const description =
-		restPct > 0
-			? sprintf(
-					/* translators: %d: a whole-number percentage. */
-					__( '%d%% from programmatic; house and other ads make up the rest.', 'newspack-plugin' ),
-					programmaticPct
-			  )
-			: sprintf(
-					/* translators: %d: a whole-number percentage. */
-					__( '%d%% from programmatic.', 'newspack-plugin' ),
-					programmaticPct
-			  );
+	// Definitional sentence (à la the Donors "Active Donors" card), with the
+	// complement percentage inline. Edge cases for all-direct / all-programmatic
+	// avoid an awkward "0% from programmatic".
+	let description: string;
+	if ( directPct >= 100 ) {
+		description = __( 'All of your ad revenue comes from direct sales.', 'newspack-plugin' );
+	} else if ( directPct <= 0 ) {
+		description = __( 'All of your ad revenue comes from programmatic auctions.', 'newspack-plugin' );
+	} else {
+		description = sprintf(
+			/* translators: %d: percentage of ad revenue from programmatic auctions. */
+			__(
+				'How your ad revenue splits between direct sales and programmatic auctions. The other %d%% comes from programmatic.',
+				'newspack-plugin'
+			),
+			otherPct
+		);
+	}
 
 	return <MetricCard label={ label } value={ directShare } format="percent" secondary={ subtext } description={ description } />;
 };

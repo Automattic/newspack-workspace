@@ -15,7 +15,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import { formatNumber, formatPercent } from '../../components/format';
+import { formatCurrency, formatNumber, formatPercent } from '../../components/format';
 
 export interface PieSegment {
 	label: string;
@@ -24,12 +24,25 @@ export interface PieSegment {
 
 export interface PieChartProps {
 	segments: PieSegment[];
+	/** How to format the raw legend value. Defaults to a plain number. */
+	valueFormat?: 'number' | 'currency' | 'percent';
 }
+
+const formatLegendValue = ( value: number, valueFormat: PieChartProps[ 'valueFormat' ] ): string => {
+	switch ( valueFormat ) {
+		case 'currency':
+			return formatCurrency( value );
+		case 'percent':
+			return formatPercent( value );
+		default:
+			return formatNumber( value );
+	}
+};
 
 const RADIUS = 16;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
-const PieChart = ( { segments }: PieChartProps ) => {
+const PieChart = ( { segments, valueFormat = 'number' }: PieChartProps ) => {
 	const total = segments.reduce( ( sum, s ) => sum + ( s.value || 0 ), 0 );
 	if ( total <= 0 ) {
 		return <p className="newspack-insights__chart-empty">{ __( 'No data in this timeframe.', 'newspack-plugin' ) }</p>;
@@ -69,7 +82,7 @@ const PieChart = ( { segments }: PieChartProps ) => {
 						<span className={ `newspack-insights__legend-swatch is-series-${ i % 7 }` } aria-hidden="true" />
 						<span className="newspack-insights__legend-label">{ segment.label }</span>
 						<span className="newspack-insights__legend-value">
-							{ formatNumber( segment.value ) } ({ formatPercent( segment.value / total ) })
+							{ formatLegendValue( segment.value, valueFormat ) } ({ formatPercent( segment.value / total ) })
 						</span>
 					</li>
 				) ) }

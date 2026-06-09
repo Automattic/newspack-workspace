@@ -62,7 +62,7 @@ describe( 'Advertising sections', () => {
 		// Revenue Mix scorecard (60% direct of 2520/4200).
 		expect( screen.getByText( 'Revenue Mix' ) ).toBeInTheDocument();
 		expect( screen.getByText( '60%' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'direct sales' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'from direct sales' ) ).toBeInTheDocument();
 	} );
 
 	it( 'InventoryPerformanceSection shows eCPM/fill and the viewability overlay', () => {
@@ -80,6 +80,8 @@ describe( 'Advertising sections', () => {
 		// Row 2: device pie only — revenue mix now lives in Reach & revenue.
 		expect( screen.getByText( 'Smartphone' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Revenue Mix' ) ).not.toBeInTheDocument();
+		// Legend value is currency-formatted (revenue-by-device pie).
+		expect( screen.getByText( /\$2,400/ ) ).toBeInTheDocument();
 	} );
 
 	it( 'Top Advertisers collapses to 5 rows behind a See more toggle', () => {
