@@ -90,6 +90,7 @@ final class Newspack_Newsletters_Editor {
 		$email_cpts = [
 			Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
 			Newspack_Newsletters\Ads::CPT,
+			Newspack_Newsletters_Layouts::NEWSPACK_NEWSLETTERS_LAYOUT_CPT,
 		];
 		return apply_filters( 'newspack_newsletters_email_editor_cpts', $email_cpts );
 	}
@@ -510,23 +511,23 @@ final class Newspack_Newsletters_Editor {
 	}
 
 	/**
-	 * Load up common JS/CSS for newsletter editor.
+	 * Build the `newspack_email_editor_data` payload shared by the editor and any
+	 * surface that previews newsletter blocks (e.g. the admin-shell layouts list).
+	 *
+	 * @return array
 	 */
-	public static function enqueue_block_assets() {
-		if ( ! is_admin() ) {
-			return;
-		}
+	public static function get_email_editor_data() {
 		// Remove the Ads CPT - it does not need MJML handling since ads
 		// will be injected into email content before it's converted to MJML.
 		$mjml_handling_post_types = array_values( array_diff( self::get_email_editor_cpts(), [ Newspack_Newsletters\Ads::CPT ] ) );
 		$provider                 = Newspack_Newsletters::get_service_provider();
 		$conditional_tag_support  = false;
 
-		if ( $provider && ( self::is_editing_newsletter() || self::is_editing_newsletter_ad() ) ) {
+		if ( $provider && ( self::is_editing_newsletter() || self::is_editing_newsletter_ad() || self::is_editing_layout() ) ) {
 			$conditional_tag_support = $provider::get_conditional_tag_support();
 		}
 
-		$email_editor_data = [
+		return [
 			'email_html_meta'                => Newspack_Newsletters::EMAIL_HTML_META,
 			'mjml_handling_post_types'       => $mjml_handling_post_types,
 			'newsletter_post_type'           => Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
@@ -541,7 +542,22 @@ final class Newspack_Newsletters_Editor {
 			],
 			'supported_social_icon_services' => Newspack_Newsletters_Renderer::get_supported_social_icons_services(),
 			'supported_esps'                 => Newspack_Newsletters::get_supported_providers(),
+			'merge_tags'                     => $provider
+				? $provider::get_merge_tags()
+				: Newspack_Newsletters_Service_Provider::get_merge_tags(),
+			'sample_assets_url'              => plugins_url( '../assets/sample-posts/', __FILE__ ),
 		];
+	}
+
+	/**
+	 * Load up common JS/CSS for newsletter editor.
+	 */
+	public static function enqueue_block_assets() {
+		if ( ! is_admin() ) {
+			return;
+		}
+
+		$email_editor_data = self::get_email_editor_data();
 
 		if ( self::is_editing_email() ) {
 			wp_register_style(
@@ -578,7 +594,7 @@ final class Newspack_Newsletters_Editor {
 			);
 		}
 
-		if ( self::is_editing_newsletter() ) {
+		if ( self::is_editing_newsletter() || self::is_editing_layout() ) {
 			wp_localize_script(
 				'newspack-newsletters-editor',
 				'newspack_newsletters_data',
@@ -659,6 +675,13 @@ final class Newspack_Newsletters_Editor {
 	 */
 	private static function is_editing_newsletter_ad() {
 		return Newspack_Newsletters\Ads::CPT === get_post_type();
+	}
+
+	/**
+	 * Is editing a layout?
+	 */
+	private static function is_editing_layout() {
+		return Newspack_Newsletters_Layouts::NEWSPACK_NEWSLETTERS_LAYOUT_CPT === get_post_type();
 	}
 
 	/**

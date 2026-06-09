@@ -3,6 +3,28 @@
 	height: 100%;
 	position: absolute;
 	width: 100%;
+
+	.block-editor-block-preview__container {
+		opacity: 0;
+		transition: opacity 200ms ease-out;
+	}
+
+	&.is-ready .block-editor-block-preview__container {
+		opacity: 1;
+	}
+}
+
+.newspack-newsletters__layout-preview-spinner {
+	align-items: center;
+	display: flex;
+	height: 100%;
+	justify-content: center;
+	left: 0;
+	pointer-events: none;
+	position: absolute;
+	top: 0;
+	width: 100%;
+	z-index: 1;
 }
 
 .newspack-newsletters-modal__preview .newspack-newsletters__layout-preview {

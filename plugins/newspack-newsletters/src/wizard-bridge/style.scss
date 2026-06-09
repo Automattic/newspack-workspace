@@ -1,0 +1,9 @@
+// Bridge bundle stylesheet. Reserved for future wizard-bridge-specific styles.
+//
+// LocalListModal + LocalListDeleteModal use @wordpress/components Modal
+// styling, which WP admin loads independently. The file exists so webpack
+// emits a dist/wizard-bridge.css alongside the JS bundle for PHP to enqueue.
+
+.newspack-newsletters-wizard-bridge-root {
+	// Body-level mount container — non-visual.
+}
