@@ -33,6 +33,8 @@ const TopPerformersSection = ( { current }: SectionProps ) => (
 				<MetricTable
 					payload={ current.top_ad_units }
 					emptyMessage={ __( 'No ad unit data in this timeframe.', 'newspack-plugin' ) }
+					expandable
+					defaultRowLimit={ 5 }
 					columns={ [
 						{ key: 'ad_unit', label: __( 'Ad Unit', 'newspack-plugin' ) },
 						{ key: 'impressions', label: __( 'Impr.', 'newspack-plugin' ), format: 'number', align: 'right' },

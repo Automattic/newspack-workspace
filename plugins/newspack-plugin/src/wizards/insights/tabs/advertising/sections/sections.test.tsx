@@ -93,6 +93,25 @@ describe( 'Advertising sections', () => {
 		expect( screen.getByText( 'Adv 8' ) ).toBeInTheDocument();
 	} );
 
+	it( 'Top Ad Units collapses to 5 rows behind a See more toggle', () => {
+		const many: InsightsWindow = {
+			...metrics,
+			top_ad_units: {
+				type: 'table',
+				computable: true,
+				rows: Array.from( { length: 8 }, ( _, i ) => ( { ad_unit: `Unit ${ i + 1 }`, impressions: 100, revenue: 10, ecpm: 1 } ) ),
+			},
+		};
+		render( <TopPerformersSection current={ many } previous={ null } /> );
+		expect( screen.getByText( 'Unit 5' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Unit 6' ) ).not.toBeInTheDocument();
+
+		fireEvent.click( screen.getByRole( 'button', { name: /See more/ } ) );
+
+		expect( screen.getByText( 'Unit 6' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Unit 8' ) ).toBeInTheDocument();
+	} );
+
 	it( 'handles a zero-impressions window without erroring', () => {
 		const zero: InsightsWindow = {
 			total_impressions: { value: 0, computable: true, type: 'count' },
