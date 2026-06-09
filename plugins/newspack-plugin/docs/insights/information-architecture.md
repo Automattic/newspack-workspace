@@ -57,7 +57,7 @@ When a metric's underlying data isn't available (scroll tracking not enabled, GA
 
 **Job-to-be-done:** "How big is my reach?"
 
-The entry tab. First thing a publisher sees when opening Insights. All metrics are BigQuery-only.
+The entry tab. First thing a publisher sees when opening Insights. Powered by the GA4 Data API in v1; swaps to BigQuery in v1.1 (NPPD-1630), with a few metrics BQ-only and hidden until then. See `specs/audience.md`.
 
 **Sections:**
 - Reach (scorecards: active readers, sessions, pageviews, avg sessions per reader)
@@ -72,7 +72,7 @@ The entry tab. First thing a publisher sees when opening Insights. All metrics a
 
 **Job-to-be-done:** "Are readers engaging?"
 
-The engagement-quality deep dive. Picks up where Tab 1 leaves off. BQ-only.
+The engagement-quality deep dive. Picks up where Tab 1 leaves off. Powered by the GA4 Data API in v1; swaps to BigQuery in v1.1 (NPPD-1630), with a few metrics BQ-only and hidden until then. See `specs/engagement.md`.
 
 **Sections:**
 - Overall quality (avg pages per session, engaged session duration, bounce rate, scroll depth rate)
@@ -156,7 +156,7 @@ Donation deep dive — both one-time and recurring donations. Mostly local Woo S
 
 **Job-to-be-done:** "How is my ad stack performing?"
 
-Ad revenue and inventory performance. Reads live from the GAM (Google Ad Manager) API (`ReportService`), authenticated through Newspack's existing Google OAuth connection — the same connection used for GA4 (its scopes already include `admanager`). Not BigQuery. Hide tab when the OAuth token lacks the GAM scope or no GAM network code is configured.
+Ad revenue and inventory performance. Reads live from the GAM (Google Ad Manager) API (`ReportService`), authenticated through Newspack's existing Google OAuth connection — the same connection used for GA4 (its scopes already include `admanager`). Not BigQuery. Tab visibility is based on whether Google Ad Manager is active on the site (the GAM ad provider is enabled — `Client::is_gam_active()`); reporting readiness (OAuth `admanager` scope + a configured network code — `Client::can_run_reports()`) is checked inside the tab, which shows a "finish connecting" diagnostic when GAM is active but reporting isn't fully wired up.
 
 **Sections:**
 - Headline scorecards (impressions, revenue, fill rate, eCPM, CTR, viewability)
@@ -230,7 +230,7 @@ Tab visibility is computed at boot via lightweight detection queries:
 
 - Tab 6 visible if non-donation subscription product count > 0
 - Tab 7 visible if any donation product activity ever
-- Tab 8 visible if the Google OAuth token carries the `admanager` scope and a GAM network code is configured
+- Tab 8 visible if Google Ad Manager is active on the site (the GAM ad provider is enabled — `Client::is_gam_active()`); reporting readiness (OAuth scope + network code — `Client::can_run_reports()`) is handled in-tab, not as a visibility gate
 - Scroll-dependent sections within Tab 2 visible if scroll events fired in last 7 days
 - Local Reader Rate within Tab 1 visible if coverage area setting is configured
 

@@ -408,8 +408,11 @@ class Test_Insights_GAM_Client extends WP_UnitTestCase {
 			];
 		};
 		add_filter( 'pre_http_request', $filter );
-		$rows = Client::fetch_and_parse_csv( 'https://admanager.example.test/report.csv.gz' );
-		remove_filter( 'pre_http_request', $filter );
+		try {
+			$rows = Client::fetch_and_parse_csv( 'https://admanager.example.test/report.csv.gz' );
+		} finally {
+			remove_filter( 'pre_http_request', $filter );
+		}
 
 		$this->assertCount( 1, $rows );
 		$this->assertSame( '4242', $rows[0]['Column.TOTAL_IMPRESSIONS'] );

@@ -1,6 +1,6 @@
 # Tab 4: Gates — Product Spec
 
-> Companion to `formulas/gates.md`. This document specifies the UI structure, empty-state behavior, and product decisions. Formula references point at the formulas doc; no SQL lives here.
+> Companion to `formulas/tab-4-gates.md`. This document specifies the UI structure, empty-state behavior, and product decisions. Formula references point at the formulas doc; no SQL lives here.
 
 ## Status: placeholder phase
 
@@ -16,7 +16,7 @@ This spec describes Phase 2 — the intended final state. Phase 1 is identical e
 
 The Gates tab gives publishers a publisher-facing read on how their content gates (paywalls and regwalls) are performing. It answers: how many readers are seeing gates, how many of those readers convert, how many gate exposures it takes before a conversion happens, and which gates work best.
 
-Sources: GA4 event data via BigQuery for impressions and conversion intent; local Woo for paid conversion completion (joined on `gate_post_id` and timestamp). See `formulas/gates.md` for the queries.
+Sources: GA4 event data via BigQuery for impressions and conversion intent; local Woo for paid conversion completion (joined on `gate_post_id` and timestamp). See `formulas/tab-4-gates.md` for the queries.
 
 ## Visibility heuristic
 
@@ -65,7 +65,7 @@ Remove this banner entirely when Phase 2 lands.
 - **Value type:** Count
 - **Placeholder:** 0
 - **Comparison mode:** Yes (delta vs prior period)
-- **Formula:** `formulas/gates.md` → "Total Gate Impressions (selected period)"
+- **Formula:** `formulas/tab-4-gates.md` → "Total Gate Impressions (selected period)"
 
 ### Card 1.2: Unique Readers Reached
 
@@ -73,7 +73,7 @@ Remove this banner entirely when Phase 2 lands.
 - **Value type:** Count
 - **Placeholder:** 0
 - **Comparison mode:** Yes
-- **Formula:** `formulas/gates.md` → "Unique Readers Who Saw a Gate"
+- **Formula:** `formulas/tab-4-gates.md` → "Unique Readers Who Saw a Gate"
 
 ### Card 1.3: Avg Exposures per Reader
 
@@ -81,7 +81,7 @@ Remove this banner entirely when Phase 2 lands.
 - **Value type:** Decimal (1 place)
 - **Placeholder:** 0.0
 - **Comparison mode:** Yes
-- **Formula:** `formulas/gates.md` → "Avg Gate Exposures per Reader"
+- **Formula:** `formulas/tab-4-gates.md` → "Avg Gate Exposures per Reader"
 
 ### Card 1.4: Sessions With a Gate
 
@@ -89,7 +89,7 @@ Remove this banner entirely when Phase 2 lands.
 - **Value type:** Percentage
 - **Placeholder:** 0%
 - **Comparison mode:** Yes
-- **Formula:** `formulas/gates.md` → "% of Sessions With a Gate Trigger"
+- **Formula:** `formulas/tab-4-gates.md` → "% of Sessions With a Gate Trigger"
 
 ---
 
@@ -106,7 +106,7 @@ Remove this banner entirely when Phase 2 lands.
 - **Value type:** Percentage
 - **Placeholder:** 0%
 - **Comparison mode:** Yes
-- **Formula:** `formulas/gates.md` → "Regwall Conversion Rate (Direct)"
+- **Formula:** `formulas/tab-4-gates.md` → "Regwall Conversion Rate (Direct)"
 
 ### Card 2.2: Regwall Conversion (Influenced, 7d)
 
@@ -114,7 +114,7 @@ Remove this banner entirely when Phase 2 lands.
 - **Value type:** Percentage
 - **Placeholder:** 0%
 - **Comparison mode:** Yes
-- **Formula:** `formulas/gates.md` → "Regwall Conversion Rate (Influenced, 7d lookback)"
+- **Formula:** `formulas/tab-4-gates.md` → "Regwall Conversion Rate (Influenced, 7d lookback)"
 
 ---
 
@@ -131,7 +131,7 @@ Remove this banner entirely when Phase 2 lands.
 - **Value type:** Percentage
 - **Placeholder:** 0%
 - **Comparison mode:** Yes
-- **Formula:** `formulas/gates.md` → "Paywall Conversion Rate (Direct)"
+- **Formula:** `formulas/tab-4-gates.md` → "Paywall Conversion Rate (Direct)"
 
 ### Card 3.2: Paywall Conversion (Influenced, 14d)
 
@@ -139,7 +139,7 @@ Remove this banner entirely when Phase 2 lands.
 - **Value type:** Percentage
 - **Placeholder:** 0%
 - **Comparison mode:** Yes
-- **Formula:** `formulas/gates.md` → "Paywall Conversion Rate (Influenced, 14d lookback)"
+- **Formula:** `formulas/tab-4-gates.md` → "Paywall Conversion Rate (Influenced, 14d lookback)"
 
 ### Card 3.3: Total Paywall Revenue (Direct)
 
@@ -147,7 +147,7 @@ Remove this banner entirely when Phase 2 lands.
 - **Value type:** Currency
 - **Placeholder:** $0.00
 - **Comparison mode:** Yes
-- **Formula:** `formulas/gates.md` → "Total Revenue from Paywall (Direct)"
+- **Formula:** `formulas/tab-4-gates.md` → "Total Revenue from Paywall (Direct)"
 
 ### Card 3.4: Avg Revenue per Paywall Conversion
 
@@ -155,7 +155,7 @@ Remove this banner entirely when Phase 2 lands.
 - **Value type:** Currency
 - **Placeholder:** $0.00
 - **Comparison mode:** Yes
-- **Formula:** `formulas/gates.md` → "Avg Revenue per Paywall Conversion"
+- **Formula:** `formulas/tab-4-gates.md` → "Avg Revenue per Paywall Conversion"
 
 ---
 
@@ -177,7 +177,7 @@ Remove this banner entirely when Phase 2 lands.
 - **Labels:** Each stage shows count + percentage of stage 1
 - **Drop-off labels:** Between stages, show % drop-off
 - **Placeholder:** All stages show 0, drop-off labels hidden when all zeros
-- **Formula:** `formulas/gates.md` → "Funnel: Gate Impression → Engagement → Conversion (rolled up)"
+- **Formula:** `formulas/tab-4-gates.md` → "Funnel: Gate Impression → Engagement → Conversion (rolled up)"
 
 ### Viz 4.2: Exposures before conversion (right)
 
@@ -186,7 +186,7 @@ Remove this banner entirely when Phase 2 lands.
 - **Columns/bars:** Bucket label, count of converters, % of total converters
 - **Caption beneath:** "Of readers who converted, this is how many gates they saw first."
 - **Placeholder:** All buckets show 0 / 0%
-- **Formula:** `formulas/gates.md` → "Table: Gate Exposures Before Conversion (buckets)"
+- **Formula:** `formulas/tab-4-gates.md` → "Table: Gate Exposures Before Conversion (buckets)"
 
 ---
 
@@ -217,7 +217,7 @@ Remove this banner entirely when Phase 2 lands.
 
 **Row limit:** 50. Most publishers have fewer than 20 gates; the limit guardrails against display issues for outlier publishers.
 
-**Formula:** `formulas/gates.md` → "Table: Performance by Gate"
+**Formula:** `formulas/tab-4-gates.md` → "Table: Performance by Gate"
 
 ---
 
@@ -272,7 +272,7 @@ Subtitles, captions, comparison toggle, and date picker all function normally du
 
 Surface during build, decide based on real data:
 
-1. **Paywall-capable gate identification.** Under session-scoped attribution, the paywall conversion rate denominator needs to identify which gate impressions were "paywall-capable." Three options under consideration: param-based (`gate_has_checkout_button='yes'`, misses link-style buttons), server-side classification (orchestrator looks up gate config from `wp_posts`/popups config), or behavioral (any gate that appeared in a session with a paywall conversion). v1 recommendation: behavioral; v1.1: server-side classification. See `formulas/gates.md` for SQL implications.
+1. **Paywall-capable gate identification.** Under session-scoped attribution, the paywall conversion rate denominator needs to identify which gate impressions were "paywall-capable." Three options under consideration: param-based (`gate_has_checkout_button='yes'`, misses link-style buttons), server-side classification (orchestrator looks up gate config from `wp_posts`/popups config), or behavioral (any gate that appeared in a session with a paywall conversion). v1 recommendation: behavioral; v1.1: server-side classification. See `formulas/tab-4-gates.md` for SQL implications.
 2. **Paywall completion match window.** Currently defaulted to 30 minutes in the formula doc. Worth tuning once we have production paywall data and can see actual gate-event → Woo-completion latency distributions.
 3. **"Unclassified" gate exposures.** Adswerve's investigation surfaced that many publishers have gate impressions where neither `gate_has_registration_block` nor `gate_has_checkout_button` is set. Decide: include these as "Other" with separate counts, omit silently, or add a data-quality footnote. Recommendation: footnote acknowledging the gap, exclude from denominators.
 4. **Multi-currency.** Defer to v1.1. Publishers with multi-currency operations will see correctly summed totals in their primary currency only; flag with footnote.
