@@ -203,16 +203,6 @@ const Sidebar = ( {
 		<div className="newspack-newsletters__sidebar">
 			<VStack spacing={ 4 }>
 				<TextControl
-					label={ __( 'Campaign Name', 'newspack-newsletters' ) }
-					className="newspack-newsletters__campaign-name-textcontrol"
-					value={ getCampaignName() }
-					placeholder={ 'Newspack Newsletter (' + postId + ')' }
-					disabled={ inFlight }
-					onChange={ value => updateMeta( { campaign_name: value } ) }
-					__next40pxDefaultSize
-					__nextHasNoMarginBottom
-				/>
-				<TextControl
 					label={ __( 'Subject', 'newspack-newsletters' ) }
 					className="newspack-newsletters__subject-textcontrol"
 					value={ plainTextTitle }
@@ -223,10 +213,24 @@ const Sidebar = ( {
 				/>
 				<TextareaControl
 					label={ __( 'Preview text', 'newspack-newsletters' ) }
+					help={ __(
+						'Shown in the inbox after the subject line. Around 50–100 characters works best across email clients.',
+						'newspack-newsletters'
+					) }
 					className="newspack-newsletters__preview-textcontrol"
 					value={ previewText }
 					disabled={ inFlight }
 					onChange={ value => updateMeta( { preview_text: value } ) }
+					__nextHasNoMarginBottom
+				/>
+				<TextControl
+					label={ __( 'Campaign Name', 'newspack-newsletters' ) }
+					className="newspack-newsletters__campaign-name-textcontrol"
+					value={ getCampaignName() }
+					placeholder={ 'Newspack Newsletter (' + postId + ')' }
+					disabled={ inFlight }
+					onChange={ value => updateMeta( { campaign_name: value } ) }
+					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
 				<ProviderSidebar inFlight={ inFlight } postId={ postId } meta={ meta } updateMeta={ updateMeta } />

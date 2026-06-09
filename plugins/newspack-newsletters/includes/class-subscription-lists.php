@@ -125,12 +125,12 @@ class Subscription_Lists {
 			'attributes'            => __( 'Subscription Lists', 'newspack-newsletters' ),
 			'parent_item_colon'     => __( 'Parent Subscription List', 'newspack-newsletters' ),
 			'all_items'             => __( 'Subscription Lists', 'newspack-newsletters' ),
-			'add_new_item'          => __( 'Add new list', 'newspack-newsletters' ),
+			'add_new_item'          => __( 'Add New List', 'newspack-newsletters' ),
 			'add_new'               => __( 'Add New', 'newspack-newsletters' ),
 			'new_item'              => __( 'New Subscription List', 'newspack-newsletters' ),
-			'edit_item'             => __( 'Edit list', 'newspack-newsletters' ),
-			'update_item'           => __( 'Update list', 'newspack-newsletters' ),
-			'view_item'             => __( 'View list', 'newspack-newsletters' ),
+			'edit_item'             => __( 'Edit List', 'newspack-newsletters' ),
+			'update_item'           => __( 'Update List', 'newspack-newsletters' ),
+			'view_item'             => __( 'View List', 'newspack-newsletters' ),
 			'view_items'            => __( 'View Subscription Lists', 'newspack-newsletters' ),
 			'search_items'          => __( 'Search Subscription List', 'newspack-newsletters' ),
 			'not_found'             => __( 'Not found', 'newspack-newsletters' ),
@@ -449,6 +449,28 @@ class Subscription_Lists {
 	}
 
 	/**
+	 * Local lists in the current provider's UI scope: configured for the
+	 * current provider, or genuinely unconfigured. Locals configured only
+	 * under another provider are excluded so saving here can't draft
+	 * them globally.
+	 *
+	 * @return Subscription_List[]
+	 */
+	public static function get_locals_for_current_provider() {
+		return self::get_filtered(
+			function ( $list ) {
+				if ( ! $list->is_local() ) {
+					return false;
+				}
+				if ( $list->is_configured_for_current_provider() ) {
+					return true;
+				}
+				return empty( $list->get_configured_providers() );
+			}
+		);
+	}
+
+	/**
 	 * Get Lists that are configured for the current provider
 	 *
 	 * @return Subscription_List[]
@@ -481,7 +503,8 @@ class Subscription_Lists {
 	 * @return Subscription_List
 	 */
 	public static function get_or_create_remote_list( $list ) {
-		if ( empty( $list['id'] ) || empty( $list['title'] ) ) {
+		// `empty()` would reject a legitimate `"0"` title; check string-emptiness directly.
+		if ( empty( $list['id'] ) || ! isset( $list['title'] ) || ! is_string( $list['title'] ) || '' === trim( $list['title'] ) ) {
 			throw new \Exception( 'Invalid list' );
 		}
 
@@ -498,6 +521,7 @@ class Subscription_Lists {
 
 				// Only update the title if it was not customized by the user.
 				if ( ! $has_customized_title ) {
+					// Best-effort sync; a single failure shouldn't abort the wider remote-list refresh.
 					$saved_list->update( [ 'title' => $list['title'] ] );
 				}
 			}
@@ -553,6 +577,174 @@ class Subscription_Lists {
 	}
 
 	/**
+	 * Creates a local list.
+	 *
+	 * Created inactive (`draft`) so the admin can flip it on after
+	 * verifying. When `$audience_id` is given, the auto-generated tag is
+	 * created under that audience. ESP wiring failures roll the post
+	 * back (`wp_delete_post`) so a retry isn't blocked behind a hidden
+	 * half-created list, and the WP_Error is returned for the modal to
+	 * surface inline.
+	 *
+	 * @param string $title       List title (required, trimmed non-empty).
+	 * @param string $description Optional list description, stored as post_content.
+	 * @param string $audience_id Optional ESP audience id to wire the list to.
+	 * @return Subscription_List|WP_Error
+	 */
+	public static function create_local_list( $title, $description = '', $audience_id = '' ) {
+		$title = is_string( $title ) ? trim( $title ) : '';
+		if ( '' === $title ) {
+			return new WP_Error(
+				'newspack_newsletters_local_list_invalid_title',
+				__( 'List title is required.', 'newspack-newsletters' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		$post_id = wp_insert_post(
+			[
+				'post_type'    => self::CPT,
+				'post_status'  => 'draft',
+				'post_title'   => $title,
+				'post_content' => is_string( $description ) ? wp_kses_post( $description ) : '',
+			],
+			true
+		);
+
+		if ( is_wp_error( $post_id ) ) {
+			return $post_id;
+		}
+
+		$list = new Subscription_List( $post_id );
+		$list->set_type( 'local' );
+
+		$audience_id = is_string( $audience_id ) ? trim( $audience_id ) : '';
+		if ( '' === $audience_id ) {
+			return $list;
+		}
+
+		$provider = Newspack_Newsletters::get_service_provider();
+		if ( empty( $provider ) || ! method_exists( $provider, 'get_esp_local_list_id' ) ) {
+			return $list;
+		}
+
+		$tag_prefix = $provider::label( 'tag_prefix' );
+		$tag_name   = $list->generate_tag_name( $tag_prefix );
+		$tag_id     = $provider->get_esp_local_list_id( $tag_name, true, $audience_id );
+
+		if ( is_wp_error( $tag_id ) ) {
+			// Roll back so a retry doesn't pile up duplicate hidden posts.
+			wp_delete_post( $list->get_id(), true );
+			return $tag_id;
+		}
+
+		$list->update_current_provider_settings( $audience_id, $tag_id, $tag_name );
+		return $list;
+	}
+
+	/**
+	 * Updates a local list (title, description, audience) for the current
+	 * provider. Mirrors the legacy `save_post` mechanic: if the audience
+	 * changes, the auto-generated tag is re-created under the new
+	 * audience; if only the title changes and the list already has a
+	 * tag, the tag name is synced on the ESP via `update_esp_local_list`.
+	 *
+	 * @param int    $id          Subscription_List post ID.
+	 * @param string $title       New title (required, trimmed non-empty).
+	 * @param string $description New description.
+	 * @param string $audience_id Optional ESP audience id. Empty string leaves the wiring untouched.
+	 * @return Subscription_List|WP_Error
+	 */
+	public static function update_local_list( $id, $title, $description = '', $audience_id = '' ) {
+		$post = get_post( $id );
+		if ( ! $post || self::CPT !== $post->post_type ) {
+			return new WP_Error(
+				'newspack_newsletters_local_list_not_found',
+				__( 'Subscription list not found.', 'newspack-newsletters' ),
+				[ 'status' => 404 ]
+			);
+		}
+
+		$list = new Subscription_List( $post );
+		if ( ! $list->is_local() ) {
+			return new WP_Error(
+				'newspack_newsletters_local_list_not_local',
+				__( 'This subscription list is not a local list.', 'newspack-newsletters' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		$title = is_string( $title ) ? trim( $title ) : '';
+		if ( '' === $title ) {
+			return new WP_Error(
+				'newspack_newsletters_local_list_invalid_title',
+				__( 'List title is required.', 'newspack-newsletters' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		// Captured for ESP-failure rollback so a same-title retry still attempts the rename.
+		$original_title       = $list->get_title();
+		$original_description = $list->get_description();
+
+		$title_changed = $title !== $original_title;
+		$updated       = $list->update(
+			[
+				'title'       => $title,
+				'description' => is_string( $description ) ? $description : '',
+			]
+		);
+		if ( is_wp_error( $updated ) ) {
+			return $updated;
+		}
+
+		$audience_id = is_string( $audience_id ) ? trim( $audience_id ) : '';
+
+		$provider = Newspack_Newsletters::get_service_provider();
+		if ( empty( $provider ) ) {
+			return $list;
+		}
+
+		$current_settings = $list->get_current_provider_settings();
+		$current_audience = is_array( $current_settings ) && isset( $current_settings['list'] ) ? (string) $current_settings['list'] : '';
+		$current_tag_id   = is_array( $current_settings ) && isset( $current_settings['tag_id'] ) ? $current_settings['tag_id'] : '';
+
+		$tag_prefix   = $provider::label( 'tag_prefix' );
+		$new_tag_name = $list->generate_tag_name( $tag_prefix );
+
+		$rollback_local = function ( $original_error ) use ( $list, $original_title, $original_description ) {
+			$rollback = $list->update(
+				[
+					'title'       => $original_title,
+					'description' => $original_description,
+				]
+			);
+			if ( is_wp_error( $rollback ) ) {
+				$data                 = (array) $original_error->get_error_data();
+				$data['rolled_back']  = false;
+				$original_error->add_data( $data );
+			}
+			return $original_error;
+		};
+
+		if ( '' !== $audience_id && $audience_id !== $current_audience ) {
+			$tag_id = $provider->get_esp_local_list_id( $new_tag_name, true, $audience_id );
+			if ( is_wp_error( $tag_id ) ) {
+				return $rollback_local( $tag_id );
+			}
+			$list->update_current_provider_settings( $audience_id, $tag_id, $new_tag_name );
+		} elseif ( $title_changed && '' !== $current_audience && ! empty( $current_tag_id ) && method_exists( $provider, 'update_esp_local_list' ) ) {
+			$rename = $provider->update_esp_local_list( $current_tag_id, $new_tag_name, $current_audience );
+			if ( is_wp_error( $rename ) ) {
+				return $rollback_local( $rename );
+			}
+			$list->update_current_provider_settings( $current_audience, $current_tag_id, $new_tag_name );
+		}
+
+		return $list;
+	}
+
+	/**
 	 * Update the lists settings.
 	 *
 	 * This function retrieves the list of lists configured in the site and updates them all at once.
@@ -578,7 +770,11 @@ class Subscription_Lists {
 		}
 		$lists = Newspack_Newsletters_Subscription::sanitize_lists( $lists );
 		if ( empty( $lists ) ) {
-			return new WP_Error( 'newspack_newsletters_invalid_lists', __( 'Invalid list configuration.' ) );
+			return new WP_Error(
+				'newspack_newsletters_invalid_lists',
+				__( 'Invalid list configuration.', 'newspack-newsletters' ),
+				[ 'status' => 400 ]
+			);
 		}
 
 		$existing_ids = [];
@@ -589,6 +785,10 @@ class Subscription_Lists {
 
 			// If a remote list was not found, create one.
 			if ( ! $stored_list instanceof Subscription_List && ! Subscription_List::is_local_public_id( $list['id'] ) ) {
+				// sanitize_lists only sets `title` for non-empty strings; mirror that contract.
+				if ( ! isset( $list['title'] ) ) {
+					continue;
+				}
 				$stored_list = self::get_or_create_remote_list( $list );
 			}
 
@@ -596,15 +796,39 @@ class Subscription_Lists {
 				continue;
 			}
 
+			// Reject `active=true` for locals that lack current-provider wiring — signup forms wouldn't see them anyway.
+			if ( $stored_list->is_local() && ! $stored_list->is_configured_for_current_provider() ) {
+				$list['active'] = false;
+			}
+
 			$existing_ids[] = $stored_list->get_id();
+			// Best-effort sync inside a batch loop; per-row failures don't abort the whole save.
 			$stored_list->update( $list );
 
 		}
 
-		// Clean up. Lists that are not in the new config deactivated.
-		$all_lists = self::get_all();
-		foreach ( $all_lists as $list ) {
+		// Bail before cleanup so it doesn't deactivate everything when no rows landed.
+		if ( empty( $existing_ids ) ) {
+			return new WP_Error(
+				'newspack_newsletters_invalid_lists',
+				__( 'Invalid list configuration.', 'newspack-newsletters' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		// Cleanup is scoped to the current provider's UI — other-provider rows weren't in the payload to begin with.
+		$current_provider_slug = Newspack_Newsletters::service_provider();
+		$scoped_lists          = array_merge(
+			self::get_filtered(
+				function ( $list ) use ( $current_provider_slug ) {
+					return ! $list->is_local() && $list->get_provider() === $current_provider_slug;
+				}
+			),
+			self::get_locals_for_current_provider()
+		);
+		foreach ( $scoped_lists as $list ) {
 			if ( ! in_array( $list->get_id(), $existing_ids, true ) ) {
+				// Best-effort deactivation cleanup; per-row failures don't abort the sweep.
 				$list->update( [ 'active' => false ] );
 			}
 		}
@@ -620,6 +844,44 @@ class Subscription_Lists {
 	 */
 	public static function delete_list( Subscription_List $list ) {
 		return wp_delete_post( $list->get_id() );
+	}
+
+	/**
+	 * Permanently deletes a local list by post id, validating that the
+	 * target exists and is a local list before issuing the delete.
+	 * Force-deletes (skips trash) so the row disappears from the lists
+	 * section in one round trip — re-creating an identically-named local
+	 * list is cheap.
+	 *
+	 * @param int $id Subscription_List post ID.
+	 * @return bool|WP_Error True on success.
+	 */
+	public static function delete_local_list( $id ) {
+		$post = get_post( $id );
+		if ( ! $post || self::CPT !== $post->post_type ) {
+			return new WP_Error(
+				'newspack_newsletters_local_list_not_found',
+				__( 'Subscription list not found.', 'newspack-newsletters' ),
+				[ 'status' => 404 ]
+			);
+		}
+		$list = new Subscription_List( $post );
+		if ( ! $list->is_local() ) {
+			return new WP_Error(
+				'newspack_newsletters_local_list_not_local',
+				__( 'This subscription list is not a local list.', 'newspack-newsletters' ),
+				[ 'status' => 400 ]
+			);
+		}
+		$result = wp_delete_post( $list->get_id(), true );
+		if ( ! $result ) {
+			return new WP_Error(
+				'newspack_newsletters_local_list_delete_failed',
+				__( 'Could not delete the subscription list.', 'newspack-newsletters' ),
+				[ 'status' => 500 ]
+			);
+		}
+		return true;
 	}
 
 	/**

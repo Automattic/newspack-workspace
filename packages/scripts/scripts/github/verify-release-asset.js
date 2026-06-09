@@ -10,9 +10,7 @@ const releaseAssetPath = path.resolve( `./release/${ repoName }.zip` );
 
 async function prepare() {
 	if ( ! repoName ) {
-		throw new Error(
-			'GITHUB_REPOSITORY is not set; cannot determine release asset path.'
-		);
+		throw new Error( 'GITHUB_REPOSITORY is not set; cannot determine release asset path.' );
 	}
 	if ( ! fs.existsSync( releaseAssetPath ) ) {
 		throw new Error(

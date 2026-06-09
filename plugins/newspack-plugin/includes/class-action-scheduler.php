@@ -405,4 +405,66 @@ class Action_Scheduler {
 
 		return $hooks;
 	}
+
+	/**
+	 * Fetch a single ActionScheduler action by ID.
+	 *
+	 * Returns null when AS resolves the ID to a NullAction (action does not exist).
+	 *
+	 * @param int $action_id The action ID.
+	 *
+	 * @return \ActionScheduler_Action|null
+	 */
+	public static function get_action( $action_id ): ?\ActionScheduler_Action {
+		if ( ! self::is_available() ) {
+			return null;
+		}
+		$action = \ActionScheduler_Store::instance()->fetch_action( (int) $action_id );
+		if ( ! $action || $action instanceof \ActionScheduler_NullAction ) {
+			return null;
+		}
+		return $action;
+	}
+
+	/**
+	 * Fetch per-action log entries for a single ActionScheduler action.
+	 *
+	 * Each entry is normalized to:
+	 *   [ 'date_gmt' => string, 'message' => string ]
+	 *
+	 * NullLogEntry sentinels are filtered out. Entries are sorted ascending
+	 * by date. ActionScheduler_LogEntry does not expose the log-row PK, so
+	 * consumers use the array index as a stable key.
+	 *
+	 * @param int $action_id The action ID.
+	 *
+	 * @return array<int,array{date_gmt:string,message:string}>
+	 */
+	public static function get_action_logs( $action_id ): array {
+		if ( ! self::is_available() || ! class_exists( '\ActionScheduler_Logger' ) ) {
+			return [];
+		}
+		$entries = \ActionScheduler_Logger::instance()->get_logs( (int) $action_id );
+		if ( empty( $entries ) ) {
+			return [];
+		}
+		$normalized = [];
+		foreach ( $entries as $entry ) {
+			if ( $entry instanceof \ActionScheduler_NullLogEntry ) {
+				continue;
+			}
+			$date         = $entry->get_date();
+			$normalized[] = [
+				'date_gmt' => $date ? $date->format( 'Y-m-d\TH:i:s' ) : '',
+				'message'  => (string) $entry->get_message(),
+			];
+		}
+		usort(
+			$normalized,
+			static function ( $a, $b ) {
+				return strcmp( $a['date_gmt'], $b['date_gmt'] );
+			}
+		);
+		return $normalized;
+	}
 }

@@ -32,6 +32,15 @@ class Alert_Manager {
 	const FAILURE_LOG_OPTION = 'newspack_alert_failure_log';
 
 	/**
+	 * Window during which a repeating health-check failure for the same
+	 * integration + error-code signature emits at most one Slack alert.
+	 *
+	 * Private because no external caller needs to read it; keeping the
+	 * surface minimal lets the value evolve without breaking consumers.
+	 */
+	private const HEALTH_CHECK_DEDUP_INTERVAL = DAY_IN_SECONDS;
+
+	/**
 	 * Default pattern rules.
 	 * Each rule defines a grouping dimension, threshold, and time interval.
 	 */
@@ -454,14 +463,52 @@ class Alert_Manager {
 	/**
 	 * Handle integration health check failure.
 	 *
+	 * Deduplicates by integration + error-code + error-message signature
+	 * for HEALTH_CHECK_DEDUP_INTERVAL so an hourly cron does not repeat
+	 * the same Slack alert all day. A new error code OR a changed message
+	 * on the same integration (e.g. "list missing" escalating to "auth
+	 * fully revoked") falls outside the key and alerts immediately.
+	 *
+	 * Known boundaries of the dedup contract:
+	 * - Message text is part of the key, so locale shifts between cron
+	 *   passes (e.g. `switch_to_locale()` in a multilingual context) can
+	 *   produce a different key for the same underlying error and
+	 *   re-alert. Newspack ESP error messages are static per code today,
+	 *   so this is theoretical; revisit if dynamic content lands in
+	 *   error strings.
+	 * - The dedup key is stored as a transient, so on hosts backed by a
+	 *   persistent object cache (memcached) the entry can be evicted
+	 *   under LRU pressure before HEALTH_CHECK_DEDUP_INTERVAL elapses.
+	 *   The failure mode is re-alerting on the next hourly cron — the
+	 *   alternative (writing to the options table on every cron tick)
+	 *   has its own cost; transient + accepted re-alert risk is the
+	 *   intentional trade-off here.
+	 *
 	 * @param array $payload Health check failure data.
 	 */
 	public static function handle_health_check_failed( $payload ) {
-		$error   = $payload['error'] ?? null;
+		$error          = $payload['error'] ?? null;
+		$integration_id = $payload['integration_id'] ?? 'unknown';
+		$error_codes    = is_wp_error( $error ) ? $error->get_error_codes() : [];
+		if ( empty( $error_codes ) ) {
+			$error_codes = [ 'unknown' ];
+		}
+		$error_messages = is_wp_error( $error ) ? $error->get_error_messages() : [];
+
+		$dedup_key = self::get_health_check_dedup_key( $integration_id, $error_codes, $error_messages );
+		if ( get_transient( $dedup_key ) ) {
+			return;
+		}
+
+		// Set the dedup transient BEFORE dispatch so a `newspack_alert`
+		// handler that throws (e.g. transient Slack POST failure) cannot
+		// defeat dedup by leaving the key unset for the next hourly cron.
+		set_transient( $dedup_key, time(), self::HEALTH_CHECK_DEDUP_INTERVAL );
+
 		$message = sprintf(
 			'Integration "%s" health check failed: %s',
 			$payload['integration_name'] ?? 'unknown',
-			is_wp_error( $error ) ? implode( '; ', $error->get_error_messages() ) : 'unknown error'
+			is_wp_error( $error ) ? implode( '; ', $error_messages ) : 'unknown error'
 		);
 
 		/** This action is documented in includes/class-alert-manager.php */
@@ -475,6 +522,23 @@ class Alert_Manager {
 				'timestamp' => time(),
 			]
 		);
+	}
+
+	/**
+	 * Get the deduplication transient key for a health-check failure.
+	 *
+	 * @param string   $integration_id The integration identifier.
+	 * @param string[] $error_codes    The WP_Error codes from the failure.
+	 * @param string[] $error_messages The WP_Error messages from the failure.
+	 *
+	 * @return string Transient key.
+	 */
+	private static function get_health_check_dedup_key( $integration_id, $error_codes, $error_messages = [] ) {
+		$codes = array_map( 'strval', $error_codes );
+		sort( $codes );
+		$messages = array_map( 'strval', $error_messages );
+		sort( $messages );
+		return 'newspack_alert_hc_' . md5( $integration_id . ':' . implode( ',', $codes ) . ':' . implode( '|', $messages ) );
 	}
 }
 Alert_Manager::init();

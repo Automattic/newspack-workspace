@@ -1,3 +1,5 @@
+const { gitCommitStep } = require( './release-helpers' );
+
 /**
  * Shared release config factory for multi-semantic-release.
  *
@@ -5,7 +7,7 @@
  * (branches, plugin chain, prepare steps) is identical across the monorepo.
  *
  * @param {Object}  opts
- * @param {string}  opts.name        Package directory name, used for the zip asset path and label. Git tags are namespaced by multi-semantic-release as `<pkgName>@<version>` (it overrides any tagFormat), so this name does not affect tagging.
+ * @param {string}  opts.name        Package directory name, used for the zip asset path and label. multi-semantic-release derives git tags from the package's npm name as `<npmName>@<version>` (patched to strip the npm scope, so `@automattic/newspack-blocks` tags as `newspack-blocks@<version>`); this `name` does not affect tagging.
  * @param {string}  opts.phpFile     Main PHP file to bump the version in.
  * @param {boolean} [opts.npmPublish=false] Whether to publish to npm.
  */
@@ -58,12 +60,7 @@ module.exports = function releaseConfig( { name, phpFile, npmPublish = false } )
 					callback: 'npm run release:archive',
 				},
 			],
-			{
-				path: '@semantic-release/git',
-				assets: [ phpFile, 'package.json', 'CHANGELOG.md' ],
-				message:
-					'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
-			},
+			...gitCommitStep( [ phpFile, 'CHANGELOG.md' ] ),
 		],
 	};
 };

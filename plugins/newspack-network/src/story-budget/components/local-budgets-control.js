@@ -6,12 +6,7 @@ import { useEffect, useState } from '@wordpress/element';
 import { SelectControl } from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
 
-export default function LocalBudgetsControl( {
-	value,
-	onChange,
-	disabled,
-	...props
-} ) {
+export default function LocalBudgetsControl( { value, onChange, disabled, ...props } ) {
 	const [ isLoading, setIsLoading ] = useState( false );
 	const [ localBudgets, setLocalBudgets ] = useState( [] );
 
@@ -39,7 +34,7 @@ export default function LocalBudgetsControl( {
 					label: __( 'Select a budget', 'newspack-network' ),
 					value: '',
 				},
-				...localBudgets.map( ( budget ) => ( {
+				...localBudgets.map( budget => ( {
 					label: budget.name,
 					value: budget.id,
 				} ) ),

@@ -10,10 +10,7 @@ module.exports = {
 			return [ cmd, ...args ];
 		}
 
-		const defaults = [
-			'--config',
-			'webpack.config.js',
-		];
+		const defaults = [ '--config', 'webpack.config.js' ];
 
 		// Default build path: ./dist
 		if ( ! args.includes( '--output-path' ) ) {

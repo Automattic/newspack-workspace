@@ -171,4 +171,149 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 			'Custom OAuth route should be detected after adding via filter.'
 		);
 	}
+
+	/**
+	 * Test that get_verification_payload() returns the stable shape (both keys
+	 * always present) and that the verification_nonce is bound to the just-
+	 * registered user's session, so a subsequent OTP send from that session
+	 * verifies the nonce successfully.
+	 *
+	 * Reproduces the scenario flagged in pr-test review (S10): when entry points
+	 * like the Newsletter Subscription block call register_reader(..., true, ...)
+	 * and then immediately compute the verification payload, the nonce must work
+	 * for the new user — not be silently bound to user 0.
+	 */
+	public function test_get_verification_payload_nonce_binds_to_new_user() {
+		// Simulate logged-out request.
+		wp_set_current_user( 0 );
+		$this->assertFalse( is_user_logged_in() );
+
+		// Register a new reader. Third arg `true` authenticates the user in this request.
+		$user_id = Reader_Activation::register_reader( self::$reader_email, self::$reader_name, true );
+		$this->assertIsInt( $user_id );
+		$this->assertEquals( $user_id, get_current_user_id(), 'register_reader should set the current user.' );
+
+		// The payload must contain both keys (stable shape contract).
+		$payload = Reader_Activation::get_verification_payload( $user_id );
+		$this->assertArrayHasKey( 'verified', $payload );
+		$this->assertArrayHasKey( 'verification_nonce', $payload );
+		$this->assertFalse( $payload['verified'], 'New reader should be unverified.' );
+		$this->assertNotEmpty( $payload['verification_nonce'], 'Unverified new reader should receive a nonce.' );
+
+		// The nonce must verify in the just-registered session.
+		$this->assertEquals(
+			1,
+			wp_verify_nonce( $payload['verification_nonce'], 'newspack_reader_registration_verification' ),
+			'Verification nonce must verify in the just-registered user session.'
+		);
+
+		wp_delete_user( $user_id ); // Clean up.
+	}
+
+	/**
+	 * Test that get_verification_payload() returns the empty-sentinel shape
+	 * for invalid input — both keys present, `verified` null, `verification_nonce`
+	 * an empty string — so cross-plugin callers can pattern-match without
+	 * `isset()` ladders.
+	 */
+	public function test_get_verification_payload_shape_for_invalid_user() {
+		$payload = Reader_Activation::get_verification_payload( 0 );
+		$this->assertSame(
+			[
+				'verified'           => null,
+				'verification_nonce' => '',
+			],
+			$payload
+		);
+
+		$payload = Reader_Activation::get_verification_payload( 999999999 );
+		$this->assertSame(
+			[
+				'verified'           => null,
+				'verification_nonce' => '',
+			],
+			$payload
+		);
+	}
+
+	/**
+	 * Test that an already-verified reader receives `verified => true` and an
+	 * empty nonce (no verification flow to trigger).
+	 */
+	public function test_get_verification_payload_for_verified_reader() {
+		$user_id = self::register_sample_reader();
+		Reader_Activation::set_reader_verified( get_user_by( 'id', $user_id ) );
+
+		$payload = Reader_Activation::get_verification_payload( $user_id );
+		$this->assertTrue( $payload['verified'] );
+		$this->assertSame( '', $payload['verification_nonce'], 'Verified reader should receive an empty nonce.' );
+
+		wp_delete_user( $user_id ); // Clean up.
+	}
+
+	/**
+	 * Test that the prerequisites status no longer exposes skip-related keys.
+	 */
+	public function test_prerequisites_status_has_no_skip_keys() {
+		$prerequisites = Reader_Activation::get_prerequisites_status();
+		$this->assertNotEmpty( $prerequisites );
+		foreach ( $prerequisites as $slug => $prerequisite ) {
+			$this->assertArrayNotHasKey( 'skippable', $prerequisite, "Prerequisite '$slug' should not expose 'skippable'." );
+			$this->assertArrayNotHasKey( 'is_skipped', $prerequisite, "Prerequisite '$slug' should not expose 'is_skipped'." );
+			$this->assertArrayNotHasKey( 'action_enabled', $prerequisite, "Prerequisite '$slug' should not expose 'action_enabled'." );
+			$this->assertArrayNotHasKey( 'disabled_text', $prerequisite, "Prerequisite '$slug' should not expose 'disabled_text'." );
+		}
+	}
+
+	/**
+	 * Test that the auto-enable and skip helpers have been removed.
+	 */
+	public function test_auto_enable_and_skip_helpers_removed() {
+		$this->assertFalse( method_exists( Reader_Activation::class, 'is_ras_ready_to_configure' ), 'is_ras_ready_to_configure() should be removed.' );
+		$this->assertFalse( method_exists( Reader_Activation::class, 'skip' ), 'skip() should be removed.' );
+		$this->assertFalse( method_exists( Reader_Activation::class, 'is_skipped' ), 'is_skipped() should be removed.' );
+	}
+
+	/**
+	 * Test that removed prerequisites are gone and ordering is correct.
+	 */
+	public function test_prerequisites_status_cleanup() {
+		$prerequisites = Reader_Activation::get_prerequisites_status();
+
+		$this->assertArrayNotHasKey( 'reader_revenue', $prerequisites, 'Reader Revenue prerequisite should be removed.' );
+		$this->assertArrayNotHasKey( 'ras_campaign', $prerequisites, 'Campaign defaults prerequisite should be removed.' );
+
+		// First three are always present and ordered.
+		$keys = array_keys( $prerequisites );
+		$this->assertSame( 'emails', $keys[0], 'Transactional Emails should be first.' );
+		$this->assertSame( 'terms_conditions', $keys[1], 'Legal Pages should be second.' );
+		$this->assertSame( 'recaptcha', $keys[2], 'reCAPTCHA should be third.' );
+
+		// ESP is gated on Newspack Newsletters; in the test env it is absent.
+		if ( class_exists( '\Newspack_Newsletters' ) ) {
+			$this->assertArrayHasKey( 'esp', $prerequisites, 'ESP should be present when Newsletters exists.' );
+			$this->assertSame( 'esp', $keys[3], 'ESP should be fourth when present.' );
+		} else {
+			$this->assertArrayNotHasKey( 'esp', $prerequisites, 'ESP should be absent without Newsletters.' );
+		}
+	}
+
+	/**
+	 * Test the reader-revenue platform first-run signal.
+	 */
+	public function test_is_platform_selected() {
+		delete_option( 'newspack_reader_revenue_platform' );
+		$this->assertFalse(
+			\Newspack\Donations::is_platform_selected(),
+			'Platform should report not selected when the option was never saved.'
+		);
+
+		\Newspack\Donations::set_platform_slug( 'wc' );
+		$this->assertTrue(
+			\Newspack\Donations::is_platform_selected(),
+			'Platform should report selected after an explicit save.'
+		);
+
+		delete_option( 'newspack_reader_revenue_platform' );
+	}
 }

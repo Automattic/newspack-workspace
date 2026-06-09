@@ -15,6 +15,9 @@
 		&:not(:first-child) {
 			margin-top: 48px;
 		}
+		&:has(> .newspack-section-header--no-margin) {
+			margin-top: 0;
+		}
 		&.newspack-section-header--has-primary-action {
 			display: flex;
 			flex-direction: column;

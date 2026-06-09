@@ -7,8 +7,6 @@ import { useState, useEffect } from '@wordpress/element';
 import { ToggleControl, Button } from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
 
-import { NEWSLETTER_AD_CPT_SLUG } from '../../utils/consts';
-
 export default function DisableAutoAds( { saveOnToggle = false } ) {
 	const { disableAutoAds, postId, isSaving, postBlocks } = useSelect( select => {
 		const { getEditedPostAttribute, getCurrentPostId, isSavingPost } = select( 'core/editor' );
@@ -40,7 +38,7 @@ export default function DisableAutoAds( { saveOnToggle = false } ) {
 	useEffect( () => {
 		setInFlight( true );
 		apiFetch( {
-			path: `/wp/v2/${ NEWSLETTER_AD_CPT_SLUG }/config/?postId=${ postId }`,
+			path: `/newspack-newsletters/v1/ads/config?postId=${ postId }`,
 		} )
 			.then( response => {
 				setAdsConfig( response );

@@ -11,19 +11,60 @@ else
 fi
 
 # Determine target container based on current directory
-# If inside a worktree, find the environment that mounts it; otherwise use newspack_dev
+# If inside a worktree, find the environment whose compose file mounts that
+# exact worktree path; otherwise use newspack_dev.
+#
+# Earlier versions used a 2-segment regex prefix that collapsed branches with
+# slashes (e.g. `jl/news-2239-pr1b-frontend` -> `jl`), causing false matches
+# when multiple envs mounted `jl/*` worktrees. This version reads each compose
+# file's actual mount lines and picks the LONGEST absolute path that PWD
+# starts with — unambiguous regardless of branch-name shape.
 get_target_container() {
     if [[ "$PWD" == "$NABSPATH/worktrees/"* ]]; then
-        # Extract the worktree path segment (e.g., /worktrees/repo-name/branch-name)
-        worktree_rel=$(echo "$PWD" | sed "s|.*\(/worktrees/[^/]*/[^/]*\).*|\1|")
+        local best_match="" best_env=""
         for f in "$NABSPATH"/docker-compose.env-*.yml; do
             [[ -f "$f" ]] || continue
-            if grep -q "$worktree_rel" "$f" 2>/dev/null; then
-                env_name=$(basename "$f" | sed 's/docker-compose\.env-//' | sed 's/\.yml//')
-                echo "newspack_env_${env_name}" | tr '-' '_'
-                return
-            fi
+            while IFS= read -r mount; do
+                # Mounts can take two shapes — pre-monorepo per-plugin worktrees
+                # (./worktrees/<repo>/<branch>:/newspack-repos/<repo>) and
+                # monorepo workspace worktrees (./worktrees/<safe_branch>/plugins/<name>:/newspack-plugins/<name>,
+                # or .../themes/<name>:/newspack-themes/<name>). For the
+                # monorepo shape, the env mounts a per-plugin subdir but we
+                # also want to route correctly from elsewhere inside the
+                # worktree (its root, bin/, packages/, sibling plugins). Match
+                # by the enclosing worktree root instead of only the mounted
+                # subdir. Regex extraction tolerates tabs/multi-space and cuts
+                # cleanly at the next `:` so mount-mode suffixes (`:ro`) and
+                # trailing comments don't corrupt the captured paths.
+                [[ "$mount" =~ ^[[:space:]]*-[[:space:]]+\./worktrees/([^[:space:]:]+):/newspack-(repos|plugins|themes)/[^[:space:]:]+ ]] || continue
+                local rel="worktrees/${BASH_REMATCH[1]}"
+                local container_type="${BASH_REMATCH[2]}"
+                local abs="$NABSPATH/$rel"
+                local worktree_root="$abs"
+                case "$container_type" in
+                    plugins|themes)
+                        worktree_root="${abs%/plugins/*}"
+                        worktree_root="${worktree_root%/themes/*}"
+                        ;;
+                esac
+                # Prefer the deeper mounted-subpath match (more specific) so
+                # PWD inside a mounted plugin/theme routes to that env even
+                # when a sibling env mounts a different plugin from the same
+                # worktree. Fall back to the worktree root for PWDs in
+                # shared dirs (bin/, packages/, the worktree root itself).
+                if [[ "$PWD" == "$abs" || "$PWD" == "$abs"/* ]] && [ ${#abs} -gt ${#best_match} ]; then
+                    best_match="$abs"
+                    best_env=$(basename "$f" | sed 's/docker-compose\.env-//;s/\.yml//')
+                elif [[ "$PWD" == "$worktree_root" || "$PWD" == "$worktree_root"/* ]] && [ ${#worktree_root} -gt ${#best_match} ]; then
+                    best_match="$worktree_root"
+                    best_env=$(basename "$f" | sed 's/docker-compose\.env-//;s/\.yml//')
+                fi
+            done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$f" 2>/dev/null)
         done
+        if [ -n "$best_env" ]; then
+            echo "newspack_env_${best_env}" | tr '-' '_'
+            return
+        fi
     fi
     echo "newspack_dev"
 }
@@ -39,11 +80,25 @@ fi
 # Infer the current working project from the current folder;
 projects=("${newspack_plugins[@]}" "newspack-theme" "newspack-block-theme") # create a new list with the appended value
 target_folder=""
+# Match on path-segment boundaries (not a raw substring) so a checkout whose
+# name merely contains a monorepo slug (e.g. newspack-ads-pro) isn't
+# mis-identified as the monorepo project (newspack-ads).
 for plugin in "${projects[@]}"; do
-    if [[ "$PWD" == *"$plugin"* ]]; then
+    if [[ "$PWD" == *"/$plugin/"* || "$PWD" == *"/$plugin" ]]; then
         target_folder=$plugin
     fi
 done
+# Standalone/local checkouts under repos/{plugins,themes}/<name> need no
+# registration: derive the project from the path via parameter expansion (no
+# subprocess). Gated on no monorepo match above so a tracked project of the
+# same name still wins.
+if [[ -z "$target_folder" && "$PWD" == *"/repos/plugins/"* ]]; then
+    rest="${PWD##*/repos/plugins/}"
+    target_folder="${rest%%/*}"
+elif [[ -z "$target_folder" && "$PWD" == *"/repos/themes/"* ]]; then
+    rest="${PWD##*/repos/themes/}"
+    target_folder="${rest%%/*}"
+fi
 
 path_param=""
 current_site_path="/var/www/html"
@@ -338,8 +393,20 @@ case $1 in
         docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/build-repos.sh $target_folder ci"
         ;;
     watch)
-        require_target_folder
-        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/watch-repo.sh $target_folder"
+        if [[ -n "$2" ]]; then
+            target_folder=$2
+        fi
+        if [[ -z "$target_folder" ]]; then
+            # No project: watch every unit from the monorepo root, spawning each
+            # unit's own watcher lazily on its first edit. Note this also covers
+            # running `n watch` from a non-project dir (e.g. additional-sites-html/
+            # or manager-html/), where cwd detection yields no target_folder.
+            docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/watch-all.sh"
+        else
+            # Run the script directly (no `sh -c`) and quote the folder so a
+            # project name can't be word-split or injected into a shell string.
+            docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER /var/scripts/watch-repo.sh "$target_folder"
+        fi
         ;;
     test-php)
         require_target_folder
@@ -438,7 +505,7 @@ case $1 in
         echo "Building & Testing:"
         echo "  build [folder]               Build the specified folder (plugin/theme) or all for every repo."
         echo "  ci-build [folder]            Build for CI environment with specific optimizations."
-        echo "  watch                        Watch for changes in the current repo and rebuild automatically."
+        echo "  watch [folder]               Watch & rebuild the given/current repo; no arg watches every unit from the root."
         echo "  test-php [args]              Run PHP tests for the current repo with optional arguments."
         echo "  test-js                      Run JavaScript tests for the current repo."
         echo "  composer [args]              Run a composer command for the current repo."

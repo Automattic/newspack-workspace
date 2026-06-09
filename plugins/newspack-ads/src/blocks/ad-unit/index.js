@@ -52,6 +52,9 @@ export const settings = {
 			background: true,
 		},
 		visibility: false,
+		position: {
+			sticky: true,
+		},
 	},
 	edit,
 	save: () => null, // to use Newspack_Ads_Blocks::render_block()
