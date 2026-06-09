@@ -190,8 +190,8 @@ class Newspack_Test_GoogleSiteKit_Group_Param extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Matching institution (via verified email domain) contributes the anonymized ID label
-	 * for logged-out users who match via IP-based access rules, too.
+	 * Matching institution (via IP-based access rules) contributes the anonymized ID label
+	 * for logged-out users, too.
 	 */
 	public function test_group_includes_matching_institution_while_logged_out() {
 		// Ensure logged-out user.
