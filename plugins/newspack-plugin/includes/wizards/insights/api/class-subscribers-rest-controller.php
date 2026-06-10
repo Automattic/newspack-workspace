@@ -41,6 +41,8 @@ use WP_REST_Server;
  */
 class Subscribers_REST_Controller extends WP_REST_Controller {
 
+	use Cached_Controller_Trait;
+
 	/**
 	 * Dedicated namespace for Insights endpoints, separate from
 	 * `newspack/v1` (which is reserved for wizard infrastructure).
@@ -57,6 +59,24 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 	protected $rest_base = 'subscribers';
 
 	/**
+	 * Cache source classification for this controller.
+	 *
+	 * @return string
+	 */
+	protected function cache_source(): string {
+		return Cache::SOURCE_BIGQUERY;
+	}
+
+	/**
+	 * Tab slug used as the cache namespace.
+	 *
+	 * @return string
+	 */
+	protected function tab_slug(): string {
+		return 'subscribers';
+	}
+
+	/**
 	 * Register the single Tab 6 route.
 	 *
 	 * @return void
@@ -69,6 +89,18 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 				[
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => [ $this, 'get_subscribers_data' ],
+					'permission_callback' => [ $this, 'permissions_check' ],
+					'args'                => $this->get_collection_params(),
+				],
+			]
+		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/refresh',
+			[
+				[
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => [ $this, 'refresh_subscribers_data' ],
 					'permission_callback' => [ $this, 'permissions_check' ],
 					'args'                => $this->get_collection_params(),
 				],
@@ -100,8 +132,54 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function get_subscribers_data( WP_REST_Request $request ) {
-		$tz = $this->site_timezone();
+		$parsed = $this->parse_window_args( $request );
+		if ( is_wp_error( $parsed ) ) {
+			return $parsed;
+		}
+		[ $start, $end, $compare_start, $compare_end ] = $parsed;
 
+		$metric = new Subscribers_Metric();
+
+		return $this->cached_response(
+			$request,
+			function () use ( $metric, $start, $end, $compare_start, $compare_end ) {
+				return $this->build_response( $metric, $start, $end, $compare_start, $compare_end );
+			}
+		);
+	}
+
+	/**
+	 * POST /newspack-insights/v1/subscribers/refresh handler — bypass cache and recompute.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function refresh_subscribers_data( WP_REST_Request $request ) {
+		$parsed = $this->parse_window_args( $request );
+		if ( is_wp_error( $parsed ) ) {
+			return $parsed;
+		}
+		[ $start, $end, $compare_start, $compare_end ] = $parsed;
+
+		$metric = new Subscribers_Metric();
+
+		return $this->refresh_response(
+			$request,
+			function () use ( $metric, $start, $end, $compare_start, $compare_end ) {
+				return $this->build_response( $metric, $start, $end, $compare_start, $compare_end );
+			}
+		);
+	}
+
+	/**
+	 * Validate and parse the window args. Returns [start, end, compare_start, compare_end] on
+	 * success; WP_Error on validation failure.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 * @return array|WP_Error
+	 */
+	private function parse_window_args( WP_REST_Request $request ) {
+		$tz = $this->site_timezone();
 		try {
 			$start = $this->parse_date( $request->get_param( 'start' ), $tz, false );
 			$end   = $this->parse_date( $request->get_param( 'end' ), $tz, true );
@@ -112,7 +190,6 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 				[ 'status' => 400 ]
 			);
 		}
-
 		if ( $start > $end ) {
 			return new WP_Error(
 				'newspack_insights_invalid_window',
@@ -125,7 +202,6 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 		$compare_end_param   = $request->get_param( 'compare_end' );
 		$compare_start       = null;
 		$compare_end         = null;
-
 		if ( $compare_start_param || $compare_end_param ) {
 			if ( ! $compare_start_param || ! $compare_end_param ) {
 				return new WP_Error(
@@ -153,9 +229,7 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 			}
 		}
 
-		$metric = new Subscribers_Metric();
-
-		return rest_ensure_response( $this->build_response( $metric, $start, $end, $compare_start, $compare_end ) );
+		return [ $start, $end, $compare_start, $compare_end ];
 	}
 
 	/**

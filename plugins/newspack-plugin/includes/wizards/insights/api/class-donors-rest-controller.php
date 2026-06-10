@@ -26,6 +26,8 @@ use WP_REST_Server;
  */
 class Donors_REST_Controller extends WP_REST_Controller {
 
+	use Cached_Controller_Trait;
+
 	/**
 	 * Dedicated namespace shared with Tab 6.
 	 *
@@ -41,6 +43,24 @@ class Donors_REST_Controller extends WP_REST_Controller {
 	protected $rest_base = 'donors';
 
 	/**
+	 * Cache source classification for this controller.
+	 *
+	 * @return string
+	 */
+	protected function cache_source(): string {
+		return Cache::SOURCE_BIGQUERY;
+	}
+
+	/**
+	 * Tab slug used as the cache namespace.
+	 *
+	 * @return string
+	 */
+	protected function tab_slug(): string {
+		return 'donors';
+	}
+
+	/**
 	 * Register the Tab 7 route.
 	 *
 	 * @return void
@@ -53,6 +73,18 @@ class Donors_REST_Controller extends WP_REST_Controller {
 				[
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => [ $this, 'get_donors_data' ],
+					'permission_callback' => [ $this, 'permissions_check' ],
+					'args'                => $this->get_collection_params(),
+				],
+			]
+		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/refresh',
+			[
+				[
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => [ $this, 'refresh_donors_data' ],
 					'permission_callback' => [ $this, 'permissions_check' ],
 					'args'                => $this->get_collection_params(),
 				],
@@ -83,8 +115,52 @@ class Donors_REST_Controller extends WP_REST_Controller {
 	 * @return \WP_REST_Response|WP_Error
 	 */
 	public function get_donors_data( WP_REST_Request $request ) {
-		$tz = $this->site_timezone();
+		$parsed = $this->parse_window_args( $request );
+		if ( is_wp_error( $parsed ) ) {
+			return $parsed;
+		}
+		[ $start, $end, $compare_start, $compare_end ] = $parsed;
 
+		$metric = new Donors_Metric();
+		return $this->cached_response(
+			$request,
+			function () use ( $metric, $start, $end, $compare_start, $compare_end ) {
+				return $this->build_response( $metric, $start, $end, $compare_start, $compare_end );
+			}
+		);
+	}
+
+	/**
+	 * POST /donors/refresh handler — bypass cache and recompute.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function refresh_donors_data( WP_REST_Request $request ) {
+		$parsed = $this->parse_window_args( $request );
+		if ( is_wp_error( $parsed ) ) {
+			return $parsed;
+		}
+		[ $start, $end, $compare_start, $compare_end ] = $parsed;
+
+		$metric = new Donors_Metric();
+		return $this->refresh_response(
+			$request,
+			function () use ( $metric, $start, $end, $compare_start, $compare_end ) {
+				return $this->build_response( $metric, $start, $end, $compare_start, $compare_end );
+			}
+		);
+	}
+
+	/**
+	 * Validate and parse the window args. Returns [start, end, compare_start, compare_end] on
+	 * success; WP_Error on validation failure.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 * @return array|WP_Error
+	 */
+	private function parse_window_args( WP_REST_Request $request ) {
+		$tz = $this->site_timezone();
 		try {
 			$start = $this->parse_date( $request->get_param( 'start' ), $tz, false );
 			$end   = $this->parse_date( $request->get_param( 'end' ), $tz, true );
@@ -126,8 +202,7 @@ class Donors_REST_Controller extends WP_REST_Controller {
 			}
 		}
 
-		$metric = new Donors_Metric();
-		return rest_ensure_response( $this->build_response( $metric, $start, $end, $compare_start, $compare_end ) );
+		return [ $start, $end, $compare_start, $compare_end ];
 	}
 
 	/**
