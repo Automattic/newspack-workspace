@@ -35,6 +35,8 @@ use WP_REST_Server;
  */
 class Audience_REST_Controller extends WP_REST_Controller {
 
+	use Cached_Controller_Trait;
+
 	/**
 	 * Shared Insights namespace.
 	 *
@@ -50,6 +52,24 @@ class Audience_REST_Controller extends WP_REST_Controller {
 	protected $rest_base = 'audience';
 
 	/**
+	 * Cache source classification for this controller.
+	 *
+	 * @return string
+	 */
+	protected function cache_source(): string {
+		return Cache::SOURCE_EXTERNAL;
+	}
+
+	/**
+	 * Tab slug used as the cache namespace.
+	 *
+	 * @return string
+	 */
+	protected function tab_slug(): string {
+		return 'audience';
+	}
+
+	/**
 	 * Register the Tab 1 route.
 	 *
 	 * @return void
@@ -62,6 +82,18 @@ class Audience_REST_Controller extends WP_REST_Controller {
 				[
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => [ $this, 'get_audience_data' ],
+					'permission_callback' => [ $this, 'permissions_check' ],
+					'args'                => $this->get_collection_params(),
+				],
+			]
+		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/refresh',
+			[
+				[
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => [ $this, 'refresh_audience_data' ],
 					'permission_callback' => [ $this, 'permissions_check' ],
 					'args'                => $this->get_collection_params(),
 				],
@@ -98,8 +130,54 @@ class Audience_REST_Controller extends WP_REST_Controller {
 			return rest_ensure_response( Audience_Metric::get_fixture() );
 		}
 
-		$tz = $this->site_timezone();
+		$parsed = $this->parse_window_args( $request );
+		if ( is_wp_error( $parsed ) ) {
+			return $parsed;
+		}
+		[ $start, $end, $compare_start, $compare_end ] = $parsed;
 
+		return $this->cached_response(
+			$request,
+			function () use ( $start, $end, $compare_start, $compare_end ) {
+				return $this->build_response( $start, $end, $compare_start, $compare_end );
+			}
+		);
+	}
+
+	/**
+	 * POST /audience/refresh handler — bypass cache and recompute.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function refresh_audience_data( WP_REST_Request $request ) {
+		// Fixture mode: delegate to GET so refresh is a no-op cache bypass.
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			return $this->get_audience_data( $request );
+		}
+		$parsed = $this->parse_window_args( $request );
+		if ( is_wp_error( $parsed ) ) {
+			return $parsed;
+		}
+		[ $start, $end, $compare_start, $compare_end ] = $parsed;
+
+		return $this->refresh_response(
+			$request,
+			function () use ( $start, $end, $compare_start, $compare_end ) {
+				return $this->build_response( $start, $end, $compare_start, $compare_end );
+			}
+		);
+	}
+
+	/**
+	 * Validate and parse the window args. Returns [start, end, compare_start, compare_end] on
+	 * success; WP_Error on validation failure.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 * @return array|WP_Error
+	 */
+	private function parse_window_args( WP_REST_Request $request ) {
+		$tz = $this->site_timezone();
 		try {
 			$start = $this->parse_date( $request->get_param( 'start' ), $tz, false );
 			$end   = $this->parse_date( $request->get_param( 'end' ), $tz, true );
@@ -141,7 +219,7 @@ class Audience_REST_Controller extends WP_REST_Controller {
 			}
 		}
 
-		return rest_ensure_response( $this->build_response( $start, $end, $compare_start, $compare_end ) );
+		return [ $start, $end, $compare_start, $compare_end ];
 	}
 
 	/**
@@ -170,7 +248,7 @@ class Audience_REST_Controller extends WP_REST_Controller {
 			'previous' => null,
 		];
 		if ( $compare_start && $compare_end ) {
-			$previous = Audience_Metric::get_all( $compare_start->format( 'Y-m-d' ), $compare_end->format( 'Y-m-d' ), false );
+			$previous             = Audience_Metric::get_all( $compare_start->format( 'Y-m-d' ), $compare_end->format( 'Y-m-d' ), false );
 			$response['previous'] = isset( $previous['tab_error'] ) ? null : $previous;
 		}
 		return $response;

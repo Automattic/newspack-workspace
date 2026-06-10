@@ -35,6 +35,8 @@ use WP_REST_Server;
  */
 class Advertising_REST_Controller extends WP_REST_Controller {
 
+	use Cached_Controller_Trait;
+
 	/**
 	 * Shared Insights namespace.
 	 *
@@ -50,6 +52,24 @@ class Advertising_REST_Controller extends WP_REST_Controller {
 	protected $rest_base = 'advertising';
 
 	/**
+	 * Cache source classification for this controller.
+	 *
+	 * @return string
+	 */
+	protected function cache_source(): string {
+		return Cache::SOURCE_EXTERNAL;
+	}
+
+	/**
+	 * Tab slug used as the cache namespace.
+	 *
+	 * @return string
+	 */
+	protected function tab_slug(): string {
+		return 'advertising';
+	}
+
+	/**
 	 * Register the Tab 8 route.
 	 *
 	 * @return void
@@ -62,6 +82,18 @@ class Advertising_REST_Controller extends WP_REST_Controller {
 				[
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => [ $this, 'get_advertising_data' ],
+					'permission_callback' => [ $this, 'permissions_check' ],
+					'args'                => $this->get_collection_params(),
+				],
+			]
+		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/refresh',
+			[
+				[
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => [ $this, 'refresh_advertising_data' ],
 					'permission_callback' => [ $this, 'permissions_check' ],
 					'args'                => $this->get_collection_params(),
 				],
@@ -92,8 +124,65 @@ class Advertising_REST_Controller extends WP_REST_Controller {
 	 * @return \WP_REST_Response|WP_Error
 	 */
 	public function get_advertising_data( WP_REST_Request $request ) {
-		$tz = $this->site_timezone();
+		$parsed = $this->parse_window_args( $request );
+		if ( is_wp_error( $parsed ) ) {
+			return $parsed;
+		}
+		[ $start, $end, $compare_start, $compare_end ] = $parsed;
 
+		// Dev smoke-test path: serve canned fixture data so the UI renders without
+		// a GAM connection. The optional _fixture_state param selects a render
+		// path (see dev-notes.md). Never enable in production.
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			$compare = $compare_start && $compare_end;
+			$variant = (string) ( $request->get_param( '_fixture_state' ) ?? 'populated' );
+			return rest_ensure_response(
+				Advertising_Metric::get_fixture( $start->format( 'Y-m-d' ), $end->format( 'Y-m-d' ), $compare, $variant )
+			);
+		}
+
+		return $this->cached_response(
+			$request,
+			function () use ( $start, $end, $compare_start, $compare_end ) {
+				return $this->build_response( $start, $end, $compare_start, $compare_end );
+			}
+		);
+	}
+
+	/**
+	 * POST /advertising/refresh handler — bypass cache and recompute.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function refresh_advertising_data( WP_REST_Request $request ) {
+		// Fixture mode: delegate to GET so refresh is a no-op cache bypass.
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			return $this->get_advertising_data( $request );
+		}
+		$parsed = $this->parse_window_args( $request );
+		if ( is_wp_error( $parsed ) ) {
+			return $parsed;
+		}
+		[ $start, $end, $compare_start, $compare_end ] = $parsed;
+
+		return $this->refresh_response(
+			$request,
+			function () use ( $start, $end, $compare_start, $compare_end ) {
+				return $this->build_response( $start, $end, $compare_start, $compare_end );
+			}
+		);
+	}
+
+	/**
+	 * Validate and parse the window args. Returns [start, end, compare_start, compare_end] on
+	 * success; WP_Error on validation failure.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 * @return array|WP_Error
+	 */
+	private function parse_window_args( WP_REST_Request $request ) {
+		$tz = $this->site_timezone();
 		try {
 			$start = $this->parse_date( $request->get_param( 'start' ), $tz, false );
 			$end   = $this->parse_date( $request->get_param( 'end' ), $tz, true );
@@ -135,19 +224,7 @@ class Advertising_REST_Controller extends WP_REST_Controller {
 			}
 		}
 
-		$compare = $compare_start && $compare_end;
-
-		// Dev smoke-test path: serve canned fixture data so the UI renders without
-		// a GAM connection. The optional _fixture_state param selects a render
-		// path (see dev-notes.md). Never enable in production.
-		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
-			$variant = (string) ( $request->get_param( '_fixture_state' ) ?? 'populated' );
-			return rest_ensure_response(
-				Advertising_Metric::get_fixture( $start->format( 'Y-m-d' ), $end->format( 'Y-m-d' ), $compare, $variant )
-			);
-		}
-
-		return rest_ensure_response( $this->build_response( $start, $end, $compare_start, $compare_end ) );
+		return [ $start, $end, $compare_start, $compare_end ];
 	}
 
 	/**
