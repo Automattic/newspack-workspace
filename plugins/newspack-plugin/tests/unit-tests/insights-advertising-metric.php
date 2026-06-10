@@ -260,19 +260,20 @@ class Newspack_Test_Insights_Advertising_Metric extends WP_UnitTestCase {
 	/**
 	 * Dotted-qualified GAM CSV headers are matched by their enum suffix.
 	 */
-	public function test_top_countries_qualified_csv_headers() {
+	public function test_qualified_csv_headers() {
 		$this->with_rows(
 			[
 				[
-					'Dimension.COUNTRY_NAME'         => 'United States',
-					'Column.TOTAL_IMPRESSIONS'       => '1000',
+					'Dimension.AD_UNIT_NAME'              => 'Homepage Leaderboard',
+					'Column.TOTAL_IMPRESSIONS'            => '1000',
 					'Column.TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => '2000000',
-					'Column.TOTAL_CODE_SERVED_COUNT' => '1000',
+					'Column.TOTAL_CODE_SERVED_COUNT'      => '1000',
+					'Column.TOTAL_LINE_ITEM_LEVEL_CLICKS' => '0',
 				],
 			]
 		);
-		$payload = Insights_Advertising_Test_Metric::top_countries( '2026-01-01', '2026-01-31' );
-		$this->assertSame( 'United States', $payload['rows'][0]['country'] );
+		$payload = Insights_Advertising_Test_Metric::top_ad_units( '2026-01-01', '2026-01-31' );
+		$this->assertSame( 'Homepage Leaderboard', $payload['rows'][0]['ad_unit'] );
 		$this->assertSame( 1000, $payload['rows'][0]['impressions'] );
 		$this->assertSame( 2.0, $payload['rows'][0]['revenue'] );
 	}
