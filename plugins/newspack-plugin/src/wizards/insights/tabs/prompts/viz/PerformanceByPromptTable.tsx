@@ -22,16 +22,13 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { PromptsPerformanceByPromptRow, PromptsPerformanceByPromptTable as TableData } from '../../../api/prompts';
-import { formatNumber, formatPercent } from '../../components/format';
-import SortableTable, { NotApplicable, type SortableColumn } from './SortableTable';
+import { formatNumber } from '../../components/format';
+import SortableTable, { renderCount, renderRate, type SortableColumn } from './SortableTable';
 import { humanizeTerm } from './humanize';
 
 export interface PerformanceByPromptTableProps {
 	data: TableData;
 }
-
-const renderRate = ( v: number | null ) => ( v === null ? <NotApplicable /> : <>{ formatPercent( v ) }</> );
-const renderCount = ( v: number | null ) => ( v === null ? <NotApplicable /> : <>{ formatNumber( v ) }</> );
 
 const columns: SortableColumn< PromptsPerformanceByPromptRow >[] = [
 	{ key: 'prompt_title', label: __( 'Prompt', 'newspack-plugin' ), numeric: false, render: r => r.prompt_title, sortValue: r => r.prompt_title },

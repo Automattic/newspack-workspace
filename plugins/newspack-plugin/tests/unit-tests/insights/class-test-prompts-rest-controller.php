@@ -193,4 +193,33 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 		);
 		$this->assertSame( 400, $response->get_status() );
 	}
+
+	/**
+	 * The mirror of the above: a lone comparison end (no start) is rejected.
+	 */
+	public function test_partial_comparison_end_only_returns_400() {
+		$response = $this->dispatch(
+			[
+				'start'       => '2026-03-22',
+				'end'         => '2026-04-21',
+				'compare_end' => '2026-03-21',
+			]
+		);
+		$this->assertSame( 400, $response->get_status() );
+	}
+
+	/**
+	 * An inverted comparison window (compare_start after compare_end) is rejected.
+	 */
+	public function test_inverted_comparison_window_returns_400() {
+		$response = $this->dispatch(
+			[
+				'start'         => '2026-03-22',
+				'end'           => '2026-04-21',
+				'compare_start' => '2026-03-21',
+				'compare_end'   => '2026-02-20',
+			]
+		);
+		$this->assertSame( 400, $response->get_status() );
+	}
 }

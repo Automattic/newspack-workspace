@@ -17,15 +17,13 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { PromptsPerformanceByIntentRow, PromptsPerformanceByIntentTable as TableData } from '../../../api/prompts';
-import { formatNumber, formatPercent } from '../../components/format';
-import SortableTable, { NotApplicable, type SortableColumn } from './SortableTable';
+import { formatNumber } from '../../components/format';
+import SortableTable, { renderRate, type SortableColumn } from './SortableTable';
 import { humanizeTerm } from './humanize';
 
 export interface PerformanceByIntentTableProps {
 	data: TableData;
 }
-
-const renderRate = ( v: number | null ) => ( v === null ? <NotApplicable /> : <>{ formatPercent( v ) }</> );
 
 const columns: SortableColumn< PromptsPerformanceByIntentRow >[] = [
 	{ key: 'intent', label: __( 'Intent', 'newspack-plugin' ), numeric: false, render: r => humanizeTerm( r.intent ), sortValue: r => r.intent },

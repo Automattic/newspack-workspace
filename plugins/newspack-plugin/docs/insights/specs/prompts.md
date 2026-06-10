@@ -274,7 +274,7 @@ When a section has data but zero of a specific category:
 When the whole tab has zero data (no prompts active, no event data ingested yet):
 
 - Every scorecard shows zero per its format type
-- Funnel shows three stages with zero / zero / zero
+- Funnel shows its empty-state message ("Not enough data to chart the funnel.") — the SVG funnel needs a non-zero top stage to chart proportions, so an all-zero window renders the message rather than three zero-height bands (matches the Gates funnel)
 - Distribution shows four buckets with zero / 0%
 - Performance by prompt table shows the empty-state row above
 - Performance by intent table shows zero rows

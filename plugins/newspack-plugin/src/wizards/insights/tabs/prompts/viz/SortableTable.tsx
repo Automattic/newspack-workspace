@@ -25,6 +25,11 @@ import { __, sprintf } from '@wordpress/i18n';
 import { useMemo, useState } from '@wordpress/element';
 import { Icon, chevronUp, chevronDown } from '@wordpress/icons';
 
+/**
+ * Internal dependencies
+ */
+import { formatNumber, formatPercent } from '../../components/format';
+
 export type SortDir = 'asc' | 'desc';
 
 export interface SortableColumn< Row > {
@@ -203,5 +208,11 @@ export const NotApplicable = () => (
 		—
 	</span>
 );
+
+/** Cell renderer: a percentage, or a muted em-dash when the metric is not applicable (null). */
+export const renderRate = ( v: number | null ) => ( v === null ? <NotApplicable /> : <>{ formatPercent( v ) }</> );
+
+/** Cell renderer: a formatted count, or a muted em-dash when the metric is not applicable (null). */
+export const renderCount = ( v: number | null ) => ( v === null ? <NotApplicable /> : <>{ formatNumber( v ) }</> );
 
 export default SortableTable;

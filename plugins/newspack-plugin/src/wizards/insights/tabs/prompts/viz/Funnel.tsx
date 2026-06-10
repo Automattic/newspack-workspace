@@ -79,7 +79,11 @@ const stepHeightFor = ( stepCount: number ): number => Math.max( MIN_STEP_HEIGHT
  */
 const trapezoidPath = ( count: number, nextCount: number, topCount: number, yTop: number, yBottom: number ): string => {
 	const cx = VIEWBOX_WIDTH / 2;
-	const halfTop = ( count / topCount ) * ( VIEWBOX_WIDTH / 2 );
+	// Clamp the top edge to the viewBox half-width too (not just the bottom):
+	// funnel stages are independent aggregates, so a later stage can exceed the
+	// top stage (data drift). Without this the trapezoid would flare past the
+	// viewBox edge — the opposite of the "only ever narrows" invariant below.
+	const halfTop = Math.min( VIEWBOX_WIDTH / 2, ( count / topCount ) * ( VIEWBOX_WIDTH / 2 ) );
 	const halfBottom = Math.min( halfTop, ( nextCount / topCount ) * ( VIEWBOX_WIDTH / 2 ) );
 	return [
 		`M ${ cx - halfTop } ${ yTop }`,
