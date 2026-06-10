@@ -7,8 +7,14 @@
 
 use Newspack\Insights\Cache;
 
+/**
+ * Tests for Newspack\Insights\Cache.
+ */
 class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 
+	/**
+	 * Clean transients between tests.
+	 */
 	public function tear_down() {
 		// Clean transients between tests.
 		global $wpdb;
@@ -17,6 +23,9 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 		parent::tear_down();
 	}
 
+	/**
+	 * Test local source skips transient and recomputes each call.
+	 */
 	public function test_local_source_skips_transient_and_recomputes_each_call(): void {
 		$calls = 0;
 		$compute = function () use ( &$calls ) {
@@ -36,10 +45,16 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 		$this->assertNotEmpty( $first['computed_at'] );
 	}
 
+	/**
+	 * Test is_disabled returns false without constant.
+	 */
 	public function test_is_disabled_returns_false_without_constant(): void {
 		$this->assertFalse( Cache::is_disabled() );
 	}
 
+	/**
+	 * Test external source caches payload and reuses on second call.
+	 */
 	public function test_external_source_caches_payload_and_reuses_on_second_call(): void {
 		$calls = 0;
 		$compute = function () use ( &$calls ) {
@@ -57,6 +72,9 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 		$this->assertSame( Cache::SOURCE_EXTERNAL, $second['source'] );
 	}
 
+	/**
+	 * Test different key parts produce distinct cache entries.
+	 */
 	public function test_different_key_parts_produce_distinct_cache_entries(): void {
 		$calls = 0;
 		$compute = function () use ( &$calls ) {
@@ -70,10 +88,18 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 		$this->assertSame( 2, $calls, 'Distinct windows must produce distinct cache keys.' );
 	}
 
+	/**
+	 * Test BigQuery source uses 24h TTL.
+	 */
 	public function test_bigquery_source_uses_24h_ttl(): void {
-		Cache::store( 'gates', Cache::SOURCE_BIGQUERY, [ '2026-01-01', '2026-01-31', null, null ], function () {
-			return [ 'value' => 1 ];
-		} );
+		Cache::store(
+			'gates',
+			Cache::SOURCE_BIGQUERY,
+			[ '2026-01-01', '2026-01-31', null, null ],
+			function () {
+				return [ 'value' => 1 ];
+			}
+		);
 
 		$key       = self::_transient_key_for( 'gates', [ '2026-01-01', '2026-01-31', null, null ] );
 		$timeout   = get_option( '_transient_timeout_' . $key );
@@ -83,10 +109,18 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 		$this->assertLessThanOrEqual( DAY_IN_SECONDS, $remaining );
 	}
 
+	/**
+	 * Test external source uses 10m TTL.
+	 */
 	public function test_external_source_uses_10m_ttl(): void {
-		Cache::store( 'audience', Cache::SOURCE_EXTERNAL, [ '2026-01-01', '2026-01-31', null, null ], function () {
-			return [ 'value' => 1 ];
-		} );
+		Cache::store(
+			'audience',
+			Cache::SOURCE_EXTERNAL,
+			[ '2026-01-01', '2026-01-31', null, null ],
+			function () {
+				return [ 'value' => 1 ];
+			}
+		);
 
 		$key       = self::_transient_key_for( 'audience', [ '2026-01-01', '2026-01-31', null, null ] );
 		$timeout   = get_option( '_transient_timeout_' . $key );
@@ -97,6 +131,8 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test disabled constant bypasses transient IO.
+	 *
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
 	 */
@@ -122,6 +158,10 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 
 	/**
 	 * Mirror the production transient-key formula so tests can reach into storage.
+	 *
+	 * @param string $tab Tab slug.
+	 * @param array  $key_parts Canonicalized window components.
+	 * @return string Transient key.
 	 */
 	private static function _transient_key_for( string $tab, array $key_parts ): string {
 		return 'newspack_insights_' . $tab . '_' . md5( wp_json_encode( $key_parts ) );
