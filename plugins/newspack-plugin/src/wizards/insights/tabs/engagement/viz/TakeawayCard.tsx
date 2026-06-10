@@ -30,9 +30,11 @@ export interface TakeawayCardProps {
 	sub?: string;
 	/** Bars for the inline mini chart. */
 	bars: { label: string; value: number }[];
+	/** Render the bar hover value with its unit, e.g. "98 seconds". */
+	formatValue?: ( value: number ) => string;
 }
 
-const TakeawayCard = ( { title, payload, headline, sub, bars }: TakeawayCardProps ) => {
+const TakeawayCard = ( { title, payload, headline, sub, bars, formatValue }: TakeawayCardProps ) => {
 	if ( ! payload || payload.hidden_in_v1 ) {
 		return null;
 	}
@@ -52,7 +54,7 @@ const TakeawayCard = ( { title, payload, headline, sub, bars }: TakeawayCardProp
 				<p className="newspack-insights__takeaway-headline">{ headline }</p>
 				{ sub && <p className="newspack-insights__takeaway-sub">{ sub }</p> }
 				<div className="newspack-insights__takeaway-chart">
-					<BarChart bars={ bars } />
+					<BarChart bars={ bars } formatValue={ formatValue } />
 				</div>
 			</>
 		);

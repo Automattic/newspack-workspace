@@ -43,6 +43,9 @@ describe( 'ReaderSegmentsSection — traffic source card', () => {
 		expect( within( card ).getByText( 'Newsletter traffic engages 100% longer than other sources' ) ).toBeInTheDocument();
 		expect( within( card ).getByText( '1:38 per session vs 0:49' ) ).toBeInTheDocument();
 		expect( within( card ).queryByText( 'Not enough data in this timeframe.' ) ).not.toBeInTheDocument();
+		// Bar-hover values carry the "seconds" unit.
+		expect( within( card ).getByText( '98 seconds' ) ).toBeInTheDocument();
+		expect( within( card ).getByText( '49 seconds' ) ).toBeInTheDocument();
 	} );
 
 	it( 'inverts the headline when other sources lead', () => {

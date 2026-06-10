@@ -16,7 +16,7 @@ import { __, sprintf } from '@wordpress/i18n';
  */
 import type { InsightsWindow } from '../../../api/audience';
 import type { MetricPayload, MetricRow } from '../../components/metrics';
-import { formatDecimal, formatDuration } from '../../components/format';
+import { formatDecimal, formatDuration, formatNumber } from '../../components/format';
 import TakeawayCard from '../viz/TakeawayCard';
 
 export interface SectionProps {
@@ -38,6 +38,16 @@ const num = ( row: MetricRow | undefined, key: string ): number => ( typeof row?
 const findRow = ( rows: MetricRow[], key: string, value: string ): MetricRow | undefined => rows.find( row => row[ key ] === value );
 const pctMore = ( a: number, b: number ): number => ( b > 0 ? Math.round( ( ( a - b ) / b ) * 100 ) : 0 );
 const cap = ( s: string ): string => s.charAt( 0 ).toUpperCase() + s.slice( 1 );
+
+// Bar-hover value formatters: append the unit so a hovered bar reads "98 seconds"
+// or "2.4 pages" rather than a bare number. Engagement values are aggregate
+// averages (always well above 1), so a single plural form is sufficient.
+const formatSeconds = ( value: number ): string =>
+	/* translators: %s: a number of seconds. */
+	sprintf( __( '%s seconds', 'newspack-plugin' ), formatNumber( value ) );
+const formatPages = ( value: number ): string =>
+	/* translators: %s: a number of pages. */
+	sprintf( __( '%s pages', 'newspack-plugin' ), formatDecimal( value ) );
 
 interface Takeaway {
 	headline?: string;
@@ -182,6 +192,7 @@ const ReaderSegmentsSection = ( { current }: SectionProps ) => {
 					headline={ device.headline }
 					sub={ device.sub }
 					bars={ device.bars }
+					formatValue={ formatSeconds }
 				/>
 				<TakeawayCard
 					title={ __( 'New vs returning readers', 'newspack-plugin' ) }
@@ -189,6 +200,7 @@ const ReaderSegmentsSection = ( { current }: SectionProps ) => {
 					headline={ returning.headline }
 					sub={ returning.sub }
 					bars={ returning.bars }
+					formatValue={ formatPages }
 				/>
 				<TakeawayCard
 					title={ __( 'Engagement by traffic source', 'newspack-plugin' ) }
@@ -196,6 +208,7 @@ const ReaderSegmentsSection = ( { current }: SectionProps ) => {
 					headline={ trafficSource.headline }
 					sub={ trafficSource.sub }
 					bars={ trafficSource.bars }
+					formatValue={ formatSeconds }
 				/>
 			</div>
 		</section>
