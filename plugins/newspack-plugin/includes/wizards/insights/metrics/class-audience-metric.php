@@ -771,10 +771,10 @@ final class Audience_Metric {
 	}
 
 	/**
-	 * dimensionFilter: a customEvent dimension is present AND not GA4's literal
-	 * "(not set)" placeholder. A bare present-filter (regex `.+`) matches
-	 * "(not set)", which would surface a bogus aggregated row (e.g. a "(not set)"
-	 * author from non-article pageviews where the dimension is unset).
+	 * Build a dimensionFilter requiring a customEvent dimension to be present and
+	 * not GA4's literal "(not set)" placeholder. A bare present-filter (`.+`)
+	 * matches "(not set)", which would surface a bogus aggregated row (e.g. a
+	 * "(not set)" author from non-article pageviews where the dimension is unset).
 	 *
 	 * @param string $param Event parameter name.
 	 * @return array
