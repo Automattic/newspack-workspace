@@ -253,6 +253,70 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Purge() clears every cached window for a tab and resets cooldown.
+	 */
+	public function test_purge_clears_every_window_for_a_tab(): void {
+		Cache::store(
+			'audience',
+			Cache::SOURCE_EXTERNAL,
+			[ '2026-01-01', '2026-01-31', null, null ],
+			function () {
+				return [ 'a' => 1 ];
+			}
+		);
+		Cache::store(
+			'audience',
+			Cache::SOURCE_EXTERNAL,
+			[ '2026-02-01', '2026-02-28', null, null ],
+			function () {
+				return [ 'b' => 1 ];
+			}
+		);
+
+		Cache::purge( 'audience' );
+
+		$key_a = 'newspack_insights_audience_' . md5( (string) wp_json_encode( [ '2026-01-01', '2026-01-31', null, null ] ) );
+		$key_b = 'newspack_insights_audience_' . md5( (string) wp_json_encode( [ '2026-02-01', '2026-02-28', null, null ] ) );
+		$this->assertFalse( get_transient( $key_a ) );
+		$this->assertFalse( get_transient( $key_b ) );
+		$this->assertSame( [], get_option( 'newspack_insights_index_audience', [] ) );
+	}
+
+	/**
+	 * Disabled-mode refresh skips the cooldown gate.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_disabled_refresh_skips_cooldown(): void {
+		if ( ! defined( 'NEWSPACK_INSIGHTS_CACHE_DISABLED' ) ) {
+			define( 'NEWSPACK_INSIGHTS_CACHE_DISABLED', true );
+		}
+		$key_parts = [ '2026-01-01', '2026-01-31', null, null ];
+
+		$first  = Cache::refresh(
+			'gates',
+			Cache::SOURCE_BIGQUERY,
+			$key_parts,
+			function () {
+				return [ 'value' => 1 ];
+			}
+		);
+		$second = Cache::refresh(
+			'gates',
+			Cache::SOURCE_BIGQUERY,
+			$key_parts,
+			function () {
+				return [ 'value' => 2 ];
+			}
+		);
+
+		$this->assertSame( [ 'value' => 1 ], $first['payload'] );
+		$this->assertSame( [ 'value' => 2 ], $second['payload'] );
+		$this->assertNull( Cache::bq_cooldown_until( 'gates' ) );
+	}
+
+	/**
 	 * Mirror the production transient-key formula so tests can reach into storage.
 	 *
 	 * @param string $tab Tab slug.

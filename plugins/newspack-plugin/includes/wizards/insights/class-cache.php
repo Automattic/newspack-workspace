@@ -249,4 +249,25 @@ final class Cache {
 			'warning'
 		);
 	}
+
+	/**
+	 * Clear every cached window for a tab and reset its BQ cooldown marker.
+	 * No-op when caching is disabled.
+	 *
+	 * @param string $tab Tab slug.
+	 */
+	public static function purge( string $tab ): void {
+		if ( self::is_disabled() ) {
+			return;
+		}
+		$option = self::index_option( $tab );
+		$keys   = get_option( $option, [] );
+		if ( is_array( $keys ) ) {
+			foreach ( $keys as $key ) {
+				delete_transient( $key );
+			}
+		}
+		delete_option( $option );
+		delete_option( self::cooldown_option( $tab ) );
+	}
 }
