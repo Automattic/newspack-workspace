@@ -131,10 +131,12 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'state', $current['total_prompt_impressions'] );
 		$this->assertArrayNotHasKey( 'pending', $current['total_prompt_impressions'] );
 		$this->assertSame( 'count', $current['total_prompt_impressions']['placeholder_type'] );
-		// Tables ship a `rows` key for the empty-state UI; not-yet-wired metrics
-		// also report `state: 'error'` with the bridge error code.
+		// Tables ship a `rows` key for the empty-state UI; in the test env the
+		// proxy is unconfigured so wired collection metrics surface as state
+		// 'error' with `bigquery_proxy_not_configured`. The envelope under
+		// test is the `rows` + `state` contract, not which error code we got.
 		$this->assertSame( [], $current['performance_by_prompt']['rows'] );
-		$this->assertSame( 'newspack_insights_prompts_not_yet_implemented', $current['performance_by_prompt']['error_code'] );
+		$this->assertSame( 'error', $current['performance_by_prompt']['state'] );
 	}
 
 	/**

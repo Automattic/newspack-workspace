@@ -15,10 +15,12 @@
  * and share a per-window memoization cache (one proxy call per intent +
  * direction).
  *
- * The 5 not-yet-wired collection methods (funnel / distribution / 3 perf
- * tables) remain pinned to the bridge envelope:
- * state 'error' with `error_code: newspack_insights_prompts_not_yet_implemented`.
- * Locks the bridge behavior so Task 3.3 can refactor with confidence.
+ * The 5 collection methods are pinned (Task 3.3): funnel + distribution mirror
+ * the Gates state-envelope contract one-for-one; the per-prompt performance
+ * table additionally augments each row with per-popup Woo-completed donation
+ * and subscription counts and is asserted to degrade gracefully (engagement
+ * columns still render with zeros in the Woo columns) when the Woo-side proxy
+ * call fails.
  *
  * @package Newspack\Tests\Insights
  */
@@ -77,16 +79,6 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 			->method( 'query' )
 			->with( $expected_query_name, $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
 			->willReturn( $return );
-		return new Prompts_Metric( $proxy );
-	}
-
-	/**
-	 * Build a Prompts_Metric with a proxy stub that fails the test if `query()`
-	 * is ever called. Used for the not-yet-implemented bridge smoke tests.
-	 */
-	protected function make_metric_with_unused_proxy(): Prompts_Metric {
-		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
-		$proxy->expects( $this->never() )->method( 'query' );
 		return new Prompts_Metric( $proxy );
 	}
 
@@ -515,39 +507,567 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$metric->get_subscription_conversion_direct( $this->start(), $this->end() );
 	}
 
-	// --- Section 6/7: not-yet-implemented bridge (collections) ---------
+	// --- Section 6: Conversion funnel + exposures distribution ---------
 
 	/**
-	 * Placeholder collection methods (funnel, distribution, 3 perf tables)
-	 * return the bridge envelope with the proper rows-key and an empty list.
-	 *
-	 * @dataProvider provide_placeholder_collection_methods
-	 * @param string $method   Method on Prompts_Metric to call.
-	 * @param string $rows_key Key holding the (empty) collection: 'stages'|'buckets'|'rows'.
+	 * Funnel: maps the single BQ row to three React-ready stages with
+	 * pct_of_top normalized against step 1.
 	 */
-	public function test_placeholder_collection_returns_bridge_envelope( string $method, string $rows_key ) {
-		$metric = $this->make_metric_with_unused_proxy();
-		$result = $metric->$method( $this->start(), $this->end() );
+	public function test_funnel_maps_bq_rows_to_stages() {
+		$metric = $this->make_metric_with_proxy_returning(
+			'prompts_funnel',
+			[
+				[
+					'step_1_impression' => 100,
+					'step_2_engagement' => 20,
+					'step_3_conversion' => 5,
+				],
+			]
+		);
+		$result = $metric->get_conversion_funnel( $this->start(), $this->end() );
 
-		$this->assertSame( 'error', $result['state'] );
-		$this->assertSame( 'newspack_insights_prompts_not_yet_implemented', $result['error_code'] );
-		$this->assertNotSame( '', $result['error_message'] );
-		$this->assertSame( [], $result[ $rows_key ] );
-		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertCount( 3, $result['stages'] );
+		$this->assertSame( 100, $result['stages'][0]['count'] );
+		$this->assertSame( 20, $result['stages'][1]['count'] );
+		$this->assertSame( 5, $result['stages'][2]['count'] );
+		$this->assertEqualsWithDelta( 1.0, $result['stages'][0]['pct_of_top'], 0.001 );
+		$this->assertEqualsWithDelta( 0.2, $result['stages'][1]['pct_of_top'], 0.001 );
+		$this->assertEqualsWithDelta( 0.05, $result['stages'][2]['pct_of_top'], 0.001 );
 	}
 
 	/**
-	 * Data provider for the 5 not-yet-wired collection methods.
+	 * Funnel: empty rows → state 'empty' with no stages.
+	 */
+	public function test_funnel_returns_empty_state_on_no_rows() {
+		$metric = $this->make_metric_with_proxy_returning( 'prompts_funnel', [] );
+		$result = $metric->get_conversion_funnel( $this->start(), $this->end() );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	/**
+	 * Funnel: proxy WP_Error → state 'error' with code + empty stages.
+	 */
+	public function test_funnel_returns_error_state_on_proxy_error() {
+		$metric = $this->make_metric_with_proxy_returning(
+			'prompts_funnel',
+			new \WP_Error( 'bigquery_query_failed', 'BQ down' )
+		);
+		$result = $metric->get_conversion_funnel( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_query_failed', $result['error_code'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	/**
+	 * Funnel: malformed shape (non-array row) → state 'error' with
+	 * `bigquery_proxy_malformed_rows`.
+	 */
+	public function test_funnel_returns_error_state_on_malformed_response() {
+		$metric = $this->make_metric_with_proxy_returning(
+			'prompts_funnel',
+			[ 'not-a-row' ]
+		);
+		$result = $metric->get_conversion_funnel( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+	}
+
+	/**
+	 * Distribution: maps BQ rows to React-ready buckets in spec order
+	 * (1 / 2 / 3-5 / 6+).
+	 */
+	public function test_distribution_maps_bq_rows_to_buckets() {
+		$metric = $this->make_metric_with_proxy_returning(
+			'prompts_exposures_before_conversion',
+			[
+				[
+					'bucket'               => '1',
+					'converters_in_bucket' => 50,
+					'pct_of_converters'    => 0.5,
+				],
+				[
+					'bucket'               => '2',
+					'converters_in_bucket' => 30,
+					'pct_of_converters'    => 0.3,
+				],
+				[
+					'bucket'               => '3-5',
+					'converters_in_bucket' => 15,
+					'pct_of_converters'    => 0.15,
+				],
+				[
+					'bucket'               => '6+',
+					'converters_in_bucket' => 5,
+					'pct_of_converters'    => 0.05,
+				],
+			]
+		);
+		$result = $metric->get_exposures_distribution( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertCount( 4, $result['buckets'] );
+		$this->assertSame( 50, $result['buckets'][0]['count'] );
+		$this->assertSame( 30, $result['buckets'][1]['count'] );
+		$this->assertSame( 15, $result['buckets'][2]['count'] );
+		$this->assertSame( 5, $result['buckets'][3]['count'] );
+	}
+
+	/**
+	 * Distribution: empty rows → state 'empty' with no buckets.
+	 */
+	public function test_distribution_returns_empty_state_on_no_rows() {
+		$metric = $this->make_metric_with_proxy_returning( 'prompts_exposures_before_conversion', [] );
+		$result = $metric->get_exposures_distribution( $this->start(), $this->end() );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['buckets'] );
+	}
+
+	/**
+	 * Distribution: proxy WP_Error → state 'error' with empty buckets.
+	 */
+	public function test_distribution_returns_error_state_on_proxy_error() {
+		$metric = $this->make_metric_with_proxy_returning(
+			'prompts_exposures_before_conversion',
+			new \WP_Error( 'bigquery_query_failed', 'BQ down' )
+		);
+		$result = $metric->get_exposures_distribution( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_query_failed', $result['error_code'] );
+		$this->assertSame( [], $result['buckets'] );
+	}
+
+	/**
+	 * Distribution: malformed shape (non-array) → state 'error' with
+	 * `bigquery_proxy_malformed_rows`.
+	 */
+	public function test_distribution_returns_error_state_on_malformed_response() {
+		$metric = $this->make_metric_with_proxy_returning(
+			'prompts_exposures_before_conversion',
+			'not-an-array'
+		);
+		$result = $metric->get_exposures_distribution( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+	}
+
+	// --- Section 7: Performance breakdown ------------------------------
+
+	/**
+	 * Sample BQ row for the performance-by-prompt query. Columns mirror the
+	 * hub `prompts_performance_by_prompt` SELECT one-for-one.
 	 *
+	 * @param int    $popup_id    Popup ID for the row.
+	 * @param string $title       Prompt title.
+	 * @param string $intent      One of `donation`, `registration`, `newsletters_subscription`.
+	 * @param int    $impressions Impressions count (also used as ctr denominator on the publisher side).
 	 * @return array
 	 */
-	public function provide_placeholder_collection_methods(): array {
+	protected function performance_row( int $popup_id, string $title, string $intent, int $impressions ): array {
 		return [
-			'funnel'                => [ 'get_conversion_funnel', 'stages' ],
-			'distribution'          => [ 'get_exposures_distribution', 'buckets' ],
-			'performance_by_prompt' => [ 'get_performance_by_prompt', 'rows' ],
-			'performance_by_intent' => [ 'get_performance_by_intent', 'rows' ],
-			'performance_by_place'  => [ 'get_performance_by_placement', 'rows' ],
+			'popup_id'             => (string) $popup_id, // BQ emits string scalars.
+			'prompt_title'         => $title,
+			'intent'               => $intent,
+			'placement'            => 'overlay',
+			'impressions'          => $impressions,
+			'unique_viewers'       => (int) round( $impressions * 0.8 ),
+			'ctr'                  => 0.1,
+			'form_submission_rate' => 0.05,
+			'dismissal_rate'       => 0.02,
+			'registrations'        => 0,
+			'newsletter_signups'   => 0,
 		];
+	}
+
+	/**
+	 * Build a proxy mock that returns the performance-by-prompt rows on the
+	 * main query call and the given donation/subscription rows on the
+	 * augmentation queries (in dispatch order).
+	 *
+	 * @param array           $perf_rows         Rows for `prompts_performance_by_prompt`.
+	 * @param array|\WP_Error $donation_rows Rows for `prompts_donation_conversion_direct`.
+	 * @param array|\WP_Error $subscription_rows Rows for `prompts_subscription_conversion_direct`.
+	 * @return BigQuery_Proxy_Client
+	 */
+	protected function make_performance_proxy( array $perf_rows, $donation_rows, $subscription_rows ): BigQuery_Proxy_Client {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		// Dispatch order: perf table, donation augmentation, subscription augmentation.
+		$proxy->expects( $this->exactly( 3 ) )
+			->method( 'query' )
+			->willReturnCallback(
+				function ( $query_name ) use ( $perf_rows, $donation_rows, $subscription_rows ) {
+					switch ( $query_name ) {
+						case 'prompts_performance_by_prompt':
+							return $perf_rows;
+						case 'prompts_donation_conversion_direct':
+							return $donation_rows;
+						case 'prompts_subscription_conversion_direct':
+							return $subscription_rows;
+					}
+					return null;
+				}
+			);
+		return $proxy;
+	}
+
+	/**
+	 * Performance by prompt: maps BQ rows and intent-scopes Woo-completed
+	 * donation / subscription counts per popup.
+	 */
+	public function test_performance_by_prompt_augments_with_woo_counts() {
+		$perf_rows = [
+			$this->performance_row( 42, 'Donate now', 'donation', 1000 ),
+			$this->performance_row( 99, 'Join us', 'registration', 500 ),
+		];
+		$donation_attempts = [
+			[
+				'popup_id'       => '42',
+				'user_pseudo_id' => 'u1',
+				'session_id'     => 's1',
+				'attempt_ts'     => 1717000000000000,
+			],
+			[
+				'popup_id'       => '42',
+				'user_pseudo_id' => 'u2',
+				'session_id'     => 's2',
+				'attempt_ts'     => 1717001000000000,
+			],
+		];
+		$subscription_attempts = [
+			[
+				'popup_id'       => '99',
+				'user_pseudo_id' => 'u3',
+				'session_id'     => 's3',
+				'attempt_ts'     => 1717002000000000,
+			],
+		];
+
+		$proxy = $this->make_performance_proxy( $perf_rows, $donation_attempts, $subscription_attempts );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		// Each per-popup augmentation call gets its own scoped row subset; we
+		// stub a fixed return per call regardless of which subset arrived. The
+		// per-popup grouping itself is what the test exercises.
+		$resolver->method( 'count_completed_orders' )->willReturn( 5 );
+		$resolver->method( 'sum_completed_revenue' )->willReturn( 0.0 );
+
+		$metric = new Prompts_Metric( $proxy, $resolver );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertCount( 2, $result['rows'] );
+
+		// Donation popup → donation columns populated, subscription columns zeroed.
+		$this->assertSame( 42, $result['rows'][0]['popup_id'] );
+		$this->assertSame( 'Donate now', $result['rows'][0]['prompt_title'] );
+		$this->assertSame( 'donation', $result['rows'][0]['intent'] );
+		$this->assertSame( 5, $result['rows'][0]['donation_conversions'] );
+		$this->assertEqualsWithDelta( 0.005, $result['rows'][0]['donation_conversion_rate'], 0.0001 );
+		$this->assertSame( 0, $result['rows'][0]['subscription_conversions'] );
+		$this->assertNull( $result['rows'][0]['subscription_conversion_rate'] );
+
+		// Registration popup → subscription columns populated, donation columns zeroed.
+		$this->assertSame( 99, $result['rows'][1]['popup_id'] );
+		$this->assertSame( 'registration', $result['rows'][1]['intent'] );
+		$this->assertSame( 0, $result['rows'][1]['donation_conversions'] );
+		$this->assertNull( $result['rows'][1]['donation_conversion_rate'] );
+		$this->assertSame( 5, $result['rows'][1]['subscription_conversions'] );
+		$this->assertEqualsWithDelta( 0.01, $result['rows'][1]['subscription_conversion_rate'], 0.0001 );
+
+		// Engagement columns flow through untouched.
+		$this->assertSame( 1000, $result['rows'][0]['impressions'] );
+		$this->assertSame( 0.1, $result['rows'][0]['ctr'] );
+		$this->assertSame( 0.05, $result['rows'][0]['form_submission_rate'] );
+	}
+
+	/**
+	 * Performance by prompt: locks the canonical row-key contract the React
+	 * layer consumes (`PromptPerformanceRow`). A column rename on either side
+	 * silently blanks the table, so assert the exact set + order.
+	 */
+	public function test_performance_by_prompt_row_schema_is_locked() {
+		$perf_rows = [ $this->performance_row( 42, 'Donate now', 'donation', 100 ) ];
+		$proxy     = $this->make_performance_proxy( $perf_rows, [], [] );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_completed_orders' )->willReturn( 0 );
+		$resolver->method( 'sum_completed_revenue' )->willReturn( 0.0 );
+
+		$metric = new Prompts_Metric( $proxy, $resolver );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame(
+			[
+				'popup_id',
+				'prompt_title',
+				'intent',
+				'placement',
+				'impressions',
+				'unique_viewers',
+				'ctr',
+				'form_submission_rate',
+				'dismissal_rate',
+				'registrations',
+				'newsletter_signups',
+				'donation_conversions',
+				'donation_conversion_rate',
+				'subscription_conversions',
+				'subscription_conversion_rate',
+			],
+			array_keys( $result['rows'][0] )
+		);
+	}
+
+	/**
+	 * Performance by prompt: empty rows → state 'empty' with no augmentation
+	 * queries dispatched.
+	 */
+	public function test_performance_by_prompt_returns_empty_state_on_no_rows() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( 'prompts_performance_by_prompt' )
+			->willReturn( [] );
+
+		$metric = new Prompts_Metric( $proxy, $this->createMock( Woo_Order_Resolver::class ) );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['rows'] );
+	}
+
+	/**
+	 * Performance by prompt: proxy WP_Error on the main query → state 'error'
+	 * with empty rows; augmentation queries are not dispatched.
+	 */
+	public function test_performance_by_prompt_returns_error_state_on_proxy_error() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( 'prompts_performance_by_prompt' )
+			->willReturn( new \WP_Error( 'bigquery_query_failed', 'BQ down' ) );
+
+		$metric = new Prompts_Metric( $proxy, $this->createMock( Woo_Order_Resolver::class ) );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_query_failed', $result['error_code'] );
+		$this->assertSame( [], $result['rows'] );
+	}
+
+	/**
+	 * Performance by prompt: malformed shape (non-array) → state 'error' with
+	 * `bigquery_proxy_malformed_rows`.
+	 */
+	public function test_performance_by_prompt_returns_error_state_on_malformed_response() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( 'prompts_performance_by_prompt' )
+			->willReturn( 'not-an-array' );
+
+		$metric = new Prompts_Metric( $proxy, $this->createMock( Woo_Order_Resolver::class ) );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+	}
+
+	/**
+	 * Performance by prompt: when the donation-augmentation proxy call fails,
+	 * the table still renders with engagement columns intact; donation
+	 * columns degrade to 0 / null (no error envelope, no exception).
+	 */
+	public function test_performance_by_prompt_degrades_gracefully_on_woo_query_failure() {
+		$perf_rows = [ $this->performance_row( 42, 'Donate now', 'donation', 1000 ) ];
+
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->exactly( 3 ) )
+			->method( 'query' )
+			->willReturnCallback(
+				function ( $query_name ) use ( $perf_rows ) {
+					switch ( $query_name ) {
+						case 'prompts_performance_by_prompt':
+							return $perf_rows;
+						case 'prompts_donation_conversion_direct':
+							return new \WP_Error( 'bigquery_query_failed', 'donation BQ down' );
+						case 'prompts_subscription_conversion_direct':
+							return [];
+					}
+					return null;
+				}
+			);
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_completed_orders' )->willReturn( 0 );
+		$resolver->method( 'sum_completed_revenue' )->willReturn( 0.0 );
+
+		$metric = new Prompts_Metric( $proxy, $resolver );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		// Table renders successfully — engagement data is load-bearing.
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 1000, $result['rows'][0]['impressions'] );
+		$this->assertSame( 0.1, $result['rows'][0]['ctr'] );
+		// Donation augmentation degraded to zero conversions; the rate stays
+		// computable (0/impressions = 0.0) since the intent matches and the
+		// engagement denominator is real — only the numerator is missing.
+		$this->assertSame( 0, $result['rows'][0]['donation_conversions'] );
+		$this->assertEqualsWithDelta( 0.0, $result['rows'][0]['donation_conversion_rate'], 0.0001 );
+	}
+
+	/**
+	 * Performance by intent: maps BQ rows with title-cased intent labels per
+	 * `INTENT_LABELS` (including the special `newsletters_subscription` →
+	 * "Newsletter signup" mapping).
+	 */
+	public function test_performance_by_intent_maps_bq_rows_with_titlecased_labels() {
+		$metric = $this->make_metric_with_proxy_returning(
+			'prompts_performance_by_intent',
+			[
+				[
+					'intent'               => 'donation',
+					'impressions'          => 5000,
+					'unique_viewers'       => 1200,
+					'ctr'                  => 0.1,
+					'form_submission_rate' => 0.05,
+					'dismissal_rate'       => 0.02,
+				],
+				[
+					'intent'               => 'registration',
+					'impressions'          => 3000,
+					'unique_viewers'       => 900,
+					'ctr'                  => 0.15,
+					'form_submission_rate' => 0.08,
+					'dismissal_rate'       => 0.03,
+				],
+				[
+					'intent'               => 'newsletters_subscription',
+					'impressions'          => 2000,
+					'unique_viewers'       => 600,
+					'ctr'                  => 0.2,
+					'form_submission_rate' => 0.1,
+					'dismissal_rate'       => 0.04,
+				],
+			]
+		);
+		$result = $metric->get_performance_by_intent( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertCount( 3, $result['rows'] );
+
+		$this->assertSame( 'donation', $result['rows'][0]['intent'] );
+		$this->assertSame( 'Donation', $result['rows'][0]['intent_label'] );
+		$this->assertSame( 5000, $result['rows'][0]['impressions'] );
+
+		$this->assertSame( 'registration', $result['rows'][1]['intent'] );
+		$this->assertSame( 'Registration', $result['rows'][1]['intent_label'] );
+
+		$this->assertSame( 'newsletters_subscription', $result['rows'][2]['intent'] );
+		$this->assertSame( 'Newsletter signup', $result['rows'][2]['intent_label'] );
+	}
+
+	/**
+	 * Performance by intent: empty rows → state 'empty'.
+	 */
+	public function test_performance_by_intent_returns_empty_state_on_no_rows() {
+		$metric = $this->make_metric_with_proxy_returning( 'prompts_performance_by_intent', [] );
+		$result = $metric->get_performance_by_intent( $this->start(), $this->end() );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['rows'] );
+	}
+
+	/**
+	 * Performance by intent: proxy WP_Error → state 'error'.
+	 */
+	public function test_performance_by_intent_returns_error_state_on_proxy_error() {
+		$metric = $this->make_metric_with_proxy_returning(
+			'prompts_performance_by_intent',
+			new \WP_Error( 'bigquery_query_failed', 'BQ down' )
+		);
+		$result = $metric->get_performance_by_intent( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_query_failed', $result['error_code'] );
+		$this->assertSame( [], $result['rows'] );
+	}
+
+	/**
+	 * Performance by placement: maps BQ rows with humanized placement labels
+	 * (`above-header` → "Above header") and no form_submission_rate column.
+	 */
+	public function test_performance_by_placement_maps_bq_rows_with_humanized_labels() {
+		$metric = $this->make_metric_with_proxy_returning(
+			'prompts_performance_by_placement',
+			[
+				[
+					'placement'      => 'overlay',
+					'impressions'    => 5000,
+					'unique_viewers' => 1200,
+					'ctr'            => 0.1,
+					'dismissal_rate' => 0.02,
+				],
+				[
+					'placement'      => 'inline',
+					'impressions'    => 3000,
+					'unique_viewers' => 900,
+					'ctr'            => 0.15,
+					'dismissal_rate' => 0.03,
+				],
+				[
+					'placement'      => 'above-header',
+					'impressions'    => 2000,
+					'unique_viewers' => 600,
+					'ctr'            => 0.2,
+					'dismissal_rate' => 0.04,
+				],
+			]
+		);
+		$result = $metric->get_performance_by_placement( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertCount( 3, $result['rows'] );
+
+		$this->assertSame( 'overlay', $result['rows'][0]['placement'] );
+		$this->assertSame( 'Overlay', $result['rows'][0]['placement_label'] );
+		$this->assertSame( 'Inline', $result['rows'][1]['placement_label'] );
+		$this->assertSame( 'Above header', $result['rows'][2]['placement_label'] );
+
+		// No form_submission_rate column per spec.
+		$this->assertArrayNotHasKey( 'form_submission_rate', $result['rows'][0] );
+	}
+
+	/**
+	 * Performance by placement: empty rows → state 'empty'.
+	 */
+	public function test_performance_by_placement_returns_empty_state_on_no_rows() {
+		$metric = $this->make_metric_with_proxy_returning( 'prompts_performance_by_placement', [] );
+		$result = $metric->get_performance_by_placement( $this->start(), $this->end() );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['rows'] );
+	}
+
+	/**
+	 * Performance by placement: proxy WP_Error → state 'error'.
+	 */
+	public function test_performance_by_placement_returns_error_state_on_proxy_error() {
+		$metric = $this->make_metric_with_proxy_returning(
+			'prompts_performance_by_placement',
+			new \WP_Error( 'bigquery_query_failed', 'BQ down' )
+		);
+		$result = $metric->get_performance_by_placement( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_query_failed', $result['error_code'] );
+		$this->assertSame( [], $result['rows'] );
 	}
 }

@@ -19,12 +19,15 @@
  * Gates' two, so it has more scorecards and a three-table performance
  * breakdown — but the per-metric envelope is identical.
  *
- * This commit wires the 8 paid-conversion + revenue metrics through the
- * BigQuery proxy + Woo_Order_Resolver join (Task 3.2), on top of the 10
- * free-side scalars wired in Task 3.1. The 5 collection metrics
- * (funnel/distribution/3 perf tables) remain as placeholder envelopes that
- * surface as state 'error' with the `newspack_insights_prompts_not_yet_implemented`
- * code — they will be wired in Task 3.3.
+ * Phase 2 wiring is now complete in this class: 10 scalar metrics (Task 3.1),
+ * 8 paid conversion + revenue metrics joined via {@see Woo_Order_Resolver}
+ * (Task 3.2), and 5 collection metrics — conversion funnel, exposures
+ * distribution, and three performance breakdown tables (Task 3.3). The
+ * performance-by-prompt table additionally augments each row with per-popup
+ * donation and subscription conversion counts using a Woo join scoped to the
+ * popup's intent; that augmentation degrades gracefully (engagement columns
+ * still render with zeros in the Woo columns) if the conversion-attempt query
+ * fails.
  *
  * @package Newspack
  */
@@ -59,6 +62,21 @@ final class Prompts_Metric {
 	 * @var string
 	 */
 	const CACHE_PREFIX = 'newspack_insights_tab5_v1:';
+
+	/**
+	 * Display labels for each `action_type` (intent) value. Spec §7.2 prescribes
+	 * title-cased labels with `newsletters_subscription` rendered as the more
+	 * publisher-friendly "Newsletter signup" (the auto-ucwords result —
+	 * "Newsletters Subscription" — is awkward). Centralized so the per-intent
+	 * table and any future intent display agree.
+	 *
+	 * @var array<string, string>
+	 */
+	private const INTENT_LABELS = [
+		'donation'                 => 'Donation',
+		'registration'             => 'Registration',
+		'newsletters_subscription' => 'Newsletter signup',
+	];
 
 	/**
 	 * Proxy client used to dispatch catalog queries to the hub.
@@ -267,19 +285,42 @@ final class Prompts_Metric {
 	}
 
 	/**
-	 * Bridge placeholder for collection methods not yet wired to a catalog query.
+	 * Compute per-popup Woo-completed counts for an intent's attempt rows.
 	 *
-	 * @param string $rows_key Key holding the (empty) collection: 'stages'|'buckets'|'rows'.
-	 * @return array
+	 * Fetches the intent's BQ attempt rows (cached via fetch_paid_attempts_woo_join),
+	 * groups them by popup_id, and returns a map<popup_id, completed_count>.
+	 * Returns an empty map on proxy failure so the per-prompt breakdown still
+	 * renders the engagement columns even if the Woo-join augmentation fails —
+	 * the engagement data is the load-bearing part of the table; the Woo
+	 * augmentation is a bonus.
+	 *
+	 * @param string            $query_name Catalog `query_name` (e.g. 'prompts_donation_conversion_direct').
+	 * @param DateTimeInterface $start      Window start.
+	 * @param DateTimeInterface $end        Window end.
+	 * @return array<int, int> popup_id => completed_count
 	 */
-	private function placeholder_collection( string $rows_key ): array {
-		return $this->error_collection(
-			$rows_key,
-			new \WP_Error(
-				'newspack_insights_prompts_not_yet_implemented',
-				__( 'This metric will be wired in a follow-up commit (NPPD-1607 Phase 2).', 'newspack-plugin' )
-			)
-		);
+	private function fetch_per_popup_woo_counts(
+		string $query_name,
+		DateTimeInterface $start,
+		DateTimeInterface $end
+	): array {
+		$joined = $this->fetch_paid_attempts_woo_join( $query_name, $start, $end );
+		if ( is_wp_error( $joined ) ) {
+			return []; // Graceful degradation: render zeros, not error the whole table.
+		}
+		$by_popup = [];
+		foreach ( $joined['rows'] as $row ) {
+			$popup_id = (int) ( $row['popup_id'] ?? 0 );
+			if ( $popup_id <= 0 ) {
+				continue;
+			}
+			$by_popup[ $popup_id ][] = $row;
+		}
+		$counts = [];
+		foreach ( $by_popup as $popup_id => $rows_for_popup ) {
+			$counts[ $popup_id ] = $this->woo_resolver->count_completed_orders( $rows_for_popup );
+		}
+		return $counts;
 	}
 
 	// --- Section 1: Prompt exposure -------------------------------------
@@ -587,69 +628,293 @@ final class Prompts_Metric {
 	}
 
 	// --- Section 6: How readers convert ---------------------------------
-	// Placeholder bridge — to be wired in Task 3.3 (collections).
 
 	/**
 	 * Conversion funnel — three stages (impression → engagement → conversion).
-	 * Placeholder.
+	 *
+	 * Dispatches `prompts_funnel` and normalizes the single-row response into a
+	 * stage list with each stage's count and proportion-of-top-stage.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array
+	 * @return array{
+	 *   state: string,
+	 *   stages: array<int, array{label: string, count: int, pct_of_top: float}>,
+	 *   error_code?: string,
+	 *   error_message?: string
+	 * }
 	 */
 	public function get_conversion_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder_collection( 'stages' );
+		$rows = $this->proxy->query( 'prompts_funnel', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'stages', $rows );
+		}
+		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
+			// Successful response in an unexpected shape — a data-quality bug,
+			// not a legitimately empty window. Surface it as an error.
+			return $this->malformed_collection( 'stages' );
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state'  => 'empty',
+				'stages' => [],
+			];
+		}
+		$row   = $rows[0];
+		$step1 = (int) ( $row['step_1_impression'] ?? 0 );
+		$step2 = (int) ( $row['step_2_engagement'] ?? 0 );
+		$step3 = (int) ( $row['step_3_conversion'] ?? 0 );
+		$top   = $step1 > 0 ? $step1 : 1; // Avoid div-by-zero in pct_of_top.
+		return [
+			'state'  => 'populated',
+			'stages' => [
+				[
+					'label'      => __( 'Impression', 'newspack-plugin' ),
+					'count'      => $step1,
+					'pct_of_top' => 1.0,
+				],
+				[
+					'label'      => __( 'Engagement', 'newspack-plugin' ),
+					'count'      => $step2,
+					'pct_of_top' => $step2 / $top,
+				],
+				[
+					'label'      => __( 'Conversion', 'newspack-plugin' ),
+					'count'      => $step3,
+					'pct_of_top' => $step3 / $top,
+				],
+			],
+		];
 	}
 
 	/**
-	 * Exposures-before-conversion distribution buckets. Placeholder.
+	 * Exposures-before-conversion distribution buckets.
+	 *
+	 * Dispatches `prompts_exposures_before_conversion`. The hub emits one row
+	 * per non-zero bucket; we always render the full ordered set so missing
+	 * buckets show as zero rather than disappearing.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array
+	 * @return array{
+	 *   state: string,
+	 *   buckets: array<int, array{label: string, count: int, pct: float}>,
+	 *   error_code?: string,
+	 *   error_message?: string
+	 * }
 	 */
 	public function get_exposures_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder_collection( 'buckets' );
+		$rows = $this->proxy->query( 'prompts_exposures_before_conversion', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'buckets', $rows );
+		}
+		if ( ! is_array( $rows ) ) {
+			return $this->malformed_collection( 'buckets' );
+		}
+
+		$by_bucket = [];
+		foreach ( $rows as $row ) {
+			if ( isset( $row['bucket'] ) ) {
+				$by_bucket[ $row['bucket'] ] = [
+					'count' => (int) ( $row['converters_in_bucket'] ?? 0 ),
+					'pct'   => (float) ( $row['pct_of_converters'] ?? 0.0 ),
+				];
+			}
+		}
+
+		if ( empty( $by_bucket ) ) {
+			return [
+				'state'   => 'empty',
+				'buckets' => [],
+			];
+		}
+
+		$ordered_keys   = [ '1', '2', '3-5', '6+' ];
+		$ordered_labels = [
+			'1'   => __( '1 exposure', 'newspack-plugin' ),
+			'2'   => __( '2 exposures', 'newspack-plugin' ),
+			'3-5' => __( '3–5 exposures', 'newspack-plugin' ),
+			'6+'  => __( '6+ exposures', 'newspack-plugin' ),
+		];
+		$buckets        = [];
+		foreach ( $ordered_keys as $key ) {
+			$buckets[] = [
+				'label' => $ordered_labels[ $key ],
+				'count' => $by_bucket[ $key ]['count'] ?? 0,
+				'pct'   => $by_bucket[ $key ]['pct'] ?? 0.0,
+			];
+		}
+		return [
+			'state'   => 'populated',
+			'buckets' => $buckets,
+		];
 	}
 
 	// --- Section 7: Performance breakdown -------------------------------
-	// Placeholder bridge — to be wired in Task 3.3 (collections).
 
 	/**
-	 * Per-prompt breakdown. Placeholder.
+	 * Per-prompt breakdown, augmented with per-popup Woo-completed donation and
+	 * subscription counts (intent-scoped: donation_conversions are non-zero
+	 * only for `intent === 'donation'` rows; subscription_conversions only for
+	 * `intent === 'registration'` rows — subscription-intent prompts share the
+	 * registration `action_type` in the data model, see spec §"Subscription-
+	 * intent vs registration-intent prompts").
+	 *
+	 * The Woo augmentation degrades gracefully: if either conversion-attempt
+	 * query fails, the matching column renders as 0 conversions / null rate
+	 * (React renders null as the em-dash) rather than blanking the whole table.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array
+	 * @return array{state: string, rows: array, error_code?: string, error_message?: string}
 	 */
 	public function get_performance_by_prompt( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder_collection( 'rows' );
+		$rows = $this->proxy->query( 'prompts_performance_by_prompt', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'rows', $rows );
+		}
+		if ( ! is_array( $rows ) ) {
+			return $this->malformed_collection( 'rows' );
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state' => 'empty',
+				'rows'  => [],
+			];
+		}
+
+		// Fetch per-popup Woo augmentation once for each direction; the cache
+		// in fetch_paid_attempts_woo_join means this is free if the matching
+		// paid-rate / revenue method has already run this request.
+		$donation_counts     = $this->fetch_per_popup_woo_counts( 'prompts_donation_conversion_direct', $start, $end );
+		$subscription_counts = $this->fetch_per_popup_woo_counts( 'prompts_subscription_conversion_direct', $start, $end );
+
+		$mapped = [];
+		foreach ( $rows as $row ) {
+			$popup_id    = (int) ( $row['popup_id'] ?? 0 );
+			$intent      = (string) ( $row['intent'] ?? '' );
+			$impressions = (int) ( $row['impressions'] ?? 0 );
+
+			$donation_conversions = 'donation' === $intent ? (int) ( $donation_counts[ $popup_id ] ?? 0 ) : 0;
+			// Subscription-intent prompts share `action_type=registration` at
+			// the data layer; the Woo product-type filter on the hub-side
+			// subscription query already scopes attempts correctly.
+			$subscription_conversions = 'registration' === $intent ? (int) ( $subscription_counts[ $popup_id ] ?? 0 ) : 0;
+
+			$mapped[] = [
+				'popup_id'                     => $popup_id,
+				'prompt_title'                 => (string) ( $row['prompt_title'] ?? '' ),
+				'intent'                       => $intent,
+				'placement'                    => (string) ( $row['placement'] ?? '' ),
+				'impressions'                  => $impressions,
+				'unique_viewers'               => (int) ( $row['unique_viewers'] ?? 0 ),
+				'ctr'                          => isset( $row['ctr'] ) && null !== $row['ctr'] ? (float) $row['ctr'] : null,
+				'form_submission_rate'         => isset( $row['form_submission_rate'] ) && null !== $row['form_submission_rate'] ? (float) $row['form_submission_rate'] : null,
+				'dismissal_rate'               => isset( $row['dismissal_rate'] ) && null !== $row['dismissal_rate'] ? (float) $row['dismissal_rate'] : null,
+				'registrations'                => (int) ( $row['registrations'] ?? 0 ),
+				'newsletter_signups'           => (int) ( $row['newsletter_signups'] ?? 0 ),
+				'donation_conversions'         => $donation_conversions,
+				'donation_conversion_rate'     => ( 'donation' === $intent && $impressions > 0 ) ? $donation_conversions / $impressions : null,
+				'subscription_conversions'     => $subscription_conversions,
+				'subscription_conversion_rate' => ( 'registration' === $intent && $impressions > 0 ) ? $subscription_conversions / $impressions : null,
+			];
+		}
+
+		return [
+			'state' => 'populated',
+			'rows'  => $mapped,
+		];
 	}
 
 	/**
-	 * Per-intent breakdown (donation / registration / newsletter signup). Placeholder.
+	 * Per-intent breakdown (donation / registration / newsletter signup).
+	 *
+	 * Pure BQ → row mapping; no Woo or WP enrichment. Intent labels come from
+	 * {@see self::INTENT_LABELS}; an unknown `intent` value falls back to its
+	 * raw form so a hub-side catalog change isn't silently swallowed.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array
+	 * @return array{state: string, rows: array, error_code?: string, error_message?: string}
 	 */
 	public function get_performance_by_intent( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder_collection( 'rows' );
+		$rows = $this->proxy->query( 'prompts_performance_by_intent', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'rows', $rows );
+		}
+		if ( ! is_array( $rows ) ) {
+			return $this->malformed_collection( 'rows' );
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state' => 'empty',
+				'rows'  => [],
+			];
+		}
+
+		$mapped = [];
+		foreach ( $rows as $row ) {
+			$intent   = (string) ( $row['intent'] ?? '' );
+			$mapped[] = [
+				'intent'               => $intent,
+				'intent_label'         => self::INTENT_LABELS[ $intent ] ?? $intent,
+				'impressions'          => (int) ( $row['impressions'] ?? 0 ),
+				'unique_viewers'       => (int) ( $row['unique_viewers'] ?? 0 ),
+				'ctr'                  => isset( $row['ctr'] ) && null !== $row['ctr'] ? (float) $row['ctr'] : null,
+				'form_submission_rate' => isset( $row['form_submission_rate'] ) && null !== $row['form_submission_rate'] ? (float) $row['form_submission_rate'] : null,
+				'dismissal_rate'       => isset( $row['dismissal_rate'] ) && null !== $row['dismissal_rate'] ? (float) $row['dismissal_rate'] : null,
+			];
+		}
+
+		return [
+			'state' => 'populated',
+			'rows'  => $mapped,
+		];
 	}
 
 	/**
-	 * Per-placement breakdown (overlay / inline / above-header / etc.). Placeholder.
+	 * Per-placement breakdown (overlay / inline / above-header / etc.).
+	 *
+	 * Pure BQ → row mapping. Placement labels are humanized inline
+	 * (`above-header` → `Above header`); the raw value is also carried through
+	 * for any UI that needs to filter on it. This table intentionally has no
+	 * `form_submission_rate` column per spec §"Performance by Prompt Placement".
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array
+	 * @return array{state: string, rows: array, error_code?: string, error_message?: string}
 	 */
 	public function get_performance_by_placement( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder_collection( 'rows' );
+		$rows = $this->proxy->query( 'prompts_performance_by_placement', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'rows', $rows );
+		}
+		if ( ! is_array( $rows ) ) {
+			return $this->malformed_collection( 'rows' );
+		}
+		if ( empty( $rows ) ) {
+			return [
+				'state' => 'empty',
+				'rows'  => [],
+			];
+		}
+
+		$mapped = [];
+		foreach ( $rows as $row ) {
+			$placement = (string) ( $row['placement'] ?? '' );
+			$mapped[]  = [
+				'placement'       => $placement,
+				'placement_label' => '' === $placement ? '' : ucfirst( str_replace( '-', ' ', $placement ) ),
+				'impressions'     => (int) ( $row['impressions'] ?? 0 ),
+				'unique_viewers'  => (int) ( $row['unique_viewers'] ?? 0 ),
+				'ctr'             => isset( $row['ctr'] ) && null !== $row['ctr'] ? (float) $row['ctr'] : null,
+				'dismissal_rate'  => isset( $row['dismissal_rate'] ) && null !== $row['dismissal_rate'] ? (float) $row['dismissal_rate'] : null,
+			];
+		}
+
+		return [
+			'state' => 'populated',
+			'rows'  => $mapped,
+		];
 	}
 }
