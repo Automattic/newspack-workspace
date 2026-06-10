@@ -45,8 +45,80 @@ final class Cache {
 			return self::envelope( (array) $compute(), $source );
 		}
 
-		// TTL paths land in a later task — until then, fall through to compute.
-		return self::envelope( (array) $compute(), $source );
+		$key    = self::transient_key( $tab, $key_parts );
+		$cached = get_transient( $key );
+		if ( is_array( $cached ) && isset( $cached['payload'], $cached['computed_at'], $cached['source'] ) ) {
+			return [
+				'payload'        => $cached['payload'],
+				'computed_at'    => $cached['computed_at'],
+				'source'         => $cached['source'],
+				'cooldown_until' => null,
+			];
+		}
+
+		$payload  = (array) $compute();
+		$envelope = self::envelope( $payload, $source );
+
+		$store = [
+			'payload'     => $envelope['payload'],
+			'computed_at' => $envelope['computed_at'],
+			'source'      => $envelope['source'],
+		];
+		set_transient( $key, $store, self::ttl_for( $source ) );
+		self::index_add( $tab, $key );
+
+		return $envelope;
+	}
+
+	/**
+	 * Generate the transient key for a given tab and key parts.
+	 *
+	 * @param string   $tab       Tab slug.
+	 * @param string[] $key_parts Canonicalized window components.
+	 * @return string Transient key.
+	 */
+	private static function transient_key( string $tab, array $key_parts ): string {
+		return 'newspack_insights_' . $tab . '_' . md5( (string) wp_json_encode( $key_parts ) );
+	}
+
+	/**
+	 * Get the TTL for a given source.
+	 *
+	 * @param string $source SOURCE_* constant.
+	 * @return int TTL in seconds.
+	 */
+	private static function ttl_for( string $source ): int {
+		if ( self::SOURCE_BIGQUERY === $source ) {
+			return self::TTL_BIGQUERY;
+		}
+		return self::TTL_EXTERNAL;
+	}
+
+	/**
+	 * Get the option name for the transient index of a tab.
+	 *
+	 * @param string $tab Tab slug.
+	 * @return string Option name.
+	 */
+	private static function index_option( string $tab ): string {
+		return 'newspack_insights_index_' . $tab;
+	}
+
+	/**
+	 * Add a transient key to the index for a tab.
+	 *
+	 * @param string $tab Tab slug.
+	 * @param string $key Transient key.
+	 */
+	private static function index_add( string $tab, string $key ): void {
+		$keys = get_option( self::index_option( $tab ), [] );
+		if ( ! is_array( $keys ) ) {
+			$keys = [];
+		}
+		if ( ! in_array( $key, $keys, true ) ) {
+			$keys[] = $key;
+			update_option( self::index_option( $tab ), $keys, false );
+		}
 	}
 
 	/**
