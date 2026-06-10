@@ -20,6 +20,8 @@ import { __ } from '@wordpress/i18n';
 import type { DateRange } from '../state/useDateRange';
 import useAdvertisingData from '../hooks/useAdvertisingData';
 import TabStateView from './components/TabStateView';
+import TabLoading from './components/TabLoading';
+import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import DataLagIndicator from './components/DataLagIndicator';
 import FinishConnectingDiagnostic from './components/FinishConnectingDiagnostic';
 import ReachRevenueSection from './advertising/sections/ReachRevenueSection';
@@ -53,15 +55,12 @@ const AdvertisingTab = ( { range, previousRange }: AdvertisingTabProps ) => {
 		}
 
 		// Ready, but the first background refresh hasn't populated the cache yet
-		// (async GAM reports). Show a loading note rather than empty sections; the
-		// data arrives on a later poll. (Beyond the ticket's three states — surfaced
-		// because the orchestrator is asynchronous and exposes `is_loading`.)
+		// (async GAM reports). This is the genuinely long wait, so it carries the
+		// progressive GAM messages — unlike the brief envelope fetch handled by
+		// TabStateView below, which stays spinner-only. (Beyond the ticket's three
+		// states — surfaced because the orchestrator exposes `is_loading`.)
 		if ( current.is_loading ) {
-			return (
-				<div className="newspack-insights__tab-loading" role="status" aria-live="polite">
-					{ __( 'Preparing your advertising data… this can take a minute the first time.', 'newspack-plugin' ) }
-				</div>
-			);
+			return <TabLoading messages={ TAB_LOADING_MESSAGES.advertising } />;
 		}
 	}
 

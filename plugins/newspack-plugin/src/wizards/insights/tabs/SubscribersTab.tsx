@@ -25,6 +25,7 @@ import { __ } from '@wordpress/i18n';
 import type { DateRange } from '../state/useDateRange';
 import useSubscribersData from '../hooks/useSubscribersData';
 import TabStateView from './components/TabStateView';
+import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import ScorecardSection from './subscribers/ScorecardSection';
 import WindowedSection from './subscribers/WindowedSection';
 import TenureSection from './subscribers/TenureSection';
@@ -46,6 +47,7 @@ const SubscribersTab = ( { range, previousRange }: SubscribersTabProps ) => {
 			error={ error }
 			errorLabel={ __( 'Could not load subscriber data.', 'newspack-plugin' ) }
 			className="newspack-insights__subscribers-tab"
+			loadingMessages={ TAB_LOADING_MESSAGES.subscribers }
 		>
 			{ data && (
 				<>

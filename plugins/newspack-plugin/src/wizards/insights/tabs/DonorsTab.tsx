@@ -21,6 +21,7 @@ import { __ } from '@wordpress/i18n';
 import type { DateRange } from '../state/useDateRange';
 import useDonorsData from '../hooks/useDonorsData';
 import TabStateView from './components/TabStateView';
+import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import ScorecardSection from './donors/ScorecardSection';
 import WindowedSection from './donors/WindowedSection';
 import RetentionSection from './donors/RetentionSection';
@@ -42,6 +43,7 @@ const DonorsTab = ( { range, previousRange }: DonorsTabProps ) => {
 			error={ error }
 			errorLabel={ __( 'Could not load donor data.', 'newspack-plugin' ) }
 			className="newspack-insights__donors-tab"
+			loadingMessages={ TAB_LOADING_MESSAGES.donors }
 		>
 			{ data && (
 				<>

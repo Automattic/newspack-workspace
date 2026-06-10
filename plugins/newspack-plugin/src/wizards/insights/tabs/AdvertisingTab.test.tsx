@@ -73,10 +73,12 @@ describe( 'AdvertisingTab', () => {
 		expect( screen.queryByText( 'Reach & revenue' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'shows a loading note while a ready window is still being cached', () => {
+	it( 'shows the progressive GAM messages while a ready window is still being cached', () => {
 		mockData( baseWindow( { is_loading: true } ) );
 		render( <AdvertisingTab range={ range } previousRange={ null } /> );
-		expect( screen.getByText( /Preparing your advertising data/ ) ).toBeInTheDocument();
+		// The async is_loading wait carries the progressive copy (NPPD-1684); the
+		// first message renders immediately.
+		expect( screen.getByText( 'Loading ad performance…' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders all sections with values when ready', () => {

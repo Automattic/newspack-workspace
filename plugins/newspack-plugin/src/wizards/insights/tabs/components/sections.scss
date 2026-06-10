@@ -19,13 +19,23 @@
 	// fetch and first render.
 
 	// Initial load: a centered spinner (Newspack Waiting) where the tab body
-	// will render, matching the inter-tab Suspense fallback.
+	// will render, matching the inter-tab Suspense fallback. When the tab supplies
+	// progressive copy, a muted single-line message stacks beneath the spinner.
 	&__tab-loading {
 		display: flex;
+		flex-direction: column;
 		align-items: center;
 		justify-content: center;
+		gap: 16px;
 		min-height: 320px;
 		padding: 32px 24px;
+
+		&-message {
+			margin: 0;
+			font-size: 13px;
+			color: wp-colors.$gray-700;
+			text-align: center;
+		}
 	}
 
 	&__tab-error {

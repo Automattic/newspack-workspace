@@ -27,6 +27,7 @@ import { __ } from '@wordpress/i18n';
 import type { DateRange } from '../state/useDateRange';
 import usePromptsData from '../hooks/usePromptsData';
 import TabStateView from './components/TabStateView';
+import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import DirectVsInfluencedCallout from './prompts/DirectVsInfluencedCallout';
 import PromptExposureSection from './prompts/PromptExposureSection';
 import PromptEngagementSection from './prompts/PromptEngagementSection';
@@ -52,6 +53,7 @@ const PromptsTab = ( { range, previousRange }: PromptsTabProps ) => {
 			error={ error }
 			errorLabel={ __( 'Could not load prompt data.', 'newspack-plugin' ) }
 			className="newspack-insights__prompts-tab"
+			loadingMessages={ TAB_LOADING_MESSAGES.prompts }
 		>
 			{ data && (
 				<>
