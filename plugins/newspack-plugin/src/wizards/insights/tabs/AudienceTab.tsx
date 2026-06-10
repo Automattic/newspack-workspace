@@ -3,20 +3,14 @@
  *
  * GA4-backed Audience tab. Fetches the Audience orchestrator endpoint and
  * renders six sections. When GA4 isn't connected the orchestrator returns a
- * tab-level error and the whole tab becomes a single connect banner. Mirrors
- * the GatesTab loading/error/success lifecycle.
+ * tab-level error and the whole tab becomes a single connect banner. The
+ * loading / error / refetch chrome is handled by the shared TabStateView.
  */
-
-/**
- * External dependencies
- */
-import classnames from 'classnames';
 
 /**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { Spinner } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -24,6 +18,7 @@ import { Spinner } from '@wordpress/components';
 import type { DateRange } from '../state/useDateRange';
 import useAudienceData from '../hooks/useAudienceData';
 import ConnectBanner from './components/ConnectBanner';
+import TabStateView from './components/TabStateView';
 import ReachSection from './audience/sections/ReachSection';
 import CompositionSection from './audience/sections/CompositionSection';
 import TimeTrendsSection from './audience/sections/TimeTrendsSection';
@@ -40,57 +35,34 @@ export interface AudienceTabProps {
 const AudienceTab = ( { range, previousRange }: AudienceTabProps ) => {
 	const { status, data, error } = useAudienceData( range, previousRange );
 
-	if ( status === 'loading' && ! data ) {
-		return (
-			<div className="newspack-insights__tab-loading" role="status" aria-live="polite">
-				{ __( 'Loading audience data…', 'newspack-plugin' ) }
-			</div>
-		);
-	}
-
-	if ( status === 'error' ) {
-		return (
-			<div className="newspack-insights__tab-error" role="alert">
-				<p>{ __( 'Could not load audience data.', 'newspack-plugin' ) }</p>
-				{ error && <p className="newspack-insights__tab-error-detail">{ error }</p> }
-			</div>
-		);
-	}
-
-	if ( ! data ) {
-		return null;
-	}
-
-	if ( data.tab_error || ! data.current ) {
-		return <ConnectBanner text={ data.banner_text } />;
-	}
-
-	const current = data.current;
+	const current = data?.current ?? null;
 	// Only surface comparison deltas when the toggle is on (previousRange set).
 	// Fixture mode returns a `previous` window unconditionally, so gate on the
 	// toggle here rather than on the response — matches Gates/Subscribers/Donors.
-	const previous = previousRange ? data.previous ?? null : null;
-
-	// A refetch (date range / comparison toggle change) keeps the prior window's
-	// values on screen while the new ones load. Mute the populated sections and
-	// float a spinner so the change is clearly registering (NPPD fix #8).
-	const isRefreshing = status === 'loading' && !! data;
+	const previous = previousRange ? data?.previous ?? null : null;
 
 	return (
-		<div className={ classnames( 'newspack-insights__audience-tab', { 'is-refreshing': isRefreshing } ) } aria-busy={ isRefreshing }>
-			{ isRefreshing && (
-				<div className="newspack-insights__tab-refreshing" role="status" aria-live="polite">
-					<Spinner />
-					<span className="screen-reader-text">{ __( 'Updating…', 'newspack-plugin' ) }</span>
-				</div>
-			) }
-			<ReachSection current={ current } previous={ previous } />
-			<CompositionSection current={ current } previous={ previous } />
-			<TrafficSourcesSection current={ current } previous={ previous } />
-			<GeographicSection current={ current } previous={ previous } />
-			<ContentPerformanceSection current={ current } previous={ previous } />
-			<TimeTrendsSection current={ current } previous={ previous } />
-		</div>
+		<TabStateView
+			status={ status }
+			hasData={ !! data }
+			error={ error }
+			errorLabel={ __( 'Could not load audience data.', 'newspack-plugin' ) }
+			className="newspack-insights__audience-tab"
+		>
+			{ data &&
+				( data.tab_error || ! current ? (
+					<ConnectBanner text={ data.banner_text } />
+				) : (
+					<>
+						<ReachSection current={ current } previous={ previous } />
+						<CompositionSection current={ current } previous={ previous } />
+						<TrafficSourcesSection current={ current } previous={ previous } />
+						<GeographicSection current={ current } previous={ previous } />
+						<ContentPerformanceSection current={ current } previous={ previous } />
+						<TimeTrendsSection current={ current } previous={ previous } />
+					</>
+				) ) }
+		</TabStateView>
 	);
 };
 

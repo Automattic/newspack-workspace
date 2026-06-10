@@ -22,6 +22,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { DateRange } from '../state/useDateRange';
 import useGatesData from '../hooks/useGatesData';
+import TabStateView from './components/TabStateView';
 import PreviewBanner from './gates/PreviewBanner';
 import DirectVsInfluencedCallout from './gates/DirectVsInfluencedCallout';
 import GateExposureSection from './gates/GateExposureSection';
@@ -39,37 +40,26 @@ export interface GatesTabProps {
 const GatesTab = ( { range, previousRange }: GatesTabProps ) => {
 	const { status, data, error } = useGatesData( range, previousRange );
 
-	if ( status === 'loading' && ! data ) {
-		return (
-			<div className="newspack-insights__tab-loading" role="status" aria-live="polite">
-				{ __( 'Loading gate data…', 'newspack-plugin' ) }
-			</div>
-		);
-	}
-
-	if ( status === 'error' ) {
-		return (
-			<div className="newspack-insights__tab-error" role="alert">
-				<p>{ __( 'Could not load gate data.', 'newspack-plugin' ) }</p>
-				{ error && <p className="newspack-insights__tab-error-detail">{ error }</p> }
-			</div>
-		);
-	}
-
-	if ( ! data ) {
-		return null;
-	}
-
 	return (
-		<div className="newspack-insights__gates-tab">
-			{ data.tab_pending && <PreviewBanner /> }
-			<DirectVsInfluencedCallout />
-			<GateExposureSection current={ data.current } previous={ data.previous } />
-			<FreeReaderConversionSection current={ data.current } previous={ data.previous } />
-			<PaidReaderConversionSection current={ data.current } previous={ data.previous } />
-			<HowReadersConvertSection current={ data.current } />
-			<PerformanceByGateSection data={ data.current.performance_by_gate } />
-		</div>
+		<TabStateView
+			status={ status }
+			hasData={ !! data }
+			error={ error }
+			errorLabel={ __( 'Could not load gate data.', 'newspack-plugin' ) }
+			className="newspack-insights__gates-tab"
+		>
+			{ data && (
+				<>
+					{ data.tab_pending && <PreviewBanner /> }
+					<DirectVsInfluencedCallout />
+					<GateExposureSection current={ data.current } previous={ data.previous } />
+					<FreeReaderConversionSection current={ data.current } previous={ data.previous } />
+					<PaidReaderConversionSection current={ data.current } previous={ data.previous } />
+					<HowReadersConvertSection current={ data.current } />
+					<PerformanceByGateSection data={ data.current.performance_by_gate } />
+				</>
+			) }
+		</TabStateView>
 	);
 };
 

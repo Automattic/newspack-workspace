@@ -195,10 +195,11 @@
 	}
 
 	&__tab-fallback {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 320px;
 		padding: 64px 24px;
-		text-align: center;
-		color: wp-colors.$gray-600;
-		font-size: 13px;
 	}
 
 	// Tab stub ("Coming soon")

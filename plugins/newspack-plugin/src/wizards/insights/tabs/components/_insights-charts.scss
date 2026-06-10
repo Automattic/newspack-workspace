@@ -470,14 +470,18 @@
 	display: flex;
 	flex-direction: column;
 	gap: 32px;
-	position: relative; // anchor for the refetch overlay
 }
 
-// Refetch state (date range / comparison toggle change): mute the populated
-// sections and float a spinner so it's clear the change is loading rather than
-// the previous window's values lingering silently (NPPD fix #8).
-.newspack-insights__audience-tab.is-refreshing > section,
-.newspack-insights__engagement-tab.is-refreshing > section {
+// Shared refetch chrome for every data tab (Audience, Engagement, Gates,
+// Subscribers, Donors). The tab body is the positioning context; on refetch
+// (date range / comparison change) its children are muted and a spinner floats
+// over them so the change is visibly loading rather than the previous window's
+// values lingering silently (NPPD fix #8).
+.newspack-insights__tab-body {
+	position: relative;
+}
+
+.newspack-insights__tab-body.is-refreshing > *:not( .newspack-insights__tab-refreshing ) {
 	opacity: 0.4;
 	pointer-events: none;
 	transition: opacity 0.15s ease;

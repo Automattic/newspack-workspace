@@ -20,6 +20,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { DateRange } from '../state/useDateRange';
 import useDonorsData from '../hooks/useDonorsData';
+import TabStateView from './components/TabStateView';
 import ScorecardSection from './donors/ScorecardSection';
 import WindowedSection from './donors/WindowedSection';
 import RetentionSection from './donors/RetentionSection';
@@ -34,34 +35,23 @@ export interface DonorsTabProps {
 const DonorsTab = ( { range, previousRange }: DonorsTabProps ) => {
 	const { status, data, error } = useDonorsData( range, previousRange );
 
-	if ( status === 'loading' && ! data ) {
-		return (
-			<div className="newspack-insights__tab-loading" role="status" aria-live="polite">
-				{ __( 'Loading donor data…', 'newspack-plugin' ) }
-			</div>
-		);
-	}
-
-	if ( status === 'error' ) {
-		return (
-			<div className="newspack-insights__tab-error" role="alert">
-				<p>{ __( 'Could not load donor data.', 'newspack-plugin' ) }</p>
-				{ error && <p className="newspack-insights__tab-error-detail">{ error }</p> }
-			</div>
-		);
-	}
-
-	if ( ! data ) {
-		return null;
-	}
-
 	return (
-		<div className="newspack-insights__donors-tab">
-			<ScorecardSection snapshot={ data.snapshot } />
-			<WindowedSection range={ range } current={ data.current } previous={ data.previous } />
-			<RetentionSection current={ data.current } previous={ data.previous } />
-			<PerformanceSection rows={ data.current.donations_by_tier } />
-		</div>
+		<TabStateView
+			status={ status }
+			hasData={ !! data }
+			error={ error }
+			errorLabel={ __( 'Could not load donor data.', 'newspack-plugin' ) }
+			className="newspack-insights__donors-tab"
+		>
+			{ data && (
+				<>
+					<ScorecardSection snapshot={ data.snapshot } />
+					<WindowedSection range={ range } current={ data.current } previous={ data.previous } />
+					<RetentionSection current={ data.current } previous={ data.previous } />
+					<PerformanceSection rows={ data.current.donations_by_tier } />
+				</>
+			) }
+		</TabStateView>
 	);
 };
 

@@ -18,15 +18,20 @@
 	// Tab-level status blocks shown by orchestrators between data
 	// fetch and first render.
 
-	&__tab-loading,
+	// Initial load: a centered spinner (Newspack Waiting) where the tab body
+	// will render, matching the inter-tab Suspense fallback.
+	&__tab-loading {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 320px;
+		padding: 32px 24px;
+	}
+
 	&__tab-error {
 		padding: 32px 24px;
 		text-align: center;
 		font-size: 14px;
-		color: wp-colors.$gray-700;
-	}
-
-	&__tab-error {
 		color: wp-colors.$alert-red;
 
 		&-detail {
