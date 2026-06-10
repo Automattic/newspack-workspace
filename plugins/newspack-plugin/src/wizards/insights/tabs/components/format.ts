@@ -21,10 +21,28 @@ const decimalFormatter = new Intl.NumberFormat( undefined, {
 	maximumFractionDigits: 1,
 } );
 
-const currencyFormatter = new Intl.NumberFormat( undefined, {
+// Three tiers keep large dashboard values readable (NPPD-1684): small amounts
+// keep cents, thousands drop cents, millions+ abbreviate with the full value in
+// a tooltip. All USD for v1 (see file header on multi-currency).
+const USD_WITH_CENTS = new Intl.NumberFormat( undefined, {
 	style: 'currency',
 	currency: 'USD',
+	minimumFractionDigits: 2,
 	maximumFractionDigits: 2,
+} );
+
+const USD_NO_CENTS = new Intl.NumberFormat( undefined, {
+	style: 'currency',
+	currency: 'USD',
+	minimumFractionDigits: 0,
+	maximumFractionDigits: 0,
+} );
+
+const USD_COMPACT = new Intl.NumberFormat( undefined, {
+	style: 'currency',
+	currency: 'USD',
+	notation: 'compact',
+	maximumFractionDigits: 1,
 } );
 
 const percentFormatter = new Intl.NumberFormat( undefined, {
@@ -58,7 +76,32 @@ export const formatShortDate = ( ymd: string ): string => {
 /** Format a number with exactly one decimal place: 0 -> "0.0", 1.23 -> "1.2". */
 export const formatDecimal = ( n: number ): string => decimalFormatter.format( n );
 
-export const formatCurrency = ( n: number ): string => currencyFormatter.format( n );
+export interface FormattedCurrency {
+	/** The value to render (cents / no-cents / compact, per magnitude). */
+	display: string;
+	/** Full-precision value for a tooltip when `display` is abbreviated, else null. */
+	title: string | null;
+}
+
+/**
+ * Tiered currency: `<$1K` keeps cents, `$1K–<$1M` drops cents, `>=$1M`
+ * abbreviates (e.g. "$1.2M") and carries the full value as `title`. The sign is
+ * handled by the formatter; tier is chosen by magnitude, so negatives tier the
+ * same. Zero renders as "$0.00".
+ */
+export const formatCurrency = ( value: number ): FormattedCurrency => {
+	const abs = Math.abs( value );
+	if ( abs < 1000 ) {
+		return { display: USD_WITH_CENTS.format( value ), title: null };
+	}
+	if ( abs < 1_000_000 ) {
+		return { display: USD_NO_CENTS.format( value ), title: null };
+	}
+	return {
+		display: USD_COMPACT.format( value ),
+		title: USD_WITH_CENTS.format( value ),
+	};
+};
 
 /** Format a fraction in [0, 1] as a percent: 0.123 -> "12.3%". */
 export const formatPercent = ( fraction: number ): string => percentFormatter.format( fraction );

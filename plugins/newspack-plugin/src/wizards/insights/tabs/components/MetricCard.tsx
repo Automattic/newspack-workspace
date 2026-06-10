@@ -57,12 +57,17 @@ export interface MetricCardProps {
 	error?: string;
 	/** Metric needs configuration (e.g. coverage area not set). */
 	notConfigured?: boolean;
+	/**
+	 * Native tooltip for the value (e.g. the full amount behind an abbreviated
+	 * "$1.2M"). Overrides the title the currency formatter derives on its own.
+	 */
+	valueTitle?: string;
 }
 
 const formatValue = ( v: number, fmt: MetricFormat ): string => {
 	switch ( fmt ) {
 		case 'currency':
-			return formatCurrency( v );
+			return formatCurrency( v ).display;
 		case 'percent':
 			return formatPercent( v );
 		case 'decimal':
@@ -87,6 +92,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 		overlay,
 		error,
 		notConfigured,
+		valueTitle,
 	} = props;
 
 	// Shared graceful-failure state (missing dimension / not configured / error).
@@ -131,11 +137,18 @@ const MetricCard = ( props: MetricCardProps ) => {
 			  ).trim()
 			: null;
 
+	const valueText = formatValue( value, format );
+	// Explicit `valueTitle` wins; otherwise the currency formatter supplies a
+	// full-value title when it abbreviates (e.g. "$1.2M" → "$1,234,567.89").
+	const valueTooltip = valueTitle ?? ( format === 'currency' ? formatCurrency( value ).title : null ) ?? undefined;
+
 	return (
 		<div className="newspack-insights__metric-card">
 			<div className="newspack-insights__metric-card-label">{ label }</div>
 			<div className="newspack-insights__metric-card-body">
-				<div className="newspack-insights__metric-card-value">{ formatValue( value, format ) }</div>
+				<div className="newspack-insights__metric-card-value">
+					{ valueTooltip ? <span title={ valueTooltip }>{ valueText }</span> : valueText }
+				</div>
 				{ secondary && <div className="newspack-insights__metric-card-secondary">{ secondary }</div> }
 				{ magnitude !== null && (
 					<div

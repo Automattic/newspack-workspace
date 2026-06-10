@@ -66,7 +66,7 @@ const formatCell = ( value: string | number | null, format?: MetricTableColumn[ 
 			case 'duration':
 				return formatDuration( value );
 			case 'currency':
-				return formatCurrency( value );
+				return formatCurrency( value ).display;
 			default:
 				return formatNumber( value );
 		}
