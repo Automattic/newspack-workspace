@@ -1,70 +1,70 @@
 /**
  * LastUpdated
  *
- * Header-row timestamp display. Renders "Updated X minutes ago" or
- * absolute time depending on staleness. Renders nothing if no timestamp
- * is available (e.g., chrome is loaded before first cache hit).
+ * Renders the active tab's cache freshness ("Last updated: …") plus a
+ * kebab DropdownMenu with a "Refresh now" item. Reads the active tab's
+ * cache slot via insightsCache; fires the registered refresh callback
+ * via RefreshRegistry.
  */
 
 /**
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
+import { dateI18n } from '@wordpress/date';
+import { useSyncExternalStore } from '@wordpress/element';
+
+/**
+ * Internal dependencies
+ */
+import RefreshMenu from './RefreshMenu';
+import type { DateRange } from '../state/useDateRange';
+import { insightsCache, makeSlotKey, type CacheSlot } from '../state/insightsCache';
+import { useInvokeRefresh } from '../state/refreshRegistry';
 
 export interface LastUpdatedProps {
-	/** ISO 8601 timestamp of the most recent cache update, or null if unknown. */
-	timestamp: string | null;
-	/** Optional className for wrapper styling overrides. */
-	className?: string;
+	tab: string | null;
+	range: DateRange;
+	previousRange: DateRange | null;
 }
 
-const formatRelative = ( ts: Date, now: Date ): string => {
-	// Math.floor (not Math.round) so a 30-second-old timestamp stays in
-	// the "just now" branch instead of rounding up to "1 minute ago".
-	// Same reasoning applies to the hour / day branches below.
-	const diffMs = now.getTime() - ts.getTime();
-	const diffMin = Math.floor( diffMs / ( 1000 * 60 ) );
-	if ( diffMin < 1 ) {
-		return __( 'Updated just now', 'newspack-plugin' );
-	}
-	if ( diffMin < 60 ) {
-		return sprintf(
-			/* translators: %d is number of minutes */
-			__( 'Updated %d minutes ago', 'newspack-plugin' ),
-			diffMin
-		);
-	}
-	const diffHr = Math.floor( diffMin / 60 );
-	if ( diffHr < 24 ) {
-		return sprintf(
-			/* translators: %d is number of hours */
-			__( 'Updated %d hours ago', 'newspack-plugin' ),
-			diffHr
-		);
-	}
-	const diffDay = Math.floor( diffHr / 24 );
-	return sprintf(
-		/* translators: %d is number of days */
-		__( 'Updated %d days ago', 'newspack-plugin' ),
-		diffDay
-	);
+const idleSlot: CacheSlot = {
+	status: 'idle',
+	data: null,
+	error: null,
+	computedAt: null,
+	source: null,
+	cooldownUntil: null,
+	inFlight: null,
 };
 
-const LastUpdated = ( { timestamp, className }: LastUpdatedProps ) => {
-	if ( ! timestamp ) {
+const LastUpdated = ( { tab, range, previousRange }: LastUpdatedProps ) => {
+	const key = tab ? makeSlotKey( tab, range, previousRange ) : null;
+
+	const slot = useSyncExternalStore(
+		listener => ( key ? insightsCache.subscribe( key, listener ) : () => {} ),
+		() => ( key ? insightsCache.getSlot( key ) : idleSlot )
+	);
+
+	const invoke = useInvokeRefresh();
+
+	if ( ! tab || ! slot.computedAt ) {
 		return null;
 	}
-	const ts = new Date( timestamp );
-	if ( Number.isNaN( ts.getTime() ) ) {
-		return null;
-	}
-	const now = new Date();
-	const label = formatRelative( ts, now );
-	const absolute = ts.toLocaleString();
+
+	const cooldownActive = !! slot.cooldownUntil && new Date( slot.cooldownUntil ).getTime() > Date.now();
+
 	return (
-		<span className={ className ?? 'newspack-insights__last-updated' } title={ absolute }>
-			{ label }
-		</span>
+		<div className="newspack-insights__last-updated-wrap">
+			<span className="newspack-insights__last-updated">
+				{ sprintf(
+					/* translators: %s is a formatted timestamp */
+					__( 'Last updated: %s', 'newspack-plugin' ),
+					dateI18n( 'M j, Y H:i:s', slot.computedAt )
+				) }
+			</span>
+			<RefreshMenu onRefresh={ () => invoke( tab ) } disabled={ slot.status === 'loading' || cooldownActive } />
+		</div>
 	);
 };
 
