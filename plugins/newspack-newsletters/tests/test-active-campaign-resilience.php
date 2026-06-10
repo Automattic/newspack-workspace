@@ -348,17 +348,59 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * When the stored campaign is already scheduled/sending/sent, a prior attempt
-	 * already dispatched it (its response was just lost). send() must treat that as
-	 * success and NOT create or trigger another campaign — no double send.
+	 * The state check failing with a NON-timeout error (e.g. an HTTP 5xx during an
+	 * AC incident, surfaced as a generic api_error) must also fail safe. This is
+	 * the branch most likely to fire during the degradation the gate exists for,
+	 * and the one that would double-send if it defaulted to "recreate".
 	 */
-	public function test_send_does_not_resend_already_dispatched_campaign() {
+	public function test_send_fails_safe_when_status_check_returns_non_timeout_error() {
 		$active_campaign = Newspack_Newsletters_Active_Campaign::instance();
 		$post_id         = $this->create_sendable_post( '12345' );
 
 		$this->responses = array_merge(
 			$this->fresh_send_chain_responses(),
-			[ 'campaign_list' => [ 'result_code' => 1, [ 'id' => 12345, 'status' => '2' ] ] ] // 2 = sending.
+			// result_code !== 1 makes api_v1_request return a generic api_error
+			// (the shape AC returns for a 5xx), NOT the timeout code.
+			[ 'campaign_list' => [ 'result_code' => 0, 'result_message' => 'Internal error' ] ]
+		);
+
+		$result = $active_campaign->send( get_post( $post_id ) );
+
+		$this->assertTrue( is_wp_error( $result ), 'A non-timeout state-check error must not proceed to a resend.' );
+		$this->assertSame( 'newspack_newsletters_active_campaign_unverified_campaign', $result->get_error_code() );
+		$this->assertNotContains( 'campaign_create', $this->called_actions, 'No campaign may be created when the prior state is unverifiable for any reason.' );
+		$this->assertNotContains( 'campaign_status', $this->called_actions, 'No send may be triggered when the prior state is unverifiable for any reason.' );
+	}
+
+	/**
+	 * Statuses that mean the campaign was already dispatched on a prior attempt.
+	 *
+	 * @return array
+	 */
+	public function already_dispatched_statuses() {
+		return [
+			'scheduled' => [ '1' ],
+			'sending'   => [ '2' ],
+			'completed' => [ '5' ],
+		];
+	}
+
+	/**
+	 * When the stored campaign is already scheduled/sending/sent, a prior attempt
+	 * already dispatched it (its response was just lost). send() must treat that as
+	 * success and NOT create or trigger another campaign — no double send.
+	 *
+	 * @dataProvider already_dispatched_statuses
+	 *
+	 * @param string $status The ActiveCampaign campaign status code.
+	 */
+	public function test_send_does_not_resend_already_dispatched_campaign( $status ) {
+		$active_campaign = Newspack_Newsletters_Active_Campaign::instance();
+		$post_id         = $this->create_sendable_post( '12345' );
+
+		$this->responses = array_merge(
+			$this->fresh_send_chain_responses(),
+			[ 'campaign_list' => [ 'result_code' => 1, [ 'id' => 12345, 'status' => $status ] ] ]
 		);
 
 		$result = $active_campaign->send( get_post( $post_id ) );
@@ -370,16 +412,32 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A campaign in a paused/stopped (indeterminate, possibly partial) state must
-	 * not be auto-resent; send() surfaces a needs-review notice for a human.
+	 * Indeterminate statuses (paused, stopped, or anything unrecognised) — the
+	 * campaign may have partially sent, so it must not be auto-resent; send()
+	 * surfaces a needs-review notice for a human.
+	 *
+	 * @return array
 	 */
-	public function test_send_flags_for_review_when_campaign_paused_or_stopped() {
+	public function needs_review_statuses() {
+		return [
+			'paused'  => [ '3' ],
+			'stopped' => [ '4' ],
+			'unknown' => [ '99' ],
+		];
+	}
+
+	/**
+	 * @dataProvider needs_review_statuses
+	 *
+	 * @param string $status The ActiveCampaign campaign status code.
+	 */
+	public function test_send_flags_for_review_when_campaign_state_is_indeterminate( $status ) {
 		$active_campaign = Newspack_Newsletters_Active_Campaign::instance();
 		$post_id         = $this->create_sendable_post( '12345' );
 
 		$this->responses = array_merge(
 			$this->fresh_send_chain_responses(),
-			[ 'campaign_list' => [ 'result_code' => 1, [ 'id' => 12345, 'status' => '3' ] ] ] // 3 = paused.
+			[ 'campaign_list' => [ 'result_code' => 1, [ 'id' => 12345, 'status' => $status ] ] ]
 		);
 
 		$result = $active_campaign->send( get_post( $post_id ) );

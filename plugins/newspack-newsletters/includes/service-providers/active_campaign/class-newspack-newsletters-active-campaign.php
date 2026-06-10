@@ -45,6 +45,23 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	const CAMPAIGN_NEEDS_REVIEW       = 'needs_review';
 
 	/**
+	 * ActiveCampaign V1 campaign status codes (the `status` field on a campaign).
+	 * See https://www.activecampaign.com/api/example.php?call=campaign_status.
+	 */
+	const STATUS_DRAFT     = '0';
+	const STATUS_SCHEDULED = '1';
+	const STATUS_SENDING   = '2';
+	const STATUS_PAUSED    = '3';
+	const STATUS_STOPPED   = '4';
+	const STATUS_COMPLETED = '5';
+	const STATUS_DISABLED  = '6';
+
+	/**
+	 * Campaign statuses that can be safely deleted (not mid- or post-send).
+	 */
+	const DELETABLE_STATUSES = [ self::STATUS_DRAFT, self::STATUS_SCHEDULED, self::STATUS_DISABLED ];
+
+	/**
 	 * Provider name.
 	 *
 	 * @var string
@@ -195,6 +212,11 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * a publisher, so timeouts are rephrased into actionable guidance. Every
 	 * other transport error is returned unchanged so genuine failures keep their
 	 * original, more specific message.
+	 *
+	 * The substring match is for the publisher-facing *message* only; it is not
+	 * relied on for send-safety. get_campaign_dispatch_state() fails safe on
+	 * ANY error, so a timeout that this match ever missed would still block a
+	 * resend rather than slip through.
 	 *
 	 * @param WP_Error $error A WP_Error returned by wp_safe_remote_request.
 	 *
@@ -1336,27 +1358,29 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		// the publisher is waiting on, so it must fail fast: a campaign stuck in
 		// ActiveCampaign would otherwise hang this call for the full request
 		// timeout and strand the new send behind it.
-		$campaigns = $this->api_v1_request(
-			'campaign_list',
-			'GET',
-			[
-				'query'   => [ 'ids' => $campaign_id ],
-				'timeout' => self::CLEANUP_REQUEST_TIMEOUT,
-			]
-		);
-		if ( is_wp_error( $campaigns ) ) {
-			return $campaigns;
-		}
-		$deletable_statuses = [
-			'0', // Draft.
-			'1', // Scheduled.
-			'6', // Disabled.
-		];
-		if ( true !== $force && ! in_array( $campaigns[0]['status'], $deletable_statuses ) ) {
-			return new \WP_Error(
-				'newspack_newsletters_active_campaign_campaign_not_deletable',
-				__( 'Campaign is not deletable.', 'newspack-newsletters' )
+		//
+		// The status look-up only exists to enforce the deletable-status guard,
+		// so it is skipped entirely when forcing — saving a round-trip (the
+		// callers that pass $force already know the campaign is disposable).
+		if ( true !== $force ) {
+			$campaigns = $this->api_v1_request(
+				'campaign_list',
+				'GET',
+				[
+					'query'   => [ 'ids' => $campaign_id ],
+					'timeout' => self::CLEANUP_REQUEST_TIMEOUT,
+				]
 			);
+			if ( is_wp_error( $campaigns ) ) {
+				return $campaigns;
+			}
+			$status = isset( $campaigns[0]['status'] ) ? (string) $campaigns[0]['status'] : '';
+			if ( ! in_array( $status, self::DELETABLE_STATUSES, true ) ) {
+				return new \WP_Error(
+					'newspack_newsletters_active_campaign_campaign_not_deletable',
+					__( 'Campaign is not deletable.', 'newspack-newsletters' )
+				);
+			}
 		}
 		return $this->api_v1_request(
 			'campaign_delete',
@@ -1417,27 +1441,34 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			]
 		);
 		if ( is_wp_error( $campaigns ) ) {
-			// A timeout means the campaign is unreachable and we cannot tell
-			// whether it already sent: fail safe and refuse to resend. Any other
-			// API error (e.g. the campaign no longer exists) leaves nothing to
-			// dispatch, so it is safe to recreate.
-			if ( 'newspack_newsletters_active_campaign_timeout' === $campaigns->get_error_code() ) {
-				return new \WP_Error(
-					'newspack_newsletters_active_campaign_unverified_campaign',
-					__( 'Newspack could not confirm with ActiveCampaign whether this newsletter had already started sending, so it was not resent (to avoid a duplicate). Please wait a few minutes and try again, or check the campaign status in ActiveCampaign.', 'newspack-newsletters' )
-				);
-			}
-			return self::CAMPAIGN_DRAFT;
+			// ANY error (timeout, HTTP 5xx, auth, malformed) means we cannot
+			// confirm whether the campaign already started sending, so fail safe
+			// and refuse to resend rather than risk a duplicate send to the full
+			// list. A campaign that genuinely no longer exists does NOT arrive
+			// here: ActiveCampaign returns it as a successful empty list, handled
+			// below. The error code is deliberately not inspected — an HTTP 5xx
+			// during an AC incident (exactly when this matters) carries the
+			// generic api_error code, not the timeout code, and must still block.
+			return new \WP_Error(
+				'newspack_newsletters_active_campaign_unverified_campaign',
+				__( 'Newspack could not confirm with ActiveCampaign whether this newsletter had already started sending, so it was not resent (to avoid a duplicate). Please wait a few minutes and try again, or check the campaign status in ActiveCampaign.', 'newspack-newsletters' )
+			);
 		}
-		$status = isset( $campaigns[0]['status'] ) ? (string) $campaigns[0]['status'] : '0';
+		// A successful response with no campaign means it no longer exists in
+		// ActiveCampaign: nothing was dispatched, so it is safe to recreate.
+		$status = isset( $campaigns[0]['status'] ) ? (string) $campaigns[0]['status'] : self::STATUS_DRAFT;
 		switch ( $status ) {
-			case '0': // Draft: never dispatched.
+			case self::STATUS_DRAFT: // Never dispatched.
 				return self::CAMPAIGN_DRAFT;
-			case '1': // Scheduled.
-			case '2': // Sending.
-			case '5': // Completed.
+			case self::STATUS_SCHEDULED:
+			case self::STATUS_SENDING:
+			case self::STATUS_COMPLETED:
 				return self::CAMPAIGN_ALREADY_DISPATCHED;
-			default: // 3 = paused, 4 = stopped, or unknown: indeterminate / possibly partial.
+			default:
+				// Paused (3) and stopped (4) are campaigns that were sending and
+				// got halted, so they have likely already delivered to part of
+				// the list; an unknown status is equally indeterminate. None are
+				// safe to recreate-and-resend, so route them to manual review.
 				return self::CAMPAIGN_NEEDS_REVIEW;
 		}
 	}
