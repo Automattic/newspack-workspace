@@ -19,6 +19,17 @@ export class CooldownError extends Error {
 	}
 }
 
+/**
+ * Whether an `apiFetch` rejection carries a cache cooldown 429.
+ */
+export const isCooldown = ( e: unknown ): boolean => {
+	if ( typeof e !== 'object' || e === null ) {
+		return false;
+	}
+	const err = e as { code?: string; data?: { status?: number; cooldown_until?: string } };
+	return err.code === 'newspack_insights_cooldown' || err.data?.status === 429;
+};
+
 type Source = 'bigquery' | 'external' | 'local';
 type Status = 'idle' | 'loading' | 'success' | 'error';
 

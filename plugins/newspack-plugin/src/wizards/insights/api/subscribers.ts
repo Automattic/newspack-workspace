@@ -12,6 +12,11 @@
  */
 import apiFetch from '@wordpress/api-fetch';
 
+/**
+ * Internal dependencies
+ */
+import { CooldownError, isCooldown, type CachedEnvelope } from '../state/insightsCache';
+
 export type StorageBackend = 'hpos' | 'legacy';
 
 /**
@@ -119,14 +124,7 @@ export interface SubscribersQuery {
 
 const ENDPOINT = '/newspack-insights/v1/subscribers';
 
-/**
- * Fetch Tab 6 data for the given window pair. Returns the full
- * classification + snapshot + current + previous payload.
- *
- * Throws on REST error (caught by the calling hook into an `error`
- * state).
- */
-export const fetchSubscribersData = async ( query: SubscribersQuery ): Promise< SubscribersResponse > => {
+const queryString = ( query: SubscribersQuery ): string => {
 	const params = new URLSearchParams();
 	params.set( 'start', query.start );
 	params.set( 'end', query.end );
@@ -134,8 +132,33 @@ export const fetchSubscribersData = async ( query: SubscribersQuery ): Promise< 
 		params.set( 'compare_start', query.compare_start );
 		params.set( 'compare_end', query.compare_end );
 	}
-	return apiFetch< SubscribersResponse >( {
-		path: `${ ENDPOINT }?${ params.toString() }`,
+	return params.toString();
+};
+
+/**
+ * Fetch Tab 6 data for the given window pair. Returns the full
+ * classification + snapshot + current + previous payload.
+ *
+ * Throws on REST error (caught by the calling hook into an `error`
+ * state).
+ */
+export const fetchSubscribersData = async ( query: SubscribersQuery ): Promise< CachedEnvelope< SubscribersResponse > > =>
+	apiFetch< CachedEnvelope< SubscribersResponse > >( {
+		path: `${ ENDPOINT }?${ queryString( query ) }`,
 		method: 'GET',
 	} );
+
+export const refreshSubscribersData = async ( query: SubscribersQuery ): Promise< CachedEnvelope< SubscribersResponse > > => {
+	try {
+		return await apiFetch< CachedEnvelope< SubscribersResponse > >( {
+			path: `${ ENDPOINT }/refresh?${ queryString( query ) }`,
+			method: 'POST',
+		} );
+	} catch ( e: unknown ) {
+		if ( isCooldown( e ) ) {
+			const data = ( e as { data: { cooldown_until: string } } ).data;
+			throw new CooldownError( data.cooldown_until );
+		}
+		throw e;
+	}
 };

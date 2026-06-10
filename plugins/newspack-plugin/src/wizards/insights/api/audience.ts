@@ -16,6 +16,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
+import { CooldownError, isCooldown, type CachedEnvelope } from '../state/insightsCache';
 import type { MetricPayload } from '../tabs/components/metrics';
 
 /** A window of metrics keyed by metric name, plus a `window` meta entry. */
@@ -37,7 +38,7 @@ export interface InsightsQuery {
 
 const ENDPOINT = '/newspack-insights/v1/audience';
 
-export const fetchAudienceData = async ( query: InsightsQuery ): Promise< AudienceResponse > => {
+const queryString = ( query: InsightsQuery ): string => {
 	const params = new URLSearchParams();
 	params.set( 'start', query.start );
 	params.set( 'end', query.end );
@@ -45,8 +46,26 @@ export const fetchAudienceData = async ( query: InsightsQuery ): Promise< Audien
 		params.set( 'compare_start', query.compare_start );
 		params.set( 'compare_end', query.compare_end );
 	}
-	return apiFetch< AudienceResponse >( {
-		path: `${ ENDPOINT }?${ params.toString() }`,
+	return params.toString();
+};
+
+export const fetchAudienceData = async ( query: InsightsQuery ): Promise< CachedEnvelope< AudienceResponse > > =>
+	apiFetch< CachedEnvelope< AudienceResponse > >( {
+		path: `${ ENDPOINT }?${ queryString( query ) }`,
 		method: 'GET',
 	} );
+
+export const refreshAudienceData = async ( query: InsightsQuery ): Promise< CachedEnvelope< AudienceResponse > > => {
+	try {
+		return await apiFetch< CachedEnvelope< AudienceResponse > >( {
+			path: `${ ENDPOINT }/refresh?${ queryString( query ) }`,
+			method: 'POST',
+		} );
+	} catch ( e: unknown ) {
+		if ( isCooldown( e ) ) {
+			const data = ( e as { data: { cooldown_until: string } } ).data;
+			throw new CooldownError( data.cooldown_until );
+		}
+		throw e;
+	}
 };

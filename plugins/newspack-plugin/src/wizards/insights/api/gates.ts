@@ -17,6 +17,11 @@
 import apiFetch from '@wordpress/api-fetch';
 
 /**
+ * Internal dependencies
+ */
+import { CooldownError, isCooldown, type CachedEnvelope } from '../state/insightsCache';
+
+/**
  * The kind of placeholder a metric renders. Encoded server-side so
  * the React format layer doesn't have to guess from the field name.
  */
@@ -126,10 +131,7 @@ export interface GatesQuery {
 
 const ENDPOINT = '/newspack-insights/v1/gates';
 
-/**
- * Fetch Tab 4 data for the given window pair.
- */
-export const fetchGatesData = async ( query: GatesQuery ): Promise< GatesResponse > => {
+const queryString = ( query: GatesQuery ): string => {
 	const params = new URLSearchParams();
 	params.set( 'start', query.start );
 	params.set( 'end', query.end );
@@ -137,8 +139,29 @@ export const fetchGatesData = async ( query: GatesQuery ): Promise< GatesRespons
 		params.set( 'compare_start', query.compare_start );
 		params.set( 'compare_end', query.compare_end );
 	}
-	return apiFetch< GatesResponse >( {
-		path: `${ ENDPOINT }?${ params.toString() }`,
+	return params.toString();
+};
+
+/**
+ * Fetch Tab 4 data for the given window pair.
+ */
+export const fetchGatesData = async ( query: GatesQuery ): Promise< CachedEnvelope< GatesResponse > > =>
+	apiFetch< CachedEnvelope< GatesResponse > >( {
+		path: `${ ENDPOINT }?${ queryString( query ) }`,
 		method: 'GET',
 	} );
+
+export const refreshGatesData = async ( query: GatesQuery ): Promise< CachedEnvelope< GatesResponse > > => {
+	try {
+		return await apiFetch< CachedEnvelope< GatesResponse > >( {
+			path: `${ ENDPOINT }/refresh?${ queryString( query ) }`,
+			method: 'POST',
+		} );
+	} catch ( e: unknown ) {
+		if ( isCooldown( e ) ) {
+			const data = ( e as { data: { cooldown_until: string } } ).data;
+			throw new CooldownError( data.cooldown_until );
+		}
+		throw e;
+	}
 };
