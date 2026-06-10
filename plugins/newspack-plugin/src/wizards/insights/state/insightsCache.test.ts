@@ -2,7 +2,7 @@
  * Tests for the insightsCache module.
  */
 
-import { insightsCache, makeSlotKey } from './insightsCache';
+import { CachedEnvelope, insightsCache, makeSlotKey } from './insightsCache';
 
 describe( 'makeSlotKey', () => {
 	it( 'composes a stable key from tab + window components', () => {
@@ -32,5 +32,80 @@ describe( 'insightsCache.getSlot', () => {
 		const a = insightsCache.getSlot( 'k' );
 		const b = insightsCache.getSlot( 'k' );
 		expect( a ).toBe( b );
+	} );
+} );
+
+describe( 'insightsCache.ensureFetched', () => {
+	afterEach( () => {
+		( insightsCache as unknown as { reset: () => void } ).reset();
+	} );
+
+	const envelope: CachedEnvelope< { v: number } > = {
+		cache: { source: 'external', computed_at: '2026-06-10T00:00:00Z', cooldown_until: null },
+		data: { v: 1 },
+	};
+
+	it( 'populates the slot from a successful fetcher', async () => {
+		const fetcher = jest.fn().mockResolvedValue( envelope );
+
+		insightsCache.ensureFetched( 'k', fetcher );
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const slot = insightsCache.getSlot< { v: number } >( 'k' );
+		expect( slot.status ).toBe( 'success' );
+		expect( slot.data ).toEqual( { v: 1 } );
+		expect( slot.computedAt ).toBe( '2026-06-10T00:00:00Z' );
+		expect( slot.source ).toBe( 'external' );
+	} );
+
+	it( 'records errors and exposes the message', async () => {
+		const fetcher = jest.fn().mockRejectedValue( new Error( 'kaboom' ) );
+
+		insightsCache.ensureFetched( 'k', fetcher );
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect( insightsCache.getSlot( 'k' ).status ).toBe( 'error' );
+		expect( insightsCache.getSlot( 'k' ).error ).toBe( 'kaboom' );
+	} );
+
+	it( 'is a no-op when the slot is already in success state', async () => {
+		const fetcher = jest.fn().mockResolvedValue( envelope );
+		insightsCache.ensureFetched( 'k', fetcher );
+		await Promise.resolve();
+		await Promise.resolve();
+
+		insightsCache.ensureFetched( 'k', fetcher );
+		await Promise.resolve();
+
+		expect( fetcher ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'dedupes concurrent in-flight calls', async () => {
+		let resolveIt: ( v: typeof envelope ) => void = () => {};
+		const slow = new Promise< typeof envelope >( resolve => {
+			resolveIt = resolve;
+		} );
+		const fetcher = jest.fn().mockReturnValue( slow );
+
+		insightsCache.ensureFetched( 'k', fetcher );
+		insightsCache.ensureFetched( 'k', fetcher );
+		resolveIt( envelope );
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect( fetcher ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	it( 'notifies subscribers on state transitions', async () => {
+		const listener = jest.fn();
+		insightsCache.subscribe( 'k', listener );
+
+		insightsCache.ensureFetched( 'k', () => Promise.resolve( envelope ) );
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect( listener.mock.calls.length ).toBeGreaterThanOrEqual( 2 ); // loading + success
 	} );
 } );
