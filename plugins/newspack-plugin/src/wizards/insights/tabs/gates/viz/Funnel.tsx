@@ -74,7 +74,7 @@ const stepHeightFor = ( stepCount: number ): number => Math.max( MIN_STEP_HEIGHT
  */
 const trapezoidPath = ( count: number, nextCount: number, topCount: number, yTop: number, yBottom: number ): string => {
 	const cx = VIEWBOX_WIDTH / 2;
-	const halfTop = ( count / topCount ) * ( VIEWBOX_WIDTH / 2 );
+	const halfTop = Math.min( VIEWBOX_WIDTH / 2, ( count / topCount ) * ( VIEWBOX_WIDTH / 2 ) );
 	const halfBottom = Math.min( halfTop, ( nextCount / topCount ) * ( VIEWBOX_WIDTH / 2 ) );
 	return [
 		`M ${ cx - halfTop } ${ yTop }`,
