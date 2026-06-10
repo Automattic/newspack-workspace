@@ -16,6 +16,25 @@ use Newspack\Newsletters\Send_List;
 final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_Service_Provider {
 
 	/**
+	 * Default timeout, in seconds, for ActiveCampaign API requests.
+	 *
+	 * @var int
+	 */
+	const DEFAULT_REQUEST_TIMEOUT = 45;
+
+	/**
+	 * Timeout, in seconds, for best-effort cleanup requests (deleting a
+	 * previously-created campaign before a new send). ActiveCampaign
+	 * occasionally stops responding to calls that reference a particular
+	 * campaign; when that happens the campaign_list/campaign_delete cleanup must
+	 * fail fast instead of consuming the whole request budget and stranding the
+	 * send behind a stuck campaign it was only trying to tidy up.
+	 *
+	 * @var int
+	 */
+	const CLEANUP_REQUEST_TIMEOUT = 15;
+
+	/**
 	 * Provider name.
 	 *
 	 * @var string
@@ -119,13 +138,15 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		$credentials = $this->api_credentials();
 		$api_path    = '/api/3/';
 		$query       = isset( $options['query'] ) ? $options['query'] : [];
+		$timeout     = isset( $options['timeout'] ) ? (int) $options['timeout'] : self::DEFAULT_REQUEST_TIMEOUT;
+		unset( $options['timeout'] );
 		$url         = add_query_arg(
 			$query,
 			rtrim( $credentials['url'], '/' ) . $api_path . $resource
 		);
 		$args        = [
 			'method'  => $method,
-			'timeout' => 45, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
+			'timeout' => $timeout, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
 			'headers' => [
 				'Content-Type' => 'application/json',
 				'Accept'       => 'application/json',
@@ -134,7 +155,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		];
 		$response    = wp_safe_remote_request( $url, $args + $options );
 		if ( is_wp_error( $response ) ) {
-			return $response;
+			return $this->humanize_transport_error( $response );
 		}
 		$response_code = wp_remote_retrieve_response_code( $response );
 		$response_body = json_decode( wp_remote_retrieve_body( $response ), true );
@@ -153,6 +174,31 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			return $errors;
 		}
 		return $response_body;
+	}
+
+	/**
+	 * Translate a low-level HTTP transport failure into a publisher-friendly error.
+	 *
+	 * ActiveCampaign sometimes stops responding to calls that reference a
+	 * particular campaign, which surfaces from wp_safe_remote_request as a cURL
+	 * timeout (error 28, "0 bytes received"). That raw message is meaningless to
+	 * a publisher, so timeouts are rephrased into actionable guidance. Every
+	 * other transport error is returned unchanged so genuine failures keep their
+	 * original, more specific message.
+	 *
+	 * @param WP_Error $error A WP_Error returned by wp_safe_remote_request.
+	 *
+	 * @return WP_Error The original error, or a friendlier one for timeouts.
+	 */
+	private function humanize_transport_error( $error ) {
+		$message = $error->get_error_message();
+		if ( false !== stripos( $message, 'timed out' ) || false !== stripos( $message, 'cURL error 28' ) ) {
+			return new \WP_Error(
+				'newspack_newsletters_active_campaign_timeout',
+				__( 'ActiveCampaign did not respond in time. This is usually a temporary issue on ActiveCampaign\'s end. Please wait a few minutes and try again; if the problem continues, try sending a fresh copy of the newsletter.', 'newspack-newsletters' )
+			);
+		}
+		return $error;
 	}
 
 	/**
@@ -183,6 +229,8 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			$options_query = $options['query'];
 			unset( $options['query'] );
 		}
+		$timeout = isset( $options['timeout'] ) ? (int) $options['timeout'] : self::DEFAULT_REQUEST_TIMEOUT;
+		unset( $options['timeout'] );
 		$content_type = 'application/json';
 		$url          = rtrim( $credentials['url'], '/' ) . $api_path;
 		$body         = null;
@@ -198,7 +246,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		}
 		$args     = [
 			'method'  => $method,
-			'timeout' => 45, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
+			'timeout' => $timeout, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
 			'headers' => [
 				'Content-Type' => $content_type,
 				'Accept'       => 'application/json',
@@ -208,7 +256,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		];
 		$response = wp_safe_remote_request( $url, $args + $options );
 		if ( is_wp_error( $response ) ) {
-			return $response;
+			return $this->humanize_transport_error( $response );
 		}
 		$body = json_decode( $response['body'], true );
 
@@ -1267,7 +1315,18 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * @return array|WP_Error API response data or error.
 	 */
 	private function delete_campaign( $campaign_id, $force = false ) {
-		$campaigns = $this->api_v1_request( 'campaign_list', 'GET', [ 'query' => [ 'ids' => $campaign_id ] ] );
+		// Deleting a previous campaign is best-effort cleanup, never the operation
+		// the publisher is waiting on, so it must fail fast: a campaign stuck in
+		// ActiveCampaign would otherwise hang this call for the full request
+		// timeout and strand the new send behind it.
+		$campaigns = $this->api_v1_request(
+			'campaign_list',
+			'GET',
+			[
+				'query'   => [ 'ids' => $campaign_id ],
+				'timeout' => self::CLEANUP_REQUEST_TIMEOUT,
+			]
+		);
 		if ( is_wp_error( $campaigns ) ) {
 			return $campaigns;
 		}
@@ -1282,7 +1341,14 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 				__( 'Campaign is not deletable.', 'newspack-newsletters' )
 			);
 		}
-		return $this->api_v1_request( 'campaign_delete', 'GET', [ 'query' => [ 'id' => $campaign_id ] ] );
+		return $this->api_v1_request(
+			'campaign_delete',
+			'GET',
+			[
+				'query'   => [ 'id' => $campaign_id ],
+				'timeout' => self::CLEANUP_REQUEST_TIMEOUT,
+			]
+		);
 	}
 
 	/**
