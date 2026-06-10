@@ -158,20 +158,26 @@
 			max-height: 480px;
 		}
 
-		// Muted anchor color (a step lighter than primary-500): the funnel is
-		// descriptive, not action-oriented, so it stays quiet against the page.
+		// Single anchor color; the 1.0 → 0.6 opacity interpolation gives each band
+		// its own weight while staying within one hue.
 		&-trapezoid {
-			fill: colors.$primary-400;
+			fill: colors.$primary-500;
 		}
 
-		// In-band count (compact mode). Dark text reads on every band: the
-		// lightened fill + 0.6–1.0 opacity keeps bands light enough that bold
-		// dark numerals clear large-text contrast across the whole stack.
+		// In-band count (compact mode): white on the darker top bands, dark on the
+		// faded tail bands — see DARK_TEXT_OPACITY_THRESHOLD in Funnel.tsx.
 		&-count-text {
 			font-size: 16px;
 			font-weight: 600;
 			font-variant-numeric: tabular-nums;
-			fill: wp-colors.$gray-900;
+
+			&.is-on-dark {
+				fill: #fff;
+			}
+
+			&.is-on-light {
+				fill: wp-colors.$gray-900;
+			}
 		}
 
 		// Side-label column: equal-flex blocks align to the equal-height bands.

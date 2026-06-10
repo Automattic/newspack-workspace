@@ -4,9 +4,8 @@
  * Multi-step conversion funnel rendered as stacked SVG trapezoids. Each
  * trapezoid's top edge is proportional to its own count and its bottom edge to
  * the next step's count, so the silhouette narrows with drop-off; the last step
- * is a rectangle. A single muted anchor color (primary-400) fades from full
- * opacity at the top to 0.6 at the bottom, keeping the chart descriptive rather
- * than alarming.
+ * is a rectangle. A single anchor color (primary-500) fades from full opacity at
+ * the top to 0.6 at the bottom, so each stage carries its own weight.
  *
  * Two layouts, auto-selected from container width + step count:
  *   - Side-label (default): step name / count / labels in a fixed column to the
@@ -38,6 +37,9 @@ const MAX_CHART_HEIGHT = 480;
 const VIEWBOX_WIDTH = 320;
 const FULL_OPACITY = 1;
 const TAIL_OPACITY = 0.6;
+// Above this band opacity the fill is dark enough for white text; below it, the
+// faded band needs dark text. Only affects compact mode (count rendered inside).
+const DARK_TEXT_OPACITY_THRESHOLD = 0.75;
 
 export interface FunnelProps {
 	stages: GatesFunnelStage[];
@@ -200,7 +202,9 @@ const Funnel = ( { stages }: FunnelProps ) => {
 				steps.map( step => (
 					<text
 						key={ step.index }
-						className="newspack-insights__funnel-count-text"
+						className={
+							'newspack-insights__funnel-count-text ' + ( step.opacity > DARK_TEXT_OPACITY_THRESHOLD ? 'is-on-dark' : 'is-on-light' )
+						}
 						x={ VIEWBOX_WIDTH / 2 }
 						y={ step.index * stepHeight + stepHeight / 2 }
 						textAnchor="middle"
