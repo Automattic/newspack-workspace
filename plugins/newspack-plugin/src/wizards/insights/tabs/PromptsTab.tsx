@@ -26,6 +26,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { DateRange } from '../state/useDateRange';
 import usePromptsData from '../hooks/usePromptsData';
+import TabStateView from './components/TabStateView';
 import DirectVsInfluencedCallout from './prompts/DirectVsInfluencedCallout';
 import PromptExposureSection from './prompts/PromptExposureSection';
 import PromptEngagementSection from './prompts/PromptEngagementSection';
@@ -44,38 +45,27 @@ export interface PromptsTabProps {
 const PromptsTab = ( { range, previousRange }: PromptsTabProps ) => {
 	const { status, data, error } = usePromptsData( range, previousRange );
 
-	if ( status === 'loading' && ! data ) {
-		return (
-			<div className="newspack-insights__tab-loading" role="status" aria-live="polite">
-				{ __( 'Loading prompt data…', 'newspack-plugin' ) }
-			</div>
-		);
-	}
-
-	if ( status === 'error' ) {
-		return (
-			<div className="newspack-insights__tab-error" role="alert">
-				<p>{ __( 'Could not load prompt data.', 'newspack-plugin' ) }</p>
-				{ error && <p className="newspack-insights__tab-error-detail">{ error }</p> }
-			</div>
-		);
-	}
-
-	if ( ! data ) {
-		return null;
-	}
-
 	return (
-		<div className="newspack-insights__prompts-tab">
-			<DirectVsInfluencedCallout />
-			<PromptExposureSection current={ data.current } previous={ data.previous } />
-			<PromptEngagementSection current={ data.current } previous={ data.previous } />
-			<FreeReaderConversionSection current={ data.current } previous={ data.previous } />
-			<PaidReaderConversionSection current={ data.current } previous={ data.previous } />
-			<RevenueFromPromptsSection current={ data.current } previous={ data.previous } />
-			<HowReadersConvertSection current={ data.current } />
-			<PerformanceBreakdownSection current={ data.current } />
-		</div>
+		<TabStateView
+			status={ status }
+			hasData={ !! data }
+			error={ error }
+			errorLabel={ __( 'Could not load prompt data.', 'newspack-plugin' ) }
+			className="newspack-insights__prompts-tab"
+		>
+			{ data && (
+				<>
+					<DirectVsInfluencedCallout />
+					<PromptExposureSection current={ data.current } previous={ data.previous } />
+					<PromptEngagementSection current={ data.current } previous={ data.previous } />
+					<FreeReaderConversionSection current={ data.current } previous={ data.previous } />
+					<PaidReaderConversionSection current={ data.current } previous={ data.previous } />
+					<RevenueFromPromptsSection current={ data.current } previous={ data.previous } />
+					<HowReadersConvertSection current={ data.current } />
+					<PerformanceBreakdownSection current={ data.current } />
+				</>
+			) }
+		</TabStateView>
 	);
 };
 

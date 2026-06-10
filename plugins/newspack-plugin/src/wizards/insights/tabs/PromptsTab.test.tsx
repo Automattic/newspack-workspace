@@ -168,7 +168,8 @@ describe( 'PromptsTab', () => {
 	it( 'renders the loading state', () => {
 		mockHook.mockReturnValue( { status: 'loading', data: null, error: null, refetch: () => {} } );
 		render( <PromptsTab range={ range } previousRange={ null } /> );
-		expect( screen.getByText( 'Loading prompt data…' ) ).toBeInTheDocument();
+		// Now routed through the shared TabStateView loading frame (NPPD-1684).
+		expect( screen.getByText( 'Loading…' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders the error state', () => {
