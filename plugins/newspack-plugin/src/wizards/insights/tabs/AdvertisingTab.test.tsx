@@ -105,7 +105,10 @@ describe( 'AdvertisingTab', () => {
 	it( 'shows the initial loading state before any data arrives', () => {
 		mockHook.mockReturnValue( { status: 'loading', data: null, error: null, refetch: () => {} } );
 		render( <AdvertisingTab range={ range } previousRange={ null } /> );
-		expect( screen.getByText( /Loading advertising data/ ) ).toBeInTheDocument();
+		// Now routed through the shared TabStateView loading frame (NPPD-1684).
+		// Advertising keeps the spinner-only frame; its progressive messages live
+		// on the async `is_loading` state instead.
+		expect( screen.getByText( 'Loading…' ) ).toBeInTheDocument();
 	} );
 
 	it( 'shows the error state with detail when the fetch fails', () => {

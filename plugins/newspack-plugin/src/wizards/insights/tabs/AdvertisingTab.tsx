@@ -19,6 +19,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { DateRange } from '../state/useDateRange';
 import useAdvertisingData from '../hooks/useAdvertisingData';
+import TabStateView from './components/TabStateView';
 import DataLagIndicator from './components/DataLagIndicator';
 import FinishConnectingDiagnostic from './components/FinishConnectingDiagnostic';
 import ReachRevenueSection from './advertising/sections/ReachRevenueSection';
@@ -33,64 +34,58 @@ export interface AdvertisingTabProps {
 
 const AdvertisingTab = ( { range, previousRange }: AdvertisingTabProps ) => {
 	const { status, data, error } = useAdvertisingData( range, previousRange );
-
-	if ( status === 'loading' && ! data ) {
-		return (
-			<div className="newspack-insights__tab-loading" role="status" aria-live="polite">
-				{ __( 'Loading advertising data…', 'newspack-plugin' ) }
-			</div>
-		);
-	}
-
-	if ( status === 'error' ) {
-		return (
-			<div className="newspack-insights__tab-error" role="alert">
-				<p>{ __( 'Could not load advertising data.', 'newspack-plugin' ) }</p>
-				{ error && <p className="newspack-insights__tab-error-detail">{ error }</p> }
-			</div>
-		);
-	}
-
 	const current = data?.current;
-	if ( ! current ) {
-		return null;
+
+	// Tab-specific render gates precede the standard data lifecycle. They require
+	// the envelope, so they're guarded by `current` (skipped on initial load) and
+	// by `status` so a fetch error still routes through TabStateView's error frame
+	// rather than being masked by a gate.
+	if ( status !== 'error' && current ) {
+		// Tab visibility (GAM ad provider active). When false the tab renders nothing;
+		// the wizard chrome likewise omits the nav entry (boot-config gate).
+		if ( ! current.is_tab_visible ) {
+			return null;
+		}
+
+		// Visible, but reporting isn't fully connected: itemized "finish connecting".
+		if ( ! current.is_report_ready ) {
+			return <FinishConnectingDiagnostic issues={ current.readiness_issues } />;
+		}
+
+		// Ready, but the first background refresh hasn't populated the cache yet
+		// (async GAM reports). Show a loading note rather than empty sections; the
+		// data arrives on a later poll. (Beyond the ticket's three states — surfaced
+		// because the orchestrator is asynchronous and exposes `is_loading`.)
+		if ( current.is_loading ) {
+			return (
+				<div className="newspack-insights__tab-loading" role="status" aria-live="polite">
+					{ __( 'Preparing your advertising data… this can take a minute the first time.', 'newspack-plugin' ) }
+				</div>
+			);
+		}
 	}
 
-	// Tab visibility (GAM ad provider active). When false the tab renders nothing;
-	// the wizard chrome likewise omits the nav entry (boot-config gate).
-	if ( ! current.is_tab_visible ) {
-		return null;
-	}
-
-	// Visible, but reporting isn't fully connected: itemized "finish connecting".
-	if ( ! current.is_report_ready ) {
-		return <FinishConnectingDiagnostic issues={ current.readiness_issues } />;
-	}
-
-	// Ready, but the first background refresh hasn't populated the cache yet
-	// (async GAM reports). Show a loading note rather than empty sections; the
-	// data arrives on a later poll. (Beyond the ticket's three states — surfaced
-	// because the orchestrator is asynchronous and exposes `is_loading`.)
-	if ( current.is_loading ) {
-		return (
-			<div className="newspack-insights__tab-loading" role="status" aria-live="polite">
-				{ __( 'Preparing your advertising data… this can take a minute the first time.', 'newspack-plugin' ) }
-			</div>
-		);
-	}
-
-	const metrics = current.metrics;
 	// Only surface comparison deltas when the toggle is on (previousRange set).
 	// Fixture mode returns a `previous` window unconditionally, so gate here.
 	const previous = previousRange ? data?.previous?.metrics ?? null : null;
 
 	return (
-		<div className="newspack-insights__advertising-tab">
-			<DataLagIndicator dataAsOf={ current.data_as_of } hasEstimatedData={ current.has_estimated_data } />
-			<ReachRevenueSection current={ metrics } previous={ previous } />
-			<InventoryPerformanceSection current={ metrics } previous={ previous } />
-			<TopPerformersSection current={ metrics } previous={ previous } />
-		</div>
+		<TabStateView
+			status={ status }
+			hasData={ !! current }
+			error={ error }
+			errorLabel={ __( 'Could not load advertising data.', 'newspack-plugin' ) }
+			className="newspack-insights__advertising-tab"
+		>
+			{ current && (
+				<>
+					<DataLagIndicator dataAsOf={ current.data_as_of } hasEstimatedData={ current.has_estimated_data } />
+					<ReachRevenueSection current={ current.metrics } previous={ previous } />
+					<InventoryPerformanceSection current={ current.metrics } previous={ previous } />
+					<TopPerformersSection current={ current.metrics } previous={ previous } />
+				</>
+			) }
+		</TabStateView>
 	);
 };
 
