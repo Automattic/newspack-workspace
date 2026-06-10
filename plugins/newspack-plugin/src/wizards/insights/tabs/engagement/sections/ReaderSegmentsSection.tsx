@@ -24,6 +24,15 @@ export interface SectionProps {
 	previous: InsightsWindow | null;
 }
 
+// Stable segment keys emitted by the orchestrator
+// (Engagement_Metric::engagement_by_newsletter_status_via_ga4). Kept here as the
+// single JS-side reference for the PHP↔JS contract; a regression test
+// (ReaderSegmentsSection.test.tsx) guards the match.
+const NEWSLETTER_SEGMENT = {
+	subscriber: 'subscriber',
+	notSubscribed: 'not_subscribed',
+} as const;
+
 const rowsOf = ( payload?: MetricPayload ): MetricRow[] => ( Array.isArray( payload?.rows ) ? ( payload as MetricPayload ).rows ?? [] : [] );
 const num = ( row: MetricRow | undefined, key: string ): number => ( typeof row?.[ key ] === 'number' ? ( row[ key ] as number ) : 0 );
 const findRow = ( rows: MetricRow[], key: string, value: string ): MetricRow | undefined => rows.find( row => row[ key ] === value );
@@ -117,8 +126,10 @@ const returningTakeaway = ( payload?: MetricPayload ): Takeaway => {
 /** Newsletter status: subscriber vs non-subscriber avg engaged time. */
 const newsletterTakeaway = ( payload?: MetricPayload ): Takeaway => {
 	const rows = rowsOf( payload );
-	const subRow = findRow( rows, 'segment', 'Subscriber' );
-	const nonRow = findRow( rows, 'segment', 'Non-subscriber' );
+	// Match on the orchestrator's stable, non-translated segment keys; the bar
+	// labels below carry the user-facing translated strings.
+	const subRow = findRow( rows, 'segment', NEWSLETTER_SEGMENT.subscriber );
+	const nonRow = findRow( rows, 'segment', NEWSLETTER_SEGMENT.notSubscribed );
 	const bars = [
 		{ label: __( 'Subscriber', 'newspack-plugin' ), value: num( subRow, 'avg_engagement_seconds' ) },
 		{ label: __( 'Non-subscriber', 'newspack-plugin' ), value: num( nonRow, 'avg_engagement_seconds' ) },
@@ -163,14 +174,22 @@ const ReaderSegmentsSection = ( { current }: SectionProps ) => {
 			</h2>
 			<p className="newspack-insights__section-caption">{ __( 'How engagement varies by segment.', 'newspack-plugin' ) }</p>
 			<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-3">
-				<TakeawayCard payload={ current.engagement_by_device_type } headline={ device.headline } sub={ device.sub } bars={ device.bars } />
 				<TakeawayCard
+					title={ __( 'Engagement by device', 'newspack-plugin' ) }
+					payload={ current.engagement_by_device_type }
+					headline={ device.headline }
+					sub={ device.sub }
+					bars={ device.bars }
+				/>
+				<TakeawayCard
+					title={ __( 'New vs returning readers', 'newspack-plugin' ) }
 					payload={ current.engagement_by_returning_vs_new }
 					headline={ returning.headline }
 					sub={ returning.sub }
 					bars={ returning.bars }
 				/>
 				<TakeawayCard
+					title={ __( 'Engagement by newsletter status', 'newspack-plugin' ) }
 					payload={ current.engagement_by_newsletter_status }
 					headline={ newsletter.headline }
 					sub={ newsletter.sub }

@@ -24,6 +24,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { DateRange } from '../state/useDateRange';
 import useSubscribersData from '../hooks/useSubscribersData';
+import TabStateView from './components/TabStateView';
 import ScorecardSection from './subscribers/ScorecardSection';
 import WindowedSection from './subscribers/WindowedSection';
 import TenureSection from './subscribers/TenureSection';
@@ -38,34 +39,23 @@ export interface SubscribersTabProps {
 const SubscribersTab = ( { range, previousRange }: SubscribersTabProps ) => {
 	const { status, data, error } = useSubscribersData( range, previousRange );
 
-	if ( status === 'loading' && ! data ) {
-		return (
-			<div className="newspack-insights__tab-loading" role="status" aria-live="polite">
-				{ __( 'Loading subscriber data…', 'newspack-plugin' ) }
-			</div>
-		);
-	}
-
-	if ( status === 'error' ) {
-		return (
-			<div className="newspack-insights__tab-error" role="alert">
-				<p>{ __( 'Could not load subscriber data.', 'newspack-plugin' ) }</p>
-				{ error && <p className="newspack-insights__tab-error-detail">{ error }</p> }
-			</div>
-		);
-	}
-
-	if ( ! data ) {
-		return null;
-	}
-
 	return (
-		<div className="newspack-insights__subscribers-tab">
-			<ScorecardSection snapshot={ data.snapshot } />
-			<WindowedSection range={ range } current={ data.current } previous={ data.previous } />
-			<TenureSection rows={ data.snapshot.tenure_distribution } />
-			<PerformanceSection rows={ data.current.subscriptions_by_product } />
-		</div>
+		<TabStateView
+			status={ status }
+			hasData={ !! data }
+			error={ error }
+			errorLabel={ __( 'Could not load subscriber data.', 'newspack-plugin' ) }
+			className="newspack-insights__subscribers-tab"
+		>
+			{ data && (
+				<>
+					<ScorecardSection snapshot={ data.snapshot } />
+					<WindowedSection range={ range } current={ data.current } previous={ data.previous } />
+					<TenureSection rows={ data.snapshot.tenure_distribution } />
+					<PerformanceSection rows={ data.current.subscriptions_by_product } />
+				</>
+			) }
+		</TabStateView>
 	);
 };
 

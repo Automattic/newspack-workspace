@@ -18,6 +18,7 @@ import type { ErrorInfo, ReactNode } from 'react';
 /**
  * Internal dependencies
  */
+import { Waiting } from '../../../../packages/components/src';
 import type { TabKey } from './TabNavigation';
 import type { DateRange } from '../state/useDateRange';
 
@@ -46,7 +47,8 @@ export interface TabContentProps extends TabSectionProps {
 
 const Fallback = () => (
 	<div className="newspack-insights__tab-fallback" role="status" aria-live="polite">
-		{ __( 'Loading…', 'newspack-plugin' ) }
+		<Waiting />
+		<span className="screen-reader-text">{ __( 'Loading…', 'newspack-plugin' ) }</span>
 	</div>
 );
 

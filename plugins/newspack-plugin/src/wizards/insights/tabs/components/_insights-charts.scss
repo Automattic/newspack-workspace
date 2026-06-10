@@ -105,6 +105,14 @@
 		border-radius: 4px;
 	}
 
+	// Takeaway card title: persists across populated / empty / failure states so
+	// the card always says what it would show. Reset the chart-card-title's
+	// two-line min-height reservation (takeaway titles are single-line).
+	&__takeaway-title {
+		min-height: 0;
+		margin: 0 0 12px;
+	}
+
 	&__takeaway-headline {
 		margin: 0;
 		font-size: 18px;
@@ -462,6 +470,32 @@
 	display: flex;
 	flex-direction: column;
 	gap: 32px;
+}
+
+// Shared refetch chrome for every data tab (Audience, Engagement, Gates,
+// Subscribers, Donors). The tab body is the positioning context; on refetch
+// (date range / comparison change) its children are muted and a spinner floats
+// over them so the change is visibly loading rather than the previous window's
+// values lingering silently (NPPD fix #8).
+.newspack-insights__tab-body {
+	position: relative;
+}
+
+.newspack-insights__tab-body.is-refreshing > *:not( .newspack-insights__tab-refreshing ) {
+	opacity: 0.4;
+	pointer-events: none;
+	transition: opacity 0.15s ease;
+}
+
+.newspack-insights__tab-refreshing {
+	position: absolute;
+	inset: 0;
+	z-index: 5;
+	display: flex;
+	align-items: flex-start;
+	justify-content: center;
+	padding-top: 96px;
+	background: rgba( 255, 255, 255, 0.35 );
 }
 
 // Per-section grid column modifiers. Compound selectors (0,2,0) so they win

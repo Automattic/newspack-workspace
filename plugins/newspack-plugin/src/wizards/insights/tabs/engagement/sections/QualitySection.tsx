@@ -45,11 +45,11 @@ const QualitySection = ( { current, previous }: SectionProps ) => (
 				lowerIsBetter
 			/>
 			<Scorecard
-				label={ __( 'Article Completion Rate', 'newspack-plugin' ) }
+				label={ __( 'Completion Rate', 'newspack-plugin' ) }
 				description={
-					// "% finished reading" is literal copy; the "%" is a percent sign, not a format placeholder.
+					// "% of page views read to the end" is literal copy; the "%" is a percent sign, not a format placeholder.
 					// eslint-disable-next-line @wordpress/i18n-translator-comments
-					__( '% finished reading', 'newspack-plugin' )
+					__( '% of page views read to the end', 'newspack-plugin' )
 				}
 				current={ current.article_completion_rate }
 				previous={ previous?.article_completion_rate }
