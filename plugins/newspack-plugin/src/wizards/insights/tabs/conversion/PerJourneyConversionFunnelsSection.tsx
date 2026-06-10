@@ -3,8 +3,8 @@
  *
  * Four small funnels in a 2-column grid: anonymous → registered,
  * registered → subscriber, registered → donor, and the visibility-gated
- * subscriber → donor cross-upsell. Scaffold renders header + caption + an
- * empty placeholder; the Funnel viz is wired in the following commit.
+ * subscriber → donor cross-upsell. The cross-upsell cell shows an
+ * empty-state note instead of a funnel while hidden (Phase 1 default).
  */
 
 /**
@@ -16,13 +16,29 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { ConversionWindow } from '../../api/conversion';
+import Funnel from './viz/Funnel';
 
 export interface PerJourneyConversionFunnelsSectionProps {
 	current: ConversionWindow;
 }
 
+interface JourneyFunnelProps {
+	title: string;
+	caption: string;
+	children: React.ReactNode;
+}
+
+const JourneyFunnel = ( { title, caption, children }: JourneyFunnelProps ) => (
+	<div className="newspack-insights__conversion-journey-cell">
+		<h3 className="newspack-insights__conversion-subheading">{ title }</h3>
+		<p className="newspack-insights__conversion-subcaption">{ caption }</p>
+		{ children }
+	</div>
+);
+
 const PerJourneyConversionFunnelsSection = ( { current }: PerJourneyConversionFunnelsSectionProps ) => {
-	const crossUpsellHidden = current.subscriber_to_donor_funnel.visibility === 'hidden';
+	const crossUpsell = current.subscriber_to_donor_funnel;
+	const crossUpsellHidden = crossUpsell.visibility === 'hidden';
 	return (
 		<section
 			className="newspack-insights__section newspack-insights__section--per-journey-funnels"
@@ -37,7 +53,47 @@ const PerJourneyConversionFunnelsSection = ( { current }: PerJourneyConversionFu
 					'newspack-plugin'
 				) }
 			</p>
-			<div className="newspack-insights__viz-placeholder" data-cross-upsell-hidden={ crossUpsellHidden } />
+			<div className="newspack-insights__conversion-journey-grid">
+				<JourneyFunnel
+					title={ __( 'Anonymous → Registered', 'newspack-plugin' ) }
+					caption={ __(
+						'The free-conversion path. Combines gate and prompt impressions to make the funnel readable; per-surface breakdowns live in Tabs 4 and 5.',
+						'newspack-plugin'
+					) }
+				>
+					<Funnel stages={ current.anonymous_to_registered_funnel.stages } />
+				</JourneyFunnel>
+				<JourneyFunnel
+					title={ __( 'Registered → Subscriber', 'newspack-plugin' ) }
+					caption={ __(
+						'The paid-upsell path. Subscription excludes donation products; donor conversions are in the next funnel.',
+						'newspack-plugin'
+					) }
+				>
+					<Funnel stages={ current.registered_to_subscriber_funnel.stages } />
+				</JourneyFunnel>
+				<JourneyFunnel
+					title={ __( 'Registered → Donor', 'newspack-plugin' ) }
+					caption={ __( 'The donation-conversion path.', 'newspack-plugin' ) }
+				>
+					<Funnel stages={ current.registered_to_donor_funnel.stages } />
+				</JourneyFunnel>
+				<JourneyFunnel
+					title={ __( 'Subscriber → Donor (cross-upsell)', 'newspack-plugin' ) }
+					caption={ __( 'Cross-upsell visibility for publishers running both subscriptions and donations.', 'newspack-plugin' ) }
+				>
+					{ crossUpsellHidden ? (
+						<p className="newspack-insights__conversion-gated-note">
+							{ __(
+								'Cross-upsell view appears when both subscription and donation programs have at least 50 active participants.',
+								'newspack-plugin'
+							) }
+						</p>
+					) : (
+						<Funnel stages={ crossUpsell.stages } />
+					) }
+				</JourneyFunnel>
+			</div>
 		</section>
 	);
 };

@@ -2,10 +2,9 @@
  * CohortRetentionSection (NPPD-1609, Section 5).
  *
  * Two stacked multi-series cohort LineCharts (registration → conversion,
- * subscriber retention), each with a hardcoded reference line. Snapshot —
- * not affected by the date picker; refreshed weekly. Scaffold renders
- * header + caption + an empty placeholder; the LineChart viz (with
- * reference line) is wired in the following commit.
+ * subscriber retention), each with a hardcoded reference-line target.
+ * Snapshot — refreshed weekly, independent of the date picker. Phase 1
+ * renders the empty state per chart.
  */
 
 /**
@@ -16,31 +15,58 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import type { ConversionWindow } from '../../api/conversion';
+import type { ConversionCohortData } from '../../api/conversion';
+import LineChart, { type LineSeries } from './viz/LineChart';
 
 export interface CohortRetentionSectionProps {
-	current: ConversionWindow;
+	current: {
+		registration_to_conversion_cohort: ConversionCohortData;
+		subscriber_retention_cohort: ConversionCohortData;
+	};
 }
 
-const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => {
-	const pending = current.registration_to_conversion_cohort.pending;
-	return (
-		<section
-			className="newspack-insights__section newspack-insights__section--cohort-retention"
-			aria-labelledby="newspack-insights-conversion-cohort-heading"
-		>
-			<h2 id="newspack-insights-conversion-cohort-heading" className="newspack-insights__section-heading">
-				{ __( 'Cohort retention', 'newspack-plugin' ) }
-			</h2>
-			<p className="newspack-insights__section-caption">
-				{ __(
-					'Retention curves by monthly cohort. The vertical axis is the share of each cohort still on a given lifecycle stage at each point in time. Updated weekly (see callout above).',
-					'newspack-plugin'
-				) }
-			</p>
-			<div className="newspack-insights__viz-placeholder" data-pending={ pending } />
-		</section>
-	);
-};
+/** Map cohort series (period → value) to LineChart series. */
+const toCohortSeries = ( data: ConversionCohortData ): LineSeries[] =>
+	data.cohorts.map( cohort => ( {
+		name: cohort.label,
+		points: cohort.points.map( p => ( { label: String( p.period ), value: p.value } ) ),
+	} ) );
+
+interface CohortChartProps {
+	title: string;
+	data: ConversionCohortData;
+}
+
+const CohortChart = ( { title, data }: CohortChartProps ) => (
+	<div className="newspack-insights__conversion-cohort-cell">
+		<h3 className="newspack-insights__conversion-subheading">{ title }</h3>
+		<LineChart
+			series={ toCohortSeries( data ) }
+			referenceLine={ data.reference_line }
+			emptyMessage={ __( 'Cohort data will appear after the first weekly refresh.', 'newspack-plugin' ) }
+		/>
+	</div>
+);
+
+const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => (
+	<section
+		className="newspack-insights__section newspack-insights__section--cohort-retention"
+		aria-labelledby="newspack-insights-conversion-cohort-heading"
+	>
+		<h2 id="newspack-insights-conversion-cohort-heading" className="newspack-insights__section-heading">
+			{ __( 'Cohort retention', 'newspack-plugin' ) }
+		</h2>
+		<p className="newspack-insights__section-caption">
+			{ __(
+				'Retention curves by monthly cohort. The vertical axis is the share of each cohort still on a given lifecycle stage at each point in time. Updated weekly (see callout above).',
+				'newspack-plugin'
+			) }
+		</p>
+		<div className="newspack-insights__conversion-cohort-stack">
+			<CohortChart title={ __( 'Registration → conversion', 'newspack-plugin' ) } data={ current.registration_to_conversion_cohort } />
+			<CohortChart title={ __( 'Subscriber retention', 'newspack-plugin' ) } data={ current.subscriber_retention_cohort } />
+		</div>
+	</section>
+);
 
 export default CohortRetentionSection;

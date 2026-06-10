@@ -1,19 +1,24 @@
 /**
  * Newspack Insights — Tab 3 (Conversion Journey) styles (NPPD-1609, Phase 1)
  *
- * Tab 3-specific layout only. The shared Insights chrome (sections,
- * metric cards, tables, tab loading/error) lives in
+ * Tab 3-specific layout only. The shared Insights chrome (sections, metric
+ * cards, table base + wrap, tab loading/error) lives in
  * `tabs/components/sections.scss` and is loaded by the wizard's main
- * `style.scss`. Visualization, callout, and table styles for this tab are
- * tab-local and live here.
+ * `style.scss`. The shared chart chrome (pie, line, legend, series colors,
+ * tooltip, chart-empty) lives in `tabs/components/_insights-charts.scss` and
+ * is pulled in below — this tab's PieChart and LineChart reuse those classes.
  *
- * Classes are conversion-scoped (`__conversion-*`) so the tab stays fully
- * decoupled from the other Insights tabs — no shared-stylesheet edits, no
- * cross-tab selector collisions. The visual language is intentionally
- * identical to Gates and Prompts.
+ * Funnel, sortable-table, and per-section grid styles are tab-local copies
+ * scoped `__conversion-*` so the tab stays fully decoupled from the other
+ * Insights tabs — no shared-stylesheet edits, no cross-tab selector
+ * collisions. The visual language is intentionally identical to Gates and
+ * Prompts. (Funnel / PieChart / LineChart / SortableTable are candidates to
+ * hoist into packages/components as shared primitives in a v1.1 ticket.)
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "../../../../../packages/colors/colors.module" as colors;
+@use "../components/insights-charts";
 
 .newspack-insights {
 	&__conversion-tab {
@@ -22,12 +27,347 @@
 		gap: 32px;
 	}
 
-	// Scaffold placeholder for a viz slot whose primitive is wired in a
-	// later commit. Reserves vertical space so the section structure reads
-	// during the scaffold phase; replaced by the real chart / table.
-	&__viz-placeholder {
-		min-height: 120px;
-		border: 1px dashed wp-colors.$gray-200;
+	// Per-viz subheading + caption used inside the multi-cell sections.
+	&__conversion-subheading {
+		margin: 0 0 4px;
+		font-size: 15px;
+		font-weight: 600;
+		color: wp-colors.$gray-900;
+	}
+
+	&__conversion-subcaption {
+		margin: 0 0 12px;
+		font-size: 13px;
+		font-weight: 400;
+		line-height: 1.5;
+		color: wp-colors.$gray-700;
+	}
+
+	// Empty-state note shown when a visibility-gated viz (Section 2.4 funnel,
+	// Section 4.4 lag curve) is hidden.
+	&__conversion-gated-note {
+		margin: 0;
+		padding: 32px 20px;
+		text-align: center;
+		font-size: 13px;
+		color: wp-colors.$gray-600;
+	}
+
+	// Section 2 — four per-journey funnels in a 2-column grid, stacking under
+	// ~720px container width.
+	&__conversion-journey-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+		gap: 24px;
+		align-items: start;
+	}
+
+	&__conversion-journey-cell {
+		min-width: 0;
+	}
+
+	// Section 3 — three source-mix pies side by side.
+	&__conversion-pie-row {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+		gap: 24px;
+		align-items: start;
+	}
+
+	&__conversion-pie-cell {
+		min-width: 0;
+	}
+
+	// Section 4 — 2×2 grid of cumulative-distribution curves.
+	&__conversion-curve-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+		gap: 24px;
+		align-items: start;
+	}
+
+	&__conversion-curve-cell {
+		min-width: 0;
+	}
+
+	// Section 5 — two cohort curves stacked vertically.
+	&__conversion-cohort-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 24px;
+	}
+
+	&__conversion-cohort-cell {
+		min-width: 0;
+	}
+
+	// Section 8.4 — top-pages table block.
+	&__conversion-top-pages {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		margin-top: 24px;
+	}
+
+	&__conversion-top-pages-note {
+		margin: 0;
+		font-size: 13px;
+		font-weight: 400;
+		line-height: 1.5;
+		color: wp-colors.$gray-700;
+	}
+
+	// PieChart center label (the window total) — extends the shared pie chrome.
+	&__pie-center {
+		font-size: 6px;
+		font-weight: 600;
+		fill: wp-colors.$gray-900;
+	}
+
+	// LineChart reference target line + floating label — extends the shared
+	// line chrome (Section 5 cohort targets).
+	&__line-reference {
+		stroke: wp-colors.$gray-500;
+		stroke-width: 1;
+		stroke-dasharray: 4 3;
+		vector-effect: non-scaling-stroke;
+	}
+
+	&__line-reference-label {
+		display: block;
+		margin-top: 4px;
+		font-size: 12px;
+		color: wp-colors.$gray-600;
+	}
+
+	// Funnel viz — tab-local. Stacked SVG trapezoids in a single anchor color
+	// (primary-500) fading to 0.6 opacity at the tail. Side-label mode puts the
+	// step name/count/deltas in a fixed column beside the equal-height bands;
+	// compact mode renders the count inside each band and moves labels to a
+	// legend below.
+	&__conversion-funnel {
+		padding: 20px;
+		background-color: #fff;
+		border: 1px solid wp-colors.$gray-200;
 		border-radius: 4px;
+
+		&--side {
+			display: flex;
+			align-items: stretch;
+			gap: 16px;
+		}
+
+		&--compact {
+			display: flex;
+			flex-direction: column;
+			gap: 16px;
+		}
+
+		&-svg {
+			min-width: 0;
+			width: 100%;
+			height: auto;
+			display: block;
+		}
+
+		// Side mode: cap the SVG WIDTH (not height) so it keeps its exact viewBox
+		// aspect ratio — no letterboxing — and the equal-height trapezoid bands
+		// stay aligned with the equal-flex label column beside them.
+		&--side &-svg {
+			flex: 0 1 auto;
+			max-width: 320px;
+		}
+
+		// Compact mode: fill the width; the count sits inside each band.
+		&--compact &-svg {
+			max-height: 480px;
+		}
+
+		// Single anchor color; the 1.0 → 0.6 opacity interpolation gives each
+		// band its own weight while staying within one hue.
+		&-trapezoid {
+			fill: colors.$primary-500;
+		}
+
+		// In-band count (compact mode): white on the darker top bands, dark on
+		// the faded tail bands — see DARK_TEXT_OPACITY_THRESHOLD in Funnel.tsx.
+		&-count-text {
+			font-size: 16px;
+			font-weight: 600;
+			font-variant-numeric: tabular-nums;
+
+			&.is-on-dark {
+				fill: #fff;
+			}
+
+			&.is-on-light {
+				fill: wp-colors.$gray-900;
+			}
+		}
+
+		// Side-label column: equal-flex blocks align to the equal-height bands.
+		&-labels {
+			flex: 0 0 200px;
+			display: flex;
+			flex-direction: column;
+		}
+
+		&-label {
+			flex: 1 1 0;
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+		}
+
+		&-legend {
+			list-style: none;
+			margin: 0;
+			padding: 0;
+			display: flex;
+			flex-direction: column;
+			gap: 12px;
+		}
+
+		&-legend-item {
+			display: flex;
+			flex-direction: column;
+		}
+
+		&-label-name {
+			font-size: 13px;
+			font-weight: 600;
+			color: wp-colors.$gray-900;
+		}
+
+		&-label-count {
+			font-size: 20px;
+			font-weight: 600;
+			font-variant-numeric: tabular-nums;
+			line-height: 1.2;
+			color: wp-colors.$gray-900;
+		}
+
+		// Stage descriptors: both muted gray. The drop-off is funnel context,
+		// not an alarm, and deliberately NOT red/green — red/green is reserved
+		// for the period-over-period scorecard deltas elsewhere on the page.
+		&-label-pct {
+			font-size: 13px;
+			font-weight: 400;
+			color: wp-colors.$gray-600;
+		}
+
+		&-label-drop {
+			font-size: 13px;
+			font-weight: 400;
+			font-variant-numeric: tabular-nums;
+			color: wp-colors.$gray-600;
+
+			&-arrow {
+				color: wp-colors.$gray-600;
+			}
+		}
+
+		&-empty {
+			margin: 0;
+			padding: 32px 20px;
+			text-align: center;
+			font-size: 13px;
+			color: wp-colors.$gray-600;
+		}
+	}
+
+	// "See more" / "See less" toggle under the row-capped top-pages table.
+	&__conversion-table-more {
+		align-self: flex-start;
+		padding: 4px 0;
+		background: transparent;
+		border: 0;
+		cursor: pointer;
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--wp-admin-theme-color);
+
+		&:hover {
+			text-decoration: underline;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--wp-admin-theme-color);
+			outline-offset: 2px;
+		}
+	}
+
+	// Empty-state row inside the top-pages table.
+	&__conversion-table-empty {
+		padding: 32px 20px;
+		text-align: center;
+		font-style: italic;
+		color: wp-colors.$gray-700;
+	}
+
+	// Sortable table affordances (Section 8.4). A tab-local copy of the Gates /
+	// Prompts sortable chrome. Numeric right-alignment (`__table-num`) and the
+	// muted em-dash (`__table-na`) come from the shared sections.scss chrome.
+	&__conversion-table--sortable {
+		.newspack-insights__conversion-table-sort-cell {
+			// Eliminate the th's default padding because the button inside owns
+			// the click target and re-paints the padding itself; without this,
+			// half the cell isn't clickable.
+			padding: 0;
+		}
+
+		.newspack-insights__conversion-table-sort {
+			// Button fills the cell so any click anywhere in the th sorts.
+			display: flex;
+			align-items: center;
+			gap: 4px;
+			width: 100%;
+			padding: 12px 20px;
+			background: transparent;
+			border: 0;
+			cursor: pointer;
+			text-align: inherit;
+			font: inherit;
+			color: inherit;
+			letter-spacing: inherit;
+			text-transform: inherit;
+
+			&:hover {
+				background-color: wp-colors.$gray-200;
+			}
+
+			&:focus-visible {
+				outline: 2px solid var(--wp-admin-theme-color);
+				outline-offset: -2px;
+			}
+		}
+
+		// Numeric columns are right-aligned (shared `__table-num`), so pin the
+		// indicator to the right edge.
+		.newspack-insights__table-num .newspack-insights__conversion-table-sort {
+			justify-content: flex-end;
+			text-align: right;
+		}
+
+		.newspack-insights__conversion-table-sort-label {
+			flex: 1 1 auto;
+		}
+
+		.newspack-insights__conversion-table-sort-indicator {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			opacity: 0.3;
+			color: wp-colors.$gray-700;
+		}
+
+		.newspack-insights__conversion-table-sort:hover .newspack-insights__conversion-table-sort-indicator {
+			opacity: 0.7;
+		}
+
+		.newspack-insights__conversion-table-sort.is-active .newspack-insights__conversion-table-sort-indicator {
+			opacity: 1;
+			color: wp-colors.$gray-900;
+		}
 	}
 }
