@@ -53,6 +53,14 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 	private $responses = [];
 
 	/**
+	 * Every ActiveCampaign action invoked through the mocked HTTP layer, in order.
+	 * Lets tests assert that a step was (or was not) attempted.
+	 *
+	 * @var string[]
+	 */
+	private $called_actions = [];
+
+	/**
 	 * Set up: configure credentials and intercept all outbound HTTP.
 	 */
 	public function set_up() {
@@ -61,6 +69,7 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 		$this->transport_error   = null;
 		$this->response_body     = [ 'result_code' => 1 ];
 		$this->responses         = [];
+		$this->called_actions    = [];
 		Newspack_Newsletters_Active_Campaign::instance()->set_api_credentials(
 			[
 				'url' => 'https://example.api-us1.com',
@@ -89,10 +98,11 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 	 */
 	public function mock_http( $preempt, $args, $url ) {
 		$this->captured_timeouts[] = $args['timeout'];
+		$action                    = $this->resolve_action( $args, $url );
+		$this->called_actions[]    = $action;
 
 		// Per-action overrides take precedence (used by the send() choreography test).
 		if ( ! empty( $this->responses ) ) {
-			$action = $this->resolve_action( $args, $url );
 			if ( array_key_exists( $action, $this->responses ) ) {
 				$canned = $this->responses[ $action ];
 				if ( is_wp_error( $canned ) ) {
@@ -269,57 +279,136 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The headline resilience guarantee. When a previously-created campaign is
-	 * stuck in ActiveCampaign — so the cleanup `campaign_list` call hangs and
-	 * times out — send() must NOT abort. It proceeds to create and dispatch a
-	 * fresh campaign, which is exactly what lets a publisher recover instead of
-	 * being stranded behind a campaign they were only trying to delete. The fresh
-	 * campaign id also overwrites the stuck one, so the failure self-clears.
+	 * Build a newsletter post wired up to send, carrying a stored campaign id from
+	 * a previous attempt.
+	 *
+	 * @param string $stored_campaign_id The ac_campaign_id left by a prior attempt.
+	 *
+	 * @return int Post ID.
 	 */
-	public function test_send_completes_despite_stuck_campaign_cleanup() {
-		$active_campaign = Newspack_Newsletters_Active_Campaign::instance();
-
+	private function create_sendable_post( $stored_campaign_id ) {
 		$post_id = self::factory()->post->create(
 			[
 				'post_title'  => 'Resilience Newsletter',
 				'post_status' => 'draft',
 			]
 		);
-		// A stuck campaign from a prior attempt that send() will try (and fail) to clean up.
-		update_post_meta( $post_id, 'ac_campaign_id', '999999' );
+		update_post_meta( $post_id, 'ac_campaign_id', (string) $stored_campaign_id );
 		update_post_meta( $post_id, 'senderName', 'Sender' );
 		update_post_meta( $post_id, 'senderEmail', 'sender@example.com' );
 		update_post_meta( $post_id, 'send_list_id', '5' );
 		update_post_meta( $post_id, Newspack_Newsletters::EMAIL_HTML_META, '<p>Hello</p>' );
+		return $post_id;
+	}
 
-		$timeout_error = new WP_Error(
-			'http_request_failed',
-			'cURL error 28: Operation timed out after 45002 milliseconds with 0 bytes received'
-		);
-		$this->responses = [
-			// Cleanup of the stuck campaign hangs — this is the failure being tolerated.
-			'campaign_list'   => $timeout_error,
-			// The fresh send chain succeeds.
+	/**
+	 * Canned responses for a successful fresh send chain (everything except the
+	 * `campaign_list` status check, which each test sets to drive the gate).
+	 *
+	 * @return array
+	 */
+	private function fresh_send_chain_responses() {
+		return [
 			'list_list'       => [ 'result_code' => 1, [ 'id' => 5, 'name' => 'Main', 'subscriber_count' => 10 ] ],
 			'v3:audiences'    => [ 'data' => [], 'meta' => [ 'page' => [ 'total' => 0 ] ] ],
 			'message_add'     => [ 'result_code' => 1, 'id' => 555 ],
 			'message_view'    => [ 'result_code' => 1, 'id' => 555, 'html' => '<p>Hello</p>' ],
 			'campaign_create' => [ 'result_code' => 1, 'id' => 777 ],
+			'campaign_delete' => [ 'result_code' => 1 ],
 			'campaign_status' => [ 'result_code' => 1 ],
 		];
+	}
+
+	/**
+	 * The headline safety guarantee. When a prior attempt's campaign can't be
+	 * reached (its status check times out), send() must NOT resend — it can't tell
+	 * whether that campaign already started dispatching, so it fails safe with a
+	 * publisher-facing notice instead of risking a duplicate send.
+	 */
+	public function test_send_fails_safe_when_prior_campaign_status_unverifiable() {
+		$active_campaign = Newspack_Newsletters_Active_Campaign::instance();
+		$post_id         = $this->create_sendable_post( '999999' );
+
+		$this->responses = array_merge(
+			$this->fresh_send_chain_responses(),
+			[
+				'campaign_list' => new WP_Error(
+					'http_request_failed',
+					'cURL error 28: Operation timed out after 45002 milliseconds with 0 bytes received'
+				),
+			]
+		);
 
 		$result = $active_campaign->send( get_post( $post_id ) );
 
-		$this->assertTrue( $result, 'send() must succeed even though cleanup of the stuck campaign timed out.' );
-		$this->assertSame(
-			'777',
-			(string) get_post_meta( $post_id, 'ac_campaign_id', true ),
-			'The fresh campaign id must replace the stuck one so the failure self-clears.'
+		$this->assertTrue( is_wp_error( $result ) );
+		$this->assertSame( 'newspack_newsletters_active_campaign_unverified_campaign', $result->get_error_code() );
+		$this->assertNotContains( 'campaign_create', $this->called_actions, 'A new campaign must not be created when the prior one is unverifiable.' );
+		$this->assertNotContains( 'campaign_status', $this->called_actions, 'No send must be triggered when the prior campaign is unverifiable.' );
+	}
+
+	/**
+	 * When the stored campaign is already scheduled/sending/sent, a prior attempt
+	 * already dispatched it (its response was just lost). send() must treat that as
+	 * success and NOT create or trigger another campaign — no double send.
+	 */
+	public function test_send_does_not_resend_already_dispatched_campaign() {
+		$active_campaign = Newspack_Newsletters_Active_Campaign::instance();
+		$post_id         = $this->create_sendable_post( '12345' );
+
+		$this->responses = array_merge(
+			$this->fresh_send_chain_responses(),
+			[ 'campaign_list' => [ 'result_code' => 1, [ 'id' => 12345, 'status' => '2' ] ] ] // 2 = sending.
 		);
-		$this->assertContains(
-			Newspack_Newsletters_Active_Campaign::CLEANUP_REQUEST_TIMEOUT,
-			$this->captured_timeouts,
-			'The cleanup that hung must have been attempted with the bounded timeout.'
+
+		$result = $active_campaign->send( get_post( $post_id ) );
+
+		$this->assertTrue( $result, 'An already-dispatched campaign must report success, not error.' );
+		$this->assertNotContains( 'campaign_create', $this->called_actions, 'A second campaign must not be created.' );
+		$this->assertNotContains( 'campaign_status', $this->called_actions, 'The send must not be triggered again.' );
+		$this->assertNotContains( 'campaign_delete', $this->called_actions, 'A dispatched campaign must not be deleted.' );
+	}
+
+	/**
+	 * A campaign in a paused/stopped (indeterminate, possibly partial) state must
+	 * not be auto-resent; send() surfaces a needs-review notice for a human.
+	 */
+	public function test_send_flags_for_review_when_campaign_paused_or_stopped() {
+		$active_campaign = Newspack_Newsletters_Active_Campaign::instance();
+		$post_id         = $this->create_sendable_post( '12345' );
+
+		$this->responses = array_merge(
+			$this->fresh_send_chain_responses(),
+			[ 'campaign_list' => [ 'result_code' => 1, [ 'id' => 12345, 'status' => '3' ] ] ] // 3 = paused.
 		);
+
+		$result = $active_campaign->send( get_post( $post_id ) );
+
+		$this->assertTrue( is_wp_error( $result ) );
+		$this->assertSame( 'newspack_newsletters_active_campaign_send_needs_review', $result->get_error_code() );
+		$this->assertNotContains( 'campaign_create', $this->called_actions );
+		$this->assertNotContains( 'campaign_status', $this->called_actions );
+	}
+
+	/**
+	 * When the stored campaign is confirmed a draft (never dispatched), send()
+	 * proceeds normally: it recreates and dispatches a fresh campaign and the new
+	 * id replaces the stored one.
+	 */
+	public function test_send_recreates_and_sends_when_prior_campaign_is_draft() {
+		$active_campaign = Newspack_Newsletters_Active_Campaign::instance();
+		$post_id         = $this->create_sendable_post( '12345' );
+
+		$this->responses = array_merge(
+			$this->fresh_send_chain_responses(),
+			[ 'campaign_list' => [ 'result_code' => 1, [ 'id' => 12345, 'status' => '0' ] ] ] // 0 = draft.
+		);
+
+		$result = $active_campaign->send( get_post( $post_id ) );
+
+		$this->assertTrue( $result, 'A draft prior campaign is safe to recreate and send.' );
+		$this->assertSame( '777', (string) get_post_meta( $post_id, 'ac_campaign_id', true ), 'The fresh campaign id replaces the stored draft.' );
+		$this->assertContains( 'campaign_create', $this->called_actions, 'A fresh campaign must be created.' );
+		$this->assertContains( 'campaign_status', $this->called_actions, 'The send must be triggered.' );
 	}
 }

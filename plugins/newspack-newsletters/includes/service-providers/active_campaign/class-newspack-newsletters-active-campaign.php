@@ -35,6 +35,16 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	const CLEANUP_REQUEST_TIMEOUT = 15;
 
 	/**
+	 * Dispatch states for a stored campaign, returned by
+	 * get_campaign_dispatch_state(): a confirmed fresh draft that is safe to
+	 * (re)send, a campaign that has already been dispatched and must never be
+	 * resent, or an indeterminate state that needs manual review before resending.
+	 */
+	const CAMPAIGN_DRAFT              = 'draft';
+	const CAMPAIGN_ALREADY_DISPATCHED = 'dispatched';
+	const CAMPAIGN_NEEDS_REVIEW       = 'needs_review';
+
+	/**
 	 * Provider name.
 	 *
 	 * @var string
@@ -1383,6 +1393,56 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	}
 
 	/**
+	 * Determine whether a stored campaign has already been dispatched, so send()
+	 * can avoid sending the same newsletter twice.
+	 *
+	 * A send attempt can time out *after* ActiveCampaign has begun dispatching the
+	 * campaign, so the campaign's own status — not the success of our last
+	 * request — is the source of truth for whether the newsletter already went
+	 * out. Only a confirmed draft is safe to recreate and (re)send.
+	 *
+	 * @param string $campaign_id The ActiveCampaign campaign ID.
+	 *
+	 * @return string|WP_Error One of the CAMPAIGN_* dispatch states, or a WP_Error
+	 *                         when the status could not be verified (a timeout),
+	 *                         in which case the caller must not resend.
+	 */
+	private function get_campaign_dispatch_state( $campaign_id ) {
+		$campaigns = $this->api_v1_request(
+			'campaign_list',
+			'GET',
+			[
+				'query'   => [ 'ids' => $campaign_id ],
+				'timeout' => self::CLEANUP_REQUEST_TIMEOUT,
+			]
+		);
+		if ( is_wp_error( $campaigns ) ) {
+			// A timeout means the campaign is unreachable and we cannot tell
+			// whether it already sent: fail safe and refuse to resend. Any other
+			// API error (e.g. the campaign no longer exists) leaves nothing to
+			// dispatch, so it is safe to recreate.
+			if ( 'newspack_newsletters_active_campaign_timeout' === $campaigns->get_error_code() ) {
+				return new \WP_Error(
+					'newspack_newsletters_active_campaign_unverified_campaign',
+					__( 'Newspack could not confirm with ActiveCampaign whether this newsletter had already started sending, so it was not resent (to avoid a duplicate). Please wait a few minutes and try again, or check the campaign status in ActiveCampaign.', 'newspack-newsletters' )
+				);
+			}
+			return self::CAMPAIGN_DRAFT;
+		}
+		$status = isset( $campaigns[0]['status'] ) ? (string) $campaigns[0]['status'] : '0';
+		switch ( $status ) {
+			case '0': // Draft: never dispatched.
+				return self::CAMPAIGN_DRAFT;
+			case '1': // Scheduled.
+			case '2': // Sending.
+			case '5': // Completed.
+				return self::CAMPAIGN_ALREADY_DISPATCHED;
+			default: // 3 = paused, 4 = stopped, or unknown: indeterminate / possibly partial.
+				return self::CAMPAIGN_NEEDS_REVIEW;
+		}
+	}
+
+	/**
 	 * Send a campaign.
 	 *
 	 * @param WP_Post $post Post to send.
@@ -1392,11 +1452,30 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	public function send( $post ) {
 		$post_id = $post->ID;
 
-		$error = null;
-
-		/** Clean up existing campaign. */
+		// A campaign created by a previous attempt may already have been
+		// dispatched even if that attempt ended in a timeout: ActiveCampaign can
+		// begin sending before the HTTP response returns. So before doing
+		// anything destructive, verify the stored campaign's state. Never delete,
+		// recreate, or re-trigger a campaign we cannot confirm is still a fresh
+		// draft, or the newsletter could go out twice.
 		$campaign_id = get_post_meta( $post_id, 'ac_campaign_id', true );
 		if ( $campaign_id ) {
+			$dispatch_state = $this->get_campaign_dispatch_state( $campaign_id );
+			if ( is_wp_error( $dispatch_state ) ) {
+				return $dispatch_state;
+			}
+			if ( self::CAMPAIGN_ALREADY_DISPATCHED === $dispatch_state ) {
+				// A prior attempt already started the send; its response was just
+				// lost. Treat as success so it is marked sent, not resent.
+				return true;
+			}
+			if ( self::CAMPAIGN_NEEDS_REVIEW === $dispatch_state ) {
+				return new \WP_Error(
+					'newspack_newsletters_active_campaign_send_needs_review',
+					__( "This newsletter's ActiveCampaign campaign is in an unexpected state (paused or stopped) and may have already partially sent. To avoid sending it twice, Newspack did not resend it. Please review the campaign in ActiveCampaign before trying again.", 'newspack-newsletters' )
+				);
+			}
+			// Confirmed draft: safe to clean up and recreate below.
 			$this->delete_campaign( $campaign_id, true );
 		}
 		/** Clean up existing test campaigns. */
