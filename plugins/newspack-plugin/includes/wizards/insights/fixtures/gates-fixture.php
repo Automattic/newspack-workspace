@@ -58,7 +58,12 @@ return function ( string $variant = 'populated' ): array {
 				'error_message'    => 'HTTP 500',
 			];
 		}
-		foreach ( [ 'conversion_funnel' => 'stages', 'exposures_distribution' => 'buckets', 'performance_by_gate' => 'rows' ] as $key => $rows_key ) {
+		$collections = [
+			'conversion_funnel'      => 'stages',
+			'exposures_distribution' => 'buckets',
+			'performance_by_gate'    => 'rows',
+		];
+		foreach ( $collections as $key => $rows_key ) {
 			$current[ $key ] = [
 				'state'         => 'error',
 				'error_code'    => 'bigquery_proxy_http_error',
