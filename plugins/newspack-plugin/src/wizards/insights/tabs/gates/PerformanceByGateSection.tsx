@@ -8,7 +8,7 @@
  *
  * Null cells (em-dash) always sort to the bottom regardless of
  * direction — a gate without a registration block has no Regwall
- * conversions to compare, so a "—" should never claim the top of
+ * conversion rate to compare, so a "—" should never claim the top of
  * an ascending sort.
  *
  * Phase 1 always renders the empty-state copy from spec since
@@ -31,6 +31,7 @@ import { Icon, chevronUp, chevronDown } from '@wordpress/icons';
  */
 import type { GatesPerformanceRow, GatesPerformanceTable } from '../../api/gates';
 import { formatNumber, formatPercent } from '../components/format';
+import { SECTION_ERROR_MESSAGE } from './SectionState';
 
 export interface PerformanceByGateSectionProps {
 	data: GatesPerformanceTable;
@@ -44,10 +45,10 @@ type SortKey =
 	| 'gate_name'
 	| 'impressions'
 	| 'unique_viewers'
-	| 'regwall_conversions'
+	| 'registrations'
 	| 'regwall_conversion_rate'
-	| 'paywall_conversions'
-	| 'paywall_conversion_rate';
+	| 'paywall_attempts'
+	| 'paywall_attempt_rate';
 
 type SortDir = 'asc' | 'desc';
 
@@ -63,7 +64,6 @@ const NotApplicable = () => (
 	</span>
 );
 
-const renderCount = ( v: number | null ) => ( v === null ? <NotApplicable /> : formatNumber( v ) );
 const renderPercent = ( v: number | null ) => ( v === null ? <NotApplicable /> : formatPercent( v ) );
 
 const renderRow = ( row: GatesPerformanceRow ) => (
@@ -71,10 +71,10 @@ const renderRow = ( row: GatesPerformanceRow ) => (
 		<td>{ row.gate_name }</td>
 		<td className="newspack-insights__table-num">{ formatNumber( row.impressions ) }</td>
 		<td className="newspack-insights__table-num">{ formatNumber( row.unique_viewers ) }</td>
-		<td className="newspack-insights__table-num">{ renderCount( row.regwall_conversions ) }</td>
+		<td className="newspack-insights__table-num">{ formatNumber( row.registrations ) }</td>
 		<td className="newspack-insights__table-num">{ renderPercent( row.regwall_conversion_rate ) }</td>
-		<td className="newspack-insights__table-num">{ renderCount( row.paywall_conversions ) }</td>
-		<td className="newspack-insights__table-num">{ renderPercent( row.paywall_conversion_rate ) }</td>
+		<td className="newspack-insights__table-num">{ formatNumber( row.paywall_attempts ) }</td>
+		<td className="newspack-insights__table-num">{ renderPercent( row.paywall_attempt_rate ) }</td>
 	</tr>
 );
 
@@ -144,10 +144,10 @@ const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => 
 		{ key: 'gate_name', label: __( 'Gate name', 'newspack-plugin' ), numeric: false },
 		{ key: 'impressions', label: __( 'Impressions', 'newspack-plugin' ), numeric: true },
 		{ key: 'unique_viewers', label: __( 'Unique viewers', 'newspack-plugin' ), numeric: true },
-		{ key: 'regwall_conversions', label: __( 'Regwall conversions', 'newspack-plugin' ), numeric: true },
+		{ key: 'registrations', label: __( 'Registrations', 'newspack-plugin' ), numeric: true },
 		{ key: 'regwall_conversion_rate', label: __( 'Regwall conversion rate', 'newspack-plugin' ), numeric: true },
-		{ key: 'paywall_conversions', label: __( 'Paywall conversions', 'newspack-plugin' ), numeric: true },
-		{ key: 'paywall_conversion_rate', label: __( 'Paywall conversion rate', 'newspack-plugin' ), numeric: true },
+		{ key: 'paywall_attempts', label: __( 'Paywall attempts', 'newspack-plugin' ), numeric: true },
+		{ key: 'paywall_attempt_rate', label: __( 'Paywall attempt rate', 'newspack-plugin' ), numeric: true },
 	];
 
 	const [ sortKey, setSortKey ] = useState< SortKey >( 'impressions' );
@@ -166,8 +166,6 @@ const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => 
 	};
 
 	const sortedRows = useMemo( () => [ ...data.rows ].sort( ( a, b ) => compareRows( a, b, sortKey, sortDir ) ), [ data.rows, sortKey, sortDir ] );
-
-	const isEmpty = sortedRows.length === 0;
 
 	return (
 		<section
@@ -190,7 +188,14 @@ const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => 
 						</tr>
 					</thead>
 					<tbody>
-						{ isEmpty ? (
+						{ 'error' === data.state && (
+							<tr>
+								<td colSpan={ columns.length } className="newspack-insights__gates-performance-empty">
+									{ SECTION_ERROR_MESSAGE }
+								</td>
+							</tr>
+						) }
+						{ 'empty' === data.state && (
 							<tr>
 								<td colSpan={ columns.length } className="newspack-insights__gates-performance-empty">
 									{ __(
@@ -199,9 +204,8 @@ const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => 
 									) }
 								</td>
 							</tr>
-						) : (
-							sortedRows.map( renderRow )
 						) }
+						{ 'populated' === data.state && sortedRows.map( renderRow ) }
 					</tbody>
 				</table>
 			</div>

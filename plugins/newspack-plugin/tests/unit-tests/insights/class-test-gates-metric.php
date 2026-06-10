@@ -62,7 +62,7 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$result = $metric->$method( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
 		$this->assertSame( $expected_value, $result['value'] );
-		$this->assertFalse( $result['pending'] );
+		$this->assertSame( 'populated', $result['state'] );
 		$this->assertTrue( $result['computable'] );
 		$this->assertSame( $placeholder_type, $result['placeholder_type'] );
 	}
@@ -84,20 +84,22 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Scorecards fall back to placeholder on proxy error.
+	 * Scorecards report state 'error' (with the proxy error code) on proxy error.
 	 *
 	 * @dataProvider provide_scorecard_method_names
 	 * @param string $method Method on Gates_Metric to call.
 	 */
-	public function test_scorecard_falls_back_to_placeholder_on_error( string $method ) {
+	public function test_scorecard_returns_error_state_on_proxy_error( string $method ) {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )->willReturn( new \WP_Error( 'bigquery_query_failed', 'BQ down' ) );
 
 		$metric = new Gates_Metric( $proxy );
 		$result = $metric->$method( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertTrue( $result['pending'] );
+		$this->assertSame( 'error', $result['state'] );
 		$this->assertFalse( $result['computable'] );
+		$this->assertSame( 'bigquery_query_failed', $result['error_code'] );
+		$this->assertSame( 'BQ down', $result['error_message'] );
 	}
 
 	/**
@@ -117,16 +119,18 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Section 1 scorecards fall back to placeholder on empty rows.
+	 * A successful but empty scalar query is a non-computable zero, not an error.
 	 */
-	public function test_section_1_falls_back_on_empty_rows() {
+	public function test_section_1_empty_rows_is_noncomputable_zero() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )->willReturn( [] );
 
 		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_total_gate_impressions( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertTrue( $result['pending'] );
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertSame( 0, $result['value'] );
 	}
 
 	/**
@@ -142,8 +146,10 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_total_gate_impressions( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertTrue( $result['pending'] );
+		// Malformed data is a quality bug, not an empty window → error state.
+		$this->assertSame( 'error', $result['state'] );
 		$this->assertFalse( $result['computable'] );
+		$this->assertSame( 'bigquery_proxy_malformed_value', $result['error_code'] );
 	}
 
 	/**
@@ -160,7 +166,9 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_total_gate_impressions( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertTrue( $result['pending'] );
+		// A non-integer count signals catalog drift → error state, not a zero.
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_value', $result['error_code'] );
 	}
 
 	/**
@@ -203,12 +211,12 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
 		$this->assertSame( 0.25, $result['value'] );
-		$this->assertFalse( $result['pending'] );
+		$this->assertSame( 'populated', $result['state'] );
 		$this->assertSame( 4, $result['denominator'] );
 	}
 
 	/**
-	 * Paywall direct conversion rate: zero denominator -> placeholder.
+	 * Paywall direct conversion rate: no attempts -> non-computable 0% (not error).
 	 */
 	public function test_paywall_conversion_direct_with_zero_denominator() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
@@ -217,7 +225,8 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_paywall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertTrue( $result['pending'] );
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
 	}
 
 	/**
@@ -242,7 +251,7 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$result = $metric->get_total_paywall_revenue_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
 		$this->assertSame( 99.99, $result['value'] );
-		$this->assertFalse( $result['pending'] );
+		$this->assertSame( 'populated', $result['state'] );
 	}
 
 	/**
@@ -273,11 +282,11 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$result = $metric->get_avg_revenue_per_paywall_conversion( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
 		$this->assertSame( 100.0, $result['value'] );
-		$this->assertFalse( $result['pending'] );
+		$this->assertSame( 'populated', $result['state'] );
 	}
 
 	/**
-	 * Avg revenue per conversion: zero conversions -> placeholder, not divide-by-zero.
+	 * Avg revenue per conversion: zero conversions -> non-computable $0.00, not divide-by-zero.
 	 */
 	public function test_avg_revenue_per_paywall_conversion_with_zero_conversions() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
@@ -286,7 +295,8 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_avg_revenue_per_paywall_conversion( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertTrue( $result['pending'] );
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
 	}
 
 	/**
@@ -320,7 +330,8 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$metric = new Gates_Metric( $proxy, $resolver );
 		$result = $metric->get_avg_revenue_per_paywall_conversion( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertTrue( $result['pending'] );
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
 	}
 
 	/**
@@ -383,7 +394,7 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_conversion_funnel( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertFalse( $result['pending'] );
+		$this->assertSame( 'populated', $result['state'] );
 		$this->assertCount( 3, $result['stages'] );
 		$this->assertSame( 1000, $result['stages'][0]['count'] );
 		$this->assertSame( 200, $result['stages'][1]['count'] );
@@ -394,17 +405,32 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Funnel falls back on error.
+	 * Funnel reports state 'error' (with error code) and no stages on proxy error.
 	 */
-	public function test_funnel_falls_back_on_error() {
+	public function test_funnel_returns_error_state_on_proxy_error() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )->willReturn( new \WP_Error( 'bigquery_query_failed', 'BQ down' ) );
 
 		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_conversion_funnel( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertTrue( $result['pending'] );
-		$this->assertCount( 3, $result['stages'] );
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_query_failed', $result['error_code'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	/**
+	 * Funnel reports state 'empty' (no stages) when the query returns no rows.
+	 */
+	public function test_funnel_returns_empty_state_on_no_rows() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( [] );
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_conversion_funnel( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'empty', $result['state'] );
+		$this->assertSame( [], $result['stages'] );
 	}
 
 	/**
@@ -441,7 +467,7 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_exposures_distribution( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertFalse( $result['pending'] );
+		$this->assertSame( 'populated', $result['state'] );
 		$this->assertCount( 4, $result['buckets'] );
 		$this->assertSame( 50, $result['buckets'][0]['count'] );
 		$this->assertSame( 5, $result['buckets'][3]['count'] );
@@ -523,28 +549,68 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_performance_by_gate( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertFalse( $result['pending'] );
+		$this->assertSame( 'populated', $result['state'] );
 		$this->assertCount( 2, $result['rows'] );
+
+		// Lock the canonical row-key contract the React layer consumes
+		// (`GatesPerformanceRow` in src/wizards/insights/api/gates.ts). These keys
+		// mirror the `gates_performance_by_gate` catalog columns one-for-one; a
+		// rename on either side silently blanks the table, so assert the exact set.
+		$this->assertSame(
+			[
+				'gate_post_id',
+				'gate_name',
+				'impressions',
+				'unique_viewers',
+				'registrations',
+				'regwall_conversion_rate',
+				'paywall_attempts',
+				'paywall_attempt_rate',
+			],
+			array_keys( $result['rows'][0] )
+		);
 
 		$this->assertSame( 'Welcome paywall', $result['rows'][0]['gate_name'] );
 		$this->assertSame( 5000, $result['rows'][0]['impressions'] );
+		$this->assertSame( 1200, $result['rows'][0]['unique_viewers'] );
+		$this->assertSame( 0, $result['rows'][0]['registrations'] );
 		$this->assertNull( $result['rows'][0]['regwall_conversion_rate'] );
+		$this->assertSame( 80, $result['rows'][0]['paywall_attempts'] );
+		$this->assertSame( 0.04, $result['rows'][0]['paywall_attempt_rate'] );
 
 		$this->assertSame( 'Member regwall', $result['rows'][1]['gate_name'] );
+		$this->assertSame( 150, $result['rows'][1]['registrations'] );
+		$this->assertSame( 0.07, $result['rows'][1]['regwall_conversion_rate'] );
+		$this->assertSame( 0, $result['rows'][1]['paywall_attempts'] );
 		$this->assertNull( $result['rows'][1]['paywall_attempt_rate'] );
 	}
 
 	/**
-	 * Performance by gate: falls back when proxy errors.
+	 * Performance by gate: state 'error' (with error code) and no rows on proxy error.
 	 */
-	public function test_performance_by_gate_falls_back_on_error() {
+	public function test_performance_by_gate_returns_error_state_on_proxy_error() {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )->willReturn( new \WP_Error( 'bigquery_query_failed', 'BQ down' ) );
 
 		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_performance_by_gate( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertTrue( $result['pending'] );
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_query_failed', $result['error_code'] );
+		$this->assertSame( [], $result['rows'] );
+	}
+
+	/**
+	 * Performance by gate: state 'empty' (no rows) when the query returns no rows.
+	 */
+	public function test_performance_by_gate_returns_empty_state_on_no_rows() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( [] );
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_performance_by_gate( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'empty', $result['state'] );
 		$this->assertSame( [], $result['rows'] );
 	}
 

@@ -259,18 +259,22 @@
 			border-bottom: 0;
 		}
 
-		&-num {
+		// Right-align numeric cells AND their headers. Qualified with td/th so it
+		// beats the base `th, td { text-align: left }` rule (equal specificity,
+		// later source order) — without the qualifier the bare `-num` class loses
+		// and numbers render left-aligned.
+		td#{&}-num,
+		th#{&}-num {
 			text-align: right;
 			font-variant-numeric: tabular-nums;
 		}
 
-		// Em-dash for cells where the column doesn't apply to the row
-		// (one-time products can't have recurring donors / recurring
-		// revenue; recurring products can't have one-time gifts).
-		// Visually subordinate — gray-700, matching the body-text color
-		// — to read as "not applicable" rather than "data missing."
+		// Em-dash for cells where the column doesn't apply to the row (e.g. a
+		// regwall has no paywall attempts). Muted (gray-600) so it reads as "not
+		// applicable" and is distinct from a real, default-colored zero — a zero
+		// is a tracked data point; an em-dash is "this metric doesn't apply here."
 		&-na {
-			color: wp-colors.$gray-700;
+			color: wp-colors.$gray-600;
 		}
 
 		// Nested variation/child rows sit directly under their parent.
