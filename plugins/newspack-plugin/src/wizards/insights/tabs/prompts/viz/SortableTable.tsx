@@ -64,7 +64,7 @@ function SortableHeader< Row >( { column, activeKey, activeDir, onSort }: Sortab
 	const isActive = column.key === activeKey;
 	const ariaSort = ariaSortFor( isActive, activeDir );
 	const className = column.numeric
-		? 'newspack-insights__prompts-table-num newspack-insights__prompts-table-sort-cell'
+		? 'newspack-insights__table-num newspack-insights__prompts-table-sort-cell'
 		: 'newspack-insights__prompts-table-sort-cell';
 	return (
 		<th scope="col" className={ className } aria-sort={ ariaSort }>
@@ -152,7 +152,7 @@ function SortableTable< Row >( { columns, rows, getRowKey, defaultSortKey, empty
 						sortedRows.map( row => (
 							<tr key={ getRowKey( row ) }>
 								{ columns.map( col => (
-									<td key={ col.key } className={ col.numeric ? 'newspack-insights__prompts-table-num' : undefined }>
+									<td key={ col.key } className={ col.numeric ? 'newspack-insights__table-num' : undefined }>
 										{ col.render( row ) }
 									</td>
 								) ) }
@@ -167,7 +167,7 @@ function SortableTable< Row >( { columns, rows, getRowKey, defaultSortKey, empty
 
 /** Renders an em-dash for non-applicable numeric cells, distinct from a real zero. */
 export const NotApplicable = () => (
-	<span className="newspack-insights__prompts-table-na" aria-label={ __( 'Not applicable', 'newspack-plugin' ) }>
+	<span className="newspack-insights__table-na" aria-label={ __( 'Not applicable', 'newspack-plugin' ) }>
 		—
 	</span>
 );

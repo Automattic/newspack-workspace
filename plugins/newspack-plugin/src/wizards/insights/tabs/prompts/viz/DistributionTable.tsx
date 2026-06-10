@@ -33,10 +33,10 @@ const DistributionTable = ( { data }: DistributionTableProps ) => (
 				<thead>
 					<tr>
 						<th scope="col">{ __( 'Exposures before conversion', 'newspack-plugin' ) }</th>
-						<th scope="col" className="newspack-insights__prompts-table-num">
+						<th scope="col" className="newspack-insights__table-num">
 							{ __( 'Converters', 'newspack-plugin' ) }
 						</th>
-						<th scope="col" className="newspack-insights__prompts-table-num">
+						<th scope="col" className="newspack-insights__table-num">
 							{ __( '% of total', 'newspack-plugin' ) }
 						</th>
 					</tr>
@@ -45,8 +45,8 @@ const DistributionTable = ( { data }: DistributionTableProps ) => (
 					{ data.buckets.map( bucket => (
 						<tr key={ bucket.label }>
 							<td>{ bucket.label }</td>
-							<td className="newspack-insights__prompts-table-num">{ formatNumber( bucket.count ) }</td>
-							<td className="newspack-insights__prompts-table-num">{ formatPercent( bucket.pct ) }</td>
+							<td className="newspack-insights__table-num">{ formatNumber( bucket.count ) }</td>
+							<td className="newspack-insights__table-num">{ formatPercent( bucket.pct ) }</td>
 						</tr>
 					) ) }
 				</tbody>

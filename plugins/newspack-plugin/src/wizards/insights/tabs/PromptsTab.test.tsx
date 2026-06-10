@@ -134,13 +134,16 @@ describe( 'PromptsTab', () => {
 		expect( screen.getByText( 'Donation Revenue (Direct)' ) ).toBeInTheDocument(); // currency
 	} );
 
-	it( 'renders the funnel three stages and the distribution four buckets at zero', () => {
+	it( 'renders the funnel empty state and the distribution four buckets when all-zero', () => {
 		mockSuccess();
 		render( <PromptsTab range={ range } previousRange={ null } /> );
 
-		expect( screen.getByText( 'Impression' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Engagement' ) ).toBeInTheDocument();
-		// "Conversion" is also a funnel stage; the distribution buckets each render once.
+		// Phase 1 funnel data is all-zero; the SVG funnel needs a non-zero top step
+		// to chart proportions, so it shows its empty-state copy (matching Gates).
+		expect( screen.getByText( 'Not enough data to chart the funnel.' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Impression' ) ).not.toBeInTheDocument();
+
+		// The distribution still renders its four buckets at 0 / 0%.
 		expect( screen.getByText( '1 exposure' ) ).toBeInTheDocument();
 		expect( screen.getByText( '2 exposures' ) ).toBeInTheDocument();
 		expect( screen.getByText( '3–5 exposures' ) ).toBeInTheDocument();

@@ -37,7 +37,7 @@ const HowReadersConvertSection = ( { current }: HowReadersConvertSectionProps ) 
 		</p>
 		<div className="newspack-insights__prompts-convert-grid">
 			<div className="newspack-insights__prompts-convert-col">
-				<Funnel data={ current.conversion_funnel } />
+				<Funnel stages={ current.conversion_funnel.stages } />
 			</div>
 			<div className="newspack-insights__prompts-convert-col">
 				<DistributionTable data={ current.exposures_distribution } />
