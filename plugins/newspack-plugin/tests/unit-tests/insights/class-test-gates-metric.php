@@ -549,11 +549,36 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'populated', $result['state'] );
 		$this->assertCount( 2, $result['rows'] );
 
+		// Lock the canonical row-key contract the React layer consumes
+		// (`GatesPerformanceRow` in src/wizards/insights/api/gates.ts). These keys
+		// mirror the `gates_performance_by_gate` catalog columns one-for-one; a
+		// rename on either side silently blanks the table, so assert the exact set.
+		$this->assertSame(
+			[
+				'gate_post_id',
+				'gate_name',
+				'impressions',
+				'unique_viewers',
+				'registrations',
+				'regwall_conversion_rate',
+				'paywall_attempts',
+				'paywall_attempt_rate',
+			],
+			array_keys( $result['rows'][0] )
+		);
+
 		$this->assertSame( 'Welcome paywall', $result['rows'][0]['gate_name'] );
 		$this->assertSame( 5000, $result['rows'][0]['impressions'] );
+		$this->assertSame( 1200, $result['rows'][0]['unique_viewers'] );
+		$this->assertSame( 0, $result['rows'][0]['registrations'] );
 		$this->assertNull( $result['rows'][0]['regwall_conversion_rate'] );
+		$this->assertSame( 80, $result['rows'][0]['paywall_attempts'] );
+		$this->assertSame( 0.04, $result['rows'][0]['paywall_attempt_rate'] );
 
 		$this->assertSame( 'Member regwall', $result['rows'][1]['gate_name'] );
+		$this->assertSame( 150, $result['rows'][1]['registrations'] );
+		$this->assertSame( 0.07, $result['rows'][1]['regwall_conversion_rate'] );
+		$this->assertSame( 0, $result['rows'][1]['paywall_attempts'] );
 		$this->assertNull( $result['rows'][1]['paywall_attempt_rate'] );
 	}
 

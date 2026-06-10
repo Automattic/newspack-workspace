@@ -74,10 +74,10 @@ export interface GatesPerformanceRow {
 	gate_name: string;
 	impressions: number;
 	unique_viewers: number;
-	regwall_conversions: number | null;
+	registrations: number;
 	regwall_conversion_rate: number | null;
-	paywall_conversions: number | null;
-	paywall_conversion_rate: number | null;
+	paywall_attempts: number;
+	paywall_attempt_rate: number | null;
 }
 
 export interface GatesPerformanceTable extends GatesErrorFields {
