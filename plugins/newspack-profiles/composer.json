@@ -1,0 +1,31 @@
+{
+	"name": "newspack/newspack-profiles",
+	"type": "wordpress-plugin",
+	"license": "GPL-2.0-or-later",
+	"autoload": {
+		"classmap": [
+			"includes"
+		]
+	},
+	"authors": [
+		{
+			"name": "Newspack"
+		}
+	],
+	"scripts": {
+		"lint:php": "phpcs",
+		"lint:php:fix": "phpcbf",
+		"pot": "wp i18n make-pot ./ ./languages/newspack-profiles.pot --exclude=node_modules,vendor,build --domain=newspack-profiles"
+	},
+	"require-dev": {
+		"wp-coding-standards/wpcs": "^3.3",
+		"automattic/vipwpcs": "^3.0",
+		"phpcompatibility/phpcompatibility-wp": "^2.1",
+		"wp-cli/i18n-command": "^2.6"
+	},
+	"config": {
+		"allow-plugins": {
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		}
+	}
+}

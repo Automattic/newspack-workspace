@@ -1,0 +1,10 @@
+# Ignore system files
+.DS_Store
+
+# Ignore dependencies directories
+/vendor/
+/node_modules/
+
+# Ignore build directory
+/dist/
+release/
