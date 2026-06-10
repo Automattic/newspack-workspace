@@ -21,7 +21,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { useMemo, useState } from '@wordpress/element';
 import { Icon, chevronUp, chevronDown } from '@wordpress/icons';
 
@@ -44,6 +44,12 @@ export interface SortableTableProps< Row > {
 	getRowKey: ( row: Row ) => string | number;
 	defaultSortKey: string;
 	emptyMessage: string;
+	/**
+	 * When set and the table has more rows than this, only the first N (by the
+	 * active sort) render, with a "See more" toggle that reveals the rest. The
+	 * cap is applied after sorting, so collapsing always shows the current top N.
+	 */
+	initialRowLimit?: number;
 }
 
 const ariaSortFor = ( isActive: boolean, activeDir: SortDir ): 'ascending' | 'descending' | 'none' => {
@@ -82,12 +88,13 @@ function SortableHeader< Row >( { column, activeKey, activeDir, onSort }: Sortab
 	);
 }
 
-function SortableTable< Row >( { columns, rows, getRowKey, defaultSortKey, emptyMessage }: SortableTableProps< Row > ) {
+function SortableTable< Row >( { columns, rows, getRowKey, defaultSortKey, emptyMessage, initialRowLimit }: SortableTableProps< Row > ) {
 	const [ sortKey, setSortKey ] = useState< string >( defaultSortKey );
 	const [ sortDir, setSortDir ] = useState< SortDir >( () => {
 		const def = columns.find( c => c.key === defaultSortKey );
 		return def?.numeric ? 'desc' : 'asc';
 	} );
+	const [ expanded, setExpanded ] = useState( false );
 
 	const handleSort = ( key: string ) => {
 		if ( key === sortKey ) {
@@ -131,37 +138,62 @@ function SortableTable< Row >( { columns, rows, getRowKey, defaultSortKey, empty
 
 	const isEmpty = sortedRows.length === 0;
 
+	// Row cap + "See more" toggle (only when a limit is set and exceeded). The
+	// cap is applied to the already-sorted rows, so collapsing shows the current
+	// top N; the toggle persists across re-sorts.
+	const isCollapsible = typeof initialRowLimit === 'number' && sortedRows.length > initialRowLimit;
+	const visibleRows = isCollapsible && ! expanded ? sortedRows.slice( 0, initialRowLimit ) : sortedRows;
+	const hiddenCount = sortedRows.length - ( initialRowLimit ?? 0 );
+
 	return (
-		<div className="newspack-insights__table-wrap">
-			<table className="newspack-insights__table newspack-insights__prompts-table--sortable">
-				<thead>
-					<tr>
-						{ columns.map( col => (
-							<SortableHeader key={ col.key } column={ col } activeKey={ sortKey } activeDir={ sortDir } onSort={ handleSort } />
-						) ) }
-					</tr>
-				</thead>
-				<tbody>
-					{ isEmpty ? (
+		<>
+			<div className="newspack-insights__table-wrap">
+				<table className="newspack-insights__table newspack-insights__prompts-table--sortable">
+					<thead>
 						<tr>
-							<td colSpan={ columns.length } className="newspack-insights__prompts-performance-empty">
-								{ emptyMessage }
-							</td>
+							{ columns.map( col => (
+								<SortableHeader key={ col.key } column={ col } activeKey={ sortKey } activeDir={ sortDir } onSort={ handleSort } />
+							) ) }
 						</tr>
-					) : (
-						sortedRows.map( row => (
-							<tr key={ getRowKey( row ) }>
-								{ columns.map( col => (
-									<td key={ col.key } className={ col.numeric ? 'newspack-insights__table-num' : undefined }>
-										{ col.render( row ) }
-									</td>
-								) ) }
+					</thead>
+					<tbody>
+						{ isEmpty ? (
+							<tr>
+								<td colSpan={ columns.length } className="newspack-insights__prompts-performance-empty">
+									{ emptyMessage }
+								</td>
 							</tr>
-						) )
-					) }
-				</tbody>
-			</table>
-		</div>
+						) : (
+							visibleRows.map( row => (
+								<tr key={ getRowKey( row ) }>
+									{ columns.map( col => (
+										<td key={ col.key } className={ col.numeric ? 'newspack-insights__table-num' : undefined }>
+											{ col.render( row ) }
+										</td>
+									) ) }
+								</tr>
+							) )
+						) }
+					</tbody>
+				</table>
+			</div>
+			{ isCollapsible && (
+				<button
+					type="button"
+					className="newspack-insights__prompts-table-more"
+					aria-expanded={ expanded }
+					onClick={ () => setExpanded( prev => ! prev ) }
+				>
+					{ expanded
+						? __( 'See less', 'newspack-plugin' )
+						: sprintf(
+								/* translators: %d: number of additional rows revealed by expanding the table. */
+								__( 'See more (%d)', 'newspack-plugin' ),
+								hiddenCount
+						  ) }
+				</button>
+			) }
+		</>
 	);
 }
 

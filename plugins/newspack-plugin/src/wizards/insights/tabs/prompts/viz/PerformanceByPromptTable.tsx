@@ -108,6 +108,7 @@ const PerformanceByPromptTable = ( { data }: PerformanceByPromptTableProps ) => 
 			rows={ data.rows }
 			getRowKey={ row => row.newspack_popup_id }
 			defaultSortKey="impressions"
+			initialRowLimit={ 10 }
 			emptyMessage={ __(
 				'No prompt data yet. Performance metrics will appear once readers begin interacting with your prompts.',
 				'newspack-plugin'
@@ -115,7 +116,7 @@ const PerformanceByPromptTable = ( { data }: PerformanceByPromptTableProps ) => 
 		/>
 		<p className="newspack-insights__prompts-subsection-note">
 			{ __(
-				'Showing top 50 prompts by impressions. If you have more than 50 active prompts, lower-traffic prompts may not appear.',
+				'Showing the top 10 prompts by the sorted column; use “See more” to reveal the rest. Capped at the top 50 prompts by impressions — lower-traffic prompts beyond that may not appear.',
 				'newspack-plugin'
 			) }
 		</p>

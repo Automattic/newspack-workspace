@@ -264,6 +264,27 @@
 		}
 	}
 
+	// "See more" / "See less" toggle under a row-capped breakdown table.
+	&__prompts-table-more {
+		align-self: flex-start;
+		padding: 4px 0;
+		background: transparent;
+		border: 0;
+		cursor: pointer;
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--wp-admin-theme-color);
+
+		&:hover {
+			text-decoration: underline;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var(--wp-admin-theme-color);
+			outline-offset: 2px;
+		}
+	}
+
 	// Empty state row inside a Performance breakdown table.
 	&__prompts-performance-empty {
 		padding: 32px 20px;
