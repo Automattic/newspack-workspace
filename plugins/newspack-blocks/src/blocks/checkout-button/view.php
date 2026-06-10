@@ -43,7 +43,12 @@ function render_callback( $attributes ) {
 	if ( $attributes['is_variable'] && ! empty( $attributes['variation'] ) ) {
 		$product_id = $attributes['variation'];
 	}
-	\Newspack_Blocks\Modal_Checkout::enqueue_modal( $product_id );
+	// Register the parent for variable buttons so the picker is rendered.
+	// The form still carries any locked variation for direct clicks.
+	$modal_product_id = ! empty( $attributes['is_variable'] ) && ! empty( $attributes['product'] )
+		? $attributes['product']
+		: $product_id;
+	\Newspack_Blocks\Modal_Checkout::enqueue_modal( $modal_product_id );
 	\Newspack_Blocks::enqueue_view_assets( 'checkout-button' );
 
 	$background_color           = $attributes['backgroundColor'] ?? '';

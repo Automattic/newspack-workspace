@@ -88,23 +88,17 @@ final class Client {
 		$requested = self::extract_custom_dimensions( $body );
 		if ( ! empty( $requested ) ) {
 			$registered = self::get_registered_parameter_names_cached( $property_id );
-			// Only block on a definitive answer. If the registered list can't be
-			// resolved (WP_Error), fall through and let the Data API respond — a
-			// genuinely missing dimension surfaces as an API error rather than
-			// silently suppressing the metric.
-			if ( ! is_wp_error( $registered ) ) {
-				$missing = array_values( array_diff( $requested, $registered ) );
-				if ( ! empty( $missing ) ) {
-					return new \WP_Error(
-						'custom_dimension_missing',
-						sprintf(
-							/* translators: %s: comma-separated list of GA4 custom dimension parameter names. */
-							__( 'GA4 custom dimension(s) not registered on this property: %s', 'newspack-plugin' ),
-							implode( ', ', $missing )
-						),
-						[ 'dimensions' => $missing ]
-					);
-				}
+			$missing    = self::missing_registered_dimensions( $requested, $registered );
+			if ( ! empty( $missing ) ) {
+				return new \WP_Error(
+					'custom_dimension_missing',
+					sprintf(
+						/* translators: %s: comma-separated list of GA4 custom dimension parameter names. */
+						__( 'GA4 custom dimension(s) not registered on this property: %s', 'newspack-plugin' ),
+						implode( ', ', $missing )
+					),
+					[ 'dimensions' => $missing ]
+				);
 			}
 		}
 
@@ -159,6 +153,27 @@ final class Client {
 			$results[ $key ] = self::run_report( $property_id, $body );
 		}
 		return $results;
+	}
+
+	/**
+	 * Which requested custom-dimension parameter names are definitively NOT
+	 * registered on the property.
+	 *
+	 * Only a non-empty, non-error registered set is treated as authoritative.
+	 * A `WP_Error` (lookup failed) OR an empty array (e.g. a freshly connected
+	 * property whose async dimension provisioning has not run yet) is
+	 * indeterminate — we return no "missing" entries and let the Data API
+	 * respond, rather than blocking the metric on a transient state.
+	 *
+	 * @param string[]           $requested  Requested parameter names.
+	 * @param string[]|\WP_Error $registered Registered names, or a WP_Error.
+	 * @return string[] Definitely-missing parameter names ([] if indeterminate).
+	 */
+	private static function missing_registered_dimensions( array $requested, $registered ): array {
+		if ( is_wp_error( $registered ) || ! is_array( $registered ) || empty( $registered ) ) {
+			return [];
+		}
+		return array_values( array_diff( $requested, $registered ) );
 	}
 
 	/**

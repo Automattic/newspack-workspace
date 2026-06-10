@@ -44,6 +44,10 @@ class WooCommerce_Connection {
 		include_once __DIR__ . '/class-woocommerce-custom-currency-symbol.php';
 
 		\add_action( 'admin_init', [ __CLASS__, 'disable_woocommerce_setup' ] );
+		// Newspack configures WooCommerce itself; suppress WC's first-run setup-wizard
+		// redirect (runs before WC's admin_redirects at the default priority of 10).
+		\add_action( 'admin_init', [ __CLASS__, 'prevent_setup_wizard_redirect' ], 1 );
+		\add_filter( 'woocommerce_prevent_automatic_wizard_redirect', '__return_true' );
 		\add_action( 'wp_loaded', [ __CLASS__, 'disable_legacy_form_checkout' ], 1 );
 		\add_filter( 'option_woocommerce_subscriptions_allow_switching', [ __CLASS__, 'force_allow_subscription_switching' ], 10, 2 );
 		\add_filter( 'option_woocommerce_subscriptions_allow_switching_nyp_price', [ __CLASS__, 'force_allow_subscription_switching' ], 10, 2 );
@@ -106,6 +110,22 @@ class WooCommerce_Connection {
 			if ( $task_list ) {
 				$task_list->hide();
 			}
+		}
+	}
+
+	/**
+	 * Prevent WooCommerce from redirecting to its setup wizard after activation.
+	 *
+	 * WC sets the `_wc_activation_redirect` transient on activation and consumes it on
+	 * the next admin page load to redirect to the onboarding/setup wizard. Newspack
+	 * installs and configures WooCommerce as part of Audience Management setup, so this
+	 * redirect would yank the admin out of the Newspack flow. Clearing the transient
+	 * (the common trigger across WC versions) suppresses the redirect; the wizard is
+	 * still reachable manually.
+	 */
+	public static function prevent_setup_wizard_redirect() {
+		if ( \get_transient( '_wc_activation_redirect' ) ) {
+			\delete_transient( '_wc_activation_redirect' );
 		}
 	}
 
