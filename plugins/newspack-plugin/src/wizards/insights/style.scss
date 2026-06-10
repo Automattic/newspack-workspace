@@ -229,4 +229,24 @@
 		color: wp-colors.$gray-600;
 		margin: 0;
 	}
+
+	&__last-updated-wrap {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+
+		.newspack-insights__last-updated {
+			font-size: 11px;
+			color: wp-colors.$gray-600;
+			white-space: nowrap;
+		}
+	}
+
+	&__refresh-menu .components-dropdown-menu__toggle {
+		padding: 0 4px;
+	}
+
+	&__cooldown-notice {
+		margin: 0 0 16px;
+	}
 }
