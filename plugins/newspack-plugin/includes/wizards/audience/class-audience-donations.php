@@ -48,8 +48,15 @@ class Audience_Donations extends Wizard {
 
 	/**
 	 * Add Donations page.
+	 *
+	 * The Donations wizard manages Newspack-platform (WooCommerce-backed) donations.
+	 * Other platforms (NRH, "other") are configured elsewhere, so the submenu entry
+	 * is hidden unless the reader revenue platform is Newspack.
 	 */
 	public function add_page() {
+		if ( ! Donations::is_platform_wc() ) {
+			return;
+		}
 		add_submenu_page(
 			$this->parent_slug,
 			$this->get_name(),
@@ -167,11 +174,17 @@ class Audience_Donations extends Wizard {
 	public function fetch_all_data() {
 		$platform = Donations::get_platform_slug();
 
+		// get_donation_settings() returns a WP_Error when the WooCommerce suite isn't
+		// fully active (e.g. platform is 'wc' but Subscriptions is missing). Surface an
+		// empty array in that case so the response doesn't carry a serialized WP_Error;
+		// missing plugins are reported separately via plugin_status below.
+		$donation_settings = Donations::get_donation_settings();
+
 		$args = [
 			'platform_data'      => [
 				'platform' => $platform,
 			],
-			'donation_data'      => Donations::get_donation_settings(),
+			'donation_data'      => is_wp_error( $donation_settings ) ? [] : $donation_settings,
 			'donation_page'      => Donations::get_donation_page_info(),
 			'product_validation' => $this->validate_donation_products(),
 		];

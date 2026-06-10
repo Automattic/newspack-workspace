@@ -138,6 +138,15 @@ final class Ad_Unit_Block {
 		if ( strpos( $classes, 'aligncenter' ) == true ) {
 			$align = 'center';
 		}
+		$styles = array( sprintf( 'text-align:%s', $align ) );
+		if ( 'sticky' === ( $attrs['style']['position']['type'] ?? '' ) ) {
+			$sticky_top = $attrs['style']['position']['top'] ?? null;
+			if ( null !== $sticky_top ) {
+				$styles[] = sprintf( '--wp--style--position-sticky-top:%s', $sticky_top );
+			}
+		}
+		// Sanitize the inline style so user-supplied attribute values can't inject arbitrary CSS declarations.
+		$style_attr = safecss_filter_attr( implode( ';', $styles ) );
 		ob_start();
 		do_action( $placement_config['hook_name'] );
 		$content = ob_get_clean();
@@ -145,9 +154,9 @@ final class Ad_Unit_Block {
 			return '';
 		}
 		return sprintf(
-			'<div class="%1$s" style="text-align:%2$s">%3$s</div>',
+			'<div class="%1$s" style="%2$s">%3$s</div>',
 			esc_attr( $classes ),
-			esc_attr( $align ),
+			esc_attr( $style_attr ),
 			$content
 		);
 	}
@@ -194,6 +203,9 @@ final class Ad_Unit_Block {
 		if ( isset( $attributes['backgroundColor'] ) ) {
 			array_push( $classes, 'has-background' );
 			array_push( $classes, sprintf( 'has-%s-background-color', $attributes['backgroundColor'] ) );
+		}
+		if ( 'sticky' === ( $attributes['style']['position']['type'] ?? '' ) ) {
+			$classes[] = 'is-position-sticky';
 		}
 		return implode( ' ', $classes );
 	}
