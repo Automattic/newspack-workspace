@@ -78,7 +78,7 @@ The engagement-quality deep dive. Picks up where Tab 1 leaves off. Powered by th
 - Overall quality (avg pages per session, engaged session duration, bounce rate, scroll depth rate)
 - Distributions (pages per session BoxPlot, scroll depth BoxPlot)
 - Content engagement (most-engaged articles via composite score, articles by completion rate, by avg time, top categories/authors)
-- Reader segments (engagement by device, by newsletter status, returning vs new)
+- Reader segments (engagement by device, by traffic source, returning vs new)
 - Author loyalty (reader-author affinity BoxPlot, top authors by repeat reader rate)
 - Time patterns (engagement by day of week)
 

@@ -8,7 +8,7 @@ This tab ships **v1 powered by the GA4 Data API** and swaps to **BigQuery in v1.
 
 ## Summary
 
-The Engagement tab answers "Are readers engaging?" It's the quality deep-dive after Tab 1's reach summary: pages per session, time on article, scroll completion, which articles and authors hold attention, and how engagement differs by device, newsletter status, and new-vs-returning. There is no attribution or entity-state concept here; every metric is window-scoped engagement quality.
+The Engagement tab answers "Are readers engaging?" It's the quality deep-dive after Tab 1's reach summary: pages per session, time on article, scroll completion, which articles and authors hold attention, and how engagement differs by device, traffic source, and new-vs-returning. There is no attribution or entity-state concept here; every metric is window-scoped engagement quality.
 
 ## Visibility heuristic
 
@@ -34,7 +34,7 @@ Scroll-dependent cards use a scroll-specific variant of this overlay ("Scroll tr
 
 1. **Overall engagement quality** — scorecards
 2. **Content engagement** — most-read articles, completion, top authors
-3. **Reader segments** — engagement by device, newsletter status, new vs returning
+3. **Reader segments** — engagement by device, traffic source, new vs returning
 4. **Author loyalty** — repeat-reader performance (BQ-only, hidden in v1)
 
 Three sections render in v1 (Overall engagement quality, Content engagement,
@@ -156,13 +156,20 @@ previously rendered as tables; the dense tables were unscannable.
 - **Footnote:** "Returning" uses GA4's standard 540-day definition.
 - **Formula:** `formulas/tab-2-engagement.md` → "Engagement by Returning vs New Readers"
 
-### Viz 3.3: Newsletter status (Takeaway card)
+### Viz 3.3: Traffic source (Takeaway card)
 
-- **Headline:** "Subscribers engage {X}% longer than non-subscribers" (flips if non-subscribers lead).
-- **Sub:** "{subscriber time} per session vs {non-subscriber time}"
-- **Mini chart:** bars for subscriber / non-subscriber, heights ∝ avg engaged session duration.
-- **Custom dimension:** `is_newsletter_subscriber` — if missing, the card shows the custom-dimension overlay.
-- **Formula:** `formulas/tab-2-engagement.md` → "Engagement by Newsletter Status"
+- **Headline:** "Newsletter traffic engages {X}% longer than other sources" (flips to "…{X}% shorter…" if other sources lead).
+- **Sub:** "{newsletter time} per session vs {other time}"
+- **Mini chart:** bars for newsletter / other, heights ∝ avg engaged session duration.
+- **Newsletter definition:** a session is "newsletter" when its `sessionMedium` is `email` or `newsletter`; everything else (direct, organic, referral, social, paid, etc.) is "other".
+- **Minimum-sessions floor:** if the newsletter cohort has fewer than 100 sessions in the window, the card renders the standard "Not enough data in this timeframe." state instead of a comparison. Below ~100 newsletter sessions a handful of unusually engaged or bouncy readers can swing the average enough to flip the headline, so the comparison stops being informative.
+- **Formula:** `formulas/tab-2-engagement.md` → "Engagement by traffic source"
+
+#### Known limitations
+
+- **UTM-stripping email clients.** Apple Mail Privacy Protection and similar privacy features strip UTM parameters, landing some email opens in the `(none)` / direct bucket. The newsletter share shown here is therefore a floor — real newsletter traffic share is typically higher (often 12–15% on an active publisher).
+- **Non-standard medium tags.** Most ESPs default to `utm_medium=email`; some use `newsletter`. Publishers tagging with bespoke mediums (e.g. `newsletter-weekly`) fall into the "other" bucket and will see depressed newsletter numbers. The `email`/`newsletter` convention is required for accurate attribution.
+- **Small newsletter programs.** Cohorts below the 100-session floor get the "needs data" state rather than a noisy comparison.
 
 ---
 

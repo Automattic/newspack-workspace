@@ -67,6 +67,8 @@ export interface MetricPayload {
 	error?: string;
 	hidden_in_v1?: boolean;
 	not_configured?: boolean;
+	/** Cohort below its minimum-sessions floor: render the "needs data" state instead of a comparison. */
+	needs_data?: boolean;
 }
 
 const typeToFormat = ( type?: MetricPayloadType ): MetricFormat => {

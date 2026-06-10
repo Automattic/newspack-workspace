@@ -1,7 +1,7 @@
 /**
  * Engagement › Reader segments (NPPD-1649, Section 3).
  *
- * Three takeaway cards (device, returning-vs-new, newsletter status): each a
+ * Three takeaway cards (device, returning-vs-new, traffic source): each a
  * one-line comparison + an inline mini bar chart, derived from the same
  * orchestrator metrics that previously rendered as dense tables.
  */
@@ -25,12 +25,12 @@ export interface SectionProps {
 }
 
 // Stable segment keys emitted by the orchestrator
-// (Engagement_Metric::engagement_by_newsletter_status_via_ga4). Kept here as the
+// (Engagement_Metric::engagement_by_traffic_source_via_ga4). Kept here as the
 // single JS-side reference for the PHP↔JS contract; a regression test
 // (ReaderSegmentsSection.test.tsx) guards the match.
-const NEWSLETTER_SEGMENT = {
-	subscriber: 'subscriber',
-	notSubscribed: 'not_subscribed',
+const TRAFFIC_SEGMENT = {
+	newsletter: 'newsletter',
+	other: 'other',
 } as const;
 
 const rowsOf = ( payload?: MetricPayload ): MetricRow[] => ( Array.isArray( payload?.rows ) ? ( payload as MetricPayload ).rows ?? [] : [] );
@@ -123,41 +123,43 @@ const returningTakeaway = ( payload?: MetricPayload ): Takeaway => {
 	};
 };
 
-/** Newsletter status: subscriber vs non-subscriber avg engaged time. */
-const newsletterTakeaway = ( payload?: MetricPayload ): Takeaway => {
+/** Traffic source: newsletter vs other avg engaged time per session. */
+const trafficSourceTakeaway = ( payload?: MetricPayload ): Takeaway => {
 	const rows = rowsOf( payload );
 	// Match on the orchestrator's stable, non-translated segment keys; the bar
 	// labels below carry the user-facing translated strings.
-	const subRow = findRow( rows, 'segment', NEWSLETTER_SEGMENT.subscriber );
-	const nonRow = findRow( rows, 'segment', NEWSLETTER_SEGMENT.notSubscribed );
+	const newsletterRow = findRow( rows, 'segment', TRAFFIC_SEGMENT.newsletter );
+	const otherRow = findRow( rows, 'segment', TRAFFIC_SEGMENT.other );
 	const bars = [
-		{ label: __( 'Subscriber', 'newspack-plugin' ), value: num( subRow, 'avg_engagement_seconds' ) },
-		{ label: __( 'Non-subscriber', 'newspack-plugin' ), value: num( nonRow, 'avg_engagement_seconds' ) },
+		{ label: __( 'Newsletter traffic', 'newspack-plugin' ), value: num( newsletterRow, 'avg_engagement_seconds' ) },
+		{ label: __( 'Other traffic', 'newspack-plugin' ), value: num( otherRow, 'avg_engagement_seconds' ) },
 	];
-	if ( ! subRow || ! nonRow ) {
+	// Below the orchestrator's minimum-sessions floor the comparison is too noisy
+	// to render; suppress the headline so the card shows its "needs data" state.
+	if ( ! newsletterRow || ! otherRow || payload?.needs_data ) {
 		return { bars };
 	}
-	const subTime = num( subRow, 'avg_engagement_seconds' );
-	const nonTime = num( nonRow, 'avg_engagement_seconds' );
+	const newsletterTime = num( newsletterRow, 'avg_engagement_seconds' );
+	const otherTime = num( otherRow, 'avg_engagement_seconds' );
 	return {
 		bars,
 		headline:
-			subTime >= nonTime
+			newsletterTime >= otherTime
 				? sprintf(
 						/* translators: %d: percentage. */
-						__( 'Subscribers engage %d%% longer than non-subscribers', 'newspack-plugin' ),
-						pctMore( subTime, nonTime )
+						__( 'Newsletter traffic engages %d%% longer than other sources', 'newspack-plugin' ),
+						pctMore( newsletterTime, otherTime )
 				  )
 				: sprintf(
 						/* translators: %d: percentage. */
-						__( 'Non-subscribers engage %d%% longer than subscribers', 'newspack-plugin' ),
-						pctMore( nonTime, subTime )
+						__( 'Newsletter traffic engages %d%% shorter than other sources', 'newspack-plugin' ),
+						pctMore( otherTime, newsletterTime )
 				  ),
 		sub: sprintf(
-			/* translators: 1: subscriber avg time, 2: non-subscriber avg time. */
+			/* translators: 1: newsletter avg time, 2: other avg time. */
 			__( '%1$s per session vs %2$s', 'newspack-plugin' ),
-			formatDuration( subTime ),
-			formatDuration( nonTime )
+			formatDuration( newsletterTime ),
+			formatDuration( otherTime )
 		),
 	};
 };
@@ -165,7 +167,7 @@ const newsletterTakeaway = ( payload?: MetricPayload ): Takeaway => {
 const ReaderSegmentsSection = ( { current }: SectionProps ) => {
 	const device = deviceTakeaway( current.engagement_by_device_type );
 	const returning = returningTakeaway( current.engagement_by_returning_vs_new );
-	const newsletter = newsletterTakeaway( current.engagement_by_newsletter_status );
+	const trafficSource = trafficSourceTakeaway( current.engagement_by_traffic_source );
 
 	return (
 		<section className="newspack-insights__section" aria-labelledby="newspack-insights-engagement-segments">
@@ -189,11 +191,11 @@ const ReaderSegmentsSection = ( { current }: SectionProps ) => {
 					bars={ returning.bars }
 				/>
 				<TakeawayCard
-					title={ __( 'Engagement by newsletter status', 'newspack-plugin' ) }
-					payload={ current.engagement_by_newsletter_status }
-					headline={ newsletter.headline }
-					sub={ newsletter.sub }
-					bars={ newsletter.bars }
+					title={ __( 'Engagement by traffic source', 'newspack-plugin' ) }
+					payload={ current.engagement_by_traffic_source }
+					headline={ trafficSource.headline }
+					sub={ trafficSource.sub }
+					bars={ trafficSource.bars }
 				/>
 			</div>
 		</section>
