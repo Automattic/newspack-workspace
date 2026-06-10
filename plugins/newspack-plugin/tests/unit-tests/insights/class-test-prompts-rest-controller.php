@@ -124,11 +124,17 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 			$this->assertArrayHasKey( $key, $current, "Missing window key: $key" );
 		}
 
-		// A scalar carries the placeholder envelope.
-		$this->assertTrue( $current['total_prompt_impressions']['pending'] );
+		// A scalar carries the state-envelope (Phase 2). In the test env the proxy
+		// is unconfigured, so wired metrics surface as state 'error' (with
+		// `bigquery_proxy_not_configured`) — the envelope under test is the
+		// `state` + `placeholder_type` contract, not which `state` we got.
+		$this->assertArrayHasKey( 'state', $current['total_prompt_impressions'] );
+		$this->assertArrayNotHasKey( 'pending', $current['total_prompt_impressions'] );
 		$this->assertSame( 'count', $current['total_prompt_impressions']['placeholder_type'] );
-		// Tables ship empty rows for the empty-state UI.
+		// Tables ship a `rows` key for the empty-state UI; not-yet-wired metrics
+		// also report `state: 'error'` with the bridge error code.
 		$this->assertSame( [], $current['performance_by_prompt']['rows'] );
+		$this->assertSame( 'newspack_insights_prompts_not_yet_implemented', $current['performance_by_prompt']['error_code'] );
 	}
 
 	/**
