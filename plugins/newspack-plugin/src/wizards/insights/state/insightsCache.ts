@@ -4,9 +4,20 @@
  * Slot key = tab|start|end|compare_start|compare_end. Slots are created
  * lazily on first read and survive tab unmounts; React subscribers attach
  * via subscribe() and read via getSlot(). ensureFetched() populates a slot
- * from a fetcher, deduping concurrent calls. The refresh / setCooldown /
- * CooldownError APIs land in subsequent tasks.
+ * from a fetcher, deduping concurrent calls. refresh() re-runs a fetch
+ * unconditionally; on a CooldownError it preserves the prior data and
+ * records the cooldown timestamp. setCooldown() writes the timestamp
+ * directly (e.g. after a 429 from the manual-refresh endpoint).
  */
+
+export class CooldownError extends Error {
+	name = 'CooldownError';
+	cooldownUntil: string;
+	constructor( cooldownUntil: string ) {
+		super( 'Refresh is rate limited.' );
+		this.cooldownUntil = cooldownUntil;
+	}
+}
 
 type Source = 'bigquery' | 'external' | 'local';
 type Status = 'idle' | 'loading' | 'success' | 'error';
@@ -108,6 +119,44 @@ export const insightsCache = {
 				settle();
 			}
 		} )();
+	},
+
+	refresh< T >( key: string, refresher: () => Promise< CachedEnvelope< T > > ): void {
+		let settle: () => void = () => {};
+		const inFlight = new Promise< void >( resolve => {
+			settle = resolve;
+		} );
+		setSlot( key, { status: 'loading', error: null, inFlight } );
+
+		( async () => {
+			try {
+				const envelope = await refresher();
+				setSlot( key, {
+					status: 'success',
+					data: envelope.data,
+					error: null,
+					computedAt: envelope.cache.computed_at,
+					source: envelope.cache.source,
+					cooldownUntil: envelope.cache.cooldown_until,
+					inFlight: null,
+				} );
+			} catch ( e: unknown ) {
+				if ( e instanceof CooldownError ) {
+					// Preserve prior data/computedAt; if the slot had no prior success,
+					// status:'success' with data:null is harmless (consumer renders nothing).
+					setSlot( key, { cooldownUntil: e.cooldownUntil, status: 'success', inFlight: null } );
+					return;
+				}
+				const message = e instanceof Error ? e.message : String( e );
+				setSlot( key, { status: 'error', error: message, inFlight: null } );
+			} finally {
+				settle();
+			}
+		} )();
+	},
+
+	setCooldown( key: string, until: string | null ): void {
+		setSlot( key, { cooldownUntil: until } );
 	},
 
 	/** Internal testing helper. Not part of the public API. */

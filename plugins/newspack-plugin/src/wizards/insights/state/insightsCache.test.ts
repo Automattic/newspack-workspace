@@ -2,7 +2,7 @@
  * Tests for the insightsCache module.
  */
 
-import { CachedEnvelope, insightsCache, makeSlotKey } from './insightsCache';
+import { CachedEnvelope, CooldownError, insightsCache, makeSlotKey } from './insightsCache';
 
 describe( 'makeSlotKey', () => {
 	it( 'composes a stable key from tab + window components', () => {
@@ -107,5 +107,57 @@ describe( 'insightsCache.ensureFetched', () => {
 		await Promise.resolve();
 
 		expect( listener.mock.calls.length ).toBeGreaterThanOrEqual( 2 ); // loading + success
+	} );
+} );
+
+describe( 'insightsCache.refresh', () => {
+	afterEach( () => {
+		( insightsCache as unknown as { reset: () => void } ).reset();
+	} );
+
+	const fresh: CachedEnvelope< { v: number } > = {
+		cache: { source: 'bigquery', computed_at: '2026-06-10T00:05:00Z', cooldown_until: null },
+		data: { v: 99 },
+	};
+
+	it( 'replaces the slot with the refreshed envelope', async () => {
+		insightsCache.refresh( 'k', () => Promise.resolve( fresh ) );
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const slot = insightsCache.getSlot< { v: number } >( 'k' );
+		expect( slot.status ).toBe( 'success' );
+		expect( slot.data ).toEqual( { v: 99 } );
+		expect( slot.computedAt ).toBe( '2026-06-10T00:05:00Z' );
+		expect( slot.cooldownUntil ).toBeNull();
+	} );
+
+	it( 'on CooldownError, writes cooldownUntil and preserves prior data', async () => {
+		// Seed with an earlier success.
+		insightsCache.ensureFetched( 'k', () =>
+			Promise.resolve( {
+				cache: { source: 'bigquery', computed_at: '2026-06-09T00:00:00Z', cooldown_until: null },
+				data: { v: 1 },
+			} )
+		);
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const err = new CooldownError( '2026-06-10T00:10:00Z' );
+		insightsCache.refresh( 'k', () => Promise.reject( err ) );
+		await Promise.resolve();
+		await Promise.resolve();
+
+		const slot = insightsCache.getSlot< { v: number } >( 'k' );
+		expect( slot.cooldownUntil ).toBe( '2026-06-10T00:10:00Z' );
+		expect( slot.data ).toEqual( { v: 1 } );
+		expect( slot.computedAt ).toBe( '2026-06-09T00:00:00Z' );
+	} );
+
+	it( 'setCooldown can clear the cooldown', () => {
+		insightsCache.setCooldown( 'k', '2026-06-10T00:10:00Z' );
+		expect( insightsCache.getSlot( 'k' ).cooldownUntil ).toBe( '2026-06-10T00:10:00Z' );
+		insightsCache.setCooldown( 'k', null );
+		expect( insightsCache.getSlot( 'k' ).cooldownUntil ).toBeNull();
 	} );
 } );
