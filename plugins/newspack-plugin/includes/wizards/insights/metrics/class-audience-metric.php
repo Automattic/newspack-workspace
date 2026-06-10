@@ -666,6 +666,10 @@ final class Audience_Metric {
 	 * pageview counts. No post_id / singular-content filter: this surfaces
 	 * whatever pages drive pageviews, not just article posts.
 	 *
+	 * Trade-off: pageTitle is a display string, not a stable id — distinct URLs
+	 * that share a title merge into one row, and a retitled page splits across
+	 * two. Accepted here in exchange for working without the post_id dimension.
+	 *
 	 * @param string $pid Property ID.
 	 * @param string $s   Start date.
 	 * @param string $e   End date.
@@ -691,7 +695,7 @@ final class Audience_Metric {
 	 */
 	private static function top_authors_by_reader_count_via_ga4( string $pid, string $s, string $e ): array {
 		$body                    = self::body( $s, $e, [ 'customEvent:author' ], [ 'totalUsers', 'screenPageViews' ] );
-		$body['dimensionFilter'] = self::custom_event_present_filter( 'author' );
+		$body['dimensionFilter'] = self::custom_event_meaningful_filter( 'author' );
 		$body                   += self::order_by_metric_desc( 'totalUsers' );
 		$body['limit']           = 25;
 		$result                  = self::safe_run_report( $pid, $body );
@@ -764,6 +768,36 @@ final class Audience_Metric {
 	 */
 	private static function custom_event_present_filter( string $param ): array {
 		return [ 'filter' => self::custom_event_present_expression( $param )['filter'] ];
+	}
+
+	/**
+	 * dimensionFilter: a customEvent dimension is present AND not GA4's literal
+	 * "(not set)" placeholder. A bare present-filter (regex `.+`) matches
+	 * "(not set)", which would surface a bogus aggregated row (e.g. a "(not set)"
+	 * author from non-article pageviews where the dimension is unset).
+	 *
+	 * @param string $param Event parameter name.
+	 * @return array
+	 */
+	private static function custom_event_meaningful_filter( string $param ): array {
+		return [
+			'andGroup' => [
+				'expressions' => [
+					self::custom_event_present_expression( $param ),
+					[
+						'notExpression' => [
+							'filter' => [
+								'fieldName'    => 'customEvent:' . $param,
+								'stringFilter' => [
+									'matchType' => 'EXACT',
+									'value'     => '(not set)',
+								],
+							],
+						],
+					],
+				],
+			],
+		];
 	}
 
 	/**

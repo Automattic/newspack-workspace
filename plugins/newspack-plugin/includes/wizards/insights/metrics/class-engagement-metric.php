@@ -368,8 +368,11 @@ final class Engagement_Metric {
 
 		$numerator   = (int) ( $num['raw']['rows'][0]['metricValues'][0]['value'] ?? 0 );
 		$denominator = (int) ( $den['raw']['rows'][0]['metricValues'][0]['value'] ?? 0 );
+		// Clamp to 1.0: a `scroll` event implies a pageview, so the ratio should
+		// not exceed 1, but edge cases (AMP, multiple scroll fires) can nudge it
+		// over — match the per-page completion clamps and never show >100%.
 		return [
-			'value'       => $denominator > 0 ? $numerator / $denominator : 0,
+			'value'       => $denominator > 0 ? min( 1.0, $numerator / $denominator ) : 0,
 			'computable'  => $denominator > 0,
 			'type'        => 'rate',
 			'numerator'   => $numerator,
@@ -493,7 +496,7 @@ final class Engagement_Metric {
 	 */
 	private static function top_authors_by_avg_engagement_time_via_ga4( string $pid, string $s, string $e ): array {
 		$body                    = self::body( $s, $e, [ 'customEvent:author' ], [ 'totalUsers', 'userEngagementDuration' ] );
-		$body['dimensionFilter'] = self::custom_event_present_filter( 'author' );
+		$body['dimensionFilter'] = self::custom_event_meaningful_filter( 'author' );
 		$body                   += self::order_by_metric_desc( 'userEngagementDuration' );
 		$body['limit']           = 25;
 		$result                  = self::safe_run_report( $pid, $body );
@@ -582,6 +585,11 @@ final class Engagement_Metric {
 	/**
 	 * Scroll-completion event counts keyed by pageTitle. Empty array on
 	 * error/overlay (callers treat missing scroll data as zero completion).
+	 *
+	 * Note: pageTitle is the join key for Most-Engaged Pages and Pages by
+	 * Completion Rate. It's a display string, not a stable id — distinct URLs
+	 * sharing a title merge here and in the readers report, and a retitled page
+	 * splits across two. Accepted in exchange for working without post_id.
 	 *
 	 * @param string $pid Property ID.
 	 * @param string $s   Start date.
@@ -701,13 +709,33 @@ final class Engagement_Metric {
 	}
 
 	/**
-	 * Build a dimensionFilter asserting a customEvent dimension is present.
+	 * dimensionFilter: a customEvent dimension is present AND not GA4's literal
+	 * "(not set)" placeholder. A bare present-filter (regex `.+`) matches
+	 * "(not set)", which would surface a bogus aggregated row (e.g. a "(not set)"
+	 * author from non-article pageviews where the dimension is unset).
 	 *
 	 * @param string $param Event parameter name.
 	 * @return array
 	 */
-	private static function custom_event_present_filter( string $param ): array {
-		return [ 'filter' => self::custom_event_present_expression( $param )['filter'] ];
+	private static function custom_event_meaningful_filter( string $param ): array {
+		return [
+			'andGroup' => [
+				'expressions' => [
+					self::custom_event_present_expression( $param ),
+					[
+						'notExpression' => [
+							'filter' => [
+								'fieldName'    => 'customEvent:' . $param,
+								'stringFilter' => [
+									'matchType' => 'EXACT',
+									'value'     => '(not set)',
+								],
+							],
+						],
+					],
+				],
+			],
+		];
 	}
 
 	/**

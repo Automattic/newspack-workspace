@@ -21,7 +21,19 @@ export type MetricPayloadType = 'count' | 'decimal' | 'rate' | 'duration' | 'bre
 export type MetricRow = Record< string, string | number | null >;
 
 /** Values that should never trigger uniform-column collapse (data-quality gaps stay visible). */
-const NON_COLLAPSIBLE_VALUES = [ '', '(not set)' ];
+export const NON_COLLAPSIBLE_VALUES = [ '', '(not set)' ];
+
+/**
+ * Whether a dimension value is meaningless — empty or GA4's "(not set)"
+ * placeholder. Single source of truth for the not-set sentinel (shared by the
+ * uniform-column-collapse check and the Top Campaigns row filter).
+ */
+export const isNotSet = ( value: unknown ): boolean =>
+	NON_COLLAPSIBLE_VALUES.includes(
+		String( value ?? '' )
+			.trim()
+			.toLowerCase()
+	);
 
 /**
  * If every row shares the same meaningful value for `key`, return it (as a

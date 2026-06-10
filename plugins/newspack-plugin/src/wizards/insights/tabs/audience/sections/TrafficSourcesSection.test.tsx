@@ -1,7 +1,8 @@
 /**
- * Tests for TrafficSourcesSection (NPPD): the Top Campaigns table hides when
- * every row is "(not set)" across source/medium/campaign; the section as a whole
- * hides only when the breakdown pie is also empty.
+ * Tests for TrafficSourcesSection (NPPD): the Top Campaigns table drops only the
+ * rows where source AND medium AND campaign are all "(not set)"; rows with data
+ * in any column are kept (including their "(not set)" cells). The table and the
+ * rest of the section always render.
  */
 
 /**
@@ -15,56 +16,62 @@ import { render, screen } from '@testing-library/react';
 import TrafficSourcesSection from './TrafficSourcesSection';
 import type { InsightsWindow } from '../../../api/audience';
 
-const breakdownWithData = {
+const breakdown = {
 	computable: true,
 	type: 'breakdown',
-	rows: [
-		{ channel: 'Organic Search', readers: 5120 },
-		{ channel: 'Direct', readers: 3380 },
-	],
+	rows: [ { channel: 'Organic Search', readers: 5120 } ],
 };
 
-const breakdownEmpty = { computable: true, type: 'breakdown', rows: [] };
+const table = ( rows: unknown[] ) => ( { computable: true, type: 'table', rows } );
 
-const realCampaigns = {
-	computable: true,
-	type: 'table',
-	rows: [
-		{ source: 'newsletter', medium: 'email', campaign: 'weekly-digest', readers: 820, sessions: 1140 },
-		{ source: '(not set)', medium: '(not set)', campaign: '(not set)', readers: 300, sessions: 360 },
-	],
-};
+const windowOf = ( top_campaigns: unknown ): InsightsWindow =>
+	( { top_campaigns, traffic_sources_breakdown: breakdown } ) as unknown as InsightsWindow;
 
-const allNotSetCampaigns = {
-	computable: true,
-	type: 'table',
-	rows: [
-		{ source: '(not set)', medium: '(not set)', campaign: '(not set)', readers: 4200, sessions: 5100 },
-		{ source: '', medium: '', campaign: '', readers: 1800, sessions: 2000 },
-	],
-};
-
-const windowOf = ( top_campaigns: unknown, traffic_sources_breakdown: unknown ): InsightsWindow =>
-	( { top_campaigns, traffic_sources_breakdown } ) as unknown as InsightsWindow;
-
-describe( 'TrafficSourcesSection', () => {
-	it( 'renders the Top Campaigns table when at least one row has real data', () => {
-		render( <TrafficSourcesSection current={ windowOf( realCampaigns, breakdownWithData ) } previous={ null } /> );
-		expect( screen.getByText( 'Top Campaigns' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Traffic Sources Breakdown' ) ).toBeInTheDocument();
+describe( 'TrafficSourcesSection — Top Campaigns row filtering', () => {
+	it( 'drops fully-unattributed (all "(not set)") rows but keeps real ones', () => {
+		render(
+			<TrafficSourcesSection
+				current={ windowOf(
+					table( [
+						{ source: 'newsletter', medium: 'email', campaign: 'weekly-digest', readers: 820, sessions: 1140 },
+						{ source: '(not set)', medium: '(not set)', campaign: '(not set)', readers: 300, sessions: 360 },
+					] )
+				) }
+				previous={ null }
+			/>
+		);
+		// The real row survives; the all-"(not set)" row is gone (no "(not set)" cell left).
+		expect( screen.getByText( 'weekly-digest' ) ).toBeInTheDocument();
+		expect( screen.queryByText( '(not set)' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'hides the Top Campaigns table when every row is (not set), keeping the section for the breakdown', () => {
-		render( <TrafficSourcesSection current={ windowOf( allNotSetCampaigns, breakdownWithData ) } previous={ null } /> );
-		expect( screen.queryByText( 'Top Campaigns' ) ).not.toBeInTheDocument();
-		// Section stays visible because the breakdown pie still has data.
+	it( 'keeps a row that has data in any column, including its "(not set)" cells', () => {
+		render(
+			<TrafficSourcesSection
+				current={ windowOf( table( [ { source: 'google', medium: '(not set)', campaign: '(not set)', readers: 500, sessions: 700 } ] ) ) }
+				previous={ null }
+			/>
+		);
+		expect( screen.getByText( 'google' ) ).toBeInTheDocument();
+		// The partially-set row stays, so its "(not set)" cells render alongside.
+		expect( screen.getAllByText( '(not set)' ).length ).toBeGreaterThan( 0 );
+	} );
+
+	it( 'shows the empty message (table still renders) when every row is "(not set)"', () => {
+		render(
+			<TrafficSourcesSection
+				current={ windowOf(
+					table( [
+						{ source: '(not set)', medium: '(not set)', campaign: '(not set)', readers: 4200, sessions: 5100 },
+						{ source: '', medium: '', campaign: '', readers: 1800, sessions: 2000 },
+					] )
+				) }
+				previous={ null }
+			/>
+		);
+		expect( screen.getByText( 'No campaign traffic in this timeframe.' ) ).toBeInTheDocument();
+		// Section + breakdown stay visible.
 		expect( screen.getByText( 'Traffic sources' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Traffic Sources Breakdown' ) ).toBeInTheDocument();
-	} );
-
-	it( 'hides the whole section when campaigns are all (not set) and the breakdown is empty', () => {
-		const { container } = render( <TrafficSourcesSection current={ windowOf( allNotSetCampaigns, breakdownEmpty ) } previous={ null } /> );
-		expect( container ).toBeEmptyDOMElement();
-		expect( screen.queryByText( 'Traffic sources' ) ).not.toBeInTheDocument();
 	} );
 } );

@@ -24,6 +24,15 @@ export interface SectionProps {
 	previous: InsightsWindow | null;
 }
 
+// Stable segment keys emitted by the orchestrator
+// (Engagement_Metric::engagement_by_newsletter_status_via_ga4). Kept here as the
+// single JS-side reference for the PHP↔JS contract; a regression test
+// (ReaderSegmentsSection.test.tsx) guards the match.
+const NEWSLETTER_SEGMENT = {
+	subscriber: 'subscriber',
+	notSubscribed: 'not_subscribed',
+} as const;
+
 const rowsOf = ( payload?: MetricPayload ): MetricRow[] => ( Array.isArray( payload?.rows ) ? ( payload as MetricPayload ).rows ?? [] : [] );
 const num = ( row: MetricRow | undefined, key: string ): number => ( typeof row?.[ key ] === 'number' ? ( row[ key ] as number ) : 0 );
 const findRow = ( rows: MetricRow[], key: string, value: string ): MetricRow | undefined => rows.find( row => row[ key ] === value );
@@ -117,11 +126,10 @@ const returningTakeaway = ( payload?: MetricPayload ): Takeaway => {
 /** Newsletter status: subscriber vs non-subscriber avg engaged time. */
 const newsletterTakeaway = ( payload?: MetricPayload ): Takeaway => {
 	const rows = rowsOf( payload );
-	// Match on the orchestrator's stable, non-translated segment keys (see
-	// Engagement_Metric::engagement_by_newsletter_status_via_ga4); the bar labels
-	// below carry the user-facing translated strings.
-	const subRow = findRow( rows, 'segment', 'subscriber' );
-	const nonRow = findRow( rows, 'segment', 'not_subscribed' );
+	// Match on the orchestrator's stable, non-translated segment keys; the bar
+	// labels below carry the user-facing translated strings.
+	const subRow = findRow( rows, 'segment', NEWSLETTER_SEGMENT.subscriber );
+	const nonRow = findRow( rows, 'segment', NEWSLETTER_SEGMENT.notSubscribed );
 	const bars = [
 		{ label: __( 'Subscriber', 'newspack-plugin' ), value: num( subRow, 'avg_engagement_seconds' ) },
 		{ label: __( 'Non-subscriber', 'newspack-plugin' ), value: num( nonRow, 'avg_engagement_seconds' ) },
