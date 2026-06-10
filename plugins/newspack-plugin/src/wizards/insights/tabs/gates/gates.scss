@@ -138,30 +138,40 @@
 		}
 
 		&-svg {
-			flex: 1 1 auto;
 			min-width: 0;
 			width: 100%;
 			height: auto;
-			max-height: 480px;
 			display: block;
 		}
 
-		&-trapezoid {
-			fill: colors.$primary-500;
+		// Side mode: cap the SVG WIDTH (not height) so it keeps its exact viewBox
+		// aspect ratio — no letterboxing — and the equal-height trapezoid bands
+		// stay aligned with the equal-flex label column beside them.
+		&--side &-svg {
+			flex: 0 1 auto;
+			max-width: 320px;
 		}
 
+		// Compact mode: fill the width; the count sits inside each band, so there's
+		// no side column to align against and a height cap is fine.
+		&--compact &-svg {
+			max-height: 480px;
+		}
+
+		// Muted anchor color (a step lighter than primary-500): the funnel is
+		// descriptive, not action-oriented, so it stays quiet against the page.
+		&-trapezoid {
+			fill: colors.$primary-400;
+		}
+
+		// In-band count (compact mode). Dark text reads on every band: the
+		// lightened fill + 0.6–1.0 opacity keeps bands light enough that bold
+		// dark numerals clear large-text contrast across the whole stack.
 		&-count-text {
 			font-size: 16px;
 			font-weight: 600;
 			font-variant-numeric: tabular-nums;
-
-			&.is-on-dark {
-				fill: #fff;
-			}
-
-			&.is-on-light {
-				fill: wp-colors.$gray-900;
-			}
+			fill: wp-colors.$gray-900;
 		}
 
 		// Side-label column: equal-flex blocks align to the equal-height bands.
@@ -206,22 +216,23 @@
 			color: wp-colors.$gray-900;
 		}
 
-		&-delta {
+		// Stage descriptors: both muted gray. The drop-off is funnel context, not
+		// an alarm, and deliberately NOT red/green — red/green is reserved for the
+		// period-over-period scorecard deltas elsewhere on the page.
+		&-label-pct {
 			font-size: 13px;
+			font-weight: 400;
+			color: wp-colors.$gray-600;
+		}
 
-			&--top {
-				font-weight: 400;
+		&-label-drop {
+			font-size: 13px;
+			font-weight: 400;
+			font-variant-numeric: tabular-nums;
+			color: wp-colors.$gray-600;
+
+			&-arrow {
 				color: wp-colors.$gray-600;
-			}
-
-			&--prev {
-				font-weight: 700;
-				font-variant-numeric: tabular-nums;
-				color: wp-colors.$gray-900;
-
-				&.is-high-drop {
-					color: colors.$error-500;
-				}
 			}
 		}
 

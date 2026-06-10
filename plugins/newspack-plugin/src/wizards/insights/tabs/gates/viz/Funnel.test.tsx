@@ -1,7 +1,7 @@
 /**
  * Tests for the Funnel viz: the pure layout/geometry helpers (mode selection,
- * opacity interpolation, drop-off, highlight threshold) and a few render smoke
- * tests covering deltas, the high-drop highlight, and the edge cases.
+ * opacity interpolation, clamped drop-off) and render smoke tests covering the
+ * descriptive labels and the edge cases.
  */
 
 /**
@@ -12,7 +12,7 @@ import { render, screen } from '@testing-library/react';
 /**
  * Internal dependencies
  */
-import Funnel, { DROP_HIGHLIGHT_THRESHOLD, isCompactMode, stepOpacity, dropFromPrevious, isHighDrop } from './Funnel';
+import Funnel, { isCompactMode, stepOpacity, dropFromPrevious } from './Funnel';
 
 const stage = ( label: string, count: number, pctOfTop: number ) => ( { label, count, pct_of_top: pctOfTop } );
 
@@ -50,32 +50,27 @@ describe( 'Funnel helpers', () => {
 			expect( dropFromPrevious( 500, 500 ) ).toBe( 0 );
 			expect( dropFromPrevious( 0, 500 ) ).toBe( 1 );
 		} );
+		it( 'clamps to 0 when a later step exceeds the previous (no negative drop)', () => {
+			expect( dropFromPrevious( 600, 400 ) ).toBe( 0 );
+		} );
 		it( 'is 0 when the previous step is 0 (avoids divide-by-zero)', () => {
 			expect( dropFromPrevious( 0, 0 ) ).toBe( 0 );
-		} );
-	} );
-
-	describe( 'isHighDrop', () => {
-		it( `flags drops strictly greater than ${ DROP_HIGHLIGHT_THRESHOLD }`, () => {
-			expect( isHighDrop( 0.21 ) ).toBe( true );
-			expect( isHighDrop( 0.2 ) ).toBe( false );
-			expect( isHighDrop( 0.05 ) ).toBe( false );
 		} );
 	} );
 } );
 
 describe( 'Funnel render', () => {
-	it( 'renders step labels, counts and both deltas (high drops highlighted)', () => {
-		const { container } = render(
-			<Funnel stages={ [ stage( 'Impression', 1000, 1 ), stage( 'Engagement', 200, 0.2 ), stage( 'Conversion', 50, 0.05 ) ] } />
-		);
+	it( 'renders step labels and the descriptive % / drop-off lines naming the top stage', () => {
+		render( <Funnel stages={ [ stage( 'Impression', 1000, 1 ), stage( 'Engagement', 200, 0.2 ), stage( 'Conversion', 50, 0.05 ) ] } /> );
 		expect( screen.getByText( 'Impression' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Engagement' ) ).toBeInTheDocument();
-		// Deltas: 200/1000 → 20% of top, 80% drop; 50/200 → 75% drop. Both > 20%.
-		expect( screen.getByText( '20% of top' ) ).toBeInTheDocument();
-		expect( screen.getByText( '80% from previous' ) ).toBeInTheDocument();
-		expect( screen.getByText( '75% from previous' ) ).toBeInTheDocument();
-		expect( container.querySelectorAll( '.newspack-insights__funnel-delta--prev.is-high-drop' ) ).toHaveLength( 2 );
+		// "% of top" names the actual first stage.
+		expect( screen.getByText( '20% of Impression' ) ).toBeInTheDocument();
+		// Drop-off uses the word "drop-off" (the ↓ glyph is a sibling node).
+		expect( screen.getByText( /80% drop-off/ ) ).toBeInTheDocument();
+		expect( screen.getByText( /75% drop-off/ ) ).toBeInTheDocument();
+		// Drop-off labels are descriptive gray, never the error-red treatment.
+		expect( document.querySelector( '.is-high-drop' ) ).toBeNull();
 	} );
 
 	it( 'renders the empty state when the first step is 0', () => {
@@ -83,9 +78,9 @@ describe( 'Funnel render', () => {
 		expect( screen.getByText( 'Not enough data to chart the funnel.' ) ).toBeInTheDocument();
 	} );
 
-	it( 'renders a single stage with no deltas', () => {
+	it( 'renders a single stage with no drop-off lines', () => {
 		render( <Funnel stages={ [ stage( 'Impression', 1000, 1 ) ] } /> );
 		expect( screen.getByText( 'Impression' ) ).toBeInTheDocument();
-		expect( screen.queryByText( /from previous/ ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( /drop-off/ ) ).not.toBeInTheDocument();
 	} );
 } );

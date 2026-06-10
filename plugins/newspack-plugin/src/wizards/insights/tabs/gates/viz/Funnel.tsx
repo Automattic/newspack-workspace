@@ -4,14 +4,15 @@
  * Multi-step conversion funnel rendered as stacked SVG trapezoids. Each
  * trapezoid's top edge is proportional to its own count and its bottom edge to
  * the next step's count, so the silhouette narrows with drop-off; the last step
- * is a rectangle. A single anchor color (primary-500) fades from full opacity at
- * the top to 0.6 at the bottom.
+ * is a rectangle. A single muted anchor color (primary-400) fades from full
+ * opacity at the top to 0.6 at the bottom, keeping the chart descriptive rather
+ * than alarming.
  *
  * Two layouts, auto-selected from container width + step count:
- *   - Side-label (default): step name / count / deltas in a fixed column to the
+ *   - Side-label (default): step name / count / labels in a fixed column to the
  *     right of each trapezoid. Used when stepCount < 5 AND width >= 480px.
  *   - Compact: the count renders inside each trapezoid and the full
- *     names/counts/deltas move to a legend below. Used when stepCount >= 5 OR
+ *     names/counts/labels move to a legend below. Used when stepCount >= 5 OR
  *     width < 480px.
  *
  * Tab-local for now (only Gates consumes a funnel); promote to
@@ -22,21 +23,13 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { useEffect, useRef, useState } from '@wordpress/element';
-
-/**
- * External dependencies
- */
-import classnames from 'classnames';
+import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
 import type { GatesFunnelStage } from '../../../api/gates';
 import { formatNumber, formatPercent } from '../../components/format';
-
-/** A "from previous" drop above this fraction is highlighted as a problem. */
-export const DROP_HIGHLIGHT_THRESHOLD = 0.2;
 
 const COMPACT_MIN_STEPS = 5;
 const COMPACT_MAX_WIDTH = 480; // Below this container width, force compact mode.
@@ -45,7 +38,6 @@ const MAX_CHART_HEIGHT = 480;
 const VIEWBOX_WIDTH = 320;
 const FULL_OPACITY = 1;
 const TAIL_OPACITY = 0.6;
-const DARK_TEXT_OPACITY_THRESHOLD = 0.75;
 
 export interface FunnelProps {
 	stages: GatesFunnelStage[];
@@ -63,20 +55,25 @@ export const stepOpacity = ( index: number, stepCount: number ): number => {
 	return FULL_OPACITY + ( TAIL_OPACITY - FULL_OPACITY ) * ( index / ( stepCount - 1 ) );
 };
 
-/** Drop-off from the previous step as a fraction in [0, 1]. */
-export const dropFromPrevious = ( count: number, prevCount: number ): number => ( prevCount > 0 ? 1 - count / prevCount : 0 );
-
-/** Whether a drop-off is severe enough to highlight. */
-export const isHighDrop = ( drop: number ): boolean => drop > DROP_HIGHLIGHT_THRESHOLD;
+/**
+ * Drop-off from the previous step as a fraction in [0, 1]. Clamped at 0: funnel
+ * stages are independent aggregates, so a later stage can occasionally exceed
+ * the prior one (data drift) — a negative "drop-off" is meaningless, so show 0%.
+ */
+export const dropFromPrevious = ( count: number, prevCount: number ): number => ( prevCount > 0 ? Math.max( 0, 1 - count / prevCount ) : 0 );
 
 /** Equal band height per step, capped so the whole chart fits ~480px. */
 const stepHeightFor = ( stepCount: number ): number => Math.max( MIN_STEP_HEIGHT, Math.floor( MAX_CHART_HEIGHT / stepCount ) );
 
-/** SVG path for one trapezoid: top edge sized to `count`, bottom to `nextCount`, centered. */
+/**
+ * SVG path for one trapezoid: top edge sized to `count`, bottom to `nextCount`,
+ * centered. The bottom is clamped to never exceed the top so the silhouette only
+ * ever narrows (a funnel never flares outward, even on anomalous data).
+ */
 const trapezoidPath = ( count: number, nextCount: number, topCount: number, yTop: number, yBottom: number ): string => {
 	const cx = VIEWBOX_WIDTH / 2;
 	const halfTop = ( count / topCount ) * ( VIEWBOX_WIDTH / 2 );
-	const halfBottom = ( nextCount / topCount ) * ( VIEWBOX_WIDTH / 2 );
+	const halfBottom = Math.min( halfTop, ( nextCount / topCount ) * ( VIEWBOX_WIDTH / 2 ) );
 	return [
 		`M ${ cx - halfTop } ${ yTop }`,
 		`L ${ cx + halfTop } ${ yTop }`,
@@ -92,46 +89,47 @@ interface StepView {
 	opacity: number;
 	pctOfTop: number;
 	drop: number | null;
-	highDrop: boolean;
 }
 
 /** Build the per-step view model shared by both layouts. */
 const buildSteps = ( stages: GatesFunnelStage[], topCount: number ): StepView[] =>
 	stages.map( ( stage, index ) => {
 		const prevCount = index > 0 ? stages[ index - 1 ].count : 0;
-		const drop = index > 0 ? dropFromPrevious( stage.count, prevCount ) : null;
 		return {
 			stage,
 			index,
 			opacity: stepOpacity( index, stages.length ),
 			pctOfTop: topCount > 0 ? stage.count / topCount : 0,
-			drop,
-			highDrop: drop !== null && isHighDrop( drop ),
+			drop: index > 0 ? dropFromPrevious( stage.count, prevCount ) : null,
 		};
 	} );
 
-/** The two delta lines shown for every step beyond the first. */
-const Deltas = ( { step }: { step: StepView } ) => {
+/**
+ * The two descriptive labels shown for every step beyond the first: what share
+ * of the top stage reached here, and the stage-to-stage drop-off. Both are muted
+ * (not red/green) — they describe funnel progression, not a period comparison.
+ */
+const StepLabels = ( { step, topLabel }: { step: StepView; topLabel: string } ) => {
 	if ( step.drop === null ) {
 		return null;
 	}
 	return (
 		<>
-			<span className="newspack-insights__funnel-delta newspack-insights__funnel-delta--top">
+			<span className="newspack-insights__funnel-label-pct">
 				{ sprintf(
-					/* translators: %s: percentage of the first step's count reaching this step. */
-					__( '%s of top', 'newspack-plugin' ),
-					formatPercent( step.pctOfTop )
+					/* translators: 1: percentage, 2: name of the first/top funnel stage (e.g. "Impression"). */
+					__( '%1$s of %2$s', 'newspack-plugin' ),
+					formatPercent( step.pctOfTop ),
+					topLabel
 				) }
 			</span>
-			<span
-				className={ classnames( 'newspack-insights__funnel-delta newspack-insights__funnel-delta--prev', {
-					'is-high-drop': step.highDrop,
-				} ) }
-			>
+			<span className="newspack-insights__funnel-label-drop">
+				<span aria-hidden="true" className="newspack-insights__funnel-label-drop-arrow">
+					↓
+				</span>{ ' ' }
 				{ sprintf(
-					/* translators: %s: percentage drop-off from the previous step. */
-					__( '%s from previous', 'newspack-plugin' ),
+					/* translators: %s: percentage drop-off from the previous stage. */
+					__( '%s drop-off', 'newspack-plugin' ),
 					formatPercent( step.drop )
 				) }
 			</span>
@@ -161,6 +159,8 @@ const Funnel = ( { stages }: FunnelProps ) => {
 	}, [] );
 
 	const topCount = stages.length > 0 ? stages[ 0 ].count : 0;
+	const topLabel = stages.length > 0 ? stages[ 0 ].label : '';
+	const steps = useMemo( () => buildSteps( stages, topCount ), [ stages, topCount ] );
 
 	// Proportions can't be computed without a non-zero first step.
 	if ( stages.length === 0 || topCount <= 0 ) {
@@ -175,7 +175,6 @@ const Funnel = ( { stages }: FunnelProps ) => {
 	const compact = isCompactMode( stepCount, width );
 	const stepHeight = stepHeightFor( stepCount );
 	const chartHeight = stepHeight * stepCount;
-	const steps = buildSteps( stages, topCount );
 
 	const svg = (
 		<svg
@@ -190,7 +189,7 @@ const Funnel = ( { stages }: FunnelProps ) => {
 				const yTop = step.index * stepHeight;
 				return (
 					<path
-						key={ step.stage.label }
+						key={ step.index }
 						className="newspack-insights__funnel-trapezoid"
 						d={ trapezoidPath( step.stage.count, nextCount, topCount, yTop, yTop + stepHeight ) }
 						fillOpacity={ step.opacity }
@@ -200,11 +199,8 @@ const Funnel = ( { stages }: FunnelProps ) => {
 			{ compact &&
 				steps.map( step => (
 					<text
-						key={ step.stage.label }
-						className={ classnames( 'newspack-insights__funnel-count-text', {
-							'is-on-dark': step.opacity > DARK_TEXT_OPACITY_THRESHOLD,
-							'is-on-light': step.opacity <= DARK_TEXT_OPACITY_THRESHOLD,
-						} ) }
+						key={ step.index }
+						className="newspack-insights__funnel-count-text"
 						x={ VIEWBOX_WIDTH / 2 }
 						y={ step.index * stepHeight + stepHeight / 2 }
 						textAnchor="middle"
@@ -222,10 +218,10 @@ const Funnel = ( { stages }: FunnelProps ) => {
 				{ svg }
 				<ol className="newspack-insights__funnel-legend">
 					{ steps.map( step => (
-						<li key={ step.stage.label } className="newspack-insights__funnel-legend-item">
+						<li key={ step.index } className="newspack-insights__funnel-legend-item">
 							<span className="newspack-insights__funnel-label-name">{ step.stage.label }</span>
 							<span className="newspack-insights__funnel-label-count">{ formatNumber( step.stage.count ) }</span>
-							<Deltas step={ step } />
+							<StepLabels step={ step } topLabel={ topLabel } />
 						</li>
 					) ) }
 				</ol>
@@ -238,10 +234,10 @@ const Funnel = ( { stages }: FunnelProps ) => {
 			{ svg }
 			<div className="newspack-insights__funnel-labels">
 				{ steps.map( step => (
-					<div key={ step.stage.label } className="newspack-insights__funnel-label">
+					<div key={ step.index } className="newspack-insights__funnel-label">
 						<span className="newspack-insights__funnel-label-name">{ step.stage.label }</span>
 						<span className="newspack-insights__funnel-label-count">{ formatNumber( step.stage.count ) }</span>
-						<Deltas step={ step } />
+						<StepLabels step={ step } topLabel={ topLabel } />
 					</div>
 				) ) }
 			</div>
