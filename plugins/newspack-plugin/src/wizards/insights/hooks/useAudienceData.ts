@@ -1,20 +1,21 @@
 /**
  * useAudienceData (NPPD-1649).
  *
- * Tab 1's fetch lifecycle. Mirrors {@see useGatesData}: a request-id guard
- * serializes overlapping calls so the latest range change wins.
+ * Thin reader over the module insightsCache. The slot key embeds the
+ * date range + comparison window so cross-tab/date state stays coherent.
  */
 
 /**
  * WordPress dependencies
  */
-import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
+import { useCallback, useEffect, useSyncExternalStore } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
 import type { DateRange } from '../state/useDateRange';
-import { fetchAudienceData, type AudienceResponse } from '../api/audience';
+import { fetchAudienceData, refreshAudienceData, type AudienceResponse } from '../api/audience';
+import { insightsCache, makeSlotKey } from '../state/insightsCache';
 
 export type FetchStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -23,52 +24,43 @@ export interface UseAudienceDataResult {
 	data: AudienceResponse | null;
 	error: string | null;
 	refetch: () => void;
+	computedAt: string | null;
+	source: 'bigquery' | 'external' | 'local' | null;
+	cooldownUntil: string | null;
 }
 
-const errorMessage = ( e: unknown ): string => {
-	if ( e && typeof e === 'object' && 'message' in e && typeof ( e as { message: unknown } ).message === 'string' ) {
-		return ( e as { message: string } ).message;
-	}
-	return String( e );
-};
+const queryFrom = ( range: DateRange, previousRange: DateRange | null ) => ( {
+	start: range.start,
+	end: range.end,
+	compare_start: previousRange?.start,
+	compare_end: previousRange?.end,
+} );
 
 const useAudienceData = ( range: DateRange, previousRange: DateRange | null ): UseAudienceDataResult => {
-	const [ status, setStatus ] = useState< FetchStatus >( 'idle' );
-	const [ data, setData ] = useState< AudienceResponse | null >( null );
-	const [ error, setError ] = useState< string | null >( null );
+	const key = makeSlotKey( 'audience', range, previousRange );
 
-	const requestIdRef = useRef( 0 );
-	const [ refetchTick, setRefetchTick ] = useState( 0 );
-	const refetch = useCallback( () => setRefetchTick( t => t + 1 ), [] );
+	const slot = useSyncExternalStore(
+		listener => insightsCache.subscribe( key, listener ),
+		() => insightsCache.getSlot< AudienceResponse >( key )
+	);
 
 	useEffect( () => {
-		const myId = ++requestIdRef.current;
-		setStatus( 'loading' );
-		setError( null );
+		insightsCache.ensureFetched( key, () => fetchAudienceData( queryFrom( range, previousRange ) ) );
+	}, [ key, range.start, range.end, previousRange?.start, previousRange?.end ] );
 
-		fetchAudienceData( {
-			start: range.start,
-			end: range.end,
-			compare_start: previousRange?.start,
-			compare_end: previousRange?.end,
-		} )
-			.then( response => {
-				if ( requestIdRef.current !== myId ) {
-					return;
-				}
-				setData( response );
-				setStatus( 'success' );
-			} )
-			.catch( e => {
-				if ( requestIdRef.current !== myId ) {
-					return;
-				}
-				setError( errorMessage( e ) );
-				setStatus( 'error' );
-			} );
-	}, [ range.start, range.end, previousRange?.start, previousRange?.end, refetchTick ] );
+	const refetch = useCallback( () => {
+		insightsCache.refresh( key, () => refreshAudienceData( queryFrom( range, previousRange ) ) );
+	}, [ key, range.start, range.end, previousRange?.start, previousRange?.end ] );
 
-	return { status, data, error, refetch };
+	return {
+		status: slot.status,
+		data: slot.data,
+		error: slot.error,
+		refetch,
+		computedAt: slot.computedAt,
+		source: slot.source,
+		cooldownUntil: slot.cooldownUntil,
+	};
 };
 
 export default useAudienceData;
