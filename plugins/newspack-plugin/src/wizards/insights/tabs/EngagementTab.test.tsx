@@ -32,6 +32,9 @@ describe( 'EngagementTab', () => {
 			data: { tab_error: 'oauth_not_connected', banner_text: 'Connect Google Analytics.' },
 			error: null,
 			refetch: () => {},
+			computedAt: '2026-06-10T18:42:13Z',
+			source: 'external',
+			cooldownUntil: null,
 		} );
 
 		render( <EngagementTab range={ range } previousRange={ null } /> );
@@ -51,6 +54,9 @@ describe( 'EngagementTab', () => {
 				},
 				previous: null,
 			},
+			computedAt: '2026-06-10T18:42:13Z',
+			source: 'external',
+			cooldownUntil: null,
 		} );
 
 		render( <EngagementTab range={ range } previousRange={ null } /> );
@@ -71,6 +77,9 @@ describe( 'EngagementTab', () => {
 				// gate the delta on the toggle, not on the response.
 				previous: { avg_pages_per_session: { value: 2.0, computable: true, type: 'decimal' } },
 			},
+			computedAt: '2026-06-10T18:42:13Z',
+			source: 'external',
+			cooldownUntil: null,
 		} );
 
 		render( <EngagementTab range={ range } previousRange={ null } /> );
