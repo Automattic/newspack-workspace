@@ -1,0 +1,288 @@
+/**
+ * Newspack Insights — Tab 5 (Prompts) styles (NPPD-1607, Phase 1)
+ *
+ * Tab 5-specific layout only. The shared Insights chrome (sections,
+ * metric cards, table base + wrap, tab loading/error) lives in
+ * `tabs/components/sections.scss` and is loaded by the wizard's main
+ * `style.scss`. Visualization + callout + sortable-table styles live
+ * here because those components are tab-local for Phase 1.
+ *
+ * These classes are prompts-scoped (`__prompts-*`) rather than reusing
+ * the generic Gates names so the two tabs stay fully decoupled — no
+ * shared-stylesheet edits, no cross-tab selector collisions. The
+ * visual language is intentionally identical to Gates.
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-insights {
+	&__prompts-tab {
+		display: flex;
+		flex-direction: column;
+		gap: 32px;
+	}
+
+	// Direct vs Influenced explainer — light gray chrome, info icon, X to
+	// dismiss (session-only). Mirrors the Gates callout.
+	&__prompts-callout {
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		padding: 16px 20px;
+		background-color: wp-colors.$gray-100;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 4px;
+
+		&-icon {
+			flex: 0 0 20px;
+			width: 20px;
+			height: 20px;
+			color: wp-colors.$gray-700;
+		}
+
+		&-body {
+			flex: 1 1 auto;
+			display: flex;
+			flex-direction: column;
+			gap: 8px;
+			font-size: 13px;
+			line-height: 1.5;
+			color: wp-colors.$gray-900;
+
+			p {
+				margin: 0;
+			}
+		}
+
+		&-title {
+			font-size: 14px;
+		}
+
+		&-dismiss {
+			flex: 0 0 auto;
+			background: transparent;
+			border: 0;
+			cursor: pointer;
+			padding: 4px;
+			color: wp-colors.$gray-700;
+
+			&:hover {
+				color: wp-colors.$gray-900;
+			}
+		}
+	}
+
+	// Section 6 — funnel + distribution side-by-side at equal width,
+	// stacking under ~720px container width.
+	&__prompts-convert-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+		gap: 24px;
+		align-items: start;
+	}
+
+	&__prompts-convert-col {
+		min-width: 0; // allow the column to shrink within the grid
+	}
+
+	// Funnel viz — tab-local. Vertical trapezoids approximated as
+	// centered, width-scaled rounded rectangles.
+	&__prompts-funnel {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 16px;
+		padding: 20px;
+		background-color: #fff;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 4px;
+
+		&-row {
+			width: 100%;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 6px;
+		}
+
+		&-dropoff {
+			font-size: 12px;
+			font-weight: 600;
+			letter-spacing: 0.04em;
+			text-transform: uppercase;
+			color: wp-colors.$gray-700;
+		}
+
+		&-stage {
+			width: 40%;
+			min-height: 72px;
+			padding: 12px 16px;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 4px;
+			background-color: var(--wp-admin-theme-color);
+			color: #fff;
+			border-radius: 6px;
+
+			&[data-stage-index="0"] {
+				opacity: 1;
+			}
+
+			&[data-stage-index="1"] {
+				opacity: 0.8;
+			}
+
+			&[data-stage-index="2"] {
+				opacity: 0.6;
+			}
+
+			&-label {
+				font-size: 13px;
+				font-weight: 600;
+				letter-spacing: 0.04em;
+				text-transform: uppercase;
+			}
+
+			&-count {
+				font-size: 24px;
+				font-weight: 600;
+				font-variant-numeric: tabular-nums;
+				line-height: 1.1;
+			}
+
+			&-pct {
+				font-size: 12px;
+				font-weight: 400;
+				opacity: 0.9;
+			}
+		}
+	}
+
+	// Distribution viz — tab-local. Reuses the shared table chrome.
+	&__prompts-distribution {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+
+		&-caption {
+			margin: 0;
+			font-size: 13px;
+			font-weight: 400;
+			line-height: 1.5;
+			color: wp-colors.$gray-700;
+		}
+	}
+
+	// Section 7 — stacked breakdown sub-blocks.
+	&__prompts-subsection {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+
+		& + & {
+			margin-top: 24px;
+		}
+
+		&-heading {
+			margin: 0;
+			font-size: 15px;
+			font-weight: 600;
+			color: wp-colors.$gray-900;
+		}
+
+		&-note {
+			margin: 0;
+			font-size: 13px;
+			font-weight: 400;
+			line-height: 1.5;
+			color: wp-colors.$gray-700;
+		}
+	}
+
+	// Empty state row inside a Performance breakdown table.
+	&__prompts-performance-empty {
+		padding: 32px 20px;
+		text-align: center;
+		font-style: italic;
+		color: wp-colors.$gray-700;
+	}
+
+	// Right-aligned numeric cells (header + body), tabular figures.
+	&__prompts-table-num {
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+	}
+
+	// Em-dash for non-applicable cells, muted to distinguish from a real zero.
+	&__prompts-table-na {
+		color: wp-colors.$gray-600;
+	}
+
+	// Sortable table affordances (Tab 5 Performance breakdown). A
+	// tab-local copy of the Gates sortable chrome.
+	&__prompts-table--sortable {
+		.newspack-insights__prompts-table-sort-cell {
+			// Eliminate the th's default padding because the button
+			// inside owns the click target and re-paints the padding
+			// itself; without this, half the cell isn't clickable.
+			padding: 0;
+		}
+
+		.newspack-insights__prompts-table-sort {
+			// Button fills the cell so any click anywhere in the th
+			// triggers the sort.
+			display: flex;
+			align-items: center;
+			gap: 4px;
+			width: 100%;
+			padding: 12px 20px;
+			background: transparent;
+			border: 0;
+			cursor: pointer;
+			text-align: inherit;
+			font: inherit;
+			color: inherit;
+			letter-spacing: inherit;
+			text-transform: inherit;
+
+			&:hover {
+				background-color: wp-colors.$gray-200;
+			}
+
+			&:focus-visible {
+				outline: 2px solid var(--wp-admin-theme-color);
+				outline-offset: -2px;
+			}
+		}
+
+		// Numeric columns are right-aligned, so pin the indicator to the
+		// right edge.
+		.newspack-insights__prompts-table-num .newspack-insights__prompts-table-sort {
+			justify-content: flex-end;
+			text-align: right;
+		}
+
+		.newspack-insights__prompts-table-sort-label {
+			flex: 1 1 auto;
+		}
+
+		.newspack-insights__prompts-table-sort-indicator {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			opacity: 0.3;
+			color: wp-colors.$gray-700;
+		}
+
+		.newspack-insights__prompts-table-sort:hover .newspack-insights__prompts-table-sort-indicator {
+			opacity: 0.7;
+		}
+
+		.newspack-insights__prompts-table-sort.is-active .newspack-insights__prompts-table-sort-indicator {
+			opacity: 1;
+			color: wp-colors.$gray-900;
+		}
+	}
+}
