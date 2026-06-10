@@ -1,0 +1,33 @@
+/**
+ * Newspack Insights — Tab 3 (Conversion Journey) styles (NPPD-1609, Phase 1)
+ *
+ * Tab 3-specific layout only. The shared Insights chrome (sections,
+ * metric cards, tables, tab loading/error) lives in
+ * `tabs/components/sections.scss` and is loaded by the wizard's main
+ * `style.scss`. Visualization, callout, and table styles for this tab are
+ * tab-local and live here.
+ *
+ * Classes are conversion-scoped (`__conversion-*`) so the tab stays fully
+ * decoupled from the other Insights tabs — no shared-stylesheet edits, no
+ * cross-tab selector collisions. The visual language is intentionally
+ * identical to Gates and Prompts.
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-insights {
+	&__conversion-tab {
+		display: flex;
+		flex-direction: column;
+		gap: 32px;
+	}
+
+	// Scaffold placeholder for a viz slot whose primitive is wired in a
+	// later commit. Reserves vertical space so the section structure reads
+	// during the scaffold phase; replaced by the real chart / table.
+	&__viz-placeholder {
+		min-height: 120px;
+		border: 1px dashed wp-colors.$gray-200;
+		border-radius: 4px;
+	}
+}

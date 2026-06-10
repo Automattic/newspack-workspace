@@ -30,6 +30,12 @@ export const TAB_LOADING_MESSAGES = {
 		{ text: __( 'Analyzing reading patterns…', 'newspack-plugin' ), delay: 6000 },
 		{ text: __( 'Almost there…', 'newspack-plugin' ), delay: 12000 },
 	],
+	conversion: [
+		{ text: __( 'Loading conversion journey…', 'newspack-plugin' ), delay: 0 },
+		{ text: __( 'Aggregating across all surfaces…', 'newspack-plugin' ), delay: 250 },
+		{ text: __( 'Joining WooCommerce orders…', 'newspack-plugin' ), delay: 6000 },
+		{ text: __( 'Almost there…', 'newspack-plugin' ), delay: 12000 },
+	],
 	gates: [
 		{ text: __( 'Loading gate performance…', 'newspack-plugin' ), delay: 0 },
 		{ text: __( 'Querying gate impressions…', 'newspack-plugin' ), delay: 250 },
