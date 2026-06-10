@@ -383,8 +383,10 @@ final class Prompts_Metric {
 	 * when the array is empty. Phase 2 will populate this with real BQ
 	 * rows — `prompt_title` is captured directly in event params, so no
 	 * WP enrichment is needed (unlike Gates' `gate_post_id` → post_title
-	 * lookup). Donation/subscription columns ship as *attempts* in v1;
-	 * completion columns are a v1.1 candidate via the Woo join.
+	 * lookup). Donation/subscription columns report *conversions* (count
+	 * + rate), populated in Phase 2 by grouping per-prompt attempts and
+	 * matching Woo completions via `Woo_Order_Resolver` — mirroring the
+	 * Gates v1.1 decision (NPPD-1684).
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.

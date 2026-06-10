@@ -67,9 +67,11 @@ export interface PromptsDistributionData {
  * returns no rows (the section renders the spec's empty-state copy).
  * Phase 2 populates this from BQ — `prompt_title` comes straight from
  * the event params, no WP enrichment needed. Donation / subscription
- * columns are *attempts* in v1; completion columns are a v1.1
- * candidate. Rate columns are nullable: a button-less prompt has no
- * CTR, which renders as an em-dash (distinct from a real 0%).
+ * columns report *conversions* (Woo-completed outcomes), not attempts,
+ * matching the Gates v1.1 decision (NPPD-1684). Count and rate columns
+ * are nullable: a non-applicable cell (e.g. CTR on a button-less
+ * prompt, or donation conversions on a registration prompt) renders as
+ * an em-dash, distinct from a real 0 / 0%.
  */
 export interface PromptsPerformanceByPromptRow {
 	newspack_popup_id: number;
@@ -83,8 +85,10 @@ export interface PromptsPerformanceByPromptRow {
 	dismissal_rate: number | null;
 	registrations: number;
 	newsletter_signups: number;
-	donation_attempts: number;
-	subscription_attempts: number;
+	donation_conversions: number | null;
+	donation_conversion_rate: number | null;
+	subscription_conversions: number | null;
+	subscription_conversion_rate: number | null;
 }
 
 /**

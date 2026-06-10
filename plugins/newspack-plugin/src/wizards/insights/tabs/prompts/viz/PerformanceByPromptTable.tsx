@@ -3,10 +3,11 @@
  *
  * One row per prompt, sorted by impressions descending by default.
  * Thin wrapper over the tab-local {@see SortableTable}. Donation and
- * subscription columns show *attempts* in v1 (completions are a v1.1
- * candidate via the Woo join). Rate cells render an em-dash for
- * non-applicable prompts (e.g. CTR on a button-less prompt), distinct
- * from a real 0%.
+ * subscription columns report *conversions* (Woo-completed outcomes) —
+ * count + rate for each — matching the Gates v1.1 decision (NPPD-1684).
+ * Count and rate cells render a muted em-dash for non-applicable
+ * prompts (e.g. donation conversions on a registration prompt),
+ * distinct from a real 0 / 0%.
  *
  * Phase 1 renders the spec's empty-state row; the sort chrome stays
  * visible so it's identical between phases.
@@ -30,6 +31,7 @@ export interface PerformanceByPromptTableProps {
 }
 
 const renderRate = ( v: number | null ) => ( v === null ? <NotApplicable /> : <>{ formatPercent( v ) }</> );
+const renderCount = ( v: number | null ) => ( v === null ? <NotApplicable /> : <>{ formatNumber( v ) }</> );
 
 const columns: SortableColumn< PromptsPerformanceByPromptRow >[] = [
 	{ key: 'prompt_title', label: __( 'Prompt', 'newspack-plugin' ), numeric: false, render: r => r.prompt_title, sortValue: r => r.prompt_title },
@@ -85,18 +87,32 @@ const columns: SortableColumn< PromptsPerformanceByPromptRow >[] = [
 		sortValue: r => r.newsletter_signups,
 	},
 	{
-		key: 'donation_attempts',
-		label: __( 'Donation attempts', 'newspack-plugin' ),
+		key: 'donation_conversions',
+		label: __( 'Donation conversions', 'newspack-plugin' ),
 		numeric: true,
-		render: r => formatNumber( r.donation_attempts ),
-		sortValue: r => r.donation_attempts,
+		render: r => renderCount( r.donation_conversions ),
+		sortValue: r => r.donation_conversions,
 	},
 	{
-		key: 'subscription_attempts',
-		label: __( 'Subscription attempts', 'newspack-plugin' ),
+		key: 'donation_conversion_rate',
+		label: __( 'Donation conversion rate', 'newspack-plugin' ),
 		numeric: true,
-		render: r => formatNumber( r.subscription_attempts ),
-		sortValue: r => r.subscription_attempts,
+		render: r => renderRate( r.donation_conversion_rate ),
+		sortValue: r => r.donation_conversion_rate,
+	},
+	{
+		key: 'subscription_conversions',
+		label: __( 'Subscription conversions', 'newspack-plugin' ),
+		numeric: true,
+		render: r => renderCount( r.subscription_conversions ),
+		sortValue: r => r.subscription_conversions,
+	},
+	{
+		key: 'subscription_conversion_rate',
+		label: __( 'Subscription conversion rate', 'newspack-plugin' ),
+		numeric: true,
+		render: r => renderRate( r.subscription_conversion_rate ),
+		sortValue: r => r.subscription_conversion_rate,
 	},
 ];
 
