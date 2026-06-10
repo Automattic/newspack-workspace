@@ -230,6 +230,25 @@
 		margin: 0;
 	}
 
+	// Wraps a section's heading + caption alongside an optional
+	// flex-end slot used by each tab's first section to host
+	// LastUpdated. When the slot is empty the wrapper still flows
+	// correctly with just the text side.
+	&__section-header-container {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 16px;
+	}
+
+	&__section-header-text {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
 	&__last-updated-wrap {
 		display: inline-flex;
 		align-items: center;

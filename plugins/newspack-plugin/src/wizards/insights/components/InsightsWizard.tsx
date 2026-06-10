@@ -2,9 +2,10 @@
  * InsightsWizard
  *
  * Top-level chrome for the Newspack Insights wizard. Owns active tab,
- * date range, and comparison-mode state; renders header (title +
- * LastUpdated), date picker, comparison toggle, tab navigation, and
- * the lazy-loaded tab content.
+ * date range, and comparison-mode state; renders header (title, date
+ * picker, comparison toggle), tab navigation, and the lazy-loaded tab
+ * content. Per-tab cache freshness ("Last updated …") lives inside
+ * each tab's first section heading, not the global header.
  *
  * Tab routing happens entirely client-side via URL query persistence so
  * tabs are linkable and refresh restores state.
@@ -21,7 +22,6 @@ import { useCallback, useEffect, useState } from '@wordpress/element';
  */
 import ComparisonToggle from './ComparisonToggle';
 import DateRangePicker from './DateRangePicker';
-import LastUpdated from './LastUpdated';
 import TabContent from './TabContent';
 import TabNavigation, { ALL_TABS, type TabKey, type TabVisibility } from './TabNavigation';
 import useComparisonMode from '../state/useComparisonMode';
@@ -121,7 +121,6 @@ const InsightsWizard = ( { config }: InsightsWizardProps ) => {
 							<>
 								<DateRangePicker range={ range } onPresetChange={ setPreset } onCustomChange={ setCustom } />
 								<ComparisonToggle enabled={ comparisonEnabled } onChange={ setComparisonEnabled } />
-								<LastUpdated tab={ activeTab } range={ range } previousRange={ previousRange } />
 							</>
 						) }
 					</div>
