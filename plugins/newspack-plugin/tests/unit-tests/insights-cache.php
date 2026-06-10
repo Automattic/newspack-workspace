@@ -101,7 +101,7 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 			}
 		);
 
-		$key       = self::_transient_key_for( 'gates', [ '2026-01-01', '2026-01-31', null, null ] );
+		$key       = self::transient_key_for_test( 'gates', [ '2026-01-01', '2026-01-31', null, null ] );
 		$timeout   = get_option( '_transient_timeout_' . $key );
 		$remaining = $timeout - time();
 
@@ -122,7 +122,7 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 			}
 		);
 
-		$key       = self::_transient_key_for( 'audience', [ '2026-01-01', '2026-01-31', null, null ] );
+		$key       = self::transient_key_for_test( 'audience', [ '2026-01-01', '2026-01-31', null, null ] );
 		$timeout   = get_option( '_transient_timeout_' . $key );
 		$remaining = $timeout - time();
 
@@ -152,7 +152,7 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 		Cache::store( 'audience', Cache::SOURCE_EXTERNAL, $key_parts, $compute );
 
 		$this->assertSame( 2, $calls, 'Disabled mode must recompute every call.' );
-		$key = self::_transient_key_for( 'audience', $key_parts );
+		$key = self::transient_key_for_test( 'audience', $key_parts );
 		$this->assertFalse( get_transient( $key ), 'Disabled mode must not write transients.' );
 	}
 
@@ -323,7 +323,7 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 	 * @param array  $key_parts Canonicalized window components.
 	 * @return string Transient key.
 	 */
-	private static function _transient_key_for( string $tab, array $key_parts ): string {
+	private static function transient_key_for_test( string $tab, array $key_parts ): string {
 		return 'newspack_insights_' . $tab . '_' . md5( wp_json_encode( $key_parts ) );
 	}
 }
