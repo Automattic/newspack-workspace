@@ -16,6 +16,7 @@ import { useCallback, useEffect, useSyncExternalStore } from '@wordpress/element
 import type { DateRange } from '../state/useDateRange';
 import { fetchDonorsData, refreshDonorsData, type DonorsResponse } from '../api/donors';
 import { insightsCache, makeSlotKey } from '../state/insightsCache';
+import { useRegisterRefresh } from '../state/refreshRegistry';
 
 export type FetchStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -51,6 +52,8 @@ const useDonorsData = ( range: DateRange, previousRange: DateRange | null ): Use
 	const refetch = useCallback( () => {
 		insightsCache.refresh( key, () => refreshDonorsData( queryFrom( range, previousRange ) ) );
 	}, [ key, range.start, range.end, previousRange?.start, previousRange?.end ] );
+
+	useRegisterRefresh( 'donors', refetch );
 
 	return {
 		status: slot.status,

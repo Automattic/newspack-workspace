@@ -16,6 +16,7 @@ import { useCallback, useEffect, useSyncExternalStore } from '@wordpress/element
 import type { DateRange } from '../state/useDateRange';
 import { fetchGatesData, refreshGatesData, type GatesResponse } from '../api/gates';
 import { insightsCache, makeSlotKey } from '../state/insightsCache';
+import { useRegisterRefresh } from '../state/refreshRegistry';
 
 export type FetchStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -51,6 +52,8 @@ const useGatesData = ( range: DateRange, previousRange: DateRange | null ): UseG
 	const refetch = useCallback( () => {
 		insightsCache.refresh( key, () => refreshGatesData( queryFrom( range, previousRange ) ) );
 	}, [ key, range.start, range.end, previousRange?.start, previousRange?.end ] );
+
+	useRegisterRefresh( 'gates', refetch );
 
 	return {
 		status: slot.status,
