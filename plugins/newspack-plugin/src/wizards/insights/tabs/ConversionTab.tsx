@@ -28,6 +28,8 @@ import type { DateRange } from '../state/useDateRange';
 import useConversionData from '../hooks/useConversionData';
 import TabStateView from './components/TabStateView';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
+import ConversionPreviewBanner from './conversion/ConversionPreviewBanner';
+import CohortRetentionFreshnessCallout from './conversion/CohortRetentionFreshnessCallout';
 import ReaderLifecycleSection from './conversion/ReaderLifecycleSection';
 import PerJourneyConversionFunnelsSection from './conversion/PerJourneyConversionFunnelsSection';
 import WhereConversionsComeFromSection from './conversion/WhereConversionsComeFromSection';
@@ -57,6 +59,8 @@ const ConversionTab = ( { range, previousRange }: ConversionTabProps ) => {
 		>
 			{ data && (
 				<>
+					<ConversionPreviewBanner />
+					<CohortRetentionFreshnessCallout />
 					<ReaderLifecycleSection current={ data.current } />
 					<PerJourneyConversionFunnelsSection current={ data.current } />
 					<WhereConversionsComeFromSection current={ data.current } />

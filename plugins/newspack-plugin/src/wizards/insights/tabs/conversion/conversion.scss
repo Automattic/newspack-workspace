@@ -27,6 +27,55 @@
 		gap: 32px;
 	}
 
+	// Phase 1 preview banner — light-blue chrome to distinguish it from the
+	// gray `__info-callout` freshness note below it. Removed entirely in
+	// Phase 2. Shares the callout layout (info icon left, dismiss X right).
+	&__conversion-preview-banner {
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		padding: 16px 20px;
+		background-color: #e6f1fb;
+		border: 1px solid #b8d8f0;
+		border-radius: 4px;
+
+		&-icon {
+			flex: 0 0 20px;
+			width: 20px;
+			height: 20px;
+			color: var(--wp-admin-theme-color);
+		}
+
+		&-body {
+			flex: 1 1 auto;
+			font-size: 13px;
+			line-height: 1.5;
+			color: wp-colors.$gray-900;
+		}
+
+		&-title {
+			margin: 0;
+		}
+
+		&-dismiss {
+			flex: 0 0 auto;
+			background: transparent;
+			border: 0;
+			cursor: pointer;
+			padding: 4px;
+			color: wp-colors.$gray-700;
+
+			&:hover {
+				color: wp-colors.$gray-900;
+			}
+
+			&:focus-visible {
+				outline: 2px solid var(--wp-admin-theme-color);
+				outline-offset: 2px;
+			}
+		}
+	}
+
 	// Per-viz subheading + caption used inside the multi-cell sections.
 	&__conversion-subheading {
 		margin: 0 0 4px;
