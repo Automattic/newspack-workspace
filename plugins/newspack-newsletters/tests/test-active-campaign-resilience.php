@@ -43,6 +43,16 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 	private $response_body = [ 'result_code' => 1 ];
 
 	/**
+	 * Optional per-action canned responses, keyed by API action (v1 `api_action`
+	 * or `v3:<resource>`). A value may be a decoded body array (returned as a 200)
+	 * or a WP_Error (returned as a transport failure). When set for the matched
+	 * action it takes precedence over $transport_error / $response_body.
+	 *
+	 * @var array
+	 */
+	private $responses = [];
+
+	/**
 	 * Set up: configure credentials and intercept all outbound HTTP.
 	 */
 	public function set_up() {
@@ -50,6 +60,7 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 		$this->captured_timeouts = [];
 		$this->transport_error   = null;
 		$this->response_body     = [ 'result_code' => 1 ];
+		$this->responses         = [];
 		Newspack_Newsletters_Active_Campaign::instance()->set_api_credentials(
 			[
 				'url' => 'https://example.api-us1.com',
@@ -78,6 +89,25 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 	 */
 	public function mock_http( $preempt, $args, $url ) {
 		$this->captured_timeouts[] = $args['timeout'];
+
+		// Per-action overrides take precedence (used by the send() choreography test).
+		if ( ! empty( $this->responses ) ) {
+			$action = $this->resolve_action( $args, $url );
+			if ( array_key_exists( $action, $this->responses ) ) {
+				$canned = $this->responses[ $action ];
+				if ( is_wp_error( $canned ) ) {
+					return $canned;
+				}
+				return [
+					'response' => [
+						'code'    => 200,
+						'message' => 'OK',
+					],
+					'body'     => wp_json_encode( $canned ),
+				];
+			}
+		}
+
 		if ( $this->transport_error ) {
 			return $this->transport_error;
 		}
@@ -91,6 +121,29 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Resolve the ActiveCampaign action for a request. v1 GET calls carry
+	 * `api_action` in the query string; v1 POST calls carry it in the body; v3
+	 * calls are identified by the resource path.
+	 *
+	 * @param array  $args HTTP request arguments.
+	 * @param string $url  Request URL.
+	 *
+	 * @return string Action key, e.g. `campaign_create` or `v3:audiences`.
+	 */
+	private function resolve_action( $args, $url ) {
+		if ( isset( $args['body']['api_action'] ) ) {
+			return $args['body']['api_action'];
+		}
+		if ( preg_match( '/api_action=([a-z_]+)/', $url, $matches ) ) {
+			return $matches[1];
+		}
+		if ( preg_match( '#/api/3/([a-z_]+)#', $url, $matches ) ) {
+			return 'v3:' . $matches[1];
+		}
+		return '';
+	}
+
+	/**
 	 * A caller-supplied timeout must reach the HTTP layer. The request args merge
 	 * (`$args + $options`) silently drops it unless the request method honors it
 	 * explicitly, so this guards the plumbing the cleanup fix depends on.
@@ -98,6 +151,15 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 	public function test_api_v1_request_honors_caller_supplied_timeout() {
 		Newspack_Newsletters_Active_Campaign::instance()->api_v1_request( 'campaign_delete', 'GET', [ 'timeout' => 12 ] );
 		$this->assertSame( 12, end( $this->captured_timeouts ) );
+	}
+
+	/**
+	 * The v3 request method honors a caller-supplied timeout too, so the plumbing
+	 * is symmetric with v1.
+	 */
+	public function test_api_v3_request_honors_caller_supplied_timeout() {
+		Newspack_Newsletters_Active_Campaign::instance()->api_v3_request( 'audiences', 'GET', [ 'timeout' => 9 ] );
+		$this->assertSame( 9, end( $this->captured_timeouts ) );
 	}
 
 	/**
@@ -204,5 +266,60 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 		$this->assertTrue( is_wp_error( $result ) );
 		$this->assertSame( 'http_request_failed', $result->get_error_code() );
 		$this->assertStringContainsString( 'Could not resolve host', $result->get_error_message() );
+	}
+
+	/**
+	 * The headline resilience guarantee. When a previously-created campaign is
+	 * stuck in ActiveCampaign — so the cleanup `campaign_list` call hangs and
+	 * times out — send() must NOT abort. It proceeds to create and dispatch a
+	 * fresh campaign, which is exactly what lets a publisher recover instead of
+	 * being stranded behind a campaign they were only trying to delete. The fresh
+	 * campaign id also overwrites the stuck one, so the failure self-clears.
+	 */
+	public function test_send_completes_despite_stuck_campaign_cleanup() {
+		$active_campaign = Newspack_Newsletters_Active_Campaign::instance();
+
+		$post_id = self::factory()->post->create(
+			[
+				'post_title'  => 'Resilience Newsletter',
+				'post_status' => 'draft',
+			]
+		);
+		// A stuck campaign from a prior attempt that send() will try (and fail) to clean up.
+		update_post_meta( $post_id, 'ac_campaign_id', '999999' );
+		update_post_meta( $post_id, 'senderName', 'Sender' );
+		update_post_meta( $post_id, 'senderEmail', 'sender@example.com' );
+		update_post_meta( $post_id, 'send_list_id', '5' );
+		update_post_meta( $post_id, Newspack_Newsletters::EMAIL_HTML_META, '<p>Hello</p>' );
+
+		$timeout_error = new WP_Error(
+			'http_request_failed',
+			'cURL error 28: Operation timed out after 45002 milliseconds with 0 bytes received'
+		);
+		$this->responses = [
+			// Cleanup of the stuck campaign hangs — this is the failure being tolerated.
+			'campaign_list'   => $timeout_error,
+			// The fresh send chain succeeds.
+			'list_list'       => [ 'result_code' => 1, [ 'id' => 5, 'name' => 'Main', 'subscriber_count' => 10 ] ],
+			'v3:audiences'    => [ 'data' => [], 'meta' => [ 'page' => [ 'total' => 0 ] ] ],
+			'message_add'     => [ 'result_code' => 1, 'id' => 555 ],
+			'message_view'    => [ 'result_code' => 1, 'id' => 555, 'html' => '<p>Hello</p>' ],
+			'campaign_create' => [ 'result_code' => 1, 'id' => 777 ],
+			'campaign_status' => [ 'result_code' => 1 ],
+		];
+
+		$result = $active_campaign->send( get_post( $post_id ) );
+
+		$this->assertTrue( $result, 'send() must succeed even though cleanup of the stuck campaign timed out.' );
+		$this->assertSame(
+			'777',
+			(string) get_post_meta( $post_id, 'ac_campaign_id', true ),
+			'The fresh campaign id must replace the stuck one so the failure self-clears.'
+		);
+		$this->assertContains(
+			Newspack_Newsletters_Active_Campaign::CLEANUP_REQUEST_TIMEOUT,
+			$this->captured_timeouts,
+			'The cleanup that hung must have been attempted with the bounded timeout.'
+		);
 	}
 }
