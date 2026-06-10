@@ -143,7 +143,8 @@ class Gates_REST_Controller extends WP_REST_Controller {
 		// render path ('populated' | 'empty' | 'error'). Never enable in production.
 		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
 			$variant = (string) ( $request->get_param( '_fixture_state' ) ?? 'populated' );
-			return rest_ensure_response( Gates_Metric::get_fixture( $variant ) );
+			$compare = null !== $compare_start && null !== $compare_end;
+			return rest_ensure_response( Gates_Metric::get_fixture( $variant, $compare ) );
 		}
 
 		$metric = new Gates_Metric();

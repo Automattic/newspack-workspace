@@ -45,7 +45,10 @@ export const scalarToMetricCardProps = ( props: ScalarCardProps ) => {
 		description,
 		value: current.value,
 		format: formatFor( current ),
-		// Only compare against a real prior value (not an error/non-computable one).
-		previousValue: previous && previous.state !== 'error' && previous.computable ? previous.value : null,
+		// Suppress the period-over-period delta unless BOTH windows are real
+		// computed values. A non-computable current (e.g. an empty window's zero)
+		// must not show a delta against a real prior value (that would read as a
+		// misleading "↓ 100%").
+		previousValue: current.computable && previous && previous.state !== 'error' && previous.computable ? previous.value : null,
 	};
 };

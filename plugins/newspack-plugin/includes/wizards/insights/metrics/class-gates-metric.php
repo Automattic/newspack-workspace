@@ -95,11 +95,13 @@ final class Gates_Metric {
 	 * The variant selects a render path: 'populated' (default), 'empty', 'error'.
 	 *
 	 * @param string $variant One of 'populated', 'empty', 'error'.
+	 * @param bool   $compare Whether comparison was requested; when false the
+	 *                        `previous` window is null (no period-over-period deltas).
 	 * @return array Full { tab_error, current, previous } response shape.
 	 */
-	public static function get_fixture( string $variant = 'populated' ): array {
+	public static function get_fixture( string $variant = 'populated', bool $compare = false ): array {
 		$build = require NEWSPACK_ABSPATH . 'includes/wizards/insights/fixtures/gates-fixture.php';
-		return $build( $variant );
+		return $build( $variant, $compare );
 	}
 
 	/**
@@ -161,6 +163,20 @@ final class Gates_Metric {
 	}
 
 	/**
+	 * Error payload for a collection whose query succeeded but returned an
+	 * unexpected (non-array) shape — a data-quality bug, not an empty window.
+	 *
+	 * @param string $rows_key Key holding the (empty) collection: 'stages'|'buckets'|'rows'.
+	 * @return array
+	 */
+	private function malformed_collection( string $rows_key ): array {
+		return $this->error_collection(
+			$rows_key,
+			new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The query returned an unexpected shape.', 'newspack-plugin' ) )
+		);
+	}
+
+	/**
 	 * Run a scalar catalog query and extract a single value from the first row.
 	 *
 	 * A proxy WP_Error becomes state 'error'. A successful query with no usable
@@ -191,10 +207,14 @@ final class Gates_Metric {
 			return $this->populated_scalar( $zero, false, null, $placeholder_type );
 		}
 		$value = $rows[0][ $row_key ];
-		// Non-numeric, or (for counts) a non-integer value that signals catalog
-		// drift, can't be trusted as a figure — surface a non-computable zero.
+		// Non-numeric, or (for counts) a non-integer value, signals catalog/schema
+		// drift — malformed data, not an empty window. Surface it as an error so a
+		// real data-quality regression isn't masked as a benign zero.
 		if ( ! is_numeric( $value ) || ( 'count' === $placeholder_type && (float) $value !== (float) (int) $value ) ) {
-			return $this->populated_scalar( $zero, false, null, $placeholder_type );
+			return $this->error_scalar(
+				$placeholder_type,
+				new \WP_Error( 'bigquery_proxy_malformed_value', __( 'The query returned a non-numeric value.', 'newspack-plugin' ) )
+			);
 		}
 		return $this->populated_scalar( 'count' === $placeholder_type ? (int) $value : (float) $value, true, null, $placeholder_type );
 	}
@@ -424,10 +444,7 @@ final class Gates_Metric {
 		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
 			// Successful response in an unexpected shape — a data-quality bug, not
 			// a legitimately empty window. Surface it as an error.
-			return $this->error_collection(
-				'stages',
-				new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The funnel query returned an unexpected shape.', 'newspack-plugin' ) )
-			);
+			return $this->malformed_collection( 'stages' );
 		}
 		if ( empty( $rows ) ) {
 			return [
@@ -480,10 +497,7 @@ final class Gates_Metric {
 			return $this->error_collection( 'buckets', $rows );
 		}
 		if ( ! is_array( $rows ) ) {
-			return $this->error_collection(
-				'buckets',
-				new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The distribution query returned an unexpected shape.', 'newspack-plugin' ) )
-			);
+			return $this->malformed_collection( 'buckets' );
 		}
 
 		$by_bucket = [];
@@ -541,10 +555,7 @@ final class Gates_Metric {
 			return $this->error_collection( 'rows', $rows );
 		}
 		if ( ! is_array( $rows ) ) {
-			return $this->error_collection(
-				'rows',
-				new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The performance query returned an unexpected shape.', 'newspack-plugin' ) )
-			);
+			return $this->malformed_collection( 'rows' );
 		}
 		if ( empty( $rows ) ) {
 			return [

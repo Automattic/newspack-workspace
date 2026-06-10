@@ -31,6 +31,7 @@ import { Icon, chevronUp, chevronDown } from '@wordpress/icons';
  */
 import type { GatesPerformanceRow, GatesPerformanceTable } from '../../api/gates';
 import { formatNumber, formatPercent } from '../components/format';
+import { SECTION_ERROR_MESSAGE } from './SectionState';
 
 export interface PerformanceByGateSectionProps {
 	data: GatesPerformanceTable;
@@ -190,7 +191,7 @@ const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => 
 						{ 'error' === data.state && (
 							<tr>
 								<td colSpan={ columns.length } className="newspack-insights__gates-performance-empty">
-									{ __( 'Unable to load this section. Newspack Manager may need attention.', 'newspack-plugin' ) }
+									{ SECTION_ERROR_MESSAGE }
 								</td>
 							</tr>
 						) }

@@ -18,7 +18,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-return function ( string $variant = 'populated' ): array {
+return function ( string $variant = 'populated', bool $compare = false ): array {
 	$now    = function_exists( 'current_datetime' ) ? current_datetime() : new DateTimeImmutable();
 	$end    = $now;
 	$start  = $now->modify( '-29 days' );
@@ -225,6 +225,6 @@ return function ( string $variant = 'populated' ): array {
 	return [
 		'tab_error' => false,
 		'current'   => $build( 1.0 ),
-		'previous'  => $build( 0.9 ),
+		'previous'  => $compare ? $build( 0.9 ) : null,
 	];
 };

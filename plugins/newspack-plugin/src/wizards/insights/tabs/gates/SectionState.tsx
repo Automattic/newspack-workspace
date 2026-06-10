@@ -21,6 +21,9 @@ import { Icon, caution } from '@wordpress/icons';
  */
 import type { GatesMetricState } from '../../api/gates';
 
+/** Publisher-facing copy for a section that failed to load (no internal codes). */
+export const SECTION_ERROR_MESSAGE = __( 'Unable to load this section. Newspack Manager may need attention.', 'newspack-plugin' );
+
 export interface SectionStateProps {
 	state: GatesMetricState;
 	/** Copy shown when the query succeeded with no rows. */
@@ -33,7 +36,7 @@ const SectionState = ( { state, emptyMessage, children }: SectionStateProps ) =>
 		return (
 			<p className="newspack-insights__section-error" role="alert">
 				<Icon icon={ caution } size={ 20 } />
-				<span>{ __( 'Unable to load this section. Newspack Manager may need attention.', 'newspack-plugin' ) }</span>
+				<span>{ SECTION_ERROR_MESSAGE }</span>
 			</p>
 		);
 	}

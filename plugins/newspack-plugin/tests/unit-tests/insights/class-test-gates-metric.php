@@ -146,8 +146,10 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_total_gate_impressions( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertSame( 'populated', $result['state'] );
+		// Malformed data is a quality bug, not an empty window → error state.
+		$this->assertSame( 'error', $result['state'] );
 		$this->assertFalse( $result['computable'] );
+		$this->assertSame( 'bigquery_proxy_malformed_value', $result['error_code'] );
 	}
 
 	/**
@@ -164,8 +166,9 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 		$metric = new Gates_Metric( $proxy );
 		$result = $metric->get_total_gate_impressions( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
 
-		$this->assertSame( 'populated', $result['state'] );
-		$this->assertFalse( $result['computable'] );
+		// A non-integer count signals catalog drift → error state, not a zero.
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_value', $result['error_code'] );
 	}
 
 	/**
