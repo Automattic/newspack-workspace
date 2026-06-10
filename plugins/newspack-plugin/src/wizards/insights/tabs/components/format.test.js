@@ -31,7 +31,13 @@ describe( 'formatCurrency', () => {
 	} );
 
 	it( 'treats exactly $1,000,000 as the abbreviated tier', () => {
-		expect( formatCurrency( 1000000 ) ).toEqual( { display: '$1M', title: '$1,000,000.00' } );
+		// The compact display's trailing ".0" varies by ICU version ("$1M" on
+		// newer Node, "$1.0M" on older). Assert the meaningful invariants — the
+		// abbreviated tier was taken (full-value title present) and the rounded
+		// magnitude — without pinning the ICU-specific form.
+		const result = formatCurrency( 1000000 );
+		expect( result.display ).toMatch( /^\$1(\.0)?M$/ );
+		expect( result.title ).toBe( '$1,000,000.00' );
 	} );
 
 	it( 'tiers negatives by magnitude and keeps the sign', () => {
