@@ -160,6 +160,23 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The humanized timeout must keep the original transport failure as error
+	 * data so logging and support tooling retain the underlying cURL detail.
+	 */
+	public function test_humanized_timeout_preserves_original_error() {
+		$this->transport_error = new WP_Error(
+			'http_request_failed',
+			'cURL error 28: Operation timed out after 45002 milliseconds with 0 bytes received'
+		);
+		$result = Newspack_Newsletters_Active_Campaign::instance()->api_v1_request( 'campaign_list', 'GET' );
+
+		$data = $result->get_error_data();
+		$this->assertSame( 'http_request_failed', $data['original_error_code'] );
+		$this->assertStringContainsString( 'cURL error 28', $data['original_error_message'] );
+		$this->assertArrayHasKey( 'original_error_data', $data );
+	}
+
+	/**
 	 * The same translation applies to the v3 API.
 	 */
 	public function test_v3_timeout_is_humanized() {

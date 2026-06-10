@@ -195,7 +195,14 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		if ( false !== stripos( $message, 'timed out' ) || false !== stripos( $message, 'cURL error 28' ) ) {
 			return new \WP_Error(
 				'newspack_newsletters_active_campaign_timeout',
-				__( 'ActiveCampaign did not respond in time. This is usually a temporary issue on ActiveCampaign\'s end. Please wait a few minutes and try again; if the problem continues, try sending a fresh copy of the newsletter.', 'newspack-newsletters' )
+				__( 'ActiveCampaign did not respond in time. This is usually a temporary issue on ActiveCampaign\'s end. Please wait a few minutes and try again; if the problem continues, try sending a fresh copy of the newsletter.', 'newspack-newsletters' ),
+				// Preserve the original transport failure for logging and support
+				// tooling; the publisher sees the friendly message above.
+				[
+					'original_error_code'    => $error->get_error_code(),
+					'original_error_message' => $message,
+					'original_error_data'    => $error->get_error_data(),
+				]
 			);
 		}
 		return $error;
