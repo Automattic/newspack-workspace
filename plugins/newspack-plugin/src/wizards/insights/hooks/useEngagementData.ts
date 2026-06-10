@@ -1,19 +1,21 @@
 /**
  * useEngagementData (NPPD-1649).
  *
- * Tab 2's fetch lifecycle. Mirrors {@see useAudienceData}.
+ * Thin reader over the module insightsCache. The slot key embeds the
+ * date range + comparison window so cross-tab/date state stays coherent.
  */
 
 /**
  * WordPress dependencies
  */
-import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
+import { useCallback, useEffect, useSyncExternalStore } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
 import type { DateRange } from '../state/useDateRange';
-import { fetchEngagementData, type EngagementResponse } from '../api/engagement';
+import { fetchEngagementData, refreshEngagementData, type EngagementResponse } from '../api/engagement';
+import { insightsCache, makeSlotKey } from '../state/insightsCache';
 
 export type FetchStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -22,52 +24,43 @@ export interface UseEngagementDataResult {
 	data: EngagementResponse | null;
 	error: string | null;
 	refetch: () => void;
+	computedAt: string | null;
+	source: 'bigquery' | 'external' | 'local' | null;
+	cooldownUntil: string | null;
 }
 
-const errorMessage = ( e: unknown ): string => {
-	if ( e && typeof e === 'object' && 'message' in e && typeof ( e as { message: unknown } ).message === 'string' ) {
-		return ( e as { message: string } ).message;
-	}
-	return String( e );
-};
+const queryFrom = ( range: DateRange, previousRange: DateRange | null ) => ( {
+	start: range.start,
+	end: range.end,
+	compare_start: previousRange?.start,
+	compare_end: previousRange?.end,
+} );
 
 const useEngagementData = ( range: DateRange, previousRange: DateRange | null ): UseEngagementDataResult => {
-	const [ status, setStatus ] = useState< FetchStatus >( 'idle' );
-	const [ data, setData ] = useState< EngagementResponse | null >( null );
-	const [ error, setError ] = useState< string | null >( null );
+	const key = makeSlotKey( 'engagement', range, previousRange );
 
-	const requestIdRef = useRef( 0 );
-	const [ refetchTick, setRefetchTick ] = useState( 0 );
-	const refetch = useCallback( () => setRefetchTick( t => t + 1 ), [] );
+	const slot = useSyncExternalStore(
+		listener => insightsCache.subscribe( key, listener ),
+		() => insightsCache.getSlot< EngagementResponse >( key )
+	);
 
 	useEffect( () => {
-		const myId = ++requestIdRef.current;
-		setStatus( 'loading' );
-		setError( null );
+		insightsCache.ensureFetched( key, () => fetchEngagementData( queryFrom( range, previousRange ) ) );
+	}, [ key, range.start, range.end, previousRange?.start, previousRange?.end ] );
 
-		fetchEngagementData( {
-			start: range.start,
-			end: range.end,
-			compare_start: previousRange?.start,
-			compare_end: previousRange?.end,
-		} )
-			.then( response => {
-				if ( requestIdRef.current !== myId ) {
-					return;
-				}
-				setData( response );
-				setStatus( 'success' );
-			} )
-			.catch( e => {
-				if ( requestIdRef.current !== myId ) {
-					return;
-				}
-				setError( errorMessage( e ) );
-				setStatus( 'error' );
-			} );
-	}, [ range.start, range.end, previousRange?.start, previousRange?.end, refetchTick ] );
+	const refetch = useCallback( () => {
+		insightsCache.refresh( key, () => refreshEngagementData( queryFrom( range, previousRange ) ) );
+	}, [ key, range.start, range.end, previousRange?.start, previousRange?.end ] );
 
-	return { status, data, error, refetch };
+	return {
+		status: slot.status,
+		data: slot.data,
+		error: slot.error,
+		refetch,
+		computedAt: slot.computedAt,
+		source: slot.source,
+		cooldownUntil: slot.cooldownUntil,
+	};
 };
 
 export default useEngagementData;
