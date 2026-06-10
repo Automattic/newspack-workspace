@@ -92,8 +92,6 @@ class Advertising_Metric {
 	const DIM_LINE_ITEM_TYPE  = 'LINE_ITEM_TYPE';
 	const DIM_AD_UNIT_NAME    = 'AD_UNIT_NAME';
 	const DIM_ADVERTISER_NAME = 'ADVERTISER_NAME';
-	const DIM_DEVICE          = 'DEVICE_CATEGORY_NAME';
-	const DIM_COUNTRY         = 'COUNTRY_NAME';
 
 	const DIRECT_LINE_ITEM_TYPES       = [ 'SPONSORSHIP', 'STANDARD', 'BULK', 'PRICE_PRIORITY' ];
 	const PROGRAMMATIC_LINE_ITEM_TYPES = [ 'NETWORK', 'AD_EXCHANGE' ];
@@ -432,8 +430,6 @@ class Advertising_Metric {
 			'direct_vs_programmatic' => self::direct_vs_programmatic( $start_date, $end_date ),
 			'top_ad_units'           => self::top_ad_units( $start_date, $end_date ),
 			'top_advertisers'        => self::top_advertisers( $start_date, $end_date ),
-			'performance_by_device'  => self::performance_by_device( $start_date, $end_date ),
-			'top_countries'          => self::top_countries( $start_date, $end_date ),
 		];
 	}
 
@@ -729,79 +725,6 @@ class Advertising_Metric {
 				'advertiser'  => (string) self::cell( $row, self::DIM_ADVERTISER_NAME ),
 				'impressions' => (int) self::cell_number( $row, self::COL_IMPRESSIONS ),
 				'revenue'     => Client::normalize_currency_micros( self::cell_number( $row, self::COL_REVENUE ) ),
-			];
-		}
-		return self::rank_table( $out, 'revenue', $limit );
-	}
-
-	/**
-	 * Performance by Device.
-	 *
-	 * @param string $s Start date.
-	 * @param string $e End date.
-	 * @return array
-	 */
-	public static function performance_by_device( string $s, string $e ): array {
-		$rows = static::run_gam_report(
-			new Report_Query(
-				[
-					'dimensions' => [ self::DIM_DEVICE ],
-					'columns'    => [ self::COL_IMPRESSIONS, self::COL_REVENUE, self::COL_CODED, self::COL_CLICKS ],
-					'start_date' => $s,
-					'end_date'   => $e,
-				]
-			)
-		);
-		if ( isset( $rows['error'] ) || isset( $rows['overlay'] ) ) {
-			return $rows;
-		}
-		$out = [];
-		foreach ( $rows['rows'] as $row ) {
-			$revenue = Client::normalize_currency_micros( self::cell_number( $row, self::COL_REVENUE ) );
-			$coded   = (int) self::cell_number( $row, self::COL_CODED );
-			$clicks  = (int) self::cell_number( $row, self::COL_CLICKS );
-			$out[]   = [
-				'device'      => (string) self::cell( $row, self::DIM_DEVICE ),
-				'impressions' => (int) self::cell_number( $row, self::COL_IMPRESSIONS ),
-				'revenue'     => $revenue,
-				'ecpm'        => $coded > 0 ? ( $revenue / $coded ) * 1000 : 0.0,
-				'ctr'         => $coded > 0 ? $clicks / $coded : 0.0,
-			];
-		}
-		return self::rank_table( $out, 'revenue', count( $out ) );
-	}
-
-	/**
-	 * Top Countries by revenue.
-	 *
-	 * @param string $s     Start date.
-	 * @param string $e     End date.
-	 * @param int    $limit Max rows.
-	 * @return array
-	 */
-	public static function top_countries( string $s, string $e, int $limit = 25 ): array {
-		$rows = static::run_gam_report(
-			new Report_Query(
-				[
-					'dimensions' => [ self::DIM_COUNTRY ],
-					'columns'    => [ self::COL_IMPRESSIONS, self::COL_REVENUE, self::COL_CODED ],
-					'start_date' => $s,
-					'end_date'   => $e,
-				]
-			)
-		);
-		if ( isset( $rows['error'] ) || isset( $rows['overlay'] ) ) {
-			return $rows;
-		}
-		$out = [];
-		foreach ( $rows['rows'] as $row ) {
-			$revenue = Client::normalize_currency_micros( self::cell_number( $row, self::COL_REVENUE ) );
-			$coded   = (int) self::cell_number( $row, self::COL_CODED );
-			$out[]   = [
-				'country'     => (string) self::cell( $row, self::DIM_COUNTRY ),
-				'impressions' => (int) self::cell_number( $row, self::COL_IMPRESSIONS ),
-				'revenue'     => $revenue,
-				'ecpm'        => $coded > 0 ? ( $revenue / $coded ) * 1000 : 0.0,
 			];
 		}
 		return self::rank_table( $out, 'revenue', $limit );

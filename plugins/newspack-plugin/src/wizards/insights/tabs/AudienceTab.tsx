@@ -19,6 +19,7 @@ import type { DateRange } from '../state/useDateRange';
 import useAudienceData from '../hooks/useAudienceData';
 import ConnectBanner from './components/ConnectBanner';
 import TabStateView from './components/TabStateView';
+import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import ReachSection from './audience/sections/ReachSection';
 import CompositionSection from './audience/sections/CompositionSection';
 import TimeTrendsSection from './audience/sections/TimeTrendsSection';
@@ -48,6 +49,7 @@ const AudienceTab = ( { range, previousRange }: AudienceTabProps ) => {
 			error={ error }
 			errorLabel={ __( 'Could not load audience data.', 'newspack-plugin' ) }
 			className="newspack-insights__audience-tab"
+			loadingMessages={ TAB_LOADING_MESSAGES.audience }
 		>
 			{ data &&
 				( data.tab_error || ! current ? (

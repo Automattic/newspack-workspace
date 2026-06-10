@@ -86,8 +86,8 @@ const WindowedSection = ( { range, current, previous }: WindowedSectionProps ) =
 				secondary={ sprintf(
 					/* translators: 1: one-time gift revenue formatted as currency, 2: recurring renewal revenue formatted as currency */
 					__( '%1$s one-time + %2$s recurring', 'newspack-plugin' ),
-					formatCurrency( current.one_time_revenue ),
-					formatCurrency( current.recurring_revenue )
+					formatCurrency( current.one_time_revenue ).display,
+					formatCurrency( current.recurring_revenue ).display
 				) }
 				description={ __( 'One-time gifts + recurring renewals in this timeframe', 'newspack-plugin' ) }
 			/>

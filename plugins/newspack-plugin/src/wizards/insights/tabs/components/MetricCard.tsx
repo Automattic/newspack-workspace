@@ -30,7 +30,11 @@ export type MetricFormat = 'number' | 'currency' | 'percent' | 'decimal' | 'dura
 
 export interface MetricCardOverlay {
 	type: string;
-	dimensions: string[];
+	/**
+	 * Custom-dimension parameter names (GA4 `custom_dimension_missing` overlays).
+	 * Absent for dimension-less overlays such as GAM's `data_unavailable`.
+	 */
+	dimensions?: string[];
 }
 
 export interface MetricCardProps {
@@ -53,12 +57,17 @@ export interface MetricCardProps {
 	error?: string;
 	/** Metric needs configuration (e.g. coverage area not set). */
 	notConfigured?: boolean;
+	/**
+	 * Native tooltip for the value (e.g. the full amount behind an abbreviated
+	 * "$1.2M"). Overrides the title the currency formatter derives on its own.
+	 */
+	valueTitle?: string;
 }
 
+// Currency is handled by the caller (it needs both display + title from one
+// formatCurrency call); every other format maps to a plain string here.
 const formatValue = ( v: number, fmt: MetricFormat ): string => {
 	switch ( fmt ) {
-		case 'currency':
-			return formatCurrency( v );
 		case 'percent':
 			return formatPercent( v );
 		case 'decimal':
@@ -83,6 +92,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 		overlay,
 		error,
 		notConfigured,
+		valueTitle,
 	} = props;
 
 	// Shared graceful-failure state (missing dimension / not configured / error).
@@ -127,11 +137,22 @@ const MetricCard = ( props: MetricCardProps ) => {
 			  ).trim()
 			: null;
 
+	// Currency formats once, yielding both the display string and (when
+	// abbreviated, e.g. "$1.2M") the full-value title; other formats go through
+	// formatValue.
+	const currency = format === 'currency' ? formatCurrency( value ) : null;
+	const valueText = currency ? currency.display : formatValue( value, format );
+	// Explicit `valueTitle` wins; `||` (not `??`) so an empty string isn't treated
+	// as an override and still falls back to the formatter-derived full value.
+	const valueTooltip = valueTitle || currency?.title || undefined;
+
 	return (
 		<div className="newspack-insights__metric-card">
 			<div className="newspack-insights__metric-card-label">{ label }</div>
 			<div className="newspack-insights__metric-card-body">
-				<div className="newspack-insights__metric-card-value">{ formatValue( value, format ) }</div>
+				<div className="newspack-insights__metric-card-value">
+					{ valueTooltip ? <span title={ valueTooltip }>{ valueText }</span> : valueText }
+				</div>
 				{ secondary && <div className="newspack-insights__metric-card-secondary">{ secondary }</div> }
 				{ magnitude !== null && (
 					<div

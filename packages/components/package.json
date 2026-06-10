@@ -23,11 +23,6 @@
 		"access": "public"
 	},
 	"dependencies": {
-		"@wordpress/base-styles": "^6.0.0",
-		"@wordpress/components": "^32.0.0",
-		"@wordpress/element": "^6.0.0",
-		"@wordpress/i18n": "^6.21.0",
-		"@wordpress/icons": "^11.0.0",
 		"classnames": "^2.3.1",
 		"lodash": "^4.17.21",
 		"moment-range": "^3.1.1",
@@ -35,6 +30,22 @@
 		"react-router-dom": "^5.3.4",
 		"@babel/runtime": "^7.29.7",
 		"colord": "^2.9.0"
+	},
+	"peerDependencies": {
+		"@wordpress/api-fetch": "^7.48.0",
+		"@wordpress/base-styles": "^6.9.0",
+		"@wordpress/components": "^30.6.0",
+		"@wordpress/compose": "^7.33.0",
+		"@wordpress/data": "^10.48.0",
+		"@wordpress/dataviews": "^10.2.0",
+		"@wordpress/dom-ready": "^4.48.0",
+		"@wordpress/element": "^6.33.0",
+		"@wordpress/hooks": "^4.48.0",
+		"@wordpress/html-entities": "^4.48.0",
+		"@wordpress/i18n": "^6.21.0",
+		"@wordpress/icons": "^11.0.0",
+		"@wordpress/keycodes": "^4.48.0",
+		"@wordpress/url": "^4.48.0"
 	},
 	"devDependencies": {
 		"@babel/cli": "^7.29.7",

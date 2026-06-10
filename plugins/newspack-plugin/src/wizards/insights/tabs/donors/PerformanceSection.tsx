@@ -42,7 +42,7 @@ const NotApplicable = () => (
 );
 
 const renderCount = ( applies: boolean, value: number ) => ( applies ? formatNumber( value ) : <NotApplicable /> );
-const renderCurrency = ( applies: boolean, value: number ) => ( applies ? formatCurrency( value ) : <NotApplicable /> );
+const renderCurrency = ( applies: boolean, value: number ) => ( applies ? formatCurrency( value ).display : <NotApplicable /> );
 
 const isRecurring = ( m: BillingModel ) => m === 'recurring';
 const isOneTime = ( m: BillingModel ) => m === 'one_time';
@@ -54,7 +54,7 @@ const renderRowCells = ( row: DonorsTierRow | DonorsTierVariationRow ) => (
 		<td className="newspack-insights__table-num">{ formatNumber( row.new_donors_in_window ) }</td>
 		<td className="newspack-insights__table-num">{ renderCount( isOneTime( row.billing_model ), row.one_time_gifts_in_window ) }</td>
 		<td className="newspack-insights__table-num">{ renderCurrency( isRecurring( row.billing_model ), row.recurring_revenue_in_window ) }</td>
-		<td className="newspack-insights__table-num">{ formatCurrency( row.lifetime_donation_revenue ) }</td>
+		<td className="newspack-insights__table-num">{ formatCurrency( row.lifetime_donation_revenue ).display }</td>
 	</>
 );
 

@@ -84,9 +84,9 @@ Exercise each render path with the `_fixture_state` query param on
 `/wp-json/newspack-insights/v1/advertising?start=…&end=…&_fixture_state=…`:
 
 - **`populated`** (default) — full scorecards (~2.4M impressions, $4,200
-  revenue, ~$1.75 eCPM, 87% fill, 64% viewability), 10 ad units, 8 advertisers,
-  5 countries, 3 device categories, and a 60/40 direct/programmatic split. Add
-  `compare_start`/`compare_end` to get the comparison payload (mixed +/- deltas).
+  revenue, ~$1.75 eCPM, 87% fill, 64% viewability), 10 ad units, 10 advertisers,
+  and a 60/40 direct/programmatic split. Add `compare_start`/`compare_end` to
+  get the comparison payload (mixed +/- deltas).
 - **`not_ready`** — `is_report_ready: false` with both `oauth_scope_missing`
   and `network_code_missing` in `readiness_issues`.
 - **`zero`** — a zero-impression window: scorecards read 0, tables are empty.

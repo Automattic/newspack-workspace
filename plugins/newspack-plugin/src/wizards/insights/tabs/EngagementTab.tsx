@@ -19,6 +19,7 @@ import type { DateRange } from '../state/useDateRange';
 import useEngagementData from '../hooks/useEngagementData';
 import ConnectBanner from './components/ConnectBanner';
 import TabStateView from './components/TabStateView';
+import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import QualitySection from './engagement/sections/QualitySection';
 import ContentEngagementSection from './engagement/sections/ContentEngagementSection';
 import ReaderSegmentsSection from './engagement/sections/ReaderSegmentsSection';
@@ -44,6 +45,7 @@ const EngagementTab = ( { range, previousRange }: EngagementTabProps ) => {
 			error={ error }
 			errorLabel={ __( 'Could not load engagement data.', 'newspack-plugin' ) }
 			className="newspack-insights__engagement-tab"
+			loadingMessages={ TAB_LOADING_MESSAGES.engagement }
 		>
 			{ data &&
 				( data.tab_error || ! current ? (

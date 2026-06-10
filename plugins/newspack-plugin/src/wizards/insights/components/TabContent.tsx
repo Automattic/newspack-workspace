@@ -18,7 +18,7 @@ import type { ErrorInfo, ReactNode } from 'react';
 /**
  * Internal dependencies
  */
-import { Waiting } from '../../../../packages/components/src';
+import TabSpinner from '../tabs/components/TabSpinner';
 import type { TabKey } from './TabNavigation';
 import type { DateRange } from '../state/useDateRange';
 
@@ -45,12 +45,7 @@ export interface TabContentProps extends TabSectionProps {
 	activeTab: TabKey;
 }
 
-const Fallback = () => (
-	<div className="newspack-insights__tab-fallback" role="status" aria-live="polite">
-		<Waiting />
-		<span className="screen-reader-text">{ __( 'Loading…', 'newspack-plugin' ) }</span>
-	</div>
-);
+const Fallback = () => <TabSpinner className="newspack-insights__tab-fallback" />;
 
 interface TabErrorBoundaryProps {
 	children: ReactNode;
