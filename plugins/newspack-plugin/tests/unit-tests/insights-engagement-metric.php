@@ -244,6 +244,21 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * When the GA4 report fails (no connection in tests), the traffic-source method
+	 * must propagate the error/overlay payload and NOT run the bucketing helper —
+	 * otherwise a failed report would render as a zeroed, needs-data comparison.
+	 */
+	public function test_traffic_source_short_circuits_on_failed_report() {
+		$payload = $this->invoke( 'engagement_by_traffic_source_via_ga4', [ '123456', '2026-05-09', '2026-06-08' ] );
+		// safe_run_report returns an error (or overlay) payload; it must pass through.
+		$this->assertTrue( isset( $payload['error'] ) || isset( $payload['overlay'] ), 'Failed report should propagate error/overlay.' );
+		$this->assertFalse( $payload['computable'] ?? true );
+		// The bucketing helper never ran, so no rows / needs_data leaked in.
+		$this->assertArrayNotHasKey( 'rows', $payload );
+		$this->assertArrayNotHasKey( 'needs_data', $payload );
+	}
+
+	/**
 	 * Overlay propagation through a transform helper.
 	 */
 	public function test_overlay_propagates_through_transform() {

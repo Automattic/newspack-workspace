@@ -158,8 +158,8 @@ previously rendered as tables; the dense tables were unscannable.
 
 ### Viz 3.3: Traffic source (Takeaway card)
 
-- **Headline:** "Newsletter traffic engages {X}% longer than other sources" (flips to "…{X}% shorter…" if other sources lead).
-- **Sub:** "{newsletter time} per session vs {other time}"
+- **Headline:** "Newsletter traffic engages {X}% longer than other sources" (when other sources lead, the subject flips: "Other sources engage {X}% longer than newsletter traffic" — same as the device / new-vs-returning cards, so the percentage is always computed against the leader and never reads as a misleading "X% shorter").
+- **Sub:** "{leader time} per session vs {other time}" (leads with the headline's subject).
 - **Mini chart:** bars for newsletter / other, heights ∝ avg engaged session duration.
 - **Newsletter definition:** a session is "newsletter" when its `sessionMedium` is `email` or `newsletter`; everything else (direct, organic, referral, social, paid, etc.) is "other".
 - **Minimum-sessions floor:** if the newsletter cohort has fewer than 100 sessions in the window, the card renders the standard "Not enough data in this timeframe." state instead of a comparison. Below ~100 newsletter sessions a handful of unusually engaged or bouncy readers can swing the average enough to flip the headline, so the comparison stops being informative.

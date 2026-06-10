@@ -48,12 +48,13 @@ describe( 'ReaderSegmentsSection — traffic source card', () => {
 		expect( within( card ).getByText( '49 seconds' ) ).toBeInTheDocument();
 	} );
 
-	it( 'inverts the headline when other sources lead', () => {
+	it( 'flips the subject (not the adjective) when other sources lead', () => {
 		render( <ReaderSegmentsSection current={ windowOf( trafficSource( [ 'newsletter', 'other' ], [ 49, 98 ] ) ) } previous={ null } /> );
 		const card = trafficSourceCard();
-		// 49s vs 98s → other leads, so newsletter engages 100% shorter.
-		expect( within( card ).getByText( 'Newsletter traffic engages 100% shorter than other sources' ) ).toBeInTheDocument();
-		expect( within( card ).getByText( '0:49 per session vs 1:38' ) ).toBeInTheDocument();
+		// 98s vs 49s → other leads by 100%; phrased as "longer" with other as the subject.
+		expect( within( card ).getByText( 'Other sources engage 100% longer than newsletter traffic' ) ).toBeInTheDocument();
+		// Sub leads with the subject (other) too.
+		expect( within( card ).getByText( '1:38 per session vs 0:49' ) ).toBeInTheDocument();
 	} );
 
 	it( 'shows the needs-data state when the newsletter cohort is below the floor', () => {

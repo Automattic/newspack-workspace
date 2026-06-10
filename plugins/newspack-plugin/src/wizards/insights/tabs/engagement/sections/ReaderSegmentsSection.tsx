@@ -151,26 +151,38 @@ const trafficSourceTakeaway = ( payload?: MetricPayload ): Takeaway => {
 	}
 	const newsletterTime = num( newsletterRow, 'avg_engagement_seconds' );
 	const otherTime = num( otherRow, 'avg_engagement_seconds' );
+	const newsletterLeads = newsletterTime >= otherTime;
+	// Always phrase the comparison as "<leader> engages X% longer than <other>",
+	// flipping the subject rather than inverting to "shorter" — matching the
+	// device / new-vs-returning takeaways. "X% shorter" would divide by the
+	// smaller value and overstate the gap (e.g. 49s vs 98s reads as "100% shorter"
+	// when newsletter is only half as long).
 	return {
 		bars,
-		headline:
-			newsletterTime >= otherTime
-				? sprintf(
-						/* translators: %d: percentage. */
-						__( 'Newsletter traffic engages %d%% longer than other sources', 'newspack-plugin' ),
-						pctMore( newsletterTime, otherTime )
-				  )
-				: sprintf(
-						/* translators: %d: percentage. */
-						__( 'Newsletter traffic engages %d%% shorter than other sources', 'newspack-plugin' ),
-						pctMore( otherTime, newsletterTime )
-				  ),
-		sub: sprintf(
-			/* translators: 1: newsletter avg time, 2: other avg time. */
-			__( '%1$s per session vs %2$s', 'newspack-plugin' ),
-			formatDuration( newsletterTime ),
-			formatDuration( otherTime )
-		),
+		headline: newsletterLeads
+			? sprintf(
+					/* translators: %d: percentage. */
+					__( 'Newsletter traffic engages %d%% longer than other sources', 'newspack-plugin' ),
+					pctMore( newsletterTime, otherTime )
+			  )
+			: sprintf(
+					/* translators: %d: percentage. */
+					__( 'Other sources engage %d%% longer than newsletter traffic', 'newspack-plugin' ),
+					pctMore( otherTime, newsletterTime )
+			  ),
+		sub: newsletterLeads
+			? sprintf(
+					/* translators: 1: newsletter avg time, 2: other avg time. */
+					__( '%1$s per session vs %2$s', 'newspack-plugin' ),
+					formatDuration( newsletterTime ),
+					formatDuration( otherTime )
+			  )
+			: sprintf(
+					/* translators: 1: other avg time, 2: newsletter avg time. */
+					__( '%1$s per session vs %2$s', 'newspack-plugin' ),
+					formatDuration( otherTime ),
+					formatDuration( newsletterTime )
+			  ),
 	};
 };
 
