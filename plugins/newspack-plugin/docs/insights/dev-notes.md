@@ -29,9 +29,9 @@ verified at once:
 
 - **Realistic values** across scorecards, tables, pie charts, the time-series
   line chart, and the day-of-week / hour-of-day bar charts.
-- **`custom_dimension_missing` overlay** — one card per tab:
+- **`custom_dimension_missing` overlay** — Audience only:
   - Audience: Newsletter Subscriber Rate (and its composition pie)
-  - Engagement: Engagement by Newsletter Status
+  - (Engagement's traffic-source card uses the standard `sessionMedium` dimension — no custom-dimension overlay.)
 - **`hidden_in_v1` skips** — BQ-only metrics render nothing (no card, no empty
   space): Audience's Returning Reader Rate (strict); Engagement's Top Categories,
   Mobile vs Desktop, Repeat Reader Rate, Article Freshness.

@@ -22,9 +22,11 @@ export interface Bar {
 
 export interface BarChartProps {
 	bars: Bar[];
+	/** Render the hover value, e.g. "98 seconds". Defaults to a plain number. */
+	formatValue?: ( value: number ) => string;
 }
 
-const BarChart = ( { bars }: BarChartProps ) => {
+const BarChart = ( { bars, formatValue = formatNumber }: BarChartProps ) => {
 	if ( bars.length === 0 ) {
 		return <p className="newspack-insights__chart-empty">{ __( 'No data in this timeframe.', 'newspack-plugin' ) }</p>;
 	}
@@ -37,7 +39,7 @@ const BarChart = ( { bars }: BarChartProps ) => {
 					{ /* Dark hover panel (NPPD-1649 fix #5), shown on column hover via CSS. */ }
 					<div className="newspack-insights__chart-tooltip newspack-insights__chart-tooltip--bar">
 						<span className="newspack-insights__chart-tooltip-label">{ bar.label }</span>
-						<span className="newspack-insights__chart-tooltip-value">{ formatNumber( bar.value ) }</span>
+						<span className="newspack-insights__chart-tooltip-value">{ formatValue( bar.value ) }</span>
 					</div>
 					<div className="newspack-insights__bar-track">
 						<div

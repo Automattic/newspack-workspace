@@ -559,54 +559,67 @@ Notes:
 - **Why BQ-only:** same `SPLIT` + `UNNEST` on the comma-separated `categories` param that GA4 Data API can't perform.
 - Useful for editorial placement decisions — categories with high mobile share might benefit from mobile-first formatting; desktop-heavy categories may be lunchtime/work-hour reads.
 
-### Engagement by Newsletter Status
+### Engagement by traffic source
 
 **v1 backend**: GA4 Data API
-**Custom dimension dependency**: `is_newsletter_subscriber`
-**Overlay if missing**: "Newsletter status custom dimension not detected — see [setup docs]"
+**Custom dimension dependency**: none (`sessionMedium` is a GA4 standard dimension, always present)
+**Minimum-sessions floor**: 100 newsletter sessions in the window. Below the floor the card renders "Not enough data in this timeframe." instead of a comparison.
 
-**GA4 Data API query (v1, active):**
+Sessions are partitioned into two cohorts by traffic medium:
+
+- **Newsletter:** sessions whose medium is `email` or `newsletter`.
+- **Other:** all other sessions, including direct, organic, referral, social, paid, etc.
+
+For each cohort, compute average engagement time per session.
+
+#### GA4 Data API (v1, active)
+
+Dimensions: `sessionMedium`
+Metrics: `userEngagementDuration`, `sessions`
+
+Per cohort: `SUM(userEngagementDuration) / SUM(sessions)`, partitioned by the IN-list above.
 
 ```json
 {
   "dateRanges": [{"startDate": "30daysAgo", "endDate": "today"}],
-  "dimensions": [{"name": "customEvent:is_newsletter_subscriber"}],
+  "dimensions": [{"name": "sessionMedium"}],
   "metrics": [
-    {"name": "sessions"},
-    {"name": "screenPageViewsPerSession"},
-    {"name": "userEngagementDuration"}
+    {"name": "userEngagementDuration"},
+    {"name": "sessions"}
   ]
 }
 ```
 
-PHP collapses non-`yes` dimension values into "not subscribed" and derives per-session averages.
+PHP buckets rows where `sessionMedium IN ('email', 'newsletter')` into `newsletter` and all other rows into `other`, summing `sessions` and `userEngagementDuration` per bucket, then `avg_engagement_sec = userEngagementDuration / sessions` per bucket.
 
-**BigQuery query (v1.1 swap target):**
+#### BigQuery (post-migration)
+
+Per session, sum `engagement_time_msec` event params (from `events_*`). Identify session medium from `COALESCE(NULLIF(collected_traffic_source.manual_medium, ''), NULLIF(traffic_source.medium, ''))`. Per cohort: average per-session engagement seconds.
 
 ```sql
 WITH session_engagement AS (
   SELECT
-    CONCAT(user_pseudo_id, '|', CAST(PARAM_INT('ga_session_id') AS STRING)) AS session_key,
-    MAX(IF(PARAM('is_newsletter_subscriber') = 'yes', 1, 0)) AS is_newsletter_subscriber,
-    SUM(IF(event_name = 'page_view', 1, 0)) AS pages_in_session,
-    SUM(PARAM_INT('engagement_time_msec')) / 1000 AS engagement_seconds
+    CONCAT(user_pseudo_id, '|', CAST((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') AS STRING)) AS session_key,
+    ANY_VALUE(COALESCE(NULLIF(collected_traffic_source.manual_medium, ''), NULLIF(traffic_source.medium, ''))) AS medium,
+    SUM((SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'engagement_time_msec')) / 1000 AS engagement_seconds
   FROM `{project}.{dataset}.events_*`
   WHERE _TABLE_SUFFIX BETWEEN @start_date AND @end_date
-    AND PARAM_INT('ga_session_id') IS NOT NULL
+    AND (SELECT value.int_value FROM UNNEST(event_params) WHERE key = 'ga_session_id') IS NOT NULL
   GROUP BY session_key
 )
 SELECT
-  CASE WHEN is_newsletter_subscriber = 1 THEN 'newsletter subscriber' ELSE 'not subscribed' END AS segment,
+  CASE WHEN medium IN ('email', 'newsletter') THEN 'newsletter' ELSE 'other' END AS segment,
   COUNT(*) AS sessions,
-  AVG(pages_in_session) AS avg_pages_per_session,
   AVG(engagement_seconds) AS avg_engagement_seconds
 FROM session_engagement
 GROUP BY segment;
 ```
 
 Notes:
-- Empty result for `customEvent:is_newsletter_subscriber` → overlay, not 0.
-- Expected pattern: newsletter subscribers engage substantially more per session. If they DON'T, that's a publisher diagnostic — the newsletter audience isn't converting to deeper site engagement.
+- The data contract returned to the React layer is source-agnostic: `rows: [{ segment: 'newsletter'|'other', sessions, avg_engagement_seconds }]`. The GA4 and BigQuery formulas above must produce the same shape so the migration is a mechanical backend swap.
+- Below the 100-session newsletter floor → "needs data" state, not a 0 comparison.
+- Expected pattern: newsletter traffic engages substantially more per session (validation on Richland Source showed ~2× — newsletter 97.6s vs other 47.4s over a 28-day window). If it DOESN'T, that's a publisher diagnostic — the newsletter audience isn't converting to deeper site engagement.
+- **Known limitations:** UTM-stripping email clients (Apple Mail Privacy Protection) push some email opens into the direct bucket, so the newsletter share is a floor; publishers using non-standard medium tags (e.g. `newsletter-weekly`) land in "other". The `email`/`newsletter` convention is required.
 
 ### Engagement by Returning vs New Readers
 

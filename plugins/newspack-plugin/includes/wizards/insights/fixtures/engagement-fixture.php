@@ -266,19 +266,17 @@ $build = function ( float $f ) use ( $scalar, $rate, $table, $hidden, $start, $e
 				],
 			]
 		),
-		'engagement_by_newsletter_status'       => $table(
+		'engagement_by_traffic_source'          => $table(
 			[
 				[
-					'segment'                => 'subscriber',
-					'sessions'               => (int) round( 61200 * $f ),
-					'avg_pages_per_session'  => round( 3.4 * $f, 2 ),
-					'avg_engagement_seconds' => round( 224 * $f ),
+					'segment'                => 'newsletter',
+					'sessions'               => (int) round( 38200 * $f ),
+					'avg_engagement_seconds' => round( 98 * $f ),
 				],
 				[
-					'segment'                => 'not_subscribed',
-					'sessions'               => (int) round( 219800 * $f ),
-					'avg_pages_per_session'  => round( 2.0 * $f, 2 ),
-					'avg_engagement_seconds' => round( 121 * $f ),
+					'segment'                => 'other',
+					'sessions'               => (int) round( 243600 * $f ),
+					'avg_engagement_seconds' => round( 47 * $f ),
 				],
 			]
 		),
