@@ -19,12 +19,12 @@
  * Gates' two, so it has more scorecards and a three-table performance
  * breakdown — but the per-metric envelope is identical.
  *
- * This commit wires the 10 free-side scalar metrics (exposure + engagement +
- * registration/newsletter conversion). Paid-conversion (donation/subscription)
- * + revenue and the collection metrics (funnel/distribution/3 perf tables)
- * remain as placeholder envelopes that surface as state 'error' with the
- * `newspack_insights_prompts_not_yet_implemented` code — they will be wired in
- * follow-up commits (Task 3.2 = Woo join, Task 3.3 = collections).
+ * This commit wires the 8 paid-conversion + revenue metrics through the
+ * BigQuery proxy + Woo_Order_Resolver join (Task 3.2), on top of the 10
+ * free-side scalars wired in Task 3.1. The 5 collection metrics
+ * (funnel/distribution/3 perf tables) remain as placeholder envelopes that
+ * surface as state 'error' with the `newspack_insights_prompts_not_yet_implemented`
+ * code — they will be wired in Task 3.3.
  *
  * @package Newspack
  */
@@ -35,6 +35,7 @@ defined( 'ABSPATH' ) || exit;
 
 use DateTimeInterface;
 use Newspack\Insights\BigQuery_Proxy_Client;
+use Newspack\Insights\Woo_Order_Resolver;
 
 /**
  * Tab 5 metric orchestrator.
@@ -67,12 +68,35 @@ final class Prompts_Metric {
 	private BigQuery_Proxy_Client $proxy;
 
 	/**
-	 * Constructor. Optionally inject a proxy client (used in tests).
+	 * Resolver used to match BQ paid-conversion attempts against Woo orders.
 	 *
-	 * @param BigQuery_Proxy_Client|null $proxy Injected proxy client, or null to lazy-resolve.
+	 * @var Woo_Order_Resolver
 	 */
-	public function __construct( ?BigQuery_Proxy_Client $proxy = null ) {
-		$this->proxy = $proxy ?? new BigQuery_Proxy_Client();
+	private Woo_Order_Resolver $woo_resolver;
+
+	/**
+	 * Per-request memoization for paid-conversion BQ row fetches.
+	 *
+	 * Keyed by `<query_name>|Ymd|Ymd` of (query_name, start UTC, end UTC). The
+	 * conversion-rate and revenue methods for the same intent + same window
+	 * share one round-trip to the hub.
+	 *
+	 * @var array<string, array{rows:array, conversions:int, revenue:float}|\WP_Error>
+	 */
+	private array $paid_attempt_cache = [];
+
+	/**
+	 * Constructor. Optionally inject collaborators (used in tests).
+	 *
+	 * @param BigQuery_Proxy_Client|null $proxy        Injected proxy client, or null to lazy-resolve.
+	 * @param Woo_Order_Resolver|null    $woo_resolver Injected Woo resolver, or null to lazy-create.
+	 */
+	public function __construct(
+		?BigQuery_Proxy_Client $proxy = null,
+		?Woo_Order_Resolver $woo_resolver = null
+	) {
+		$this->proxy        = $proxy ?? new BigQuery_Proxy_Client();
+		$this->woo_resolver = $woo_resolver ?? new Woo_Order_Resolver();
 	}
 
 	/**
@@ -191,24 +215,55 @@ final class Prompts_Metric {
 	}
 
 	/**
-	 * Bridge placeholder for scalar methods not yet wired to a catalog query.
+	 * Fetch paid-conversion rows for a given query and Woo-join them.
 	 *
-	 * Returns the `state: 'error'` envelope with a stable, explicit
-	 * `error_code` so the React layer can render an unambiguous
-	 * "not yet implemented" state. Replaces the Phase-1 `pending: true` shape
-	 * so the REST envelope is internally consistent across every metric.
+	 * Returns { rows, conversions, revenue } on success or a WP_Error on proxy
+	 * failure. Used by both the conversion-rate and revenue methods for the
+	 * same intent + direction; the per-(query_name, window) memoization avoids
+	 * a redundant round-trip to the hub when both methods run in one request.
 	 *
-	 * @param string $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
-	 * @return array
+	 * @param string            $query_name One of the 4 distinct paid query names
+	 *                                      (the 4 revenue aliases share rows with
+	 *                                      their conversion counterparts; pass the
+	 *                                      conversion name so the cache is shared).
+	 * @param DateTimeInterface $start      Window start.
+	 * @param DateTimeInterface $end        Window end.
+	 * @return array{rows:array, conversions:int, revenue:float}|\WP_Error
 	 */
-	private function placeholder_scalar( string $placeholder_type ): array {
-		return $this->error_scalar(
-			$placeholder_type,
-			new \WP_Error(
-				'newspack_insights_prompts_not_yet_implemented',
-				__( 'This metric will be wired in a follow-up commit (NPPD-1607 Phase 2).', 'newspack-plugin' )
-			)
-		);
+	private function fetch_paid_attempts_woo_join(
+		string $query_name,
+		DateTimeInterface $start,
+		DateTimeInterface $end
+	) {
+		// Normalize both bounds to UTC Ymd so callers passing different timezone
+		// objects don't bust the cache for the same logical window. Matches the
+		// proxy client's own UTC normalization.
+		$utc       = new \DateTimeZone( 'UTC' );
+		$cache_key = $query_name . '|'
+			. \DateTimeImmutable::createFromInterface( $start )->setTimezone( $utc )->format( 'Ymd' )
+			. '|'
+			. \DateTimeImmutable::createFromInterface( $end )->setTimezone( $utc )->format( 'Ymd' );
+
+		if ( array_key_exists( $cache_key, $this->paid_attempt_cache ) ) {
+			return $this->paid_attempt_cache[ $cache_key ];
+		}
+
+		$rows = $this->proxy->query( $query_name, $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			$this->paid_attempt_cache[ $cache_key ] = $rows;
+			return $rows;
+		}
+
+		// A successful but empty response is real "no conversions", not an error:
+		// zero conversions / zero revenue, which the callers render as $0.00.
+		$rows   = is_array( $rows ) ? $rows : [];
+		$result = [
+			'rows'        => $rows,
+			'conversions' => $this->woo_resolver->count_completed_orders( $rows ),
+			'revenue'     => $this->woo_resolver->sum_completed_revenue( $rows ),
+		];
+		$this->paid_attempt_cache[ $cache_key ] = $result;
+		return $result;
 	}
 
 	/**
@@ -364,108 +419,171 @@ final class Prompts_Metric {
 	}
 
 	// --- Section 4: Paid reader conversion ------------------------------
-	// Placeholder bridge — to be wired in Task 3.2 (Woo join for paid conversions).
+	//
+	// Each rate dispatches the BQ "attempt" query for the intent + direction,
+	// Woo-joins the rows via Woo_Order_Resolver, and returns
+	// `conversions / attempts`. The BQ-side `action_type` filter on the hub
+	// already scopes attempts to the right product intent (donation vs
+	// subscription), so the resolver's product-type-agnostic match is safe.
+	//
+	// v1 simplification: we use attempts as the denominator (not impressions).
+	// The spec acknowledges this as a known trade-off (see formulas-doc
+	// Section 4). The follow-up is a separate impression-count query; not
+	// blocking for this task.
 
 	/**
 	 * Donation conversion rate, direct attribution.
-	 *
-	 * Placeholder — surfaces as state 'error' with the
-	 * `newspack_insights_prompts_not_yet_implemented` code until wired.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_donation_conversion_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder_scalar( 'rate' );
+		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_donation_conversion_direct', $start, $end );
+		if ( is_wp_error( $joined ) ) {
+			return $this->error_scalar( 'rate', $joined );
+		}
+		$denominator = count( $joined['rows'] );
+		$numerator   = $joined['conversions'];
+		return $this->populated_scalar(
+			$denominator > 0 ? $numerator / $denominator : 0.0,
+			$denominator > 0,
+			$denominator,
+			'rate'
+		);
 	}
 
 	/**
-	 * Donation conversion rate, influenced (14-day lookback). Placeholder.
+	 * Donation conversion rate, influenced (14-day lookback).
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_donation_conversion_influenced_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder_scalar( 'rate' );
+		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_donation_conversion_influenced_14d', $start, $end );
+		if ( is_wp_error( $joined ) ) {
+			return $this->error_scalar( 'rate', $joined );
+		}
+		$denominator = count( $joined['rows'] );
+		$numerator   = $joined['conversions'];
+		return $this->populated_scalar(
+			$denominator > 0 ? $numerator / $denominator : 0.0,
+			$denominator > 0,
+			$denominator,
+			'rate'
+		);
 	}
 
 	/**
-	 * Subscription conversion rate, direct attribution. Placeholder.
+	 * Subscription conversion rate, direct attribution.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_subscription_conversion_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder_scalar( 'rate' );
+		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_subscription_conversion_direct', $start, $end );
+		if ( is_wp_error( $joined ) ) {
+			return $this->error_scalar( 'rate', $joined );
+		}
+		$denominator = count( $joined['rows'] );
+		$numerator   = $joined['conversions'];
+		return $this->populated_scalar(
+			$denominator > 0 ? $numerator / $denominator : 0.0,
+			$denominator > 0,
+			$denominator,
+			'rate'
+		);
 	}
 
 	/**
-	 * Subscription conversion rate, influenced (14-day lookback). Placeholder.
+	 * Subscription conversion rate, influenced (14-day lookback).
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_subscription_conversion_influenced_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder_scalar( 'rate' );
+		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_subscription_conversion_influenced_14d', $start, $end );
+		if ( is_wp_error( $joined ) ) {
+			return $this->error_scalar( 'rate', $joined );
+		}
+		$denominator = count( $joined['rows'] );
+		$numerator   = $joined['conversions'];
+		return $this->populated_scalar(
+			$denominator > 0 ? $numerator / $denominator : 0.0,
+			$denominator > 0,
+			$denominator,
+			'rate'
+		);
 	}
 
 	// --- Section 5: Revenue from prompts --------------------------------
-	// Placeholder bridge — to be wired in Task 3.2 (Woo join for paid revenue).
+	//
+	// Each revenue method dispatches the underlying CONVERSION query name (not
+	// the byte-identical hub `*_revenue_*` alias) so the per-window cache is
+	// shared with the matching rate method — both can be computed from one
+	// proxy round-trip when they appear in the same response.
 
 	/**
-	 * Total donation revenue from prompts, direct attribution. Placeholder.
+	 * Total donation revenue from prompts, direct attribution.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_donation_revenue_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder_scalar( 'currency' );
+		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_donation_conversion_direct', $start, $end );
+		if ( is_wp_error( $joined ) ) {
+			return $this->error_scalar( 'currency', $joined );
+		}
+		return $this->populated_scalar( $joined['revenue'], true, $joined['conversions'], 'currency' );
 	}
 
 	/**
-	 * Total donation revenue from prompts, influenced (14-day lookback). Placeholder.
+	 * Total donation revenue from prompts, influenced (14-day lookback).
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_donation_revenue_influenced_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder_scalar( 'currency' );
+		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_donation_conversion_influenced_14d', $start, $end );
+		if ( is_wp_error( $joined ) ) {
+			return $this->error_scalar( 'currency', $joined );
+		}
+		return $this->populated_scalar( $joined['revenue'], true, $joined['conversions'], 'currency' );
 	}
 
 	/**
-	 * Total subscription revenue from prompts, direct attribution. Placeholder.
+	 * Total subscription revenue from prompts, direct attribution.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_subscription_revenue_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder_scalar( 'currency' );
+		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_subscription_conversion_direct', $start, $end );
+		if ( is_wp_error( $joined ) ) {
+			return $this->error_scalar( 'currency', $joined );
+		}
+		return $this->populated_scalar( $joined['revenue'], true, $joined['conversions'], 'currency' );
 	}
 
 	/**
-	 * Total subscription revenue from prompts, influenced (14-day lookback). Placeholder.
+	 * Total subscription revenue from prompts, influenced (14-day lookback).
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_subscription_revenue_influenced_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		unset( $start, $end );
-		return $this->placeholder_scalar( 'currency' );
+		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_subscription_conversion_influenced_14d', $start, $end );
+		if ( is_wp_error( $joined ) ) {
+			return $this->error_scalar( 'currency', $joined );
+		}
+		return $this->populated_scalar( $joined['revenue'], true, $joined['conversions'], 'currency' );
 	}
 
 	// --- Section 6: How readers convert ---------------------------------

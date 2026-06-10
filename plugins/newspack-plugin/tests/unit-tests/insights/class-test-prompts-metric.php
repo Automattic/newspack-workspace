@@ -10,10 +10,15 @@
  *   - state 'error' with `bigquery_proxy_malformed_value` when the catalog
  *     returns a non-numeric column.
  *
- * The 13 not-yet-wired methods (paid conversion / revenue / funnel /
- * distribution / 3 perf tables) are pinned to the bridge envelope:
+ * The 8 paid-conversion + revenue methods are also pinned (Task 3.2): they
+ * dispatch through the BigQuery proxy, Woo-join the rows via Woo_Order_Resolver,
+ * and share a per-window memoization cache (one proxy call per intent +
+ * direction).
+ *
+ * The 5 not-yet-wired collection methods (funnel / distribution / 3 perf
+ * tables) remain pinned to the bridge envelope:
  * state 'error' with `error_code: newspack_insights_prompts_not_yet_implemented`.
- * Locks the bridge behavior so Tasks 3.2 / 3.3 can refactor with confidence.
+ * Locks the bridge behavior so Task 3.3 can refactor with confidence.
  *
  * @package Newspack\Tests\Insights
  */
@@ -24,6 +29,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Prompts_Metric;
+use Newspack\Insights\Woo_Order_Resolver;
 use WP_UnitTestCase;
 
 /**
@@ -228,47 +234,288 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'bigquery_proxy_malformed_value', $result['error_code'] );
 	}
 
-	// --- Section 4/5/6/7: not-yet-implemented bridge -------------------
+	// --- Section 4: Paid reader conversion (Woo join) -------------------
 
 	/**
-	 * Placeholder methods return the bridge envelope:
-	 *   state 'error', error_code 'newspack_insights_prompts_not_yet_implemented'.
-	 * They must not touch the proxy.
+	 * Sample BQ rows in the shape returned by the 4 paid-conversion catalog
+	 * queries. Shared across the conversion-rate / revenue tests.
 	 *
-	 * @dataProvider provide_placeholder_scalar_methods
-	 * @param string $method           Method on Prompts_Metric to call.
-	 * @param string $placeholder_type Expected `placeholder_type` in the payload.
+	 * @return array
 	 */
-	public function test_placeholder_scalar_returns_bridge_envelope( string $method, string $placeholder_type ) {
-		$metric = $this->make_metric_with_unused_proxy();
+	protected function paid_attempt_rows(): array {
+		return [
+			[
+				'user_pseudo_id' => '101',
+				'session_id'     => 's1',
+				'attempt_ts'     => 1717000000000000,
+				'popup_id'       => '42',
+			],
+			[
+				'user_pseudo_id' => '102',
+				'session_id'     => 's2',
+				'attempt_ts'     => 1717001000000000,
+				'popup_id'       => '42',
+			],
+		];
+	}
+
+	/**
+	 * Wired paid-conversion RATE methods: dispatch the query, Woo-join, and
+	 * return `conversions / attempts` as a `placeholder_type: 'rate'` envelope.
+	 *
+	 * @dataProvider provide_paid_conversion_rate_methods
+	 * @param string $method     Method on Prompts_Metric to call.
+	 * @param string $query_name Catalog name the orchestrator must dispatch.
+	 */
+	public function test_paid_conversion_rate_returns_populated_on_success( string $method, string $query_name ) {
+		$rows  = $this->paid_attempt_rows();
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( $query_name, $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
+			->willReturn( $rows );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_completed_orders' )->willReturn( 1 ); // 1 of 2 attempts converted.
+		$resolver->method( 'sum_completed_revenue' )->willReturn( 25.0 );
+
+		$metric = new Prompts_Metric( $proxy, $resolver );
+		$result = $metric->$method( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 0.5, $result['value'] );
+		$this->assertTrue( $result['computable'] );
+		$this->assertSame( 2, $result['denominator'] );
+		$this->assertSame( 'rate', $result['placeholder_type'] );
+	}
+
+	/**
+	 * Wired paid-conversion RATE methods: proxy WP_Error → state 'error'.
+	 *
+	 * @dataProvider provide_paid_conversion_rate_methods
+	 * @param string $method     Method on Prompts_Metric to call.
+	 * @param string $query_name Catalog name the orchestrator must dispatch.
+	 */
+	public function test_paid_conversion_rate_returns_error_state_on_proxy_error( string $method, string $query_name ) {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( $query_name, $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
+			->willReturn( new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 500' ) );
+
+		$metric = new Prompts_Metric( $proxy, $this->createMock( Woo_Order_Resolver::class ) );
 		$result = $metric->$method( $this->start(), $this->end() );
 
 		$this->assertSame( 'error', $result['state'] );
 		$this->assertFalse( $result['computable'] );
-		$this->assertSame( $placeholder_type, $result['placeholder_type'] );
-		$this->assertSame( 'newspack_insights_prompts_not_yet_implemented', $result['error_code'] );
-		$this->assertNotSame( '', $result['error_message'] );
-		// No `pending` key — bridge MUST NOT regress to the old shape.
-		$this->assertArrayNotHasKey( 'pending', $result );
+		$this->assertSame( 'rate', $result['placeholder_type'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( 'HTTP 500', $result['error_message'] );
+		$this->assertSame( 0, $result['value'] );
 	}
 
 	/**
-	 * Data provider for the 8 not-yet-wired scalar methods.
+	 * Wired paid-conversion RATE methods: empty BQ response → non-computable
+	 * 0.0 with denominator 0 (a real "no attempts in window", not an error).
+	 *
+	 * @dataProvider provide_paid_conversion_rate_methods
+	 * @param string $method     Method on Prompts_Metric to call.
+	 * @param string $query_name Catalog name the orchestrator must dispatch.
+	 */
+	public function test_paid_conversion_rate_returns_noncomputable_zero_on_empty( string $method, string $query_name ) {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( $query_name, $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
+			->willReturn( [] );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_completed_orders' )->willReturn( 0 );
+		$resolver->method( 'sum_completed_revenue' )->willReturn( 0.0 );
+
+		$metric = new Prompts_Metric( $proxy, $resolver );
+		$result = $metric->$method( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertSame( 0, $result['denominator'] );
+		$this->assertSame( 'rate', $result['placeholder_type'] );
+		$this->assertSame( 0.0, $result['value'] );
+	}
+
+	/**
+	 * Data provider for the 4 paid-conversion rate methods.
 	 *
 	 * @return array
 	 */
-	public function provide_placeholder_scalar_methods(): array {
+	public function provide_paid_conversion_rate_methods(): array {
 		return [
-			'donation_direct'         => [ 'get_donation_conversion_direct', 'rate' ],
-			'donation_influenced'     => [ 'get_donation_conversion_influenced_14d', 'rate' ],
-			'subscription_direct'     => [ 'get_subscription_conversion_direct', 'rate' ],
-			'subscription_influenced' => [ 'get_subscription_conversion_influenced_14d', 'rate' ],
-			'donation_revenue_direct' => [ 'get_donation_revenue_direct', 'currency' ],
-			'donation_revenue_inf'    => [ 'get_donation_revenue_influenced_14d', 'currency' ],
-			'sub_revenue_direct'      => [ 'get_subscription_revenue_direct', 'currency' ],
-			'sub_revenue_inf'         => [ 'get_subscription_revenue_influenced_14d', 'currency' ],
+			'donation_direct'         => [ 'get_donation_conversion_direct', 'prompts_donation_conversion_direct' ],
+			'donation_influenced'     => [ 'get_donation_conversion_influenced_14d', 'prompts_donation_conversion_influenced_14d' ],
+			'subscription_direct'     => [ 'get_subscription_conversion_direct', 'prompts_subscription_conversion_direct' ],
+			'subscription_influenced' => [ 'get_subscription_conversion_influenced_14d', 'prompts_subscription_conversion_influenced_14d' ],
 		];
 	}
+
+	// --- Section 5: Revenue from prompts --------------------------------
+
+	/**
+	 * Wired revenue methods: dispatch the underlying CONVERSION query name
+	 * (sharing cache with the matching rate method), return summed Woo revenue
+	 * as a `placeholder_type: 'currency'` envelope.
+	 *
+	 * @dataProvider provide_paid_revenue_methods
+	 * @param string $method     Method on Prompts_Metric to call.
+	 * @param string $query_name Underlying conversion query name dispatched.
+	 */
+	public function test_paid_revenue_returns_populated_on_success( string $method, string $query_name ) {
+		$rows  = $this->paid_attempt_rows();
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( $query_name, $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
+			->willReturn( $rows );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_completed_orders' )->willReturn( 1 );
+		$resolver->method( 'sum_completed_revenue' )->willReturn( 25.0 );
+
+		$metric = new Prompts_Metric( $proxy, $resolver );
+		$result = $metric->$method( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 25.0, $result['value'] );
+		$this->assertTrue( $result['computable'] );
+		$this->assertSame( 1, $result['denominator'] );
+		$this->assertSame( 'currency', $result['placeholder_type'] );
+	}
+
+	/**
+	 * Wired revenue methods: proxy WP_Error → state 'error'.
+	 *
+	 * @dataProvider provide_paid_revenue_methods
+	 * @param string $method     Method on Prompts_Metric to call.
+	 * @param string $query_name Underlying conversion query name dispatched.
+	 */
+	public function test_paid_revenue_returns_error_state_on_proxy_error( string $method, string $query_name ) {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( $query_name, $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
+			->willReturn( new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 500' ) );
+
+		$metric = new Prompts_Metric( $proxy, $this->createMock( Woo_Order_Resolver::class ) );
+		$result = $metric->$method( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertSame( 'currency', $result['placeholder_type'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		$this->assertSame( 'HTTP 500', $result['error_message'] );
+		$this->assertSame( 0, $result['value'] );
+	}
+
+	/**
+	 * Wired revenue methods: empty BQ rows → $0.00 populated, computable=true
+	 * (the sum is a real 0), denominator 0 (zero conversions matched).
+	 *
+	 * @dataProvider provide_paid_revenue_methods
+	 * @param string $method     Method on Prompts_Metric to call.
+	 * @param string $query_name Underlying conversion query name dispatched.
+	 */
+	public function test_paid_revenue_returns_zero_on_empty( string $method, string $query_name ) {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( $query_name, $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
+			->willReturn( [] );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_completed_orders' )->willReturn( 0 );
+		$resolver->method( 'sum_completed_revenue' )->willReturn( 0.0 );
+
+		$metric = new Prompts_Metric( $proxy, $resolver );
+		$result = $metric->$method( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 0.0, $result['value'] );
+		$this->assertSame( 0, $result['denominator'] );
+		$this->assertSame( 'currency', $result['placeholder_type'] );
+	}
+
+	/**
+	 * Data provider for the 4 revenue methods. The `query_name` is the
+	 * underlying conversion-query name (revenue methods share the cache with
+	 * their rate counterparts; the hub's revenue alias is byte-identical).
+	 *
+	 * @return array
+	 */
+	public function provide_paid_revenue_methods(): array {
+		return [
+			'donation_direct'         => [ 'get_donation_revenue_direct', 'prompts_donation_conversion_direct' ],
+			'donation_influenced'     => [ 'get_donation_revenue_influenced_14d', 'prompts_donation_conversion_influenced_14d' ],
+			'subscription_direct'     => [ 'get_subscription_revenue_direct', 'prompts_subscription_conversion_direct' ],
+			'subscription_influenced' => [ 'get_subscription_revenue_influenced_14d', 'prompts_subscription_conversion_influenced_14d' ],
+		];
+	}
+
+	/**
+	 * Per-(query_name, window) memoization: the matching rate + revenue
+	 * methods for the same intent + direction share one proxy round-trip.
+	 *
+	 * `expects($this->once())` is the regression guard — a second call fails
+	 * the test. The two methods read different fields from the same Woo-joined
+	 * result, so they must dispatch the underlying conversion query exactly
+	 * once.
+	 */
+	public function test_paid_methods_share_single_proxy_call_per_window() {
+		$rows  = $this->paid_attempt_rows();
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->expects( $this->once() )
+			->method( 'query' )
+			->with( 'prompts_donation_conversion_direct', $this->isInstanceOf( DateTimeImmutable::class ), $this->isInstanceOf( DateTimeImmutable::class ) )
+			->willReturn( $rows );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_completed_orders' )->willReturn( 1 );
+		$resolver->method( 'sum_completed_revenue' )->willReturn( 25.0 );
+
+		$metric = new Prompts_Metric( $proxy, $resolver );
+		$start  = $this->start();
+		$end    = $this->end();
+
+		$rate    = $metric->get_donation_conversion_direct( $start, $end );
+		$revenue = $metric->get_donation_revenue_direct( $start, $end );
+
+		$this->assertSame( 'populated', $rate['state'] );
+		$this->assertSame( 0.5, $rate['value'] );
+		$this->assertSame( 'populated', $revenue['state'] );
+		$this->assertSame( 25.0, $revenue['value'] );
+	}
+
+	/**
+	 * Memoization keys by (query_name, window): two different intents must
+	 * NOT share a cache entry. Each distinct query_name triggers its own
+	 * proxy round-trip; the cache only deduplicates within an intent.
+	 */
+	public function test_paid_cache_is_keyed_per_query_name() {
+		$rows  = $this->paid_attempt_rows();
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		// Two distinct query_names → two proxy calls.
+		$proxy->expects( $this->exactly( 2 ) )
+			->method( 'query' )
+			->willReturn( $rows );
+
+		$resolver = $this->createMock( Woo_Order_Resolver::class );
+		$resolver->method( 'count_completed_orders' )->willReturn( 1 );
+		$resolver->method( 'sum_completed_revenue' )->willReturn( 25.0 );
+
+		$metric = new Prompts_Metric( $proxy, $resolver );
+		$metric->get_donation_conversion_direct( $this->start(), $this->end() );
+		$metric->get_subscription_conversion_direct( $this->start(), $this->end() );
+	}
+
+	// --- Section 6/7: not-yet-implemented bridge (collections) ---------
 
 	/**
 	 * Placeholder collection methods (funnel, distribution, 3 perf tables)
