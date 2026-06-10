@@ -64,10 +64,10 @@ export interface MetricCardProps {
 	valueTitle?: string;
 }
 
+// Currency is handled by the caller (it needs both display + title from one
+// formatCurrency call); every other format maps to a plain string here.
 const formatValue = ( v: number, fmt: MetricFormat ): string => {
 	switch ( fmt ) {
-		case 'currency':
-			return formatCurrency( v ).display;
 		case 'percent':
 			return formatPercent( v );
 		case 'decimal':
@@ -137,10 +137,14 @@ const MetricCard = ( props: MetricCardProps ) => {
 			  ).trim()
 			: null;
 
-	const valueText = formatValue( value, format );
-	// Explicit `valueTitle` wins; otherwise the currency formatter supplies a
-	// full-value title when it abbreviates (e.g. "$1.2M" → "$1,234,567.89").
-	const valueTooltip = valueTitle ?? ( format === 'currency' ? formatCurrency( value ).title : null ) ?? undefined;
+	// Currency formats once, yielding both the display string and (when
+	// abbreviated, e.g. "$1.2M") the full-value title; other formats go through
+	// formatValue.
+	const currency = format === 'currency' ? formatCurrency( value ) : null;
+	const valueText = currency ? currency.display : formatValue( value, format );
+	// Explicit `valueTitle` wins; `||` (not `??`) so an empty string isn't treated
+	// as an override and still falls back to the formatter-derived full value.
+	const valueTooltip = valueTitle || currency?.title || undefined;
 
 	return (
 		<div className="newspack-insights__metric-card">

@@ -6,49 +6,58 @@
  * Advertising consumes its entry from the async `is_loading` GAM-report state
  * instead, where the genuinely long wait happens. Delays are absolute ms from
  * the start of the load — see useProgressiveMessages for the cadence.
+ *
+ * Strings are wrapped in `__()` so they're translatable and picked up by the
+ * .pot extractor. Evaluated at module load, which is after script translations
+ * are injected for the wizard bundle.
  */
+
+/**
+ * WordPress dependencies
+ */
+import { __ } from '@wordpress/i18n';
 
 export const TAB_LOADING_MESSAGES = {
 	audience: [
-		{ text: 'Loading reader data…', delay: 0 },
-		{ text: 'Counting unique readers…', delay: 250 },
-		{ text: 'Mapping where they come from…', delay: 6000 },
-		{ text: 'Almost there…', delay: 12000 },
+		{ text: __( 'Loading reader data…', 'newspack-plugin' ), delay: 0 },
+		{ text: __( 'Counting unique readers…', 'newspack-plugin' ), delay: 250 },
+		{ text: __( 'Mapping where they come from…', 'newspack-plugin' ), delay: 6000 },
+		{ text: __( 'Almost there…', 'newspack-plugin' ), delay: 12000 },
 	],
 	engagement: [
-		{ text: 'Loading engagement data…', delay: 0 },
-		{ text: 'Measuring engagement signals…', delay: 250 },
-		{ text: 'Analyzing reading patterns…', delay: 6000 },
-		{ text: 'Almost there…', delay: 12000 },
+		{ text: __( 'Loading engagement data…', 'newspack-plugin' ), delay: 0 },
+		{ text: __( 'Measuring engagement signals…', 'newspack-plugin' ), delay: 250 },
+		{ text: __( 'Analyzing reading patterns…', 'newspack-plugin' ), delay: 6000 },
+		{ text: __( 'Almost there…', 'newspack-plugin' ), delay: 12000 },
 	],
 	gates: [
-		{ text: 'Loading gate performance…', delay: 0 },
-		{ text: 'Querying gate impressions…', delay: 250 },
-		{ text: 'Joining with WooCommerce orders…', delay: 6000 },
-		{ text: 'Almost there…', delay: 12000 },
+		{ text: __( 'Loading gate performance…', 'newspack-plugin' ), delay: 0 },
+		{ text: __( 'Querying gate impressions…', 'newspack-plugin' ), delay: 250 },
+		{ text: __( 'Joining with WooCommerce orders…', 'newspack-plugin' ), delay: 6000 },
+		{ text: __( 'Almost there…', 'newspack-plugin' ), delay: 12000 },
 	],
 	prompts: [
-		{ text: 'Loading prompt performance…', delay: 0 },
-		{ text: 'Querying prompt impressions…', delay: 250 },
-		{ text: 'Joining with WooCommerce orders…', delay: 6000 },
-		{ text: 'Almost there…', delay: 12000 },
+		{ text: __( 'Loading prompt performance…', 'newspack-plugin' ), delay: 0 },
+		{ text: __( 'Querying prompt impressions…', 'newspack-plugin' ), delay: 250 },
+		{ text: __( 'Joining with WooCommerce orders…', 'newspack-plugin' ), delay: 6000 },
+		{ text: __( 'Almost there…', 'newspack-plugin' ), delay: 12000 },
 	],
 	subscribers: [
-		{ text: 'Loading subscriber data…', delay: 0 },
-		{ text: 'Counting active subscribers…', delay: 250 },
-		{ text: 'Calculating MRR…', delay: 6000 },
-		{ text: 'Almost there…', delay: 12000 },
+		{ text: __( 'Loading subscriber data…', 'newspack-plugin' ), delay: 0 },
+		{ text: __( 'Counting active subscribers…', 'newspack-plugin' ), delay: 250 },
+		{ text: __( 'Calculating MRR…', 'newspack-plugin' ), delay: 6000 },
+		{ text: __( 'Almost there…', 'newspack-plugin' ), delay: 12000 },
 	],
 	donors: [
-		{ text: 'Loading donor data…', delay: 0 },
-		{ text: 'Counting active donors…', delay: 250 },
-		{ text: 'Calculating contributions…', delay: 6000 },
-		{ text: 'Almost there…', delay: 12000 },
+		{ text: __( 'Loading donor data…', 'newspack-plugin' ), delay: 0 },
+		{ text: __( 'Counting active donors…', 'newspack-plugin' ), delay: 250 },
+		{ text: __( 'Calculating contributions…', 'newspack-plugin' ), delay: 6000 },
+		{ text: __( 'Almost there…', 'newspack-plugin' ), delay: 12000 },
 	],
 	advertising: [
-		{ text: 'Loading ad performance…', delay: 0 },
-		{ text: 'Submitting GAM report…', delay: 250 },
-		{ text: 'Waiting for ad server…', delay: 6000 },
-		{ text: 'Processing ad data…', delay: 12000 },
+		{ text: __( 'Loading ad performance…', 'newspack-plugin' ), delay: 0 },
+		{ text: __( 'Submitting GAM report…', 'newspack-plugin' ), delay: 250 },
+		{ text: __( 'Waiting for ad server…', 'newspack-plugin' ), delay: 6000 },
+		{ text: __( 'Processing ad data…', 'newspack-plugin' ), delay: 12000 },
 	],
 } as const;
