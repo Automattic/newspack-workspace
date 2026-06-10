@@ -138,6 +138,14 @@ class Gates_REST_Controller extends WP_REST_Controller {
 			}
 		}
 
+		// Dev smoke-test path: serve canned fixture data so the UI renders without
+		// a BigQuery proxy connection. The optional _fixture_state param selects a
+		// render path ('populated' | 'empty' | 'error'). Never enable in production.
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			$variant = (string) ( $request->get_param( '_fixture_state' ) ?? 'populated' );
+			return rest_ensure_response( Gates_Metric::get_fixture( $variant ) );
+		}
+
 		$metric = new Gates_Metric();
 		return rest_ensure_response( $this->build_response( $metric, $start, $end, $compare_start, $compare_end ) );
 	}

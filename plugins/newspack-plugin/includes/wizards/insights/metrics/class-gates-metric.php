@@ -90,6 +90,19 @@ final class Gates_Metric {
 	}
 
 	/**
+	 * Canned fixture payload for UI smoke testing without a BigQuery connection.
+	 * Returned by the REST controller when NEWSPACK_INSIGHTS_FIXTURE_MODE is on.
+	 * The variant selects a render path: 'populated' (default), 'empty', 'error'.
+	 *
+	 * @param string $variant One of 'populated', 'empty', 'error'.
+	 * @return array Full { tab_error, current, previous } response shape.
+	 */
+	public static function get_fixture( string $variant = 'populated' ): array {
+		$build = require NEWSPACK_ABSPATH . 'includes/wizards/insights/fixtures/gates-fixture.php';
+		return $build( $variant );
+	}
+
+	/**
 	 * Error payload for a scalar scorecard metric. Carries the proxy's error
 	 * code + message so the UI can render an error treatment (without exposing
 	 * internals to the reader) instead of a misleading zero.
