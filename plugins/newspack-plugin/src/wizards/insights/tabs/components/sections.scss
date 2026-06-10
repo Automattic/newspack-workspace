@@ -19,13 +19,23 @@
 	// fetch and first render.
 
 	// Initial load: a centered spinner (Newspack Waiting) where the tab body
-	// will render, matching the inter-tab Suspense fallback.
+	// will render, matching the inter-tab Suspense fallback. When the tab supplies
+	// progressive copy, a muted single-line message stacks beneath the spinner.
 	&__tab-loading {
 		display: flex;
+		flex-direction: column;
 		align-items: center;
 		justify-content: center;
+		gap: 16px;
 		min-height: 320px;
 		padding: 32px 24px;
+
+		&-message {
+			margin: 0;
+			font-size: 13px;
+			color: wp-colors.$gray-700;
+			text-align: center;
+		}
 	}
 
 	&__tab-error {
@@ -231,6 +241,24 @@
 		background-color: #fff;
 		border: 1px solid wp-colors.$gray-200;
 		border-radius: 4px;
+	}
+
+	// "See more" / "See less" toggle below an expandable MetricTable.
+	&__table-toggle {
+		display: inline-block;
+		margin-top: 8px;
+		padding: 0;
+		background: transparent;
+		border: 0;
+		cursor: pointer;
+		font-size: 13px;
+		font-weight: 600;
+		color: var( --wp-admin-theme-color );
+
+		&:hover,
+		&:focus {
+			text-decoration: underline;
+		}
 	}
 
 	&__table {

@@ -30,6 +30,8 @@ import classnames from 'classnames';
  * Internal dependencies
  */
 import { Waiting } from '../../../../../packages/components/src';
+import TabLoading from './TabLoading';
+import type { LoadingMessage } from './useProgressiveMessages';
 
 export type FetchStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -42,17 +44,17 @@ export interface TabStateViewProps {
 	errorLabel: string;
 	/** Tab root class, e.g. 'newspack-insights__audience-tab'. */
 	className: string;
+	/**
+	 * Progressive copy shown beneath the spinner on initial load only. Ignored on
+	 * refetch (spinner-only). Omit for a spinner-only initial load.
+	 */
+	loadingMessages?: readonly LoadingMessage[];
 	children: React.ReactNode;
 }
 
-const TabStateView = ( { status, hasData, error, errorLabel, className, children }: TabStateViewProps ) => {
+const TabStateView = ( { status, hasData, error, errorLabel, className, loadingMessages, children }: TabStateViewProps ) => {
 	if ( status === 'loading' && ! hasData ) {
-		return (
-			<div className="newspack-insights__tab-loading" role="status" aria-live="polite">
-				<Waiting />
-				<span className="screen-reader-text">{ __( 'Loading…', 'newspack-plugin' ) }</span>
-			</div>
-		);
+		return <TabLoading messages={ loadingMessages } />;
 	}
 
 	if ( status === 'error' ) {

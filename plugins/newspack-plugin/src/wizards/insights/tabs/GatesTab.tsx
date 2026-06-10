@@ -23,6 +23,7 @@ import { __ } from '@wordpress/i18n';
 import type { DateRange } from '../state/useDateRange';
 import useGatesData from '../hooks/useGatesData';
 import TabStateView from './components/TabStateView';
+import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import GatesErrorBanner from './gates/GatesErrorBanner';
 import DirectVsInfluencedCallout from './gates/DirectVsInfluencedCallout';
 import GateExposureSection from './gates/GateExposureSection';
@@ -47,6 +48,7 @@ const GatesTab = ( { range, previousRange }: GatesTabProps ) => {
 			error={ error }
 			errorLabel={ __( 'Could not load gate data.', 'newspack-plugin' ) }
 			className="newspack-insights__gates-tab"
+			loadingMessages={ TAB_LOADING_MESSAGES.gates }
 		>
 			{ data && (
 				<>

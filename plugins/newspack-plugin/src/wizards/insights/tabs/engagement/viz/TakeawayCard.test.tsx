@@ -35,8 +35,8 @@ describe( 'TakeawayCard', () => {
 	} );
 
 	it( 'renders the title even in the empty state (no headline / no bars)', () => {
-		render( <TakeawayCard title="Engagement by newsletter status" payload={ { computable: true, type: 'table', rows: [] } } bars={ [] } /> );
-		expect( screen.getByText( 'Engagement by newsletter status' ) ).toBeInTheDocument();
+		render( <TakeawayCard title="Engagement by traffic source" payload={ { computable: true, type: 'table', rows: [] } } bars={ [] } /> );
+		expect( screen.getByText( 'Engagement by traffic source' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Not enough data in this timeframe.' ) ).toBeInTheDocument();
 	} );
 

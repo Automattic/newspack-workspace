@@ -83,8 +83,8 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 									<td>{ row.name }</td>
 									<td className="newspack-insights__table-num">{ formatNumber( row.active_subs ) }</td>
 									<td className="newspack-insights__table-num">{ formatNumber( row.churned_subs ) }</td>
-									<td className="newspack-insights__table-num">{ formatCurrency( row.active_value ) }</td>
-									<td className="newspack-insights__table-num">{ formatCurrency( row.lifetime_revenue ) }</td>
+									<td className="newspack-insights__table-num">{ formatCurrency( row.active_value ).display }</td>
+									<td className="newspack-insights__table-num">{ formatCurrency( row.lifetime_revenue ).display }</td>
 								</tr>
 								{ row.is_parent &&
 									row.variations?.map( v => (
@@ -92,8 +92,8 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 											<td>{ v.label }</td>
 											<td className="newspack-insights__table-num">{ formatNumber( v.active_subs ) }</td>
 											<td className="newspack-insights__table-num">{ formatNumber( v.churned_subs ) }</td>
-											<td className="newspack-insights__table-num">{ formatCurrency( v.active_value ) }</td>
-											<td className="newspack-insights__table-num">{ formatCurrency( v.lifetime_revenue ) }</td>
+											<td className="newspack-insights__table-num">{ formatCurrency( v.active_value ).display }</td>
+											<td className="newspack-insights__table-num">{ formatCurrency( v.lifetime_revenue ).display }</td>
 										</tr>
 									) ) }
 							</Fragment>

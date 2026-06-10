@@ -50,7 +50,7 @@ const ScorecardSection = ( { snapshot }: ScorecardSectionProps ) => (
 				secondary={ sprintf(
 					/* translators: %s: annualized subscription revenue (MRR × 12), formatted as currency */
 					__( '%s annualized', 'newspack-plugin' ),
-					formatCurrency( snapshot.arr )
+					formatCurrency( snapshot.arr ).display
 				) }
 				description={ __( 'Normalized across billing periods', 'newspack-plugin' ) }
 			/>

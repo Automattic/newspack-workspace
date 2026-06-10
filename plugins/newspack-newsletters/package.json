@@ -42,7 +42,6 @@
 		"*.php": "npm run lint:php:staged"
 	},
 	"dependencies": {
-		"@wordpress/dataviews": "^10.2.0",
 		"classnames": "^2.5.1",
 		"mjml-browser": "^4.18.0",
 		"newspack-components": "workspace:*",

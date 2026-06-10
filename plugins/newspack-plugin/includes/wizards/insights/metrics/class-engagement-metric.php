@@ -31,6 +31,20 @@ final class Engagement_Metric {
 	const READER_THRESHOLD = 50;
 
 	/**
+	 * Minimum newsletter sessions in the window before the "Engagement by traffic
+	 * source" card renders a comparison. Below this the newsletter average is too
+	 * noisy — a few unusually engaged or bouncy readers can flip the headline — so
+	 * the card shows its "needs data" state instead. Sessions, not readers, so this
+	 * is a distinct unit from READER_THRESHOLD.
+	 */
+	const NEWSLETTER_SESSION_FLOOR = 100;
+
+	/**
+	 * Session mediums that count as newsletter traffic. Everything else is "other".
+	 */
+	const NEWSLETTER_MEDIUMS = [ 'email', 'newsletter' ];
+
+	/**
 	 * Whether this tab uses the GA4 path. Default true.
 	 *
 	 * @return bool
@@ -182,7 +196,7 @@ final class Engagement_Metric {
 			'top_authors_by_avg_engagement_time'    => self::top_authors_by_avg_engagement_time_via_ga4( $pid, $start_date, $end_date ),
 			// Reader segments.
 			'engagement_by_device_type'             => self::engagement_by_device_type_via_ga4( $pid, $start_date, $end_date ),
-			'engagement_by_newsletter_status'       => self::engagement_by_newsletter_status_via_ga4( $pid, $start_date, $end_date ),
+			'engagement_by_traffic_source'          => self::engagement_by_traffic_source_via_ga4( $pid, $start_date, $end_date ),
 			'engagement_by_returning_vs_new'        => self::engagement_by_returning_vs_new_via_ga4( $pid, $start_date, $end_date ),
 			// BQ-only (hidden in v1).
 			'top_categories_by_engagement'          => self::hidden_in_v1_payload(),
@@ -209,7 +223,7 @@ final class Engagement_Metric {
 			'articles_by_completion_rate',
 			'top_authors_by_avg_engagement_time',
 			'engagement_by_device_type',
-			'engagement_by_newsletter_status',
+			'engagement_by_traffic_source',
 			'engagement_by_returning_vs_new',
 		];
 		$payload = [
@@ -530,39 +544,58 @@ final class Engagement_Metric {
 	}
 
 	/**
-	 * Engagement by Newsletter Status — customEvent:is_newsletter_subscriber.
-	 * Collapses non-'yes' dimension values into a single "not subscribed" bucket.
+	 * Engagement by traffic source — sessionMedium.
+	 *
+	 * Partitions sessions into two cohorts by traffic medium: "newsletter"
+	 * (sessionMedium IN 'email', 'newsletter') vs "other" (everything else), and
+	 * reports average engagement seconds per session for each. sessionMedium is a
+	 * GA4 standard dimension, so unlike the previous newsletter-status cut this has
+	 * no custom-dimension dependency. The returned shape is source-agnostic so the
+	 * BigQuery migration is a mechanical backend swap.
 	 *
 	 * @param string $pid Property ID.
 	 * @param string $s   Start date.
 	 * @param string $e   End date.
 	 * @return array
 	 */
-	private static function engagement_by_newsletter_status_via_ga4( string $pid, string $s, string $e ): array {
-		$result = self::safe_run_report( $pid, self::body( $s, $e, [ 'customEvent:is_newsletter_subscriber' ], [ 'sessions', 'screenPageViewsPerSession', 'userEngagementDuration' ] ) );
+	private static function engagement_by_traffic_source_via_ga4( string $pid, string $s, string $e ): array {
+		$result = self::safe_run_report( $pid, self::body( $s, $e, [ 'sessionMedium' ], [ 'userEngagementDuration', 'sessions' ] ) );
 		if ( isset( $result['error'] ) || isset( $result['overlay'] ) ) {
 			return $result;
 		}
-		// Aggregate into two buckets. screenPageViewsPerSession is a per-session
-		// average, so weight it by sessions before re-dividing.
+		return self::bucket_by_traffic_source( $result['raw']['rows'] ?? [] );
+	}
+
+	/**
+	 * Bucket raw GA4 sessionMedium rows into the newsletter/other cohorts.
+	 *
+	 * Pure transform (no GA4 client) so the cohort math and the minimum-sessions
+	 * floor are unit-testable in isolation. Each input row is
+	 * `{ dimensionValues: [ { value: <medium> } ], metricValues: [ <eng>, <sessions> ] }`.
+	 *
+	 * Below NEWSLETTER_SESSION_FLOOR newsletter sessions the comparison is too
+	 * noisy to render, so the payload carries `needs_data` and the card falls back
+	 * to its "Not enough data in this timeframe." state.
+	 *
+	 * @param array $rows GA4 report rows (userEngagementDuration, sessions).
+	 * @return array
+	 */
+	private static function bucket_by_traffic_source( array $rows ): array {
 		$buckets = [
-			'subscriber'     => [
+			'newsletter' => [
 				'sessions' => 0,
-				'pages'    => 0.0,
 				'eng'      => 0.0,
 			],
-			'not_subscribed' => [
+			'other'      => [
 				'sessions' => 0,
-				'pages'    => 0.0,
 				'eng'      => 0.0,
 			],
 		];
-		foreach ( $result['raw']['rows'] ?? [] as $row ) {
-			$key      = ( ( $row['dimensionValues'][0]['value'] ?? '' ) === 'yes' ) ? 'subscriber' : 'not_subscribed';
-			$sessions = self::num( $row, 0 );
-			$buckets[ $key ]['sessions'] += (int) $sessions;
-			$buckets[ $key ]['pages']    += self::num( $row, 1 ) * $sessions;
-			$buckets[ $key ]['eng']      += self::num( $row, 2 );
+		foreach ( $rows as $row ) {
+			$medium = strtolower( (string) ( $row['dimensionValues'][0]['value'] ?? '' ) );
+			$key    = in_array( $medium, self::NEWSLETTER_MEDIUMS, true ) ? 'newsletter' : 'other';
+			$buckets[ $key ]['eng']      += self::num( $row, 0 );
+			$buckets[ $key ]['sessions'] += (int) self::num( $row, 1 );
 		}
 		$out = [];
 		foreach ( $buckets as $key => $b ) {
@@ -571,7 +604,6 @@ final class Engagement_Metric {
 			$out[] = [
 				'segment'                => $key,
 				'sessions'               => $b['sessions'],
-				'avg_pages_per_session'  => $b['sessions'] > 0 ? $b['pages'] / $b['sessions'] : 0,
 				'avg_engagement_seconds' => $b['sessions'] > 0 ? $b['eng'] / $b['sessions'] : 0,
 			];
 		}
@@ -579,6 +611,7 @@ final class Engagement_Metric {
 			'rows'       => $out,
 			'computable' => true,
 			'type'       => 'table',
+			'needs_data' => $buckets['newsletter']['sessions'] < self::NEWSLETTER_SESSION_FLOOR,
 		];
 	}
 
