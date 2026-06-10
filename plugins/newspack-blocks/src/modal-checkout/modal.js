@@ -24,6 +24,7 @@ import {
 	getCheckoutData,
 	getFormattedAmount,
 } from './utils';
+import { resolveCheckoutButtonForm, readCheckoutData } from './checkout-button-trigger';
 
 const CLASS_PREFIX = newspackBlocksModal.newspack_class_prefix;
 const IFRAME_NAME = 'newspack_modal_checkout_iframe';
@@ -376,9 +377,8 @@ domReady( () => {
 					} );
 
 					// Append the product data hidden inputs.
-					const variationData = singleVariationForm.dataset.checkout;
-					if ( variationData ) {
-						const data = JSON.parse( variationData );
+					const data = readCheckoutData( singleVariationForm );
+					if ( data ) {
 						Object.keys( data ).forEach( key => {
 							const existingInputs = singleVariationForm.querySelectorAll( 'input[name="' + key + '"]' );
 							if ( 0 === existingInputs.length ) {
@@ -799,41 +799,29 @@ domReady( () => {
 	};
 
 	/**
-	 * Handle checkout button form triggers.
+	 * Handle checkout button URL triggers.
 	 *
-	 * @param {number}      productId   The product ID.
-	 * @param {number|null} variationId Optional. The variation ID.
+	 * @param {string}      productId   The product ID.
+	 * @param {string|null} variationId Optional. The variation ID.
+	 *
+	 * @return {boolean} Whether a matching form was submitted.
 	 */
 	const triggerCheckoutButtonForm = ( productId, variationId = null ) => {
-		let form;
-		if ( variationId && variationId !== productId ) {
-			const variationModals = document.querySelectorAll( `.${ VARIATON_MODAL_CLASS_PREFIX }` );
-			const variationModal = [ ...variationModals ].find( modal => modal.dataset.productId === productId );
-			if ( variationModal ) {
-				const forms = variationModal.querySelectorAll( `form[target="${ IFRAME_NAME }"]` );
-				forms.forEach( variationForm => {
-					const productData = JSON.parse( variationForm.dataset.checkout );
-					if ( productData?.variation_id === Number( variationId ) ) {
-						form = variationForm;
-					}
-				} );
-			}
-		} else {
-			const checkoutButtons = document.querySelectorAll( '.wp-block-newspack-blocks-checkout-button' );
-			checkoutButtons.forEach( button => {
-				const checkoutButtonForm = button.querySelector( 'form' );
-				if ( ! checkoutButtonForm ) {
-					return;
-				}
-				const productData = JSON.parse( checkoutButtonForm.dataset.checkout );
-				if ( productData?.product_id === productId ) {
-					form = checkoutButtonForm;
-				}
-			} );
-		}
+		const form = resolveCheckoutButtonForm( document, productId, variationId, {
+			variationModalClassPrefix: VARIATON_MODAL_CLASS_PREFIX,
+			iframeName: IFRAME_NAME,
+		} );
 		if ( form ) {
 			triggerFormSubmit( form );
+			return true;
 		}
+		const message =
+			`Newspack modal checkout: no checkout form found for product_id "${ productId }"` +
+			( variationId ? ` and variation_id "${ variationId }"` : '' ) +
+			'. The checkout was not triggered.';
+		// eslint-disable-next-line no-console
+		console.warn( message );
+		return false;
 	};
 
 	/**
@@ -844,6 +832,10 @@ domReady( () => {
 		if ( ! urlParams.has( 'checkout' ) ) {
 			return;
 		}
+		// Default to stripping the params after handling. The checkout button
+		// trigger overrides this so a link that matches no form stays visible
+		// and diagnosable rather than being silently dropped.
+		let shouldStripParams = true;
 		const type = urlParams.get( 'type' );
 		if ( type === 'donate' ) {
 			const layout = urlParams.get( 'layout' );
@@ -857,7 +849,13 @@ domReady( () => {
 			const productId = urlParams.get( 'product_id' );
 			const variationId = urlParams.get( 'variation_id' );
 			if ( productId ) {
-				triggerCheckoutButtonForm( productId, variationId );
+				shouldStripParams = triggerCheckoutButtonForm( productId, variationId );
+			} else {
+				// A checkout_button trigger with no product_id cannot resolve a
+				// form; keep the params visible rather than dropping them silently.
+				shouldStripParams = false;
+				// eslint-disable-next-line no-console
+				console.warn( 'Newspack modal checkout: checkout_button trigger is missing product_id. The checkout was not triggered.' );
 			}
 		} else {
 			const url = window.newspackReaderActivation?.getPendingCheckout?.();
@@ -866,8 +864,11 @@ domReady( () => {
 				triggerFormSubmit( form );
 			}
 		}
-		// Remove the URL param to prevent re-triggering.
-		window.history.replaceState( null, null, window.location.pathname );
+		// Remove the URL params to prevent re-triggering, but only when the
+		// trigger succeeded.
+		if ( shouldStripParams ) {
+			window.history.replaceState( null, null, window.location.pathname );
+		}
 	};
 	handleModalCheckoutUrlParams();
 
