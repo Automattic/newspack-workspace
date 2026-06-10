@@ -6,6 +6,8 @@
  * the section components stay declarative.
  */
 
+import { __ } from '@wordpress/i18n';
+
 import type { GatesScalarMetric } from '../../api/gates';
 import type { MetricFormat } from '../components/MetricCard';
 
@@ -32,12 +34,18 @@ export interface ScalarCardProps {
 
 export const scalarToMetricCardProps = ( props: ScalarCardProps ) => {
 	const { label, description, current, previous } = props;
+	// A failed query renders MetricCard's shared error treatment rather than a
+	// misleading zero. The raw message stays server-side; the card shows generic
+	// copy keyed off the `error` prop.
+	if ( current.state === 'error' ) {
+		return { label, description, error: current.error_message ?? __( 'Data unavailable', 'newspack-plugin' ) };
+	}
 	return {
 		label,
 		description,
 		value: current.value,
 		format: formatFor( current ),
-		previousValue: previous?.computable ? previous.value : null,
-		pending: current.pending,
+		// Only compare against a real prior value (not an error/non-computable one).
+		previousValue: previous && previous.state !== 'error' && previous.computable ? previous.value : null,
 	};
 };

@@ -3,7 +3,7 @@
  *
  * Tab 4 orchestrator. Mirrors the SubscribersTab / DonorsTab
  * loading / error / success lifecycle and composes the five Gates
- * sections plus the Phase 1 top-of-tab banner.
+ * sections, plus a tab-level error banner when every section fails.
  *
  * Date range picker affects every metric — there are no current-state
  * metrics on this tab, only window-scoped ones. Comparison toggle is
@@ -23,7 +23,7 @@ import { __ } from '@wordpress/i18n';
 import type { DateRange } from '../state/useDateRange';
 import useGatesData from '../hooks/useGatesData';
 import TabStateView from './components/TabStateView';
-import PreviewBanner from './gates/PreviewBanner';
+import GatesErrorBanner from './gates/GatesErrorBanner';
 import DirectVsInfluencedCallout from './gates/DirectVsInfluencedCallout';
 import GateExposureSection from './gates/GateExposureSection';
 import FreeReaderConversionSection from './gates/FreeReaderConversionSection';
@@ -50,7 +50,7 @@ const GatesTab = ( { range, previousRange }: GatesTabProps ) => {
 		>
 			{ data && (
 				<>
-					{ data.tab_pending && <PreviewBanner /> }
+					{ data.tab_error && <GatesErrorBanner /> }
 					<DirectVsInfluencedCallout />
 					<GateExposureSection current={ data.current } previous={ data.previous } />
 					<FreeReaderConversionSection current={ data.current } previous={ data.previous } />

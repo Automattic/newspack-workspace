@@ -7,15 +7,16 @@
  * {@see Subscribers_REST_Controller} and {@see Donors_REST_Controller}.
  *
  * Response shape:
- *   tab_pending: bool       — true while Phase 1 is live; React renders
- *                              the top-of-tab banner whenever true.
+ *   tab_error: bool         — true only when every section in the current
+ *                              window failed to load; React renders a
+ *                              tab-level error banner.
  *   current:     GatesWindow — scorecards + funnel + distribution + table
  *   previous:    GatesWindow | null — only populated when the request
  *                              passes `compare_start` + `compare_end`.
  *
- * Phase 1 returns placeholder payloads from {@see Gates_Metric} (every
- * metric pending, zeros). Phase 2 (NPPD-1630) swaps the underlying
- * metric implementations to BigQuery without touching this controller.
+ * Each metric from {@see Gates_Metric} carries its own `state`
+ * ('error' | 'empty' | 'populated'); sections render their own treatments,
+ * so the tab banner is reserved for the all-failed case.
  *
  * @package Newspack
  */
@@ -144,11 +145,11 @@ class Gates_REST_Controller extends WP_REST_Controller {
 	/**
 	 * Assemble the top-level response.
 	 *
-	 * `tab_pending` is computed from the current window: it is true only
-	 * when every metric in the window fell back to its placeholder/pending
-	 * payload. React uses it to render the top-of-tab banner, so the
-	 * banner disappears as soon as any metric returns real data and
-	 * reappears for no-data / misconfigured windows.
+	 * `tab_error` is true only when every metric in the current window reports
+	 * `state: 'error'` — i.e. the whole tab failed to load (e.g. the BigQuery
+	 * proxy is down/misconfigured). React renders a tab-level error banner in
+	 * that case; otherwise each section renders its own error/empty/populated
+	 * treatment.
 	 *
 	 * @param Gates_Metric           $metric        Orchestrator.
 	 * @param DateTimeImmutable      $start         Current window start.
@@ -166,9 +167,9 @@ class Gates_REST_Controller extends WP_REST_Controller {
 	): array {
 		$current  = $this->build_window( $metric, $start, $end );
 		$response = [
-			'tab_pending' => self::is_window_all_pending( $current ),
-			'current'     => $current,
-			'previous'    => null,
+			'tab_error' => self::is_window_all_error( $current ),
+			'current'   => $current,
+			'previous'  => null,
 		];
 		if ( $compare_start && $compare_end ) {
 			$response['previous'] = $this->build_window( $metric, $compare_start, $compare_end );
@@ -177,22 +178,22 @@ class Gates_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Whether every scorecard/viz in a window payload is pending.
+	 * Whether every metric in a window payload reports `state: 'error'`.
 	 *
-	 * Returns `true` as long as no metric reports `pending: false`. Treats
-	 * unrecognized payload shapes (no `pending` key, scalar values, etc.) as
-	 * pending — i.e. the banner stays up when in doubt. The `window` key is
-	 * date metadata, not a metric, so it's skipped.
+	 * Returns `false` as soon as any metric is not in the error state (the `window`
+	 * key is date metadata, not a metric, so it's skipped). A metric missing a
+	 * `state` key is treated as non-error, so the banner only shows on an
+	 * unambiguous all-failed window.
 	 *
 	 * @param array $window The shape returned by `build_window()`.
 	 * @return bool
 	 */
-	private static function is_window_all_pending( array $window ): bool {
+	private static function is_window_all_error( array $window ): bool {
 		foreach ( $window as $key => $value ) {
 			if ( 'window' === $key ) {
 				continue;
 			}
-			if ( is_array( $value ) && isset( $value['pending'] ) && false === $value['pending'] ) {
+			if ( ! is_array( $value ) || ! isset( $value['state'] ) || 'error' !== $value['state'] ) {
 				return false;
 			}
 		}

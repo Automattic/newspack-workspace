@@ -1,15 +1,14 @@
 /**
- * Gates API client (NPPD-1604, Phase 1).
+ * Gates API client (NPPD-1604).
  *
  * Thin wrapper around `@wordpress/api-fetch` for the single Tab 4
  * endpoint: `GET /newspack-insights/v1/gates`. Type definitions
  * mirror the PHP response shape assembled by `Gates_REST_Controller`.
  *
- * Phase 1: every metric carries `pending: true` and a zero value.
- * Phase 2 (NPPD-1630) keeps the same shape but flips `pending` to
- * false and surfaces real BQ values; the React layer does not need
- * to know which phase produced a payload — it reads `pending` and
- * the `tab_pending` banner flag.
+ * Every metric carries an explicit `state`: 'error' (query failed —
+ * with `error_code` / `error_message`), 'empty' (succeeded, no rows),
+ * or 'populated'. Scalars use 'error' | 'populated' only. The
+ * `tab_error` flag is true only when every section is in the error state.
  */
 
 /**
@@ -23,15 +22,23 @@ import apiFetch from '@wordpress/api-fetch';
  */
 export type GatesPlaceholderType = 'count' | 'rate' | 'currency' | 'decimal';
 
+/** Collection metrics report all three states; scalars use 'error' | 'populated'. */
+export type GatesMetricState = 'error' | 'empty' | 'populated';
+
+/** Fields present on any metric in the error state. */
+export interface GatesErrorFields {
+	error_code?: string;
+	error_message?: string;
+}
+
 /**
- * Standard scorecard metric payload. Carries the value plus the
- * `pending` and `placeholder_type` markers the UI needs to render
- * the Phase 1 zeros in the correct visual format.
+ * Standard scorecard metric payload. `state` is 'error' or 'populated'
+ * (an absent value is a non-computable zero, not an 'empty' state).
  */
-export interface GatesScalarMetric {
+export interface GatesScalarMetric extends GatesErrorFields {
+	state: 'error' | 'populated';
 	value: number;
 	computable: boolean;
-	pending: boolean;
 	denominator: number | null;
 	placeholder_type: GatesPlaceholderType;
 }
@@ -42,8 +49,8 @@ export interface GatesFunnelStage {
 	pct_of_top: number;
 }
 
-export interface GatesFunnelData {
-	pending: boolean;
+export interface GatesFunnelData extends GatesErrorFields {
+	state: GatesMetricState;
 	stages: GatesFunnelStage[];
 }
 
@@ -53,16 +60,14 @@ export interface GatesDistributionBucket {
 	pct: number;
 }
 
-export interface GatesDistributionData {
-	pending: boolean;
+export interface GatesDistributionData extends GatesErrorFields {
+	state: GatesMetricState;
 	buckets: GatesDistributionBucket[];
 }
 
 /**
- * One row in the Performance by gate table. Phase 1 returns no rows
- * (the section renders the spec's empty-state copy). Phase 2 will
- * populate this server-side with `wp_posts.post_title` enrichment
- * keyed on `gate_post_id`.
+ * One row in the Performance by gate table, enriched server-side with each
+ * gate's `wp_posts.post_title` keyed on `gate_post_id`.
  */
 export interface GatesPerformanceRow {
 	gate_post_id: number;
@@ -75,8 +80,8 @@ export interface GatesPerformanceRow {
 	paywall_conversion_rate: number | null;
 }
 
-export interface GatesPerformanceTable {
-	pending: boolean;
+export interface GatesPerformanceTable extends GatesErrorFields {
+	state: GatesMetricState;
 	rows: GatesPerformanceRow[];
 }
 
@@ -104,10 +109,10 @@ export interface GatesWindow {
 
 export interface GatesResponse {
 	/**
-	 * True while Tab 4 is in the Phase 1 placeholder phase. React
-	 * uses this to render the top-of-tab banner.
+	 * True only when every section in the current window is in the error
+	 * state. React renders a tab-level error banner when set.
 	 */
-	tab_pending: boolean;
+	tab_error: boolean;
 	current: GatesWindow;
 	previous: GatesWindow | null;
 }

@@ -1,18 +1,18 @@
 <?php
 /**
- * Newspack Insights — Gates Metric orchestrator (NPPD-1604, Phase 1).
+ * Newspack Insights — Gates Metric orchestrator (NPPD-1604).
  *
- * Phase 1 placeholder layer. Every metric returns a `pending: true`
- * payload with a zero value and a `placeholder_type` so the React
- * layer can render the spec's empty-state value ("0", "0%", "$0.00",
- * "0.0") without inferring type. No storage layer, no SQL — the data
- * is intentionally synthetic until NPPD-1630 wires the BigQuery
- * query proxy into the same method signatures.
+ * Dispatches catalog queries to the Newspack Manager BigQuery proxy and shapes
+ * each result for the React layer. Every method reports an explicit `state`:
+ *   - 'error'     — the proxy/query failed (carries `error_code` + `error_message`)
+ *   - 'empty'     — the query succeeded but returned no rows
+ *   - 'populated' — the query returned usable data
  *
- * Phase 2 swap point: each method in this class will move from
- * returning a placeholder to dispatching a `query_name` against the
- * Newspack Manager BQ catalog. The orchestrator's responsibility
- * (caching, response shape) stays here; storage rolls in beneath.
+ * This replaces the earlier `pending: true` flag, which collapsed proxy errors,
+ * legitimately-empty results, and malformed responses into one ambiguous
+ * "No data yet" state and masked real failures. Scalar scorecards use
+ * 'error' | 'populated' only ('empty' has no meaning for a single value — an
+ * absent value renders as a non-computable zero).
  *
  * @package Newspack
  */
@@ -27,14 +27,16 @@ use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Woo_Order_Resolver;
 
 /**
- * Tab 4 placeholder metric orchestrator.
+ * Tab 4 metric orchestrator.
  *
- * @phpstan-type RateMetric array{
+ * @phpstan-type ScalarMetric array{
+ *   state: string,
  *   value: int|float,
  *   computable: bool,
- *   pending: bool,
  *   denominator: int|null,
  *   placeholder_type: string,
+ *   error_code?: string,
+ *   error_message?: string,
  * }
  */
 final class Gates_Metric {
@@ -69,7 +71,7 @@ final class Gates_Metric {
 	 * both source from `gates_paywall_revenue_direct`; this cache avoids issuing
 	 * two identical HTTP round-trips to the hub for the same window.
 	 *
-	 * @var array<string, array{rows:array, conversions:int, revenue:float}|null>
+	 * @var array<string, array{rows:array, conversions:int, revenue:float}|\WP_Error>
 	 */
 	private array $paywall_direct_cache = [];
 
@@ -88,30 +90,69 @@ final class Gates_Metric {
 	}
 
 	/**
-	 * Build the standard placeholder shape for a single scorecard
-	 * metric. Type is encoded in `placeholder_type` so React can pick
-	 * the right format token ("0" vs "0%" vs "$0.00" vs "0.0") without
-	 * inferring from the field name.
+	 * Error payload for a scalar scorecard metric. Carries the proxy's error
+	 * code + message so the UI can render an error treatment (without exposing
+	 * internals to the reader) instead of a misleading zero.
 	 *
-	 * @param string $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
-	 * @return array{value: int|float, computable: bool, pending: bool, denominator: null, placeholder_type: string}
+	 * @param string    $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
+	 * @param \WP_Error $error            The originating proxy error.
+	 * @return array
 	 */
-	private function placeholder( string $placeholder_type ): array {
+	private function error_scalar( string $placeholder_type, \WP_Error $error ): array {
 		return [
+			'state'            => 'error',
 			'value'            => 'decimal' === $placeholder_type ? 0.0 : 0,
 			'computable'       => false,
-			'pending'          => true,
 			'denominator'      => null,
 			'placeholder_type' => $placeholder_type,
+			'error_code'       => $error->get_error_code(),
+			'error_message'    => $error->get_error_message(),
+		];
+	}
+
+	/**
+	 * Populated payload for a scalar scorecard metric. A successful query that
+	 * yields no usable value is still 'populated' — it renders as a
+	 * non-computable zero ('empty' has no meaning for a single scalar).
+	 *
+	 * @param int|float $value            Metric value.
+	 * @param bool      $computable       Whether the value is a real computed figure.
+	 * @param int|null  $denominator      Optional denominator.
+	 * @param string    $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
+	 * @return array
+	 */
+	private function populated_scalar( $value, bool $computable, ?int $denominator, string $placeholder_type ): array {
+		return [
+			'state'            => 'populated',
+			'value'            => $value,
+			'computable'       => $computable,
+			'denominator'      => $denominator,
+			'placeholder_type' => $placeholder_type,
+		];
+	}
+
+	/**
+	 * Error payload for a collection metric (funnel / distribution / table).
+	 *
+	 * @param string    $rows_key Key holding the (empty) collection: 'stages'|'buckets'|'rows'.
+	 * @param \WP_Error $error    The originating proxy error.
+	 * @return array
+	 */
+	private function error_collection( string $rows_key, \WP_Error $error ): array {
+		return [
+			'state'         => 'error',
+			'error_code'    => $error->get_error_code(),
+			'error_message' => $error->get_error_message(),
+			$rows_key       => [],
 		];
 	}
 
 	/**
 	 * Run a scalar catalog query and extract a single value from the first row.
 	 *
-	 * Returns a payload in the same shape as `placeholder()`. On any failure path
-	 * (proxy not configured, BQ error, empty rows, missing key, non-numeric value),
-	 * falls back to `placeholder( $placeholder_type )` with `pending: true`.
+	 * A proxy WP_Error becomes state 'error'. A successful query with no usable
+	 * value (empty rows, missing key, non-numeric, or count drift) becomes a
+	 * 'populated' non-computable zero.
 	 *
 	 * @param string            $query_name        Catalog `query_name`.
 	 * @param string            $row_key           Column to extract from the first row.
@@ -128,25 +169,21 @@ final class Gates_Metric {
 		DateTimeInterface $end
 	): array {
 		$rows = $this->proxy->query( $query_name, $start, $end );
-		if ( is_wp_error( $rows ) || empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $row_key, $rows[0] ) ) {
-			return $this->placeholder( $placeholder_type );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_scalar( $placeholder_type, $rows );
+		}
+		$zero = 'decimal' === $placeholder_type ? 0.0 : 0;
+		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $row_key, $rows[0] ) ) {
+			// Query succeeded with no usable value → non-computable zero.
+			return $this->populated_scalar( $zero, false, null, $placeholder_type );
 		}
 		$value = $rows[0][ $row_key ];
-		if ( ! is_numeric( $value ) ) {
-			return $this->placeholder( $placeholder_type );
+		// Non-numeric, or (for counts) a non-integer value that signals catalog
+		// drift, can't be trusted as a figure — surface a non-computable zero.
+		if ( ! is_numeric( $value ) || ( 'count' === $placeholder_type && (float) $value !== (float) (int) $value ) ) {
+			return $this->populated_scalar( $zero, false, null, $placeholder_type );
 		}
-		// For count metrics, reject values that aren't representable as integers
-		// (e.g. a float column would indicate catalog drift; fall back loudly).
-		if ( 'count' === $placeholder_type && (float) $value !== (float) (int) $value ) {
-			return $this->placeholder( $placeholder_type );
-		}
-		return [
-			'value'            => 'count' === $placeholder_type ? (int) $value : (float) $value,
-			'computable'       => true,
-			'pending'          => false,
-			'denominator'      => null,
-			'placeholder_type' => $placeholder_type,
-		];
+		return $this->populated_scalar( 'count' === $placeholder_type ? (int) $value : (float) $value, true, null, $placeholder_type );
 	}
 
 	/**
@@ -163,18 +200,16 @@ final class Gates_Metric {
 		DateTimeInterface $end
 	): array {
 		$rows = $this->proxy->query( $query_name, $start, $end );
-		if ( is_wp_error( $rows ) || ! is_array( $rows ) || empty( $rows ) ) {
-			return $this->placeholder( 'rate' );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_scalar( 'rate', $rows );
+		}
+		if ( ! is_array( $rows ) || empty( $rows ) ) {
+			// No paywall attempts in the window → a real 0% rate.
+			return $this->populated_scalar( 0.0, false, 0, 'rate' );
 		}
 		$denominator = count( $rows );
 		$numerator   = $this->woo_resolver->count_completed_orders( $rows );
-		return [
-			'value'            => $denominator > 0 ? $numerator / $denominator : 0.0,
-			'computable'       => true,
-			'pending'          => false,
-			'denominator'      => $denominator,
-			'placeholder_type' => 'rate',
-		];
+		return $this->populated_scalar( $denominator > 0 ? $numerator / $denominator : 0.0, true, $denominator, 'rate' );
 	}
 
 	/**
@@ -185,12 +220,12 @@ final class Gates_Metric {
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{rows:array, conversions:int, revenue:float}|null
+	 * @return array{rows:array, conversions:int, revenue:float}|\WP_Error WP_Error on proxy failure.
 	 */
 	private function fetch_paywall_direct_woo_join(
 		DateTimeInterface $start,
 		DateTimeInterface $end
-	): ?array {
+	) {
 		// Normalize both bounds to UTC Ymd so callers passing different timezone
 		// objects don't bust the cache for the same logical window. Matches the
 		// proxy client's own UTC normalization.
@@ -204,11 +239,14 @@ final class Gates_Metric {
 		}
 
 		$rows = $this->proxy->query( 'gates_paywall_revenue_direct', $start, $end );
-		if ( is_wp_error( $rows ) || ! is_array( $rows ) || empty( $rows ) ) {
-			$this->paywall_direct_cache[ $cache_key ] = null;
-			return null;
+		if ( is_wp_error( $rows ) ) {
+			$this->paywall_direct_cache[ $cache_key ] = $rows;
+			return $rows;
 		}
 
+		// A successful but empty response is real "no conversions", not an error:
+		// zero conversions / zero revenue, which the callers render as $0.00.
+		$rows   = is_array( $rows ) ? $rows : [];
 		$result = [
 			'rows'        => $rows,
 			'conversions' => $this->woo_resolver->count_completed_orders( $rows ),
@@ -321,16 +359,10 @@ final class Gates_Metric {
 	 */
 	public function get_total_paywall_revenue_direct( DateTimeInterface $start, DateTimeInterface $end ): array {
 		$joined = $this->fetch_paywall_direct_woo_join( $start, $end );
-		if ( null === $joined ) {
-			return $this->placeholder( 'currency' );
+		if ( is_wp_error( $joined ) ) {
+			return $this->error_scalar( 'currency', $joined );
 		}
-		return [
-			'value'            => $joined['revenue'],
-			'computable'       => true,
-			'pending'          => false,
-			'denominator'      => $joined['conversions'],
-			'placeholder_type' => 'currency',
-		];
+		return $this->populated_scalar( $joined['revenue'], true, $joined['conversions'], 'currency' );
 	}
 
 	/**
@@ -342,54 +374,52 @@ final class Gates_Metric {
 	 */
 	public function get_avg_revenue_per_paywall_conversion( DateTimeInterface $start, DateTimeInterface $end ): array {
 		$joined = $this->fetch_paywall_direct_woo_join( $start, $end );
-		if ( null === $joined || $joined['conversions'] <= 0 ) {
-			return $this->placeholder( 'currency' );
+		if ( is_wp_error( $joined ) ) {
+			return $this->error_scalar( 'currency', $joined );
 		}
-		return [
-			'value'            => $joined['revenue'] / $joined['conversions'],
-			'computable'       => true,
-			'pending'          => false,
-			'denominator'      => $joined['conversions'],
-			'placeholder_type' => 'currency',
-		];
+		$conversions = $joined['conversions'];
+		// No conversions → a real $0.00 average, flagged non-computable.
+		return $this->populated_scalar(
+			$conversions > 0 ? $joined['revenue'] / $conversions : 0.0,
+			$conversions > 0,
+			$conversions,
+			'currency'
+		);
 	}
 
 	// --- Section 4: How readers convert ---------------------------------
 
 	/**
-	 * Conversion funnel — three stages with zeros and a pending flag.
-	 * Stage shape kept stable so the React Funnel viz can render the
-	 * same chrome regardless of phase.
+	 * Conversion funnel — three ordered stages (impression → engagement →
+	 * conversion). Returns state: 'error' (proxy failure / malformed row),
+	 * 'empty' (query succeeded, no rows), or 'populated' (stages with counts).
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array{
-	 *   pending: bool,
-	 *   stages: array<int, array{label: string, count: int, pct_of_top: float}>
+	 *   state: string,
+	 *   stages: array<int, array{label: string, count: int, pct_of_top: float}>,
+	 *   error_code?: string,
+	 *   error_message?: string
 	 * }
 	 */
 	public function get_conversion_funnel( DateTimeInterface $start, DateTimeInterface $end ): array {
 		$rows = $this->proxy->query( 'gates_funnel', $start, $end );
-		if ( is_wp_error( $rows ) || empty( $rows ) || ! is_array( $rows[0] ) ) {
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'stages', $rows );
+		}
+		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
+			// Successful response in an unexpected shape — a data-quality bug, not
+			// a legitimately empty window. Surface it as an error.
+			return $this->error_collection(
+				'stages',
+				new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The funnel query returned an unexpected shape.', 'newspack-plugin' ) )
+			);
+		}
+		if ( empty( $rows ) ) {
 			return [
-				'pending' => true,
-				'stages'  => [
-					[
-						'label'      => __( 'Impression', 'newspack-plugin' ),
-						'count'      => 0,
-						'pct_of_top' => 0.0,
-					],
-					[
-						'label'      => __( 'Engagement', 'newspack-plugin' ),
-						'count'      => 0,
-						'pct_of_top' => 0.0,
-					],
-					[
-						'label'      => __( 'Conversion', 'newspack-plugin' ),
-						'count'      => 0,
-						'pct_of_top' => 0.0,
-					],
-				],
+				'state'  => 'empty',
+				'stages' => [],
 			];
 		}
 		$row   = $rows[0];
@@ -398,8 +428,8 @@ final class Gates_Metric {
 		$step3 = (int) ( $row['step_3_conversion'] ?? 0 );
 		$top   = $step1 > 0 ? $step1 : 1; // Avoid div-by-zero in pct_of_top.
 		return [
-			'pending' => false,
-			'stages'  => [
+			'state'  => 'populated',
+			'stages' => [
 				[
 					'label'      => __( 'Impression', 'newspack-plugin' ),
 					'count'      => $step1,
@@ -425,14 +455,22 @@ final class Gates_Metric {
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array{
-	 *   pending: bool,
-	 *   buckets: array<int, array{label: string, count: int, pct: float}>
+	 *   state: string,
+	 *   buckets: array<int, array{label: string, count: int, pct: float}>,
+	 *   error_code?: string,
+	 *   error_message?: string
 	 * }
 	 */
 	public function get_exposures_distribution( DateTimeInterface $start, DateTimeInterface $end ): array {
 		$rows = $this->proxy->query( 'gates_exposures_before_conversion', $start, $end );
-		if ( is_wp_error( $rows ) || ! is_array( $rows ) ) {
-			return $this->empty_distribution();
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'buckets', $rows );
+		}
+		if ( ! is_array( $rows ) ) {
+			return $this->error_collection(
+				'buckets',
+				new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The distribution query returned an unexpected shape.', 'newspack-plugin' ) )
+			);
 		}
 
 		$by_bucket = [];
@@ -446,7 +484,10 @@ final class Gates_Metric {
 		}
 
 		if ( empty( $by_bucket ) ) {
-			return $this->empty_distribution();
+			return [
+				'state'   => 'empty',
+				'buckets' => [],
+			];
 		}
 
 		$ordered_keys   = [ '1', '2', '3-5', '6+' ];
@@ -465,63 +506,37 @@ final class Gates_Metric {
 			];
 		}
 		return [
-			'pending' => false,
+			'state'   => 'populated',
 			'buckets' => $buckets,
-		];
-	}
-
-	/**
-	 * Empty distribution shape (Phase 1-style placeholder for the React table).
-	 *
-	 * @return array
-	 */
-	private function empty_distribution(): array {
-		return [
-			'pending' => true,
-			'buckets' => [
-				[
-					'label' => __( '1 exposure', 'newspack-plugin' ),
-					'count' => 0,
-					'pct'   => 0.0,
-				],
-				[
-					'label' => __( '2 exposures', 'newspack-plugin' ),
-					'count' => 0,
-					'pct'   => 0.0,
-				],
-				[
-					'label' => __( '3–5 exposures', 'newspack-plugin' ),
-					'count' => 0,
-					'pct'   => 0.0,
-				],
-				[
-					'label' => __( '6+ exposures', 'newspack-plugin' ),
-					'count' => 0,
-					'pct'   => 0.0,
-				],
-			],
 		];
 	}
 
 	// --- Section 5: Performance by gate ---------------------------------
 
 	/**
-	 * Per-gate breakdown. Phase 1 returns an empty `rows` array; the
-	 * React PerformanceByGateSection renders the spec's empty-state
-	 * copy when the array is empty. Phase 2 will populate this with
-	 * real BQ rows enriched server-side from `wp_posts.post_title`
-	 * keyed on `gate_post_id`.
+	 * Per-gate breakdown, enriched server-side with each gate's
+	 * `wp_posts.post_title` keyed on `gate_post_id`. Returns state: 'error'
+	 * (proxy failure / malformed), 'empty' (no rows), or 'populated'.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
-	 * @return array{pending: bool, rows: array}
+	 * @return array{state: string, rows: array, error_code?: string, error_message?: string}
 	 */
 	public function get_performance_by_gate( DateTimeInterface $start, DateTimeInterface $end ): array {
 		$rows = $this->proxy->query( 'gates_performance_by_gate', $start, $end );
-		if ( is_wp_error( $rows ) || ! is_array( $rows ) || empty( $rows ) ) {
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_collection( 'rows', $rows );
+		}
+		if ( ! is_array( $rows ) ) {
+			return $this->error_collection(
+				'rows',
+				new \WP_Error( 'bigquery_proxy_malformed_rows', __( 'The performance query returned an unexpected shape.', 'newspack-plugin' ) )
+			);
+		}
+		if ( empty( $rows ) ) {
 			return [
-				'pending' => true,
-				'rows'    => [],
+				'state' => 'empty',
+				'rows'  => [],
 			];
 		}
 
@@ -541,8 +556,8 @@ final class Gates_Metric {
 		}
 
 		return [
-			'pending' => false,
-			'rows'    => $this->enrich_with_gate_titles( $mapped ),
+			'state' => 'populated',
+			'rows'  => $this->enrich_with_gate_titles( $mapped ),
 		];
 	}
 

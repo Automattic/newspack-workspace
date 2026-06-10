@@ -167,8 +167,6 @@ const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => 
 
 	const sortedRows = useMemo( () => [ ...data.rows ].sort( ( a, b ) => compareRows( a, b, sortKey, sortDir ) ), [ data.rows, sortKey, sortDir ] );
 
-	const isEmpty = sortedRows.length === 0;
-
 	return (
 		<section
 			className="newspack-insights__section newspack-insights__section--performance"
@@ -190,7 +188,14 @@ const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => 
 						</tr>
 					</thead>
 					<tbody>
-						{ isEmpty ? (
+						{ 'error' === data.state && (
+							<tr>
+								<td colSpan={ columns.length } className="newspack-insights__gates-performance-empty">
+									{ __( 'Unable to load this section. Newspack Manager may need attention.', 'newspack-plugin' ) }
+								</td>
+							</tr>
+						) }
+						{ 'empty' === data.state && (
 							<tr>
 								<td colSpan={ columns.length } className="newspack-insights__gates-performance-empty">
 									{ __(
@@ -199,9 +204,8 @@ const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => 
 									) }
 								</td>
 							</tr>
-						) : (
-							sortedRows.map( renderRow )
 						) }
+						{ 'populated' === data.state && sortedRows.map( renderRow ) }
 					</tbody>
 				</table>
 			</div>
