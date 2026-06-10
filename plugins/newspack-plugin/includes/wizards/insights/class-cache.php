@@ -10,6 +10,8 @@
 
 namespace Newspack\Insights;
 
+use WP_Error;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -139,5 +141,112 @@ final class Cache {
 			'source'         => $source,
 			'cooldown_until' => $cooldown_until,
 		];
+	}
+
+	/**
+	 * Force a recompute. Returns the new envelope, or WP_Error on BQ cooldown.
+	 *
+	 * @param string   $tab       Tab slug.
+	 * @param string   $source    SOURCE_* constant.
+	 * @param string[] $key_parts Canonicalized window components.
+	 * @param callable $compute   () => array — orchestrator payload.
+	 * @return array|WP_Error
+	 */
+	public static function refresh(
+		string $tab,
+		string $source,
+		array $key_parts,
+		callable $compute
+	) {
+		if ( self::is_disabled() ) {
+			return self::envelope( (array) $compute(), $source );
+		}
+
+		if ( self::SOURCE_BIGQUERY === $source ) {
+			$until = self::bq_cooldown_until( $tab );
+			if ( null !== $until ) {
+				$error = new WP_Error(
+					'newspack_insights_cooldown',
+					__( 'BigQuery refresh is rate limited. Try again shortly.', 'newspack-plugin' ),
+					[
+						'status'         => 429,
+						'cooldown_until' => $until,
+					]
+				);
+				self::log_cooldown( $tab, $until );
+				return $error;
+			}
+			update_option( self::cooldown_option( $tab ), time(), false );
+		}
+
+		if ( self::SOURCE_LOCAL !== $source ) {
+			delete_transient( self::transient_key( $tab, $key_parts ) );
+		}
+
+		$payload  = (array) $compute();
+		$envelope = self::envelope( $payload, $source );
+
+		if ( self::SOURCE_LOCAL !== $source ) {
+			$store = [
+				'payload'     => $envelope['payload'],
+				'computed_at' => $envelope['computed_at'],
+				'source'      => $envelope['source'],
+			];
+			set_transient( self::transient_key( $tab, $key_parts ), $store, self::ttl_for( $source ) );
+			self::index_add( $tab, self::transient_key( $tab, $key_parts ) );
+		}
+
+		return $envelope;
+	}
+
+	/**
+	 * ISO 8601 timestamp at which the BQ manual-refresh cooldown for $tab ends,
+	 * or null if no cooldown is currently active.
+	 *
+	 * @param string $tab Tab slug.
+	 * @return string|null
+	 */
+	public static function bq_cooldown_until( string $tab ): ?string {
+		$last = (int) get_option( self::cooldown_option( $tab ), 0 );
+		if ( 0 === $last ) {
+			return null;
+		}
+		$until = $last + self::BQ_COOLDOWN_SECONDS;
+		if ( $until <= time() ) {
+			return null;
+		}
+		return gmdate( 'Y-m-d\TH:i:s\Z', $until );
+	}
+
+	/**
+	 * Option name holding the last manual-refresh Unix timestamp for $tab.
+	 *
+	 * @param string $tab Tab slug.
+	 * @return string
+	 */
+	private static function cooldown_option( string $tab ): string {
+		return 'newspack_insights_bq_last_manual_refresh_' . $tab;
+	}
+
+	/**
+	 * Log a cooldown-rejected refresh via Newspack Logger if available.
+	 *
+	 * @param string $tab   Tab slug.
+	 * @param string $until ISO 8601 cooldown end.
+	 */
+	private static function log_cooldown( string $tab, string $until ): void {
+		if ( ! class_exists( '\Newspack\Logger' ) ) {
+			return;
+		}
+		\Newspack\Logger::newspack_log(
+			'newspack_insights_cache_cooldown',
+			sprintf( '[%s] manual refresh throttled until %s', $tab, $until ),
+			[
+				'tab'            => $tab,
+				'cooldown_until' => $until,
+				'header'         => self::LOGGER_HEADER,
+			],
+			'warning'
+		);
 	}
 }

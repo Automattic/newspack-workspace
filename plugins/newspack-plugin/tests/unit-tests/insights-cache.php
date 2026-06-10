@@ -157,6 +157,102 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Refreshing recomputes and replaces the cached payload.
+	 */
+	public function test_refresh_deletes_transient_and_recomputes(): void {
+		$calls = 0;
+		$compute = function () use ( &$calls ) {
+			$calls++;
+			return [ 'value' => $calls ];
+		};
+		$key_parts = [ '2026-01-01', '2026-01-31', null, null ];
+
+		Cache::store( 'audience', Cache::SOURCE_EXTERNAL, $key_parts, $compute );
+		$refreshed = Cache::refresh( 'audience', Cache::SOURCE_EXTERNAL, $key_parts, $compute );
+
+		$this->assertSame( 2, $calls );
+		$this->assertSame( [ 'value' => 2 ], $refreshed['payload'] );
+	}
+
+	/**
+	 * A successful BQ refresh writes the cooldown timestamp.
+	 */
+	public function test_refresh_for_bigquery_writes_cooldown_marker(): void {
+		$key_parts = [ '2026-01-01', '2026-01-31', null, null ];
+
+		Cache::refresh(
+			'gates',
+			Cache::SOURCE_BIGQUERY,
+			$key_parts,
+			function () {
+				return [ 'value' => 1 ];
+			}
+		);
+
+		$until = Cache::bq_cooldown_until( 'gates' );
+		$this->assertIsString( $until );
+		$this->assertGreaterThan( time(), (int) ( new DateTimeImmutable( $until ) )->format( 'U' ) );
+	}
+
+	/**
+	 * A second refresh inside the cooldown window returns a 429 WP_Error.
+	 */
+	public function test_refresh_during_bq_cooldown_returns_wp_error_429(): void {
+		$key_parts = [ '2026-01-01', '2026-01-31', null, null ];
+
+		Cache::refresh(
+			'gates',
+			Cache::SOURCE_BIGQUERY,
+			$key_parts,
+			function () {
+				return [ 'value' => 1 ];
+			}
+		);
+
+		$result = Cache::refresh(
+			'gates',
+			Cache::SOURCE_BIGQUERY,
+			$key_parts,
+			function () {
+				return [ 'value' => 'should-not-run' ];
+			}
+		);
+
+		$this->assertWPError( $result );
+		$this->assertSame( 'newspack_insights_cooldown', $result->get_error_code() );
+		$this->assertSame( 429, $result->get_error_data()['status'] );
+		$this->assertNotEmpty( $result->get_error_data()['cooldown_until'] );
+	}
+
+	/**
+	 * External-source refresh has no cooldown.
+	 */
+	public function test_refresh_for_external_has_no_cooldown(): void {
+		$key_parts = [ '2026-01-01', '2026-01-31', null, null ];
+
+		Cache::refresh(
+			'audience',
+			Cache::SOURCE_EXTERNAL,
+			$key_parts,
+			function () {
+				return [ 'value' => 1 ];
+			}
+		);
+		$second = Cache::refresh(
+			'audience',
+			Cache::SOURCE_EXTERNAL,
+			$key_parts,
+			function () {
+				return [ 'value' => 2 ];
+			}
+		);
+
+		$this->assertSame( [ 'value' => 2 ], $second['payload'] );
+		$this->assertNull( $second['cooldown_until'] );
+		$this->assertNull( Cache::bq_cooldown_until( 'audience' ) );
+	}
+
+	/**
 	 * Mirror the production transient-key formula so tests can reach into storage.
 	 *
 	 * @param string $tab Tab slug.
