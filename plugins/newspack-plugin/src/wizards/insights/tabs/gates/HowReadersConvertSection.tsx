@@ -21,6 +21,7 @@ import { __ } from '@wordpress/i18n';
 import type { GatesWindow } from '../../api/gates';
 import Funnel from './viz/Funnel';
 import DistributionTable from './viz/DistributionTable';
+import SectionState from './SectionState';
 
 export interface HowReadersConvertSectionProps {
 	current: GatesWindow;
@@ -39,10 +40,23 @@ const HowReadersConvertSection = ( { current }: HowReadersConvertSectionProps ) 
 		</p>
 		<div className="newspack-insights__gates-convert-grid">
 			<div className="newspack-insights__gates-convert-col">
-				<Funnel data={ current.conversion_funnel } />
+				<SectionState
+					state={ current.conversion_funnel.state }
+					emptyMessage={ __(
+						'No funnel data yet. The funnel will populate once readers begin moving through your gates.',
+						'newspack-plugin'
+					) }
+				>
+					<Funnel stages={ current.conversion_funnel.stages } />
+				</SectionState>
 			</div>
 			<div className="newspack-insights__gates-convert-col">
-				<DistributionTable data={ current.exposures_distribution } />
+				<SectionState
+					state={ current.exposures_distribution.state }
+					emptyMessage={ __( 'No distribution data yet. This will populate once readers begin converting.', 'newspack-plugin' ) }
+				>
+					<DistributionTable buckets={ current.exposures_distribution.buckets } />
+				</SectionState>
 			</div>
 		</div>
 	</section>

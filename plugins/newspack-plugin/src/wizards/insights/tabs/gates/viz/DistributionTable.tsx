@@ -1,13 +1,9 @@
 /**
- * Tab-local Distribution table viz (NPPD-1604, Phase 1).
+ * Tab-local Distribution table viz (NPPD-1604).
  *
- * Bucket distribution table used inside Tab 4 only. Mirrors the
- * pattern the canonical Table component will use when it lands in
- * `packages/components/src/`, so swap-in later is mechanical.
- *
- * Phase 1 behavior: every bucket renders 0 / 0% in the standard
- * table chrome; the section caption below the table explains the
- * cohort definition regardless of phase.
+ * Bucket distribution table used inside Tab 4 only. The parent section owns the
+ * error / empty / populated treatment (via SectionState); this component just
+ * renders the populated buckets.
  */
 
 /**
@@ -18,14 +14,14 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import type { GatesDistributionData } from '../../../api/gates';
+import type { GatesDistributionBucket } from '../../../api/gates';
 import { formatNumber, formatPercent } from '../../components/format';
 
 export interface DistributionTableProps {
-	data: GatesDistributionData;
+	buckets: GatesDistributionBucket[];
 }
 
-const DistributionTable = ( { data }: DistributionTableProps ) => (
+const DistributionTable = ( { buckets }: DistributionTableProps ) => (
 	<div className="newspack-insights__distribution">
 		<div className="newspack-insights__table-wrap">
 			<table className="newspack-insights__table">
@@ -41,7 +37,7 @@ const DistributionTable = ( { data }: DistributionTableProps ) => (
 					</tr>
 				</thead>
 				<tbody>
-					{ data.buckets.map( bucket => (
+					{ buckets.map( bucket => (
 						<tr key={ bucket.label }>
 							<td>{ bucket.label }</td>
 							<td className="newspack-insights__table-num">{ formatNumber( bucket.count ) }</td>
