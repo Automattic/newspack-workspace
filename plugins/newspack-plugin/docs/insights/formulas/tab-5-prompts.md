@@ -413,9 +413,10 @@ Notes:
 
 ### Table: Performance by Prompt
 
-Row per prompt, with impressions and conversion rates by intent.
+Row per prompt: impressions, engagement rates, and per-intent **conversion** outcomes. The aggregate engagement query (1) runs in BQ; the donation/subscription **conversion** columns are completed-order counts produced by a PHP Woo join over the per-attempt rows from query (2) — the same completion pattern as `get_donation_revenue_direct` / `get_subscription_revenue_direct`, and aligned with the Gates v1.1 per-gate conversion decision (NPPD-1684). BQ alone only sees attempts; conversions require the Woo join.
 
 ```sql
+-- (1) Per-prompt engagement aggregate (BQ).
 WITH prompt_impressions AS (
   SELECT
     PARAM('newspack_popup_id') AS popup_id,
@@ -424,6 +425,7 @@ WITH prompt_impressions AS (
     PARAM('prompt_placement') AS placement,
     COUNT(*) AS impressions,
     COUNT(DISTINCT COALESCE(user_id, user_pseudo_id)) AS unique_viewers,
+    COUNT(DISTINCT IF(PARAM('action') = 'seen', PARAM('ga_session_id'), NULL)) AS sessions_with_impression,
     COUNTIF(PARAM('action') = 'clicked') AS clicks,
     COUNTIF(PARAM('action') = 'form_submission') AS form_submissions,
     COUNTIF(PARAM('action') = 'dismissed') AS dismissals
@@ -452,18 +454,6 @@ prompt_newsletter_signups AS (
     AND event_name = 'np_newsletter_subscribed'
     AND PARAM('newspack_popup_id') IS NOT NULL
   GROUP BY popup_id
-),
-prompt_checkout_attempts AS (
-  SELECT
-    PARAM('newspack_popup_id') AS popup_id,
-    PARAM('action_type') AS checkout_type,
-    COUNT(*) AS attempts
-  FROM `{project}.{dataset}.events_*`
-  WHERE _TABLE_SUFFIX BETWEEN @start_date AND @end_date
-    AND event_name = 'np_modal_checkout_interaction'
-    AND PARAM('action') = 'form_submission'
-    AND PARAM('newspack_popup_id') IS NOT NULL
-  GROUP BY popup_id, checkout_type
 )
 SELECT
   i.popup_id,
@@ -472,29 +462,47 @@ SELECT
   i.placement,
   i.impressions,
   i.unique_viewers,
+  i.sessions_with_impression,
   SAFE_DIVIDE(i.clicks, i.impressions) AS ctr,
   SAFE_DIVIDE(i.form_submissions, i.impressions) AS form_submission_rate,
   SAFE_DIVIDE(i.dismissals, i.impressions) AS dismissal_rate,
   COALESCE(r.registrations, 0) AS registrations,
-  COALESCE(n.newsletter_signups, 0) AS newsletter_signups,
-  COALESCE(SUM(IF(c.checkout_type = 'donation', c.attempts, 0)), 0) AS donation_attempts,
-  COALESCE(SUM(IF(c.checkout_type = 'checkout_button', c.attempts, 0)), 0) AS subscription_attempts
+  COALESCE(n.newsletter_signups, 0) AS newsletter_signups
 FROM prompt_impressions i
 LEFT JOIN prompt_registrations r USING (popup_id)
 LEFT JOIN prompt_newsletter_signups n USING (popup_id)
-LEFT JOIN prompt_checkout_attempts c USING (popup_id)
-GROUP BY
-  i.popup_id, i.prompt_title, i.intent, i.placement,
-  i.impressions, i.unique_viewers, i.clicks, i.form_submissions,
-  i.dismissals, r.registrations, n.newsletter_signups
 ORDER BY i.impressions DESC
 LIMIT 50
 ```
 
+```sql
+-- (2) Per-attempt rows for the Woo conversion join (BQ). One row per checkout
+-- form submission tagged to a prompt; PHP groups these by popup_id and matches
+-- completed Woo orders within the 30-min window, scoped by product type.
+SELECT
+  PARAM('newspack_popup_id') AS popup_id,
+  PARAM('action_type') AS checkout_type, -- 'donation' | 'checkout_button' (subscription)
+  COALESCE(user_id, user_pseudo_id) AS uid,
+  PARAM('ga_session_id') AS session_id,
+  event_timestamp
+FROM `{project}.{dataset}.events_*`
+WHERE _TABLE_SUFFIX BETWEEN @start_date AND @end_date
+  AND event_name = 'np_modal_checkout_interaction'
+  AND PARAM('action') = 'form_submission'
+  AND PARAM('newspack_popup_id') IS NOT NULL
+```
+
+Then in PHP, per prompt (`popup_id`):
+
+- Group the attempt rows from query (2) by `popup_id`, split by `checkout_type` (`donation` vs `checkout_button` → subscription).
+- Pass each group to `Woo_Order_Resolver::count_completed_orders()`, scoped to the matching Woo product type (donation products vs subscription products) — the same product-type scoping used by `get_donation_revenue_direct` / `get_subscription_revenue_direct`. The result is `donation_conversions` / `subscription_conversions`.
+- `donation_conversion_rate` = `donation_conversions ÷ sessions_with_impression`; `subscription_conversion_rate` likewise. `sessions_with_impression` (from query 1) is the count of distinct sessions with a `seen` impression of that prompt — the same denominator family the section-level Prompts rate metrics use.
+- A prompt with no donation (resp. subscription) intent returns `null` for that count + rate pair → the table renders a muted em-dash; a prompt with the intent but zero completions returns `0` / `0%`.
+
 Notes:
 - `prompt_title` is captured directly in the event params, no WP enrichment needed (unlike Gates which only have `gate_post_id`).
-- Donation and subscription columns show *attempts* — the table needs PHP post-processing to convert to *completions* via the Woo join. v1 may ship with the attempts column labeled explicitly and add the completion column in a follow-up.
-- `LIMIT 50` guardrail. Publishers with >50 prompts get the top 50 by impressions with a footnote noting truncation.
+- Donation and subscription columns report **conversions** (Woo-completed outcomes), not attempts — aligning with the Gates v1.1 decision (NPPD-1684). Phase 1 ships the final column set with placeholder zeros; Phase 2 (NPPD-1682) populates them via the Woo join above.
+- `LIMIT 50` guardrail on the aggregate query. The UI shows the top 10 by the sorted column with a "See more" toggle that reveals the rest (up to 50); publishers with >50 prompts get the top 50 by impressions with a footnote noting truncation.
 
 ### Table: Performance by Prompt Intent
 

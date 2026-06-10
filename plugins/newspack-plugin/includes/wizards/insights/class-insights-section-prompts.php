@@ -1,21 +1,27 @@
 <?php
 /**
- * Newspack Insights — Prompts section (NPPD-1602).
+ * Newspack Insights — Prompts section (NPPD-1607).
  *
- * Prompts tab scope: per-campaign / per-prompt performance from the
- * Campaigns surface. Impressions, click-throughs, gate fires attributed
- * to specific overlay / inline / popup prompts. Complements the Gates
- * tab — Gates is "what conversion surface fired"; Prompts is "what
- * editorial campaign drove the fire."
+ * Tab 5 scope: prompt exposure, engagement, free + paid reader
+ * conversion, revenue from prompts, the impression → engagement →
+ * conversion funnel, and per-prompt / per-intent / per-placement
+ * performance breakdowns. Sourced from Newspack Campaigns (prompt)
+ * GA4 events. Phase 1 ships the full UI with placeholder data;
+ * Phase 2 swaps the underlying metric implementations to BigQuery via
+ * the Newspack Manager query proxy.
  *
- * Future REST endpoints for the Prompts tab register from
- * {@see self::register_hooks()}. Currently a stub; the React side renders
- * a "Coming soon" placeholder for this tab.
+ * Unlike Gates, the Prompts tab has no separate preview flag — it is
+ * gated solely by {@see Insights_Wizard::is_enabled()}. The
+ * `feat/insights-rsm` integration branch is the staging area; the tab
+ * is not visible to publishers until that branch merges to main as a
+ * single Insights v1 release event.
  *
  * @package Newspack
  */
 
 namespace Newspack;
+
+use Newspack\Insights\Prompts_REST_Controller;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -32,18 +38,39 @@ class Insights_Section_Prompts {
 	const SECTION_NAME = 'Prompts';
 
 	/**
-	 * Initialize. Hooks REST endpoints for this tab when implementations
-	 * arrive (NPPD-1607).
+	 * Initialize. Bails early when the parent Insights feature flag is off.
 	 */
 	public static function init() {
 		if ( ! Insights_Wizard::is_enabled() ) {
 			return;
 		}
+		self::load_dependencies();
 		self::register_hooks();
 	}
 
 	/**
-	 * Register hooks for this section. Currently a stub.
+	 * Include Tab 5 PHP files.
+	 *
+	 * @return void
 	 */
-	public static function register_hooks() {}
+	private static function load_dependencies(): void {
+		$base = NEWSPACK_ABSPATH . 'includes/wizards/insights/';
+		include_once $base . 'metrics/class-prompts-metric.php';
+		include_once $base . 'api/class-prompts-rest-controller.php';
+	}
+
+	/**
+	 * Register the Tab 5 REST route.
+	 *
+	 * @return void
+	 */
+	public static function register_hooks(): void {
+		add_action(
+			'rest_api_init',
+			function () {
+				$controller = new Prompts_REST_Controller();
+				$controller->register_routes();
+			}
+		);
+	}
 }
