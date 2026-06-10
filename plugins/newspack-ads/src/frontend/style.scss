@@ -189,11 +189,17 @@
 			}
 		}
 	}
+
+	/* stylelint-disable selector-type-no-unknown */
+	amp-ad {
+		vertical-align: bottom;
+	}
+	/* stylelint-enable selector-type-no-unknown */
 }
 
 .newspack_amp_sticky_ad {
 	&__container {
-		@media (min-width: 600px) {
+		@media only screen and (min-width: 600px) {
 			display: none;
 		}
 	}
@@ -240,15 +246,14 @@
 		margin-bottom: 8px;
 		margin-top: 8px;
 	}
-	// Match the ad background treatment for ads served by the standalone
-	// Broadstreet plugin, whose JS hydrates each zone into a
-	// <broadstreet-zone-container> custom element the theme's other selectors
-	// don't target. (selector-type-no-unknown is already disabled above, for
-	// amp-ad.) See NPPM-2829.
+	// Match the ad background treatment for Broadstreet zones, which render
+	// into a <broadstreet-zone-container> custom element.
+	/* stylelint-disable selector-type-no-unknown */
 	broadstreet-zone-container {
 		align-items: center;
 		display: flex;
 		justify-content: center;
 		padding: 8px;
 	}
+	/* stylelint-enable selector-type-no-unknown */
 }
