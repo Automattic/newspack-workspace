@@ -508,7 +508,7 @@ final class Newspack {
 			'newspack_commons',
 			self::plugin_url() . '/dist/commons.js',
 			[],
-			NEWSPACK_PLUGIN_VERSION,
+			self::asset_version( 'commons' ),
 			true
 		);
 		wp_enqueue_script( 'newspack_commons' );
@@ -517,7 +517,7 @@ final class Newspack {
 			'newspack-commons',
 			self::plugin_url() . '/dist/commons.css',
 			[ 'wp-components' ],
-			NEWSPACK_PLUGIN_VERSION
+			self::asset_version( 'commons' )
 		);
 		wp_style_add_data( 'newspack-commons', 'rtl', 'replace' );
 		wp_enqueue_style( 'newspack-commons' );
@@ -527,7 +527,7 @@ final class Newspack {
 				'newspack-admin',
 				self::plugin_url() . '/dist/admin.css',
 				[],
-				NEWSPACK_PLUGIN_VERSION
+				self::asset_version( 'admin' )
 			);
 		}
 	}
