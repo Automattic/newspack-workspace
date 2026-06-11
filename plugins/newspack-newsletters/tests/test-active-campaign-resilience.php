@@ -159,7 +159,7 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 	 * explicitly, so this guards the plumbing the cleanup fix depends on.
 	 */
 	public function test_api_v1_request_honors_caller_supplied_timeout() {
-		Newspack_Newsletters_Active_Campaign::instance()->api_v1_request( 'campaign_delete', 'GET', [ 'timeout' => 12 ] );
+		Newspack_Newsletters_Active_Campaign::instance()->api_v1_request( 'campaign_delete', 'GET', [ 'timeout' => 12 ] ); // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
 		$this->assertSame( 12, end( $this->captured_timeouts ) );
 	}
 
@@ -168,7 +168,7 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 	 * is symmetric with v1.
 	 */
 	public function test_api_v3_request_honors_caller_supplied_timeout() {
-		Newspack_Newsletters_Active_Campaign::instance()->api_v3_request( 'audiences', 'GET', [ 'timeout' => 9 ] );
+		Newspack_Newsletters_Active_Campaign::instance()->api_v3_request( 'audiences', 'GET', [ 'timeout' => 9 ] ); // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
 		$this->assertSame( 9, end( $this->captured_timeouts ) );
 	}
 
@@ -309,11 +309,31 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 	 */
 	private function fresh_send_chain_responses() {
 		return [
-			'list_list'       => [ 'result_code' => 1, [ 'id' => 5, 'name' => 'Main', 'subscriber_count' => 10 ] ],
-			'v3:audiences'    => [ 'data' => [], 'meta' => [ 'page' => [ 'total' => 0 ] ] ],
-			'message_add'     => [ 'result_code' => 1, 'id' => 555 ],
-			'message_view'    => [ 'result_code' => 1, 'id' => 555, 'html' => '<p>Hello</p>' ],
-			'campaign_create' => [ 'result_code' => 1, 'id' => 777 ],
+			'list_list'       => [
+				'result_code' => 1,
+				[
+					'id'               => 5,
+					'name'             => 'Main',
+					'subscriber_count' => 10,
+				],
+			],
+			'v3:audiences'    => [
+				'data' => [],
+				'meta' => [ 'page' => [ 'total' => 0 ] ],
+			],
+			'message_add'     => [
+				'result_code' => 1,
+				'id'          => 555,
+			],
+			'message_view'    => [
+				'result_code' => 1,
+				'id'          => 555,
+				'html'        => '<p>Hello</p>',
+			],
+			'campaign_create' => [
+				'result_code' => 1,
+				'id'          => 777,
+			],
 			'campaign_delete' => [ 'result_code' => 1 ],
 			'campaign_status' => [ 'result_code' => 1 ],
 		];
@@ -361,7 +381,12 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 			$this->fresh_send_chain_responses(),
 			// result_code !== 1 makes api_v1_request return a generic api_error
 			// (the shape AC returns for a 5xx), NOT the timeout code.
-			[ 'campaign_list' => [ 'result_code' => 0, 'result_message' => 'Internal error' ] ]
+			[
+				'campaign_list' => [
+					'result_code'    => 0,
+					'result_message' => 'Internal error',
+				],
+			]
 		);
 
 		$result = $active_campaign->send( get_post( $post_id ) );
@@ -400,7 +425,15 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 
 		$this->responses = array_merge(
 			$this->fresh_send_chain_responses(),
-			[ 'campaign_list' => [ 'result_code' => 1, [ 'id' => 12345, 'status' => $status ] ] ]
+			[
+				'campaign_list' => [
+					'result_code' => 1,
+					[
+						'id'     => 12345,
+						'status' => $status,
+					],
+				],
+			]
 		);
 
 		$result = $active_campaign->send( get_post( $post_id ) );
@@ -427,6 +460,9 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An indeterminate prior-campaign state must surface a needs-review notice
+	 * rather than auto-resend.
+	 *
 	 * @dataProvider needs_review_statuses
 	 *
 	 * @param string $status The ActiveCampaign campaign status code.
@@ -437,7 +473,15 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 
 		$this->responses = array_merge(
 			$this->fresh_send_chain_responses(),
-			[ 'campaign_list' => [ 'result_code' => 1, [ 'id' => 12345, 'status' => $status ] ] ]
+			[
+				'campaign_list' => [
+					'result_code' => 1,
+					[
+						'id'     => 12345,
+						'status' => $status,
+					],
+				],
+			]
 		);
 
 		$result = $active_campaign->send( get_post( $post_id ) );
@@ -459,7 +503,15 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 
 		$this->responses = array_merge(
 			$this->fresh_send_chain_responses(),
-			[ 'campaign_list' => [ 'result_code' => 1, [ 'id' => 12345, 'status' => '0' ] ] ] // 0 = draft.
+			[
+				'campaign_list' => [
+					'result_code' => 1,
+					[
+						'id'     => 12345,
+						'status' => '0',
+					],
+				],
+			] // 0 = draft.
 		);
 
 		$result = $active_campaign->send( get_post( $post_id ) );
