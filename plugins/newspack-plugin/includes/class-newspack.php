@@ -480,6 +480,9 @@ final class Newspack {
 	 * change, which makes it a tighter cache-busting key than the manually
 	 * bumped NEWSPACK_PLUGIN_VERSION constant.
 	 *
+	 * Results are memoized per request via a static cache to avoid redundant
+	 * file-system reads when the same asset is resolved multiple times.
+	 *
 	 * @param string $name Asset basename relative to `dist/`, without the
 	 *                     `.asset.php` suffix. Examples: 'wizards',
 	 *                     'other-scripts/relative-time'.
@@ -490,14 +493,20 @@ final class Newspack {
 	 *                or malformed.
 	 */
 	public static function asset_version( string $name ): string {
-		$path = NEWSPACK_ABSPATH . 'dist/' . $name . '.asset.php';
+		static $cache = [];
+		if ( isset( $cache[ $name ] ) ) {
+			return $cache[ $name ];
+		}
+		$version = NEWSPACK_PLUGIN_VERSION;
+		$path    = NEWSPACK_ABSPATH . 'dist/' . $name . '.asset.php';
 		if ( file_exists( $path ) ) {
 			$asset = include $path;
 			if ( is_array( $asset ) && ! empty( $asset['version'] ) ) {
-				return $asset['version'];
+				$version = $asset['version'];
 			}
 		}
-		return NEWSPACK_PLUGIN_VERSION;
+		$cache[ $name ] = $version;
+		return $version;
 	}
 
 	/**
