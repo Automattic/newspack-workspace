@@ -472,6 +472,35 @@ final class Newspack {
 	}
 
 	/**
+	 * Resolve the cache-busting version for a built dist asset.
+	 *
+	 * Reads the content-hashed `version` emitted by
+	 * the WordPress dependency-extraction webpack plugin into
+	 * `dist/<name>.asset.php`. The hash changes only when the bundle's bytes
+	 * change, which makes it a tighter cache-busting key than the manually
+	 * bumped NEWSPACK_PLUGIN_VERSION constant.
+	 *
+	 * @param string $name Asset basename relative to `dist/`, without the
+	 *                     `.asset.php` suffix. Examples: 'wizards',
+	 *                     'other-scripts/relative-time'.
+	 * @return string Version string suitable as the 4th arg of
+	 *                wp_register_script() / wp_enqueue_script() /
+	 *                wp_register_style() / wp_enqueue_style(). Falls back to
+	 *                NEWSPACK_PLUGIN_VERSION when the asset file is missing
+	 *                or malformed.
+	 */
+	public static function asset_version( $name ) {
+		$path = NEWSPACK_ABSPATH . 'dist/' . $name . '.asset.php';
+		if ( file_exists( $path ) ) {
+			$asset = include $path;
+			if ( is_array( $asset ) && ! empty( $asset['version'] ) ) {
+				return $asset['version'];
+			}
+		}
+		return NEWSPACK_PLUGIN_VERSION;
+	}
+
+	/**
 	 * Load the common assets.
 	 */
 	public static function load_common_assets() {
