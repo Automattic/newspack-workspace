@@ -227,6 +227,37 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 	}
 
 	/**
+	 * When BQ is in cooldown and the requested window has no cached envelope,
+	 * refresh() returns null payload + cooldown_until so the React client can
+	 * preserve any prior slot data and render the throttle UI.
+	 */
+	public function test_refresh_during_cooldown_with_no_prior_cache_returns_null_payload(): void {
+		// Trigger the cooldown via window A.
+		Cache::refresh(
+			'gates',
+			Cache::SOURCE_BIGQUERY,
+			[ '2026-01-01', '2026-01-31', null, null ],
+			function () {
+				return [ 'value' => 1 ];
+			}
+		);
+
+		// Refresh on window B (no cached envelope) during the cooldown.
+		$envelope = Cache::refresh(
+			'gates',
+			Cache::SOURCE_BIGQUERY,
+			[ '2026-02-01', '2026-02-28', null, null ],
+			function () {
+				return [ 'value' => 'should-not-run' ];
+			}
+		);
+
+		$this->assertNull( $envelope['payload'] );
+		$this->assertNotEmpty( $envelope['cooldown_until'] );
+		$this->assertSame( Cache::SOURCE_BIGQUERY, $envelope['source'] );
+	}
+
+	/**
 	 * External-source refresh has no cooldown.
 	 */
 	public function test_refresh_for_external_has_no_cooldown(): void {

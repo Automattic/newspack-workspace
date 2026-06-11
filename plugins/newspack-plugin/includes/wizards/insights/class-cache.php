@@ -25,6 +25,14 @@ final class Cache {
 	const TTL_EXTERNAL        = 10 * MINUTE_IN_SECONDS;
 	const BQ_COOLDOWN_SECONDS = 10 * MINUTE_IN_SECONDS;
 
+	/**
+	 * Max number of transient keys retained per tab in the index. Older
+	 * entries are dropped FIFO when the cap is exceeded; the underlying
+	 * transients still expire naturally on their TTL — losing the index
+	 * ref just means purge() won't delete them explicitly.
+	 */
+	const INDEX_MAX_ENTRIES = 200;
+
 	const LOGGER_HEADER = 'NEWSPACK-INSIGHTS-CACHE';
 
 	/**
@@ -139,6 +147,13 @@ final class Cache {
 		}
 		if ( ! in_array( $key, $keys, true ) ) {
 			$keys[] = $key;
+			// Cap the index so users churning the date picker don't bloat
+			// wp_options. FIFO drops the oldest refs — their transients
+			// still expire on their own TTL; purge() simply won't sweep
+			// them explicitly.
+			if ( count( $keys ) > self::INDEX_MAX_ENTRIES ) {
+				$keys = array_slice( $keys, -self::INDEX_MAX_ENTRIES );
+			}
 			update_option( self::index_option( $tab ), $keys, false );
 		}
 	}
@@ -181,10 +196,22 @@ final class Cache {
 			return self::envelope( (array) $compute(), $source );
 		}
 
+		$key = self::SOURCE_LOCAL === $source ? null : self::transient_key( $tab, $key_parts );
+
 		if ( self::SOURCE_BIGQUERY === $source ) {
 			$until = self::bq_cooldown_until( $tab );
 			if ( null !== $until ) {
 				self::log_cooldown( $tab, $until );
+				/**
+				 * Fires when a manual BQ refresh is rejected by the active
+				 * cooldown. Telemetry hook for tracking throttle frequency.
+				 *
+				 * @since 0.0.0
+				 *
+				 * @param string $tab   Tab slug whose refresh was blocked.
+				 * @param string $until ISO 8601 timestamp when the cooldown ends.
+				 */
+				do_action( 'newspack_insights_cache_cooldown_blocked', $tab, $until );
 				$cached = self::read_cached( $tab, $key_parts );
 				if ( null !== $cached ) {
 					return [
@@ -205,24 +232,30 @@ final class Cache {
 					'cooldown_until' => $until,
 				];
 			}
+		}
+
+		// Run compute BEFORE setting the cooldown or writing the transient so a
+		// throw from the orchestrator (e.g. a BQ-proxy 500) doesn't burn the
+		// cooldown window OR wipe the prior cached envelope. The React layer
+		// (insightsCache.refresh) is already defensive against an error
+		// response — it preserves prior slot data.
+		$payload = (array) $compute();
+
+		if ( self::SOURCE_BIGQUERY === $source ) {
 			update_option( self::cooldown_option( $tab ), time(), false );
 		}
 
-		if ( self::SOURCE_LOCAL !== $source ) {
-			delete_transient( self::transient_key( $tab, $key_parts ) );
-		}
-
-		$payload  = (array) $compute();
 		$envelope = self::envelope( $payload, $source );
 
-		if ( self::SOURCE_LOCAL !== $source ) {
+		if ( null !== $key ) {
 			$store = [
 				'payload'     => $envelope['payload'],
 				'computed_at' => $envelope['computed_at'],
 				'source'      => $envelope['source'],
 			];
-			set_transient( self::transient_key( $tab, $key_parts ), $store, self::ttl_for( $source ) );
-			self::index_add( $tab, self::transient_key( $tab, $key_parts ) );
+			// set_transient() overwrites in place — no need to delete_transient() first.
+			set_transient( $key, $store, self::ttl_for( $source ) );
+			self::index_add( $tab, $key );
 		}
 
 		// BigQuery refreshes always come back with the active cooldown stamp

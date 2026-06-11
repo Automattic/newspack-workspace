@@ -107,6 +107,13 @@ class Gates_REST_Controller extends WP_REST_Controller {
 	/**
 	 * Permission check.
 	 *
+	 * This route is intentionally callable via application passwords. The
+	 * BQ-side rate limit is the 10-minute cooldown enforced in
+	 * {@see Cache::refresh()}, not a per-route rate limiter — any caller
+	 * authenticated as a user with `manage_options` (whether via cookie +
+	 * nonce or an application password) can trigger a refresh, and the
+	 * cooldown applies uniformly.
+	 *
 	 * @return bool|WP_Error
 	 */
 	public function permissions_check() {

@@ -40,7 +40,9 @@ trait Cached_Controller_Trait {
 			self::cache_key_parts( $request ),
 			$build_payload
 		);
-		return rest_ensure_response( self::wrap_envelope( $envelope ) );
+		$response = rest_ensure_response( self::wrap_envelope( $envelope ) );
+		$response->header( 'Cache-Control', 'no-store, private' );
+		return $response;
 	}
 
 	/**
@@ -53,16 +55,15 @@ trait Cached_Controller_Trait {
 	 * @param callable        $build_payload () => array.
 	 */
 	protected function refresh_response( WP_REST_Request $request, callable $build_payload ): WP_REST_Response {
-		return rest_ensure_response(
-			self::wrap_envelope(
-				Cache::refresh(
-					$this->tab_slug(),
-					$this->cache_source(),
-					self::cache_key_parts( $request ),
-					$build_payload
-				)
-			)
+		$envelope = Cache::refresh(
+			$this->tab_slug(),
+			$this->cache_source(),
+			self::cache_key_parts( $request ),
+			$build_payload
 		);
+		$response = rest_ensure_response( self::wrap_envelope( $envelope ) );
+		$response->header( 'Cache-Control', 'no-store, private' );
+		return $response;
 	}
 
 	/**
