@@ -319,6 +319,82 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 	}
 
 	/**
+	 * After a successful BQ refresh, the envelope's cooldown_until is
+	 * populated so the React layer can render the throttle UI immediately
+	 * (not only on a second click).
+	 */
+	public function test_successful_bq_refresh_reports_cooldown_until(): void {
+		$key_parts = [ '2026-01-01', '2026-01-31', null, null ];
+
+		$envelope = Cache::refresh(
+			'gates',
+			Cache::SOURCE_BIGQUERY,
+			$key_parts,
+			function () {
+				return [ 'value' => 1 ];
+			}
+		);
+
+		$this->assertSame( [ 'value' => 1 ], $envelope['payload'] );
+		$this->assertNotEmpty( $envelope['cooldown_until'] );
+		$this->assertGreaterThan(
+			time(),
+			( new DateTimeImmutable( $envelope['cooldown_until'] ) )->format( 'U' )
+		);
+	}
+
+	/**
+	 * A BQ GET response that hits the transient cache still reports the
+	 * active cooldown so a page reload during the throttle window restores
+	 * the notice instead of clearing it.
+	 */
+	public function test_store_for_bigquery_reports_active_cooldown(): void {
+		$key_parts = [ '2026-01-01', '2026-01-31', null, null ];
+
+		// Seed the cache + cooldown via a successful refresh.
+		Cache::refresh(
+			'gates',
+			Cache::SOURCE_BIGQUERY,
+			$key_parts,
+			function () {
+				return [ 'value' => 1 ];
+			}
+		);
+
+		// Subsequent GET hits the cache and must still surface the cooldown.
+		$envelope = Cache::store(
+			'gates',
+			Cache::SOURCE_BIGQUERY,
+			$key_parts,
+			function () {
+				return [ 'value' => 'should-not-run' ];
+			}
+		);
+
+		$this->assertSame( [ 'value' => 1 ], $envelope['payload'] );
+		$this->assertNotEmpty( $envelope['cooldown_until'] );
+	}
+
+	/**
+	 * External-source store never reports a cooldown (cooldowns are
+	 * BigQuery-only).
+	 */
+	public function test_store_for_external_reports_null_cooldown(): void {
+		$key_parts = [ '2026-01-01', '2026-01-31', null, null ];
+
+		$envelope = Cache::store(
+			'audience',
+			Cache::SOURCE_EXTERNAL,
+			$key_parts,
+			function () {
+				return [ 'value' => 1 ];
+			}
+		);
+
+		$this->assertNull( $envelope['cooldown_until'] );
+	}
+
+	/**
 	 * Mirror the production transient-key formula so tests can reach into storage.
 	 *
 	 * @param string $tab Tab slug.

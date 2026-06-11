@@ -48,14 +48,16 @@ final class Cache {
 			return self::envelope( (array) $compute(), $source );
 		}
 
-		$key    = self::transient_key( $tab, $key_parts );
-		$cached = get_transient( $key );
+		$cooldown_until = self::SOURCE_BIGQUERY === $source ? self::bq_cooldown_until( $tab ) : null;
+		$key            = self::transient_key( $tab, $key_parts );
+		$cached         = get_transient( $key );
+
 		if ( is_array( $cached ) && isset( $cached['payload'], $cached['computed_at'], $cached['source'] ) ) {
 			return [
 				'payload'        => $cached['payload'],
 				'computed_at'    => $cached['computed_at'],
 				'source'         => $cached['source'],
-				'cooldown_until' => null,
+				'cooldown_until' => $cooldown_until,
 			];
 		}
 
@@ -70,6 +72,7 @@ final class Cache {
 		set_transient( $key, $store, self::ttl_for( $source ) );
 		self::index_add( $tab, $key );
 
+		$envelope['cooldown_until'] = $cooldown_until;
 		return $envelope;
 	}
 
@@ -218,6 +221,13 @@ final class Cache {
 			];
 			set_transient( self::transient_key( $tab, $key_parts ), $store, self::ttl_for( $source ) );
 			self::index_add( $tab, self::transient_key( $tab, $key_parts ) );
+		}
+
+		// BigQuery refreshes always come back with the active cooldown stamp
+		// so the React layer can render the throttle UI from the very first
+		// refresh response, not just the second click.
+		if ( self::SOURCE_BIGQUERY === $source ) {
+			$envelope['cooldown_until'] = self::bq_cooldown_until( $tab );
 		}
 
 		return $envelope;
