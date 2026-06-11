@@ -23,6 +23,32 @@
 		gap: 32px;
 	}
 
+	// Tab-level error banner — shown when every section fails to load.
+	&__prompts-banner {
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		padding: 16px 20px;
+		background-color: colors.$error-000;
+		border: 1px solid colors.$error-050;
+		border-radius: 4px;
+
+		&-icon {
+			flex: 0 0 24px;
+			width: 24px;
+			height: 24px;
+			color: colors.$error-600;
+		}
+
+		&-message {
+			margin: 0;
+			flex: 1 1 auto;
+			font-size: 14px;
+			line-height: 1.5;
+			color: wp-colors.$gray-900;
+		}
+	}
+
 	// Direct vs Influenced explainer — light gray chrome, info icon, X to
 	// dismiss (session-only). Mirrors the Gates callout.
 	&__prompts-callout {
@@ -221,6 +247,18 @@
 			font-size: 13px;
 			color: wp-colors.$gray-600;
 		}
+	}
+
+	// Collection-section error treatment (funnel / distribution / performance).
+	&__section-error {
+		display: flex;
+		align-items: flex-start;
+		gap: 6px;
+		margin: 0;
+		padding: 16px 0;
+		font-size: 13px;
+		line-height: 1.5;
+		color: colors.$error-600;
 	}
 
 	// Distribution viz — tab-local. Reuses the shared table chrome.
