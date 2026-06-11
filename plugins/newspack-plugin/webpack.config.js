@@ -48,6 +48,7 @@ const entry = {
 	'content-gate-countdown-block': path.join( __dirname, 'src', 'blocks', 'content-gate', 'countdown', 'view.js' ),
 	'overlay-menu-block': path.join( __dirname, 'src', 'blocks', 'overlay-menu', 'view.js' ),
 	'overlay-search-block': path.join( __dirname, 'src', 'blocks', 'overlay-search', 'view.js' ),
+	'comments-panel-block': path.join( __dirname, 'src', 'blocks', 'comments-panel', 'view.js' ),
 	'content-gate-countdown-box-block': path.join( __dirname, 'src', 'blocks', 'content-gate', 'countdown-box', 'index.js' ),
 	'contribution-meter-block': path.join( __dirname, 'src', 'blocks', 'contribution-meter', 'index.js' ),
 	'avatar-block': path.join( __dirname, 'src', 'blocks', 'avatar', 'index.js' ),

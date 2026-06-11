@@ -12,6 +12,7 @@ export { default as ballotBox } from './src/ballot-box';
 export { default as broadcast } from './src/broadcast';
 export { default as browser } from './src/browser';
 export { default as collections } from './src/collections';
+export { default as comments } from './src/comments';
 export { default as contentCarousel } from './src/content-carousel';
 export { default as contentLocked } from './src/content-locked';
 export { default as contentLoop } from './src/content-loop';
