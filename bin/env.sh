@@ -432,6 +432,13 @@ MIGRATE
                     --admin_password="${WP_ADMIN_PASSWORD:-password}" \
                     --admin_email="${WP_ADMIN_EMAIL:-wordpress@example.com}" \
                     --skip-email
+                # Activate newspack-theme so a fresh env starts on the Newspack
+                # theme rather than WordPress's default. link-repos.sh symlinks
+                # the theme into wp-content/themes at container startup, so it's
+                # available by now. `n setup` does this too, but envs brought up
+                # with just `n env up` skip that, so it has to happen here.
+                docker exec "$container_name" wp --allow-root theme activate newspack-theme 2>/dev/null \
+                    || echo "Warning: could not activate newspack-theme (is it built/symlinked?)."
                 break
             fi
             sleep 3

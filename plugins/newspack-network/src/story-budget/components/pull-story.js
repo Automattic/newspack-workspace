@@ -41,7 +41,7 @@ export default function PullStory( { items, closeModal, onActionPerformed } ) {
 		}
 	}, [ errors ] );
 
-	const pullStory = async ( storyId ) => {
+	const pullStory = async storyId => {
 		const payload = await apiFetch( {
 			isStoryBudget: true,
 			fullPath: `newspack-network/v1/content-distribution/pull/${ storyId }`,
@@ -63,7 +63,7 @@ export default function PullStory( { items, closeModal, onActionPerformed } ) {
 		fetchStory( storyId );
 	};
 
-	const handleSubmit = ( ev ) => {
+	const handleSubmit = ev => {
 		ev.preventDefault();
 		setErrors( [] );
 		setIsLoading( true );
@@ -76,7 +76,7 @@ export default function PullStory( { items, closeModal, onActionPerformed } ) {
 				closeModal();
 				onActionPerformed?.( items );
 			} )
-			.catch( ( error ) => {
+			.catch( error => {
 				setErrors( [ ...errors, error.message ] );
 			} )
 			.finally( () => {
@@ -120,27 +120,16 @@ export default function PullStory( { items, closeModal, onActionPerformed } ) {
 
 				{ items.length > 1 && (
 					<div>
-						<p>
-							{ __(
-								'The following stories will be pulled:',
-								'newspack-network'
-							) }
-						</p>
+						<p>{ __( 'The following stories will be pulled:', 'newspack-network' ) }</p>
 						<ul>
-							{ items.map( ( item ) => (
+							{ items.map( item => (
 								<li key={ item.id }>{ item.name }</li>
 							) ) }
 						</ul>
 					</div>
 				) }
 
-				<LocalBudgetsControl
-					value={ budget }
-					onChange={ setBudget }
-					disabled={ isLoading }
-					__next40pxDefaultSize
-					__nextHasNoMarginBottom
-				/>
+				<LocalBudgetsControl value={ budget } onChange={ setBudget } disabled={ isLoading } __next40pxDefaultSize __nextHasNoMarginBottom />
 
 				<SelectControl
 					label={ __( 'Status on publish', 'newspack-network' ) }
@@ -153,12 +142,7 @@ export default function PullStory( { items, closeModal, onActionPerformed } ) {
 				/>
 
 				<HStack expanded direction="row-reverse" justify="end">
-					<Button
-						variant="primary"
-						disabled={ isLoading || ! budget }
-						isBusy={ isLoading }
-						type="submit"
-					>
+					<Button variant="primary" disabled={ isLoading || ! budget } isBusy={ isLoading } type="submit">
 						{ items.length === 1
 							? __( 'Pull story', 'newspack-network' )
 							: sprintf(
@@ -167,11 +151,7 @@ export default function PullStory( { items, closeModal, onActionPerformed } ) {
 									items.length
 							  ) }
 					</Button>
-					<Button
-						variant="tertiary"
-						onClick={ closeModal }
-						disabled={ isLoading }
-					>
+					<Button variant="tertiary" onClick={ closeModal } disabled={ isLoading }>
 						{ __( 'Cancel', 'newspack-network' ) }
 					</Button>
 				</HStack>

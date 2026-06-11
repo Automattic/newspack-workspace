@@ -6,6 +6,7 @@
  * @group WooCommerce_Subscriptions_Integration
  */
 
+use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Settings;
 
 /**
@@ -54,20 +55,25 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	 * @param array $subscription_meta Map of meta key => value to set on the subscription.
 	 * @param array $subscription_args Extra arguments merged into the subscription data
 	 *                                 (e.g. billing_first_name, billing_last_name).
+	 * @param array $product_args      Extra arguments merged into the mock product data
+	 *                                 (e.g. name).
 	 *
 	 * @return WC_Subscription
 	 */
-	private function make_subscription_with_product( $product_meta = [], $subscription_meta = [], $subscription_args = [] ) {
+	private function make_subscription_with_product( $product_meta = [], $subscription_meta = [], $subscription_args = [], $product_args = [] ) {
 		$product_id            = 123;
 		$prefixed_product_meta = [];
 		foreach ( $product_meta as $key => $value ) {
 			$prefixed_product_meta[ Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . $key ] = $value;
 		}
 		wc_create_mock_product(
-			[
-				'id'   => $product_id,
-				'meta' => $prefixed_product_meta,
-			]
+			array_merge(
+				[
+					'id'   => $product_id,
+					'meta' => $prefixed_product_meta,
+				],
+				$product_args
+			)
 		);
 
 		$subscription = wcs_create_subscription(
@@ -211,31 +217,29 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Without an explicit name, the group name falls back to the billing owner's name.
+	 * Without an explicit name, the group name falls back to the product name.
 	 */
-	public function test_name_falls_back_to_owner_billing_name() {
+	public function test_name_falls_back_to_product_name() {
 		$subscription = $this->make_subscription_with_product(
 			[ 'enabled' => 'yes' ],
 			[],
-			[
-				'billing_first_name' => 'Jane',
-				'billing_last_name'  => 'Doe',
-			]
+			[],
+			[ 'name' => 'Daily Reader' ]
 		);
 
 		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
 
-		$this->assertStringContainsString( 'Jane Doe', $settings['name'], 'When no name meta is set, the group name should derive from the billing owner.' );
+		$this->assertSame( 'Daily Reader', $settings['name'], 'When no name meta is set, the group name should fall back to the product name.' );
 	}
 
 	/**
-	 * Without an explicit name or billing owner, the group name falls back to the "Unnamed group" label.
+	 * Without an explicit name or a product name, the group name falls back to the publisher singular group label.
 	 */
-	public function test_name_falls_back_to_unnamed_group() {
+	public function test_name_falls_back_to_singular_group_label() {
 		$subscription = $this->make_subscription_with_product( [ 'enabled' => 'yes' ] );
 
 		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
 
-		$this->assertSame( 'Unnamed group', $settings['name'], 'When neither name meta nor a billing owner is set, the group name should default to "Unnamed group".' );
+		$this->assertSame( Group_Subscription::get_label( 'singular' ), $settings['name'], 'When neither name meta nor a product name is set, the group name should fall back to the publisher singular group label.' );
 	}
 }

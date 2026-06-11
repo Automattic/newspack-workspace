@@ -17,8 +17,7 @@
 #   WP_ORG_PASSWORD         WordPress.org SVN password.
 # Optional:
 #   WP_ORG_PLUGIN_SLUG      WordPress.org slug, when it differs from the subdir
-#                           name (e.g. super-cool-ad-inserter-plugin ships as the
-#                           "super-cool-ad-inserter" slug). Defaults to the name.
+#                           name. Defaults to the name.
 
 set -euo pipefail
 

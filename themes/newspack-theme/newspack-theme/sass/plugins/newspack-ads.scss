@@ -157,4 +157,16 @@ body {
 	div[class*="newspack-ads-blocks-ad-unit"] {
 		padding: 8px;
 	}
+
+	// Match the ad background treatment for ads served by the standalone
+	// Broadstreet plugin, whose JS hydrates each zone into a
+	// <broadstreet-zone-container> custom element the theme's other selectors
+	// don't target. (selector-type-no-unknown is already disabled above, for
+	// amp-ad.) See NPPM-2829.
+	broadstreet-zone-container {
+		align-items: center;
+		display: flex;
+		justify-content: center;
+		padding: 8px;
+	}
 }

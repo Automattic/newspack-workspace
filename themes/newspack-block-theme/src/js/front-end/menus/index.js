@@ -564,9 +564,8 @@ export const createFocusTrap = element => {
  * Adds accessibility features to the menu.
  *
  * @param {HTMLElement} menuElement The menu element to enhance.
- * @param {string}      menuType    The type of menu.
  */
-const enhanceMenuAccessibility = ( menuElement, menuType = '' ) => {
+const enhanceMenuAccessibility = menuElement => {
 	// Store the last focused element.
 	lastFocusedElement = menuElement.ownerDocument.activeElement;
 
@@ -575,7 +574,7 @@ const enhanceMenuAccessibility = ( menuElement, menuType = '' ) => {
 	const screenReaderLink = menuElement.querySelector( SELECTORS.SCREEN_READER_LINK );
 
 	if ( ! closeButton && ! screenReaderLink ) {
-		const closeText = menuType === 'search-menu' ? newspackScreenReaderText.close_search : newspackScreenReaderText.close_menu;
+		const closeText = newspackScreenReaderText.close_menu;
 		const newScreenReaderLink = document.createElement( 'a' );
 		newScreenReaderLink.href = '#';
 		newScreenReaderLink.className = 'screen-reader-text';
@@ -601,9 +600,8 @@ const enhanceMenuAccessibility = ( menuElement, menuType = '' ) => {
  * Moves menu to body root when opened.
  *
  * @param {HTMLElement} menuElement The menu element to move.
- * @param {string}      menuType    The type of menu.
  */
-const moveMenuToRoot = ( menuElement, menuType ) => {
+const moveMenuToRoot = menuElement => {
 	if ( ! menuElement || menuPositions.has( menuElement ) ) {
 		return;
 	}
@@ -630,7 +628,7 @@ const moveMenuToRoot = ( menuElement, menuType ) => {
 	slideAnimationManager.slideIn( menuElement );
 
 	// Enhance accessibility.
-	enhanceMenuAccessibility( menuElement, menuType );
+	enhanceMenuAccessibility( menuElement );
 };
 
 /**
@@ -787,7 +785,7 @@ export const createMenu = config => {
 			const openMenu = ( contentsToOpen, containerToUse ) => {
 				body.classList.add( openClassName );
 				contentsToOpen.classList.add( openClassName );
-				moveMenuToRoot( contentsToOpen, menuType );
+				moveMenuToRoot( contentsToOpen );
 
 				// Only show overlay for non-full-width menus
 				if ( ! isEffectiveFullWidthMenu( contentsToOpen, slideAnimationManager ) ) {

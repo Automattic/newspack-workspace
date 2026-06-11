@@ -96,12 +96,11 @@ class PluginInstaller extends Component {
 		};
 		return apiFetch( params )
 			.then( response => {
-				const { pluginInfo } = this.state;
 				this.props.onInstalled( slug );
-				this.updatePluginInfo( {
-					...pluginInfo,
+				return this.updatePluginInfo( prev => ( {
+					...prev,
 					[ slug ]: { ...response, installationStatus: PLUGIN_STATE_ACTIVE },
-				} );
+				} ) );
 			} )
 			.catch( error => {
 				this.setInstallationStatus( slug, PLUGIN_STATE_ERROR, error.message );
@@ -109,28 +108,40 @@ class PluginInstaller extends Component {
 	};
 
 	setChecked = ( slug, checked ) => {
-		const { pluginInfo } = this.state;
-		this.updatePluginInfo( { ...pluginInfo, [ slug ]: { ...pluginInfo[ slug ], checked } } );
+		this.updatePluginInfo( prev => ( {
+			...prev,
+			[ slug ]: { ...prev[ slug ], checked },
+		} ) );
 	};
 
 	setInstallationStatus = ( slug, installationStatus, notification = null ) => {
-		const { pluginInfo } = this.state;
-		this.updatePluginInfo( {
-			...pluginInfo,
-			[ slug ]: { ...pluginInfo[ slug ], installationStatus, notification },
-		} );
+		this.updatePluginInfo( prev => ( {
+			...prev,
+			[ slug ]: { ...prev[ slug ], installationStatus, notification },
+		} ) );
 	};
 
-	updatePluginInfo = pluginInfo => {
+	// Accepts either the next pluginInfo object or an updater `prev => next`.
+	// The updater form is required for serial install chains: setState batches
+	// pending updates inside the same microtask, so reading `this.state.pluginInfo`
+	// at call time can return a snapshot that predates an earlier-in-the-chain
+	// pending write, and the second update would clobber the first.
+	updatePluginInfo = pluginInfoOrUpdater => {
 		return new Promise( resolve => {
 			const { onStatus } = this.props;
-			this.setState( { pluginInfo }, () => {
-				const complete = Object.values( pluginInfo ).every( plugin => {
-					return 'active' === plugin.Status;
-				} );
-				onStatus( { complete, pluginInfo } );
-				resolve();
-			} );
+			this.setState(
+				prevState => ( {
+					pluginInfo: typeof pluginInfoOrUpdater === 'function' ? pluginInfoOrUpdater( prevState.pluginInfo ) : pluginInfoOrUpdater,
+				} ),
+				() => {
+					const { pluginInfo } = this.state;
+					const complete = Object.values( pluginInfo ).every( plugin => {
+						return 'active' === plugin.Status;
+					} );
+					onStatus( { complete, pluginInfo } );
+					resolve();
+				}
+			);
 		} );
 	};
 

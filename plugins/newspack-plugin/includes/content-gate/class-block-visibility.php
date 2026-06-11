@@ -186,6 +186,13 @@ class Block_Visibility {
 			true
 		);
 
+		wp_enqueue_style(
+			'newspack-content-gate-block-visibility',
+			Newspack::plugin_url() . '/dist/content-gate-block-visibility.css',
+			[],
+			$asset['version']
+		);
+
 		wp_localize_script(
 			'newspack-content-gate-block-visibility',
 			'newspackBlockVisibility',

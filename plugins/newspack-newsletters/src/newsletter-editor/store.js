@@ -35,6 +35,9 @@ const DEFAULT_STATE = {
 	isRetrievingLists: false,
 	isRetrievingSyncErrors: false,
 	isRefreshingHtml: false,
+	// Pairs with `isRefreshingHtml` so consumers waiting on the
+	// true→false transition can tell success from failure.
+	lastRefreshHadError: false,
 	newsletterData: {},
 	shouldSendTest: false,
 	error: null,
@@ -56,6 +59,8 @@ const reducer = ( state = DEFAULT_STATE, { type, payload = {} } ) => {
 			return { ...state, hasRetrievedSyncErrors: payload };
 		case 'SET_IS_REFRESHING_HTML':
 			return { ...state, isRefreshingHtml: payload };
+		case 'SET_LAST_REFRESH_HAD_ERROR':
+			return { ...state, lastRefreshHadError: payload };
 		case 'SET_DATA':
 			const updatedNewsletterData = { ...state.newsletterData, ...payload };
 			return { ...state, newsletterData: updatedNewsletterData };
@@ -75,6 +80,7 @@ const actions = {
 	setHasRetrievedLists: createAction( 'SET_HAS_RETRIEVED_LISTS' ),
 	setHasRetrievedSyncErrors: createAction( 'SET_HAS_RETRIEVED_SYNC_ERRORS' ),
 	setIsRefreshingHtml: createAction( 'SET_IS_REFRESHING_HTML' ),
+	setLastRefreshHadError: createAction( 'SET_LAST_REFRESH_HAD_ERROR' ),
 	setData: createAction( 'SET_DATA' ),
 	setError: createAction( 'SET_ERROR' ),
 };
@@ -87,6 +93,7 @@ const selectors = {
 	getHasRetrievedLists: state => state.hasRetrievedLists,
 	getHasRetrievedSyncErrors: state => state.hasRetrievedSyncErrors,
 	getIsRefreshingHtml: state => state.isRefreshingHtml,
+	getLastRefreshHadError: state => state.lastRefreshHadError,
 	getData: state => state.newsletterData || {},
 	getError: state => state.error,
 };
@@ -109,6 +116,9 @@ export const useIsRetrieving = () =>
 
 // Hook to use the refresh HTML status from any editor component.
 export const useIsRefreshingHtml = () => useSelect( select => select( STORE_NAMESPACE ).getIsRefreshingHtml() );
+
+// Hook to read whether the most recent refresh-HTML cycle ended in error.
+export const useLastRefreshHadError = () => useSelect( select => select( STORE_NAMESPACE ).getLastRefreshHadError() );
 
 // Hook to use the newsletter data from any editor component.
 export const useNewsletterData = () =>
@@ -146,6 +156,9 @@ export const updateHasRetrievedSyncErrors = hasRetrieved => dispatch( STORE_NAME
 
 // Dispatcher to update refreshing HTML status in the store.
 export const updateIsRefreshingHtml = isRetrieving => dispatch( STORE_NAMESPACE ).setIsRefreshingHtml( isRetrieving );
+
+// Dispatcher to record whether the most recent refresh ended in error.
+export const updateLastRefreshHadError = hadError => dispatch( STORE_NAMESPACE ).setLastRefreshHadError( hadError );
 
 // Dispatcher to update newsletter data in the store.
 export const updateNewsletterData = data => dispatch( STORE_NAMESPACE ).setData( data );
@@ -233,7 +246,7 @@ export const fetchSendLists = debounce( async ( opts, replace = false ) => {
 		};
 
 		const newsletterData = coreSelect( STORE_NAMESPACE ).getData();
-		const sendLists = 'list' === args.type ? [ ...newsletterData?.lists ] || [] : [ ...newsletterData?.sublists ] || [];
+		const sendLists = 'list' === args.type ? [ ...( newsletterData?.lists || [] ) ] : [ ...( newsletterData?.sublists || [] ) ];
 
 		// If we already have a matching result, no need to fetch more.
 		const foundItems = sendLists.filter( item => {
