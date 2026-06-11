@@ -181,4 +181,30 @@ assert "functions.php Version"       "yes"            "$(has "$BLOCK/functions.p
 assert "block source fix kept"       "yes"            "$(has "$BLOCK/functions.php" 'newspack_block_theme_legacy_fix')"
 assert "block package.json version"  "1.28.1"         "$(pjv "$BLOCK/package.json" version)"
 
+# ---------------------------------------------------------------------------
+# Conflict path: drive an actual `git merge --no-commit -Xtheirs` where both
+# sides changed the same release artifact, then prove the restore resolves it
+# to the monorepo side (the scenarios above stage a post-merge state directly;
+# this one exercises the real merge the integrate phase runs).
+# ---------------------------------------------------------------------------
+WORK2=$(mktemp -d -t restore-release-artifacts-merge-XXXXXX)
+trap 'rm -rf "$WORK" "$WORK2"' EXIT
+(
+  cd "$WORK2"
+  git init -q && git config user.email t@t.t && git config user.name t
+  printf '# base\n' > CHANGELOG.md
+  git add -A && git commit -qm base
+  git branch legacy
+  printf '# newspack-theme [2.23.1] (monorepo)\n' > CHANGELOG.md
+  git commit -qam monorepo
+  git checkout -q legacy
+  printf '## [2.22.3] (legacy)\n# base\n' > CHANGELOG.md
+  git commit -qam "legacy hotfix"
+  git checkout -q main 2> /dev/null || git checkout -q master
+  git merge --no-commit -Xtheirs legacy > /dev/null 2>&1 || true
+  restore_release_artifacts .
+)
+echo "Conflict path — release artifact resolves to monorepo after a real merge:"
+assert "CHANGELOG is monorepo's" "no" "$(has "$WORK2/CHANGELOG.md" 'legacy')"
+
 [ "$fail" = 0 ] && echo "PASS" || { echo "FAIL"; exit 1; }

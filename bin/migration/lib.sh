@@ -139,7 +139,10 @@ restore_release_artifacts() {
 
   # package.json: pin name + version, keeping any real dependency change. The
   # node block is the `if` condition so a malformed package.json skips that one
-  # file (exit 1) instead of aborting the whole sync under `set -e`.
+  # file (exit 1) instead of aborting the whole sync under `set -e`. Any
+  # conflicted package.json was already taken --ours by apply_structural_overrides
+  # above; the later normalize_package_repos / restore_workspace_deps passes
+  # rewrite other fields, so this is not the last word on the file.
   while IFS= read -r pj; do
     if node -e '
       const fs = require( "fs" ), cp = require( "child_process" );
@@ -166,8 +169,13 @@ restore_release_artifacts() {
   # header (and any `*_VERSION` constant) to HEAD's version, leaving real code
   # intact. The version is read from HEAD's own copy of the file, so a package
   # without a stamped header is a no-op. Restricted to files directly under the
-  # target so a vendored library header is never touched.
+  # target so a vendored library header is never touched. An unmerged PHP file
+  # (a conflict -Xtheirs couldn't auto-resolve) is skipped rather than edited:
+  # a surgical rewrite + `git add` would mark it resolved with conflict markers
+  # still inside, hiding it from the post-merge unmerged-paths check that
+  # escalates. Leaving it unmerged lets that escalation fire.
   while IFS= read -r f; do
+    if git ls-files --unmerged -- "$f" | grep -q .; then continue; fi
     if node -e '
       const fs = require( "fs" ), cp = require( "child_process" );
       const f = process.argv[1];
