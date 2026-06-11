@@ -194,10 +194,12 @@ final class Cache {
 						'cooldown_until' => $until,
 					];
 				}
-				// No prior cache to serve — return an empty envelope with the cooldown
-				// marker so the client can still render the throttle UI.
+				// No prior cache to serve — return a null payload (rather than an
+				// empty array, which is truthy in JS and trips JSX destructuring).
+				// The client preserves any prior slot data when payload is null;
+				// the cooldown marker still surfaces so the throttle UI renders.
 				return [
-					'payload'        => [],
+					'payload'        => null,
 					'computed_at'    => null,
 					'source'         => $source,
 					'cooldown_until' => $until,

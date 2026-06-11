@@ -138,15 +138,37 @@ export const insightsCache = {
 		( async () => {
 			try {
 				const envelope = await refresher();
-				setSlot( key, {
-					status: 'success',
-					data: envelope.data,
-					error: null,
-					computedAt: envelope.cache.computed_at,
-					source: envelope.cache.source,
-					cooldownUntil: envelope.cache.cooldown_until,
-					inFlight: null,
-				} );
+				const incoming = envelope.data as unknown;
+				const prior = this.getSlot( key );
+				const incomingIsEmpty =
+					incoming === null ||
+					incoming === undefined ||
+					( Array.isArray( incoming ) && incoming.length === 0 ) ||
+					( typeof incoming === 'object' && Object.keys( incoming as object ).length === 0 );
+
+				if ( incomingIsEmpty && prior.data !== null ) {
+					// Refresh returned no usable payload (BQ unreachable, server
+					// fell back, etc.). Preserve the prior data / computedAt so
+					// the tab keeps rendering the last known good view; still
+					// update the cache metadata in case the throttle changed.
+					setSlot( key, {
+						status: 'success',
+						error: null,
+						source: envelope.cache.source,
+						cooldownUntil: envelope.cache.cooldown_until,
+						inFlight: null,
+					} );
+				} else {
+					setSlot( key, {
+						status: 'success',
+						data: envelope.data,
+						error: null,
+						computedAt: envelope.cache.computed_at,
+						source: envelope.cache.source,
+						cooldownUntil: envelope.cache.cooldown_until,
+						inFlight: null,
+					} );
+				}
 			} catch ( e: unknown ) {
 				const message = e instanceof Error ? e.message : String( e );
 				setSlot( key, { status: 'error', error: message, inFlight: null } );
