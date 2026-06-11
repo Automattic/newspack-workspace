@@ -19,6 +19,7 @@ import { __ } from '@wordpress/i18n';
 import type { PromptsWindow } from '../../api/prompts';
 import Funnel from './viz/Funnel';
 import DistributionTable from './viz/DistributionTable';
+import SectionState from './SectionState';
 
 export interface HowReadersConvertSectionProps {
 	current: PromptsWindow;
@@ -37,10 +38,23 @@ const HowReadersConvertSection = ( { current }: HowReadersConvertSectionProps ) 
 		</p>
 		<div className="newspack-insights__prompts-convert-grid">
 			<div className="newspack-insights__prompts-convert-col">
-				<Funnel stages={ current.conversion_funnel.stages } />
+				<SectionState
+					state={ current.conversion_funnel.state }
+					emptyMessage={ __(
+						'No funnel data yet. The funnel will populate once readers begin moving through your prompts.',
+						'newspack-plugin'
+					) }
+				>
+					<Funnel stages={ current.conversion_funnel.stages } />
+				</SectionState>
 			</div>
 			<div className="newspack-insights__prompts-convert-col">
-				<DistributionTable data={ current.exposures_distribution } />
+				<SectionState
+					state={ current.exposures_distribution.state }
+					emptyMessage={ __( 'No distribution data yet. This will populate once readers begin converting.', 'newspack-plugin' ) }
+				>
+					<DistributionTable data={ current.exposures_distribution } />
+				</SectionState>
 			</div>
 		</div>
 	</section>

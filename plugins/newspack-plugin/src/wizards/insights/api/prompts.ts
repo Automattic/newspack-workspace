@@ -1,15 +1,14 @@
 /**
- * Prompts API client (NPPD-1607, Phase 1).
+ * Prompts API client (NPPD-1607).
  *
  * Thin wrapper around `@wordpress/api-fetch` for the single Tab 5
  * endpoint: `GET /newspack-insights/v1/prompts`. Type definitions
  * mirror the PHP response shape assembled by `Prompts_REST_Controller`.
  *
- * Phase 1: every metric carries `pending: true` and a zero value.
- * Phase 2 keeps the same shape but flips `pending` to false and
- * surfaces real BQ values; the React layer does not need to know
- * which phase produced a payload — it reads `pending` and the
- * `tab_pending` banner flag.
+ * Every metric carries an explicit `state`: 'error' (query failed —
+ * with `error_code` / `error_message`), 'empty' (succeeded, no rows),
+ * or 'populated'. Scalars use 'error' | 'populated' only. The
+ * `tab_error` flag is true only when every section is in the error state.
  *
  * Mirrors `api/gates.ts` (Tab 4) one-for-one. Tab 5 carries four
  * conversion intents instead of two, so it has more scorecards and a
@@ -27,15 +26,23 @@ import apiFetch from '@wordpress/api-fetch';
  */
 export type PromptsPlaceholderType = 'count' | 'rate' | 'currency' | 'decimal';
 
+/** Collection metrics report all three states; scalars use 'error' | 'populated'. */
+export type PromptsMetricState = 'error' | 'empty' | 'populated';
+
+/** Fields present on any metric in the error state. */
+export interface PromptsErrorFields {
+	error_code?: string;
+	error_message?: string;
+}
+
 /**
- * Standard scorecard metric payload. Carries the value plus the
- * `pending` and `placeholder_type` markers the UI needs to render
- * the Phase 1 zeros in the correct visual format.
+ * Standard scorecard metric payload. `state` is 'error' or 'populated'
+ * (an absent value is a non-computable zero, not an 'empty' state).
  */
-export interface PromptsScalarMetric {
+export interface PromptsScalarMetric extends PromptsErrorFields {
+	state: 'error' | 'populated';
 	value: number;
 	computable: boolean;
-	pending: boolean;
 	denominator: number | null;
 	placeholder_type: PromptsPlaceholderType;
 }
@@ -46,8 +53,8 @@ export interface PromptsFunnelStage {
 	pct_of_top: number;
 }
 
-export interface PromptsFunnelData {
-	pending: boolean;
+export interface PromptsFunnelData extends PromptsErrorFields {
+	state: PromptsMetricState;
 	stages: PromptsFunnelStage[];
 }
 
@@ -57,24 +64,23 @@ export interface PromptsDistributionBucket {
 	pct: number;
 }
 
-export interface PromptsDistributionData {
-	pending: boolean;
+export interface PromptsDistributionData extends PromptsErrorFields {
+	state: PromptsMetricState;
 	buckets: PromptsDistributionBucket[];
 }
 
 /**
- * One row in the Performance by prompt table (Table 7.1). Phase 1
- * returns no rows (the section renders the spec's empty-state copy).
- * Phase 2 populates this from BQ — `prompt_title` comes straight from
- * the event params, no WP enrichment needed. Donation / subscription
- * columns report *conversions* (Woo-completed outcomes), not attempts,
- * matching the Gates v1.1 decision (NPPD-1684). Count and rate columns
- * are nullable: a non-applicable cell (e.g. CTR on a button-less
- * prompt, or donation conversions on a registration prompt) renders as
- * an em-dash, distinct from a real 0 / 0%.
+ * One row in the Performance by prompt table (Table 7.1). The 15-key
+ * schema was locked by Task 3.3 (NPPD-1607). `prompt_title` comes
+ * straight from the event params, no WP enrichment needed. Donation /
+ * subscription columns report *conversions* (Woo-completed outcomes),
+ * not attempts, matching the Gates v1.1 decision (NPPD-1684). Count and
+ * rate columns are nullable: a non-applicable cell (e.g. CTR on a
+ * button-less prompt, or donation conversions on a registration prompt)
+ * renders as an em-dash, distinct from a real 0 / 0%.
  */
 export interface PromptsPerformanceByPromptRow {
-	newspack_popup_id: number;
+	popup_id: number;
 	prompt_title: string;
 	intent: string;
 	placement: string;
@@ -116,18 +122,18 @@ export interface PromptsPerformanceByPlacementRow {
 	dismissal_rate: number | null;
 }
 
-export interface PromptsPerformanceByPromptTable {
-	pending: boolean;
+export interface PromptsPerformanceByPromptTable extends PromptsErrorFields {
+	state: PromptsMetricState;
 	rows: PromptsPerformanceByPromptRow[];
 }
 
-export interface PromptsPerformanceByIntentTable {
-	pending: boolean;
+export interface PromptsPerformanceByIntentTable extends PromptsErrorFields {
+	state: PromptsMetricState;
 	rows: PromptsPerformanceByIntentRow[];
 }
 
-export interface PromptsPerformanceByPlacementTable {
-	pending: boolean;
+export interface PromptsPerformanceByPlacementTable extends PromptsErrorFields {
+	state: PromptsMetricState;
 	rows: PromptsPerformanceByPlacementRow[];
 }
 
@@ -167,10 +173,10 @@ export interface PromptsWindow {
 
 export interface PromptsResponse {
 	/**
-	 * True while Tab 5 is in the Phase 1 placeholder phase. React
-	 * uses this to render the top-of-tab banner.
+	 * True only when every section in the current window is in the error
+	 * state. React renders a tab-level error banner when set.
 	 */
-	tab_pending: boolean;
+	tab_error: boolean;
 	current: PromptsWindow;
 	previous: PromptsWindow | null;
 }

@@ -50,6 +50,13 @@ export interface SortableTableProps< Row > {
 	defaultSortKey: string;
 	emptyMessage: string;
 	/**
+	 * When set, replaces the empty-state row with a publisher-friendly error
+	 * message. Pass when the table's wrapper envelope reports `state === 'error'`
+	 * so a failed query renders the shared error treatment instead of the
+	 * neutral "no data yet" copy.
+	 */
+	errorMessage?: string;
+	/**
 	 * When set and the table has more rows than this, only the first N (by the
 	 * active sort) render, with a "See more" toggle that reveals the rest. The
 	 * cap is applied after sorting, so collapsing always shows the current top N.
@@ -93,7 +100,15 @@ function SortableHeader< Row >( { column, activeKey, activeDir, onSort }: Sortab
 	);
 }
 
-function SortableTable< Row >( { columns, rows, getRowKey, defaultSortKey, emptyMessage, initialRowLimit }: SortableTableProps< Row > ) {
+function SortableTable< Row >( {
+	columns,
+	rows,
+	getRowKey,
+	defaultSortKey,
+	emptyMessage,
+	errorMessage,
+	initialRowLimit,
+}: SortableTableProps< Row > ) {
 	const [ sortKey, setSortKey ] = useState< string >( defaultSortKey );
 	const [ sortDir, setSortDir ] = useState< SortDir >( () => {
 		const def = columns.find( c => c.key === defaultSortKey );
@@ -165,7 +180,7 @@ function SortableTable< Row >( { columns, rows, getRowKey, defaultSortKey, empty
 						{ isEmpty ? (
 							<tr>
 								<td colSpan={ columns.length } className="newspack-insights__prompts-performance-empty">
-									{ emptyMessage }
+									{ errorMessage ?? emptyMessage }
 								</td>
 							</tr>
 						) : (
