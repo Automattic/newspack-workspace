@@ -115,7 +115,7 @@ class Audience_Wizard extends Wizard {
 		);
 
 		// Enqueue content banner CSS for previews.
-		wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], NEWSPACK_PLUGIN_VERSION );
+		wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], Newspack::asset_version( 'content-banner' ) );
 	}
 
 	/**
