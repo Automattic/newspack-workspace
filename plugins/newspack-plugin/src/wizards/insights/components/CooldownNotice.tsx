@@ -41,12 +41,23 @@ const CooldownNotice = ( { tab, range, previousRange }: CooldownNoticeProps ) =>
 		}
 	}, [ slot.cooldownUntil, dismissedFor ] );
 
-	// Auto-clear the slot's cooldownUntil when the countdown finishes,
-	// so the kebab re-enables and stale cooldownUntil doesn't linger.
+	// Auto-clear the slot's cooldownUntil when the countdown finishes, so the
+	// kebab re-enables and stale cooldownUntil doesn't linger. Gate on the
+	// deadline having actually passed — otherwise this fires on the first
+	// render after cooldownUntil arrives (useCountdown's `remaining` state is
+	// still null from its initial null input) and wipes the cooldown before
+	// the notice ever gets to render.
 	useEffect( () => {
-		if ( slot.cooldownUntil && remaining === null ) {
-			insightsCache.setCooldown( key, null );
+		if ( ! slot.cooldownUntil ) {
+			return;
 		}
+		if ( remaining !== null ) {
+			return;
+		}
+		if ( new Date( slot.cooldownUntil ).getTime() > Date.now() ) {
+			return;
+		}
+		insightsCache.setCooldown( key, null );
 	}, [ remaining, slot.cooldownUntil, key ] );
 
 	if ( ! remaining ) {
