@@ -729,7 +729,8 @@ final class Webhooks {
 	 * Schedule a webhook request.
 	 *
 	 * @param int $request_id Request ID.
-	 * @param int $delay      Delay in minutes. Default is 1 minute.
+	 * @param int $delay      Delay in minutes. Default and enforced minimum is 1
+	 *                        minute; values below 1 are clamped (see below).
 	 */
 	private static function schedule_request( $request_id, $delay = 1 ) {
 		/*

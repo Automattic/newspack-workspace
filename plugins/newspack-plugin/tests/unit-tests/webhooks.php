@@ -303,22 +303,26 @@ class Newspack_Test_Webhooks extends WP_UnitTestCase {
 	 */
 	public function test_scheduled_retry_clears_publish_boundary() {
 		add_filter( 'newspack_data_events_use_action_scheduler', '__return_false' );
-		$this->dispatch_event();
+		try {
+			$this->dispatch_event();
 
-		$request_id = Data_Events\Webhooks::get_endpoint_requests( $this->action_endpoint )[0]['id'];
+			$requests = Data_Events\Webhooks::get_endpoint_requests( $this->action_endpoint );
+			$this->assertNotEmpty( $requests );
+			$request_id = $requests[0]['id'];
 
-		$schedule_request_method = new ReflectionMethod( Data_Events\Webhooks::class, 'schedule_request' );
-		$schedule_request_method->setAccessible( true );
+			$schedule_request_method = new ReflectionMethod( Data_Events\Webhooks::class, 'schedule_request' );
+			$schedule_request_method->setAccessible( true );
 
-		// Capture the reference time before scheduling so the measured offset is
-		// immune to a wall-clock second elapsing during the assertion.
-		$before_schedule = time();
-		$schedule_request_method->invoke( null, $request_id, 1 );
-		$scheduled_offset = (int) get_post_meta( $request_id, 'scheduled', true ) - $before_schedule;
-		$this->assertGreaterThan( MINUTE_IN_SECONDS, $scheduled_offset );
-		$this->assertEquals( 'future', get_post_status( $request_id ) );
-
-		remove_filter( 'newspack_data_events_use_action_scheduler', '__return_false' );
+			// Capture the reference time before scheduling so the measured offset is
+			// immune to a wall-clock second elapsing during the assertion.
+			$before_schedule = time();
+			$schedule_request_method->invoke( null, $request_id, 1 );
+			$scheduled_offset = (int) get_post_meta( $request_id, 'scheduled', true ) - $before_schedule;
+			$this->assertGreaterThan( MINUTE_IN_SECONDS, $scheduled_offset );
+			$this->assertEquals( 'future', get_post_status( $request_id ) );
+		} finally {
+			remove_filter( 'newspack_data_events_use_action_scheduler', '__return_false' );
+		}
 	}
 
 	/**
