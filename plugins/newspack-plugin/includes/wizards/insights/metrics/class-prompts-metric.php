@@ -730,6 +730,12 @@ final class Prompts_Metric {
 
 		$by_bucket = [];
 		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				// Hub returned a row in an unexpected shape — a data-quality bug,
+				// not a legitimately empty bucket. Surface as malformed so the
+				// regression isn't masked as missing buckets.
+				return $this->malformed_collection( 'buckets' );
+			}
 			if ( isset( $row['bucket'] ) ) {
 				$by_bucket[ $row['bucket'] ] = [
 					'count' => (int) ( $row['converters_in_bucket'] ?? 0 ),
@@ -807,6 +813,12 @@ final class Prompts_Metric {
 
 		$mapped = [];
 		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				// Hub returned a row in an unexpected shape — a data-quality bug,
+				// not a legitimately empty table. Surface as malformed so the
+				// regression isn't masked as missing prompts.
+				return $this->malformed_collection( 'rows' );
+			}
 			$popup_id    = (int) ( $row['popup_id'] ?? 0 );
 			$intent      = (string) ( $row['intent'] ?? '' );
 			$impressions = (int) ( $row['impressions'] ?? 0 );
@@ -873,6 +885,10 @@ final class Prompts_Metric {
 
 		$mapped = [];
 		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				// Hub returned a row in an unexpected shape — surface as malformed.
+				return $this->malformed_collection( 'rows' );
+			}
 			$intent   = (string) ( $row['intent'] ?? '' );
 			$mapped[] = [
 				'intent'               => $intent,
@@ -920,6 +936,10 @@ final class Prompts_Metric {
 
 		$mapped = [];
 		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				// Hub returned a row in an unexpected shape — surface as malformed.
+				return $this->malformed_collection( 'rows' );
+			}
 			$placement = (string) ( $row['placement'] ?? '' );
 			$mapped[]  = [
 				'placement'       => $placement,

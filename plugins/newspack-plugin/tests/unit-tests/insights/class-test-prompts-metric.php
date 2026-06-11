@@ -658,6 +658,23 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
 	}
 
+	/**
+	 * Distribution: top-level is an array but contains a non-array row (the
+	 * hub's contract is broken). Surface as malformed so a PHP-8 TypeError on
+	 * string-offset access can't crash the endpoint.
+	 */
+	public function test_distribution_returns_error_state_on_non_array_row() {
+		$metric = $this->make_metric_with_proxy_returning(
+			'prompts_exposures_before_conversion',
+			[ 'not-a-row' ]
+		);
+		$result = $metric->get_exposures_distribution( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+		$this->assertSame( [], $result['buckets'] );
+	}
+
 	// --- Section 7: Performance breakdown ------------------------------
 
 	/**
@@ -881,6 +898,23 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Performance by prompt: top-level is an array but contains a non-array row
+	 * (the hub's contract is broken). Surface as malformed so a PHP-8 TypeError
+	 * on string-offset access can't crash the endpoint.
+	 */
+	public function test_performance_by_prompt_returns_error_state_on_non_array_row() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( [ 'not-a-row' ] );
+
+		$metric = new Prompts_Metric( $proxy, $this->createMock( Woo_Order_Resolver::class ) );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+		$this->assertSame( [], $result['rows'] );
+	}
+
+	/**
 	 * Performance by prompt: when the donation-augmentation proxy call fails,
 	 * the table still renders with engagement columns intact; donation
 	 * columns degrade to 0 / null (no error envelope, no exception).
@@ -1001,6 +1035,23 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Performance by intent: top-level is an array but contains a non-array row.
+	 * Surface as malformed so a PHP-8 TypeError on string-offset access can't
+	 * crash the endpoint.
+	 */
+	public function test_performance_by_intent_returns_error_state_on_non_array_row() {
+		$metric = $this->make_metric_with_proxy_returning(
+			'prompts_performance_by_intent',
+			[ 'not-a-row' ]
+		);
+		$result = $metric->get_performance_by_intent( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+		$this->assertSame( [], $result['rows'] );
+	}
+
+	/**
 	 * Performance by placement: maps BQ rows with humanized placement labels
 	 * (`above-header` → "Above header") and no form_submission_rate column.
 	 */
@@ -1068,6 +1119,23 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 
 		$this->assertSame( 'error', $result['state'] );
 		$this->assertSame( 'bigquery_query_failed', $result['error_code'] );
+		$this->assertSame( [], $result['rows'] );
+	}
+
+	/**
+	 * Performance by placement: top-level is an array but contains a non-array
+	 * row. Surface as malformed so a PHP-8 TypeError on string-offset access
+	 * can't crash the endpoint.
+	 */
+	public function test_performance_by_placement_returns_error_state_on_non_array_row() {
+		$metric = $this->make_metric_with_proxy_returning(
+			'prompts_performance_by_placement',
+			[ 'not-a-row' ]
+		);
+		$result = $metric->get_performance_by_placement( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
 		$this->assertSame( [], $result['rows'] );
 	}
 }
