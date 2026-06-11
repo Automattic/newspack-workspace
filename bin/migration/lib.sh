@@ -8,6 +8,9 @@
 #   • Path-rewrite / merge helpers used to land legacy commits cleanly:
 #       - apply_structural_overrides: drop legacy .github/, package-lock.json,
 #         and pin workspace:* in plugin/theme package.json.
+#       - restore_release_artifacts: pin release-stamped files (CHANGELOG.md,
+#         theme stylesheet headers, package.json name/version) to the monorepo
+#         side so a late legacy hotfix release can't downgrade the monorepo.
 #       - normalize_package_repos: rewrite repository.url in every workspace
 #         package.json so semantic-release resolves to the monorepo, not the
 #         standalone legacy repo.
@@ -91,6 +94,69 @@ apply_structural_overrides() {
         ;;
     esac
   done < <(git diff --name-only --diff-filter=U)
+}
+
+# Pin release-stamped files to the monorepo (HEAD) side after a merge.
+#
+# The monorepo owns its own release versioning: semantic-release at the root
+# bumps every version-bearing file and regenerates each CHANGELOG, so "the sync
+# brings code, not the release commits" (see lib-versions.sh). The legacy repos
+# are frozen but still occasionally cut a late hotfix; that hotfix's
+# `chore(release)` commit stamps a *regressed* version (the legacy line sits
+# below the monorepo's) into package.json, the theme stylesheet headers, and
+# CHANGELOG.md. apply_structural_overrides only rescues package.json when the
+# merge *conflicts*; a clean "legacy wins" merge (legacy advanced the file, the
+# monorepo had not touched it) lands the stale stamp unchallenged and downgrades
+# the monorepo. Restore those files from HEAD regardless of conflict state,
+# leaving the real source change the hotfix carried (the actual fix) intact.
+#
+# `git checkout HEAD -- <path>` resolves to the pre-merge monorepo blob whether
+# the path conflicted or merged cleanly (`--ours` only works for conflicts), and
+# also marks any conflicted path resolved. HEAD is the pre-merge monorepo tip
+# here because integrate runs `git merge --no-commit`.
+restore_release_artifacts() {
+  local target=$1
+
+  # CHANGELOG.md is 100% semantic-release-generated. Legacy entries reference
+  # the old standalone repo's URLs/tags and interleave out of order with the
+  # monorepo's own history.
+  if git cat-file -e "HEAD:$target/CHANGELOG.md" 2> /dev/null; then
+    git checkout HEAD -- "$target/CHANGELOG.md"
+  fi
+
+  # Theme stylesheet headers (Version / Requires at least / Tested up to) are
+  # stamped from the release version; the monorepo tracks them independently and
+  # runs ahead of the frozen legacy theme. These .scss files carry only the
+  # theme header block, so restoring them wholesale keeps the monorepo metadata
+  # authoritative without discarding any source change.
+  while IFS= read -r f; do
+    if git cat-file -e "HEAD:$f" 2> /dev/null; then
+      git checkout HEAD -- "$f"
+    fi
+  done < <(git ls-files "$target" | grep -E '(^|/)theme-description\.scss$' || true)
+
+  # package.json name + version are monorepo-owned (name renamed at cutover,
+  # version bumped only by the monorepo's semantic-release). Pin just those two
+  # fields back, preserving any real dependency change the legacy commit carried.
+  while IFS= read -r pj; do
+    git cat-file -e "HEAD:$pj" 2> /dev/null || continue
+    node -e '
+      const fs = require( "fs" ), cp = require( "child_process" );
+      const pj = process.argv[1];
+      const head = JSON.parse( cp.execSync( "git show HEAD:" + pj, { encoding: "utf8" } ) );
+      const src = fs.readFileSync( pj, "utf8" );
+      const indentMatch = src.match( /\n(\t+|[ ]+)"/ );
+      const indent = indentMatch ? indentMatch[1] : "  ";
+      const trail = src.endsWith( "\n" ) ? "\n" : "";
+      const j = JSON.parse( src );
+      let dirty = false;
+      for ( const k of [ "name", "version" ] ) {
+        if ( head[k] !== undefined && j[k] !== head[k] ) { j[k] = head[k]; dirty = true; }
+      }
+      if ( dirty ) fs.writeFileSync( pj, JSON.stringify( j, null, indent ) + trail );
+    ' "$pj"
+    git add -- "$pj"
+  done < <(git ls-files "$target" | grep -E '(^|/)package\.json$' || true)
 }
 
 # Rewrite repository field in every workspace package.json so semantic-release
