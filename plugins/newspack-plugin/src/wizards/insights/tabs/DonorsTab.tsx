@@ -20,6 +20,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { DateRange } from '../state/useDateRange';
 import useDonorsData from '../hooks/useDonorsData';
+import LastUpdated from '../components/LastUpdated';
 import TabStateView from './components/TabStateView';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import ScorecardSection from './donors/ScorecardSection';
@@ -47,7 +48,10 @@ const DonorsTab = ( { range, previousRange }: DonorsTabProps ) => {
 		>
 			{ data && (
 				<>
-					<ScorecardSection snapshot={ data.snapshot } />
+					<ScorecardSection
+						snapshot={ data.snapshot }
+						lastUpdated={ <LastUpdated tab="donors" range={ range } previousRange={ previousRange } /> }
+					/>
 					<WindowedSection range={ range } current={ data.current } previous={ data.previous } />
 					<RetentionSection current={ data.current } previous={ data.previous } />
 					<PerformanceSection rows={ data.current.donations_by_tier } />

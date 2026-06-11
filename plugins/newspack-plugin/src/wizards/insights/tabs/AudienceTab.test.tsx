@@ -32,6 +32,9 @@ describe( 'AudienceTab', () => {
 			data: { tab_error: 'oauth_not_connected', banner_text: 'Connect Google Analytics.' },
 			error: null,
 			refetch: () => {},
+			computedAt: '2026-06-10T18:42:13Z',
+			source: 'external',
+			cooldownUntil: null,
 		} );
 
 		render( <AudienceTab range={ range } previousRange={ null } /> );
@@ -52,6 +55,9 @@ describe( 'AudienceTab', () => {
 				},
 				previous: null,
 			},
+			computedAt: '2026-06-10T18:42:13Z',
+			source: 'external',
+			cooldownUntil: null,
 		} );
 
 		render( <AudienceTab range={ range } previousRange={ null } /> );

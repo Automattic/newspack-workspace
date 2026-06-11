@@ -3,6 +3,11 @@
  */
 
 /**
+ * External dependencies
+ */
+import type { ReactNode } from 'react';
+
+/**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
@@ -16,14 +21,20 @@ import Scorecard from '../../components/Scorecard';
 export interface SectionProps {
 	current: InsightsWindow;
 	previous: InsightsWindow | null;
+	lastUpdated?: ReactNode;
 }
 
-const QualitySection = ( { current, previous }: SectionProps ) => (
+const QualitySection = ( { current, previous, lastUpdated }: SectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-engagement-quality">
-		<h2 id="newspack-insights-engagement-quality" className="newspack-insights__section-heading">
-			{ __( 'Overall engagement quality', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">{ __( 'How deeply readers engage.', 'newspack-plugin' ) }</p>
+		<div className="newspack-insights__section-header-container">
+			<div className="newspack-insights__section-header-text">
+				<h2 id="newspack-insights-engagement-quality" className="newspack-insights__section-heading">
+					{ __( 'Overall engagement quality', 'newspack-plugin' ) }
+				</h2>
+				<p className="newspack-insights__section-caption">{ __( 'How deeply readers engage.', 'newspack-plugin' ) }</p>
+			</div>
+			{ lastUpdated }
+		</div>
 		<div className="newspack-insights__metric-grid">
 			<Scorecard
 				label={ __( 'Avg Pages per Session', 'newspack-plugin' ) }

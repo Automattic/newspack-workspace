@@ -12,6 +12,11 @@
  */
 import apiFetch from '@wordpress/api-fetch';
 
+/**
+ * Internal dependencies
+ */
+import { type CachedEnvelope } from '../state/insightsCache';
+
 export type StorageBackend = 'hpos' | 'legacy';
 
 export interface DonorsClassification {
@@ -131,10 +136,7 @@ export interface DonorsQuery {
 
 const ENDPOINT = '/newspack-insights/v1/donors';
 
-/**
- * Fetch Tab 7 data for the given window pair.
- */
-export const fetchDonorsData = async ( query: DonorsQuery ): Promise< DonorsResponse > => {
+const queryString = ( query: DonorsQuery ): string => {
 	const params = new URLSearchParams();
 	params.set( 'start', query.start );
 	params.set( 'end', query.end );
@@ -142,8 +144,20 @@ export const fetchDonorsData = async ( query: DonorsQuery ): Promise< DonorsResp
 		params.set( 'compare_start', query.compare_start );
 		params.set( 'compare_end', query.compare_end );
 	}
-	return apiFetch< DonorsResponse >( {
-		path: `${ ENDPOINT }?${ params.toString() }`,
+	return params.toString();
+};
+
+/**
+ * Fetch Tab 7 data for the given window pair.
+ */
+export const fetchDonorsData = async ( query: DonorsQuery ): Promise< CachedEnvelope< DonorsResponse > > =>
+	apiFetch< CachedEnvelope< DonorsResponse > >( {
+		path: `${ ENDPOINT }?${ queryString( query ) }`,
 		method: 'GET',
 	} );
-};
+
+export const refreshDonorsData = async ( query: DonorsQuery ): Promise< CachedEnvelope< DonorsResponse > > =>
+	apiFetch< CachedEnvelope< DonorsResponse > >( {
+		path: `${ ENDPOINT }/refresh?${ queryString( query ) }`,
+		method: 'POST',
+	} );

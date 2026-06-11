@@ -24,6 +24,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { DateRange } from '../state/useDateRange';
 import useSubscribersData from '../hooks/useSubscribersData';
+import LastUpdated from '../components/LastUpdated';
 import TabStateView from './components/TabStateView';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import ScorecardSection from './subscribers/ScorecardSection';
@@ -51,7 +52,10 @@ const SubscribersTab = ( { range, previousRange }: SubscribersTabProps ) => {
 		>
 			{ data && (
 				<>
-					<ScorecardSection snapshot={ data.snapshot } />
+					<ScorecardSection
+						snapshot={ data.snapshot }
+						lastUpdated={ <LastUpdated tab="subscribers" range={ range } previousRange={ previousRange } /> }
+					/>
 					<WindowedSection range={ range } current={ data.current } previous={ data.previous } />
 					<TenureSection rows={ data.snapshot.tenure_distribution } />
 					<PerformanceSection rows={ data.current.subscriptions_by_product } />

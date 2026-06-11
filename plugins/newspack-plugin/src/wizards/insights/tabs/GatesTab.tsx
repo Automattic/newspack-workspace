@@ -22,6 +22,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { DateRange } from '../state/useDateRange';
 import useGatesData from '../hooks/useGatesData';
+import LastUpdated from '../components/LastUpdated';
 import TabStateView from './components/TabStateView';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import GatesErrorBanner from './gates/GatesErrorBanner';
@@ -54,7 +55,11 @@ const GatesTab = ( { range, previousRange }: GatesTabProps ) => {
 				<>
 					{ data.tab_error && <GatesErrorBanner /> }
 					<DirectVsInfluencedCallout />
-					<GateExposureSection current={ data.current } previous={ data.previous } />
+					<GateExposureSection
+						current={ data.current }
+						previous={ data.previous }
+						lastUpdated={ <LastUpdated tab="gates" range={ range } previousRange={ previousRange } /> }
+					/>
 					<FreeReaderConversionSection current={ data.current } previous={ data.previous } />
 					<PaidReaderConversionSection current={ data.current } previous={ data.previous } />
 					<HowReadersConvertSection current={ data.current } />

@@ -19,6 +19,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { DateRange } from '../state/useDateRange';
 import useAdvertisingData from '../hooks/useAdvertisingData';
+import LastUpdated from '../components/LastUpdated';
 import TabStateView from './components/TabStateView';
 import TabLoading from './components/TabLoading';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
@@ -79,7 +80,11 @@ const AdvertisingTab = ( { range, previousRange }: AdvertisingTabProps ) => {
 			{ current && (
 				<>
 					<DataLagIndicator dataAsOf={ current.data_as_of } hasEstimatedData={ current.has_estimated_data } />
-					<ReachRevenueSection current={ current.metrics } previous={ previous } />
+					<ReachRevenueSection
+						current={ current.metrics }
+						previous={ previous }
+						lastUpdated={ <LastUpdated tab="advertising" range={ range } previousRange={ previousRange } /> }
+					/>
 					<InventoryPerformanceSection current={ current.metrics } previous={ previous } />
 					<TopPerformersSection current={ current.metrics } previous={ previous } />
 				</>

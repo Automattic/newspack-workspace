@@ -17,6 +17,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { DateRange } from '../state/useDateRange';
 import useAudienceData from '../hooks/useAudienceData';
+import LastUpdated from '../components/LastUpdated';
 import ConnectBanner from './components/ConnectBanner';
 import TabStateView from './components/TabStateView';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
@@ -56,7 +57,11 @@ const AudienceTab = ( { range, previousRange }: AudienceTabProps ) => {
 					<ConnectBanner text={ data.banner_text } />
 				) : (
 					<>
-						<ReachSection current={ current } previous={ previous } />
+						<ReachSection
+							current={ current }
+							previous={ previous }
+							lastUpdated={ <LastUpdated tab="audience" range={ range } previousRange={ previousRange } /> }
+						/>
 						<CompositionSection current={ current } previous={ previous } />
 						<TrafficSourcesSection current={ current } previous={ previous } />
 						<GeographicSection current={ current } previous={ previous } />
