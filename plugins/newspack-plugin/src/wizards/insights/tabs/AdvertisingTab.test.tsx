@@ -33,7 +33,15 @@ const baseWindow = ( overrides: Partial< AdvertisingWindow > = {} ): Advertising
 } );
 
 const mockData = ( current: AdvertisingWindow ) =>
-	mockHook.mockReturnValue( { status: 'success', data: { current, previous: null }, error: null, refetch: () => {} } );
+	mockHook.mockReturnValue( {
+		status: 'success',
+		data: { current, previous: null },
+		error: null,
+		refetch: () => {},
+		computedAt: null,
+		source: null,
+		cooldownUntil: null,
+	} );
 
 describe( 'AdvertisingTab', () => {
 	afterEach( () => {
@@ -105,7 +113,15 @@ describe( 'AdvertisingTab', () => {
 	} );
 
 	it( 'shows the initial loading state before any data arrives', () => {
-		mockHook.mockReturnValue( { status: 'loading', data: null, error: null, refetch: () => {} } );
+		mockHook.mockReturnValue( {
+			status: 'loading',
+			data: null,
+			error: null,
+			refetch: () => {},
+			computedAt: null,
+			source: null,
+			cooldownUntil: null,
+		} );
 		render( <AdvertisingTab range={ range } previousRange={ null } /> );
 		// Now routed through the shared TabStateView loading frame (NPPD-1684).
 		// Advertising keeps the spinner-only frame; its progressive messages live
@@ -114,7 +130,15 @@ describe( 'AdvertisingTab', () => {
 	} );
 
 	it( 'shows the error state with detail when the fetch fails', () => {
-		mockHook.mockReturnValue( { status: 'error', data: null, error: 'HTTP 500', refetch: () => {} } );
+		mockHook.mockReturnValue( {
+			status: 'error',
+			data: null,
+			error: 'HTTP 500',
+			refetch: () => {},
+			computedAt: null,
+			source: null,
+			cooldownUntil: null,
+		} );
 		render( <AdvertisingTab range={ range } previousRange={ null } /> );
 		expect( screen.getByText( 'Could not load advertising data.' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'HTTP 500' ) ).toBeInTheDocument();
@@ -130,6 +154,9 @@ describe( 'AdvertisingTab', () => {
 				current: baseWindow( { metrics: { total_impressions: { value: 120, computable: true, type: 'count' } } } ),
 				previous: baseWindow( { metrics: { total_impressions: { value: 100, computable: true, type: 'count' } } } ),
 			},
+			computedAt: null,
+			source: null,
+			cooldownUntil: null,
 		} );
 		render( <AdvertisingTab range={ range } previousRange={ previousRange } /> );
 		// +20% vs the prior window → up arrow + magnitude.
