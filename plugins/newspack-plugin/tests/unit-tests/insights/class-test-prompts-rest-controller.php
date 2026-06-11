@@ -1,16 +1,20 @@
 <?php
 /**
- * Test Prompts_REST_Controller (NPPD-1607, Phase 1).
+ * Test Prompts_REST_Controller (NPPD-1607, Phase 2).
  *
  * Exercises the Tab 5 endpoint's request lifecycle: a valid window
- * returns 200 with the placeholder envelope; comparison mode adds a
- * `previous` window; invalid / mismatched date params return 400.
+ * returns 200 with the state-envelope (Phase 2 replaces the Phase 1
+ * `tab_pending` placeholder with `tab_error`); comparison mode adds a
+ * `previous` window; invalid / mismatched date params return 400; the
+ * fixture-mode branch returns canned data when
+ * NEWSPACK_INSIGHTS_FIXTURE_MODE is on.
  *
  * @package Newspack\Tests\Insights
  */
 
 namespace Newspack\Tests\Insights;
 
+use Newspack\Insights\Prompts_Metric;
 use Newspack\Insights\Prompts_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Server;
@@ -84,8 +88,9 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A valid window returns 200 with the full placeholder envelope and a
-	 * null `previous` (no comparison requested).
+	 * A valid window returns 200 with the state envelope. In the test env the
+	 * proxy is unconfigured, so every metric surfaces `state: 'error'` and
+	 * the controller's `is_window_all_error` derives `tab_error: true`.
 	 */
 	public function test_valid_window_returns_200_envelope() {
 		$response = $this->dispatch(
@@ -98,8 +103,11 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 		$this->assertSame( 200, $response->get_status() );
 		$data = $response->get_data();
 
-		$this->assertArrayHasKey( 'tab_pending', $data );
-		$this->assertTrue( $data['tab_pending'] );
+		// Phase 2 replaces `tab_pending` with `tab_error`; the Phase 1 key must
+		// not leak through to the wire format.
+		$this->assertArrayNotHasKey( 'tab_pending', $data );
+		$this->assertArrayHasKey( 'tab_error', $data );
+		$this->assertTrue( $data['tab_error'], 'Test env has an unconfigured proxy → every metric errors → tab_error: true.' );
 		$this->assertArrayHasKey( 'current', $data );
 		$this->assertNull( $data['previous'] );
 
@@ -127,14 +135,13 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 		// A scalar carries the state-envelope (Phase 2). In the test env the proxy
 		// is unconfigured, so wired metrics surface as state 'error' (with
 		// `bigquery_proxy_not_configured`) — the envelope under test is the
-		// `state` + `placeholder_type` contract, not which `state` we got.
+		// `state` + `placeholder_type` contract.
 		$this->assertArrayHasKey( 'state', $current['total_prompt_impressions'] );
 		$this->assertArrayNotHasKey( 'pending', $current['total_prompt_impressions'] );
+		$this->assertSame( 'error', $current['total_prompt_impressions']['state'] );
 		$this->assertSame( 'count', $current['total_prompt_impressions']['placeholder_type'] );
-		// Tables ship a `rows` key for the empty-state UI; in the test env the
-		// proxy is unconfigured so wired collection metrics surface as state
-		// 'error' with `bigquery_proxy_not_configured`. The envelope under
-		// test is the `rows` + `state` contract, not which error code we got.
+		// Tables ship a `rows` key for the empty-state UI; wired collection
+		// metrics surface as state 'error' with `bigquery_proxy_not_configured`.
 		$this->assertSame( [], $current['performance_by_prompt']['rows'] );
 		$this->assertSame( 'error', $current['performance_by_prompt']['state'] );
 	}
@@ -229,5 +236,107 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 			]
 		);
 		$this->assertSame( 400, $response->get_status() );
+	}
+
+	/**
+	 * The fixture closure (which the REST controller invokes via
+	 * `Prompts_Metric::get_fixture` when `NEWSPACK_INSIGHTS_FIXTURE_MODE` is on)
+	 * produces a populated payload with `tab_error: false` and every section
+	 * in state 'populated'.
+	 *
+	 * The controller's fixture-mode branch is a thin wrapper around this
+	 * static; exercising the static directly avoids redefining the
+	 * NEWSPACK_INSIGHTS_FIXTURE_MODE constant per test (PHP constants can't be
+	 * undefined once set, which would taint the rest of the suite).
+	 */
+	public function test_fixture_populated_variant() {
+		$payload = Prompts_Metric::get_fixture( 'populated', false );
+
+		$this->assertArrayHasKey( 'tab_error', $payload );
+		$this->assertFalse( $payload['tab_error'] );
+		$this->assertNull( $payload['previous'] );
+
+		$current = $payload['current'];
+		$this->assertSame( 'populated', $current['total_prompt_impressions']['state'] );
+		$this->assertSame( 'count', $current['total_prompt_impressions']['placeholder_type'] );
+		$this->assertTrue( $current['total_prompt_impressions']['computable'] );
+		$this->assertGreaterThan( 0, $current['total_prompt_impressions']['value'] );
+
+		$this->assertSame( 'populated', $current['conversion_funnel']['state'] );
+		$this->assertCount( 3, $current['conversion_funnel']['stages'] );
+		$this->assertSame( 'populated', $current['performance_by_prompt']['state'] );
+		$this->assertNotEmpty( $current['performance_by_prompt']['rows'] );
+
+		// Per-prompt rows honor the locked 15-key schema from Task 3.3.
+		$row = $current['performance_by_prompt']['rows'][0];
+		$this->assertSame(
+			[
+				'popup_id',
+				'prompt_title',
+				'intent',
+				'placement',
+				'impressions',
+				'unique_viewers',
+				'ctr',
+				'form_submission_rate',
+				'dismissal_rate',
+				'registrations',
+				'newsletter_signups',
+				'donation_conversions',
+				'donation_conversion_rate',
+				'subscription_conversions',
+				'subscription_conversion_rate',
+			],
+			array_keys( $row )
+		);
+	}
+
+	/**
+	 * The empty fixture variant reports collections as state 'empty' (queries
+	 * succeeded with zero rows) and `tab_error: false`.
+	 */
+	public function test_fixture_empty_variant() {
+		$payload = Prompts_Metric::get_fixture( 'empty', false );
+
+		$this->assertFalse( $payload['tab_error'] );
+		$current = $payload['current'];
+		$this->assertSame( 'empty', $current['conversion_funnel']['state'] );
+		$this->assertSame( [], $current['conversion_funnel']['stages'] );
+		$this->assertSame( 'empty', $current['exposures_distribution']['state'] );
+		$this->assertSame( 'empty', $current['performance_by_prompt']['state'] );
+		$this->assertSame( 'empty', $current['performance_by_intent']['state'] );
+		$this->assertSame( 'empty', $current['performance_by_placement']['state'] );
+
+		// Scalars in the empty variant report 'populated' with a non-computable
+		// zero — 'empty' has no meaning for a single scalar.
+		$this->assertSame( 'populated', $current['total_prompt_impressions']['state'] );
+		$this->assertFalse( $current['total_prompt_impressions']['computable'] );
+		$this->assertSame( 0, $current['total_prompt_impressions']['value'] );
+	}
+
+	/**
+	 * The error fixture variant reports every section in state 'error' and
+	 * `tab_error: true`.
+	 */
+	public function test_fixture_error_variant() {
+		$payload = Prompts_Metric::get_fixture( 'error', false );
+
+		$this->assertTrue( $payload['tab_error'] );
+		$current = $payload['current'];
+		$this->assertSame( 'error', $current['total_prompt_impressions']['state'] );
+		$this->assertSame( 'bigquery_proxy_http_error', $current['total_prompt_impressions']['error_code'] );
+		$this->assertSame( 'error', $current['conversion_funnel']['state'] );
+		$this->assertSame( 'error', $current['performance_by_prompt']['state'] );
+	}
+
+	/**
+	 * The fixture closure populates `previous` when comparison is requested.
+	 */
+	public function test_fixture_compare_populates_previous() {
+		$payload = Prompts_Metric::get_fixture( 'populated', true );
+
+		$this->assertIsArray( $payload['previous'] );
+		$this->assertArrayHasKey( 'total_prompt_impressions', $payload['previous'] );
+		$this->assertSame( 'populated', $payload['previous']['total_prompt_impressions']['state'] );
 	}
 }

@@ -118,6 +118,22 @@ final class Prompts_Metric {
 	}
 
 	/**
+	 * Return the canned fixture payload for the Prompts tab.
+	 *
+	 * Returned by the REST controller when NEWSPACK_INSIGHTS_FIXTURE_MODE is on.
+	 * The variant selects a render path: 'populated' (default), 'empty', 'error'.
+	 *
+	 * @param string $variant One of 'populated', 'empty', 'error'.
+	 * @param bool   $compare Whether comparison was requested; when false the
+	 *                        `previous` window is null (no period-over-period deltas).
+	 * @return array Full { tab_error, current, previous } response shape.
+	 */
+	public static function get_fixture( string $variant = 'populated', bool $compare = false ): array {
+		$build = require NEWSPACK_ABSPATH . 'includes/wizards/insights/fixtures/prompts-fixture.php';
+		return $build( $variant, $compare );
+	}
+
+	/**
 	 * Error payload for a scalar scorecard metric. Carries the proxy's error
 	 * code + message so the UI can render an error treatment (without exposing
 	 * internals to the reader) instead of a misleading zero.
@@ -801,6 +817,9 @@ final class Prompts_Metric {
 			// subscription query already scopes attempts correctly.
 			$subscription_conversions = 'registration' === $intent ? (int) ( $subscription_counts[ $popup_id ] ?? 0 ) : 0;
 
+			// When the popup's intent matches but the Woo-side proxy failed (degraded),
+			// the rate is a real 0.0 — the impression denominator is still applicable;
+			// the null branch covers only intent mismatch (the column is N/A).
 			$mapped[] = [
 				'popup_id'                     => $popup_id,
 				'prompt_title'                 => (string) ( $row['prompt_title'] ?? '' ),

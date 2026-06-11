@@ -1,6 +1,6 @@
 <?php
 /**
- * Newspack Insights — Tab 5 Prompts REST controller (NPPD-1607, Phase 1).
+ * Newspack Insights — Tab 5 Prompts REST controller (NPPD-1607, Phase 2).
  *
  * Single endpoint: `GET /newspack-insights/v1/prompts`. Same date-arg
  * validation, permission check, and date parsing conventions as
@@ -8,11 +8,16 @@
  * lifecycle exactly.
  *
  * Response shape:
- *   tab_pending: bool        — true in Phase 1 (placeholder phase); React
- *                              uses it to render the top-of-tab banner.
+ *   tab_error: bool          — true only when every section in the current
+ *                              window failed to load; React renders a
+ *                              tab-level error banner.
  *   current:     PromptsWindow — scorecards + funnel + distribution + tables
  *   previous:    PromptsWindow | null — only populated when the request
  *                              passes `compare_start` + `compare_end`.
+ *
+ * Each metric from {@see Prompts_Metric} carries its own `state`
+ * ('error' | 'empty' | 'populated'); sections render their own treatments,
+ * so the tab banner is reserved for the all-failed case.
  *
  * @package Newspack
  */
@@ -134,6 +139,15 @@ class Prompts_REST_Controller extends WP_REST_Controller {
 			}
 		}
 
+		// Dev smoke-test path: serve canned fixture data so the UI renders without
+		// a BigQuery proxy connection. The optional _fixture_state param selects a
+		// render path ('populated' | 'empty' | 'error'). Never enable in production.
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			$variant = (string) ( $request->get_param( '_fixture_state' ) ?? 'populated' );
+			$compare = null !== $compare_start && null !== $compare_end;
+			return rest_ensure_response( Prompts_Metric::get_fixture( $variant, $compare ) );
+		}
+
 		$metric = new Prompts_Metric();
 		return rest_ensure_response( $this->build_response( $metric, $start, $end, $compare_start, $compare_end ) );
 	}
@@ -141,9 +155,11 @@ class Prompts_REST_Controller extends WP_REST_Controller {
 	/**
 	 * Assemble the top-level response.
 	 *
-	 * `tab_pending` is true in Phase 1 (placeholder phase). React uses it
-	 * to render the top-of-tab banner; remove the flag (or have it return
-	 * false based on real data state) when Phase 2 wires up BigQuery.
+	 * `tab_error` is true only when every metric in the current window reports
+	 * `state: 'error'` — i.e. the whole tab failed to load (e.g. the BigQuery
+	 * proxy is down/misconfigured). React renders a tab-level error banner in
+	 * that case; otherwise each section renders its own error/empty/populated
+	 * treatment.
 	 *
 	 * @param Prompts_Metric         $metric        Orchestrator.
 	 * @param DateTimeImmutable      $start         Current window start.
@@ -159,15 +175,39 @@ class Prompts_REST_Controller extends WP_REST_Controller {
 		?DateTimeImmutable $compare_start,
 		?DateTimeImmutable $compare_end
 	): array {
+		$current  = $this->build_window( $metric, $start, $end );
 		$response = [
-			'tab_pending' => true,
-			'current'     => $this->build_window( $metric, $start, $end ),
-			'previous'    => null,
+			'tab_error' => self::is_window_all_error( $current ),
+			'current'   => $current,
+			'previous'  => null,
 		];
 		if ( $compare_start && $compare_end ) {
 			$response['previous'] = $this->build_window( $metric, $compare_start, $compare_end );
 		}
 		return $response;
+	}
+
+	/**
+	 * Whether every metric in a window payload reports `state: 'error'`.
+	 *
+	 * Returns `false` as soon as any metric is not in the error state (the `window`
+	 * key is date metadata, not a metric, so it's skipped). A metric missing a
+	 * `state` key is treated as non-error, so the banner only shows on an
+	 * unambiguous all-failed window.
+	 *
+	 * @param array $window The shape returned by `build_window()`.
+	 * @return bool
+	 */
+	private static function is_window_all_error( array $window ): bool {
+		foreach ( $window as $key => $value ) {
+			if ( 'window' === $key ) {
+				continue;
+			}
+			if ( ! is_array( $value ) || ! isset( $value['state'] ) || 'error' !== $value['state'] ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
