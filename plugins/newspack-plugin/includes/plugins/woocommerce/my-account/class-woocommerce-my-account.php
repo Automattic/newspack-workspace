@@ -323,7 +323,7 @@ class WooCommerce_My_Account {
 				'newspack-my-account',
 				\Newspack\Newspack::plugin_url() . '/dist/my-account.js',
 				[],
-				NEWSPACK_PLUGIN_VERSION,
+				\Newspack\Newspack::asset_version( 'my-account' ),
 				true
 			);
 			\wp_localize_script(

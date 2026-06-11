@@ -134,7 +134,7 @@ class My_Account_UI_V1 {
 				'newspack-account-frontend',
 				\Newspack\Newspack::plugin_url() . '/dist/account-frontend.js',
 				[],
-				NEWSPACK_PLUGIN_VERSION,
+				\Newspack\Newspack::asset_version( 'account-frontend' ),
 				true
 			);
 			\wp_localize_script(
@@ -147,7 +147,7 @@ class My_Account_UI_V1 {
 				'newspack-my-account-v1',
 				\Newspack\Newspack::plugin_url() . '/dist/my-account-v1.js',
 				[ 'newspack-ui' ],
-				NEWSPACK_PLUGIN_VERSION,
+				\Newspack\Newspack::asset_version( 'my-account-v1' ),
 				true
 			);
 			\wp_localize_script(
@@ -162,7 +162,7 @@ class My_Account_UI_V1 {
 				'newspack-my-account-v1',
 				\Newspack\Newspack::plugin_url() . '/dist/my-account-v1.css',
 				[],
-				NEWSPACK_PLUGIN_VERSION
+				\Newspack\Newspack::asset_version( 'my-account-v1' )
 			);
 		}
 	}

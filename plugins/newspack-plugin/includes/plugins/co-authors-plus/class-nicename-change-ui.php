@@ -55,7 +55,7 @@ class Nicename_Change_UI {
 			'newspack-nicename-change',
 			Newspack::plugin_url() . '/dist/nicename-change.js',
 			[],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'nicename-change' ),
 			true
 		);
 
@@ -63,7 +63,7 @@ class Nicename_Change_UI {
 			'newspack-nicename-change',
 			Newspack::plugin_url() . '/dist/nicename-change.js',
 			[],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'nicename-change' ),
 			true
 		);
 
@@ -80,7 +80,7 @@ class Nicename_Change_UI {
 			'newspack-nicename-change',
 			Newspack::plugin_url() . '/dist/nicename-change.css',
 			[],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'nicename-change' )
 		);
 	}
 
