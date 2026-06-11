@@ -489,7 +489,7 @@ final class Newspack {
 	 *                NEWSPACK_PLUGIN_VERSION when the asset file is missing
 	 *                or malformed.
 	 */
-	public static function asset_version( $name ) {
+	public static function asset_version( string $name ): string {
 		$path = NEWSPACK_ABSPATH . 'dist/' . $name . '.asset.php';
 		if ( file_exists( $path ) ) {
 			$asset = include $path;
