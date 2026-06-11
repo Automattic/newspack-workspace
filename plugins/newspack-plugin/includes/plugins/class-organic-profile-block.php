@@ -34,7 +34,7 @@ class Organic_Profile_Block {
 				'organic-profile-block',
 				Newspack::plugin_url() . '/dist/other-scripts/organic-profile-block.css',
 				[],
-				NEWSPACK_PLUGIN_VERSION
+				Newspack::asset_version( 'other-scripts/organic-profile-block' )
 			);
 		}
 	}

@@ -111,7 +111,7 @@ class Enqueuer {
 			$handle,
 			\Newspack\Newspack::plugin_url() . '/dist/' . $handle . '.js',
 			$dependencies,
-			NEWSPACK_PLUGIN_VERSION,
+			\Newspack\Newspack::asset_version( $handle ),
 			true
 		);
 	}
@@ -127,7 +127,7 @@ class Enqueuer {
 			$handle,
 			\Newspack\Newspack::plugin_url() . '/dist/' . $handle . '.css',
 			$dependencies,
-			NEWSPACK_PLUGIN_VERSION
+			\Newspack\Newspack::asset_version( $handle )
 		);
 
 		wp_style_add_data( $handle, 'rtl', 'replace' );
