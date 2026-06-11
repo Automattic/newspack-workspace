@@ -285,7 +285,7 @@ class Subscriptions_Tiers {
 		} elseif ( $product->is_type( 'grouped' ) ) {
 			$products = $product->get_children();
 			$sort_by_price = $sort_by_price ?? false;
-		} elseif ( $product->is_type( 'variable' ) || $product->is_type( 'variable_subscription' ) || $product->is_type( 'subscription' ) ) {
+		} elseif ( $product->is_type( 'variable' ) || $product->is_type( 'variable-subscription' ) || $product->is_type( 'subscription' ) ) {
 			$products = [ $product ];
 			$sort_by_price = $sort_by_price ?? true;
 		}

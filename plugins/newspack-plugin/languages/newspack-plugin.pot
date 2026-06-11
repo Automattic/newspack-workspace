@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-06-04T16:27:18+00:00\n"
+"POT-Creation-Date: 2026-06-10T08:03:33+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -2874,7 +2874,7 @@ msgstr ""
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:8
 #: dist/other-scripts/emails.js:2
 #: dist/wizards.js:1
-#: src/blocks/author-profile-social/edit.jsx:189
+#: src/blocks/author-profile-social/edit.jsx:171
 #: src/blocks/avatar/inspector.jsx:18
 #: src/blocks/byline/inspector.jsx:25
 #: src/blocks/collections/components/InspectorPanel.jsx:63
@@ -3710,7 +3710,7 @@ msgid "Check availability"
 msgstr ""
 
 #. translators: %s: Subscription ID
-#: includes/plugins/wc-memberships/class-membership-expiry.php:60
+#: includes/plugins/wc-memberships/class-membership-expiry.php:65
 #, php-format
 msgid "Another active subscription for this product was found (Subscription ID: %s). Expiry prevented."
 msgstr ""
@@ -11446,40 +11446,35 @@ msgid "Featured image caption."
 msgstr ""
 
 #: dist/blocks.js:6
-#: src/blocks/author-profile-social/index.js:24
-msgid "Author Social Links"
-msgstr ""
-
-#: dist/blocks.js:6
-#: src/blocks/author-profile-social/edit.jsx:77
+#: src/blocks/author-profile-social/edit.jsx:80
 msgid "Icon color"
 msgstr ""
 
 #: dist/blocks.js:6
-#: src/blocks/author-profile-social/edit.jsx:78
+#: src/blocks/author-profile-social/edit.jsx:88
 msgid "Icon background"
 msgstr ""
 
 #: dist/blocks.js:6
-#: src/blocks/author-profile-social/edit.jsx:172
+#: src/blocks/author-profile-social/edit.jsx:154
 msgid "Social links will appear here."
 msgstr ""
 
 #: dist/blocks.js:6
-#: src/blocks/author-profile-social/edit.jsx:181
-#: src/blocks/author-profile-social/edit.jsx:182
+#: src/blocks/author-profile-social/edit.jsx:163
+#: src/blocks/author-profile-social/edit.jsx:164
 msgid "Reset links"
 msgstr ""
 
 #: dist/blocks.js:6
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:14
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:30
-#: src/blocks/author-profile-social/edit.jsx:183
+#: src/blocks/author-profile-social/edit.jsx:165
 msgid "Reset"
 msgstr ""
 
 #: dist/blocks.js:6
-#: src/blocks/author-profile-social/edit.jsx:191
+#: src/blocks/author-profile-social/edit.jsx:173
 msgid "Icon size"
 msgstr ""
 
@@ -11521,8 +11516,13 @@ msgid "Huge"
 msgstr ""
 
 #: dist/blocks.js:6
-#: src/blocks/author-profile-social/edit.jsx:199
+#: src/blocks/author-profile-social/edit.jsx:181
 msgid "Add missing links"
+msgstr ""
+
+#: dist/blocks.js:6
+#: src/blocks/author-profile-social/index.js:24
+msgid "Author Social Links"
 msgstr ""
 
 #: dist/blocks.js:6

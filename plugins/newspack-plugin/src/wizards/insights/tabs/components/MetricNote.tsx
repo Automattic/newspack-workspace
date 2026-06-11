@@ -18,8 +18,12 @@ import { __ } from '@wordpress/i18n';
 import { SETUP_DOCS_URL } from './metrics';
 
 export interface MetricNoteProps {
-	/** Missing GA4 custom dimension(s); first entry names the param. */
-	overlay?: { dimensions: string[] };
+	/**
+	 * Overlay state. GA4's `custom_dimension_missing` carries the missing param
+	 * name(s) in `dimensions`; GAM's `data_unavailable` (e.g. viewability without
+	 * Active View) carries only a `type` and renders a generic note.
+	 */
+	overlay?: { type?: string; dimensions?: string[] };
 	/** Metric needs configuration (e.g. coverage area not set). */
 	notConfigured?: boolean;
 	/** Generic data failure. */
@@ -29,8 +33,12 @@ export interface MetricNoteProps {
 const MetricNote = ( { overlay, notConfigured }: MetricNoteProps ) => {
 	let body: React.ReactNode;
 
-	if ( overlay ) {
-		const param = overlay.dimensions[ 0 ] ?? '';
+	if ( overlay && overlay.type === 'data_unavailable' ) {
+		// Dimension-less overlay (e.g. GAM viewability without Active View enabled).
+		body = __( 'Not available for this site.', 'newspack-plugin' );
+	} else if ( overlay && overlay.dimensions && overlay.dimensions.length > 0 ) {
+		// Missing GA4 custom dimension — name the first missing param.
+		const param = overlay.dimensions[ 0 ];
 		body = (
 			<>
 				{ __( 'Custom dimension', 'newspack-plugin' ) } <code>{ param }</code> { __( 'not detected.', 'newspack-plugin' ) }{ ' ' }

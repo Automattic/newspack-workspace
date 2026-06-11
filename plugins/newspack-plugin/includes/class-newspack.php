@@ -174,6 +174,9 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-subscribers.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-donors.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-advertising.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/gam/class-report-job-status.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/gam/class-report-query.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/gam/class-client.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-custom-events-section.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-emails-section.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-syndication-section.php';

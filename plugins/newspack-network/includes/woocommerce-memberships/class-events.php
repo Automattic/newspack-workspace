@@ -112,8 +112,13 @@ class Events {
 		if ( ! $user ) {
 			return;
 		}
+		$plan = $user_membership->get_plan();
+		if ( ! $plan ) {
+			// Plan post was already deleted (e.g. via `wp_delete_auto_drafts` cascading into membership deletion).
+			return;
+		}
 		$user_email = $user->user_email;
-		$plan_id    = $user_membership->get_plan()->get_id();
+		$plan_id    = $plan->get_id();
 
 		$plan_network_id = get_post_meta( $plan_id, Admin::NETWORK_ID_META_KEY, true );
 		if ( ! $plan_network_id ) {

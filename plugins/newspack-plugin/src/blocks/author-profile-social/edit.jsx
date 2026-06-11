@@ -2,7 +2,17 @@
  * WordPress dependencies
  */
 import { useContext, useEffect, useMemo, useRef, useState } from '@wordpress/element';
-import { BlockControls, useBlockProps, useInnerBlocksProps, InspectorControls } from '@wordpress/block-editor';
+import {
+	BlockControls,
+	useBlockProps,
+	useInnerBlocksProps,
+	InspectorControls,
+	withColors,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalColorGradientSettingsDropdown as ColorGradientSettingsDropdown,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalUseMultipleOriginColorsAndGradients as useMultipleOriginColorsAndGradients,
+} from '@wordpress/block-editor';
 import { PanelBody, SelectControl, Button, ToolbarButton, ToolbarGroup, Tooltip } from '@wordpress/components';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { __ } from '@wordpress/i18n';
@@ -28,91 +38,63 @@ const fetchAllServiceKeys = () => {
 	return allServiceKeysCache;
 };
 
-const presetToVar = value => {
-	if ( typeof value !== 'string' ) {
-		return value;
-	}
-	return value.replace( /^var:preset\|([^|]+)\|(.+)$/, 'var(--wp--preset--$1--$2)' );
-};
-
-const resolveColor = ( presetSlug, customValue ) => {
-	if ( presetSlug ) {
-		return `var(--wp--preset--color--${ presetSlug })`;
-	}
-	if ( typeof customValue === 'string' ) {
-		return presetToVar( customValue ) || customValue;
-	}
-	return undefined;
-};
-
 /**
  * Edit component for the Author Social Links inner block.
  *
- * @param {Object}   props               Block props.
- * @param {Object}   props.attributes    Block attributes.
- * @param {Function} props.setAttributes Function to update attributes.
- * @param {string}   props.clientId      Block client ID.
+ * @param {Object}   props                        Block props.
+ * @param {Object}   props.attributes             Block attributes.
+ * @param {Function} props.setAttributes          Function to update attributes.
+ * @param {string}   props.clientId               Block client ID.
+ * @param {Object}   props.iconColor              Resolved icon color (from withColors).
+ * @param {Function} props.setIconColor           Setter for icon color (from withColors).
+ * @param {Object}   props.iconBackgroundColor    Resolved icon background color (from withColors).
+ * @param {Function} props.setIconBackgroundColor Setter for icon background color (from withColors).
  * @return {JSX.Element} The edit component.
  */
-export default function Edit( { attributes, setAttributes, clientId } ) {
+function Edit( { attributes, setAttributes, clientId, iconColor, setIconColor, iconBackgroundColor, setIconBackgroundColor } ) {
 	const AuthorContext = getSharedAuthorContext();
 	const author = useContext( AuthorContext );
-	const { iconSize, style: styleAttr, textColor, backgroundColor, className } = attributes;
+	const { iconSize, iconColorValue, iconBackgroundColorValue, className } = attributes;
 	const hasPopulated = useRef( false );
 	const [ allServiceKeys, setAllServiceKeys ] = useState( null ); // null = loading
 
 	const isBrand = ( className || '' ).split( ' ' ).includes( 'is-style-brand' );
 	const iconSizeValue = typeof iconSize === 'number' ? iconSize : parseInt( iconSize ?? 24, 10 ) || 24;
-	const iconColor = ! isBrand ? resolveColor( textColor, styleAttr?.color?.text ) : undefined;
-	const iconBackground = ! isBrand ? resolveColor( backgroundColor, styleAttr?.color?.background ) : undefined;
 
-	// Hide color panel when "Brand" is active; rename labels when "Default".
-	useEffect( () => {
-		const sidebar = document.querySelector( '.interface-complementary-area' );
-		if ( ! sidebar ) {
-			return;
-		}
+	const resolvedIconColor = ! isBrand ? iconColor?.color || iconColorValue : undefined;
+	const resolvedIconBackground = ! isBrand ? iconBackgroundColor?.color || iconBackgroundColorValue : undefined;
 
-		const COLOR_LABEL_MAP = {
-			Text: __( 'Icon color', 'newspack-plugin' ),
-			Background: __( 'Icon background', 'newspack-plugin' ),
-		};
-
-		const updateColorPanel = container => {
-			container.querySelectorAll( '.color-block-support-panel' ).forEach( el => {
-				el.style.display = isBrand ? 'none' : '';
-			} );
-
-			if ( isBrand ) {
-				return;
-			}
-
-			container.querySelectorAll( '.block-editor-panel-color-gradient-settings__color-name' ).forEach( el => {
-				if ( COLOR_LABEL_MAP[ el.textContent ] ) {
-					el.textContent = COLOR_LABEL_MAP[ el.textContent ];
-				}
-			} );
-			container.querySelectorAll( '.components-menu-item__item' ).forEach( el => {
-				if ( COLOR_LABEL_MAP[ el.textContent ] ) {
-					el.textContent = COLOR_LABEL_MAP[ el.textContent ];
-				}
-			} );
-		};
-
-		updateColorPanel( sidebar );
-
-		const observer = new MutationObserver( () => updateColorPanel( sidebar ) );
-		observer.observe( sidebar, { childList: true, subtree: true } );
-
-		return () => observer.disconnect();
-	}, [ isBrand ] );
+	// Color panel is hidden entirely when the "Brand" style is active —
+	// brand uses each service's own colors, so neither icon nor background
+	// apply. The settings render as ToolsPanelItems directly inside the
+	// Styles tab's Color slot, so they integrate with WP's native panel
+	// (no nested panel-in-a-panel).
+	const colorGradientSettings = useMultipleOriginColorsAndGradients();
+	const colorSettings = [
+		{
+			colorValue: iconColor?.color || iconColorValue,
+			onColorChange: value => {
+				setIconColor( value );
+				setAttributes( { iconColorValue: value } );
+			},
+			label: __( 'Icon color', 'newspack-plugin' ),
+		},
+		{
+			colorValue: iconBackgroundColor?.color || iconBackgroundColorValue,
+			onColorChange: value => {
+				setIconBackgroundColor( value );
+				setAttributes( { iconBackgroundColorValue: value } );
+			},
+			label: __( 'Icon background', 'newspack-plugin' ),
+		},
+	];
 
 	const blockProps = useBlockProps( {
 		className: 'author-profile-social__list',
 		style: {
 			'--icon-size': `${ roundIconSize( iconSizeValue ) }px`,
-			...( iconColor && { '--icon-color': iconColor } ),
-			...( iconBackground && { '--icon-background': iconBackground } ),
+			...( resolvedIconColor && { '--icon-color': resolvedIconColor } ),
+			...( resolvedIconBackground && { '--icon-background': resolvedIconBackground } ),
 		},
 	} );
 
@@ -201,7 +183,17 @@ export default function Edit( { attributes, setAttributes, clientId } ) {
 					) }
 				</PanelBody>
 			</InspectorControls>
+			{ ! isBrand && (
+				<InspectorControls group="color">
+					<ColorGradientSettingsDropdown settings={ colorSettings } panelId={ clientId } { ...colorGradientSettings } />
+				</InspectorControls>
+			) }
 			<ul { ...innerBlocksProps } />
 		</>
 	);
 }
+
+export default withColors( {
+	iconColor: 'icon-color',
+	iconBackgroundColor: 'icon-background-color',
+} )( Edit );

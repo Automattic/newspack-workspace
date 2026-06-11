@@ -458,10 +458,63 @@
 // section headers get consistent breathing room above each card row instead of
 // butting against the previous one (NPPD-1649 fix #2).
 .newspack-insights__audience-tab,
-.newspack-insights__engagement-tab {
+.newspack-insights__engagement-tab,
+.newspack-insights__advertising-tab {
 	display: flex;
 	flex-direction: column;
 	gap: 32px;
+}
+
+// Shared info callout (NPPD-1618) — bold heading + free-form body in a muted
+// box, info icon left, optional dismiss X. Lifted verbatim from the Gates
+// "Direct vs Influenced" explainer so Gates and the Advertising data-lag note
+// share one treatment.
+.newspack-insights__info-callout {
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 16px 20px;
+	background-color: wp-colors.$gray-100;
+	border: 1px solid wp-colors.$gray-200;
+	border-radius: 4px;
+
+	&-icon {
+		flex: 0 0 20px;
+		width: 20px;
+		height: 20px;
+		color: wp-colors.$gray-700;
+	}
+
+	&-body {
+		flex: 1 1 auto;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		font-size: 13px;
+		line-height: 1.5;
+		color: wp-colors.$gray-900;
+
+		p {
+			margin: 0;
+		}
+	}
+
+	&-title {
+		font-size: 14px;
+	}
+
+	&-dismiss {
+		flex: 0 0 auto;
+		background: transparent;
+		border: 0;
+		cursor: pointer;
+		padding: 4px;
+		color: wp-colors.$gray-700;
+
+		&:hover {
+			color: wp-colors.$gray-900;
+		}
+	}
 }
 
 // Per-section grid column modifiers. Compound selectors (0,2,0) so they win
