@@ -18,6 +18,7 @@ import apiFetch from '@wordpress/api-fetch';
  * Internal dependencies
  */
 import type { MetricPayload } from '../tabs/components/metrics';
+import { type CachedEnvelope } from '../state/insightsCache';
 
 /** A window of metrics keyed by metric name. */
 export type InsightsWindow = Record< string, MetricPayload >;
@@ -61,7 +62,7 @@ export interface InsightsQuery {
 
 const ENDPOINT = '/newspack-insights/v1/advertising';
 
-export const fetchAdvertisingData = async ( query: InsightsQuery ): Promise< AdvertisingResponse > => {
+const queryString = ( query: InsightsQuery ): string => {
 	const params = new URLSearchParams();
 	params.set( 'start', query.start );
 	params.set( 'end', query.end );
@@ -69,8 +70,17 @@ export const fetchAdvertisingData = async ( query: InsightsQuery ): Promise< Adv
 		params.set( 'compare_start', query.compare_start );
 		params.set( 'compare_end', query.compare_end );
 	}
-	return apiFetch< AdvertisingResponse >( {
-		path: `${ ENDPOINT }?${ params.toString() }`,
+	return params.toString();
+};
+
+export const fetchAdvertisingData = async ( query: InsightsQuery ): Promise< CachedEnvelope< AdvertisingResponse > > =>
+	apiFetch< CachedEnvelope< AdvertisingResponse > >( {
+		path: `${ ENDPOINT }?${ queryString( query ) }`,
 		method: 'GET',
 	} );
-};
+
+export const refreshAdvertisingData = async ( query: InsightsQuery ): Promise< CachedEnvelope< AdvertisingResponse > > =>
+	apiFetch< CachedEnvelope< AdvertisingResponse > >( {
+		path: `${ ENDPOINT }/refresh?${ queryString( query ) }`,
+		method: 'POST',
+	} );

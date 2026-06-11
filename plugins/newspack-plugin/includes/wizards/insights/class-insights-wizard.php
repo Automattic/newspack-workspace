@@ -123,6 +123,17 @@ class Insights_Wizard extends Wizard {
 	}
 
 	/**
+	 * Globally disable the Insights cache for development / debugging.
+	 *
+	 * @constant NEWSPACK_INSIGHTS_CACHE_DISABLED
+	 * @type     bool
+	 * @default  Caching enabled
+	 * @status   stable
+	 *
+	 * @example define( 'NEWSPACK_INSIGHTS_CACHE_DISABLED', true );
+	 */
+
+	/**
 	 * Constructor.
 	 *
 	 * Bails before parent registration when the feature flag is disabled,

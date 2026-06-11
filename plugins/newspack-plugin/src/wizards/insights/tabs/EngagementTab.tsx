@@ -17,6 +17,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { DateRange } from '../state/useDateRange';
 import useEngagementData from '../hooks/useEngagementData';
+import LastUpdated from '../components/LastUpdated';
 import ConnectBanner from './components/ConnectBanner';
 import TabStateView from './components/TabStateView';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
@@ -52,7 +53,11 @@ const EngagementTab = ( { range, previousRange }: EngagementTabProps ) => {
 					<ConnectBanner text={ data.banner_text } />
 				) : (
 					<>
-						<QualitySection current={ current } previous={ previous } />
+						<QualitySection
+							current={ current }
+							previous={ previous }
+							lastUpdated={ <LastUpdated tab="engagement" range={ range } previousRange={ previousRange } /> }
+						/>
 						<ReaderSegmentsSection current={ current } previous={ previous } />
 						<ContentEngagementSection current={ current } previous={ previous } />
 					</>

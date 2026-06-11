@@ -1,20 +1,22 @@
 /**
  * useAdvertisingData (Tab 8, NPPD-1618).
  *
- * Tab 8's fetch lifecycle. Mirrors {@see useAudienceData}: a request-id guard
- * serializes overlapping calls so the latest range change wins.
+ * Thin reader over the module insightsCache. The slot key embeds the
+ * date range + comparison window so cross-tab/date state stays coherent.
  */
 
 /**
  * WordPress dependencies
  */
-import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
+import { useCallback, useEffect, useSyncExternalStore } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
 import type { DateRange } from '../state/useDateRange';
-import { fetchAdvertisingData, type AdvertisingResponse } from '../api/advertising';
+import { fetchAdvertisingData, refreshAdvertisingData, type AdvertisingResponse } from '../api/advertising';
+import { insightsCache, makeSlotKey } from '../state/insightsCache';
+import { useRegisterRefresh } from '../state/refreshRegistry';
 
 export type FetchStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -23,52 +25,45 @@ export interface UseAdvertisingDataResult {
 	data: AdvertisingResponse | null;
 	error: string | null;
 	refetch: () => void;
+	computedAt: string | null;
+	source: 'bigquery' | 'external' | 'local' | null;
+	cooldownUntil: string | null;
 }
 
-const errorMessage = ( e: unknown ): string => {
-	if ( e && typeof e === 'object' && 'message' in e && typeof ( e as { message: unknown } ).message === 'string' ) {
-		return ( e as { message: string } ).message;
-	}
-	return String( e );
-};
+const queryFrom = ( range: DateRange, previousRange: DateRange | null ) => ( {
+	start: range.start,
+	end: range.end,
+	compare_start: previousRange?.start,
+	compare_end: previousRange?.end,
+} );
 
 const useAdvertisingData = ( range: DateRange, previousRange: DateRange | null ): UseAdvertisingDataResult => {
-	const [ status, setStatus ] = useState< FetchStatus >( 'idle' );
-	const [ data, setData ] = useState< AdvertisingResponse | null >( null );
-	const [ error, setError ] = useState< string | null >( null );
+	const key = makeSlotKey( 'advertising', range, previousRange );
 
-	const requestIdRef = useRef( 0 );
-	const [ refetchTick, setRefetchTick ] = useState( 0 );
-	const refetch = useCallback( () => setRefetchTick( t => t + 1 ), [] );
+	const slot = useSyncExternalStore(
+		listener => insightsCache.subscribe( key, listener ),
+		() => insightsCache.getSlot< AdvertisingResponse >( key )
+	);
 
 	useEffect( () => {
-		const myId = ++requestIdRef.current;
-		setStatus( 'loading' );
-		setError( null );
+		insightsCache.ensureFetched( key, () => fetchAdvertisingData( queryFrom( range, previousRange ) ) );
+	}, [ key, range.start, range.end, previousRange?.start, previousRange?.end ] );
 
-		fetchAdvertisingData( {
-			start: range.start,
-			end: range.end,
-			compare_start: previousRange?.start,
-			compare_end: previousRange?.end,
-		} )
-			.then( response => {
-				if ( requestIdRef.current !== myId ) {
-					return;
-				}
-				setData( response );
-				setStatus( 'success' );
-			} )
-			.catch( e => {
-				if ( requestIdRef.current !== myId ) {
-					return;
-				}
-				setError( errorMessage( e ) );
-				setStatus( 'error' );
-			} );
-	}, [ range.start, range.end, previousRange?.start, previousRange?.end, refetchTick ] );
+	const refetch = useCallback( () => {
+		insightsCache.refresh( key, () => refreshAdvertisingData( queryFrom( range, previousRange ) ) );
+	}, [ key, range.start, range.end, previousRange?.start, previousRange?.end ] );
 
-	return { status, data, error, refetch };
+	useRegisterRefresh( 'advertising', refetch );
+
+	return {
+		status: slot.status,
+		data: slot.data,
+		error: slot.error,
+		refetch,
+		computedAt: slot.computedAt,
+		source: slot.source,
+		cooldownUntil: slot.cooldownUntil,
+	};
 };
 
 export default useAdvertisingData;

@@ -7,6 +7,11 @@
  */
 
 /**
+ * External dependencies
+ */
+import type { ReactNode } from 'react';
+
+/**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
@@ -21,14 +26,20 @@ import RevenueMixCard from '../RevenueMixCard';
 export interface SectionProps {
 	current: InsightsWindow;
 	previous: InsightsWindow | null;
+	lastUpdated?: ReactNode;
 }
 
-const ReachRevenueSection = ( { current, previous }: SectionProps ) => (
+const ReachRevenueSection = ( { current, previous, lastUpdated }: SectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-reach-revenue">
-		<h2 id="newspack-insights-advertising-reach-revenue" className="newspack-insights__section-heading">
-			{ __( 'Reach & revenue', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">{ __( 'Volume and revenue mix for the period.', 'newspack-plugin' ) }</p>
+		<div className="newspack-insights__section-header-container">
+			<div className="newspack-insights__section-header-text">
+				<h2 id="newspack-insights-advertising-reach-revenue" className="newspack-insights__section-heading">
+					{ __( 'Reach & revenue', 'newspack-plugin' ) }
+				</h2>
+				<p className="newspack-insights__section-caption">{ __( 'Volume and revenue mix for the period.', 'newspack-plugin' ) }</p>
+			</div>
+			{ lastUpdated }
+		</div>
 		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
 			<Scorecard
 				label={ __( 'Total Impressions', 'newspack-plugin' ) }

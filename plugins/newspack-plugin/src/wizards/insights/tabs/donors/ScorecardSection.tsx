@@ -10,6 +10,11 @@
  */
 
 /**
+ * External dependencies
+ */
+import type { ReactNode } from 'react';
+
+/**
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
@@ -23,19 +28,25 @@ import { formatCurrency, formatNumber } from '../components/format';
 
 export interface ScorecardSectionProps {
 	snapshot: DonorsSnapshot;
+	lastUpdated?: ReactNode;
 }
 
-const ScorecardSection = ( { snapshot }: ScorecardSectionProps ) => (
+const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) => (
 	<section
 		className="newspack-insights__section newspack-insights__section--scorecard"
 		aria-labelledby="newspack-insights-donors-scorecard-heading"
 	>
-		<h2 id="newspack-insights-donors-scorecard-heading" className="newspack-insights__section-heading">
-			{ __( 'Donors at a glance', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">
-			{ __( 'Current state and recurring revenue, independent of selected timeframe.', 'newspack-plugin' ) }
-		</p>
+		<div className="newspack-insights__section-header-container">
+			<div className="newspack-insights__section-header-text">
+				<h2 id="newspack-insights-donors-scorecard-heading" className="newspack-insights__section-heading">
+					{ __( 'Donors at a glance', 'newspack-plugin' ) }
+				</h2>
+				<p className="newspack-insights__section-caption">
+					{ __( 'Current state and recurring revenue, independent of selected timeframe.', 'newspack-plugin' ) }
+				</p>
+			</div>
+			{ lastUpdated }
+		</div>
 		<div className="newspack-insights__metric-grid">
 			<MetricCard
 				label={ __( 'Active donors', 'newspack-plugin' ) }

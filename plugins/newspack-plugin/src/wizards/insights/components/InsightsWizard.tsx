@@ -2,9 +2,10 @@
  * InsightsWizard
  *
  * Top-level chrome for the Newspack Insights wizard. Owns active tab,
- * date range, and comparison-mode state; renders header (title +
- * LastUpdated), date picker, comparison toggle, tab navigation, and
- * the lazy-loaded tab content.
+ * date range, and comparison-mode state; renders header (title, date
+ * picker, comparison toggle), tab navigation, and the lazy-loaded tab
+ * content. Per-tab cache freshness ("Last updated …") lives inside
+ * each tab's first section heading, not the global header.
  *
  * Tab routing happens entirely client-side via URL query persistence so
  * tabs are linkable and refresh restores state.
@@ -21,11 +22,11 @@ import { useCallback, useEffect, useState } from '@wordpress/element';
  */
 import ComparisonToggle from './ComparisonToggle';
 import DateRangePicker from './DateRangePicker';
-import LastUpdated from './LastUpdated';
 import TabContent from './TabContent';
 import TabNavigation, { ALL_TABS, type TabKey, type TabVisibility } from './TabNavigation';
 import useComparisonMode from '../state/useComparisonMode';
 import useDateRange, { type DateRange } from '../state/useDateRange';
+import { RefreshRegistryProvider } from '../state/refreshRegistry';
 
 export interface InsightsBootConfig {
 	tabs: TabVisibility;
@@ -33,11 +34,6 @@ export interface InsightsBootConfig {
 	defaultComparison: boolean;
 	timezone: string;
 	settingsUrl: string;
-	/**
-	 * Optional ISO 8601 timestamp of the most recent cache update for the
-	 * currently-displayed data. Null while no data has loaded.
-	 */
-	lastUpdated?: string | null;
 }
 
 export interface InsightsWizardProps {
@@ -114,42 +110,40 @@ const InsightsWizard = ( { config }: InsightsWizardProps ) => {
 	const hasVisibleTabs = visibleTabs.length > 0;
 
 	return (
-		<div className="newspack-insights">
-			<header className="newspack-insights__header">
-				<div className="newspack-insights__header-left">
-					<h1 className="newspack-insights__title">{ __( 'Insights', 'newspack-plugin' ) }</h1>
-				</div>
-				<div className="newspack-insights__header-right">
-					{ hasVisibleTabs && (
-						<>
-							<DateRangePicker range={ range } onPresetChange={ setPreset } onCustomChange={ setCustom } />
-							<ComparisonToggle enabled={ comparisonEnabled } onChange={ setComparisonEnabled } />
-							{ /* TODO(NPPD-1605): wire computed_at from the SWR cache layer. */ }
-							{ /* Currently always null because the REST endpoints don't surface */ }
-							{ /* their cache timestamps yet; LastUpdated renders nothing in that case. */ }
-							<LastUpdated timestamp={ config.lastUpdated ?? null } />
-						</>
-					) }
-				</div>
-			</header>
-
-			{ hasVisibleTabs && activeTab ? (
-				<>
-					<TabNavigation activeTab={ activeTab } visibility={ config.tabs } onTabChange={ setActiveTab } />
-					<TabContent activeTab={ activeTab } range={ range } previousRange={ previousRange } />
-				</>
-			) : (
-				<div className="newspack-insights__empty" role="status">
-					<h2 className="newspack-insights__empty-title">{ __( 'No insights sections available', 'newspack-plugin' ) }</h2>
-					<p className="newspack-insights__empty-message">
-						{ __(
-							'Insights sections light up as data sources become available for this site. Check back after you have receivers configured, or visit Settings to configure data sources.',
-							'newspack-plugin'
+		<RefreshRegistryProvider>
+			<div className="newspack-insights">
+				<header className="newspack-insights__header">
+					<div className="newspack-insights__header-left">
+						<h1 className="newspack-insights__title">{ __( 'Insights', 'newspack-plugin' ) }</h1>
+					</div>
+					<div className="newspack-insights__header-right">
+						{ hasVisibleTabs && (
+							<>
+								<DateRangePicker range={ range } onPresetChange={ setPreset } onCustomChange={ setCustom } />
+								<ComparisonToggle enabled={ comparisonEnabled } onChange={ setComparisonEnabled } />
+							</>
 						) }
-					</p>
-				</div>
-			) }
-		</div>
+					</div>
+				</header>
+
+				{ hasVisibleTabs && activeTab ? (
+					<>
+						<TabNavigation activeTab={ activeTab } visibility={ config.tabs } onTabChange={ setActiveTab } />
+						<TabContent activeTab={ activeTab } range={ range } previousRange={ previousRange } />
+					</>
+				) : (
+					<div className="newspack-insights__empty" role="status">
+						<h2 className="newspack-insights__empty-title">{ __( 'No insights sections available', 'newspack-plugin' ) }</h2>
+						<p className="newspack-insights__empty-message">
+							{ __(
+								'Insights sections light up as data sources become available for this site. Check back after you have receivers configured, or visit Settings to configure data sources.',
+								'newspack-plugin'
+							) }
+						</p>
+					</div>
+				) }
+			</div>
+		</RefreshRegistryProvider>
 	);
 };
 

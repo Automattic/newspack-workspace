@@ -5,6 +5,11 @@
  */
 
 /**
+ * External dependencies
+ */
+import type { ReactNode } from 'react';
+
+/**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
@@ -18,14 +23,20 @@ import Scorecard from '../../components/Scorecard';
 export interface SectionProps {
 	current: InsightsWindow;
 	previous: InsightsWindow | null;
+	lastUpdated?: ReactNode;
 }
 
-const ReachSection = ( { current, previous }: SectionProps ) => (
+const ReachSection = ( { current, previous, lastUpdated }: SectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-reach">
-		<h2 id="newspack-insights-audience-reach" className="newspack-insights__section-heading">
-			{ __( 'Reach', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">{ __( 'Your reach this period.', 'newspack-plugin' ) }</p>
+		<div className="newspack-insights__section-header-container">
+			<div className="newspack-insights__section-header-text">
+				<h2 id="newspack-insights-audience-reach" className="newspack-insights__section-heading">
+					{ __( 'Reach', 'newspack-plugin' ) }
+				</h2>
+				<p className="newspack-insights__section-caption">{ __( 'Your reach this period.', 'newspack-plugin' ) }</p>
+			</div>
+			{ lastUpdated }
+		</div>
 		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-4">
 			<Scorecard
 				label={ __( 'Active Readers', 'newspack-plugin' ) }
