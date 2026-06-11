@@ -10,7 +10,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
@@ -114,9 +114,13 @@ const OpportunityBucketsSection = ( { current }: OpportunityBucketsSectionProps 
 				getRowKey={ row => row.post_id }
 				defaultSortKey="pageviews"
 				initialRowLimit={ TOP_PAGES_ROW_LIMIT }
-				emptyMessage={ __(
-					'No qualifying pages yet. Pages with at least 100 pageviews and a measurable conversion rate will appear here.',
-					'newspack-plugin'
+				emptyMessage={ sprintf(
+					/* translators: %s: minimum pageview count for a page to qualify (formatted). */
+					__(
+						'No qualifying pages yet. Pages with at least %s pageviews and a measurable conversion rate will appear here.',
+						'newspack-plugin'
+					),
+					formatNumber( current.top_pages_no_conversion.threshold_pageviews )
 				) }
 			/>
 			<p className="newspack-insights__conversion-top-pages-note">

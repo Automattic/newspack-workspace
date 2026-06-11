@@ -14,7 +14,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import type { ConversionWeeklyTrendsData } from '../../api/conversion';
+import type { ConversionWeekPoint, ConversionWeeklyTrendsData } from '../../api/conversion';
 import LineChart, { type LineSeries } from './viz/LineChart';
 
 export interface ConversionRateTrendsSectionProps {
@@ -23,17 +23,31 @@ export interface ConversionRateTrendsSectionProps {
 	};
 }
 
-/** Split the weekly rows into the two tracked rate series. */
-const toTrendSeries = ( data: ConversionWeeklyTrendsData ): LineSeries[] => [
-	{
-		name: __( 'Registration rate', 'newspack-plugin' ),
-		points: data.weeks.map( w => ( { label: w.week, value: w.registration_rate } ) ),
+/**
+ * The server's `series` array is authoritative for which rate series render
+ * and in what order. Each key maps to its display label and the week-row field
+ * it reads; unknown keys are skipped so a Phase 2 series addition can't crash
+ * the chart before the UI knows about it.
+ */
+const SERIES_BY_KEY: Record< string, { label: string; value: ( w: ConversionWeekPoint ) => number } > = {
+	registration_rate: {
+		label: __( 'Registration rate', 'newspack-plugin' ),
+		value: w => w.registration_rate,
 	},
-	{
-		name: __( 'Subscription attempt rate', 'newspack-plugin' ),
-		points: data.weeks.map( w => ( { label: w.week, value: w.subscription_attempt_rate } ) ),
+	subscription_attempt_rate: {
+		label: __( 'Subscription attempt rate', 'newspack-plugin' ),
+		value: w => w.subscription_attempt_rate,
 	},
-];
+};
+
+/** Build the LineChart series from the payload's declared series keys. */
+const toTrendSeries = ( data: ConversionWeeklyTrendsData ): LineSeries[] =>
+	data.series
+		.filter( key => SERIES_BY_KEY[ key ] )
+		.map( key => ( {
+			name: SERIES_BY_KEY[ key ].label,
+			points: data.weeks.map( w => ( { label: w.week, value: SERIES_BY_KEY[ key ].value( w ) } ) ),
+		} ) );
 
 const ConversionRateTrendsSection = ( { current }: ConversionRateTrendsSectionProps ) => (
 	<section
