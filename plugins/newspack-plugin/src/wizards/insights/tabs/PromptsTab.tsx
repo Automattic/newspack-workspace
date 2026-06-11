@@ -22,6 +22,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { DateRange } from '../state/useDateRange';
 import usePromptsData from '../hooks/usePromptsData';
+import LastUpdated from '../components/LastUpdated';
 import TabStateView from './components/TabStateView';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import PromptsErrorBanner from './prompts/PromptsErrorBanner';
@@ -56,7 +57,11 @@ const PromptsTab = ( { range, previousRange }: PromptsTabProps ) => {
 				<>
 					{ data.tab_error && <PromptsErrorBanner /> }
 					<DirectVsInfluencedCallout />
-					<PromptExposureSection current={ data.current } previous={ data.previous } />
+					<PromptExposureSection
+						current={ data.current }
+						previous={ data.previous }
+						lastUpdated={ <LastUpdated tab="prompts" range={ range } previousRange={ previousRange } /> }
+					/>
 					<PromptEngagementSection current={ data.current } previous={ data.previous } />
 					<FreeReaderConversionSection current={ data.current } previous={ data.previous } />
 					<PaidReaderConversionSection current={ data.current } previous={ data.previous } />

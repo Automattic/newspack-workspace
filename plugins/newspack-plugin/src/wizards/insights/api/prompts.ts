@@ -21,6 +21,11 @@
 import apiFetch from '@wordpress/api-fetch';
 
 /**
+ * Internal dependencies
+ */
+import { type CachedEnvelope } from '../state/insightsCache';
+
+/**
  * The kind of placeholder a metric renders. Encoded server-side so
  * the React format layer doesn't have to guess from the field name.
  */
@@ -190,10 +195,7 @@ export interface PromptsQuery {
 
 const ENDPOINT = '/newspack-insights/v1/prompts';
 
-/**
- * Fetch Tab 5 data for the given window pair.
- */
-export const fetchPromptsData = async ( query: PromptsQuery ): Promise< PromptsResponse > => {
+const queryString = ( query: PromptsQuery ): string => {
 	const params = new URLSearchParams();
 	params.set( 'start', query.start );
 	params.set( 'end', query.end );
@@ -201,8 +203,20 @@ export const fetchPromptsData = async ( query: PromptsQuery ): Promise< PromptsR
 		params.set( 'compare_start', query.compare_start );
 		params.set( 'compare_end', query.compare_end );
 	}
-	return apiFetch< PromptsResponse >( {
-		path: `${ ENDPOINT }?${ params.toString() }`,
+	return params.toString();
+};
+
+/**
+ * Fetch Tab 5 data for the given window pair.
+ */
+export const fetchPromptsData = async ( query: PromptsQuery ): Promise< CachedEnvelope< PromptsResponse > > =>
+	apiFetch< CachedEnvelope< PromptsResponse > >( {
+		path: `${ ENDPOINT }?${ queryString( query ) }`,
 		method: 'GET',
 	} );
-};
+
+export const refreshPromptsData = async ( query: PromptsQuery ): Promise< CachedEnvelope< PromptsResponse > > =>
+	apiFetch< CachedEnvelope< PromptsResponse > >( {
+		path: `${ ENDPOINT }/refresh?${ queryString( query ) }`,
+		method: 'POST',
+	} );

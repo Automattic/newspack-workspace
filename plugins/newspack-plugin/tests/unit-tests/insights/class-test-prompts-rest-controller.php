@@ -14,6 +14,7 @@
 
 namespace Newspack\Tests\Insights;
 
+use Newspack\Insights\Cache;
 use Newspack\Insights\Prompts_Metric;
 use Newspack\Insights\Prompts_REST_Controller;
 use WP_REST_Request;
@@ -52,6 +53,9 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 		$this->server   = new WP_REST_Server();
 		$wp_rest_server = $this->server;
 		do_action( 'rest_api_init' );
+
+		// Wipe transients + cooldown markers so cache state doesn't leak between tests.
+		Cache::purge( 'prompts' );
 	}
 
 	/**
@@ -70,6 +74,7 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 		remove_action( 'rest_api_init', [ $this, 'register_prompts_route' ] );
 		global $wp_rest_server;
 		$wp_rest_server = null;
+		Cache::purge( 'prompts' );
 		parent::tear_down();
 	}
 
@@ -88,9 +93,10 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A valid window returns 200 with the state envelope. In the test env the
-	 * proxy is unconfigured, so every metric surfaces `state: 'error'` and
-	 * the controller's `is_window_all_error` derives `tab_error: true`.
+	 * A valid window returns 200 with the cache envelope wrapping the state
+	 * envelope. In the test env the proxy is unconfigured, so every metric
+	 * surfaces `state: 'error'` and the controller's `is_window_all_error`
+	 * derives `tab_error: true`.
 	 */
 	public function test_valid_window_returns_200_envelope() {
 		$response = $this->dispatch(
@@ -101,7 +107,16 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( 200, $response->get_status() );
-		$data = $response->get_data();
+		$body = $response->get_data();
+
+		// Outer cache envelope shape ({ cache, data }).
+		$this->assertArrayHasKey( 'cache', $body );
+		$this->assertArrayHasKey( 'data', $body );
+		$this->assertSame( Cache::SOURCE_BIGQUERY, $body['cache']['source'] );
+		$this->assertNotEmpty( $body['cache']['computed_at'] );
+		$this->assertArrayHasKey( 'cooldown_until', $body['cache'] );
+
+		$data = $body['data'];
 
 		// Phase 2 replaces `tab_pending` with `tab_error`; the Phase 1 key must
 		// not leak through to the wire format.
@@ -161,7 +176,8 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 		);
 
 		$this->assertSame( 200, $response->get_status() );
-		$data = $response->get_data();
+		$body = $response->get_data();
+		$data = $body['data'];
 
 		$this->assertIsArray( $data['previous'] );
 		$this->assertSame( '2026-02-20', $data['previous']['window']['start'] );
@@ -236,6 +252,27 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 			]
 		);
 		$this->assertSame( 400, $response->get_status() );
+	}
+
+	/**
+	 * The refresh route mirrors the GET route's envelope shape and is
+	 * registered alongside it. The route accepts POST (Cached_Controller_Trait
+	 * uses WP_REST_Server::CREATABLE).
+	 */
+	public function test_refresh_route_returns_cache_envelope() {
+		$request = new WP_REST_Request( 'POST', self::ROUTE . '/refresh' );
+		$request->set_param( 'start', '2026-03-22' );
+		$request->set_param( 'end', '2026-04-21' );
+		$response = $this->server->dispatch( $request );
+
+		$this->assertSame( 200, $response->get_status() );
+		$body = $response->get_data();
+		$this->assertArrayHasKey( 'cache', $body );
+		$this->assertArrayHasKey( 'data', $body );
+		$this->assertSame( Cache::SOURCE_BIGQUERY, $body['cache']['source'] );
+		// First refresh seeds the BQ cooldown stamp so the React layer can render the throttle UI.
+		$this->assertNotEmpty( $body['cache']['cooldown_until'] );
+		$this->assertArrayHasKey( 'tab_error', $body['data'] );
 	}
 
 	/**
