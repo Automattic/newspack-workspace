@@ -42,6 +42,10 @@ class Newspack_Test_Asset_Version extends WP_UnitTestCase {
 	 */
 	private function write_fixture( $name, $contents ) {
 		$path = NEWSPACK_ABSPATH . 'dist/' . $name . '.asset.php';
+		$dir  = dirname( $path );
+		if ( ! is_dir( $dir ) ) {
+			wp_mkdir_p( $dir );
+		}
 		file_put_contents( $path, $contents ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents
 		$this->fixture_files[] = $path;
 	}

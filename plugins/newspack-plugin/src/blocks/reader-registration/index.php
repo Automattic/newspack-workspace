@@ -62,13 +62,13 @@ function enqueue_scripts() {
 		$handle,
 		\Newspack\Newspack::plugin_url() . '/dist/reader-registration-block.css',
 		[],
-		NEWSPACK_PLUGIN_VERSION
+		\Newspack\Newspack::asset_version( 'reader-registration-block' )
 	);
 	\wp_enqueue_script(
 		$handle,
 		\Newspack\Newspack::plugin_url() . '/dist/reader-registration-block.js',
 		[ 'wp-polyfill', 'newspack-reader-activation' ],
-		NEWSPACK_PLUGIN_VERSION,
+		\Newspack\Newspack::asset_version( 'reader-registration-block' ),
 		true
 	);
 	\wp_script_add_data( $handle, 'async', true );
