@@ -51,7 +51,7 @@
 					"slug": "contrast"
 				},
 				{
-					"color": "#3E3E3E",
+					"color": "#5D5D5D",
 					"name": "Contrast / Two",
 					"slug": "contrast-2"
 				},
@@ -279,8 +279,8 @@
 			"color": {
 				"neutral-100": "#000000",
 				"neutral-90": "#1E1E1E",
-				"neutral-80": "#3E3E3E",
-				"neutral-70": "#000000B3",
+				"neutral-80": "#393939",
+				"neutral-70": "#5D5D5D",
 				"neutral-60": "#6C6C6C",
 				"neutral-50": "#949494",
 				"neutral-40": "#CCCCCC",
@@ -289,6 +289,18 @@
 				"neutral-10": "#F0F0F0",
 				"neutral-5": "#F7F7F7",
 				"neutral-0": "#FFFFFF",
+				"overlay-100": "#000000F2",
+				"overlay-90": "#000000E6",
+				"overlay-80": "#000000CC",
+				"overlay-70": "#000000B3",
+				"overlay-60": "#00000099",
+				"overlay-50": "#00000080",
+				"overlay-40": "#00000066",
+				"overlay-30": "#0000004D",
+				"overlay-20": "#00000033",
+				"overlay-10": "#00000026",
+				"overlay-5": "#0000001A",
+				"overlay-0": "#0000000D",
 				"error-60": "#B32D2E",
 				"error-50": "#D63638",
 				"error-5": "#FACFD2",

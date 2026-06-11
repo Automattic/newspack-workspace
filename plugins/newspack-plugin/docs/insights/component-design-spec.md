@@ -56,16 +56,16 @@ Two-namespace convention with documented rules:
 - `$alert-yellow` — StalePill base color (via color-mix)
 
 **SERIES_PALETTE** for multi-series charts (LineChart, PieChart):
-1. `primary-500` — anchor blue
+1. `primary-600` — anchor blue
 2. `quaternary-700` — orange
 3. `secondary-700` — green
 4. `tertiary-700` — pink/mauve
-5. `neutral-700` — dark gray
+5. `neutral-600` — dark gray
 6. `primary-300` — mid blue (6+ series fallback)
 
 Reserved (NOT in series palette): error reds, alert yellows. These mean state, not data.
 
-**Known footgun:** `wp-colors.$gray-700` (#757575) ≠ `newspack-colors.$neutral-700` (#000000b3). Same number, different colors. Always use `wp-colors.$gray-700` for neutrals; only reach into `newspack-colors.$neutral-*` for semantic exceptions documented per-component.
+**Known footgun:** `wp-colors.$gray-700` (#757575) ≠ `newspack-colors.$neutral-700` (#5d5d5d). Same number, different colors. Always use `wp-colors.$gray-700` for neutrals; only reach into `newspack-colors.$neutral-*` for semantic exceptions documented per-component.
 
 ### Card chrome
 
