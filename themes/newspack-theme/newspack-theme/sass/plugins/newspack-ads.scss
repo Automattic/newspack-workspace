@@ -7,23 +7,6 @@
 	&.global_above_header {
 		background-color: var(--newspack-theme-color-bg-pre);
 	}
-
-	&.sticky {
-		background-color: var(--newspack-theme-color-bg-body);
-
-		button {
-			background-color: var(--newspack-theme-color-bg-body);
-			color: var(--newspack-theme-color-text-main);
-		}
-	}
-}
-
-.newspack_amp_sticky_ad {
-	button,
-	.amp-sticky-ad-close-button {
-		background-color: var(--newspack-theme-color-bg-body);
-		color: var(--newspack-theme-color-text-main);
-	}
 }
 
 .widget_newspack-ads-widget .textwidget,
