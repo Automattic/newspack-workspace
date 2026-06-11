@@ -92,9 +92,10 @@ class Newspack_Test_Cached_Controller_Trait extends WP_UnitTestCase {
 	}
 
 	/**
-	 * BQ controllers surface a 429 error on cooldown.
+	 * Cooldown rejection from a BQ-source controller returns a 200 response
+	 * whose envelope carries cooldown_until — never a WP_Error / 429.
 	 */
-	public function test_refresh_response_returns_429_during_bq_cooldown(): void {
+	public function test_refresh_response_returns_envelope_with_cooldown_during_bq_cooldown(): void {
 		$controller = new class() extends WP_REST_Controller {
 			use Cached_Controller_Trait;
 
@@ -118,7 +119,7 @@ class Newspack_Test_Cached_Controller_Trait extends WP_UnitTestCase {
 			 * @param WP_REST_Request $request Request.
 			 * @param callable        $cb      Callback.
 			 */
-			public function call_refresh( WP_REST_Request $request, callable $cb ) {
+			public function call_refresh( WP_REST_Request $request, callable $cb ): WP_REST_Response {
 				return $this->refresh_response( $request, $cb );
 			}
 		};
@@ -128,10 +129,11 @@ class Newspack_Test_Cached_Controller_Trait extends WP_UnitTestCase {
 		};
 
 		$controller->call_refresh( $this->request_for_window(), $compute );
-		$result = $controller->call_refresh( $this->request_for_window(), $compute );
+		$second = $controller->call_refresh( $this->request_for_window(), $compute );
 
-		$this->assertWPError( $result );
-		$this->assertSame( 'newspack_insights_cooldown', $result->get_error_code() );
-		$this->assertSame( 429, $result->get_error_data()['status'] );
+		$body = $second->get_data();
+		$this->assertSame( [ 'value' => 1 ], $body['data'] );
+		$this->assertNotEmpty( $body['cache']['cooldown_until'] );
+		$this->assertSame( Cache::SOURCE_BIGQUERY, $body['cache']['source'] );
 	}
 }

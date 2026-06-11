@@ -44,23 +44,25 @@ trait Cached_Controller_Trait {
 	}
 
 	/**
-	 * POST /{tab}/refresh wrapper. Returns a fresh envelope or a 429 WP_Error.
+	 * POST /{tab}/refresh wrapper. Always returns a 200 envelope — when the
+	 * BQ cooldown blocks a refresh, `cache.cooldown_until` is populated in
+	 * the envelope so the client can render the throttle UI without relying
+	 * on a 4xx response (Atomic's edge mutates 4xx bodies).
 	 *
 	 * @param WP_REST_Request $request       Incoming request.
 	 * @param callable        $build_payload () => array.
-	 * @return WP_REST_Response|\WP_Error
 	 */
-	protected function refresh_response( WP_REST_Request $request, callable $build_payload ) {
-		$result = Cache::refresh(
-			$this->tab_slug(),
-			$this->cache_source(),
-			self::cache_key_parts( $request ),
-			$build_payload
+	protected function refresh_response( WP_REST_Request $request, callable $build_payload ): WP_REST_Response {
+		return rest_ensure_response(
+			self::wrap_envelope(
+				Cache::refresh(
+					$this->tab_slug(),
+					$this->cache_source(),
+					self::cache_key_parts( $request ),
+					$build_payload
+				)
+			)
 		);
-		if ( is_wp_error( $result ) ) {
-			return $result;
-		}
-		return rest_ensure_response( self::wrap_envelope( $result ) );
 	}
 
 	/**

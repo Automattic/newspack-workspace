@@ -15,7 +15,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import { CooldownError, isCooldown, type CachedEnvelope } from '../state/insightsCache';
+import { type CachedEnvelope } from '../state/insightsCache';
 
 export type StorageBackend = 'hpos' | 'legacy';
 
@@ -156,17 +156,8 @@ export const fetchDonorsData = async ( query: DonorsQuery ): Promise< CachedEnve
 		method: 'GET',
 	} );
 
-export const refreshDonorsData = async ( query: DonorsQuery ): Promise< CachedEnvelope< DonorsResponse > > => {
-	try {
-		return await apiFetch< CachedEnvelope< DonorsResponse > >( {
-			path: `${ ENDPOINT }/refresh?${ queryString( query ) }`,
-			method: 'POST',
-		} );
-	} catch ( e: unknown ) {
-		if ( isCooldown( e ) ) {
-			const data = ( e as { data: { cooldown_until: string } } ).data;
-			throw new CooldownError( data.cooldown_until );
-		}
-		throw e;
-	}
-};
+export const refreshDonorsData = async ( query: DonorsQuery ): Promise< CachedEnvelope< DonorsResponse > > =>
+	apiFetch< CachedEnvelope< DonorsResponse > >( {
+		path: `${ ENDPOINT }/refresh?${ queryString( query ) }`,
+		method: 'POST',
+	} );

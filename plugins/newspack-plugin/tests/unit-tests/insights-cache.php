@@ -195,12 +195,13 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A second refresh inside the cooldown window returns a 429 WP_Error.
+	 * Cooldown rejection returns the cached envelope (no WP_Error) with
+	 * cooldown_until populated, so the response transport stays 2xx.
 	 */
-	public function test_refresh_during_bq_cooldown_returns_wp_error_429(): void {
+	public function test_refresh_during_bq_cooldown_returns_cached_envelope_with_cooldown_until(): void {
 		$key_parts = [ '2026-01-01', '2026-01-31', null, null ];
 
-		Cache::refresh(
+		$first = Cache::refresh(
 			'gates',
 			Cache::SOURCE_BIGQUERY,
 			$key_parts,
@@ -209,7 +210,7 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 			}
 		);
 
-		$result = Cache::refresh(
+		$second = Cache::refresh(
 			'gates',
 			Cache::SOURCE_BIGQUERY,
 			$key_parts,
@@ -218,10 +219,11 @@ class Newspack_Test_Insights_Cache extends WP_UnitTestCase {
 			}
 		);
 
-		$this->assertWPError( $result );
-		$this->assertSame( 'newspack_insights_cooldown', $result->get_error_code() );
-		$this->assertSame( 429, $result->get_error_data()['status'] );
-		$this->assertNotEmpty( $result->get_error_data()['cooldown_until'] );
+		$this->assertIsArray( $second );
+		$this->assertSame( [ 'value' => 1 ], $second['payload'], 'Cooldown response replays the cached payload.' );
+		$this->assertSame( $first['computed_at'], $second['computed_at'], 'Cooldown response preserves computed_at.' );
+		$this->assertSame( Cache::SOURCE_BIGQUERY, $second['source'] );
+		$this->assertNotEmpty( $second['cooldown_until'] );
 	}
 
 	/**

@@ -2,7 +2,7 @@
  * Tests for the insightsCache module.
  */
 
-import { CachedEnvelope, CooldownError, insightsCache, makeSlotKey } from './insightsCache';
+import { CachedEnvelope, insightsCache, makeSlotKey } from './insightsCache';
 
 describe( 'makeSlotKey', () => {
 	it( 'composes a stable key from tab + window components', () => {
@@ -132,19 +132,13 @@ describe( 'insightsCache.refresh', () => {
 		expect( slot.cooldownUntil ).toBeNull();
 	} );
 
-	it( 'on CooldownError, writes cooldownUntil and preserves prior data', async () => {
-		// Seed with an earlier success.
-		insightsCache.ensureFetched( 'k', () =>
-			Promise.resolve( {
-				cache: { source: 'bigquery', computed_at: '2026-06-09T00:00:00Z', cooldown_until: null },
-				data: { v: 1 },
-			} )
-		);
-		await Promise.resolve();
-		await Promise.resolve();
+	it( 'reads cooldown_until from the refreshed envelope', async () => {
+		const throttled: CachedEnvelope< { v: number } > = {
+			cache: { source: 'bigquery', computed_at: '2026-06-09T00:00:00Z', cooldown_until: '2026-06-10T00:10:00Z' },
+			data: { v: 1 },
+		};
 
-		const err = new CooldownError( '2026-06-10T00:10:00Z' );
-		insightsCache.refresh( 'k', () => Promise.reject( err ) );
+		insightsCache.refresh( 'k', () => Promise.resolve( throttled ) );
 		await Promise.resolve();
 		await Promise.resolve();
 

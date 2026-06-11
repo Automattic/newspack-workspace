@@ -5,30 +5,10 @@
  * lazily on first read and survive tab unmounts; React subscribers attach
  * via subscribe() and read via getSlot(). ensureFetched() populates a slot
  * from a fetcher, deduping concurrent calls. refresh() re-runs a fetch
- * unconditionally; on a CooldownError it preserves the prior data and
- * records the cooldown timestamp. setCooldown() writes the timestamp
- * directly (e.g. after a 429 from the manual-refresh endpoint).
+ * unconditionally; cooldown state is carried in the response envelope's
+ * `cache.cooldown_until` field. setCooldown() writes the timestamp
+ * directly (e.g. after a manual-refresh response that signals throttling).
  */
-
-export class CooldownError extends Error {
-	name = 'CooldownError';
-	cooldownUntil: string;
-	constructor( cooldownUntil: string ) {
-		super( 'Refresh is rate limited.' );
-		this.cooldownUntil = cooldownUntil;
-	}
-}
-
-/**
- * Whether an `apiFetch` rejection carries a cache cooldown 429.
- */
-export const isCooldown = ( e: unknown ): boolean => {
-	if ( typeof e !== 'object' || e === null ) {
-		return false;
-	}
-	const err = e as { code?: string; data?: { status?: number; cooldown_until?: string } };
-	return err.code === 'newspack_insights_cooldown' || err.data?.status === 429;
-};
 
 type Source = 'bigquery' | 'external' | 'local';
 type Status = 'idle' | 'loading' | 'success' | 'error';
@@ -152,12 +132,6 @@ export const insightsCache = {
 					inFlight: null,
 				} );
 			} catch ( e: unknown ) {
-				if ( e instanceof CooldownError ) {
-					// Preserve prior data/computedAt; if the slot had no prior success,
-					// status:'success' with data:null is harmless (consumer renders nothing).
-					setSlot( key, { cooldownUntil: e.cooldownUntil, status: 'success', inFlight: null } );
-					return;
-				}
 				const message = e instanceof Error ? e.message : String( e );
 				setSlot( key, { status: 'error', error: message, inFlight: null } );
 			} finally {

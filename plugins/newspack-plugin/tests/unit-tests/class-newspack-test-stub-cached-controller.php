@@ -43,9 +43,8 @@ class Newspack_Test_Stub_Cached_Controller extends WP_REST_Controller {
 	 *
 	 * @param WP_REST_Request $request Test request.
 	 * @param callable        $cb      Payload builder.
-	 * @return WP_REST_Response|WP_Error
 	 */
-	public function call_refresh( WP_REST_Request $request, callable $cb ) {
+	public function call_refresh( WP_REST_Request $request, callable $cb ): WP_REST_Response {
 		return $this->refresh_response( $request, $cb );
 	}
 }

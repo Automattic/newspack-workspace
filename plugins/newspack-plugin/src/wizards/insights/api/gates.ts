@@ -19,7 +19,7 @@ import apiFetch from '@wordpress/api-fetch';
 /**
  * Internal dependencies
  */
-import { CooldownError, isCooldown, type CachedEnvelope } from '../state/insightsCache';
+import { type CachedEnvelope } from '../state/insightsCache';
 
 /**
  * The kind of placeholder a metric renders. Encoded server-side so
@@ -151,17 +151,8 @@ export const fetchGatesData = async ( query: GatesQuery ): Promise< CachedEnvelo
 		method: 'GET',
 	} );
 
-export const refreshGatesData = async ( query: GatesQuery ): Promise< CachedEnvelope< GatesResponse > > => {
-	try {
-		return await apiFetch< CachedEnvelope< GatesResponse > >( {
-			path: `${ ENDPOINT }/refresh?${ queryString( query ) }`,
-			method: 'POST',
-		} );
-	} catch ( e: unknown ) {
-		if ( isCooldown( e ) ) {
-			const data = ( e as { data: { cooldown_until: string } } ).data;
-			throw new CooldownError( data.cooldown_until );
-		}
-		throw e;
-	}
-};
+export const refreshGatesData = async ( query: GatesQuery ): Promise< CachedEnvelope< GatesResponse > > =>
+	apiFetch< CachedEnvelope< GatesResponse > >( {
+		path: `${ ENDPOINT }/refresh?${ queryString( query ) }`,
+		method: 'POST',
+	} );

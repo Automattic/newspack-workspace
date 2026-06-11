@@ -10,8 +10,6 @@
 
 namespace Newspack\Insights;
 
-use WP_Error;
-
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -87,6 +85,22 @@ final class Cache {
 	}
 
 	/**
+	 * Read a cached envelope from the per-tab transient, or null when no
+	 * usable entry is present.
+	 *
+	 * @param string   $tab       Tab slug.
+	 * @param string[] $key_parts Canonicalized window components.
+	 * @return array{ payload: array, computed_at: string, source: string }|null
+	 */
+	private static function read_cached( string $tab, array $key_parts ): ?array {
+		$cached = get_transient( self::transient_key( $tab, $key_parts ) );
+		if ( is_array( $cached ) && isset( $cached['payload'], $cached['computed_at'], $cached['source'] ) ) {
+			return $cached;
+		}
+		return null;
+	}
+
+	/**
 	 * Get the TTL for a given source.
 	 *
 	 * @param string $source SOURCE_* constant.
@@ -144,20 +158,22 @@ final class Cache {
 	}
 
 	/**
-	 * Force a recompute. Returns the new envelope, or WP_Error on BQ cooldown.
+	 * Force a recompute. Returns the new envelope. When BQ refresh is throttled
+	 * by the cooldown, returns the previously-cached envelope (or an empty one)
+	 * with `cooldown_until` populated, so the response transport stays 2xx.
 	 *
 	 * @param string   $tab       Tab slug.
 	 * @param string   $source    SOURCE_* constant.
 	 * @param string[] $key_parts Canonicalized window components.
 	 * @param callable $compute   () => array — orchestrator payload.
-	 * @return array|WP_Error
+	 * @return array
 	 */
 	public static function refresh(
 		string $tab,
 		string $source,
 		array $key_parts,
 		callable $compute
-	) {
+	): array {
 		if ( self::is_disabled() ) {
 			return self::envelope( (array) $compute(), $source );
 		}
@@ -165,16 +181,24 @@ final class Cache {
 		if ( self::SOURCE_BIGQUERY === $source ) {
 			$until = self::bq_cooldown_until( $tab );
 			if ( null !== $until ) {
-				$error = new WP_Error(
-					'newspack_insights_cooldown',
-					__( 'BigQuery refresh is rate limited. Try again shortly.', 'newspack-plugin' ),
-					[
-						'status'         => 429,
-						'cooldown_until' => $until,
-					]
-				);
 				self::log_cooldown( $tab, $until );
-				return $error;
+				$cached = self::read_cached( $tab, $key_parts );
+				if ( null !== $cached ) {
+					return [
+						'payload'        => $cached['payload'],
+						'computed_at'    => $cached['computed_at'],
+						'source'         => $cached['source'],
+						'cooldown_until' => $until,
+					];
+				}
+				// No prior cache to serve — return an empty envelope with the cooldown
+				// marker so the client can still render the throttle UI.
+				return [
+					'payload'        => [],
+					'computed_at'    => null,
+					'source'         => $source,
+					'cooldown_until' => $until,
+				];
 			}
 			update_option( self::cooldown_option( $tab ), time(), false );
 		}
