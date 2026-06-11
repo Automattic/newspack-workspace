@@ -28,11 +28,16 @@ class Membership_Expiry {
 	/**
 	 * Prevent membership expiration if there are other active subscriptions.
 	 *
-	 * @param bool                                                      $cancel_membership Whether to cancel the membership when the subscription is cancelled (default true).
-	 * @param \WC_Memberships_Integration_Subscriptions_User_Membership $user_membership The subscription-tied membership.
+	 * @param bool                            $cancel_membership Whether to cancel the membership when the subscription is cancelled (default true).
+	 * @param \WC_Memberships_User_Membership $user_membership   The membership. Only subscription-tied memberships (\WC_Memberships_Integration_Subscriptions_User_Membership) expose get_subscription_id()/set_subscription_id().
 	 */
 	public static function prevent_membership_expiration( $cancel_membership, $user_membership ) {
 		if ( ! function_exists( 'wcs_get_subscription' ) ) {
+			return $cancel_membership;
+		}
+		// `wc_memberships_expire_user_membership` fires for every membership, but only the
+		// Subscriptions integration class exposes get_subscription_id()/set_subscription_id().
+		if ( ! method_exists( $user_membership, 'get_subscription_id' ) ) {
 			return $cancel_membership;
 		}
 		$membership_product_id = $user_membership->get_product_id();

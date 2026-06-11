@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-06-10T00:44:57+00:00\n"
+"POT-Creation-Date: 2026-06-10T08:03:33+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -3710,7 +3710,7 @@ msgid "Check availability"
 msgstr ""
 
 #. translators: %s: Subscription ID
-#: includes/plugins/wc-memberships/class-membership-expiry.php:60
+#: includes/plugins/wc-memberships/class-membership-expiry.php:65
 #, php-format
 msgid "Another active subscription for this product was found (Subscription ID: %s). Expiry prevented."
 msgstr ""
