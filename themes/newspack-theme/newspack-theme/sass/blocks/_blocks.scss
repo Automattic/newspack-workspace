@@ -1691,6 +1691,11 @@ $colors: (
 .page-template-single-feature,
 .page-template-no-header-footer {
 	.entry .entry-content > *,
+	// Some plugins (e.g. Everlit) wrap the_content in a span/div at render
+	// time, which interposes a parent between .entry-content and the aligned
+	// block and breaks the direct-child match above. Allow one level of such
+	// wrapping so wide/full alignment continues to work.
+	.entry .entry-content > .everlit-audio > *,
 	.newspack-content-gate__inline-gate > *,
 	[id="pico"] > * {
 		&.alignwide {

@@ -7,6 +7,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use Newspack\Newsletters\Subscription_List;
 use Newspack\Newsletters\Subscription_Lists;
 use Newspack\Newsletters\Reader_Activation;
 
@@ -25,6 +26,8 @@ class Newspack_Newsletters_Subscription {
 
 	const SUBSCRIPTION_INTENT_CPT = 'np_nl_sub_intent';
 
+	const LISTS_CACHE_PREFIX = 'newspack_newsletters_lists_';
+
 	/**
 	 * Memoized lists config.
 	 *
@@ -38,6 +41,10 @@ class Newspack_Newsletters_Subscription {
 	public static function init() {
 		add_action( 'rest_api_init', [ __CLASS__, 'register_api_endpoints' ] );
 		add_action( 'newspack_registered_reader', [ __CLASS__, 'newspack_registered_reader' ], 10, 5 );
+
+		add_action( 'save_post_' . Subscription_Lists::CPT, [ __CLASS__, 'clear_lists_cache' ] );
+		add_action( 'deleted_post', [ __CLASS__, 'clear_lists_cache_on_delete' ], 10, 2 );
+		add_action( 'newspack_newsletters_provider_credentials_changed', [ __CLASS__, 'clear_lists_cache' ] );
 
 		/** User email verification for subscription management. */
 		add_action( 'resetpass_form', [ __CLASS__, 'set_current_user_email_verified' ] );
@@ -115,6 +122,113 @@ class Newspack_Newsletters_Subscription {
 				],
 			]
 		);
+		register_rest_route(
+			Newspack_Newsletters::API_NAMESPACE,
+			'/lists/local',
+			[
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => [ __CLASS__, 'api_create_local_list' ],
+				'permission_callback' => [ 'Newspack_Newsletters', 'api_administration_permissions_check' ],
+				'args'                => [
+					'title'       => [
+						'type'              => 'string',
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'description' => [
+						'type'              => 'string',
+						'required'          => false,
+						'sanitize_callback' => 'sanitize_textarea_field',
+					],
+					'audience'    => [
+						'type'              => 'string',
+						'required'          => false,
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+				],
+			]
+		);
+		register_rest_route(
+			Newspack_Newsletters::API_NAMESPACE,
+			'/lists/local/(?P<id>\d+)',
+			[
+				[
+					'methods'             => \WP_REST_Server::EDITABLE,
+					'callback'            => [ __CLASS__, 'api_update_local_list' ],
+					'permission_callback' => [ 'Newspack_Newsletters', 'api_administration_permissions_check' ],
+					'args'                => [
+						'id'          => [
+							'type'     => 'integer',
+							'required' => true,
+						],
+						'title'       => [
+							'type'              => 'string',
+							'required'          => true,
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'description' => [
+							'type'              => 'string',
+							'required'          => false,
+							'sanitize_callback' => 'sanitize_textarea_field',
+						],
+						'audience'    => [
+							'type'              => 'string',
+							'required'          => false,
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+					],
+				],
+				[
+					'methods'             => \WP_REST_Server::DELETABLE,
+					'callback'            => [ __CLASS__, 'api_delete_local_list' ],
+					'permission_callback' => [ 'Newspack_Newsletters', 'api_administration_permissions_check' ],
+					'args'                => [
+						'id' => [
+							'type'     => 'integer',
+							'required' => true,
+						],
+					],
+				],
+			]
+		);
+		register_rest_route(
+			Newspack_Newsletters::API_NAMESPACE,
+			'/lists/audiences',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ __CLASS__, 'api_get_audiences' ],
+				'permission_callback' => [ 'Newspack_Newsletters', 'api_administration_permissions_check' ],
+			]
+		);
+		register_rest_route(
+			Newspack_Newsletters::API_NAMESPACE,
+			'/lists/(?P<id>\d+)',
+			[
+				'methods'             => 'PATCH',
+				'callback'            => [ __CLASS__, 'api_patch_list' ],
+				'permission_callback' => [ 'Newspack_Newsletters', 'api_administration_permissions_check' ],
+				'args'                => [
+					'id'          => [
+						'type'     => 'integer',
+						'required' => true,
+					],
+					'active'      => [
+						'type'     => 'boolean',
+						'required' => false,
+					],
+					'title'       => [
+						'type'              => 'string',
+						'required'          => false,
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'description' => [
+						'type'              => 'string',
+						'required'          => false,
+						'sanitize_callback' => 'sanitize_textarea_field',
+					],
+				],
+			]
+		);
 	}
 
 	/**
@@ -143,11 +257,215 @@ class Newspack_Newsletters_Subscription {
 	 * @return WP_REST_Response|WP_Error WP_REST_Response on success, or WP_Error object on failure.
 	 */
 	public static function api_update_lists( $request ) {
-		$update = self::update_lists( $request['lists'] );
+		$lists = $request['lists'];
+		if ( ! is_array( $lists ) ) {
+			return new \WP_Error(
+				'rest_invalid_param',
+				__( 'The "lists" parameter must be an array.', 'newspack-newsletters' ),
+				[ 'status' => 400 ]
+			);
+		}
+		$update = self::update_lists( $lists );
 		if ( is_wp_error( $update ) ) {
 			return \rest_ensure_response( $update );
 		}
 		return \rest_ensure_response( self::get_lists() );
+	}
+
+	/**
+	 * API method to create a single local subscription list.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_REST_Response|WP_Error WP_REST_Response on success, or WP_Error object on failure.
+	 */
+	public static function api_create_local_list( $request ) {
+		// Mirror the React shell's CTA gate so a stale page (provider
+		// switched in another tab) cannot create an unreachable list.
+		$provider = Newspack_Newsletters::get_service_provider();
+		if (
+			empty( $provider )
+			|| 'manual' === Newspack_Newsletters::service_provider()
+			|| ! Newspack_Newsletters::is_service_provider_configured()
+			|| empty( $provider::$support_local_lists )
+		) {
+			return \rest_ensure_response(
+				new WP_Error(
+					'newspack_newsletters_local_lists_unavailable',
+					__( 'Local lists are not available for the configured provider.', 'newspack-newsletters' ),
+					[ 'status' => 400 ]
+				)
+			);
+		}
+
+		$list = Subscription_Lists::create_local_list(
+			(string) $request->get_param( 'title' ),
+			(string) $request->get_param( 'description' ),
+			(string) $request->get_param( 'audience' )
+		);
+		if ( is_wp_error( $list ) ) {
+			return \rest_ensure_response( $list );
+		}
+		return \rest_ensure_response( $list->to_array() );
+	}
+
+	/**
+	 * API method to update a single local subscription list.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_REST_Response|WP_Error WP_REST_Response on success, or WP_Error object on failure.
+	 */
+	public static function api_update_local_list( $request ) {
+		$list = Subscription_Lists::update_local_list(
+			(int) $request->get_param( 'id' ),
+			(string) $request->get_param( 'title' ),
+			(string) $request->get_param( 'description' ),
+			(string) $request->get_param( 'audience' )
+		);
+		if ( is_wp_error( $list ) ) {
+			return \rest_ensure_response( $list );
+		}
+		return \rest_ensure_response( $list->to_array() );
+	}
+
+	/**
+	 * API method to update a single subscription list. Locals must use
+	 * /lists/local/{id} for title/description — that path also handles
+	 * audience binding.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public static function api_patch_list( $request ) {
+		$id   = (int) $request->get_param( 'id' );
+		$post = get_post( $id );
+		if ( ! $post || Subscription_Lists::CPT !== $post->post_type ) {
+			return \rest_ensure_response(
+				new WP_Error(
+					'newspack_newsletters_list_not_found',
+					__( 'Subscription list not found.', 'newspack-newsletters' ),
+					[ 'status' => 404 ]
+				)
+			);
+		}
+
+		$list   = new Subscription_List( $post );
+		$fields = [];
+
+		if ( null !== $request->get_param( 'active' ) ) {
+			$active = (bool) $request->get_param( 'active' );
+			// Mirror the bulk path: signup forms can't see unconfigured locals, so don't let them be active.
+			if ( $active && $list->is_local() && ! $list->is_configured_for_current_provider() ) {
+				$active = false;
+			}
+			$fields['active'] = $active;
+		}
+
+		$has_title       = null !== $request->get_param( 'title' );
+		$has_description = null !== $request->get_param( 'description' );
+		if ( $has_title || $has_description ) {
+			if ( $list->is_local() ) {
+				return \rest_ensure_response(
+					new WP_Error(
+						'newspack_newsletters_local_list_use_local_endpoint',
+						__( 'Local lists must be edited via /lists/local/{id}.', 'newspack-newsletters' ),
+						[ 'status' => 400 ]
+					)
+				);
+			}
+			if ( $has_title ) {
+				$title = trim( (string) $request->get_param( 'title' ) );
+				if ( '' === $title ) {
+					return \rest_ensure_response(
+						new WP_Error(
+							'newspack_newsletters_list_invalid_title',
+							__( 'List title is required.', 'newspack-newsletters' ),
+							[ 'status' => 400 ]
+						)
+					);
+				}
+				$fields['title'] = $title;
+			}
+			if ( $has_description ) {
+				$fields['description'] = (string) $request->get_param( 'description' );
+			}
+		}
+
+		if ( ! empty( $fields ) ) {
+			$updated = $list->update( $fields );
+			if ( is_wp_error( $updated ) ) {
+				return \rest_ensure_response( $updated );
+			}
+		}
+
+		return \rest_ensure_response( $list->to_array() );
+	}
+
+	/**
+	 * API method to delete a single local subscription list.
+	 *
+	 * @param WP_REST_Request $request Full details about the request.
+	 *
+	 * @return WP_REST_Response|WP_Error WP_REST_Response on success, or WP_Error object on failure.
+	 */
+	public static function api_delete_local_list( $request ) {
+		$result = Subscription_Lists::delete_local_list( (int) $request->get_param( 'id' ) );
+		if ( is_wp_error( $result ) ) {
+			return \rest_ensure_response( $result );
+		}
+		return \rest_ensure_response( [ 'deleted' => true ] );
+	}
+
+	/**
+	 * API method to fetch native audiences from the active provider, plus
+	 * the provider-aware labels the modal needs for its picker.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public static function api_get_audiences() {
+		$payload = [
+			'audiences'        => [],
+			'audience_label'   => __( 'List', 'newspack-newsletters' ),
+			'help_before_save' => '',
+		];
+
+		$provider = Newspack_Newsletters::get_service_provider();
+		if ( empty( $provider ) ) {
+			return \rest_ensure_response( $payload );
+		}
+
+		$payload['audience_label']   = $provider::label( 'List' );
+		$payload['help_before_save'] = $provider::label( 'tag_metabox_before_save' );
+
+		if ( ! method_exists( $provider, 'get_lists' ) ) {
+			return \rest_ensure_response( $payload );
+		}
+
+		$lists = $provider->get_lists();
+		if ( is_wp_error( $lists ) || ! is_array( $lists ) ) {
+			return \rest_ensure_response( $payload );
+		}
+
+		$audiences = [];
+		foreach ( $lists as $list ) {
+			// Native audiences only — providers (Mailchimp) tack groups
+			// and tags onto the same payload with a non-empty `type`,
+			// which would point our auto-generated tag at another tag.
+			if ( ! empty( $list['type'] ) ) {
+				continue;
+			}
+			if ( empty( $list['id'] ) || empty( $list['name'] ) ) {
+				continue;
+			}
+			$audiences[] = [
+				'id'   => (string) $list['id'],
+				'name' => (string) $list['name'],
+			];
+		}
+		$payload['audiences'] = $audiences;
+		return \rest_ensure_response( $payload );
 	}
 
 	/**
@@ -160,16 +478,16 @@ class Newspack_Newsletters_Subscription {
 		if ( empty( $provider ) ) {
 			return new WP_Error( 'newspack_newsletters_invalid_provider', __( 'Provider is not set.' ) );
 		}
+		$cache_key = self::LISTS_CACHE_PREFIX . Newspack_Newsletters::service_provider();
+		$cached    = get_transient( $cache_key );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
 		try {
-			/**
-			 * Here we always fetch the lists from the ESP, because we want to make sure we have the latest data.
-			 */
 			$lists = $provider->get_lists();
 			if ( is_wp_error( $lists ) ) {
 				return $lists;
 			}
-			$saved_lists = Subscription_Lists::get_configured_for_current_provider();
-
 			/**
 			 * We loop through the lists returned by the ESP.
 			 * Only remote lists that still exist in the ESP will be returned.
@@ -200,12 +518,10 @@ class Newspack_Newsletters_Subscription {
 			 */
 			Subscription_Lists::garbage_collector( wp_list_pluck( $return_lists, 'db_id' ) );
 
-			// Add local lists to the response.
-			foreach ( $saved_lists as $saved_list ) {
-				if ( $saved_list->is_local() ) {
-					$return_lists[] = $saved_list->to_array();
-				}
+			foreach ( Subscription_Lists::get_locals_for_current_provider() as $local_list ) {
+				$return_lists[] = $local_list->to_array();
 			}
+			set_transient( $cache_key, $return_lists, self::get_lists_cache_ttl() );
 			return $return_lists;
 		} catch ( \Exception $e ) {
 			return new WP_Error(
@@ -214,6 +530,36 @@ class Newspack_Newsletters_Subscription {
 			);
 		}
 		return [];
+	}
+
+	/**
+	 * TTL, in seconds, for the cached subscription lists.
+	 *
+	 * @return int
+	 */
+	private static function get_lists_cache_ttl() {
+		return (int) apply_filters( 'newspack_newsletters_lists_cache_ttl', 5 * MINUTE_IN_SECONDS );
+	}
+
+	/**
+	 * Clear the cached subscription lists for every registered provider.
+	 */
+	public static function clear_lists_cache() {
+		foreach ( array_keys( Newspack_Newsletters::get_registered_providers() ) as $slug ) {
+			delete_transient( self::LISTS_CACHE_PREFIX . $slug );
+		}
+	}
+
+	/**
+	 * Clear the cache when a subscription list post is deleted.
+	 *
+	 * @param int           $post_id Deleted post ID.
+	 * @param \WP_Post|null $post   Deleted post object.
+	 */
+	public static function clear_lists_cache_on_delete( $post_id, $post = null ) {
+		if ( $post instanceof \WP_Post && Subscription_Lists::CPT === $post->post_type ) {
+			self::clear_lists_cache();
+		}
 	}
 
 	/**
@@ -281,15 +627,24 @@ class Newspack_Newsletters_Subscription {
 	public static function sanitize_lists( $lists ) {
 		$sanitized = [];
 		foreach ( $lists as $list ) {
-			if ( ! isset( $list['id'], $list['title'] ) || empty( $list['id'] ) || empty( $list['title'] ) ) {
+			if ( ! isset( $list['id'] ) || empty( $list['id'] ) ) {
 				continue;
 			}
-			$sanitized[] = [
-				'id'          => $list['id'],
-				'active'      => isset( $list['active'] ) ? (bool) $list['active'] : false,
-				'title'       => $list['title'],
-				'description' => isset( $list['description'] ) ? (string) $list['description'] : '',
+			$entry = [
+				'id'     => $list['id'],
+				'active' => isset( $list['active'] ) ? (bool) $list['active'] : false,
 			];
+			// Omit null/non-string title and description so update() no-ops the field.
+			if ( isset( $list['title'] ) && is_string( $list['title'] ) ) {
+				$title = trim( $list['title'] );
+				if ( '' !== $title ) {
+					$entry['title'] = $title;
+				}
+			}
+			if ( isset( $list['description'] ) && is_string( $list['description'] ) ) {
+				$entry['description'] = $list['description'];
+			}
+			$sanitized[] = $entry;
 		}
 		return $sanitized;
 	}

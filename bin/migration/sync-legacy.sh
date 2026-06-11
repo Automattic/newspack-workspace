@@ -221,6 +221,7 @@ integrate_all() {
     fi
 
     apply_structural_overrides "$target"
+    restore_release_artifacts "$target"
 
     # newspack-plugin always runs the extracted-package routing — files under
     # plugins/newspack-plugin/packages/{colors,components,icons}/ leak in even
@@ -267,6 +268,34 @@ integrate_all() {
 # matticbot identity (whose token runs gh here) is on main's bypass list; it
 # completes once the required CI check passes.
 INCOMING_BRANCH="${INCOMING_BRANCH:-sync/legacy-incoming}"
+
+# Ping the a8c ops channel when the silent-blend gate holds a sync merge. Reuses
+# the release notifier's Slack creds (SLACK_AUTH_TOKEN + SLACK_CHANNEL_ID, a8c
+# workspace). No-ops cleanly when unset (local/dry-run/forks); a Slack hiccup is
+# caught so it can never fail the sync.
+notify_blends() {
+  local branch=$1 blends=$2
+  if [ -z "${SLACK_AUTH_TOKEN:-}" ] || [ -z "${SLACK_CHANNEL_ID:-}" ]; then
+    echo "    (Slack creds unset; skipping blend ping)"
+    return 0
+  fi
+  local pr_url text payload
+  pr_url=$(gh pr view "$branch" --json url --jq '.url' 2>/dev/null \
+           || echo "${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-}/pulls")
+  text=":warning: *Legacy sync held for review.* The merge into \`main\` blended monorepo and legacy edits into a result matching neither side (possible dropped fix / orphaned code). Auto-merge is paused until someone confirms or fixes:
+\`\`\`
+${blends}
+\`\`\`
+<${pr_url}|Open the integration PR>"
+  payload=$(printf '%s' "$text" | jq -Rs '{channel: env.SLACK_CHANNEL_ID, blocks: [{type: "section", text: {type: "mrkdwn", text: .}}]}') || return 0
+  curl -sS --data "$payload" \
+    -H 'Content-type: application/json' \
+    -H "Authorization: Bearer $SLACK_AUTH_TOKEN" \
+    -X POST https://slack.com/api/chat.postMessage > /dev/null 2>&1 \
+    && echo "    pinged Slack for blend review" \
+    || echo "    WARNING: Slack ping failed (non-fatal)"
+}
+
 land_on_main() {
   local start=$1
   local n
@@ -286,6 +315,21 @@ land_on_main() {
       --title "sync: land legacy trunk commits" \
       --body "$(printf 'Automated daily sync of commits that merged on the (frozen) legacy trunks into the monorepo.\n\nLanded automatically by the sync job (admin merge with a **merge commit** after CI passes — never squash, which would collapse the per-plugin commits and break semantic-release version computation).')" \
       || echo "WARN: gh pr create failed; branch is on origin for manual handling"
+  fi
+  # Silent-blend gate. A blend that breaks CI is already held by the CI gate
+  # below; one that PASSES CI would admin-merge silently and bury the bug (a
+  # dropped fix, orphaned code). Detect first: if any non-generated blend is
+  # present, hold the merge and ping for review rather than let it land unseen.
+  # Never aborts the sync -- the detector exits 0 and the ping no-ops/traps.
+  git fetch --quiet origin '+refs/heads/sync/*:refs/remotes/origin/sync/*' || true
+  local audit blends
+  audit=$("$SCRIPT_DIR/detect-sync-collisions.sh" HEAD origin/main 2>&1) || true
+  echo "$audit"
+  blends=$(printf '%s\n' "$audit" | grep '^  REVIEW ' || true)
+  if [ -n "$blends" ]; then
+    echo "==> Silent-blend gate: holding auto-merge on $INCOMING_BRANCH for review"
+    notify_blends "$INCOMING_BRANCH" "$blends" || true
+    return 0
   fi
   # Wait for the PR's required checks, then admin-merge with a merge commit.
   # GitHub auto-merge can't be used: it ignores bypass allowances and would block

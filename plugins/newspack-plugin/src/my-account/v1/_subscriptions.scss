@@ -40,6 +40,9 @@
 		.subscription-payment-method {
 			font-weight: 700;
 		}
+		tr:only-child {
+			border-bottom: none;
+		}
 	}
 	td.order-actions {
 		text-align: right !important;
@@ -89,6 +92,8 @@
 			gap: var(--newspack-ui-spacer-1);
 
 			h2 {
+				font-size: var(--newspack-ui-font-size-m);
+				line-height: var(--newspack-ui-line-height-m);
 				margin: 0;
 				overflow-x: hidden;
 				text-overflow: ellipsis;
@@ -110,9 +115,15 @@
 			}
 		}
 		&--actions-container {
+			column-gap: var(--newspack-ui-spacer-2);
+			display: flex;
+			flex-wrap: wrap;
+			row-gap: var(--newspack-ui-spacer-2);
 			width: 100%;
-			.newspack-ui__button {
-			@media ( min-width: 768px ) {
+			// Compact buttons for the subscription header — modal buttons (which always carry --wide) keep the default medium size.
+			.newspack-ui__button:not(.newspack-ui__button--wide) {
+				width: auto;
+				@media ( min-width: 768px ) {
 					font-size: var(--newspack-ui-font-size-xs);
 					line-height: var(--newspack-ui-line-height-xs);
 					min-height: var(--newspack-ui-spacer-8);

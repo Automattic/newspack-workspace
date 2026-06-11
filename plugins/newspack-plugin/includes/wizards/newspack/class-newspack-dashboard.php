@@ -42,36 +42,43 @@ class Newspack_Dashboard extends Wizard {
 	 * @return []
 	 */
 	public function get_dashboard() {
+		$audience_cards = [
+			[
+				'icon'  => 'settings',
+				'title' => __( 'Configuration', 'newspack-plugin' ),
+				'desc'  => __( 'Manage your Audience Management setup.', 'newspack-plugin' ),
+				'href'  => admin_url( 'admin.php?page=newspack-audience' ),
+			],
+			[
+				'icon'  => 'megaphone',
+				'title' => __( 'Campaigns', 'newspack-plugin' ),
+				'desc'  => __( 'Coordinate prompts across your site to drive metrics.', 'newspack-plugin' ),
+				'href'  => admin_url( 'admin.php?page=newspack-audience-campaigns' ),
+			],
+		];
+
+		// Donations is only available when the reader revenue platform is Newspack.
+		if ( Donations::is_platform_wc() ) {
+			$audience_cards[] = [
+				'icon'  => 'gift',
+				'title' => __( 'Donations', 'newspack-plugin' ),
+				'desc'  => __( 'Bring in revenue through voluntary gifts.', 'newspack-plugin' ),
+				'href'  => admin_url( 'admin.php?page=newspack-audience-donations' ),
+			];
+		}
+
+		$audience_cards[] = [
+			'icon'  => 'payment',
+			'title' => __( 'Subscriptions', 'newspack-plugin' ),
+			'desc'  => __( 'Gate your site\'s content behind a paywall.', 'newspack-plugin' ),
+			'href'  => admin_url( 'admin.php?page=newspack-audience-subscriptions' ),
+		];
+
 		$dashboard = [
 			'audience_development' => [
 				'title' => __( 'Audience Management', 'newspack-plugin' ),
 				'desc'  => __( 'Engage your readers more deeply with tools to build customer relationships that drive towards sustainable revenue.', 'newspack-plugin' ),
-				'cards' => [
-					[
-						'icon'  => 'settings',
-						'title' => __( 'Configuration', 'newspack-plugin' ),
-						'desc'  => __( 'Manage your Audience Management setup.', 'newspack-plugin' ),
-						'href'  => admin_url( 'admin.php?page=newspack-audience' ),
-					],
-					[
-						'icon'  => 'megaphone',
-						'title' => __( 'Campaigns', 'newspack-plugin' ),
-						'desc'  => __( 'Coordinate prompts across your site to drive metrics.', 'newspack-plugin' ),
-						'href'  => admin_url( 'admin.php?page=newspack-audience-campaigns' ),
-					],
-					[
-						'icon'  => 'gift',
-						'title' => __( 'Donations', 'newspack-plugin' ),
-						'desc'  => __( 'Bring in revenue through voluntary gifts.', 'newspack-plugin' ),
-						'href'  => admin_url( 'admin.php?page=newspack-audience-donations' ),
-					],
-					[
-						'icon'  => 'payment',
-						'title' => __( 'Subscriptions', 'newspack-plugin' ),
-						'desc'  => __( 'Gate your site\'s content behind a paywall.', 'newspack-plugin' ),
-						'href'  => admin_url( 'admin.php?page=newspack-audience-subscriptions' ),
-					],
-				],
+				'cards' => $audience_cards,
 			],
 		];
 

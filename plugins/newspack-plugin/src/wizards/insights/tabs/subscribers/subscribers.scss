@@ -1,0 +1,75 @@
+/**
+ * Newspack Insights — Tab 6 (Subscribers) styles (NPPD-1616)
+ *
+ * Tab 6-specific layout + the tenure card composition (percentile
+ * callouts + interpretive narrative inside a single card chrome).
+ * The shared Insights chrome (sections, metric cards, table, tab
+ * loading/error) lives in `tabs/components/sections.scss` and is
+ * loaded by the wizard's main `style.scss`.
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-insights {
+
+	// Top-level wrapper of the Subscribers tab body. 32px section gap
+	// between the at-a-glance scorecards, the windowed group, the
+	// tenure card, and the performance table.
+	&__subscribers-tab {
+		display: flex;
+		flex-direction: column;
+		gap: 32px;
+	}
+
+	// Tenure card wraps the percentile callouts + narrative sentence
+	// so both share a single card chrome. The stats-summary becomes
+	// layout-only; the card itself carries the bg/border/padding.
+
+	&__tenure-card {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		padding: 20px 24px;
+		background-color: #fff;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 4px;
+	}
+
+	&__stats-summary {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 24px;
+		margin: 0;
+
+		div {
+			display: flex;
+			flex-direction: column;
+			gap: 4px;
+		}
+
+		dt {
+			font-size: 12px;
+			font-weight: 600;
+			letter-spacing: 0.05em;
+			text-transform: uppercase;
+			color: wp-colors.$gray-700;
+			margin: 0;
+		}
+
+		dd {
+			font-size: 22px;
+			font-weight: 600;
+			color: wp-colors.$gray-900;
+			font-variant-numeric: tabular-nums;
+			margin: 0;
+		}
+	}
+
+	&__tenure-narrative {
+		margin: 0;
+		font-size: 14px;
+		font-weight: 400;
+		line-height: 1.4;
+		color: wp-colors.$gray-700;
+	}
+}

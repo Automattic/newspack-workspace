@@ -57,6 +57,13 @@
 	&__no-margin .components-card__body {
 		padding: 0 !important;
 	}
+	&__is-disabled {
+		cursor: not-allowed;
+		opacity: 0.5;
+		.newspack-card--core__header {
+			pointer-events: none;
+		}
+	}
 	&__header {
 		color: wp-colors.$gray-700;
 		flex-wrap: wrap;

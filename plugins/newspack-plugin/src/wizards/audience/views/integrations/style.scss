@@ -31,4 +31,86 @@
 			fill: currentcolor;
 		}
 	}
+
+	.dataviews-item-actions .components-button:not(:disabled) {
+		cursor: pointer;
+	}
+}
+
+.newspack-integration-log-details {
+	&--loading {
+		display: flex;
+		justify-content: center;
+		padding: 24px 0;
+	}
+
+	&__header {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		margin-bottom: 16px;
+
+		h3 {
+			margin: 0;
+		}
+	}
+
+	&__meta {
+		display: grid;
+		grid-template-columns: max-content 1fr;
+		column-gap: 16px;
+		row-gap: 4px;
+		margin: 0 0 16px;
+
+		dt {
+			font-weight: 600;
+		}
+
+		dd {
+			margin: 0;
+		}
+	}
+
+	&__section {
+		margin-top: 16px;
+
+		h4 {
+			margin: 0 0 8px;
+		}
+	}
+
+	&__args {
+		background: #f0f0f1;
+		padding: 12px;
+		border-radius: 4px;
+		max-height: 240px;
+		overflow: auto;
+		white-space: pre-wrap;
+		word-break: break-word;
+		font-family: Consolas, monaco, monospace;
+		font-size: 12px;
+	}
+
+	&__logs {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+
+		li {
+			display: grid;
+			grid-template-columns: max-content 1fr;
+			column-gap: 12px;
+			padding: 4px 0;
+			border-bottom: 1px solid #e0e0e0;
+
+			&:last-child {
+				border-bottom: none;
+			}
+		}
+	}
+
+	&__log-date {
+		color: #757575;
+		font-variant-numeric: tabular-nums;
+	}
 }
