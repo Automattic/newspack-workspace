@@ -1,3 +1,17 @@
+## newspack [6.42.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.5...newspack@6.42.6) (2026-06-09)
+
+
+### Bug Fixes
+
+* **access-control:** make email domain matching case-insensitive ([#255](https://github.com/Automattic/newspack-workspace/issues/255)) ([c410158](https://github.com/Automattic/newspack-workspace/commit/c4101587227801514f4e078652876677e5bde7b8))
+
+## newspack [6.42.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.4...newspack@6.42.5) (2026-06-09)
+
+
+### Bug Fixes
+
+* **access-control:** populate GA4 group metadata for anonymous readers ([#254](https://github.com/Automattic/newspack-workspace/issues/254)) ([b7adf8f](https://github.com/Automattic/newspack-workspace/commit/b7adf8f0ecc3fbe8660e0c2125c419331d0dc8c5))
+
 ## newspack [6.42.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.3...newspack@6.42.4) (2026-06-04)
 
 

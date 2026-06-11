@@ -297,22 +297,22 @@ class GoogleSiteKit {
 	 * @return string[] Sorted, deduplicated anonymized labels.
 	 */
 	private static function get_user_group_labels( $user ) {
+		$labels = [];
+		// Non-logged-in users can still match institutions via IP-based access rules.
+		foreach ( Institution::get_matching_ids_for_user( $user->ID ?? 0 ) as $inst_id ) {
+			$labels[] = 'Institution ' . $inst_id;
+		}
 		if ( ! $user || ! $user->ID ) {
-			return [];
+			return $labels;
 		}
 		// Match the framing of the surrounding params (`is_reader`, `is_subscriber`):
 		// only attribute groups to actual readers, not admins/editors.
 		if ( ! Reader_Activation::is_user_reader( $user ) ) {
-			return [];
+			return $labels;
 		}
 		$user_id = (int) $user->ID;
-
-		$labels = [];
 		foreach ( Group_Subscription::get_group_ids_for_user( $user_id ) as $sub_id ) {
 			$labels[] = 'Group ' . $sub_id;
-		}
-		foreach ( Institution::get_matching_ids_for_user( $user_id ) as $inst_id ) {
-			$labels[] = 'Institution ' . $inst_id;
 		}
 		sort( $labels, SORT_NATURAL | SORT_FLAG_CASE );
 		return $labels;
