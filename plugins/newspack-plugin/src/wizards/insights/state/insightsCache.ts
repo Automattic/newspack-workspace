@@ -46,10 +46,26 @@ interface CacheInternals {
 	listeners: Map< string, Set< () => void > >;
 }
 
-const internals: CacheInternals = {
-	slots: new Map(),
-	listeners: new Map(),
-};
+declare global {
+	interface Window {
+		__newspackInsightsCache?: CacheInternals;
+	}
+}
+
+// Webpack code-splits each tab into its own lazy chunk and each chunk gets its
+// own copy of this module. Anchor the slot/listener state on `window` so every
+// copy reads and writes the same Maps — without this, a refresh fired from one
+// tab's chunk doesn't notify CooldownNotice or LastUpdated subscribers living
+// in the main chunk.
+const internals: CacheInternals = ( () => {
+	if ( typeof window === 'undefined' ) {
+		return { slots: new Map(), listeners: new Map() };
+	}
+	if ( ! window.__newspackInsightsCache ) {
+		window.__newspackInsightsCache = { slots: new Map(), listeners: new Map() };
+	}
+	return window.__newspackInsightsCache;
+} )();
 
 const notify = ( key: string ) => {
 	internals.listeners.get( key )?.forEach( listener => listener() );
