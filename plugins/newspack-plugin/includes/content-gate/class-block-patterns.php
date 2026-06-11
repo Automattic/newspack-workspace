@@ -36,7 +36,7 @@ class Block_Patterns {
 			'newspack-content_gate-block-patterns',
 			\Newspack\Newspack::plugin_url() . '/dist/content-gate-block-patterns.css',
 			[],
-			NEWSPACK_PLUGIN_VERSION
+			\Newspack\Newspack::asset_version( 'content-gate-block-patterns' )
 		);
 	}
 
