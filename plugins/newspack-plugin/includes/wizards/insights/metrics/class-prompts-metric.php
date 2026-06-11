@@ -236,6 +236,12 @@ final class Prompts_Metric {
 			return $this->populated_scalar( $zero, false, null, $placeholder_type );
 		}
 		$value = $rows[0][ $row_key ];
+		// SAFE_DIVIDE returns NULL when the denominator is zero — a legitimate
+		// "no eligible events to compute a rate" case, not a schema regression.
+		// Same handling as the missing-key branch above: non-computable zero.
+		if ( null === $value ) {
+			return $this->populated_scalar( $zero, false, null, $placeholder_type );
+		}
 		// Non-numeric, or (for counts) a non-integer value, signals catalog/schema
 		// drift — malformed data, not an empty window. Surface it as an error so a
 		// real data-quality regression isn't masked as a benign zero.

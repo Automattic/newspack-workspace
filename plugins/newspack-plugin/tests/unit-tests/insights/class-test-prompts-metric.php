@@ -226,6 +226,25 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'bigquery_proxy_malformed_value', $result['error_code'] );
 	}
 
+	/**
+	 * SAFE_DIVIDE returns NULL when the denominator is zero (BigQuery semantics).
+	 * That's a legitimate "no eligible events" case, not a malformed payload —
+	 * surface as `state: 'populated'` with a non-computable zero so the UI
+	 * renders "0%" instead of "Data temporarily unavailable".
+	 */
+	public function test_scalar_treats_null_safe_divide_result_as_non_computable_zero() {
+		$metric = $this->make_metric_with_proxy_returning(
+			'prompts_form_submission_rate',
+			[ [ 'form_submission_rate' => null ] ]
+		);
+		$result = $metric->get_form_submission_rate( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 0, $result['value'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertSame( 'rate', $result['placeholder_type'] );
+	}
+
 	// --- Section 4: Paid reader conversion (Woo join) -------------------
 
 	/**
