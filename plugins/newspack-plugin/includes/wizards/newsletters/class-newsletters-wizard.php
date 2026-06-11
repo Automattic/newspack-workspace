@@ -342,7 +342,7 @@ class Newsletters_Wizard extends Wizard {
 			'newspack-newsletters-wizard',
 			Newspack::plugin_url() . '/dist/newsletters.js',
 			$this->get_script_dependencies(),
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'newsletters' ),
 			true
 		);
 

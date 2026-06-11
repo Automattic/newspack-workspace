@@ -709,14 +709,14 @@ class Setup_Wizard extends Wizard {
 			'newspack-setup-wizard',
 			Newspack::plugin_url() . '/dist/setup.js',
 			$this->get_script_dependencies(),
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'setup' ),
 			true
 		);
 		wp_register_style(
 			'newspack-setup-wizard',
 			Newspack::plugin_url() . '/dist/setup.css',
 			$this->get_style_dependencies(),
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'setup' )
 		);
 		\wp_localize_script(
 			'newspack-setup-wizard',

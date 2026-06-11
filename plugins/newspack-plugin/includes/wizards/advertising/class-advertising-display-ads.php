@@ -625,7 +625,7 @@ class Advertising_Display_Ads extends Wizard {
 			$this->slug,
 			Newspack::plugin_url() . '/dist/billboard.js',
 			$this->get_script_dependencies(),
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'billboard' ),
 			true
 		);
 
@@ -633,7 +633,7 @@ class Advertising_Display_Ads extends Wizard {
 			$this->slug,
 			Newspack::plugin_url() . '/dist/billboard.css',
 			$this->get_style_dependencies(),
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'billboard' )
 		);
 		wp_style_add_data( $this->slug, 'rtl', 'replace' );
 		wp_enqueue_style( $this->slug );
