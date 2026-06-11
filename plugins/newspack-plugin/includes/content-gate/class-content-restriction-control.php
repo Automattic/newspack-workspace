@@ -189,7 +189,12 @@ class Content_Restriction_Control {
 					if ( ( ! $is_exclusion && ! $terms ) || is_wp_error( $terms ) ) {
 						continue 2;
 					}
-					if ( $is_exclusion ? ! empty( array_intersect( $terms, $content_rule['value'] ) ) : empty( array_intersect( $terms, $content_rule['value'] ) ) ) {
+					// For hierarchical taxonomies, a rule targeting a term also covers
+					// that term's descendants, mirroring WooCommerce Memberships' cascade.
+					// The helper also casts the rule's term IDs to integers, matching the
+					// integer IDs from wp_get_post_terms() on the other side of the intersect.
+					$target_terms = self::expand_hierarchical_terms( $content_rule['value'], $taxonomy );
+					if ( $is_exclusion ? ! empty( array_intersect( $terms, $target_terms ) ) : empty( array_intersect( $terms, $target_terms ) ) ) {
 						continue 2;
 					}
 				}
@@ -204,6 +209,36 @@ class Content_Restriction_Control {
 			$post_gates[] = $gate;
 		}
 		return $post_gates;
+	}
+
+	/**
+	 * Expand a set of taxonomy term IDs to include descendant terms when the
+	 * taxonomy is hierarchical.
+	 *
+	 * A content rule targeting a parent term should also match content assigned
+	 * only to that term's descendants, mirroring WooCommerce Memberships' cascade
+	 * behavior. Expansion happens at evaluation time so newly-added child terms
+	 * are covered without re-saving the rule. Non-hierarchical taxonomies (e.g.
+	 * tags) have no descendants and are returned as integer-cast IDs unchanged.
+	 *
+	 * @param array        $term_ids Term IDs from a content rule's value.
+	 * @param \WP_Taxonomy $taxonomy Taxonomy object the term IDs belong to.
+	 *
+	 * @return int[] De-duplicated term IDs including descendants.
+	 */
+	private static function expand_hierarchical_terms( $term_ids, $taxonomy ) {
+		$term_ids = array_map( 'intval', (array) $term_ids );
+		if ( ! $taxonomy->hierarchical ) {
+			return $term_ids;
+		}
+		$expanded = $term_ids;
+		foreach ( $term_ids as $term_id ) {
+			$children = get_term_children( $term_id, $taxonomy->name );
+			if ( ! is_wp_error( $children ) ) {
+				$expanded = array_merge( $expanded, array_map( 'intval', $children ) );
+			}
+		}
+		return array_values( array_unique( $expanded ) );
 	}
 
 	/**

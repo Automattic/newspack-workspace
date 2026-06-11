@@ -314,6 +314,137 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that a content rule targeting a parent term in a hierarchical
+	 * taxonomy cascades to descendant terms, matching WooCommerce Memberships.
+	 */
+	public function test_content_rules_hierarchical_child_terms() {
+		// Build a category tree: parent > child > grandchild.
+		$parent_cat = $this->factory->term->create(
+			[
+				'taxonomy' => 'category',
+				'name'     => 'Parent Category',
+			]
+		);
+		$child_cat = $this->factory->term->create(
+			[
+				'taxonomy' => 'category',
+				'name'     => 'Child Category',
+				'parent'   => $parent_cat,
+			]
+		);
+		$grandchild_cat = $this->factory->term->create(
+			[
+				'taxonomy' => 'category',
+				'name'     => 'Grandchild Category',
+				'parent'   => $child_cat,
+			]
+		);
+		// An unrelated category outside the parent's subtree.
+		$other_cat = $this->factory->term->create(
+			[
+				'taxonomy' => 'category',
+				'name'     => 'Other Category',
+			]
+		);
+
+		// Posts assigned only to a descendant term, never directly to the parent.
+		$parent_post     = $this->factory->post->create( [ 'post_category' => [ $parent_cat ] ] );
+		$child_post      = $this->factory->post->create( [ 'post_category' => [ $child_cat ] ] );
+		$grandchild_post = $this->factory->post->create( [ 'post_category' => [ $grandchild_cat ] ] );
+		$other_post      = $this->factory->post->create( [ 'post_category' => [ $other_cat ] ] );
+		$this->post_ids  = array_merge( $this->post_ids, [ $parent_post, $child_post, $grandchild_post, $other_post ] );
+
+		// Inclusion rule targeting only the parent term.
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'  => 'category',
+					'value' => [ $parent_cat ],
+				],
+			]
+		);
+
+		$gates = Content_Restriction_Control::get_post_gates( $child_post );
+		$this->assertCount( 1, $gates, 'Post in a child of the targeted parent category is gated' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $grandchild_post );
+		$this->assertCount( 1, $gates, 'Post in a grandchild of the targeted parent category is gated' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $other_post );
+		$this->assertCount( 0, $gates, 'Post outside the targeted subtree is not gated' );
+
+		// Exclusion rule targeting the parent term: descendants are excluded too.
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'      => 'category',
+					'value'     => [ $parent_cat ],
+					'exclusion' => true,
+				],
+			]
+		);
+
+		$gates = Content_Restriction_Control::get_post_gates( $child_post );
+		$this->assertCount( 0, $gates, 'Post in a child of an excluded parent category is not gated' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $grandchild_post );
+		$this->assertCount( 0, $gates, 'Post in a grandchild of an excluded parent category is not gated' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $other_post );
+		$this->assertCount( 1, $gates, 'Post outside the excluded subtree is still gated' );
+
+		// The cascade is one-directional: a rule targeting a child term does NOT
+		// pull in posts that only carry the parent term.
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'  => 'category',
+					'value' => [ $child_cat ],
+				],
+			]
+		);
+
+		$gates = Content_Restriction_Control::get_post_gates( $parent_post );
+		$this->assertCount( 0, $gates, 'Post in the parent term is not gated by a rule targeting a child term' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $child_post );
+		$this->assertCount( 1, $gates, 'Post in the targeted child term is gated' );
+	}
+
+	/**
+	 * Test that a content rule on a non-hierarchical taxonomy (tags) matches
+	 * only the targeted term, with no descendant expansion.
+	 */
+	public function test_content_rules_non_hierarchical_terms() {
+		$tag         = $this->factory->term->create( [ 'taxonomy' => 'post_tag' ] );
+		$other_tag   = $this->factory->term->create( [ 'taxonomy' => 'post_tag' ] );
+		$tagged_post = $this->factory->post->create();
+		$other_post  = $this->factory->post->create();
+		wp_set_post_terms( $tagged_post, [ $tag ], 'post_tag' );
+		wp_set_post_terms( $other_post, [ $other_tag ], 'post_tag' );
+		$this->post_ids = array_merge( $this->post_ids, [ $tagged_post, $other_post ] );
+
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'  => 'post_tag',
+					'value' => [ $tag ],
+				],
+			]
+		);
+
+		$gates = Content_Restriction_Control::get_post_gates( $tagged_post );
+		$this->assertCount( 1, $gates, 'Post with the targeted tag is gated' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $other_post );
+		$this->assertCount( 0, $gates, 'Post with a different tag is not gated' );
+	}
+
+	/**
 	 * Test that gate layouts are created when a gate is created.
 	 */
 	public function test_create_gate_creates_layouts() {
