@@ -27,52 +27,18 @@
 		gap: 32px;
 	}
 
-	// Phase 1 preview banner — light-blue chrome to distinguish it from the
-	// gray `__info-callout` freshness note below it. Removed entirely in
-	// Phase 2. Shares the callout layout (info icon left, dismiss X right).
-	&__conversion-preview-banner {
-		display: flex;
-		align-items: flex-start;
-		gap: 12px;
-		padding: 16px 20px;
+	// Phase 1 preview banner — a light-blue variant of the shared
+	// `__info-callout` (layout, icon, and dismiss button come from
+	// components/_insights-charts.scss), distinguishing it from the gray
+	// freshness note below it. Removed entirely in Phase 2. Compound selector
+	// so the color override wins over the single-class base regardless of load
+	// order.
+	&__info-callout--preview.newspack-insights__info-callout {
 		background-color: #e6f1fb;
-		border: 1px solid #b8d8f0;
-		border-radius: 4px;
+		border-color: #b8d8f0;
 
-		&-icon {
-			flex: 0 0 20px;
-			width: 20px;
-			height: 20px;
+		.newspack-insights__info-callout-icon {
 			color: var(--wp-admin-theme-color);
-		}
-
-		&-body {
-			flex: 1 1 auto;
-			font-size: 13px;
-			line-height: 1.5;
-			color: wp-colors.$gray-900;
-		}
-
-		&-title {
-			margin: 0;
-		}
-
-		&-dismiss {
-			flex: 0 0 auto;
-			background: transparent;
-			border: 0;
-			cursor: pointer;
-			padding: 4px;
-			color: wp-colors.$gray-700;
-
-			&:hover {
-				color: wp-colors.$gray-900;
-			}
-
-			&:focus-visible {
-				outline: 2px solid var(--wp-admin-theme-color);
-				outline-offset: 2px;
-			}
 		}
 	}
 

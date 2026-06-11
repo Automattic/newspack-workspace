@@ -5,46 +5,36 @@
  * signaling that the tab's structure is final but real data is pending.
  * Removed entirely when Phase 2 lands.
  *
- * Dismissal is session-only per the spec ("dismissible via X but reappears
- * on page reload — don't persist"): a self-contained `useState`, like the
- * Gates / Prompts DirectVsInfluencedCallout, rather than the shared
- * InfoCallout whose dismissible mode persists in localStorage.
+ * A thin wrapper over the shared InfoCallout: session-only dismissal
+ * (`persist={ false }`, reappears on reload per the spec) plus a light-blue
+ * `--preview` variant class to distinguish it from the gray freshness note
+ * below it.
  */
 
 /**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useState } from '@wordpress/element';
-import { Icon, closeSmall, info } from '@wordpress/icons';
 
-const ConversionPreviewBanner = () => {
-	const [ visible, setVisible ] = useState( true );
-	if ( ! visible ) {
-		return null;
-	}
-	return (
-		<div className="newspack-insights__conversion-preview-banner" role="note">
-			<Icon icon={ info } className="newspack-insights__conversion-preview-banner-icon" />
-			<div className="newspack-insights__conversion-preview-banner-body">
-				<p className="newspack-insights__conversion-preview-banner-title">
-					<strong>{ __( 'This tab is live in preview mode.', 'newspack-plugin' ) }</strong>{ ' ' }
-					{ __(
-						'Real-time metrics will populate once BigQuery integration is complete. The structure, sections, and visualizations are final.',
-						'newspack-plugin'
-					) }
-				</p>
-			</div>
-			<button
-				type="button"
-				className="newspack-insights__conversion-preview-banner-dismiss"
-				onClick={ () => setVisible( false ) }
-				aria-label={ __( 'Dismiss', 'newspack-plugin' ) }
-			>
-				<Icon icon={ closeSmall } />
-			</button>
-		</div>
-	);
-};
+/**
+ * Internal dependencies
+ */
+import InfoCallout from '../components/InfoCallout';
+
+const ConversionPreviewBanner = () => (
+	<InfoCallout
+		heading={ __( 'This tab is live in preview mode.', 'newspack-plugin' ) }
+		dismissible
+		persist={ false }
+		className="newspack-insights__info-callout--preview"
+	>
+		<p>
+			{ __(
+				'Real-time metrics will populate once BigQuery integration is complete. The structure, sections, and visualizations are final.',
+				'newspack-plugin'
+			) }
+		</p>
+	</InfoCallout>
+);
 
 export default ConversionPreviewBanner;
