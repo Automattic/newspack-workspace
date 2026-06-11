@@ -262,6 +262,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/polyfills/class-amp-polyfills.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-performance.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-default-image.php';
+		include_once NEWSPACK_ABSPATH . 'includes/class-default-templates.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/optional-modules/class-optional-modules.php';
 		include_once NEWSPACK_ABSPATH . 'includes/optional-modules/class-rss.php';
