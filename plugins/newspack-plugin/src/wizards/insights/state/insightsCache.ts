@@ -28,7 +28,7 @@ export interface CacheSlot< T = unknown > {
 	inFlight: Promise< void > | null;
 }
 
-const IDLE_SLOT: CacheSlot = Object.freeze( {
+const IDLE_SLOT: CacheSlot = {
 	status: 'idle',
 	data: null,
 	error: null,
@@ -36,20 +36,14 @@ const IDLE_SLOT: CacheSlot = Object.freeze( {
 	source: null,
 	cooldownUntil: null,
 	inFlight: null,
-} );
+};
 
 export const makeSlotKey = ( tab: string, range: { start: string; end: string }, previousRange: { start: string; end: string } | null ): string =>
 	`${ tab }|${ range.start }|${ range.end }|${ previousRange?.start ?? '' }|${ previousRange?.end ?? '' }`;
 
-interface CacheInternals {
+export interface CacheInternals {
 	slots: Map< string, CacheSlot >;
 	listeners: Map< string, Set< () => void > >;
-}
-
-declare global {
-	interface Window {
-		__newspackInsightsCache?: CacheInternals;
-	}
 }
 
 // Webpack code-splits each tab into its own lazy chunk and each chunk gets its
@@ -140,13 +134,13 @@ export const insightsCache = {
 				const envelope = await refresher();
 				const incoming = envelope.data as unknown;
 				const prior = this.getSlot( key );
-				const incomingIsEmpty =
-					incoming === null ||
-					incoming === undefined ||
-					( Array.isArray( incoming ) && incoming.length === 0 ) ||
-					( typeof incoming === 'object' && Object.keys( incoming as object ).length === 0 );
+				// The server contract is: `payload: null` (and only that) when
+				// there's no data to ship — e.g. a cooldown-blocked refresh on
+				// a window that has no prior cached envelope. Don't treat empty
+				// arrays/objects as "empty"; those are legitimate payloads.
+				const incomingIsNull = incoming === null;
 
-				if ( incomingIsEmpty && prior.data !== null ) {
+				if ( incomingIsNull && prior.data !== null ) {
 					// Refresh returned no usable payload (BQ unreachable, server
 					// fell back, etc.). Preserve the prior data / computedAt so
 					// the tab keeps rendering the last known good view; still

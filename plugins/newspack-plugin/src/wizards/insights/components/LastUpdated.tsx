@@ -21,6 +21,7 @@ import RefreshMenu from './RefreshMenu';
 import type { DateRange } from '../state/useDateRange';
 import { insightsCache, makeSlotKey, type CacheSlot } from '../state/insightsCache';
 import { useInvokeRefresh } from '../state/refreshRegistry';
+import useCountdown from '../hooks/useCountdown';
 
 export interface LastUpdatedProps {
 	tab: string | null;
@@ -48,11 +49,14 @@ const LastUpdated = ( { tab, range, previousRange }: LastUpdatedProps ) => {
 
 	const invoke = useInvokeRefresh();
 
+	// useCountdown ticks every second and returns null once the deadline has
+	// passed, so the kebab re-enables on the next tick after the cooldown
+	// expires — even if the slot itself hasn't mutated since.
+	const cooldownActive = useCountdown( slot.cooldownUntil ) !== null;
+
 	if ( ! tab || ! slot.computedAt ) {
 		return null;
 	}
-
-	const cooldownActive = !! slot.cooldownUntil && new Date( slot.cooldownUntil ).getTime() > Date.now();
 
 	return (
 		<div className="newspack-insights__last-updated-wrap">
