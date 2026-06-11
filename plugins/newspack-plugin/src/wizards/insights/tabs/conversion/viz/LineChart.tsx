@@ -50,6 +50,13 @@ export interface LineChartProps {
 	formatLabel?: ( label: string ) => string;
 	/** Optional horizontal target line (value in the same units as the y-axis). */
 	referenceLine?: LineReferenceLine;
+	/**
+	 * Optional pin for the top of the y-axis (e.g. `1` for a fixed 0–100% scale
+	 * on share/percentage curves). Data still wins if it exceeds the pin. When
+	 * unset, the axis auto-scales to the data — right for small-magnitude rate
+	 * series (e.g. weekly conversion rates) that would otherwise be flattened.
+	 */
+	yMax?: number;
 	/** Empty-state copy shown when there's no data. Defaults to the generic line. */
 	emptyMessage?: string;
 }
@@ -58,15 +65,21 @@ const W = 600;
 const H = 160;
 const PAD = 8;
 
-const LineChart = ( { points, series, formatLabel = ( l: string ) => l, referenceLine, emptyMessage }: LineChartProps ) => {
+const LineChart = ( { points, series, formatLabel = ( l: string ) => l, referenceLine, yMax, emptyMessage }: LineChartProps ) => {
 	const [ active, setActive ] = useState< number | null >( null );
 
 	const allSeries: LineSeries[] = series && series.length ? series : [ { name: '', points: points ?? [] } ];
-	const base = allSeries[ 0 ].points;
 
-	if ( ! base || base.length === 0 ) {
+	// Empty only when *every* series is empty — a single empty series must not
+	// blank a chart whose other series carry data.
+	if ( allSeries.every( s => s.points.length === 0 ) ) {
 		return <p className="newspack-insights__chart-empty">{ emptyMessage ?? __( 'No data in this timeframe.', 'newspack-plugin' ) }</p>;
 	}
+
+	// The x-axis spine is the longest series, so unequal-length series stay
+	// column-aligned (each plots on its own 0-based index) and the empty-state /
+	// hit-band / tooltip-label geometry can't be driven off a short first series.
+	const base = allSeries.reduce( ( longest, s ) => ( s.points.length > longest.length ? s.points : longest ), allSeries[ 0 ].points );
 
 	const isMulti = allSeries.length > 1;
 	const n = base.length;
@@ -75,7 +88,10 @@ const LineChart = ( { points, series, formatLabel = ( l: string ) => l, referenc
 	if ( referenceLine ) {
 		allValues.push( referenceLine.value );
 	}
-	const max = Math.max( ...allValues, 1 );
+	const dataMax = allValues.length ? Math.max( ...allValues ) : 0;
+	// `yMax` pins the ceiling; data always wins if it exceeds the pin. The `|| 1`
+	// only guards a zero-height domain (all values and pin are 0).
+	const max = Math.max( dataMax, yMax ?? 0 ) || 1;
 	const min = Math.min( ...allValues, 0 );
 	const span = max - min || 1;
 	const stepX = n > 1 ? ( W - PAD * 2 ) / ( n - 1 ) : 0;
@@ -167,7 +183,7 @@ const LineChart = ( { points, series, formatLabel = ( l: string ) => l, referenc
 				<div className="newspack-insights__line-meta">
 					<span>{ formatLabel( base[ 0 ].label ) }</span>
 					<span>
-						{ __( 'peak', 'newspack-plugin' ) }: { formatNumber( max ) }
+						{ __( 'peak', 'newspack-plugin' ) }: { formatNumber( dataMax ) }
 					</span>
 					<span>{ formatLabel( base[ n - 1 ].label ) }</span>
 				</div>

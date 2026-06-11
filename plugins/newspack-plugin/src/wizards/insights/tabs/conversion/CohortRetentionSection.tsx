@@ -43,6 +43,7 @@ const CohortChart = ( { title, data }: CohortChartProps ) => (
 		<LineChart
 			series={ toCohortSeries( data ) }
 			referenceLine={ data.reference_line }
+			yMax={ 1 }
 			emptyMessage={ __( 'Cohort data will appear after the first weekly refresh.', 'newspack-plugin' ) }
 		/>
 	</div>

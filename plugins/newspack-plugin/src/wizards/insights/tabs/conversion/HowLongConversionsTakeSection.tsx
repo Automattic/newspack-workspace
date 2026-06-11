@@ -65,18 +65,21 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 				<CurveCell title={ __( 'Time to register', 'newspack-plugin' ) }>
 					<LineChart
 						points={ toLinePoints( current.time_to_register_distribution.points ) }
+						yMax={ 1 }
 						emptyMessage={ __( 'Time-to-register data will appear once registrations occur in this window.', 'newspack-plugin' ) }
 					/>
 				</CurveCell>
 				<CurveCell title={ __( 'Time to subscribe', 'newspack-plugin' ) }>
 					<LineChart
 						series={ toLineSeries( current.time_to_subscribe_distribution ) }
+						yMax={ 1 }
 						emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this window.', 'newspack-plugin' ) }
 					/>
 				</CurveCell>
 				<CurveCell title={ __( 'Time to donate', 'newspack-plugin' ) }>
 					<LineChart
 						series={ toLineSeries( current.time_to_donate_distribution ) }
+						yMax={ 1 }
 						emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this window.', 'newspack-plugin' ) }
 					/>
 				</CurveCell>
@@ -88,6 +91,7 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 					) : (
 						<LineChart
 							points={ toLinePoints( lag.points ) }
+							yMax={ 1 }
 							emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this window.', 'newspack-plugin' ) }
 						/>
 					) }
