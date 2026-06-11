@@ -244,13 +244,11 @@ PHP-side aggregation:
 
 Same shape, with donation orders. Substitute `action_type = 'donation'` filtering and donation-product Woo filter.
 
-## Section: Time-to-convert distributions
+## Section: Time-to-convert cumulative distributions
 
-The BoxPlot's actual flagship use case. Each metric is a distribution per acquisition cohort.
+The cumulative shape replaces v1's original BoxPlot framing. For each metric, compute the empirical CDF: for each day N within the cohort's lookback window, what fraction of the cohort had converted by day N? LineChart consumes the result directly — one row per (day, cumulative_pct) point per series.
 
-### Time-to-Register Distribution
-
-For each reader who registered in the window, how many days between first session and registration?
+### Time-to-Register Cumulative Distribution
 
 ```sql
 WITH first_sessions AS (
@@ -270,75 +268,67 @@ registrations AS (
   FROM `{project}.{dataset}.events_*`
   WHERE _TABLE_SUFFIX BETWEEN @start_date AND @end_date
     AND event_name = 'np_reader_registered'
-)
+),
+days_diff AS (
+  SELECT TIMESTAMP_DIFF(TIMESTAMP_MICROS(r.reg_ts), TIMESTAMP_MICROS(fs.first_session_ts), DAY) AS days
+  FROM registrations r
+  JOIN first_sessions fs USING (user_pseudo_id)
+  WHERE TIMESTAMP_DIFF(TIMESTAMP_MICROS(r.reg_ts), TIMESTAMP_MICROS(fs.first_session_ts), DAY) BETWEEN 0 AND 90
+),
+total AS (SELECT COUNT(*) AS total_count FROM days_diff),
+per_day AS (SELECT days, COUNT(*) AS conversions FROM days_diff GROUP BY days)
 SELECT
-  TIMESTAMP_DIFF(TIMESTAMP_MICROS(r.reg_ts), TIMESTAMP_MICROS(fs.first_session_ts), DAY) AS days_to_register
-FROM registrations r
-JOIN first_sessions fs USING (user_pseudo_id)
-WHERE TIMESTAMP_DIFF(TIMESTAMP_MICROS(r.reg_ts), TIMESTAMP_MICROS(fs.first_session_ts), DAY) >= 0;
+  days,
+  ROUND(SUM(conversions) OVER (ORDER BY days) / (SELECT total_count FROM total), 4) AS cumulative_pct
+FROM per_day
+ORDER BY days;
 ```
 
 Notes:
-- BoxPlot data: pass `days_to_register` per row.
-- The 90-day lookback for `first_sessions` is the practical cap; readers with first session > 90d ago show up as outliers or are truncated. Document in UI.
-- Filter `days_to_register >= 0` to exclude data anomalies (registration before first session is impossible but timestamp drift can produce it).
-- BoxPlot's y-domain caveat (NPPD-1595) applies — pass explicit `yDomain={[0, dataMax]}`.
+- Returns one row per (day, cumulative_pct) pair. LineChart treats this as a single series.
+- 90-day lookback cap matches the spec's truncation. Readers with first session > 90 days ago aren't represented.
+- Filter `days >= 0` excludes timestamp-drift anomalies.
 
-### Time-to-Subscribe Distribution
+### Time-to-Subscribe Cumulative Distribution
 
-For each new subscriber, days between registration and first subscription order.
+Two-step: BQ side gathers per-UID registration timestamps + source attribution; PHP side joins to Woo for first non-donation subscription order date, computes per-source cumulative.
 
 ```sql
--- BQ side: get registrations with timestamps
-WITH registrations AS (
-  SELECT
-    COALESCE(user_id, user_pseudo_id) AS uid,
-    MIN(event_timestamp) AS reg_ts
-  FROM `{project}.{dataset}.events_*`
-  WHERE _TABLE_SUFFIX BETWEEN
-    FORMAT_DATE('%Y%m%d', DATE_SUB(PARSE_DATE('%Y%m%d', @start_date), INTERVAL 365 DAY))
-    AND @end_date
-    AND event_name = 'np_reader_registered'
-  GROUP BY uid
-)
--- Then PHP joins to Woo: for each registered UID, find their first non-donation subscription order date
--- and compute days_to_subscribe = sub_order_date - reg_date
-```
-
-PHP query:
-```sql
+-- BQ side: registrations in trailing 365 days with source attribution
 SELECT
-  o.customer_id,
-  MIN(o.date_created_gmt) AS first_sub_order_date
-FROM {prefix}wc_orders o
-JOIN {prefix}wc_order_product_lookup opl ON opl.order_id = o.id
-WHERE o.type = 'shop_order'
-  AND o.status IN ('wc-completed', 'wc-processing')
-  AND opl.product_id IN (:non_donation_subscription_product_ids)
-  AND o.customer_id IN (:registered_uids_with_ts)
-GROUP BY o.customer_id;
+  COALESCE(user_id, user_pseudo_id) AS uid,
+  MIN(event_timestamp) AS reg_ts,
+  ANY_VALUE(CASE
+    WHEN PARAM('gate_post_id') IS NOT NULL THEN 'gate'
+    WHEN PARAM('newspack_popup_id') IS NOT NULL THEN 'prompt'
+    ELSE 'direct'
+  END) AS source
+FROM `{project}.{dataset}.events_*`
+WHERE _TABLE_SUFFIX BETWEEN
+  FORMAT_DATE('%Y%m%d', DATE_SUB(PARSE_DATE('%Y%m%d', @start_date), INTERVAL 365 DAY))
+  AND @end_date
+  AND event_name = 'np_reader_registered'
+GROUP BY uid;
 ```
 
-Then in PHP: zip the two result sets by UID, compute days_to_subscribe = first_sub_order_date - reg_ts (in days), pass per-row to BoxPlot.
+PHP-side completion:
+1. For each registered UID, query Woo for first non-donation subscription order date.
+2. Compute days_to_subscribe per UID.
+3. Truncate at 365 days.
+4. Partition by source. Within each partition, sort by days, compute running cumulative_pct.
+5. Return three series: `[{ label: 'gate', points: [{day, cumulative_pct}, ...] }, { label: 'prompt', points: [...] }, { label: 'direct', points: [...] }]`.
 
-Notes:
-- Filter to subscribers who registered in the trailing 365 days (otherwise tail is unbounded and unhelpful).
-- For BoxPlot grouping: split by acquisition source (gate/prompt/direct, captured from the registration event's params). Gives a 3-category BoxPlot showing "how fast does each source convert?"
+### Time-to-Donate Cumulative Distribution
 
-### Time-to-Donate Distribution
+Same shape as Time-to-Subscribe, with donation-product Woo filter instead of non-donation subscription. Three series by source.
 
-Same shape as Time-to-Subscribe, with donation orders.
+### Subscriber → Donor Lag Cumulative Distribution
 
-### Time Between Subscription and Donation (cross-upsell)
-
-For subscribers who also donated, days between their subscription start and their first donation.
+All-Woo. For each customer who subscribed before donating, compute days between first subscription and first donation; partition into single series.
 
 ```sql
--- All-Woo
-WITH subscriber_first_dates AS (
-  SELECT
-    o.customer_id,
-    MIN(o.date_created_gmt) AS first_sub_date
+WITH subscriber_first AS (
+  SELECT o.customer_id, MIN(o.date_created_gmt) AS first_sub_date
   FROM {prefix}wc_orders o
   JOIN {prefix}wc_order_product_lookup opl ON opl.order_id = o.id
   WHERE o.type = 'shop_order'
@@ -346,27 +336,31 @@ WITH subscriber_first_dates AS (
     AND o.status IN ('wc-completed', 'wc-processing')
   GROUP BY o.customer_id
 ),
-donor_first_dates AS (
-  SELECT
-    o.customer_id,
-    MIN(o.date_created_gmt) AS first_donation_date
+donor_first AS (
+  SELECT o.customer_id, MIN(o.date_created_gmt) AS first_donation_date
   FROM {prefix}wc_orders o
   JOIN {prefix}wc_order_product_lookup opl ON opl.order_id = o.id
   WHERE o.type = 'shop_order'
     AND opl.product_id IN (:donation_product_ids)
     AND o.status IN ('wc-completed', 'wc-processing')
   GROUP BY o.customer_id
+),
+days_diff AS (
+  SELECT TIMESTAMPDIFF(DAY, sb.first_sub_date, df.first_donation_date) AS days
+  FROM subscriber_first sb
+  JOIN donor_first df USING (customer_id)
+  WHERE df.first_donation_date > sb.first_sub_date
 )
-SELECT
-  TIMESTAMPDIFF(DAY, sb.first_sub_date, do.first_donation_date) AS days_between
-FROM subscriber_first_dates sb
-JOIN donor_first_dates do USING (customer_id)
-WHERE do.first_donation_date > sb.first_sub_date;
+-- PHP-side: total count + per-day count → running cumulative_pct
+SELECT days FROM days_diff;
 ```
 
-Notes:
-- Only includes readers who became subscribers BEFORE donating (filter `>`). The inverse case (donor → subscriber) is a separate distribution.
-- Pass `days_between` per row to BoxPlot.
+Compute cumulative_pct in PHP (same pattern as Time-to-Register).
+
+Notes for all four:
+- Single-group output shape: `{ points: [{day, cumulative_pct}, ...] }`.
+- Multi-group output shape: `{ groups: [{ label, points: [{day, cumulative_pct}, ...] }, ...] }`.
+- Section 4.4 is gated at 50 cross-converters per the spec; below that threshold, return `{ visibility: 'hidden', visibility_reason: 'insufficient_data' }`.
 
 ## Section: Cohort retention
 
@@ -679,7 +673,7 @@ Same pattern with newsletter-intent surfaces and `np_newsletter_subscribed` even
 
 6. **Window vs lookback discipline.** Some metrics use the publisher-selected window (`@start_date` to `@end_date`); others extend lookback (90d for first session, 365d for cohort retention, 7-14d for Influenced). UI should display the actual lookback range for each metric in tooltips, since users will be confused otherwise.
 
-7. **Time-to-convert distributions are tail-heavy.** Some readers register years after first session; some donate years after registering. v1 caps at 365d for time-to-subscribe/donate to keep BoxPlots readable. Document the truncation in UI.
+7. **Time-to-convert distributions are tail-heavy.** Some readers register years after first session; some donate years after registering. v1 caps at 365d for time-to-subscribe/donate to keep the cumulative curves readable. Document the truncation in UI.
 
 8. **Local wp_posts enrichment available as v1.1 improvement.** `post_id` is now in BQ event params on every singular page view, enabling future joins to local `wp_posts` for canonical post titles, authoritative author/category lookup, and post_type filtering. Used by the "Top Pages That Don't Convert" diagnostic table. Adds a new join pattern (BQ → wp_posts) that v1 metrics don't currently use. v1.1 follow-up.
 
