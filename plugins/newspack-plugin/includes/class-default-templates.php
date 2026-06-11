@@ -105,20 +105,26 @@ final class Default_Templates {
 	}
 
 	/**
-	 * Whether a stored template value is currently available for a post type.
+	 * Whether a stored template value is an assignable block template for a post type.
+	 *
+	 * Block-theme only: this resolves the slug against the active block theme's
+	 * templates and will report false for classic-theme slugs. Callers in a
+	 * classic-theme context should guard with wp_is_block_theme() or use
+	 * get_template_options() instead.
+	 *
+	 * Resolves a single slug rather than building the full option list. Post-type
+	 * scoping is enforced when the value is stored (see sanitize_stored_template),
+	 * so a slug existence check is sufficient at insert time.
 	 *
 	 * @param string $template  Template slug (or 'default').
-	 * @param string $post_type Post type slug.
+	 * @param string $post_type Post type slug. Unused; scoping is enforced on write.
 	 * @return bool
 	 */
 	public static function validate_template( $template, $post_type ) {
-		$options = self::get_block_template_options( $post_type );
-		foreach ( $options as $option ) {
-			if ( $option['value'] === $template ) {
-				return true;
-			}
+		if ( 'default' === $template ) {
+			return true;
 		}
-		return false;
+		return null !== get_block_template( get_stylesheet() . '//' . $template, 'wp_template' );
 	}
 
 	/**
@@ -127,12 +133,17 @@ final class Default_Templates {
 	 * Only runs for block themes; the classic Newspack theme applies its own
 	 * defaults via its own wp_insert_post handler.
 	 *
+	 * Applies only to the editor's initial auto-draft creation. Programmatic
+	 * inserts, REST-created posts and WXR imports use other statuses (draft,
+	 * publish) and are intentionally left untouched, so a bulk import can't
+	 * inherit the site default for posts that omit a template.
+	 *
 	 * @param int      $post_id The post ID.
 	 * @param \WP_Post $post    The post object.
 	 * @param bool     $update  Whether this is an update to an existing post.
 	 */
 	public static function maybe_set_default_template( $post_id, $post, $update ) {
-		if ( $update ) {
+		if ( $update || 'auto-draft' !== $post->post_status ) {
 			return;
 		}
 		if ( ! wp_is_block_theme() ) {
@@ -153,11 +164,42 @@ final class Default_Templates {
 	}
 
 	/**
+	 * Coerce a stored default-template value to one that is currently available.
+	 *
+	 * Runs on write (via pre_set_theme_mod_*) so the persisted value is always a
+	 * valid option for the active theme, falling back to 'default' otherwise.
+	 *
+	 * @param mixed  $value     Incoming theme-mod value.
+	 * @param string $post_type Post type the value applies to ('post' or 'page').
+	 * @return string A valid template slug, or 'default'.
+	 */
+	public static function sanitize_stored_template( $value, $post_type ) {
+		$options = self::get_template_options();
+		$list    = isset( $options[ $post_type ] ) ? $options[ $post_type ] : [];
+		if ( in_array( $value, wp_list_pluck( $list, 'value' ), true ) ) {
+			return $value;
+		}
+		return 'default';
+	}
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init() {
 		add_action( 'wp_insert_post', [ __CLASS__, 'maybe_set_default_template' ], 10, 3 );
 		add_action( 'rest_api_init', [ __CLASS__, 'register_rest_routes' ] );
+		add_filter(
+			'pre_set_theme_mod_post_template_default',
+			function ( $value ) {
+				return self::sanitize_stored_template( $value, 'post' );
+			}
+		);
+		add_filter(
+			'pre_set_theme_mod_page_template_default',
+			function ( $value ) {
+				return self::sanitize_stored_template( $value, 'page' );
+			}
+		);
 	}
 
 	/**

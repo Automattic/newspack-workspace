@@ -94,6 +94,43 @@ class Newspack_Test_Default_Templates extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The "default" sentinel survives the write sanitizer for both post types.
+	 */
+	public function test_sanitize_stored_template_keeps_default() {
+		$this->assertSame( 'default', Default_Templates::sanitize_stored_template( 'default', 'post' ) );
+		$this->assertSame( 'default', Default_Templates::sanitize_stored_template( 'default', 'page' ) );
+	}
+
+	/**
+	 * An unknown slug is coerced to "default" on write.
+	 */
+	public function test_sanitize_stored_template_coerces_unknown() {
+		$this->assertSame( 'default', Default_Templates::sanitize_stored_template( 'no-such-template', 'post' ) );
+	}
+
+	/**
+	 * On a classic theme a valid legacy slug is kept, not coerced — the write
+	 * sanitizer validates against the active theme's option list, not block
+	 * templates alone.
+	 */
+	public function test_sanitize_stored_template_keeps_classic_slug() {
+		if ( wp_is_block_theme() ) {
+			$this->markTestSkipped( 'Active theme is a block theme.' );
+		}
+		$this->assertSame( 'single-wide.php', Default_Templates::sanitize_stored_template( 'single-wide.php', 'post' ) );
+	}
+
+	/**
+	 * The pre_set_theme_mod filter coerces an invalid value when it is written.
+	 */
+	public function test_invalid_value_coerced_when_set_as_theme_mod() {
+		Default_Templates::init();
+		set_theme_mod( 'post_template_default', 'no-such-template' );
+		$this->assertSame( 'default', get_theme_mod( 'post_template_default' ) );
+		remove_theme_mod( 'post_template_default' );
+	}
+
+	/**
 	 * Updating an existing post never sets the template meta.
 	 */
 	public function test_no_template_set_on_update() {

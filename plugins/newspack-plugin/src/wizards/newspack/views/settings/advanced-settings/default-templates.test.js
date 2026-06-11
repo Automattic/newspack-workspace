@@ -38,4 +38,12 @@ describe( 'DefaultTemplates', () => {
 		fireEvent.change( postSelect, { target: { value: 'single/large-image' } } );
 		expect( update ).toHaveBeenCalledWith( { post_template_default: 'single/large-image' } );
 	} );
+
+	it( 'calls update with the chosen page template', () => {
+		const update = jest.fn();
+		render( <DefaultTemplates data={ baseData } update={ update } options={ options } /> );
+		const [ , pageSelect ] = screen.getAllByRole( 'combobox' );
+		fireEvent.change( pageSelect, { target: { value: 'page/wide' } } );
+		expect( update ).toHaveBeenCalledWith( { page_template_default: 'page/wide' } );
+	} );
 } );
