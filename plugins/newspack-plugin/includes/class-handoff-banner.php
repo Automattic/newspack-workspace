@@ -163,7 +163,7 @@ class Handoff_Banner {
 			$handle,
 			Newspack::plugin_url() . '/dist/handoff-banner.css',
 			[ 'wp-components' ],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'handoff-banner' )
 		);
 		wp_enqueue_style( $handle );
 
