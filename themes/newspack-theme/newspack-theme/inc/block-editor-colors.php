@@ -24,10 +24,17 @@ function newspack_block_editor_colors_iframe_styles( $settings ) {
 		return $settings;
 	}
 
-	$css = \BlockEditorColors\ColorsService::getInstance()->generate_colors_css( true );
+	$css = (string) \BlockEditorColors\ColorsService::getInstance()->generate_colors_css( true );
 
 	// Rewrite the prefix to a bare class so it matches the iframe's <body class="editor-styles-wrapper">.
+	// As of BEC 1.2.6, generate_colors_css( true ) prefixes editor rules with `body .editor-styles-wrapper`,
+	// which won't match the iframe body. If a future version changes that prefix this str_replace silently
+	// no-ops and override previews regress (the same symptom as the bug this shim fixes).
 	$css = str_replace( 'body .editor-styles-wrapper', '.editor-styles-wrapper', $css );
+
+	if ( ! isset( $settings['styles'] ) || ! is_array( $settings['styles'] ) ) {
+		$settings['styles'] = [];
+	}
 
 	if ( $css ) {
 		$settings['styles'][] = [ 'css' => $css ];
