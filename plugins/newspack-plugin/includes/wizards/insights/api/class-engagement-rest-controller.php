@@ -121,7 +121,18 @@ class Engagement_REST_Controller extends WP_REST_Controller {
 		// Dev smoke-test path: serve canned fixture data so the UI renders
 		// without a GA4 connection. Never enable in production.
 		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
-			return rest_ensure_response( Engagement_Metric::get_fixture() );
+			$response = rest_ensure_response(
+				[
+					'cache' => [
+						'source'         => Cache::SOURCE_LOCAL,
+						'computed_at'    => gmdate( 'Y-m-d\TH:i:s\Z' ),
+						'cooldown_until' => null,
+					],
+					'data'  => Engagement_Metric::get_fixture(),
+				]
+			);
+			$response->header( 'Cache-Control', 'no-store, private' );
+			return $response;
 		}
 
 		$parsed = $this->parse_window_args( $request );

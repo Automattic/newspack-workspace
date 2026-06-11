@@ -19,7 +19,12 @@ class Newspack_Test_Cached_Controller_Trait extends WP_UnitTestCase {
 	public function tear_down() {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		$wpdb->query( "DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_newspack_insights_%' OR option_name LIKE 'newspack_insights_%'" );
+		$wpdb->query(
+			"DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_newspack_insights_%'
+				OR option_name LIKE '_transient_timeout_newspack_insights_%'
+				OR option_name LIKE 'newspack_insights_index_%'
+				OR option_name LIKE 'newspack_insights_bq_last_manual_refresh_%'"
+		);
 		parent::tear_down();
 	}
 

@@ -134,11 +134,20 @@ class Advertising_REST_Controller extends WP_REST_Controller {
 		// a GAM connection. The optional _fixture_state param selects a render
 		// path (see dev-notes.md). Never enable in production.
 		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
-			$compare = $compare_start && $compare_end;
-			$variant = (string) ( $request->get_param( '_fixture_state' ) ?? 'populated' );
-			return rest_ensure_response(
-				Advertising_Metric::get_fixture( $start->format( 'Y-m-d' ), $end->format( 'Y-m-d' ), $compare, $variant )
+			$compare  = $compare_start && $compare_end;
+			$variant  = (string) ( $request->get_param( '_fixture_state' ) ?? 'populated' );
+			$response = rest_ensure_response(
+				[
+					'cache' => [
+						'source'         => Cache::SOURCE_LOCAL,
+						'computed_at'    => gmdate( 'Y-m-d\TH:i:s\Z' ),
+						'cooldown_until' => null,
+					],
+					'data'  => Advertising_Metric::get_fixture( $start->format( 'Y-m-d' ), $end->format( 'Y-m-d' ), $compare, $variant ),
+				]
 			);
+			$response->header( 'Cache-Control', 'no-store, private' );
+			return $response;
 		}
 
 		return $this->cached_response(

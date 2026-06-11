@@ -14,8 +14,8 @@ type Source = 'bigquery' | 'external' | 'local';
 type Status = 'idle' | 'loading' | 'success' | 'error';
 
 export interface CachedEnvelope< T > {
-	cache: { source: Source; computed_at: string; cooldown_until: string | null };
-	data: T;
+	cache: { source: Source; computed_at: string | null; cooldown_until: string | null };
+	data: T | null;
 }
 
 export interface CacheSlot< T = unknown > {
@@ -132,7 +132,7 @@ export const insightsCache = {
 		( async () => {
 			try {
 				const envelope = await refresher();
-				const incoming = envelope.data as unknown;
+				const incoming = envelope.data;
 				const prior = this.getSlot( key );
 				// The server contract is: `payload: null` (and only that) when
 				// there's no data to ship — e.g. a cooldown-blocked refresh on

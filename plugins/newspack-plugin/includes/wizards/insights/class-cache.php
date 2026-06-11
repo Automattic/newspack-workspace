@@ -3,7 +3,6 @@
  * Newspack Insights — Cache helper.
  *
  * Source-typed transient wrapper used by the Insights REST controllers.
- * See ~/Documents/AI/plans/2026-06-10-insights-caching-design.md.
  *
  * @package Newspack
  */

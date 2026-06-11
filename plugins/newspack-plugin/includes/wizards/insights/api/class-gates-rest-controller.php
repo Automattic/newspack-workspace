@@ -143,9 +143,20 @@ class Gates_REST_Controller extends WP_REST_Controller {
 				return $parsed;
 			}
 			[ , , $compare_start, $compare_end ] = $parsed;
-			$variant = (string) ( $request->get_param( '_fixture_state' ) ?? 'populated' );
-			$compare = null !== $compare_start && null !== $compare_end;
-			return rest_ensure_response( Gates_Metric::get_fixture( $variant, $compare ) );
+			$variant  = (string) ( $request->get_param( '_fixture_state' ) ?? 'populated' );
+			$compare  = null !== $compare_start && null !== $compare_end;
+			$response = rest_ensure_response(
+				[
+					'cache' => [
+						'source'         => Cache::SOURCE_LOCAL,
+						'computed_at'    => gmdate( 'Y-m-d\TH:i:s\Z' ),
+						'cooldown_until' => null,
+					],
+					'data'  => Gates_Metric::get_fixture( $variant, $compare ),
+				]
+			);
+			$response->header( 'Cache-Control', 'no-store, private' );
+			return $response;
 		}
 
 		$parsed = $this->parse_window_args( $request );
