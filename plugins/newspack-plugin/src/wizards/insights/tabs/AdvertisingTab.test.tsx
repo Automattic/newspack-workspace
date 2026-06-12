@@ -104,12 +104,14 @@ describe( 'AdvertisingTab', () => {
 
 		expect( screen.getByText( 'Reach & revenue' ) ).toBeInTheDocument();
 		expect( screen.getByText( '2,400,000' ) ).toBeInTheDocument();
-		expect( screen.getByText( '$4,200.00' ) ).toBeInTheDocument();
+		expect( screen.getByText( '$4,200' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Sidebar' ) ).toBeInTheDocument();
 		// Viewability degrades to the data-unavailable note.
 		expect( screen.getByText( 'Not available for this site.' ) ).toBeInTheDocument();
-		// Data-as-of indicator present.
-		expect( screen.getByText( /Data as of/ ) ).toBeInTheDocument();
+		// Data-as-of indicator present. `@wordpress/components` Notice
+		// duplicates the text into a hidden a11y-speak region, so allow
+		// multiple matches.
+		expect( screen.getAllByText( /Data as of/ ).length ).toBeGreaterThan( 0 );
 	} );
 
 	it( 'shows the initial loading state before any data arrives', () => {

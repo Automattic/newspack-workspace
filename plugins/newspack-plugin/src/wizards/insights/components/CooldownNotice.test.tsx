@@ -38,22 +38,29 @@ describe( 'CooldownNotice', () => {
 		expect( container.firstChild ).toBeNull();
 	} );
 
+	// `@wordpress/components` Notice renders both the visible content and a
+	// hidden a11y-speak region with the same text, so plain `getByText`
+	// queries match twice. Scope queries to the visible notice element.
+	const getNotice = () => document.querySelector( '.newspack-insights__cooldown-notice' ) as HTMLElement | null;
+
 	it( 'renders the MM:SS countdown when a cooldown is set', () => {
 		seedCooldown( 'gates', '2026-06-10T00:05:00Z' );
 		render( <CooldownNotice tab="gates" range={ range } previousRange={ null } /> );
-		expect( screen.getByText( /Please wait 05:00/ ) ).toBeInTheDocument();
+		const notice = getNotice();
+		expect( notice ).not.toBeNull();
+		expect( notice ).toHaveTextContent( /Please wait 05:00/ );
 	} );
 
 	it( 'unmounts and clears the slot cooldown when time runs out', () => {
 		seedCooldown( 'gates', '2026-06-10T00:00:30Z' );
 		render( <CooldownNotice tab="gates" range={ range } previousRange={ null } /> );
-		expect( screen.getByText( /Please wait/ ) ).toBeInTheDocument();
+		expect( getNotice() ).not.toBeNull();
 
 		act( () => {
 			jest.advanceTimersByTime( 31 * 1000 );
 		} );
 
-		expect( screen.queryByText( /Please wait/ ) ).not.toBeInTheDocument();
+		expect( getNotice() ).toBeNull();
 		const key = makeSlotKey( 'gates', range, null );
 		expect( insightsCache.getSlot( key ).cooldownUntil ).toBeNull();
 	} );
@@ -62,14 +69,15 @@ describe( 'CooldownNotice', () => {
 		seedCooldown( 'gates', '2026-06-10T00:05:00Z' );
 		const { rerender } = render( <CooldownNotice tab="gates" range={ range } previousRange={ null } /> );
 
-		const dismissButton = screen.getByRole( 'button', { name: /dismiss/i } );
+		// `@wordpress/components` Notice labels its dismiss control "Close".
+		const dismissButton = screen.getByRole( 'button', { name: /close/i } );
 		expect( dismissButton ).toBeInTheDocument();
 
 		act( () => {
 			fireEvent.click( dismissButton );
 		} );
 
-		expect( screen.queryByText( /Please wait/ ) ).not.toBeInTheDocument();
+		expect( getNotice() ).toBeNull();
 
 		// A fresh cooldown (different cooldownUntil) should re-show the notice.
 		act( () => {
@@ -77,6 +85,6 @@ describe( 'CooldownNotice', () => {
 		} );
 		rerender( <CooldownNotice tab="gates" range={ range } previousRange={ null } /> );
 
-		expect( screen.getByText( /Please wait/ ) ).toBeInTheDocument();
+		expect( getNotice() ).not.toBeNull();
 	} );
 } );

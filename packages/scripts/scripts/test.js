@@ -18,7 +18,14 @@ args.push( 'test-unit-js' );
 const JEST_CONFIG = {
 	rootDir: modules.rootDirectory,
 	setupFilesAfterEnv: [ path.resolve( __dirname, 'utils/jestSetup.js' ) ],
-	testMatch: [ '<rootDir>/**/*test.js?(x)' ],
+	// Match .js, .jsx, .ts, and .tsx test files. Colocated TypeScript tests
+	// (e.g. `Component.test.tsx`) live throughout the monorepo and would be
+	// silently skipped by a JS-only glob.
+	testMatch: [ '<rootDir>/**/*test.[jt]s?(x)' ],
+	// Skip `release/` — newspack-plugin's `release:archive` script rsyncs the
+	// source tree into `release/newspack-plugin/` for packaging, which would
+	// otherwise duplicate every test run and fail on stale module paths.
+	testPathIgnorePatterns: [ '/node_modules/', '/release/' ],
 	transform: {
 		'^.+\\.(j|t)sx?$': path.resolve( __dirname, 'utils/babelJestTransformer.js' ),
 	},

@@ -1,0 +1,1695 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
+<div>
+  <div
+    aria-busy="false"
+    class="newspack-insights__tab-body newspack-insights__prompts-tab"
+  >
+    <div
+      class="newspack-insights__info-callout components-notice is-info is-dismissible"
+    >
+      <div
+        class="components-visually-hidden css-1ragr82-PolymorphicDiv e19lxcc00"
+        data-wp-c16t="true"
+        data-wp-component="VisuallyHidden"
+        style="border: 0px; clip: rect(1px, 1px, 1px, 1px); clip-path: inset( 50% ); height: 1px; margin: -1px; overflow: hidden; padding: 0px; position: absolute; width: 1px; word-wrap: normal;"
+      >
+        Information notice
+      </div>
+      <div
+        class="components-notice__content"
+      >
+        <p
+          class="newspack-insights__info-callout-title"
+        >
+          <strong>
+            About Direct vs Influenced conversion
+          </strong>
+        </p>
+        <p>
+          <strong>
+            Direct
+          </strong>
+           
+          conversions happen in the same session as a prompt impression. The prompt is credited regardless of whether checkout happens on the same page (embedded checkout block) or after clicking through to a subscription page.
+        </p>
+        <p>
+          <strong>
+            Influenced
+          </strong>
+           
+          conversions happen after a prompt impression but in a later session, within a lookback window (7 days for free conversions, 14 days for paid).
+        </p>
+        <p>
+          Same-session is Direct. Later-session-within-lookback is Influenced. The two are mutually exclusive and together capture every prompt-touched conversion within the lookback period.
+        </p>
+        <div
+          class="components-notice__actions"
+        />
+      </div>
+      <button
+        aria-label="Close"
+        class="components-button components-notice__dismiss is-small"
+        type="button"
+      />
+    </div>
+    <section
+      aria-labelledby="newspack-insights-prompts-exposure-heading"
+      class="newspack-insights__section newspack-insights__section--exposure"
+    >
+      <div
+        class="newspack-insights__section-header-container"
+      >
+        <div
+          class="newspack-insights__section-header-text"
+        >
+          <div
+            class="newspack-section-header__container newspack-insights__section-heading"
+            id="newspack-insights-prompts-exposure-heading"
+          >
+            <div
+              class="newspack-grid newspack-grid__columns-1 newspack-grid__gutter-8 newspack-section-header newspack-section-header--no-margin"
+            >
+              <div
+                class="newspack-section-header__title-container"
+              >
+                <h2>
+                  Prompt exposure
+                </h2>
+              </div>
+              <p>
+                Top of the funnel. How many readers see prompts in this timeframe.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div
+        class="newspack-insights__metric-grid"
+      >
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Total Prompt Impressions
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  0
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Every prompt view in this timeframe
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Unique Readers Reached
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  0
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Distinct readers who saw at least one prompt
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Avg Prompts per Reader
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  0.0
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                How many prompts a typical reader sees
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+      </div>
+    </section>
+    <section
+      aria-labelledby="newspack-insights-prompts-engagement-heading"
+      class="newspack-insights__section newspack-insights__section--engagement"
+    >
+      <div
+        class="newspack-section-header__container newspack-insights__section-heading"
+        id="newspack-insights-prompts-engagement-heading"
+      >
+        <div
+          class="newspack-grid newspack-grid__columns-1 newspack-grid__gutter-8 newspack-section-header newspack-section-header--no-margin"
+        >
+          <div
+            class="newspack-section-header__title-container"
+          >
+            <h2>
+              Prompt engagement
+            </h2>
+          </div>
+          <p>
+            How readers respond to prompts they see. Engagement is any interaction beyond just seeing the prompt.
+          </p>
+        </div>
+      </div>
+      <div
+        class="newspack-insights__metric-grid"
+      >
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Click-Through Rate
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  0%
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Clicks ÷ prompt impressions
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Form Submission Rate
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  0%
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Form submissions ÷ impressions on form-bearing prompts
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Dismissal Rate
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  0%
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Explicit dismissals ÷ prompt impressions
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+      </div>
+    </section>
+    <section
+      aria-labelledby="newspack-insights-prompts-free-heading"
+      class="newspack-insights__section newspack-insights__section--free-reader"
+    >
+      <div
+        class="newspack-section-header__container newspack-insights__section-heading"
+        id="newspack-insights-prompts-free-heading"
+      >
+        <div
+          class="newspack-grid newspack-grid__columns-1 newspack-grid__gutter-8 newspack-section-header newspack-section-header--no-margin"
+        >
+          <div
+            class="newspack-section-header__title-container"
+          >
+            <h2>
+              Free reader conversion
+            </h2>
+          </div>
+          <p>
+            How effectively prompts convert readers into registered readers and newsletter subscribers. Direct counts conversions in the same session as a prompt impression. Influenced counts conversions in a later session within 7 days of seeing a prompt.
+          </p>
+        </div>
+      </div>
+      <div
+        class="newspack-insights__metric-grid"
+      >
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Registration Conversion (Direct)
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  0%
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Sessions with a registration after a registration-intent prompt impression ÷ sessions with a registration-intent prompt impression
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Registration Conversion (Influenced, 7d)
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  0%
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Readers who registered in a later session within 7 days of seeing a registration-intent prompt ÷ readers who saw a registration-intent prompt
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Newsletter Signup Conversion (Direct)
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  0%
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Sessions with a newsletter signup after a newsletter-intent prompt impression ÷ sessions with a newsletter-intent prompt impression
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Newsletter Signup Conversion (Influenced, 7d)
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  0%
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Readers who signed up for a newsletter in a later session within 7 days of seeing a newsletter-intent prompt ÷ readers who saw a newsletter-intent prompt
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+      </div>
+    </section>
+    <section
+      aria-labelledby="newspack-insights-prompts-paid-heading"
+      class="newspack-insights__section newspack-insights__section--paid-reader"
+    >
+      <div
+        class="newspack-section-header__container newspack-insights__section-heading"
+        id="newspack-insights-prompts-paid-heading"
+      >
+        <div
+          class="newspack-grid newspack-grid__columns-1 newspack-grid__gutter-8 newspack-section-header newspack-section-header--no-margin"
+        >
+          <div
+            class="newspack-section-header__title-container"
+          >
+            <h2>
+              Paid reader conversion
+            </h2>
+          </div>
+          <p>
+            How effectively prompts convert readers into donors and subscribers. Direct counts conversions in the same session as a prompt impression. Influenced counts conversions in a later session within 14 days of seeing a prompt.
+          </p>
+        </div>
+      </div>
+      <div
+        class="newspack-insights__metric-grid"
+      >
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Donation Conversion (Direct)
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  0%
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Sessions with a completed donation after a donation-intent prompt impression ÷ sessions with a donation-intent prompt impression
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Donation Conversion (Influenced, 14d)
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  0%
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Readers who completed a donation in a later session within 14 days of seeing a donation-intent prompt ÷ readers who saw a donation-intent prompt
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Subscription Conversion (Direct)
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  0%
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Sessions with a completed subscription after a subscription-intent prompt impression ÷ sessions with a subscription-intent prompt impression
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Subscription Conversion (Influenced, 14d)
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  0%
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Readers who completed a subscription in a later session within 14 days of seeing a subscription-intent prompt ÷ readers who saw a subscription-intent prompt
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+      </div>
+    </section>
+    <section
+      aria-labelledby="newspack-insights-prompts-revenue-heading"
+      class="newspack-insights__section newspack-insights__section--revenue"
+    >
+      <div
+        class="newspack-section-header__container newspack-insights__section-heading"
+        id="newspack-insights-prompts-revenue-heading"
+      >
+        <div
+          class="newspack-grid newspack-grid__columns-1 newspack-grid__gutter-8 newspack-section-header newspack-section-header--no-margin"
+        >
+          <div
+            class="newspack-section-header__title-container"
+          >
+            <h2>
+              Revenue from prompts
+            </h2>
+          </div>
+          <p>
+            Sum of Woo order totals from donations and subscriptions completed after a prompt impression. Direct totals revenue from same-session completions. Influenced totals revenue from later-session completions within 14 days of seeing a prompt.
+          </p>
+        </div>
+      </div>
+      <div
+        class="newspack-insights__metric-grid"
+      >
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Donation Revenue (Direct)
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  $0.00
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Sum of Woo donation order totals from same-session completions after a donation-intent prompt impression
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Donation Revenue (Influenced, 14d)
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  $0.00
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Sum of Woo donation order totals from later-session completions within 14 days of seeing a donation-intent prompt
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Subscription Revenue (Direct)
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  $0.00
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Sum of Woo subscription order totals from same-session completions after a subscription-intent prompt impression
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+        <div
+          class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="Card"
+        >
+          <div
+            class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+          >
+            <div
+              class="newspack-card--core__body"
+            >
+              <div
+                class="newspack-insights__metric-card-label"
+              >
+                Subscription Revenue (Influenced, 14d)
+              </div>
+              <div
+                class="newspack-insights__metric-card-body"
+              >
+                <div
+                  class="newspack-insights__metric-card-value"
+                >
+                  $0.00
+                </div>
+              </div>
+              <div
+                class="newspack-insights__metric-card-description"
+              >
+                Sum of Woo subscription order totals from later-session completions within 14 days of seeing a subscription-intent prompt
+              </div>
+            </div>
+          </div>
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+          <div
+            aria-hidden="true"
+            class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Elevation"
+          />
+        </div>
+      </div>
+    </section>
+    <section
+      aria-labelledby="newspack-insights-prompts-convert-heading"
+      class="newspack-insights__section newspack-insights__section--convert"
+    >
+      <div
+        class="newspack-section-header__container newspack-insights__section-heading"
+        id="newspack-insights-prompts-convert-heading"
+      >
+        <div
+          class="newspack-grid newspack-grid__columns-1 newspack-grid__gutter-8 newspack-section-header newspack-section-header--no-margin"
+        >
+          <div
+            class="newspack-section-header__title-container"
+          >
+            <h2>
+              How readers convert
+            </h2>
+          </div>
+          <p>
+            The journey from prompt impression to conversion. The funnel shows where readers drop off; the distribution shows how many touches it typically takes before conversion.
+          </p>
+        </div>
+      </div>
+      <div
+        class="newspack-insights__prompts-convert-grid"
+      >
+        <div
+          class="newspack-insights__prompts-convert-col"
+        >
+          <p
+            class="newspack-insights__section-empty"
+          >
+            No funnel data yet. The funnel will populate once readers begin moving through your prompts.
+          </p>
+        </div>
+        <div
+          class="newspack-insights__prompts-convert-col"
+        >
+          <p
+            class="newspack-insights__section-empty"
+          >
+            No distribution data yet. This will populate once readers begin converting.
+          </p>
+        </div>
+      </div>
+    </section>
+    <section
+      aria-labelledby="newspack-insights-prompts-performance-heading"
+      class="newspack-insights__section newspack-insights__section--performance"
+    >
+      <div
+        class="newspack-section-header__container newspack-insights__section-heading"
+        id="newspack-insights-prompts-performance-heading"
+      >
+        <div
+          class="newspack-grid newspack-grid__columns-1 newspack-grid__gutter-8 newspack-section-header newspack-section-header--no-margin"
+        >
+          <div
+            class="newspack-section-header__title-container"
+          >
+            <h2>
+              Performance breakdown
+            </h2>
+          </div>
+          <p>
+            Per-prompt, per-intent, and per-placement breakdowns for the selected timeframe. Click any column to re-sort.
+          </p>
+        </div>
+      </div>
+      <div
+        class="newspack-insights__prompts-subsection"
+      >
+        <h3
+          class="newspack-insights__prompts-subsection-heading"
+        >
+          Performance by prompt
+        </h3>
+        <div
+          class="newspack-insights__table-wrap"
+        >
+          <table
+            class="newspack-insights__table newspack-insights__prompts-table--sortable"
+          >
+            <thead>
+              <tr>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Prompt
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Intent
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Placement
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="descending"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort is-active"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Impressions
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Unique viewers
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      CTR
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Form submission rate
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Dismissal rate
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Registrations
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Newsletter signups
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Donation conversions
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Donation conversion rate
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Subscription conversions
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Subscription conversion rate
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td
+                  class="newspack-insights__prompts-performance-empty"
+                  colspan="14"
+                >
+                  No prompt data yet. Performance metrics will appear once readers begin interacting with your prompts.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p
+          class="newspack-insights__prompts-subsection-note"
+        >
+          Showing the top 10 prompts by the sorted column; use “See more” to reveal the rest. Capped at the top 50 prompts by impressions — lower-traffic prompts beyond that may not appear.
+        </p>
+      </div>
+      <div
+        class="newspack-insights__prompts-subsection"
+      >
+        <h3
+          class="newspack-insights__prompts-subsection-heading"
+        >
+          Performance by prompt intent
+        </h3>
+        <div
+          class="newspack-insights__table-wrap"
+        >
+          <table
+            class="newspack-insights__table newspack-insights__prompts-table--sortable"
+          >
+            <thead>
+              <tr>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Intent
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="descending"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort is-active"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Impressions
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Unique viewers
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      CTR
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Form submission rate
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Dismissal rate
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td
+                  class="newspack-insights__prompts-performance-empty"
+                  colspan="6"
+                >
+                  No prompt data yet. Intent performance will appear once readers begin interacting with your prompts.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p
+          class="newspack-insights__prompts-subsection-note"
+        >
+          Answers 'are my donation prompts working better than my registration prompts?' at a glance.
+        </p>
+      </div>
+      <div
+        class="newspack-insights__prompts-subsection"
+      >
+        <h3
+          class="newspack-insights__prompts-subsection-heading"
+        >
+          Performance by prompt placement
+        </h3>
+        <div
+          class="newspack-insights__table-wrap"
+        >
+          <table
+            class="newspack-insights__table newspack-insights__prompts-table--sortable"
+          >
+            <thead>
+              <tr>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Placement
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="descending"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort is-active"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Impressions
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Unique viewers
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      CTR
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+                <th
+                  aria-sort="none"
+                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  scope="col"
+                >
+                  <button
+                    class="newspack-insights__prompts-table-sort"
+                    type="button"
+                  >
+                    <span
+                      class="newspack-insights__prompts-table-sort-label"
+                    >
+                      Dismissal rate
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      class="newspack-insights__prompts-table-sort-indicator"
+                    />
+                  </button>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td
+                  class="newspack-insights__prompts-performance-empty"
+                  colspan="5"
+                >
+                  No prompt data yet. Placement performance will appear once readers begin interacting with your prompts.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p
+          class="newspack-insights__prompts-subsection-note"
+        >
+          Answers 'do my overlay prompts perform better than inline?' Useful for choosing placement defaults.
+        </p>
+      </div>
+    </section>
+  </div>
+</div>
+`;

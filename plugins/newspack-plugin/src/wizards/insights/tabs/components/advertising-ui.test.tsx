@@ -46,22 +46,29 @@ describe( 'FinishConnectingDiagnostic', () => {
 } );
 
 describe( 'DataLagIndicator', () => {
+	// `@wordpress/components` Notice (via InfoCallout) renders both visible
+	// content and a hidden a11y-speak region with the same text. Scope queries
+	// to the visible notice element to avoid duplicate matches.
+	const getCallout = ( container: HTMLElement ): HTMLElement | null => container.querySelector( '.components-notice' );
+
 	it( 'renders the as-of date in an info callout, not dismissible', () => {
-		render( <DataLagIndicator dataAsOf="2026-05-30" hasEstimatedData={ false } /> );
-		expect( screen.getByText( 'About this data' ) ).toBeInTheDocument();
-		expect( screen.getByText( /Data as of/ ) ).toBeInTheDocument();
+		const { container } = render( <DataLagIndicator dataAsOf="2026-05-30" hasEstimatedData={ false } /> );
+		const callout = getCallout( container );
+		expect( callout ).not.toBeNull();
+		expect( callout ).toHaveTextContent( 'About this data' );
+		expect( callout ).toHaveTextContent( /Data as of/ );
 		// Not dismissible — no close button.
-		expect( screen.queryByRole( 'button' ) ).not.toBeInTheDocument();
+		expect( callout!.querySelector( 'button' ) ).toBeNull();
 	} );
 
 	it( 'appends the estimated-data note to the same line when estimated', () => {
-		render( <DataLagIndicator dataAsOf="2026-05-30" hasEstimatedData /> );
-		expect( screen.getByText( /Data as of .*\. Recent days are estimated and may shift until Google finalizes\./ ) ).toBeInTheDocument();
+		const { container } = render( <DataLagIndicator dataAsOf="2026-05-30" hasEstimatedData /> );
+		expect( getCallout( container ) ).toHaveTextContent( /Data as of .*\. Recent days are estimated and may shift until Google finalizes\./ );
 	} );
 
 	it( 'still warns about estimated data when there is no as-of date', () => {
-		render( <DataLagIndicator dataAsOf={ null } hasEstimatedData /> );
-		expect( screen.getByText( 'Recent days are estimated and may shift until Google finalizes.' ) ).toBeInTheDocument();
+		const { container } = render( <DataLagIndicator dataAsOf={ null } hasEstimatedData /> );
+		expect( getCallout( container ) ).toHaveTextContent( 'Recent days are estimated and may shift until Google finalizes.' );
 	} );
 
 	it( 'renders nothing with neither an as-of date nor estimated data', () => {
@@ -82,7 +89,9 @@ describe( 'data_unavailable overlay + currency mapping (Tab 8 extensions)', () =
 	} );
 
 	it( 'formats a currency MetricCard value', () => {
+		// `formatCurrency` drops cents in the $1K–<$1M tier (see format.ts), so
+		// $4,200 renders without a decimal.
 		render( <MetricCard label="Total Revenue" value={ 4200 } format="currency" /> );
-		expect( screen.getByText( '$4,200.00' ) ).toBeInTheDocument();
+		expect( screen.getByText( '$4,200' ) ).toBeInTheDocument();
 	} );
 } );
