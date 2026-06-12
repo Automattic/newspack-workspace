@@ -26,7 +26,7 @@ import LastUpdated from '../components/LastUpdated';
 import TabStateView from './components/TabStateView';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import InfoCallout from './components/InfoCallout';
-import PromptsErrorBanner from './prompts/PromptsErrorBanner';
+import TabErrorBanner from './components/TabErrorBanner';
 import PromptExposureSection from './prompts/PromptExposureSection';
 import PromptEngagementSection from './prompts/PromptEngagementSection';
 import FreeReaderConversionSection from './prompts/FreeReaderConversionSection';
@@ -55,7 +55,7 @@ const PromptsTab = ( { range, previousRange }: PromptsTabProps ) => {
 		>
 			{ data && (
 				<>
-					{ data.tab_error && <PromptsErrorBanner /> }
+					{ data.tab_error && <TabErrorBanner /> }
 					<InfoCallout heading={ __( 'About Direct vs Influenced conversion', 'newspack-plugin' ) } dismissible persist={ false }>
 						<p>
 							<strong>{ __( 'Direct', 'newspack-plugin' ) }</strong>{ ' ' }

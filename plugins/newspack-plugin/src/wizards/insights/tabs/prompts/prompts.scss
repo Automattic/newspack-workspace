@@ -23,32 +23,6 @@
 		gap: 32px;
 	}
 
-	// Tab-level error banner — shown when every section fails to load.
-	&__prompts-banner {
-		display: flex;
-		align-items: flex-start;
-		gap: 12px;
-		padding: 16px 20px;
-		background-color: colors.$error-000;
-		border: 1px solid colors.$error-050;
-		border-radius: 4px;
-
-		&-icon {
-			flex: 0 0 24px;
-			width: 24px;
-			height: 24px;
-			color: colors.$error-600;
-		}
-
-		&-message {
-			margin: 0;
-			flex: 1 1 auto;
-			font-size: 14px;
-			line-height: 1.5;
-			color: wp-colors.$gray-900;
-		}
-	}
-
 	// Section 6 — funnel + distribution side-by-side at equal width,
 	// stacking under ~720px container width.
 	&__prompts-convert-grid {
