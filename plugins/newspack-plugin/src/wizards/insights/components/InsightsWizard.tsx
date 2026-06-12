@@ -225,10 +225,11 @@ const InsightsWizard = ( { config }: InsightsWizardProps ) => {
 		);
 	}
 
-	// Wizard spreads section.props into the rendered component, so we
-	// stuff range / previousRange into per-section props rather than via
-	// the Wizard's `sharedProps`. Functionally equivalent — and avoids the
-	// JSDoc-only typing on Wizard that doesn't include sharedProps.
+	// Pass range / previousRange through each section's `props` map rather
+	// than via Wizard's `sharedProps`. Wizard supports both, but its
+	// JSDoc typedef omits `sharedProps`, so TS strict mode rejects the
+	// call site. Per-section props are functionally equivalent and read
+	// more locally.
 	const sections = visibleTabs.map( t => ( {
 		path: `/${ t.key }`,
 		label: t.label,
