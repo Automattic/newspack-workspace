@@ -229,3 +229,12 @@
 		margin: 0 0 16px;
 	}
 }
+
+// Suppress the generic wizard chunk-loading message ("Loading Insights…")
+// on the Insights page so the Insights-specific tab loading animation
+// owns the first-paint experience without a visual hand-off flash.
+// Scoped to #newspack-insights — the WordPress admin uses the page slug
+// as the React mount node id — so this only affects the Insights page.
+#newspack-insights .newspack-wizard__loader {
+	display: none;
+}
