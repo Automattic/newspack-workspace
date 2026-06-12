@@ -20,6 +20,7 @@ import { __, sprintf } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Notice, Button } from '../../../../../packages/components/src';
 import type { ReadinessIssue } from '../../api/advertising';
 
 export interface FinishConnectingDiagnosticProps {
@@ -28,38 +29,37 @@ export interface FinishConnectingDiagnosticProps {
 	heading?: string;
 }
 
-const FinishConnectingDiagnostic = ( { issues, heading }: FinishConnectingDiagnosticProps ) => (
-	<div className="newspack-insights__finish-connecting" role="status">
-		<h2 className="newspack-insights__finish-connecting-heading">
-			{ heading || __( 'Finish connecting Google Ad Manager to see ad data', 'newspack-plugin' ) }
-		</h2>
-		{ issues.length > 0 ? (
-			<ul className="newspack-insights__finish-connecting-list">
-				{ issues.map( issue => (
-					<li key={ issue.code } className="newspack-insights__finish-connecting-item">
-						<span className="newspack-insights__finish-connecting-message">{ issue.message }</span>
-						{ issue.remediation_url && (
-							<a
-								className="newspack-insights__finish-connecting-cta"
-								href={ issue.remediation_url }
-								aria-label={ sprintf(
-									/* translators: %s: the readiness issue being remediated. */
-									__( 'Fix: %s', 'newspack-plugin' ),
-									issue.message
-								) }
-							>
-								{ __( 'Fix this', 'newspack-plugin' ) } &rarr;
-							</a>
-						) }
-					</li>
-				) ) }
-			</ul>
-		) : (
-			<p className="newspack-insights__finish-connecting-message">
-				{ __( 'Finish connecting Google Ad Manager in Newspack settings to see ad data.', 'newspack-plugin' ) }
-			</p>
-		) }
-	</div>
-);
+const FinishConnectingDiagnostic = ( { issues, heading }: FinishConnectingDiagnosticProps ) => {
+	const headingText = heading || __( 'Finish connecting Google Ad Manager to see ad data', 'newspack-plugin' );
+
+	return (
+		<Notice isWarning className="newspack-insights__finish-connecting" noticeText={ <strong>{ headingText }</strong> }>
+			{ issues.length > 0 ? (
+				<ul className="newspack-insights__finish-connecting-list">
+					{ issues.map( issue => (
+						<li key={ issue.code } className="newspack-insights__finish-connecting-item">
+							<span>{ issue.message }</span>
+							{ issue.remediation_url && (
+								<Button
+									variant="link"
+									href={ issue.remediation_url }
+									aria-label={ sprintf(
+										/* translators: %s: the readiness issue being remediated. */
+										__( 'Fix: %s', 'newspack-plugin' ),
+										issue.message
+									) }
+								>
+									{ __( 'Fix this →', 'newspack-plugin' ) }
+								</Button>
+							) }
+						</li>
+					) ) }
+				</ul>
+			) : (
+				<p>{ __( 'Finish connecting Google Ad Manager in Newspack settings to see ad data.', 'newspack-plugin' ) }</p>
+			) }
+		</Notice>
+	);
+};
 
 export default FinishConnectingDiagnostic;

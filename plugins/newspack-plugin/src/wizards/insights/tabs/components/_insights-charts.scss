@@ -441,25 +441,6 @@
 		align-items: center;
 		gap: 6px;
 	}
-
-	// Connect banner (tab-level OAuth error).
-	&__connect-banner {
-		border: 1px solid wp-colors.$gray-200;
-		border-radius: 4px;
-		padding: 48px 24px;
-		text-align: center;
-		background: wp-colors.$white;
-
-		&-text {
-			font-size: 15px;
-			color: wp-colors.$gray-800;
-			margin: 0 0 16px;
-		}
-
-		&-cta {
-			font-weight: 600;
-		}
-	}
 }
 
 // Inter-section spacing for the GA4 tabs — matches Gates' tab wrapper so the

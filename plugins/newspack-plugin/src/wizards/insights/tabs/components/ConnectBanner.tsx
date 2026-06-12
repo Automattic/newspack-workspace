@@ -12,6 +12,11 @@
  */
 import { __ } from '@wordpress/i18n';
 
+/**
+ * Internal dependencies
+ */
+import { Notice, Button } from '../../../../../packages/components/src';
+
 // Localized, subdirectory-safe URL to the Newspack settings page (where the
 // Google connection lives), built with admin_url() in the PHP boot config.
 // Falls back to a relative admin path if the global isn't present.
@@ -22,14 +27,18 @@ export interface ConnectBannerProps {
 }
 
 const ConnectBanner = ( { text }: ConnectBannerProps ) => (
-	<div className="newspack-insights__connect-banner" role="status">
-		<p className="newspack-insights__connect-banner-text">
-			{ text || __( 'Connect Google Analytics in Newspack → Settings → Connections to see this tab.', 'newspack-plugin' ) }
-		</p>
-		<a className="newspack-insights__connect-banner-cta" href={ SETTINGS_URL }>
-			{ __( 'Connect Google Analytics →', 'newspack-plugin' ) }
-		</a>
-	</div>
+	<Notice
+		isWarning
+		className="newspack-insights__connect-banner"
+		noticeText={
+			<>
+				{ text || __( 'Connect Google Analytics in Newspack → Settings → Connections to see this tab.', 'newspack-plugin' ) }{ ' ' }
+				<Button variant="link" href={ SETTINGS_URL }>
+					{ __( 'Connect Google Analytics →', 'newspack-plugin' ) }
+				</Button>
+			</>
+		}
+	/>
 );
 
 export default ConnectBanner;
