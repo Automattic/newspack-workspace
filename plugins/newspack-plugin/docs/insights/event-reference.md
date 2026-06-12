@@ -184,7 +184,7 @@ Fires when a reader interacts with a Newspack Campaigns prompt. This is your pri
 
 | Parameter | What it tells you |
 |---|---|
-| `newspack_popup_id` | Numeric ID of the prompt. |
+| `newspack_popup_id` | Numeric ID of the prompt. Live BQ data stores this as `value.int_value`; the canonical queries cast it to STRING via `CAST(value.int_value AS STRING)` and fall back to `value.string_value` for safety. |
 | `prompt_title` | Name of the prompt. |
 | `prompt_placement` | Where the prompt appeared (inline, overlay, above-header, etc.). |
 | `prompt_frequency` | Frequency setting on the prompt. |
@@ -192,9 +192,11 @@ Fires when a reader interacts with a Newspack Campaigns prompt. This is your pri
 | `action_type` | `donation`, `registration`, or `newsletters_subscription`. **Single-valued per prompt** — see update #4 above. |
 | `ab_test_id` | Test ID of the A/B test this prompt belongs to, if any. |
 | `ab_variant` | Which variant the reader saw — `a` (control), `b`, `c`, etc. |
-| `prompt_has_donation_block` | Whether the prompt contains a Donate block. |
-| `prompt_has_registration_block` | Whether the prompt contains a Registration block. |
-| `prompt_has_newsletters_subscription_block` | Whether the prompt contains a Newsletter Subscription block. |
+| `prompt_has_donation` (a.k.a. `prompt_has_donation_block`) | Whether the prompt contains a Donate block. |
+| `prompt_has_registration` (a.k.a. `prompt_has_registration_block`) | Whether the prompt contains a Registration block. |
+| `prompt_has_newsletters_subscription` (a.k.a. `prompt_has_newsletters_subscription_block`) | Whether the prompt contains a Newsletter Subscription block. |
+
+**Schema note (publisher drift):** live GA4 data on test publishers emits the no-`_block` form with `int_value = 1` (truthy). The Newspack help doc and earlier examples list the `_block` suffix with `string_value = 'yes'`. Both shapes may appear in the wild; the canonical BigQuery queries (see `docs/insights/formulas/tab-5-prompts.md`) defensively read both via `COALESCE(CAST(value.int_value AS STRING), value.string_value) IN ('1', 'yes')` so neither shape is silently dropped.
 
 **Notes:**
 

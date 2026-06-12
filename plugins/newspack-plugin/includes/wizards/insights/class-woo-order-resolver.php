@@ -6,12 +6,16 @@
  * identify which checkout attempts produced a completed order within a fixed
  * time window (default 30 minutes from `attempt_ts`).
  *
- * Input row shape (from the hub's `gates_paywall_*` queries):
- *   - `user_pseudo_id` (string) — **interpreted as integer `wp_wc_orders.customer_id`**.
- *     The upstream BQ query is expected to use `COALESCE(user_id, user_pseudo_id)`
- *     so this value is a numeric WP user ID for logged-in conversions. Anonymous
- *     conversions (where `user_pseudo_id` is a non-numeric GA4 pseudo ID) fail
- *     the `(int)` cast to 0 and are silently dropped.
+ * Input row shape (from the hub's `gates_paywall_*` and `prompts_*_conversion_*`
+ * queries):
+ *   - `uid` OR `user_pseudo_id` (string) — **interpreted as integer
+ *     `wp_wc_orders.customer_id`**. The upstream BQ query projects
+ *     `COALESCE(user_id, user_pseudo_id) AS uid` (Prompts; renamed per Copilot
+ *     review on newspack-manager-admin#457) or `AS user_pseudo_id` (Gates; not
+ *     renamed). The value is a numeric WP user ID for logged-in conversions.
+ *     Anonymous conversions (where the value is a non-numeric GA4 pseudo ID)
+ *     fail the `(int)` cast to 0 and are silently dropped. The resolver reads
+ *     `uid` first and falls back to `user_pseudo_id` so both shapes work.
  *   - `session_id` (string) — passthrough; not used in the Woo join.
  *   - `attempt_ts` (string|int) — GA4 microsecond timestamp (Unix epoch × 10^6).
  *
@@ -54,7 +58,7 @@ class Woo_Order_Resolver {
 	/**
 	 * Count how many BQ rows match a completed Woo order in the window.
 	 *
-	 * @param array $rows BQ rows: `[ [ 'user_pseudo_id', 'session_id', 'attempt_ts' ], ... ]`.
+	 * @param array $rows BQ rows: `[ [ 'uid' (or 'user_pseudo_id'), 'session_id', 'attempt_ts' ], ... ]`.
 	 * @param int   $window_seconds Window after `attempt_ts` to look for a completion.
 	 * @return int
 	 */
@@ -118,9 +122,12 @@ class Woo_Order_Resolver {
 		}
 
 		// Group attempts by customer_id for one query per customer (efficient on small sets).
+		// Prompts queries project the resolved user identifier as `uid` (Copilot review on
+		// newspack-manager-admin#457); Gates queries still use `user_pseudo_id`. Read `uid`
+		// first with a fallback so both shapes work without a hub-side coordinated rename.
 		$by_customer = [];
 		foreach ( $rows as $i => $row ) {
-			$customer_id = (int) ( $row['user_pseudo_id'] ?? 0 );
+			$customer_id = (int) ( $row['uid'] ?? $row['user_pseudo_id'] ?? 0 );
 			$attempt_ts  = (int) ( $row['attempt_ts'] ?? 0 );
 			if ( $customer_id <= 0 || $attempt_ts <= 0 ) {
 				continue;
