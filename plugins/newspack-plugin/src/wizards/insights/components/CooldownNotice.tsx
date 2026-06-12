@@ -1,18 +1,21 @@
 /**
- * CooldownNotice — MM:SS countdown banner shown when a BigQuery manual
- * refresh hits the 10m cooldown. Auto-clears when the countdown finishes.
+ * CooldownNotice — dismissible MM:SS countdown banner shown when a
+ * BigQuery manual refresh hits the 10m cooldown. Auto-clears when the
+ * countdown finishes. Chrome comes from `@wordpress/components` Notice
+ * so we keep the native dismiss affordance; dismissing only hides the
+ * notice for the current cooldown window — a fresh cooldown re-shows it.
  */
 
 /**
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { useEffect, useSyncExternalStore } from '@wordpress/element';
+import { Notice } from '@wordpress/components';
+import { useEffect, useState, useSyncExternalStore } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
-import { Notice } from '../../../../packages/components/src';
 import type { DateRange } from '../state/useDateRange';
 import { insightsCache, makeSlotKey } from '../state/insightsCache';
 import useCountdown from '../hooks/useCountdown';
@@ -31,7 +34,15 @@ const CooldownNotice = ( { tab, range, previousRange }: CooldownNoticeProps ) =>
 		() => insightsCache.getSlot( key )
 	);
 
+	const [ dismissedFor, setDismissedFor ] = useState< string | null >( null );
 	const remaining = useCountdown( slot.cooldownUntil );
+
+	useEffect( () => {
+		if ( slot.cooldownUntil && dismissedFor !== slot.cooldownUntil ) {
+			// New cooldown landed — reset the dismiss state so the notice reopens.
+			setDismissedFor( null );
+		}
+	}, [ slot.cooldownUntil, dismissedFor ] );
 
 	// Auto-clear the slot's cooldownUntil when the countdown finishes, so the
 	// kebab re-enables and stale cooldownUntil doesn't linger. Gate on the
@@ -55,17 +66,23 @@ const CooldownNotice = ( { tab, range, previousRange }: CooldownNoticeProps ) =>
 	if ( ! remaining ) {
 		return null;
 	}
+	if ( dismissedFor === slot.cooldownUntil ) {
+		return null;
+	}
 
 	return (
 		<Notice
-			isWarning
+			status="warning"
+			isDismissible
+			onRemove={ () => setDismissedFor( slot.cooldownUntil ) }
 			className="newspack-insights__cooldown-notice"
-			noticeText={ sprintf(
+		>
+			{ sprintf(
 				/* translators: %s is a live mm:ss countdown */
 				__( 'Please wait %s before refreshing data again.', 'newspack-plugin' ),
 				remaining
 			) }
-		/>
+		</Notice>
 	);
 };
 

@@ -5,7 +5,7 @@
 /**
  * External dependencies
  */
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -58,10 +58,25 @@ describe( 'CooldownNotice', () => {
 		expect( insightsCache.getSlot( key ).cooldownUntil ).toBeNull();
 	} );
 
-	it( 'does not render a dismiss button (newspack Notice has no dismiss affordance)', () => {
+	it( 'renders a dismiss button that hides the notice for the current cooldown but re-shows on a new one', () => {
 		seedCooldown( 'gates', '2026-06-10T00:05:00Z' );
-		render( <CooldownNotice tab="gates" range={ range } previousRange={ null } /> );
+		const { rerender } = render( <CooldownNotice tab="gates" range={ range } previousRange={ null } /> );
 
-		expect( screen.queryByRole( 'button', { name: /dismiss/i } ) ).not.toBeInTheDocument();
+		const dismissButton = screen.getByRole( 'button', { name: /dismiss/i } );
+		expect( dismissButton ).toBeInTheDocument();
+
+		act( () => {
+			fireEvent.click( dismissButton );
+		} );
+
+		expect( screen.queryByText( /Please wait/ ) ).not.toBeInTheDocument();
+
+		// A fresh cooldown (different cooldownUntil) should re-show the notice.
+		act( () => {
+			seedCooldown( 'gates', '2026-06-10T00:10:00Z' );
+		} );
+		rerender( <CooldownNotice tab="gates" range={ range } previousRange={ null } /> );
+
+		expect( screen.getByText( /Please wait/ ) ).toBeInTheDocument();
 	} );
 } );
