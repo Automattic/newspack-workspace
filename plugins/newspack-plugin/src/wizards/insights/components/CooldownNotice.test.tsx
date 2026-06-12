@@ -5,7 +5,7 @@
 /**
  * External dependencies
  */
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -58,14 +58,10 @@ describe( 'CooldownNotice', () => {
 		expect( insightsCache.getSlot( key ).cooldownUntil ).toBeNull();
 	} );
 
-	it( 'hides on dismiss; reopens when a new cooldown arrives', () => {
+	it( 'does not render a dismiss button (newspack Notice has no dismiss affordance)', () => {
 		seedCooldown( 'gates', '2026-06-10T00:05:00Z' );
 		render( <CooldownNotice tab="gates" range={ range } previousRange={ null } /> );
 
-		fireEvent.click( screen.getByRole( 'button', { name: /dismiss/i } ) );
-		expect( screen.queryByText( /Please wait/ ) ).not.toBeInTheDocument();
-
-		seedCooldown( 'gates', '2026-06-10T00:08:00Z' );
-		expect( screen.getByText( /Please wait/ ) ).toBeInTheDocument();
+		expect( screen.queryByRole( 'button', { name: /dismiss/i } ) ).not.toBeInTheDocument();
 	} );
 } );
