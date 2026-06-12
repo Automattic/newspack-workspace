@@ -114,4 +114,30 @@ class Newspack_Test_Redirection extends WP_UnitTestCase {
 		$this->assertFalse( has_filter( 'redirection_log_data', '__return_false' ) );
 		$this->assertFalse( has_filter( 'option_redirection_options', [ Redirection::class, 'force_logging_off_in_options' ] ) );
 	}
+
+	/**
+	 * The option override forces both expiries to -1 and preserves other keys.
+	 */
+	public function test_option_override_forces_expiries_and_preserves_keys() {
+		$value = [
+			'expire_redirect' => 7,
+			'expire_404'      => 30,
+			'track_hits'      => true,
+			'monitor_post'    => 5,
+		];
+		$result = Redirection::force_logging_off_in_options( $value );
+
+		$this->assertSame( -1, $result['expire_redirect'] );
+		$this->assertSame( -1, $result['expire_404'] );
+		$this->assertTrue( $result['track_hits'] );   // untouched
+		$this->assertSame( 5, $result['monitor_post'] ); // untouched
+	}
+
+	/**
+	 * A non-array value (fresh site, no saved row) is returned untouched.
+	 */
+	public function test_option_override_passes_non_array_through() {
+		$this->assertFalse( Redirection::force_logging_off_in_options( false ) );
+		$this->assertSame( '', Redirection::force_logging_off_in_options( '' ) );
+	}
 }

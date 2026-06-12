@@ -102,12 +102,25 @@ class Redirection {
 	}
 
 	/**
-	 * Layer 2 callback — implemented in a later task.
+	 * Layer 2: force the stored log-retention values to "off" on read.
 	 *
-	 * @param mixed $value Stored option value.
+	 * Read-only (we never write the row), non-destructive, and fully reversible —
+	 * deactivating Newspack reverts the site to its prior settings. Makes the
+	 * Redirection options screen show logging disabled and prevents re-enabling
+	 * from the UI (the value reverts on next read).
+	 *
+	 * Must pass a non-array value through untouched: get_option() returns false
+	 * on a fresh site with no saved row.
+	 *
+	 * @param mixed $value Stored redirection_options value.
 	 * @return mixed
 	 */
 	public static function force_logging_off_in_options( $value ) {
+		if ( ! is_array( $value ) ) {
+			return $value;
+		}
+		$value['expire_redirect'] = -1;
+		$value['expire_404']      = -1;
 		return $value;
 	}
 
