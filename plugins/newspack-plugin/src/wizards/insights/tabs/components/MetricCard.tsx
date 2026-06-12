@@ -23,6 +23,7 @@ import { __, sprintf } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Card } from '../../../../../packages/components/src';
 import { formatCurrency, formatDecimal, formatDuration, formatNumber, formatPercent, formatDelta, deltaTone } from './format';
 import MetricNote from './MetricNote';
 
@@ -98,13 +99,13 @@ const MetricCard = ( props: MetricCardProps ) => {
 	// Shared graceful-failure state (missing dimension / not configured / error).
 	if ( overlay || error || notConfigured ) {
 		return (
-			<div className="newspack-insights__metric-card newspack-insights__metric-card--note">
+			<Card __experimentalCoreCard className="newspack-insights__metric-card newspack-insights__metric-card--note">
 				<div className="newspack-insights__metric-card-label">{ label }</div>
 				<div className="newspack-insights__metric-card-body">
 					<MetricNote overlay={ overlay } error={ !! error } notConfigured={ notConfigured } />
 				</div>
 				{ description && <div className="newspack-insights__metric-card-description">{ description }</div> }
-			</div>
+			</Card>
 		);
 	}
 
@@ -147,7 +148,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 	const valueTooltip = valueTitle || currency?.title || undefined;
 
 	return (
-		<div className="newspack-insights__metric-card">
+		<Card __experimentalCoreCard className="newspack-insights__metric-card">
 			<div className="newspack-insights__metric-card-label">{ label }</div>
 			<div className="newspack-insights__metric-card-body">
 				<div className="newspack-insights__metric-card-value">
@@ -169,7 +170,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 				) }
 			</div>
 			{ description && <div className="newspack-insights__metric-card-description">{ description }</div> }
-		</div>
+		</Card>
 	);
 };
 

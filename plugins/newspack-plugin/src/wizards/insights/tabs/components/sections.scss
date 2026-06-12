@@ -81,10 +81,15 @@
 		gap: 16px;
 	}
 
-	// Card chrome per spec: white background, gray-200 border, 4px
-	// radius. Padding 24px 28px. Min-height 180px so cards line up
-	// uniformly across the grid AND give the centered hero value room
-	// to breathe between label and description.
+	// Card chrome (white background, gray-200 border, 4px radius) is
+	// provided by the newspack Card component (rendered via
+	// `__experimentalCoreCard`, which delegates to WP Core's <Card>).
+	// We layer the colored top accent on the outer card and the
+	// internal scorecard layout (label → hero value → description) on
+	// the inner body wrapper that CoreCard wraps children in.
+	// Min-height 180px keeps cards uniform across the grid AND gives
+	// the centered hero value room to breathe between label and
+	// description.
 	//
 	// Internal layout (three regions, fixed order):
 	//   label  — top, left-aligned (spec's uppercase chip)
@@ -98,14 +103,33 @@
 	// a single coherent unit.
 
 	&__metric-card {
-		display: flex;
-		flex-direction: column;
-		padding: 24px 28px;
-		background-color: #fff;
-		border: 1px solid wp-colors.$gray-200;
 		border-top: 3px solid var(--wp-admin-theme-color);
-		border-radius: 4px;
-		min-height: 180px;
+
+		// CoreCard wraps children in a `.newspack-card--core__body` div, so
+		// the flex layout that pins description to the bottom (and the
+		// scorecard padding + min-height) belongs on that inner wrapper, not
+		// the outer card. We also zero out the default 16px 24px padding
+		// CoreCard applies to grandchild divs of its body — our own padding
+		// owns the spacing.
+		.newspack-card--core__body {
+			display: flex;
+			flex-direction: column;
+			padding: 24px 28px;
+			min-height: 180px;
+
+			// Match CoreCard's own selector to win the cascade — it
+			// pads non-CardBody/Media/Divider grandchild divs at
+			// 16px 24px by default; our outer padding above already
+			// owns the spacing. The body sub-region gets its own
+			// 16px top padding re-applied at matching specificity.
+			> div:not(.components-card__body):not(.components-card__media):not(.components-card__divider) {
+				padding: 0;
+
+				&.newspack-insights__metric-card-body {
+					padding: 16px 0 0;
+				}
+			}
+		}
 
 		&-label {
 			font-size: 12px;
