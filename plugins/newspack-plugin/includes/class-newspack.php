@@ -472,6 +472,13 @@ final class Newspack {
 	}
 
 	/**
+	 * Per-request memoization for self::asset_version().
+	 *
+	 * @var array<string, string>
+	 */
+	private static $asset_version_cache = [];
+
+	/**
 	 * Resolve the cache-busting version for a built dist asset.
 	 *
 	 * Reads the content-hashed `version` emitted by
@@ -480,8 +487,10 @@ final class Newspack {
 	 * change, which makes it a tighter cache-busting key than the manually
 	 * bumped NEWSPACK_PLUGIN_VERSION constant.
 	 *
-	 * Results are memoized per request via a static cache to avoid redundant
-	 * file-system reads when the same asset is resolved multiple times.
+	 * Results are memoized per request to avoid redundant file-system reads.
+	 * Long-running processes (CLI workers, integration tests) that rebuild
+	 * dist/ mid-run can call self::asset_version_reset_cache() to drop
+	 * stale entries.
 	 *
 	 * @param string $name Asset basename relative to `dist/`, without the
 	 *                     `.asset.php` suffix. Examples: 'wizards',
@@ -493,20 +502,50 @@ final class Newspack {
 	 *                or malformed.
 	 */
 	public static function asset_version( string $name ): string {
-		static $cache = [];
-		if ( isset( $cache[ $name ] ) ) {
-			return $cache[ $name ];
+		if ( isset( self::$asset_version_cache[ $name ] ) ) {
+			return self::$asset_version_cache[ $name ];
 		}
 		$version = NEWSPACK_PLUGIN_VERSION;
-		$path    = NEWSPACK_ABSPATH . 'dist/' . $name . '.asset.php';
+		/**
+		 * Filter the directory `asset_version()` reads `.asset.php` files from.
+		 * Defaults to the plugin's `dist/`. Tests redirect this to a temp dir
+		 * to avoid writing fixtures into the production-served path.
+		 *
+		 * @param string $dir  Absolute path with trailing slash.
+		 * @param string $name Asset basename being resolved.
+		 */
+		$dist_dir = apply_filters( 'newspack_asset_dist_dir', NEWSPACK_ABSPATH . 'dist/', $name );
+		$path     = $dist_dir . $name . '.asset.php';
+		// file_exists() is load-bearing for the silent missing-file fallback;
+		// without it the include below would emit an E_WARNING instead of
+		// reaching NEWSPACK_PLUGIN_VERSION.
 		if ( file_exists( $path ) ) {
 			$asset = include $path;
 			if ( is_array( $asset ) && ! empty( $asset['version'] ) ) {
 				$version = $asset['version'];
 			}
+		} else {
+			// Surface a missing .asset.php so a misbuilt deploy is visible to
+			// anyone tailing the debug log. Gated by NEWSPACK_LOG_LEVEL so
+			// production stays quiet; legitimate non-webpack enqueues (e.g.
+			// dist/revisions-control.css) will log too, which is the intended
+			// signal for "this enqueue is not content-hash-busted".
+			Logger::log( "asset_version() fallback: {$path} not found, using NEWSPACK_PLUGIN_VERSION", 'NEWSPACK-ASSETS' );
 		}
-		$cache[ $name ] = $version;
+		self::$asset_version_cache[ $name ] = $version;
 		return $version;
+	}
+
+	/**
+	 * Clear the per-request asset_version() memoization.
+	 *
+	 * Useful from long-running processes (CLI workers, integration tests) that
+	 * rebuild `dist/` mid-run and need subsequent resolves to re-read the file.
+	 *
+	 * @return void
+	 */
+	public static function asset_version_reset_cache(): void {
+		self::$asset_version_cache = [];
 	}
 
 	/**

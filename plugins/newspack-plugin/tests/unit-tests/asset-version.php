@@ -15,6 +15,13 @@ use Newspack\Newspack;
 class Newspack_Test_Asset_Version extends WP_UnitTestCase {
 
 	/**
+	 * Per-test temp dir for fixtures (created lazily on first write_fixture()).
+	 *
+	 * @var string|null
+	 */
+	private $fixture_dir = null;
+
+	/**
 	 * Fixture files created during a test, cleaned up in tear_down().
 	 *
 	 * @var string[]
@@ -22,30 +29,60 @@ class Newspack_Test_Asset_Version extends WP_UnitTestCase {
 	private $fixture_files = [];
 
 	/**
-	 * Clean up fixture files.
+	 * Remove fixtures, drop the temp dir, drop the filter, and reset the
+	 * helper's per-request cache so each test starts from clean state.
 	 */
 	public function tear_down() {
+		remove_filter( 'newspack_asset_dist_dir', [ $this, 'filter_dist_dir' ] );
 		foreach ( $this->fixture_files as $file ) {
 			if ( file_exists( $file ) ) {
-				unlink( $file );
+				unlink( $file ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
 			}
 		}
 		$this->fixture_files = [];
+		if ( null !== $this->fixture_dir && is_dir( $this->fixture_dir ) ) {
+			rmdir( $this->fixture_dir ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.directory_rmdir
+		}
+		$this->fixture_dir = null;
+		Newspack::asset_version_reset_cache();
 		parent::tear_down();
 	}
 
 	/**
-	 * Write a fixture asset file under dist/ and register it for cleanup.
+	 * Filter callback that redirects the helper's dist dir at the temp fixture
+	 * dir for this test. Registered on first write_fixture() call.
 	 *
-	 * @param string $name     Asset name (basename under dist/, no suffix).
+	 * @return string
+	 */
+	public function filter_dist_dir() {
+		return $this->fixture_dir;
+	}
+
+	/**
+	 * Create the per-test fixture dir and register the dist-dir filter.
+	 *
+	 * @return void
+	 */
+	private function init_fixture_dir() {
+		if ( null !== $this->fixture_dir ) {
+			return;
+		}
+		$this->fixture_dir = get_temp_dir() . 'newspack-asset-version-fixtures-' . wp_rand() . '/';
+		wp_mkdir_p( $this->fixture_dir );
+		add_filter( 'newspack_asset_dist_dir', [ $this, 'filter_dist_dir' ] );
+	}
+
+	/**
+	 * Write a fixture asset file under the per-test temp dir and register it
+	 * for cleanup. Tests that call this implicitly opt into the filter that
+	 * points `asset_version()` at the temp dir.
+	 *
+	 * @param string $name     Asset name (basename, no `.asset.php` suffix).
 	 * @param string $contents PHP source for the fixture file.
 	 */
 	private function write_fixture( $name, $contents ) {
-		$path = NEWSPACK_ABSPATH . 'dist/' . $name . '.asset.php';
-		$dir  = dirname( $path );
-		if ( ! is_dir( $dir ) ) {
-			wp_mkdir_p( $dir );
-		}
+		$this->init_fixture_dir();
+		$path = $this->fixture_dir . $name . '.asset.php';
 		file_put_contents( $path, $contents ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents
 		$this->fixture_files[] = $path;
 	}
@@ -108,5 +145,24 @@ class Newspack_Test_Asset_Version extends WP_UnitTestCase {
 			NEWSPACK_PLUGIN_VERSION,
 			Newspack::asset_version( 'this-asset-definitely-does-not-exist-' . wp_rand() )
 		);
+	}
+
+	/**
+	 * Reset clears memoized entries so a subsequent call re-reads the file.
+	 * Without the reset, the helper would return the previously-cached value
+	 * even after the underlying fixture changed.
+	 */
+	public function test_reset_cache_drops_memoized_entries() {
+		$name = 'tmp-test-reset-' . wp_rand();
+		$this->write_fixture( $name, '<?php return [ "version" => "first" ];' );
+		$this->assertSame( 'first', Newspack::asset_version( $name ) );
+
+		// Rewrite the same fixture with a new version, then reset.
+		file_put_contents( // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents
+			$this->fixture_dir . $name . '.asset.php',
+			'<?php return [ "version" => "second" ];'
+		);
+		Newspack::asset_version_reset_cache();
+		$this->assertSame( 'second', Newspack::asset_version( $name ) );
 	}
 }
