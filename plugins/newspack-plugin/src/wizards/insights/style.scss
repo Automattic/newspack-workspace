@@ -37,6 +37,17 @@
 		}
 	}
 
+	// While a tab is loading (chunk Suspense fallback OR in-tab loading view),
+	// hide the date range + comparison controls — they're non-interactive
+	// while data is fetching, and removing visual noise lets the tab loading
+	// animation own the user's attention.
+	.newspack-wizard__content:has( .newspack-insights__tab-loading ),
+	.newspack-wizard__content:has( .newspack-insights__tab-fallback ) {
+		.newspack-insights__header-controls {
+			display: none;
+		}
+	}
+
 	&__last-updated {
 		font-size: 13px;
 		font-weight: 400;
