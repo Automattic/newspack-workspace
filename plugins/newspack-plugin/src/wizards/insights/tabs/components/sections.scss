@@ -61,18 +61,6 @@
 		gap: 16px;
 	}
 
-	// The Newspack SectionHeader is designed for top-of-page chrome with
-	// generous 64px/32px margins. Inside an Insights tab we stack many
-	// sections per page and let `.newspack-insights__section { gap: 16px }`
-	// own the rhythm, so we trim the SectionHeader's intrinsic spacing.
-	&__section .newspack-insights__section-heading {
-		margin: 0;
-	}
-
-	&__section .newspack-section-header__container {
-		margin: 0;
-	}
-
 	&__section-empty {
 		margin: 0;
 		padding: 20px;
