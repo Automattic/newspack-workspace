@@ -126,7 +126,7 @@ class Redirection {
 
 	/**
 	 * Layer 3: enqueue the admin script that hides the log-retention controls,
-	 * only on Redirection's options screen.
+	 * only on the Redirection admin screen (Tools → Redirection).
 	 *
 	 * @param string $hook_suffix Current admin screen hook suffix.
 	 */
