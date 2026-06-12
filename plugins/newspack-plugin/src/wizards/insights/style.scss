@@ -239,6 +239,12 @@
 		align-items: flex-start;
 		justify-content: space-between;
 		gap: 16px;
+
+		@media ( max-width: 782px ) {
+			flex-direction: column;
+			align-items: stretch;
+			gap: 8px;
+		}
 	}
 
 	&__section-header-text {

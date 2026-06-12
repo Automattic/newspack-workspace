@@ -251,6 +251,7 @@
 
 	&__table-wrap {
 		overflow-x: auto;
+		min-width: 0;
 		background-color: #fff;
 		border: 1px solid wp-colors.$gray-200;
 		border-radius: 4px;
