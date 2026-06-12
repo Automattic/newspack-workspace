@@ -21,6 +21,7 @@ import { Icon, caution } from '@wordpress/icons';
  * Internal dependencies
  */
 import type { PromptsMetricState } from '../../api/prompts';
+import SectionEmpty from '../components/SectionEmpty';
 
 /** Publisher-facing copy for a section that failed to load (no internal codes). */
 export const SECTION_ERROR_MESSAGE = __( 'Unable to load this section. Newspack Manager may need attention.', 'newspack-plugin' );
@@ -42,7 +43,7 @@ const SectionState = ( { state, emptyMessage, children }: SectionStateProps ) =>
 		);
 	}
 	if ( state === 'empty' ) {
-		return <p className="newspack-insights__section-empty">{ emptyMessage }</p>;
+		return <SectionEmpty>{ emptyMessage }</SectionEmpty>;
 	}
 	return <>{ children }</>;
 };

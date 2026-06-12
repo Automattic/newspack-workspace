@@ -22,6 +22,7 @@ import { Fragment } from '@wordpress/element';
  * Internal dependencies
  */
 import type { PerformanceRow } from '../../api/subscribers';
+import SectionEmpty from '../components/SectionEmpty';
 import SectionHeading from '../components/SectionHeading';
 import { formatCurrency, formatNumber } from '../components/format';
 
@@ -37,7 +38,7 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 				aria-labelledby="newspack-insights-performance-heading"
 			>
 				<SectionHeading id="newspack-insights-performance-heading" title={ __( 'Subscriptions by product', 'newspack-plugin' ) } />
-				<p className="newspack-insights__section-empty">{ __( 'No subscription products configured yet.', 'newspack-plugin' ) }</p>
+				<SectionEmpty>{ __( 'No subscription products configured yet.', 'newspack-plugin' ) }</SectionEmpty>
 			</section>
 		);
 	}

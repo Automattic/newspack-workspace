@@ -29,6 +29,7 @@ import { Fragment } from '@wordpress/element';
  * Internal dependencies
  */
 import type { BillingModel, DonorsTierRow, DonorsTierVariationRow } from '../../api/donors';
+import SectionEmpty from '../components/SectionEmpty';
 import SectionHeading from '../components/SectionHeading';
 import { formatCurrency, formatNumber } from '../components/format';
 
@@ -67,7 +68,7 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 				aria-labelledby="newspack-insights-donors-performance-heading"
 			>
 				<SectionHeading id="newspack-insights-donors-performance-heading" title={ __( 'Donations by tier', 'newspack-plugin' ) } />
-				<p className="newspack-insights__section-empty">{ __( 'No donation activity yet.', 'newspack-plugin' ) }</p>
+				<SectionEmpty>{ __( 'No donation activity yet.', 'newspack-plugin' ) }</SectionEmpty>
 			</section>
 		);
 	}

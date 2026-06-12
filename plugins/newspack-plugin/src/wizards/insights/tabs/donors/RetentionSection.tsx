@@ -35,6 +35,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
  */
 import type { DonorsRateValue, DonorsWindow } from '../../api/donors';
 import MetricCard from '../components/MetricCard';
+import SectionEmpty from '../components/SectionEmpty';
 import SectionHeading from '../components/SectionHeading';
 import { formatNumber } from '../components/format';
 
@@ -75,12 +76,12 @@ const RetentionSection = ( { current, previous }: RetentionSectionProps ) => {
 		return (
 			<section { ...sectionProps }>
 				{ heading }
-				<p className="newspack-insights__section-empty">
+				<SectionEmpty>
 					{ __(
 						'Retention metrics will appear once your data shows donors lapsing and returning, or recurring donors aging through the selected timeframe.',
 						'newspack-plugin'
 					) }
-				</p>
+				</SectionEmpty>
 			</section>
 		);
 	}

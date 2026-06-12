@@ -19,6 +19,7 @@ import { useState } from '@wordpress/element';
  */
 import { formatCurrency, formatDecimal, formatDuration, formatNumber, formatPercent } from './format';
 import MetricNote from './MetricNote';
+import SectionEmpty from './SectionEmpty';
 import { uniformValue } from './metrics';
 import type { MetricPayload, MetricRow } from './metrics';
 
@@ -91,7 +92,7 @@ const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10, collapseC
 	const rows: MetricRow[] = payload && Array.isArray( payload.rows ) ? payload.rows.slice( 0, rowLimit ) : [];
 
 	if ( rows.length === 0 ) {
-		return <p className="newspack-insights__section-empty">{ emptyMessage }</p>;
+		return <SectionEmpty>{ emptyMessage }</SectionEmpty>;
 	}
 
 	// Collapse to `defaultRowLimit` rows behind a toggle when there are more.

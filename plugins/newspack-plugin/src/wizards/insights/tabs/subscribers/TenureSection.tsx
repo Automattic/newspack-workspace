@@ -19,6 +19,7 @@ import { useMemo } from '@wordpress/element';
  * Internal dependencies
  */
 import type { TenureDistributionRow } from '../../api/subscribers';
+import SectionEmpty from '../components/SectionEmpty';
 import SectionHeading from '../components/SectionHeading';
 
 export interface TenureSectionProps {
@@ -59,9 +60,7 @@ const TenureSection = ( { rows }: TenureSectionProps ) => {
 		return (
 			<section className="newspack-insights__section newspack-insights__section--tenure" aria-labelledby="newspack-insights-tenure-heading">
 				<SectionHeading id="newspack-insights-tenure-heading" title={ __( 'Subscriber tenure', 'newspack-plugin' ) } />
-				<p className="newspack-insights__section-empty">
-					{ __( 'No subscribers yet — tenure data will appear once subscriptions exist.', 'newspack-plugin' ) }
-				</p>
+				<SectionEmpty>{ __( 'No subscribers yet — tenure data will appear once subscriptions exist.', 'newspack-plugin' ) }</SectionEmpty>
 			</section>
 		);
 	}
