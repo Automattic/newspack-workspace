@@ -12,6 +12,11 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 
+/**
+ * Internal dependencies
+ */
+import { Badge } from '../../../../../packages/components/src';
+
 export interface ScopePillProps {
 	/** The uniform value to show (e.g. a country name). */
 	label: string;
@@ -19,11 +24,13 @@ export interface ScopePillProps {
 
 const ScopePill = ( { label }: ScopePillProps ) => (
 	<span className="newspack-insights__scope-pill">
-		{ sprintf(
-			/* translators: %s: the single value shared by every row (e.g. a country name). */
-			__( 'Showing: %s', 'newspack-plugin' ),
-			label
-		) }
+		<Badge
+			text={ sprintf(
+				/* translators: %s: the single value shared by every row (e.g. a country name). */
+				__( 'Showing: %s', 'newspack-plugin' ),
+				label
+			) }
+		/>
 	</span>
 );
 

@@ -67,18 +67,12 @@
 		border-radius: 0;
 	}
 
-	// Inline scope pill next to a table title (e.g. "Showing: United States") —
-	// full-pill shape, muted, vertically centered with the title text.
+	// Inline scope pill next to a table title (e.g. "Showing: United States").
+	// Visual treatment is provided by the wrapped <Badge>; this wrapper only
+	// supplies positional rules so the pill flows inline with the title text.
 	&__scope-pill {
 		display: inline-block;
 		margin-left: 8px;
-		padding: 2px 8px;
-		border-radius: 12px;
-		background: wp-colors.$gray-100;
-		color: wp-colors.$gray-700;
-		font-size: 12px;
-		font-weight: 500;
-		line-height: 1.4;
 		vertical-align: middle;
 		white-space: nowrap;
 	}
