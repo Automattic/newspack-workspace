@@ -8,6 +8,9 @@
  * codes are surfaced. Replaces the tab-local GatesErrorBanner /
  * PromptsErrorBanner with a single shared component backed by the
  * Newspack `Notice` (`isError`) for project-wide visual consistency.
+ * The outer `<div role="alert">` wrapper preserves live-region semantics
+ * so assistive tech announces the banner when it appears (the Newspack
+ * `Notice` component renders a plain `<div>` without `role="alert"`).
  */
 
 /**
@@ -28,15 +31,17 @@ export interface TabErrorBannerProps {
 }
 
 const TabErrorBanner = ( { heading, body }: TabErrorBannerProps ) => (
-	<Notice
-		isError
-		noticeText={
-			<>
-				<strong>{ heading ?? __( 'Unable to load this tab.', 'newspack-plugin' ) }</strong>{ ' ' }
-				{ body ?? __( 'Newspack Manager may need attention. Try again shortly.', 'newspack-plugin' ) }
-			</>
-		}
-	/>
+	<div role="alert">
+		<Notice
+			isError
+			noticeText={
+				<>
+					<strong>{ heading ?? __( 'Unable to load this tab.', 'newspack-plugin' ) }</strong>{ ' ' }
+					{ body ?? __( 'Newspack Manager may need attention. Try again shortly.', 'newspack-plugin' ) }
+				</>
+			}
+		/>
+	</div>
 );
 
 export default TabErrorBanner;
