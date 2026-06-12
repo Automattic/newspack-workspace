@@ -114,6 +114,8 @@ class Audience_Wizard extends Wizard {
 			'has_metering'    => Content_Gate::is_metering_enabled( Memberships::GATE_CPT ),
 		];
 
+		$data['is_newspack_feature_enabled'] = Content_Gate::is_newspack_feature_enabled();
+
 		wp_enqueue_script( 'newspack-wizards' );
 
 		wp_localize_script(
@@ -381,34 +383,38 @@ class Audience_Wizard extends Wizard {
 		);
 
 		// Group label settings (publisher-overridable singular/plural for group subscriptions).
-		register_rest_route(
-			NEWSPACK_API_NAMESPACE,
-			'/wizard/' . $this->slug . '/group-labels',
-			[
-				'methods'             => WP_REST_Server::READABLE,
-				'callback'            => [ $this, 'api_get_group_labels' ],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
-			]
-		);
-		register_rest_route(
-			NEWSPACK_API_NAMESPACE,
-			'/wizard/' . $this->slug . '/group-labels',
-			[
-				'methods'             => WP_REST_Server::EDITABLE,
-				'callback'            => [ $this, 'api_update_group_labels' ],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
-				'args'                => [
-					'label_singular' => [
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
+		// Gated on the Newspack Content Gate feature flag — these endpoints are
+		// only relevant when the group subscriptions / access control feature is on.
+		if ( Content_Gate::is_newspack_feature_enabled() ) {
+			register_rest_route(
+				NEWSPACK_API_NAMESPACE,
+				'/wizard/' . $this->slug . '/group-labels',
+				[
+					'methods'             => WP_REST_Server::READABLE,
+					'callback'            => [ $this, 'api_get_group_labels' ],
+					'permission_callback' => [ $this, 'api_permissions_check' ],
+				]
+			);
+			register_rest_route(
+				NEWSPACK_API_NAMESPACE,
+				'/wizard/' . $this->slug . '/group-labels',
+				[
+					'methods'             => WP_REST_Server::EDITABLE,
+					'callback'            => [ $this, 'api_update_group_labels' ],
+					'permission_callback' => [ $this, 'api_permissions_check' ],
+					'args'                => [
+						'label_singular' => [
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'label_plural'   => [
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
 					],
-					'label_plural'   => [
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-				],
-			]
-		);
+				]
+			);
+		}
 
 		// Cover fees settings.
 		register_rest_route(

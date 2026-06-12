@@ -111,7 +111,9 @@ function AudienceWizard( { confirmAction, pluginRequirements, wizardApiFetch }, 
 			label: __( 'Checkout & Payment', 'newspack-plugin' ),
 			path: '/payment',
 		},
-		{
+		// "Advanced settings" hosts the Group labels override, which only makes
+		// sense when the Newspack Content Gate / Group subscriptions feature is on.
+		newspackAudience.is_newspack_feature_enabled && {
 			label: __( 'Advanced settings', 'newspack-plugin' ),
 			path: '/groups',
 		},
@@ -163,7 +165,7 @@ function AudienceWizard( { confirmAction, pluginRequirements, wizardApiFetch }, 
 					<Route path="/" exact render={ () => <Setup { ...props } /> } />
 					<Route path="/content-gating" render={ () => <ContentGating { ...props } /> } />
 					<Route path="/payment" render={ () => <Payment { ...props } /> } />
-					<Route path="/groups" render={ () => <Groups { ...props } /> } />
+					{ newspackAudience.is_newspack_feature_enabled && <Route path="/groups" render={ () => <Groups { ...props } /> } /> }
 					<Route path="/campaign" render={ () => <Campaign { ...props } /> } />
 					<Route path="/complete" render={ () => <Complete { ...props } /> } />
 					<Redirect to="/" />
