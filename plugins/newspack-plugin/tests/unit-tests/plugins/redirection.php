@@ -119,7 +119,7 @@ class Newspack_Test_Redirection extends WP_UnitTestCase {
 	 * The option override forces both expiries to -1 and preserves other keys.
 	 */
 	public function test_option_override_forces_expiries_and_preserves_keys() {
-		$value = [
+		$value  = [
 			'expire_redirect' => 7,
 			'expire_404'      => 30,
 			'track_hits'      => true,
@@ -129,8 +129,8 @@ class Newspack_Test_Redirection extends WP_UnitTestCase {
 
 		$this->assertSame( -1, $result['expire_redirect'] );
 		$this->assertSame( -1, $result['expire_404'] );
-		$this->assertTrue( $result['track_hits'] );   // untouched
-		$this->assertSame( 5, $result['monitor_post'] ); // untouched
+		$this->assertTrue( $result['track_hits'] );   // Untouched.
+		$this->assertSame( 5, $result['monitor_post'] ); // Untouched.
 	}
 
 	/**
