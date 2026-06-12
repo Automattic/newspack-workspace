@@ -534,7 +534,18 @@
 // Per-section grid column modifiers. Compound selectors (0,2,0) so they win
 // over the single-class base rules regardless of stylesheet load order. Max 4
 // cards per row anywhere (NPPD-1649 fix #1).
-.newspack-insights__metric-grid.newspack-insights__metric-grid--cols-4 {
+// Shared column patterns. cols-2 and cols-4 use the same breakpoints across
+// every grid variant; cols-3 differs (metric collapses at 782px, chart at
+// 1100px) so it stays per-grid.
+%insights-grid-cols-2 {
+	grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
+
+	@media ( max-width: 782px ) {
+		grid-template-columns: 1fr;
+	}
+}
+
+%insights-grid-cols-4 {
 	grid-template-columns: repeat( 4, minmax( 0, 1fr ) );
 
 	@media ( max-width: 1100px ) {
@@ -546,24 +557,13 @@
 	}
 }
 
+.newspack-insights__metric-grid.newspack-insights__metric-grid--cols-4,
+.newspack-insights__chart-grid.newspack-insights__chart-grid--cols-4 {
+	@extend %insights-grid-cols-4;
+}
+
 .newspack-insights__metric-grid.newspack-insights__metric-grid--cols-3 {
 	grid-template-columns: repeat( 3, minmax( 0, 1fr ) );
-
-	@media ( max-width: 782px ) {
-		grid-template-columns: 1fr;
-	}
-}
-
-.newspack-insights__metric-grid.newspack-insights__metric-grid--cols-2 {
-	grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
-
-	@media ( max-width: 782px ) {
-		grid-template-columns: 1fr;
-	}
-}
-
-.newspack-insights__chart-grid.newspack-insights__chart-grid--cols-2 {
-	grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
 
 	@media ( max-width: 782px ) {
 		grid-template-columns: 1fr;
@@ -578,24 +578,10 @@
 	}
 }
 
-.newspack-insights__chart-grid.newspack-insights__chart-grid--cols-4 {
-	grid-template-columns: repeat( 4, minmax( 0, 1fr ) );
-
-	@media ( max-width: 1100px ) {
-		grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
-	}
-
-	@media ( max-width: 600px ) {
-		grid-template-columns: 1fr;
-	}
-}
-
+.newspack-insights__metric-grid.newspack-insights__metric-grid--cols-2,
+.newspack-insights__chart-grid.newspack-insights__chart-grid--cols-2,
 .newspack-insights__table-grid.newspack-insights__table-grid--cols-2 {
-	grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
-
-	@media ( max-width: 782px ) {
-		grid-template-columns: 1fr;
-	}
+	@extend %insights-grid-cols-2;
 }
 
 // Traffic sources: channel-breakdown pie (~40%) reads as a unit with the
