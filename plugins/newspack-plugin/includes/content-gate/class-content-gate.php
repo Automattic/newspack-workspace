@@ -116,9 +116,20 @@ class Content_Gate {
 	/**
 	 * Whether the first-party Newspack feature is enabled.
 	 *
+	 * Memoized per request — the underlying constant is immutable for the
+	 * lifetime of a request, and call sites (admin menu, REST registration,
+	 * wizard data, gated callbacks across Group_Subscription_*) consult this
+	 * many times per page. The cache keeps that footprint flat if the check
+	 * grows beyond a constant lookup in the future (license, remote call,
+	 * etc.).
+	 *
 	 * @return bool
 	 */
 	public static function is_newspack_feature_enabled() {
+		static $enabled = null;
+		if ( null !== $enabled ) {
+			return $enabled;
+		}
 		/**
 		 * Enables the content gating feature which allows restricting
 		 * content access based on membership, donations, or other criteria.
@@ -130,7 +141,8 @@ class Content_Gate {
 		 *
 		 * @example define( 'NEWSPACK_CONTENT_GATES', true );
 		 */
-		return defined( 'NEWSPACK_CONTENT_GATES' ) && NEWSPACK_CONTENT_GATES;
+		$enabled = defined( 'NEWSPACK_CONTENT_GATES' ) && NEWSPACK_CONTENT_GATES;
+		return $enabled;
 	}
 
 	/**

@@ -383,38 +383,37 @@ class Audience_Wizard extends Wizard {
 		);
 
 		// Group label settings (publisher-overridable singular/plural for group subscriptions).
-		// Gated on the Newspack Content Gate feature flag — these endpoints are
-		// only relevant when the group subscriptions / access control feature is on.
-		if ( Content_Gate::is_newspack_feature_enabled() ) {
-			register_rest_route(
-				NEWSPACK_API_NAMESPACE,
-				'/wizard/' . $this->slug . '/group-labels',
-				[
-					'methods'             => WP_REST_Server::READABLE,
-					'callback'            => [ $this, 'api_get_group_labels' ],
-					'permission_callback' => [ $this, 'api_permissions_check' ],
-				]
-			);
-			register_rest_route(
-				NEWSPACK_API_NAMESPACE,
-				'/wizard/' . $this->slug . '/group-labels',
-				[
-					'methods'             => WP_REST_Server::EDITABLE,
-					'callback'            => [ $this, 'api_update_group_labels' ],
-					'permission_callback' => [ $this, 'api_permissions_check' ],
-					'args'                => [
-						'label_singular' => [
-							'type'              => 'string',
-							'sanitize_callback' => 'sanitize_text_field',
-						],
-						'label_plural'   => [
-							'type'              => 'string',
-							'sanitize_callback' => 'sanitize_text_field',
-						],
+		// The callbacks short-circuit on Content_Gate::is_newspack_feature_enabled() so
+		// stale clients hitting the route after a flag flip get a descriptive error
+		// instead of reading or writing the option directly.
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/group-labels',
+			[
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_group_labels' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+			]
+		);
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/group-labels',
+			[
+				'methods'             => WP_REST_Server::EDITABLE,
+				'callback'            => [ $this, 'api_update_group_labels' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'label_singular' => [
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
 					],
-				]
-			);
-		}
+					'label_plural'   => [
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+				],
+			]
+		);
 
 		// Cover fees settings.
 		register_rest_route(
@@ -1057,9 +1056,13 @@ class Audience_Wizard extends Wizard {
 	 * Get the publisher-configurable group subscription labels. Empty values fall back
 	 * to the defaults baked into Group_Subscription::get_label().
 	 *
-	 * @return WP_REST_Response
+	 * @return WP_REST_Response|WP_Error
 	 */
 	public function api_get_group_labels() {
+		$disabled = self::group_labels_feature_disabled_error();
+		if ( $disabled ) {
+			return $disabled;
+		}
 		return rest_ensure_response(
 			[
 				'label_singular'         => (string) get_option( 'newspack_group_subscription_label_singular', '' ),
@@ -1075,9 +1078,13 @@ class Audience_Wizard extends Wizard {
 	 *
 	 * @param WP_REST_Request $request Request object.
 	 *
-	 * @return WP_REST_Response
+	 * @return WP_REST_Response|WP_Error
 	 */
 	public function api_update_group_labels( $request ) {
+		$disabled = self::group_labels_feature_disabled_error();
+		if ( $disabled ) {
+			return $disabled;
+		}
 		$params = $request->get_params();
 		foreach ( [ 'label_singular', 'label_plural' ] as $field ) {
 			if ( ! array_key_exists( $field, $params ) ) {
@@ -1091,6 +1098,23 @@ class Audience_Wizard extends Wizard {
 			}
 		}
 		return $this->api_get_group_labels();
+	}
+
+	/**
+	 * Shared guard for the /group-labels callbacks: returns a 403 WP_Error when
+	 * the Newspack Content Gate feature flag is off, or null when it's on.
+	 *
+	 * @return WP_Error|null
+	 */
+	private static function group_labels_feature_disabled_error() {
+		if ( Content_Gate::is_newspack_feature_enabled() ) {
+			return null;
+		}
+		return new WP_Error(
+			'newspack_content_gate_disabled',
+			__( 'Group subscription label settings are unavailable: the Newspack Content Gate feature is not enabled on this site.', 'newspack-plugin' ),
+			[ 'status' => 403 ]
+		);
 	}
 
 	/**
