@@ -136,3 +136,4 @@ class Redirection {
 	 */
 	public static function maybe_render_drift_notice() {}
 }
+Redirection::init();
