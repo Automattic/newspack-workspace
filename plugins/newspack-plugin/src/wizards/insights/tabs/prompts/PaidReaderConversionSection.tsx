@@ -17,6 +17,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { PromptsWindow } from '../../api/prompts';
 import MetricCard from '../components/MetricCard';
+import SectionHeading from '../components/SectionHeading';
 import { scalarToMetricCardProps } from './scalarToCard';
 
 export interface PaidReaderConversionSectionProps {
@@ -26,15 +27,14 @@ export interface PaidReaderConversionSectionProps {
 
 const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversionSectionProps ) => (
 	<section className="newspack-insights__section newspack-insights__section--paid-reader" aria-labelledby="newspack-insights-prompts-paid-heading">
-		<h2 id="newspack-insights-prompts-paid-heading" className="newspack-insights__section-heading">
-			{ __( 'Paid reader conversion', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">
-			{ __(
+		<SectionHeading
+			id="newspack-insights-prompts-paid-heading"
+			title={ __( 'Paid reader conversion', 'newspack-plugin' ) }
+			description={ __(
 				'How effectively prompts convert readers into donors and subscribers. Direct counts conversions in the same session as a prompt impression. Influenced counts conversions in a later session within 14 days of seeing a prompt.',
 				'newspack-plugin'
 			) }
-		</p>
+		/>
 		<div className="newspack-insights__metric-grid">
 			<MetricCard
 				{ ...scalarToMetricCardProps( {

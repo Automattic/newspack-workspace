@@ -15,6 +15,7 @@ import type { MetricPayload } from '../../components/metrics';
 import { uniformValue } from '../../components/metrics';
 import MetricTable from '../../components/MetricTable';
 import ScopePill from '../../components/ScopePill';
+import SectionHeading from '../../components/SectionHeading';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -34,10 +35,11 @@ const GeographicSection = ( { current }: SectionProps ) => {
 
 	return (
 		<section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-geo">
-			<h2 id="newspack-insights-audience-geo" className="newspack-insights__section-heading">
-				{ __( 'Geographic', 'newspack-plugin' ) }
-			</h2>
-			<p className="newspack-insights__section-caption">{ __( 'Where your readers are.', 'newspack-plugin' ) }</p>
+			<SectionHeading
+				id="newspack-insights-audience-geo"
+				title={ __( 'Geographic', 'newspack-plugin' ) }
+				description={ __( 'Where your readers are.', 'newspack-plugin' ) }
+			/>
 			<div className="newspack-insights__table-grid newspack-insights__table-grid--cols-2">
 				<div>
 					<h3 className="newspack-insights__chart-card-title">

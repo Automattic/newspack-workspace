@@ -22,6 +22,7 @@ import { Fragment } from '@wordpress/element';
  * Internal dependencies
  */
 import type { PerformanceRow } from '../../api/subscribers';
+import SectionHeading from '../components/SectionHeading';
 import { formatCurrency, formatNumber } from '../components/format';
 
 export interface PerformanceSectionProps {
@@ -35,9 +36,7 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 				className="newspack-insights__section newspack-insights__section--performance"
 				aria-labelledby="newspack-insights-performance-heading"
 			>
-				<h2 id="newspack-insights-performance-heading" className="newspack-insights__section-heading">
-					{ __( 'Subscriptions by product', 'newspack-plugin' ) }
-				</h2>
+				<SectionHeading id="newspack-insights-performance-heading" title={ __( 'Subscriptions by product', 'newspack-plugin' ) } />
 				<p className="newspack-insights__section-empty">{ __( 'No subscription products configured yet.', 'newspack-plugin' ) }</p>
 			</section>
 		);
@@ -48,15 +47,14 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 			className="newspack-insights__section newspack-insights__section--performance"
 			aria-labelledby="newspack-insights-performance-heading"
 		>
-			<h2 id="newspack-insights-performance-heading" className="newspack-insights__section-heading">
-				{ __( 'Subscriptions by product', 'newspack-plugin' ) }
-			</h2>
-			<p className="newspack-insights__section-caption">
-				{ __(
+			<SectionHeading
+				id="newspack-insights-performance-heading"
+				title={ __( 'Subscriptions by product', 'newspack-plugin' ) }
+				description={ __(
 					'Active subscriptions per product (subscriptions, not unique customers). Lifetime revenue is the all-time total per product.',
 					'newspack-plugin'
 				) }
-			</p>
+			/>
 			<div className="newspack-insights__table-wrap">
 				<table className="newspack-insights__table">
 					<thead>

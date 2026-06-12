@@ -26,6 +26,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 import type { SubscribersRateValue, SubscribersWindow } from '../../api/subscribers';
 import type { DateRange } from '../../state/useDateRange';
 import MetricCard from '../components/MetricCard';
+import SectionHeading from '../components/SectionHeading';
 import { formatNumber } from '../components/format';
 
 export interface WindowedSectionProps {
@@ -92,9 +93,7 @@ const WindowedSection = ( { range, current, previous }: WindowedSectionProps ) =
 
 	return (
 		<section className="newspack-insights__section newspack-insights__section--windowed" aria-labelledby="newspack-insights-windowed-heading">
-			<h2 id="newspack-insights-windowed-heading" className="newspack-insights__section-heading">
-				{ getHeading( range ) }
-			</h2>
+			<SectionHeading id="newspack-insights-windowed-heading" title={ getHeading( range ) } />
 			<div className="newspack-insights__metric-grid">
 				<MetricCard
 					label={ __( 'New subscribers', 'newspack-plugin' ) }

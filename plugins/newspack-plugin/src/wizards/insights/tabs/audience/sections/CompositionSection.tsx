@@ -14,6 +14,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { InsightsWindow } from '../../../api/audience';
 import ChartCard from '../../components/ChartCard';
+import SectionHeading from '../../components/SectionHeading';
 import { toSeries } from '../../components/metrics';
 import PieChart from '../viz/PieChart';
 
@@ -24,10 +25,11 @@ export interface SectionProps {
 
 const CompositionSection = ( { current }: SectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-composition">
-		<h2 id="newspack-insights-audience-composition" className="newspack-insights__section-heading">
-			{ __( 'Audience composition', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">{ __( "Who's reading your stories.", 'newspack-plugin' ) }</p>
+		<SectionHeading
+			id="newspack-insights-audience-composition"
+			title={ __( 'Audience composition', 'newspack-plugin' ) }
+			description={ __( "Who's reading your stories.", 'newspack-plugin' ) }
+		/>
 		<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-4">
 			<ChartCard
 				title={ __( 'Newsletter Subscriber Composition', 'newspack-plugin' ) }

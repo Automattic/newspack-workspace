@@ -14,6 +14,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { InsightsWindow } from '../../../api/audience';
 import ChartCard from '../../components/ChartCard';
+import SectionHeading from '../../components/SectionHeading';
 import { toSeries } from '../../components/metrics';
 import { formatShortDate } from '../../components/format';
 import LineChart from '../viz/LineChart';
@@ -26,12 +27,11 @@ export interface SectionProps {
 
 const TimeTrendsSection = ( { current }: SectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-trends">
-		<h2 id="newspack-insights-audience-trends" className="newspack-insights__section-heading">
-			{ __( 'Time trends', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">
-			{ __( 'When your readers show up across the period, by day of week, and by hour of day.', 'newspack-plugin' ) }
-		</p>
+		<SectionHeading
+			id="newspack-insights-audience-trends"
+			title={ __( 'Time trends', 'newspack-plugin' ) }
+			description={ __( 'When your readers show up across the period, by day of week, and by hour of day.', 'newspack-plugin' ) }
+		/>
 		{ /* New vs Returning takes the full width; the two day/hour bar charts share the row below. */ }
 		<ChartCard
 			subhead={ __( 'Day to day', 'newspack-plugin' ) }

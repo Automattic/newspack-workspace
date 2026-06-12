@@ -14,6 +14,7 @@ import type { InsightsWindow } from '../../../api/audience';
 import type { MetricPayload } from '../../components/metrics';
 import ChartCard from '../../components/ChartCard';
 import MetricTable from '../../components/MetricTable';
+import SectionHeading from '../../components/SectionHeading';
 import { toSeries, isNotSet } from '../../components/metrics';
 import PieChart from '../viz/PieChart';
 
@@ -48,10 +49,11 @@ const TrafficSourcesSection = ( { current }: SectionProps ) => {
 
 	return (
 		<section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-traffic">
-			<h2 id="newspack-insights-audience-traffic" className="newspack-insights__section-heading">
-				{ __( 'Traffic sources', 'newspack-plugin' ) }
-			</h2>
-			<p className="newspack-insights__section-caption">{ __( 'Where your readers come from.', 'newspack-plugin' ) }</p>
+			<SectionHeading
+				id="newspack-insights-audience-traffic"
+				title={ __( 'Traffic sources', 'newspack-plugin' ) }
+				description={ __( 'Where your readers come from.', 'newspack-plugin' ) }
+			/>
 			{ /* Channel breakdown (left ~35%) reads as a unit with the campaigns
 			     driving each channel (right ~65%) — NPPD-1649 fix #3. */ }
 			<div className="newspack-insights__traffic-grid">

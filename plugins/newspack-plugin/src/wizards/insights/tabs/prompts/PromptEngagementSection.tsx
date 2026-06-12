@@ -15,6 +15,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { PromptsWindow } from '../../api/prompts';
 import MetricCard from '../components/MetricCard';
+import SectionHeading from '../components/SectionHeading';
 import { scalarToMetricCardProps } from './scalarToCard';
 
 export interface PromptEngagementSectionProps {
@@ -27,12 +28,14 @@ const PromptEngagementSection = ( { current, previous }: PromptEngagementSection
 		className="newspack-insights__section newspack-insights__section--engagement"
 		aria-labelledby="newspack-insights-prompts-engagement-heading"
 	>
-		<h2 id="newspack-insights-prompts-engagement-heading" className="newspack-insights__section-heading">
-			{ __( 'Prompt engagement', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">
-			{ __( 'How readers respond to prompts they see. Engagement is any interaction beyond just seeing the prompt.', 'newspack-plugin' ) }
-		</p>
+		<SectionHeading
+			id="newspack-insights-prompts-engagement-heading"
+			title={ __( 'Prompt engagement', 'newspack-plugin' ) }
+			description={ __(
+				'How readers respond to prompts they see. Engagement is any interaction beyond just seeing the prompt.',
+				'newspack-plugin'
+			) }
+		/>
 		<div className="newspack-insights__metric-grid">
 			<MetricCard
 				{ ...scalarToMetricCardProps( {

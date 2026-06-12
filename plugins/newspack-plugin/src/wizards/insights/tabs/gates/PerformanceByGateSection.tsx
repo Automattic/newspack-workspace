@@ -31,6 +31,7 @@ import { Icon, chevronUp, chevronDown } from '@wordpress/icons';
  */
 import type { GatesPerformanceRow, GatesPerformanceTable } from '../../api/gates';
 import { formatNumber, formatPercent } from '../components/format';
+import SectionHeading from '../components/SectionHeading';
 import { SECTION_ERROR_MESSAGE } from './SectionState';
 
 export interface PerformanceByGateSectionProps {
@@ -172,12 +173,11 @@ const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => 
 			className="newspack-insights__section newspack-insights__section--performance"
 			aria-labelledby="newspack-insights-gates-performance-heading"
 		>
-			<h2 id="newspack-insights-gates-performance-heading" className="newspack-insights__section-heading">
-				{ __( 'Performance by gate', 'newspack-plugin' ) }
-			</h2>
-			<p className="newspack-insights__section-caption">
-				{ __( 'Per-gate breakdown for the selected timeframe. Click any column to re-sort.', 'newspack-plugin' ) }
-			</p>
+			<SectionHeading
+				id="newspack-insights-gates-performance-heading"
+				title={ __( 'Performance by gate', 'newspack-plugin' ) }
+				description={ __( 'Per-gate breakdown for the selected timeframe. Click any column to re-sort.', 'newspack-plugin' ) }
+			/>
 			<div className="newspack-insights__table-wrap">
 				<table className="newspack-insights__table newspack-insights__table--sortable">
 					<thead>

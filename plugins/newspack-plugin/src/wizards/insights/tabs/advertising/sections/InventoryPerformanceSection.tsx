@@ -16,6 +16,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { InsightsWindow } from '../../../api/advertising';
 import Scorecard from '../../components/Scorecard';
+import SectionHeading from '../../components/SectionHeading';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -24,10 +25,11 @@ export interface SectionProps {
 
 const InventoryPerformanceSection = ( { current, previous }: SectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-inventory">
-		<h2 id="newspack-insights-advertising-inventory" className="newspack-insights__section-heading">
-			{ __( 'Inventory performance', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">{ __( 'How efficiently your inventory monetized.', 'newspack-plugin' ) }</p>
+		<SectionHeading
+			id="newspack-insights-advertising-inventory"
+			title={ __( 'Inventory performance', 'newspack-plugin' ) }
+			description={ __( 'How efficiently your inventory monetized.', 'newspack-plugin' ) }
+		/>
 		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
 			<Scorecard
 				label={ __( 'Average eCPM', 'newspack-plugin' ) }

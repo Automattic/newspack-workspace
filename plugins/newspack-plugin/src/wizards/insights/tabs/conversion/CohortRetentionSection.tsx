@@ -16,6 +16,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { ConversionCohortData } from '../../api/conversion';
+import SectionHeading from '../components/SectionHeading';
 import LineChart, { type LineSeries } from './viz/LineChart';
 
 export interface CohortRetentionSectionProps {
@@ -54,15 +55,14 @@ const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => (
 		className="newspack-insights__section newspack-insights__section--cohort-retention"
 		aria-labelledby="newspack-insights-conversion-cohort-heading"
 	>
-		<h2 id="newspack-insights-conversion-cohort-heading" className="newspack-insights__section-heading">
-			{ __( 'Cohort retention', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">
-			{ __(
+		<SectionHeading
+			id="newspack-insights-conversion-cohort-heading"
+			title={ __( 'Cohort retention', 'newspack-plugin' ) }
+			description={ __(
 				'Retention curves by monthly cohort. The vertical axis is the share of each cohort still on a given lifecycle stage at each point in time. Updated weekly (see callout above).',
 				'newspack-plugin'
 			) }
-		</p>
+		/>
 		<div className="newspack-insights__conversion-cohort-stack">
 			<CohortChart title={ __( 'Registration → conversion', 'newspack-plugin' ) } data={ current.registration_to_conversion_cohort } />
 			<CohortChart title={ __( 'Subscriber retention', 'newspack-plugin' ) } data={ current.subscriber_retention_cohort } />

@@ -17,6 +17,7 @@ import { __, sprintf } from '@wordpress/i18n';
  */
 import type { ConversionTopPageRow, ConversionWindow } from '../../api/conversion';
 import MetricCard from '../components/MetricCard';
+import SectionHeading from '../components/SectionHeading';
 import { formatNumber, formatPercent } from '../components/format';
 import { scalarToMetricCardProps } from './scalarToCard';
 import SortableTable, { type SortableColumn } from './viz/SortableTable';
@@ -74,15 +75,14 @@ const OpportunityBucketsSection = ( { current }: OpportunityBucketsSectionProps 
 		className="newspack-insights__section newspack-insights__section--opportunity-buckets"
 		aria-labelledby="newspack-insights-conversion-opportunity-heading"
 	>
-		<h2 id="newspack-insights-conversion-opportunity-heading" className="newspack-insights__section-heading">
-			{ __( 'Opportunity buckets', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">
-			{ __(
+		<SectionHeading
+			id="newspack-insights-conversion-opportunity-heading"
+			title={ __( 'Opportunity buckets', 'newspack-plugin' ) }
+			description={ __(
 				'Where the funnel has slack. These are diagnostic counts and underperforming pages — readers and content that could move with attention.',
 				'newspack-plugin'
 			) }
-		</p>
+		/>
 		<div className="newspack-insights__metric-grid">
 			<MetricCard
 				{ ...scalarToMetricCardProps( {

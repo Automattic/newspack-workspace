@@ -16,6 +16,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { GatesWindow } from '../../api/gates';
 import MetricCard from '../components/MetricCard';
+import SectionHeading from '../components/SectionHeading';
 import { scalarToMetricCardProps } from './scalarToCard';
 
 export interface PaidReaderConversionSectionProps {
@@ -25,15 +26,14 @@ export interface PaidReaderConversionSectionProps {
 
 const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversionSectionProps ) => (
 	<section className="newspack-insights__section newspack-insights__section--paid-reader" aria-labelledby="newspack-insights-gates-paid-heading">
-		<h2 id="newspack-insights-gates-paid-heading" className="newspack-insights__section-heading">
-			{ __( 'Paid reader conversion', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">
-			{ __(
+		<SectionHeading
+			id="newspack-insights-gates-paid-heading"
+			title={ __( 'Paid reader conversion', 'newspack-plugin' ) }
+			description={ __(
 				'How effectively paywall gates convert visitors into paying subscribers. Direct counts subscriptions that happened in the same session as a paywall impression. Influenced counts subscriptions that happened in a later session within 14 days of a paywall impression. Revenue is computed from actual Woo orders, not gate-event amounts.',
 				'newspack-plugin'
 			) }
-		</p>
+		/>
 		<div className="newspack-insights__metric-grid">
 			<MetricCard
 				{ ...scalarToMetricCardProps( {

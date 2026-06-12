@@ -17,6 +17,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { PromptsWindow } from '../../api/prompts';
 import MetricCard from '../components/MetricCard';
+import SectionHeading from '../components/SectionHeading';
 import { scalarToMetricCardProps } from './scalarToCard';
 
 export interface RevenueFromPromptsSectionProps {
@@ -26,15 +27,14 @@ export interface RevenueFromPromptsSectionProps {
 
 const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSectionProps ) => (
 	<section className="newspack-insights__section newspack-insights__section--revenue" aria-labelledby="newspack-insights-prompts-revenue-heading">
-		<h2 id="newspack-insights-prompts-revenue-heading" className="newspack-insights__section-heading">
-			{ __( 'Revenue from prompts', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">
-			{ __(
+		<SectionHeading
+			id="newspack-insights-prompts-revenue-heading"
+			title={ __( 'Revenue from prompts', 'newspack-plugin' ) }
+			description={ __(
 				'Sum of Woo order totals from donations and subscriptions completed after a prompt impression. Direct totals revenue from same-session completions. Influenced totals revenue from later-session completions within 14 days of seeing a prompt.',
 				'newspack-plugin'
 			) }
-		</p>
+		/>
 		<div className="newspack-insights__metric-grid">
 			<MetricCard
 				{ ...scalarToMetricCardProps( {

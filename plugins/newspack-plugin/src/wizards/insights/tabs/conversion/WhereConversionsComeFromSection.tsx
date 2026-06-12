@@ -15,6 +15,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { ConversionSourceMixData } from '../../api/conversion';
+import SectionHeading from '../components/SectionHeading';
 import { formatNumber } from '../components/format';
 import { sourceLabel } from './labels';
 import PieChart from './viz/PieChart';
@@ -49,15 +50,14 @@ const WhereConversionsComeFromSection = ( { current }: WhereConversionsComeFromS
 		className="newspack-insights__section newspack-insights__section--source-mix"
 		aria-labelledby="newspack-insights-conversion-source-mix-heading"
 	>
-		<h2 id="newspack-insights-conversion-source-mix-heading" className="newspack-insights__section-heading">
-			{ __( 'Where conversions come from', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">
-			{ __(
+		<SectionHeading
+			id="newspack-insights-conversion-source-mix-heading"
+			title={ __( 'Where conversions come from', 'newspack-plugin' ) }
+			description={ __(
 				'Source attribution for new conversions in the window. Gate, prompt, or direct (standalone form) — which surfaces drive your registrations, subscriptions, and donations?',
 				'newspack-plugin'
 			) }
-		</p>
+		/>
 		<div className="newspack-insights__conversion-pie-row">
 			<SourcePie
 				title={ __( 'New registrations', 'newspack-plugin' ) }

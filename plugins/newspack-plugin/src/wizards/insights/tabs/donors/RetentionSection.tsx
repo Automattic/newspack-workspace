@@ -35,6 +35,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
  */
 import type { DonorsRateValue, DonorsWindow } from '../../api/donors';
 import MetricCard from '../components/MetricCard';
+import SectionHeading from '../components/SectionHeading';
 import { formatNumber } from '../components/format';
 
 export interface RetentionSectionProps {
@@ -68,11 +69,7 @@ const RetentionSection = ( { current, previous }: RetentionSectionProps ) => {
 		'aria-labelledby': 'newspack-insights-donors-retention-heading',
 	};
 
-	const heading = (
-		<h2 id="newspack-insights-donors-retention-heading" className="newspack-insights__section-heading">
-			{ __( 'Retention', 'newspack-plugin' ) }
-		</h2>
-	);
+	const heading = <SectionHeading id="newspack-insights-donors-retention-heading" title={ __( 'Retention', 'newspack-plugin' ) } />;
 
 	if ( ! recovery.computable && ! retention.computable ) {
 		return (

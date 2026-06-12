@@ -23,6 +23,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { GatesWindow } from '../../api/gates';
 import MetricCard from '../components/MetricCard';
+import SectionHeading from '../components/SectionHeading';
 import { scalarToMetricCardProps } from './scalarToCard';
 
 export interface GateExposureSectionProps {
@@ -35,12 +36,11 @@ const GateExposureSection = ( { current, previous, lastUpdated }: GateExposureSe
 	<section className="newspack-insights__section newspack-insights__section--exposure" aria-labelledby="newspack-insights-gates-exposure-heading">
 		<div className="newspack-insights__section-header-container">
 			<div className="newspack-insights__section-header-text">
-				<h2 id="newspack-insights-gates-exposure-heading" className="newspack-insights__section-heading">
-					{ __( 'Gate exposure', 'newspack-plugin' ) }
-				</h2>
-				<p className="newspack-insights__section-caption">
-					{ __( 'Top of the funnel. How many readers see gates in this timeframe.', 'newspack-plugin' ) }
-				</p>
+				<SectionHeading
+					id="newspack-insights-gates-exposure-heading"
+					title={ __( 'Gate exposure', 'newspack-plugin' ) }
+					description={ __( 'Top of the funnel. How many readers see gates in this timeframe.', 'newspack-plugin' ) }
+				/>
 			</div>
 			{ lastUpdated }
 		</div>

@@ -17,6 +17,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { ConversionCumulativeMulti, ConversionCumulativePoint, ConversionWindow } from '../../api/conversion';
+import SectionHeading from '../components/SectionHeading';
 import { sourceLabel } from './labels';
 import LineChart, { type LinePoint, type LineSeries } from './viz/LineChart';
 
@@ -52,15 +53,14 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 			className="newspack-insights__section newspack-insights__section--time-to-convert"
 			aria-labelledby="newspack-insights-conversion-time-to-convert-heading"
 		>
-			<h2 id="newspack-insights-conversion-time-to-convert-heading" className="newspack-insights__section-heading">
-				{ __( 'How long conversions take', 'newspack-plugin' ) }
-			</h2>
-			<p className="newspack-insights__section-caption">
-				{ __(
+			<SectionHeading
+				id="newspack-insights-conversion-time-to-convert-heading"
+				title={ __( 'How long conversions take', 'newspack-plugin' ) }
+				description={ __(
 					'Cumulative conversion curves per cohort. Each line shows what percentage of readers had converted by day N. Steeper early curves mean faster conversion; flatter curves mean longer tails. Median is where the line crosses 50%.',
 					'newspack-plugin'
 				) }
-			</p>
+			/>
 			<div className="newspack-insights__conversion-curve-grid">
 				<CurveCell title={ __( 'Time to register', 'newspack-plugin' ) }>
 					<LineChart

@@ -17,6 +17,7 @@ import { __, sprintf } from '@wordpress/i18n';
 import type { InsightsWindow } from '../../../api/audience';
 import type { MetricPayload, MetricRow } from '../../components/metrics';
 import { formatDecimal, formatDuration, formatNumber } from '../../components/format';
+import SectionHeading from '../../components/SectionHeading';
 import TakeawayCard from '../viz/TakeawayCard';
 
 export interface SectionProps {
@@ -193,10 +194,11 @@ const ReaderSegmentsSection = ( { current }: SectionProps ) => {
 
 	return (
 		<section className="newspack-insights__section" aria-labelledby="newspack-insights-engagement-segments">
-			<h2 id="newspack-insights-engagement-segments" className="newspack-insights__section-heading">
-				{ __( 'Reader segments', 'newspack-plugin' ) }
-			</h2>
-			<p className="newspack-insights__section-caption">{ __( 'How engagement varies by segment.', 'newspack-plugin' ) }</p>
+			<SectionHeading
+				id="newspack-insights-engagement-segments"
+				title={ __( 'Reader segments', 'newspack-plugin' ) }
+				description={ __( 'How engagement varies by segment.', 'newspack-plugin' ) }
+			/>
 			<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-3">
 				<TakeawayCard
 					title={ __( 'Engagement by device', 'newspack-plugin' ) }

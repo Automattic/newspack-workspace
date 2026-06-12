@@ -19,6 +19,7 @@ import { __, sprintf } from '@wordpress/i18n';
 import type { DonorsWindow } from '../../api/donors';
 import type { DateRange } from '../../state/useDateRange';
 import MetricCard from '../components/MetricCard';
+import SectionHeading from '../components/SectionHeading';
 import { formatCurrency } from '../components/format';
 
 export interface WindowedSectionProps {
@@ -59,9 +60,7 @@ const getHeading = ( range: DateRange ): string => {
 
 const WindowedSection = ( { range, current, previous }: WindowedSectionProps ) => (
 	<section className="newspack-insights__section newspack-insights__section--windowed" aria-labelledby="newspack-insights-donors-windowed-heading">
-		<h2 id="newspack-insights-donors-windowed-heading" className="newspack-insights__section-heading">
-			{ getHeading( range ) }
-		</h2>
+		<SectionHeading id="newspack-insights-donors-windowed-heading" title={ getHeading( range ) } />
 		<div className="newspack-insights__metric-grid">
 			<MetricCard
 				label={ __( 'New donors', 'newspack-plugin' ) }

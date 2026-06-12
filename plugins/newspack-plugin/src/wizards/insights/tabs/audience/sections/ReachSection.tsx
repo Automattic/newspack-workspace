@@ -19,6 +19,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { InsightsWindow } from '../../../api/audience';
 import Scorecard from '../../components/Scorecard';
+import SectionHeading from '../../components/SectionHeading';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -30,10 +31,11 @@ const ReachSection = ( { current, previous, lastUpdated }: SectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-reach">
 		<div className="newspack-insights__section-header-container">
 			<div className="newspack-insights__section-header-text">
-				<h2 id="newspack-insights-audience-reach" className="newspack-insights__section-heading">
-					{ __( 'Reach', 'newspack-plugin' ) }
-				</h2>
-				<p className="newspack-insights__section-caption">{ __( 'Your reach this period.', 'newspack-plugin' ) }</p>
+				<SectionHeading
+					id="newspack-insights-audience-reach"
+					title={ __( 'Reach', 'newspack-plugin' ) }
+					description={ __( 'Your reach this period.', 'newspack-plugin' ) }
+				/>
 			</div>
 			{ lastUpdated }
 		</div>

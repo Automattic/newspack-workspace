@@ -15,6 +15,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { InsightsWindow } from '../../../api/advertising';
 import MetricTable from '../../components/MetricTable';
+import SectionHeading from '../../components/SectionHeading';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -23,10 +24,11 @@ export interface SectionProps {
 
 const TopPerformersSection = ( { current }: SectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-performers">
-		<h2 id="newspack-insights-advertising-top-performers" className="newspack-insights__section-heading">
-			{ __( 'Top performers', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">{ __( 'Where your ad dollars are coming from.', 'newspack-plugin' ) }</p>
+		<SectionHeading
+			id="newspack-insights-advertising-top-performers"
+			title={ __( 'Top performers', 'newspack-plugin' ) }
+			description={ __( 'Where your ad dollars are coming from.', 'newspack-plugin' ) }
+		/>
 		<div className="newspack-insights__table-grid newspack-insights__table-grid--cols-2">
 			<div>
 				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Ad Units', 'newspack-plugin' ) }</h3>

@@ -19,6 +19,7 @@ import { useMemo } from '@wordpress/element';
  * Internal dependencies
  */
 import type { TenureDistributionRow } from '../../api/subscribers';
+import SectionHeading from '../components/SectionHeading';
 
 export interface TenureSectionProps {
 	rows: TenureDistributionRow[];
@@ -57,9 +58,7 @@ const TenureSection = ( { rows }: TenureSectionProps ) => {
 	if ( ! stats ) {
 		return (
 			<section className="newspack-insights__section newspack-insights__section--tenure" aria-labelledby="newspack-insights-tenure-heading">
-				<h2 id="newspack-insights-tenure-heading" className="newspack-insights__section-heading">
-					{ __( 'Subscriber tenure', 'newspack-plugin' ) }
-				</h2>
+				<SectionHeading id="newspack-insights-tenure-heading" title={ __( 'Subscriber tenure', 'newspack-plugin' ) } />
 				<p className="newspack-insights__section-empty">
 					{ __( 'No subscribers yet — tenure data will appear once subscriptions exist.', 'newspack-plugin' ) }
 				</p>
@@ -92,9 +91,7 @@ const TenureSection = ( { rows }: TenureSectionProps ) => {
 
 	return (
 		<section className="newspack-insights__section newspack-insights__section--tenure" aria-labelledby="newspack-insights-tenure-heading">
-			<h2 id="newspack-insights-tenure-heading" className="newspack-insights__section-heading">
-				{ __( 'Subscriber tenure', 'newspack-plugin' ) }
-			</h2>
+			<SectionHeading id="newspack-insights-tenure-heading" title={ __( 'Subscriber tenure', 'newspack-plugin' ) } />
 			<div className="newspack-insights__tenure-card">
 				<dl className="newspack-insights__stats-summary">
 					<div>

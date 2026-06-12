@@ -21,6 +21,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { InsightsWindow } from '../../../api/advertising';
 import Scorecard from '../../components/Scorecard';
+import SectionHeading from '../../components/SectionHeading';
 import RevenueMixCard from '../RevenueMixCard';
 
 export interface SectionProps {
@@ -33,10 +34,11 @@ const ReachRevenueSection = ( { current, previous, lastUpdated }: SectionProps )
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-reach-revenue">
 		<div className="newspack-insights__section-header-container">
 			<div className="newspack-insights__section-header-text">
-				<h2 id="newspack-insights-advertising-reach-revenue" className="newspack-insights__section-heading">
-					{ __( 'Reach & revenue', 'newspack-plugin' ) }
-				</h2>
-				<p className="newspack-insights__section-caption">{ __( 'Volume and revenue mix for the period.', 'newspack-plugin' ) }</p>
+				<SectionHeading
+					id="newspack-insights-advertising-reach-revenue"
+					title={ __( 'Reach & revenue', 'newspack-plugin' ) }
+					description={ __( 'Volume and revenue mix for the period.', 'newspack-plugin' ) }
+				/>
 			</div>
 			{ lastUpdated }
 		</div>

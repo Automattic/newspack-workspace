@@ -16,6 +16,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { ConversionWindow } from '../../api/conversion';
+import SectionHeading from '../components/SectionHeading';
 import Funnel from './viz/Funnel';
 
 export interface PerJourneyConversionFunnelsSectionProps {
@@ -44,15 +45,14 @@ const PerJourneyConversionFunnelsSection = ( { current }: PerJourneyConversionFu
 			className="newspack-insights__section newspack-insights__section--per-journey-funnels"
 			aria-labelledby="newspack-insights-conversion-per-journey-heading"
 		>
-			<h2 id="newspack-insights-conversion-per-journey-heading" className="newspack-insights__section-heading">
-				{ __( 'Per-journey conversion funnels', 'newspack-plugin' ) }
-			</h2>
-			<p className="newspack-insights__section-caption">
-				{ __(
+			<SectionHeading
+				id="newspack-insights-conversion-per-journey-heading"
+				title={ __( 'Per-journey conversion funnels', 'newspack-plugin' ) }
+				description={ __(
 					'Focused conversion paths. Each funnel shows where readers drop off within a specific journey — anonymous to registered, registered to paid, paid to donor.',
 					'newspack-plugin'
 				) }
-			</p>
+			/>
 			<div className="newspack-insights__conversion-journey-grid">
 				<JourneyFunnel
 					title={ __( 'Anonymous → Registered', 'newspack-plugin' ) }

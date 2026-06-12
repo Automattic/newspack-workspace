@@ -24,6 +24,7 @@ import { __, sprintf } from '@wordpress/i18n';
  */
 import type { DonorsSnapshot } from '../../api/donors';
 import MetricCard from '../components/MetricCard';
+import SectionHeading from '../components/SectionHeading';
 import { formatCurrency, formatNumber } from '../components/format';
 
 export interface ScorecardSectionProps {
@@ -38,12 +39,11 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 	>
 		<div className="newspack-insights__section-header-container">
 			<div className="newspack-insights__section-header-text">
-				<h2 id="newspack-insights-donors-scorecard-heading" className="newspack-insights__section-heading">
-					{ __( 'Donors at a glance', 'newspack-plugin' ) }
-				</h2>
-				<p className="newspack-insights__section-caption">
-					{ __( 'Current state and recurring revenue, independent of selected timeframe.', 'newspack-plugin' ) }
-				</p>
+				<SectionHeading
+					id="newspack-insights-donors-scorecard-heading"
+					title={ __( 'Donors at a glance', 'newspack-plugin' ) }
+					description={ __( 'Current state and recurring revenue, independent of selected timeframe.', 'newspack-plugin' ) }
+				/>
 			</div>
 			{ lastUpdated }
 		</div>

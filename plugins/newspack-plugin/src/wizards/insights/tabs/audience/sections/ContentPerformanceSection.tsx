@@ -12,6 +12,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { InsightsWindow } from '../../../api/audience';
 import MetricTable from '../../components/MetricTable';
+import SectionHeading from '../../components/SectionHeading';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -20,10 +21,11 @@ export interface SectionProps {
 
 const ContentPerformanceSection = ( { current }: SectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-content">
-		<h2 id="newspack-insights-audience-content" className="newspack-insights__section-heading">
-			{ __( 'Content performance', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">{ __( "What's getting read.", 'newspack-plugin' ) }</p>
+		<SectionHeading
+			id="newspack-insights-audience-content"
+			title={ __( 'Content performance', 'newspack-plugin' ) }
+			description={ __( "What's getting read.", 'newspack-plugin' ) }
+		/>
 		<div className="newspack-insights__table-grid">
 			<div>
 				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Pages', 'newspack-plugin' ) }</h3>

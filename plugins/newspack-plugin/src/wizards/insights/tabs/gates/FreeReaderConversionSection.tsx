@@ -15,6 +15,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { GatesWindow } from '../../api/gates';
 import MetricCard from '../components/MetricCard';
+import SectionHeading from '../components/SectionHeading';
 import { scalarToMetricCardProps } from './scalarToCard';
 
 export interface FreeReaderConversionSectionProps {
@@ -24,15 +25,14 @@ export interface FreeReaderConversionSectionProps {
 
 const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversionSectionProps ) => (
 	<section className="newspack-insights__section newspack-insights__section--free-reader" aria-labelledby="newspack-insights-gates-free-heading">
-		<h2 id="newspack-insights-gates-free-heading" className="newspack-insights__section-heading">
-			{ __( 'Free reader conversion', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">
-			{ __(
+		<SectionHeading
+			id="newspack-insights-gates-free-heading"
+			title={ __( 'Free reader conversion', 'newspack-plugin' ) }
+			description={ __(
 				'How effectively registration gates convert visitors into registered readers. Direct counts registrations that happened in the same session as a registration gate impression. Influenced counts registrations that happened in a later session within 7 days of a registration gate impression.',
 				'newspack-plugin'
 			) }
-		</p>
+		/>
 		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--pair">
 			<MetricCard
 				{ ...scalarToMetricCardProps( {

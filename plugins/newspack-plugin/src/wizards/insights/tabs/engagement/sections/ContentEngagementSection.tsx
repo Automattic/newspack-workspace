@@ -12,6 +12,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { InsightsWindow } from '../../../api/audience';
 import MetricTable from '../../components/MetricTable';
+import SectionHeading from '../../components/SectionHeading';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -22,10 +23,11 @@ const PAGE_COL = { key: 'page_title', label: __( 'Page', 'newspack-plugin' ) };
 
 const ContentEngagementSection = ( { current }: SectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-engagement-content">
-		<h2 id="newspack-insights-engagement-content" className="newspack-insights__section-heading">
-			{ __( 'Content engagement', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">{ __( 'What holds reader attention.', 'newspack-plugin' ) }</p>
+		<SectionHeading
+			id="newspack-insights-engagement-content"
+			title={ __( 'Content engagement', 'newspack-plugin' ) }
+			description={ __( 'What holds reader attention.', 'newspack-plugin' ) }
+		/>
 		{ /* 2-col grid: Most-Read + Completion Rate share row 1; Top Authors wraps
 		     to row 2, occupying one column (~50%, left-aligned) so 10-row tables
 		     have width and the third doesn't stretch full-width. */ }

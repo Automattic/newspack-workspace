@@ -29,6 +29,7 @@ import { Fragment } from '@wordpress/element';
  * Internal dependencies
  */
 import type { BillingModel, DonorsTierRow, DonorsTierVariationRow } from '../../api/donors';
+import SectionHeading from '../components/SectionHeading';
 import { formatCurrency, formatNumber } from '../components/format';
 
 export interface PerformanceSectionProps {
@@ -65,9 +66,7 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 				className="newspack-insights__section newspack-insights__section--performance"
 				aria-labelledby="newspack-insights-donors-performance-heading"
 			>
-				<h2 id="newspack-insights-donors-performance-heading" className="newspack-insights__section-heading">
-					{ __( 'Donations by tier', 'newspack-plugin' ) }
-				</h2>
+				<SectionHeading id="newspack-insights-donors-performance-heading" title={ __( 'Donations by tier', 'newspack-plugin' ) } />
 				<p className="newspack-insights__section-empty">{ __( 'No donation activity yet.', 'newspack-plugin' ) }</p>
 			</section>
 		);
@@ -78,15 +77,14 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 			className="newspack-insights__section newspack-insights__section--performance"
 			aria-labelledby="newspack-insights-donors-performance-heading"
 		>
-			<h2 id="newspack-insights-donors-performance-heading" className="newspack-insights__section-heading">
-				{ __( 'Donations by tier', 'newspack-plugin' ) }
-			</h2>
-			<p className="newspack-insights__section-caption">
-				{ __(
+			<SectionHeading
+				id="newspack-insights-donors-performance-heading"
+				title={ __( 'Donations by tier', 'newspack-plugin' ) }
+				description={ __(
 					'Current state plus activity in the selected timeframe. Lifetime revenue is the all-time total per product.',
 					'newspack-plugin'
 				) }
-			</p>
+			/>
 			<div className="newspack-insights__table-wrap">
 				<table className="newspack-insights__table">
 					<thead>

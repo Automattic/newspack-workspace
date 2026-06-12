@@ -16,6 +16,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { ConversionWindow } from '../../api/conversion';
 import MetricCard from '../components/MetricCard';
+import SectionHeading from '../components/SectionHeading';
 import { scalarToMetricCardProps } from './scalarToCard';
 
 export interface CrossTabInfluencedAttributionSectionProps {
@@ -28,15 +29,14 @@ const CrossTabInfluencedAttributionSection = ( { current, previous }: CrossTabIn
 		className="newspack-insights__section newspack-insights__section--influenced-attribution"
 		aria-labelledby="newspack-insights-conversion-influenced-heading"
 	>
-		<h2 id="newspack-insights-conversion-influenced-heading" className="newspack-insights__section-heading">
-			{ __( 'Cross-tab influenced attribution', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">
-			{ __(
+		<SectionHeading
+			id="newspack-insights-conversion-influenced-heading"
+			title={ __( 'Cross-tab influenced attribution', 'newspack-plugin' ) }
+			description={ __(
 				'Influenced conversion rates from your Gates and Prompts tabs, centralized so you don’t have to bounce between tabs to compare. Influenced means the reader saw a gate or prompt in the lookback window before converting in a later session.',
 				'newspack-plugin'
 			) }
-		</p>
+		/>
 		<div className="newspack-insights__metric-grid">
 			<MetricCard
 				{ ...scalarToMetricCardProps( {

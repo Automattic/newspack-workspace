@@ -15,6 +15,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { ConversionWeekPoint, ConversionWeeklyTrendsData } from '../../api/conversion';
+import SectionHeading from '../components/SectionHeading';
 import LineChart, { type LineSeries } from './viz/LineChart';
 
 export interface ConversionRateTrendsSectionProps {
@@ -54,15 +55,14 @@ const ConversionRateTrendsSection = ( { current }: ConversionRateTrendsSectionPr
 		className="newspack-insights__section newspack-insights__section--rate-trends"
 		aria-labelledby="newspack-insights-conversion-rate-trends-heading"
 	>
-		<h2 id="newspack-insights-conversion-rate-trends-heading" className="newspack-insights__section-heading">
-			{ __( 'Conversion rate trends', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">
-			{ __(
+		<SectionHeading
+			id="newspack-insights-conversion-rate-trends-heading"
+			title={ __( 'Conversion rate trends', 'newspack-plugin' ) }
+			description={ __(
 				'Weekly conversion rates across the selected window. Useful for spotting acceleration, plateaus, or seasonality.',
 				'newspack-plugin'
 			) }
-		</p>
+		/>
 		<LineChart
 			series={ toTrendSeries( current.weekly_conversion_rates ) }
 			emptyMessage={ __( 'Weekly trends will appear once the window contains at least 4 weeks of data.', 'newspack-plugin' ) }
