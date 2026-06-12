@@ -28,18 +28,13 @@
 	}
 
 	// Phase 1 preview banner — a light-blue variant of the shared
-	// `__info-callout`. The base chrome now comes from the Newspack `Notice`
-	// component (`.newspack-notice`); this override re-skins that inner
-	// background and tints the info icon, distinguishing the preview banner
-	// from the gray freshness note below it. Removed entirely in Phase 2.
-	&__info-callout--preview.newspack-insights__info-callout {
-		.newspack-notice {
-			background-color: #e6f1fb;
-		}
-
-		.newspack-notice > svg {
-			fill: var(--wp-admin-theme-color);
-		}
+	// `__info-callout`. The base chrome comes from `@wordpress/components`
+	// Notice (rendered as `.components-notice`); this override re-skins the
+	// background, distinguishing the preview banner from the gray freshness
+	// note below it. (`@wordpress/components` Notice renders no icon for
+	// `status="info"`, so there's nothing to tint.) Removed entirely in Phase 2.
+	&__info-callout--preview.newspack-insights__info-callout.components-notice {
+		background-color: #e6f1fb;
 	}
 
 	// Per-viz subheading + caption used inside the multi-cell sections.

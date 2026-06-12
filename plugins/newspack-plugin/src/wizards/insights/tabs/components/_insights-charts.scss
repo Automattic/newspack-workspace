@@ -476,48 +476,18 @@
 }
 
 // Shared info callout (NPPD-1618) — bold heading + free-form body in a muted
-// box, info icon left, optional dismiss X. Visual chrome (background, info
-// icon, padding, content layout) comes from the Newspack `Notice` component;
-// this wrapper only owns positioning for the optional dismiss button and the
-// title typography override. Variants (e.g. `--preview`) re-skin the inner
-// `.newspack-notice` from the consuming tab stylesheet.
+// box. Background, padding, and the dismiss button all come from
+// `@wordpress/components` Notice (rendered as `.components-notice`); we only
+// override the title typography and neutralize Notice's default margins so
+// the callout sits cleanly in the Insights tabs' gap-based flex layouts.
 .newspack-insights__info-callout {
-	position: relative;
-
-	// Neutralize Notice's default vertical margin — Insights tabs use
-	// gap-based flex layouts and own their own spacing.
-	.newspack-notice {
+	&.components-notice {
 		margin: 0;
 	}
 
-	// Reserve right-side gutter on the Notice content so dismiss X doesn't
-	// overlap the body text on narrow widths.
-	.newspack-notice__content {
-		padding-right: 32px;
-	}
-
-	&-title {
+	.newspack-insights__info-callout-title {
 		font-size: 14px;
-	}
-
-	&-dismiss {
-		position: absolute;
-		top: 12px;
-		right: 12px;
-		background: transparent;
-		border: 0;
-		cursor: pointer;
-		padding: 4px;
-		color: wp-colors.$gray-700;
-
-		&:hover {
-			color: wp-colors.$gray-900;
-		}
-
-		&:focus-visible {
-			outline: 2px solid var(--wp-admin-theme-color);
-			outline-offset: 2px;
-		}
+		margin: 0;
 	}
 }
 

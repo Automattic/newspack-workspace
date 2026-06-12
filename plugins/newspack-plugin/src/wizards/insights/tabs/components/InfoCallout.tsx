@@ -2,16 +2,10 @@
  * InfoCallout (NPPD-1618).
  *
  * Shared info callout: a bold heading over free-form body content in a muted
- * box (info icon left, optional dismiss X). The visual chrome — gray
- * background, info icon, padding, content layout — is provided by the Newspack
- * design-system `Notice` component; this wrapper owns the layout container
- * (so a variant `className` can re-skin the whole callout) and the optional
- * dismiss affordance (`Notice` itself has no dismiss button).
- *
- * Trade-off: the previous hand-rolled markup set `role="note"` on the root.
- * `Notice` renders a plain `<div>` with no role, so that semantic hint is
- * lost. Accepted in exchange for visual consistency with every other notice
- * in the Newspack admin.
+ * box. The visual chrome — background, padding, dismiss button — comes from
+ * the `@wordpress/components` `Notice` component, which natively supports the
+ * `isDismissible` + `onRemove` props. This wrapper just wires the persisted
+ * dismissal state into those props and renders the heading + children inside.
  *
  * When `dismissible`, dismissal persists per-publisher in localStorage under
  * `storageKey`, so the callout stays hidden across page loads. Pass
@@ -19,21 +13,16 @@
  * next page load (e.g. the Conversion preview banner / cohort-freshness note,
  * which should re-announce each session). Non-dismissible callouts (e.g. the
  * Advertising data-lag note, whose content varies with the selected date range)
- * always render. `className` appends a variant class to the root (e.g. a
- * different background) while keeping the shared markup and dismiss affordance.
+ * pass `dismissible={ false }` (the default), which suppresses the X button
+ * entirely. `className` appends a variant class to the Notice root, so consumers
+ * can re-skin the whole callout (e.g. `--preview`).
  */
 
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
 import { useCallback, useState } from '@wordpress/element';
-import { Icon, closeSmall } from '@wordpress/icons';
-
-/**
- * Internal dependencies
- */
-import { Notice } from '../../../../../packages/components/src';
+import { Notice } from '@wordpress/components';
 
 const STORAGE_PREFIX = 'newspack-insights-callout:';
 
@@ -85,28 +74,17 @@ const InfoCallout = ( { heading, children, dismissible = false, persist = true, 
 	}
 
 	return (
-		<div className={ className ? `newspack-insights__info-callout ${ className }` : 'newspack-insights__info-callout' }>
-			<Notice
-				noticeText={
-					<>
-						<p className="newspack-insights__info-callout-title">
-							<strong>{ heading }</strong>
-						</p>
-						{ children }
-					</>
-				}
-			/>
-			{ dismissible && (
-				<button
-					type="button"
-					className="newspack-insights__info-callout-dismiss"
-					onClick={ dismiss }
-					aria-label={ __( 'Dismiss', 'newspack-plugin' ) }
-				>
-					<Icon icon={ closeSmall } />
-				</button>
-			) }
-		</div>
+		<Notice
+			status="info"
+			isDismissible={ dismissible }
+			onRemove={ dismissible ? dismiss : undefined }
+			className={ className ? `newspack-insights__info-callout ${ className }` : 'newspack-insights__info-callout' }
+		>
+			<p className="newspack-insights__info-callout-title">
+				<strong>{ heading }</strong>
+			</p>
+			{ children }
+		</Notice>
 	);
 };
 
