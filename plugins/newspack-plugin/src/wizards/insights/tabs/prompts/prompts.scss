@@ -49,56 +49,6 @@
 		}
 	}
 
-	// Direct vs Influenced explainer — light gray chrome, info icon, X to
-	// dismiss (session-only). Mirrors the Gates callout.
-	&__prompts-callout {
-		display: flex;
-		align-items: flex-start;
-		gap: 12px;
-		padding: 16px 20px;
-		background-color: wp-colors.$gray-100;
-		border: 1px solid wp-colors.$gray-200;
-		border-radius: 4px;
-
-		&-icon {
-			flex: 0 0 20px;
-			width: 20px;
-			height: 20px;
-			color: wp-colors.$gray-700;
-		}
-
-		&-body {
-			flex: 1 1 auto;
-			display: flex;
-			flex-direction: column;
-			gap: 8px;
-			font-size: 13px;
-			line-height: 1.5;
-			color: wp-colors.$gray-900;
-
-			p {
-				margin: 0;
-			}
-		}
-
-		&-title {
-			font-size: 14px;
-		}
-
-		&-dismiss {
-			flex: 0 0 auto;
-			background: transparent;
-			border: 0;
-			cursor: pointer;
-			padding: 4px;
-			color: wp-colors.$gray-700;
-
-			&:hover {
-				color: wp-colors.$gray-900;
-			}
-		}
-	}
-
 	// Section 6 — funnel + distribution side-by-side at equal width,
 	// stacking under ~720px container width.
 	&__prompts-convert-grid {
