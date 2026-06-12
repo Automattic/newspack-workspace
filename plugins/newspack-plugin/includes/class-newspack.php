@@ -507,6 +507,15 @@ final class Newspack {
 			return self::$asset_version_cache[ $name ];
 		}
 		$version = NEWSPACK_PLUGIN_VERSION;
+		// Defense in depth: every current call site passes a literal, but this
+		// helper is publicly callable, so reject anything that isn't a webpack
+		// entry-shaped basename (alphanumerics, hyphens, underscores, dots, and
+		// optional slash-separated segments — no `..`, no leading slashes).
+		if ( ! preg_match( '#^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$#', $name ) ) {
+			Logger::log( "asset_version() rejected unsafe name: \"{$name}\", using NEWSPACK_PLUGIN_VERSION", 'NEWSPACK-ASSETS' );
+			self::$asset_version_cache[ $name ] = $version;
+			return $version;
+		}
 		/**
 		 * Filter the directory `asset_version()` reads `.asset.php` files from.
 		 * Defaults to the plugin's `dist/`. Tests redirect this to a temp dir

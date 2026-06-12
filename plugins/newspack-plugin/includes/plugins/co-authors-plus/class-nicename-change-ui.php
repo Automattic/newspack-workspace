@@ -59,14 +59,6 @@ class Nicename_Change_UI {
 			true
 		);
 
-		\wp_enqueue_script(
-			'newspack-nicename-change',
-			Newspack::plugin_url() . '/dist/nicename-change.js',
-			[],
-			Newspack::asset_version( 'nicename-change' ),
-			true
-		);
-
 		wp_localize_script(
 			'newspack-nicename-change',
 			'newspack_change_nicename_params',

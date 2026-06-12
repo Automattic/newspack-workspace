@@ -148,6 +148,29 @@ class Newspack_Test_Asset_Version extends WP_UnitTestCase {
 	}
 
 	/**
+	 * It rejects path-traversal sequences and other unsafe names by falling back
+	 * to NEWSPACK_PLUGIN_VERSION without touching the file system.
+	 */
+	public function test_falls_back_to_plugin_version_when_name_is_unsafe() {
+		$unsafe = [
+			'../wp-config',
+			'../../etc/passwd',
+			'foo/../bar',
+			'/absolute/path',
+			'has spaces',
+			'name;with;semicolons',
+			'name\\with\\backslashes',
+		];
+		foreach ( $unsafe as $name ) {
+			$this->assertSame(
+				NEWSPACK_PLUGIN_VERSION,
+				Newspack::asset_version( $name ),
+				"Unsafe name should fall back to plugin version: {$name}"
+			);
+		}
+	}
+
+	/**
 	 * Reset clears memoized entries so a subsequent call re-reads the file.
 	 * Without the reset, the helper would return the previously-cached value
 	 * even after the underlying fixture changed.
