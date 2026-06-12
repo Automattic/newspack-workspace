@@ -162,8 +162,48 @@ class Redirection {
 	}
 
 	/**
-	 * Durability notice — implemented in a later task.
+	 * Pure detector: is Redirection's expected logging surface missing?
+	 *
+	 * Our Layer 1 suppression hooks Redirection's own log classes' filters; if a
+	 * future Redirection release renames/removes those classes, our filters would
+	 * silently no-op. This detects that drift so we can surface a warning.
+	 *
+	 * @param bool $has_redirect_log Whether Red_Redirect_Log exists.
+	 * @param bool $has_404_log      Whether Red_404_Log exists.
+	 * @return bool
 	 */
-	public static function maybe_render_drift_notice() {}
+	public static function is_logging_surface_missing( $has_redirect_log, $has_404_log ) {
+		return ! $has_redirect_log || ! $has_404_log;
+	}
+
+	/**
+	 * Build the drift-notice HTML (empty string when no drift).
+	 *
+	 * @return string
+	 */
+	public static function get_drift_notice_html() {
+		$missing = self::is_logging_surface_missing(
+			class_exists( 'Red_Redirect_Log' ),
+			class_exists( 'Red_404_Log' )
+		);
+		if ( ! $missing ) {
+			return '';
+		}
+		return '<div class="notice notice-warning"><p>'
+			. esc_html__( 'Newspack expected to disable Redirection logging, but this version of Redirection no longer exposes the expected log classes. Please report this so Newspack can update the integration.', 'newspack' )
+			. '</p></div>';
+	}
+
+	/**
+	 * Durability: warn admins if Redirection's log surface has drifted out from
+	 * under our suppression filters. Rendered only on the Redirection screen.
+	 */
+	public static function maybe_render_drift_notice() {
+		$screen = get_current_screen();
+		if ( ! $screen || 'tools_page_redirection' !== $screen->id ) {
+			return;
+		}
+		echo self::get_drift_notice_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+	}
 }
 Redirection::init();

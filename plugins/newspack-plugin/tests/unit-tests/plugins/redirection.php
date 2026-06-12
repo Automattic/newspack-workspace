@@ -140,4 +140,28 @@ class Newspack_Test_Redirection extends WP_UnitTestCase {
 		$this->assertFalse( Redirection::force_logging_off_in_options( false ) );
 		$this->assertSame( '', Redirection::force_logging_off_in_options( '' ) );
 	}
+
+	/**
+	 * No drift notice when Redirection's log classes are present.
+	 */
+	public function test_no_drift_notice_when_log_classes_present() {
+		if ( ! class_exists( 'Red_Redirect_Log' ) ) {
+			eval( 'class Red_Redirect_Log {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged
+		}
+		if ( ! class_exists( 'Red_404_Log' ) ) {
+			eval( 'class Red_404_Log {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged
+		}
+		$this->assertSame( '', Redirection::get_drift_notice_html() );
+	}
+
+	/**
+	 * The drift detector reports drift when the log classes are missing.
+	 * (Tested via the pure detector, since the stub classes can't be unloaded.)
+	 */
+	public function test_drift_detected_when_log_classes_missing() {
+		$this->assertTrue( Redirection::is_logging_surface_missing( false, false ) );
+		$this->assertTrue( Redirection::is_logging_surface_missing( true, false ) );
+		$this->assertTrue( Redirection::is_logging_surface_missing( false, true ) );
+		$this->assertFalse( Redirection::is_logging_surface_missing( true, true ) );
+	}
 }
