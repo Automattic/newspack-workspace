@@ -153,6 +153,25 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * SAFE_DIVIDE returns NULL when the denominator is zero (BigQuery semantics).
+	 * That's a legitimate "no eligible events" case, not a malformed payload —
+	 * surface as `state: 'populated'` with a non-computable zero so the UI
+	 * renders "0%" instead of "Data temporarily unavailable".
+	 */
+	public function test_scalar_treats_null_safe_divide_result_as_non_computable_zero() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn( [ [ 'regwall_conversion_rate_direct' => null ] ] );
+
+		$metric = new Gates_Metric( $proxy );
+		$result = $metric->get_regwall_conversion_direct( $this->make_date( '2026-03-22' ), $this->make_date( '2026-04-21' ) );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertSame( 0, $result['value'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertSame( 'rate', $result['placeholder_type'] );
+	}
+
+	/**
 	 * Section 1 count metrics fall back when the catalog returns a non-integer numeric value.
 	 *
 	 * A `count` should always be a whole number; a float (e.g. 3.7) indicates upstream

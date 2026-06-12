@@ -8,6 +8,8 @@
  * placeholder type (Card 1.3 — Avg Prompts per Reader).
  */
 
+import { __ } from '@wordpress/i18n';
+
 import type { PromptsScalarMetric } from '../../api/prompts';
 import type { MetricFormat } from '../components/MetricCard';
 
@@ -34,12 +36,21 @@ export interface ScalarCardProps {
 
 export const scalarToMetricCardProps = ( props: ScalarCardProps ) => {
 	const { label, description, current, previous } = props;
+	// A failed query renders MetricCard's shared error treatment rather than a
+	// misleading zero. The raw message stays server-side; the card shows generic
+	// copy keyed off the `error` prop.
+	if ( current.state === 'error' ) {
+		return { label, description, error: current.error_message ?? __( 'Data unavailable', 'newspack-plugin' ) };
+	}
 	return {
 		label,
 		description,
 		value: current.value,
 		format: formatFor( current ),
-		previousValue: previous?.computable ? previous.value : null,
-		pending: current.pending,
+		// Suppress the period-over-period delta unless BOTH windows are real
+		// computed values. A non-computable current (e.g. an empty window's zero)
+		// must not show a delta against a real prior value (that would read as a
+		// misleading "↓ 100%").
+		previousValue: current.computable && previous && previous.state !== 'error' && previous.computable ? previous.value : null,
 	};
 };

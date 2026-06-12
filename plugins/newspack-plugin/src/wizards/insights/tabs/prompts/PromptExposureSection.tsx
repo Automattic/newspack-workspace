@@ -8,6 +8,11 @@
  */
 
 /**
+ * External dependencies
+ */
+import type { ReactNode } from 'react';
+
+/**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
@@ -22,16 +27,22 @@ import { scalarToMetricCardProps } from './scalarToCard';
 export interface PromptExposureSectionProps {
 	current: PromptsWindow;
 	previous: PromptsWindow | null;
+	lastUpdated?: ReactNode;
 }
 
-const PromptExposureSection = ( { current, previous }: PromptExposureSectionProps ) => (
+const PromptExposureSection = ( { current, previous, lastUpdated }: PromptExposureSectionProps ) => (
 	<section className="newspack-insights__section newspack-insights__section--exposure" aria-labelledby="newspack-insights-prompts-exposure-heading">
-		<h2 id="newspack-insights-prompts-exposure-heading" className="newspack-insights__section-heading">
-			{ __( 'Prompt exposure', 'newspack-plugin' ) }
-		</h2>
-		<p className="newspack-insights__section-caption">
-			{ __( 'Top of the funnel. How many readers see prompts in this timeframe.', 'newspack-plugin' ) }
-		</p>
+		<div className="newspack-insights__section-header-container">
+			<div className="newspack-insights__section-header-text">
+				<h2 id="newspack-insights-prompts-exposure-heading" className="newspack-insights__section-heading">
+					{ __( 'Prompt exposure', 'newspack-plugin' ) }
+				</h2>
+				<p className="newspack-insights__section-caption">
+					{ __( 'Top of the funnel. How many readers see prompts in this timeframe.', 'newspack-plugin' ) }
+				</p>
+			</div>
+			{ lastUpdated }
+		</div>
 		<div className="newspack-insights__metric-grid">
 			<MetricCard
 				{ ...scalarToMetricCardProps( {

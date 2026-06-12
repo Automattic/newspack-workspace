@@ -1,6 +1,6 @@
 <?php
 /**
- * Newspack Insights — Tab 5 Prompts REST controller (NPPD-1607, Phase 1).
+ * Newspack Insights — Tab 5 Prompts REST controller (NPPD-1607, Phase 2).
  *
  * Single endpoint: `GET /newspack-insights/v1/prompts`. Same date-arg
  * validation, permission check, and date parsing conventions as
@@ -8,11 +8,16 @@
  * lifecycle exactly.
  *
  * Response shape:
- *   tab_pending: bool        — true in Phase 1 (placeholder phase); React
- *                              uses it to render the top-of-tab banner.
+ *   tab_error: bool          — true only when every section in the current
+ *                              window failed to load; React renders a
+ *                              tab-level error banner.
  *   current:     PromptsWindow — scorecards + funnel + distribution + tables
  *   previous:    PromptsWindow | null — only populated when the request
  *                              passes `compare_start` + `compare_end`.
+ *
+ * Each metric from {@see Prompts_Metric} carries its own `state`
+ * ('error' | 'empty' | 'populated'); sections render their own treatments,
+ * so the tab banner is reserved for the all-failed case.
  *
  * @package Newspack
  */
@@ -34,6 +39,8 @@ use WP_REST_Server;
  */
 class Prompts_REST_Controller extends WP_REST_Controller {
 
+	use Cached_Controller_Trait;
+
 	/**
 	 * Shared Tab 4–7 namespace.
 	 *
@@ -47,6 +54,24 @@ class Prompts_REST_Controller extends WP_REST_Controller {
 	 * @var string
 	 */
 	protected $rest_base = 'prompts';
+
+	/**
+	 * Cache source classification for this controller.
+	 *
+	 * @return string
+	 */
+	protected function cache_source(): string {
+		return Cache::SOURCE_BIGQUERY;
+	}
+
+	/**
+	 * Tab slug used as the cache namespace.
+	 *
+	 * @return string
+	 */
+	protected function tab_slug(): string {
+		return 'prompts';
+	}
 
 	/**
 	 * Register the Tab 5 route.
@@ -66,10 +91,29 @@ class Prompts_REST_Controller extends WP_REST_Controller {
 				],
 			]
 		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/refresh',
+			[
+				[
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => [ $this, 'refresh_prompts_data' ],
+					'permission_callback' => [ $this, 'permissions_check' ],
+					'args'                => $this->get_collection_params(),
+				],
+			]
+		);
 	}
 
 	/**
 	 * Permission check.
+	 *
+	 * This route is intentionally callable via application passwords. The
+	 * BQ-side rate limit is the 10-minute cooldown enforced in
+	 * {@see Cache::refresh()}, not a per-route rate limiter — any caller
+	 * authenticated as a user with `manage_options` (whether via cookie +
+	 * nonce or an application password) can trigger a refresh, and the
+	 * cooldown applies uniformly.
 	 *
 	 * @return bool|WP_Error
 	 */
@@ -91,8 +135,80 @@ class Prompts_REST_Controller extends WP_REST_Controller {
 	 * @return \WP_REST_Response|WP_Error
 	 */
 	public function get_prompts_data( WP_REST_Request $request ) {
-		$tz = $this->site_timezone();
+		// Dev smoke-test path: serve canned fixture data so the UI renders without
+		// a BigQuery proxy connection. The optional _fixture_state param selects a
+		// render path ('populated' | 'empty' | 'error'). Never enable in production.
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			$parsed = $this->parse_window_args( $request );
+			if ( is_wp_error( $parsed ) ) {
+				return $parsed;
+			}
+			[ , , $compare_start, $compare_end ] = $parsed;
+			$variant  = (string) ( $request->get_param( '_fixture_state' ) ?? 'populated' );
+			$compare  = null !== $compare_start && null !== $compare_end;
+			$response = rest_ensure_response(
+				[
+					'cache' => [
+						'source'         => Cache::SOURCE_LOCAL,
+						'computed_at'    => gmdate( 'Y-m-d\TH:i:s\Z' ),
+						'cooldown_until' => null,
+					],
+					'data'  => Prompts_Metric::get_fixture( $variant, $compare ),
+				]
+			);
+			$response->header( 'Cache-Control', 'no-store, private' );
+			return $response;
+		}
 
+		$parsed = $this->parse_window_args( $request );
+		if ( is_wp_error( $parsed ) ) {
+			return $parsed;
+		}
+		[ $start, $end, $compare_start, $compare_end ] = $parsed;
+
+		$metric = new Prompts_Metric();
+		return $this->cached_response(
+			$request,
+			function () use ( $metric, $start, $end, $compare_start, $compare_end ) {
+				return $this->build_response( $metric, $start, $end, $compare_start, $compare_end );
+			}
+		);
+	}
+
+	/**
+	 * POST /prompts/refresh handler — bypass cache and recompute.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|WP_Error
+	 */
+	public function refresh_prompts_data( WP_REST_Request $request ) {
+		// Fixture mode: delegate to GET so refresh is a no-op cache bypass.
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			return $this->get_prompts_data( $request );
+		}
+		$parsed = $this->parse_window_args( $request );
+		if ( is_wp_error( $parsed ) ) {
+			return $parsed;
+		}
+		[ $start, $end, $compare_start, $compare_end ] = $parsed;
+		$metric = new Prompts_Metric();
+		return $this->refresh_response(
+			$request,
+			function () use ( $metric, $start, $end, $compare_start, $compare_end ) {
+				return $this->build_response( $metric, $start, $end, $compare_start, $compare_end );
+			}
+		);
+	}
+
+	/**
+	 * Validate and parse the window args. Returns [start, end, compare_start, compare_end] on
+	 * success; WP_Error on validation failure.
+	 *
+	 * @param WP_REST_Request $request Incoming request.
+	 * @return array|WP_Error
+	 */
+	private function parse_window_args( WP_REST_Request $request ) {
+		$tz = $this->site_timezone();
 		try {
 			$start = $this->parse_date( $request->get_param( 'start' ), $tz, false );
 			$end   = $this->parse_date( $request->get_param( 'end' ), $tz, true );
@@ -134,16 +250,17 @@ class Prompts_REST_Controller extends WP_REST_Controller {
 			}
 		}
 
-		$metric = new Prompts_Metric();
-		return rest_ensure_response( $this->build_response( $metric, $start, $end, $compare_start, $compare_end ) );
+		return [ $start, $end, $compare_start, $compare_end ];
 	}
 
 	/**
 	 * Assemble the top-level response.
 	 *
-	 * `tab_pending` is true in Phase 1 (placeholder phase). React uses it
-	 * to render the top-of-tab banner; remove the flag (or have it return
-	 * false based on real data state) when Phase 2 wires up BigQuery.
+	 * `tab_error` is true only when every metric in the current window reports
+	 * `state: 'error'` — i.e. the whole tab failed to load (e.g. the BigQuery
+	 * proxy is down/misconfigured). React renders a tab-level error banner in
+	 * that case; otherwise each section renders its own error/empty/populated
+	 * treatment.
 	 *
 	 * @param Prompts_Metric         $metric        Orchestrator.
 	 * @param DateTimeImmutable      $start         Current window start.
@@ -159,15 +276,39 @@ class Prompts_REST_Controller extends WP_REST_Controller {
 		?DateTimeImmutable $compare_start,
 		?DateTimeImmutable $compare_end
 	): array {
+		$current  = $this->build_window( $metric, $start, $end );
 		$response = [
-			'tab_pending' => true,
-			'current'     => $this->build_window( $metric, $start, $end ),
-			'previous'    => null,
+			'tab_error' => self::is_window_all_error( $current ),
+			'current'   => $current,
+			'previous'  => null,
 		];
 		if ( $compare_start && $compare_end ) {
 			$response['previous'] = $this->build_window( $metric, $compare_start, $compare_end );
 		}
 		return $response;
+	}
+
+	/**
+	 * Whether every metric in a window payload reports `state: 'error'`.
+	 *
+	 * Returns `false` as soon as any metric is not in the error state (the `window`
+	 * key is date metadata, not a metric, so it's skipped). A metric missing a
+	 * `state` key is treated as non-error, so the banner only shows on an
+	 * unambiguous all-failed window.
+	 *
+	 * @param array $window The shape returned by `build_window()`.
+	 * @return bool
+	 */
+	private static function is_window_all_error( array $window ): bool {
+		foreach ( $window as $key => $value ) {
+			if ( 'window' === $key ) {
+				continue;
+			}
+			if ( ! is_array( $value ) || ! isset( $value['state'] ) || 'error' !== $value['state'] ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

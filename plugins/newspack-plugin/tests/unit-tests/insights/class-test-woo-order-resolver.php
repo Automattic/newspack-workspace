@@ -53,7 +53,7 @@ class Test_Woo_Order_Resolver extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Build a row in the shape the BQ paywall queries return.
+	 * Build a row in the shape Gates BQ paywall queries return (back-compat `user_pseudo_id` key).
 	 *
 	 * @param int    $uid        Customer id used as user_pseudo_id.
 	 * @param string $session    Session identifier.
@@ -65,6 +65,26 @@ class Test_Woo_Order_Resolver extends WP_UnitTestCase {
 			'user_pseudo_id' => (string) $uid,
 			'session_id'     => $session,
 			'attempt_ts'     => (string) $attempt_ts,
+		];
+	}
+
+	/**
+	 * Build a row in the shape Prompts BQ paid attempt queries return (`uid` key).
+	 *
+	 * The hub's prompts catalog projects `COALESCE(user_id, user_pseudo_id) AS uid`
+	 * (renamed per Copilot review on newspack-manager-admin#457). The resolver
+	 * reads `uid` first and falls back to `user_pseudo_id` so both shapes work.
+	 *
+	 * @param int    $uid        Customer id used as uid.
+	 * @param string $session    Session identifier.
+	 * @param int    $attempt_ts GA4 microsecond timestamp.
+	 * @return array
+	 */
+	private function row_uid( int $uid, string $session, int $attempt_ts ): array {
+		return [
+			'uid'        => (string) $uid,
+			'session_id' => $session,
+			'attempt_ts' => (string) $attempt_ts,
 		];
 	}
 
@@ -172,6 +192,47 @@ class Test_Woo_Order_Resolver extends WP_UnitTestCase {
 		// One attempt = one conversion; revenue picks the first matching order.
 		$this->assertSame( 1, $resolver->count_completed_orders( $rows ) );
 		$this->assertSame( 25.00, $resolver->sum_completed_revenue( $rows ) );
+	}
+
+	/**
+	 * Rows with the Prompts-style `uid` key are matched the same as Gates-style
+	 * `user_pseudo_id` rows. Guards against a regression where the resolver
+	 * stopped reading the `uid` shape after the Copilot-driven hub-side rename.
+	 */
+	public function test_counts_completed_order_in_window_with_uid_field() {
+		$attempt_ts_micros = ( strtotime( '2026-04-15 12:00:00 UTC' ) * 1000000 );
+		$this->make_order( $this->customer_a, 'completed', '2026-04-15 12:10:00 UTC', 25.00 );
+
+		$rows = [ $this->row_uid( $this->customer_a, 'sess1', $attempt_ts_micros ) ];
+		$resolver = new Woo_Order_Resolver();
+
+		$this->assertSame( 1, $resolver->count_completed_orders( $rows ) );
+		$this->assertSame( 25.00, $resolver->sum_completed_revenue( $rows ) );
+		$this->assertSame( 1, $resolver->count_unique_completed_users( $rows ) );
+	}
+
+	/**
+	 * The `uid` field takes precedence over `user_pseudo_id` when both are present
+	 * on the same row. Documents the resolver's resolution order: read `uid` first,
+	 * fall back to `user_pseudo_id`. Customer B is the `uid` value (matches the
+	 * order). Customer A is the `user_pseudo_id` fallback (no matching order).
+	 */
+	public function test_uid_takes_precedence_over_user_pseudo_id() {
+		$attempt_ts_micros = ( strtotime( '2026-04-15 12:00:00 UTC' ) * 1000000 );
+		$this->make_order( $this->customer_b, 'completed', '2026-04-15 12:10:00 UTC', 42.00 );
+
+		$rows = [
+			[
+				'uid'            => (string) $this->customer_b,
+				'user_pseudo_id' => (string) $this->customer_a,
+				'session_id'     => 'sess1',
+				'attempt_ts'     => (string) $attempt_ts_micros,
+			],
+		];
+		$resolver = new Woo_Order_Resolver();
+
+		$this->assertSame( 1, $resolver->count_completed_orders( $rows ) );
+		$this->assertSame( 42.00, $resolver->sum_completed_revenue( $rows ) );
 	}
 
 	/**

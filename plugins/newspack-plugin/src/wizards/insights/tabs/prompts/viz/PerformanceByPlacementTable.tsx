@@ -20,6 +20,7 @@ import type { PromptsPerformanceByPlacementRow, PromptsPerformanceByPlacementTab
 import { formatNumber } from '../../components/format';
 import SortableTable, { renderRate, type SortableColumn } from './SortableTable';
 import { humanizeTerm } from './humanize';
+import { SECTION_ERROR_MESSAGE } from '../SectionState';
 
 export interface PerformanceByPlacementTableProps {
 	data: TableData;
@@ -69,6 +70,7 @@ const PerformanceByPlacementTable = ( { data }: PerformanceByPlacementTableProps
 				'No prompt data yet. Placement performance will appear once readers begin interacting with your prompts.',
 				'newspack-plugin'
 			) }
+			errorMessage={ 'error' === data.state ? SECTION_ERROR_MESSAGE : undefined }
 		/>
 		<p className="newspack-insights__prompts-subsection-note">
 			{ __( "Answers 'do my overlay prompts perform better than inline?' Useful for choosing placement defaults.", 'newspack-plugin' ) }

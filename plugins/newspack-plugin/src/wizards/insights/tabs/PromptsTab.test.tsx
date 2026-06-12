@@ -1,13 +1,11 @@
 /**
- * Tab-level tests for PromptsTab (NPPD-1607, Phase 1).
+ * Tab-level tests for PromptsTab (NPPD-1607).
  *
- * Phase 1 ships the whole tab against placeholder (`pending: true`)
- * data. These tests confirm the tab renders the full section
- * structure without crashing when every metric is pending, that the
- * funnel / distribution / performance tables render their zero / empty
- * states, and that loading + error states are handled. A snapshot pins
- * the section structure, card titles, table headers, and explainer
- * copy against the spec.
+ * Confirms the tab renders the full section structure under the state
+ * envelope: scalars in 'populated' state render their card chrome,
+ * collection metrics ('empty' state) render their empty-state copy, and
+ * the tab-level error banner appears when `tab_error` is set.
+ * Loading + error states are exercised separately.
  */
 
 /**
@@ -36,17 +34,28 @@ jest.mock( '@wordpress/icons', () => ( {
 	closeSmall: 'closeSmall',
 	chevronUp: 'chevronUp',
 	chevronDown: 'chevronDown',
+	caution: 'caution',
 } ) );
 
 const mockHook = usePromptsData as jest.Mock;
 const range = { start: '2026-05-09', end: '2026-06-08', preset: 'last-30' } as unknown as DateRange;
 
 const scalar = ( placeholder_type: PromptsPlaceholderType ): PromptsScalarMetric => ( {
+	state: 'populated',
 	value: 'decimal' === placeholder_type ? 0.0 : 0,
 	computable: false,
-	pending: true,
 	denominator: null,
 	placeholder_type,
+} );
+
+const errorScalar = ( placeholder_type: PromptsPlaceholderType ): PromptsScalarMetric => ( {
+	state: 'error',
+	value: 0,
+	computable: false,
+	denominator: null,
+	placeholder_type,
+	error_code: 'bq_unavailable',
+	error_message: 'BigQuery is unavailable.',
 } );
 
 const makeWindow = (): PromptsWindow => ( {
@@ -70,29 +79,20 @@ const makeWindow = (): PromptsWindow => ( {
 	subscription_revenue_direct: scalar( 'currency' ),
 	subscription_revenue_influenced_14d: scalar( 'currency' ),
 	conversion_funnel: {
-		pending: true,
-		stages: [
-			{ label: 'Impression', count: 0, pct_of_top: 0 },
-			{ label: 'Engagement', count: 0, pct_of_top: 0 },
-			{ label: 'Conversion', count: 0, pct_of_top: 0 },
-		],
+		state: 'empty',
+		stages: [],
 	},
 	exposures_distribution: {
-		pending: true,
-		buckets: [
-			{ label: '1 exposure', count: 0, pct: 0 },
-			{ label: '2 exposures', count: 0, pct: 0 },
-			{ label: '3–5 exposures', count: 0, pct: 0 },
-			{ label: '6+ exposures', count: 0, pct: 0 },
-		],
+		state: 'empty',
+		buckets: [],
 	},
-	performance_by_prompt: { pending: true, rows: [] },
-	performance_by_intent: { pending: true, rows: [] },
-	performance_by_placement: { pending: true, rows: [] },
+	performance_by_prompt: { state: 'empty', rows: [] },
+	performance_by_intent: { state: 'empty', rows: [] },
+	performance_by_placement: { state: 'empty', rows: [] },
 } );
 
 const makeResponse = (): PromptsResponse => ( {
-	tab_pending: true,
+	tab_error: false,
 	current: makeWindow(),
 	previous: null,
 } );
@@ -110,7 +110,7 @@ describe( 'PromptsTab', () => {
 		mockHook.mockReset();
 	} );
 
-	it( 'renders all seven section headings + the explainer when every metric is pending', () => {
+	it( 'renders all seven section headings + the explainer when scalars are populated', () => {
 		mockSuccess();
 		render( <PromptsTab range={ range } previousRange={ null } /> );
 
@@ -134,20 +134,14 @@ describe( 'PromptsTab', () => {
 		expect( screen.getByText( 'Donation Revenue (Direct)' ) ).toBeInTheDocument(); // currency
 	} );
 
-	it( 'renders the funnel empty state and the distribution four buckets when all-zero', () => {
+	it( 'renders the funnel + distribution empty-state copy when those sections are empty', () => {
 		mockSuccess();
 		render( <PromptsTab range={ range } previousRange={ null } /> );
 
-		// Phase 1 funnel data is all-zero; the SVG funnel needs a non-zero top step
-		// to chart proportions, so it shows its empty-state copy (matching Gates).
-		expect( screen.getByText( 'Not enough data to chart the funnel.' ) ).toBeInTheDocument();
-		expect( screen.queryByText( 'Impression' ) ).not.toBeInTheDocument();
-
-		// The distribution still renders its four buckets at 0 / 0%.
-		expect( screen.getByText( '1 exposure' ) ).toBeInTheDocument();
-		expect( screen.getByText( '2 exposures' ) ).toBeInTheDocument();
-		expect( screen.getByText( '3–5 exposures' ) ).toBeInTheDocument();
-		expect( screen.getByText( '6+ exposures' ) ).toBeInTheDocument();
+		expect(
+			screen.getByText( 'No funnel data yet. The funnel will populate once readers begin moving through your prompts.' )
+		).toBeInTheDocument();
+		expect( screen.getByText( 'No distribution data yet. This will populate once readers begin converting.' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders the three performance tables empty-state rows when rows are empty', () => {
@@ -163,6 +157,56 @@ describe( 'PromptsTab', () => {
 		expect(
 			screen.getByText( 'No prompt data yet. Placement performance will appear once readers begin interacting with your prompts.' )
 		).toBeInTheDocument();
+	} );
+
+	it( 'renders the tab-level error banner when tab_error is true', () => {
+		const response = makeResponse();
+		response.tab_error = true;
+		// Flip every scalar to the error state so the per-card treatments line up
+		// with the banner; the banner itself only depends on `tab_error`.
+		Object.keys( response.current ).forEach( key => {
+			const metric = ( response.current as unknown as Record< string, { state?: string; placeholder_type?: PromptsPlaceholderType } > )[ key ];
+			if ( metric && 'placeholder_type' in metric && metric.placeholder_type ) {
+				( response.current as unknown as Record< string, PromptsScalarMetric > )[ key ] = errorScalar( metric.placeholder_type );
+			}
+		} );
+		response.current.conversion_funnel = {
+			state: 'error',
+			stages: [],
+			error_code: 'bq_unavailable',
+			error_message: 'BigQuery is unavailable.',
+		};
+		response.current.exposures_distribution = {
+			state: 'error',
+			buckets: [],
+			error_code: 'bq_unavailable',
+			error_message: 'BigQuery is unavailable.',
+		};
+		response.current.performance_by_prompt = {
+			state: 'error',
+			rows: [],
+			error_code: 'bq_unavailable',
+			error_message: 'BigQuery is unavailable.',
+		};
+		response.current.performance_by_intent = {
+			state: 'error',
+			rows: [],
+			error_code: 'bq_unavailable',
+			error_message: 'BigQuery is unavailable.',
+		};
+		response.current.performance_by_placement = {
+			state: 'error',
+			rows: [],
+			error_code: 'bq_unavailable',
+			error_message: 'BigQuery is unavailable.',
+		};
+		mockHook.mockReturnValue( { status: 'success', error: null, refetch: () => {}, data: response } );
+
+		render( <PromptsTab range={ range } previousRange={ null } /> );
+
+		expect( screen.getByText( 'Unable to load this tab.' ) ).toBeInTheDocument();
+		// Per-section error treatment renders the shared "Unable to load this section." copy.
+		expect( screen.getAllByText( 'Unable to load this section. Newspack Manager may need attention.' ).length ).toBeGreaterThan( 0 );
 	} );
 
 	it( 'renders the loading state', () => {

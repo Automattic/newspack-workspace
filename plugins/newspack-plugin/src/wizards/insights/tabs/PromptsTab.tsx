@@ -2,18 +2,14 @@
  * PromptsTab (NPPD-1607).
  *
  * Tab 5 orchestrator. Mirrors the GatesTab loading / error / success
- * lifecycle and composes the seven Prompts sections.
+ * lifecycle and composes the seven Prompts sections, plus a tab-level
+ * error banner when every section fails.
  *
  * Date range picker affects every metric — there are no current-state
  * metrics on this tab, only window-scoped ones. Comparison toggle is
  * forwarded by the wizard chrome via the standard `previousRange`
  * prop; when set, the response carries a `previous` window that the
  * sections thread into their per-card MetricCards.
- *
- * Note: unlike Gates, Prompts renders no top-of-tab "preview" banner —
- * the tab is not behind a preview flag, and the spec calls for none.
- * The `tab_pending` flag stays in the response envelope for parity
- * with the other Insights tabs and for Phase 2.
  */
 
 /**
@@ -26,8 +22,10 @@ import { __ } from '@wordpress/i18n';
  */
 import type { DateRange } from '../state/useDateRange';
 import usePromptsData from '../hooks/usePromptsData';
+import LastUpdated from '../components/LastUpdated';
 import TabStateView from './components/TabStateView';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
+import PromptsErrorBanner from './prompts/PromptsErrorBanner';
 import DirectVsInfluencedCallout from './prompts/DirectVsInfluencedCallout';
 import PromptExposureSection from './prompts/PromptExposureSection';
 import PromptEngagementSection from './prompts/PromptEngagementSection';
@@ -57,8 +55,13 @@ const PromptsTab = ( { range, previousRange }: PromptsTabProps ) => {
 		>
 			{ data && (
 				<>
+					{ data.tab_error && <PromptsErrorBanner /> }
 					<DirectVsInfluencedCallout />
-					<PromptExposureSection current={ data.current } previous={ data.previous } />
+					<PromptExposureSection
+						current={ data.current }
+						previous={ data.previous }
+						lastUpdated={ <LastUpdated tab="prompts" range={ range } previousRange={ previousRange } /> }
+					/>
 					<PromptEngagementSection current={ data.current } previous={ data.previous } />
 					<FreeReaderConversionSection current={ data.current } previous={ data.previous } />
 					<PaidReaderConversionSection current={ data.current } previous={ data.previous } />

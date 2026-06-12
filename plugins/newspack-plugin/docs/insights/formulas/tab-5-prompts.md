@@ -9,6 +9,21 @@ Reference: see `formulas/README.md` for conventions used throughout (PARAM() sho
 - **Paywall completion:** same pattern as Gates — `np_modal_checkout_interaction(form_submission, checkout_button)` is an attempt; success requires a matching Woo order within the 30-min window. See `../open-questions.md` for the window default discussion.
 - **Influenced lookback:** 7 days for free conversions (registration, newsletter signup). 14 days for paid (subscription, donation).
 
+### Schema note: param shape drift across publishers
+
+The snippets below use `PARAM('foo') = 'yes'` shorthand for readability, but two pieces of param shape vary by publisher and the canonical BQ builder (`Newspack_Manager_Admin_BigQuery_Prompts_Queries`) wraps both in defensive COALESCEs:
+
+1. **`newspack_popup_id` value type** — live BQ data stores this as `value.int_value`. The canonical builder reads it as `COALESCE(CAST(value.int_value AS STRING), value.string_value)` so publishers emitting either type are matched.
+2. **`prompt_has_*` keys** — live BQ data emits `prompt_has_donation`, `prompt_has_registration`, `prompt_has_newsletters_subscription` (no `_block` suffix) with `int_value = 1`. The help doc and earlier examples use the `_block` suffix with `string_value = 'yes'`. The canonical builder reads both:
+   ```sql
+   COALESCE(
+     (SELECT CAST(value.int_value AS STRING) FROM UNNEST(event_params) WHERE key='prompt_has_X'),
+     (SELECT value.string_value FROM UNNEST(event_params) WHERE key='prompt_has_X_block')
+   ) IN ('1', 'yes')
+   ```
+
+The snippets in this doc keep the shorter `PARAM('prompt_has_X_block') = 'yes'` form for human readability — when porting them to BigQuery, expand to the COALESCE form above.
+
 ## Section: Prompt exposure
 
 ### Total Prompt Impressions (selected period)

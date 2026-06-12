@@ -25,6 +25,7 @@ import type { PromptsPerformanceByPromptRow, PromptsPerformanceByPromptTable as 
 import { formatNumber } from '../../components/format';
 import SortableTable, { renderCount, renderRate, type SortableColumn } from './SortableTable';
 import { humanizeTerm } from './humanize';
+import { SECTION_ERROR_MESSAGE } from '../SectionState';
 
 export interface PerformanceByPromptTableProps {
 	data: TableData;
@@ -119,13 +120,14 @@ const PerformanceByPromptTable = ( { data }: PerformanceByPromptTableProps ) => 
 		<SortableTable
 			columns={ columns }
 			rows={ data.rows }
-			getRowKey={ row => row.newspack_popup_id }
+			getRowKey={ row => row.popup_id }
 			defaultSortKey="impressions"
 			initialRowLimit={ 10 }
 			emptyMessage={ __(
 				'No prompt data yet. Performance metrics will appear once readers begin interacting with your prompts.',
 				'newspack-plugin'
 			) }
+			errorMessage={ 'error' === data.state ? SECTION_ERROR_MESSAGE : undefined }
 		/>
 		<p className="newspack-insights__prompts-subsection-note">
 			{ __(

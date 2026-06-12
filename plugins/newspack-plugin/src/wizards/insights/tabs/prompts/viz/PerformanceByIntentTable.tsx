@@ -20,6 +20,7 @@ import type { PromptsPerformanceByIntentRow, PromptsPerformanceByIntentTable as 
 import { formatNumber } from '../../components/format';
 import SortableTable, { renderRate, type SortableColumn } from './SortableTable';
 import { humanizeTerm } from './humanize';
+import { SECTION_ERROR_MESSAGE } from '../SectionState';
 
 export interface PerformanceByIntentTableProps {
 	data: TableData;
@@ -70,6 +71,7 @@ const PerformanceByIntentTable = ( { data }: PerformanceByIntentTableProps ) => 
 				'No prompt data yet. Intent performance will appear once readers begin interacting with your prompts.',
 				'newspack-plugin'
 			) }
+			errorMessage={ 'error' === data.state ? SECTION_ERROR_MESSAGE : undefined }
 		/>
 		<p className="newspack-insights__prompts-subsection-note">
 			{ __( "Answers 'are my donation prompts working better than my registration prompts?' at a glance.", 'newspack-plugin' ) }
