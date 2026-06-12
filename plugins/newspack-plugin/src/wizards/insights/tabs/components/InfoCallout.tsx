@@ -2,9 +2,16 @@
  * InfoCallout (NPPD-1618).
  *
  * Shared info callout: a bold heading over free-form body content in a muted
- * box (info icon left, optional dismiss X). Extracted verbatim from the Gates
- * "Direct vs Influenced" callout so the Advertising data-lag note and any future
- * explainer share one treatment.
+ * box (info icon left, optional dismiss X). The visual chrome — gray
+ * background, info icon, padding, content layout — is provided by the Newspack
+ * design-system `Notice` component; this wrapper owns the layout container
+ * (so a variant `className` can re-skin the whole callout) and the optional
+ * dismiss affordance (`Notice` itself has no dismiss button).
+ *
+ * Trade-off: the previous hand-rolled markup set `role="note"` on the root.
+ * `Notice` renders a plain `<div>` with no role, so that semantic hint is
+ * lost. Accepted in exchange for visual consistency with every other notice
+ * in the Newspack admin.
  *
  * When `dismissible`, dismissal persists per-publisher in localStorage under
  * `storageKey`, so the callout stays hidden across page loads. Pass
@@ -21,7 +28,12 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useCallback, useState } from '@wordpress/element';
-import { Icon, closeSmall, info } from '@wordpress/icons';
+import { Icon, closeSmall } from '@wordpress/icons';
+
+/**
+ * Internal dependencies
+ */
+import { Notice } from '../../../../../packages/components/src';
 
 const STORAGE_PREFIX = 'newspack-insights-callout:';
 
@@ -73,14 +85,17 @@ const InfoCallout = ( { heading, children, dismissible = false, persist = true, 
 	}
 
 	return (
-		<div className={ className ? `newspack-insights__info-callout ${ className }` : 'newspack-insights__info-callout' } role="note">
-			<Icon icon={ info } className="newspack-insights__info-callout-icon" />
-			<div className="newspack-insights__info-callout-body">
-				<p className="newspack-insights__info-callout-title">
-					<strong>{ heading }</strong>
-				</p>
-				{ children }
-			</div>
+		<div className={ className ? `newspack-insights__info-callout ${ className }` : 'newspack-insights__info-callout' }>
+			<Notice
+				noticeText={
+					<>
+						<p className="newspack-insights__info-callout-title">
+							<strong>{ heading }</strong>
+						</p>
+						{ children }
+					</>
+				}
+			/>
 			{ dismissible && (
 				<button
 					type="button"

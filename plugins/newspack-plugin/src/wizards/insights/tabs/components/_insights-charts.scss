@@ -476,37 +476,24 @@
 }
 
 // Shared info callout (NPPD-1618) — bold heading + free-form body in a muted
-// box, info icon left, optional dismiss X. Lifted verbatim from the Gates
-// "Direct vs Influenced" explainer so Gates and the Advertising data-lag note
-// share one treatment.
+// box, info icon left, optional dismiss X. Visual chrome (background, info
+// icon, padding, content layout) comes from the Newspack `Notice` component;
+// this wrapper only owns positioning for the optional dismiss button and the
+// title typography override. Variants (e.g. `--preview`) re-skin the inner
+// `.newspack-notice` from the consuming tab stylesheet.
 .newspack-insights__info-callout {
-	display: flex;
-	align-items: flex-start;
-	gap: 12px;
-	padding: 16px 20px;
-	background-color: wp-colors.$gray-100;
-	border: 1px solid wp-colors.$gray-200;
-	border-radius: 4px;
+	position: relative;
 
-	&-icon {
-		flex: 0 0 20px;
-		width: 20px;
-		height: 20px;
-		color: wp-colors.$gray-700;
+	// Neutralize Notice's default vertical margin — Insights tabs use
+	// gap-based flex layouts and own their own spacing.
+	.newspack-notice {
+		margin: 0;
 	}
 
-	&-body {
-		flex: 1 1 auto;
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		font-size: 13px;
-		line-height: 1.5;
-		color: wp-colors.$gray-900;
-
-		p {
-			margin: 0;
-		}
+	// Reserve right-side gutter on the Notice content so dismiss X doesn't
+	// overlap the body text on narrow widths.
+	.newspack-notice__content {
+		padding-right: 32px;
 	}
 
 	&-title {
@@ -514,7 +501,9 @@
 	}
 
 	&-dismiss {
-		flex: 0 0 auto;
+		position: absolute;
+		top: 12px;
+		right: 12px;
 		background: transparent;
 		border: 0;
 		cursor: pointer;

@@ -28,17 +28,17 @@
 	}
 
 	// Phase 1 preview banner — a light-blue variant of the shared
-	// `__info-callout` (layout, icon, and dismiss button come from
-	// components/_insights-charts.scss), distinguishing it from the gray
-	// freshness note below it. Removed entirely in Phase 2. Compound selector
-	// so the color override wins over the single-class base regardless of load
-	// order.
+	// `__info-callout`. The base chrome now comes from the Newspack `Notice`
+	// component (`.newspack-notice`); this override re-skins that inner
+	// background and tints the info icon, distinguishing the preview banner
+	// from the gray freshness note below it. Removed entirely in Phase 2.
 	&__info-callout--preview.newspack-insights__info-callout {
-		background-color: #e6f1fb;
-		border-color: #b8d8f0;
+		.newspack-notice {
+			background-color: #e6f1fb;
+		}
 
-		.newspack-insights__info-callout-icon {
-			color: var(--wp-admin-theme-color);
+		.newspack-notice > svg {
+			fill: var(--wp-admin-theme-color);
 		}
 	}
 
