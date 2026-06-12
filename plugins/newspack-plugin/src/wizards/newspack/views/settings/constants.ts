@@ -46,9 +46,10 @@ export const ADVANCED_SETTINGS_DEFAULTS = {
 	show_author_bio: true,
 	show_author_email: false,
 	author_bio_length: 200,
-	// Default Featured Image and Post Template.
+	// Default Featured Image and Post/Page Template.
 	featured_image_default: 'large',
 	post_template_default: 'default',
+	page_template_default: 'default',
 	// Featured Image and Post Template for All Posts.
 	featured_image_all_posts: 'none',
 	post_template_all_posts: 'none',
