@@ -104,6 +104,9 @@
 
 	&__metric-card {
 		border-top: 3px solid var(--wp-admin-theme-color);
+		// Clip the top accent to the CoreCard's rounded corners so the
+		// 3px colored bar doesn't visually overhang the radius.
+		border-radius: 4px 4px 0 0;
 
 		// CoreCard wraps children in a `.newspack-card--core__body` div, so
 		// the flex layout that pins description to the bottom (and the
@@ -152,7 +155,9 @@
 			justify-content: flex-start; // hero sits at the top, just under the label
 			align-items: flex-start;     // left-aligned to match label
 			gap: 8px;
-			padding: 16px 0 0;
+			// Top padding is applied on the higher-specificity selector
+			// inside `.newspack-card--core__body` above so it beats
+			// CoreCard's default grandchild-div padding.
 		}
 
 		&-value {
