@@ -125,11 +125,41 @@ class Redirection {
 	}
 
 	/**
-	 * Layer 3 enqueue — implemented in a later task.
+	 * Layer 3: enqueue the admin script that hides the log-retention controls,
+	 * only on Redirection's options screen.
 	 *
 	 * @param string $hook_suffix Current admin screen hook suffix.
 	 */
-	public static function enqueue_admin_assets( $hook_suffix ) {}
+	public static function enqueue_admin_assets( $hook_suffix ) {
+		// Redirection's menu lives under Tools → Redirection (slug `redirection.php`).
+		if ( 'tools_page_redirection' !== $hook_suffix ) {
+			return;
+		}
+
+		$path = NEWSPACK_ABSPATH . 'dist/other-scripts/redirection-admin.js';
+		if ( ! file_exists( $path ) ) {
+			return;
+		}
+
+		$asset  = include NEWSPACK_ABSPATH . 'dist/other-scripts/redirection-admin.asset.php';
+		$handle = 'newspack-redirection-admin';
+		wp_enqueue_script(
+			$handle,
+			plugins_url( 'dist/other-scripts/redirection-admin.js', NEWSPACK_PLUGIN_FILE ),
+			$asset['dependencies'] ?? [],
+			$asset['version'] ?? false,
+			true
+		);
+
+		// Translated note text, ready for the disable+note fallback.
+		wp_localize_script(
+			$handle,
+			'newspackRedirection',
+			[
+				'noteText' => __( 'Logging is disabled for performance reasons on Newspack.', 'newspack' ),
+			]
+		);
+	}
 
 	/**
 	 * Durability notice — implemented in a later task.
