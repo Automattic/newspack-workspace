@@ -13,7 +13,8 @@ use Newspack\Redirection;
 class Newspack_Test_Redirection extends WP_UnitTestCase {
 
 	/**
-	 * Remove our filters between tests so registrations don't leak.
+	 * Remove the filters and actions register() adds, so registrations don't leak
+	 * across tests in the same process.
 	 */
 	public function tear_down() {
 		parent::tear_down();
@@ -24,6 +25,8 @@ class Newspack_Test_Redirection extends WP_UnitTestCase {
 		remove_all_filters( 'option_redirection_options' );
 		remove_all_filters( 'newspack_redirection_logging_enabled' );
 		remove_all_filters( 'newspack_redirection_hit_tracking_enabled' );
+		remove_all_actions( 'admin_enqueue_scripts' );
+		remove_all_actions( 'admin_notices' );
 	}
 
 	/**
@@ -72,6 +75,12 @@ class Newspack_Test_Redirection extends WP_UnitTestCase {
 	/**
 	 * With logging disabled (default), register() adds the three hard-stop filters,
 	 * and each returns false (suppressing the log write).
+	 *
+	 * Note: unit coverage stops at registration + the filters' return value. That
+	 * Redirection actually *honors* a false return to skip the DB insert is the
+	 * load-bearing contract, but it can't be exercised here (no Redirection in the
+	 * test container) — it's verified live against a real install in the PR's test
+	 * plan (logs stop accruing while the integration is active).
 	 */
 	public function test_register_adds_log_suppression_filters() {
 		$this->stub_redirection_present();

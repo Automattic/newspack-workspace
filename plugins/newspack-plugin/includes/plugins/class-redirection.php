@@ -168,6 +168,13 @@ class Redirection {
 	 * future Redirection release renames/removes those classes, our filters would
 	 * silently no-op. This detects that drift so we can surface a warning.
 	 *
+	 * Note: this is an intentionally loose proxy. Suppression rides on the log
+	 * *filters*; we check the log *classes* (whose create() methods carry those
+	 * filters) as a cheap stand-in. They can diverge — Redirection could keep the
+	 * classes but rename/relocate the filters — so this catches class-level removal,
+	 * not every possible filter drift. The live "logs actually stop" check (the PR
+	 * test plan) is the authoritative verification.
+	 *
 	 * @param bool $has_redirect_log Whether Red_Redirect_Log exists.
 	 * @param bool $has_404_log      Whether Red_404_Log exists.
 	 * @return bool
