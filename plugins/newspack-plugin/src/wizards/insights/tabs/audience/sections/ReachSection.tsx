@@ -29,16 +29,12 @@ export interface SectionProps {
 
 const ReachSection = ( { current, previous, lastUpdated }: SectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-reach">
-		<div className="newspack-insights__section-header-container">
-			<div className="newspack-insights__section-header-text">
-				<SectionHeading
-					id="newspack-insights-audience-reach"
-					title={ __( 'Reach', 'newspack-plugin' ) }
-					description={ __( 'Your reach this period.', 'newspack-plugin' ) }
-				/>
-			</div>
-			{ lastUpdated }
-		</div>
+		<SectionHeading
+			id="newspack-insights-audience-reach"
+			title={ __( 'Reach', 'newspack-plugin' ) }
+			description={ __( 'Your reach this period.', 'newspack-plugin' ) }
+			actions={ lastUpdated }
+		/>
 		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-4">
 			<Scorecard
 				label={ __( 'Active Readers', 'newspack-plugin' ) }

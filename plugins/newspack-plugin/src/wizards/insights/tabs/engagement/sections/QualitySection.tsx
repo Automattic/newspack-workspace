@@ -27,16 +27,12 @@ export interface SectionProps {
 
 const QualitySection = ( { current, previous, lastUpdated }: SectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-engagement-quality">
-		<div className="newspack-insights__section-header-container">
-			<div className="newspack-insights__section-header-text">
-				<SectionHeading
-					id="newspack-insights-engagement-quality"
-					title={ __( 'Overall engagement quality', 'newspack-plugin' ) }
-					description={ __( 'How deeply readers engage.', 'newspack-plugin' ) }
-				/>
-			</div>
-			{ lastUpdated }
-		</div>
+		<SectionHeading
+			id="newspack-insights-engagement-quality"
+			title={ __( 'Overall engagement quality', 'newspack-plugin' ) }
+			description={ __( 'How deeply readers engage.', 'newspack-plugin' ) }
+			actions={ lastUpdated }
+		/>
 		<div className="newspack-insights__metric-grid">
 			<Scorecard
 				label={ __( 'Avg Pages per Session', 'newspack-plugin' ) }

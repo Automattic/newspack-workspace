@@ -33,16 +33,12 @@ export interface PromptExposureSectionProps {
 
 const PromptExposureSection = ( { current, previous, lastUpdated }: PromptExposureSectionProps ) => (
 	<section className="newspack-insights__section newspack-insights__section--exposure" aria-labelledby="newspack-insights-prompts-exposure-heading">
-		<div className="newspack-insights__section-header-container">
-			<div className="newspack-insights__section-header-text">
-				<SectionHeading
-					id="newspack-insights-prompts-exposure-heading"
-					title={ __( 'Prompt exposure', 'newspack-plugin' ) }
-					description={ __( 'Top of the funnel. How many readers see prompts in this timeframe.', 'newspack-plugin' ) }
-				/>
-			</div>
-			{ lastUpdated }
-		</div>
+		<SectionHeading
+			id="newspack-insights-prompts-exposure-heading"
+			title={ __( 'Prompt exposure', 'newspack-plugin' ) }
+			description={ __( 'Top of the funnel. How many readers see prompts in this timeframe.', 'newspack-plugin' ) }
+			actions={ lastUpdated }
+		/>
 		<div className="newspack-insights__metric-grid">
 			<MetricCard
 				{ ...scalarToMetricCardProps( {

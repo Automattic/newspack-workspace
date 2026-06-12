@@ -34,16 +34,12 @@ export interface GateExposureSectionProps {
 
 const GateExposureSection = ( { current, previous, lastUpdated }: GateExposureSectionProps ) => (
 	<section className="newspack-insights__section newspack-insights__section--exposure" aria-labelledby="newspack-insights-gates-exposure-heading">
-		<div className="newspack-insights__section-header-container">
-			<div className="newspack-insights__section-header-text">
-				<SectionHeading
-					id="newspack-insights-gates-exposure-heading"
-					title={ __( 'Gate exposure', 'newspack-plugin' ) }
-					description={ __( 'Top of the funnel. How many readers see gates in this timeframe.', 'newspack-plugin' ) }
-				/>
-			</div>
-			{ lastUpdated }
-		</div>
+		<SectionHeading
+			id="newspack-insights-gates-exposure-heading"
+			title={ __( 'Gate exposure', 'newspack-plugin' ) }
+			description={ __( 'Top of the funnel. How many readers see gates in this timeframe.', 'newspack-plugin' ) }
+			actions={ lastUpdated }
+		/>
 		<div className="newspack-insights__metric-grid">
 			<MetricCard
 				{ ...scalarToMetricCardProps( {

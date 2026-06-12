@@ -37,16 +37,12 @@ export interface ScorecardSectionProps {
 
 const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) => (
 	<section className="newspack-insights__section newspack-insights__section--scorecard" aria-labelledby="newspack-insights-scorecard-heading">
-		<div className="newspack-insights__section-header-container">
-			<div className="newspack-insights__section-header-text">
-				<SectionHeading
-					id="newspack-insights-scorecard-heading"
-					title={ __( 'Subscribers at a glance', 'newspack-plugin' ) }
-					description={ __( 'Current state and recurring revenue, independent of selected timeframe.', 'newspack-plugin' ) }
-				/>
-			</div>
-			{ lastUpdated }
-		</div>
+		<SectionHeading
+			id="newspack-insights-scorecard-heading"
+			title={ __( 'Subscribers at a glance', 'newspack-plugin' ) }
+			description={ __( 'Current state and recurring revenue, independent of selected timeframe.', 'newspack-plugin' ) }
+			actions={ lastUpdated }
+		/>
 		<div className="newspack-insights__metric-grid">
 			<MetricCard
 				label={ __( 'Active subscribers', 'newspack-plugin' ) }
