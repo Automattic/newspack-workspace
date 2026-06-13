@@ -53,7 +53,13 @@
 				btn.textContent = 'Connect Agent';
 			};
 
-			xhr.send('action=agent_access_create&nonce=' + encodeURIComponent(agentAccess.create_nonce));
+			var scopeEl = document.getElementById('agent-access-scope');
+			var scope   = scopeEl ? scopeEl.value : 'posts_media';
+			xhr.send(
+				'action=agent_access_create' +
+				'&nonce=' + encodeURIComponent(agentAccess.create_nonce) +
+				'&scope=' + encodeURIComponent(scope)
+			);
 		});
 	}
 
@@ -186,10 +192,13 @@
 					btn.textContent = 'Connect agent for ' + displayName;
 				};
 
+				var scopeEl = document.querySelector('#agent-access-admin-card select[name="scope"]');
+				var scope   = scopeEl ? scopeEl.value : 'posts_media';
 				xhr.send(
 					'action=agent_access_admin_create' +
 					'&nonce=' + encodeURIComponent(agentAccess.admin_create_nonce) +
-					'&user_id=' + encodeURIComponent(userId)
+					'&user_id=' + encodeURIComponent(userId) +
+					'&scope=' + encodeURIComponent(scope)
 				);
 			});
 		});

@@ -106,6 +106,10 @@ class Agent_Access_Admin {
 			wp_send_json_error( $result->get_error_message() );
 		}
 
+		// Save scope for this credential.
+		$scope = isset( $_POST['scope'] ) ? sanitize_key( $_POST['scope'] ) : Agent_Access_Scope::DEFAULT_SCOPE; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		Agent_Access_Scope::save( get_current_user_id(), $result['uuid'], $scope );
+
 		$connection_info = $this->api->get_connection_info( $result['password'] );
 
 		$user = wp_get_current_user();
@@ -156,6 +160,10 @@ class Agent_Access_Admin {
 		if ( is_wp_error( $result ) ) {
 			wp_send_json_error( $result->get_error_message() );
 		}
+
+		// Save scope for this credential.
+		$scope = isset( $_POST['scope'] ) ? sanitize_key( $_POST['scope'] ) : Agent_Access_Scope::DEFAULT_SCOPE; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		Agent_Access_Scope::save( $user_id, $result['uuid'], $scope );
 
 		$connection_info = $this->api->get_connection_info( $result['password'], $user_id );
 
@@ -321,6 +329,18 @@ class Agent_Access_Admin {
 			<?php else : ?>
 				<div id="agent-access-admin-card" data-user-id="<?php echo esc_attr( $user->ID ); ?>">
 					<p>
+						<label for="agent-access-admin-scope-<?php echo esc_attr( $user->ID ); ?>" style="margin-right:0.5em;font-weight:600;">
+							<?php esc_html_e( 'Scope:', 'botcreds-agent-access' ); ?>
+						</label>
+						<select id="agent-access-admin-scope-<?php echo esc_attr( $user->ID ); ?>" name="scope" style="margin-right:0.5em;">
+							<?php foreach ( Agent_Access_Scope::get_templates() as $key => $tpl ) : ?>
+								<option value="<?php echo esc_attr( $key ); ?>"
+									<?php selected( $key, Agent_Access_Scope::DEFAULT_SCOPE ); ?>
+									title="<?php echo esc_attr( $tpl['description'] ); ?>">
+									<?php echo esc_html( $tpl['label'] ); ?>
+								</option>
+							<?php endforeach; ?>
+						</select>
 						<button type="button"
 							class="button button-primary agent-access-admin-create-btn"
 							data-user-id="<?php echo esc_attr( $user->ID ); ?>"
@@ -328,14 +348,14 @@ class Agent_Access_Admin {
 							<?php
 							printf(
 								/* translators: %s: display name */
-								esc_html__( 'Generate Agent Access credentials for %s', 'botcreds-agent-access' ),
+								esc_html__( 'Generate credentials for %s', 'botcreds-agent-access' ),
 								esc_html( $user->display_name )
 							);
 							?>
 						</button>
 					</p>
 					<p class="agent-access-create-hint">
-						<?php esc_html_e( 'This will generate a secure Application Password and display the credentials for you to share with the user or their agent.', 'botcreds-agent-access' ); ?>
+						<?php esc_html_e( 'Generates a scoped Application Password to share with the user or their agent.', 'botcreds-agent-access' ); ?>
 					</p>
 				</div>
 			<?php endif; ?>
@@ -485,12 +505,24 @@ class Agent_Access_Admin {
 		?>
 		<div id="agent-access-card">
 			<p>
+				<label for="agent-access-scope" style="margin-right:0.5em;font-weight:600;">
+					<?php esc_html_e( 'Scope:', 'botcreds-agent-access' ); ?>
+				</label>
+				<select id="agent-access-scope" style="margin-right:0.5em;">
+					<?php foreach ( Agent_Access_Scope::get_templates() as $key => $tpl ) : ?>
+						<option value="<?php echo esc_attr( $key ); ?>"
+							<?php selected( $key, Agent_Access_Scope::DEFAULT_SCOPE ); ?>
+							title="<?php echo esc_attr( $tpl['description'] ); ?>">
+							<?php echo esc_html( $tpl['label'] ); ?>
+						</option>
+					<?php endforeach; ?>
+				</select>
 				<button type="button" class="button button-primary agent-access-create-btn" id="agent-access-create-btn">
 					<?php esc_html_e( 'Connect Agent', 'botcreds-agent-access' ); ?>
 				</button>
 			</p>
 			<p class="agent-access-create-hint">
-				<?php esc_html_e( 'This will generate a secure Application Password for Agent Access. You\'ll be given credentials to paste into your Agent Access config.', 'botcreds-agent-access' ); ?>
+				<?php esc_html_e( 'Generates a scoped Application Password for Agent Access. You\'ll be given credentials to paste into your agent config.', 'botcreds-agent-access' ); ?>
 			</p>
 		</div>
 		<?php
@@ -522,17 +554,303 @@ class Agent_Access_Admin {
 				   class="nav-tab <?php echo 'content' === $current_tab ? 'nav-tab-active' : ''; ?>">
 					<?php esc_html_e( 'Content', 'botcreds-agent-access' ); ?>
 				</a>
+				<a href="<?php echo esc_url( add_query_arg( 'tab', 'experimental', menu_page_url( 'agent-access', false ) ) ); ?>"
+				   class="nav-tab <?php echo 'experimental' === $current_tab ? 'nav-tab-active' : ''; ?>" style="color:#856404;">
+					<?php esc_html_e( '⚗ Experimental', 'botcreds-agent-access' ); ?>
+				</a>
 			</nav>
 
 			<?php if ( 'activity' === $current_tab ) : ?>
 				<?php $this->render_activity_log_tab(); ?>
 			<?php elseif ( 'content' === $current_tab ) : ?>
 				<?php $this->render_content_tab(); ?>
+			<?php elseif ( 'experimental' === $current_tab ) : ?>
+				<?php $this->render_experimental_tab(); ?>
 			<?php else : ?>
 				<?php $this->render_connections_tab(); ?>
 			<?php endif; ?>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Render the Connections tab (formerly the full admin page).
+	 */
+	/**
+	 * Render the ⚗ Experimental tab — Pro Auth settings and token management.
+	 */
+	private function render_experimental_tab() {
+		$is_enabled = Agent_Access_Pro_Auth::is_enabled();
+		$tokens     = $is_enabled ? Agent_Access_Pro_Auth::get_tokens() : array();
+		$users      = get_users( array(
+			'role__in' => array( 'administrator', 'editor', 'author', 'agent' ),
+			'number'   => -1,
+		) );
+		?>
+
+		<?php // phpcs:ignore WordPress.Security.NonceVerification.Recommended ?>
+		<?php if ( ! empty( $_GET['updated'] ) ) : ?>
+			<div class="notice notice-success inline" style="margin:1em 0;"><p><?php esc_html_e( 'Settings saved.', 'botcreds-agent-access' ); ?></p></div>
+		<?php endif; ?>
+
+		<div class="notice notice-warning inline" style="margin:1.5em 0 1em;">
+			<p>
+				<strong><?php esc_html_e( 'Experimental', 'botcreds-agent-access' ); ?></strong>
+				&mdash; <?php esc_html_e( 'These features are in active development. Token format and API may change between versions.', 'botcreds-agent-access' ); ?>
+			</p>
+		</div>
+
+		<h2><?php esc_html_e( 'Pro Auth', 'botcreds-agent-access' ); ?></h2>
+		<p>
+			<?php esc_html_e( 'Token-based agent authentication with optional Ed25519 request signing. Agents receive a persistent', 'botcreds-agent-access' ); ?>
+			<code>agt_</code>
+			<?php esc_html_e( 'token via a one-time setup link — credential never enters LLM context.', 'botcreds-agent-access' ); ?>
+		</p>
+
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+			<?php wp_nonce_field( 'agent_access_save_pro_auth', 'aa_pro_auth_nonce' ); ?>
+			<input type="hidden" name="action" value="agent_access_save_pro_auth">
+			<label>
+				<input type="checkbox" name="pro_auth_enabled" value="1" <?php checked( $is_enabled ); ?>>
+				<?php esc_html_e( 'Enable Pro Auth', 'botcreds-agent-access' ); ?>
+			</label>
+			<button type="submit" class="button" style="margin-left:1em;"><?php esc_html_e( 'Save', 'botcreds-agent-access' ); ?></button>
+		</form>
+
+		<?php if ( $is_enabled ) : ?>
+
+			<hr style="margin:2em 0;">
+			<h3><?php esc_html_e( 'Generate Setup Code', 'botcreds-agent-access' ); ?></h3>
+			<p class="description">
+				<?php esc_html_e( 'Creates a one-time setup code (15-min TTL). Paste the JSON payload to your agent — it POSTs the code to the activate endpoint and receives a persistent token.', 'botcreds-agent-access' ); ?>
+			</p>
+
+			<div style="display:flex;gap:0.5em;align-items:center;flex-wrap:wrap;margin-top:0.75em;">
+				<select id="aa-setup-user">
+					<?php foreach ( $users as $u ) : ?>
+						<option value="<?php echo esc_attr( $u->ID ); ?>">
+							<?php echo esc_html( $u->display_name . ' (' . $u->user_login . ')' ); ?>
+						</option>
+					<?php endforeach; ?>
+				</select>
+				<input type="text" id="aa-setup-label"
+					placeholder="<?php esc_attr_e( 'Label (e.g. Bob / OpenClaw)', 'botcreds-agent-access' ); ?>"
+					style="width:200px;">
+				<button type="button" class="button button-primary" id="aa-generate-setup-btn">
+					<?php esc_html_e( 'Generate', 'botcreds-agent-access' ); ?>
+				</button>
+			</div>
+
+			<div id="aa-setup-result" style="display:none;margin-top:1.5em;">
+				<p><strong><?php esc_html_e( 'Paste this to your agent:', 'botcreds-agent-access' ); ?></strong></p>
+				<textarea id="aa-setup-payload" rows="10"
+					style="width:100%;font-family:monospace;font-size:12px;background:#f6f7f7;"
+					readonly></textarea>
+				<div style="margin-top:0.5em;display:flex;gap:0.5em;align-items:center;">
+					<button type="button" class="button" id="aa-copy-setup-btn">
+						<?php esc_html_e( 'Copy', 'botcreds-agent-access' ); ?>
+					</button>
+					<span style="color:#d63638;font-size:12px;">
+						⚠ <?php esc_html_e( 'Expires in 15 minutes. One-time use only.', 'botcreds-agent-access' ); ?>
+					</span>
+				</div>
+			</div>
+
+			<hr style="margin:2em 0;">
+			<h3><?php esc_html_e( 'Active Pro Tokens', 'botcreds-agent-access' ); ?></h3>
+
+			<?php if ( empty( $tokens ) ) : ?>
+				<p><em><?php esc_html_e( 'No active pro tokens yet.', 'botcreds-agent-access' ); ?></em></p>
+			<?php else : ?>
+				<table class="widefat striped" style="margin-top:0.5em;">
+					<thead>
+						<tr>
+							<th><?php esc_html_e( 'Label', 'botcreds-agent-access' ); ?></th>
+							<th><?php esc_html_e( 'User', 'botcreds-agent-access' ); ?></th>
+							<th><?php esc_html_e( 'Mode', 'botcreds-agent-access' ); ?></th>
+							<th><?php esc_html_e( 'Origin IP', 'botcreds-agent-access' ); ?></th>
+							<th><?php esc_html_e( 'Created', 'botcreds-agent-access' ); ?></th>
+							<th><?php esc_html_e( 'Last Used', 'botcreds-agent-access' ); ?></th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+					<?php foreach ( $tokens as $token ) : ?>
+						<tr>
+							<td><?php echo esc_html( $token->label ); ?></td>
+							<td><?php echo esc_html( $token->display_name ?: $token->user_login ?: '#' . $token->user_id ); ?></td>
+							<td>
+								<?php if ( $token->public_key ) : ?>
+									<span class="agent-access-badge agent-access-badge--green"
+										title="<?php esc_attr_e( 'Ed25519 request signing enabled', 'botcreds-agent-access' ); ?>">
+										Pro
+									</span>
+								<?php else : ?>
+									<span class="agent-access-badge">Standard</span>
+								<?php endif; ?>
+							</td>
+							<td><code><?php echo esc_html( $token->origin_ip ?: '—' ); ?></code></td>
+							<td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $token->created_at ) ) ); ?></td>
+							<td>
+								<?php
+								echo $token->last_used_at
+									? esc_html( date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), strtotime( $token->last_used_at ) ) )
+									: '—';
+								?>
+							</td>
+							<td>
+								<button type="button"
+									class="button aa-revoke-pro-token-btn"
+									data-token-id="<?php echo esc_attr( $token->id ); ?>"
+									data-label="<?php echo esc_attr( $token->label ); ?>">
+									<?php esc_html_e( 'Revoke', 'botcreds-agent-access' ); ?>
+								</button>
+							</td>
+						</tr>
+					<?php endforeach; ?>
+					</tbody>
+				</table>
+			<?php endif; ?>
+
+		<?php endif; ?>
+
+		<script>
+		if ( typeof jQuery !== 'undefined' ) {
+			jQuery( function( $ ) {
+				$( '#aa-generate-setup-btn' ).on( 'click', function() {
+					var $btn = $( this );
+					$btn.prop( 'disabled', true ).text( 'Generating…' );
+					$.post( agentAccess.ajax_url, {
+						action:  'agent_access_generate_setup',
+						nonce:   agentAccess.generate_setup_nonce,
+						user_id: $( '#aa-setup-user' ).val(),
+						label:   $( '#aa-setup-label' ).val()
+					}, function( res ) {
+						$btn.prop( 'disabled', false ).text( 'Generate' );
+						if ( res.success ) {
+							var d = res.data;
+							var payload = JSON.stringify( {
+								action:       'activate_agent_access',
+								activate_url: d.activate_url,
+								setup_code:   d.setup_code,
+								expires_in:   d.expires_in,
+								instructions: 'POST { setup_code, public_key (optional Ed25519 base64 32-byte), agent_id (optional) } to activate_url. Returns a persistent agt_ token.'
+							}, null, 2 );
+							$( '#aa-setup-payload' ).val( payload );
+							$( '#aa-setup-result' ).show();
+						} else {
+							alert( res.data || 'Error generating setup code.' );
+						}
+					} );
+				} );
+
+				$( '#aa-copy-setup-btn' ).on( 'click', function() {
+					$( '#aa-setup-payload' ).select();
+					document.execCommand( 'copy' );
+					var $self = $( this );
+					$self.text( 'Copied!' );
+					setTimeout( function() { $self.text( 'Copy' ); }, 2000 );
+				} );
+
+				$( document ).on( 'click', '.aa-revoke-pro-token-btn', function() {
+					var $btn  = $( this );
+					var label = $btn.data( 'label' );
+					if ( ! confirm( 'Revoke token "' + label + '"? The agent will lose access immediately.' ) ) {
+						return;
+					}
+					$btn.prop( 'disabled', true ).text( 'Revoking…' );
+					$.post( agentAccess.ajax_url, {
+						action:   'agent_access_revoke_pro_token',
+						nonce:    agentAccess.revoke_pro_token_nonce,
+						token_id: $btn.data( 'token-id' )
+					}, function( res ) {
+						if ( res.success ) {
+							$btn.closest( 'tr' ).fadeOut( 300, function() { $( this ).remove(); } );
+						} else {
+							$btn.prop( 'disabled', false ).text( 'Revoke' );
+							alert( res.data || 'Error revoking token.' );
+						}
+					} );
+				} );
+			} );
+		}
+		</script>
+		<?php
+	}
+
+	/**
+	 * AJAX: generate a setup code for Pro Auth.
+	 */
+	public function handle_generate_setup_ajax() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( __( 'Permission denied.', 'botcreds-agent-access' ) );
+		}
+		check_ajax_referer( 'agent_access_generate_setup', 'nonce' );
+
+		$user_id = isset( $_POST['user_id'] ) ? (int) $_POST['user_id'] : 0;
+		$label   = isset( $_POST['label'] ) ? sanitize_text_field( wp_unslash( $_POST['label'] ) ) : '';
+
+		if ( ! $user_id || ! get_userdata( $user_id ) ) {
+			wp_send_json_error( __( 'Invalid user.', 'botcreds-agent-access' ) );
+		}
+
+		$result = Agent_Access_Pro_Auth::generate_setup_link( $user_id, $label );
+
+		wp_send_json_success( array(
+			'activate_url' => $result['url'],
+			'setup_code'   => $result['code'],
+			'expires_in'   => $result['expires_in'],
+		) );
+	}
+
+	/**
+	 * AJAX: revoke a Pro Auth token by DB id.
+	 */
+	public function handle_revoke_pro_token_ajax() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( __( 'Permission denied.', 'botcreds-agent-access' ) );
+		}
+		check_ajax_referer( 'agent_access_revoke_pro_token', 'nonce' );
+
+		$token_id = isset( $_POST['token_id'] ) ? (int) $_POST['token_id'] : 0;
+		if ( ! $token_id ) {
+			wp_send_json_error( __( 'Invalid token.', 'botcreds-agent-access' ) );
+		}
+
+		if ( ! Agent_Access_Pro_Auth::revoke_token( $token_id ) ) {
+			wp_send_json_error( __( 'Failed to revoke token.', 'botcreds-agent-access' ) );
+		}
+
+		wp_send_json_success( __( 'Token revoked.', 'botcreds-agent-access' ) );
+	}
+
+	/**
+	 * admin-post: save Pro Auth enabled/disabled setting.
+	 */
+	public function handle_save_pro_auth() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Permission denied.', 'botcreds-agent-access' ) );
+		}
+		check_admin_referer( 'agent_access_save_pro_auth', 'aa_pro_auth_nonce' );
+
+		$enabled = ! empty( $_POST['pro_auth_enabled'] ) && '1' === $_POST['pro_auth_enabled'];
+		update_option( Agent_Access_Pro_Auth::OPTION_ENABLED, $enabled );
+
+		if ( $enabled ) {
+			Agent_Access_Pro_Auth::install_table();
+		}
+
+		wp_redirect(
+			add_query_arg(
+				array(
+					'page'    => 'agent-access',
+					'tab'     => 'experimental',
+					'updated' => '1',
+				),
+				admin_url( 'tools.php' )
+			)
+		);
+		exit;
 	}
 
 	/**
@@ -557,6 +875,7 @@ class Agent_Access_Admin {
 					<tr>
 						<th><?php esc_html_e( 'User', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Role', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Created', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Last Used', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Posts', 'botcreds-agent-access' ); ?></th>
@@ -583,6 +902,7 @@ class Agent_Access_Admin {
 									<?php echo esc_html( $entry['role_name'] ); ?>
 								</span>
 							</td>
+							<td><?php echo esc_html( $entry['scope_label'] ); ?></td>
 							<td><?php echo esc_html( $entry['created'] ); ?></td>
 							<td><?php echo esc_html( $entry['last_used'] ); ?></td>
 							<td><?php echo esc_html( $entry['stats']['post_count'] ); ?></td>
@@ -616,8 +936,14 @@ class Agent_Access_Admin {
 			'offset' => ( $paged - 1 ) * $per_page,
 		) ) );
 
-		$base_url     = add_query_arg( 'tab', 'content', menu_page_url( 'agent-access', false ) );
-		$filter_users = get_users( array( 'number' => 200 ) );
+		$base_url          = add_query_arg( 'tab', 'content', menu_page_url( 'agent-access', false ) );
+		$content_post_types = Agent_Access_Tracker::get_content_post_types();
+
+		// Only roles that can hold agent connections — avoids loading subscriber/follower tails.
+		$filter_users = get_users( array(
+			'role__in' => array( 'administrator', 'editor', 'author', 'agent' ),
+			'number'   => -1,
+		) );
 		?>
 
 		<form method="get" style="margin: 1em 0;">
@@ -635,9 +961,15 @@ class Agent_Access_Admin {
 
 			<select name="post_type">
 				<option value=""><?php esc_html_e( 'All types', 'botcreds-agent-access' ); ?></option>
-				<option value="post" <?php selected( $filter_post_type, 'post' ); ?>><?php esc_html_e( 'Posts', 'botcreds-agent-access' ); ?></option>
-				<option value="page" <?php selected( $filter_post_type, 'page' ); ?>><?php esc_html_e( 'Pages', 'botcreds-agent-access' ); ?></option>
-				<option value="attachment" <?php selected( $filter_post_type, 'attachment' ); ?>><?php esc_html_e( 'Media', 'botcreds-agent-access' ); ?></option>
+				<?php foreach ( $content_post_types as $pt ) : ?>
+					<?php
+					$pt_obj   = get_post_type_object( $pt );
+					$pt_label = $pt_obj ? $pt_obj->labels->name : ucfirst( str_replace( '_', ' ', $pt ) );
+					?>
+					<option value="<?php echo esc_attr( $pt ); ?>" <?php selected( $filter_post_type, $pt ); ?>>
+						<?php echo esc_html( $pt_label ); ?>
+					</option>
+				<?php endforeach; ?>
 			</select>
 
 			<?php submit_button( __( 'Filter', 'botcreds-agent-access' ), 'secondary', '', false ); ?>
@@ -918,26 +1250,34 @@ class Agent_Access_Admin {
 	}
 
 	/**
-	 * Whether the Connections list may be truncated due to the 200-user fetch cap.
+	 * Whether the Connections list may be truncated.
+	 *
+	 * Now always false: we query by application-password meta directly so
+	 * site size no longer affects which users appear.
 	 *
 	 * @return bool
 	 */
 	private function connections_list_is_truncated() {
-		$counts = count_users();
-		return $counts['total_users'] > 200;
+		return false;
 	}
 
 	/**
 	 * Get users who have an Agent Access Application Password.
 	 *
-	 * Note: silently capped at 200 users. A truncation notice is shown when
-	 * the site has more users than this limit.
+	 * Queries by user meta so only users who actually have application passwords
+	 * are loaded — works correctly regardless of total user count.
 	 *
 	 * @return array
 	 */
 	private function get_connected_users() {
 		$results = array();
-		$users   = get_users( array( 'number' => 200 ) );
+
+		// Only roles that can realistically hold agent connections.
+		// This sidesteps the old 200-user cap and avoids scanning subscriber/follower tails.
+		$users = get_users( array(
+			'role__in' => array( 'administrator', 'editor', 'author', 'agent' ),
+			'number'   => -1,
+		) );
 
 		foreach ( $users as $user ) {
 			$passwords = WP_Application_Passwords::get_user_application_passwords( $user->ID );
@@ -962,12 +1302,13 @@ class Agent_Access_Admin {
 					: __( 'Never', 'botcreds-agent-access' );
 
 				$results[] = array(
-					'user'      => $user,
-					'role_slug' => $role_slug,
-					'role_name' => $role_name,
-					'created'   => $created,
-					'last_used' => $last_used,
-					'stats'     => Agent_Access_Tracker::get_stats( $user->ID ),
+					'user'        => $user,
+					'role_slug'   => $role_slug,
+					'role_name'   => $role_name,
+					'scope_label' => Agent_Access_Scope::get_label( Agent_Access_Scope::get( $user->ID, $item['uuid'] ) ),
+					'created'     => $created,
+					'last_used'   => $last_used,
+					'stats'       => Agent_Access_Tracker::get_stats( $user->ID ),
 				);
 
 				break; // Only one Agent Access password per user

@@ -3,13 +3,13 @@
  * Plugin Name: BotCreds Agent Access
  * Plugin URI:  https://botcreds.com/
  * Description: Scoped, per-agent application passwords for AI agents, MCP clients, and automation tools.
- * Version:     2.1.20
+ * Version:     2.1.21
  * Author:      Joe Boydston
  * Author URI:  https://botcreds.com
  * License:     GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: botcreds-agent-access
- * Requires at least: 5.6
+ * Requires at least: 5.7
  * Requires PHP: 7.4
  */
 
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AGENT_ACCESS_VERSION', '2.1.20' );
+define( 'AGENT_ACCESS_VERSION', '2.1.21' );
 define( 'AGENT_ACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AGENT_ACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AGENT_ACCESS_APP_PASSWORD_NAME', 'BotCreds' );
@@ -28,6 +28,8 @@ require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-admin.php';
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-tracker.php';
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-mentions.php';
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-activity-log.php';
+require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-pro-auth.php';
+require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-scope.php';
 
 /**
  * Initialize the plugin.
@@ -43,7 +45,11 @@ function agent_access_init() {
 	$mentions->init();
 	$activity_log->init();
 
+	Agent_Access_Scope::init();
 
+	if ( Agent_Access_Pro_Auth::is_enabled() ) {
+		Agent_Access_Pro_Auth::init();
+	}
 }
 add_action( 'plugins_loaded', 'agent_access_init' );
 
@@ -195,6 +201,9 @@ function agent_access_activate() {
 
 	require_once plugin_dir_path( __FILE__ ) . 'includes/class-agent-access-role.php';
 	Agent_Access_Role::register();
+
+	require_once plugin_dir_path( __FILE__ ) . 'includes/class-agent-access-pro-auth.php';
+	Agent_Access_Pro_Auth::install_table();
 }
 register_activation_hook( __FILE__, 'agent_access_activate' );
 

@@ -67,14 +67,14 @@ class Agent_Access_Tracker {
 
 		global $wpdb;
 
-		// Count posts (not attachments) tagged by Agent Access.
+		// Count posts (not attachments) tagged by Agent Access — includes all non-attachment CPTs.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$post_count = (int) $wpdb->get_var( $wpdb->prepare(
 			"SELECT COUNT(*) FROM {$wpdb->posts} p
 			 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
 			 WHERE p.post_author = %d
 			 AND pm.meta_key = %s
-			 AND p.post_type IN ('post', 'page')
+			 AND p.post_type != 'attachment'
 			 AND p.post_status != 'trash'",
 			$user_id,
 			self::META_KEY
@@ -92,7 +92,7 @@ class Agent_Access_Tracker {
 			self::META_KEY
 		) );
 
-		// Recent posts (last 5).
+		// Recent posts (last 5) — includes all non-attachment CPTs.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 		$recent_posts = $wpdb->get_results( $wpdb->prepare(
 			"SELECT p.ID, p.post_title, p.post_date, p.post_status, p.post_type
@@ -100,7 +100,7 @@ class Agent_Access_Tracker {
 			 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
 			 WHERE p.post_author = %d
 			 AND pm.meta_key = %s
-			 AND p.post_type IN ('post', 'page')
+			 AND p.post_type != 'attachment'
 			 AND p.post_status != 'trash'
 			 ORDER BY p.post_date DESC
 			 LIMIT 5",
@@ -237,10 +237,39 @@ class Agent_Access_Tracker {
 		if ( ! empty( $args['post_type'] ) ) {
 			$sql     .= ' AND p.post_type = %s';
 			$params[] = $args['post_type'];
-		} else {
-			$sql .= " AND p.post_type IN ('post', 'page', 'attachment')";
 		}
+		// No post_type restriction when unfiltered — show all CPTs tagged by Agent Access.
 
 		return array( $sql, $params );
+	}
+
+	/**
+	 * Get distinct post types that have been created via Agent Access.
+	 * Used to build the Content tab filter dropdown dynamically.
+	 *
+	 * @return string[]
+	 */
+	public static function get_content_post_types() {
+		global $wpdb;
+
+		$cache_key = 'agent_access_content_post_types';
+		$cached    = wp_cache_get( $cache_key, 'agent_access' );
+		if ( false !== $cached ) {
+			return $cached;
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
+		$types = $wpdb->get_col( $wpdb->prepare(
+			"SELECT DISTINCT p.post_type
+			 FROM {$wpdb->posts} p
+			 INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+			 WHERE pm.meta_key = %s AND p.post_status != 'trash'
+			 ORDER BY p.post_type",
+			self::META_KEY
+		) ) ?: array();
+
+		wp_cache_set( $cache_key, $types, 'agent_access', 300 );
+
+		return $types;
 	}
 }
