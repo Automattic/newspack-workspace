@@ -106,9 +106,11 @@ class Agent_Access_Admin {
 			wp_send_json_error( $result->get_error_message() );
 		}
 
-		// Save scope for this credential.
+		// Save scope and rate-limit tier for this credential.
 		$scope = isset( $_POST['scope'] ) ? sanitize_key( $_POST['scope'] ) : Agent_Access_Scope::DEFAULT_SCOPE; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$tier  = isset( $_POST['rate_limit'] ) ? sanitize_key( $_POST['rate_limit'] ) : Agent_Access_Rate_Limiter::DEFAULT_TIER; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		Agent_Access_Scope::save( get_current_user_id(), $result['uuid'], $scope );
+		Agent_Access_Rate_Limiter::save( get_current_user_id(), $result['uuid'], $tier );
 
 		$connection_info = $this->api->get_connection_info( $result['password'] );
 
@@ -161,9 +163,11 @@ class Agent_Access_Admin {
 			wp_send_json_error( $result->get_error_message() );
 		}
 
-		// Save scope for this credential.
+		// Save scope and rate-limit tier for this credential.
 		$scope = isset( $_POST['scope'] ) ? sanitize_key( $_POST['scope'] ) : Agent_Access_Scope::DEFAULT_SCOPE; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$tier  = isset( $_POST['rate_limit'] ) ? sanitize_key( $_POST['rate_limit'] ) : Agent_Access_Rate_Limiter::DEFAULT_TIER; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		Agent_Access_Scope::save( $user_id, $result['uuid'], $scope );
+		Agent_Access_Rate_Limiter::save( $user_id, $result['uuid'], $tier );
 
 		$connection_info = $this->api->get_connection_info( $result['password'], $user_id );
 
@@ -338,6 +342,18 @@ class Agent_Access_Admin {
 									<?php selected( $key, Agent_Access_Scope::DEFAULT_SCOPE ); ?>
 									title="<?php echo esc_attr( $tpl['description'] ); ?>">
 									<?php echo esc_html( $tpl['label'] ); ?>
+								</option>
+							<?php endforeach; ?>
+						</select>
+						<label for="agent-access-admin-rate-limit-<?php echo esc_attr( $user->ID ); ?>" style="margin-right:0.5em;font-weight:600;">
+							<?php esc_html_e( 'Rate limit:', 'botcreds-agent-access' ); ?>
+						</label>
+						<select id="agent-access-admin-rate-limit-<?php echo esc_attr( $user->ID ); ?>" name="rate_limit" style="margin-right:0.5em;">
+							<?php foreach ( Agent_Access_Rate_Limiter::get_tiers() as $key => $tier ) : ?>
+								<option value="<?php echo esc_attr( $key ); ?>"
+									<?php selected( $key, Agent_Access_Rate_Limiter::DEFAULT_TIER ); ?>
+									title="<?php echo esc_attr( $tier['description'] ); ?>">
+									<?php echo esc_html( $tier['label'] ); ?>
 								</option>
 							<?php endforeach; ?>
 						</select>
@@ -876,6 +892,7 @@ class Agent_Access_Admin {
 						<th><?php esc_html_e( 'User', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Role', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Rate Limit', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Created', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Last Used', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Posts', 'botcreds-agent-access' ); ?></th>
@@ -903,6 +920,7 @@ class Agent_Access_Admin {
 								</span>
 							</td>
 							<td><?php echo esc_html( $entry['scope_label'] ); ?></td>
+							<td><?php echo esc_html( $entry['rl_label'] ); ?></td>
 							<td><?php echo esc_html( $entry['created'] ); ?></td>
 							<td><?php echo esc_html( $entry['last_used'] ); ?></td>
 							<td><?php echo esc_html( $entry['stats']['post_count'] ); ?></td>

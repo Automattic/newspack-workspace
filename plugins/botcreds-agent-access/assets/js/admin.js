@@ -55,10 +55,13 @@
 
 			var scopeEl = document.getElementById('agent-access-scope');
 			var scope   = scopeEl ? scopeEl.value : 'posts_media';
+			var rlEl    = document.getElementById('agent-access-rate-limit');
+			var rl      = rlEl ? rlEl.value : 'standard';
 			xhr.send(
 				'action=agent_access_create' +
 				'&nonce=' + encodeURIComponent(agentAccess.create_nonce) +
-				'&scope=' + encodeURIComponent(scope)
+				'&scope=' + encodeURIComponent(scope) +
+				'&rate_limit=' + encodeURIComponent(rl)
 			);
 		});
 	}
@@ -194,11 +197,14 @@
 
 				var scopeEl = document.querySelector('#agent-access-admin-card select[name="scope"]');
 				var scope   = scopeEl ? scopeEl.value : 'posts_media';
+				var rlEl    = document.querySelector('#agent-access-admin-card select[name="rate_limit"]');
+				var rl      = rlEl ? rlEl.value : 'standard';
 				xhr.send(
 					'action=agent_access_admin_create' +
 					'&nonce=' + encodeURIComponent(agentAccess.admin_create_nonce) +
 					'&user_id=' + encodeURIComponent(userId) +
-					'&scope=' + encodeURIComponent(scope)
+					'&scope=' + encodeURIComponent(scope) +
+					'&rate_limit=' + encodeURIComponent(rl)
 				);
 			});
 		});
