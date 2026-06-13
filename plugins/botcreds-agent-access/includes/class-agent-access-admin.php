@@ -671,7 +671,7 @@ class Agent_Access_Admin {
 		?>
 		<h2><?php esc_html_e( 'Agent Write History', 'botcreds-agent-access' ); ?></h2>
 		<p class="description">
-			<?php esc_html_e( 'Before-state snapshots captured when agents modified or deleted content. Click Restore to roll back a post to its state before the agent's change.', 'botcreds-agent-access' ); ?>
+			<?php esc_html_e( 'Before-state snapshots captured when agents modified or deleted content. Click Restore to roll back a post to its pre-agent state.', 'botcreds-agent-access' ); ?>
 		</p>
 
 		<?php if ( empty( $snapshots ) ) : ?>
