@@ -383,4 +383,63 @@
 			);
 		});
 	});
+
+	// ── Rollback: restore buttons ─────────────────────────────
+	document.querySelectorAll('.agent-access-restore-btn').forEach(function (btn) {
+		btn.addEventListener('click', function () {
+			var snapshotId = btn.getAttribute('data-snapshot-id');
+			var nonce      = btn.getAttribute('data-nonce');
+			var postTitle  = btn.getAttribute('data-post-title');
+
+			if ( ! confirm( 'Restore "' + postTitle + '" to its state before the agent edit? This cannot be undone.' ) ) {
+				return;
+			}
+
+			btn.disabled    = true;
+			btn.textContent = 'Restoring…';
+
+			var xhr = new XMLHttpRequest();
+			xhr.open('POST', agentAccess.ajax_url);
+			xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+
+			xhr.onload = function () {
+				var response;
+				try {
+					response = JSON.parse(xhr.responseText);
+				} catch (e) {
+					alert('Unexpected error. Please reload the page.');
+					btn.disabled    = false;
+					btn.textContent = '\u21a9 Restore';
+					return;
+				}
+				if (response.success) {
+					btn.textContent = '\u2713 Restored';
+					btn.style.color = '#4CAF50';
+					if (response.data && response.data.edit_url) {
+						var link = document.createElement('a');
+						link.href      = response.data.edit_url;
+						link.textContent = ' View post';
+						link.target    = '_blank';
+						btn.parentNode.appendChild(link);
+					}
+				} else {
+					alert(response.data || 'An error occurred.');
+					btn.disabled    = false;
+					btn.textContent = '\u21a9 Restore';
+				}
+			};
+
+			xhr.onerror = function () {
+				alert('Network error. Please try again.');
+				btn.disabled    = false;
+				btn.textContent = '\u21a9 Restore';
+			};
+
+			xhr.send(
+				'action=agent_access_restore' +
+				'&snapshot_id=' + encodeURIComponent(snapshotId) +
+				'&nonce=' + encodeURIComponent(nonce)
+			);
+		});
+	});
 })();

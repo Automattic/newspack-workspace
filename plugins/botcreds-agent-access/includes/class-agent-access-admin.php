@@ -36,6 +36,7 @@ class Agent_Access_Admin {
 		add_action( 'wp_ajax_agent_access_admin_create', array( $this, 'handle_admin_create_ajax' ) );
 		add_action( 'wp_ajax_agent_access_admin_revoke', array( $this, 'handle_admin_revoke_ajax' ) );
 		add_action( 'admin_post_agent_access_save_approval_setting', array( $this, 'handle_save_approval_setting' ) );
+		add_action( 'wp_ajax_agent_access_restore', array( 'Agent_Access_Rollback', 'handle_restore_ajax' ) );
 	}
 
 	/**
@@ -594,6 +595,10 @@ class Agent_Access_Admin {
 				   class="nav-tab <?php echo 'content' === $current_tab ? 'nav-tab-active' : ''; ?>">
 					<?php esc_html_e( 'Content', 'botcreds-agent-access' ); ?>
 				</a>
+				<a href="<?php echo esc_url( add_query_arg( 'tab', 'revisions', menu_page_url( 'agent-access', false ) ) ); ?>"
+				   class="nav-tab <?php echo 'revisions' === $current_tab ? 'nav-tab-active' : ''; ?>">
+					<?php esc_html_e( '↩ Revisions', 'botcreds-agent-access' ); ?>
+				</a>
 				<a href="<?php echo esc_url( add_query_arg( 'tab', 'experimental', menu_page_url( 'agent-access', false ) ) ); ?>"
 				   class="nav-tab <?php echo 'experimental' === $current_tab ? 'nav-tab-active' : ''; ?>" style="color:#856404;">
 					<?php esc_html_e( '⚗ Experimental', 'botcreds-agent-access' ); ?>
@@ -604,6 +609,8 @@ class Agent_Access_Admin {
 				<?php $this->render_activity_log_tab(); ?>
 			<?php elseif ( 'content' === $current_tab ) : ?>
 				<?php $this->render_content_tab(); ?>
+			<?php elseif ( 'revisions' === $current_tab ) : ?>
+				<?php $this->render_revisions_tab(); ?>
 			<?php elseif ( 'experimental' === $current_tab ) : ?>
 				<?php $this->render_experimental_tab(); ?>
 			<?php else : ?>
@@ -619,6 +626,78 @@ class Agent_Access_Admin {
 	/**
 	 * Render the ⚗ Experimental tab — Pro Auth settings and token management.
 	 */
+	private function render_revisions_tab() {
+		$snapshots = Agent_Access_Rollback::get_recent_snapshots( 50 );
+		?>
+		<h2><?php esc_html_e( 'Agent Write History', 'botcreds-agent-access' ); ?></h2>
+		<p class="description">
+			<?php esc_html_e( 'Before-state snapshots captured when agents modified or deleted content. Click Restore to roll back a post to its state before the agent's change.', 'botcreds-agent-access' ); ?>
+		</p>
+
+		<?php if ( empty( $snapshots ) ) : ?>
+			<p><em><?php esc_html_e( 'No snapshots yet. Snapshots are captured automatically when agents modify existing posts or attachments.', 'botcreds-agent-access' ); ?></em></p>
+		<?php else : ?>
+			<table class="widefat striped" style="margin-top:1em;">
+				<thead>
+					<tr>
+						<th><?php esc_html_e( 'Post', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Type', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Agent (user)', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Action', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Captured', 'botcreds-agent-access' ); ?></th>
+						<th></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $snapshots as $snap ) : ?>
+						<?php
+						$state     = json_decode( $snap->before_state, true );
+						$post      = get_post( (int) $snap->post_id );
+						$kind      = $state['kind'] ?? 'posts';
+						$title     = $state['post_title'] ?? __( '(untitled)', 'botcreds-agent-access' );
+						$edit_url  = $post ? get_edit_post_link( $post->ID ) : '';
+						$nonce_key = 'agent_access_restore_' . (int) $snap->id;
+						?>
+						<tr>
+							<td>
+								<?php if ( $edit_url ) : ?>
+									<a href="<?php echo esc_url( $edit_url ); ?>"><?php echo esc_html( $title ); ?></a>
+								<?php else : ?>
+									<em><?php echo esc_html( $title ); ?> <?php esc_html_e( '(deleted)', 'botcreds-agent-access' ); ?></em>
+								<?php endif; ?>
+							</td>
+							<td><?php echo esc_html( 'media' === $kind ? __( 'Media', 'botcreds-agent-access' ) : __( 'Post', 'botcreds-agent-access' ) ); ?></td>
+							<td><?php echo esc_html( $snap->user_login ?: __( '—', 'botcreds-agent-access' ) ); ?></td>
+							<td><?php echo esc_html( $snap->method ); ?></td>
+							<td><?php echo esc_html( get_date_from_gmt( $snap->captured_at, get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) ); ?></td>
+							<td>
+								<?php if ( $post ) : ?>
+									<button type="button"
+										class="button button-small agent-access-restore-btn"
+										data-snapshot-id="<?php echo esc_attr( $snap->id ); ?>"
+										data-nonce="<?php echo esc_attr( wp_create_nonce( $nonce_key ) ); ?>"
+										data-post-title="<?php echo esc_attr( $title ); ?>">
+										<?php esc_html_e( '↩ Restore', 'botcreds-agent-access' ); ?>
+									</button>
+								<?php endif; ?>
+							</td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+			<p class="description" style="margin-top:0.5em;">
+				<?php
+				printf(
+					/* translators: %d: retention days */
+					esc_html__( 'Snapshots are retained for %d days and pruned automatically.', 'botcreds-agent-access' ),
+					(int) Agent_Access_Rollback::RETAIN_DAYS
+				);
+				?>
+			</p>
+		<?php endif; ?>
+		<?php
+	}
+
 	private function render_experimental_tab() {
 		$is_enabled = Agent_Access_Pro_Auth::is_enabled();
 		$tokens     = $is_enabled ? Agent_Access_Pro_Auth::get_tokens() : array();
