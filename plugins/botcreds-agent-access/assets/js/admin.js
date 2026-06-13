@@ -53,15 +53,18 @@
 				btn.textContent = 'Connect Agent';
 			};
 
-			var scopeEl = document.getElementById('agent-access-scope');
-			var scope   = scopeEl ? scopeEl.value : 'posts_media';
-			var rlEl    = document.getElementById('agent-access-rate-limit');
-			var rl      = rlEl ? rlEl.value : 'standard';
+			var scopeEl  = document.getElementById('agent-access-scope');
+			var scope    = scopeEl ? scopeEl.value : 'posts_media';
+			var rlEl     = document.getElementById('agent-access-rate-limit');
+			var rl       = rlEl ? rlEl.value : 'standard';
+			var cpEl     = document.getElementById('agent-access-content-policy');
+			var cp       = cpEl ? cpEl.value : 'standard';
 			xhr.send(
 				'action=agent_access_create' +
 				'&nonce=' + encodeURIComponent(agentAccess.create_nonce) +
 				'&scope=' + encodeURIComponent(scope) +
-				'&rate_limit=' + encodeURIComponent(rl)
+				'&rate_limit=' + encodeURIComponent(rl) +
+				'&content_policy=' + encodeURIComponent(cp)
 			);
 		});
 	}
@@ -199,12 +202,15 @@
 				var scope   = scopeEl ? scopeEl.value : 'posts_media';
 				var rlEl    = document.querySelector('#agent-access-admin-card select[name="rate_limit"]');
 				var rl      = rlEl ? rlEl.value : 'standard';
+				var cpEl    = document.querySelector('#agent-access-admin-card select[name="content_policy"]');
+				var cp      = cpEl ? cpEl.value : 'standard';
 				xhr.send(
 					'action=agent_access_admin_create' +
 					'&nonce=' + encodeURIComponent(agentAccess.admin_create_nonce) +
 					'&user_id=' + encodeURIComponent(userId) +
 					'&scope=' + encodeURIComponent(scope) +
-					'&rate_limit=' + encodeURIComponent(rl)
+					'&rate_limit=' + encodeURIComponent(rl) +
+					'&content_policy=' + encodeURIComponent(cp)
 				);
 			});
 		});

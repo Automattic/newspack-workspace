@@ -3,7 +3,7 @@
  * Plugin Name: BotCreds Agent Access
  * Plugin URI:  https://botcreds.com/
  * Description: Scoped, per-agent application passwords for AI agents, MCP clients, and automation tools.
- * Version:     2.1.24
+ * Version:     2.2.0
  * Author:      Joe Boydston
  * Author URI:  https://botcreds.com
  * License:     GPL-2.0-or-later
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AGENT_ACCESS_VERSION', '2.1.24' );
+define( 'AGENT_ACCESS_VERSION', '2.2.0' );
 define( 'AGENT_ACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AGENT_ACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AGENT_ACCESS_APP_PASSWORD_NAME', 'BotCreds' );
@@ -33,6 +33,7 @@ require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-scope.php';
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-rate-limiter.php';
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-approval-queue.php';
 require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-rollback.php';
+require_once AGENT_ACCESS_PLUGIN_DIR . 'includes/class-agent-access-content-policy.php';
 
 /**
  * Initialize the plugin.
@@ -52,6 +53,7 @@ function agent_access_init() {
 	Agent_Access_Rate_Limiter::init();
 	Agent_Access_Approval_Queue::init();
 	Agent_Access_Rollback::init();
+	Agent_Access_Content_Policy::init();
 
 	if ( Agent_Access_Pro_Auth::is_enabled() ) {
 		Agent_Access_Pro_Auth::init();

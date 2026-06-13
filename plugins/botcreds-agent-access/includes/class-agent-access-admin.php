@@ -116,6 +116,8 @@ class Agent_Access_Admin {
 		if ( Agent_Access_Approval_Queue::is_required() ) {
 			Agent_Access_Approval_Queue::set_pending( get_current_user_id(), $result['uuid'] );
 		}
+		$policy = isset( $_POST['content_policy'] ) ? sanitize_key( $_POST['content_policy'] ) : Agent_Access_Content_Policy::DEFAULT_POLICY; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		Agent_Access_Content_Policy::save( get_current_user_id(), $result['uuid'], $policy );
 
 		$connection_info = $this->api->get_connection_info( $result['password'] );
 
@@ -176,6 +178,8 @@ class Agent_Access_Admin {
 		if ( Agent_Access_Approval_Queue::is_required() ) {
 			Agent_Access_Approval_Queue::set_pending( $user_id, $result['uuid'] );
 		}
+		$policy = isset( $_POST['content_policy'] ) ? sanitize_key( $_POST['content_policy'] ) : Agent_Access_Content_Policy::DEFAULT_POLICY; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		Agent_Access_Content_Policy::save( $user_id, $result['uuid'], $policy );
 
 		$connection_info = $this->api->get_connection_info( $result['password'], $user_id );
 
@@ -382,6 +386,18 @@ class Agent_Access_Admin {
 								</option>
 							<?php endforeach; ?>
 						</select>
+						<label for="agent-access-admin-content-policy-<?php echo esc_attr( $user->ID ); ?>" style="margin-right:0.5em;font-weight:600;">
+							<?php esc_html_e( 'Content policy:', 'botcreds-agent-access' ); ?>
+						</label>
+						<select id="agent-access-admin-content-policy-<?php echo esc_attr( $user->ID ); ?>" name="content_policy" style="margin-right:0.5em;">
+							<?php foreach ( Agent_Access_Content_Policy::get_policies() as $key => $pol ) : ?>
+								<option value="<?php echo esc_attr( $key ); ?>"
+									<?php selected( $key, Agent_Access_Content_Policy::DEFAULT_POLICY ); ?>
+									title="<?php echo esc_attr( $pol['description'] ); ?>">
+									<?php echo esc_html( $pol['label'] ); ?>
+								</option>
+							<?php endforeach; ?>
+						</select>
 						<button type="button"
 							class="button button-primary agent-access-admin-create-btn"
 							data-user-id="<?php echo esc_attr( $user->ID ); ?>"
@@ -555,6 +571,30 @@ class Agent_Access_Admin {
 							<?php selected( $key, Agent_Access_Scope::DEFAULT_SCOPE ); ?>
 							title="<?php echo esc_attr( $tpl['description'] ); ?>">
 							<?php echo esc_html( $tpl['label'] ); ?>
+						</option>
+					<?php endforeach; ?>
+				</select>
+				<label for="agent-access-rate-limit" style="margin-right:0.5em;font-weight:600;">
+					<?php esc_html_e( 'Rate limit:', 'botcreds-agent-access' ); ?>
+				</label>
+				<select id="agent-access-rate-limit" style="margin-right:0.5em;">
+					<?php foreach ( Agent_Access_Rate_Limiter::get_tiers() as $key => $tier ) : ?>
+						<option value="<?php echo esc_attr( $key ); ?>"
+							<?php selected( $key, Agent_Access_Rate_Limiter::DEFAULT_TIER ); ?>
+							title="<?php echo esc_attr( $tier['description'] ); ?>">
+							<?php echo esc_html( $tier['label'] ); ?>
+						</option>
+					<?php endforeach; ?>
+				</select>
+				<label for="agent-access-content-policy" style="margin-right:0.5em;font-weight:600;">
+					<?php esc_html_e( 'Content policy:', 'botcreds-agent-access' ); ?>
+				</label>
+				<select id="agent-access-content-policy" style="margin-right:0.5em;">
+					<?php foreach ( Agent_Access_Content_Policy::get_policies() as $key => $pol ) : ?>
+						<option value="<?php echo esc_attr( $key ); ?>"
+							<?php selected( $key, Agent_Access_Content_Policy::DEFAULT_POLICY ); ?>
+							title="<?php echo esc_attr( $pol['description'] ); ?>">
+							<?php echo esc_html( $pol['label'] ); ?>
 						</option>
 					<?php endforeach; ?>
 				</select>
@@ -1014,6 +1054,7 @@ class Agent_Access_Admin {
 						<th><?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Rate Limit', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Approval', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Content Policy', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Created', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Last Used', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Posts', 'botcreds-agent-access' ); ?></th>
@@ -1064,6 +1105,7 @@ class Agent_Access_Admin {
 									</button>
 								<?php endif; ?>
 							</td>
+							<td><?php echo esc_html( $entry['policy_label'] ); ?></td>
 							<td><?php echo esc_html( $entry['created'] ); ?></td>
 							<td><?php echo esc_html( $entry['last_used'] ); ?></td>
 							<td><?php echo esc_html( $entry['stats']['post_count'] ); ?></td>
@@ -1469,6 +1511,7 @@ class Agent_Access_Admin {
 					'scope_label' => Agent_Access_Scope::get_label( Agent_Access_Scope::get( $user->ID, $item['uuid'] ) ),
 					'rl_label'    => Agent_Access_Rate_Limiter::get_label( Agent_Access_Rate_Limiter::get( $user->ID, $item['uuid'] ) ),
 					'approval'    => Agent_Access_Approval_Queue::get_status( $user->ID, $item['uuid'] ),
+					'policy_label' => Agent_Access_Content_Policy::get_label( Agent_Access_Content_Policy::get( $user->ID, $item['uuid'] ) ),
 					'uuid'        => $item['uuid'],
 					'created'     => $created,
 					'last_used'   => $last_used,

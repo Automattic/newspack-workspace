@@ -226,6 +226,7 @@ class Agent_Access_Approval_Queue {
 		self::delete( $user_id, $uuid );
 		Agent_Access_Scope::delete( $user_id, $uuid );
 		Agent_Access_Rate_Limiter::delete( $user_id, $uuid );
+		Agent_Access_Content_Policy::delete( $user_id, $uuid );
 
 		$target = get_userdata( $user_id );
 		do_action( 'agent_access_audit', 'credential_rejected', array(
