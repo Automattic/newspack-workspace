@@ -35,6 +35,7 @@ class Agent_Access_Admin {
 		add_action( 'wp_ajax_agent_access_revoke', array( $this, 'handle_revoke_ajax' ) );
 		add_action( 'wp_ajax_agent_access_admin_create', array( $this, 'handle_admin_create_ajax' ) );
 		add_action( 'wp_ajax_agent_access_admin_revoke', array( $this, 'handle_admin_revoke_ajax' ) );
+		add_action( 'admin_post_agent_access_save_approval_setting', array( $this, 'handle_save_approval_setting' ) );
 	}
 
 	/**
@@ -111,6 +112,9 @@ class Agent_Access_Admin {
 		$tier  = isset( $_POST['rate_limit'] ) ? sanitize_key( $_POST['rate_limit'] ) : Agent_Access_Rate_Limiter::DEFAULT_TIER; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		Agent_Access_Scope::save( get_current_user_id(), $result['uuid'], $scope );
 		Agent_Access_Rate_Limiter::save( get_current_user_id(), $result['uuid'], $tier );
+		if ( Agent_Access_Approval_Queue::is_required() ) {
+			Agent_Access_Approval_Queue::set_pending( get_current_user_id(), $result['uuid'] );
+		}
 
 		$connection_info = $this->api->get_connection_info( $result['password'] );
 
@@ -168,6 +172,9 @@ class Agent_Access_Admin {
 		$tier  = isset( $_POST['rate_limit'] ) ? sanitize_key( $_POST['rate_limit'] ) : Agent_Access_Rate_Limiter::DEFAULT_TIER; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		Agent_Access_Scope::save( $user_id, $result['uuid'], $scope );
 		Agent_Access_Rate_Limiter::save( $user_id, $result['uuid'], $tier );
+		if ( Agent_Access_Approval_Queue::is_required() ) {
+			Agent_Access_Approval_Queue::set_pending( $user_id, $result['uuid'] );
+		}
 
 		$connection_info = $this->api->get_connection_info( $result['password'], $user_id );
 
@@ -210,6 +217,23 @@ class Agent_Access_Admin {
 		) );
 
 		wp_send_json_success( __( 'Agent connection revoked successfully.', 'botcreds-agent-access' ) );
+	}
+
+	/**
+	 * Handle admin-post: save 'require approval' setting.
+	 */
+	public function handle_save_approval_setting() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'You do not have permission to do this.', 'botcreds-agent-access' ) );
+		}
+
+		check_admin_referer( 'agent_access_save_approval_setting', 'aa_approval_nonce' );
+
+		$enabled = ! empty( $_POST['require_approval'] );
+		Agent_Access_Approval_Queue::set_required( $enabled );
+
+		wp_safe_redirect( add_query_arg( 'updated', '1', wp_get_referer() ) );
+		exit;
 	}
 
 	/**
@@ -874,7 +898,24 @@ class Agent_Access_Admin {
 	 */
 	private function render_connections_tab() {
 		$users_with_passwords = $this->get_connected_users();
+		$approval_required    = Agent_Access_Approval_Queue::is_required();
 		?>
+
+		<div style="margin:1em 0 1.5em;padding:0.75em 1em;background:#f6f7f7;border:1px solid #ddd;border-radius:3px;display:flex;align-items:center;gap:1em;flex-wrap:wrap;">
+			<strong><?php esc_html_e( 'Approval queue:', 'botcreds-agent-access' ); ?></strong>
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin:0;">
+				<?php wp_nonce_field( 'agent_access_save_approval_setting', 'aa_approval_nonce' ); ?>
+				<input type="hidden" name="action" value="agent_access_save_approval_setting">
+				<label style="display:flex;align-items:center;gap:0.4em;cursor:pointer;">
+					<input type="checkbox" name="require_approval" value="1" <?php checked( $approval_required ); ?> onchange="this.form.submit()">
+					<?php esc_html_e( 'Require admin approval for new credentials', 'botcreds-agent-access' ); ?>
+				</label>
+			</form>
+			<span class="description">
+				<?php esc_html_e( 'When enabled, newly created credentials start in ⏳ Pending status. Write access is suspended until an admin approves each credential.', 'botcreds-agent-access' ); ?>
+			</span>
+		</div>
+
 		<p><?php esc_html_e( 'All users with active agent connections on this site.', 'botcreds-agent-access' ); ?></p>
 
 		<?php if ( $this->connections_list_is_truncated() ) : ?>
@@ -893,6 +934,7 @@ class Agent_Access_Admin {
 						<th><?php esc_html_e( 'Role', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Rate Limit', 'botcreds-agent-access' ); ?></th>
+						<th><?php esc_html_e( 'Approval', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Created', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Last Used', 'botcreds-agent-access' ); ?></th>
 						<th><?php esc_html_e( 'Posts', 'botcreds-agent-access' ); ?></th>
@@ -921,6 +963,28 @@ class Agent_Access_Admin {
 							</td>
 							<td><?php echo esc_html( $entry['scope_label'] ); ?></td>
 							<td><?php echo esc_html( $entry['rl_label'] ); ?></td>
+							<td>
+								<?php echo esc_html( Agent_Access_Approval_Queue::get_label( $entry['approval'] ) ); ?>
+								<?php if ( 'pending' === $entry['approval'] ) : ?>
+									<br>
+									<button type="button"
+										class="button button-small agent-access-approve-btn"
+										data-user-id="<?php echo esc_attr( $entry['user']->ID ); ?>"
+										data-uuid="<?php echo esc_attr( $entry['uuid'] ); ?>"
+										data-nonce="<?php echo esc_attr( wp_create_nonce( 'agent_access_approve_' . $entry['uuid'] ) ); ?>"
+										style="margin:0.25em 0.25em 0 0;">
+										<?php esc_html_e( 'Approve', 'botcreds-agent-access' ); ?>
+									</button>
+									<button type="button"
+										class="button button-small agent-access-reject-btn"
+										data-user-id="<?php echo esc_attr( $entry['user']->ID ); ?>"
+										data-uuid="<?php echo esc_attr( $entry['uuid'] ); ?>"
+										data-nonce="<?php echo esc_attr( wp_create_nonce( 'agent_access_reject_' . $entry['uuid'] ) ); ?>"
+										style="color:#b32d2e;margin:0.25em 0 0;">
+										<?php esc_html_e( 'Reject', 'botcreds-agent-access' ); ?>
+									</button>
+								<?php endif; ?>
+							</td>
 							<td><?php echo esc_html( $entry['created'] ); ?></td>
 							<td><?php echo esc_html( $entry['last_used'] ); ?></td>
 							<td><?php echo esc_html( $entry['stats']['post_count'] ); ?></td>
@@ -1324,6 +1388,9 @@ class Agent_Access_Admin {
 					'role_slug'   => $role_slug,
 					'role_name'   => $role_name,
 					'scope_label' => Agent_Access_Scope::get_label( Agent_Access_Scope::get( $user->ID, $item['uuid'] ) ),
+					'rl_label'    => Agent_Access_Rate_Limiter::get_label( Agent_Access_Rate_Limiter::get( $user->ID, $item['uuid'] ) ),
+					'approval'    => Agent_Access_Approval_Queue::get_status( $user->ID, $item['uuid'] ),
+					'uuid'        => $item['uuid'],
 					'created'     => $created,
 					'last_used'   => $last_used,
 					'stats'       => Agent_Access_Tracker::get_stats( $user->ID ),

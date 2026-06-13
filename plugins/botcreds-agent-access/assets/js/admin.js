@@ -332,4 +332,55 @@
 			xhr.send('action=agent_access_revoke&nonce=' + encodeURIComponent(agentAccess.revoke_nonce));
 		});
 	}
+
+	// ── Approval queue: approve / reject buttons ───────────────────────
+	document.querySelectorAll('.agent-access-approve-btn, .agent-access-reject-btn').forEach(function (btn) {
+		btn.addEventListener('click', function () {
+			var isApprove = btn.classList.contains('agent-access-approve-btn');
+			var action    = isApprove ? 'agent_access_approve' : 'agent_access_reject';
+			var label     = isApprove ? 'Approving…' : 'Rejecting…';
+			var userId    = btn.getAttribute('data-user-id');
+			var uuid      = btn.getAttribute('data-uuid');
+			var nonce     = btn.getAttribute('data-nonce');
+
+			btn.disabled    = true;
+			btn.textContent = label;
+
+			var xhr = new XMLHttpRequest();
+			xhr.open('POST', agentAccess.ajax_url);
+			xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+
+			xhr.onload = function () {
+				var response;
+				try {
+					response = JSON.parse(xhr.responseText);
+				} catch (e) {
+					alert('Unexpected error. Please reload the page.');
+					btn.disabled    = false;
+					btn.textContent = isApprove ? 'Approve' : 'Reject';
+					return;
+				}
+				if (response.success) {
+					window.location.reload();
+				} else {
+					alert(response.data || 'An error occurred.');
+					btn.disabled    = false;
+					btn.textContent = isApprove ? 'Approve' : 'Reject';
+				}
+			};
+
+			xhr.onerror = function () {
+				alert('Network error. Please try again.');
+				btn.disabled    = false;
+				btn.textContent = isApprove ? 'Approve' : 'Reject';
+			};
+
+			xhr.send(
+				'action=' + action +
+				'&user_id=' + encodeURIComponent(userId) +
+				'&uuid=' + encodeURIComponent(uuid) +
+				'&nonce=' + encodeURIComponent(nonce)
+			);
+		});
+	});
 })();
