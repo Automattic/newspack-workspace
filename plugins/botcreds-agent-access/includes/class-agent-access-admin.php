@@ -31,19 +31,267 @@ class Agent_Access_Admin {
 		add_action( 'edit_user_profile', array( $this, 'render_profile_section' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'admin_menu', array( $this, 'add_admin_menu' ) );
+		add_action( 'admin_menu', array( $this, 'add_users_menu' ) );
 		add_action( 'wp_ajax_agent_access_create', array( $this, 'handle_create_ajax' ) );
 		add_action( 'wp_ajax_agent_access_revoke', array( $this, 'handle_revoke_ajax' ) );
 		add_action( 'wp_ajax_agent_access_admin_create', array( $this, 'handle_admin_create_ajax' ) );
 		add_action( 'wp_ajax_agent_access_admin_revoke', array( $this, 'handle_admin_revoke_ajax' ) );
 		add_action( 'admin_post_agent_access_save_approval_setting', array( $this, 'handle_save_approval_setting' ) );
+		add_action( 'admin_post_agent_access_add_agent', array( $this, 'handle_add_agent' ) );
+		add_action( 'admin_notices', array( $this, 'maybe_show_add_agent_notice' ) );
 		add_action( 'wp_ajax_agent_access_restore', array( 'Agent_Access_Rollback', 'handle_restore_ajax' ) );
 	}
 
 	/**
-	 * Enqueue admin CSS and JS on profile pages only.
-	 *
-	 * @param string $hook_suffix The current admin page hook suffix.
+	 * Register Users → Add Agent submenu page.
 	 */
+	public function add_users_menu() {
+		add_users_page(
+			__( 'Add Agent', 'botcreds-agent-access' ),
+			__( 'Add Agent', 'botcreds-agent-access' ),
+			'create_users',
+			'agent-access-add-agent',
+			array( $this, 'render_add_agent_page' )
+		);
+	}
+
+	/**
+	 * Render the Users → Add Agent page.
+	 */
+	public function render_add_agent_page() {
+		if ( ! current_user_can( 'create_users' ) ) {
+			wp_die( esc_html__( 'You do not have permission to create users.', 'botcreds-agent-access' ) );
+		}
+
+		$error_key = 'agent_access_add_agent_error_' . get_current_user_id();
+		$errors    = get_transient( $error_key );
+		if ( $errors ) {
+			delete_transient( $error_key );
+		}
+
+		// Re-populate fields from a failed submission.
+		// phpcs:disable WordPress.Security.NonceVerification.Missing
+		$prev_username     = isset( $_POST['agent_username'] )     ? sanitize_user( wp_unslash( $_POST['agent_username'] ) )          : '';
+		$prev_email        = isset( $_POST['agent_email'] )        ? sanitize_email( wp_unslash( $_POST['agent_email'] ) )             : '';
+		$prev_display_name = isset( $_POST['agent_display_name'] ) ? sanitize_text_field( wp_unslash( $_POST['agent_display_name'] ) ) : '';
+		// phpcs:enable
+		?>
+		<div class="wrap">
+			<h1>
+				<span>&#129438;</span>
+				<?php esc_html_e( 'Add Agent', 'botcreds-agent-access' ); ?>
+			</h1>
+			<p class="description">
+				<?php esc_html_e( 'Creates a WordPress user account with the Agent role. After creation, go to their profile to connect their BotCreds credential.', 'botcreds-agent-access' ); ?>
+			</p>
+
+			<?php if ( ! empty( $errors ) ) : ?>
+				<div class="notice notice-error">
+					<?php foreach ( (array) $errors as $err ) : ?>
+						<p><?php echo esc_html( $err ); ?></p>
+					<?php endforeach; ?>
+				</div>
+			<?php endif; ?>
+
+			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="max-width:520px;margin-top:1.5em;">
+				<?php wp_nonce_field( 'agent_access_add_agent_nonce', 'agent_access_add_agent_nonce' ); ?>
+				<input type="hidden" name="action" value="agent_access_add_agent">
+				<input type="hidden" name="agent_password" id="agent_password_hidden">
+
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row">
+							<label for="agent_username"><?php esc_html_e( 'Username', 'botcreds-agent-access' ); ?> <span aria-hidden="true">*</span></label>
+						</th>
+						<td>
+							<input type="text"
+								name="agent_username"
+								id="agent_username"
+								class="regular-text"
+								value="<?php echo esc_attr( $prev_username ); ?>"
+								required
+								autocomplete="off">
+						</td>
+					</tr>
+					<tr>
+						<th scope="row">
+							<label for="agent_email"><?php esc_html_e( 'Email', 'botcreds-agent-access' ); ?> <span aria-hidden="true">*</span></label>
+						</th>
+						<td>
+							<input type="email"
+								name="agent_email"
+								id="agent_email"
+								class="regular-text"
+								value="<?php echo esc_attr( $prev_email ); ?>"
+								required
+								autocomplete="off">
+						</td>
+					</tr>
+					<tr>
+						<th scope="row">
+							<label for="agent_display_name"><?php esc_html_e( 'Agent Name', 'botcreds-agent-access' ); ?></label>
+						</th>
+						<td>
+							<input type="text"
+								name="agent_display_name"
+								id="agent_display_name"
+								class="regular-text"
+								value="<?php echo esc_attr( $prev_display_name ); ?>"
+								autocomplete="off">
+							<p class="description"><?php esc_html_e( 'Display name for the agent (optional). Maps to display_name and first_name.', 'botcreds-agent-access' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row">
+							<label for="agent_password_display"><?php esc_html_e( 'Password', 'botcreds-agent-access' ); ?></label>
+						</th>
+						<td>
+							<input type="text"
+								id="agent_password_display"
+								class="regular-text"
+								readonly
+								autocomplete="new-password"
+								style="font-family:monospace;">
+							<a href="#" id="agent_password_regenerate" style="margin-left:0.5em;"><?php esc_html_e( 'Regenerate', 'botcreds-agent-access' ); ?></a>
+							<p class="description"><?php esc_html_e( 'Auto-generated password. Copy it now — it will not be shown again.', 'botcreds-agent-access' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'Role', 'botcreds-agent-access' ); ?></th>
+						<td>
+							<span class="agent-access-badge agent-access-badge--agent"><?php esc_html_e( 'Agent', 'botcreds-agent-access' ); ?></span>
+							<p class="description"><?php esc_html_e( 'Agent role is pre-selected and cannot be changed here.', 'botcreds-agent-access' ); ?></p>
+						</td>
+					</tr>
+				</table>
+
+				<p class="submit">
+					<button type="submit" class="button button-primary">
+						<?php esc_html_e( 'Create Agent', 'botcreds-agent-access' ); ?>
+					</button>
+				</p>
+			</form>
+		</div>
+
+		<script>
+		( function() {
+			function generatePassword( length ) {
+				var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%^&*';
+				var pass  = '';
+				for ( var i = 0; i < length; i++ ) {
+					pass += chars.charAt( Math.floor( Math.random() * chars.length ) );
+				}
+				return pass;
+			}
+
+			function syncPassword() {
+				var pass = generatePassword( 24 );
+				document.getElementById( 'agent_password_display' ).value = pass;
+				document.getElementById( 'agent_password_hidden' ).value  = pass;
+			}
+
+			syncPassword();
+
+			document.getElementById( 'agent_password_regenerate' ).addEventListener( 'click', function( e ) {
+				e.preventDefault();
+				syncPassword();
+			} );
+		} )();
+		</script>
+		<?php
+	}
+
+	/**
+	 * Handle admin-post: create a new agent user account.
+	 */
+	public function handle_add_agent() {
+		if ( ! current_user_can( 'create_users' ) ) {
+			wp_die( esc_html__( 'You do not have permission to create users.', 'botcreds-agent-access' ) );
+		}
+
+		check_admin_referer( 'agent_access_add_agent_nonce', 'agent_access_add_agent_nonce' );
+
+		$add_agent_url = admin_url( 'users.php?page=agent-access-add-agent' );
+		$error_key     = 'agent_access_add_agent_error_' . get_current_user_id();
+
+		$username     = isset( $_POST['agent_username'] )     ? sanitize_user( wp_unslash( $_POST['agent_username'] ) )          : '';
+		$email        = isset( $_POST['agent_email'] )        ? sanitize_email( wp_unslash( $_POST['agent_email'] ) )             : '';
+		$display_name = isset( $_POST['agent_display_name'] ) ? sanitize_text_field( wp_unslash( $_POST['agent_display_name'] ) ) : '';
+		$password     = isset( $_POST['agent_password'] ) && ! empty( $_POST['agent_password'] )
+			? wp_unslash( $_POST['agent_password'] )
+			: wp_generate_password( 24 );
+
+		$errs = array();
+
+		if ( empty( $username ) ) {
+			$errs[] = __( 'Username is required.', 'botcreds-agent-access' );
+		}
+
+		if ( empty( $email ) || ! is_email( $email ) ) {
+			$errs[] = __( 'A valid email address is required.', 'botcreds-agent-access' );
+		}
+
+		if ( ! empty( $username ) && username_exists( $username ) ) {
+			$errs[] = __( 'That username is already taken.', 'botcreds-agent-access' );
+		}
+
+		if ( ! empty( $email ) && is_email( $email ) && email_exists( $email ) ) {
+			$errs[] = __( 'That email address is already registered.', 'botcreds-agent-access' );
+		}
+
+		if ( ! empty( $errs ) ) {
+			set_transient( $error_key, $errs, 60 );
+			wp_safe_redirect( $add_agent_url );
+			exit;
+		}
+
+		$new_user_id = wp_create_user( $username, $password, $email );
+
+		if ( is_wp_error( $new_user_id ) ) {
+			set_transient( $error_key, array( $new_user_id->get_error_message() ), 60 );
+			wp_safe_redirect( $add_agent_url );
+			exit;
+		}
+
+		$user = get_userdata( $new_user_id );
+		$user->set_role( 'agent' );
+
+		if ( ! empty( $display_name ) ) {
+			wp_update_user( array(
+				'ID'           => $new_user_id,
+				'display_name' => $display_name,
+				'first_name'   => $display_name,
+			) );
+		}
+
+		set_transient( 'agent_access_agent_created_' . get_current_user_id(), $new_user_id, 60 );
+
+		wp_safe_redirect( get_edit_user_link( $new_user_id ) . '#agent-access' );
+		exit;
+	}
+
+	/**
+	 * Show an admin notice after a new agent is created successfully.
+	 */
+	public function maybe_show_add_agent_notice() {
+		$transient_key = 'agent_access_agent_created_' . get_current_user_id();
+		$new_user_id   = get_transient( $transient_key );
+
+		if ( ! $new_user_id ) {
+			return;
+		}
+
+		delete_transient( $transient_key );
+
+		?>
+		<div class="notice notice-success is-dismissible">
+			<p>
+				<?php esc_html_e( 'Agent created! Set up their BotCreds credential in the Agent Access section below.', 'botcreds-agent-access' ); ?>
+			</p>
+		</div>
+		<?php
+	}
+
 	/**
 	 * Register Tools → Agent Access admin page.
 	 */
@@ -58,7 +306,7 @@ class Agent_Access_Admin {
 	}
 
 	public function enqueue_assets( $hook_suffix ) {
-		if ( ! in_array( $hook_suffix, array( 'profile.php', 'user-edit.php', 'tools_page_agent-access' ), true ) ) {
+		if ( ! in_array( $hook_suffix, array( 'profile.php', 'user-edit.php', 'tools_page_agent-access', 'users_page_agent-access-add-agent' ), true ) ) {
 			return;
 		}
 

@@ -3,7 +3,7 @@
  * Plugin Name: BotCreds Agent Access
  * Plugin URI:  https://botcreds.com/
  * Description: Scoped, per-agent application passwords for AI agents, MCP clients, and automation tools.
- * Version:     2.2.0
+ * Version:     2.2.1
  * Author:      Joe Boydston
  * Author URI:  https://botcreds.com
  * License:     GPL-2.0-or-later
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AGENT_ACCESS_VERSION', '2.2.0' );
+define( 'AGENT_ACCESS_VERSION', '2.2.1' );
 define( 'AGENT_ACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AGENT_ACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AGENT_ACCESS_APP_PASSWORD_NAME', 'BotCreds' );
@@ -146,6 +146,9 @@ function agent_access_plugins_api( $res, $action, $args ) {
 			'<p>BotCreds manages one Application Password per user. Revoke the existing one before creating a new connection, or create additional passwords directly in your WordPress profile.</p>',
 
 		'changelog' =>
+			'<h4>2.2.1</h4>' .
+			'<ul><li>New: Users → Add Agent page in wp-admin. Create a dedicated agent user account in one step — Agent role pre-selected, no role picker clutter. After creation, you land directly on the new agent\'s profile page to connect their BotCreds credential.</li></ul>' .
+
 			'<h4>2.1.20</h4>' .
 			'<ul><li>New: Built-in <strong>Agent</strong> WordPress role. Create dedicated AI agent user accounts and assign them the Agent role — they appear with a clear Agent badge in the Connections dashboard. Default capabilities: publish posts/pages, upload media, manage categories. No access to site settings or user management. Capabilities can be further tuned with any role-management plugin.</li></ul>' .
 
