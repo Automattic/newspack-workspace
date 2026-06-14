@@ -609,59 +609,76 @@ class Agent_Access_Admin {
 				<?php $this->render_profile_content_table( $user->ID ); ?>
 			<?php else : ?>
 				<div id="agent-access-admin-card" data-user-id="<?php echo esc_attr( $user->ID ); ?>">
-					<p>
-						<label for="agent-access-admin-scope-<?php echo esc_attr( $user->ID ); ?>" style="margin-right:0.5em;font-weight:600;">
-							<?php esc_html_e( 'Scope:', 'botcreds-agent-access' ); ?>
-						</label>
-						<select id="agent-access-admin-scope-<?php echo esc_attr( $user->ID ); ?>" name="scope" style="margin-right:0.5em;">
-							<?php foreach ( Agent_Access_Scope::get_templates() as $key => $tpl ) : ?>
-								<option value="<?php echo esc_attr( $key ); ?>"
-									<?php selected( $key, Agent_Access_Scope::DEFAULT_SCOPE ); ?>
-									title="<?php echo esc_attr( $tpl['description'] ); ?>">
-									<?php echo esc_html( $tpl['label'] ); ?>
-								</option>
-							<?php endforeach; ?>
-						</select>
-						<label for="agent-access-admin-rate-limit-<?php echo esc_attr( $user->ID ); ?>" style="margin-right:0.5em;font-weight:600;">
-							<?php esc_html_e( 'Rate limit:', 'botcreds-agent-access' ); ?>
-						</label>
-						<select id="agent-access-admin-rate-limit-<?php echo esc_attr( $user->ID ); ?>" name="rate_limit" style="margin-right:0.5em;">
-							<?php foreach ( Agent_Access_Rate_Limiter::get_tiers() as $key => $tier ) : ?>
-								<option value="<?php echo esc_attr( $key ); ?>"
-									<?php selected( $key, Agent_Access_Rate_Limiter::DEFAULT_TIER ); ?>
-									title="<?php echo esc_attr( $tier['description'] ); ?>">
-									<?php echo esc_html( $tier['label'] ); ?>
-								</option>
-							<?php endforeach; ?>
-						</select>
-						<label for="agent-access-admin-content-policy-<?php echo esc_attr( $user->ID ); ?>" style="margin-right:0.5em;font-weight:600;">
-							<?php esc_html_e( 'Content policy:', 'botcreds-agent-access' ); ?>
-						</label>
-						<select id="agent-access-admin-content-policy-<?php echo esc_attr( $user->ID ); ?>" name="content_policy" style="margin-right:0.5em;">
-							<?php foreach ( Agent_Access_Content_Policy::get_policies() as $key => $pol ) : ?>
-								<option value="<?php echo esc_attr( $key ); ?>"
-									<?php selected( $key, Agent_Access_Content_Policy::DEFAULT_POLICY ); ?>
-									title="<?php echo esc_attr( $pol['description'] ); ?>">
-									<?php echo esc_html( $pol['label'] ); ?>
-								</option>
-							<?php endforeach; ?>
-						</select>
-						<button type="button"
-							class="button button-primary agent-access-admin-create-btn"
-							data-user-id="<?php echo esc_attr( $user->ID ); ?>"
-							data-display-name="<?php echo esc_attr( $user->display_name ); ?>">
-							<?php
-							printf(
-								/* translators: %s: display name */
-								esc_html__( 'Generate credentials for %s', 'botcreds-agent-access' ),
-								esc_html( $user->display_name )
-							);
-							?>
-						</button>
-					</p>
-					<p class="agent-access-create-hint">
-						<?php esc_html_e( 'Generates a scoped Application Password to share with the user or their agent.', 'botcreds-agent-access' ); ?>
-					</p>
+					<table class="form-table" role="presentation" style="max-width:480px;">
+						<tr>
+							<th scope="row">
+								<label for="agent-access-admin-scope-<?php echo esc_attr( $user->ID ); ?>"><?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?></label>
+							</th>
+							<td>
+								<select id="agent-access-admin-scope-<?php echo esc_attr( $user->ID ); ?>" name="scope">
+									<?php foreach ( Agent_Access_Scope::get_templates() as $key => $tpl ) : ?>
+										<option value="<?php echo esc_attr( $key ); ?>"
+											<?php selected( $key, Agent_Access_Scope::DEFAULT_SCOPE ); ?>
+											title="<?php echo esc_attr( $tpl['description'] ); ?>">
+											<?php echo esc_html( $tpl['label'] ); ?>
+										</option>
+									<?php endforeach; ?>
+								</select>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row">
+								<label for="agent-access-admin-rate-limit-<?php echo esc_attr( $user->ID ); ?>"><?php esc_html_e( 'Rate limit', 'botcreds-agent-access' ); ?></label>
+							</th>
+							<td>
+								<select id="agent-access-admin-rate-limit-<?php echo esc_attr( $user->ID ); ?>" name="rate_limit">
+									<?php foreach ( Agent_Access_Rate_Limiter::get_tiers() as $key => $tier ) : ?>
+										<option value="<?php echo esc_attr( $key ); ?>"
+											<?php selected( $key, Agent_Access_Rate_Limiter::DEFAULT_TIER ); ?>
+											title="<?php echo esc_attr( $tier['description'] ); ?>">
+											<?php echo esc_html( $tier['label'] ); ?>
+										</option>
+									<?php endforeach; ?>
+								</select>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row">
+								<label for="agent-access-admin-content-policy-<?php echo esc_attr( $user->ID ); ?>"><?php esc_html_e( 'Content policy', 'botcreds-agent-access' ); ?></label>
+							</th>
+							<td>
+								<select id="agent-access-admin-content-policy-<?php echo esc_attr( $user->ID ); ?>" name="content_policy">
+									<?php foreach ( Agent_Access_Content_Policy::get_policies() as $key => $pol ) : ?>
+										<option value="<?php echo esc_attr( $key ); ?>"
+											<?php selected( $key, Agent_Access_Content_Policy::DEFAULT_POLICY ); ?>
+											title="<?php echo esc_attr( $pol['description'] ); ?>">
+											<?php echo esc_html( $pol['label'] ); ?>
+										</option>
+									<?php endforeach; ?>
+								</select>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"></th>
+							<td>
+								<button type="button"
+									class="button button-primary agent-access-admin-create-btn"
+									data-user-id="<?php echo esc_attr( $user->ID ); ?>"
+									data-display-name="<?php echo esc_attr( $user->display_name ); ?>">
+									<?php
+									printf(
+										/* translators: %s: display name */
+										esc_html__( 'Generate credentials for %s', 'botcreds-agent-access' ),
+										esc_html( $user->display_name )
+									);
+									?>
+								</button>
+								<p class="description" style="margin-top:0.5em;">
+									<?php esc_html_e( 'Generates a scoped Application Password to share with the user or their agent.', 'botcreds-agent-access' ); ?>
+								</p>
+							</td>
+						</tr>
+					</table>
 				</div>
 			<?php endif; ?>
 		</div>
@@ -809,50 +826,67 @@ class Agent_Access_Admin {
 	private function render_disconnected_state() {
 		?>
 		<div id="agent-access-card">
-			<p>
-				<label for="agent-access-scope" style="margin-right:0.5em;font-weight:600;">
-					<?php esc_html_e( 'Scope:', 'botcreds-agent-access' ); ?>
-				</label>
-				<select id="agent-access-scope" style="margin-right:0.5em;">
-					<?php foreach ( Agent_Access_Scope::get_templates() as $key => $tpl ) : ?>
-						<option value="<?php echo esc_attr( $key ); ?>"
-							<?php selected( $key, Agent_Access_Scope::DEFAULT_SCOPE ); ?>
-							title="<?php echo esc_attr( $tpl['description'] ); ?>">
-							<?php echo esc_html( $tpl['label'] ); ?>
-						</option>
-					<?php endforeach; ?>
-				</select>
-				<label for="agent-access-rate-limit" style="margin-right:0.5em;font-weight:600;">
-					<?php esc_html_e( 'Rate limit:', 'botcreds-agent-access' ); ?>
-				</label>
-				<select id="agent-access-rate-limit" style="margin-right:0.5em;">
-					<?php foreach ( Agent_Access_Rate_Limiter::get_tiers() as $key => $tier ) : ?>
-						<option value="<?php echo esc_attr( $key ); ?>"
-							<?php selected( $key, Agent_Access_Rate_Limiter::DEFAULT_TIER ); ?>
-							title="<?php echo esc_attr( $tier['description'] ); ?>">
-							<?php echo esc_html( $tier['label'] ); ?>
-						</option>
-					<?php endforeach; ?>
-				</select>
-				<label for="agent-access-content-policy" style="margin-right:0.5em;font-weight:600;">
-					<?php esc_html_e( 'Content policy:', 'botcreds-agent-access' ); ?>
-				</label>
-				<select id="agent-access-content-policy" style="margin-right:0.5em;">
-					<?php foreach ( Agent_Access_Content_Policy::get_policies() as $key => $pol ) : ?>
-						<option value="<?php echo esc_attr( $key ); ?>"
-							<?php selected( $key, Agent_Access_Content_Policy::DEFAULT_POLICY ); ?>
-							title="<?php echo esc_attr( $pol['description'] ); ?>">
-							<?php echo esc_html( $pol['label'] ); ?>
-						</option>
-					<?php endforeach; ?>
-				</select>
-				<button type="button" class="button button-primary agent-access-create-btn" id="agent-access-create-btn">
-					<?php esc_html_e( 'Connect Agent', 'botcreds-agent-access' ); ?>
-				</button>
-			</p>
-			<p class="agent-access-create-hint">
-				<?php esc_html_e( 'Generates a scoped Application Password for Agent Access. You\'ll be given credentials to paste into your agent config.', 'botcreds-agent-access' ); ?>
-			</p>
+			<table class="form-table" role="presentation" style="max-width:480px;">
+				<tr>
+					<th scope="row">
+						<label for="agent-access-scope"><?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?></label>
+					</th>
+					<td>
+						<select id="agent-access-scope">
+							<?php foreach ( Agent_Access_Scope::get_templates() as $key => $tpl ) : ?>
+								<option value="<?php echo esc_attr( $key ); ?>"
+									<?php selected( $key, Agent_Access_Scope::DEFAULT_SCOPE ); ?>
+									title="<?php echo esc_attr( $tpl['description'] ); ?>">
+									<?php echo esc_html( $tpl['label'] ); ?>
+								</option>
+							<?php endforeach; ?>
+						</select>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="agent-access-rate-limit"><?php esc_html_e( 'Rate limit', 'botcreds-agent-access' ); ?></label>
+					</th>
+					<td>
+						<select id="agent-access-rate-limit">
+							<?php foreach ( Agent_Access_Rate_Limiter::get_tiers() as $key => $tier ) : ?>
+								<option value="<?php echo esc_attr( $key ); ?>"
+									<?php selected( $key, Agent_Access_Rate_Limiter::DEFAULT_TIER ); ?>
+									title="<?php echo esc_attr( $tier['description'] ); ?>">
+									<?php echo esc_html( $tier['label'] ); ?>
+								</option>
+							<?php endforeach; ?>
+						</select>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row">
+						<label for="agent-access-content-policy"><?php esc_html_e( 'Content policy', 'botcreds-agent-access' ); ?></label>
+					</th>
+					<td>
+						<select id="agent-access-content-policy">
+							<?php foreach ( Agent_Access_Content_Policy::get_policies() as $key => $pol ) : ?>
+								<option value="<?php echo esc_attr( $key ); ?>"
+									<?php selected( $key, Agent_Access_Content_Policy::DEFAULT_POLICY ); ?>
+									title="<?php echo esc_attr( $pol['description'] ); ?>">
+									<?php echo esc_html( $pol['label'] ); ?>
+								</option>
+							<?php endforeach; ?>
+						</select>
+					</td>
+				</tr>
+				<tr>
+					<th scope="row"></th>
+					<td>
+						<button type="button" class="button button-primary agent-access-create-btn" id="agent-access-create-btn">
+							<?php esc_html_e( 'Connect Agent', 'botcreds-agent-access' ); ?>
+						</button>
+						<p class="description" style="margin-top:0.5em;">
+							<?php esc_html_e( "Generates a scoped Application Password for Agent Access. You'll be given credentials to paste into your agent config.", 'botcreds-agent-access' ); ?>
+						</p>
+					</td>
+				</tr>
+			</table>
 		</div>
 		<?php
 	}
