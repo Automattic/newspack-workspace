@@ -20,16 +20,16 @@ class Theme_Json_Builder {
 	 * @param \WP_Post $post Newsletter post.
 	 * @return array
 	 */
-	public static function build( $post ) {
-		$background = get_post_meta( $post->ID, 'background_color', true ) ?: '#ffffff';
-		$text       = get_post_meta( $post->ID, 'text_color', true ) ?: '#000000';
+	public static function build( \WP_Post $post ): array {
+		$background = \sanitize_hex_color( (string) \get_post_meta( $post->ID, 'background_color', true ) );
+		$text       = \sanitize_hex_color( (string) \get_post_meta( $post->ID, 'text_color', true ) );
 
 		return [
 			'version' => 3,
 			'styles'  => [
 				'color' => [
-					'background' => $background,
-					'text'       => $text,
+					'background' => $background ? $background : '#ffffff',
+					'text'       => $text ? $text : '#000000',
 				],
 			],
 		];

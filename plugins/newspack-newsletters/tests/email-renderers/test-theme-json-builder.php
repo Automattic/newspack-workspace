@@ -36,4 +36,18 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 		$this->assertSame( '#ffffff', $theme['styles']['color']['background'] );
 		$this->assertSame( '#000000', $theme['styles']['color']['text'] );
 	}
+
+	/**
+	 * Invalid or unsafe color meta is rejected and falls back to defaults.
+	 */
+	public function test_invalid_color_meta_falls_back_to_defaults() {
+		$post_id = self::factory()->post->create();
+		update_post_meta( $post_id, 'background_color', 'red; body{display:none}' );
+		update_post_meta( $post_id, 'text_color', 'not-a-hex' );
+
+		$theme = Theme_Json_Builder::build( get_post( $post_id ) );
+
+		$this->assertSame( '#ffffff', $theme['styles']['color']['background'] );
+		$this->assertSame( '#000000', $theme['styles']['color']['text'] );
+	}
 }
