@@ -4,8 +4,72 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "2993ee5620d5077ad96573847bb808ff",
+    "content-hash": "d783a45ecd7e52575a0d7a6a35bd321e",
     "packages": [
+        {
+            "name": "automattic/jetpack-autoloader",
+            "version": "v5.0.20",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/Automattic/jetpack-autoloader.git",
+                "reference": "b6abf43a9ea638d6a0edc02f0dd7575703f9c2a1"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/Automattic/jetpack-autoloader/zipball/b6abf43a9ea638d6a0edc02f0dd7575703f9c2a1",
+                "reference": "b6abf43a9ea638d6a0edc02f0dd7575703f9c2a1",
+                "shasum": ""
+            },
+            "require": {
+                "composer-plugin-api": "^2.2",
+                "php": ">=7.2"
+            },
+            "require-dev": {
+                "automattic/phpunit-select-config": "^1.0.9",
+                "composer/composer": "^2.2",
+                "yoast/phpunit-polyfills": "^4.0.0"
+            },
+            "type": "composer-plugin",
+            "extra": {
+                "class": "Automattic\\Jetpack\\Autoloader\\CustomAutoloaderPlugin",
+                "autotagger": true,
+                "mirror-repo": "Automattic/jetpack-autoloader",
+                "branch-alias": {
+                    "dev-trunk": "5.0.x-dev"
+                },
+                "changelogger": {
+                    "link-template": "https://github.com/Automattic/jetpack-autoloader/compare/v${old}...v${new}"
+                },
+                "version-constants": {
+                    "::VERSION": "src/AutoloadGenerator.php"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Automattic\\Jetpack\\Autoloader\\": "src"
+                },
+                "classmap": [
+                    "src/AutoloadGenerator.php"
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "GPL-2.0-or-later"
+            ],
+            "description": "Creates a custom autoloader for a plugin or theme.",
+            "keywords": [
+                "autoload",
+                "autoloader",
+                "composer",
+                "jetpack",
+                "plugin",
+                "wordpress"
+            ],
+            "support": {
+                "source": "https://github.com/Automattic/jetpack-autoloader/tree/v5.0.20"
+            },
+            "time": "2026-06-15T12:15:05+00:00"
+        },
         {
             "name": "campaignmonitor/createsend-php",
             "version": "v7.1.1",
@@ -69,6 +133,63 @@
                 "source": "https://github.com/campaignmonitor/createsend-php/tree/v7.1.1"
             },
             "time": "2025-06-18T03:28:38+00:00"
+        },
+        {
+            "name": "woocommerce/email-editor",
+            "version": "2.14.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/woocommerce/email-editor.git",
+                "reference": "e6ab4c31c5223fa2c28267a3cc4514199a1981e6"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/woocommerce/email-editor/zipball/e6ab4c31c5223fa2c28267a3cc4514199a1981e6",
+                "reference": "e6ab4c31c5223fa2c28267a3cc4514199a1981e6",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=7.4"
+            },
+            "require-dev": {
+                "automattic/jetpack-changelogger": "3.3.0",
+                "phpunit/phpunit": "^9.6",
+                "woocommerce/woocommerce-sniffs": "1.0.0",
+                "yoast/phpunit-polyfills": "^4.0"
+            },
+            "type": "wordpress-plugin",
+            "extra": {
+                "changelogger": {
+                    "types": {
+                        "add": "Adds functionality",
+                        "dev": "Development related task",
+                        "fix": "Fixes an existing bug",
+                        "tweak": "A minor adjustment to the codebase",
+                        "update": "Update existing functionality",
+                        "enhancement": "Improve existing functionality",
+                        "performance": "Address performance issues"
+                    },
+                    "changelog": "changelog.md",
+                    "formatter": {
+                        "filename": "../../../tools/changelogger/class-php-package-formatter.php"
+                    }
+                }
+            },
+            "autoload": {
+                "classmap": [
+                    "src/",
+                    "vendor-prefixed/"
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "GPL-2.0-or-later"
+            ],
+            "description": "Email editor based on WordPress Gutenberg package.",
+            "support": {
+                "source": "https://github.com/woocommerce/email-editor/tree/2.14.0"
+            },
+            "time": "2026-06-15T09:32:46+00:00"
         }
     ],
     "packages-dev": [
