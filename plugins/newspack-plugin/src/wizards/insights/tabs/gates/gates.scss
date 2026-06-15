@@ -18,9 +18,9 @@
 		gap: 32px;
 	}
 
-	// The Direct vs Influenced explainer chrome moved to the shared
-	// `.newspack-insights__info-callout` (components/_insights-charts.scss) —
-	// see DirectVsInfluencedCallout / InfoCallout (NPPD-1618).
+	// The Direct vs Influenced explainer chrome comes from the shared
+	// `.newspack-insights__info-callout` rule in the wizard's global
+	// `style.scss` — see DirectVsInfluencedCallout / InfoCallout (NPPD-1618).
 
 	// Two-card row (Section 2). The shared metric-grid is auto-fill
 	// with a 220px minimum; for the dedicated two-card sections we

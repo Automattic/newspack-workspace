@@ -475,21 +475,11 @@
 	background: rgba( 255, 255, 255, 0.35 );
 }
 
-// Shared info callout (NPPD-1618) — bold heading + free-form body in a muted
-// box. Background, padding, and the dismiss button all come from
-// `@wordpress/components` Notice (rendered as `.components-notice`); we only
-// override the title typography and neutralize Notice's default margins so
-// the callout sits cleanly in the Insights tabs' gap-based flex layouts.
-.newspack-insights__info-callout {
-	&.components-notice {
-		margin: 0;
-	}
-
-	.newspack-insights__info-callout-title {
-		font-size: 14px;
-		margin: 0;
-	}
-}
+// Shared info callout (NPPD-1618) chrome — background, uniform border, margin
+// reset, and title typography — now lives in the wizard's global `style.scss`
+// (`.newspack-insights__info-callout`), which loads on every Insights view. It
+// is intentionally NOT defined in this per-tab partial so the callout can't
+// look different depending on which tab-chunk CSS happens to be loaded.
 
 // Per-section grid column modifiers. Compound selectors (0,2,0) so they win
 // over the single-class base rules regardless of stylesheet load order. Max 4

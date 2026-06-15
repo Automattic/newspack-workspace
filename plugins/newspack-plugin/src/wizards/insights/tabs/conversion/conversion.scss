@@ -28,11 +28,11 @@
 	}
 
 	// Phase 1 preview banner — a light-blue variant of the shared
-	// `__info-callout`. The base chrome comes from `@wordpress/components`
-	// Notice (rendered as `.components-notice`); this override re-skins the
-	// background, distinguishing the preview banner from the gray freshness
-	// note below it. (`@wordpress/components` Notice renders no icon for
-	// `status="info"`, so there's nothing to tint.) Removed entirely in Phase 2.
+	// `__info-callout`. The box chrome (border, radius, margin reset) comes from
+	// the shared `.newspack-insights__info-callout` rule in the wizard's global
+	// `style.scss`; this higher-specificity (0,3,0) selector re-skins only the
+	// background, distinguishing the preview banner from the gray freshness note
+	// below it while keeping the same border. Removed entirely in Phase 2.
 	&__info-callout--preview.newspack-insights__info-callout.components-notice {
 		background-color: #e6f1fb;
 	}

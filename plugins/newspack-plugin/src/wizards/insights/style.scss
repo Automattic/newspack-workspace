@@ -228,6 +228,32 @@
 	&__cooldown-notice {
 		margin: 0 0 16px;
 	}
+
+	// Shared info callout (NPPD-1618). Self-contained box chrome — background +
+	// uniform border — defined here in the wizard's global stylesheet (imported
+	// by `insights/index.tsx`, so it loads on EVERY Insights view) rather than in
+	// a per-tab partial. This guarantees the callout looks identical on every tab
+	// and component regardless of which lazy tab-chunk CSS is loaded.
+	//
+	// We paint the full box explicitly instead of leaning on `@wordpress/components`
+	// Notice: its `status="info"` variant ships NO `.is-info` rule, so a bare
+	// `.components-notice` is just a white box with a 4px left accent border — no
+	// background, no full border. The compound `&.components-notice` selector
+	// (0,2,0) outranks WP's `.components-notice` (0,1,0) regardless of load order,
+	// so the custom chrome can't be lost to the cascade. Variant skins (e.g.
+	// `--preview`) override only the background on top of this shared box.
+	&__info-callout.components-notice {
+		margin: 0;
+		background-color: wp-colors.$gray-100;
+		border: 1px solid wp-colors.$gray-300;
+		border-radius: 4px;
+		color: wp-colors.$gray-900;
+	}
+
+	&__info-callout-title {
+		margin: 0;
+		font-size: 14px;
+	}
 }
 
 // Suppress the generic wizard chunk-loading message ("Loading Insights…")
