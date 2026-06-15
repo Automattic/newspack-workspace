@@ -28,11 +28,24 @@ class Test_Feature_Flag extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that the filter overrides the option value.
+	 * Test that the filter overrides the option value (filter wins over an enabled option).
 	 */
 	public function test_filter_overrides_option() {
-		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+		update_option( 'newspack_newsletters_use_woo_renderer', '1' );
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
+		$this->assertFalse( Feature_Flag::is_enabled() );
+		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
+		delete_option( 'newspack_newsletters_use_woo_renderer' );
+	}
+
+	/**
+	 * Test that the NEWSPACK_NEWSLETTERS_WOO_RENDERER constant overrides the option.
+	 */
+	public function test_constant_overrides_option() {
+		if ( ! defined( 'NEWSPACK_NEWSLETTERS_WOO_RENDERER' ) ) {
+			define( 'NEWSPACK_NEWSLETTERS_WOO_RENDERER', true );
+		}
+		delete_option( 'newspack_newsletters_use_woo_renderer' );
 		$this->assertTrue( Feature_Flag::is_enabled() );
-		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
 	}
 }
