@@ -259,6 +259,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				],
 			]
 		);
+		$this->reset_restriction_cache();
 
 		$gates = Content_Restriction_Control::get_post_gates( $post1 );
 		$this->assertCount( 1, $gates, 'One gate for the post in category 1' );
@@ -285,6 +286,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				],
 			]
 		);
+		$this->reset_restriction_cache();
 		$gates = Content_Restriction_Control::get_post_gates( $post1 );
 		$this->assertCount( 1, $gates, 'One gate for the post in category 1' );
 		$this->assertEquals( $this->gate_ids[2], $gates[0]['id'], 'Rule with an empty array-like value is ignored; category rule still matches' );
@@ -300,6 +302,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				],
 			]
 		);
+		$this->reset_restriction_cache();
 
 		$gates = Content_Restriction_Control::get_post_gates( $post1 );
 		$this->assertCount( 0, $gates, 'No gates for the post in category 1' );
@@ -364,6 +367,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				],
 			]
 		);
+		$this->reset_restriction_cache();
 
 		$gates = Content_Restriction_Control::get_post_gates( $child_post );
 		$this->assertCount( 1, $gates, 'Post in a child of the targeted parent category is gated' );
@@ -385,6 +389,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				],
 			]
 		);
+		$this->reset_restriction_cache();
 
 		$gates = Content_Restriction_Control::get_post_gates( $child_post );
 		$this->assertCount( 0, $gates, 'Post in a child of an excluded parent category is not gated' );
@@ -406,12 +411,29 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				],
 			]
 		);
+		$this->reset_restriction_cache();
 
 		$gates = Content_Restriction_Control::get_post_gates( $parent_post );
 		$this->assertCount( 0, $gates, 'Post in the parent term is not gated by a rule targeting a child term' );
 
 		$gates = Content_Restriction_Control::get_post_gates( $child_post );
 		$this->assertCount( 1, $gates, 'Post in the targeted child term is gated' );
+
+		// Stored rule values may be strings; the cascade must still match because the
+		// helper normalizes term IDs to integers before intersecting.
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'  => 'category',
+					'value' => [ (string) $parent_cat ],
+				],
+			]
+		);
+		$this->reset_restriction_cache();
+
+		$gates = Content_Restriction_Control::get_post_gates( $child_post );
+		$this->assertCount( 1, $gates, 'Stringified parent term ID still cascades to gate a child-category post' );
 	}
 
 	/**
@@ -1013,7 +1035,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	 * tests to prevent cross-test contamination.
 	 */
 	private function reset_restriction_cache() {
-		foreach ( [ 'post_gate_id_map', 'post_gate_layout_id_map' ] as $prop ) {
+		foreach ( [ 'post_gate_id_map', 'post_gate_layout_id_map', 'post_gates_map', 'term_descendants_map' ] as $prop ) {
 			$reflection = new \ReflectionProperty( Content_Restriction_Control::class, $prop );
 			$reflection->setAccessible( true );
 			$reflection->setValue( null, [] );
