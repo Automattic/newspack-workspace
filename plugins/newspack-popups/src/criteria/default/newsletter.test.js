@@ -50,13 +50,28 @@ describe( 'newsletter criteria matching', () => {
 		expect( isFromEmail() ).toBe( false );
 	} );
 
-	it( 'does not throw when sessionStorage is unavailable', () => {
+	it( 'still matches subscribers on an email arrival when sessionStorage writes are blocked', () => {
 		window.history.replaceState( {}, '', '/?utm_medium=email' );
-		const spy = jest.spyOn( Storage.prototype, 'setItem' ).mockImplementation( () => {
+		const setSpy = jest.spyOn( Storage.prototype, 'setItem' ).mockImplementation( () => {
 			throw new Error( 'sessionStorage unavailable' );
 		} );
+		// The URL param is authoritative; a failed write only costs cross-navigation memory.
 		expect( () => matchNewsletter( { value: 'subscribers' }, ras( false ) ) ).not.toThrow();
-		expect( matchNewsletter( { value: 'subscribers' }, ras( false ) ) ).toBe( false );
-		spy.mockRestore();
+		expect( matchNewsletter( { value: 'subscribers' }, ras( false ) ) ).toBe( true );
+		setSpy.mockRestore();
+	} );
+
+	it( 'does not throw when sessionStorage is fully unavailable', () => {
+		window.history.replaceState( {}, '', '/some-article' );
+		const setSpy = jest.spyOn( Storage.prototype, 'setItem' ).mockImplementation( () => {
+			throw new Error( 'sessionStorage unavailable' );
+		} );
+		const getSpy = jest.spyOn( Storage.prototype, 'getItem' ).mockImplementation( () => {
+			throw new Error( 'sessionStorage unavailable' );
+		} );
+		expect( () => isFromEmail() ).not.toThrow();
+		expect( isFromEmail() ).toBe( false );
+		setSpy.mockRestore();
+		getSpy.mockRestore();
 	} );
 } );
