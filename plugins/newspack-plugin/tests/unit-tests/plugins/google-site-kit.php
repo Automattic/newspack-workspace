@@ -73,8 +73,8 @@ class Newspack_Test_GoogleSiteKit_Group_Param extends WP_UnitTestCase {
 
 		// Capture request globals that IP-based tests mutate, so tear_down can
 		// restore them even if an assertion fails mid-test.
-		$this->original_remote_addr = $_SERVER['REMOTE_ADDR'] ?? null; // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
-		$this->original_ip_cookie   = $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ?? null; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->original_remote_addr = $_SERVER['REMOTE_ADDR'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
+		$this->original_ip_cookie   = $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 
 		// Reset mock WC databases.
 		global $subscriptions_database, $products_database;
