@@ -30,7 +30,9 @@ class Newspack_Test_CAP_Count_User_Posts_Fix extends WP_UnitTestCase {
 				'supports' => [ 'title' ],
 			]
 		);
-		register_taxonomy( 'author', 'post', [ 'public' => false ] );
+		// CAP attaches 'author' terms to the guest-author CPT, so register the
+		// taxonomy for that object type as well as 'post'.
+		register_taxonomy( 'author', [ 'post', 'guest-author' ], [ 'public' => false ] );
 	}
 
 	/**
