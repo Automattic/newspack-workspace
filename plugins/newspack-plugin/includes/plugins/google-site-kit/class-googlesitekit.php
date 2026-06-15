@@ -365,6 +365,10 @@ class GoogleSiteKit {
 		if ( ! self::is_active() ) {
 			return;
 		}
+		// Arbitrary inline scripts are invalid on AMP pages and break AMP validation.
+		if ( function_exists( 'is_amp_endpoint' ) && is_amp_endpoint() ) {
+			return;
+		}
 		if ( defined( 'NEWSPACK_GA_DISABLE_CUSTOM_FE_PARAMS' ) && NEWSPACK_GA_DISABLE_CUSTOM_FE_PARAMS ) {
 			return;
 		}
@@ -386,17 +390,23 @@ class GoogleSiteKit {
 	 * @return array Parameters to push to window.dataLayer.
 	 */
 	public static function get_data_layer_params() {
-		$params = self::get_custom_event_parameters();
-		unset( $params['email_hash'] );
 		/**
 		 * Filters the Newspack parameters pushed to the dataLayer for Google Tag Manager.
 		 *
-		 * Mirrors the `newspack_ga4_custom_parameters` set sent to Site Kit's gtag config,
-		 * minus `email_hash`.
+		 * Mirrors the `newspack_ga4_custom_parameters` set sent to Site Kit's gtag config.
+		 * Note that `email_hash` is always stripped afterwards (see below) and cannot be
+		 * re-added through this filter.
 		 *
 		 * @param array $params Parameters pushed to window.dataLayer.
 		 */
-		return apply_filters( 'newspack_ga4_data_layer_params', $params );
+		$params = apply_filters( 'newspack_ga4_data_layer_params', self::get_custom_event_parameters() );
+
+		// Always keep the hashed email out of the dataLayer - enforced after the filter so it
+		// cannot be re-added. It is only needed by Site Kit's own gtag config (which still
+		// receives it) and must not reach the third-party tags in a publisher's GTM container.
+		unset( $params['email_hash'] );
+
+		return $params;
 	}
 
 	/**

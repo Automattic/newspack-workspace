@@ -111,6 +111,24 @@ class Newspack_Test_GoogleSiteKit_Data_Layer extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The exclusion is enforced after the filter runs, so a filter cannot re-introduce
+	 * `email_hash` into the dataLayer.
+	 */
+	public function test_filter_cannot_reintroduce_email_hash() {
+		add_filter(
+			'newspack_ga4_data_layer_params',
+			function ( $params ) {
+				$params['email_hash'] = 'should-not-survive';
+				return $params;
+			}
+		);
+
+		$data_layer_params = GoogleSiteKit::get_data_layer_params();
+
+		$this->assertArrayNotHasKey( 'email_hash', $data_layer_params );
+	}
+
+	/**
 	 * The whole point of the fix: `logged_in` always carries an explicit value, so an
 	 * anonymous reader is sent `no` (not omitted, which GA4 reports as `(not set)`).
 	 */
