@@ -426,6 +426,7 @@ class Access_Rules {
 		$domains = str_replace( PHP_EOL, ',', $domains );
 		$domains = explode( ',', $domains );
 		$domains = array_map( 'trim', $domains );
+		$domains = array_map( 'strtolower', $domains );
 		$user    = \get_userdata( $user_id );
 		if ( ! $user ) {
 			return false;
@@ -437,7 +438,7 @@ class Access_Rules {
 		if ( Reader_Activation::is_reader_verified( $user ) === false ) {
 			return false;
 		}
-		$email_domain = substr( $email, strrpos( $email, '@' ) + 1 );
+		$email_domain = strtolower( substr( $email, strrpos( $email, '@' ) + 1 ) );
 		return in_array( $email_domain, $domains, true );
 	}
 
