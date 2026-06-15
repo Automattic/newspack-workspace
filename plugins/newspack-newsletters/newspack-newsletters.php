@@ -34,8 +34,25 @@ if ( ! defined( 'NEWSPACK_NEWSLETTERS_PLUGIN_FILE' ) ) {
 if ( ! defined( 'NEWSPACK_NEWSLETTERS_LETTERHEAD_ENDPOINT' ) ) {
 	define( 'NEWSPACK_NEWSLETTERS_LETTERHEAD_ENDPOINT', 'https://api.tryletterhead.com' );
 }
+// Load the Composer autoloader. Prefer the jetpack-autoloader package loader
+// (which negotiates shared package versions across plugins); fall back to the
+// plain Composer autoloader if it is unavailable.
+if ( file_exists( NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/vendor/autoload_packages.php' ) ) {
+	require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/vendor/autoload_packages.php';
+} elseif ( file_exists( NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/vendor/autoload.php' ) ) {
+	require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/vendor/autoload.php';
+} else {
+	add_action(
+		'admin_notices',
+		function() {
+			echo '<div class="notice notice-error"><p>';
+			echo esc_html__( 'Newspack Newsletters is missing its Composer dependencies. Please run "composer install" in the plugin directory.', 'newspack-newsletters' );
+			echo '</p></div>';
+		}
+	);
+	return;
+}
 // Include main plugin resources.
-require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/vendor/autoload.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/class-newspack-newsletters-logger.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/service-providers/interface-newspack-newsletters-esp-service.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/service-providers/interface-newspack-newsletters-wp-hookable.php';
