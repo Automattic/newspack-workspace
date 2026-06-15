@@ -27,11 +27,31 @@ function _manually_load_plugin() {
 }
 tests_add_filter( 'muplugins_loaded', '_manually_load_plugin' );
 
-// Load the composer autoloader.
-require_once __DIR__ . '/../vendor/autoload.php';
+// Tell the WP test bootstrap where to find PHPUnit Polyfills directly. The plugin
+// loads its dependencies through the jetpack-autoloader (autoload_packages.php),
+// which cannot be required this early because it relies on WordPress functions
+// (e.g. wp_normalize_path()) that are not defined until WP boots below. Pointing
+// the WP bootstrap at Polyfills avoids needing the plain Composer autoloader here.
+if ( ! defined( 'WP_TESTS_PHPUNIT_POLYFILLS_PATH' ) ) {
+	define( 'WP_TESTS_PHPUNIT_POLYFILLS_PATH', __DIR__ . '/../vendor/yoast/phpunit-polyfills' );
+}
 
 // Start up the WP testing environment.
 require $_tests_dir . '/includes/bootstrap.php';
+
+// Load the Composer autoloader. Prefer the jetpack-autoloader package loader
+// (which negotiates shared package versions across plugins) to mirror the
+// plugin's runtime bootstrap; fall back to the plain Composer autoloader.
+// Loaded after the WP test environment boots because the jetpack-autoloader
+// relies on WordPress functions (e.g. wp_normalize_path()).
+if ( file_exists( __DIR__ . '/../vendor/autoload_packages.php' ) ) {
+	require_once __DIR__ . '/../vendor/autoload_packages.php';
+} elseif ( file_exists( __DIR__ . '/../vendor/autoload.php' ) ) {
+	require_once __DIR__ . '/../vendor/autoload.php';
+} else {
+	echo 'Could not find the Composer autoloader, have you run "composer install" in the plugin directory?' . PHP_EOL; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+	exit( 1 );
+}
 
 // Trait used to test Subscription Lists.
 require_once 'trait-lists-setup.php';
