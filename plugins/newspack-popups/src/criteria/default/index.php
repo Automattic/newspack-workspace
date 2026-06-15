@@ -102,7 +102,7 @@ $criteria = [
 	],
 	'newsletter'               => [
 		'name'        => __( 'Newsletter', 'newspack-popups' ),
-		'description' => __( 'Subscriber status based on any newsletter list.', 'newspack-popups' ),
+		'description' => __( 'Subscriber status based on any newsletter list. Readers arriving from a newsletter email are also matched as subscribers, even if they have not subscribed.', 'newspack-popups' ),
 		'category'    => 'newsletter',
 		'options'     => [
 			[
