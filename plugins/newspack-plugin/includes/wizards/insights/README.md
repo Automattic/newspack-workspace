@@ -11,10 +11,11 @@ All gated by PHP constants. The wizard registers nothing when `NEWSPACK_INSIGHTS
 | Constant | Effect |
 | --- | --- |
 | `NEWSPACK_INSIGHTS_ENABLED` | Master switch. When off, no admin page, no REST routes, no asset enqueue. |
-| `NEWSPACK_INSIGHTS_GATES_PREVIEW` | Shows the Gates (Tab 4) nav entry and activates its REST route. Independent of the main flag so the Phase 1 preview can ship to a subset of environments. |
-| `NEWSPACK_INSIGHTS_ADVERTISING_ENABLED` | Shows the Advertising (Tab 8) nav entry and activates its GAM-backed orchestrator. |
-| `NEWSPACK_INSIGHTS_FIXTURE_MODE` | REST controllers short-circuit to deterministic fixtures instead of calling live data clients. Used for UI smoke testing. |
+| `NEWSPACK_INSIGHTS_GATES_PREVIEW` | Shows the Gates (Tab 4) nav entry and activates its REST route. Requires `NEWSPACK_INSIGHTS_ENABLED` to be on as well — the section bails before either check otherwise. The two flags are kept separate so the Phase 1 preview can ship to a subset of Insights-enabled environments. |
+| `NEWSPACK_INSIGHTS_ADVERTISING_ENABLED` | Shows the Advertising (Tab 8) nav entry and activates its GAM-backed orchestrator. Also requires `NEWSPACK_INSIGHTS_ENABLED`. |
+| `NEWSPACK_INSIGHTS_FIXTURE_MODE` | REST controllers that wrap a metric with a `get_fixture()` method short-circuit to fixtures instead of live data. Used for UI smoke testing. (Conversion, Subscribers, and Donors don't implement fixtures today; see [Metric orchestrators](#metric-orchestrators-metricsclass--metricphp).) |
 | `NEWSPACK_INSIGHTS_CACHE_DISABLED` | Bypass the server-side transient cache entirely. Dev/debug only. |
+| `NEWSPACK_INSIGHTS_AUDIENCE_USE_GA4`, `NEWSPACK_INSIGHTS_ENGAGEMENT_USE_GA4` | Per-tab backend dispatch (default on). When off, the metric would route to the BigQuery proxy path — currently a stub until NPPD-1630. |
 
 See [`class-insights-wizard.php`](class-insights-wizard.php) for the canonical definitions and tab-visibility rules.
 
@@ -49,7 +50,7 @@ src/wizards/insights/               (frontend)
 
 ### Sections (`class-insights-section-*.php`)
 
-One per tab. Each section's `init()` (called by [`class-insights-wizard.php`](class-insights-wizard.php) when the feature flag is on) does three things:
+One per tab. Each section's `init()` is called from [`includes/class-wizards.php`](../../class-wizards.php) during wizard bootstrap. The section bails immediately when `Insights_Wizard::is_enabled()` is false; Gates and Advertising sections also gate on their per-tab preview/enabled constants. When the gate passes, the section:
 
 1. Loads the tab's `metrics/class-*-metric.php` and `api/class-*-rest-controller.php` files.
 2. Registers the REST route on the `rest_api_init` hook.
@@ -63,7 +64,7 @@ The unit of work per tab. Each metric class exposes:
 
 - `get_all( $start, $end, $compare = null )` — full tab payload (current window plus optional comparison window).
 - `connection_error()` — early gate check returning `{ tab_error, banner_text }` when preconditions (OAuth, GAM activation, etc.) fail. Returns `null` when ready.
-- `get_fixture( ... )` — deterministic mock payload used by `FIXTURE_MODE`.
+- `get_fixture( ... )` — deterministic mock payload used by `FIXTURE_MODE`. Implemented on Audience, Engagement, Gates, Prompts, and Advertising; not on Conversion, Subscribers, or Donors (those tabs either return inline placeholders or read from local Woo data already, so the fixture path hasn't been needed).
 
 Internally orchestrators compose data-client calls, normalize results into payload envelopes, and cache windows via [`class-cache.php`](class-cache.php). The envelope shapes used by the React layer are:
 
@@ -80,8 +81,8 @@ Current tab status:
 | Tab | Source | Notes |
 | --- | --- | --- |
 | Audience (1) | GA4 Data API | Default path; BQ v1.1 path is stubbed behind `NEWSPACK_INSIGHTS_AUDIENCE_USE_GA4`. |
-| Engagement (2) | GA4 Data API | Same dispatch pattern as Audience. |
-| Conversion (3) | BigQuery | Fixtures only until NPPD-1630 lands. |
+| Engagement (2) | GA4 Data API | Same dispatch pattern (`NEWSPACK_INSIGHTS_ENGAGEMENT_USE_GA4`). |
+| Conversion (3) | Inline placeholders | The metric returns synthetic payloads with `pending: true` per shape until NPPD-1630 Phase 2 lands. No BigQuery calls and no fixtures wired today. |
 | Gates (4) | BigQuery | Preview-flag gated. |
 | Prompts (5) | BigQuery | Conversion funnels. |
 | Subscribers (6) | Local Woo | Reads via [`storage/`](storage/). |
@@ -97,18 +98,20 @@ Current tab status:
 
 ### REST API (`api/`)
 
-Namespace: `newspack-insights/v1`. Each tab has:
+Namespace: `newspack-insights/v1`. The standard shape used by every cached tab is:
 
 - `GET  /newspack-insights/v1/<tab>` — initial fetch.
 - `POST /newspack-insights/v1/<tab>/refresh` — manual cache invalidation. Always returns 200; `cooldown_until` in the envelope signals throttle to the client.
 
-Shared shape:
+Schematic response envelope (illustrative — actual `cache` values are populated strings/timestamps):
 
-```json
-{ "cache": { "source", "computed_at", "cooldown_until" }, "data": { ... } }
+```
+{ cache: { source, computed_at, cooldown_until }, data: { ... } }
 ```
 
-`Cached_Controller_Trait` ([`trait-cached-controller.php`](api/trait-cached-controller.php)) wraps GET/POST in cache orchestration. Concrete controllers declare `cache_source()` (one of `SOURCE_EXTERNAL`, `SOURCE_BIGQUERY`, `SOURCE_LOCAL`) and `tab_slug()`. All responses set `Cache-Control: no-store, private` so the browser never caches over the server-side transient.
+`Cached_Controller_Trait` ([`trait-cached-controller.php`](api/trait-cached-controller.php)) wraps GET/POST in cache orchestration. Concrete controllers declare `cache_source()` (one of `SOURCE_EXTERNAL`, `SOURCE_BIGQUERY`, `SOURCE_LOCAL`) and `tab_slug()`. Cached responses set `Cache-Control: no-store, private` so the browser never caches over the server-side transient.
+
+**Exception:** Conversion (Tab 3) does *not* use `Cached_Controller_Trait` while it returns inline placeholders. It registers a single `GET /newspack-insights/v1/conversion` route, returns the metric output directly, and has no `/refresh` route or cache envelope. It will adopt the standard pattern when NPPD-1630 lands.
 
 ### Caching (`class-cache.php`)
 
@@ -193,18 +196,18 @@ Jest, colocated `*.test.ts(x)` next to the source. Key spots:
 
 - `state/insightsCache.test.ts` covers slot dedupe and refresh semantics.
 - Per-tab component tests verify rendering against representative payloads (loading, error, partial data, overlays, comparison on/off).
-- PHP unit tests live in `plugins/newspack-plugin/tests/unit-tests/insights*` and `tests/unit-tests/insights/`.
+- PHP unit tests live under `plugins/newspack-plugin/tests/unit-tests/` — both as loose `insights-*.php` files (e.g. `insights-audience-metric.php`, `insights-cache.php`) and inside the `insights/` subdirectory.
 
 `NEWSPACK_INSIGHTS_FIXTURE_MODE` is the recommended path for manual UI smoke testing without a live GA4 or GAM connection.
 
 ## Adding a new tab
 
 1. Add a `class-insights-section-<tab>.php` that loads the metric + controller and registers the route on `rest_api_init`.
-2. Add `metrics/class-<tab>-metric.php` implementing `get_all`, `connection_error`, `get_fixture`.
+2. Add `metrics/class-<tab>-metric.php` implementing `get_all` and `connection_error`. Add `get_fixture` if the tab needs `FIXTURE_MODE` support.
 3. Add `api/class-<tab>-rest-controller.php` using `Cached_Controller_Trait`, declaring `cache_source()` and `tab_slug()`.
-4. Add `fixtures/<tab>-fixture.php` returning a representative payload.
-5. Wire the section into `class-insights-wizard.php` (tab visibility map + section init).
+4. (If using fixtures.) Add `fixtures/<tab>-fixture.php` returning a representative payload.
+5. Add the section to the bootstrap list in [`includes/class-wizards.php`](../../class-wizards.php), and add the tab key to the visibility map in `class-insights-wizard.php::get_boot_config()`.
 6. Frontend: add `hooks/use<Tab>Data.ts`, `api/<tab>.ts`, and `tabs/<Tab>Tab.tsx` (lazy-loaded from `InsightsWizard.tsx`).
-7. Add the tab key to the visibility map and tab nav in the wizard shell.
+7. Add the tab to the wizard shell's tab nav.
 
 Anything that materially changes the surface above — feature flags, REST shape, payload envelopes, cache TTLs, data clients, frontend state contracts — should land in the same PR as a README update.
