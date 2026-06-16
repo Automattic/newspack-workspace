@@ -49,6 +49,7 @@ class Test_Editor_Bootstrap extends WP_UnitTestCase {
 		$post_type = get_post_type_object( \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT );
 		$this->assertNotNull( $post_type, 'Newsletters CPT should be registered.' );
 		$this->assertTrue( (bool) $post_type->public, 'Newsletters CPT should remain public after the editor bootstraps.' );
-		$this->assertSame( 'Newsletters', $post_type->labels->name, 'Newsletters CPT labels should remain authoritative after the editor bootstraps.' );
+		$expected_label = _x( 'Newsletters', 'post type general name', 'newspack-newsletters' );
+		$this->assertSame( $expected_label, $post_type->labels->name, 'Newsletters CPT labels should remain authoritative after the editor bootstraps.' );
 	}
 }

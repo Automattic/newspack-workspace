@@ -62,7 +62,7 @@ class Editor_Bootstrap {
 		// the canonical CPT's scalar args (public, labels, rewrite, menu_icon,
 		// rendering mode) with the package's email defaults. Re-assert the canonical
 		// definition at a later priority so Newspack's registration stays authoritative.
-		add_action( 'init', [ '\Newspack_Newsletters', 'register_cpt' ], 11 );
+		add_action( 'init', [ \Newspack_Newsletters::class, 'register_cpt' ], 11 );
 	}
 
 	/**
