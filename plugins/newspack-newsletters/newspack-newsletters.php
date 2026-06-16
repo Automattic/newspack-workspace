@@ -56,6 +56,7 @@ if ( file_exists( NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/vendor/autoload_packages.
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/class-newspack-newsletters-logger.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/email-renderers/class-feature-flag.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/email-renderers/class-renderer-controller.php';
+require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/email-renderers/class-editor-bootstrap.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/service-providers/interface-newspack-newsletters-esp-service.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/service-providers/interface-newspack-newsletters-wp-hookable.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/service-providers/class-newspack-newsletters-service-provider.php';
@@ -116,6 +117,10 @@ require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-admin-she
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-admin-shell-assets.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/admin/class-admin-shell.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/class-wizard-bridge.php';
+
+// Boot the WooCommerce Email Editor package. Must run before the `init` hook
+// so the editor's own `init` callbacks (CPT, templates) are registered in time.
+\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
 
 // This MUST be initialized after Newspack_Newsletter class.
 \Newspack\Newsletters\Subscription_Lists::init();
