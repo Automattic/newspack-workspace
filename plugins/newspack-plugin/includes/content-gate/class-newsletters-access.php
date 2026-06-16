@@ -573,8 +573,18 @@ class Newsletters_Access {
 	 *                known send list.
 	 */
 	private static function resolve_utm_source_list_id() {
-		$raw = isset( $_SERVER['QUERY_STRING'] ) ? wp_unslash( $_SERVER['QUERY_STRING'] ) : '';
-		if ( ! is_string( $raw ) || '' === $raw ) {
+		// Read the request URI rather than QUERY_STRING directly: WP's
+		// WP_UnitTestCase::go_to() populates REQUEST_URI but not
+		// QUERY_STRING, so QUERY_STRING-based parsing breaks the existing
+		// UTM-fallback test suite. Real requests have both. wp_parse_url
+		// then gives the raw query untouched by PHP's $_GET de-duplication.
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- each candidate value is sanitize_text_field()'d below before any use.
+		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+		if ( ! is_string( $request_uri ) || '' === $request_uri ) {
+			return '';
+		}
+		$raw = (string) wp_parse_url( $request_uri, PHP_URL_QUERY );
+		if ( '' === $raw ) {
 			return '';
 		}
 		// Hard cap on the candidate count so a query string stuffed with
