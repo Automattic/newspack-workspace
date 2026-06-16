@@ -38,4 +38,17 @@ class Test_Editor_Bootstrap extends WP_UnitTestCase {
 			'The wrapping template should be associated with the newsletters CPT.'
 		);
 	}
+
+	/**
+	 * The canonical newsletters CPT definition stays authoritative after the
+	 * editor bootstraps. The email-editor package re-registers every opted-in
+	 * post type on `init`, so this guards against it clobbering Newspack's
+	 * registration (public flag, labels, etc.) with the package's email defaults.
+	 */
+	public function test_canonical_cpt_args_remain_authoritative() {
+		$post_type = get_post_type_object( \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT );
+		$this->assertNotNull( $post_type, 'Newsletters CPT should be registered.' );
+		$this->assertTrue( (bool) $post_type->public, 'Newsletters CPT should remain public after the editor bootstraps.' );
+		$this->assertSame( 'Newsletters', $post_type->labels->name, 'Newsletters CPT labels should remain authoritative after the editor bootstraps.' );
+	}
 }

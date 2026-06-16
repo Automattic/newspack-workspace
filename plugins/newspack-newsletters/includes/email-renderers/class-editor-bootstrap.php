@@ -25,7 +25,9 @@ defined( 'ABSPATH' ) || exit;
 class Editor_Bootstrap {
 	/**
 	 * Plugin namespace used as the prefix of the registered template id.
-	 * The package composes the template id as "{namespace}//{slug}".
+	 * The package composes the template id as "{namespace}//{slug}", so the
+	 * full id is "newspack//newspack-newsletter" — unique to this plugin's
+	 * wrapping template (the slug below is newsletters-specific).
 	 */
 	const TEMPLATE_NAMESPACE = 'newspack';
 
@@ -40,23 +42,38 @@ class Editor_Bootstrap {
 	 * @return void
 	 */
 	public static function init() {
+		static $did_init = false;
+		if ( $did_init ) {
+			return;
+		}
 		if ( ! class_exists( Email_Editor_Container::class ) || ! class_exists( Bootstrap::class ) ) {
 			return;
 		}
+		$did_init = true;
 
 		Email_Editor_Container::container()->get( Bootstrap::class )->init();
 
 		add_filter( 'woocommerce_email_editor_post_types', [ __CLASS__, 'add_post_type' ] );
 		add_filter( 'woocommerce_email_editor_register_templates', [ __CLASS__, 'register_template' ] );
+
+		// The package re-registers every opted-in post type on `init` (priority 10)
+		// via register_post_type(). Its callback runs after
+		// Newspack_Newsletters::register_cpt(), so without this it would overwrite
+		// the canonical CPT's scalar args (public, labels, rewrite, menu_icon,
+		// rendering mode) with the package's email defaults. Re-assert the canonical
+		// definition at a later priority so Newspack's registration stays authoritative.
+		add_action( 'init', [ '\Newspack_Newsletters', 'register_cpt' ], 11 );
 	}
 
 	/**
 	 * Opt the newsletters CPT into the email editor.
 	 *
 	 * The package expects each entry to be an array with `name` and `args`
-	 * keys. We pass empty `args` so the canonical CPT definition registered by
-	 * Newspack_Newsletters remains authoritative; this entry only opts the CPT
-	 * into the editor's post-type-aware features (templates, REST fields).
+	 * keys. We pass empty `args` and opt the CPT in only for the editor's
+	 * post-type-aware features (templates, REST fields). The package re-registers
+	 * opted-in post types, so `init()` re-asserts the canonical
+	 * Newspack_Newsletters CPT definition at a later priority to keep it
+	 * authoritative (see init()).
 	 *
 	 * @param array $post_types List of email editor post types.
 	 * @return array Modified list of post types.
@@ -78,6 +95,7 @@ class Editor_Bootstrap {
 	public static function register_template( $registry ) {
 		$content = file_get_contents( __DIR__ . '/templates/newspack-newsletter.html' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reading a bundled plugin template file, not a remote resource.
 		if ( false === $content ) {
+			\Newspack_Newsletters_Logger::log( 'Email editor: could not read the wrapping template file; skipping template registration.' );
 			return $registry;
 		}
 
