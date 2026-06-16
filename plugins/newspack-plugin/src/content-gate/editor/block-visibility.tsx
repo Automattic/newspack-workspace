@@ -22,7 +22,7 @@ import { __, sprintf } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import './editor.scss';
+import './block-visibility.scss';
 
 /**
  * Target block types that receive access control attributes.

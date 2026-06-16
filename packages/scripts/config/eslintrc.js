@@ -31,13 +31,7 @@ module.exports = {
 			},
 		},
 	},
-	ignorePatterns: [
-		'dist/',
-		'node_modules/',
-		'release/',
-		'scripts/',
-		'/vendor',
-	],
+	ignorePatterns: [ 'dist/', 'node_modules/', 'release/', 'scripts/', '/vendor' ],
 	rules: {
 		'arrow-parens': 'off',
 		camelcase: 'off',
@@ -49,10 +43,7 @@ module.exports = {
 		// See https://github.com/WordPress/gutenberg/blob/e035f71/packages/dependency-extraction-webpack-plugin/README.md#behavior-with-scripts
 		// Unfortunately there's no "ignore" option for this rule, so it's disabled altogether.
 		'import/no-extraneous-dependencies': 'off',
-		'import/no-unresolved': [
-			'error',
-			{ ignore: GLOBALLY_AVAILABLE_PACKAGES },
-		],
+		'import/no-unresolved': [ 'error', { ignore: GLOBALLY_AVAILABLE_PACKAGES } ],
 		'import/namespace': 'off',
 		// There's a conflict with prettier here:
 		'react/jsx-curly-spacing': 'off',

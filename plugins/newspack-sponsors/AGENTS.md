@@ -1,6 +1,6 @@
 # AI agent instructions for newspack-sponsors
 
-See the workspace root `../../AGENTS.md` for Docker setup, the `n` script, coding standards, git rules, and cross-repo workflow. This file covers only what is specific to newspack-sponsors.
+See the workspace root `../../AGENTS.md` for Docker setup, the `n` script, coding standards, git rules, and cross-plugin workflow. This file covers only what is specific to newspack-sponsors.
 
 ## Core architecture
 

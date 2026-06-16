@@ -1,18 +1,16 @@
-## newspack-block-theme [1.28.3](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.2...newspack-block-theme@1.28.3) (2026-06-01)
+## newspack-block-theme [1.28.4](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.3...newspack-block-theme@1.28.4) (2026-06-15)
 
 
 ### Bug Fixes
 
-* ensure subtitle PHP file ends up in release:archive version of theme ([#444](https://github.com/Automattic/newspack-workspace/issues/444)) ([a162406](https://github.com/Automattic/newspack-workspace/commit/a1624063dccf173966f382fcb03f961cd5df8121))
-* remove italics from editor preview for subtitle block ([#446](https://github.com/Automattic/newspack-workspace/issues/446)) ([4113f2d](https://github.com/Automattic/newspack-workspace/commit/4113f2da57c7370b1334edc6f4fc9e5db02f79d0))
+* **theme:** square icon-only buttons via theme.json variations ([#452](https://github.com/Automattic/newspack-workspace/issues/452)) ([fb1493d](https://github.com/Automattic/newspack-workspace/commit/fb1493d1741a329430c8c4c4287b0d3f9f01266c))
 
-## [1.28.2-alpha.1](https://github.com/Automattic/newspack-block-theme/compare/v1.28.1...v1.28.2-alpha.1) (2026-05-21)
+## newspack-block-theme [1.28.4-alpha.1](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.3...newspack-block-theme@1.28.4-alpha.1) (2026-06-05)
 
 
 ### Bug Fixes
 
-* ensure subtitle PHP file ends up in release:archive version of theme ([#444](https://github.com/Automattic/newspack-block-theme/issues/444)) ([9dc914c](https://github.com/Automattic/newspack-block-theme/commit/9dc914cff1b7cfd5bf6a23ae1ec0ce90b59a8cf4))
-* remove italics from editor preview for subtitle block ([#446](https://github.com/Automattic/newspack-block-theme/issues/446)) ([cf91f15](https://github.com/Automattic/newspack-block-theme/commit/cf91f150523b5bcbb552f849077aa3996df912dd))
+* **theme:** square icon-only buttons via theme.json variations ([#452](https://github.com/Automattic/newspack-workspace/issues/452)) ([fb1493d](https://github.com/Automattic/newspack-workspace/commit/fb1493d1741a329430c8c4c4287b0d3f9f01266c))
 
 ## [1.28.1](https://github.com/Automattic/newspack-block-theme/compare/v1.28.0...v1.28.1) (2026-05-18)
 

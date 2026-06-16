@@ -14,9 +14,6 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Overlay_Menu_Panel_Block {
 
-	// Inline SVG for the close icon.
-	const ICON_CLOSE = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M13 11.8l6.1-6.3-1-1-6.1 6.2-6.1-6.2-1 1 6.1 6.3-6.5 6.7 1 1 6.5-6.6 6.5 6.6 1-1z"/></svg>';
-
 	/**
 	 * Initializes the block.
 	 *
@@ -74,12 +71,20 @@ final class Overlay_Menu_Panel_Block {
 			$panel_class = 'overlay-menu__panel is-layout-constrained overlay-menu__panel--' . $direction . ' overlay-menu__panel--width--' . $panel_width;
 		}
 
+		// Run user-supplied color values through `safecss_filter_attr` so
+		// `;`-delimited declaration injection is stripped (esc_attr alone wouldn't).
 		$panel_styles = [];
 		if ( $panel_bg_color ) {
-			$panel_styles[] = 'background:' . esc_attr( $panel_bg_color );
+			$safe_bg = safecss_filter_attr( 'background: ' . $panel_bg_color );
+			if ( '' !== $safe_bg ) {
+				$panel_styles[] = $safe_bg;
+			}
 		}
 		if ( $panel_text_color ) {
-			$panel_styles[] = 'color:' . esc_attr( $panel_text_color );
+			$safe_color = safecss_filter_attr( 'color: ' . $panel_text_color );
+			if ( '' !== $safe_color ) {
+				$panel_styles[] = $safe_color;
+			}
 		}
 		$extra_attributes = [
 			'id'                 => 'newspack-overlay-panel-' . $instance_id,
@@ -105,7 +110,7 @@ final class Overlay_Menu_Panel_Block {
 					class="overlay-menu__close"
 				>
 					<span class="overlay-menu__icon" aria-hidden="true">
-						<?php echo self::ICON_CLOSE; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+						<?php \Newspack\Newspack_UI_Icons::print_svg( 'close' ); ?>
 					</span>
 					<span class="screen-reader-text">
 						<?php esc_html_e( 'Close', 'newspack-plugin' ); ?>

@@ -93,6 +93,7 @@ final class Reader_Activation {
 	public static function init() {
 		\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ] );
 		\add_action( 'wp_footer', [ __CLASS__, 'render_auth_modal' ] );
+		\add_action( 'wp_footer', [ __CLASS__, 'render_verification_modal' ] );
 		\add_action( 'wp_footer', [ __CLASS__, 'render_newsletters_signup_modal' ] );
 		\add_action( 'wp_ajax_newspack_reader_activation_newsletters_signup', [ __CLASS__, 'newsletters_signup' ] );
 		\add_action( 'woocommerce_customer_reset_password', [ __CLASS__, 'login_after_password_reset' ] );
@@ -139,15 +140,17 @@ final class Reader_Activation {
 		$authenticated_email = \is_user_logged_in() && self::is_user_reader( \wp_get_current_user() ) ? \wp_get_current_user()->user_email : '';
 		$script_dependencies = [];
 		$script_data         = [
-			'auth_intention_cookie' => self::AUTH_INTENTION_COOKIE,
-			'cid_cookie'            => NEWSPACK_CLIENT_ID_COOKIE_NAME,
-			'is_logged_in'          => \is_user_logged_in(),
-			'authenticated_email'   => $authenticated_email,
-			'otp_auth_action'       => Magic_Link::OTP_AUTH_ACTION,
-			'otp_rate_interval'     => Magic_Link::RATE_INTERVAL,
-			'auth_action_result'    => Magic_Link::AUTH_ACTION_RESULT,
-			'account_url'           => function_exists( 'wc_get_account_endpoint_url' ) ? \wc_get_account_endpoint_url( 'dashboard' ) : '',
-			'is_ras_enabled'        => self::is_enabled(),
+			'auth_intention_cookie'        => self::AUTH_INTENTION_COOKIE,
+			'cid_cookie'                   => NEWSPACK_CLIENT_ID_COOKIE_NAME,
+			'is_logged_in'                 => \is_user_logged_in(),
+			'authenticated_email'          => $authenticated_email,
+			'otp_auth_action'              => Magic_Link::OTP_AUTH_ACTION,
+			'otp_rate_interval'            => Magic_Link::RATE_INTERVAL,
+			'auth_action_result'           => Magic_Link::AUTH_ACTION_RESULT,
+			'account_url'                  => function_exists( 'wc_get_account_endpoint_url' ) ? \wc_get_account_endpoint_url( 'dashboard' ) : '',
+			'is_ras_enabled'               => self::is_enabled(),
+			'require_account_verification' => self::show_post_registration_verification(),
+			'verification_url'             => \admin_url( 'admin-ajax.php' ),
 		];
 
 		$script_data = array_merge( $script_data, Reader_Registration::get_script_data() );
@@ -271,16 +274,17 @@ final class Reader_Activation {
 	private static function get_reader_activation_labels( $key = null ) {
 		if ( empty( self::$reader_activation_labels ) ) {
 			$default_labels = [
-				'title'                    => __( 'Sign in', 'newspack-plugin' ),
+				'title'                    => __( 'Sign in or register', 'newspack-plugin' ),
 				'invalid_email'            => __( 'Please enter a valid email address.', 'newspack-plugin' ),
 				'invalid_password'         => __( 'Please enter a password.', 'newspack-plugin' ),
 				'invalid_display'          => __( 'Display name cannot match your email address. Please choose a different display name.', 'newspack-plugin' ),
 				'blocked_popup'            => __( 'The popup has been blocked. Allow popups for the site and try again.', 'newspack-plugin' ),
 				'code_sent'                => __( 'Code sent! Check your inbox.', 'newspack-plugin' ),
 				'code_resent'              => __( 'Code resent! Check your inbox.', 'newspack-plugin' ),
+				'verification_error'       => __( 'Something went wrong. Please try again.', 'newspack-plugin' ),
 				'create_account'           => __( 'Create an account', 'newspack-plugin' ),
 				'signin'                   => [
-					'title'           => __( 'Sign in', 'newspack-plugin' ),
+					'title'           => __( 'Sign in or register', 'newspack-plugin' ),
 					'success_title'   => __( 'Success! You’re signed in.', 'newspack-plugin' ),
 					'success_message' => __( 'Login successful!', 'newspack-plugin' ),
 					'continue'        => __( 'Continue', 'newspack-plugin' ),
@@ -1533,16 +1537,7 @@ final class Reader_Activation {
 	 * @param boolean $in_modal Whether the form is rendiner in a modal; defaults to true.
 	 */
 	public static function render_auth_form( $in_modal = true ) {
-		/**
-		 * Filters whether to render reader auth form.
-		 *
-		 * @param bool $should_render Whether to render reader auth form.
-		 */
-		if ( ! apply_filters( 'newspack_reader_activation_should_render_auth', true ) ) {
-			return;
-		}
-		// No need to render if RAS is disabled and not a preview request.
-		if ( ! self::allow_reg_block_render() ) {
+		if ( ! self::should_render_auth_modal() ) {
 			return;
 		}
 
@@ -1581,7 +1576,6 @@ final class Reader_Activation {
 		<div class="newspack-ui newspack-reader-auth">
 			<?php if ( ! $in_modal ) { ?>
 				<h2 data-action="signin"><?php echo wp_kses_post( self::get_reader_activation_labels( 'title' ) ); ?></h2>
-				<h2 data-action="register"><?php echo wp_kses_post( self::get_reader_activation_labels( 'create_account' ) ); ?></h2>
 			<?php } ?>
 			<div class="newspack-ui__box newspack-ui__box--success newspack-ui__box--text-center" data-action="success">
 				<span class="newspack-ui__icon newspack-ui__icon--success">
@@ -1593,7 +1587,7 @@ final class Reader_Activation {
 				<p class="newspack-ui__font--xs success-description"></p>
 			</div>
 			<form method="post" target="_top" data-newspack-recaptcha="newspack_register">
-				<div data-action="signin register">
+				<div data-action="signin">
 					<?php self::render_third_party_auth(); ?>
 				</div>
 				<input type="hidden" name="<?php echo \esc_attr( self::AUTH_FORM_ACTION ); ?>" value="1" />
@@ -1604,7 +1598,7 @@ final class Reader_Activation {
 				<p data-action="otp">
 					<label><?php echo esc_html( $labels['otp_title'] ); ?></label>
 				</p>
-				<div data-action="signin register">
+				<div data-action="signin">
 					<p>
 						<label for="newspack-reader-auth-email-input"><?php esc_html_e( 'Email address', 'newspack-plugin' ); ?></label>
 						<input id="newspack-reader-auth-email-input" name="npe" type="email" placeholder="<?php \esc_attr_e( 'Your email address', 'newspack-plugin' ); ?>" />
@@ -1636,13 +1630,13 @@ final class Reader_Activation {
 					);
 					?>
 				</p>
-				<button type="submit" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--primary" data-action="register signin pwd otp"><?php echo \esc_html( $labels['continue'] ); ?></button>
-				<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--secondary" data-action="otp" data-resend-code><?php echo \esc_html( $labels['resend_code'] ); ?></button>
-				<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--secondary" data-action="pwd" data-send-code><?php echo \esc_html( $labels['otp'] ); ?></button>
-				<a class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--secondary" data-action="pwd" href="<?php echo \esc_url( \wp_lostpassword_url() ); ?>"><?php echo \esc_html( $labels['forgot_password'] ); ?></a>
-				<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--ghost newspack-ui__last-child" data-action="signin" data-set-action="register"><?php echo \esc_html( $labels['create_account'] ); ?></button>
-				<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--ghost newspack-ui__last-child" data-action="register" data-set-action="signin"><?php echo \esc_html( $labels['register'] ); ?></button>
-				<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--ghost newspack-ui__last-child" data-action="otp pwd"  data-back><?php echo \esc_html( $labels['go_back'] ); ?></button>
+				<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-2 newspack-ui__spacing-top--5" data-action="signin pwd otp">
+					<button type="submit" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--primary" data-action="signin pwd otp"><?php echo \esc_html( $labels['continue'] ); ?></button>
+					<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--secondary" data-action="otp" data-resend-code><?php echo \esc_html( $labels['resend_code'] ); ?></button>
+					<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--secondary" data-action="pwd" data-send-code><?php echo \esc_html( $labels['otp'] ); ?></button>
+					<a class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--secondary" data-action="pwd" href="<?php echo \esc_url( \wp_lostpassword_url() ); ?>"><?php echo \esc_html( $labels['forgot_password'] ); ?></a>
+					<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--ghost" data-action="otp pwd" data-back><?php echo \esc_html( $labels['go_back'] ); ?></button>
+				</div>
 			</form>
 			<a href="<?php echo \esc_url( $auth_callback_url ); ?>" class="auth-callback newspack-ui__button newspack-ui__button--wide newspack-ui__button--primary" data-action="success"><?php echo \esc_html( $labels['continue'] ); ?></a>
 			<a href="#" class="set-password newspack-ui__button newspack-ui__button--wide newspack-ui__button--secondary" data-action="success"><?php echo \esc_html( $labels['set_password'] ); ?></a>
@@ -1651,19 +1645,30 @@ final class Reader_Activation {
 	}
 
 	/**
-	 * Renders reader authentication modal.
+	 * Whether the reader authentication modal should be rendered.
+	 *
+	 * @return bool
 	 */
-	public static function render_auth_modal() {
+	private static function should_render_auth_modal() {
 		/**
 		 * Filters whether to render reader auth form.
 		 *
 		 * @param bool $should_render Whether to render reader auth form.
 		 */
-		if ( ! apply_filters( 'newspack_reader_activation_should_render_auth', true ) ) {
-			return;
-		}
+		$should_render = apply_filters( 'newspack_reader_activation_should_render_auth', true );
+
 		// No need to render if RAS is disabled and not a preview request.
 		if ( ! self::allow_reg_block_render() ) {
+			$should_render = false;
+		}
+		return $should_render;
+	}
+
+	/**
+	 * Renders reader authentication modal.
+	 */
+	public static function render_auth_modal() {
+		if ( ! self::should_render_auth_modal() ) {
 			return;
 		}
 
@@ -1684,13 +1689,67 @@ final class Reader_Activation {
 					<?php self::render_auth_form(); ?>
 				</div>
 				<?php if ( ! empty( $terms ) ) : ?>
-					<footer class="newspack-ui__modal__footer" data-action="signin register">
+					<footer class="newspack-ui__modal__footer" data-action="signin">
 						<p>
 							<?php echo wp_kses_post( trim( $terms ) ); ?>
 						</p>
 					</footer>
 				<?php endif; ?>
 			</div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Render the post-registration verification modal.
+	 *
+	 * @return void
+	 */
+	public static function render_verification_modal() {
+		if ( ! self::should_render_auth_modal() || ! self::show_post_registration_verification() ) {
+			return;
+		}
+
+		$email = '%EMAIL%';
+		if ( \is_user_logged_in() ) {
+			$current_user = \wp_get_current_user();
+			$email = $current_user->user_email;
+		}
+		ob_start();
+		?>
+		<div class="newspack-ui__box newspack-ui__box--text-center">
+			<span class="newspack-ui__icon newspack-ui__icon--neutral">
+				<?php Newspack_UI_Icons::print_svg( 'login' ); ?>
+			</span>
+			<p>
+				<?php
+				printf(
+					// translators: %s is the user's email address.
+					esc_html__( 'We\'ll send a verification code to %s.', 'newspack-plugin' ),
+					'<strong class="email-address">' . esc_html( $email ) . '</strong>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+				);
+				?>
+			</p>
+		</div>
+		<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide" data-send-otp>
+			<?php esc_html_e( 'Send code', 'newspack-plugin' ); ?>
+		</button>
+		<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close">
+			<?php esc_html_e( 'Go back', 'newspack-plugin' ); ?>
+		</button>
+		<?php
+		$content = ob_get_clean();
+		?>
+		<div class="newspack-ui newspack__reader-verification">
+			<?php
+			\Newspack\Newspack_UI::generate_modal(
+				[
+					'id'      => 'newspack-reader-verification',
+					'title'   => __( 'Verify your email', 'newspack-plugin' ),
+					'content' => $content,
+				]
+			);
+			?>
 		</div>
 		<?php
 	}
@@ -1727,14 +1786,18 @@ final class Reader_Activation {
 					<input type="hidden" name="<?php echo \esc_attr( self::NEWSLETTERS_SIGNUP_FORM_ACTION ); ?>" value="1" />
 					<input type="hidden" name="email_address" value="<?php echo esc_attr( $email_address ); ?>" />
 
-					<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-2 overflow-hidden position-relative newsletter-list-container" data-list-default-size="<?php echo esc_attr( $default_list_size ); ?>">
+					<?php $has_overflow = count( $newsletters_lists ) > (int) $default_list_size; ?>
+					<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-2 overflow-hidden position-relative newsletter-list-container">
 					<?php
 					foreach ( $newsletters_lists as $list ) {
-						$checkbox_id = sprintf( 'newspack-plugin-list-%s', $list['id'] );
-						$is_hidden   = $loop_index <= $default_list_size ? '' : 'hidden';
+						$checkbox_id   = sprintf( 'newspack-plugin-list-%s', $list['id'] );
+						$is_peek       = $loop_index === (int) $default_list_size;
+						$is_hidden     = $loop_index > (int) $default_list_size;
+						$label_classes = 'newspack-ui__input-card' . ( $is_hidden ? ' hidden' : '' );
+						$label_inert   = ( $is_peek || $is_hidden ) ? ' inert' : '';
 						$loop_index++;
 						?>
-						<label class="newspack-ui__input-card <?php echo esc_attr( $is_hidden ); ?>" for="<?php echo \esc_attr( $checkbox_id ); ?>">
+						<label class="<?php echo esc_attr( $label_classes ); ?>" for="<?php echo \esc_attr( $checkbox_id ); ?>"<?php echo esc_attr( $label_inert ); ?>>
 							<input
 								type="checkbox"
 								name="lists[]"
@@ -1752,17 +1815,15 @@ final class Reader_Activation {
 							<?php endif; ?>
 						</label>
 						<?php
-						if ( $loop_index === (int) $default_list_size && count( $newsletters_lists ) > $default_list_size ) :
-							?>
-							<div class="newspack-ui__gradient-divider"></div>
-							<?php
-						endif;
 					}
 					?>
+					<?php if ( $has_overflow ) : ?>
+						<div class="newspack-ui__gradient-divider"></div>
+					<?php endif; ?>
 					</div>
 
 					<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-2 newspack-ui__spacing-top--5">
-						<?php if ( count( $newsletters_lists ) > $default_list_size ) : ?>
+						<?php if ( $has_overflow ) : ?>
 							<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--secondary see-all-button" aria-label="<?php esc_attr_e( 'See all newsletters', 'newspack-plugin' ); ?>">
 								<span aria-hidden="true"><?php esc_html_e( 'See all', 'newspack-plugin' ); ?></span>
 								<?php Newspack_UI_Icons::print_svg( 'chevronDownSmall' ); ?>
@@ -2104,6 +2165,24 @@ final class Reader_Activation {
 			);
 		}
 
+		if ( ! in_array( $action, self::AUTH_FORM_OPTIONS, true ) ) {
+			return self::send_auth_form_response( new \WP_Error( 'invalid_request', __( 'Invalid request.', 'newspack-plugin' ) ) );
+		}
+
+		if ( empty( $email ) ) {
+			return self::send_auth_form_response( new \WP_Error( 'invalid_email', __( 'You must enter a valid email address.', 'newspack-plugin' ) ) );
+		}
+
+		$user = \get_user_by( 'email', $email );
+
+		// The auth form has a single entry point: a 'signin' submission with an unknown email
+		// is treated as a registration so the reader doesn't have to pick between two flows.
+		// This conversion must happen BEFORE the captcha check below so the captcha runs server-side
+		// for the unified form's new-email path (the frontend already solves the captcha for it).
+		if ( 'signin' === $action && ! $user ) {
+			$action = 'register';
+		}
+
 		// reCAPTCHA test on account registration only.
 		$should_verify_captcha = apply_filters( 'newspack_recaptcha_verify_captcha', Recaptcha::can_use_captcha(), $current_page_url, 'auth_modal' );
 		if ( 'register' === $action && $should_verify_captcha ) {
@@ -2113,23 +2192,14 @@ final class Reader_Activation {
 			}
 		}
 
-		if ( ! in_array( $action, self::AUTH_FORM_OPTIONS, true ) ) {
-			return self::send_auth_form_response( new \WP_Error( 'invalid_request', __( 'Invalid request.', 'newspack-plugin' ) ) );
-		}
-
-		if ( empty( $email ) ) {
-			return self::send_auth_form_response( new \WP_Error( 'invalid_email', __( 'You must enter a valid email address.', 'newspack-plugin' ) ) );
-		}
-
 		self::set_auth_intention_cookie( $email );
 
-		$user = \get_user_by( 'email', $email );
 		if ( ! $user && 'register' !== $action ) {
-			return self::send_auth_form_response( new \WP_Error( 'unauthorized', wp_kses_post( __( 'Account not found. <a data-set-action="register" href="#register_modal">Create an account</a> instead?', 'newspack-plugin' ) ) ) );
+			return self::send_auth_form_response( new \WP_Error( 'unauthorized', __( 'Account not found.', 'newspack-plugin' ) ) );
 		}
 
 		if ( $user && ! self::is_user_reader( $user ) ) {
-			$message = 'register' === $action ? __( 'An account was already registered with this email. Please check your inbox for an authentication link.', 'newspack-plugin' ) : wp_kses_post( __( 'Account not found. <a data-set-action="register" href="#register_modal">Create an account</a> instead?', 'newspack-plugin' ) );
+			$message = 'register' === $action ? __( 'An account was already registered with this email. Please check your inbox for an authentication link.', 'newspack-plugin' ) : __( 'Account not found.', 'newspack-plugin' );
 			$sent = self::send_non_reader_login_reminder( $user );
 			return self::send_auth_form_response( new \WP_Error( 'unauthorized', \is_wp_error( $sent ) ? $sent->get_error_message() : $message ) );
 		}
@@ -2225,6 +2295,9 @@ final class Reader_Activation {
 
 				$payload['registered']    = 1;
 				$payload['authenticated'] = 1;
+
+				// Surface verification state so the frontend can trigger the post-registration verification flow.
+				$payload = array_merge( $payload, self::get_verification_payload( $user_id ) );
 				break;
 		}
 
@@ -2270,6 +2343,67 @@ final class Reader_Activation {
 	}
 
 	/**
+	 * Get the verification payload for a freshly registered/authenticated reader.
+	 *
+	 * Returns the fields the frontend needs to decide whether to trigger the
+	 * post-registration verification modal and, if so, to send the OTP request.
+	 * Intended for use by any registration entry point (auth modal, registration
+	 * block, newsletters subscribe block, etc.) so they share a single source of
+	 * truth for the verification contract.
+	 *
+	 * The return shape is stable: both keys are always present. `verified` is null when the
+	 * user is invalid or not a reader; `verification_nonce` is an empty string when no
+	 * verification flow should be triggered. This lets cross-plugin consumers consume the
+	 * fields without `isset()` ladders.
+	 *
+	 * @param \WP_User|int $user_or_id The user (or user ID) to inspect.
+	 * @return array {
+	 *     @type bool|null $verified           Whether the reader's email is already verified.
+	 *                                         Null when the user is invalid or not a reader.
+	 *     @type string    $verification_nonce Nonce for the verification OTP request, or an
+	 *                                         empty string when no verification flow should run
+	 *                                         (already verified, not a reader, or the post-
+	 *                                         registration verification feature is disabled).
+	 * }
+	 */
+	public static function get_verification_payload( $user_or_id ) {
+		$user = $user_or_id instanceof \WP_User ? $user_or_id : \get_user_by( 'id', (int) $user_or_id );
+		if ( ! $user instanceof \WP_User || ! self::is_user_reader( $user ) ) {
+			return [
+				'verified'           => null,
+				'verification_nonce' => '',
+			];
+		}
+		$verified           = self::is_reader_verified( $user );
+		$verification_nonce = '';
+		if ( ! $verified && self::show_post_registration_verification() ) {
+			$verification_nonce = \wp_create_nonce( 'newspack_reader_registration_verification' );
+		}
+		return [
+			'verified'           => $verified,
+			'verification_nonce' => $verification_nonce,
+		];
+	}
+
+	/**
+	 * Whether to show the post-registration flow for account verification.
+	 *
+	 * @return bool Whether to show the verification flow after registering a new reader account.
+	 */
+	public static function show_post_registration_verification() {
+		$current_user = \wp_get_current_user();
+		$should_show  = ! is_user_logged_in() || ( self::is_user_reader( $current_user ) && ! self::is_reader_verified( $current_user ) );
+
+		/**
+		 * Whether to show the verification flow after registering a new reader account.
+		 * This lets new readers verify immediately rather than waiting for them to visit My Account.
+		 *
+		 * @param bool $show_pending_verification If true, show the post-registration verification flow.
+		 */
+		return apply_filters( 'newspack_show_post_registration_verification', $should_show );
+	}
+
+	/**
 	 * Authenticate a reader session given its user ID.
 	 *
 	 * Warning: this method will only verify if the user is a reader in order to
@@ -2280,6 +2414,7 @@ final class Reader_Activation {
 	 * @return \WP_User|\WP_Error The authenticated reader or WP_Error if authentication failed.
 	 */
 	public static function set_current_reader( $user_or_user_id ) {
+		$user = null;
 		if ( $user_or_user_id instanceof \WP_User ) {
 			$user = $user_or_user_id;
 		} elseif ( absint( $user_or_user_id ) ) {
