@@ -63,6 +63,44 @@ class Editor_Bootstrap {
 		// rendering mode) with the package's email defaults. Re-assert the canonical
 		// definition at a later priority so Newspack's registration stays authoritative.
 		add_action( 'init', [ \Newspack_Newsletters::class, 'register_cpt' ], 11 );
+
+		// Inject per-newsletter theme colors at render time. See merge_theme_json().
+		add_filter( 'woocommerce_email_editor_theme_json', [ __CLASS__, 'merge_theme_json' ] );
+	}
+
+	/**
+	 * Merge per-newsletter theme colors into the editor theme at render time.
+	 *
+	 * ThemeController applies the `woocommerce_email_editor_theme_json` filter
+	 * with no post argument, so resolve the render post from Renderer_Controller
+	 * first (set during render_wc), falling back to the global $post only when not
+	 * actively rendering.
+	 *
+	 * The built WP_Theme_JSON is memoized per post: get_theme() — and therefore
+	 * this filter — fires several times during one render, and WP_Theme_JSON::merge()
+	 * reads but never mutates its argument, so the cached instance is safe to reuse.
+	 * The cache is request-scoped (static) and a newsletter's color meta is stable
+	 * within a single render.
+	 *
+	 * @param \WP_Theme_JSON $theme The editor theme being assembled.
+	 * @return \WP_Theme_JSON The theme with per-newsletter colors merged in.
+	 */
+	public static function merge_theme_json( $theme ) {
+		$post = Renderer_Controller::get_rendering_post();
+		if ( ! $post ) {
+			$post = get_post();
+		}
+		if ( ! $post || \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT !== $post->post_type ) {
+			return $theme;
+		}
+
+		static $cache = [];
+		if ( ! isset( $cache[ $post->ID ] ) ) {
+			$cache[ $post->ID ] = new \WP_Theme_JSON( Theme_Json_Builder::build( $post ), 'default' );
+		}
+
+		$theme->merge( $cache[ $post->ID ] );
+		return $theme;
 	}
 
 	/**
