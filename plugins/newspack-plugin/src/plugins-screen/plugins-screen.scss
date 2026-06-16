@@ -21,7 +21,7 @@ table.plugins {
 	display: flex;
 	justify-content: center;
 	align-items: center;
-	background: rgba(0, 0, 0, 0.5);
+	background: rgba(wp-colors.$black, 0.35);
 	&--hidden {
 		display: none;
 	}

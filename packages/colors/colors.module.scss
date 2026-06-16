@@ -156,6 +156,8 @@ $neutral-900--rgb: to-rgb($neutral-900);
 $neutral-1000--rgb: to-rgb($neutral-1000);
 
 // Overlay: Hex
+// Stepped black scrim ramp, deliberately spanning 5%–95% alpha — never fully
+// transparent or fully opaque. For solid black, use $neutral-1000 instead.
 $overlay-000: #0000000d;
 $overlay-050: #0000001a;
 $overlay-100: #00000026;
