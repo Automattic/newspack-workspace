@@ -51,16 +51,27 @@ class Agent_Access_Scope {
 			return $result; // Short-circuited upstream — don't interfere.
 		}
 
-		// Only enforce on write methods.
-		$method = strtoupper( $request->get_method() );
-		if ( in_array( $method, array( 'GET', 'HEAD', 'OPTIONS' ), true ) ) {
-			return $result;
-		}
+		$method   = strtoupper( $request->get_method() );
+		$is_write = ! in_array( $method, array( 'GET', 'HEAD', 'OPTIONS' ), true );
 
 		// Only enforce on authenticated agent requests.
 		$template_key = self::get_scope_for_current_request();
 		if ( null === $template_key ) {
 			return $result; // Not an agent request, or no scope set.
+		}
+
+		// For read_only scope, block all writes regardless of route.
+		if ( 'read_only' === $template_key && $is_write ) {
+			return new WP_Error(
+				'agent_scope_violation',
+				__( 'This agent credential is read-only. Write operations are not permitted.', 'botcreds-agent-access' ),
+				array( 'status' => 403 )
+			);
+		}
+
+		// For non-read_only scopes, pass GET/HEAD/OPTIONS through.
+		if ( ! $is_write ) {
+			return $result;
 		}
 
 		// 'full' scope — no route restriction.
@@ -260,6 +271,12 @@ class Agent_Access_Scope {
 				'description' => __( 'All write operations permitted by the user\'s WP role. Use with care.', 'botcreds-agent-access' ),
 				'routes'      => array( '*' ),
 				'methods'     => array( 'POST', 'PUT', 'PATCH', 'DELETE' ),
+			),
+			'read_only'   => array(
+				'label'       => __( 'Read only', 'botcreds-agent-access' ),
+				'description' => __( 'Read any content (GET requests only). All write operations are blocked.', 'botcreds-agent-access' ),
+				'routes'      => array( '*' ),
+				'methods'     => array(), // No write methods permitted.
 			),
 		);
 	}

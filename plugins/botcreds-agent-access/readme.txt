@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.7
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.2.0
+Stable tag: 2.2.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -75,6 +75,9 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.2.3 =
+* Add read-only scope template for agents that should never write
 
 = 2.1.20 =
 * New: Built-in **Agent** WordPress role. Create dedicated AI agent user accounts and assign them the Agent role — they appear with a clear Agent badge in the Connections dashboard. Default capabilities: publish posts/pages, upload media, manage categories. No access to site settings or user management. Capabilities can be further tuned with any role-management plugin.
