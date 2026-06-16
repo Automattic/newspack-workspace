@@ -40,7 +40,7 @@ class Editor_Bootstrap {
 	 * @return void
 	 */
 	public static function init() {
-		if ( ! class_exists( Email_Editor_Container::class ) ) {
+		if ( ! class_exists( Email_Editor_Container::class ) || ! class_exists( Bootstrap::class ) ) {
 			return;
 		}
 
@@ -76,7 +76,10 @@ class Editor_Bootstrap {
 	 * @return Templates_Registry The templates registry instance.
 	 */
 	public static function register_template( $registry ) {
-		$content = (string) file_get_contents( __DIR__ . '/templates/newspack-newsletter.html' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reading a bundled plugin template file, not a remote resource.
+		$content = file_get_contents( __DIR__ . '/templates/newspack-newsletter.html' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Reading a bundled plugin template file, not a remote resource.
+		if ( false === $content ) {
+			return $registry;
+		}
 
 		$template = new Template(
 			self::TEMPLATE_NAMESPACE,
