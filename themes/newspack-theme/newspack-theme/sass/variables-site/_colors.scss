@@ -45,4 +45,8 @@
 	--newspack-theme-color-alert-yellow: #dba617;
 	--newspack-theme-color-alert-red: #d63638;
 	--newspack-theme-color-alert-green: #008a20;
+
+	// Ads
+	--newspack-ads-sticky-bg: var( --newspack-theme-color-bg-body );
+	--newspack-ads-sticky-text: var( --newspack-theme-color-text-main );
 }

@@ -1,3 +1,31 @@
+## newspack [6.42.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.7...newspack@6.42.8) (2026-06-15)
+
+
+### Bug Fixes
+
+* **content-gate:** cascade taxonomy content rules to child terms (NPPD-1670, [#283](https://github.com/Automattic/newspack-workspace/issues/283)) ([12dcbab](https://github.com/Automattic/newspack-workspace/commit/12dcbab5bcba286100ca8d6f8373b912451d829a))
+
+## newspack [6.42.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.6...newspack@6.42.7) (2026-06-11)
+
+
+### Bug Fixes
+
+* **co-authors-plus:** dedup count_user_posts for linked guest authors ([#149](https://github.com/Automattic/newspack-workspace/issues/149)) ([3e577bf](https://github.com/Automattic/newspack-workspace/commit/3e577bff6b1a92277d42a8afb3085e803f8b1503))
+
+## newspack [6.42.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.5...newspack@6.42.6) (2026-06-09)
+
+
+### Bug Fixes
+
+* **access-control:** make email domain matching case-insensitive ([#255](https://github.com/Automattic/newspack-workspace/issues/255)) ([c410158](https://github.com/Automattic/newspack-workspace/commit/c4101587227801514f4e078652876677e5bde7b8))
+
+## newspack [6.42.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.4...newspack@6.42.5) (2026-06-09)
+
+
+### Bug Fixes
+
+* **access-control:** populate GA4 group metadata for anonymous readers ([#254](https://github.com/Automattic/newspack-workspace/issues/254)) ([b7adf8f](https://github.com/Automattic/newspack-workspace/commit/b7adf8f0ecc3fbe8660e0c2125c419331d0dc8c5))
+
 ## newspack [6.42.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.3...newspack@6.42.4) (2026-06-04)
 
 

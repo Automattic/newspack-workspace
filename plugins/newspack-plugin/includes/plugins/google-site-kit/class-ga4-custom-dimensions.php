@@ -346,61 +346,6 @@ final class GA4_Custom_Dimensions {
 	}
 
 	/**
-	 * List the parameter names of every EVENT-scoped custom dimension currently
-	 * registered on the connected GA4 property.
-	 *
-	 * Scoped to EVENT dimensions specifically because the Data API references
-	 * those as `customEvent:<param>` (USER-scoped dimensions are `customUser:`),
-	 * so callers checking a `customEvent:` reference must not be satisfied by a
-	 * same-named USER-scoped dimension.
-	 *
-	 * Unlike status(), this returns the full event-scoped set actually present
-	 * on the property — not just the intersection with Newspack's standard set —
-	 * so callers can authoritatively check whether an arbitrary `customEvent:`
-	 * dimension (e.g. `post_id`) is available before querying the Data API.
-	 *
-	 * Reuses the same Newspack-OAuth-then-Site-Kit auth fallback as the rest of
-	 * this class.
-	 *
-	 * @param string|null $property_id GA4 property ID to list dimensions for. When
-	 *                                 null (default), resolves Site Kit's configured
-	 *                                 property. Pass an explicit ID so the Admin API
-	 *                                 lookup matches the Data API property being
-	 *                                 queried (the lists can differ per property).
-	 *
-	 * @return string[]|\WP_Error Registered event-scoped parameter names, or
-	 *                            WP_Error if the property or Admin API can't be reached.
-	 */
-	public static function get_registered_parameter_names( ?string $property_id = null ) {
-		$property_id = $property_id ?? self::get_property_id();
-		if ( ! $property_id ) {
-			return new \WP_Error( 'newspack_ga4_dimensions', 'No GA4 property ID configured in Site Kit.' );
-		}
-
-		$existing = self::with_admin_client(
-			function ( $client, $source ) use ( $property_id ) {
-				try {
-					return $client->list_custom_dimensions( $property_id );
-				} catch ( \Throwable $e ) {
-					return new \WP_Error( 'newspack_ga4_dimensions', 'Failed listing custom dimensions: ' . $e->getMessage() );
-				}
-			}
-		);
-		if ( is_wp_error( $existing ) ) {
-			return $existing;
-		}
-
-		$event_scoped = array_filter(
-			$existing,
-			function ( $dimension ) {
-				return isset( $dimension['scope'] ) && 'EVENT' === $dimension['scope'];
-			}
-		);
-
-		return array_values( array_filter( array_column( $event_scoped, 'parameterName' ) ) );
-	}
-
-	/**
 	 * Provision Newspack's standard GA4 custom dimensions.
 	 *
 	 * Idempotent: existing dimensions on the property are detected by

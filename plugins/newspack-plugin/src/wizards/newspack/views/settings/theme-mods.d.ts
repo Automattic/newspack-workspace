@@ -110,9 +110,10 @@ interface AdvancedSettings {
 	show_author_email: boolean;
 	author_bio_length: number;
 
-	// Default Featured Image and Post Template.
+	// Default Featured Image and Post/Page Template.
 	featured_image_default: string;
 	post_template_default: string;
+	page_template_default: string;
 
 	// Featured Image and Post Template for All Posts.
 	featured_image_all_posts: string;
@@ -149,6 +150,7 @@ interface AdvancedSettings {
 		all: boolean;
 		archives: boolean;
 		feeds: boolean;
+		feed_terms: boolean;
 		tag_links: boolean;
 		tag_clouds: boolean;
 		css_classes: boolean;

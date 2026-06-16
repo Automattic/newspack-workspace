@@ -25,6 +25,8 @@ import * as overlayMenu from './overlay-menu';
 import * as overlayMenuTrigger from './overlay-menu/trigger';
 import * as overlayMenuPanel from './overlay-menu/panel';
 import * as overlaySearch from './overlay-search';
+import * as responsiveContainer from './responsive-container';
+import * as responsiveContainerBreakpoint from './responsive-container/breakpoint';
 
 /**
  * Block Scripts
@@ -49,6 +51,8 @@ export const blocks = [
 	overlayMenuTrigger,
 	overlayMenuPanel,
 	overlaySearch,
+	responsiveContainer,
+	responsiveContainerBreakpoint,
 ];
 
 const readerActivationBlocks = [ 'newspack/reader-registration', 'newspack/my-account-button' ];
@@ -67,7 +71,10 @@ const blockThemeBlocks = [
 	'newspack/overlay-menu-panel',
 	'newspack/my-account-button',
 	'newspack/overlay-search',
+	'newspack/responsive-container',
+	'newspack/responsive-container-breakpoint',
 ];
+const siteEditorOnlyBlocks = [ 'newspack/responsive-container', 'newspack/responsive-container-breakpoint' ];
 
 /**
  * Function to register an individual block.
@@ -100,6 +107,10 @@ const registerBlock = block => {
 	}
 	/** Do not register block theme blocks if not using a block theme. */
 	if ( blockThemeBlocks.includes( name ) && ! newspack_blocks.is_block_theme ) {
+		return;
+	}
+	/** Do not register Site Editor-only blocks outside the Site Editor. */
+	if ( siteEditorOnlyBlocks.includes( name ) && window.pagenow !== 'site-editor' ) {
 		return;
 	}
 

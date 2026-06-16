@@ -1,3 +1,10 @@
+## newspack-network [2.20.3](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.2...newspack-network@2.20.3) (2026-06-11)
+
+
+### Bug Fixes
+
+* **network:** preserve node future schedule on origin publish re-sync ([#222](https://github.com/Automattic/newspack-workspace/issues/222)) ([888b5d8](https://github.com/Automattic/newspack-workspace/commit/888b5d82f2dd2fdf9a989d0017fdc9be69208f61))
+
 ## newspack-network [2.20.2](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.1...newspack-network@2.20.2) (2026-06-01)
 
 

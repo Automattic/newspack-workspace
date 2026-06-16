@@ -25,72 +25,107 @@ class Newspack_Walker_Comment extends Walker_Comment {
 
 		$tag = ( 'div' === $args['style'] ) ? 'div' : 'li';
 
+		$comment_meta = '';
+		$_meta_level  = ob_get_level();
+		try {
+			ob_start();
+			?>
+		<footer class="comment-meta">
+			<div class="comment-author vcard">
+				<?php
+				$comment_author_url = get_comment_author_url( $comment );
+				$avatar             = get_avatar( $comment, $args['avatar_size'] );
+				if ( 0 !== $args['avatar_size'] ) {
+					if ( empty( $comment_author_url ) ) {
+						echo wp_kses_post( $avatar );
+					} else {
+						printf( '<a href="%s" rel="external nofollow" class="url">', esc_url( $comment_author_url ) );
+						echo wp_kses_post( $avatar );
+					}
+				}
+
+				printf(
+					wp_kses(
+						/* translators: %s: comment author link */
+						__( '%s <span class="screen-reader-text says">says:</span>', 'newspack-theme' ),
+						array(
+							'span' => array(
+								'class' => array(),
+							),
+						)
+					),
+					'<b class="fn">' . get_comment_author_link( $comment ) . '</b>'
+				);
+
+				/* Display icon if the commenter is the current post's author. */
+				if ( newspack_is_comment_by_post_author( $comment ) ) {
+					printf( '<span class="post-author-badge" aria-hidden="true">%s</span>', wp_kses( newspack_get_icon_svg( 'person', 24, esc_html__( 'Article author', 'newspack-theme' ) ), newspack_sanitize_svgs() ) );
+				}
+
+				if ( ! empty( $comment_author_url ) ) {
+					echo '</a>';
+				}
+				?>
+			</div><!-- .comment-author -->
+
+			<div class="comment-metadata">
+				<a href="<?php echo esc_url( get_comment_link( $comment, $args ) ); ?>">
+					<?php
+						/* translators: 1: comment date, 2: comment time */
+						$comment_timestamp = sprintf( __( '%1$s at %2$s', 'newspack-theme' ), get_comment_date( '', $comment ), get_comment_time() );
+					?>
+					<time datetime="<?php comment_time( 'c' ); ?>" title="<?php echo esc_attr( $comment_timestamp ); ?>">
+						<?php echo esc_html( $comment_timestamp ); ?>
+					</time>
+				</a>
+				<?php
+					$edit_comment_icon = newspack_get_icon_svg( 'edit', 16 );
+					edit_comment_link( __( 'Edit', 'newspack-theme' ), '<span class="edit-link-sep">&mdash;</span> <span class="edit-link">' . $edit_comment_icon, '</span>' );
+				?>
+			</div><!-- .comment-metadata -->
+
+			<?php if ( '0' === $comment->comment_approved ) : ?>
+			<p class="comment-awaiting-moderation"><?php esc_html_e( 'Your comment is awaiting moderation.', 'newspack-theme' ); ?></p>
+			<?php endif; ?>
+		</footer><!-- .comment-meta -->
+		<?php
+			$comment_meta = ob_get_clean();
+		} finally {
+			while ( ob_get_level() > $_meta_level ) {
+				ob_end_clean();
+			}
+		}
+
+		$comment_content = '';
+		$_content_level  = ob_get_level();
+		try {
+			ob_start();
+			?>
+		<div class="comment-content">
+			<?php comment_text(); ?>
+		</div><!-- .comment-content -->
+		<?php
+			$comment_content = ob_get_clean();
+		} finally {
+			while ( ob_get_level() > $_content_level ) {
+				ob_end_clean();
+			}
+		}
+
+		$comment_meta_position = get_theme_mod( 'comment_meta_position', 'above' );
+
 		?>
 		<<?php echo esc_html( $tag ); ?> id="comment-<?php comment_ID(); ?>" <?php comment_class( $this->has_children ? 'parent' : '', $comment ); ?>>
 			<article id="div-comment-<?php comment_ID(); ?>" class="comment-body">
-				<footer class="comment-meta">
-					<div class="comment-author vcard">
-						<?php
-						$comment_author_url = get_comment_author_url( $comment );
-						$avatar             = get_avatar( $comment, $args['avatar_size'] );
-						if ( 0 !== $args['avatar_size'] ) {
-							if ( empty( $comment_author_url ) ) {
-								echo wp_kses_post( $avatar );
-							} else {
-								printf( '<a href="%s" rel="external nofollow" class="url">', esc_url( $comment_author_url ) );
-								echo wp_kses_post( $avatar );
-							}
-						}
-
-						printf(
-							wp_kses(
-								/* translators: %s: comment author link */
-								__( '%s <span class="screen-reader-text says">says:</span>', 'newspack-theme' ),
-								array(
-									'span' => array(
-										'class' => array(),
-									),
-								)
-							),
-							'<b class="fn">' . get_comment_author_link( $comment ) . '</b>'
-						);
-
-						/* Display icon if the commenter is the current post's author. */
-						if ( newspack_is_comment_by_post_author( $comment ) ) {
-							printf( '<span class="post-author-badge" aria-hidden="true">%s</span>', wp_kses( newspack_get_icon_svg( 'person', 24, esc_html__( 'Article author', 'newspack-theme' ) ), newspack_sanitize_svgs() ) );
-						}
-
-						if ( ! empty( $comment_author_url ) ) {
-							echo '</a>';
-						}
-						?>
-					</div><!-- .comment-author -->
-
-					<div class="comment-metadata">
-						<a href="<?php echo esc_url( get_comment_link( $comment, $args ) ); ?>">
-							<?php
-								/* translators: 1: comment date, 2: comment time */
-								$comment_timestamp = sprintf( __( '%1$s at %2$s', 'newspack-theme' ), get_comment_date( '', $comment ), get_comment_time() );
-							?>
-							<time datetime="<?php comment_time( 'c' ); ?>" title="<?php echo esc_attr( $comment_timestamp ); ?>">
-								<?php echo esc_html( $comment_timestamp ); ?>
-							</time>
-						</a>
-						<?php
-							$edit_comment_icon = newspack_get_icon_svg( 'edit', 16 );
-							edit_comment_link( __( 'Edit', 'newspack-theme' ), '<span class="edit-link-sep">&mdash;</span> <span class="edit-link">' . $edit_comment_icon, '</span>' );
-						?>
-					</div><!-- .comment-metadata -->
-
-					<?php if ( '0' === $comment->comment_approved ) : ?>
-					<p class="comment-awaiting-moderation"><?php esc_html_e( 'Your comment is awaiting moderation.', 'newspack-theme' ); ?></p>
-					<?php endif; ?>
-				</footer><!-- .comment-meta -->
-
-				<div class="comment-content">
-					<?php comment_text(); ?>
-				</div><!-- .comment-content -->
-
+				<?php
+				if ( 'above' === $comment_meta_position ) {
+					echo wp_kses_post( $comment_meta );
+					echo wp_kses_post( $comment_content );
+				} else {
+					echo wp_kses_post( $comment_content );
+					echo wp_kses_post( $comment_meta );
+				}
+				?>
 			</article><!-- .comment-body -->
 
 			<?php

@@ -15,9 +15,18 @@
 }
 
 .newspack_global_ad {
+	align-items: center;
 	clear: both;
+	display: flex;
+	justify-content: center;
 	max-width: 100%;
 	flex: 1 1 auto;
+
+	> * {
+		margin-top: 16px;
+		margin-bottom: 16px;
+	}
+
 	&.fixed-height {
 		padding: 16px 0;
 		box-sizing: content-box;
@@ -25,6 +34,114 @@
 			margin: 0;
 		}
 	}
+
+	// Sticky footer ad styles.
+	&.sticky {
+		background-color: var(--newspack-ads-sticky-bg, #fff);
+		box-shadow: 0 0 5px 0 rgba(0, 0, 0, 0.2);
+		bottom: 0;
+		display: none;
+		position: fixed;
+		width: 100%;
+		z-index: 11;
+
+		button {
+			align-items: center;
+			background-color: var(--newspack-ads-sticky-bg, #fff);
+			border-radius: 0.75rem 0 0;
+			box-shadow: 0 -1px 1px 0 rgba(0, 0, 0, 0.2);
+			color: var(--newspack-ads-sticky-text, #111);
+			display: flex;
+			font-size: 1.25rem;
+			height: 1.75rem;
+			justify-content: center;
+			padding: 0;
+			position: absolute;
+			right: 0;
+			top: -1.75rem;
+			width: 1.75rem;
+
+			&::before {
+				content: "×";
+			}
+		}
+
+		> * {
+			margin: 0;
+			max-height: 25vh;
+		}
+	}
+
+	// Left and right rail ad placements.
+	&.left_side_rail,
+	&.right_side_rail {
+		position: fixed;
+		top: 40px;
+		bottom: 40px;
+		box-sizing: border-box;
+		> * {
+			margin: 0;
+		}
+
+		// Animation states
+		.ad-slot {
+			transition-property: display, opacity, transform;
+			transition-duration: 0.2s;
+			transition-timing-function: ease-in-out;
+			/* stylelint-disable-next-line property-no-unknown */
+			transition-behavior: allow-discrete;
+			display: block;
+			transform: translateX(0);
+			@starting-style {
+				opacity: 0;
+				display: none;
+			}
+			&.ad-hidden {
+				opacity: 0;
+				display: none;
+				pointer-events: none;
+			}
+			&.ad-visible {
+				opacity: 1;
+				display: block;
+				pointer-events: auto;
+			}
+		}
+	}
+
+	&.left_side_rail {
+		left: 0;
+		justify-content: flex-end;
+		padding-right: 32px;
+		.ad-slot {
+			@starting-style {
+				transform: translateX(-20%);
+			}
+			&.ad-hidden {
+				transform: translateX(-20%);
+			}
+		}
+	}
+
+	&.right_side_rail {
+		right: 0;
+		justify-content: flex-start;
+		padding-left: 32px;
+		.ad-slot {
+			@starting-style {
+				transform: translateX(20%);
+			}
+			&.ad-hidden {
+				transform: translateX(20%);
+			}
+		}
+	}
+
+	/* stylelint-disable selector-type-no-unknown */
+	amp-ad {
+		vertical-align: bottom;
+	}
+	/* stylelint-enable selector-type-no-unknown */
 }
 
 .newspack-broadstreet-ad {
@@ -78,70 +195,6 @@
 	}
 }
 
-.newspack_global_ad.left_side_rail,
-.newspack_global_ad.right_side_rail {
-	position: fixed;
-	top: 40px;
-	bottom: 40px;
-	box-sizing: border-box;
-	> * {
-		margin: 0;
-	}
-
-	// Animation states
-	.ad-slot {
-		transition-property: display, opacity, transform;
-		transition-duration: 0.2s;
-		transition-timing-function: ease-in-out;
-		/* stylelint-disable-next-line property-no-unknown */
-		transition-behavior: allow-discrete;
-		display: block;
-		transform: translateX(0);
-		@starting-style {
-			opacity: 0;
-			display: none;
-		}
-		&.ad-hidden {
-			opacity: 0;
-			display: none;
-			pointer-events: none;
-		}
-		&.ad-visible {
-			opacity: 1;
-			display: block;
-			pointer-events: auto;
-		}
-	}
-}
-
-.newspack_global_ad.left_side_rail {
-	left: 0;
-	justify-content: flex-end;
-	padding-right: 32px;
-	.ad-slot {
-		@starting-style {
-			transform: translateX(-20%);
-		}
-		&.ad-hidden {
-			transform: translateX(-20%);
-		}
-	}
-}
-
-.newspack_global_ad.right_side_rail {
-	right: 0;
-	justify-content: flex-start;
-	padding-left: 32px;
-	.ad-slot {
-		@starting-style {
-			transform: translateX(20%);
-		}
-		&.ad-hidden {
-			transform: translateX(20%);
-		}
-	}
-}
-
 // Force visibility on parent blocks the user has hidden when they contain an ad unit.
 .wp-block-hidden-desktop,
 .wp-block-hidden-tablet,
@@ -150,4 +203,21 @@
 	&:has(.wp-block-newspack-blocks-wp-block-newspack-ads-blocks-ad-unit) {
 		display: revert !important;
 	}
+}
+
+.custom-ad-bg {
+	.newspack_global_ad > * {
+		margin-bottom: 8px;
+		margin-top: 8px;
+	}
+	// Match the ad background treatment for Broadstreet zones, which render
+	// into a <broadstreet-zone-container> custom element.
+	/* stylelint-disable selector-type-no-unknown */
+	broadstreet-zone-container {
+		align-items: center;
+		display: flex;
+		justify-content: center;
+		padding: 8px;
+	}
+	/* stylelint-enable selector-type-no-unknown */
 }
