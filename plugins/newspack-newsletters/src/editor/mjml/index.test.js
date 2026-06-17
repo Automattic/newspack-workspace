@@ -92,9 +92,7 @@ describe( 'refreshEmailHtml', () => {
 			data: { post_id: 123, title: 'A title', content: '<p>body</p>' },
 		} );
 		// Did NOT hit the server-render endpoint.
-		expect( apiFetch ).not.toHaveBeenCalledWith(
-			expect.objectContaining( { path: expect.stringContaining( '/post-html' ) } )
-		);
+		expect( apiFetch ).not.toHaveBeenCalledWith( expect.objectContaining( { path: expect.stringContaining( '/post-html' ) } ) );
 		expect( mjml2html ).toHaveBeenCalledWith( '<mjml />', { keepComments: false, minify: true } );
 		expect( result ).toEqual( { result: 'success', html: '<mjml-html />' } );
 	} );
