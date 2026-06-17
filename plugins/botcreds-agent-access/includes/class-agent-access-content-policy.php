@@ -95,10 +95,16 @@ class Agent_Access_Content_Policy {
 			}
 		}
 
-		// ── Publish gating ─────────────────────────
+		// ── Publish gating (applies on both create AND update) ────────────
 		if ( 'allow' !== $policy['publish_gating'] ) {
-			if ( isset( $prepared_post->post_status ) && 'publish' === $prepared_post->post_status ) {
+			$request_status = $request->get_param( 'status' );
+			if (
+				( isset( $prepared_post->post_status ) && 'publish' === $prepared_post->post_status ) ||
+				'publish' === $request_status
+			) {
 				$prepared_post->post_status = $policy['publish_gating']; // 'draft' | 'pending'
+				// Also lock the request param so the REST layer can't bypass via status field.
+				$request->set_param( 'status', $policy['publish_gating'] );
 			}
 		}
 

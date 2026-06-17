@@ -386,7 +386,7 @@
 					'&user_id=' + encodeURIComponent(userId) +
 					'&' + encodeScopeParams(scopeData) +
 					'&rate_limit=' + encodeURIComponent(rl) +
-					'&policy=' + encodeURIComponent(policy)
+					'&content_policy=' + encodeURIComponent(policy)
 				);
 			});
 		});

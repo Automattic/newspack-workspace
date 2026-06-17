@@ -496,7 +496,7 @@ class Agent_Access_Admin {
 
 		$uuid       = $existing['uuid'];
 		$scope      = self::collect_scope_from_post();
-		$policy     = isset( $_POST['policy'] )     ? sanitize_key( $_POST['policy'] )     : Agent_Access_Content_Policy::DEFAULT_POLICY;
+		$policy     = isset( $_POST['content_policy'] ) ? sanitize_key( $_POST['content_policy'] ) : Agent_Access_Content_Policy::DEFAULT_POLICY;
 		$rate_limit = isset( $_POST['rate_limit'] ) ? sanitize_key( $_POST['rate_limit'] ) : Agent_Access_Rate_Limiter::DEFAULT_TIER;
 
 		Agent_Access_Scope::save( $user_id, $uuid, $scope );
