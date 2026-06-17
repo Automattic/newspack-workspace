@@ -1,4 +1,5 @@
 import { setMatchingFunction } from '../utils';
+import { rememberSessionSignal } from './session-signal';
 
 /**
  * Query param carrying the reader's donor status, substituted per-recipient by
@@ -50,42 +51,20 @@ const isUnsubstitutedMergeTag = value =>
  *
  * A reader clicking a link in a newsletter lands on a URL carrying
  * `np_seg_donor`, whose value the ESP substitutes per recipient from the
- * publisher's donor merge field. The URL param is authoritative on the landing
- * page, so it is honored even when the arrival cannot be persisted. When a
- * positive donor value is detected, the arrival is also remembered for the rest
- * of the browsing session via sessionStorage so the reader keeps matching donor
- * segments as they navigate to clean URLs.
- *
- * This is segmentation-only and transient — it is never written to the persisted
- * reader data store, so it cannot grant content access, does not affect
- * analytics or ad targeting, and never persists across sessions. Mirrors the
- * `isFromEmail()` pattern in newsletter.js.
+ * publisher's donor merge field. A positive value is detected and remembered
+ * for the rest of the browsing session so the reader keeps matching donor
+ * segments as they navigate to clean URLs. An unsubstituted merge tag means the
+ * send was misconfigured, so it is ignored rather than treated as a donor value.
+ * See rememberSessionSignal() for the segmentation-only, transient guarantees.
  *
  * @return {boolean} True if the reader arrived this session as a flagged donor.
  */
 export function isDonorFromEmail() {
-	const value = new URLSearchParams( window.location.search ).get( DONOR_PARAM );
-	// The URL param is authoritative on the landing page, even if nothing can be
-	// persisted. An unsubstituted merge tag means the send was misconfigured, so
-	// it is ignored rather than treated as a donor value.
-	if ( value !== null && ! isUnsubstitutedMergeTag( value ) && isDonorValue( value ) ) {
-		// Remember the arrival for the rest of the session so the reader keeps
-		// matching after navigating to clean URLs. A write failure (e.g. private
-		// mode) only costs the cross-navigation memory, not this detection.
-		try {
-			window.sessionStorage.setItem( FROM_EMAIL_DONOR_KEY, '1' );
-		} catch ( e ) {
-			// sessionStorage unavailable; the URL signal still stands.
-		}
-		return true;
-	}
-	// No positive param on this page — fall back to whatever was remembered earlier.
-	try {
-		return window.sessionStorage.getItem( FROM_EMAIL_DONOR_KEY ) === '1';
-	} catch ( e ) {
-		// sessionStorage unavailable. Fail closed.
-		return false;
-	}
+	return rememberSessionSignal( {
+		param: DONOR_PARAM,
+		sessionKey: FROM_EMAIL_DONOR_KEY,
+		isPositive: value => ! isUnsubstitutedMergeTag( value ) && isDonorValue( value ),
+	} );
 }
 
 /**

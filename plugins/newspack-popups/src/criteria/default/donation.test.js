@@ -4,7 +4,7 @@ import { matchDonation, isDonorFromEmail } from './donation';
  * Build the second argument the matching function receives, with a stubbed
  * reader data library store returning the given values.
  *
- * @param {Object}  values            Store values.
+ * @param {Object}  values               Store values.
  * @param {boolean} values.isDonor       Value returned by store.get( 'is_donor' ).
  * @param {boolean} values.isFormerDonor Value returned by store.get( 'is_former_donor' ).
  * @return {Object} Stubbed reader activation object.
@@ -34,22 +34,16 @@ describe( 'donation criteria matching', () => {
 		expect( matchDonation( { value: 'formers-donors' }, ras() ) ).toBe( false );
 	} );
 
-	it.each( [ 'true', 'Yes', '1', 'monthly', '$50.00' ] )(
-		'treats a reader arriving with np_seg_donor=%s as a donor',
-		value => {
-			window.history.replaceState( {}, '', '/?np_seg_donor=' + encodeURIComponent( value ) );
-			expect( matchDonation( { value: 'donors' }, ras() ) ).toBe( true );
-			expect( matchDonation( { value: 'non-donors' }, ras() ) ).toBe( false );
-		}
-	);
+	it.each( [ 'true', 'Yes', '1', 'monthly', '$50.00' ] )( 'treats a reader arriving with np_seg_donor=%s as a donor', value => {
+		window.history.replaceState( {}, '', '/?np_seg_donor=' + encodeURIComponent( value ) );
+		expect( matchDonation( { value: 'donors' }, ras() ) ).toBe( true );
+		expect( matchDonation( { value: 'non-donors' }, ras() ) ).toBe( false );
+	} );
 
-	it.each( [ 'false', 'no', 'none', '0' ] )(
-		'does not treat a reader arriving with falsy np_seg_donor=%s as a donor',
-		value => {
-			window.history.replaceState( {}, '', '/?np_seg_donor=' + encodeURIComponent( value ) );
-			expect( isDonorFromEmail() ).toBe( false );
-		}
-	);
+	it.each( [ 'false', 'no', 'none', '0' ] )( 'does not treat a reader arriving with falsy np_seg_donor=%s as a donor', value => {
+		window.history.replaceState( {}, '', '/?np_seg_donor=' + encodeURIComponent( value ) );
+		expect( isDonorFromEmail() ).toBe( false );
+	} );
 
 	it( 'remembers a donor email arrival for the rest of the session', () => {
 		// Landing page carries the param and sets the session flag.

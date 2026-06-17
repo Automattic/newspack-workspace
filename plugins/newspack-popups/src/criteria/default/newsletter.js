@@ -1,4 +1,5 @@
 import { setMatchingFunction } from '../utils';
+import { rememberSessionSignal } from './session-signal';
 
 /**
  * Session-storage key used to remember that the reader arrived from a
@@ -10,39 +11,20 @@ const FROM_EMAIL_KEY = 'newspack-popups-from-email';
  * Whether the reader is visiting from a newsletter email.
  *
  * A reader clicking a link in a Newspack newsletter lands on a URL carrying
- * `utm_medium=email` (appended by the newsletter renderer). The URL param is an
- * authoritative signal on the landing page, so it is honored even when the
- * arrival cannot be persisted. When detected, the arrival is also remembered
- * for the rest of the browsing session via sessionStorage so the reader keeps
- * matching "subscribers" segments as they navigate to clean URLs. This is
- * segmentation-only and transient — it is never written to the persisted reader
- * data store, so it does not affect analytics or ad targeting, and never
- * persists across sessions.
+ * `utm_medium=email` (appended by the newsletter renderer). The arrival is
+ * detected from the param and remembered for the rest of the browsing session
+ * so the reader keeps matching "subscribers" segments as they navigate to clean
+ * URLs. See rememberSessionSignal() for the segmentation-only, transient
+ * guarantees.
  *
  * @return {boolean} True if the reader arrived from a newsletter email this session.
  */
 export function isFromEmail() {
-	// The URL param is authoritative on the landing page, even if nothing can
-	// be persisted.
-	const medium = new URLSearchParams( window.location.search ).get( 'utm_medium' );
-	if ( medium?.toLowerCase() === 'email' ) {
-		// Remember the arrival for the rest of the session so the reader keeps
-		// matching after navigating to clean URLs. A write failure (e.g. private
-		// mode) only costs the cross-navigation memory, not this detection.
-		try {
-			window.sessionStorage.setItem( FROM_EMAIL_KEY, '1' );
-		} catch ( e ) {
-			// sessionStorage unavailable; the URL signal still stands.
-		}
-		return true;
-	}
-	// No param on this page — fall back to whatever was remembered earlier.
-	try {
-		return window.sessionStorage.getItem( FROM_EMAIL_KEY ) === '1';
-	} catch ( e ) {
-		// sessionStorage unavailable. Fail closed.
-		return false;
-	}
+	return rememberSessionSignal( {
+		param: 'utm_medium',
+		sessionKey: FROM_EMAIL_KEY,
+		isPositive: value => value.toLowerCase() === 'email',
+	} );
 }
 
 /**
