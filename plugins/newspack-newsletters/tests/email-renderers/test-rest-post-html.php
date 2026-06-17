@@ -18,27 +18,33 @@ class Test_REST_Post_Html extends WP_UnitTestCase {
 	const ROUTE = '/' . \Newspack_Newsletters::API_NAMESPACE . '/post-html';
 
 	/**
-	 * Enable the WC renderer flag and ensure the REST routes are registered.
+	 * Enable the WC renderer flag and register the plugin's REST routes against a
+	 * fresh server instance.
 	 *
-	 * The test bootstrap fires `init` once already; here we boot the WC editor
-	 * so render_wc() can run and fire `rest_api_init` (the established pattern in
-	 * this plugin's REST tests) to register the plugin's routes into the server.
+	 * A dedicated `WP_REST_Server` is created before `rest_api_init` (the
+	 * established pattern in this plugin's REST tests) to avoid order-dependent
+	 * route registration and global state leaking between tests. `Editor_Bootstrap`
+	 * is already booted (idempotently) at plugin load, so the WC render path is
+	 * available without re-initializing it here.
 	 *
 	 * @return void
 	 */
 	public function set_up() {
 		parent::set_up();
 		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
-		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
+		global $wp_rest_server;
+		$wp_rest_server = new \WP_REST_Server();
 		do_action( 'rest_api_init' );
 	}
 
 	/**
-	 * Remove the WC renderer flag.
+	 * Reset the REST server and remove the WC renderer flag.
 	 *
 	 * @return void
 	 */
 	public function tear_down() {
+		global $wp_rest_server;
+		$wp_rest_server = null;
 		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
 		parent::tear_down();
 	}
@@ -72,7 +78,7 @@ class Test_REST_Post_Html extends WP_UnitTestCase {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
 		$post_id = $this->create_newsletter_with_paragraph( 'Hello from the WC endpoint' );
 
-		$request = new WP_REST_Request( 'POST', self::ROUTE );
+		$request = new WP_REST_Request( 'GET', self::ROUTE );
 		$request->set_param( 'post_id', $post_id );
 		$response = rest_do_request( $request );
 
@@ -91,11 +97,63 @@ class Test_REST_Post_Html extends WP_UnitTestCase {
 	public function test_post_html_route_404_for_missing_post() {
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
 
-		$request = new WP_REST_Request( 'POST', self::ROUTE );
+		$request = new WP_REST_Request( 'GET', self::ROUTE );
 		$request->set_param( 'post_id', 99999999 );
 		$response = rest_do_request( $request );
 
 		$this->assertSame( 404, $response->get_status() );
+	}
+
+	/**
+	 * A request for an existing post that is not a newsletter returns a 404,
+	 * confirming the endpoint only renders the newsletter CPT and not arbitrary
+	 * post types.
+	 *
+	 * @return void
+	 */
+	public function test_post_html_route_404_for_non_newsletter_post() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$page_id = self::factory()->post->create(
+			[
+				'post_type'    => 'page',
+				'post_status'  => 'publish',
+				'post_content' => '<!-- wp:paragraph --><p>Not a newsletter</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$request = new WP_REST_Request( 'GET', self::ROUTE );
+		$request->set_param( 'post_id', $page_id );
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 404, $response->get_status() );
+	}
+
+	/**
+	 * When the WC engine fails to render (returns an empty string), the endpoint
+	 * surfaces a 500 rather than a misleading 200 with empty HTML.
+	 *
+	 * The render failure is simulated by forcing the email-editor's theme.json
+	 * filter to throw; render_wc() swallows the throwable into an empty string,
+	 * which is exactly the failure mode the endpoint must report as an error.
+	 *
+	 * @return void
+	 */
+	public function test_post_html_route_500_when_render_fails() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$post_id = $this->create_newsletter_with_paragraph( 'Will fail to render' );
+
+		$thrower = static function () {
+			throw new \RuntimeException( 'Simulated render failure' );
+		};
+		add_filter( 'woocommerce_email_editor_theme_json', $thrower, 99 );
+
+		$request = new WP_REST_Request( 'GET', self::ROUTE );
+		$request->set_param( 'post_id', $post_id );
+		$response = rest_do_request( $request );
+
+		remove_filter( 'woocommerce_email_editor_theme_json', $thrower, 99 );
+
+		$this->assertSame( 500, $response->get_status() );
 	}
 
 	/**
@@ -108,7 +166,7 @@ class Test_REST_Post_Html extends WP_UnitTestCase {
 		wp_set_current_user( 0 );
 		$post_id = $this->create_newsletter_with_paragraph( 'Should be gated' );
 
-		$request = new WP_REST_Request( 'POST', self::ROUTE );
+		$request = new WP_REST_Request( 'GET', self::ROUTE );
 		$request->set_param( 'post_id', $post_id );
 		$response = rest_do_request( $request );
 
