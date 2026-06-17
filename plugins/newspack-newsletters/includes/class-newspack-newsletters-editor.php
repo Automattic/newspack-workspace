@@ -542,6 +542,7 @@ final class Newspack_Newsletters_Editor {
 			],
 			'supported_social_icon_services' => Newspack_Newsletters_Renderer::get_supported_social_icons_services(),
 			'supported_esps'                 => Newspack_Newsletters::get_supported_providers(),
+			'use_woo_renderer'               => \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled(),
 			'merge_tags'                     => $provider
 				? $provider::get_merge_tags()
 				: Newspack_Newsletters_Service_Provider::get_merge_tags(),
