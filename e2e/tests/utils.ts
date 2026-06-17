@@ -1,3 +1,5 @@
+import { expect } from "@playwright/test";
+
 export const randomString = (length = 8) =>
   Math.random()
     .toString(36)
@@ -5,9 +7,27 @@ export const randomString = (length = 8) =>
 
 export const randomEmailAddress = () => `test-${randomString()}@example.com`;
 
-export const goToEmailClient = async (page, cachebust = "") => {
-  await page.waitForTimeout(1000); // Wait a moment to let the server save the email.
-  await page.goto(`/_email?cachebust=${cachebust}`);
+// Open an email in the dev "Email Sendbox" (/_email) by its subject + recipient.
+// Emails are saved asynchronously and the sendbox is a static page, so we reload
+// until the message shows up instead of trusting a single load (otherwise a
+// message that arrives after the page render is never seen).
+export const openEmail = async (page, subjectPrefix, emailAddress) => {
+  const emailLink = page.getByText(`${subjectPrefix} (${emailAddress}`);
+  await expect(async () => {
+    await page.goto(`/_email?cachebust=${emailAddress}-${Date.now()}`);
+    await expect(emailLink).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 30000 });
+  await emailLink.click();
+};
+
+// Navigate to the reader's My Account page. We go directly rather than clicking
+// the header link: that link is collapsed behind the nav toggle on mobile, and
+// auth events (registration, magic-link or password sign-in) trigger an
+// asynchronous reload that can swallow the click. A direct navigation is
+// reliable on every viewport.
+export const goToMyAccount = async (page) => {
+  await page.goto("/my-account/");
+  await page.waitForURL(/my-account/);
 };
 
 export const clickLinkURL = async (page, linkText) => {
