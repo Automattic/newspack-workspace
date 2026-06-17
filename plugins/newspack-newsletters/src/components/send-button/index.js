@@ -1,7 +1,9 @@
+/* global newspack_email_editor_data */
+
 /**
  * WordPress dependencies
  */
-import { withDispatch, withSelect, useSelect } from '@wordpress/data';
+import { withDispatch, withSelect, useSelect, useDispatch } from '@wordpress/data';
 import { compose } from '@wordpress/compose';
 import { Button, Modal, Spinner } from '@wordpress/components';
 import { Fragment, useEffect, useState } from '@wordpress/element';
@@ -24,26 +26,39 @@ import { refreshEmailHtml } from '../../editor/mjml';
 import './style.scss';
 
 function PreviewHTML() {
-	const { isSaving, isAutosaving, postId, postContent, postTitle } = useSelect( select => {
-		const { getCurrentPostId, getCurrentPostType, getEditedPostAttribute, getEditedPostContent, isAutosavingPost, isSavingPost } =
-			select( 'core/editor' );
+	const { isSaving, isAutosaving, isDirty, postId, postContent, postTitle } = useSelect( select => {
+		const {
+			getCurrentPostId,
+			getCurrentPostType,
+			getEditedPostAttribute,
+			getEditedPostContent,
+			isAutosavingPost,
+			isEditedPostDirty,
+			isSavingPost,
+		} = select( 'core/editor' );
 		return {
 			isSaving: isSavingPost(),
 			isAutosaving: isAutosavingPost(),
+			isDirty: isEditedPostDirty(),
 			postContent: getEditedPostContent(),
 			postId: getCurrentPostId(),
 			postTitle: getEditedPostAttribute( 'title' ),
 			postType: getCurrentPostType(),
 		};
 	} );
+	const { savePost } = useDispatch( 'core/editor' );
 	const [ previewHtml, setPreviewHtml ] = useState( '' );
 	const showSpinner = ( isSaving && ! isAutosaving ) || ! previewHtml;
 
 	useEffect( () => {
 		if ( ! previewHtml ) {
-			refreshEmailHtml( postId, postTitle, postContent ).then( ( { html } ) => {
+			( async () => {
+				if ( newspack_email_editor_data?.use_woo_renderer && isDirty ) {
+					await savePost();
+				}
+				const { html } = await refreshEmailHtml( postId, postTitle, postContent );
 				setPreviewHtml( html );
-			} );
+			} )();
 		}
 	}, [] );
 

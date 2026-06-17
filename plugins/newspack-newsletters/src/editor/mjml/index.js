@@ -5,6 +5,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
+import { addQueryArgs } from '@wordpress/url';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { useEffect } from '@wordpress/element';
 import { isLayoutEditor, usePrevious } from '../../newsletter-editor/utils';
@@ -29,6 +30,13 @@ import mjml2html from 'mjml-browser';
  * @return {Promise<string>} The refreshed email HTML.
  */
 export const refreshEmailHtml = async ( postId, postTitle, postContent ) => {
+	if ( newspack_email_editor_data?.use_woo_renderer ) {
+		return apiFetch( {
+			path: addQueryArgs( '/newspack-newsletters/v1/post-html', { post_id: postId } ),
+		} )
+			.then( ( { html } ) => ( { result: 'success', html } ) )
+			.catch( error => ( { result: 'error', error } ) );
+	}
 	return apiFetch( {
 		path: `/newspack-newsletters/v1/post-mjml`,
 		method: 'POST',
