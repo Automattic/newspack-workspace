@@ -147,11 +147,15 @@ class Test_REST_Post_Html extends WP_UnitTestCase {
 		};
 		add_filter( 'woocommerce_email_editor_theme_json', $thrower, 99 );
 
-		$request = new WP_REST_Request( 'GET', self::ROUTE );
-		$request->set_param( 'post_id', $post_id );
-		$response = rest_do_request( $request );
-
-		remove_filter( 'woocommerce_email_editor_theme_json', $thrower, 99 );
+		// try/finally so the throwing filter is always removed, even if the
+		// request errors — otherwise it would leak into subsequent tests.
+		try {
+			$request = new WP_REST_Request( 'GET', self::ROUTE );
+			$request->set_param( 'post_id', $post_id );
+			$response = rest_do_request( $request );
+		} finally {
+			remove_filter( 'woocommerce_email_editor_theme_json', $thrower, 99 );
+		}
 
 		$this->assertSame( 500, $response->get_status() );
 	}
