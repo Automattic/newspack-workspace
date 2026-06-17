@@ -459,6 +459,10 @@ abstract class Newspack_Newsletters_Service_Provider implements Newspack_Newslet
 
 		if ( true === $result ) {
 			Newspack_Newsletters::set_newsletter_sent( $post_id );
+			\Newspack\Newsletters\Email_Renderers\Renderer_Controller::stamp_renderer(
+				$post_id,
+				\Newspack\Newsletters\Email_Renderers\Renderer_Controller::active_engine()
+			);
 		}
 
 		if ( \is_wp_error( $result ) ) {
