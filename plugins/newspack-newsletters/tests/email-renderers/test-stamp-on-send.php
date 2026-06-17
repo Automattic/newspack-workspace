@@ -29,8 +29,11 @@ class Stamp_On_Send_Test_Provider extends Newspack_Newsletters_Service_Provider 
 	 * Construct the test-double, registering its service slug.
 	 */
 	public function __construct() {
+		// Intentionally skip parent::__construct(): it registers global send/transition
+		// hooks bound to $this, and set_up() builds a fresh provider per test, so those
+		// callbacks would accumulate across the suite. These tests call send_newsletter()
+		// directly and need only the service slug, not the registered hooks.
 		$this->service = 'stamp_on_send_test';
-		parent::__construct();
 	}
 
 	/**
@@ -405,9 +408,15 @@ class Test_Stamp_On_Send extends WP_UnitTestCase {
 		$this->provider->set_send_result( new WP_Error( 'send_failed', 'Send failed.' ) );
 
 		$post_id = $this->create_draft_newsletter();
-		$result  = $this->provider->send_newsletter( get_post( $post_id ) );
+		// Mark as a scheduled send so the base class suppresses the admin failure email
+		// (an unrelated global side effect) on this non-final attempt.
+		update_post_meta( $post_id, 'sending_scheduled', true );
+		$result = $this->provider->send_newsletter( get_post( $post_id ) );
 
 		$this->assertWPError( $result, 'Harness must drive the failure branch.' );
+		// The send was attempted and failed — not skipped — so the post is not marked sent.
+		$this->assertFalse( Newspack_Newsletters::is_newsletter_sent( $post_id ), 'A failed send must not mark the newsletter sent.' );
+		// And with no stamp written, the resolver returns its intentional MJML default.
 		$this->assertSame( '', get_post_meta( $post_id, Renderer_Controller::RENDERER_META, true ) );
 		$this->assertSame( Renderer_Controller::ENGINE_MJML, Renderer_Controller::get_post_renderer( $post_id ) );
 	}
