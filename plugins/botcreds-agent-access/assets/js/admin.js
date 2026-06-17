@@ -10,6 +10,7 @@
 		initRevokeButton();
 		initAdminCreateButtons();
 		initAdminRevokeButtons();
+		initAdminUpdateButtons();
 	});
 
 	/**
@@ -238,6 +239,99 @@
 			'</div>';
 
 		initCopyButtons();
+	}
+
+	/**
+	 * Admin: save scope/policy/rate-limit for an already-connected agent.
+	 */
+	function initAdminUpdateButtons() {
+		var buttons = document.querySelectorAll('.agent-access-admin-update-btn');
+		buttons.forEach(function (btn) {
+			btn.addEventListener('click', function () {
+				var userId  = btn.getAttribute('data-user-id');
+				var section = btn.closest('.agent-access-settings-section') || btn.closest('td').closest('table').closest('div');
+
+				var scopeEl  = section ? section.querySelector('.agent-access-admin-update-scope') : null;
+				var rlEl     = section ? section.querySelector('.agent-access-admin-update-rate-limit') : null;
+				var cpEl     = section ? section.querySelector('.agent-access-admin-update-content-policy') : null;
+
+				var scope  = scopeEl  ? scopeEl.value  : 'posts_media';
+				var rl     = rlEl     ? rlEl.value     : 'standard';
+				var policy = cpEl     ? cpEl.value     : 'standard';
+
+				var statusEl = document.querySelector('.agent-access-admin-update-status[data-user-id="' + userId + '"]');
+
+				btn.disabled    = true;
+				btn.textContent = 'Saving…';
+				if (statusEl) {
+					statusEl.style.display = 'none';
+					statusEl.textContent   = '';
+				}
+
+				var xhr = new XMLHttpRequest();
+				xhr.open('POST', agentAccess.ajax_url, true);
+				xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+
+				xhr.onload = function () {
+					var response;
+					try {
+						response = JSON.parse(xhr.responseText);
+					} catch (e) {
+						if (statusEl) {
+							statusEl.textContent   = 'Unexpected error.';
+							statusEl.style.color   = '#b32d2e';
+							statusEl.style.display = 'inline';
+						}
+						btn.disabled    = false;
+						btn.textContent = 'Save settings';
+						return;
+					}
+
+					btn.disabled    = false;
+					btn.textContent = 'Save settings';
+
+					if (response.success) {
+						if (statusEl) {
+							statusEl.textContent   = '\u2713 Saved';
+							statusEl.style.color   = '#1a7a1a';
+							statusEl.style.display = 'inline';
+							setTimeout(function () {
+								statusEl.style.display = 'none';
+							}, 3000);
+						}
+					} else {
+						if (statusEl) {
+							statusEl.textContent   = response.data || 'Error saving settings.';
+							statusEl.style.color   = '#b32d2e';
+							statusEl.style.display = 'inline';
+						} else {
+							alert(response.data || 'Error saving settings.');
+						}
+					}
+				};
+
+				xhr.onerror = function () {
+					btn.disabled    = false;
+					btn.textContent = 'Save settings';
+					if (statusEl) {
+						statusEl.textContent   = 'Network error.';
+						statusEl.style.color   = '#b32d2e';
+						statusEl.style.display = 'inline';
+					} else {
+						alert('Network error. Please try again.');
+					}
+				};
+
+				xhr.send(
+					'action=agent_access_admin_update' +
+					'&nonce=' + encodeURIComponent(agentAccess.admin_update_nonce) +
+					'&user_id=' + encodeURIComponent(userId) +
+					'&scope=' + encodeURIComponent(scope) +
+					'&rate_limit=' + encodeURIComponent(rl) +
+					'&policy=' + encodeURIComponent(policy)
+				);
+			});
+		});
 	}
 
 	/**

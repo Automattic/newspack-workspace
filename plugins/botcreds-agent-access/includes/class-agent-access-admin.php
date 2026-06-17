@@ -36,6 +36,7 @@ class Agent_Access_Admin {
 		add_action( 'wp_ajax_agent_access_revoke', array( $this, 'handle_revoke_ajax' ) );
 		add_action( 'wp_ajax_agent_access_admin_create', array( $this, 'handle_admin_create_ajax' ) );
 		add_action( 'wp_ajax_agent_access_admin_revoke', array( $this, 'handle_admin_revoke_ajax' ) );
+		add_action( 'wp_ajax_agent_access_admin_update', array( $this, 'handle_admin_update_ajax' ) );
 		add_action( 'admin_post_agent_access_save_approval_setting', array( $this, 'handle_save_approval_setting' ) );
 		add_action( 'admin_post_agent_access_add_agent', array( $this, 'handle_add_agent' ) );
 		add_action( 'admin_notices', array( $this, 'maybe_show_add_agent_notice' ) );
@@ -331,6 +332,7 @@ class Agent_Access_Admin {
 			'revoke_nonce'        => wp_create_nonce( 'agent_access_revoke' ),
 			'admin_create_nonce'  => current_user_can( 'manage_options' ) ? wp_create_nonce( 'agent_access_admin_create' ) : '',
 			'admin_revoke_nonce'  => current_user_can( 'manage_options' ) ? wp_create_nonce( 'agent_access_admin_revoke' ) : '',
+			'admin_update_nonce'  => current_user_can( 'manage_options' ) ? wp_create_nonce( 'agent_access_admin_nonce' ) : '',
 			'confirm_msg'         => __( 'Are you sure you want to revoke the agent connection? You will need to reconfigure your agent with a new password.', 'botcreds-agent-access' ),
 			'confirm_admin_msg'   => __( 'Are you sure you want to revoke this user\'s agent connection? They will need new credentials to reconnect.', 'botcreds-agent-access' ),
 			'creating_text'       => __( 'Connecting…', 'botcreds-agent-access' ),
@@ -473,6 +475,38 @@ class Agent_Access_Admin {
 	}
 
 	/**
+	 * Handle the admin AJAX update request — save scope/policy/rate-limit for an already-connected user.
+	 */
+	public function handle_admin_update_ajax() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( __( 'You do not have permission to do this.', 'botcreds-agent-access' ) );
+		}
+
+		check_ajax_referer( 'agent_access_admin_nonce', 'nonce' );
+
+		$user_id = isset( $_POST['user_id'] ) ? (int) $_POST['user_id'] : 0;
+		if ( ! $user_id || ! get_userdata( $user_id ) ) {
+			wp_send_json_error( __( 'Invalid user.', 'botcreds-agent-access' ) );
+		}
+
+		$existing = $this->api->get_existing_password( $user_id );
+		if ( ! $existing ) {
+			wp_send_json_error( __( 'No active agent connection found for this user.', 'botcreds-agent-access' ) );
+		}
+
+		$uuid       = $existing['uuid'];
+		$scope      = isset( $_POST['scope'] )      ? sanitize_key( $_POST['scope'] )      : Agent_Access_Scope::DEFAULT_SCOPE;
+		$policy     = isset( $_POST['policy'] )     ? sanitize_key( $_POST['policy'] )     : Agent_Access_Content_Policy::DEFAULT_POLICY;
+		$rate_limit = isset( $_POST['rate_limit'] ) ? sanitize_key( $_POST['rate_limit'] ) : Agent_Access_Rate_Limiter::DEFAULT_TIER;
+
+		Agent_Access_Scope::save( $user_id, $uuid, $scope );
+		Agent_Access_Content_Policy::save( $user_id, $uuid, $policy );
+		Agent_Access_Rate_Limiter::save( $user_id, $uuid, $rate_limit );
+
+		wp_send_json_success( __( 'Settings saved.', 'botcreds-agent-access' ) );
+	}
+
+	/**
 	 * Handle admin-post: save 'require approval' setting.
 	 */
 	public function handle_save_approval_setting() {
@@ -606,6 +640,84 @@ class Agent_Access_Admin {
 						?>
 					</span>
 				</div>
+
+				<?php
+				$uuid           = $existing['uuid'];
+				$current_scope  = Agent_Access_Scope::get( $user->ID, $uuid );
+				$current_policy = Agent_Access_Content_Policy::get( $user->ID, $uuid );
+				$current_rl     = Agent_Access_Rate_Limiter::get( $user->ID, $uuid );
+				?>
+				<div class="agent-access-settings-section" style="margin-top:1.5em;">
+					<h3 style="margin-bottom:0.5em;"><?php esc_html_e( 'Agent Settings', 'botcreds-agent-access' ); ?></h3>
+					<table class="form-table" role="presentation" style="max-width:480px;">
+						<tr>
+							<th scope="row">
+								<label for="agent-access-admin-update-scope-<?php echo esc_attr( $user->ID ); ?>"><?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?></label>
+							</th>
+							<td>
+								<select id="agent-access-admin-update-scope-<?php echo esc_attr( $user->ID ); ?>"
+									class="agent-access-admin-update-scope"
+									data-user-id="<?php echo esc_attr( $user->ID ); ?>">
+									<?php foreach ( Agent_Access_Scope::get_templates() as $key => $tpl ) : ?>
+										<option value="<?php echo esc_attr( $key ); ?>"
+											<?php selected( $key, $current_scope ); ?>
+											title="<?php echo esc_attr( $tpl['description'] ); ?>">
+											<?php echo esc_html( $tpl['label'] ); ?>
+										</option>
+									<?php endforeach; ?>
+								</select>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row">
+								<label for="agent-access-admin-update-rate-limit-<?php echo esc_attr( $user->ID ); ?>"><?php esc_html_e( 'Rate limit', 'botcreds-agent-access' ); ?></label>
+							</th>
+							<td>
+								<select id="agent-access-admin-update-rate-limit-<?php echo esc_attr( $user->ID ); ?>"
+									class="agent-access-admin-update-rate-limit"
+									data-user-id="<?php echo esc_attr( $user->ID ); ?>">
+									<?php foreach ( Agent_Access_Rate_Limiter::get_tiers() as $key => $tier ) : ?>
+										<option value="<?php echo esc_attr( $key ); ?>"
+											<?php selected( $key, $current_rl ); ?>
+											title="<?php echo esc_attr( $tier['description'] ); ?>">
+											<?php echo esc_html( $tier['label'] ); ?>
+										</option>
+									<?php endforeach; ?>
+								</select>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row">
+								<label for="agent-access-admin-update-content-policy-<?php echo esc_attr( $user->ID ); ?>"><?php esc_html_e( 'Content policy', 'botcreds-agent-access' ); ?></label>
+							</th>
+							<td>
+								<select id="agent-access-admin-update-content-policy-<?php echo esc_attr( $user->ID ); ?>"
+									class="agent-access-admin-update-content-policy"
+									data-user-id="<?php echo esc_attr( $user->ID ); ?>">
+									<?php foreach ( Agent_Access_Content_Policy::get_policies() as $key => $pol ) : ?>
+										<option value="<?php echo esc_attr( $key ); ?>"
+											<?php selected( $key, $current_policy ); ?>
+											title="<?php echo esc_attr( $pol['description'] ); ?>">
+											<?php echo esc_html( $pol['label'] ); ?>
+										</option>
+									<?php endforeach; ?>
+								</select>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"></th>
+							<td>
+								<button type="button"
+									class="button button-primary agent-access-admin-update-btn"
+									data-user-id="<?php echo esc_attr( $user->ID ); ?>">
+									<?php esc_html_e( 'Save settings', 'botcreds-agent-access' ); ?>
+								</button>
+								<span class="agent-access-admin-update-status" data-user-id="<?php echo esc_attr( $user->ID ); ?>" style="margin-left:0.75em;display:none;"></span>
+							</td>
+						</tr>
+					</table>
+				</div>
+
 				<?php $this->render_profile_content_table( $user->ID ); ?>
 			<?php else : ?>
 				<div id="agent-access-admin-card" data-user-id="<?php echo esc_attr( $user->ID ); ?>">
