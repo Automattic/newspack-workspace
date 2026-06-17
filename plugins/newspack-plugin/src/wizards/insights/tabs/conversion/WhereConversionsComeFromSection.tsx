@@ -21,7 +21,7 @@ import type { ConversionSourceMixData } from '../../api/conversion';
 import SectionHeading from '../components/SectionHeading';
 import { formatNumber } from '../components/format';
 import { sourceLabel } from './labels';
-import PieChart from './viz/PieChart';
+import PieChart from '../components/PieChart';
 import SectionState from './SectionState';
 
 export interface WhereConversionsComeFromSectionProps {

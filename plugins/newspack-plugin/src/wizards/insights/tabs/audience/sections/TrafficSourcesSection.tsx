@@ -16,7 +16,7 @@ import ChartCard from '../../components/ChartCard';
 import MetricTable from '../../components/MetricTable';
 import SectionHeading from '../../components/SectionHeading';
 import { toSeries, isNotSet } from '../../components/metrics';
-import PieChart from '../viz/PieChart';
+import PieChart from '../../components/PieChart';
 
 export interface SectionProps {
 	current: InsightsWindow;

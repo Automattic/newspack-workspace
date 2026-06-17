@@ -1,5 +1,5 @@
 /**
- * BarChart (NPPD-1649) — tab-local vertical bar chart.
+ * BarChart (NPPD-1649) — shared vertical bar chart.
  *
  * Dependency-free SVG. Used for categorical breakdowns (readership by day of
  * week, by hour of day). Bars scale to the max value; labels render beneath.
@@ -13,7 +13,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import { formatNumber } from '../../components/format';
+import { formatNumber } from './format';
 
 export interface Bar {
 	label: string;

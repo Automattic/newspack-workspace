@@ -16,7 +16,7 @@ import type { InsightsWindow } from '../../../api/audience';
 import ChartCard from '../../components/ChartCard';
 import SectionHeading from '../../components/SectionHeading';
 import { toSeries } from '../../components/metrics';
-import PieChart from '../viz/PieChart';
+import PieChart from '../../components/PieChart';
 
 export interface SectionProps {
 	current: InsightsWindow;

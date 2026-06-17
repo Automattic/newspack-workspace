@@ -18,7 +18,7 @@ import type { InsightsWindow } from '../../../api/audience';
 import type { MetricPayload, MetricRow } from '../../components/metrics';
 import { formatDecimal, formatDuration, formatNumber } from '../../components/format';
 import SectionHeading from '../../components/SectionHeading';
-import TakeawayCard from '../viz/TakeawayCard';
+import TakeawayCard from '../../components/TakeawayCard';
 
 export interface SectionProps {
 	current: InsightsWindow;

@@ -17,8 +17,8 @@ import ChartCard from '../../components/ChartCard';
 import SectionHeading from '../../components/SectionHeading';
 import { toSeries } from '../../components/metrics';
 import { formatShortDate } from '../../components/format';
-import LineChart from '../viz/LineChart';
-import BarChart from '../viz/BarChart';
+import LineChart from '../../components/LineChart';
+import BarChart from '../../components/BarChart';
 
 export interface SectionProps {
 	current: InsightsWindow;

@@ -1093,287 +1093,287 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
           class="newspack-insights__table-wrap"
         >
           <table
-            class="newspack-insights__table newspack-insights__prompts-table--sortable"
+            class="newspack-insights__table newspack-insights__sortable-table"
           >
             <thead>
               <tr>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Prompt
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Intent
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Placement
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="descending"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort is-active"
+                    class="newspack-insights__sortable-table-sort is-active"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Impressions
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Unique viewers
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       CTR
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Form submission rate
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Dismissal rate
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Registrations
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Newsletter signups
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Donation conversions
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Donation conversion rate
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Subscription conversions
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Subscription conversion rate
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
@@ -1382,7 +1382,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
             <tbody>
               <tr>
                 <td
-                  class="newspack-insights__prompts-performance-empty"
+                  class="newspack-insights__sortable-table-empty"
                   colspan="14"
                 >
                   No prompt data yet. Performance metrics will appear once readers begin interacting with your prompts.
@@ -1409,127 +1409,127 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
           class="newspack-insights__table-wrap"
         >
           <table
-            class="newspack-insights__table newspack-insights__prompts-table--sortable"
+            class="newspack-insights__table newspack-insights__sortable-table"
           >
             <thead>
               <tr>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Intent
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="descending"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort is-active"
+                    class="newspack-insights__sortable-table-sort is-active"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Impressions
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Unique viewers
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       CTR
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Form submission rate
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Dismissal rate
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
@@ -1538,7 +1538,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
             <tbody>
               <tr>
                 <td
-                  class="newspack-insights__prompts-performance-empty"
+                  class="newspack-insights__sortable-table-empty"
                   colspan="6"
                 >
                   No prompt data yet. Intent performance will appear once readers begin interacting with your prompts.
@@ -1565,107 +1565,107 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
           class="newspack-insights__table-wrap"
         >
           <table
-            class="newspack-insights__table newspack-insights__prompts-table--sortable"
+            class="newspack-insights__table newspack-insights__sortable-table"
           >
             <thead>
               <tr>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Placement
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="descending"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort is-active"
+                    class="newspack-insights__sortable-table-sort is-active"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Impressions
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Unique viewers
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       CTR
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
                 <th
                   aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__prompts-table-sort-cell"
+                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
                   scope="col"
                 >
                   <button
-                    class="newspack-insights__prompts-table-sort"
+                    class="newspack-insights__sortable-table-sort"
                     type="button"
                   >
                     <span
-                      class="newspack-insights__prompts-table-sort-label"
+                      class="newspack-insights__sortable-table-sort-label"
                     >
                       Dismissal rate
                     </span>
                     <span
                       aria-hidden="true"
-                      class="newspack-insights__prompts-table-sort-indicator"
+                      class="newspack-insights__sortable-table-sort-indicator"
                     />
                   </button>
                 </th>
@@ -1674,7 +1674,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
             <tbody>
               <tr>
                 <td
-                  class="newspack-insights__prompts-performance-empty"
+                  class="newspack-insights__sortable-table-empty"
                   colspan="5"
                 >
                   No prompt data yet. Placement performance will appear once readers begin interacting with your prompts.

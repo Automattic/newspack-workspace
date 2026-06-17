@@ -4,12 +4,14 @@
  * Tab 4-specific layout only. The shared Insights chrome (sections,
  * metric cards, table with empty state, tab loading/error) lives in
  * `tabs/components/sections.scss` and is loaded by the wizard's main
- * `style.scss`. Visualization styles (funnel + distribution) live
- * here because both viz components are tab-local for Phase 1.
+ * `style.scss`. The funnel and distribution component styles now live in
+ * `tabs/components/_insights-charts.scss` (shared across tabs); only the
+ * tab-local section/grid layout remains here.
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "../../../../../packages/colors/colors.module" as colors;
+@use "../components/insights-charts";
 
 .newspack-insights {
 	&__gates-tab {
@@ -42,143 +44,6 @@
 		min-width: 0; // allow the column to shrink within the grid
 	}
 
-	// Funnel viz — tab-local. Stacked SVG trapezoids in a single anchor color
-	// (primary-500) fading to 0.6 opacity at the tail. Side-label mode puts the
-	// step name/count/deltas in a fixed column beside the equal-height bands;
-	// compact mode renders the count inside each band and moves labels to a
-	// legend below.
-	&__funnel {
-		padding: 20px;
-		background-color: #fff;
-		border: 1px solid wp-colors.$gray-200;
-		border-radius: 4px;
-
-		&--side {
-			display: flex;
-			align-items: stretch;
-			gap: 16px;
-		}
-
-		&--compact {
-			display: flex;
-			flex-direction: column;
-			gap: 16px;
-		}
-
-		&-svg {
-			min-width: 0;
-			width: 100%;
-			height: auto;
-			display: block;
-		}
-
-		// Side mode: cap the SVG WIDTH (not height) so it keeps its exact viewBox
-		// aspect ratio — no letterboxing — and the equal-height trapezoid bands
-		// stay aligned with the equal-flex label column beside them.
-		&--side &-svg {
-			flex: 0 1 auto;
-			max-width: 320px;
-		}
-
-		// Compact mode: fill the width; the count sits inside each band, so there's
-		// no side column to align against and a height cap is fine.
-		&--compact &-svg {
-			max-height: 480px;
-		}
-
-		// Single anchor color; the 1.0 → 0.6 opacity interpolation gives each band
-		// its own weight while staying within one hue.
-		&-trapezoid {
-			fill: colors.$primary-500;
-		}
-
-		// In-band count (compact mode): white on the darker top bands, dark on the
-		// faded tail bands — see DARK_TEXT_OPACITY_THRESHOLD in Funnel.tsx.
-		&-count-text {
-			font-size: 16px;
-			font-weight: 600;
-			font-variant-numeric: tabular-nums;
-
-			&.is-on-dark {
-				fill: #fff;
-			}
-
-			&.is-on-light {
-				fill: wp-colors.$gray-900;
-			}
-		}
-
-		// Side-label column: equal-flex blocks align to the equal-height bands.
-		&-labels {
-			flex: 0 0 200px;
-			display: flex;
-			flex-direction: column;
-		}
-
-		&-label {
-			flex: 1 1 0;
-			display: flex;
-			flex-direction: column;
-			justify-content: center;
-		}
-
-		&-legend {
-			list-style: none;
-			margin: 0;
-			padding: 0;
-			display: flex;
-			flex-direction: column;
-			gap: 12px;
-		}
-
-		&-legend-item {
-			display: flex;
-			flex-direction: column;
-		}
-
-		&-label-name {
-			font-size: 13px;
-			font-weight: 600;
-			color: wp-colors.$gray-900;
-		}
-
-		&-label-count {
-			font-size: 20px;
-			font-weight: 600;
-			font-variant-numeric: tabular-nums;
-			line-height: 1.2;
-			color: wp-colors.$gray-900;
-		}
-
-		// Stage descriptors: both muted gray. The drop-off is funnel context, not
-		// an alarm, and deliberately NOT red/green — red/green is reserved for the
-		// period-over-period scorecard deltas elsewhere on the page.
-		&-label-pct {
-			font-size: 13px;
-			font-weight: 400;
-			color: wp-colors.$gray-600;
-		}
-
-		&-label-drop {
-			font-size: 13px;
-			font-weight: 400;
-			font-variant-numeric: tabular-nums;
-			color: wp-colors.$gray-600;
-
-			&-arrow {
-				color: wp-colors.$gray-600;
-			}
-		}
-
-		&-empty {
-			margin: 0;
-			padding: 32px 20px;
-			text-align: center;
-			font-size: 13px;
-			color: wp-colors.$gray-600;
-		}
-	}
-
 	// Collection-section error treatment (funnel / distribution / performance).
 	&__section-error {
 		display: flex;
@@ -189,21 +54,6 @@
 		font-size: 13px;
 		line-height: 1.5;
 		color: colors.$error-600;
-	}
-
-	// Distribution viz — tab-local. Reuses the shared table chrome.
-	&__distribution {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-
-		&-caption {
-			margin: 0;
-			font-size: 13px;
-			font-weight: 400;
-			line-height: 1.5;
-			color: wp-colors.$gray-700;
-		}
 	}
 
 	// Empty state row inside the Performance by gate table.

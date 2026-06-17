@@ -23,7 +23,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { PromptsPerformanceByPromptRow, PromptsPerformanceByPromptTable as TableData } from '../../../api/prompts';
 import { formatNumber } from '../../components/format';
-import SortableTable, { renderCount, renderRate, type SortableColumn } from './SortableTable';
+import SortableTable, { renderCount, renderRate, type SortableColumn } from '../../components/SortableTable';
 import { humanizeTerm } from './humanize';
 import { SECTION_ERROR_MESSAGE } from '../SectionState';
 

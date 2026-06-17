@@ -19,7 +19,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { ConversionCohortData } from '../../api/conversion';
 import SectionHeading from '../components/SectionHeading';
-import LineChart, { type LineSeries } from './viz/LineChart';
+import LineChart, { type LineSeries } from '../components/LineChart';
 import SectionState from './SectionState';
 
 export interface CohortRetentionSectionProps {

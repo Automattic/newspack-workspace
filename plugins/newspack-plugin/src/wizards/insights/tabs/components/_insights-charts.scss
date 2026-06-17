@@ -9,6 +9,7 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "../../../../../packages/colors/colors.module" as colors;
 
 // Categorical series palette for charts. Hardcoded because a chart needs
 // distinct, stable category colors; applied via the --series-color custom
@@ -201,7 +202,9 @@
 		max-width: 150px;
 		height: auto;
 		aspect-ratio: 1 / 1;
-		transform: rotate( -90deg );
+		// No rotate: segments already start at 12 o'clock via the component's
+		// stroke-dashoffset (CIRCUMFERENCE / 4). Rotating the <svg> here would
+		// re-offset every segment and turn the center-label text sideways.
 	}
 
 	// Donut band thickness. The chart is a stroked circle (r=16 in a 42 viewBox),
@@ -217,6 +220,13 @@
 		fill: none;
 		stroke: var( --series-color );
 		stroke-width: 8;
+	}
+
+	// Center label text inside the donut (e.g. the window total — NPPD-1609).
+	&__pie-center {
+		font-size: 6px;
+		font-weight: 600;
+		fill: wp-colors.$gray-900;
 	}
 
 	// Bottom slot: legend anchored to the card bottom, left-aligned, full width.
@@ -421,6 +431,22 @@
 		margin-left: auto;
 	}
 
+	// Reference line (dashed horizontal target) and its floating label — used
+	// by Section 5 cohort targets in the Conversion Journey tab.
+	&__line-reference {
+		stroke: wp-colors.$gray-400;
+		stroke-width: 1;
+		stroke-dasharray: 4 3;
+		vector-effect: non-scaling-stroke;
+	}
+
+	&__line-reference-label {
+		display: block;
+		margin-top: 4px;
+		font-size: 12px;
+		color: wp-colors.$gray-600;
+	}
+
 	// Legend below a multi-series line chart.
 	&__line-legend {
 		display: flex;
@@ -435,6 +461,272 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
+	}
+
+	// Distribution viz — shared across Gates (Tab 4) and Prompts (Tab 5).
+	// Wraps the canonical table chrome (`__table-wrap` / `__table`) and pins
+	// an optional caption below the table.
+	&__distribution {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+
+		&-caption {
+			margin: 0;
+			font-size: 13px;
+			font-weight: 400;
+			line-height: 1.5;
+			color: wp-colors.$gray-700;
+		}
+	}
+
+	// Funnel viz — shared across Gates, Prompts, and Conversion Journey tabs.
+	// Stacked SVG trapezoids in a single anchor color (primary-500) fading to
+	// 0.6 opacity at the tail. Side-label mode puts the step name/count/deltas
+	// in a fixed column beside the equal-height bands; compact mode renders the
+	// count inside each band and moves labels to a legend below.
+	&__funnel {
+		padding: 20px;
+		background-color: #fff;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 4px;
+
+		&--side {
+			display: flex;
+			align-items: stretch;
+			gap: 16px;
+		}
+
+		&--compact {
+			display: flex;
+			flex-direction: column;
+			gap: 16px;
+		}
+
+		&-svg {
+			min-width: 0;
+			width: 100%;
+			height: auto;
+			display: block;
+		}
+
+		// Side mode: cap the SVG WIDTH (not height) so it keeps its exact viewBox
+		// aspect ratio — no letterboxing — and the equal-height trapezoid bands
+		// stay aligned with the equal-flex label column beside them.
+		&--side &-svg {
+			flex: 0 1 auto;
+			max-width: 320px;
+		}
+
+		// Compact mode: fill the width; the count sits inside each band, so there's
+		// no side column to align against and a height cap is fine.
+		&--compact &-svg {
+			max-height: 480px;
+		}
+
+		// Single anchor color; the 1.0 → 0.6 opacity interpolation gives each band
+		// its own weight while staying within one hue.
+		&-trapezoid {
+			fill: colors.$primary-500;
+		}
+
+		// In-band count (compact mode): white on the darker top bands, dark on the
+		// faded tail bands — see DARK_TEXT_OPACITY_THRESHOLD in Funnel.tsx. The
+		// stroke "halo" (painted under the fill) is the band's *apparent* color:
+		// primary-500 flattened over the white card at the band's own opacity
+		// (passed in as the inline --band-opacity). Because it's opaque and equal
+		// to what the band shows, it disappears inside the segment and only
+		// appears — as the band's color against the white page — where the number
+		// overflows a segment narrower than itself. (A translucent same-color halo
+		// can't do this: painted over the band, its alpha stacks and every halo
+		// drifts toward the full-opacity top color.)
+		&-count-text {
+			font-size: 16px;
+			font-weight: 600;
+			font-variant-numeric: tabular-nums;
+			paint-order: stroke;
+			stroke-width: 3px;
+			stroke-linejoin: round;
+			stroke: color-mix( in srgb, colors.$primary-500 calc( var( --band-opacity ) * 100% ), #fff );
+
+			&.is-on-dark {
+				fill: #fff;
+			}
+
+			&.is-on-light {
+				fill: wp-colors.$gray-900;
+			}
+		}
+
+		// Side-label column: equal-flex blocks align to the equal-height bands.
+		&-labels {
+			flex: 0 0 200px;
+			display: flex;
+			flex-direction: column;
+		}
+
+		&-label {
+			flex: 1 1 0;
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+		}
+
+		&-legend {
+			list-style: none;
+			margin: 0;
+			padding: 0;
+			display: flex;
+			flex-direction: column;
+			gap: 12px;
+		}
+
+		&-legend-item {
+			display: flex;
+			flex-direction: column;
+		}
+
+		&-label-name {
+			font-size: 13px;
+			font-weight: 600;
+			color: wp-colors.$gray-900;
+		}
+
+		&-label-count {
+			font-size: 20px;
+			font-weight: 600;
+			font-variant-numeric: tabular-nums;
+			line-height: 1.2;
+			color: wp-colors.$gray-900;
+		}
+
+		// Stage descriptors: both muted gray. The drop-off is funnel context, not
+		// an alarm, and deliberately NOT red/green — red/green is reserved for the
+		// period-over-period scorecard deltas elsewhere on the page.
+		&-label-pct {
+			font-size: 13px;
+			font-weight: 400;
+			color: wp-colors.$gray-600;
+		}
+
+		&-label-drop {
+			font-size: 13px;
+			font-weight: 400;
+			font-variant-numeric: tabular-nums;
+			color: wp-colors.$gray-600;
+
+			&-arrow {
+				color: wp-colors.$gray-600;
+			}
+		}
+
+		&-empty {
+			margin: 0;
+			padding: 32px 20px;
+			text-align: center;
+			font-size: 13px;
+			color: wp-colors.$gray-600;
+		}
+	}
+
+	// Sortable table affordances — shared across all tabs that embed SortableTable
+	// (Conversion Journey Section 8.4, Prompts Tab 5 performance breakdowns).
+	// Numeric right-alignment (`__table-num`) and the muted em-dash (`__table-na`)
+	// come from the shared sections.scss table chrome.
+
+	// "See more" / "See less" toggle under a row-capped sortable table.
+	&__sortable-table-more {
+		align-self: flex-start;
+		padding: 4px 0;
+		background: transparent;
+		border: 0;
+		cursor: pointer;
+		font-size: 13px;
+		font-weight: 600;
+		color: var( --wp-admin-theme-color );
+
+		&:hover {
+			text-decoration: underline;
+		}
+
+		&:focus-visible {
+			outline: 2px solid var( --wp-admin-theme-color );
+			outline-offset: 2px;
+		}
+	}
+
+	// Empty-state row inside a sortable table.
+	&__sortable-table-empty {
+		padding: 32px 20px;
+		text-align: center;
+		font-style: italic;
+		color: wp-colors.$gray-700;
+	}
+
+	// Sortable table sort-affordance chrome. The `__sortable-table` modifier on
+	// the `<table>` element scopes the sort styles so they don't bleed to plain
+	// `.newspack-insights__table` elements elsewhere.
+	&__sortable-table {
+		.newspack-insights__sortable-table-sort-cell {
+			// Eliminate the th's default padding because the button inside owns
+			// the click target and re-paints the padding itself; without this,
+			// half the cell isn't clickable.
+			padding: 0;
+		}
+
+		.newspack-insights__sortable-table-sort {
+			// Button fills the cell so any click anywhere in the th sorts.
+			display: flex;
+			align-items: center;
+			gap: 4px;
+			width: 100%;
+			padding: 12px 20px;
+			background: transparent;
+			border: 0;
+			cursor: pointer;
+			text-align: inherit;
+			font: inherit;
+			color: inherit;
+			letter-spacing: inherit;
+			text-transform: inherit;
+
+			&:hover {
+				background-color: wp-colors.$gray-200;
+			}
+
+			&:focus-visible {
+				outline: 2px solid var( --wp-admin-theme-color );
+				outline-offset: -2px;
+			}
+		}
+
+		// Numeric columns are right-aligned (shared `__table-num`), so pin the
+		// indicator to the right edge.
+		.newspack-insights__table-num .newspack-insights__sortable-table-sort {
+			justify-content: flex-end;
+			text-align: right;
+		}
+
+		.newspack-insights__sortable-table-sort-label {
+			flex: 1 1 auto;
+		}
+
+		.newspack-insights__sortable-table-sort-indicator {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			opacity: 0.3;
+			color: wp-colors.$gray-700;
+		}
+
+		.newspack-insights__sortable-table-sort:hover .newspack-insights__sortable-table-sort-indicator {
+			opacity: 0.7;
+		}
+
+		.newspack-insights__sortable-table-sort.is-active .newspack-insights__sortable-table-sort-indicator {
+			opacity: 1;
+			color: wp-colors.$gray-900;
+		}
 	}
 }
 

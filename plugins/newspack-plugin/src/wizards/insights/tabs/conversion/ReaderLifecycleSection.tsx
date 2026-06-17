@@ -21,7 +21,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { ConversionWindow } from '../../api/conversion';
 import SectionHeading from '../components/SectionHeading';
-import Funnel from './viz/Funnel';
+import Funnel from '../components/Funnel';
 import SectionState from './SectionState';
 
 export interface ReaderLifecycleSectionProps {

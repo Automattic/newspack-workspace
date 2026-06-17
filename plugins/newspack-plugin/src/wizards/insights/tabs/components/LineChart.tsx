@@ -1,18 +1,22 @@
 /**
- * LineChart (NPPD-1609) — tab-local time-series line(s) for Conversion
- * Journey. A copy of the Audience tab's LineChart (NPPD-1649), extended
- * with an optional horizontal `referenceLine` (the Section 5 cohort target,
- * e.g. "15% at 6 months") and a configurable `emptyMessage` so the Phase 1
- * empty state shows the section's spec copy. Viz stay tab-local until a
- * canonical LineChart lands in packages/components/src/ (a v1.1 ticket).
+ * LineChart — shared time-series line viz for Insights tabs (NPPD-1609, NPPD-1649).
  *
- * Used by Section 4 (cumulative-distribution curves, single + multi-series),
- * Section 5 (cohort retention, multi-series + reference line), and Section 6
- * (weekly trends, multi-series).
+ * Hoisted from the per-tab copies in audience/viz/ and conversion/viz/ into the
+ * shared tabs/components/ directory. This is the superset: it includes everything
+ * both copies had plus their individual additions merged cleanly.
  *
- * Dependency-free SVG. Renders one line from `points`, or several color-coded
- * lines from `series`. A custom dark hover panel anchored to each x-index shows
- * the label plus every series' value there. `formatLabel` humanizes x labels.
+ * Features:
+ *   - Single-series via `points`; multi-series via `series` (takes precedence).
+ *   - X-axis spine driven by the longest series so unequal-length series stay
+ *     column-aligned and the hit-band geometry is never off a short first series.
+ *   - Empty only when *every* series is empty.
+ *   - Optional horizontal reference line (`referenceLine`) — e.g. a cohort target.
+ *   - Optional y-axis ceiling (`yMax`) — data always wins if it exceeds the pin.
+ *   - Configurable empty-state copy (`emptyMessage`).
+ *   - `formatLabel` humanizes x-axis labels in tooltips and the meta row.
+ *   - Dark hover panel anchored to each x-index; one hit band per column for
+ *     forgiving mouse targeting.
+ *   - Dependency-free SVG.
  */
 
 /**
@@ -24,7 +28,7 @@ import { useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { formatNumber } from '../../components/format';
+import { formatNumber } from './format';
 
 export interface LinePoint {
 	label: string;
