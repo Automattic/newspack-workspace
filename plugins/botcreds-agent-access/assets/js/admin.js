@@ -11,7 +11,62 @@
 		initAdminCreateButtons();
 		initAdminRevokeButtons();
 		initAdminUpdateButtons();
+		initScopeReadOnlyToggles();
 	});
+
+	/**
+	 * When "Read only" is toggled on, disable and uncheck all other scope checkboxes.
+	 * When toggled off, re-enable them.
+	 */
+	function initScopeReadOnlyToggles() {
+		// Delegate so it also works for dynamically injected checklists.
+		document.addEventListener('change', function (e) {
+			if (!e.target.classList.contains('agent-access-scope-read-only')) return;
+			var checklist = e.target.closest('.agent-access-scope-checklist');
+			if (!checklist) return;
+			var typeCheckboxes = checklist.querySelectorAll('.agent-access-scope-type');
+			var isReadOnly = e.target.checked;
+			typeCheckboxes.forEach(function (cb) {
+				cb.disabled = isReadOnly;
+				if (isReadOnly) {
+					cb.checked = false;
+				}
+			});
+		});
+	}
+
+	/**
+	 * Collect scope data from a checklist container.
+	 * Returns { scope_read_only: '1'|'', scope_types: string[] }
+	 */
+	function collectScopeFromChecklist(container) {
+		var readOnlyEl = container ? container.querySelector('.agent-access-scope-read-only') : null;
+		if (readOnlyEl && readOnlyEl.checked) {
+			return { scope_read_only: '1', scope_types: [] };
+		}
+		var typeCheckboxes = container ? container.querySelectorAll('.agent-access-scope-type:checked') : [];
+		var types = [];
+		typeCheckboxes.forEach(function (cb) {
+			types.push(cb.value);
+		});
+		return { scope_read_only: '', scope_types: types };
+	}
+
+	/**
+	 * Encode scope data as a query-string fragment.
+	 */
+	function encodeScopeParams(scopeData) {
+		var parts = [];
+		if (scopeData.scope_read_only) {
+			parts.push('scope_read_only=' + encodeURIComponent(scopeData.scope_read_only));
+		}
+		if (scopeData.scope_types && scopeData.scope_types.length > 0) {
+			scopeData.scope_types.forEach(function (t) {
+				parts.push('scope_types%5B%5D=' + encodeURIComponent(t));
+			});
+		}
+		return parts.join('&');
+	}
 
 	/**
 	 * Create connection via AJAX.
@@ -54,16 +109,17 @@
 				btn.textContent = 'Connect Agent';
 			};
 
-			var scopeEl  = document.getElementById('agent-access-scope');
-			var scope    = scopeEl ? scopeEl.value : 'posts_media';
-			var rlEl     = document.getElementById('agent-access-rate-limit');
-			var rl       = rlEl ? rlEl.value : 'standard';
-			var cpEl     = document.getElementById('agent-access-content-policy');
-			var cp       = cpEl ? cpEl.value : 'standard';
+			var card       = document.getElementById('agent-access-card');
+			var checklist  = card ? card.querySelector('.agent-access-scope-checklist') : null;
+			var scopeData  = collectScopeFromChecklist(checklist);
+			var rlEl       = document.getElementById('agent-access-rate-limit');
+			var rl         = rlEl ? rlEl.value : 'standard';
+			var cpEl       = document.getElementById('agent-access-content-policy');
+			var cp         = cpEl ? cpEl.value : 'standard';
 			xhr.send(
 				'action=agent_access_create' +
 				'&nonce=' + encodeURIComponent(agentAccess.create_nonce) +
-				'&scope=' + encodeURIComponent(scope) +
+				'&' + encodeScopeParams(scopeData) +
 				'&rate_limit=' + encodeURIComponent(rl) +
 				'&content_policy=' + encodeURIComponent(cp)
 			);
@@ -199,17 +255,18 @@
 					btn.textContent = 'Connect agent for ' + displayName;
 				};
 
-				var scopeEl = document.querySelector('#agent-access-admin-card select[name="scope"]');
-				var scope   = scopeEl ? scopeEl.value : 'posts_media';
-				var rlEl    = document.querySelector('#agent-access-admin-card select[name="rate_limit"]');
-				var rl      = rlEl ? rlEl.value : 'standard';
-				var cpEl    = document.querySelector('#agent-access-admin-card select[name="content_policy"]');
-				var cp      = cpEl ? cpEl.value : 'standard';
+				var adminCard  = document.getElementById('agent-access-admin-card');
+				var checklist  = adminCard ? adminCard.querySelector('.agent-access-scope-checklist') : null;
+				var scopeData  = collectScopeFromChecklist(checklist);
+				var rlEl       = document.querySelector('#agent-access-admin-card select[name="rate_limit"]');
+				var rl         = rlEl ? rlEl.value : 'standard';
+				var cpEl       = document.querySelector('#agent-access-admin-card select[name="content_policy"]');
+				var cp         = cpEl ? cpEl.value : 'standard';
 				xhr.send(
 					'action=agent_access_admin_create' +
 					'&nonce=' + encodeURIComponent(agentAccess.admin_create_nonce) +
 					'&user_id=' + encodeURIComponent(userId) +
-					'&scope=' + encodeURIComponent(scope) +
+					'&' + encodeScopeParams(scopeData) +
 					'&rate_limit=' + encodeURIComponent(rl) +
 					'&content_policy=' + encodeURIComponent(cp)
 				);
@@ -251,11 +308,12 @@
 				var userId  = btn.getAttribute('data-user-id');
 				var section = btn.closest('.agent-access-settings-section') || btn.closest('td').closest('table').closest('div');
 
-				var scopeEl  = section ? section.querySelector('.agent-access-admin-update-scope') : null;
-				var rlEl     = section ? section.querySelector('.agent-access-admin-update-rate-limit') : null;
-				var cpEl     = section ? section.querySelector('.agent-access-admin-update-content-policy') : null;
+				// The update scope is rendered as a .agent-access-admin-update-scope div (checklist).
+				var checklistEl = section ? section.querySelector('.agent-access-admin-update-scope') : null;
+				var scopeData   = collectScopeFromChecklist(checklistEl);
+				var rlEl        = section ? section.querySelector('.agent-access-admin-update-rate-limit') : null;
+				var cpEl        = section ? section.querySelector('.agent-access-admin-update-content-policy') : null;
 
-				var scope  = scopeEl  ? scopeEl.value  : 'posts_media';
 				var rl     = rlEl     ? rlEl.value     : 'standard';
 				var policy = cpEl     ? cpEl.value     : 'standard';
 
@@ -326,7 +384,7 @@
 					'action=agent_access_admin_update' +
 					'&nonce=' + encodeURIComponent(agentAccess.admin_update_nonce) +
 					'&user_id=' + encodeURIComponent(userId) +
-					'&scope=' + encodeURIComponent(scope) +
+					'&' + encodeScopeParams(scopeData) +
 					'&rate_limit=' + encodeURIComponent(rl) +
 					'&policy=' + encodeURIComponent(policy)
 				);

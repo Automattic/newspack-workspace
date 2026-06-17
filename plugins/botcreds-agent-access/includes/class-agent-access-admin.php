@@ -359,7 +359,7 @@ class Agent_Access_Admin {
 		}
 
 		// Save scope and rate-limit tier for this credential.
-		$scope = isset( $_POST['scope'] ) ? sanitize_key( $_POST['scope'] ) : Agent_Access_Scope::DEFAULT_SCOPE; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$scope = self::collect_scope_from_post();
 		$tier  = isset( $_POST['rate_limit'] ) ? sanitize_key( $_POST['rate_limit'] ) : Agent_Access_Rate_Limiter::DEFAULT_TIER; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		Agent_Access_Scope::save( get_current_user_id(), $result['uuid'], $scope );
 		Agent_Access_Rate_Limiter::save( get_current_user_id(), $result['uuid'], $tier );
@@ -421,7 +421,7 @@ class Agent_Access_Admin {
 		}
 
 		// Save scope and rate-limit tier for this credential.
-		$scope = isset( $_POST['scope'] ) ? sanitize_key( $_POST['scope'] ) : Agent_Access_Scope::DEFAULT_SCOPE; // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		$scope = self::collect_scope_from_post();
 		$tier  = isset( $_POST['rate_limit'] ) ? sanitize_key( $_POST['rate_limit'] ) : Agent_Access_Rate_Limiter::DEFAULT_TIER; // phpcs:ignore WordPress.Security.NonceVerification.Missing
 		Agent_Access_Scope::save( $user_id, $result['uuid'], $scope );
 		Agent_Access_Rate_Limiter::save( $user_id, $result['uuid'], $tier );
@@ -495,7 +495,7 @@ class Agent_Access_Admin {
 		}
 
 		$uuid       = $existing['uuid'];
-		$scope      = isset( $_POST['scope'] )      ? sanitize_key( $_POST['scope'] )      : Agent_Access_Scope::DEFAULT_SCOPE;
+		$scope      = self::collect_scope_from_post();
 		$policy     = isset( $_POST['policy'] )     ? sanitize_key( $_POST['policy'] )     : Agent_Access_Content_Policy::DEFAULT_POLICY;
 		$rate_limit = isset( $_POST['rate_limit'] ) ? sanitize_key( $_POST['rate_limit'] ) : Agent_Access_Rate_Limiter::DEFAULT_TIER;
 
@@ -504,6 +504,41 @@ class Agent_Access_Admin {
 		Agent_Access_Rate_Limiter::save( $user_id, $uuid, $rate_limit );
 
 		wp_send_json_success( __( 'Settings saved.', 'botcreds-agent-access' ) );
+	}
+
+	/**
+	 * Collect scope from the current AJAX POST request.
+	 *
+	 * Reads scope_read_only and scope_types[] POST fields and returns an array
+	 * of post type slugs suitable for Agent_Access_Scope::save().
+	 *
+	 * @return array
+	 */
+	private static function collect_scope_from_post() {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing
+		if ( ! empty( $_POST['scope_read_only'] ) ) {
+			return array( '__read_only__' );
+		}
+
+		$raw_types = isset( $_POST['scope_types'] ) && is_array( $_POST['scope_types'] )
+			? (array) $_POST['scope_types']
+			: array();
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+
+		$clean = array();
+		foreach ( $raw_types as $slug ) {
+			$s = sanitize_key( (string) $slug );
+			if ( '' !== $s ) {
+				$clean[] = $s;
+			}
+		}
+
+		// Default to full if nothing was selected.
+		if ( empty( $clean ) ) {
+			return array( '*' );
+		}
+
+		return $clean;
 	}
 
 	/**
@@ -647,25 +682,44 @@ class Agent_Access_Admin {
 				$current_policy = Agent_Access_Content_Policy::get( $user->ID, $uuid );
 				$current_rl     = Agent_Access_Rate_Limiter::get( $user->ID, $uuid );
 				?>
+				<?php
+					$update_available_types = Agent_Access_Scope::get_available_post_types();
+					$is_read_only_scope     = is_array( $current_scope ) && array( '__read_only__' ) === $current_scope;
+					$is_wildcard_scope      = is_array( $current_scope ) && in_array( '*', (array) $current_scope, true );
+					$checked_slugs          = is_array( $current_scope ) ? $current_scope : array( 'post', 'attachment' );
+				?>
 				<div class="agent-access-settings-section" style="margin-top:1.5em;">
 					<h3 style="margin-bottom:0.5em;"><?php esc_html_e( 'Agent Settings', 'botcreds-agent-access' ); ?></h3>
 					<table class="form-table" role="presentation" style="max-width:480px;">
 						<tr>
 							<th scope="row">
-								<label for="agent-access-admin-update-scope-<?php echo esc_attr( $user->ID ); ?>"><?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?></label>
+								<?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?>
 							</th>
 							<td>
-								<select id="agent-access-admin-update-scope-<?php echo esc_attr( $user->ID ); ?>"
-									class="agent-access-admin-update-scope"
+								<div class="agent-access-scope-checklist agent-access-admin-update-scope"
 									data-user-id="<?php echo esc_attr( $user->ID ); ?>">
-									<?php foreach ( Agent_Access_Scope::get_templates() as $key => $tpl ) : ?>
-										<option value="<?php echo esc_attr( $key ); ?>"
-											<?php selected( $key, $current_scope ); ?>
-											title="<?php echo esc_attr( $tpl['description'] ); ?>">
-											<?php echo esc_html( $tpl['label'] ); ?>
-										</option>
+									<label class="agent-access-scope-read-only-label" style="display:block;margin-bottom:6px;font-weight:600;">
+										<input type="checkbox"
+											name="scope_read_only"
+											class="agent-access-scope-read-only"
+											value="1"
+											<?php checked( $is_read_only_scope ); ?>>
+										<?php esc_html_e( 'Read only (no writes)', 'botcreds-agent-access' ); ?>
+									</label>
+									<hr style="margin:4px 0 6px;">
+									<?php foreach ( $update_available_types as $type ) : ?>
+										<label style="display:block;margin-bottom:3px;">
+											<input type="checkbox"
+												name="scope_types[]"
+												class="agent-access-scope-type"
+												value="<?php echo esc_attr( $type['slug'] ); ?>"
+												<?php checked( $is_wildcard_scope || in_array( $type['slug'], $checked_slugs, true ) ); ?>
+												<?php echo $is_read_only_scope ? 'disabled' : ''; ?>>
+											<?php echo esc_html( $type['label'] ); ?>
+											<span class="description" style="font-size:11px;color:#777;">(<?php echo esc_html( $type['slug'] ); ?>)</span>
+										</label>
 									<?php endforeach; ?>
-								</select>
+								</div>
 							</td>
 						</tr>
 						<tr>
@@ -720,22 +774,36 @@ class Agent_Access_Admin {
 
 				<?php $this->render_profile_content_table( $user->ID ); ?>
 			<?php else : ?>
+				<?php $admin_create_types = Agent_Access_Scope::get_available_post_types(); ?>
+				<?php $admin_create_defaults = array( 'post', 'attachment' ); ?>
 				<div id="agent-access-admin-card" data-user-id="<?php echo esc_attr( $user->ID ); ?>">
 					<table class="form-table" role="presentation" style="max-width:480px;">
 						<tr>
 							<th scope="row">
-								<label for="agent-access-admin-scope-<?php echo esc_attr( $user->ID ); ?>"><?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?></label>
+								<?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?>
 							</th>
 							<td>
-								<select id="agent-access-admin-scope-<?php echo esc_attr( $user->ID ); ?>" name="scope">
-									<?php foreach ( Agent_Access_Scope::get_templates() as $key => $tpl ) : ?>
-										<option value="<?php echo esc_attr( $key ); ?>"
-											<?php selected( $key, Agent_Access_Scope::DEFAULT_SCOPE ); ?>
-											title="<?php echo esc_attr( $tpl['description'] ); ?>">
-											<?php echo esc_html( $tpl['label'] ); ?>
-										</option>
+								<div class="agent-access-scope-checklist">
+									<label class="agent-access-scope-read-only-label" style="display:block;margin-bottom:6px;font-weight:600;">
+										<input type="checkbox"
+											name="scope_read_only"
+											class="agent-access-scope-read-only"
+											value="1">
+										<?php esc_html_e( 'Read only (no writes)', 'botcreds-agent-access' ); ?>
+									</label>
+									<hr style="margin:4px 0 6px;">
+									<?php foreach ( $admin_create_types as $type ) : ?>
+										<label style="display:block;margin-bottom:3px;">
+											<input type="checkbox"
+												name="scope_types[]"
+												class="agent-access-scope-type"
+												value="<?php echo esc_attr( $type['slug'] ); ?>"
+												<?php checked( in_array( $type['slug'], $admin_create_defaults, true ) ); ?>>
+											<?php echo esc_html( $type['label'] ); ?>
+											<span class="description" style="font-size:11px;color:#777;">(<?php echo esc_html( $type['slug'] ); ?>)</span>
+										</label>
 									<?php endforeach; ?>
-								</select>
+								</div>
 							</td>
 						</tr>
 						<tr>
@@ -936,23 +1004,38 @@ class Agent_Access_Admin {
 	 * Render the "disconnected" state with create button.
 	 */
 	private function render_disconnected_state() {
+		$available_types = Agent_Access_Scope::get_available_post_types();
+		// Default checked: post + attachment (posts_media equivalent)
+		$default_slugs   = array( 'post', 'attachment' );
 		?>
 		<div id="agent-access-card">
 			<table class="form-table" role="presentation" style="max-width:480px;">
 				<tr>
 					<th scope="row">
-						<label for="agent-access-scope"><?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?></label>
+						<?php esc_html_e( 'Scope', 'botcreds-agent-access' ); ?>
 					</th>
 					<td>
-						<select id="agent-access-scope">
-							<?php foreach ( Agent_Access_Scope::get_templates() as $key => $tpl ) : ?>
-								<option value="<?php echo esc_attr( $key ); ?>"
-									<?php selected( $key, Agent_Access_Scope::DEFAULT_SCOPE ); ?>
-									title="<?php echo esc_attr( $tpl['description'] ); ?>">
-									<?php echo esc_html( $tpl['label'] ); ?>
-								</option>
+						<div class="agent-access-scope-checklist">
+							<label class="agent-access-scope-read-only-label" style="display:block;margin-bottom:6px;font-weight:600;">
+								<input type="checkbox"
+									name="scope_read_only"
+									class="agent-access-scope-read-only"
+									value="1">
+								<?php esc_html_e( 'Read only (no writes)', 'botcreds-agent-access' ); ?>
+							</label>
+							<hr style="margin:4px 0 6px;">
+							<?php foreach ( $available_types as $type ) : ?>
+								<label style="display:block;margin-bottom:3px;">
+									<input type="checkbox"
+										name="scope_types[]"
+										class="agent-access-scope-type"
+										value="<?php echo esc_attr( $type['slug'] ); ?>"
+										<?php checked( in_array( $type['slug'], $default_slugs, true ) ); ?>>
+									<?php echo esc_html( $type['label'] ); ?>
+									<span class="description" style="font-size:11px;color:#777;">(<?php echo esc_html( $type['slug'] ); ?>)</span>
+								</label>
 							<?php endforeach; ?>
-						</select>
+						</div>
 					</td>
 				</tr>
 				<tr>

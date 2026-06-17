@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.7
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.2.6
+Stable tag: 2.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -75,6 +75,9 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.3.0 =
+* Scope redesign: replace single dropdown with per-CPT checklist. Automatically discovers all REST-enabled post types on the site. Legacy scope keys migrated automatically.
 
 = 2.2.6 =
 * Add scope, content policy, and rate-limit editing for already-connected agents in admin profile view
