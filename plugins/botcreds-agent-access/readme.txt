@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.7
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.3.1
+Stable tag: 2.3.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -75,6 +75,9 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.3.2 =
+* Fix: content policy now hooks all public REST-enabled CPTs, not just core post/attachment — custom post types like newspack_nl_cpt were completely ungoverned
 
 = 2.3.1 =
 * Fix: content policy now blocks publish on status-promotion updates, not just on create

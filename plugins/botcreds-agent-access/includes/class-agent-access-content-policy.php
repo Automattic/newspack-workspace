@@ -30,15 +30,25 @@ class Agent_Access_Content_Policy {
 
 	/**
 	 * Register hooks.
+	 *
+	 * Hooks rest_pre_insert_{post_type} and rest_after_insert_{post_type} for
+	 * every public, REST-enabled post type so custom CPTs (e.g. newspack_nl_cpt)
+	 * are governed by content policy just like core post types.
 	 */
 	public static function init() {
-		// Intercept before post / attachment is written to DB.
-		add_filter( 'rest_pre_insert_post',       array( __CLASS__, 'apply' ), 10, 2 );
-		add_filter( 'rest_pre_insert_attachment',  array( __CLASS__, 'apply' ), 10, 2 );
+		add_action( 'init', array( __CLASS__, 'register_cpt_hooks' ), 999 );
+	}
 
-		// Count new posts AFTER successful creation (only real creates, not updates).
-		add_action( 'rest_after_insert_post',       array( __CLASS__, 'record_creation' ), 10, 3 );
-		add_action( 'rest_after_insert_attachment', array( __CLASS__, 'record_creation' ), 10, 3 );
+	/**
+	 * Register rest_pre_insert / rest_after_insert hooks for all public CPTs.
+	 * Called late on 'init' so all post types are registered first.
+	 */
+	public static function register_cpt_hooks() {
+		$post_types = get_post_types( array( 'show_in_rest' => true ), 'names' );
+		foreach ( $post_types as $post_type ) {
+			add_filter( "rest_pre_insert_{$post_type}",  array( __CLASS__, 'apply' ), 10, 2 );
+			add_action( "rest_after_insert_{$post_type}", array( __CLASS__, 'record_creation' ), 10, 3 );
+		}
 	}
 
 	// ──────────────────────────────────────────────
