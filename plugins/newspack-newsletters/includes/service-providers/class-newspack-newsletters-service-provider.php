@@ -459,6 +459,16 @@ abstract class Newspack_Newsletters_Service_Provider implements Newspack_Newslet
 
 		if ( true === $result ) {
 			Newspack_Newsletters::set_newsletter_sent( $post_id );
+			// Stamp the engine active at send time as the producing engine. Send time is
+			// the source of truth: the dispatched HTML reflects the engine resolved here,
+			// and for a scheduled send the flag is read on dispatch (not at authoring), so
+			// a flag flip between authoring and send is recorded as the send-time engine.
+			// The write is intentionally lossy toward MJML: if it fails, the resolver's
+			// default (Renderer_Controller::get_post_renderer) reports mjml.
+			\Newspack\Newsletters\Email_Renderers\Renderer_Controller::stamp_renderer(
+				$post_id,
+				\Newspack\Newsletters\Email_Renderers\Renderer_Controller::active_engine()
+			);
 		}
 
 		if ( \is_wp_error( $result ) ) {
