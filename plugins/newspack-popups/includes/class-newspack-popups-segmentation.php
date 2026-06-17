@@ -223,7 +223,12 @@ final class Newspack_Popups_Segmentation {
 	 * @return string
 	 */
 	public static function append_donor_segment_param( $url, $original_url, $post ) {
-		if ( ! class_exists( '\Newspack_Newsletters\Tracking\Utils' ) ) {
+		// Guard on the method, not just the class: the Tracking\Utils class predates
+		// get_merge_tag(), so an older newspack-newsletters can satisfy a class_exists()
+		// check while lacking the method — calling it would fatal mid-render, breaking
+		// every newsletter on the site. method_exists() also returns false when the
+		// class is absent, so this covers both the missing-class and version-skew cases.
+		if ( ! method_exists( '\Newspack_Newsletters\Tracking\Utils', 'get_merge_tag' ) ) {
 			return $url;
 		}
 		if ( ! self::is_newsletter_post( $post ) ) {
@@ -235,7 +240,13 @@ final class Newspack_Popups_Segmentation {
 		// Read the option directly rather than via Newspack_Popups_Settings::get_setting(),
 		// which builds the whole settings array (including a WP_Query over all pages)
 		// on every call — wasteful here since this filter fires once per newsletter link.
-		$donor_merge_field = get_option( 'newspack_popups_mc_donor_merge_field', 'DONAT' );
+		$donor_merge_field = get_option( 'newspack_popups_mc_donor_merge_field', Newspack_Popups_Settings::DEFAULT_DONOR_MERGE_FIELD );
+		// This setting is a comma-delimited list of name fragments used for substring
+		// matching at login (see reader_logged_in()). Building a query-param merge tag
+		// instead needs a single exact ESP merge tag — a multi-value list can't map to
+		// one — so use the first entry. The value must be the exact merge tag (not a
+		// display label or partial name) for the ESP to substitute it.
+		$donor_merge_field = trim( explode( ',', (string) $donor_merge_field )[0] );
 		if ( empty( $donor_merge_field ) ) {
 			return $url;
 		}

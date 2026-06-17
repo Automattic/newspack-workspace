@@ -85,4 +85,29 @@ class SegmentationNewsletterLinkTest extends WP_UnitTestCase {
 			Newspack_Popups_Segmentation::append_donor_segment_param( $url, $url, $post )
 		);
 	}
+
+	/**
+	 * Relative (host-less) links are first-party by definition and get the param.
+	 */
+	public function test_appends_to_relative_link() {
+		$result = Newspack_Popups_Segmentation::append_donor_segment_param( '/some-article/', '/some-article/', $this->make_newsletter() );
+
+		$args = wp_parse_args( wp_parse_url( $result, PHP_URL_QUERY ) );
+		$this->assertArrayHasKey( 'np_seg_donor', $args );
+		$this->assertSame( '*|' . self::DONOR_FIELD . '|*', $args['np_seg_donor'] );
+	}
+
+	/**
+	 * The donor-merge-field setting is a comma-delimited substring list (used for
+	 * login matching); a query-param merge tag needs a single exact tag, so only
+	 * the first entry is used and surrounding whitespace is trimmed.
+	 */
+	public function test_uses_first_entry_of_comma_delimited_field() {
+		update_option( 'newspack_popups_mc_donor_merge_field', ' HUB-MEMBER , MEMBER ' );
+		$url    = home_url( '/some-article/' );
+		$result = Newspack_Popups_Segmentation::append_donor_segment_param( $url, $url, $this->make_newsletter() );
+
+		$args = wp_parse_args( wp_parse_url( $result, PHP_URL_QUERY ) );
+		$this->assertSame( '*|HUB-MEMBER|*', $args['np_seg_donor'] );
+	}
 }

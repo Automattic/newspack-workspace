@@ -58,6 +58,7 @@ describe( 'donation criteria matching', () => {
 		[ 'Mailchimp', '*|HUB-MEMBER|*' ],
 		[ 'Constant Contact', '[[DONOR]]' ],
 		[ 'ActiveCampaign', '%DONOR%' ],
+		[ 'Campaign Monitor', '[HUB-MEMBER]' ],
 	] )( 'ignores an unsubstituted %s merge tag so every recipient is not flagged', ( _esp, value ) => {
 		window.history.replaceState( {}, '', '/?np_seg_donor=' + encodeURIComponent( value ) );
 		expect( isDonorFromEmail() ).toBe( false );

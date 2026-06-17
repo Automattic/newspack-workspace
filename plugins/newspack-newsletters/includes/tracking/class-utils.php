@@ -19,19 +19,13 @@ final class Utils {
 		if ( empty( $provider ) ) {
 			return '';
 		}
-		$provider_name = $provider->service;
-		switch ( $provider_name ) {
-			case 'mailchimp':
-				return '*|EMAIL|*';
-			case 'campaign_monitor':
-				return '[email]';
-			case 'constant_contact':
-				return '[[emailAddress]]';
-			case 'active_campaign':
-				return '%EMAIL%';
-			default:
-				return '';
-		}
+		return match ( $provider->service ) {
+			'mailchimp'        => '*|EMAIL|*',
+			'campaign_monitor' => '[email]',
+			'constant_contact' => '[[emailAddress]]',
+			'active_campaign'  => '%EMAIL%',
+			default            => '',
+		};
 	}
 
 	/**
@@ -60,17 +54,12 @@ final class Utils {
 		if ( empty( $provider ) ) {
 			return '';
 		}
-		switch ( $provider->service ) {
-			case 'mailchimp':
-				return '*|' . $field . '|*';
-			case 'campaign_monitor':
-				return '[' . $field . ']';
-			case 'constant_contact':
-				return '[[' . $field . ']]';
-			case 'active_campaign':
-				return '%' . $field . '%';
-			default:
-				return '';
-		}
+		return match ( $provider->service ) {
+			'mailchimp'        => '*|' . $field . '|*',
+			'campaign_monitor' => '[' . $field . ']',
+			'constant_contact' => '[[' . $field . ']]',
+			'active_campaign'  => '%' . $field . '%',
+			default            => '',
+		};
 	}
 }

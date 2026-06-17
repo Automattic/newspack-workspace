@@ -30,13 +30,17 @@ const isDonorValue = value => ! [ 'no', 'none', 'false', '0', '' ].includes( Str
  * value. Such a value must be ignored, or every recipient of a misconfigured
  * send would be flagged as a donor from the raw template string.
  *
- * Covers three of the four ESPs supported by Newspack Newsletters:
+ * Covers all four ESPs supported by Newspack Newsletters:
  *   Mailchimp        *|FIELD|*
  *   Constant Contact [[FIELD]]
  *   ActiveCampaign   %FIELD%
+ *   Campaign Monitor [FIELD]
  *
- * Campaign Monitor uses [FIELD], but bare square brackets are too common in
- * query values to guard against reliably.
+ * Rejecting the bare-bracket Campaign Monitor form would be risky for an
+ * arbitrary query value, but `np_seg_donor` only ever carries a donor-status
+ * value (e.g. `true`, `monthly`, `$50.00`) — never a `[…]`-wrapped string — so
+ * matching it here is safe and keeps the inbound guard symmetric with every tag
+ * get_merge_tag() can emit.
  *
  * @param {string} value The decoded query-param value.
  * @return {boolean} True when the value contains raw merge-tag syntax.
@@ -44,7 +48,8 @@ const isDonorValue = value => ! [ 'no', 'none', 'false', '0', '' ].includes( Str
 const isUnsubstitutedMergeTag = value =>
 	/^\*\|[^|]+\|\*$/.test( value ) || // Mailchimp
 	/^\[\[[^\]]+\]\]$/.test( value ) || // Constant Contact
-	/^%[^%]+%$/.test( value ); // ActiveCampaign
+	/^%[^%]+%$/.test( value ) || // ActiveCampaign
+	/^\[[^\][]+\]$/.test( value ); // Campaign Monitor
 
 /**
  * Whether the reader arrived from a newsletter email flagged as a donor.
@@ -69,6 +74,11 @@ export function isDonorFromEmail() {
 
 /**
  * Matching function for the 'donation' criteria.
+ *
+ * Readers arriving from a newsletter flagged as donors (`np_seg_donor`) match
+ * `donors`; a falsy or absent signal leaves them matching `non-donors`, the same
+ * as a reader who never clicked — the inbound flag only ever adds donors, there
+ * is no separate "unknown" state.
  *
  * @param {Object} config    The segment criteria config.
  * @param {Object} ras       The reader activation object.
