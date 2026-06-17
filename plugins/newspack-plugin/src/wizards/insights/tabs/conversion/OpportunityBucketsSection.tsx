@@ -25,7 +25,7 @@ import MetricCard from '../components/MetricCard';
 import SectionHeading from '../components/SectionHeading';
 import { formatNumber, formatPercent } from '../components/format';
 import { scalarToMetricCardProps } from './scalarToCard';
-import SortableTable, { type SortableColumn } from './viz/SortableTable';
+import SortableTable, { type SortableColumn } from '../components/SortableTable';
 import SectionState from './SectionState';
 
 export interface OpportunityBucketsSectionProps {

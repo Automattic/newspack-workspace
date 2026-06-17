@@ -1,10 +1,12 @@
 /**
- * Funnel viz (NPPD) — tab-local to Gates.
+ * Funnel viz — shared across Insights tabs (Gates, Prompts, Conversion Journey).
  *
- * Multi-step conversion funnel rendered as stacked SVG trapezoids. Each
- * trapezoid's top edge is proportional to its own count and its bottom edge to
- * the next step's count, so the silhouette narrows with drop-off; the last step
- * is a rectangle. A single anchor color (primary-500) fades from full opacity at
+ * Multi-step conversion funnel rendered as stacked SVG trapezoids. Each level's
+ * width tracks its share of the top count so the silhouette narrows with
+ * drop-off, but widths are clamped (min segment width + max per-segment taper)
+ * so it reads as a rough relative-size viz, never a razor-thin sliver or a
+ * cliff — see computeDisplayHalfWidths. The counts/percentages in the labels
+ * are always exact. A single anchor color (primary-500) fades from full opacity at
  * the top to 0.6 at the bottom, so each stage carries its own weight.
  *
  * Two layouts, auto-selected from container width + step count:
@@ -13,9 +15,6 @@
  *   - Compact: the count renders inside each trapezoid and the full
  *     names/counts/labels move to a legend below. Used when stepCount >= 5 OR
  *     width < 480px.
- *
- * Tab-local for now (only Gates consumes a funnel); promote to
- * packages/components/src/ when a second consumer arrives.
  */
 
 /**
@@ -27,8 +26,7 @@ import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import type { GatesFunnelStage } from '../../../api/gates';
-import { formatNumber, formatPercent } from '../../components/format';
+import { formatNumber, formatPercent } from './format';
 
 const COMPACT_MIN_STEPS = 5;
 const COMPACT_MAX_WIDTH = 480; // Below this container width, force compact mode.
@@ -40,9 +38,24 @@ const TAIL_OPACITY = 0.6;
 // Above this band opacity the fill is dark enough for white text; below it, the
 // faded band needs dark text. Only affects compact mode (count rendered inside).
 const DARK_TEXT_OPACITY_THRESHOLD = 0.75;
+const HALF_WIDTH = VIEWBOX_WIDTH / 2;
+// Width clamping: the funnel is a rough relative-size viz, not an exact one. No
+// segment is narrower than MIN_SEGMENT_WIDTH_RATIO of the chart width (avoids
+// razor-thin bands). The max per-segment taper is not fixed — it's computed
+// per-funnel from the step count (see computeDisplayHalfWidths) so funnels of
+// any length descend evenly across all their segments rather than cliff-diving
+// to the floor in one step.
+const MIN_SEGMENT_WIDTH_RATIO = 0.2;
+const MIN_HALF_WIDTH = ( MIN_SEGMENT_WIDTH_RATIO * VIEWBOX_WIDTH ) / 2;
+
+export interface FunnelStage {
+	label: string;
+	count: number;
+	pct_of_top: number;
+}
 
 export interface FunnelProps {
-	stages: GatesFunnelStage[];
+	stages: FunnelStage[];
 }
 
 /** Compact when there are many steps OR the container is narrow. */
@@ -68,14 +81,44 @@ export const dropFromPrevious = ( count: number, prevCount: number ): number => 
 const stepHeightFor = ( stepCount: number ): number => Math.max( MIN_STEP_HEIGHT, Math.floor( MAX_CHART_HEIGHT / stepCount ) );
 
 /**
- * SVG path for one trapezoid: top edge sized to `count`, bottom to `nextCount`,
- * centered. The bottom is clamped to never exceed the top so the silhouette only
- * ever narrows (a funnel never flares outward, even on anomalous data).
+ * Per-level display half-width for every stage. Raw width is proportional to the
+ * stage's share of the top count, but clamped so the silhouette stays a readable
+ * rough viz rather than a mathematically exact one. Walking top→bottom, each
+ * level is:
+ *   - at most the level above it (the funnel only ever narrows, never flares —
+ *     even on anomalous data where a later stage exceeds an earlier one),
+ *   - at least MIN_HALF_WIDTH (no razor-thin band), and
+ *   - no more than the per-funnel max taper (HALF_WIDTH / stepCount) narrower
+ *     than the level above it — so an N-step funnel descends across all N
+ *     segments (≈ HALF_WIDTH / N at the bottom) instead of cliff-diving to the
+ *     floor in one step. A 2-step funnel may narrow up to half the chart per
+ *     step, a 3-step a third, a 5-step a fifth, etc.
+ * Counts/percentages shown in the labels are unaffected — only widths are clamped.
  */
-const trapezoidPath = ( count: number, nextCount: number, topCount: number, yTop: number, yBottom: number ): string => {
+export const computeDisplayHalfWidths = ( stages: FunnelStage[], topCount: number ): number[] => {
+	if ( topCount <= 0 ) {
+		return stages.map( () => 0 );
+	}
+	const maxTaperHalfWidth = HALF_WIDTH / stages.length;
+	const halves: number[] = [];
+	stages.forEach( ( stage, index ) => {
+		const raw = Math.min( HALF_WIDTH, ( stage.count / topCount ) * HALF_WIDTH );
+		if ( index === 0 ) {
+			halves.push( raw );
+			return;
+		}
+		const prev = halves[ index - 1 ];
+		const lower = Math.max( MIN_HALF_WIDTH, prev - maxTaperHalfWidth );
+		// Clamp raw into [lower, prev]: never wider than the level above, never
+		// below the min floor or beyond the max taper from the level above.
+		halves.push( Math.min( prev, Math.max( lower, raw ) ) );
+	} );
+	return halves;
+};
+
+/** SVG path for one trapezoid from a top half-width to a bottom half-width, centered. */
+const trapezoidPath = ( halfTop: number, halfBottom: number, yTop: number, yBottom: number ): string => {
 	const cx = VIEWBOX_WIDTH / 2;
-	const halfTop = Math.min( VIEWBOX_WIDTH / 2, ( count / topCount ) * ( VIEWBOX_WIDTH / 2 ) );
-	const halfBottom = Math.min( halfTop, ( nextCount / topCount ) * ( VIEWBOX_WIDTH / 2 ) );
 	return [
 		`M ${ cx - halfTop } ${ yTop }`,
 		`L ${ cx + halfTop } ${ yTop }`,
@@ -86,7 +129,7 @@ const trapezoidPath = ( count: number, nextCount: number, topCount: number, yTop
 };
 
 interface StepView {
-	stage: GatesFunnelStage;
+	stage: FunnelStage;
 	index: number;
 	opacity: number;
 	pctOfTop: number;
@@ -94,7 +137,7 @@ interface StepView {
 }
 
 /** Build the per-step view model shared by both layouts. */
-const buildSteps = ( stages: GatesFunnelStage[], topCount: number ): StepView[] =>
+const buildSteps = ( stages: FunnelStage[], topCount: number ): StepView[] =>
 	stages.map( ( stage, index ) => {
 		const prevCount = index > 0 ? stages[ index - 1 ].count : 0;
 		return {
@@ -163,6 +206,7 @@ const Funnel = ( { stages }: FunnelProps ) => {
 	const topCount = stages.length > 0 ? stages[ 0 ].count : 0;
 	const topLabel = stages.length > 0 ? stages[ 0 ].label : '';
 	const steps = useMemo( () => buildSteps( stages, topCount ), [ stages, topCount ] );
+	const displayHalves = useMemo( () => computeDisplayHalfWidths( stages, topCount ), [ stages, topCount ] );
 
 	// Proportions can't be computed without a non-zero first step.
 	if ( stages.length === 0 || topCount <= 0 ) {
@@ -187,13 +231,14 @@ const Funnel = ( { stages }: FunnelProps ) => {
 			aria-label={ __( 'Conversion funnel', 'newspack-plugin' ) }
 		>
 			{ steps.map( step => {
-				const nextCount = step.index < stepCount - 1 ? stages[ step.index + 1 ].count : step.stage.count;
+				const halfTop = displayHalves[ step.index ];
+				const halfBottom = step.index < stepCount - 1 ? displayHalves[ step.index + 1 ] : halfTop;
 				const yTop = step.index * stepHeight;
 				return (
 					<path
 						key={ step.index }
 						className="newspack-insights__funnel-trapezoid"
-						d={ trapezoidPath( step.stage.count, nextCount, topCount, yTop, yTop + stepHeight ) }
+						d={ trapezoidPath( halfTop, halfBottom, yTop, yTop + stepHeight ) }
 						fillOpacity={ step.opacity }
 					/>
 				);
@@ -209,6 +254,7 @@ const Funnel = ( { stages }: FunnelProps ) => {
 						y={ step.index * stepHeight + stepHeight / 2 }
 						textAnchor="middle"
 						dominantBaseline="central"
+						style={ { '--band-opacity': step.opacity } as React.CSSProperties }
 					>
 						{ formatNumber( step.stage.count ) }
 					</text>

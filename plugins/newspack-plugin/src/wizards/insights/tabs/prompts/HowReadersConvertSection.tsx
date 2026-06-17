@@ -18,8 +18,8 @@ import { __ } from '@wordpress/i18n';
  */
 import type { PromptsWindow } from '../../api/prompts';
 import SectionHeading from '../components/SectionHeading';
-import Funnel from './viz/Funnel';
-import DistributionTable from './viz/DistributionTable';
+import Funnel from '../components/Funnel';
+import DistributionTable from '../components/DistributionTable';
 import SectionState from './SectionState';
 
 export interface HowReadersConvertSectionProps {
@@ -53,7 +53,10 @@ const HowReadersConvertSection = ( { current }: HowReadersConvertSectionProps ) 
 					state={ current.exposures_distribution.state }
 					emptyMessage={ __( 'No distribution data yet. This will populate once readers begin converting.', 'newspack-plugin' ) }
 				>
-					<DistributionTable data={ current.exposures_distribution } />
+					<DistributionTable
+						buckets={ current.exposures_distribution.buckets }
+						caption={ __( 'Of readers who converted, this is how many prompts they saw first.', 'newspack-plugin' ) }
+					/>
 				</SectionState>
 			</div>
 		</div>

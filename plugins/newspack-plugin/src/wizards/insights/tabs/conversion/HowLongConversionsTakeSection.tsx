@@ -23,7 +23,7 @@ import { __ } from '@wordpress/i18n';
 import type { ConversionCumulativeMulti, ConversionCumulativePoint, ConversionWindow } from '../../api/conversion';
 import SectionHeading from '../components/SectionHeading';
 import { sourceLabel } from './labels';
-import LineChart, { type LinePoint, type LineSeries } from './viz/LineChart';
+import LineChart, { type LinePoint, type LineSeries } from '../components/LineChart';
 import SectionState from './SectionState';
 
 export interface HowLongConversionsTakeSectionProps {

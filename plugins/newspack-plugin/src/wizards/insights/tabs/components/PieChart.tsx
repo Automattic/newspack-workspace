@@ -1,11 +1,11 @@
 /**
- * PieChart (NPPD-1609) — tab-local donut for the Section 3 source-mix
- * breakdowns. A copy of the Audience tab's PieChart (NPPD-1649), extended
- * with a `centerLabel` (the spec's "total in window" at the donut center)
- * and a configurable `emptyMessage` so the Phase 1 empty state shows the
- * section's spec copy. Viz stay tab-local until a canonical PieChart lands
- * in packages/components/src/ (a v1.1 ticket, per the Audience PieChart's
- * own note).
+ * PieChart — shared donut + legend viz for Insights tabs (NPPD-1609, NPPD-1649).
+ *
+ * Hoisted from the per-tab copies in audience/viz/ and conversion/viz/ into the
+ * shared tabs/components/ directory. This is the superset: conversion's copy
+ * extended with a `centerLabel` (the spec's "total in window" at the donut center)
+ * and a configurable `emptyMessage`. Audience's copy had no additions that
+ * conversion lacked.
  *
  * Dependency-free SVG donut + legend. Series colors come from the shared
  * `.is-series-N` CSS classes in `tabs/components/_insights-charts.scss`.
@@ -19,7 +19,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import { formatNumber, formatPercent } from '../../components/format';
+import { formatNumber, formatPercent } from './format';
 
 export interface PieSegment {
 	label: string;
