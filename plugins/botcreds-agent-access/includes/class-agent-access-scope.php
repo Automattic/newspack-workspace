@@ -120,7 +120,9 @@ class Agent_Access_Scope {
 		}
 
 		// App password path.
-		$uuid = rest_get_authenticated_app_password();
+		$uuid = function_exists( 'rest_get_authenticated_app_password' )
+			? rest_get_authenticated_app_password()
+			: null;
 		if ( ! $uuid ) {
 			return null;
 		}
