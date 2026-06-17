@@ -950,6 +950,22 @@ final class Newspack_Newsletters {
 				],
 			]
 		);
+		\register_rest_route(
+			self::API_NAMESPACE,
+			'post-html',
+			[
+				'methods'             => \WP_REST_Server::READABLE,
+				'callback'            => [ __CLASS__, 'api_get_post_html' ],
+				'permission_callback' => [ __CLASS__, 'api_authoring_permissions_check' ],
+				'args'                => [
+					'post_id' => [
+						'required'          => true,
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
+					],
+				],
+			]
+		);
 	}
 
 	/**
@@ -981,6 +997,41 @@ final class Newspack_Newsletters {
 		}
 		$post->post_content = $request['content'];
 		return \rest_ensure_response( Newspack_Newsletters_Renderer::render_post_to_mjml( $post ) );
+	}
+
+	/**
+	 * Render a newsletter to final email HTML via the WC engine.
+	 *
+	 * Produces email-safe HTML through the block-based WC email-editor engine for
+	 * the editor preview. This is a read-only endpoint: it renders the
+	 * newsletter's saved content and, unlike api_get_mjml(), does not accept a
+	 * live `content` override, because the WC engine re-fetches the post from the
+	 * database by ID at render time (see Post_Content::render_stateless in the
+	 * email-editor package), so an in-memory override would be ignored.
+	 *
+	 * @param WP_REST_Request $request API request object.
+	 * @return WP_REST_Response|WP_Error Response carrying the rendered HTML; a 404
+	 *                                   error when the post is not a newsletter, or
+	 *                                   a 500 error when rendering fails.
+	 */
+	public static function api_get_post_html( $request ) {
+		$post = get_post( $request['post_id'] );
+		if ( ! $post instanceof \WP_Post || ! self::validate_newsletter_id( $post->ID ) ) {
+			return new \WP_Error(
+				'newspack_newsletters_no_post',
+				__( 'Newsletter not found.', 'newspack-newsletters' ),
+				[ 'status' => 404 ]
+			);
+		}
+		$html = \Newspack\Newsletters\Email_Renderers\Renderer_Controller::render_wc( $post );
+		if ( '' === $html ) {
+			return new \WP_Error(
+				'newspack_newsletters_render_failed',
+				__( 'Failed to render the newsletter.', 'newspack-newsletters' ),
+				[ 'status' => 500 ]
+			);
+		}
+		return \rest_ensure_response( [ 'html' => $html ] );
 	}
 
 	/**
