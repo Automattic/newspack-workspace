@@ -3,7 +3,7 @@
  * Plugin Name: BotCreds Agent Access
  * Plugin URI:  https://botcreds.com/
  * Description: Scoped, per-agent application passwords for AI agents, MCP clients, and automation tools.
- * Version:     2.2.4
+ * Version:     2.2.5
  * Author:      Joe Boydston
  * Author URI:  https://botcreds.com
  * License:     GPL-2.0-or-later
@@ -17,7 +17,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AGENT_ACCESS_VERSION', '2.2.4' );
+define( 'AGENT_ACCESS_VERSION', '2.2.5' );
 define( 'AGENT_ACCESS_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'AGENT_ACCESS_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'AGENT_ACCESS_APP_PASSWORD_NAME', 'BotCreds' );
@@ -224,16 +224,10 @@ function agent_access_activate() {
 }
 register_activation_hook( __FILE__, 'agent_access_activate' );
 
-/**
- * Remove the Agent role on plugin deactivation.
- *
- * Note: existing users assigned the Agent role will become roleless.
- * Reassign or delete agent accounts before deactivating if needed.
- */
-function agent_access_deactivate() {
-	Agent_Access_Role::remove();
-}
-register_deactivation_hook( __FILE__, 'agent_access_deactivate' );
+// Deactivation intentionally preserves all data and the Agent role so that
+// upgrades and reactivations restore cleanly. Role removal only happens on
+// full uninstall (uninstall.php).
+register_deactivation_hook( __FILE__, '__return_null' );
 
 /**
  * Defensive role re-registration on every load.

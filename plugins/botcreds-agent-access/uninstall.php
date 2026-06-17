@@ -66,6 +66,9 @@ $wpdb->delete( $wpdb->commentmeta, array( 'meta_key' => '_agent_access_mentions'
 // Remove rate limit option.
 delete_option( '_agent_access_rate_limits' );
 
+// Remove the Agent role.
+remove_role( 'agent' );
+
 // Drop the activity log table.
 // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 $wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}agent_access_log" );

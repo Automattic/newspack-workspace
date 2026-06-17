@@ -4,7 +4,7 @@ Tags: ai-agents, mcp, application-passwords, rest-api, security
 Requires at least: 5.7
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.2.4
+Stable tag: 2.2.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -75,6 +75,9 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 3. The "Connected" state showing status and revoke option.
 
 == Changelog ==
+
+= 2.2.5 =
+* Fix: deactivation no longer removes the Agent role — role and data are preserved across deactivate/reactivate and upgrades; role removal now happens only on full uninstall
 
 = 2.2.4 =
 * Fix fatal error on WordPress < 5.8: missing function_exists guard for rest_get_authenticated_app_password() in scope class
