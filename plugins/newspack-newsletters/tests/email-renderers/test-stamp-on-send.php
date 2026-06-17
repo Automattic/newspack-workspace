@@ -348,6 +348,8 @@ class Test_Stamp_On_Send extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
+		delete_option( 'newspack_newsletters_use_woo_renderer' );
 		parent::tear_down();
 	}
 
@@ -382,6 +384,10 @@ class Test_Stamp_On_Send extends WP_UnitTestCase {
 	 * Flag OFF plus a successful send stamps the MJML engine.
 	 */
 	public function test_successful_send_stamps_mjml_when_flag_off() {
+		// Force the flag off so the assertion is independent of option/filter state
+		// leaked by other tests in the full suite — the filter wins last in Feature_Flag.
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
+
 		$post_id = $this->create_draft_newsletter();
 		$result  = $this->provider->send_newsletter( get_post( $post_id ) );
 
