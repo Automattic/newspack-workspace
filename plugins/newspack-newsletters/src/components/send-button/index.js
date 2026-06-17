@@ -47,17 +47,32 @@ function PreviewHTML() {
 		};
 	} );
 	const { savePost } = useDispatch( 'core/editor' );
+	const { createNotice } = useDispatch( 'core/notices' );
 	const [ previewHtml, setPreviewHtml ] = useState( '' );
 	const showSpinner = ( isSaving && ! isAutosaving ) || ! previewHtml;
 
 	useEffect( () => {
 		if ( ! previewHtml ) {
+			// Mount-once: the modal remounts on each open, so capturing isDirty/savePost
+			// at mount is intentional — do not add them to deps (would cause double-fetches).
 			( async () => {
-				if ( newspack_email_editor_data?.use_woo_renderer && isDirty ) {
-					await savePost();
+				try {
+					if ( newspack_email_editor_data?.use_woo_renderer && isDirty ) {
+						await savePost();
+					}
+					const res = await refreshEmailHtml( postId, postTitle, postContent );
+					if ( res?.html ) {
+						setPreviewHtml( res.html );
+					} else {
+						createNotice( 'error', res?.error?.message || __( 'Failed to load email preview.', 'newspack-newsletters' ) );
+						// Resolve the spinner with non-empty fallback markup.
+						setPreviewHtml( `<p>${ __( 'Could not load preview.', 'newspack-newsletters' ) }</p>` );
+					}
+				} catch ( error ) {
+					createNotice( 'error', error?.message || __( 'Failed to load email preview.', 'newspack-newsletters' ) );
+					// Resolve the spinner with non-empty fallback markup.
+					setPreviewHtml( `<p>${ __( 'Could not load preview.', 'newspack-newsletters' ) }</p>` );
 				}
-				const { html } = await refreshEmailHtml( postId, postTitle, postContent );
-				setPreviewHtml( html );
 			} )();
 		}
 	}, [] );
@@ -323,8 +338,17 @@ export default compose( [
 	}
 
 	const handleModalOpen = async () => {
-		const res = await refreshEmailHtml( postId, postTitle, postContent );
-		await savePost();
+		// Under the Woo renderer the endpoint renders saved content, so save first
+		// to avoid rendering stale content. When the flag is off, preserve the
+		// original order (refresh first, then save) byte-for-byte.
+		let res;
+		if ( newspack_email_editor_data?.use_woo_renderer ) {
+			await savePost();
+			res = await refreshEmailHtml( postId, postTitle, postContent );
+		} else {
+			res = await refreshEmailHtml( postId, postTitle, postContent );
+			await savePost();
+		}
 		if ( res.result === 'success' && saveDidSucceed ) {
 			setModalVisible( true );
 		} else {

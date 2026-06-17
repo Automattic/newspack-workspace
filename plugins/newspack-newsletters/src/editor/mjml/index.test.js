@@ -24,8 +24,12 @@ describe( 'refreshEmailHtml', () => {
 		delete global.newspack_email_editor_data;
 	} );
 
-	it( 'GETs the server-rendered HTML endpoint when the Woo renderer flag is on', async () => {
-		global.newspack_email_editor_data = { use_woo_renderer: true };
+	it( 'GETs the server-rendered HTML endpoint when the Woo renderer flag is on and editing the newsletter CPT', async () => {
+		global.newspack_email_editor_data = {
+			use_woo_renderer: true,
+			current_post_type: 'newspack_nl_cpt',
+			newsletter_post_type: 'newspack_nl_cpt',
+		};
 		apiFetch.mockResolvedValueOnce( { html: '<server-html />' } );
 
 		const result = await refreshEmailHtml( 123, 'A title', '<p>body</p>' );
@@ -40,7 +44,11 @@ describe( 'refreshEmailHtml', () => {
 	} );
 
 	it( 'returns an error shape when the server render request rejects', async () => {
-		global.newspack_email_editor_data = { use_woo_renderer: true };
+		global.newspack_email_editor_data = {
+			use_woo_renderer: true,
+			current_post_type: 'newspack_nl_cpt',
+			newsletter_post_type: 'newspack_nl_cpt',
+		};
 		const error = new Error( 'boom' );
 		apiFetch.mockRejectedValueOnce( error );
 
@@ -61,6 +69,32 @@ describe( 'refreshEmailHtml', () => {
 			method: 'POST',
 			data: { post_id: 123, title: 'A title', content: '<p>body</p>' },
 		} );
+		expect( mjml2html ).toHaveBeenCalledWith( '<mjml />', { keepComments: false, minify: true } );
+		expect( result ).toEqual( { result: 'success', html: '<mjml-html />' } );
+	} );
+
+	it( 'falls back to MJML when the flag is on but the current post is not the newsletter CPT', async () => {
+		// e.g. the Layout editor (newspack_nl_layo_cpt): /post-html only accepts the
+		// newsletter CPT, so the gate must route these through the MJML path.
+		global.newspack_email_editor_data = {
+			use_woo_renderer: true,
+			current_post_type: 'newspack_nl_layo_cpt',
+			newsletter_post_type: 'newspack_nl_cpt',
+		};
+		apiFetch.mockResolvedValueOnce( '<mjml />' );
+
+		const result = await refreshEmailHtml( 123, 'A title', '<p>body</p>' );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/newspack-newsletters/v1/post-mjml',
+			method: 'POST',
+			data: { post_id: 123, title: 'A title', content: '<p>body</p>' },
+		} );
+		// Did NOT hit the server-render endpoint.
+		expect( apiFetch ).not.toHaveBeenCalledWith(
+			expect.objectContaining( { path: expect.stringContaining( '/post-html' ) } )
+		);
 		expect( mjml2html ).toHaveBeenCalledWith( '<mjml />', { keepComments: false, minify: true } );
 		expect( result ).toEqual( { result: 'success', html: '<mjml-html />' } );
 	} );
