@@ -27,15 +27,8 @@ import './style.scss';
 
 function PreviewHTML() {
 	const { isSaving, isAutosaving, isDirty, postId, postContent, postTitle } = useSelect( select => {
-		const {
-			getCurrentPostId,
-			getCurrentPostType,
-			getEditedPostAttribute,
-			getEditedPostContent,
-			isAutosavingPost,
-			isEditedPostDirty,
-			isSavingPost,
-		} = select( 'core/editor' );
+		const { getCurrentPostId, getEditedPostAttribute, getEditedPostContent, isAutosavingPost, isEditedPostDirty, isSavingPost } =
+			select( 'core/editor' );
 		return {
 			isSaving: isSavingPost(),
 			isAutosaving: isAutosavingPost(),
@@ -43,7 +36,6 @@ function PreviewHTML() {
 			postContent: getEditedPostContent(),
 			postId: getCurrentPostId(),
 			postTitle: getEditedPostAttribute( 'title' ),
-			postType: getCurrentPostType(),
 		};
 	} );
 	const { savePost } = useDispatch( 'core/editor' );
