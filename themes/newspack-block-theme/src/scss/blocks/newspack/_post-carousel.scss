@@ -15,8 +15,8 @@
 		}
 
 		.entry-wrapper {
-			background: var(--wp--custom--color--neutral-70);
-			background: linear-gradient(0deg, var(--wp--custom--color--neutral-70) 50%, transparent 100%);
+			background: var(--wp--custom--color--overlay-70);
+			background: linear-gradient(0deg, var(--wp--custom--color--overlay-70) 50%, transparent 100%);
 			color: var(--wp--custom--color--neutral-0);
 			display: flex;
 			flex-direction: column;
@@ -149,7 +149,7 @@
 	}
 
 	.swiper-button {
-		background-color: var(--wp--custom--color--neutral-70);
+		background-color: var(--wp--custom--color--overlay-70);
 		background-size: 24px 24px;
 		border-radius: var(--wp--custom--border--radius-medium);
 		height: var(--wp--custom--spacing--55);

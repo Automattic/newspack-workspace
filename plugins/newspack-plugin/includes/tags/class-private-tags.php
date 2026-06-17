@@ -147,6 +147,7 @@ class Private_Tags {
 		add_filter( 'term_links-post_tag', [ __CLASS__, 'filter_tag_links' ], 10, 1 );
 		add_filter( 'tag_cloud_sort', [ __CLASS__, 'filter_tag_cloud' ], 10, 1 );
 		add_action( 'pre_get_posts', [ __CLASS__, 'disable_tag_archives' ], 10, 1 );
+		add_filter( 'get_the_terms', [ __CLASS__, 'filter_feed_terms' ], 10, 3 );
 
 		// Frontend: strip private tag slugs from HTML class attributes.
 		add_filter( 'post_class', [ __CLASS__, 'filter_post_class' ], 10, 1 );
@@ -162,6 +163,11 @@ class Private_Tags {
 		// Integrations: strip private tags from Yoast SEO structured data and sitemaps.
 		add_filter( 'wpseo_schema_article', [ __CLASS__, 'filter_yoast_schema_article' ], 10, 2 );
 		add_filter( 'wpseo_exclude_from_sitemap_by_term_ids', [ __CLASS__, 'filter_yoast_sitemap_term_ids' ], 10, 1 );
+
+		// Integrations: strip private tag IDs from the client-side reader-activity data
+		// (newspack_reader_data) so they can't be round-tripped to names via the REST API.
+		// Always on when the feature is enabled — there's no legitimate reason to expose them.
+		add_filter( 'newspack_reader_activity_article_view', [ __CLASS__, 'filter_reader_activity' ], 10, 1 );
 	}
 
 	// -------------------------------------------------------------------------
@@ -366,6 +372,36 @@ class Private_Tags {
 		return ' ' . __( '(private)', 'newspack-plugin' );
 	}
 
+	/**
+	 * Append the "(private)" label to a tag name when the term is private.
+	 *
+	 * Single source of truth for the private-label suffix, shared by the REST
+	 * filter and external consumers such as the Partner RSS feed editor. Returns
+	 * the name unchanged when the feature is disabled, the value isn't a string,
+	 * the term isn't private, or the label is already present (suffix check, not
+	 * substring, so names containing "(private)" aren't incorrectly skipped).
+	 *
+	 * Self-gates on is_enabled() so callers outside the feature flag (e.g. the
+	 * RSS module) can call it unconditionally.
+	 *
+	 * @param int|string $term_id   The tag term ID (get_terms 'id=>name' yields string keys).
+	 * @param mixed      $term_name The tag name to (maybe) label; returned unchanged if not a string.
+	 * @return mixed The labeled string, or $term_name unchanged when no label applies.
+	 */
+	public static function maybe_append_private_label( $term_id, $term_name ) {
+		if ( ! self::is_enabled() || ! is_string( $term_name ) ) {
+			return $term_name;
+		}
+		$label = self::get_private_label();
+		if (
+			in_array( (int) $term_id, self::get_private_tag_ids(), true ) &&
+			substr( $term_name, -strlen( $label ) ) !== $label
+		) {
+			$term_name .= $label;
+		}
+		return $term_name;
+	}
+
 	// -------------------------------------------------------------------------
 	// Settings
 	// -------------------------------------------------------------------------
@@ -384,6 +420,7 @@ class Private_Tags {
 			'all'            => true,
 			'archives'       => true,
 			'feeds'          => true,
+			'feed_terms'     => true,
 			'tag_links'      => true,
 			'tag_clouds'     => true,
 			'css_classes'    => true,
@@ -638,18 +675,11 @@ class Private_Tags {
 			return $response;
 		}
 
-		// Append the label if the tag is private and it isn't already suffixed. Check suffix
-		// (not substring) so tag names containing "(private)" aren't incorrectly skipped.
-		// isset/is_string guard covers REST requests that omit 'name' via the _fields param.
-		// Use cached ID list instead of per-term get_term_meta() to avoid N+1 queries.
-		$label = self::get_private_label();
-		if (
-			isset( $response->data['name'] ) &&
-			is_string( $response->data['name'] ) &&
-			in_array( $term->term_id, self::get_private_tag_ids(), true ) &&
-			substr( $response->data['name'], -strlen( $label ) ) !== $label
-		) {
-			$response->data['name'] .= $label;
+		// Delegate to the shared helper so the private-label rule lives in one place.
+		// isset guard covers REST requests that omit 'name' via the _fields param;
+		// the helper handles the is_string, private-check, and double-suffix guards.
+		if ( isset( $response->data['name'] ) ) {
+			$response->data['name'] = self::maybe_append_private_label( $term->term_id, $response->data['name'] );
 		}
 
 		return $response;
@@ -996,6 +1026,57 @@ class Private_Tags {
 	}
 
 	/**
+	 * Strip private tags from feed <category> output across all feed surfaces.
+	 *
+	 * WordPress core's the_category_rss() emits a <category> element for every
+	 * post_tag via get_the_terms(). disable_tag_archives() only 404s a private
+	 * tag's own feed — it does nothing for the site/category/author/search/partner
+	 * feeds, which still leak private tag names. This filter removes them.
+	 *
+	 * Performance: get_the_terms fires on every term lookup site-wide, so the two
+	 * O(1) guards (taxonomy + is_feed) return before any work on the non-feed hot
+	 * path. The private-ID lookup only runs inside an actual feed request. This is
+	 * why a global get_the_terms filter (rejected for filter_tag_links) is safe here.
+	 *
+	 * @param WP_Term[]|false|\WP_Error $terms    Terms for the post, or false/WP_Error.
+	 * @param int                       $post_id  Post ID (unused; required by filter signature).
+	 * @param string                    $taxonomy Taxonomy slug.
+	 * @return WP_Term[]|false|\WP_Error
+	 */
+	public static function filter_feed_terms( $terms, $post_id, $taxonomy ) {
+		if ( 'post_tag' !== $taxonomy || ! is_feed() || ! is_array( $terms ) ) {
+			return $terms;
+		}
+
+		// 'feed_terms' governs stripping private tags from <category> across ALL feed
+		// surfaces — standard (site/category/author/search) and custom partner feeds
+		// alike. Distinct from the 'feeds' behavior, which only 404s a tag's own feed.
+		if ( ! self::is_behavior_enabled( 'feed_terms' ) ) {
+			return $terms;
+		}
+
+		$private_ids = self::get_private_tag_ids();
+		if ( empty( $private_ids ) ) {
+			return $terms;
+		}
+
+		// Flip to an int-keyed lookup set so membership is O(1) per term via isset(),
+		// rather than O(private_tags) via in_array() — a feed can carry many terms.
+		// array_values re-indexes after array_filter, consistent with the sibling
+		// filters (filter_tag_cloud, filter_ad_targeting, filter_reader_activity);
+		// non-WP_Term entries are left intact.
+		$private_lookup = array_flip( $private_ids );
+		return array_values(
+			array_filter(
+				$terms,
+				function( $term ) use ( $private_lookup ) {
+					return ! ( $term instanceof WP_Term ) || ! isset( $private_lookup[ (int) $term->term_id ] );
+				}
+			)
+		);
+	}
+
+	/**
 	 * Strip private tag CSS classes from the post element.
 	 *
 	 * @param string[] $classes CSS class names.
@@ -1052,6 +1133,36 @@ class Private_Tags {
 		}
 
 		return $targeting;
+	}
+
+	/**
+	 * Strip private tag IDs from the client-side reader-activity data.
+	 *
+	 * The 'article_view' activity (localized into the newspack_reader_data JS
+	 * global) carries the post's tag IDs. Private tag IDs are removed here so a
+	 * client can't round-trip an ID back to a tag name via the reader-data REST
+	 * API — reducing discoverability of private tags. Categories and other data
+	 * are left untouched.
+	 *
+	 * @param array $activity The 'article_view' reader activity.
+	 * @return array
+	 */
+	public static function filter_reader_activity( $activity ) {
+		if ( ! isset( $activity['data']['tags'] ) || ! is_array( $activity['data']['tags'] ) ) {
+			return $activity;
+		}
+
+		$private_ids = self::get_private_tag_ids();
+		if ( empty( $private_ids ) ) {
+			return $activity;
+		}
+
+		// array_diff removes private IDs; array_values re-indexes into a sequential array.
+		$activity['data']['tags'] = array_values(
+			array_diff( array_map( 'intval', $activity['data']['tags'] ), $private_ids )
+		);
+
+		return $activity;
 	}
 
 	/**

@@ -150,6 +150,7 @@ interface AdvancedSettings {
 		all: boolean;
 		archives: boolean;
 		feeds: boolean;
+		feed_terms: boolean;
 		tag_links: boolean;
 		tag_clouds: boolean;
 		css_classes: boolean;

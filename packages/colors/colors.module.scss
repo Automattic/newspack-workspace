@@ -4,9 +4,15 @@
  */
 
 @use "sass:color";
+@use "sass:math";
 
 @function to-rgb($color) {
 	@return color.channel($color, "red", $space: rgb) + ", " + color.channel($color, "green", $space: rgb) + ", " + color.channel($color, "blue", $space: rgb);
+}
+
+@function to-rgba($color) {
+	$alpha: math.div(math.round(color.channel($color, "alpha") * 100), 100);
+	@return rgba(color.channel($color, "red", $space: rgb), color.channel($color, "green", $space: rgb), color.channel($color, "blue", $space: rgb), $alpha);
 }
 
 // Primary: Hex
@@ -130,8 +136,8 @@ $neutral-300: #ddd;
 $neutral-400: #ccc;
 $neutral-500: #949494;
 $neutral-600: #6c6c6c;
-$neutral-700: #000000b3;
-$neutral-800: #3e3e3e;
+$neutral-700: #5d5d5d;
+$neutral-800: #393939;
 $neutral-900: #1e1e1e;
 $neutral-1000: #000;
 
@@ -148,6 +154,36 @@ $neutral-700--rgb: to-rgb($neutral-700);
 $neutral-800--rgb: to-rgb($neutral-800);
 $neutral-900--rgb: to-rgb($neutral-900);
 $neutral-1000--rgb: to-rgb($neutral-1000);
+
+// Overlay: Hex
+// Stepped black scrim ramp, deliberately spanning 5%–95% alpha — never fully
+// transparent or fully opaque. For solid black, use $neutral-1000 instead.
+$overlay-000: #0000000d;
+$overlay-050: #0000001a;
+$overlay-100: #00000026;
+$overlay-200: #00000033;
+$overlay-300: #0000004d;
+$overlay-400: #00000066;
+$overlay-500: #00000080;
+$overlay-600: #00000099;
+$overlay-700: #000000b3;
+$overlay-800: #000000cc;
+$overlay-900: #000000e6;
+$overlay-1000: #000000f2;
+
+// Overlay: RGBA
+$overlay-000--rgba: to-rgba($overlay-000);
+$overlay-050--rgba: to-rgba($overlay-050);
+$overlay-100--rgba: to-rgba($overlay-100);
+$overlay-200--rgba: to-rgba($overlay-200);
+$overlay-300--rgba: to-rgba($overlay-300);
+$overlay-400--rgba: to-rgba($overlay-400);
+$overlay-500--rgba: to-rgba($overlay-500);
+$overlay-600--rgba: to-rgba($overlay-600);
+$overlay-700--rgba: to-rgba($overlay-700);
+$overlay-800--rgba: to-rgba($overlay-800);
+$overlay-900--rgba: to-rgba($overlay-900);
+$overlay-1000--rgba: to-rgba($overlay-1000);
 
 // Success: Hex
 $success-000: #edfaef;
@@ -256,6 +292,20 @@ $warning-400--rgb: to-rgb($warning-400);
 	neutral-800: $neutral-800;
 	neutral-900: $neutral-900;
 	neutral-1000: $neutral-1000;
+
+	// Overlay
+	overlay-000: $overlay-000;
+	overlay-050: $overlay-050;
+	overlay-100: $overlay-100;
+	overlay-200: $overlay-200;
+	overlay-300: $overlay-300;
+	overlay-400: $overlay-400;
+	overlay-500: $overlay-500;
+	overlay-600: $overlay-600;
+	overlay-700: $overlay-700;
+	overlay-800: $overlay-800;
+	overlay-900: $overlay-900;
+	overlay-1000: $overlay-1000;
 
 	// Success
 	success-000: $success-000;
