@@ -52,6 +52,47 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Remove options mutated by tests so they never leak between cases.
+	 */
+	public function tear_down() {
+		delete_option( 'newspack_newsletters_color_palette' );
+		parent::tear_down();
+	}
+
+	/**
+	 * With no palette configured, the palette key is omitted so the merge does
+	 * not wipe the editor's default color presets.
+	 */
+	public function test_omits_palette_when_option_unconfigured() {
+		$post_id = self::factory()->post->create();
+
+		$theme = Theme_Json_Builder::build( get_post( $post_id ) );
+
+		$this->assertArrayNotHasKey( 'color', $theme['settings'] );
+	}
+
+	/**
+	 * Palette entries with invalid hex values are skipped.
+	 */
+	public function test_palette_skips_invalid_hex_entries() {
+		update_option(
+			'newspack_newsletters_color_palette',
+			wp_json_encode(
+				[
+					'good' => '#112233',
+					'bad'  => 'not-a-hex',
+				]
+			)
+		);
+		$post_id = self::factory()->post->create();
+
+		$theme = Theme_Json_Builder::build( get_post( $post_id ) );
+
+		$this->assertNotNull( $this->find_preset( $theme['settings']['color']['palette'], 'good' ) );
+		$this->assertNull( $this->find_preset( $theme['settings']['color']['palette'], 'bad' ) );
+	}
+
+	/**
 	 * Find a preset entry by its slug.
 	 *
 	 * @param array  $presets Theme.json preset array (palette/fontSizes/spacingSizes).
@@ -85,8 +126,8 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 		$theme = Theme_Json_Builder::build( get_post( $post_id ) );
 
 		$primary = $this->find_preset( $theme['settings']['color']['palette'], 'primary' );
+		$this->assertNotNull( $primary );
 		$this->assertSame( '#003da5', $primary['color'] );
-		delete_option( 'newspack_newsletters_color_palette' );
 	}
 
 	/**
@@ -98,6 +139,7 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 		$theme = Theme_Json_Builder::build( get_post( $post_id ) );
 
 		$small = $this->find_preset( $theme['settings']['typography']['fontSizes'], 'small' );
+		$this->assertNotNull( $small );
 		$this->assertSame( '12px', $small['size'] );
 	}
 
@@ -110,6 +152,7 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 		$theme = Theme_Json_Builder::build( get_post( $post_id ) );
 
 		$fifty = $this->find_preset( $theme['settings']['spacing']['spacingSizes'], '50' );
+		$this->assertNotNull( $fifty );
 		$this->assertSame( '32px', $fifty['size'] );
 	}
 

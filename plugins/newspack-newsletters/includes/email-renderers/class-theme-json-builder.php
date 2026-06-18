@@ -81,21 +81,28 @@ class Theme_Json_Builder {
 		$header_font = self::resolve_font( (string) \get_post_meta( $post->ID, 'font_header', true ), self::DEFAULT_HEADER_FONT );
 		$body_font   = self::resolve_font( (string) \get_post_meta( $post->ID, 'font_body', true ), self::DEFAULT_BODY_FONT );
 
+		$settings = [
+			'spacing'    => [
+				'spacingSizes' => self::build_presets( self::SPACING_SIZES ),
+			],
+			'typography' => [
+				// Disable fluid typography so font sizes resolve to fixed pixels in email.
+				'fluid'     => false,
+				'fontSizes' => self::build_presets( self::FONT_SIZES ),
+			],
+		];
+
+		// Only emit the palette when the newsletter configures one. WP_Theme_JSON::merge()
+		// replaces preset arrays per origin, so an empty palette would wipe the editor's
+		// default color presets rather than leave them intact.
+		$palette = self::build_palette();
+		if ( ! empty( $palette ) ) {
+			$settings['color'] = [ 'palette' => $palette ];
+		}
+
 		return [
 			'version'  => 3,
-			'settings' => [
-				'color'      => [
-					'palette' => self::build_palette(),
-				],
-				'spacing'    => [
-					'spacingSizes' => self::build_presets( self::SPACING_SIZES ),
-				],
-				'typography' => [
-					// Disable fluid typography so font sizes resolve to fixed pixels in email.
-					'fluid'     => false,
-					'fontSizes' => self::build_presets( self::FONT_SIZES ),
-				],
-			],
+			'settings' => $settings,
 			'styles'   => [
 				'color'      => [
 					'background' => $background ? $background : '#ffffff',
@@ -141,14 +148,16 @@ class Theme_Json_Builder {
 			return $palette;
 		}
 		foreach ( $option as $slug => $hex ) {
+			// Slugs become CSS custom-property/classname fragments, so sanitize them.
+			$slug  = \sanitize_key( (string) $slug );
 			$color = \sanitize_hex_color( (string) $hex );
-			if ( ! $color ) {
+			if ( '' === $slug || ! $color ) {
 				continue;
 			}
 			$palette[] = [
-				'slug'  => (string) $slug,
+				'slug'  => $slug,
 				'color' => $color,
-				'name'  => (string) $slug,
+				'name'  => $slug,
 			];
 		}
 		return $palette;
