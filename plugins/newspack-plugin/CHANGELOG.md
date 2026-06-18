@@ -1,3 +1,10 @@
+## newspack [6.43.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.0...newspack@6.43.1) (2026-06-17)
+
+
+### Bug Fixes
+
+* **content-gate:** try all utm_source values for newsletter bypass ([#331](https://github.com/Automattic/newspack-workspace/issues/331)) ([280be9b](https://github.com/Automattic/newspack-workspace/commit/280be9b5ff14bc750b4be953201402dc6b72c9d6))
+
 # newspack [6.43.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.8...newspack@6.43.0) (2026-06-15)
 
 

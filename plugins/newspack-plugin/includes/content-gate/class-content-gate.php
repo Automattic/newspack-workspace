@@ -117,6 +117,17 @@ class Content_Gate {
 	/**
 	 * Whether the first-party Newspack feature is enabled.
 	 *
+	 * Memoized per request — the underlying constant is immutable for the
+	 * lifetime of a request, and call sites (admin menu, REST registration,
+	 * wizard data, gated callbacks across Group_Subscription_*) consult this
+	 * many times per page. The cache keeps that footprint flat if the check
+	 * grows beyond a constant lookup in the future (license, remote call,
+	 * etc.).
+	 *
+	 * Tests under PHPUnit boot the plugin once and `define()` the constant
+	 * later in per-suite `setUp()` calls. To keep those defines effective,
+	 * skip the cache when `IS_TEST_ENV` is on.
+	 *
 	 * @return bool
 	 */
 	public static function is_newspack_feature_enabled() {
@@ -131,7 +142,14 @@ class Content_Gate {
 		 *
 		 * @example define( 'NEWSPACK_CONTENT_GATES', true );
 		 */
-		return defined( 'NEWSPACK_CONTENT_GATES' ) && NEWSPACK_CONTENT_GATES;
+		if ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV ) {
+			return defined( 'NEWSPACK_CONTENT_GATES' ) && NEWSPACK_CONTENT_GATES;
+		}
+		static $enabled = null;
+		if ( null === $enabled ) {
+			$enabled = defined( 'NEWSPACK_CONTENT_GATES' ) && NEWSPACK_CONTENT_GATES;
+		}
+		return $enabled;
 	}
 
 	/**
