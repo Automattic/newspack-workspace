@@ -66,6 +66,12 @@ class Editor_Bootstrap {
 
 		// Inject per-newsletter theme colors at render time. See merge_theme_json().
 		add_filter( 'woocommerce_email_editor_theme_json', [ __CLASS__, 'merge_theme_json' ] );
+
+		// Override the package's per-block renderers with Newspack's (e.g. the
+		// columns percentage-width fix). Hooks block_type_metadata_settings at a
+		// later priority than the package, which runs before core blocks register
+		// on init:10, so the override lands in time.
+		Block_Renderer_Registry::init();
 	}
 
 	/**
