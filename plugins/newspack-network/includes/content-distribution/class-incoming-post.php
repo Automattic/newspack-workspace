@@ -722,6 +722,36 @@ class Incoming_Post {
 				$postarr['post_status'] = $post_data['post_status'];
 			}
 
+			/**
+			 * Preserve a node's local future schedule.
+			 *
+			 * If the linked node post has been locally scheduled (`future`) and
+			 * the origin re-syncs an edit while still `publish`, do not let the
+			 * sync overwrite the node's schedule. Overwriting `post_date_gmt`
+			 * with the origin's (past) date trips WP core's future-with-past-date
+			 * check and auto-publishes the node post ahead of its intended time,
+			 * while the public permalink keeps the future local `post_date`.
+			 * Content/title/taxonomy/meta still flow.
+			 *
+			 * Scoped to incoming `publish` only: origin-side removal or
+			 * unpublishing (`trash`/`draft`/`pending`/`private`) still propagates
+			 * so a retracted story doesn't stay scheduled to publish on the node.
+			 *
+			 * A node's local schedule deliberately takes precedence over any
+			 * `status_on_publish` hold applied above: manually scheduling the
+			 * node post is the more recent, explicit editor intent.
+			 */
+			if (
+				! $is_new_post
+				&& $this->post instanceof WP_Post
+				&& 'future' === $this->post->post_status
+				&& 'publish' === $post_data['post_status']
+			) {
+				$postarr['post_status']   = 'future';
+				$postarr['post_date']     = $this->post->post_date;
+				$postarr['post_date_gmt'] = $this->post->post_date_gmt;
+			}
+
 			$postarr['post_author'] = 0;
 			if ( ! empty( $post_data['author'] ) ) {
 				$post_author = self::get_incoming_wp_user_author( $this->get_original_site_url(), $post_data['author'] );
