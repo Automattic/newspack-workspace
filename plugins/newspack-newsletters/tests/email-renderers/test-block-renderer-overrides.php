@@ -20,6 +20,14 @@ use Automattic\WooCommerce\EmailEditor\Integrations\Core\Renderer\Blocks\Column 
  */
 class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	/**
+	 * Run override discovery so the self-registering renderers are mapped.
+	 */
+	public function set_up() {
+		parent::set_up();
+		Block_Renderer_Registry::init();
+	}
+
+	/**
 	 * The width helper restores a percentage width the package stripped to px.
 	 *
 	 * The package's Column renderer runs `Styles_Helper::parse_value( '70%' )`,
@@ -108,6 +116,22 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'render_email_callback', $settings, 'Expected a render_email_callback to be set for the mapped block.' );
 		$this->assertIsCallable( $settings['render_email_callback'], 'The render_email_callback should be callable.' );
 		$this->assertInstanceOf( Column::class, $settings['render_email_callback'][0], 'The callback should be bound to the Newspack Column renderer.' );
+	}
+
+	/**
+	 * Registering via add() maps any block name (no hardcoded list).
+	 *
+	 * Overrides self-register by calling add() at the bottom of their file, so the
+	 * registry must map whatever block name is passed to a lazily-instantiated
+	 * renderer of the given class — proving registration is data-driven, not a
+	 * hardcoded list.
+	 */
+	public function test_add_registers_an_arbitrary_block_override() {
+		Block_Renderer_Registry::add( 'test/dummy', Column::class );
+
+		$settings = Block_Renderer_Registry::update_block_settings( [ 'name' => 'test/dummy' ] );
+
+		$this->assertInstanceOf( Column::class, $settings['render_email_callback'][0], 'add() should register an override for any block name.' );
 	}
 
 	/**
