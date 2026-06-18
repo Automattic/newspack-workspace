@@ -155,6 +155,38 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A non-renderer override class fails closed (no callback, no fatal).
+	 *
+	 * The instantiation guard requires the class to be a package block-renderer
+	 * subclass. A class that exists but isn't one (here stdClass) must be skipped,
+	 * leaving the package callback in place rather than binding a bad renderer.
+	 */
+	public function test_non_renderer_override_fails_closed() {
+		Block_Renderer_Registry::add( 'test/not-a-renderer', \stdClass::class );
+
+		$settings = Block_Renderer_Registry::update_block_settings( [ 'name' => 'test/not-a-renderer' ] );
+
+		$this->assertArrayNotHasKey( 'render_email_callback', $settings, 'A non-renderer class must not be bound as a render callback.' );
+	}
+
+	/**
+	 * An override whose constructor throws fails closed (no callback, no fatal).
+	 *
+	 * The is_subclass_of() guard can't catch an instantiable subclass that throws
+	 * (or needs constructor args), so the registry wraps `new` in a try/catch. The throwing
+	 * fixture is a valid subclass, so it clears the type guard and exercises that
+	 * catch — registration must survive without a render callback.
+	 */
+	public function test_uninstantiable_override_fails_closed() {
+		require_once __DIR__ . '/fixtures/class-throwing-block-renderer.php';
+		Block_Renderer_Registry::add( 'test/throws', \Newspack\Newsletters\Email_Renderers\Blocks\Throwing_Block_Renderer::class );
+
+		$settings = Block_Renderer_Registry::update_block_settings( [ 'name' => 'test/throws' ] );
+
+		$this->assertArrayNotHasKey( 'render_email_callback', $settings, 'A renderer that throws on construction must not be bound, and must not fatal.' );
+	}
+
+	/**
 	 * The registry leaves an unmapped block untouched.
 	 *
 	 * A block with no override (e.g. core/paragraph) must pass through with no

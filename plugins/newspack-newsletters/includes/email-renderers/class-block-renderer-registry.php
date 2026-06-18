@@ -122,14 +122,22 @@ class Block_Renderer_Registry {
 		}
 		if ( ! isset( self::$instances[ $name ] ) ) {
 			$renderer_class = self::$renderers[ $name ];
-			// Fail closed: a missing class (typo / premature registration) or one
-			// without a render() method leaves the package callback in place
-			// rather than fataling during block registration.
-			if ( ! class_exists( $renderer_class ) || ! method_exists( $renderer_class, 'render' ) ) {
-				\Newspack_Newsletters_Logger::log( 'Email editor: skipping invalid block override for ' . $name . ' (' . $renderer_class . ').' );
+			// Fail closed: a class that isn't a package block renderer (missing,
+			// wrong type, the abstract base itself) leaves the package callback in
+			// place rather than fataling during block registration. is_subclass_of
+			// autoloads and returns false for a non-existent class.
+			if ( ! is_subclass_of( $renderer_class, Abstract_Block_Renderer::class ) ) {
+				\Newspack_Newsletters_Logger::log( 'Email editor: skipping invalid block override for ' . $name . ' (' . $renderer_class . ' is not a block renderer).' );
 				return $settings;
 			}
-			self::$instances[ $name ] = new $renderer_class();
+			try {
+				// Guards above don't catch an abstract subclass or a throwing /
+				// required-arg constructor, so instantiation stays in a try/catch.
+				self::$instances[ $name ] = new $renderer_class();
+			} catch ( \Throwable $e ) {
+				\Newspack_Newsletters_Logger::log( 'Email editor: could not instantiate block override for ' . $name . ' (' . $renderer_class . '): ' . $e->getMessage() );
+				return $settings;
+			}
 		}
 		$settings['render_email_callback'] = [ self::$instances[ $name ], 'render' ];
 		return $settings;

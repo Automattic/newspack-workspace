@@ -4,7 +4,7 @@ The **WooCommerce (WC) rendering engine** for Newspack newsletters — a second 
 
 It's built on the [WooCommerce Email Editor package](https://github.com/woocommerce/woocommerce/tree/trunk/packages/php/email-editor), so newsletters render through real WordPress block output instead of a bespoke MJML template. The legacy `Newspack_Newsletters_Renderer` stays in place; the flag decides which engine a site uses at runtime, so the WC engine can roll out gradually and roll back instantly.
 
-Everything here is in the `Newspack\Newsletters\Email_Renderers` namespace, autoloaded via the Composer classmap on `includes/`.
+Everything here is in the `Newspack\Newsletters\Email_Renderers` namespace, autoloaded via the Composer classmap on `includes/`. The `blocks/` override files are classmapped too, but the registry also loads them eagerly so they self-register without anything referencing them by name — see [Adding an override](#adding-an-override).
 
 ## Reference model: vanilla WordPress, not MJML
 
@@ -110,7 +110,7 @@ protected function render_content( string $block_content, array $parsed_block, R
 \Newspack\Newsletters\Email_Renderers\Block_Renderer_Registry::add( 'core/column', Column::class );
 ```
 
-> **Note:** `blocks/` files are loaded by the registry's `glob()`, not the Composer classmap — so **don't** add a `require_once` for them (it would double-load). The flip side: a file that doesn't match `class-*.php`, or one that omits the `add()` call, is silently skipped rather than failing loudly. If an override "isn't taking", check the filename and that the `add()` line is present.
+> **Note:** `blocks/` files are classmapped like everything in `includes/`, but the registry also loads them **eagerly** via `glob()` so their bottom-of-file `add()` runs without anything referencing the class — a manual `require_once` is therefore redundant. The flip side: a file that doesn't match `class-*.php`, or one that omits the `add()` call, is silently skipped rather than failing loudly. If an override "isn't taking", check the filename and that the `add()` line is present.
 
 ### Worked example: `core/column` percentage widths
 
