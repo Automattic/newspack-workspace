@@ -14,21 +14,25 @@ The audit and per-block tracking live in Linear: **NEWS-1901** (audit), **NEWS-1
 
 ## Architecture & data flow
 
+The flag selects the engine. The **editor refresh** renders through it and saves the result into the `newspack_email_html` meta — that saved HTML is what gets sent.
+
 ```
-                     Feature_Flag::is_enabled()
-              ┌───────────────┴───────────────┐
-           flag ON                         flag OFF
-              │                                │
-       WC email-editor                  legacy MJML
-  Renderer_Controller::render_wc   Newspack_Newsletters_Renderer
-              │                                │
-              └────────► newspack_email_html ◄─┘
-                    (EMAIL_HTML_META → sent to the ESP)
+                  Feature_Flag::is_enabled()
+                            │
+      editor refresh (src/editor/mjml) branches on the flag
+              ┌─────────────┴─────────────┐
+           flag ON                      flag OFF
+              │                            │
+   post-html → render_wc        post-mjml → client MJML compile
+              │                            │
+              └──────► newspack_email_html ◄┘   (saved by the editor)
+                            │
+              ESP send reads it (retrieve_email_html)
 ```
 
-- **`Renderer_Controller` is the dispatch seam** — `active_engine()` returns `'wc'` or `'mjml'`; new newsletters render through the active engine into `newspack_email_html`.
-- **Editor preview** round-trips through `GET newspack-newsletters/v1/post-html`, which renders the **saved** post (the WC engine re-fetches by ID, so unsaved content is ignored).
-- **Sent newsletters are frozen and stamped** — at send the final HTML is written to `newspack_email_html` and the producing engine is stamped on the post, so a later flag flip can't rewrite history.
+- **`active_engine()`** reads the flag and returns `'wc'` or `'mjml'`. The editor refresh (`refreshEmailHtml`) branches on it: WC → the `post-html` REST endpoint → `Renderer_Controller::render_wc()`; MJML → the `post-mjml` endpoint + a client-side compile. The resulting HTML is saved to the `newspack_email_html` meta.
+- **`render_wc()`** is the WC render entry, called by the `post-html` round-trip. It renders the **saved** post (the WC engine re-fetches by ID, so unsaved content is ignored).
+- **At send**, the ESP provider **reads** the saved `newspack_email_html` (`Newspack_Newsletters_Renderer::retrieve_email_html`) — it doesn't re-render. `send_newsletter()` additionally **stamps** the producing engine on the post (it does not write the HTML). A sent newsletter never re-renders, so the stamp survives a later flag flip.
 - The boundary is narrow: everything downstream (ESPs, tracking, layouts) just reads `newspack_email_html` and doesn't care which engine produced it.
 
 ## Components
@@ -45,7 +49,7 @@ add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' ); // force
 ```
 
 ### `Renderer_Controller` — `class-renderer-controller.php`
-Dispatch point and WC render entry.
+Engine resolution, the WC render entry, and the producing-engine stamp.
 
 - **`active_engine(): string`** — `'wc'` or `'mjml'` from the flag.
 - **`render_wc( ?WP_Post ): string`** — renders via the package; returns `''` (never fatals) on bad input / missing package / thrown error.
