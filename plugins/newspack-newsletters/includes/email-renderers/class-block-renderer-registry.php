@@ -12,7 +12,7 @@
 
 namespace Newspack\Newsletters\Email_Renderers;
 
-use Automattic\WooCommerce\EmailEditor\Integrations\Core\Renderer\Blocks\Abstract_Block_Renderer;
+use Automattic\WooCommerce\EmailEditor\Integrations\Core\Renderer\Blocks\Column as Package_Column;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -28,16 +28,16 @@ class Block_Renderer_Registry {
 	private static $renderers = null;
 
 	/**
-	 * Hook the override filter once the package base class is present.
+	 * Hook the override filter once the package renderer classes are present.
 	 *
-	 * Guards on the package's Abstract_Block_Renderer so the override only wires
-	 * up when the email-editor package is loaded — instantiating our renderers
-	 * requires that base class.
+	 * Guards on the package's concrete Column renderer (the class our overrides
+	 * extend) so the override only wires up when the email-editor package is
+	 * loaded — instantiating our renderers requires that parent class.
 	 *
 	 * @return void
 	 */
 	public static function init(): void {
-		if ( ! class_exists( Abstract_Block_Renderer::class ) ) {
+		if ( ! class_exists( Package_Column::class ) ) {
 			return;
 		}
 		add_filter( 'block_type_metadata_settings', [ __CLASS__, 'update_block_settings' ], 11, 1 );
