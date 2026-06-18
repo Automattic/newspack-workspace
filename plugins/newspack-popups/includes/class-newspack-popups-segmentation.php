@@ -254,7 +254,14 @@ final class Newspack_Popups_Segmentation {
 		if ( empty( $merge_tag ) ) {
 			return $url;
 		}
-		return add_query_arg( self::DONOR_SEGMENT_QUERY_PARAM, $merge_tag, $url );
+		$url = add_query_arg( self::DONOR_SEGMENT_QUERY_PARAM, $merge_tag, $url );
+		// add_query_arg() URL-encodes the value, but ESPs substitute only the raw
+		// merge-tag syntax — Mailchimp leaves the percent-encoded form (e.g.
+		// %2A%7C…%7C%2A) untouched, verified against a live send — so the tag would
+		// never resolve. Restore the raw tag so the ESP substitutes the recipient's
+		// value at send time. (The reader lands on the substituted value; an
+		// unsubstituted literal is ignored client-side, so this stays fail-safe.)
+		return str_replace( urlencode( $merge_tag ), $merge_tag, $url );
 	}
 
 	/**

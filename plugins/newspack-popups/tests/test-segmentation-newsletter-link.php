@@ -47,6 +47,13 @@ class SegmentationNewsletterLinkTest extends WP_UnitTestCase {
 		$args = wp_parse_args( wp_parse_url( $result, PHP_URL_QUERY ) );
 		$this->assertArrayHasKey( 'np_seg_donor', $args );
 		$this->assertSame( '*|' . self::DONOR_FIELD . '|*', $args['np_seg_donor'] );
+
+		// The merge tag must appear RAW (unencoded) in the URL: ESPs substitute only
+		// the literal *|FIELD|* syntax and leave the percent-encoded form (%2A%7C…)
+		// untouched (verified against a live Mailchimp send). add_query_arg() encodes
+		// by default, so this guards the str_replace that restores the raw tag.
+		$this->assertStringContainsString( 'np_seg_donor=*|' . self::DONOR_FIELD . '|*', $result );
+		$this->assertStringNotContainsString( '%2A%7C', $result );
 	}
 
 	/**
