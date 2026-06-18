@@ -100,3 +100,6 @@ class Column extends Package_Column {
 		);
 	}
 }
+
+// Self-register this override so the registry discovers it via the blocks/ glob.
+\Newspack\Newsletters\Email_Renderers\Block_Renderer_Registry::add( 'core/column', Column::class );

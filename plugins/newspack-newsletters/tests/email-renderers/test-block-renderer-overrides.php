@@ -20,6 +20,14 @@ use Automattic\WooCommerce\EmailEditor\Integrations\Core\Renderer\Blocks\Column 
  */
 class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	/**
+	 * Run override discovery so the self-registering renderers are mapped.
+	 */
+	public function set_up() {
+		parent::set_up();
+		Block_Renderer_Registry::init();
+	}
+
+	/**
 	 * The width helper restores a percentage width the package stripped to px.
 	 *
 	 * The package's Column renderer runs `Styles_Helper::parse_value( '70%' )`,
@@ -108,6 +116,74 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'render_email_callback', $settings, 'Expected a render_email_callback to be set for the mapped block.' );
 		$this->assertIsCallable( $settings['render_email_callback'], 'The render_email_callback should be callable.' );
 		$this->assertInstanceOf( Column::class, $settings['render_email_callback'][0], 'The callback should be bound to the Newspack Column renderer.' );
+	}
+
+	/**
+	 * Registering via add() maps any block name (no hardcoded list).
+	 *
+	 * Overrides self-register by calling add() at the bottom of their file, so the
+	 * registry must map whatever block name is passed to a lazily-instantiated
+	 * renderer of the given class — proving registration is data-driven, not a
+	 * hardcoded list.
+	 */
+	public function test_add_registers_an_arbitrary_block_override() {
+		Block_Renderer_Registry::add( 'test/dummy', Column::class );
+
+		$settings = Block_Renderer_Registry::update_block_settings( [ 'name' => 'test/dummy' ] );
+
+		$this->assertInstanceOf( Column::class, $settings['render_email_callback'][0], 'add() should register an override for any block name.' );
+	}
+
+	/**
+	 * Glob discovery loads override files so they self-register.
+	 *
+	 * This is the only test that exercises the headline glob discovery in
+	 * isolation. The fixture renderer lives in a non-autoloaded `fixtures/` dir
+	 * and is never referenced by name, so the sole path to mapping
+	 * `test/fixture-block` is discover() globbing the directory and requiring the
+	 * file (which self-registers at its bottom). Delete the glob loop and this
+	 * fails — unlike the other registry tests, where classmap autoloading of
+	 * Blocks\Column would mask a broken glob.
+	 */
+	public function test_discover_registers_overrides_via_glob() {
+		Block_Renderer_Registry::discover( __DIR__ . '/fixtures/block-renderers' );
+
+		$settings = Block_Renderer_Registry::update_block_settings( [ 'name' => 'test/fixture-block' ] );
+
+		$this->assertArrayHasKey( 'render_email_callback', $settings, 'Expected discover() to have loaded the fixture file and registered its block.' );
+		$this->assertIsCallable( $settings['render_email_callback'], 'The discovered override should map to a callable render callback.' );
+	}
+
+	/**
+	 * A non-renderer override class fails closed (no callback, no fatal).
+	 *
+	 * The instantiation guard requires the class to be a package block-renderer
+	 * subclass. A class that exists but isn't one (here stdClass) must be skipped,
+	 * leaving the package callback in place rather than binding a bad renderer.
+	 */
+	public function test_non_renderer_override_fails_closed() {
+		Block_Renderer_Registry::add( 'test/not-a-renderer', \stdClass::class );
+
+		$settings = Block_Renderer_Registry::update_block_settings( [ 'name' => 'test/not-a-renderer' ] );
+
+		$this->assertArrayNotHasKey( 'render_email_callback', $settings, 'A non-renderer class must not be bound as a render callback.' );
+	}
+
+	/**
+	 * An override whose constructor throws fails closed (no callback, no fatal).
+	 *
+	 * The is_subclass_of() guard can't catch an instantiable subclass that throws
+	 * (or needs constructor args), so the registry wraps `new` in a try/catch. The throwing
+	 * fixture is a valid subclass, so it clears the type guard and exercises that
+	 * catch — registration must survive without a render callback.
+	 */
+	public function test_uninstantiable_override_fails_closed() {
+		require_once __DIR__ . '/fixtures/class-throwing-block-renderer.php';
+		Block_Renderer_Registry::add( 'test/throws', \Newspack\Newsletters\Email_Renderers\Blocks\Throwing_Block_Renderer::class );
+
+		$settings = Block_Renderer_Registry::update_block_settings( [ 'name' => 'test/throws' ] );
+
+		$this->assertArrayNotHasKey( 'render_email_callback', $settings, 'A renderer that throws on construction must not be bound, and must not fatal.' );
 	}
 
 	/**
