@@ -110,6 +110,8 @@ protected function render_content( string $block_content, array $parsed_block, R
 \Newspack\Newsletters\Email_Renderers\Block_Renderer_Registry::add( 'core/column', Column::class );
 ```
 
+> **Note:** `blocks/` files are loaded by the registry's `glob()`, not the Composer classmap — so **don't** add a `require_once` for them (it would double-load). The flip side: a file that doesn't match `class-*.php`, or one that omits the `add()` call, is silently skipped rather than failing loudly. If an override "isn't taking", check the filename and that the `add()` line is present.
+
 ### Worked example: `core/column` percentage widths
 
 The canonical override (`blocks/class-column.php`). The package strips column width units (`Styles_Helper::parse_value( '70%' )` → `width="70"` = 70px), collapsing multi-column layouts. Vanilla WP keeps the percentage, so we override:

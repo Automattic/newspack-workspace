@@ -135,6 +135,26 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Glob discovery loads override files so they self-register.
+	 *
+	 * This is the only test that exercises the headline glob discovery in
+	 * isolation. The fixture renderer lives in a non-autoloaded `fixtures/` dir
+	 * and is never referenced by name, so the sole path to mapping
+	 * `test/fixture-block` is discover() globbing the directory and requiring the
+	 * file (which self-registers at its bottom). Delete the glob loop and this
+	 * fails — unlike the other registry tests, where classmap autoloading of
+	 * Blocks\Column would mask a broken glob.
+	 */
+	public function test_discover_registers_overrides_via_glob() {
+		Block_Renderer_Registry::discover( __DIR__ . '/fixtures/block-renderers' );
+
+		$settings = Block_Renderer_Registry::update_block_settings( [ 'name' => 'test/fixture-block' ] );
+
+		$this->assertArrayHasKey( 'render_email_callback', $settings, 'Expected discover() to have loaded the fixture file and registered its block.' );
+		$this->assertIsCallable( $settings['render_email_callback'], 'The discovered override should map to a callable render callback.' );
+	}
+
+	/**
 	 * The registry leaves an unmapped block untouched.
 	 *
 	 * A block with no override (e.g. core/paragraph) must pass through with no

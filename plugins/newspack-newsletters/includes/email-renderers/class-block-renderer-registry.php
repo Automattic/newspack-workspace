@@ -58,6 +58,9 @@ class Block_Renderer_Registry {
 	 */
 	public static function add( string $block_name, string $renderer_class ): void {
 		self::$renderers[ $block_name ] = $renderer_class;
+		// Drop any instance cached under a previous class so a re-registration
+		// doesn't keep serving the stale renderer.
+		unset( self::$instances[ $block_name ] );
 	}
 
 	/**
@@ -78,12 +81,32 @@ class Block_Renderer_Registry {
 		}
 		self::$initialized = true;
 
-		$files = glob( __DIR__ . '/blocks/class-*.php' );
-		foreach ( (array) $files as $file ) {
-			require_once $file;
-		}
+		self::discover( __DIR__ . '/blocks' );
 
 		add_filter( 'block_type_metadata_settings', [ __CLASS__, 'update_block_settings' ], 11, 1 );
+	}
+
+	/**
+	 * Discover and load the override files in a `blocks/` directory.
+	 *
+	 * Each `class-*.php` file self-registers via add() at its bottom, so loading
+	 * the file is what populates the registry — there is no manual map. The files
+	 * extend package renderer classes, so this must only run once the package is
+	 * loaded (init() guards on that before calling here; the standalone seam is
+	 * for tests that point it at a fixtures dir).
+	 *
+	 * @param string $blocks_dir Absolute path to a directory of `class-*.php` overrides.
+	 * @return void
+	 */
+	public static function discover( string $blocks_dir ): void {
+		$files = glob( $blocks_dir . '/class-*.php' );
+		if ( false === $files ) {
+			\Newspack_Newsletters_Logger::log( 'Email editor: could not read the block overrides directory; no overrides loaded.' );
+			return;
+		}
+		foreach ( $files as $file ) {
+			require_once $file;
+		}
 	}
 
 	/**
@@ -98,8 +121,15 @@ class Block_Renderer_Registry {
 			return $settings;
 		}
 		if ( ! isset( self::$instances[ $name ] ) ) {
-			$renderer_class            = self::$renderers[ $name ];
-			self::$instances[ $name ]  = new $renderer_class();
+			$renderer_class = self::$renderers[ $name ];
+			// Fail closed: a missing class (typo / premature registration) or one
+			// without a render() method leaves the package callback in place
+			// rather than fataling during block registration.
+			if ( ! class_exists( $renderer_class ) || ! method_exists( $renderer_class, 'render' ) ) {
+				\Newspack_Newsletters_Logger::log( 'Email editor: skipping invalid block override for ' . $name . ' (' . $renderer_class . ').' );
+				return $settings;
+			}
+			self::$instances[ $name ] = new $renderer_class();
 		}
 		$settings['render_email_callback'] = [ self::$instances[ $name ], 'render' ];
 		return $settings;
