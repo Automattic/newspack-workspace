@@ -42,21 +42,41 @@
 		width: 100%;
 
 		tr {
-			border-bottom: 1px solid #ddd;
+			border-bottom: 1px solid var(--newspack-ui-color-neutral-10);
+		}
+		thead tr {
+			border-bottom-color: var(--newspack-ui-color-border);
+		}
+		&.order_details thead tr {
+			border-bottom-color: var(--newspack-ui-color-neutral-10);
 		}
 	}
 	.shop_table {
 		th,
 		td {
-			padding-bottom: var(--newspack-ui-spacer-2);
-			padding-top: var(--newspack-ui-spacer-2);
+			padding-bottom: calc(var(--newspack-ui-spacer-1) * 0.75);
+			padding-top: calc(var(--newspack-ui-spacer-1) * 0.75);
 			vertical-align: middle;
+
+			// Establish a 48px minimum cell height (spacer-7 inner + 6px×2 padding) that still grows with content.
+			// Uses ::after so it doesn't clobber WooCommerce's responsive `td::before { content: attr(data-title) }` mobile labels.
+			&::after {
+				content: "";
+				display: inline-block;
+				height: var(--newspack-ui-spacer-7);
+				vertical-align: middle;
+				width: 0;
+			}
 
 			@media ( min-width: breakpoints.$tablet_width ) {
 				&:not(:last-child) {
 					padding-right: var(--newspack-ui-spacer-2);
 				}
 			}
+		}
+		// Keep the action control and the min-height ::after spacer on one line.
+		td.woocommerce-orders-table__cell-order-actions {
+			white-space: nowrap;
 		}
 		th {
 			color: var(--newspack-ui-color-neutral-60);
@@ -67,8 +87,7 @@
 		.woocommerce-Button {
 			@extend .newspack-ui__button--secondary;
 			@extend .newspack-ui__button--x-small;
-			margin-top: calc(var(--newspack-ui-spacer-1) / 2);
-			margin-bottom: calc(var(--newspack-ui-spacer-1) / 2);
+			vertical-align: middle;
 			&.newspack-ui__button--ghost {
 				@extend .newspack-ui__button--ghost;
 			}
@@ -149,7 +168,7 @@
 		.newspack-ui__dropdown:has( ul > li:only-child .disabled ) {
 			display: none;
 		}
-		.newspack-ui__row > .payment-method {
+		.newspack-ui__grid > .payment-method {
 			min-height: 106px;
 		}
 	}

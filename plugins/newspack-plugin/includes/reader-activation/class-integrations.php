@@ -365,6 +365,29 @@ class Integrations {
 	}
 
 	/**
+	 * Get active integrations whose external prerequisites are also configured.
+	 *
+	 * Iteration sites that perform real I/O on each integration (health checks,
+	 * contact pushes, pulls, retries) MUST use this instead of
+	 * `get_active_integrations()` to avoid alerting on, or scheduling AS
+	 * retries for, integrations the admin has not yet finished setting up.
+	 *
+	 * `is_set_up()` is a stored-state check by contract — see ESP's override.
+	 * Treating it as a runtime probe here would silently drop traffic on
+	 * transient provider failures.
+	 *
+	 * @return Integration[] Integrations that are both enabled AND set up.
+	 */
+	public static function get_active_configured_integrations() {
+		return array_filter(
+			self::get_active_integrations(),
+			function ( $integration ) {
+				return $integration->is_set_up();
+			}
+		);
+	}
+
+	/**
 	 * Get a specific integration by ID.
 	 *
 	 * @param string $integration_id The integration ID.
@@ -424,20 +447,37 @@ class Integrations {
 				continue;
 			}
 			$result[ $id ] = [
-				'id'          => $id,
-				'name'        => $integration->get_name(),
-				'description' => $integration->get_description(),
-				'enabled'     => self::is_enabled( $id ),
-				'is_set_up'   => $integration->is_set_up(),
-				'setup_url'   => $integration->get_setup_url(),
-				'settings'    => $integration->get_settings_config(),
+				'id'               => $id,
+				'name'             => $integration->get_name(),
+				'description'      => $integration->get_description(),
+				'enabled'          => self::is_enabled( $id ),
+				'is_set_up'        => $integration->is_set_up(),
+				'setup_url'        => $integration->get_setup_url(),
+				'settings'         => $integration->get_settings_config(),
+				'required_plugins' => $integration->get_required_plugins(),
 			];
 		}
-		return $result;
+
+		/**
+		 * Filters the integration settings list shown in the Audience → Integrations UI.
+		 *
+		 * Lets a registered integration hide another's card when a takeover is in
+		 * effect (e.g. a vendor-specific ESP integration superseding the built-in
+		 * one).
+		 *
+		 * @param array $result Keyed array of integration settings.
+		 */
+		return apply_filters( 'newspack_reader_activation_integration_settings', $result );
 	}
 
 	/**
-	 * Update settings for a specific integration.
+	 * Update settings for a specific integration from an admin REST request.
+	 *
+	 * Skips fields whose type is managed server-side (see
+	 * Integration::MANAGED_FIELD_TYPES — e.g., 'oauth', 'hidden') so admin
+	 * clients can't overwrite tokens or other programmatically-managed values
+	 * by POSTing them in the settings payload. Server-side writers continue
+	 * to use Integration::update_settings_field_value() directly.
 	 *
 	 * @param string $integration_id The integration ID.
 	 * @param array  $settings       Key-value pairs of settings to update.
@@ -449,6 +489,9 @@ class Integrations {
 			return null;
 		}
 		foreach ( $settings as $key => $value ) {
+			if ( $integration->is_managed_settings_field( $key ) ) {
+				continue;
+			}
 			$integration->update_settings_field_value( $key, $value );
 		}
 		return true;
@@ -742,13 +785,17 @@ class Integrations {
 	}
 
 	/**
-	 * Run health checks on all active integrations.
+	 * Run health checks on all active and configured integrations.
+	 *
+	 * Routed through `get_active_configured_integrations()` so a missing
+	 * provider or unconfigured master list — a setup-incomplete state, not a
+	 * runtime incident — surfaces in the integrations UI rather than the
+	 * alerts channel.
 	 *
 	 * Logs failures and fires an action for the Alert Manager.
 	 */
 	public static function run_health_checks() {
-		$active = self::get_active_integrations();
-		foreach ( $active as $integration ) {
+		foreach ( self::get_active_configured_integrations() as $integration ) {
 			$result = $integration->health_check();
 			if ( is_wp_error( $result ) ) {
 				Logger::error(

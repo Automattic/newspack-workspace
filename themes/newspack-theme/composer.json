@@ -13,31 +13,18 @@
 		"wp-coding-standards/wpcs": "^3.0",
 		"phpcompatibility/phpcompatibility-wp": "^2.1",
 		"dealerdirect/phpcodesniffer-composer-installer": "^1.0.0",
-		"brainmaestro/composer-git-hooks": "^3.0",
 		"szepeviktor/phpstan-wordpress": "^2.0"
 	},
 	"scripts": {
 		"phpcs-i": "@php ./vendor/squizlabs/php_codesniffer/bin/phpcs -i",
 		"lint": "@php ./vendor/squizlabs/php_codesniffer/bin/phpcs",
 		"format": "@php ./vendor/squizlabs/php_codesniffer/bin/phpcbf",
-		"post-install-cmd": [
-			"vendor/bin/cghooks add --no-lock",
-			"PHPStan\\WordPress\\Composer\\FixWpStubs::php73Polyfill"
-		],
 		"post-update-cmd": [
 			"vendor/bin/cghooks update",
 			"PHPStan\\WordPress\\Composer\\FixWpStubs::php73Polyfill"
 		]
 	},
-	"extra": {
-		"hooks": {
-			"pre-commit": "./node_modules/.bin/lint-staged",
-			"pre-push": "./.hooks/pre-push",
-			"commit-msg": [
-				"cat $1 | ./node_modules/.bin/newspack-scripts commitlint"
-			]
-		}
-	},
+	"extra": {},
 	"config": {
 		"platform": {
 			"php": "8.0"

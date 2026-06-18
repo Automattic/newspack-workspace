@@ -1,0 +1,62 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack/overlay-search",
+	"title": "Overlay Search",
+	"category": "newspack",
+	"description": "A search button that opens a full-screen overlay containing a search form. Hands off to Jetpack Instant Search when active.",
+	"keywords": [
+		"search",
+		"overlay",
+		"jetpack"
+	],
+	"textdomain": "newspack-plugin",
+	"attributes": {
+		"triggerText": {
+			"type": "string",
+			"default": "Search"
+		},
+		"overlayColor": {
+			"type": "string",
+			"default": ""
+		},
+		"className": {
+			"type": "string",
+			"default": ""
+		}
+	},
+	"supports": {
+		"anchor": true,
+		"align": false,
+		"html": false,
+		"color": {
+			"background": true,
+			"text": true
+		},
+		"typography": {
+			"fontSize": true,
+			"lineHeight": true,
+			"__experimentalFontFamily": true,
+			"__experimentalFontWeight": true,
+			"__experimentalFontStyle": true,
+			"__experimentalTextTransform": true,
+			"__experimentalTextDecoration": true,
+			"__experimentalLetterSpacing": true
+		},
+		"spacing": {
+			"padding": true
+		},
+		"__experimentalBorder": {
+			"radius": true
+		},
+		"shadow": true
+	},
+	"styles": [
+		{ "name": "default", "label": "Default", "isDefault": true },
+		{ "name": "icon-only", "label": "Icon only" },
+		{ "name": "text-only", "label": "Text only" }
+	],
+	"editorStyle": "file:../../../dist/blocks.css",
+	"style": "file:../../../dist/blocks.css",
+	"viewScript": "file:../../../dist/overlay-search-block.js"
+}

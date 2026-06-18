@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack Newsletters 3.33.0\n"
+"Project-Id-Version: Newspack Newsletters 3.33.4\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-newsletters\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-05-19T14:09:48+00:00\n"
+"POT-Creation-Date: 2026-05-29T18:06:01+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-newsletters\n"
@@ -1794,14 +1794,14 @@ msgstr ""
 #: dist/editorBlocks.js:5
 #: src/blocks/subscribe/edit.js:194
 #: src/editor/blocks/posts-inserter/index.js:261
-#: src/newsletter-editor/styling/index.js:224
+#: src/newsletter-editor/styling/index.js:277
 msgid "Text"
 msgstr ""
 
 #: dist/blocks.js:1
 #: dist/editorBlocks.js:5
 #: src/blocks/subscribe/edit.js:199
-#: src/newsletter-editor/styling/index.js:229
+#: src/newsletter-editor/styling/index.js:282
 msgid "Background"
 msgstr ""
 
@@ -2048,40 +2048,40 @@ msgstr ""
 
 #: dist/editorBlocks.js:5
 #: src/editor/blocks/posts-inserter/index.js:249
-#: src/newsletter-editor/styling/index.js:218
+#: src/newsletter-editor/styling/index.js:271
 msgid "Color"
 msgstr ""
 
 #: dist/editorBlocks.js:5
 #: src/editor/blocks/posts-inserter/index.js:265
-#: src/newsletter-editor/styling/index.js:233
+#: src/newsletter-editor/styling/index.js:286
 msgid "Typography"
 msgstr ""
 
 #: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:236
+#: src/newsletter-editor/styling/index.js:289
 msgid "Headings font"
 msgstr ""
 
 #: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:245
+#: src/newsletter-editor/styling/index.js:298
 msgid "Body font"
 msgstr ""
 
 #: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:255
-#: src/newsletter-editor/styling/index.js:259
-#: src/newsletter-editor/styling/index.js:270
+#: src/newsletter-editor/styling/index.js:308
+#: src/newsletter-editor/styling/index.js:312
+#: src/newsletter-editor/styling/index.js:323
 msgid "Custom CSS"
 msgstr ""
 
 #: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:260
+#: src/newsletter-editor/styling/index.js:313
 msgid "This is an advanced feature and may result in unpredictable behavior. Custom CSS will be appended to default styles in sent emails only."
 msgstr ""
 
 #: dist/editorBlocks.js:5
-#: src/newsletter-editor/styling/index.js:271
+#: src/newsletter-editor/styling/index.js:324
 msgid "Write custom CSS…"
 msgstr ""
 
@@ -2471,7 +2471,11 @@ msgstr ""
 msgid "Drop cap"
 msgstr ""
 
-#: src/editor/blocks-validation/blocks-filters.js:84
+#: src/editor/blocks-validation/blocks-filters.js:91
+msgid "Unpublished synced pattern"
+msgstr ""
+
+#: src/editor/blocks-validation/blocks-filters.js:109
 msgid "These features will not be displayed correctly in an email, please remove them:"
 msgstr ""
 
@@ -2833,19 +2837,19 @@ msgstr ""
 msgid "Only visible in the sent email."
 msgstr ""
 
-#: src/editor/index.js:90
+#: src/editor/index.js:88
 msgid "Circle Black"
 msgstr ""
 
-#: src/editor/index.js:95
+#: src/editor/index.js:93
 msgid "Circle White"
 msgstr ""
 
-#: src/editor/index.js:100
+#: src/editor/index.js:98
 msgid "Black"
 msgstr ""
 
-#: src/editor/index.js:105
+#: src/editor/index.js:103
 msgid "White"
 msgstr ""
 

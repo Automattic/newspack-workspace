@@ -10,6 +10,7 @@ use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Settings;
 use Newspack\Institution;
 use Newspack\Reader_Activation;
+use Newspack\Content_Gate\IP_Access_Rule;
 
 /**
  * Test the `group` GA4 custom event parameter.
@@ -186,6 +187,30 @@ class Newspack_Test_GoogleSiteKit_Group_Param extends WP_UnitTestCase {
 		$params = GoogleSiteKit::get_custom_event_parameters();
 
 		$this->assertEquals( 'Institution ' . $inst_id, $params['group'] );
+	}
+
+	/**
+	 * Matching institution (via IP-based access rules) contributes the anonymized ID label
+	 * for logged-out users, too.
+	 */
+	public function test_group_includes_matching_institution_while_logged_out() {
+		// Ensure logged-out user.
+		wp_set_current_user( 0 );
+		$inst_id = $this->create_institution( 'Test University', [ 'ip_range' => '192.168.1.0/24' ] );
+
+		// Mock a session in the whitelisted IP range.
+		$_SERVER['REMOTE_ADDR'] = '192.168.1.50'; // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
+		$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+
+		$this->assertTrue( IP_Access_Rule::is_cookie_set() );
+
+		$params = GoogleSiteKit::get_custom_event_parameters();
+
+		$this->assertEquals( 'Institution ' . $inst_id, $params['group'] );
+
+		// Unset whitelisted IP and cookie.
+		unset( $_SERVER['REMOTE_ADDR'] ); // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
+		unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 	}
 
 	/**

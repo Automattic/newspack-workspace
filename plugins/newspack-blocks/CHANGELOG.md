@@ -1,3 +1,19 @@
+## @automattic/newspack-blocks [4.26.5](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.4...newspack-blocks@4.26.5) (2026-06-15)
+
+
+### Bug Fixes
+
+* **blocks:** restore allow-duplicate toggle for static blocks ([#180](https://github.com/Automattic/newspack-workspace/issues/180)) ([8aaa75e](https://github.com/Automattic/newspack-workspace/commit/8aaa75e8565887e8ac5536cec74ea5f8184ebe83))
+* **newspack-blocks:** update swiper to patched release ([a33812a](https://github.com/Automattic/newspack-workspace/commit/a33812a8682966dba39af8789edd2dc26bf66a82))
+
+## @automattic/newspack-blocks [4.26.5-alpha.1](https://github.com/Automattic/newspack-workspace/compare/@automattic/newspack-blocks@4.26.4...@automattic/newspack-blocks@4.26.5-alpha.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* **blocks:** restore allow-duplicate toggle for static blocks ([#180](https://github.com/Automattic/newspack-workspace/issues/180)) ([8aaa75e](https://github.com/Automattic/newspack-workspace/commit/8aaa75e8565887e8ac5536cec74ea5f8184ebe83))
+* **newspack-blocks:** update swiper to patched release ([a33812a](https://github.com/Automattic/newspack-workspace/commit/a33812a8682966dba39af8789edd2dc26bf66a82))
+
 ## @automattic/newspack-blocks [4.26.4](https://github.com/Automattic/newspack-workspace/compare/@automattic/newspack-blocks@4.26.3...@automattic/newspack-blocks@4.26.4) (2026-06-01)
 
 

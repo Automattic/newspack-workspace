@@ -20,21 +20,11 @@ const ContentDistributionPanel = ( { header, body, footer, buttons } ) => {
 			className="newspack-network-content-distribution-panel"
 		>
 			<Panel>
-				<PanelBody className="content-distribution-panel-header">
-					{ header }
-				</PanelBody>
-				<PanelBody className="content-distribution-panel-body">
-					{ body }
-				</PanelBody>
-				<PanelBody className="content-distribution-panel-footer">
-					{ footer }
-				</PanelBody>
+				<PanelBody className="content-distribution-panel-header">{ header }</PanelBody>
+				<PanelBody className="content-distribution-panel-body">{ body }</PanelBody>
+				<PanelBody className="content-distribution-panel-footer">{ footer }</PanelBody>
 				<PanelBody className="content-distribution-panel-buttons">
-					<Flex
-						direction="column"
-						className="content-distribution-panel__button-column"
-						gap={ 4 }
-					>
+					<Flex direction="column" className="content-distribution-panel__button-column" gap={ 4 }>
 						{ buttons }
 					</Flex>
 				</PanelBody>

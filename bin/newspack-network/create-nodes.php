@@ -9,7 +9,7 @@ foreach( $nodes as $node ) {
     if ( empty( $node ) ) {
         continue;
     }
-    $domain = $node . '.local';
+    $domain = $node . '.test';
     $existing_node = Newspack_Network\Hub\Nodes::get_node_by_url( 'http://' . $domain );
     if ( $existing_node ) {
         echo "Node $domain already exists.\n";

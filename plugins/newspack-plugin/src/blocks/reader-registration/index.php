@@ -77,9 +77,8 @@ function enqueue_scripts() {
 		$handle,
 		'reader_registration_block_config',
 		[
-			'require_account_verification' => \Newspack\Content_Gate::requires_account_verification(),
-			'verification_url'             => \admin_url( 'admin-ajax.php' ),
-			'verification_nonce'           => \wp_create_nonce( 'newspack_reader_registration_verification' ),
+			'verification_url'   => \admin_url( 'admin-ajax.php' ),
+			'verification_nonce' => \wp_create_nonce( 'newspack_reader_registration_verification' ),
 		]
 	);
 }
@@ -136,60 +135,6 @@ function render_verification_box() {
 }
 
 /**
- * Render the verification modal for the registration block.
- *
- * @return void
- */
-function render_verification_modal() {
-	if ( ! \Newspack\Content_Gate::requires_account_verification() ) {
-		return;
-	}
-	$email = '%EMAIL%';
-	if ( \is_user_logged_in() ) {
-		$current_user = \wp_get_current_user();
-		$email = $current_user->user_email;
-	}
-	ob_start();
-	?>
-	<div class="newspack-ui__box newspack-ui__box--text-center">
-		<span class="newspack-ui__icon newspack-ui__icon--neutral">
-			<?php Newspack_UI_Icons::print_svg( 'login' ); ?>
-		</span>
-		<p>
-			<?php
-			printf(
-				// translators: %s is the user's email address.
-				esc_html__( 'We\'ll send a verification code to %s.', 'newspack-plugin' ),
-				'<strong class="email-address">' . esc_html( $email ) . '</strong>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-			);
-			?>
-		</p>
-	</div>
-	<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide" data-send-otp>
-		<?php esc_html_e( 'Send code', 'newspack-plugin' ); ?>
-	</button>
-	<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close">
-		<?php esc_html_e( 'Go back', 'newspack-plugin' ); ?>
-	</button>
-	<?php
-	$content = ob_get_clean();
-	?>
-	<div class="newspack-ui newspack__reader-verification">
-		<?php
-		\Newspack\Newspack_UI::generate_modal(
-			[
-				'id'      => 'newspack-reader-verification',
-				'title'   => __( 'Sign in', 'newspack-plugin' ),
-				'content' => $content,
-			]
-		);
-		?>
-	</div>
-	<?php
-}
-add_action( 'wp_footer', __NAMESPACE__ . '\\render_verification_modal' );
-
-/**
  * Process the verification request.
  *
  * @return never
@@ -243,7 +188,7 @@ function render_block( $attrs, $content ) {
 	if ( $my_account_url ) {
 		$success_message .= sprintf(
 			// Translators: %s is a link to My Account.
-			__( 'Please visit %s to verify and manage your account.', 'newspack-plugin' ),
+			__( 'Please visit %s to manage your account.', 'newspack-plugin' ),
 			'<a href="' . esc_url( $my_account_url ) . '">' . __( 'My Account', 'newspack-plugin' ) . '</a>'
 		);
 	}
@@ -286,7 +231,7 @@ function render_block( $attrs, $content ) {
 		)
 	) {
 		$registered = true;
-		if ( \is_user_logged_in() && ! Reader_Activation::is_reader_verified( \wp_get_current_user() ) && \Newspack\Content_Gate::is_gated() ) {
+		if ( \is_user_logged_in() && ! Reader_Activation::is_reader_verified( \wp_get_current_user() ) && Reader_Activation::show_post_registration_verification() ) {
 			$show_pending_verification = true;
 		}
 	}
@@ -582,17 +527,11 @@ function process_form() {
 		'metadata'      => $metadata,
 	];
 
-	// Include verified status for newly registered users.
+	// Surface verification state so the frontend can trigger the post-registration verification flow.
+	// The previously-set $response['action'] = 'otp' for new registrations was dead code: view.js only
+	// reads $response['action'] for existing-user signin paths, gated on data?.existing_user.
 	if ( $user_logged_in ) {
-		$user = \get_user_by( 'id', $user_id );
-		if ( $user ) {
-			$response['verified'] = Reader_Activation::is_reader_verified( $user );
-			// Signal frontend to open OTP verification flow.
-			if ( ! $response['verified'] && \Newspack\Content_Gate::requires_account_verification() ) {
-				$response['action']             = 'otp';
-				$response['verification_nonce'] = \wp_create_nonce( 'newspack_reader_registration_verification' );
-			}
-		}
+		$response = array_merge( $response, Reader_Activation::get_verification_payload( $user_id ) );
 	} else {
 		$existing_user = \get_user_by( 'email', $email );
 		if ( $existing_user && Reader_Activation::is_user_reader( $existing_user ) ) {

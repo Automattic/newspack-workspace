@@ -1,14 +1,14 @@
 #!/bin/bash
 
-SITE_NAME=$1
+SITE_NAME="$1"
 
-cd "/var/www/additional-sites-html/$SITE_NAME"
+cd "/var/www/additional-sites-html/${SITE_NAME}"
 
 # Download WordPress
-[ -f "/var/www/additional-sites-html/$SITE_NAME"/xmlrpc.php ] || wp --allow-root core download
+[ -f "/var/www/additional-sites-html/${SITE_NAME}/xmlrpc.php" ] || wp --allow-root core download
 
 # Configure WordPress
-if [ ! -f "/var/www/additional-sites-html/$SITE_NAME/wp-config.php" ]; then
+if [ ! -f "/var/www/additional-sites-html/${SITE_NAME}/wp-config.php" ]; then
 	echo "Creating wp-config.php..."
 	# Loop until wp cli exits with 0
 	# because if running the containers for the first time,
@@ -19,10 +19,10 @@ if [ ! -f "/var/www/additional-sites-html/$SITE_NAME/wp-config.php" ]; then
 	while [ "$i" -le "$times" ]; do
 		sleep 3
 		wp --allow-root config create \
-			--dbhost=${MYSQL_HOST} \
-			--dbname=${SITE_NAME} \
-			--dbuser=${MYSQL_USER} \
-			--dbpass=${MYSQL_PASSWORD} \
+			--dbhost="${MYSQL_HOST}" \
+			--dbname="${SITE_NAME}" \
+			--dbuser="${MYSQL_USER}" \
+			--dbpass="${MYSQL_PASSWORD}" \
 			&& break
 		[ ! $? -eq 0 ] || break;
 		echo "Waiting for creating wp-config.php until mysql is ready to receive connections"
@@ -42,30 +42,30 @@ fi
 
 # Copy single site htaccess if none is present
 if [ ! -f "/var/www/additional-sites-html/$SITE_NAME/.htaccess" ]; then
-	cp /var/lib/jetpack-config/htaccess "/var/www/additional-sites-html/$SITE_NAME"/.htaccess
+	cp /var/lib/jetpack-config/htaccess "/var/www/additional-sites-html/${SITE_NAME}/.htaccess"
 fi
 
 # MU Plugin
-mkdir -p "/var/www/additional-sites-html/$SITE_NAME/wp-content/mu-plugins"
-cp /var/scripts/newspack-docker-mu.php "/var/www/additional-sites-html/$SITE_NAME/wp-content/mu-plugins"
+mkdir -p "/var/www/additional-sites-html/${SITE_NAME}/wp-content/mu-plugins"
+cp /var/scripts/newspack-docker-mu.php "/var/www/additional-sites-html/${SITE_NAME}/wp-content/mu-plugins"
 
 # link plugins and themes
-/var/scripts/link-repos.sh "/var/www/additional-sites-html/$SITE_NAME/wp-content"
+/var/scripts/link-repos.sh "/var/www/additional-sites-html/${SITE_NAME}/wp-content"
 
 # SSL
-sudo /usr/local/bin/ssl "${SITE_NAME}.local"
+sudo /usr/local/bin/ssl "${SITE_NAME}.test"
 
 # check if a VirtualHost block for the site already exists
-if ! grep -q "ServerName ${SITE_NAME}.local:443" /etc/apache2/sites-available/002-additional.conf; then
+if ! grep -q "ServerName ${SITE_NAME}.test:443" /etc/apache2/sites-available/002-additional.conf; then
 echo "Adding SSL VirtualHost block to the apache config file for ${SITE_NAME}…"
 # https://stackoverflow.com/questions/41979785/how-to-configure-multiple-ssl-certs-on-apache-virtual-host-with-aliases
 sudo cat <<EOF >> /etc/apache2/sites-available/002-additional.conf
 <VirtualHost *:443>
-	ServerName ${SITE_NAME}.local:443
+	ServerName ${SITE_NAME}.test:443
 	DocumentRoot /var/www/additional-sites-html/${SITE_NAME}
 	SSLEngine on
-	SSLCertificateFile /etc/ssl/certs/${SITE_NAME}.local.pem
-	SSLCertificateKeyFile /etc/ssl/certs/${SITE_NAME}.local-key.pem
+	SSLCertificateFile /etc/ssl/certs/${SITE_NAME}.test.pem
+	SSLCertificateKeyFile /etc/ssl/certs/${SITE_NAME}.test-key.pem
 	<Directory /var/www/additional-sites-html/${SITE_NAME}>
         AllowOverride All
         Require all granted

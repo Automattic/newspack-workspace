@@ -2,9 +2,9 @@
 	--newspack-newsletters-header-font: arial, sans-serif;
 	--newspack-newsletters-body-font: georgia, serif;
 	--newspack-newsletters-max-width: 600px;
-	--newspack-header-font: arial, sans-serif;
-	--newspack-body-font: georgia, serif;
-	--newspack-max-width: 600px;
+	--newspack-header-font: var(--newspack-newsletters-header-font);
+	--newspack-body-font: var(--newspack-newsletters-body-font);
+	--newspack-max-width: var(--newspack-newsletters-max-width);
 	--wp--style--global--content-size: 600px;
 	--wp--style--global--wide-size: 600px;
 }
@@ -20,7 +20,7 @@
 // Override block theme layout constraints — all newsletter blocks
 // should use the same max-width (600px) regardless of theme settings.
 .is-layout-constrained > * {
-	max-width: var(--newspack-max-width) !important;
+	max-width: var(--newspack-newsletters-max-width) !important;
 }
 
 // Override block theme global-padding layout rule that sets negative

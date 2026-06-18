@@ -37,14 +37,28 @@ class ESP extends Integration {
 	/**
 	 * Whether the ESP integration is ready to sync.
 	 *
-	 * Mirrors the readiness gate used by get_settings_config() so the configure
-	 * UI never advertises a card as set up while the underlying settings call
-	 * short-circuits to an empty config.
+	 * Checks STORED configuration only — provider option set + master list
+	 * option set. Does NOT call the live provider API. A live `get_lists()`
+	 * call here would mean: every gate that consults `is_set_up()`
+	 * (`Integrations::get_active_configured_integrations()`, the retry-time
+	 * guards in `Contact_Sync` / `Contact_Pull`) would silently skip and
+	 * lose data on any transient provider failure — exactly the failure
+	 * mode the AS retry system was built to survive. The setup question
+	 * "did the admin finish configuring this?" must be answered from local
+	 * state; "is the provider reachable right now?" is `health_check()`'s
+	 * job.
 	 *
-	 * @return bool True if an ESP provider is selected and at least one list is active.
+	 * @return bool True if a provider is selected and a master list ID is stored.
 	 */
 	public function is_set_up() {
-		return Reader_Activation::is_esp_configured();
+		$newsletters_configuration_manager = Configuration_Managers::configuration_manager_class_for_plugin_slug( 'newspack-newsletters' );
+		if ( ! $newsletters_configuration_manager || is_wp_error( $newsletters_configuration_manager ) ) {
+			return false;
+		}
+		if ( ! $newsletters_configuration_manager->is_esp_set_up() ) {
+			return false;
+		}
+		return (bool) $this->get_master_list_id();
 	}
 
 	/**
@@ -62,6 +76,23 @@ class ESP extends Integration {
 			return admin_url( 'edit.php?post_type=newspack_nl_cpt&page=newspack-newsletters' );
 		}
 		return $newsletters_configuration_manager->get_settings_url();
+	}
+
+	/**
+	 * Get the plugins this integration depends on, with their install/active status.
+	 *
+	 * @return array List of associative arrays with keys `slug`, `name`, `is_active`, `is_installed`.
+	 */
+	public function get_required_plugins() {
+		$status = \Newspack\Plugin_Manager::get_managed_plugin_status( 'newspack-newsletters' );
+		return [
+			[
+				'slug'         => 'newspack-newsletters',
+				'name'         => __( 'Newspack Newsletters', 'newspack-plugin' ),
+				'is_active'    => 'active' === $status,
+				'is_installed' => 'uninstalled' !== $status,
+			],
+		];
 	}
 
 	/**

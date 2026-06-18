@@ -1,6 +1,0 @@
-description: >
-  Chechout code and attach workspace.
-steps:
-  - checkout
-  - attach_workspace:
-      at: ~/

@@ -41,8 +41,8 @@ class TestBlockProcessor extends \WP_UnitTestCase {
 	 */
 	public static function process_outgoing_paragraph( $block ) {
 		$block['attrs']['outgoing'] = 'test';
-		$block['innerHTML']         = '<p>Outgoing Processed</p>';
-		$block['innerContent']      = [ '<p>Outgoing Processed</p>' ];
+		$block['innerHTML']         = '<p class="wp-block-paragraph">Outgoing Processed</p>';
+		$block['innerContent']      = [ '<p class="wp-block-paragraph">Outgoing Processed</p>' ];
 		return $block;
 	}
 
@@ -55,8 +55,8 @@ class TestBlockProcessor extends \WP_UnitTestCase {
 	 */
 	public static function process_incoming_paragraph( $block ) {
 		$block['attrs']['incoming'] = 'test';
-		$block['innerHTML']         = '<p>Incoming Processed</p>';
-		$block['innerContent']      = [ '<p>Incoming Processed</p>' ];
+		$block['innerHTML']         = '<p class="wp-block-paragraph">Incoming Processed</p>';
+		$block['innerContent']      = [ '<p class="wp-block-paragraph">Incoming Processed</p>' ];
 		return $block;
 	}
 
@@ -77,8 +77,8 @@ class TestBlockProcessor extends \WP_UnitTestCase {
 		$block = [ 'blockName' => 'core/paragraph' ];
 		$processed_block = Blocks::process_outgoing_block( $block );
 		$this->assertEquals( 'test', $processed_block['attrs']['outgoing'] );
-		$this->assertEquals( '<p>Outgoing Processed</p>', $processed_block['innerHTML'] );
-		$this->assertEquals( [ '<p>Outgoing Processed</p>' ], $processed_block['innerContent'] );
+		$this->assertEquals( '<p class="wp-block-paragraph">Outgoing Processed</p>', $processed_block['innerHTML'] );
+		$this->assertEquals( [ '<p class="wp-block-paragraph">Outgoing Processed</p>' ], $processed_block['innerContent'] );
 	}
 
 	/**
@@ -88,8 +88,8 @@ class TestBlockProcessor extends \WP_UnitTestCase {
 		$block = [ 'blockName' => 'core/paragraph' ];
 		$processed_block = Blocks::process_incoming_block( $block );
 		$this->assertEquals( 'test', $processed_block['attrs']['incoming'] );
-		$this->assertEquals( '<p>Incoming Processed</p>', $processed_block['innerHTML'] );
-		$this->assertEquals( [ '<p>Incoming Processed</p>' ], $processed_block['innerContent'] );
+		$this->assertEquals( '<p class="wp-block-paragraph">Incoming Processed</p>', $processed_block['innerHTML'] );
+		$this->assertEquals( [ '<p class="wp-block-paragraph">Incoming Processed</p>' ], $processed_block['innerContent'] );
 	}
 
 	/**
@@ -122,8 +122,8 @@ class TestBlockProcessor extends \WP_UnitTestCase {
 		$outgoing_post = new Outgoing_Post( $post );
 		$payload       = $outgoing_post->get_payload();
 
-		$this->assertEquals( '<p>Outgoing Processed</p>', $payload['post_data']['content'] );
-		$this->assertEquals( '<!-- wp:paragraph {"outgoing":"test"} --><p>Outgoing Processed</p><!-- /wp:paragraph -->', $payload['post_data']['raw_content'] );
+		$this->assertEquals( '<p class="wp-block-paragraph">Outgoing Processed</p>', $payload['post_data']['content'] );
+		$this->assertEquals( '<!-- wp:paragraph {"outgoing":"test"} --><p class="wp-block-paragraph">Outgoing Processed</p><!-- /wp:paragraph -->', $payload['post_data']['raw_content'] );
 	}
 
 	/**
@@ -145,6 +145,6 @@ class TestBlockProcessor extends \WP_UnitTestCase {
 		$incoming_post = new Incoming_Post( $payload );
 		$post_id       = $incoming_post->insert();
 
-		$this->assertEquals( '<!-- wp:paragraph {"outgoing":"test","incoming":"test"} --><p>Incoming Processed</p><!-- /wp:paragraph -->', get_post( $post_id )->post_content );
+		$this->assertEquals( '<!-- wp:paragraph {"outgoing":"test","incoming":"test"} --><p class="wp-block-paragraph">Incoming Processed</p><!-- /wp:paragraph -->', get_post( $post_id )->post_content );
 	}
 }

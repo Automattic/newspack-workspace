@@ -1,3 +1,46 @@
+## newspack-newsletters [3.34.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.34.0...newspack-newsletters@3.34.1) (2026-06-15)
+
+
+### Bug Fixes
+
+* **esp:** force Mailchimp segment_opts re-snapshot on segment swap ([#221](https://github.com/Automattic/newspack-workspace/issues/221)) ([9cad542](https://github.com/Automattic/newspack-workspace/commit/9cad5427351a118087c28a69354614faa1d36de3))
+
+# newspack-newsletters [3.34.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.33.6...newspack-newsletters@3.34.0) (2026-06-15)
+
+
+### Bug Fixes
+
+* **editor:** keep legacy CSS vars in sync with newsletters-prefixed ones ([#2140](https://github.com/Automattic/newspack-workspace/issues/2140)) ([4f3c33a](https://github.com/Automattic/newspack-workspace/commit/4f3c33a823b2e2634ff298f2f4060b4c93af6dbd))
+* **newsletters:** clear false "unsaved changes" prompt after save ([#190](https://github.com/Automattic/newspack-workspace/issues/190)) ([265f0dc](https://github.com/Automattic/newspack-workspace/commit/265f0dca2c41eeefe3c688b1030de31212bcc70f))
+* render synced patterns inside Group blocks in newsletters ([#2069](https://github.com/Automattic/newspack-workspace/issues/2069)) ([b09da75](https://github.com/Automattic/newspack-workspace/commit/b09da75d3b30d1325ee6b84de5113516d22b494d))
+
+
+### Features
+
+* **content-gate:** add newsletter link access-control bypass ([#136](https://github.com/Automattic/newspack-workspace/issues/136)) ([508f57c](https://github.com/Automattic/newspack-workspace/commit/508f57c623cfb3e2a6ba8d06d89a4f6a7ad3b97f))
+* **reader-auth:** unify auth + post-reg verification flows ([#135](https://github.com/Automattic/newspack-workspace/issues/135)) ([f67bb65](https://github.com/Automattic/newspack-workspace/commit/f67bb654374b291658a90dd9151dcc9e3cce43fc)), closes [#signin_modal](https://github.com/Automattic/newspack-workspace/issues/signin_modal) [#register_modal](https://github.com/Automattic/newspack-workspace/issues/register_modal)
+
+# newspack-newsletters [3.34.0-alpha.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.34.0-alpha.1...newspack-newsletters@3.34.0-alpha.2) (2026-06-12)
+
+
+### Features
+
+* **content-gate:** add newsletter link access-control bypass ([#136](https://github.com/Automattic/newspack-workspace/issues/136)) ([508f57c](https://github.com/Automattic/newspack-workspace/commit/508f57c623cfb3e2a6ba8d06d89a4f6a7ad3b97f))
+
+# newspack-newsletters [3.34.0-alpha.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.33.6...newspack-newsletters@3.34.0-alpha.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* **editor:** keep legacy CSS vars in sync with newsletters-prefixed ones ([#2140](https://github.com/Automattic/newspack-workspace/issues/2140)) ([4f3c33a](https://github.com/Automattic/newspack-workspace/commit/4f3c33a823b2e2634ff298f2f4060b4c93af6dbd))
+* **newsletters:** clear false "unsaved changes" prompt after save ([#190](https://github.com/Automattic/newspack-workspace/issues/190)) ([265f0dc](https://github.com/Automattic/newspack-workspace/commit/265f0dca2c41eeefe3c688b1030de31212bcc70f))
+* render synced patterns inside Group blocks in newsletters ([#2069](https://github.com/Automattic/newspack-workspace/issues/2069)) ([b09da75](https://github.com/Automattic/newspack-workspace/commit/b09da75d3b30d1325ee6b84de5113516d22b494d))
+
+
+### Features
+
+* **reader-auth:** unify auth + post-reg verification flows ([#135](https://github.com/Automattic/newspack-workspace/issues/135)) ([f67bb65](https://github.com/Automattic/newspack-workspace/commit/f67bb654374b291658a90dd9151dcc9e3cce43fc)), closes [#signin_modal](https://github.com/Automattic/newspack-workspace/issues/signin_modal) [#register_modal](https://github.com/Automattic/newspack-workspace/issues/register_modal)
+
 ## newspack-newsletters [3.33.6](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.33.5...newspack-newsletters@3.33.6) (2026-06-03)
 
 
