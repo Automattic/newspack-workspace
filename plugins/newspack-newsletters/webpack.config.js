@@ -25,6 +25,7 @@ const entry = {
 	branding: path.join( __dirname, 'src', 'branding' ),
 	quickEdit: path.join( __dirname, 'src', 'quick-edit' ),
 	editorBlocks: path.join( __dirname, 'src', 'editor', 'blocks' ),
+	legacyBlockStyles: path.join( __dirname, 'src', 'editor', 'legacy-block-styles' ),
 	newsletterEditor: path.join( __dirname, 'src', 'newsletter-editor' ),
 	blocks: path.join( __dirname, 'src', 'blocks' ),
 	subscribeBlock: path.join( __dirname, 'src', 'blocks', 'subscribe', 'view.js' ),

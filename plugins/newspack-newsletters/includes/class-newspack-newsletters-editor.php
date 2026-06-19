@@ -409,9 +409,24 @@ final class Newspack_Newsletters_Editor {
 			],
 		];
 
-		// Only override button element styles for block themes — classic themes
-		// use their own neutral defaults and don't need the opinionated blue.
-		if ( wp_is_block_theme() ) {
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
+			// WC renderer on: apply the canonical button to both classic and block
+			// themes so the editor canvas matches the rendered email everywhere.
+			// The button is not post-dependent, so apply it even when no post is
+			// resolvable (e.g. post-new.php or early theme.json evaluation). The
+			// primary color is resolved from the theme.json being filtered, because
+			// Lite_Site::get_primary_color() returns `currentcolor` inside this
+			// filter on block themes (see Email_Theme::resolve_primary_color()).
+			$primary = \Newspack\Newsletters\Email_Renderers\Email_Theme::resolve_primary_color( $theme_json );
+			$post    = get_post();
+			$email_overrides['styles'] = \Newspack\Newsletters\Email_Renderers\Email_Theme::canonical(
+				$post instanceof WP_Post ? $post : null,
+				$primary
+			)['styles'];
+		} elseif ( wp_is_block_theme() ) {
+			// Legacy (flag off): only override button element styles for block
+			// themes — classic themes use their own neutral defaults and don't need
+			// the opinionated blue.
 			$primary_color = '#36f';
 			if ( method_exists( '\Newspack\Lite_Site', 'get_primary_color' ) ) {
 				$primary_color = Newspack\Lite_Site::get_primary_color();
@@ -571,6 +586,24 @@ final class Newspack_Newsletters_Editor {
 			wp_enqueue_style( 'newspack-newsletters' );
 
 			wp_add_inline_style( 'newspack-newsletters', self::get_color_palette_css( '.editor-styles-wrapper' ) );
+
+			// Legacy MJML-era block-appearance styles (separator/button/social/
+			// quote/list). Skip them when the WC email renderer is active so the
+			// editor canvas reflects the WC (vanilla WP) output; MJML sites still
+			// load them, unchanged. Defaults to loading if the flag class is
+			// somehow unavailable, preserving pre-WC behavior.
+			$wc_renderer_active = class_exists( \Newspack\Newsletters\Email_Renderers\Feature_Flag::class )
+				&& \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled();
+			if ( ! $wc_renderer_active ) {
+				wp_register_style(
+					'newspack-newsletters-legacy-block-styles',
+					plugins_url( '../dist/legacyBlockStyles.css', __FILE__ ),
+					[ 'newspack-newsletters' ],
+					filemtime( NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'dist/legacyBlockStyles.css' )
+				);
+				wp_style_add_data( 'newspack-newsletters-legacy-block-styles', 'rtl', 'replace' );
+				wp_enqueue_style( 'newspack-newsletters-legacy-block-styles' );
+			}
 
 			$editor_asset = include NEWSPACK_NEWSLETTERS_PLUGIN_FILE . 'dist/editor.asset.php';
 			\wp_enqueue_script(

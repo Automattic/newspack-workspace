@@ -1,0 +1,209 @@
+// Legacy MJML-era block-appearance overrides for the newsletter editor canvas.
+//
+// These rules style separator, button, social-links, quote and list blocks to
+// mimic the old MJML email output. They were split out of `../style.scss` so
+// they can be enqueued conditionally: PHP loads this bundle
+// (handle `newspack-newsletters-legacy-block-styles`) only when the WooCommerce
+// email renderer is OFF. With the WC renderer on, the editor canvas instead
+// shows these blocks with vanilla WP styling that matches the WC email output.
+//
+// The selector nesting mirrors the original location under
+// `.editor-styles-wrapper .block-editor-block-list__layout` in `style.scss`, so
+// when both stylesheets load (flag off) the result is identical to before.
+
+.editor-styles-wrapper {
+	.block-editor-block-list__layout {
+		.wp-block-buttons {
+			font-weight: bold;
+			text-align: center;
+
+			.block-list-appender {
+				margin: 0;
+			}
+
+			.wp-block-button__link {
+				font-size: 1em;
+				padding: 0.75em 1.5em;
+			}
+
+			// Default to left alignment styles.
+			.wp-block-button {
+				margin-left: 0 !important;
+				margin-right: auto !important;
+			}
+
+			&.is-content-justification-right {
+				.wp-block-button {
+					margin-left: auto !important;
+					margin-right: 0 !important;
+				}
+			}
+
+			&.is-content-justification-center {
+				.wp-block-button {
+					margin-left: auto !important;
+					margin-right: auto !important;
+				}
+			}
+		}
+
+		.wp-block-button {
+			padding: 0;
+		}
+
+		.wp-block-social-links {
+			gap: 0 !important;
+
+			&.is-style-circle-black {
+				.wp-social-link {
+					background: black;
+					color: white;
+				}
+			}
+
+			&.is-style-filled-black {
+				.wp-social-link {
+					background: transparent;
+					color: black;
+				}
+			}
+
+			&.is-style-circle-white {
+				.wp-social-link {
+					background: white;
+					color: black;
+				}
+			}
+
+			&.is-style-filled-white {
+				.wp-social-link {
+					background: transparent;
+					color: white;
+				}
+			}
+		}
+
+		.wp-social-link {
+			border-radius: 19px;
+			height: 38px;
+			margin: 4px;
+			padding: 7px;
+			width: 38px;
+		}
+
+		.wp-block-quote {
+			margin: 0 auto;
+
+			&::before {
+				left: 12px;
+			}
+
+			p {
+				margin: 0;
+				padding: 8px 0;
+			}
+
+			&__citation {
+				color: #767676;
+				font-size: inherit;
+				font-style: italic;
+				margin-top: 0;
+				text-align: inherit;
+			}
+
+			&:not(.is-style-plain, .is-style-large) {
+				border: 0;
+				margin: 12px auto;
+				padding: 0;
+				padding-left: calc(24px + 0.25em);
+				position: relative;
+
+				&::before {
+					background: currentcolor;
+					bottom: 0;
+					content: "";
+					display: block;
+					position: absolute;
+					left: 12px;
+					top: 0;
+					width: 0.25em;
+				}
+
+				+ .wp-block-quote:not(.is-style-plain, .is-style-large) {
+					margin-top: 24px;
+				}
+			}
+
+			&.is-style-large {
+				padding: 12px;
+			}
+		}
+
+		.wp-block {
+			&[data-type="core/button"] {
+				padding: 0;
+			}
+
+			// More specific styles for the list block.
+			&[data-type="core/list"] {
+				padding: 6px 12px 6px 30px;
+				li:first-child {
+					padding: 12px 7px 0;
+				}
+				li {
+					padding: 0 7px;
+				}
+			}
+
+			&[data-type="core/separator"],
+			.wp-block-separator {
+				background: none !important;
+				border-bottom: 1px solid;
+				max-width: calc(var(--newspack-newsletters-max-width) - 24px);
+				margin-bottom: 12px;
+				opacity: 1;
+				padding-top: 12px;
+
+				&:not(.is-style-wide, .is-style-dots) {
+					border-bottom-width: 1px;
+					width: 128px;
+				}
+
+				hr {
+					margin-bottom: 0;
+					margin-top: 0;
+				}
+			}
+
+			&[data-align="center"] {
+				.wp-block-social-links {
+					margin-left: 8px;
+					margin-right: 0;
+				}
+			}
+
+			&[data-align="left"] {
+				.wp-block-social-links {
+					margin-left: 0;
+				}
+			}
+
+			&[data-align="right"] {
+				.wp-block-social-links {
+					margin-right: 0;
+				}
+			}
+
+			.wp-social-link {
+				align-items: center;
+				display: flex;
+				justify-content: center;
+				padding: 0;
+
+				&:not([contenteditable]):focus::after {
+					right: 0;
+				}
+			}
+		}
+	}
+}
