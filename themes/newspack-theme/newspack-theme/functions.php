@@ -897,9 +897,13 @@ function newspack_override_avatar_downsizing( $default_value, $args ) {
 add_filter( 'jetpack_photon_override_image_downsize', 'newspack_override_avatar_downsizing', 10, 2 );
 
 /**
- * Register meta fields:
- * - Featured Image position option
- * - Article Subtitle
+ * Register the theme's editor-managed post meta:
+ * - Featured image position
+ * - Article subtitle
+ * - Article summary title
+ * - Article summary
+ * - Hide page title (pages)
+ * - Show share buttons (pages)
  */
 function newspack_register_meta() {
 	// These fields are edited through dedicated editor panels via the REST API.
