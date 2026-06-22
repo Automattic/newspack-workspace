@@ -30,6 +30,12 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * fail fast instead of consuming the whole request budget and stranding the
 	 * send behind a stuck campaign it was only trying to tidy up.
 	 *
+	 * This bound is also reused for the safety-critical status check in
+	 * get_campaign_dispatch_state(): a fast failure there is desirable, since a
+	 * slow/unresponsive ActiveCampaign correctly routes to the fail-safe
+	 * "unverified" branch that blocks the resend. Don't lower it on the
+	 * assumption it only affects disposable cleanup calls.
+	 *
 	 * @var int
 	 */
 	const CLEANUP_REQUEST_TIMEOUT = 15;
@@ -188,7 +194,10 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		$response_body = json_decode( wp_remote_retrieve_body( $response ), true );
 		$response_message = wp_remote_retrieve_response_message( $response );
 
-		if ( 400 < $response_code || ! empty( $response_body['errors'] ) ) {
+		// Treat HTTP 400 (Bad Request) as an error, not just 401+: a bare 400 with
+		// no `errors` array would otherwise slip through as a valid response and
+		// feed bad data into callers (including the dispatch-state reasoning).
+		if ( 400 <= $response_code || ! empty( $response_body['errors'] ) ) {
 			$errors = new WP_Error();
 			if ( isset( $response_body['errors'] ) && is_array( $response_body['errors'] ) ) {
 				foreach ( $response_body['errors'] as $error ) {
@@ -217,6 +226,12 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * relied on for send-safety. get_campaign_dispatch_state() fails safe on
 	 * ANY error, so a timeout that this match ever missed would still block a
 	 * resend rather than slip through.
+	 *
+	 * The 'cURL error 28' token is locale-stable (cURL error numbers aren't
+	 * translated), so the important case is always caught. The 'timed out'
+	 * fallback is locale/transport-fragile (cron/CLI or non-English builds may
+	 * phrase it differently); when it misses, the publisher sees the raw message.
+	 * That is a residual UX gap only, never a safety issue.
 	 *
 	 * @param WP_Error $error A WP_Error returned by wp_safe_remote_request.
 	 *
@@ -1456,6 +1471,14 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		}
 		// A successful response with no campaign means it no longer exists in
 		// ActiveCampaign: nothing was dispatched, so it is safe to recreate.
+		//
+		// This is the only branch that defaults toward recreate-and-send on an
+		// absent row, and its safety rests on an ActiveCampaign behavior: AC is
+		// documented never to return an empty *success* for a campaign that was
+		// dispatched and then deleted (it returns result_code=0, which lands in
+		// the is_wp_error() fail-safe branch above). If that assumption ever
+		// broke, the cost would be a duplicate send to the full list, so do not
+		// widen this default without re-verifying that AC behavior.
 		$status = isset( $campaigns[0]['status'] ) ? (string) $campaigns[0]['status'] : self::STATUS_DRAFT;
 		switch ( $status ) {
 			case self::STATUS_DRAFT: // Never dispatched.
@@ -1469,6 +1492,13 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 				// got halted, so they have likely already delivered to part of
 				// the list; an unknown status is equally indeterminate. None are
 				// safe to recreate-and-resend, so route them to manual review.
+				//
+				// Disabled (6) reaches this default too. It is intentionally NOT
+				// treated as a fresh draft here even though it appears in
+				// DELETABLE_STATUSES: "deletable" only means the cleanup path may
+				// remove it, not that its dispatch state is known to be safe to
+				// resend. A disabled campaign is genuinely indeterminate, so it
+				// belongs in needs-review, not the recreate-and-send path.
 				return self::CAMPAIGN_NEEDS_REVIEW;
 		}
 	}
