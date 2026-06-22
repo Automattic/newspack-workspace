@@ -1,3 +1,10 @@
+## newspack-newsletters [3.34.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.34.1...newspack-newsletters@3.34.2) (2026-06-22)
+
+
+### Bug Fixes
+
+* **posts-inserter:** show featured images for all post types ([#337](https://github.com/Automattic/newspack-workspace/issues/337)) ([c4e9b51](https://github.com/Automattic/newspack-workspace/commit/c4e9b5101145986f93bca30950830f00e23769f6))
+
 ## newspack-newsletters [3.34.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.34.0...newspack-newsletters@3.34.1) (2026-06-15)
 
 
