@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-05-19T17:35:37+00:00\n"
+"POT-Creation-Date: 2026-06-05T21:50:40+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-ads\n"
@@ -130,51 +130,96 @@ msgstr ""
 msgid "Maximum value for the fixed height applied to the ad slot, in pixels."
 msgstr ""
 
-#: includes/class-placements.php:370
+#: includes/class-placements.php:385
 msgid "Global: Above Header"
 msgstr ""
 
-#: includes/class-placements.php:371
+#: includes/class-placements.php:386
 msgid "Choose an ad unit to display above the header."
 msgstr ""
 
-#: includes/class-placements.php:375
+#: includes/class-placements.php:390
 msgid "Global: Below Header"
 msgstr ""
 
-#: includes/class-placements.php:376
+#: includes/class-placements.php:391
 msgid "Choose an ad unit to display below the header."
 msgstr ""
 
-#: includes/class-placements.php:380
+#: includes/class-placements.php:395
 msgid "Global: Above Footer"
 msgstr ""
 
-#: includes/class-placements.php:381
+#: includes/class-placements.php:396
 msgid "Choose an ad unit to display above the footer."
 msgstr ""
 
-#: includes/class-placements.php:385
+#: includes/class-placements.php:400
+#: includes/class-placements.php:433
 msgid "Sticky Footer"
 msgstr ""
 
-#: includes/class-placements.php:386
+#: includes/class-placements.php:401
 msgid "Choose a sticky ad unit to display at the bottom of the viewport (recommended sizes are 728x90, 320x50, 300x50)"
 msgstr ""
 
-#: includes/class-placements.php:405
+#: includes/class-placements.php:421
+msgid "Above Header"
+msgstr ""
+
+#: includes/class-placements.php:422
+msgid "Renders above the site header."
+msgstr ""
+
+#: includes/class-placements.php:425
+msgid "Below Header"
+msgstr ""
+
+#: includes/class-placements.php:426
+msgid "Renders below the site header."
+msgstr ""
+
+#: includes/class-placements.php:429
+msgid "Above Footer"
+msgstr ""
+
+#: includes/class-placements.php:430
+msgid "Renders above the site footer."
+msgstr ""
+
+#: includes/class-placements.php:434
+msgid "Renders as a sticky footer ad (recommended sizes 728x90, 320x50, 300x50)."
+msgstr ""
+
+#: includes/class-placements.php:437
+msgid "Above Content"
+msgstr ""
+
+#: includes/class-placements.php:438
+msgid "Renders above the post content."
+msgstr ""
+
+#: includes/class-placements.php:441
+msgid "Below Content"
+msgstr ""
+
+#: includes/class-placements.php:442
+msgid "Renders below the post content."
+msgstr ""
+
+#: includes/class-placements.php:477
 msgid "Invalid placement."
 msgstr ""
 
-#: includes/class-placements.php:408
+#: includes/class-placements.php:480
 msgid "Placement already exists."
 msgstr ""
 
-#: includes/class-placements.php:543
+#: includes/class-placements.php:615
 msgid "This placement does not exist."
 msgstr ""
 
-#: includes/class-placements.php:681
+#: includes/class-placements.php:753
 #: dist/editor.js:6
 #: src/blocks/ad-unit/edit.js:98
 msgid "Unknown size"
@@ -205,16 +250,16 @@ msgid "Invalid setting value for \"%s\"."
 msgstr ""
 
 #. Translators: %s: The name of the sidebar.
-#: includes/class-sidebar-placements.php:142
+#: includes/class-sidebar-placements.php:146
 #, php-format
 msgid "Choose an ad unit to display in the \"%s\" widget area."
 msgstr ""
 
-#: includes/class-sidebar-placements.php:151
+#: includes/class-sidebar-placements.php:155
 msgid "Before Widget Area"
 msgstr ""
 
-#: includes/class-sidebar-placements.php:155
+#: includes/class-sidebar-placements.php:159
 msgid "After Widget Area"
 msgstr ""
 
@@ -1147,6 +1192,34 @@ msgid "A hidden block contains an ad unit. Ads and their containers must stay vi
 msgstr ""
 
 #: dist/editor.js:1
+#: src/blocks/ad-slot/edit.js:85
+#: src/blocks/ad-slot/editor.js:22
+msgid "Ad Slot"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/blocks/ad-slot/editor.js:23
+msgid "Render an ad in a wizard-managed global placement (above header, sticky footer, etc.)."
+msgstr ""
+
+#: dist/editor.js:1
+#: src/blocks/ad-slot/edit.js:60
+msgid "— Select a placement —"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/blocks/ad-slot/edit.js:66
+#: src/blocks/ad-slot/edit.js:68
+#: src/blocks/ad-slot/edit.js:89
+msgid "Placement"
+msgstr ""
+
+#: dist/editor.js:1
+#: src/blocks/ad-slot/edit.js:86
+msgid "Pick the placement this block represents. The wizard binds an ad unit to each placement."
+msgstr ""
+
+#: dist/editor.js:1
 #: src/placements/placement-control.js:21
 msgid "Select a provider"
 msgstr ""
@@ -1412,6 +1485,42 @@ msgstr ""
 #: dist/suppress-ads.js:1
 #: src/suppress-ads/index.js:41
 msgid "Suppress specific placements:"
+msgstr ""
+
+#: dist/blocks/ad-slot/block.json
+#: src/blocks/ad-slot/block.json
+msgctxt "block title"
+msgid "Ad Slot"
+msgstr ""
+
+#: dist/blocks/ad-slot/block.json
+#: src/blocks/ad-slot/block.json
+msgctxt "block description"
+msgid "Render an ad in a wizard-managed global placement (above header, sticky footer, etc.)."
+msgstr ""
+
+#: dist/blocks/ad-slot/block.json
+#: src/blocks/ad-slot/block.json
+msgctxt "block keyword"
+msgid "ad"
+msgstr ""
+
+#: dist/blocks/ad-slot/block.json
+#: src/blocks/ad-slot/block.json
+msgctxt "block keyword"
+msgid "slot"
+msgstr ""
+
+#: dist/blocks/ad-slot/block.json
+#: src/blocks/ad-slot/block.json
+msgctxt "block keyword"
+msgid "placement"
+msgstr ""
+
+#: dist/blocks/ad-slot/block.json
+#: src/blocks/ad-slot/block.json
+msgctxt "block keyword"
+msgid "ads"
 msgstr ""
 
 #: dist/blocks/tabs/block.json

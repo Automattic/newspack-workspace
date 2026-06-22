@@ -1361,6 +1361,13 @@ if ( class_exists( 'Newspack_Multibranded_Site\Customizations\Theme_Colors' ) ) 
 }
 
 /**
+ * Load Block Editor Colors compatibility file.
+ */
+if ( defined( 'BEC_PLUGIN_VERSION' ) ) {
+	require get_template_directory() . '/inc/block-editor-colors.php';
+}
+
+/**
  * Woo Templates cache handling
  */
 require get_template_directory() . '/woocommerce/templates.php';

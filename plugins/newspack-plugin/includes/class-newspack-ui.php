@@ -225,6 +225,8 @@ class Newspack_UI {
 				'size'        => 'small',
 				'state'       => 'closed',
 				'form_action' => '',
+				'form_id'     => '',
+				'form_class'  => '',
 			]
 		);
 		?>
@@ -314,11 +316,11 @@ class Newspack_UI {
 								?>
 								<?php if ( isset( $action['url'] ) ) : ?>
 								<a href="<?php echo esc_url( $action['url'] ); ?>" class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>" <?php echo esc_attr( $fetch_data ); ?>>
-									<?php echo wp_kses_post( $action['label'] ); ?>
+									<span><?php echo wp_kses_post( $action['label'] ); ?></span>
 								</a>
 							<?php else : ?>
 								<button type="submit" class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>" <?php echo esc_attr( $fetch_data ); ?>>
-									<?php echo wp_kses_post( $action['label'] ); ?>
+									<span><?php echo wp_kses_post( $action['label'] ); ?></span>
 								</button>
 								<?php
 							endif;
@@ -356,6 +358,7 @@ class Newspack_UI {
 				<li><a href="?ui-demo#checkbox-radio-lists">Checkbox/Radio Lists</a></li>
 				<li><a href="?ui-demo#order-table">Order table</a></li>
 				<li><a href="?ui-demo#buttons">Buttons</a></li>
+				<li><a href="?ui-demo#tabs">Tabs</a></li>
 				<li><a href="#buttons-icon">Buttons Icon</a></li>
 				<li><a href="?ui-demo#modals">Modals</a></li>
 			</ul>
@@ -893,6 +896,55 @@ class Newspack_UI {
 					</div><!-- .newspack-ui__segmented-control__panel -->
 				</div><!-- .newspack-ui__segmented-control__content -->
 			</div><!-- .newspack-ui__segmented-control -->
+
+			<hr>
+
+			<h2 id="tabs">Tabs</h2>
+			<p>Underline-style tabs. Built on Ghost button + bottom box-shadow. Drop-in replacement for <code>newspack-ui__segmented-control</code> where the underline aesthetic is preferred.</p>
+
+			<h3>Default</h3>
+			<div class="newspack-ui__tabs">
+				<div class="newspack-ui__tabs__list" role="tablist">
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost selected"><?php esc_html_e( 'Tab One', 'newspack-plugin' ); ?></button>
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost"><?php esc_html_e( 'Tab Two', 'newspack-plugin' ); ?></button>
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost"><?php esc_html_e( 'Tab Three', 'newspack-plugin' ); ?></button>
+				</div>
+			</div>
+
+			<h3>With count badges</h3>
+			<div class="newspack-ui__tabs">
+				<div class="newspack-ui__tabs__list" role="tablist">
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost selected">
+						<?php esc_html_e( 'Members', 'newspack-plugin' ); ?>
+						<span class="newspack-ui__badge newspack-ui__badge--outline">12</span>
+					</button>
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost">
+						<?php esc_html_e( 'Invitations', 'newspack-plugin' ); ?>
+						<span class="newspack-ui__badge newspack-ui__badge--outline">3</span>
+					</button>
+				</div>
+			</div>
+
+			<h3>Small &mdash; with panels</h3>
+			<div class="newspack-ui__tabs">
+				<div class="newspack-ui__tabs__list" role="tablist">
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small selected"><?php esc_html_e( 'Monthly', 'newspack-plugin' ); ?></button>
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small"><?php esc_html_e( 'Annually', 'newspack-plugin' ); ?></button>
+				</div>
+				<div class="newspack-ui__tabs__content">
+					<div class="newspack-ui__tabs__panel"><p><?php esc_html_e( 'Monthly content goes here.', 'newspack-plugin' ); ?></p></div>
+					<div class="newspack-ui__tabs__panel"><p><?php esc_html_e( 'Annually content goes here.', 'newspack-plugin' ); ?></p></div>
+				</div>
+			</div>
+
+			<h3>X-Small &mdash; stretch (equal width)</h3>
+			<div class="newspack-ui__tabs newspack-ui__tabs--stretch">
+				<div class="newspack-ui__tabs__list" role="tablist">
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--x-small selected"><?php esc_html_e( 'All', 'newspack-plugin' ); ?></button>
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--x-small"><?php esc_html_e( 'Active', 'newspack-plugin' ); ?></button>
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--x-small"><?php esc_html_e( 'Archived', 'newspack-plugin' ); ?></button>
+				</div>
+			</div>
 
 			<hr>
 

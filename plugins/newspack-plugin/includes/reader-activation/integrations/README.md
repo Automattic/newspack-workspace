@@ -131,6 +131,7 @@ class My_Integration extends Integration {
 | `handle_logged_in_user_registration( $user, $request )` | Called when a logged-in user attempts to register again via the frontend. Use to update user data, link the account, record a new event, etc. Default is a no-op. |
 | `get_my_account_menu_item()` | Return `[ 'slug' => ..., 'label' => ..., 'position' => ... ]` to add a tab to the WooCommerce My Account page. Default returns `null` (no tab). |
 | `render_my_account_page( $value )` | Echo markup for the integration's My Account page. Called inside the WooCommerce account template. |
+| `get_required_plugins()` | Declare third-party plugins this integration depends on. Return an array of `[ 'slug' => ..., 'name' => ..., 'is_active' => ..., 'is_installed' => ... ]` entries. The Integrations UI uses this to gate the card: when every missing dependency is at least installed, it offers an **Activate** action; when any dependency is uninstalled, the card stays disabled with a "Requires …" affordance. Default `[]`. |
 
 ---
 
@@ -151,7 +152,29 @@ Settings fields are declared statically in `register_settings_fields()` and stor
 ]
 ```
 
-Supported `type` values: `text`, `password`, `textarea`, `number`, `checkbox`, `select`, `metadata`. The base class sanitizes values per type before persisting.
+Supported `type` values: `text`, `password`, `textarea`, `number`, `checkbox`, `select`, `metadata`, `oauth`, `hidden`. The base class sanitizes values per type before persisting.
+
+`oauth` and `hidden` are **managed field types**: `Integrations::update_integration_settings()` calls `is_managed_settings_field()` and skips them, so admin clients can't overwrite them by POSTing to the settings REST endpoint. They're writable only from trusted PHP via `update_settings_field_value()`. See `Integration::MANAGED_FIELD_TYPES`.
+
+### `oauth` field type
+
+`oauth` renders as a Connect / Disconnect button on the integration's settings card. The stored value is the human-readable identity of the connection (account email, workspace name, etc.) — it's shown next to the Disconnect button when present, and its presence toggles the card between "Connect" and "connected" states.
+
+Two render-time properties drive the buttons; declare them in `get_settings_config()` (not the static `register_settings_fields()`) since they typically depend on a nonce or the current user:
+
+| Key | Purpose |
+| --- | --- |
+| `oauth_url` | Target of the **Connect** button. Usually a remote authorize URL with `redirect_uri` pointing back to your callback. |
+| `disconnect_url` | Target of the **Disconnect** button. Usually a local admin URL that revokes the remote grant, clears stored tokens, and redirects back to the integrations screen. |
+
+Typical wiring:
+
+1. Declare the field statically with `'type' => 'oauth'` (and any siblings — `'hidden'` token fields for the access/refresh tokens, scopes, etc.).
+2. Override `get_settings_config()` to attach `oauth_url` and `disconnect_url` for the current request.
+3. Register an OAuth callback endpoint that exchanges the code, writes the tokens and the display identity via `update_settings_field_value()`, and redirects back to the integrations screen.
+4. Implement `is_set_up()` to return `true` only when the identity field is populated, so the Integrations UI marks the card ready.
+
+Because the field skips the REST save path, no admin client can spoof a connection by POSTing a value — every write goes through your callback.
 
 ### Reading and writing
 

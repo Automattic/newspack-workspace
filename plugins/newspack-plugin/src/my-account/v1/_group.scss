@@ -1,0 +1,37 @@
+.newspack-my-account__group {
+	&__back {
+		display: inline-flex;
+		margin-bottom: var(--newspack-ui-spacer-4);
+	}
+
+	&__content {
+		padding-top: var(--newspack-ui-spacer-1);
+	}
+}
+
+.newspack-my-account__group-picker {
+	> header {
+		margin-bottom: var(--newspack-ui-spacer-5);
+	}
+
+	&__card {
+		&__content {
+			display: flex;
+			flex-direction: column;
+			gap: var(--newspack-ui-spacer-1);
+			min-width: 0;
+		}
+
+		&__name {
+			font-size: var(--newspack-ui-font-size-s);
+			font-weight: 600;
+			line-height: var(--newspack-ui-line-height-s);
+		}
+
+		&__meta {
+			color: var(--newspack-ui-color-neutral-60);
+			font-size: var(--newspack-ui-font-size-xs);
+			line-height: var(--newspack-ui-line-height-xs);
+		}
+	}
+}

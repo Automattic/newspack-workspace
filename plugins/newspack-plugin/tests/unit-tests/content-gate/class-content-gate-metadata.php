@@ -262,6 +262,25 @@ class Newspack_Test_Content_Gate_Metadata extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test user passing email domain rule with case insensitivity.
+	 */
+	public function test_email_domain_pass_case_insensitive() {
+		$rules = [
+			[
+				[
+					'slug'  => 'email_domain',
+					'value' => 'Example.com',
+				],
+			],
+		];
+		$this->create_gate_with_rules( 'Domain Gate', $rules );
+
+		$result = $this->get_metadata_for_user( self::$user_id );
+
+		$this->assertEquals( 'Yes', $result['Content_Access'], 'User with matching domain but non-matching case should have access.' );
+	}
+
+	/**
 	 * Test user failing email domain rule.
 	 */
 	public function test_email_domain_fail() {

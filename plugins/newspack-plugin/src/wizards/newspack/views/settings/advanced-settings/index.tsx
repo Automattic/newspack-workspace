@@ -20,6 +20,7 @@ import Recirculation from './recirculation';
 import AuthorBio from './author-bio';
 import FeaturedImagePostsAll from './featured-image-posts-all';
 import FeaturedImagePostsNew from './featured-image-posts-new';
+import DefaultTemplates, { TemplateOptions } from './default-templates';
 import MediaCredits from './media-credits';
 import PostDate from './post-date';
 import AccessibilityStatement from './accessibility-statement';
@@ -55,6 +56,12 @@ export default function AdvancedSettings() {
 		yoast_active: false,
 	} );
 
+	const [ templateOptions, setTemplateOptions ] = hooks.useObjectState< TemplateOptions >( {
+		post: [ { label: __( 'Default', 'newspack-plugin' ), value: 'default' } ],
+		page: [ { label: __( 'Default', 'newspack-plugin' ), value: 'default' } ],
+	} );
+	const { wizardApiFetch: wizardApiFetchTemplateOptions } = useWizardApiFetch( 'newspack-settings/default-templates' );
+
 	const fetchThemeMods = () => {
 		wizardApiFetch< ThemeData >(
 			{
@@ -85,6 +92,14 @@ export default function AdvancedSettings() {
 			},
 			{
 				onSuccess: setPrimaryCategoryData,
+			}
+		);
+		wizardApiFetchTemplateOptions< TemplateOptions >(
+			{
+				path: '/newspack/v1/wizard/newspack-settings/default-templates',
+			},
+			{
+				onSuccess: setTemplateOptions,
 			}
 		);
 	}, [] );
@@ -158,10 +173,19 @@ export default function AdvancedSettings() {
 				<AuthorBio update={ setData } data={ data } isFetching={ isFetching } />
 			</WizardSection>
 			<WizardSection
-				title={ __( 'Default Featured Image Position and Post Template', 'newspack-plugin' ) }
-				description={ __( 'Modify how the featured image and post template settings are applied to new posts.', 'newspack-plugin' ) }
+				title={ __( 'Default Featured Image Position', 'newspack-plugin' ) }
+				description={ __( 'Set the default featured image position applied to new posts.', 'newspack-plugin' ) }
 			>
 				<FeaturedImagePostsNew data={ data } update={ setData } />
+			</WizardSection>
+			<WizardSection
+				title={ __( 'Default Templates', 'newspack-plugin' ) }
+				description={ __(
+					'Choose the template applied to newly created posts and pages. The available templates depend on the active theme.',
+					'newspack-plugin'
+				) }
+			>
+				<DefaultTemplates data={ data } update={ setData } options={ templateOptions } />
 			</WizardSection>
 			<WizardSection
 				title={ __( 'Featured Image Position And Post Template For All Posts', 'newspack-plugin' ) }

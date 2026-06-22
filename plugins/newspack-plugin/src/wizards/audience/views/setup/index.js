@@ -20,15 +20,20 @@ import { withWizard } from '../../../../../packages/components/src';
 import Router from '../../../../../packages/components/src/proxied-imports/router';
 import ContentGating from './content-gating';
 import Payment from './payment';
+import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
+import PlatformSelection from '../../components/platform-selection';
+import Groups from './groups';
 
 const { HashRouter, Redirect, Route, Switch } = Router;
 
-function AudienceWizard( { confirmAction, pluginRequirements, wizardApiFetch }, ref ) {
+function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ config, setConfig ] = useState( {} );
 	const [ prerequisites, setPrerequisites ] = useState( null );
 	const [ error, setError ] = useState( false );
 	const [ espSyncErrors, setEspSyncErrors ] = useState( [] );
+	const [ requiredPlugins, setRequiredPlugins ] = useState( {} );
+	const [ configLoaded, setConfigLoaded ] = useState( false );
 
 	const fetchConfig = () => {
 		setError( false );
@@ -36,10 +41,12 @@ function AudienceWizard( { confirmAction, pluginRequirements, wizardApiFetch }, 
 		return wizardApiFetch( {
 			path: '/newspack/v1/wizard/newspack-audience/audience-management',
 		} )
-			.then( ( { config: fetchedConfig, prerequisites_status, can_esp_sync } ) => {
+			.then( ( { config: fetchedConfig, prerequisites_status, required_plugins, can_esp_sync } ) => {
 				setPrerequisites( prerequisites_status );
+				setRequiredPlugins( required_plugins || {} );
 				setConfig( fetchedConfig );
 				setEspSyncErrors( can_esp_sync.errors );
+				setConfigLoaded( true );
 			} )
 			.catch( setError )
 			.finally( () => setInFlight( false ) );
@@ -50,45 +57,20 @@ function AudienceWizard( { confirmAction, pluginRequirements, wizardApiFetch }, 
 	const saveConfig = data => {
 		setError( false );
 		setInFlight( true );
-		wizardApiFetch( {
+		return wizardApiFetch( {
 			path: '/newspack/v1/wizard/newspack-audience/audience-management',
 			method: 'post',
 			quiet: true,
 			data,
 		} )
-			.then( ( { config: fetchedConfig, prerequisites_status, can_esp_sync } ) => {
+			.then( ( { config: fetchedConfig, prerequisites_status, required_plugins, can_esp_sync } ) => {
 				setPrerequisites( prerequisites_status );
+				setRequiredPlugins( required_plugins || {} );
 				setConfig( fetchedConfig );
 				setEspSyncErrors( can_esp_sync.errors );
 			} )
 			.catch( setError )
 			.finally( () => setInFlight( false ) );
-	};
-	const skipPrerequisite = ( data, callback = null ) => {
-		confirmAction( {
-			message: __( 'Are you sure you want to skip this step? You can always come back later.', 'newspack-plugin' ),
-			confirmText: __( 'Skip', 'newspack-plugin' ),
-			callback: () => {
-				setError( false );
-				setInFlight( true );
-				wizardApiFetch( {
-					path: '/newspack/v1/wizard/newspack-audience/audience-management/skip',
-					method: 'post',
-					quiet: true,
-					data,
-				} )
-					.then( ( { config: fetchedConfig, prerequisites_status, can_esp_sync } ) => {
-						setPrerequisites( prerequisites_status );
-						setConfig( fetchedConfig );
-						setEspSyncErrors( can_esp_sync.errors );
-						if ( callback ) {
-							callback();
-						}
-					} )
-					.catch( setError )
-					.finally( () => setInFlight( false ) );
-			},
-		} );
 	};
 
 	useEffect( () => {
@@ -96,21 +78,45 @@ function AudienceWizard( { confirmAction, pluginRequirements, wizardApiFetch }, 
 		fetchConfig();
 	}, [] );
 
-	let tabs = [
-		{
-			label: config.enabled ? __( 'Configuration', 'newspack-plugin' ) : __( 'Setup', 'newspack-plugin' ),
-			path: '/',
-		},
-		config.enabled &&
-			newspackAudience.has_memberships && {
-				label: __( 'Content Gating', 'newspack-plugin' ),
-				path: '/content-gating',
-			},
-		{
-			label: __( 'Checkout & Payment', 'newspack-plugin' ),
-			path: '/payment',
-		},
-	];
+	const paymentData = useWizardData( 'newspack-audience/payment' );
+	const platform = paymentData?.platform_data?.platform;
+	const platformSelected = paymentData?.platform_data?.platform_selected;
+	// `null` = undecided until config + payment data load. Driven by local state (not the
+	// live values) so the chooser stays mounted while plugins auto-install and while enabling
+	// — the saves flip platform_selected/enabled before the flow finishes. Open the chooser
+	// when no platform has been chosen OR Audience Management is disabled, so a disabled site
+	// lands on the platform/enable screen rather than the (active-looking) configuration page.
+	const [ showChooser, setShowChooser ] = useState( null );
+	useEffect( () => {
+		if ( showChooser === null && configLoaded && typeof platformSelected === 'boolean' ) {
+			setShowChooser( ! platformSelected || ! config.enabled );
+		}
+	}, [ platformSelected, configLoaded, config.enabled, showChooser ] );
+	const chooserOpen = showChooser === true;
+
+	let tabs = chooserOpen
+		? []
+		: [
+				{
+					label: config.enabled ? __( 'Configuration', 'newspack-plugin' ) : __( 'Setup', 'newspack-plugin' ),
+					path: '/',
+				},
+				config.enabled &&
+					newspackAudience.has_memberships && {
+						label: __( 'Content Gating', 'newspack-plugin' ),
+						path: '/content-gating',
+					},
+				[ 'wc', 'nrh' ].includes( platform ) && {
+					label: __( 'Checkout & Payment', 'newspack-plugin' ),
+					path: '/payment',
+				},
+				// "Advanced settings" hosts the Group labels override, which only makes
+				// sense when the Newspack Content Gate / Group subscriptions feature is on.
+				newspackAudience.is_newspack_feature_enabled && {
+					label: __( 'Advanced settings', 'newspack-plugin' ),
+					path: '/groups',
+				},
+		  ];
 	tabs = tabs.filter( tab => tab );
 
 	const getSharedProps = ( configKey, type = 'checkbox' ) => {
@@ -141,13 +147,15 @@ function AudienceWizard( { confirmAction, pluginRequirements, wizardApiFetch }, 
 		fetchConfig,
 		updateConfig,
 		saveConfig,
-		skipPrerequisite,
 		setInFlight,
 		setError,
 		getSharedProps,
 		espSyncErrors,
 		prerequisites,
 		config,
+		requiredPlugins,
+		onChangePlatform: () => setShowChooser( true ),
+		platform,
 	};
 
 	return (
@@ -155,11 +163,32 @@ function AudienceWizard( { confirmAction, pluginRequirements, wizardApiFetch }, 
 			<HashRouter hashType="slash">
 				<Switch>
 					{ pluginRequirements }
-					<Route path="/" exact render={ () => <Setup { ...props } /> } />
+					<Route
+						path="/"
+						exact
+						render={ () =>
+							chooserOpen ? (
+								<PlatformSelection
+									{ ...props }
+									tabbedNavigation={ null }
+									platformSelected={ platformSelected }
+									showEnableToggle={ platformSelected }
+									onComplete={ () => {
+										setShowChooser( false );
+										fetchConfig();
+									} }
+									onCancel={ platformSelected && config.enabled ? () => setShowChooser( false ) : undefined }
+								/>
+							) : (
+								<Setup { ...props } />
+							)
+						}
+					/>
 					<Route path="/content-gating" render={ () => <ContentGating { ...props } /> } />
 					<Route path="/payment" render={ () => <Payment { ...props } /> } />
-					<Route path="/campaign" render={ () => <Campaign { ...props } /> } />
-					<Route path="/complete" render={ () => <Complete { ...props } /> } />
+					{ newspackAudience.is_newspack_feature_enabled && <Route path="/groups" render={ () => <Groups { ...props } /> } /> }
+					<Route path="/campaign" render={ () => ( configLoaded && ! config.enabled ? <Redirect to="/" /> : <Campaign { ...props } /> ) } />
+					<Route path="/complete" render={ () => ( configLoaded && ! config.enabled ? <Redirect to="/" /> : <Complete { ...props } /> ) } />
 					<Redirect to="/" />
 				</Switch>
 			</HashRouter>

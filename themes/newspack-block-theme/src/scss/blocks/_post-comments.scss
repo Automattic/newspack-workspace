@@ -68,12 +68,11 @@
 
 .wp-block-comment-template {
 	ol {
-		list-style: decimal;
+		list-style: none;
 		padding-left: var(--wp--preset--spacing--40);
 
 		&:has(.comment) {
 			border-left: 1px solid var(--wp--preset--color--base-3);
-			list-style: none;
 			margin: var(--wp--preset--spacing--50) 0 0;
 			padding-left: var(--wp--preset--spacing--50);
 		}
@@ -148,6 +147,11 @@
 	.comment-awaiting-moderation {
 		font-size: inherit;
 		line-height: inherit;
+	}
+
+	ol {
+		list-style: decimal;
+		margin-bottom: var(--wp--preset--spacing--30); // overriding some Core styles.
 	}
 }
 

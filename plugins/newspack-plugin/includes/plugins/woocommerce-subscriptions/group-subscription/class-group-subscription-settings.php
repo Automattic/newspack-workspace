@@ -66,6 +66,11 @@ class Group_Subscription_Settings {
 		\add_filter( 'woocommerce_order_table_search_query_meta_keys', [ __CLASS__, 'add_group_name_hpos_search_field' ] );
 		\add_filter( 'posts_join', [ __CLASS__, 'search_group_name_join' ], 10, 2 );
 		\add_filter( 'posts_search', [ __CLASS__, 'search_group_name_where' ], 10, 2 );
+
+		// Publisher-configurable group label settings. The editing UI lives in the
+		// Audience wizard's Groups tab; this registration only guards storage
+		// validation when the options are written directly.
+		\add_action( 'admin_init', [ __CLASS__, 'register_label_settings' ] );
 	}
 
 	/**
@@ -254,8 +259,8 @@ class Group_Subscription_Settings {
 			return self::DEFAULT_SETTINGS;
 		}
 		$product_id          = WooCommerce_Subscriptions::get_subscription_product_id( $subscription );
-		$owner_name          = trim( $subscription->get_formatted_billing_full_name() );
-		$settings            = self::get_product_settings( $product_id );
+		$product             = ( $product_id && function_exists( 'wc_get_product' ) ) ? \wc_get_product( $product_id ) : null;
+		$settings            = self::get_product_settings( $product ? $product : $product_id );
 		$enabled_meta        = $subscription->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', true );
 		$limit_meta          = $subscription->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit', true );
 		$name_meta           = $subscription->get_meta( self::GROUP_SUBSCRIPTION_META_PREFIX . 'name', true );
@@ -263,14 +268,9 @@ class Group_Subscription_Settings {
 		$settings['limit']   = '' !== $limit_meta ? (int) $limit_meta : $settings['limit']; // Empty string means the meta is unset; any other value, including '0', is a real override.
 		if ( $name_meta ) {
 			$settings['name'] = $name_meta;
-		} elseif ( $owner_name ) {
-			$settings['name'] = sprintf(
-				/* translators: %s: The subscription owner's name. */
-				__( '%s’s Group', 'newspack-plugin' ),
-				$owner_name
-			);
 		} else {
-			$settings['name'] = __( 'Unnamed group', 'newspack-plugin' );
+			$product_name     = $product ? trim( (string) $product->get_name() ) : '';
+			$settings['name'] = '' !== $product_name ? $product_name : Group_Subscription::get_label( 'singular' );
 		}
 
 		/**
@@ -851,6 +851,36 @@ class Group_Subscription_Settings {
 		}
 
 		return $args;
+	}
+
+	/**
+	 * Register the publisher-configurable group label settings.
+	 */
+	public static function register_label_settings() {
+		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
+			return;
+		}
+		// Group name is unused (no settings_fields() form); registers sanitize_callback via update_option().
+		\register_setting(
+			'newspack_group_subscription',
+			'newspack_group_subscription_label_singular',
+			[
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_text_field',
+				'default'           => '',
+				'show_in_rest'      => false,
+			]
+		);
+		\register_setting(
+			'newspack_group_subscription',
+			'newspack_group_subscription_label_plural',
+			[
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_text_field',
+				'default'           => '',
+				'show_in_rest'      => false,
+			]
+		);
 	}
 }
 Group_Subscription_Settings::init();

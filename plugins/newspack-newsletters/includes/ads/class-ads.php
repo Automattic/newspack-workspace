@@ -59,12 +59,19 @@ final class Ads {
 	}
 
 	/**
+	 * REST namespace for ads endpoints. Plugin-scoped to avoid the
+	 * collision a `wp/v2/<CPT>` namespace has with the CPT's standard
+	 * collection route — the metadata response would shadow the GET.
+	 */
+	const REST_NAMESPACE = 'newspack-newsletters/v1';
+
+	/**
 	 * API endpoints.
 	 */
 	public static function rest_api_init() {
 		\register_rest_route(
-			'wp/v2/' . self::CPT,
-			'config',
+			self::REST_NAMESPACE,
+			'ads/config',
 			[
 				'callback'            => [ __CLASS__, 'get_ads_config' ],
 				'methods'             => 'GET',
@@ -166,6 +173,19 @@ final class Ads {
 	}
 
 	/**
+	 * Top-level admin URL for the Newsletter Ads page family —
+	 * collapses the bundled-vs-standalone branch into one place.
+	 *
+	 * @return string
+	 */
+	public static function get_top_level_url() {
+		if ( self::display_ads_menu_item_separately() ) {
+			return 'edit.php?post_type=' . self::CPT;
+		}
+		return 'edit.php?post_type=' . Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT;
+	}
+
+	/**
 	 * Display Newsletter Ads as a separate menu item, if the user can't edit Newsletters but can edit Newsletter Ads.
 	 * Otherwise, the Newsletter Ads will be a submenu item under Newsletters.
 	 */
@@ -248,6 +268,7 @@ final class Ads {
 			'new_item'                 => __( 'New Newsletter Ad', 'newspack-newsletters' ),
 			'edit_item'                => __( 'Edit Newsletter Ad', 'newspack-newsletters' ),
 			'view_item'                => __( 'View Newsletter Ad', 'newspack-newsletters' ),
+			'view_items'               => __( 'View Newsletter Ads', 'newspack-newsletters' ),
 			'all_items'                => __( 'All Newsletter Ads', 'newspack-newsletters' ),
 			'search_items'             => __( 'Search Newsletter Ads', 'newspack-newsletters' ),
 			'parent_item_colon'        => __( 'Parent Newsletter Ads:', 'newspack-newsletters' ),

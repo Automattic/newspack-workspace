@@ -114,6 +114,15 @@ class WC_Customer {
 	public function set_billing_email( $email ) {
 		$this->data['billing_email'] = $email;
 	}
+	public function get_billing() {
+		return [];
+	}
+	public function get_shipping() {
+		return [];
+	}
+	public function get_is_paying_customer() {
+		return false;
+	}
 	public function save() {}
 }
 
@@ -332,6 +341,9 @@ class WC_Subscription {
 		}
 		return in_array( $this->data['status'], $statuses, true );
 	}
+	public function get_date_created() {
+		return new WC_DateTime( $this->data['date_created'] ?? 'now' );
+	}
 	public function get_date_paid() {
 		return new WC_DateTime( $this->data['date_paid'] );
 	}
@@ -340,6 +352,9 @@ class WC_Subscription {
 	}
 	public function get_status() {
 		return $this->data['status'];
+	}
+	public function set_status( $status ) {
+		$this->data['status'] = $status;
 	}
 	public function get_billing_period() {
 		return $this->data['billing_period'];
@@ -416,6 +431,12 @@ class WC_Subscription {
 			}
 		}
 		return (float) ( $wcs_mock_items_sign_up_fee ?? 0 );
+	}
+	public function needs_payment() {
+		return ! empty( $this->data['needs_payment'] );
+	}
+	public function get_view_order_url() {
+		return $this->data['view_order_url'] ?? 'https://example.test/my-account/view-order/' . $this->get_id();
 	}
 	public function save() {
 		return true;
@@ -615,7 +636,26 @@ function wcs_get_users_subscriptions( $user_id ) {
 			$user_subscriptions[ $id ] = $subscription;
 		}
 	}
-	return $user_subscriptions;
+	// Mirror the production filter so callers see the same surface the live
+	// WCS function exposes (e.g. inject_member_group_subscriptions can inject
+	// subs the user is only a member of). Tests that need ownership semantics
+	// must guard against this just like production code.
+	return apply_filters( 'wcs_get_users_subscriptions', $user_subscriptions, $user_id );
+}
+function wcs_get_subscriptions( $args = [] ) {
+	// Minimal mock: implements only the `customer_id` filter, the sole arg the code
+	// under test passes. If a future test needs status/paging args
+	// (subscription_status, subscriptions_per_page, paged, offset), extend the filter
+	// here rather than relying on this returning the full set.
+	global $subscriptions_database;
+	$customer_id = $args['customer_id'] ?? null;
+	$matches     = [];
+	foreach ( $subscriptions_database as $id => $subscription ) {
+		if ( null === $customer_id || $subscription->get_customer_id() === $customer_id ) {
+			$matches[ $id ] = $subscription;
+		}
+	}
+	return $matches;
 }
 function wcs_get_canonical_product_id( $item ) {
 	if ( is_object( $item ) && method_exists( $item, 'get_product_id' ) ) {
@@ -710,4 +750,23 @@ function wc_get_order( $order_id ) {
 function wc_get_product( $product_id ) {
 	global $products_database;
 	return $products_database[ $product_id ] ?? false;
+}
+function wcs_get_subscription_status_name( $status ) {
+	return ucfirst( $status );
+}
+function wcs_get_all_user_actions_for_subscription( $subscription, $user_id ) {
+	return apply_filters( 'wcs_view_subscription_actions', [], $subscription, $user_id );
+}
+function wc_get_template( $template_name, $args = [] ) {
+	$plugin_dir   = dirname( __DIR__, 2 );
+	$templates_dir = $plugin_dir . '/includes/plugins/woocommerce/my-account/templates/v1/';
+	$map = [
+		'myaccount/group-picker.php' => $templates_dir . 'group-picker.php',
+		'myaccount/group.php'        => $templates_dir . 'group.php',
+	];
+	if ( isset( $map[ $template_name ] ) && file_exists( $map[ $template_name ] ) ) {
+		// phpcs:ignore WordPress.PHP.DontExtract.extract_extract
+		extract( $args );
+		include $map[ $template_name ];
+	}
 }

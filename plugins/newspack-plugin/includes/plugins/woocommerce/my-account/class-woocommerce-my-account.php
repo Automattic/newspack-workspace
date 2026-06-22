@@ -433,9 +433,12 @@ class WooCommerce_My_Account {
 				}
 			}
 
-			// Move "Account Details" and "Subscriptions" to the top of the menu.
+			// Move "Account settings", "Newsletters", and "Subscriptions" to the top of the menu (in that order).
 			if ( isset( $items['subscriptions'] ) ) {
 				$items = [ 'subscriptions' => $items['subscriptions'] ] + $items;
+			}
+			if ( isset( $items['newsletters'] ) ) {
+				$items = [ 'newsletters' => $items['newsletters'] ] + $items;
 			}
 			if ( isset( $items['edit-account'] ) ) {
 				$items = [ 'edit-account' => $items['edit-account'] ] + $items;

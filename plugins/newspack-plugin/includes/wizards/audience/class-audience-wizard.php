@@ -23,13 +23,6 @@ defined( 'ABSPATH' ) || exit;
 class Audience_Wizard extends Wizard {
 
 	/**
-	 * Option to skip campaign setup.
-	 *
-	 * @var string
-	 */
-	const SKIP_CAMPAIGN_SETUP_OPTION = '_newspack_ras_skip_campaign_setup';
-
-	/**
 	 * Admin page slug.
 	 *
 	 * @var string
@@ -83,12 +76,13 @@ class Audience_Wizard extends Wizard {
 		parent::enqueue_scripts_and_styles();
 		$salesforce_settings = Salesforce::get_salesforce_settings();
 		$data = [
-			'has_memberships'         => Memberships::is_active(),
-			'reader_activation_url'   => admin_url( 'admin.php?page=newspack-audience#/' ),
-			'esp_metadata_fields'     => Reader_Activation\Sync\Metadata::get_default_fields(),
-			'can_use_salesforce'      => ! empty( $salesforce_settings['client_id'] ),
-			'salesforce_redirect_url' => Salesforce::get_redirect_url(),
-			'available_products'      => Content_Gate::get_purchasable_product_options(),
+			'has_memberships'               => Memberships::is_active(),
+			'reader_activation_url'         => admin_url( 'admin.php?page=newspack-audience#/' ),
+			'esp_metadata_fields'           => Reader_Activation\Sync\Metadata::get_default_fields(),
+			'can_use_salesforce'            => ! empty( $salesforce_settings['client_id'] ),
+			'salesforce_redirect_url'       => Salesforce::get_redirect_url(),
+			'available_products'            => Content_Gate::get_purchasable_product_options(),
+			'integrations_settings_enabled' => Audience_Integrations::is_enabled(),
 		];
 
 		if ( method_exists( 'Newspack\Newsletters\Subscription_Lists', 'get_add_new_url' ) ) {
@@ -107,12 +101,12 @@ class Audience_Wizard extends Wizard {
 			$data['preview_archive']    = $newspack_popups->preview_archive();
 		}
 
-		$data['is_skipped_campaign_setup'] = Reader_Activation::is_skipped( 'ras_campaign' );
-
 		$data['content_gifting'] = [
 			'can_use_gifting' => Content_Gifting::can_use_gifting( true ),
 			'has_metering'    => Content_Gate::is_metering_enabled( Memberships::GATE_CPT ),
 		];
+
+		$data['is_newspack_feature_enabled'] = Content_Gate::is_newspack_feature_enabled();
 
 		wp_enqueue_script( 'newspack-wizards' );
 
@@ -193,23 +187,6 @@ class Audience_Wizard extends Wizard {
 				'methods'             => \WP_REST_Server::DELETABLE,
 				'callback'            => [ $this, 'api_reset_reader_activation_email' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
-			]
-		);
-		register_rest_route(
-			NEWSPACK_API_NAMESPACE,
-			'/wizard/' . $this->slug . '/audience-management/skip',
-			[
-				'methods'             => WP_REST_Server::EDITABLE,
-				'callback'            => [ $this, 'api_skip_prerequisite' ],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
-				'args'                => [
-					'prerequisite' => [
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-					'skip'         => [
-						'sanitize_callback' => 'Newspack\newspack_string_to_bool',
-					],
-				],
 			]
 		);
 		register_rest_route(
@@ -380,6 +357,39 @@ class Audience_Wizard extends Wizard {
 			]
 		);
 
+		// Group label settings (publisher-overridable singular/plural for group subscriptions).
+		// The callbacks short-circuit on Content_Gate::is_newspack_feature_enabled() so
+		// stale clients hitting the route after a flag flip get a descriptive error
+		// instead of reading or writing the option directly.
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/group-labels',
+			[
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_group_labels' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+			]
+		);
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/group-labels',
+			[
+				'methods'             => WP_REST_Server::EDITABLE,
+				'callback'            => [ $this, 'api_update_group_labels' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'label_singular' => [
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'label_plural'   => [
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+				],
+			]
+		);
+
 		// Cover fees settings.
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
@@ -484,6 +494,7 @@ class Audience_Wizard extends Wizard {
 			[
 				'config'               => Reader_Activation::get_settings(),
 				'prerequisites_status' => Reader_Activation::get_prerequisites_status(),
+				'required_plugins'     => Reader_Activation::get_reader_revenue_required_plugins(),
 				'memberships'          => self::get_memberships_settings(),
 				'can_esp_sync'         => Reader_Activation\Contact_Sync::has_one_syncable_integration( true ),
 			]
@@ -507,6 +518,7 @@ class Audience_Wizard extends Wizard {
 			[
 				'config'               => Reader_Activation::get_settings(),
 				'prerequisites_status' => Reader_Activation::get_prerequisites_status(),
+				'required_plugins'     => Reader_Activation::get_reader_revenue_required_plugins(),
 				'memberships'          => self::get_memberships_settings(),
 				'can_esp_sync'         => Reader_Activation\Contact_Sync::has_one_syncable_integration( true ),
 			]
@@ -554,48 +566,20 @@ class Audience_Wizard extends Wizard {
 	}
 
 	/**
-	 * Activate reader activation and publish RAS prompts/segments.
+	 * Publish the Audience Management campaign (RAS prompts/segments).
 	 *
-	 * @param WP_REST_Request $request WP Rest Request object.
+	 * @param WP_REST_Request $request WP REST Request object (unused; declared to match the REST callback convention used by other api_* methods in this class).
 	 * @return WP_REST_Response
 	 */
 	public function api_activate_reader_activation( WP_REST_Request $request ) {
-		$skip_activation = $request->get_param( 'skip_activation' ) ?? false;
-		$response = $skip_activation ? true : Reader_Activation::activate();
+		unset( $request );
+		$response = Reader_Activation::activate();
 
 		if ( is_wp_error( $response ) ) {
 			return new WP_REST_Response( [ 'message' => $response->get_error_message() ], 400 );
 		}
 
-		if ( true === $response ) {
-			Reader_Activation::update_setting( 'enabled', true );
-		}
-
 		return rest_ensure_response( $response );
-	}
-
-	/**
-	 * Activate reader activation and publish RAS prompts/segments.
-	 *
-	 * @param WP_REST_Request $request WP Rest Request object.
-	 * @return WP_REST_Response
-	 */
-	public function api_skip_prerequisite( WP_REST_Request $request ) {
-		$preqrequisite       = $request->get_param( 'prerequisite' );
-		$skip                = $request->get_param( 'skip' );
-		$skip_campaign_setup = Reader_Activation::skip( $preqrequisite, $skip );
-		if ( ! $skip_campaign_setup ) {
-			return new WP_REST_Response( [ 'message' => __( 'Error skipping prerequisite.', 'newspack-plugin' ) ], 400 );
-		}
-
-		return rest_ensure_response(
-			[
-				'config'               => Reader_Activation::get_settings(),
-				'prerequisites_status' => Reader_Activation::get_prerequisites_status(),
-				'memberships'          => self::get_memberships_settings(),
-				'can_esp_sync'         => Reader_Activation\Contact_Sync::has_one_syncable_integration( true ),
-			]
-		);
 	}
 
 	/**
@@ -660,6 +644,9 @@ class Audience_Wizard extends Wizard {
 				Content_Gifting_CTA::set_style( sanitize_text_field( $args['content_gifting']['style'] ) );
 			}
 		}
+		if ( isset( $args['newsletter_link_bypass_enabled'] ) ) {
+			Content_Gate_Advanced_Settings::update_settings( [ 'newsletter_link_bypass_enabled' => (bool) $args['newsletter_link_bypass_enabled'] ] );
+		}
 		return rest_ensure_response( self::get_memberships_settings() );
 	}
 
@@ -692,8 +679,8 @@ class Audience_Wizard extends Wizard {
 	 * @param mixed $value A param value.
 	 * @return bool
 	 */
-	public function api_validate_platform( $value ) {
-		return in_array( $value, [ 'nrh', 'wc', 'other' ] );
+	public function api_validate_platform( mixed $value ): bool {
+		return in_array( $value, [ 'nrh', 'wc', 'other' ], true );
 	}
 
 	/**
@@ -720,12 +707,14 @@ class Audience_Wizard extends Wizard {
 	 * Set payment settings.
 	 *
 	 * @param WP_REST_Request $request Request object.
-	 * @return WP_REST_Response Boolean success.
+	 * @return WP_REST_Response Payment data array (see get_payment_data()).
 	 */
 	public function api_update_payment_settings( $request ) {
 		$params = $request->get_params();
 
-		Donations::set_platform_slug( $params['platform'] );
+		if ( isset( $params['platform'] ) ) {
+			Donations::set_platform_slug( $params['platform'] );
+		}
 
 		// Update NRH settings.
 		if ( Donations::is_platform_nrh() ) {
@@ -733,8 +722,13 @@ class Audience_Wizard extends Wizard {
 		}
 
 		// Ensure that any Reader Revenue settings changed while the platform wasn't WC are persisted to WC products.
+		// Skip when WooCommerce isn't ready yet (e.g. the platform was just set to 'wc' before WooCommerce is
+		// installed), in which case get_donation_settings() returns a WP_Error and product writes would fatal.
 		if ( Donations::is_platform_wc() ) {
-			Donations::update_donation_product( Donations::get_donation_settings() );
+			$donation_settings = Donations::get_donation_settings();
+			if ( ! \is_wp_error( $donation_settings ) ) {
+				Donations::update_donation_product( $donation_settings );
+			}
 		}
 
 		return \rest_ensure_response( $this->get_payment_data() );
@@ -876,7 +870,8 @@ class Audience_Wizard extends Wizard {
 				'ppcp-gateway'         => $wc_configuration_manager->gateway_data( 'ppcp-gateway' ),
 			],
 			'platform_data'    => [
-				'platform' => $platform,
+				'platform'          => $platform,
+				'platform_selected' => Donations::is_platform_selected(),
 			],
 			'is_ssl'           => is_ssl(),
 			'errors'           => [],
@@ -913,13 +908,15 @@ class Audience_Wizard extends Wizard {
 	 */
 	private static function get_memberships_settings() {
 		return [
-			'edit_gate_url'            => Memberships::get_edit_gate_url(),
-			'gate_status'              => get_post_status( Memberships::get_gate_post_id() ),
-			'plans'                    => Memberships::get_plans(),
-			'require_all_plans'        => Memberships::get_require_all_plans_setting(),
-			'show_on_subscription_tab' => Memberships::get_show_on_subscription_tab_setting(),
-			'countdown_banner'         => Metering_Countdown::get_settings(),
-			'content_gifting'          => Content_Gifting::get_settings(),
+			'edit_gate_url'                  => Memberships::get_edit_gate_url(),
+			'gate_status'                    => get_post_status( Memberships::get_gate_post_id() ),
+			'plans'                          => Memberships::get_plans(),
+			'require_all_plans'              => Memberships::get_require_all_plans_setting(),
+			'show_on_subscription_tab'       => Memberships::get_show_on_subscription_tab_setting(),
+			'countdown_banner'               => Metering_Countdown::get_settings(),
+			'content_gifting'                => Content_Gifting::get_settings(),
+			'has_newsletters'                => Reader_Activation::is_esp_configured(),
+			'newsletter_link_bypass_enabled' => Newsletters_Access::is_verification_enabled(),
 		];
 	}
 
@@ -1015,6 +1012,71 @@ class Audience_Wizard extends Wizard {
 		}
 
 		return $this->api_get_subscription_settings();
+	}
+
+	/**
+	 * Get the publisher-configurable group subscription labels. Empty values fall back
+	 * to the defaults baked into Group_Subscription::get_label().
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function api_get_group_labels() {
+		$disabled = self::group_labels_feature_disabled_error();
+		if ( $disabled ) {
+			return $disabled;
+		}
+		return rest_ensure_response(
+			[
+				'label_singular'         => (string) get_option( 'newspack_group_subscription_label_singular', '' ),
+				'label_plural'           => (string) get_option( 'newspack_group_subscription_label_plural', '' ),
+				'label_singular_default' => __( 'Group', 'newspack-plugin' ),
+				'label_plural_default'   => __( 'Groups', 'newspack-plugin' ),
+			]
+		);
+	}
+
+	/**
+	 * Update the publisher-configurable group subscription labels.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function api_update_group_labels( $request ) {
+		$disabled = self::group_labels_feature_disabled_error();
+		if ( $disabled ) {
+			return $disabled;
+		}
+		$params = $request->get_params();
+		foreach ( [ 'label_singular', 'label_plural' ] as $field ) {
+			if ( ! array_key_exists( $field, $params ) ) {
+				continue;
+			}
+			$value = trim( (string) $params[ $field ] );
+			if ( '' === $value ) {
+				delete_option( 'newspack_group_subscription_' . $field );
+			} else {
+				update_option( 'newspack_group_subscription_' . $field, $value );
+			}
+		}
+		return $this->api_get_group_labels();
+	}
+
+	/**
+	 * Shared guard for the /group-labels callbacks: returns a 403 WP_Error when
+	 * the Newspack Content Gate feature flag is off, or null when it's on.
+	 *
+	 * @return WP_Error|null
+	 */
+	private static function group_labels_feature_disabled_error() {
+		if ( Content_Gate::is_newspack_feature_enabled() ) {
+			return null;
+		}
+		return new WP_Error(
+			'newspack_content_gate_disabled',
+			__( 'Group subscription label settings are unavailable: the Newspack Content Gate feature is not enabled on this site.', 'newspack-plugin' ),
+			[ 'status' => 403 ]
+		);
 	}
 
 	/**

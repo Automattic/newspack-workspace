@@ -86,7 +86,7 @@ export default function ShareBlockEdit( { attributes, setAttributes } ) {
 				tagName="a"
 				{ ...blockProps }
 				value={ content }
-				allowedFormats={ [ 'core/bold', 'core/italic', 'core/text-color' ] }
+				allowedFormats={ [ 'core/bold', 'core/italic', 'core/text-color', 'newspack-newsletters/merge-tag' ] }
 				onChange={ newContent => setAttributes( { content: newContent } ) }
 				aria-label={ __( 'Share block', 'newspack-newsletters' ) }
 				data-empty={ content ? false : true }

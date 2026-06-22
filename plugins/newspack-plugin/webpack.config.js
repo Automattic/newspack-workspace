@@ -51,7 +51,6 @@ const entry = {
 	'content-gate-countdown-box-block': path.join( __dirname, 'src', 'blocks', 'content-gate', 'countdown-box', 'index.js' ),
 	'contribution-meter-block': path.join( __dirname, 'src', 'blocks', 'contribution-meter', 'index.js' ),
 	'avatar-block': path.join( __dirname, 'src', 'blocks', 'avatar', 'index.js' ),
-	'my-account-button-block': path.join( __dirname, 'src', 'blocks', 'my-account-button', 'index.js' ),
 	'my-account': path.join( __dirname, 'src', 'my-account', 'index.js' ),
 	'my-account-v0': path.join( __dirname, 'src', 'my-account', 'v0', 'index.js' ),
 	'my-account-v1': path.join( __dirname, 'src', 'my-account', 'v1', 'index.js' ),

@@ -625,30 +625,17 @@ final class Newspack_Newsletters {
 	}
 
 	/**
-	 * Remove some admin menu items, if the user has no matching capability.
+	 * Drop redundant Categories / Tags submenus from the Newsletters
+	 * CPT — they're shared with Posts and surfacing twice is clutter.
 	 */
 	public static function remove_admin_menu_items() {
-		$newsletter_post_type_object = get_post_type_object( self::NEWSPACK_NEWSLETTERS_CPT );
-		$newsletter_ad_post_type_object = get_post_type_object( Newspack_Newsletters\Ads::CPT );
-
-		if ( $newsletter_post_type_object === null || $newsletter_ad_post_type_object === null ) {
+		if ( ! get_post_type_object( self::NEWSPACK_NEWSLETTERS_CPT ) ) {
 			return;
 		}
 
-		// If the user can't edit newsletters, the "Category" will be the top-level menu item.
-		$category_page_slug = 'edit-tags.php?taxonomy=category&amp;post_type=' . self::NEWSPACK_NEWSLETTERS_CPT;
-
-		$can_edit_newsletters = current_user_can( $newsletter_post_type_object->cap->edit_posts );
-		$can_edit_newsletter_ads = current_user_can( $newsletter_ad_post_type_object->cap->edit_posts );
-
-		if ( ! $can_edit_newsletters && ! $can_edit_newsletter_ads ) {
-			// If they user can't edit newsletters, the taxonomy menu items will still be visible. Let's remove them.
-			remove_submenu_page( $category_page_slug, $category_page_slug );
-			remove_submenu_page( $category_page_slug, 'edit-tags.php?taxonomy=post_tag&amp;post_type=' . self::NEWSPACK_NEWSLETTERS_CPT );
-		}
-
-		// Note: Newsletter Ads menu handling is done in Newspack_Newsletters\Ads::add_ads_page()
-		// which dynamically places the menu based on user capabilities.
+		$cpt_parent = 'edit.php?post_type=' . self::NEWSPACK_NEWSLETTERS_CPT;
+		remove_submenu_page( $cpt_parent, 'edit-tags.php?taxonomy=category&amp;post_type=' . self::NEWSPACK_NEWSLETTERS_CPT );
+		remove_submenu_page( $cpt_parent, 'edit-tags.php?taxonomy=post_tag&amp;post_type=' . self::NEWSPACK_NEWSLETTERS_CPT );
 	}
 
 	/**
@@ -831,6 +818,13 @@ final class Newspack_Newsletters {
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => [ __CLASS__, 'api_get_layouts' ],
 				'permission_callback' => [ __CLASS__, 'api_authoring_permissions_check' ],
+				'args'                => [
+					'defaults_only' => [
+						'type'        => 'boolean',
+						'default'     => false,
+						'description' => __( 'When true, return only the bundled prebuilt layouts and skip the saved-posts query.', 'newspack-newsletters' ),
+					],
+				],
 			]
 		);
 		\register_rest_route(
@@ -948,8 +942,18 @@ final class Newspack_Newsletters {
 
 	/**
 	 * Retrieve Layouts.
+	 *
+	 * @param \WP_REST_Request $request Request object.
 	 */
-	public static function api_get_layouts() {
+	public static function api_get_layouts( $request ) {
+		if ( $request && $request->get_param( 'defaults_only' ) ) {
+			return \rest_ensure_response(
+				array_merge(
+					Newspack_Newsletters_Layouts::get_default_layouts(),
+					\apply_filters( 'newspack_newsletters_templates', [] )
+				)
+			);
+		}
 		return \rest_ensure_response( Newspack_Newsletters_Layouts::get_layouts() );
 	}
 
@@ -970,34 +974,50 @@ final class Newspack_Newsletters {
 		$credentials      = $request['credentials'];
 		$wp_error         = new WP_Error();
 
-		// Service Provider slug.
-		if ( empty( $service_provider ) ) {
+		if ( ! is_string( $service_provider ) || '' === $service_provider ) {
 			$wp_error->add(
 				'newspack_newsletters_no_service_provider',
-				__( 'Please select a newsletter service provider.', 'newspack-newsletters' )
+				__( 'Please select a newsletter service provider.', 'newspack-newsletters' ),
+				[ 'status' => 400 ]
 			);
-		} else {
+			return $wp_error;
+		}
+
+		if ( 'manual' === $service_provider ) {
 			self::set_service_provider( $service_provider );
+			return self::api_get_settings();
 		}
 
-		// Service Provider credentials.
-		if ( 'manual' !== $service_provider ) {
-			if ( empty( $credentials ) ) {
-				$wp_error->add(
-					'newspack_newsletters_invalid_keys',
-					__( 'Please input credentials.', 'newspack-newsletters' )
-				);
-			} else {
-				$status = self::$provider->set_api_credentials( $credentials );
-				if ( is_wp_error( $status ) ) {
-					foreach ( $status->errors as $code => $message ) {
-						$wp_error->add( $code, implode( ' ', $message ) );
-					}
-				}
+		if ( ! is_array( $credentials ) || empty( $credentials ) ) {
+			$wp_error->add(
+				'newspack_newsletters_invalid_keys',
+				__( 'Please input credentials.', 'newspack-newsletters' ),
+				[ 'status' => 400 ]
+			);
+			return $wp_error;
+		}
+
+		// Only commit set_service_provider on credentials success — a rejection must not leave the site pointing at an unconfigured ESP.
+		$provider = self::get_service_provider_instance( $service_provider );
+		if ( ! $provider || ! method_exists( $provider, 'set_api_credentials' ) ) {
+			$wp_error->add(
+				'newspack_newsletters_provider_unavailable',
+				__( 'The selected service provider is not available on this site.', 'newspack-newsletters' ),
+				[ 'status' => 400 ]
+			);
+			return $wp_error;
+		}
+
+		$status = $provider->set_api_credentials( $credentials );
+		if ( is_wp_error( $status ) ) {
+			foreach ( $status->errors as $code => $message ) {
+				$wp_error->add( $code, implode( ' ', $message ), [ 'status' => 400 ] );
 			}
+			return $wp_error;
 		}
 
-		return $wp_error->has_errors() ? $wp_error : self::api_get_settings();
+		self::set_service_provider( $service_provider );
+		return self::api_get_settings();
 	}
 
 	/**
@@ -1159,10 +1179,12 @@ final class Newspack_Newsletters {
 	 */
 	public static function activation_nag() {
 		$screen = get_current_screen();
-		if ( 'settings_page_newspack-newsletters-settings-admin' === $screen->base || self::NEWSPACK_NEWSLETTERS_CPT === $screen->post_type ) {
+		// Match both the legacy and React settings screens — neither should show the "head to settings" nag.
+		$on_settings_screen = $screen && is_string( $screen->base ) && false !== strpos( $screen->base, 'newspack-newsletters-settings' );
+		if ( $on_settings_screen || ( $screen && self::NEWSPACK_NEWSLETTERS_CPT === $screen->post_type ) ) {
 			return;
 		}
-		$url = admin_url( 'edit.php?post_type=' . self::NEWSPACK_NEWSLETTERS_CPT . '&page=newspack-newsletters-settings-admin' );
+		$url = Newspack_Newsletters_Settings::get_settings_url();
 		?>
 		<div class="notice notice-info is-dismissible newspack-newsletters-notification-nag">
 			<p>
@@ -1188,8 +1210,17 @@ final class Newspack_Newsletters {
 		if (
 			self::NEWSPACK_NEWSLETTERS_CPT !== $screen->post_type &&
 			Newspack_Newsletters\Ads::CPT !== $screen->post_type &&
-			Newspack\Newsletters\Subscription_Lists::CPT !== $screen->post_type
+			Newspack\Newsletters\Subscription_Lists::CPT !== $screen->post_type &&
+			Newspack_Newsletters_Layouts::NEWSPACK_NEWSLETTERS_LAYOUT_CPT !== $screen->post_type
 		) {
+			return;
+		}
+
+		// Banner is bundled-only — mirror `Admin_Shell::is_bundled_mode()` so the filter override drops it from a standalone shell too.
+		$is_bundled = class_exists( '\Newspack\Newsletters\Admin\Admin_Shell' )
+			? \Newspack\Newsletters\Admin\Admin_Shell::is_bundled_mode()
+			: class_exists( '\Newspack\Newspack' );
+		if ( ! $is_bundled ) {
 			return;
 		}
 

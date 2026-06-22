@@ -19,6 +19,40 @@ class Group_Subscription {
 	const GROUP_SUBSCRIPTION_USER_META_KEY = '_newspack_group_subscription';
 
 	/**
+	 * Per-membership join timestamp meta key prefix.
+	 * Full key is `{$prefix}{$subscription_id}` storing a Unix timestamp.
+	 */
+	const GROUP_SUBSCRIPTION_JOINED_META_KEY_PREFIX = '_newspack_group_subscription_joined_';
+
+	/**
+	 * Build the per-subscription joined-at user_meta key.
+	 *
+	 * @param int $subscription_id Subscription ID.
+	 *
+	 * @return string Meta key.
+	 */
+	public static function get_member_joined_meta_key( $subscription_id ) {
+		return self::GROUP_SUBSCRIPTION_JOINED_META_KEY_PREFIX . absint( $subscription_id );
+	}
+
+	/**
+	 * Get the Unix timestamp at which a user joined a group subscription.
+	 *
+	 * @param int                  $user_id      The user ID.
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return int|null Unix timestamp, or null if no record exists.
+	 */
+	public static function get_member_joined_at( $user_id, $subscription ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription || ! $user_id ) {
+			return null;
+		}
+		$stored = \get_user_meta( $user_id, self::get_member_joined_meta_key( $subscription->get_id() ), true );
+		return $stored ? (int) $stored : null;
+	}
+
+	/**
 	 * Per-request cache of [sub_id => decoded_name] maps, keyed by user_id + product filter.
 	 *
 	 * @var array<string,array<int,string>>
@@ -26,14 +60,31 @@ class Group_Subscription {
 	private static $names_cache = [];
 
 	/**
-	 * Reset the per-request names cache.
+	 * Per-request cache of the subscriptions a user is a member of, keyed by `user_id|ids_only`.
+	 *
+	 * @var array<string,array>
+	 */
+	private static $member_subscriptions_cache = [];
+
+	/**
+	 * Per-request cache of the subscriptions a user manages, keyed by `user_id|ids_only`.
+	 *
+	 * @var array<string,array>
+	 */
+	private static $managed_subscriptions_cache = [];
+
+	/**
+	 * Reset the per-request caches.
 	 *
 	 * Tests, CLI workers, and invalidation hooks call this to bust the static
-	 * memoization in `get_group_names_for_user()` / `get_group_ids_for_user()`.
+	 * memoization in `get_group_names_for_user()` / `get_group_ids_for_user()`,
+	 * `get_group_subscriptions_for_user()`, and `get_managed_subscriptions_for_user()`.
 	 * No-op if nothing is cached.
 	 */
 	public static function reset_cache() {
-		self::$names_cache = [];
+		self::$names_cache                 = [];
+		self::$member_subscriptions_cache  = [];
+		self::$managed_subscriptions_cache = [];
 	}
 
 	/**
@@ -78,6 +129,37 @@ class Group_Subscription {
 	}
 
 	/**
+	 * Get the publisher-configurable container label.
+	 *
+	 * @param string $variant Either 'singular' or 'plural'. Unknown variants fall back to singular.
+	 *
+	 * @return string The override if the publisher has set a non-blank one, otherwise the translated default.
+	 */
+	public static function get_label( $variant = 'singular' ) {
+		$variant    = 'plural' === $variant ? 'plural' : 'singular';
+		$option_key = 'newspack_group_subscription_label_' . $variant;
+		$override   = trim( (string) \get_option( $option_key, '' ) );
+		if ( '' !== $override ) {
+			return $override;
+		}
+		return 'plural' === $variant
+			? __( 'Groups', 'newspack-plugin' )
+			: __( 'Group', 'newspack-plugin' );
+	}
+
+	/**
+	 * Get the lowercased group label for inline use in sentences.
+	 *
+	 * @param string $variant Either 'singular' or 'plural'.
+	 *
+	 * @return string The lowercased label.
+	 */
+	public static function get_label_lower( $variant = 'singular' ) {
+		$label = self::get_label( $variant );
+		return function_exists( 'mb_strtolower' ) ? mb_strtolower( $label ) : strtolower( $label );
+	}
+
+	/**
 	 * Get the managers of a group subscription.
 	 *
 	 * @param \WC_Subscription|int $subscription The subscription object or ID.
@@ -95,6 +177,58 @@ class Group_Subscription {
 		 * @param WC_Subscription $subscription The subscription object.
 		 */
 		return apply_filters( 'newspack_group_subscription_managers', [ $subscription ? $subscription->get_user_id() : 0 ], $subscription );
+	}
+
+	/**
+	 * Get the group subscriptions a user manages (owns).
+	 *
+	 * Mirrors the data-layer side of `get_managers()` — a manager is any user
+	 * who owns a group-enabled subscription. Filters out non-group-enabled subs
+	 * and gifted subscriptions where the user isn't the owner.
+	 *
+	 * @param int  $user_id  The user ID.
+	 * @param bool $ids_only If true, return only subscription IDs instead of objects.
+	 *
+	 * @return \WC_Subscription[]|int[] The group subscriptions the user manages.
+	 */
+	public static function get_managed_subscriptions_for_user( $user_id, $ids_only = false ) {
+		$user_id = (int) $user_id;
+		if ( ! $user_id || ! function_exists( 'wcs_get_users_subscriptions' ) ) {
+			return [];
+		}
+		$cache_key = $user_id . '|' . ( $ids_only ? '1' : '0' );
+		if ( isset( self::$managed_subscriptions_cache[ $cache_key ] ) ) {
+			return self::$managed_subscriptions_cache[ $cache_key ];
+		}
+		$owned   = \wcs_get_users_subscriptions( $user_id );
+		$managed = [];
+		foreach ( $owned as $sub ) {
+			if ( ! $sub instanceof \WC_Subscription ) {
+				continue;
+			}
+			// wcs_get_users_subscriptions() is filtered to inject subs the user
+			// is only a *member* of on account pages. Manager detection must
+			// only accept subs the user actually owns.
+			if ( (int) $sub->get_customer_id() !== $user_id ) {
+				continue;
+			}
+			$settings = Group_Subscription_Settings::get_subscription_settings( $sub );
+			if ( empty( $settings['enabled'] ) ) {
+				continue;
+			}
+			$managed[] = $ids_only ? $sub->get_id() : $sub;
+		}
+
+		/**
+		 * Filter the group subscriptions a user manages.
+		 *
+		 * @param \WC_Subscription[]|int[] $managed Managed group subscriptions or IDs.
+		 * @param int                      $user_id The user ID.
+		 */
+		$managed = apply_filters( 'newspack_group_subscriptions_managed_for_user', $managed, $user_id );
+
+		self::$managed_subscriptions_cache[ $cache_key ] = $managed;
+		return $managed;
 	}
 
 	/**
@@ -148,7 +282,7 @@ class Group_Subscription {
 	public static function update_members( $subscription, $members_to_add, $members_to_remove = [] ) {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
 		if ( ! $subscription ) {
-			return new \WP_Error( 'newspack_group_subscription_update_members', __( 'Subscription not found.', 'newspack-plugin' ) );
+			return new \WP_Error( 'newspack_group_subscription_update_members', __( 'Subscription not found.', 'newspack-plugin' ), [ 'status' => 404 ] );
 		}
 		$subscription_settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
 
@@ -167,6 +301,7 @@ class Group_Subscription {
 				continue;
 			}
 			if ( \delete_user_meta( $member_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() ) ) {
+				\delete_user_meta( $member_id, self::get_member_joined_meta_key( $subscription->get_id() ) );
 				$members_removed[ $member_id ] = [
 					'email' => \get_userdata( $member_id )->user_email,
 					'url'   => \get_edit_user_link( $member_id ),
@@ -174,9 +309,14 @@ class Group_Subscription {
 			}
 		}
 
+		// Removals above are persisted before this limit check, so a single call that both removes
+		// and adds past the limit would keep the removals while returning 409. No shipped caller
+		// batches add + remove in one call (the admin JS and admin-post handlers split them into
+		// separate requests), so this can't happen today. If a caller ever combines both arrays,
+		// move this check ahead of the removal loop and compute the projected count there.
 		$existing_members = self::get_members( $subscription );
 		if ( $subscription_settings['limit'] > 0 && count( $existing_members ) + count( $members_to_add ) > $subscription_settings['limit'] ) {
-			return new \WP_Error( 'newspack_group_subscription_update_members', __( 'Member limit reached. Please remove some members or increase the limit.', 'newspack-plugin' ) );
+			return new \WP_Error( 'newspack_group_subscription_update_members', __( 'Member limit reached. Please remove some members or increase the limit.', 'newspack-plugin' ), [ 'status' => 409 ] );
 		}
 
 		// Add new members.
@@ -191,6 +331,7 @@ class Group_Subscription {
 				continue;
 			}
 			if ( \add_user_meta( $member_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() ) ) {
+				\update_user_meta( $member_id, self::get_member_joined_meta_key( $subscription->get_id() ), time() );
 				$members_added[ $member_id ] = [
 					'email' => \get_userdata( $member_id )->user_email,
 					'url'   => \get_edit_user_link( $member_id ),
@@ -263,11 +404,16 @@ class Group_Subscription {
 	 * @return \WC_Subscription[]|int[] The group subscriptions or subscription IDs the user is a member of.
 	 */
 	public static function get_group_subscriptions_for_user( $user_id, $ids_only = false ) {
+		$user_id = (int) $user_id;
 		if ( ! function_exists( 'wcs_get_subscription' ) ) {
 			return [];
 		}
 		if ( ! Reader_Activation::is_user_reader( \get_user_by( 'id', $user_id ) ) ) {
 			return [];
+		}
+		$cache_key = $user_id . '|' . ( $ids_only ? '1' : '0' );
+		if ( isset( self::$member_subscriptions_cache[ $cache_key ] ) ) {
+			return self::$member_subscriptions_cache[ $cache_key ];
 		}
 		$subscription_ids = array_map( 'absint', \get_user_meta( $user_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, false ) );
 		$subscriptions    = [];
@@ -292,7 +438,10 @@ class Group_Subscription {
 		 * @param \WC_Subscription[]|int[] $subscriptions The group subscriptions or subscription IDs the user is a member of.
 		 * @param int $user_id The user ID.
 		 */
-		return apply_filters( 'newspack_group_subscriptions_for_user', $subscriptions, $user_id );
+		$subscriptions = apply_filters( 'newspack_group_subscriptions_for_user', $subscriptions, $user_id );
+
+		self::$member_subscriptions_cache[ $cache_key ] = $subscriptions;
+		return $subscriptions;
 	}
 
 	/**

@@ -18,10 +18,10 @@ $types         = \wc_get_account_payment_methods_types();
 \do_action( 'newspack_woocommerce_before_account_payment_methods', $has_methods ); ?>
 
 <section id="payment-methods">
-	<h4 class="newspack-ui__font--m newspack-ui__spacing-top--0"><?php \esc_html_e( 'Payment methods', 'newspack-plugin' ); ?></h4>
 	<?php if ( $has_methods ) : ?>
+		<h4 class="newspack-ui__font--m newspack-ui__spacing-top--0"><?php \esc_html_e( 'Payment methods', 'newspack-plugin' ); ?></h4>
 
-		<div class="newspack-my-account__payment-methods newspack-ui__row newspack-ui__row--no-padding">
+		<div class="newspack-my-account__payment-methods newspack-ui__grid">
 		<?php $payment_method_columns = \wc_get_account_payment_methods_columns(); ?>
 		<?php foreach ( $saved_methods as $type => $methods ) : // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited ?>
 			<?php
@@ -155,21 +155,23 @@ $types         = \wc_get_account_payment_methods_types();
 		</div>
 
 	<?php else : ?>
-		<p>
-			<?php \esc_html_e( 'You don’t have any payment methods saved yet.', 'newspack-plugin' ); ?>
-		</p>
+		<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-1">
+			<h4 class="newspack-ui__font--m"><?php \esc_html_e( 'Payment methods', 'newspack-plugin' ); ?></h4>
+			<p>
+				<?php \esc_html_e( 'You don’t have any payment methods saved yet.', 'newspack-plugin' ); ?>
+			</p>
+		</div>
 
 	<?php endif; ?>
 
 	<?php do_action( 'newspack_woocommerce_after_account_payment_methods', $has_methods ); ?>
 
 	<?php if ( \WC()->payment_gateways->get_available_payment_gateways() ) : ?>
-		<a class="newspack-ui__button newspack-ui__button--primary newspack-my-account__add-payment-method" href="<?php echo \esc_url( \wc_get_endpoint_url( 'add-payment-method' ) ); ?>"><?php \esc_html_e( 'Add payment method', 'newspack-plugin' ); ?></a>
+		<a class="newspack-ui__button newspack-ui__button--primary newspack-ui__spacing-top--5 newspack-my-account__add-payment-method" href="<?php echo \esc_url( \wc_get_endpoint_url( 'add-payment-method' ) ); ?>"><?php \esc_html_e( 'Add payment method', 'newspack-plugin' ); ?></a>
 	<?php endif; ?>
 </section>
 
 <section id="addresses">
-	<h4 class="newspack-ui__font--m"><?php \esc_html_e( 'Addresses', 'newspack-plugin' ); ?></h4>
 	<?php
 	$address_types = [ 'billing' => __( 'Billing', 'newspack-plugin' ) ];
 	if ( ! \wc_ship_to_billing_address_only() && \wc_shipping_enabled() ) {
@@ -178,19 +180,34 @@ $types         = \wc_get_account_payment_methods_types();
 	$address_types    = \apply_filters( 'woocommerce_my_account_get_addresses', $address_types );
 	$addresses_to_add = [];
 	$addresses        = [];
-	if ( ! empty( $address_types ) ) :
-		?>
-		<div class="newspack-my-account__addresses newspack-ui__row newspack-ui__row--no-padding">
-		<?php
-		foreach ( $address_types as $address_type => $address_label ) :
-			$address = \wc_get_account_formatted_address( $address_type );
-			if ( $address ) :
-				$addresses[ $address_type ] = $address;
-				?>
+	foreach ( $address_types as $address_type => $address_label ) {
+		$address = \wc_get_account_formatted_address( $address_type );
+		if ( $address ) {
+			$addresses[ $address_type ] = [
+				'address' => $address,
+				'label'   => $address_label,
+			];
+		} else {
+			$addresses_to_add[] = $address_type;
+		}
+	}
+	?>
+	<?php if ( ! empty( $address_types ) ) : ?>
+		<?php if ( empty( $addresses ) ) : ?>
+			<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-1">
+				<h4 class="newspack-ui__font--m"><?php \esc_html_e( 'Addresses', 'newspack-plugin' ); ?></h4>
+				<p>
+					<?php \esc_html_e( 'You don’t have any addresses saved yet.', 'newspack-plugin' ); ?>
+				</p>
+			</div>
+		<?php else : ?>
+			<h4 class="newspack-ui__font--m"><?php \esc_html_e( 'Addresses', 'newspack-plugin' ); ?></h4>
+			<div class="newspack-my-account__addresses newspack-ui__grid">
+			<?php foreach ( $addresses as $address_type => $address_data ) : ?>
 				<div class="newspack-ui__box newspack-ui__box--border woocommerce-Address">
 					<div class="address__content">
 						<address class="newspack-ui__font--s">
-							<?php echo \wp_kses_post( $address ); ?>
+							<?php echo \wp_kses_post( $address_data['address'] ); ?>
 						</address>
 						<?php
 						/**
@@ -204,7 +221,7 @@ $types         = \wc_get_account_payment_methods_types();
 					</div>
 					<div class="newspack-ui__box__actions">
 						<div class="newspack-ui__box__badges">
-							<span class="newspack-ui__badge newspack-ui__badge--secondary"><?php echo \esc_html( $address_label ); ?></span>
+							<span class="newspack-ui__badge newspack-ui__badge--secondary"><?php echo \esc_html( $address_data['label'] ); ?></span>
 						</div>
 						<div class="newspack-ui__dropdown">
 							<button class="newspack-ui__dropdown__toggle newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__button--small">
@@ -228,20 +245,11 @@ $types         = \wc_get_account_payment_methods_types();
 						</div>
 					</div>
 				</div>
-				<?php
-			else :
-				$addresses_to_add[] = $address_type;
-			endif;
-		endforeach;
-		?>
-		<?php if ( empty( $addresses ) ) : ?>
-			<p>
-				<?php \esc_html_e( 'You don’t have any addresses saved yet.', 'newspack-plugin' ); ?>
-			</p>
+			<?php endforeach; ?>
+			</div>
 		<?php endif; ?>
-		</div>
 		<?php if ( ! empty( $addresses_to_add ) ) : ?>
-			<div class="newspack-ui__button__row">
+			<div class="newspack-ui__button__row newspack-ui__spacing-top--5">
 				<?php foreach ( $addresses_to_add as $address_type ) : ?>
 					<a href="<?php echo esc_url( \wc_get_endpoint_url( 'edit-address', $address_type ) ); ?>" class="newspack-my-account__edit-address newspack-ui__button newspack-ui__button--primary" data-address-type="<?php echo esc_attr( $address_type ); ?>">
 						<?php
