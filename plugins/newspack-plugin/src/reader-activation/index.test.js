@@ -113,6 +113,9 @@ describe( 'init() post-logout clearing (NPPM-2721)', () => {
 	afterEach( () => {
 		jest.clearAllTimers();
 		jest.useRealTimers();
+		// Reset the global between tests so a test that throws mid-bootInit can't leak
+		// newspack_reader_data (items cache / read_only_keys) into the next test.
+		delete window.newspack_reader_data;
 	} );
 
 	/**
@@ -363,6 +366,30 @@ describe( 'init() post-logout clearing (NPPM-2721)', () => {
 		expect( reader.authenticated ).toBe( true );
 	} );
 
+	it( 'logout clear does NOT restore server items even when present (authenticated gate)', () => {
+		// The post-clear restore is gated on `authenticated`, so only an account
+		// switch (A→B) repopulates the namespace. A logout pageload is anonymous, so
+		// even if the server localized items they must NOT be restored — the namespace
+		// stays empty. Guards against a regression that drops the `authenticated` gate
+		// and wipes-then-repopulates on logout.
+		bootInit( {
+			storage: {
+				reader: { email: 'a@example.com', authenticated: true },
+				activity: [ { action: 'article_view', data: { post_id: 1 }, timestamp: 0 } ],
+				is_donor: true,
+			},
+			serverItems: { is_donor: true, is_newsletter_subscriber: true },
+			readOnlyKeys: [ 'is_donor', 'is_newsletter_subscriber' ],
+			config: { authenticated_email: '' },
+		} );
+		expect( readStore( 'activity' ) ).toBeNull();
+		expect( readStore( 'is_donor' ) ).toBeNull();
+		expect( readStore( 'is_newsletter_subscriber' ) ).toBeNull();
+		const reader = JSON.parse( readStore( 'reader' ) );
+		expect( reader.email ).toBeUndefined();
+		expect( reader.authenticated ).toBe( false );
+	} );
+
 	it( 'same-reader re-auth (A→A) preserves activity', () => {
 		bootInit( {
 			storage: {
@@ -515,6 +542,29 @@ describe( 'shouldClearReaderData (NPPM-2899)', () => {
 				authenticatedEmail: '',
 				initialEmail: '',
 				storedReader: {},
+				hasAuthReaderCookie: false,
+			} )
+		).toBe( false );
+	} );
+
+	it( 'does NOT clear when storedReader is null (fresh browser, getReader() returned null)', () => {
+		// optional chaining + `|| ''` must tolerate a null storedReader on anonymous→login.
+		expect(
+			shouldClearReaderData( {
+				authenticatedEmail: 'a@example.com',
+				initialEmail: 'a@example.com',
+				storedReader: null,
+				hasAuthReaderCookie: false,
+			} )
+		).toBe( false );
+	} );
+
+	it( 'does NOT clear with null/undefined initialEmail and storedReader', () => {
+		expect(
+			shouldClearReaderData( {
+				authenticatedEmail: '',
+				initialEmail: undefined,
+				storedReader: undefined,
 				hasAuthReaderCookie: false,
 			} )
 		).toBe( false );
