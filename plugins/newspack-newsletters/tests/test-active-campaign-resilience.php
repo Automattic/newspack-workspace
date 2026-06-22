@@ -520,5 +520,15 @@ class ActiveCampaignResilienceTest extends WP_UnitTestCase {
 		$this->assertSame( '777', (string) get_post_meta( $post_id, 'ac_campaign_id', true ), 'The fresh campaign id replaces the stored draft.' );
 		$this->assertContains( 'campaign_create', $this->called_actions, 'A fresh campaign must be created.' );
 		$this->assertContains( 'campaign_status', $this->called_actions, 'The send must be triggered.' );
+		$this->assertSame(
+			1,
+			count( array_keys( $this->called_actions, 'campaign_delete', true ) ),
+			'The confirmed draft must be deleted exactly once before recreating.'
+		);
+		$this->assertSame(
+			1,
+			count( array_keys( $this->called_actions, 'campaign_list', true ) ),
+			'The force-delete must skip the status re-check, so campaign_list runs only once (the dispatch-state gate).'
+		);
 	}
 }
