@@ -245,6 +245,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-teams-for-memberships.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-newspack-elections.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-yoast.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-parsely.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-primary-category.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/class-patches.php';

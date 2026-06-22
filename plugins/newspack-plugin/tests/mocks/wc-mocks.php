@@ -432,6 +432,12 @@ class WC_Subscription {
 		}
 		return (float) ( $wcs_mock_items_sign_up_fee ?? 0 );
 	}
+	public function needs_payment() {
+		return ! empty( $this->data['needs_payment'] );
+	}
+	public function get_view_order_url() {
+		return $this->data['view_order_url'] ?? 'https://example.test/my-account/view-order/' . $this->get_id();
+	}
 	public function save() {
 		return true;
 	}
@@ -635,6 +641,21 @@ function wcs_get_users_subscriptions( $user_id ) {
 	// subs the user is only a member of). Tests that need ownership semantics
 	// must guard against this just like production code.
 	return apply_filters( 'wcs_get_users_subscriptions', $user_subscriptions, $user_id );
+}
+function wcs_get_subscriptions( $args = [] ) {
+	// Minimal mock: implements only the `customer_id` filter, the sole arg the code
+	// under test passes. If a future test needs status/paging args
+	// (subscription_status, subscriptions_per_page, paged, offset), extend the filter
+	// here rather than relying on this returning the full set.
+	global $subscriptions_database;
+	$customer_id = $args['customer_id'] ?? null;
+	$matches     = [];
+	foreach ( $subscriptions_database as $id => $subscription ) {
+		if ( null === $customer_id || $subscription->get_customer_id() === $customer_id ) {
+			$matches[ $id ] = $subscription;
+		}
+	}
+	return $matches;
 }
 function wcs_get_canonical_product_id( $item ) {
 	if ( is_object( $item ) && method_exists( $item, 'get_product_id' ) ) {

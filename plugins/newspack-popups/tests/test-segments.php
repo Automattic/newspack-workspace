@@ -625,4 +625,219 @@ class SegmentsTest extends WP_UnitTestCase {
 			$this->assertSame( $key, $last_segment['name'] );
 		}
 	}
+
+	/**
+	 * Disabled number-based criteria (`{ min: 0, max: 0 }`) should be dropped
+	 * from a segment's criteria so they never reach the front-end criteria
+	 * array. Regression test for NPPM-2890.
+	 */
+	public function test_update_segment_drops_disabled_criteria() {
+		Newspack_Popups_Segmentation::create_segment( $this->complete_and_valid );
+		$segment = Newspack_Popups_Segmentation::get_segments()[0];
+
+		$segment['criteria'] = [
+			[
+				'criteria_id' => 'articles_read',
+				'value'       => [
+					'min' => 5,
+					'max' => 20,
+				],
+			],
+			[
+				'criteria_id' => 'articles_read_in_session',
+				'value'       => [
+					'min' => 0,
+					'max' => 0,
+				],
+			],
+			[
+				'criteria_id' => 'favorite_categories',
+				'value'       => [],
+			],
+			[
+				'criteria_id' => 'newsletter',
+				'value'       => '',
+			],
+			[
+				'criteria_id' => 'donation',
+				'value'       => 'donors',
+			],
+		];
+
+		$result = Newspack_Popups_Segmentation::update_segment( $segment );
+
+		$this->assertCount(
+			2,
+			$result[0]['criteria'],
+			'Only criteria with non-empty values should be persisted.'
+		);
+		$criteria_ids = wp_list_pluck( $result[0]['criteria'], 'criteria_id' );
+		$this->assertSame( [ 'articles_read', 'donation' ], $criteria_ids );
+
+		// Verify the raw term meta was written in its filtered form (not just the read path).
+		$raw_criteria = get_term_meta( $segment['id'], 'criteria', true );
+		$this->assertCount( 2, $raw_criteria, 'Disabled criteria should not be persisted to term meta.' );
+		$this->assertSame( [ 'articles_read', 'donation' ], wp_list_pluck( $raw_criteria, 'criteria_id' ) );
+	}
+
+	/**
+	 * Already-stored disabled criteria should be filtered out on read so
+	 * publishers don't have to re-save every segment to recover.
+	 */
+	public function test_get_segment_filters_legacy_disabled_criteria() {
+		Newspack_Popups_Segmentation::create_segment( $this->complete_and_valid );
+		$segment_id = Newspack_Popups_Segmentation::get_segments()[0]['id'];
+
+		// Simulate legacy data: criteria written directly to term meta, bypassing the save-time filter.
+		update_term_meta(
+			$segment_id,
+			'criteria',
+			[
+				[
+					'criteria_id' => 'articles_read',
+					'value'       => [
+						'min' => 5,
+						'max' => 20,
+					],
+				],
+				[
+					'criteria_id' => 'articles_read_in_session',
+					'value'       => [
+						'min' => 0,
+						'max' => 0,
+					],
+				],
+				[
+					'criteria_id' => 'sources_to_match',
+					'value'       => [],
+				],
+			]
+		);
+
+		$segment = Newspack_Popups_Segmentation::get_segment( $segment_id );
+
+		$this->assertCount( 1, $segment['criteria'] );
+		$this->assertSame( 'articles_read', $segment['criteria'][0]['criteria_id'] );
+	}
+
+	/**
+	 * Partially-disabled range criteria (one of min/max set) must be preserved.
+	 */
+	public function test_filter_criteria_preserves_partial_range() {
+		$criteria = [
+			[
+				'criteria_id' => 'articles_read',
+				'value'       => [
+					'min' => 3,
+					'max' => 0,
+				],
+			],
+			[
+				'criteria_id' => 'articles_read_in_session',
+				'value'       => [
+					'min' => 0,
+					'max' => 5,
+				],
+			],
+		];
+
+		$filtered = Newspack_Segments_Model::filter_criteria( $criteria );
+
+		$this->assertCount( 2, $filtered );
+	}
+
+	/**
+	 * Criteria without a `criteria_id` or with non-array entries should be dropped.
+	 */
+	public function test_filter_criteria_drops_malformed_entries() {
+		$criteria = [
+			'not-an-array',
+			[ 'value' => 5 ],
+			[
+				'criteria_id' => 'articles_read',
+				'value'       => 5,
+			],
+		];
+
+		$filtered = Newspack_Segments_Model::filter_criteria( $criteria );
+
+		$this->assertCount( 1, $filtered );
+		$this->assertSame( 'articles_read', $filtered[0]['criteria_id'] );
+	}
+
+	/**
+	 * Boolean criterion values: `false` is treated as empty (dropped),
+	 * `true` is preserved.
+	 */
+	public function test_filter_criteria_handles_booleans() {
+		$criteria = [
+			[
+				'criteria_id' => 'custom_bool_active',
+				'value'       => true,
+			],
+			[
+				'criteria_id' => 'custom_bool_inactive',
+				'value'       => false,
+			],
+		];
+
+		$filtered = Newspack_Segments_Model::filter_criteria( $criteria );
+
+		$this->assertSame(
+			[ 'custom_bool_active' ],
+			wp_list_pluck( $filtered, 'criteria_id' ),
+			'`true` should survive; `false` should be dropped.'
+		);
+	}
+
+	/**
+	 * Third parties can register a custom criterion whose semantically-meaningful
+	 * value is normally treated as empty (e.g. `0`). The
+	 * `newspack_popups_is_criteria_value_empty` filter lets them opt out per-value.
+	 */
+	public function test_filter_criteria_value_empty_filter_can_override() {
+		$callback = function ( $override, $value ) {
+			// Treat integer `0` as a meaningful value for any criterion.
+			if ( 0 === $value ) {
+				return false;
+			}
+			return $override;
+		};
+		add_filter( 'newspack_popups_is_criteria_value_empty', $callback, 10, 2 );
+
+		$filtered = Newspack_Segments_Model::filter_criteria(
+			[
+				[
+					'criteria_id' => 'zero_donations',
+					'value'       => 0,
+				],
+			]
+		);
+
+		remove_filter( 'newspack_popups_is_criteria_value_empty', $callback, 10 );
+
+		$this->assertCount( 1, $filtered, 'Override should keep the otherwise-empty criterion.' );
+	}
+
+	/**
+	 * Third parties can post-process the filtered criteria array via
+	 * `newspack_popups_filter_segment_criteria` — e.g. to inject defaults.
+	 */
+	public function test_filter_segment_criteria_filter_runs() {
+		$callback = function ( $filtered ) {
+			$filtered[] = [
+				'criteria_id' => 'injected',
+				'value'       => 'yes',
+			];
+			return $filtered;
+		};
+		add_filter( 'newspack_popups_filter_segment_criteria', $callback );
+
+		$filtered = Newspack_Segments_Model::filter_criteria( [] );
+
+		remove_filter( 'newspack_popups_filter_segment_criteria', $callback );
+
+		$this->assertCount( 1, $filtered );
+		$this->assertSame( 'injected', $filtered[0]['criteria_id'] );
+	}
 }

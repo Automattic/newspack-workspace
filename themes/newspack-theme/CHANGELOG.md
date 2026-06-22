@@ -1,3 +1,10 @@
+## newspack-theme [2.23.3](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.2...newspack-theme@2.23.3) (2026-06-19)
+
+
+### Bug Fixes
+
+* **separator:** restore Default separator width on WP 7.0 ([#324](https://github.com/Automattic/newspack-workspace/issues/324)) ([8a8b315](https://github.com/Automattic/newspack-workspace/commit/8a8b3158daba9774022e64b9ef929d6509856acc))
+
 ## newspack-theme [2.23.2](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.1...newspack-theme@2.23.2) (2026-06-17)
 
 
