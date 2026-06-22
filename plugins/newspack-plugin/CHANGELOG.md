@@ -1,3 +1,24 @@
+## newspack [6.43.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.2...newspack@6.43.3) (2026-06-19)
+
+
+### Bug Fixes
+
+* **woocommerce:** scope payment notice to recoverable statuses ([#301](https://github.com/Automattic/newspack-workspace/issues/301)) ([1f55c11](https://github.com/Automattic/newspack-workspace/commit/1f55c117bff9626fe5bb8ab53e2937cec2f40083))
+
+## newspack [6.43.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.1...newspack@6.43.2) (2026-06-19)
+
+
+### Bug Fixes
+
+* **audience:** gate Group labels settings behind Content_Gate feature flag ([#297](https://github.com/Automattic/newspack-workspace/issues/297)) ([cfe7901](https://github.com/Automattic/newspack-workspace/commit/cfe7901d1207d6af4352eabc563ebc2f81277fec)), closes [#148](https://github.com/Automattic/newspack-workspace/issues/148) [#newspack-engineering-public](https://github.com/Automattic/newspack-workspace/issues/newspack-engineering-public)
+
+## newspack [6.43.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.0...newspack@6.43.1) (2026-06-17)
+
+
+### Bug Fixes
+
+* **content-gate:** try all utm_source values for newsletter bypass ([#331](https://github.com/Automattic/newspack-workspace/issues/331)) ([280be9b](https://github.com/Automattic/newspack-workspace/commit/280be9b5ff14bc750b4be953201402dc6b72c9d6))
+
 # newspack [6.43.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.42.8...newspack@6.43.0) (2026-06-15)
 
 

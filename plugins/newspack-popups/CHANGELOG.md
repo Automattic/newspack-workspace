@@ -1,3 +1,10 @@
+## newspack-popups [3.12.2](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.12.1...newspack-popups@3.12.2) (2026-06-18)
+
+
+### Bug Fixes
+
+* **popups:** drop disabled criteria from segment criteria array ([#209](https://github.com/Automattic/newspack-workspace/issues/209)) ([5b5d092](https://github.com/Automattic/newspack-workspace/commit/5b5d092af473c7ee0604d0d90e69f0eeb4fbd52c))
+
 ## newspack-popups [3.12.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.12.0...newspack-popups@3.12.1) (2026-06-02)
 
 
