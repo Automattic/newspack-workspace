@@ -715,11 +715,17 @@ function handlePush( ...args ) {
  *   - logout (NPPM-2721): server anonymous AND a prior session was authenticated.
  *   - orphaned (NPPM-2721): server anonymous AND a stale stored email != intention.
  *
+ * Exported only so the truth table above can be unit-tested directly; it is not part
+ * of the public readerActivation API and is not attached to window.newspackReaderActivation.
+ * Do not depend on it from other bundles.
+ *
+ * @access private
+ *
  * @param {Object}  args
  * @param {string}  args.authenticatedEmail  newspack_ras_config.authenticated_email ('' when anonymous).
- * @param {string}  args.initialEmail        authenticated_email || np_auth_intention cookie.
+ * @param {string}  args.initialEmail        authenticated_email || np_auth_intention cookie (the intention cookie = identity).
  * @param {Object}  args.storedReader        Persisted reader ({ email, authenticated }).
- * @param {boolean} args.hasAuthReaderCookie Whether the np_auth_reader cookie is present.
+ * @param {boolean} args.hasAuthReaderCookie Whether the np_auth_reader cookie is present (the reader cookie = cache guard).
  * @return {boolean} Whether to clear the namespace.
  */
 export function shouldClearReaderData( { authenticatedEmail, initialEmail, storedReader, hasAuthReaderCookie } ) {
@@ -746,6 +752,11 @@ export function shouldClearReaderData( { authenticatedEmail, initialEmail, store
 	// Remaining triggers require the server to report anonymous. A present
 	// np_auth_reader cookie means "not anonymous" (NPPM-2721 cached-page guard).
 	// Use the normalized `authed` so a whitespace-only email is handled consistently.
+	// Behavioral delta vs NPPM-2721: deriving this from `authed` (not the raw
+	// authenticated_email) makes a degenerate whitespace-only value ('   ') normalize
+	// to anonymous, which could newly trigger the logout/orphaned clear. The server
+	// only ever sends '' or a real email, so this input is non-occurring; the
+	// normalization is intentional and keeps the comparison consistent.
 	const serverSaysAnonymous = ! authed && ! hasAuthReaderCookie;
 	if ( ! serverSaysAnonymous ) {
 		return false;
@@ -760,6 +771,8 @@ export function shouldClearReaderData( { authenticatedEmail, initialEmail, store
  */
 function init() {
 	const data = newspack_ras_config;
+	// np_auth_intention = identity (who the in-progress auth flow is for); distinct
+	// from np_auth_reader below, which is the cached-page guard, not an identity.
 	const initialEmail = data?.authenticated_email || getCookie( 'np_auth_intention' );
 	const authenticated = !! data?.authenticated_email;
 	let currentReader = getReader();
@@ -773,20 +786,40 @@ function init() {
 			authenticatedEmail: data?.authenticated_email,
 			initialEmail,
 			storedReader: currentReader,
+			// np_auth_reader = cache guard (present ⇒ "not anonymous"), NOT an identity.
 			hasAuthReaderCookie: !! getCookie( 'np_auth_reader' ),
 		} )
 	) {
+		// Capture the current reader's server-localized snapshot before the wipe.
+		// clearReaderStore() empties newspack_reader_data.items, which would make the
+		// trailing store.rehydrate() a no-op. The reference survives the wipe because
+		// clear() reassigns the property rather than mutating the object (NPPM-2899).
+		const serverReaderItems = newspack_reader_data?.items;
 		clearReaderStore();
 		// Re-read so currentReader reflects the post-clear reseed ({ authenticated:
 		// false }, no email); otherwise the reader object built below would pick the
 		// stale email back up via `initialEmail || currentReader?.email`.
 		currentReader = getReader();
+		// On an authenticated account switch (A→B), restore the new reader's own
+		// server snapshot the clear just dropped so reader B isn't briefly missing its
+		// OWN read-only state (e.g. reading as a non-donor for prompt segmentation)
+		// until its next navigation. The trailing store.rehydrate() consumes it. This
+		// is scoped to the switch case: logout/orphaned clears are anonymous
+		// (authenticated === false) and intentionally leave the namespace empty.
+		if ( authenticated && serverReaderItems ) {
+			newspack_reader_data.items = serverReaderItems;
+		}
 	}
 
 	const reader = { email: initialEmail || currentReader?.email, authenticated };
 	if ( currentReader?.email !== reader?.email || currentReader?.authenticated !== reader?.authenticated ) {
 		store.set( 'reader', reader, false );
 	}
+	// On an account switch (A→B) this fires once with the final identity (B); the
+	// intermediate anonymous reseed clear() performs is surfaced only on EVENTS.data
+	// (per wiped key), never as a separate EVENTS.reader. Consumers here react to the
+	// current reader state, not to a reset transition, so this is intentional — any
+	// per-reader cache invalidation should key off the EVENTS.data wipe events.
 	emit( EVENTS.reader, reader );
 	initAnalytics( readerActivation );
 	initSubscriptionTiersForm( readerActivation );
