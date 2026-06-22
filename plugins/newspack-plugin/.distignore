@@ -33,6 +33,7 @@ yarn.lock
 *.sql
 *.tar.gz
 *.zip
+*.gtm.json
 
 # directories
 node_modules

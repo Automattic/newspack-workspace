@@ -191,6 +191,10 @@ class GoogleSiteKit {
 	/**
 	 * Get custom parameters for a GA configuration or event body.
 	 *
+	 * If you add, rename, or remove a key here, update the companion GTM template
+	 * (Data Layer Variables + docs) at includes/plugins/google-site-kit/gtm-template/
+	 * so GTM-tagged sites keep reading the same params.
+	 *
 	 * @return array
 	 */
 	public static function get_custom_event_parameters() {
