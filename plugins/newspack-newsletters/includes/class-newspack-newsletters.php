@@ -351,6 +351,15 @@ final class Newspack_Newsletters {
 				'default'        => -1,
 			]
 		);
+		// The four send-config keys below (SEND_CONFIG_META_KEYS) are also
+		// committed early by persist_send_config_before_send() on rest_pre_insert
+		// so the ESP send reads fresh values. That early write goes through
+		// update_post_meta() — so a registered sanitize_callback is still applied
+		// — but it bypasses the REST schema validation and the per-key
+		// 'edit_post_meta' capability check the normal meta route runs. It is
+		// therefore only safe while these keys stay permissive strings
+		// (auth_callback __return_true, no restrictive schema/sanitize). If that
+		// changes, mirror it in persist_send_config_before_send().
 		\register_meta(
 			'post',
 			'send_list_id',
