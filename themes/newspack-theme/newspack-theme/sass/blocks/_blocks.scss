@@ -998,6 +998,20 @@ body:not(.wp-child-theme-newspack-joseph):not(.wp-child-theme-newspack-nelson) .
 		text-align: left;
 	}
 
+	&.aligncenter figcaption,
+	.aligncenter figcaption {
+		text-align: center;
+	}
+
+	&.alignright figcaption,
+	.alignright figcaption {
+		text-align: right;
+	}
+
+	&.alignleft figcaption,
+	.alignleft figcaption {
+		text-align: left;
+	}
 	img:not([style*="object-fit"]) {
 		height: auto !important; // !important to override inline styles.
 	}
