@@ -43,6 +43,11 @@ stop here until it ships.
 
 `email_hash` is intentionally **not** in the dataLayer (kept out of third-party reach).
 
+> **Privacy note:** everything pushed to `window.dataLayer` is readable by *every* tag in
+> the container – not just Google's GA4 tag, but any third-party tags too. The params above
+> are intentionally coarse and anonymized (yes/no flags, anonymized group IDs, no PII), and
+> `email_hash` is excluded for exactly this reason. Don't extend this set with reader PII.
+
 ## Step 1 – Import the variables
 
 `newspack-ga4-reader-params.gtm.json` is a GTM container export containing:

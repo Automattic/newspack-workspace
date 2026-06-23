@@ -362,11 +362,18 @@ class GoogleSiteKit {
 	 * GA4 tags as Data Layer Variables, keeping both tagging paths in sync.
 	 *
 	 * Hooked early on wp_head so the values are in the dataLayer before Site Kit's container
-	 * snippet enqueues gtm.js. Gated the same way as the gtag params: only with Site Kit active
-	 * and unless custom frontend params are disabled.
+	 * snippet enqueues gtm.js. Emitted only when Site Kit is active and has a GA4 property
+	 * configured, and unless custom frontend params are disabled.
 	 */
 	public static function print_data_layer_params() {
 		if ( ! self::is_active() ) {
+			return;
+		}
+		// Only emit the push when Site Kit has a GA4 property configured. Gate on the measurement
+		// ID, not on useSnippet: a GTM-tagged site routes GA4 through its container with the gtag
+		// snippet off, and still needs these params mirrored into the dataLayer.
+		$sitekit_ga4_settings = self::get_sitekit_ga4_settings();
+		if ( false === $sitekit_ga4_settings || empty( $sitekit_ga4_settings['measurementID'] ) ) {
 			return;
 		}
 		// Arbitrary inline scripts are invalid on AMP pages and break AMP validation.

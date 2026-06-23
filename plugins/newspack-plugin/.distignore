@@ -34,6 +34,7 @@ yarn.lock
 *.tar.gz
 *.zip
 *.gtm.json
+includes/plugins/google-site-kit/gtm-template/
 
 # directories
 node_modules
