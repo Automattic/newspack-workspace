@@ -1,5 +1,6 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
+@use "../../utilities/classes";
 
 .newspack-newsletters {
 	&__editor-block {
@@ -89,4 +90,18 @@
 	.components-notice {
 		margin: 0;
 	}
+}
+
+.newspack-newsletters__sidebar .components-base-control {
+	margin-bottom: 0;
+}
+
+.components-panel__row:has(> .newspack-newsletters__visibility-row) {
+	margin: 0;
+}
+
+.newspack-newsletters__visibility-dropdown-content .components-popover__content {
+	width: 320px;
+	max-width: calc(100vw - #{wp-vars.$grid-unit-40});
+	padding: wp-vars.$grid-unit-20;
 }

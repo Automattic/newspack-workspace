@@ -365,6 +365,21 @@ final class Placements {
 	 * Register default placements.
 	 */
 	public static function register_default_placements() {
+		/**
+		 * Filter the result of wp_is_block_theme() for placement registration.
+		 *
+		 * Allows tests and edge cases to force the block-theme registration path
+		 * without changing the active theme. Defaults to the WP core value.
+		 *
+		 * @param bool $is_block_theme Whether the active theme is a block theme.
+		 */
+		$is_block_theme = apply_filters( 'newspack_ads_is_block_theme', wp_is_block_theme() );
+
+		if ( $is_block_theme ) {
+			self::register_block_placements();
+			return;
+		}
+
 		$placements = array(
 			'global_above_header' => array(
 				'name'        => __( 'Global: Above Header', 'newspack-ads' ),
@@ -390,6 +405,63 @@ final class Placements {
 		foreach ( $placements as $placement_key => $placement_config ) {
 			self::register_placement( $placement_key, $placement_config );
 		}
+	}
+
+	/**
+	 * Register the placements that are rendered by the newspack-ads/ad-slot block.
+	 *
+	 * Each placement is given a synthetic hook_name; nothing in WordPress core fires
+	 * these hooks. The newspack-ads/ad-slot block fires the hook via
+	 * do_action() when rendered, which routes through inject_placement_ad() and
+	 * the standard Providers::render_placement_ad_code() pipeline.
+	 */
+	public static function register_block_placements() {
+		$placements = array(
+			'global_above_header' => array(
+				'name'        => __( 'Above Header', 'newspack-ads' ),
+				'description' => __( 'Renders above the site header.', 'newspack-ads' ),
+			),
+			'global_below_header' => array(
+				'name'        => __( 'Below Header', 'newspack-ads' ),
+				'description' => __( 'Renders below the site header.', 'newspack-ads' ),
+			),
+			'global_above_footer' => array(
+				'name'        => __( 'Above Footer', 'newspack-ads' ),
+				'description' => __( 'Renders above the site footer.', 'newspack-ads' ),
+			),
+			'sticky'              => array(
+				'name'        => __( 'Sticky Footer', 'newspack-ads' ),
+				'description' => __( 'Renders as a sticky footer ad (recommended sizes 728x90, 320x50, 300x50).', 'newspack-ads' ),
+			),
+			'above_content'       => array(
+				'name'        => __( 'Above Content', 'newspack-ads' ),
+				'description' => __( 'Renders above the post content.', 'newspack-ads' ),
+			),
+			'below_content'       => array(
+				'name'        => __( 'Below Content', 'newspack-ads' ),
+				'description' => __( 'Renders below the post content.', 'newspack-ads' ),
+			),
+		);
+		foreach ( $placements as $placement_key => $placement_config ) {
+			$placement_config['hook_name']      = self::get_block_hook_name( $placement_key );
+			$placement_config['block_rendered'] = true;
+			self::register_placement( $placement_key, $placement_config );
+		}
+	}
+
+	/**
+	 * Build the synthetic hook name fired by the newspack-ads/ad-slot block for a
+	 * given placement key.
+	 *
+	 * Centralizes the naming convention so the render callback can derive the hook
+	 * directly without loading placement data.
+	 *
+	 * @param string $placement_key Placement key.
+	 *
+	 * @return string Hook name.
+	 */
+	public static function get_block_hook_name( $placement_key ) {
+		return 'newspack_ads_block_placement_' . $placement_key;
 	}
 
 	/**

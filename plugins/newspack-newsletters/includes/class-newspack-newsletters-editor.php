@@ -90,6 +90,7 @@ final class Newspack_Newsletters_Editor {
 		$email_cpts = [
 			Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
 			Newspack_Newsletters\Ads::CPT,
+			Newspack_Newsletters_Layouts::NEWSPACK_NEWSLETTERS_LAYOUT_CPT,
 		];
 		return apply_filters( 'newspack_newsletters_email_editor_cpts', $email_cpts );
 	}
@@ -510,23 +511,23 @@ final class Newspack_Newsletters_Editor {
 	}
 
 	/**
-	 * Load up common JS/CSS for newsletter editor.
+	 * Build the `newspack_email_editor_data` payload shared by the editor and any
+	 * surface that previews newsletter blocks (e.g. the admin-shell layouts list).
+	 *
+	 * @return array
 	 */
-	public static function enqueue_block_assets() {
-		if ( ! is_admin() ) {
-			return;
-		}
+	public static function get_email_editor_data() {
 		// Remove the Ads CPT - it does not need MJML handling since ads
 		// will be injected into email content before it's converted to MJML.
 		$mjml_handling_post_types = array_values( array_diff( self::get_email_editor_cpts(), [ Newspack_Newsletters\Ads::CPT ] ) );
 		$provider                 = Newspack_Newsletters::get_service_provider();
 		$conditional_tag_support  = false;
 
-		if ( $provider && ( self::is_editing_newsletter() || self::is_editing_newsletter_ad() ) ) {
+		if ( $provider && ( self::is_editing_newsletter() || self::is_editing_newsletter_ad() || self::is_editing_layout() ) ) {
 			$conditional_tag_support = $provider::get_conditional_tag_support();
 		}
 
-		$email_editor_data = [
+		return [
 			'email_html_meta'                => Newspack_Newsletters::EMAIL_HTML_META,
 			'mjml_handling_post_types'       => $mjml_handling_post_types,
 			'newsletter_post_type'           => Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
@@ -541,7 +542,22 @@ final class Newspack_Newsletters_Editor {
 			],
 			'supported_social_icon_services' => Newspack_Newsletters_Renderer::get_supported_social_icons_services(),
 			'supported_esps'                 => Newspack_Newsletters::get_supported_providers(),
+			'merge_tags'                     => $provider
+				? $provider::get_merge_tags()
+				: Newspack_Newsletters_Service_Provider::get_merge_tags(),
+			'sample_assets_url'              => plugins_url( '../assets/sample-posts/', __FILE__ ),
 		];
+	}
+
+	/**
+	 * Load up common JS/CSS for newsletter editor.
+	 */
+	public static function enqueue_block_assets() {
+		if ( ! is_admin() ) {
+			return;
+		}
+
+		$email_editor_data = self::get_email_editor_data();
 
 		if ( self::is_editing_email() ) {
 			wp_register_style(
@@ -578,7 +594,7 @@ final class Newspack_Newsletters_Editor {
 			);
 		}
 
-		if ( self::is_editing_newsletter() ) {
+		if ( self::is_editing_newsletter() || self::is_editing_layout() ) {
 			wp_localize_script(
 				'newspack-newsletters-editor',
 				'newspack_newsletters_data',
@@ -662,6 +678,13 @@ final class Newspack_Newsletters_Editor {
 	}
 
 	/**
+	 * Is editing a layout?
+	 */
+	private static function is_editing_layout() {
+		return Newspack_Newsletters_Layouts::NEWSPACK_NEWSLETTERS_LAYOUT_CPT === get_post_type();
+	}
+
+	/**
 	 * If excerpt length is set in Post Inserter block attributes, override the site's excerpt length using the setting.
 	 *
 	 * @param array           $args Request arguments.
@@ -723,12 +746,30 @@ final class Newspack_Newsletters_Editor {
 	}
 
 	/**
-	 * Append author info to the posts REST response so we can append Coauthors, if they exist.
+	 * Register the Posts Inserter's extra REST fields — author info, custom byline,
+	 * sponsor info and featured-media URLs — for every post type the inserter can offer.
 	 */
 	public static function add_newspack_extra_info() {
+		// Register on every post type the Posts Inserter can offer — it mirrors the
+		// inserter's own /wp/v2/types filter (REST-exposed + viewable + show_ui) — so
+		// featured images, author info, custom bylines and sponsor data resolve for
+		// Pages, Newsletters, Events, etc., not just `post`. Regression fix: NPPM-2756 (#1969).
+		$post_types = array_values(
+			array_filter(
+				get_post_types(
+					[
+						'show_ui'      => true,
+						'show_in_rest' => true,
+					],
+					'names'
+				),
+				'is_post_type_viewable'
+			)
+		);
+
 		// Add author info source.
 		register_rest_field(
-			'post',
+			$post_types,
 			'newspack_author_info',
 			[
 				'get_callback' => [ __CLASS__, 'newspack_get_author_info' ],
@@ -743,7 +784,7 @@ final class Newspack_Newsletters_Editor {
 
 		// Add custom byline info.
 		register_rest_field(
-			'post',
+			$post_types,
 			'newspack_custom_byline',
 			[
 				'get_callback' => [ __CLASS__, 'newspack_get_custom_byline' ],
@@ -751,7 +792,7 @@ final class Newspack_Newsletters_Editor {
 					'context' => [
 						'edit',
 					],
-					'type'    => 'string',
+					'type'    => [ 'string', 'null' ],
 				],
 			]
 		);
@@ -759,7 +800,7 @@ final class Newspack_Newsletters_Editor {
 		// Add sponsor info.
 		if ( function_exists( '\Newspack_Sponsors\get_all_sponsors' ) ) {
 			register_rest_field(
-				'post',
+				$post_types,
 				'newspack_sponsors_info',
 				[
 					'get_callback' => [ __CLASS__, 'newspack_get_sponsors_info' ],
@@ -775,7 +816,7 @@ final class Newspack_Newsletters_Editor {
 
 		// Add featured media thumbnail URLs.
 		register_rest_field(
-			'post',
+			$post_types,
 			'featured_media_info',
 			[
 				'get_callback' => [ __CLASS__, 'newspack_get_featured_media_info' ],
@@ -783,7 +824,7 @@ final class Newspack_Newsletters_Editor {
 					'context' => [
 						'edit',
 					],
-					'type'    => 'array',
+					'type'    => 'object',
 				],
 			]
 		);
@@ -863,15 +904,19 @@ final class Newspack_Newsletters_Editor {
 	/**
 	 * Append author data to the REST /posts response, so we can include Coauthors, link and display names.
 	 *
-	 * @param object $post Post object for the post being returned.
-	 * @return object Formatted data for all authors associated with the post.
+	 * @param array $post Prepared REST response data for the post being returned.
+	 * @return array Formatted data for all authors associated with the post.
 	 */
 	public static function newspack_get_author_info( $post ) {
 		$author_data = [];
 
 
 		if ( function_exists( 'get_coauthors' ) ) {
-			$authors = get_coauthors();
+			// Pass the post ID explicitly: this runs as a REST collection callback
+			// without setup_postdata(), so get_coauthors() has no reliable global
+			// $post to fall back on. Now that the field is registered for Pages,
+			// Newsletters, Events, etc. (NPPM-2756), the global is unset here.
+			$authors = get_coauthors( $post['id'] );
 
 			foreach ( $authors as $author ) {
 				$author_link = null;
@@ -888,13 +933,18 @@ final class Newspack_Newsletters_Editor {
 				];
 			}
 		} else {
+			// Derive the author from the post ID rather than `$post['author']`:
+			// the REST response only carries an `author` key for post types that
+			// support authors, and this field now covers types that may not
+			// (NPPM-2756). `post_author` is always set on the row.
+			$author_id = (int) get_post_field( 'post_author', $post['id'] );
 			$author_data[] = [
 				/* Get the author name */
-				'display_name' => get_the_author_meta( 'display_name', $post['author'] ),
+				'display_name' => get_the_author_meta( 'display_name', $author_id ),
 				/* Get the author ID */
-				'id'           => $post['author'],
+				'id'           => $author_id,
 				/* Get the author Link */
-				'author_link'  => get_author_posts_url( $post['author'] ),
+				'author_link'  => get_author_posts_url( $author_id ),
 			];
 		}
 
@@ -905,7 +955,7 @@ final class Newspack_Newsletters_Editor {
 	/**
 	 * Get custom byline for the REST /posts response.
 	 *
-	 * @param object $post Post object for the post being returned.
+	 * @param array $post Prepared REST response data for the post being returned.
 	 * @return string|null Formatted custom byline HTML or null if not active.
 	 */
 	public static function newspack_get_custom_byline( $post ) {
@@ -919,17 +969,19 @@ final class Newspack_Newsletters_Editor {
 	/**
 	 * Append sponsor data to the REST /posts response.
 	 *
-	 * @param object $post Post object for the post being returned.
+	 * @param array $post Prepared REST response data for the post being returned.
 	 * @return array Formatted data for all sponsors associated with the post.
 	 */
 	public static function newspack_get_sponsors_info( $post ) {
-		return \Newspack_Sponsors\get_all_sponsors( $post['id'], null, 'post' );
+		// Cast to array: get_all_sponsors() returns false when none exist, but the
+		// REST schema (and callers) expect an array.
+		return (array) \Newspack_Sponsors\get_all_sponsors( $post['id'], null, 'post' );
 	}
 
 	/**
 	 * Get featured media info for the REST /posts response.
 	 *
-	 * @param object $post Post object for the post being returned.
+	 * @param array $post Prepared REST response data for the post being returned.
 	 * @return object Formatted data for the featured media associated with the post.
 	 */
 	public static function newspack_get_featured_media_info( $post ) {
@@ -942,7 +994,9 @@ final class Newspack_Newsletters_Editor {
 		if ( $medium_url ) {
 			$featured_media_info['medium_url'] = $medium_url;
 		}
-		return $featured_media_info;
+		// Cast to object so the response always matches the `object` REST schema —
+		// an empty array would otherwise encode as a JSON array `[]`, not `{}`.
+		return (object) $featured_media_info;
 	}
 }
 Newspack_Newsletters_Editor::instance();

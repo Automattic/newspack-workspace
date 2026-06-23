@@ -266,7 +266,23 @@ class Group_Subscription_API {
 	 * @return \WP_REST_Response The response object.
 	 */
 	public static function api_update_members( $request ) {
-		$subscription_id   = $request->get_param( 'subscription_id' );
+		$subscription_id = $request->get_param( 'subscription_id' );
+		// Match the admin-post handlers: terminal-state subscriptions don't accept member changes.
+		// 409 Conflict (not 403) so every "can't write in this state" rejection across this
+		// endpoint shares one status with update_members()'s member-limit response.
+		if ( ! Group_Subscription_MyAccount::is_subscription_manageable( $subscription_id ) ) {
+			return \rest_ensure_response(
+				new \WP_Error(
+					'newspack_group_subscription_not_manageable',
+					sprintf(
+						/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+						__( 'This %s is no longer active, so its members can\'t be changed.', 'newspack-plugin' ),
+						Group_Subscription::get_label_lower( 'singular' )
+					),
+					[ 'status' => 409 ]
+				)
+			);
+		}
 		$members_to_add    = $request->get_param( 'members_to_add' );
 		$members_to_remove = $request->get_param( 'members_to_remove' );
 		$results           = Group_Subscription::update_members( $subscription_id, $members_to_add ?? [], $members_to_remove ?? [] );
@@ -282,7 +298,23 @@ class Group_Subscription_API {
 	 */
 	public static function api_invite( $request ) {
 		$subscription_id = $request->get_param( 'subscription_id' );
-		$email           = $request->get_param( 'email' );
+		// Email invitations are new invitations, so gate on active state for parity with
+		// api_generate_invite_link() and the admin-post handler (verify_active).
+		// 409 Conflict: a state-based rejection, matching the other member/invite gates.
+		if ( ! Group_Subscription_MyAccount::is_subscription_active( $subscription_id ) ) {
+			return \rest_ensure_response(
+				new \WP_Error(
+					'newspack_group_subscription_not_active',
+					sprintf(
+						/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+						__( 'This %s is not active, so new invitations can\'t be issued.', 'newspack-plugin' ),
+						Group_Subscription::get_label_lower( 'singular' )
+					),
+					[ 'status' => 409 ]
+				)
+			);
+		}
+		$email  = $request->get_param( 'email' );
 		$invite = Group_Subscription_Invite::generate_invite( $subscription_id, $email );
 		return \rest_ensure_response( $invite );
 	}
@@ -310,6 +342,22 @@ class Group_Subscription_API {
 	 */
 	public static function api_generate_invite_link( $request ) {
 		$subscription_id = $request->get_param( 'subscription_id' );
+		// Only active subscriptions can mint new invitations; otherwise a stale token could be
+		// left behind on an inactive sub for later reactivation. Deletion stays allowed for cleanup.
+		// 409 Conflict: a state-based rejection, matching the other member/invite gates.
+		if ( ! Group_Subscription_MyAccount::is_subscription_active( $subscription_id ) ) {
+			return \rest_ensure_response(
+				new \WP_Error(
+					'newspack_group_subscription_not_active',
+					sprintf(
+						/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+						__( 'This %s is not active, so new invitations can\'t be issued.', 'newspack-plugin' ),
+						Group_Subscription::get_label_lower( 'singular' )
+					),
+					[ 'status' => 409 ]
+				)
+			);
+		}
 		$result = Group_Subscription_Invite::generate_link_invite( $subscription_id, get_current_user_id() );
 		return \rest_ensure_response( $result );
 	}

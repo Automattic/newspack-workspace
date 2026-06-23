@@ -65,7 +65,7 @@ const EmbedPreview = props => {
 					placeholder={ __( 'Add caption' ) }
 					value={ caption }
 					onChange={ props.onCaptionChange }
-					allowedFormats={ [ 'core/bold', 'core/italic', 'core/text-color' ] }
+					allowedFormats={ [ 'core/bold', 'core/italic', 'core/text-color', 'newspack-newsletters/merge-tag' ] }
 					inlineToolbar
 					__unstableOnSplitAtEnd={ () => props.insertBlocksAfter( createBlock( 'core/paragraph' ) ) }
 				/>

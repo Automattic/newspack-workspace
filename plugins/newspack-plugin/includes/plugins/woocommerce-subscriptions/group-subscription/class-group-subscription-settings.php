@@ -857,6 +857,9 @@ class Group_Subscription_Settings {
 	 * Register the publisher-configurable group label settings.
 	 */
 	public static function register_label_settings() {
+		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
+			return;
+		}
 		// Group name is unused (no settings_fields() form); registers sanitize_callback via update_option().
 		\register_setting(
 			'newspack_group_subscription',

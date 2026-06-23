@@ -229,6 +229,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/co-authors-plus/class-nicename-change.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/co-authors-plus/class-nicename-change-ui.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/co-authors-plus/class-co-authors-plus-rss-feed.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/co-authors-plus/class-co-authors-plus-count-user-posts-fix.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/co-authors-plus/class-search-authors-limit.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-complianz.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/wc-memberships/class-memberships.php';
@@ -244,12 +245,14 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-teams-for-memberships.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-newspack-elections.php';
 		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-yoast.php';
+		include_once NEWSPACK_ABSPATH . 'includes/plugins/class-parsely.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-primary-category.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/class-patches.php';
 		include_once NEWSPACK_ABSPATH . 'includes/polyfills/class-amp-polyfills.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-performance.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-default-image.php';
+		include_once NEWSPACK_ABSPATH . 'includes/class-default-templates.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/optional-modules/class-optional-modules.php';
 		include_once NEWSPACK_ABSPATH . 'includes/optional-modules/class-rss.php';

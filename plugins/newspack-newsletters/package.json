@@ -1,6 +1,6 @@
 {
 	"name": "newspack-newsletters",
-	"version": "3.33.6",
+	"version": "3.34.2",
 	"description": "",
 	"repository": {
 		"type": "git",
@@ -18,7 +18,7 @@
 		"build": "npm run clean && newspack-scripts wp-scripts build",
 		"start": "npm ci && npm run watch",
 		"watch": "npm run clean && newspack-scripts wp-scripts start",
-		"test": "echo 'No JS unit tests in this repository.'",
+		"test": "newspack-scripts test",
 		"lint": "npm run lint:scss && npm run lint:js",
 		"lint:js": "newspack-scripts wp-scripts lint-js '**/{src,includes}/**/*.{js,jsx,ts,tsx}'",
 		"lint:js:staged": "newspack-scripts wp-scripts lint-js --ext .js,.jsx,.ts,.tsx",
@@ -45,6 +45,7 @@
 		"classnames": "^2.5.1",
 		"mjml-browser": "^4.18.0",
 		"newspack-components": "workspace:*",
+		"newspack-icons": "workspace:*",
 		"qs": "^6.15.2"
 	},
 	"devDependencies": {

@@ -25,7 +25,13 @@ const JEST_CONFIG = {
 	transformIgnorePatterns: [
 		// Ignore all node_modules except for newspack-scripts, @wordpress/* packages, and
 		// some transitive dependencies which distribute ES6 modules.
-		'/node_modules/(?!(newspack-scripts|@wordpress|is-plain-obj|memize)/)',
+		//
+		// The optional `.pnpm/<name>@<ver>/node_modules/` segment makes the allowlist
+		// match under pnpm's nested store too: those packages resolve to a real path
+		// like `node_modules/.pnpm/@wordpress+components@30.9.0_.../node_modules/@wordpress/components/...`,
+		// where the leading `.pnpm/` segment would otherwise short-circuit the match
+		// and leave the ES module source un-transformed (jest "unexpected token").
+		'/node_modules/(?!(\\.pnpm/[^/]+/node_modules/)?(newspack-scripts|@wordpress|is-plain-obj|memize|uuid)/)',
 	],
 	moduleNameMapper: {
 		'\\.(scss|css)$': path.resolve( __dirname, 'utils/babelJestTransformer.js' ),

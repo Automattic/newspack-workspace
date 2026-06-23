@@ -21,9 +21,13 @@ class Content_Gate_API {
 	 * @var array
 	 */
 	public static $gate_properties = [
-		'title'         => [ 'type' => 'string' ],
-		'status'        => [ 'type' => 'string' ],
-		'metering'      => [
+		'title'               => [ 'type' => 'string' ],
+		'status'              => [ 'type' => 'string' ],
+		'content_rules_match' => [
+			'type' => 'string',
+			'enum' => [ 'all', 'any' ],
+		],
+		'metering'            => [
 			'type'       => 'object',
 			'properties' => [
 				'enabled'          => [ 'type' => 'boolean' ],
@@ -32,7 +36,7 @@ class Content_Gate_API {
 				'period'           => [ 'type' => 'string' ],
 			],
 		],
-		'content_rules' => [
+		'content_rules'       => [
 			'type'  => 'array',
 			'items' => [
 				'type'       => 'object',
@@ -43,7 +47,7 @@ class Content_Gate_API {
 				],
 			],
 		],
-		'registration'  => [
+		'registration'        => [
 			'type'       => 'object',
 			'properties' => [
 				'active'               => [ 'type' => 'boolean' ],
@@ -62,7 +66,7 @@ class Content_Gate_API {
 				],
 			],
 		],
-		'custom_access' => [
+		'custom_access'       => [
 			'type'       => 'object',
 			'properties' => [
 				'active'         => [ 'type' => 'boolean' ],
@@ -105,7 +109,7 @@ class Content_Gate_API {
 	 * @return array The sanitized gate.
 	 */
 	public static function sanitize_gate( $gate ) {
-		return [
+		$sanitized = [
 			'title'         => isset( $gate['title'] ) ? sanitize_text_field( $gate['title'] ) : __( 'Untitled Content Gate', 'newspack-plugin' ),
 			'priority'      => isset( $gate['priority'] ) ? intval( $gate['priority'] ) : 0,
 			'status'        => isset( $gate['status'] ) && ! empty( $gate['id'] ) ? self::sanitize_status( $gate['status'], $gate['id'] ) : 'draft',
@@ -113,6 +117,12 @@ class Content_Gate_API {
 			'registration'  => isset( $gate['registration'] ) ? self::sanitize_registration( $gate['registration'] ) : [],
 			'custom_access' => isset( $gate['custom_access'] ) ? self::sanitize_custom_access( $gate['custom_access'] ) : [],
 		];
+		// Only include the rule-combination mode when the request explicitly provided it,
+		// so an omitted field does not clobber an existing gate's stored mode on update.
+		if ( isset( $gate['content_rules_match'] ) ) {
+			$sanitized['content_rules_match'] = in_array( $gate['content_rules_match'], [ 'all', 'any' ], true ) ? $gate['content_rules_match'] : 'all';
+		}
+		return $sanitized;
 	}
 
 	/**

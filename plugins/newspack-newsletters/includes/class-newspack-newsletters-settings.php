@@ -26,12 +26,19 @@ class Newspack_Newsletters_Settings {
 	}
 
 	/**
-	 * Get newsletters settings url.
+	 * Get newsletters settings url. Mirrors `Admin_Shell::is_bundled_mode()`
+	 * — falls back to `class_exists` if Admin_Shell isn't loaded yet.
 	 *
 	 * @return string URL to settings page.
 	 */
 	public static function get_settings_url() {
-		$url = admin_url( 'edit.php?post_type=newspack_nl_cpt&page=newspack-newsletters-settings-admin' );
+		$is_bundled = class_exists( '\Newspack\Newsletters\Admin\Admin_Shell' )
+			? \Newspack\Newsletters\Admin\Admin_Shell::is_bundled_mode()
+			: class_exists( '\Newspack\Newspack' );
+		$page_slug  = $is_bundled
+			? 'newspack-newsletters-settings-admin'
+			: 'newspack-newsletters-settings';
+		$url        = admin_url( 'edit.php?post_type=newspack_nl_cpt&page=' . $page_slug );
 
 		/**
 		 * Filters the URL to the Newspack Newsletters settings page.
@@ -210,17 +217,22 @@ class Newspack_Newsletters_Settings {
 	}
 
 	/**
-	 * Add options page
+	 * Register the classic Settings page.
+	 *
+	 * URL and screen-base stay stable; the visible menu link is removed
+	 * so the React admin shell owns the entry.
 	 */
 	public static function add_plugin_page() {
+		$parent_slug = 'edit.php?post_type=' . Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT;
 		add_submenu_page(
-			'edit.php?post_type=' . Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+			$parent_slug,
 			esc_html__( 'Newsletters Settings', 'newspack-newsletters' ),
 			esc_html__( 'Settings', 'newspack-newsletters' ),
 			'manage_options',
 			'newspack-newsletters-settings-admin',
 			[ __CLASS__, 'create_admin_page' ]
 		);
+		remove_submenu_page( $parent_slug, 'newspack-newsletters-settings-admin' );
 	}
 
 	/**
