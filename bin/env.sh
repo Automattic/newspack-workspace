@@ -210,6 +210,7 @@ services:
       - .:/newspack-monorepo
       - ./plugins:/newspack-plugins
       - ./themes:/newspack-themes
+      - ./repos:/newspack-repos
 ${worktree_volumes}      - ./envs/${env_name}/html:/var/www/html
       - ./manager-html:/var/www/manager-html
       - ./additional-sites-html:/var/www/additional-sites-html
