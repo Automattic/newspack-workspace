@@ -1,3 +1,24 @@
+## newspack [6.43.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.5...newspack@6.43.6) (2026-06-23)
+
+
+### Bug Fixes
+
+* **google-site-kit:** add filter to override forced GA4 snippet ([704cfee](https://github.com/Automattic/newspack-workspace/commit/704cfeeac0dc2d5a3b66523198a57ed963e77f38))
+
+## newspack [6.43.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.4...newspack@6.43.5) (2026-06-23)
+
+
+### Bug Fixes
+
+* **google-site-kit:** mirror GA4 reader params to dataLayer for GTM ([dde1a0b](https://github.com/Automattic/newspack-workspace/commit/dde1a0b50eb8abd8c28ff5e0a263fe031cda03a1))
+
+## newspack [6.43.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.3...newspack@6.43.4) (2026-06-23)
+
+
+### Bug Fixes
+
+* **wc-memberships:** skip expiry filter for non-subscription memberships ([d0a399e](https://github.com/Automattic/newspack-workspace/commit/d0a399ee89c6dc787ea0377297ebc6a663f2cd46))
+
 ## newspack [6.43.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.2...newspack@6.43.3) (2026-06-19)
 
 
