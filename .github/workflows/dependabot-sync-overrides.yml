@@ -37,7 +37,21 @@ jobs:
     # manual edit most needs reconciling. PR author stays dependabot[bot].
     if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    # Single-sourced here so the loop-break gate (which matches HEAD's commit
+    # subject against this string) and the commit step that writes it can never
+    # drift apart. Job-level env is inherited by every step's run shell.
+    env:
+      SYNC_COMMIT_SUBJECT: 'build(deps): sync package.json pnpm.overrides with lockfile'
     steps:
+      # SECURITY INVARIANT (pull_request_target): this job is privileged --
+      # `contents: write` plus a PAT -- and it checks out an attacker-
+      # influenceable tree (anyone with write access can push to a Dependabot
+      # branch). Every step below MUST treat that tree as DATA ONLY: git
+      # plumbing, yaml.safe_load, json.load. NEVER execute anything from it --
+      # no `pnpm install`, no build, no lifecycle scripts. Running checked-out
+      # code here would hand it the PAT (the classic pull_request_target RCE).
+      # Keep this job read-as-data; do not add execution steps.
+      #
       # PAT, not GITHUB_TOKEN: a push from GITHUB_TOKEN does not re-fire CI on
       # the PR, which would leave required checks pending forever. Same reason
       # as dependabot-branch-auto-update.yml.
@@ -53,7 +67,6 @@ jobs:
         id: lockfile
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          SYNC_COMMIT_SUBJECT: 'build(deps): sync package.json pnpm.overrides with lockfile'
         run: |
           # Loop-break: gating on user.login (above) keeps the sync running
           # on the workflow's own PAT-authored push, so guard against a re-sync
@@ -156,9 +169,6 @@ jobs:
       - name: Commit and push
         if: steps.sync.outputs.changed == 'true'
         env:
-          # Keep this aligned with SYNC_COMMIT_SUBJECT in the loop-break gate
-          # above; the gate matches HEAD's subject against this exact string.
-          SYNC_COMMIT_SUBJECT: 'build(deps): sync package.json pnpm.overrides with lockfile'
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           git config user.name  'dependabot[bot]'
