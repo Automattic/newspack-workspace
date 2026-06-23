@@ -1735,7 +1735,7 @@ final class Reader_Activation {
 			<?php esc_html_e( 'Send code', 'newspack-plugin' ); ?>
 		</button>
 		<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close">
-			<?php esc_html_e( 'Go back', 'newspack-plugin' ); ?>
+			<?php esc_html_e( 'Skip for now', 'newspack-plugin' ); ?>
 		</button>
 		<?php
 		$content = ob_get_clean();
