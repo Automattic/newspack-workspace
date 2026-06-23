@@ -1,3 +1,10 @@
+## newspack-theme [2.23.4](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.3...newspack-theme@2.23.4) (2026-06-23)
+
+
+### Bug Fixes
+
+* **theme:** stop Custom Fields box overwriting editor post meta ([#375](https://github.com/Automattic/newspack-workspace/issues/375)) ([3738a64](https://github.com/Automattic/newspack-workspace/commit/3738a649164b80508530b75f4cd243b8cf0b94fa))
+
 ## newspack-theme [2.23.3](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.2...newspack-theme@2.23.3) (2026-06-19)
 
 

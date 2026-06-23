@@ -1,7 +1,7 @@
 <?php
 /**
  * Newspack Block Theme functions and definitions
- * Version: 1.28.4
+ * Version: 1.28.5
  *
  * @link https://developer.wordpress.org/themes/basics/theme-functions/
  *
@@ -15,7 +15,7 @@ if ( ! defined( 'NEWSPACK_BLOCK_THEME_FILE' ) ) {
 	define( 'NEWSPACK_BLOCK_THEME_FILE', __FILE__ );
 	define( 'NEWSPACK_BLOCK_THEME_FILE_PATH', plugin_dir_path( NEWSPACK_BLOCK_THEME_FILE ) );
 	define( 'NEWSPACK_BLOCK_THEME_URL', plugin_dir_url( NEWSPACK_BLOCK_THEME_FILE ) );
-	define( 'NEWSPACK_BLOCK_THEME_VERSION', '1.28.4' );
+	define( 'NEWSPACK_BLOCK_THEME_VERSION', '1.28.5' );
 }
 
 
