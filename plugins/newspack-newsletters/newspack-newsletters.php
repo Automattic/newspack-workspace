@@ -55,7 +55,7 @@ if ( file_exists( NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/vendor/autoload_packages.
 // Include main plugin resources.
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/class-newspack-newsletters-logger.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/email-renderers/class-feature-flag.php';
-require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/email-renderers/class-email-theme.php';
+require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/email-renderers/class-email-defaults.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/email-renderers/class-renderer-controller.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/email-renderers/class-editor-bootstrap.php';
 require_once NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/includes/service-providers/interface-newspack-newsletters-esp-service.php';

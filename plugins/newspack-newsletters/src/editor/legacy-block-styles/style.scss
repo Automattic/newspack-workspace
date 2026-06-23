@@ -11,8 +11,126 @@
 // `.editor-styles-wrapper .block-editor-block-list__layout` in `style.scss`, so
 // when both stylesheets load (flag off) the result is identical to before.
 
+// Font variable declarations and aliases — moved from `../style.scss` (Task 5).
+// Under flag-on these are absent so the theme's fonts flow through; under
+// flag-off this bundle restores them, keeping the MJML editor appearance intact.
+:root {
+	--newspack-newsletters-header-font: arial, sans-serif;
+	--newspack-newsletters-body-font: georgia, serif;
+	--newspack-header-font: var(--newspack-newsletters-header-font);
+	--newspack-body-font: var(--newspack-newsletters-body-font);
+}
+
 .editor-styles-wrapper {
+	.editor-post-title {
+		font-family: var(--newspack-newsletters-header-font);
+		line-height: 1.5;
+	}
+
 	.block-editor-block-list__layout {
+		// Font-size and spacing CSS custom property overrides — moved from
+		// `../style.scss` (Task 5). These de-fluid the size/spacing scale for
+		// the MJML render path; the WC renderer path handles these PHP-side via
+		// override_theme_json_for_email_editor.
+		--wp--preset--font-size--xx-small: 8px;
+		--wp--preset--font-size--x-small: 10px;
+		--wp--preset--font-size--small: 12px;
+		--wp--preset--font-size--normal: 16px;
+		--wp--preset--font-size--medium: 16px;
+		--wp--preset--font-size--large: 24px;
+		--wp--preset--font-size--x-large: 36px;
+		--wp--preset--font-size--huge: 36px;
+		--wp--preset--font-size--xx-large: 40px;
+		--wp--preset--font-size--xxx-large: 48px;
+		--wp--preset--font-size--xxxx-large: 56px;
+		--wp--preset--font-size--xxxxx-large: 64px;
+		--wp--preset--font-size--xxxxxx-large: 72px;
+
+		--wp--preset--spacing--20: 8px;
+		--wp--preset--spacing--30: 16px;
+		--wp--preset--spacing--40: 24px;
+		--wp--preset--spacing--50: 32px;
+		--wp--preset--spacing--60: 32px;
+		--wp--preset--spacing--70: 48px;
+		--wp--preset--spacing--80: 64px;
+
+		// Blanket font-family and line-height overrides — moved from
+		// `../style.scss` (Task 5). Forces georgia/arial regardless of theme;
+		// only applies when flag is off (MJML path).
+		* {
+			line-height: 1.5;
+
+			&:not(code) {
+				font-family: var(--newspack-newsletters-body-font);
+			}
+		}
+
+		.block-editor-block-list__block .components-placeholder,
+		.block-editor-block-list__block .components-placeholder div {
+			font-family: "Noto Serif", helvetica, arial, sans-serif;
+		}
+
+		h1,
+		h2,
+		h3,
+		h4,
+		h5,
+		h6 {
+			font-family: var(--newspack-newsletters-header-font);
+			line-height: 1.5;
+		}
+
+		h1 {
+			font-size: 2.44em;
+			line-height: 1.24;
+		}
+
+		h2 {
+			font-size: 1.95em;
+			line-height: 1.36;
+		}
+
+		h3 {
+			font-size: 1.56em;
+			line-height: 1.44;
+		}
+
+		h4 {
+			font-size: 1.25em;
+			line-height: 1.6;
+		}
+
+		h5 {
+			font-size: 1em;
+		}
+
+		h6 {
+			font-size: 0.8em;
+			line-height: 1.56;
+		}
+
+		a {
+			font-family: inherit;
+		}
+
+		code {
+			background: none;
+			color: inherit;
+		}
+
+		.wp-block-heading {
+			> span {
+				font-family: inherit;
+			}
+		}
+
+		.wp-block-group {
+			&.has-background {
+				padding-bottom: 0;
+				padding-top: 0;
+			}
+		}
+
 		.wp-block-buttons {
 			font-weight: bold;
 			text-align: center;

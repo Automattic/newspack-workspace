@@ -102,7 +102,7 @@ final class Newspack_Newsletters_Editor {
 	 */
 	public static function is_editing_email( $post_id = null ) {
 		$post_id = empty( $post_id ) ? get_the_ID() : $post_id;
-		return in_array( get_post_type( $post_id ), self::get_email_editor_cpts() );
+		return in_array( get_post_type( $post_id ), self::get_email_editor_cpts(), true );
 	}
 
 	/**
@@ -119,7 +119,7 @@ final class Newspack_Newsletters_Editor {
 		global $pagenow;
 		$email_editor_cpts = self::get_email_editor_cpts();
 		$is_editing_email  = 'post.php' === $pagenow && isset( $_GET['post'] ) && self::is_editing_email( absint( $_GET['post'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$is_creating_email = 'post-new.php' === $pagenow && isset( $_GET['post_type'] ) && in_array( $_GET['post_type'], $email_editor_cpts ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$is_creating_email = 'post-new.php' === $pagenow && isset( $_GET['post_type'] ) && is_string( $_GET['post_type'] ) && in_array( sanitize_key( wp_unslash( $_GET['post_type'] ) ), $email_editor_cpts, true ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		return $is_editing_email || $is_creating_email;
 	}
 
@@ -219,6 +219,17 @@ final class Newspack_Newsletters_Editor {
 			return;
 		}
 
+		// Theme-native editor: under the WC renderer, keep the theme's editor styles
+		// ONLY for block themes — they express block appearance via theme.json, which
+		// the WC email render also consumes, so the canvas and the email match (1:1).
+		// Classic themes style blocks via editor CSS the email render can't reproduce,
+		// so they keep stripping and fall back to theme.json + Newspack defaults (which
+		// both the canvas and the email use), preserving 1:1. The legacy MJML editor
+		// (flag off) always strips.
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() && wp_is_block_theme() ) {
+			return;
+		}
+
 		$allowed_actions = [
 			__CLASS__ . '::enqueue_block_assets',
 			'newspack_enqueue_scripts',
@@ -288,6 +299,13 @@ final class Newspack_Newsletters_Editor {
 		if ( ! self::is_email_editor_request() ) {
 			return;
 		}
+		// Theme-native editor: under the WC renderer, let theme.json drive block
+		// appearance (font sizes, spacing, layout, button) so the canvas matches
+		// the standard post editor. The legacy MJML editor keeps the email-safe
+		// overrides below.
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
+			return;
+		}
 		add_theme_support(
 			'editor-font-sizes',
 			[
@@ -328,6 +346,14 @@ final class Newspack_Newsletters_Editor {
 	 */
 	public static function override_theme_json_for_email_editor( $theme_json ) {
 		if ( ! self::is_email_editor_request() ) {
+			return $theme_json;
+		}
+
+		// Theme-native editor: under the WC renderer, let theme.json drive block
+		// appearance (font sizes, spacing, layout, button) so the canvas matches
+		// the standard post editor. The legacy MJML editor keeps the email-safe
+		// overrides below.
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
 			return $theme_json;
 		}
 
@@ -409,21 +435,7 @@ final class Newspack_Newsletters_Editor {
 			],
 		];
 
-		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
-			// WC renderer on: apply the canonical button to both classic and block
-			// themes so the editor canvas matches the rendered email everywhere.
-			// The button is not post-dependent, so apply it even when no post is
-			// resolvable (e.g. post-new.php or early theme.json evaluation). The
-			// primary color is resolved from the theme.json being filtered, because
-			// Lite_Site::get_primary_color() returns `currentcolor` inside this
-			// filter on block themes (see Email_Theme::resolve_primary_color()).
-			$primary = \Newspack\Newsletters\Email_Renderers\Email_Theme::resolve_primary_color( $theme_json );
-			$post    = get_post();
-			$email_overrides['styles'] = \Newspack\Newsletters\Email_Renderers\Email_Theme::canonical(
-				$post instanceof WP_Post ? $post : null,
-				$primary
-			)['styles'];
-		} elseif ( wp_is_block_theme() ) {
+		if ( wp_is_block_theme() ) {
 			// Legacy (flag off): only override button element styles for block
 			// themes — classic themes use their own neutral defaults and don't need
 			// the opinionated blue.

@@ -72,6 +72,10 @@ class Editor_Bootstrap {
 		// later priority than the package, which runs before core blocks register
 		// on init:10, so the override lands in time.
 		Block_Renderer_Registry::init();
+
+		// Inject Newspack fallback defaults at the theme.json `default` origin.
+		// This wires up the wp_theme_json_data_default filter (flag-gated + email-editor-request-gated).
+		Email_Defaults::init();
 	}
 
 	/**
