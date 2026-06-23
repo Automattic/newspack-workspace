@@ -124,6 +124,38 @@ class GoogleSiteKit {
 	}
 
 	/**
+	 * Whether Newspack should turn on Site Kit's GA4 gtag snippet during GA4 setup.
+	 *
+	 * Newspack enables the gtag snippet so its reader custom dimensions ride along with the
+	 * GA4 page_view. On a site that already tags GA4 through a Google Tag Manager container,
+	 * the gtag is a second GA4 page_view feed (duplicate counting); reader params also reach
+	 * GTM through the dataLayer (see print_data_layer_params), so the gtag is not required to
+	 * deliver them there.
+	 *
+	 * Defaults to true (enable the snippet). WordPress cannot see whether a placed GTM
+	 * container actually carries a GA4 tag, so leaving the gtag off by default would remove
+	 * GA4 entirely from any site whose GTM does not carry it. Newspack Manager, which observes
+	 * the real GA4 beacons, hooks the filter below to return false once it has confirmed a
+	 * container is independently sending GA4 for the property.
+	 *
+	 * @param string $measurement_id The GA4 measurement ID being set up, if known.
+	 * @return bool Whether to enable the GA4 gtag snippet.
+	 */
+	public static function should_force_ga4_snippet( string $measurement_id = '' ): bool {
+		/**
+		 * Filters whether Newspack turns on Site Kit's GA4 gtag snippet during GA4 setup.
+		 *
+		 * Return false to leave the gtag snippet off. Do so only when GA4 is known to be
+		 * tagged through another source (e.g. a GTM container that carries GA4), otherwise
+		 * the site will have no GA4 tag at all.
+		 *
+		 * @param bool   $force_snippet  Whether to enable the gtag snippet. Default true.
+		 * @param string $measurement_id The GA4 measurement ID being set up, if known.
+		 */
+		return (bool) apply_filters( 'newspack_googlesitekit_force_ga4_snippet', true, $measurement_id );
+	}
+
+	/**
 	 * Fetch data for the GA account data and set up GA4.
 	 */
 	public static function setup_sitekit_ga4() {
@@ -162,7 +194,7 @@ class GoogleSiteKit {
 				return;
 			}
 			$ga4_settings['ownerID']    = get_current_user_id();
-			$ga4_settings['useSnippet'] = true;
+			$ga4_settings['useSnippet'] = self::should_force_ga4_snippet( $ga4_settings['measurementID'] ?? '' );
 
 			$sitekit_ga4_option_name = self::get_sitekit_ga4_settings_option_name();
 			Logger::log( 'Updating Site Kit GA4 settings option.' );
