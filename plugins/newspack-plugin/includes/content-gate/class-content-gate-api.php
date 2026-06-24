@@ -112,7 +112,7 @@ class Content_Gate_API {
 		$sanitized = [
 			'title'         => isset( $gate['title'] ) ? sanitize_text_field( $gate['title'] ) : __( 'Untitled Content Gate', 'newspack-plugin' ),
 			'priority'      => isset( $gate['priority'] ) ? intval( $gate['priority'] ) : 0,
-			'status'        => isset( $gate['status'] ) && ! empty( $gate['id'] ) ? self::sanitize_status( $gate['status'], $gate['id'] ) : 'draft',
+			'status'        => isset( $gate['status'] ) ? self::sanitize_status( $gate['status'], $gate['id'] ?? 0 ) : 'draft',
 			'content_rules' => isset( $gate['content_rules'] ) ? self::sanitize_rules( $gate['content_rules'], 'content' ) : [],
 			'registration'  => isset( $gate['registration'] ) ? self::sanitize_registration( $gate['registration'] ) : [],
 			'custom_access' => isset( $gate['custom_access'] ) ? self::sanitize_custom_access( $gate['custom_access'] ) : [],

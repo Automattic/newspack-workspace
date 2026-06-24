@@ -10,6 +10,7 @@ import { __experimentalVStack as VStack, CardDivider } from '@wordpress/componen
 import { useDispatch } from '@wordpress/data';
 import { createInterpolateElement, useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { commentAuthorAvatar, currencyDollar, envelope, pencil, postList, settings } from '@wordpress/icons';
+import apiFetch from '@wordpress/api-fetch';
 
 /**
  * Internal dependencies
@@ -33,6 +34,9 @@ import MatchLogicToggle from './match-logic-toggle';
 import Registration from './registration';
 import CustomAccess from './custom-access';
 import { getEditGateLayoutUrl, getGateStatus, getGateStatusBadgeLevel } from '../utils';
+import { getGateSummarySections } from '../gate-summary';
+import SavePanel from './save-panel';
+import PreferencesModal from './preferences-modal';
 
 const { useHistory } = Router;
 
@@ -68,11 +72,14 @@ const getContentTypeFromRules = ( rules: GateContentRule[] ): 'all' | 'custom' |
 };
 
 const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SLUG, isNewsletter = false }: ContentGateEditProps ) => {
+	const [ defaultGateStatus, setDefaultGateStatus ] = useState< GateStatus >(
+		( ( window as any ).newspackAudienceContentGates?.default_gate_status as GateStatus ) || 'draft' // eslint-disable-line @typescript-eslint/no-explicit-any
+	);
 	const DEFAULT_GATE: Gate = {
 		id: 0,
 		title: '',
 		priority: 0,
-		status: 'publish',
+		status: defaultGateStatus,
 		content_rules: isNewsletter ? [ { slug: 'newsletters', value: [] } ] : [ { slug: 'post_types', value: [ 'post' ] } ],
 		content_rules_match: 'all',
 		registration: { active: false, metering: { enabled: false, count: 1, period: 'month' }, require_verification: false, gate_layout_id: 0 },
@@ -95,6 +102,12 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	const [ customAccess, setCustomAccess ] = useState< CustomAccess >( gate.custom_access );
 	const [ contentType, setContentType ] = useState< 'all' | 'custom' | undefined >( type as 'all' | 'custom' | undefined );
 	const [ status, setStatus ] = useState< GateStatus >( gate.status );
+	const [ showSavePanel, setShowSavePanel ] = useState< boolean >( false );
+	const [ showPreferences, setShowPreferences ] = useState< boolean >( false );
+	const [ presaveChecksEnabled, setPresaveChecksEnabled ] = useState< boolean >(
+		// wp_localize_script stringifies booleans ('1'/''), so coerce to a real boolean.
+		Boolean( ( window as any ).newspackAudienceContentGates?.presave_checks_enabled ?? true ) // eslint-disable-line @typescript-eslint/no-explicit-any
+	);
 	const isNew = _id === 'new' || ! id;
 	const isSaving = useRef( false );
 	const gatesRef = useRef< Gate[] >( gates );
@@ -132,7 +145,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	} );
 
 	const handleCreate = useCallback(
-		( redirectToLayout: '' | 'registration' | 'custom_access' = '' ) => {
+		( redirectToLayout: '' | 'registration' | 'custom_access' = '', statusOverride?: GateStatus ) => {
 			if ( isFetching ) {
 				return;
 			}
@@ -146,6 +159,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				content_rules_match: contentRulesMatch,
 				registration,
 				custom_access: customAccess,
+				status: statusOverride ?? status,
 			};
 			wizardApiFetch< Gate >(
 				{
@@ -178,49 +192,91 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		[ gate, contentRules, contentRulesMatch, registration, customAccess, status, title ]
 	);
 
-	const handleSave = useCallback( () => {
+	const handleSave = useCallback(
+		( statusOverride?: GateStatus ) => {
+			if ( isFetching ) {
+				return;
+			}
+			isSaving.current = true;
+			resetError();
+			resetNotices();
+			const gateTitle = title || gate.title;
+			const _gate = {
+				...gate,
+				title,
+				content_rules: contentRules,
+				content_rules_match: contentRulesMatch,
+				registration,
+				custom_access: customAccess,
+				status: statusOverride ?? status,
+			};
+			wizardApiFetch< Gate >(
+				{
+					path: `/newspack/v1/wizard/${ slug }/${ gate.id }`,
+					method: 'POST',
+					data: { gate: _gate },
+				},
+				{
+					onSuccess( data: Gate ) {
+						updateGatesData( gatesRef.current.map( g => ( g.id === data.id ? data : g ) ) );
+						history.push( '/content-gates' );
+						addNotice( {
+							message: sprintf(
+								// translators: %s is the gate title.
+								__( '%s gate updated.', 'newspack-plugin' ),
+								gateTitle ? `"${ gateTitle }"` : __( 'Content', 'newspack-plugin' )
+							),
+							type: 'success',
+							id: 'content-gate-updated',
+						} );
+					},
+					onFinally: () => {
+						isSaving.current = false;
+					},
+				}
+			);
+		},
+		[ gate, contentRules, contentRulesMatch, registration, customAccess, status, title ]
+	);
+
+	const handleSaveButtonClick = useCallback( () => {
 		if ( isFetching ) {
 			return;
 		}
-		isSaving.current = true;
-		resetError();
-		resetNotices();
-		const gateTitle = title || gate.title;
-		const _gate = {
-			...gate,
-			title,
-			content_rules: contentRules,
-			content_rules_match: contentRulesMatch,
-			registration,
-			custom_access: customAccess,
-			status,
-		};
-		wizardApiFetch< Gate >(
-			{
-				path: `/newspack/v1/wizard/${ slug }/${ gate.id }`,
-				method: 'POST',
-				data: { gate: _gate },
-			},
-			{
-				onSuccess( data: Gate ) {
-					updateGatesData( gatesRef.current.map( g => ( g.id === data.id ? data : g ) ) );
-					history.push( '/content-gates' );
-					addNotice( {
-						message: sprintf(
-							// translators: %s is the gate title.
-							__( '%s gate updated.', 'newspack-plugin' ),
-							gateTitle ? `"${ gateTitle }"` : __( 'Content', 'newspack-plugin' )
-						),
-						type: 'success',
-						id: 'content-gate-updated',
-					} );
-				},
-				onFinally: () => {
-					isSaving.current = false;
-				},
+		if ( ! presaveChecksEnabled ) {
+			if ( isNew ) {
+				handleCreate();
+			} else {
+				handleSave();
 			}
-		);
-	}, [ gate, contentRules, contentRulesMatch, registration, customAccess, status, title ] );
+			return;
+		}
+		setShowSavePanel( true );
+	}, [ isFetching, presaveChecksEnabled, isNew, handleCreate, handleSave ] );
+
+	const handleSaveConfirm = ( {
+		status: chosenStatus,
+		presaveChecksEnabled: keepChecks,
+	}: {
+		status: GateStatus;
+		presaveChecksEnabled: boolean;
+	} ) => {
+		setShowSavePanel( false );
+		if ( keepChecks !== presaveChecksEnabled ) {
+			setPresaveChecksEnabled( keepChecks );
+			( window as any ).newspackAudienceContentGates.presave_checks_enabled = keepChecks; // eslint-disable-line @typescript-eslint/no-explicit-any
+			apiFetch( {
+				path: `/newspack/v1/wizard/${ slug }/preferences`,
+				method: 'POST',
+				data: { presave_checks_enabled: keepChecks },
+			} ).catch( () => {} );
+		}
+		if ( isNew ) {
+			handleCreate( '', chosenStatus );
+		} else {
+			handleSave( chosenStatus );
+		}
+	};
 
 	const updateStatus = useRef< ( _status: GateStatus ) => void >();
 	const handleStatusChange = ( _status: GateStatus ) => {
@@ -244,7 +300,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			},
 			{
 				onSuccess( data: Gate ) {
-					updateGatesData( gates.map( g => ( g.id === data.id ? data : g ) ) );
+					updateGatesData( gatesRef.current.map( g => ( g.id === data.id ? data : g ) ) );
 					addNotice( {
 						message: sprintf(
 							// translators: 1: the gate title, or "Content" if we can't determine the gate title. 2: the gate status.
@@ -327,7 +383,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			setContentRulesMatch( 'all' );
 			setRegistration( DEFAULT_GATE.registration );
 			setCustomAccess( DEFAULT_GATE.custom_access );
-			setStatus( 'draft' );
+			setStatus( defaultGateStatus );
 			setContentType( 'all' );
 			history.push( `/edit/new/all` );
 			return;
@@ -350,9 +406,10 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			{
 				type: 'primary',
 				label: __( 'Save', 'newspack-plugin' ),
-				action: isNew ? () => handleCreate() : handleSave,
+				action: handleSaveButtonClick,
 				disabled:
 					isFetching ||
+					! isDirty ||
 					! title ||
 					! contentRules.length ||
 					( ! registration.active && ! customAccess.active ) ||
@@ -373,21 +430,12 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				action: () => setIsRenaming( true ),
 				disabled: isFetching || isRenaming,
 			} );
-			if ( gate.status !== 'publish' ) {
-				actions.push( {
-					type: 'more',
-					label: __( 'Activate', 'newspack-plugin' ),
-					action: () => updateStatus.current?.( 'publish' ),
-					disabled: isFetching,
-				} );
-			} else {
-				actions.push( {
-					type: 'more',
-					label: __( 'Deactivate', 'newspack-plugin' ),
-					action: () => updateStatus.current?.( 'draft' ),
-					disabled: isFetching,
-				} );
-			}
+			actions.push( {
+				type: 'more',
+				label: gate.status === 'publish' ? __( 'Set to inactive', 'newspack-plugin' ) : __( 'Set to active', 'newspack-plugin' ),
+				action: () => updateStatus.current?.( gate.status === 'publish' ? 'draft' : 'publish' ),
+				disabled: isFetching,
+			} );
 			actions.push( {
 				type: 'more',
 				label: __( 'Delete', 'newspack-plugin' ),
@@ -396,6 +444,13 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				destructive: true,
 			} );
 		}
+		actions.push( {
+			type: 'more',
+			label: __( 'Preferences', 'newspack-plugin' ),
+			action: () => setShowPreferences( true ),
+			disabled: isFetching,
+			separator: ! isNew,
+		} );
 		setHeaderData( {
 			actions,
 			badges: isNew ? [] : [ { label: getGateStatus( gate.status ), level: getGateStatusBadgeLevel( gate.status ) } ],
@@ -419,9 +474,12 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		gate.status,
 		handleCreate,
 		handleSave,
+		handleSaveButtonClick,
+		isDirty,
 		isFetching,
 		isNew,
 		isRenaming,
+		presaveChecksEnabled,
 		registration.active,
 		title,
 	] );
@@ -447,17 +505,42 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		}
 	}, [ errorMessage ] );
 
-	// Update gate status.
-	useEffect( () => {
-		if ( ! isNew && status !== gate.status ) {
-			updateStatus.current?.( status );
-		}
-	}, [ isNew, gate.status, status, updateStatus ] );
-
 	return (
 		<div className="newspack-content-gate__edit">
 			{ navBlockDialog }
 			{ deleteDialog }
+			{ showSavePanel && (
+				<SavePanel
+					initialStatus={ status }
+					presaveChecksEnabled={ presaveChecksEnabled }
+					isSaving={ isFetching }
+					summary={ getGateSummarySections(
+						{ ...gate, content_rules: contentRules, registration, custom_access: customAccess },
+						isNewsletter
+					) }
+					onCancel={ () => setShowSavePanel( false ) }
+					onConfirm={ handleSaveConfirm }
+				/>
+			) }
+			{ showPreferences && (
+				<PreferencesModal
+					slug={ slug }
+					presaveChecksEnabled={ presaveChecksEnabled }
+					defaultGateStatus={ defaultGateStatus }
+					onClose={ () => setShowPreferences( false ) }
+					onSaved={ ( { presaveChecksEnabled: nextChecks, defaultGateStatus: nextStatus } ) => {
+						setPresaveChecksEnabled( nextChecks );
+						setDefaultGateStatus( nextStatus );
+						( window as any ).newspackAudienceContentGates.presave_checks_enabled = nextChecks; // eslint-disable-line @typescript-eslint/no-explicit-any
+						( window as any ).newspackAudienceContentGates.default_gate_status = nextStatus; // eslint-disable-line @typescript-eslint/no-explicit-any
+						addNotice( {
+							message: __( 'Preferences saved.', 'newspack-plugin' ),
+							type: 'success',
+							id: 'content-gate-preferences-saved',
+						} );
+					} }
+				/>
+			) }
 			{ ( isNew || isRenaming ) && (
 				<>
 					<Grid columns={ 2 } gutter={ 32 }>

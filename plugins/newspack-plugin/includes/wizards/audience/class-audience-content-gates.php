@@ -97,6 +97,8 @@ class Audience_Content_Gates extends Wizard {
 				'available_access_rules'  => Access_Rules::get_access_rules(),
 				'available_content_rules' => Content_Rules::get_content_rules(),
 				'edit_gate_layout_url'    => Content_Gate::get_edit_gate_layout_url(),
+				'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
+				'default_gate_status'     => Content_Gate::get_default_new_gate_status(),
 			]
 		);
 
@@ -358,6 +360,27 @@ class Audience_Content_Gates extends Wizard {
 				],
 			]
 		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/preferences',
+			[
+				'methods'             => 'POST',
+				'callback'            => [ $this, 'update_preferences' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'presave_checks_enabled' => [
+						'type'              => 'boolean',
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+					'default_gate_status'    => [
+						'type'              => 'string',
+						'enum'              => [ 'publish', 'draft' ],
+						'validate_callback' => 'rest_validate_request_arg',
+					],
+				],
+			]
+		);
 	}
 
 	/**
@@ -524,6 +547,31 @@ class Audience_Content_Gates extends Wizard {
 			$updated_gates[] = $updated_gate;
 		}
 		return rest_ensure_response( $updated_gates );
+	}
+
+	/**
+	 * Update the content gate preferences.
+	 *
+	 * `presave_checks_enabled` is a per-user preference; `default_gate_status`
+	 * is a site-wide default applied to newly created gates.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 *
+	 * @return \WP_REST_Response
+	 */
+	public function update_preferences( $request ) {
+		if ( null !== $request->get_param( 'presave_checks_enabled' ) ) {
+			Content_Gate::set_presave_checks_enabled( (bool) $request->get_param( 'presave_checks_enabled' ) );
+		}
+		if ( null !== $request->get_param( 'default_gate_status' ) ) {
+			Content_Gate::set_default_new_gate_status( $request->get_param( 'default_gate_status' ) );
+		}
+		return rest_ensure_response(
+			[
+				'presave_checks_enabled' => Content_Gate::get_presave_checks_enabled(),
+				'default_gate_status'    => Content_Gate::get_default_new_gate_status(),
+			]
+		);
 	}
 
 	/**
