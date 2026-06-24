@@ -111,6 +111,12 @@
 
 		a {
 			font-family: inherit;
+			// Underline links — moved from `../style.scss`. This is an opinionated
+			// appearance rule, not structural: under flag-on the canvas lets link
+			// decoration flow from theme.json/core (so e.g. the site-title link is
+			// not underlined, matching the WC email and the standard post editor),
+			// while flag-off restores the legacy MJML underline here.
+			text-decoration: underline;
 		}
 
 		code {
@@ -255,6 +261,31 @@
 			&.is-style-large {
 				padding: 12px;
 			}
+		}
+
+		// Cancel the flag-on batch-C canvas↔email parity rules from `../style.scss`
+		// so the flag-off (MJML) canvas stays byte-identical to its pre-batch-C
+		// appearance. Those rules live in the always-enqueued `editor.css`; this
+		// bundle loads after it (flag-off only) at equal specificity, so restoring
+		// the prior values here wins. (`core/list` is already restored below via its
+		// own `padding: 6px 12px 6px 30px`, which overrides the flag-on
+		// `padding-left: 40px`.) The quote wrapper and site-title sizing have no
+		// pre-existing legacy rule, so reset them to their pre-batch-C values:
+		// the quote wrapper falls back to the generic `.wp-block` inset with no
+		// added border/size, and the site title inherits core's heading sizing.
+		.wp-block[data-type="core/quote"] {
+			padding: 6px 12px;
+			border-left-width: 0;
+			font-size: inherit;
+
+			.wp-block {
+				padding: 6px 12px;
+			}
+		}
+
+		h1.wp-block-site-title,
+		h2.wp-block-site-title {
+			font-size: inherit;
 		}
 
 		.wp-block {

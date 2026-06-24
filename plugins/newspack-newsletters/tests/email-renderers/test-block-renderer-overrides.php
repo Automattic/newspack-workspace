@@ -7,9 +7,11 @@
 
 use Newspack\Newsletters\Email_Renderers\Block_Renderer_Registry;
 use Newspack\Newsletters\Email_Renderers\Blocks\Column;
+use Newspack\Newsletters\Email_Renderers\Blocks\Quote;
 use Newspack\Newsletters\Email_Renderers\Editor_Bootstrap;
 use Newspack\Newsletters\Email_Renderers\Renderer_Controller;
 use Automattic\WooCommerce\EmailEditor\Integrations\Core\Renderer\Blocks\Column as Package_Column;
+use Automattic\WooCommerce\EmailEditor\Integrations\Core\Renderer\Blocks\Quote as Package_Quote;
 
 /**
  * Block Renderer Overrides Test.
@@ -254,5 +256,183 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 		// No per-column double-wrapper: a div.email-block-layout must never wrap a column td.
 		$double_wrappers = preg_match_all( '/<div class="email-block-layout"[^>]*>\s*<td class="block wp-block-column/', $html );
 		$this->assertSame( 0, $double_wrappers, 'Expected no column <td> to be wrapped in an extra div.email-block-layout (the f1 double-wrapper).' );
+	}
+
+	/**
+	 * The Newspack Quote renderer extends the package Quote renderer.
+	 *
+	 * The override must extend the package class (not just the abstract base) so
+	 * all the package's quote layout, border, and wrapper logic is inherited
+	 * unchanged. The cite parity fix is applied via theme.json filter, not
+	 * via render_content(), so the class is a structural shim that satisfies
+	 * the registry type-guard.
+	 */
+	public function test_quote_renderer_extends_package_quote() {
+		$this->assertTrue(
+			is_subclass_of( Quote::class, Package_Quote::class ),
+			'The Newspack Quote renderer must extend the package Quote so all layout logic is inherited.'
+		);
+	}
+
+	/**
+	 * A rendered quote cite does NOT carry font-style: italic.
+	 *
+	 * The package vendor theme.json declares `fontStyle: italic` for the cite
+	 * element inside core/quote. The editor canvas renders the cite upright
+	 * (font-style: normal), so the email must match. This test renders a
+	 * quote-with-cite through the real WC pipeline and confirms the cite's
+	 * inline style no longer contains font-style: italic while still carrying the
+	 * other citation styles (font-size, font-weight) that the package provides.
+	 */
+	public function test_quote_cite_is_not_italic() {
+		Editor_Bootstrap::init();
+
+		$content = '<!-- wp:quote --><blockquote class="wp-block-quote">'
+			. '<!-- wp:paragraph --><p>Quoted text here.</p><!-- /wp:paragraph -->'
+			. '<cite>A. Reporter</cite></blockquote><!-- /wp:quote -->';
+
+		$post_id = self::factory()->post->create(
+			[
+				'post_type'    => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_status'  => 'draft',
+				'post_title'   => 'Quote cite parity test',
+				'post_content' => $content,
+			]
+		);
+
+		$html = Renderer_Controller::render_wc( get_post( $post_id ) );
+
+		// The cite must be present with the citation class.
+		$this->assertStringContainsString( 'email-block-quote-citation', $html, 'Expected the citation wrapper class to be present.' );
+		$this->assertStringContainsString( 'A. Reporter', $html, 'Expected the citation text to survive.' );
+
+		// Extract the cite element's style and assert it does NOT contain italic.
+		preg_match( '/<cite class="email-block-quote-citation"[^>]*style="([^"]*)"/', $html, $matches );
+		$cite_style = $matches[1] ?? '';
+		$this->assertNotEmpty( $cite_style, 'Expected the cite to have an inline style attribute.' );
+		$this->assertStringNotContainsString( 'font-style: italic', $cite_style, 'Expected the cite NOT to carry font-style: italic (editor renders it upright).' );
+		$this->assertStringContainsString( 'font-style: normal', $cite_style, 'Expected the cite to carry font-style: normal to match the editor canvas.' );
+
+		// Other package-provided cite styles must still be present.
+		$this->assertStringContainsString( 'font-size: 13px', $cite_style, 'Expected the package font-size to be preserved.' );
+
+		// The quote table must carry the Newspack 2px left bar (not the package 1px).
+		$this->assertStringContainsString( 'border-width: 0 0 0 2px', $html, 'Expected the quote to carry a 2px left border to match the post editor.' );
+		$this->assertStringNotContainsString( 'border-width: 0 0 0 1px', $html, 'Expected the package 1px quote border to be overridden.' );
+	}
+
+	/**
+	 * The quote un-italic filter overrides the vendor cite italic in theme.json.
+	 *
+	 * The Core Initializer merges `core/quote.elements.cite.typography.fontStyle =
+	 * "italic"` at priority 10. The quote file registers a filter at priority 11
+	 * that merges `"normal"` so the CSS inliner sees `font-style: normal`. This
+	 * test simulates both filter calls in order and verifies the final merged
+	 * theme.json reports `normal` for the cite element.
+	 */
+	public function test_quote_theme_json_filter_overrides_vendor_italic() {
+		// The override is guarded to the newsletter CPT — set a newsletter as the
+		// global post so the filter's context check passes.
+		$newsletter_id   = self::factory()->post->create(
+			[ 'post_type' => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT ]
+		);
+		$GLOBALS['post'] = get_post( $newsletter_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		// Start with a base theme that mimics the Core Initializer's italic injection.
+		$theme = new \WP_Theme_JSON(
+			[
+				'version' => 3,
+				'styles'  => [
+					'blocks' => [
+						'core/quote' => [
+							'elements' => [
+								'cite' => [
+									'typography' => [
+										'fontStyle' => 'italic',
+									],
+								],
+							],
+						],
+					],
+				],
+			],
+			'default'
+		);
+
+		// The override filter runs at priority 11 (after the package defaults).
+		$theme = Quote::override_quote_email_styles( $theme );
+
+		unset( $GLOBALS['post'] );
+
+		// The merged theme must report normal for the cite font-style.
+		$raw        = $theme->get_raw_data();
+		$font_style = $raw['styles']['blocks']['core/quote']['elements']['cite']['typography']['fontStyle'] ?? '';
+		$this->assertSame( 'normal', $font_style, 'Expected the quote override filter to set the cite fontStyle to "normal".' );
+
+		// The merged theme must also report the Newspack 2px left border width.
+		$border_width = $raw['styles']['blocks']['core/quote']['border']['width'] ?? '';
+		$this->assertSame( Quote::BORDER_WIDTH, $border_width, 'Expected the quote override filter to set the 2px left border width.' );
+	}
+
+	/**
+	 * The quote override is a NO-OP outside the newsletter CPT context.
+	 *
+	 * `woocommerce_email_editor_theme_json` is a global hook shared with the
+	 * WooCommerce block-email editor. When the rendering post is not a newsletter
+	 * (here: a regular post, or no post at all), the override must return the theme
+	 * untouched so it never bleeds the Newspack quote styles into WC transactional
+	 * emails on a site running both editors.
+	 */
+	public function test_quote_override_is_no_op_for_non_newsletter_context() {
+		$base_styles = [
+			'version' => 3,
+			'styles'  => [
+				'blocks' => [
+					'core/quote' => [
+						'elements' => [
+							'cite' => [
+								'typography' => [
+									'fontStyle' => 'italic',
+								],
+							],
+						],
+					],
+				],
+			],
+		];
+
+		// Case 1: a non-newsletter post is the global post → no-op.
+		$regular_id      = self::factory()->post->create( [ 'post_type' => 'post' ] );
+		$GLOBALS['post'] = get_post( $regular_id ); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+		$theme_regular = Quote::override_quote_email_styles( new \WP_Theme_JSON( $base_styles, 'default' ) );
+		$raw_regular   = $theme_regular->get_raw_data();
+
+		$this->assertSame(
+			'italic',
+			$raw_regular['styles']['blocks']['core/quote']['elements']['cite']['typography']['fontStyle'] ?? '',
+			'On a non-newsletter post the override must not touch the cite fontStyle.'
+		);
+		$this->assertArrayNotHasKey(
+			'border',
+			$raw_regular['styles']['blocks']['core/quote'] ?? [],
+			'On a non-newsletter post the override must not add the Newspack border.'
+		);
+
+		// Case 2: no post in context at all → also a no-op.
+		unset( $GLOBALS['post'] );
+		$theme_none = Quote::override_quote_email_styles( new \WP_Theme_JSON( $base_styles, 'default' ) );
+		$raw_none   = $theme_none->get_raw_data();
+
+		$this->assertSame(
+			'italic',
+			$raw_none['styles']['blocks']['core/quote']['elements']['cite']['typography']['fontStyle'] ?? '',
+			'With no post in context the override must not touch the cite fontStyle.'
+		);
+		$this->assertArrayNotHasKey(
+			'border',
+			$raw_none['styles']['blocks']['core/quote'] ?? [],
+			'With no post in context the override must not add the Newspack border.'
+		);
 	}
 }

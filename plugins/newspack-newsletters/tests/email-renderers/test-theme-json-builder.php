@@ -185,6 +185,9 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	 * Unsupported or empty font meta falls back to the default font stacks.
 	 */
 	public function test_font_meta_falls_back_to_defaults_when_unsupported() {
+		if ( function_exists( 'newspack_font_stack' ) ) {
+			$this->markTestSkipped( 'Theme font fn present; unsupported meta resolves to the theme stack, not the hardcoded fallback.' );
+		}
 		$post_id = self::factory()->post->create();
 		update_post_meta( $post_id, 'font_header', 'Comic Sans' );
 		update_post_meta( $post_id, 'font_body', '' );

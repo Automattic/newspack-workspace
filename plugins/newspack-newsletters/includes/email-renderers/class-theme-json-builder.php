@@ -78,8 +78,13 @@ class Theme_Json_Builder {
 		$background = \sanitize_hex_color( (string) \get_post_meta( $post->ID, 'background_color', true ) );
 		$text       = \sanitize_hex_color( (string) \get_post_meta( $post->ID, 'text_color', true ) );
 
-		$header_font = self::resolve_font( (string) \get_post_meta( $post->ID, 'font_header', true ), self::DEFAULT_HEADER_FONT );
-		$body_font   = self::resolve_font( (string) \get_post_meta( $post->ID, 'font_body', true ), self::DEFAULT_BODY_FONT );
+		// Resolve fonts through the shared precedence chain: explicit newsletter
+		// meta → global styles → active theme fonts → hardcoded default. An
+		// un-customized newsletter therefore inherits the theme's fonts (matching
+		// the standard post editor) instead of the hardcoded Arial/Georgia.
+		$fonts       = Fonts::resolve( $post );
+		$header_font = $fonts['header'];
+		$body_font   = $fonts['body'];
 
 		$settings = [
 			'spacing'    => [
@@ -327,20 +332,6 @@ class Theme_Json_Builder {
 
 		// Anything else (percentages, vw, unresolvable, etc.) is not email-safe.
 		return null;
-	}
-
-	/**
-	 * Resolve a font meta value to a supported font stack, or a default.
-	 *
-	 * @param string $font    Stored font meta value.
-	 * @param string $fallback Default stack when the value is empty/unsupported.
-	 * @return string
-	 */
-	private static function resolve_font( string $font, string $fallback ): string {
-		if ( $font && \in_array( $font, \Newspack_Newsletters::$supported_fonts, true ) ) {
-			return $font;
-		}
-		return $fallback;
 	}
 
 	/**

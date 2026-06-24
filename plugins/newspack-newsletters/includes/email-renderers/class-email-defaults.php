@@ -53,6 +53,7 @@ class Email_Defaults {
 			return;
 		}
 		add_filter( 'wp_theme_json_data_default', [ __CLASS__, 'inject_button_border_radius' ] );
+		add_filter( 'wp_theme_json_data_default', [ __CLASS__, 'inject_fonts' ] );
 	}
 
 	/**
@@ -96,5 +97,75 @@ class Email_Defaults {
 				],
 			]
 		);
+	}
+
+	/**
+	 * Inject the resolved newsletter body/header fonts at the default origin.
+	 *
+	 * This makes the editor canvas show the same fonts the rendered email uses
+	 * for an un-customized newsletter — by default the active theme's fonts,
+	 * matching the standard post editor. Injecting at the `default` origin (this
+	 * filter fires before `_theme`/`_user`) means any global-styles or
+	 * theme-origin font family still overrides it: that is exactly the "unless
+	 * global fonts are set" requirement.
+	 *
+	 * Guarded identically to inject_button_border_radius(): WC renderer flag on
+	 * AND an email-editor request. is_email_editor_request() is also true on
+	 * post-new.php (create), where there is no post yet — in that case fonts are
+	 * resolved with empty meta (global → theme → default), so a brand-new
+	 * newsletter's canvas still shows the resolved theme fonts instead of the
+	 * hardcoded builder defaults.
+	 *
+	 * @param \WP_Theme_JSON_Data $theme_json Incoming default theme.json data.
+	 * @return \WP_Theme_JSON_Data Potentially modified default theme.json data.
+	 */
+	public static function inject_fonts( \WP_Theme_JSON_Data $theme_json ): \WP_Theme_JSON_Data {
+		if ( ! Feature_Flag::is_enabled() ) {
+			return $theme_json;
+		}
+
+		if ( ! \Newspack_Newsletters_Editor::is_email_editor_request() ) {
+			return $theme_json;
+		}
+
+		// On post-new.php there is no editing post yet; resolve() accepts null and
+		// skips the per-post meta step, running the global → theme → default chain.
+		$fonts = Fonts::resolve( self::get_editing_post() );
+
+		return $theme_json->update_with(
+			[
+				'version' => 3,
+				'styles'  => [
+					'typography' => [
+						'fontFamily' => $fonts['body'],
+					],
+					'elements'   => [
+						'heading' => [
+							'typography' => [
+								'fontFamily' => $fonts['header'],
+							],
+						],
+					],
+				],
+			]
+		);
+	}
+
+	/**
+	 * Resolve the newsletter post currently being edited, if any.
+	 *
+	 * Reads the `post` URL param (the same signal is_email_editor_request()
+	 * validates for post.php). Returns null on post-new.php / when absent so the
+	 * caller can skip injection gracefully.
+	 *
+	 * @return \WP_Post|null The post being edited, or null.
+	 */
+	private static function get_editing_post(): ?\WP_Post {
+		$post_id = isset( $_GET['post'] ) ? \absint( $_GET['post'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! $post_id ) {
+			return null;
+		}
+		$post = \get_post( $post_id );
+		return $post instanceof \WP_Post ? $post : null;
 	}
 }

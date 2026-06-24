@@ -79,10 +79,6 @@
 			}
 		}
 
-		a {
-			text-decoration: underline;
-		}
-
 		a:not(:is(.wp-block-paragraph.has-link-color a, .wp-block-paragraph.has-link-color * a)) {
 			color: inherit;
 		}
@@ -158,6 +154,31 @@
 				padding: 0;
 			}
 
+			// Batch C canvas↔email parity. On a classic theme the canvas otherwise
+			// falls to WP-core editor defaults (common.css / block-library theme.css)
+			// plus this generic `.wp-block` inset, which under-render these blocks
+			// relative to the WC email output (e.g. the list loses its bullet indent,
+			// the quote shows core's 4px rule, the site title renders smaller). Align
+			// the canvas to the rendered email so the preview is accurate. This is a
+			// targeted patch for the batch-C blocks; theme-agnostic canvas/theme.json
+			// parity is tracked separately.
+			&[data-type="core/list"] {
+				padding-left: 40px;
+			}
+
+			&[data-type="core/quote"] {
+				padding: 20px;
+				border-left-width: 2px;
+				font-size: 20px;
+
+				// The quote's own 20px padding already insets its contents to match
+				// the email; zero the generic `.wp-block` inset on the inner blocks so
+				// the text isn't double-padded (email inner paragraph has no padding).
+				.wp-block {
+					padding: 0;
+				}
+			}
+
 			&[data-align="full"] {
 				margin: 0;
 				padding: 0;
@@ -168,6 +189,17 @@
 				}
 			}
 		}
+		// Batch C canvas↔email parity for the site title: its block data-type sits on
+		// the heading element itself, so size it by tag + class (not a descendant) to
+		// match the email render (h1 40px / h2 32px).
+		h1.wp-block-site-title {
+			font-size: 40px;
+		}
+
+		h2.wp-block-site-title {
+			font-size: 32px;
+		}
+
 		.has-xx-small-font-size {
 			font-size: var(--wp--preset--font-size--xx-small);
 		}

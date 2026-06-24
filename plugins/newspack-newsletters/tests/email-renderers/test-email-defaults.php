@@ -73,6 +73,7 @@ class Test_Email_Defaults extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		delete_option( Feature_Flag::OPTION );
+		\Newspack\Newsletters\Email_Renderers\Fonts::reset_memo();
 
 		if ( null === $this->saved_pagenow ) {
 			unset( $GLOBALS['pagenow'] );
@@ -225,6 +226,102 @@ class Test_Email_Defaults extends WP_UnitTestCase {
 	// -------------------------------------------------------------------------
 	// Merge order: theme-origin radius wins over default-origin.
 	// -------------------------------------------------------------------------
+
+	/**
+	 * Pull a font-family out of a WP_Theme_JSON_Data.
+	 *
+	 * @param \WP_Theme_JSON_Data $data Theme.json data.
+	 * @param string              $side 'body' or 'header'.
+	 * @return string|null Font family value or null if absent.
+	 */
+	private function get_font( \WP_Theme_JSON_Data $data, string $side ) {
+		$raw = $data->get_data();
+		if ( 'header' === $side ) {
+			return $raw['styles']['elements']['heading']['typography']['fontFamily'] ?? null;
+		}
+		return $raw['styles']['typography']['fontFamily'] ?? null;
+	}
+
+	// -------------------------------------------------------------------------
+	// Font injection guards + behaviour.
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Flag OFF → font injection is a no-op (MJML path unchanged).
+	 */
+	public function test_fonts_no_op_when_flag_is_off() {
+		$this->simulate_email_editor_request();
+
+		$data   = $this->make_empty_default_data();
+		$result = Email_Defaults::inject_fonts( $data );
+
+		$this->assertNull( $this->get_font( $result, 'body' ), 'Body font must not inject when flag is off.' );
+		$this->assertNull( $this->get_font( $result, 'header' ), 'Header font must not inject when flag is off.' );
+	}
+
+	/**
+	 * Flag ON but not an email-editor request → font injection is a no-op.
+	 */
+	public function test_fonts_no_op_when_not_email_editor_request() {
+		update_option( Feature_Flag::OPTION, '1' );
+		global $pagenow;
+		$pagenow = 'index.php';
+
+		$data   = $this->make_empty_default_data();
+		$result = Email_Defaults::inject_fonts( $data );
+
+		$this->assertNull( $this->get_font( $result, 'body' ) );
+		$this->assertNull( $this->get_font( $result, 'header' ) );
+	}
+
+	/**
+	 * Flag ON + email-editor request → resolved body/header fonts are injected
+	 * at the default origin so global/theme fonts can still override them.
+	 */
+	public function test_fonts_injected_when_flag_on_and_email_editor() {
+		update_option( Feature_Flag::OPTION, '1' );
+		$this->simulate_email_editor_request();
+
+		$data   = $this->make_empty_default_data();
+		$result = Email_Defaults::inject_fonts( $data );
+
+		$expected = \Newspack\Newsletters\Email_Renderers\Fonts::resolve( get_post( self::$newsletter_post_id ) );
+
+		$this->assertSame( $expected['body'], $this->get_font( $result, 'body' ) );
+		$this->assertSame( $expected['header'], $this->get_font( $result, 'header' ) );
+	}
+
+	/**
+	 * A theme-origin font must win over the Newspack default-origin font, proving
+	 * the "unless global/theme fonts are set" semantics of the default origin.
+	 */
+	public function test_theme_origin_font_wins_over_default() {
+		update_option( Feature_Flag::OPTION, '1' );
+		$this->simulate_email_editor_request();
+
+		$default_data  = $this->make_empty_default_data();
+		$injected_data = Email_Defaults::inject_fonts( $default_data );
+		$default_theme = new \WP_Theme_JSON( $injected_data->get_data(), 'default' );
+
+		$theme_json = new \WP_Theme_JSON(
+			[
+				'version' => 3,
+				'styles'  => [ 'typography' => [ 'fontFamily' => 'ThemeBody, sans-serif' ] ],
+			],
+			'theme'
+		);
+
+		$default_theme->merge( $theme_json );
+
+		$raw    = $default_theme->get_raw_data();
+		$result = $raw['styles']['typography']['fontFamily'] ?? null;
+
+		$this->assertSame(
+			'ThemeBody, sans-serif',
+			$result,
+			'A theme-origin body font must override the Newspack default-origin font after merge.'
+		);
+	}
 
 	/**
 	 * A theme-origin button radius must win over the Newspack default-origin value.
