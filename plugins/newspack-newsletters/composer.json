@@ -9,16 +9,12 @@
 		"automattic/vipwpcs": "^3.0",
 		"wp-coding-standards/wpcs": "^3.0",
 		"phpcompatibility/phpcompatibility-wp": "^2.1",
-		"brainmaestro/composer-git-hooks": "^3.0",
 		"dealerdirect/phpcodesniffer-composer-installer": "^1.0.0",
 		"yoast/phpunit-polyfills": "^4.0",
 		"phpunit/phpunit": "^9.5"
 	},
 	"license": "GPL-2.0-or-later",
 	"scripts": {
-		"post-install-cmd": [
-			"vendor/bin/cghooks add --no-lock"
-		],
 		"post-update-cmd": [
 			"vendor/bin/cghooks update"
 		],
@@ -26,17 +22,7 @@
 			"XDEBUG_MODE=coverage vendor/bin/phpunit --coverage-html codecov"
 		]
 	},
-	"extra": {
-		"hooks": {
-			"pre-commit": [
-				"./node_modules/.bin/lint-staged"
-			],
-			"pre-push": "./.hooks/pre-push",
-			"commit-msg": [
-				"cat $1 | ./node_modules/.bin/newspack-scripts commitlint"
-			]
-		}
-	},
+	"extra": {},
 	"config": {
 		"platform": {
 			"php": "8.3"

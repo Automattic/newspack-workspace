@@ -447,20 +447,37 @@ class Integrations {
 				continue;
 			}
 			$result[ $id ] = [
-				'id'          => $id,
-				'name'        => $integration->get_name(),
-				'description' => $integration->get_description(),
-				'enabled'     => self::is_enabled( $id ),
-				'is_set_up'   => $integration->is_set_up(),
-				'setup_url'   => $integration->get_setup_url(),
-				'settings'    => $integration->get_settings_config(),
+				'id'               => $id,
+				'name'             => $integration->get_name(),
+				'description'      => $integration->get_description(),
+				'enabled'          => self::is_enabled( $id ),
+				'is_set_up'        => $integration->is_set_up(),
+				'setup_url'        => $integration->get_setup_url(),
+				'settings'         => $integration->get_settings_config(),
+				'required_plugins' => $integration->get_required_plugins(),
 			];
 		}
-		return $result;
+
+		/**
+		 * Filters the integration settings list shown in the Audience → Integrations UI.
+		 *
+		 * Lets a registered integration hide another's card when a takeover is in
+		 * effect (e.g. a vendor-specific ESP integration superseding the built-in
+		 * one).
+		 *
+		 * @param array $result Keyed array of integration settings.
+		 */
+		return apply_filters( 'newspack_reader_activation_integration_settings', $result );
 	}
 
 	/**
-	 * Update settings for a specific integration.
+	 * Update settings for a specific integration from an admin REST request.
+	 *
+	 * Skips fields whose type is managed server-side (see
+	 * Integration::MANAGED_FIELD_TYPES — e.g., 'oauth', 'hidden') so admin
+	 * clients can't overwrite tokens or other programmatically-managed values
+	 * by POSTing them in the settings payload. Server-side writers continue
+	 * to use Integration::update_settings_field_value() directly.
 	 *
 	 * @param string $integration_id The integration ID.
 	 * @param array  $settings       Key-value pairs of settings to update.
@@ -472,6 +489,9 @@ class Integrations {
 			return null;
 		}
 		foreach ( $settings as $key => $value ) {
+			if ( $integration->is_managed_settings_field( $key ) ) {
+				continue;
+			}
 			$integration->update_settings_field_value( $key, $value );
 		}
 		return true;

@@ -55,28 +55,32 @@ export default function OverlayMenuTriggerEdit( { attributes, setAttributes, cli
 		<>
 			<PanelPreviewToggle isOpen={ isPanelOpen } onToggle={ () => panelToggles.get( parentClientId )?.() } />
 
-			<button
-				{ ...blockProps }
-				type="button"
-				aria-label={ triggerText || __( 'Menu', 'newspack-plugin' ) }
-				aria-controls={ instanceId ? `newspack-overlay-panel-${ instanceId }` : undefined }
-				onClick={ e => e.preventDefault() }
-			>
-				{ showTriggerIcon && (
-					<span className="overlay-menu__icon" aria-hidden="true">
-						{ menuIcon }
-					</span>
-				) }
-				<RichText
-					tagName="span"
-					className={ isIconOnly ? 'screen-reader-text' : undefined }
-					aria-label={ __( 'Button text', 'newspack-plugin' ) }
-					placeholder={ __( 'Menu', 'newspack-plugin' ) }
-					value={ triggerText }
-					onChange={ val => setAttributes( { triggerText: stripHTML( val ) } ) }
-					withoutInteractiveFormatting
-				/>
-			</button>
+			<div className="wp-block-buttons is-layout-flex">
+				<div className="wp-block-button">
+					<button
+						{ ...blockProps }
+						type="button"
+						aria-controls={ instanceId ? `newspack-overlay-panel-${ instanceId }` : undefined }
+						aria-label={ ! triggerText || ! triggerText.trim() ? __( 'Menu', 'newspack-plugin' ) : undefined }
+						onClick={ e => e.preventDefault() }
+					>
+						{ showTriggerIcon && (
+							<span className="overlay-menu__icon" aria-hidden="true">
+								{ menuIcon }
+							</span>
+						) }
+						<RichText
+							tagName="span"
+							className={ isIconOnly ? 'screen-reader-text' : undefined }
+							aria-label={ __( 'Button text', 'newspack-plugin' ) }
+							placeholder={ __( 'Menu', 'newspack-plugin' ) }
+							value={ triggerText }
+							onChange={ val => setAttributes( { triggerText: stripHTML( val ) } ) }
+							withoutInteractiveFormatting
+						/>
+					</button>
+				</div>
+			</div>
 		</>
 	);
 }

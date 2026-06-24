@@ -20,6 +20,22 @@ require_once dirname( __DIR__, 2 ) . '/mocks/newsletters-mocks.php';
 class Test_ESP extends \WP_UnitTestCase {
 
 	/**
+	 * Whether a test mutated the cached get_plugins() result. tear_down deletes
+	 * the cache when set, so the next caller rescans the real plugin directory.
+	 *
+	 * @var bool
+	 */
+	private $plugins_cache_dirty = false;
+
+	/**
+	 * Snapshot of the `active_plugins` option taken before a test mutates it,
+	 * so tear_down can restore the original value.
+	 *
+	 * @var array|null
+	 */
+	private $original_active_plugins = null;
+
+	/**
 	 * Cleanup state set up by individual tests so failures don't leak across cases.
 	 */
 	public function tear_down() {
@@ -27,7 +43,53 @@ class Test_ESP extends \WP_UnitTestCase {
 		remove_all_filters( 'newspack_ras_metadata_keys' );
 		remove_all_filters( 'newspack_ras_metadata_prefix' );
 		\delete_option( 'newspack_integration_incoming_fields_esp' );
+		if ( $this->plugins_cache_dirty ) {
+			\wp_cache_delete( 'plugins', 'plugins' );
+			$this->plugins_cache_dirty = false;
+		}
+		if ( null !== $this->original_active_plugins ) {
+			\update_option( 'active_plugins', $this->original_active_plugins );
+			$this->original_active_plugins = null;
+		}
+		\Newspack\Plugin_Manager::reset_managed_plugin_status_cache();
 		parent::tear_down();
+	}
+
+	/**
+	 * Stub Plugin_Manager::get_managed_plugin_status() for the newspack-newsletters
+	 * slug by pre-populating the cached get_plugins() result and the active_plugins option.
+	 *
+	 * Core's get_plugins() short-circuits on its `plugins` cache key in the `plugins`
+	 * group, so writing into that cache bypasses the real filesystem scan. The
+	 * all_plugins filter does NOT cover this path — it only fires from the admin
+	 * plugins list table.
+	 *
+	 * @param string $status One of 'active', 'inactive', 'uninstalled'.
+	 */
+	private function stub_newsletters_status( $status ) {
+		if ( ! function_exists( 'get_plugins' ) ) {
+			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		$plugin_file                   = 'newspack-newsletters/newspack-newsletters.php';
+		$this->original_active_plugins = \get_option( 'active_plugins', [] );
+
+		$plugins = \get_plugins();
+		if ( 'uninstalled' === $status ) {
+			unset( $plugins[ $plugin_file ] );
+		} else {
+			$plugins[ $plugin_file ] = [
+				'Name'    => 'Newspack Newsletters',
+				'Version' => '1.0.0',
+			];
+		}
+		\wp_cache_set( 'plugins', [ '' => $plugins ], 'plugins' );
+		$this->plugins_cache_dirty = true;
+
+		\update_option(
+			'active_plugins',
+			'active' === $status ? [ $plugin_file ] : []
+		);
 	}
 
 	/**
@@ -407,5 +469,49 @@ class Test_ESP extends \WP_UnitTestCase {
 		$this->assertIsArray( $result );
 		$this->assertCount( 1, $result );
 		$this->assertSame( 'good', $result[0]->get_key() );
+	}
+
+	/**
+	 * Active newspack-newsletters maps to is_active=true, is_installed=true so the
+	 * integrations UI shows the normal Enable/Connect action, not the requirements badge.
+	 */
+	public function test_get_required_plugins_reports_active_state() {
+		$this->stub_newsletters_status( 'active' );
+
+		$required = ( new ESP() )->get_required_plugins();
+
+		$this->assertCount( 1, $required );
+		$this->assertSame( 'newspack-newsletters', $required[0]['slug'] );
+		$this->assertSame( 'Newspack Newsletters', $required[0]['name'] );
+		$this->assertTrue( $required[0]['is_active'] );
+		$this->assertTrue( $required[0]['is_installed'] );
+	}
+
+	/**
+	 * Installed-but-inactive newspack-newsletters maps to is_active=false, is_installed=true
+	 * so the integrations UI shows the Activate remediation button.
+	 */
+	public function test_get_required_plugins_reports_inactive_state() {
+		$this->stub_newsletters_status( 'inactive' );
+
+		$required = ( new ESP() )->get_required_plugins();
+
+		$this->assertCount( 1, $required );
+		$this->assertFalse( $required[0]['is_active'] );
+		$this->assertTrue( $required[0]['is_installed'] );
+	}
+
+	/**
+	 * Absent newspack-newsletters maps to is_active=false, is_installed=false so the
+	 * integrations UI falls back to a disabled "Requires …" affordance.
+	 */
+	public function test_get_required_plugins_reports_uninstalled_state() {
+		$this->stub_newsletters_status( 'uninstalled' );
+
+		$required = ( new ESP() )->get_required_plugins();
+
+		$this->assertCount( 1, $required );
+		$this->assertFalse( $required[0]['is_active'] );
+		$this->assertFalse( $required[0]['is_installed'] );
 	}
 }

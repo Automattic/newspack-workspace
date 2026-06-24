@@ -33,7 +33,9 @@ LEGACY_REPOS=(
   newspack-listings:plugins/newspack-listings
   newspack-sponsors:plugins/newspack-sponsors
   newspack-story-budget:plugins/newspack-story-budget
-  super-cool-ad-inserter-plugin:plugins/super-cool-ad-inserter-plugin
+  # super-cool-ad-inserter is no longer synced: its legacy repo is frozen and
+  # the monorepo dir was renamed from super-cool-ad-inserter-plugin to its
+  # wp.org canonical slug, so the old path/name no longer maps cleanly.
   republication-tracker-tool:plugins/republication-tracker-tool
   newspack-theme:themes/newspack-theme
   newspack-block-theme:themes/newspack-block-theme

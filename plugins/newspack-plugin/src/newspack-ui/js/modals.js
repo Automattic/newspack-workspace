@@ -77,6 +77,20 @@ domReady( function () {
 			} );
 		} );
 
+		// Form-submit modals: show a spinner on the submit button while the form
+		// navigates away. No need to remove the class — page reloads. Covers both
+		// shapes: form IS the modal content, or form lives inside a content section.
+		const modalForm = modal.querySelector( 'form.newspack-ui__modal__content, .newspack-ui__modal__content form' );
+		if ( modalForm ) {
+			modalForm.addEventListener( 'submit', () => {
+				const submitButton = modalForm.querySelector( 'button[type="submit"]' );
+				if ( submitButton ) {
+					submitButton.classList.add( 'newspack-ui__button--loading' );
+					submitButton.setAttribute( 'disabled', 'true' );
+				}
+			} );
+		}
+
 		const fetchButtons = [ ...modal.querySelectorAll( '[data-fetch]' ) ];
 		fetchButtons.forEach( fetchButton => {
 			fetchButton.addEventListener( 'click', e => {
@@ -87,7 +101,8 @@ domReady( function () {
 						errors.parentElement.removeChild( errors );
 					}
 					e.preventDefault();
-					e.target.setAttribute( 'disabled', true );
+					fetchButton.setAttribute( 'disabled', true );
+					fetchButton.classList.add( 'newspack-ui__button--loading' );
 					fetch( fetchData.url, {
 						method: fetchData.method,
 						body: JSON.stringify( fetchData.body || {} ),
@@ -95,8 +110,8 @@ domReady( function () {
 							'X-WP-Nonce': fetchData.nonce,
 						},
 					} )
-						.then( response => {
-							const json = response.json();
+						.then( async response => {
+							const json = await response.json();
 							if ( ! response.ok || json.error ) {
 								throw new Error( json.message || json.error || 'An error occurred. Please try again.' );
 							}
@@ -118,9 +133,8 @@ domReady( function () {
 							content.insertBefore( errorsDiv, content.firstChild );
 						} )
 						.finally( () => {
-							e.target.removeAttribute( 'disabled' );
-							e.target.classList.remove( 'newspack-ui--loading' );
-							e.target.closest( 'form, div' ).classList.remove( 'newspack-ui--loading' );
+							fetchButton.removeAttribute( 'disabled' );
+							fetchButton.classList.remove( 'newspack-ui__button--loading' );
 						} );
 				}
 			} );

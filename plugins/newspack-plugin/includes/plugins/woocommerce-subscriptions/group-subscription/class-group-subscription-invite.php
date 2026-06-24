@@ -339,7 +339,7 @@ class Group_Subscription_Invite {
 				__( 'Invalid subscription.', 'newspack-plugin' )
 			);
 		}
-		if ( ! $subscription->has_status( 'active' ) ) {
+		if ( ! $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
 			return new \WP_Error(
 				'newspack_group_subscription_link_invite_invalid_subscription',
 				__( 'Subscription is not active.', 'newspack-plugin' )
@@ -374,6 +374,16 @@ class Group_Subscription_Invite {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
 		if ( ! $subscription || ! Group_Subscription::is_group_subscription( $subscription ) ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_subscription', __( 'Invalid subscription.', 'newspack-plugin' ) );
+		}
+		if ( ! $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
+			return new \WP_Error(
+				'newspack_group_subscription_invite_inactive',
+				sprintf(
+					/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+					__( 'This %s is no longer active.', 'newspack-plugin' ),
+					Group_Subscription::get_label_lower( 'singular' )
+				)
+			);
 		}
 		if ( ! $email ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_email', __( 'Invalid email address.', 'newspack-plugin' ) );
@@ -483,6 +493,17 @@ class Group_Subscription_Invite {
 	 * @return true|\WP_Error True on success, or a WP_Error on failure.
 	 */
 	public static function accept_invite( $subscription, $key, $email ) {
+		$subscription_obj = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription_obj || ! $subscription_obj->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
+			return new \WP_Error(
+				'newspack_group_subscription_invite_inactive',
+				sprintf(
+					/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+					__( 'This %s is no longer active.', 'newspack-plugin' ),
+					Group_Subscription::get_label_lower( 'singular' )
+				)
+			);
+		}
 		$invite = self::get_invite_by_key( $subscription, $key );
 		if ( ! $invite || $invite['email'] !== $email ) {
 			// No need to display an error if the user is already a member: just give a success message.

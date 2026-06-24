@@ -647,6 +647,23 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that a presence cookie ('1') is recognized by is_cookie_set().
+	 */
+	public function test_is_cookie_set_accepts_presence_value() {
+		$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->assertTrue( IP_Access_Rule::is_cookie_set() );
+		unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * Test that an absent cookie returns false from is_cookie_set().
+	 */
+	public function test_is_cookie_set_returns_false_when_absent() {
+		unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->assertFalse( IP_Access_Rule::is_cookie_set() );
+	}
+
+	/**
 	 * Test the `newspack_content_gate_ip_allowlist` filter is applied and
 	 * receives the built institution list as input.
 	 */

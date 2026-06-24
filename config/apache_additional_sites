@@ -1,6 +1,6 @@
 <VirtualHost *:80>
 	UseCanonicalName Off
-    ServerAlias *.local
+    ServerAlias *.test *.local
 	VirtualDocumentRoot /var/www/additional-sites-html/%1
 
 	ServerAdmin webmaster@localhost

@@ -84,7 +84,11 @@ function PostSettings() {
 	);
 
 	return (
-		<PluginDocumentSettingPanel name="content-gate-post-exemptions-panel" title={ __( 'Access control settings', 'newspack-plugin' ) }>
+		<PluginDocumentSettingPanel
+			name="content-gate-post-exemptions-panel"
+			className="newspack-content-gate-panel"
+			title={ __( 'Access control settings', 'newspack-plugin' ) }
+		>
 			{ matchingGates.length > 0 ? (
 				<p>
 					{ __( 'Gates that apply to this post: ', 'newspack-plugin' ) }

@@ -292,6 +292,20 @@ land_on_main() {
   # on main's required review. matticbot is a repo admin, so --admin merges past
   # the review once CI is green. On CI failure the PR is left open for review.
   echo "    waiting for CI on $INCOMING_BRANCH ..."
+  # gh pr checks --watch --fail-fast exits immediately when no check suites
+  # have been registered yet (GitHub takes a few seconds after push). Poll
+  # until at least one check is registered before entering --watch.
+  local waited=0
+  while [ "$waited" -lt 120 ]; do
+    local check_count
+    check_count=$(gh pr checks "$INCOMING_BRANCH" --json name --jq 'length' 2>/dev/null || echo 0)
+    if [ "$check_count" -gt 0 ]; then
+      break
+    fi
+    echo "    no checks registered yet, retrying in 15s ..."
+    sleep 15
+    waited=$((waited + 15))
+  done
   if gh pr checks "$INCOMING_BRANCH" --watch --fail-fast > /dev/null 2>&1; then
     gh pr merge "$INCOMING_BRANCH" --merge --admin \
       && echo "    landed on main (admin merge after green CI)" \

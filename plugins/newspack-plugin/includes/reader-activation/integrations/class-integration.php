@@ -152,6 +152,23 @@ abstract class Integration {
 	}
 
 	/**
+	 * Get the plugins this integration depends on, with their active status.
+	 *
+	 * Child classes should override this to declare any plugins that must be
+	 * active for the integration to function. The integrations UI uses this
+	 * to surface a "requirements" affordance on the integration card.
+	 *
+	 * Each entry must include all of `slug`, `name`, `is_active`, and `is_installed` —
+	 * the integrations UI treats a missing `is_installed` as uninstalled and renders
+	 * a disabled "Requires …" card instead of the Activate action.
+	 *
+	 * @return array List of associative arrays with keys `slug`, `name`, `is_active`, `is_installed`.
+	 */
+	public function get_required_plugins() {
+		return [];
+	}
+
+	/**
 	 * Whether this integration supports frontend reader registration.
 	 *
 	 * Integrations that return true will have their key output to the page
@@ -603,7 +620,7 @@ abstract class Integration {
 			$fields_to_store[ $key ] = $raw_data;
 		}
 
-		return \update_option( self::INCOMING_FIELDS_OPTION_PREFIX . $this->id, $fields_to_store );
+		return \update_option( self::INCOMING_FIELDS_OPTION_PREFIX . $this->id, $fields_to_store, false );
 	}
 
 	/**
@@ -615,7 +632,7 @@ abstract class Integration {
 	public function update_enabled_outgoing_fields( $fields ) {
 		// Only allow fields that are in the metadata keys map.
 		$fields = array_intersect( Sync\Metadata::get_default_fields(), $fields );
-		return \update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, array_values( $fields ) );
+		return \update_option( self::OUTGOING_FIELDS_OPTION_PREFIX . $this->id, array_values( $fields ), false );
 	}
 
 	/**
@@ -698,7 +715,7 @@ abstract class Integration {
 		$legacy_value = \get_option( Sync\Metadata::PREFIX_OPTION, null );
 		if ( null !== $legacy_value && ! empty( $legacy_value ) ) {
 			// update option directly to avoid infinite loop.
-			\update_option( self::METADATA_PREFIX_OPTION_PREFIX . $this->id, $legacy_value );
+			\update_option( self::METADATA_PREFIX_OPTION_PREFIX . $this->id, $legacy_value, false );
 			return $legacy_value;
 		}
 		return 'NP_';
@@ -760,7 +777,7 @@ abstract class Integration {
 		if ( empty( $prefix ) ) {
 			$prefix = 'NP_';
 		}
-		return \update_option( self::METADATA_PREFIX_OPTION_PREFIX . $this->id, \sanitize_text_field( $prefix ) );
+		return \update_option( self::METADATA_PREFIX_OPTION_PREFIX . $this->id, \sanitize_text_field( $prefix ), false );
 	}
 
 	/**
@@ -773,6 +790,29 @@ abstract class Integration {
 			$this->settings_fields,
 			$this->get_metadata_fields()
 		);
+	}
+
+	/**
+	 * Settings field types that are managed by server-side code (e.g., OAuth
+	 * callbacks) and must not be writable from the admin settings REST endpoint.
+	 *
+	 * @var string[]
+	 */
+	const MANAGED_FIELD_TYPES = [ 'oauth', 'hidden' ];
+
+	/**
+	 * Whether a settings field is managed by server-side code and therefore
+	 * read-only on the REST settings save path.
+	 *
+	 * @param string $key The field key.
+	 * @return bool True if the field is a managed type, false otherwise.
+	 */
+	public function is_managed_settings_field( $key ) {
+		$field = $this->get_settings_field_by_key( $key );
+		if ( ! $field ) {
+			return false;
+		}
+		return in_array( $field['type'] ?? 'text', self::MANAGED_FIELD_TYPES, true );
 	}
 
 	/**
@@ -814,7 +854,7 @@ abstract class Integration {
 			$legacy_value = \get_option( self::$legacy_option_map[ $key ], null );
 			if ( null !== $legacy_value ) {
 				// update option directly to avoid infinite loop.
-				\update_option( $option_name, $legacy_value );
+				\update_option( $option_name, $legacy_value, false );
 				return $legacy_value;
 			}
 		}
@@ -847,7 +887,7 @@ abstract class Integration {
 		}
 
 		$option_name = self::SETTINGS_OPTION_PREFIX . $this->id . '_' . $key;
-		return \update_option( $option_name, $sanitized );
+		return \update_option( $option_name, $sanitized, false );
 	}
 
 	/**
@@ -912,6 +952,19 @@ abstract class Integration {
 	protected function sanitize_settings_field_value( $field, $value ) {
 		$type = $field['type'] ?? 'text';
 		switch ( $type ) {
+			case 'hidden':
+			case 'oauth':
+				// Server-managed types. Admin POSTs to the settings REST endpoint
+				// are filtered out upstream in Integrations::update_integration_settings(),
+				// so values land here only via trusted PHP writers (e.g., an OAuth
+				// callback). Assumes a single-line, tag-free scalar — sanitize_text_field
+				// will strip tags and collapse whitespace, which is fine for opaque
+				// tokens but would silently corrupt a multiline secret. Non-scalar
+				// payloads fall back to the declared default.
+				if ( ! is_scalar( $value ) ) {
+					return $field['default'] ?? '';
+				}
+				return \sanitize_text_field( (string) $value );
 			case 'checkbox':
 				return (bool) $value;
 			case 'number':

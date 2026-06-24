@@ -114,6 +114,8 @@ class Audience_Wizard extends Wizard {
 			'has_metering'    => Content_Gate::is_metering_enabled( Memberships::GATE_CPT ),
 		];
 
+		$data['is_newspack_feature_enabled'] = Content_Gate::is_newspack_feature_enabled();
+
 		wp_enqueue_script( 'newspack-wizards' );
 
 		wp_localize_script(
@@ -377,6 +379,39 @@ class Audience_Wizard extends Wizard {
 				'methods'             => WP_REST_Server::EDITABLE,
 				'callback'            => [ $this, 'api_update_subscription_settings' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
+			]
+		);
+
+		// Group label settings (publisher-overridable singular/plural for group subscriptions).
+		// The callbacks short-circuit on Content_Gate::is_newspack_feature_enabled() so
+		// stale clients hitting the route after a flag flip get a descriptive error
+		// instead of reading or writing the option directly.
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/group-labels',
+			[
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => [ $this, 'api_get_group_labels' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+			]
+		);
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/group-labels',
+			[
+				'methods'             => WP_REST_Server::EDITABLE,
+				'callback'            => [ $this, 'api_update_group_labels' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => [
+					'label_singular' => [
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+					'label_plural'   => [
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+				],
 			]
 		);
 
@@ -660,6 +695,9 @@ class Audience_Wizard extends Wizard {
 				Content_Gifting_CTA::set_style( sanitize_text_field( $args['content_gifting']['style'] ) );
 			}
 		}
+		if ( isset( $args['newsletter_link_bypass_enabled'] ) ) {
+			Content_Gate_Advanced_Settings::update_settings( [ 'newsletter_link_bypass_enabled' => (bool) $args['newsletter_link_bypass_enabled'] ] );
+		}
 		return rest_ensure_response( self::get_memberships_settings() );
 	}
 
@@ -913,13 +951,15 @@ class Audience_Wizard extends Wizard {
 	 */
 	private static function get_memberships_settings() {
 		return [
-			'edit_gate_url'            => Memberships::get_edit_gate_url(),
-			'gate_status'              => get_post_status( Memberships::get_gate_post_id() ),
-			'plans'                    => Memberships::get_plans(),
-			'require_all_plans'        => Memberships::get_require_all_plans_setting(),
-			'show_on_subscription_tab' => Memberships::get_show_on_subscription_tab_setting(),
-			'countdown_banner'         => Metering_Countdown::get_settings(),
-			'content_gifting'          => Content_Gifting::get_settings(),
+			'edit_gate_url'                  => Memberships::get_edit_gate_url(),
+			'gate_status'                    => get_post_status( Memberships::get_gate_post_id() ),
+			'plans'                          => Memberships::get_plans(),
+			'require_all_plans'              => Memberships::get_require_all_plans_setting(),
+			'show_on_subscription_tab'       => Memberships::get_show_on_subscription_tab_setting(),
+			'countdown_banner'               => Metering_Countdown::get_settings(),
+			'content_gifting'                => Content_Gifting::get_settings(),
+			'has_newsletters'                => Reader_Activation::is_esp_configured(),
+			'newsletter_link_bypass_enabled' => Newsletters_Access::is_verification_enabled(),
 		];
 	}
 
@@ -1015,6 +1055,71 @@ class Audience_Wizard extends Wizard {
 		}
 
 		return $this->api_get_subscription_settings();
+	}
+
+	/**
+	 * Get the publisher-configurable group subscription labels. Empty values fall back
+	 * to the defaults baked into Group_Subscription::get_label().
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function api_get_group_labels() {
+		$disabled = self::group_labels_feature_disabled_error();
+		if ( $disabled ) {
+			return $disabled;
+		}
+		return rest_ensure_response(
+			[
+				'label_singular'         => (string) get_option( 'newspack_group_subscription_label_singular', '' ),
+				'label_plural'           => (string) get_option( 'newspack_group_subscription_label_plural', '' ),
+				'label_singular_default' => __( 'Group', 'newspack-plugin' ),
+				'label_plural_default'   => __( 'Groups', 'newspack-plugin' ),
+			]
+		);
+	}
+
+	/**
+	 * Update the publisher-configurable group subscription labels.
+	 *
+	 * @param WP_REST_Request $request Request object.
+	 *
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function api_update_group_labels( $request ) {
+		$disabled = self::group_labels_feature_disabled_error();
+		if ( $disabled ) {
+			return $disabled;
+		}
+		$params = $request->get_params();
+		foreach ( [ 'label_singular', 'label_plural' ] as $field ) {
+			if ( ! array_key_exists( $field, $params ) ) {
+				continue;
+			}
+			$value = trim( (string) $params[ $field ] );
+			if ( '' === $value ) {
+				delete_option( 'newspack_group_subscription_' . $field );
+			} else {
+				update_option( 'newspack_group_subscription_' . $field, $value );
+			}
+		}
+		return $this->api_get_group_labels();
+	}
+
+	/**
+	 * Shared guard for the /group-labels callbacks: returns a 403 WP_Error when
+	 * the Newspack Content Gate feature flag is off, or null when it's on.
+	 *
+	 * @return WP_Error|null
+	 */
+	private static function group_labels_feature_disabled_error() {
+		if ( Content_Gate::is_newspack_feature_enabled() ) {
+			return null;
+		}
+		return new WP_Error(
+			'newspack_content_gate_disabled',
+			__( 'Group subscription label settings are unavailable: the Newspack Content Gate feature is not enabled on this site.', 'newspack-plugin' ),
+			[ 'status' => 403 ]
+		);
 	}
 
 	/**

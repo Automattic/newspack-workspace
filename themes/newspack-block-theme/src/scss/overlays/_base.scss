@@ -5,7 +5,7 @@
 	overflow-y: hidden;
 
 	@include sass-utils.media(medium) {
-		&:not(.menu-open--search-menu,.menu-open--comments-menu) {
+		&:not(.menu-open--comments-menu) {
 			overflow-y: auto;
 		}
 	}

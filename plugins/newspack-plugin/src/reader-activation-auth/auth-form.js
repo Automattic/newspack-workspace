@@ -1,4 +1,4 @@
-/* globals newspack_reader_activation_labels */
+/* globals newspack_reader_activation_labels, newspack_ras_config */
 
 /**
  * Internal dependencies.
@@ -6,13 +6,14 @@
 import { domReady, formatTime } from '../utils';
 import { getPendingCheckout } from '../reader-activation/checkout';
 import { openNewslettersSignupModal } from '../reader-activation-newsletters/newsletters-modal';
+import { openVerificationModal } from './verification-modal';
 
 import './google-oauth';
 import './otp-input';
 
 import './style.scss';
 
-const FORM_ALLOWED_ACTIONS = [ 'register', 'signin', 'pwd', 'otp', 'success' ];
+const FORM_ALLOWED_ACTIONS = [ 'signin', 'pwd', 'otp', 'success' ];
 
 window.newspackRAS = window.newspackRAS || [];
 
@@ -84,19 +85,6 @@ window.newspackRAS.push( function ( readerActivation ) {
 						messageContentElement.classList.add( 'newspack-ui__helper-text' );
 					}
 					messageContentElement.style.display = 'block';
-
-					// If the message includes a registration toggle, hide the message when clicked.
-					messageContentElement.querySelectorAll( 'a[data-set-action="register"], a[data-set-action="signin"]' ).forEach( registerLink => {
-						registerLink.parentNode.setAttribute( 'data-action', 'signin' );
-
-						registerLink.addEventListener(
-							'click',
-							function () {
-								messageContentElement.innerHTML = '';
-							},
-							false
-						);
-					} );
 				} else {
 					messageContentElement.style.display = 'none';
 					messageContentElement.innerHTML = '';
@@ -118,7 +106,9 @@ window.newspackRAS.push( function ( readerActivation ) {
 				}
 				const newspack_grecaptcha = window.newspack_grecaptcha || {};
 				if ( 'v2_invisible' === newspack_grecaptcha?.version ) {
-					if ( 'register' === action ) {
+					// The unified signin form may result in a registration, so the captcha is rendered
+					// for it as well. Other states (otp, pwd, success) skip the captcha challenge.
+					if ( 'signin' === action ) {
 						form.removeAttribute( 'data-skip-recaptcha' );
 						newspack_grecaptcha.render( [ form ], error => form.setMessageContent( error, true ) );
 					} else {
@@ -288,6 +278,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 				form.style.opacity = 0.5;
 			};
 
+			form.isVerifying = false;
 			form.endLoginFlow = ( message = null, status = 500, data = null ) => {
 				container.setAttribute( 'data-form-status', status );
 				// Only reset opacity if modal should close on success.
@@ -299,6 +290,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 					messageNode.innerHTML = message;
 
 					if ( status !== 200 ) {
+						form.isVerifying = false;
 						form.setMessageContent( message, true );
 						messageContentElement.querySelectorAll( '[data-set-action]' ).forEach( setActionListener );
 						submitButtons.forEach( button => {
@@ -334,16 +326,83 @@ window.newspackRAS.push( function ( readerActivation ) {
 						}
 					}
 
+					// Post-registration email verification: detour the new reader through the verification
+					// modal before completing the auth flow. The newsletters signup modal is shown after the
+					// verification step (or its dismissal) and before the original onSuccess/onClose callbacks.
+					const needsVerification =
+						data?.registered && newspack_ras_config?.require_account_verification && data?.verified !== true && data?.verification_nonce;
+
 					let callback;
 					if ( ! container.config?.skipNewslettersSignup && data?.registered && container.authCallback ) {
-						callback = ( authMessage, authData ) =>
+						// One-shot guard: this callback may run twice — once from the "Continue"
+						// click on the success screen, and again when `container.authCallback()`
+						// fires `close()` which in turn fires `config.onClose`. Without the guard
+						// we'd re-open the newsletter modal and re-reload the page.
+						let newslettersShown = false;
+						callback = ( authMessage, authData ) => {
+							if ( newslettersShown ) {
+								return;
+							}
+							newslettersShown = true;
 							openNewslettersSignupModal( {
-								onSuccess: container.authCallback( authMessage, authData ),
+								onSuccess: () => {
+									container.authCallback( authMessage, authData );
+									window.location.reload();
+								},
 								closeOnSuccess: true,
 								signupMethod: 'reader-registration',
+								onDismiss: () => window.location.reload(),
 							} );
+						};
+						// Also fire the chain if the reader dismisses the success screen via Escape
+						// / backdrop / close button without clicking Continue. The guard above
+						// prevents the double-fire when they did click Continue.
+						container.config.onClose = callback;
 					} else {
 						callback = container.authCallback;
+					}
+
+					if ( needsVerification ) {
+						form.isVerifying = true;
+						const authModal = container.closest( '.newspack-reader-auth-modal' );
+						// Visually hide the auth modal while the verification flow is active.
+						if ( authModal ) {
+							authModal.style.display = 'none';
+						}
+
+						// startLoginFlow() disabled the submit buttons and dimmed the form for the in-flight
+						// register request. Restore them now so the auth form is interactive when we switch
+						// back to it in OTP state on Send code.
+						submitButtons.forEach( button => {
+							button.disabled = false;
+						} );
+						form.style.opacity = 1;
+
+						// Restore the auth modal's inline display before invoking any callback
+						// that might close or re-open it. Skipping this leaves data-state='open'
+						// on an element still styled `display:none`, making the modal appear
+						// broken on subsequent re-opens.
+						const restoreAuthModal = () => {
+							if ( authModal ) {
+								authModal.style.display = '';
+							}
+						};
+
+						openVerificationModal( {
+							email: data.email,
+							verificationNonce: data.verification_nonce,
+							setOTPTimer: readerActivation.setOTPTimer,
+							onSendCode: () => {
+								restoreAuthModal();
+								container.setFormAction( 'otp', true );
+							},
+							onDismiss: () => {
+								restoreAuthModal();
+								callback?.( message, data );
+								form.isVerifying = false;
+							},
+						} );
+						return;
 					}
 
 					/** Resolve the modal immediately or display the "success" state. */
@@ -446,6 +505,10 @@ window.newspackRAS.push( function ( readerActivation ) {
 					readerActivation
 						.authenticateOTP( body.get( 'otp_code' ) )
 						.then( data => {
+							if ( form.isVerifying ) {
+								data.registered = true;
+								form.isVerifying = false;
+							}
 							form.endLoginFlow( data.message, 200, data );
 						} )
 						.catch( data => {

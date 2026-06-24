@@ -2,7 +2,7 @@
 	"name": "automattic/newspack-network",
 	"description": "The Newspack Network plugin",
 	"type": "wordpress-plugin",
-	"license": "GPL-3.0",
+	"license": "GPL-2.0-or-later",
 	"require-dev": {
 		"automattic/vipwpcs": "^3.0",
 		"wp-coding-standards/wpcs": "^3.0",

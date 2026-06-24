@@ -112,9 +112,44 @@ domReady( function () {
 				},
 				body,
 			} ).then( res => {
-				res.json().then( ( { message, newspack_newsletters_subscribed: wasSubscribed, newspack_newsletters_subscribe, metadata } ) => {
+				res.json().then( data => {
+					const { message, newspack_newsletters_subscribed: wasSubscribed, newspack_newsletters_subscribe, metadata } = data;
 					nonce = newspack_newsletters_subscribe;
 					form.endFlow( message, res.status, wasSubscribed, metadata );
+
+					// Post-registration email verification. When newspack-plugin signals that the
+					// freshly registered reader needs to verify, hand off to the verification modal
+					// exposed on window.newspackReaderActivation. The flow:
+					//   1. Verification prompt → reader clicks "Send code" or dismisses.
+					//   2. On Send code: auth modal opens in OTP state (newsletters signup is skipped
+					//      because the reader just subscribed via this form).
+					// Degrades gracefully when running against an older newspack-plugin that doesn't
+					// expose the helpers.
+					if ( res.status === 200 && data?.registered && data?.verified !== true && data?.verification_nonce ) {
+						window.newspackRAS = window.newspackRAS || [];
+						window.newspackRAS.push( ras => {
+							if ( typeof ras?.openVerificationModal !== 'function' ) {
+								return;
+							}
+							ras.openVerificationModal( {
+								email: data.email,
+								verificationNonce: data.verification_nonce,
+								onSendCode: () => {
+									if ( typeof ras?.openAuthModal !== 'function' ) {
+										return;
+									}
+									ras.openAuthModal( {
+										skipAuthenticatedCheck: true,
+										skipNewslettersSignup: true,
+										backButtonClosesModal: true,
+										initialState: 'otp',
+										closeOnSuccess: true,
+										onClose: null,
+									} );
+								},
+							} );
+						} );
+					}
 				} );
 			} );
 		} );

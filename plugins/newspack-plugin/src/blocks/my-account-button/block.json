@@ -51,6 +51,11 @@
 		},
 		"shadow": true
 	},
+	"styles": [
+		{ "name": "default", "label": "Default", "isDefault": true },
+		{ "name": "icon-only", "label": "Icon only" },
+		{ "name": "text-only", "label": "Text only" }
+	],
 	"editorStyle": "file:../../../dist/blocks.css",
 	"style": "file:../../../dist/blocks.css"
 }

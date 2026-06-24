@@ -225,6 +225,8 @@ class Newspack_UI {
 				'size'        => 'small',
 				'state'       => 'closed',
 				'form_action' => '',
+				'form_id'     => '',
+				'form_class'  => '',
 			]
 		);
 		?>
@@ -314,11 +316,11 @@ class Newspack_UI {
 								?>
 								<?php if ( isset( $action['url'] ) ) : ?>
 								<a href="<?php echo esc_url( $action['url'] ); ?>" class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>" <?php echo esc_attr( $fetch_data ); ?>>
-									<?php echo wp_kses_post( $action['label'] ); ?>
+									<span><?php echo wp_kses_post( $action['label'] ); ?></span>
 								</a>
 							<?php else : ?>
 								<button type="submit" class="<?php echo esc_attr( implode( ' ', $classes ) ); ?>" <?php echo esc_attr( $fetch_data ); ?>>
-									<?php echo wp_kses_post( $action['label'] ); ?>
+									<span><?php echo wp_kses_post( $action['label'] ); ?></span>
 								</button>
 								<?php
 							endif;
@@ -356,6 +358,7 @@ class Newspack_UI {
 				<li><a href="?ui-demo#checkbox-radio-lists">Checkbox/Radio Lists</a></li>
 				<li><a href="?ui-demo#order-table">Order table</a></li>
 				<li><a href="?ui-demo#buttons">Buttons</a></li>
+				<li><a href="?ui-demo#tabs">Tabs</a></li>
 				<li><a href="#buttons-icon">Buttons Icon</a></li>
 				<li><a href="?ui-demo#modals">Modals</a></li>
 			</ul>
@@ -896,6 +899,55 @@ class Newspack_UI {
 
 			<hr>
 
+			<h2 id="tabs">Tabs</h2>
+			<p>Underline-style tabs. Built on Ghost button + bottom box-shadow. Drop-in replacement for <code>newspack-ui__segmented-control</code> where the underline aesthetic is preferred.</p>
+
+			<h3>Default</h3>
+			<div class="newspack-ui__tabs">
+				<div class="newspack-ui__tabs__list" role="tablist">
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost selected"><?php esc_html_e( 'Tab One', 'newspack-plugin' ); ?></button>
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost"><?php esc_html_e( 'Tab Two', 'newspack-plugin' ); ?></button>
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost"><?php esc_html_e( 'Tab Three', 'newspack-plugin' ); ?></button>
+				</div>
+			</div>
+
+			<h3>With count badges</h3>
+			<div class="newspack-ui__tabs">
+				<div class="newspack-ui__tabs__list" role="tablist">
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost selected">
+						<?php esc_html_e( 'Members', 'newspack-plugin' ); ?>
+						<span class="newspack-ui__badge newspack-ui__badge--outline">12</span>
+					</button>
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost">
+						<?php esc_html_e( 'Invitations', 'newspack-plugin' ); ?>
+						<span class="newspack-ui__badge newspack-ui__badge--outline">3</span>
+					</button>
+				</div>
+			</div>
+
+			<h3>Small &mdash; with panels</h3>
+			<div class="newspack-ui__tabs">
+				<div class="newspack-ui__tabs__list" role="tablist">
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small selected"><?php esc_html_e( 'Monthly', 'newspack-plugin' ); ?></button>
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--small"><?php esc_html_e( 'Annually', 'newspack-plugin' ); ?></button>
+				</div>
+				<div class="newspack-ui__tabs__content">
+					<div class="newspack-ui__tabs__panel"><p><?php esc_html_e( 'Monthly content goes here.', 'newspack-plugin' ); ?></p></div>
+					<div class="newspack-ui__tabs__panel"><p><?php esc_html_e( 'Annually content goes here.', 'newspack-plugin' ); ?></p></div>
+				</div>
+			</div>
+
+			<h3>X-Small &mdash; stretch (equal width)</h3>
+			<div class="newspack-ui__tabs newspack-ui__tabs--stretch">
+				<div class="newspack-ui__tabs__list" role="tablist">
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--x-small selected"><?php esc_html_e( 'All', 'newspack-plugin' ); ?></button>
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--x-small"><?php esc_html_e( 'Active', 'newspack-plugin' ); ?></button>
+					<button type="button" role="tab" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--x-small"><?php esc_html_e( 'Archived', 'newspack-plugin' ); ?></button>
+				</div>
+			</div>
+
+			<hr>
+
 			<h2 id="buttons-icon">Buttons Icon</h2>
 
 			<p>Uses the same classes as the <code>newspack-ui__button</code> but we add an extra class to it <code>newspack-ui__button--icon</code></p>
@@ -1182,14 +1234,18 @@ class Newspack_UI {
 								<input type="hidden" name="reader-activation-newsletters-signup" value="1" />
 								<input type="hidden" name="email_address" value="<?php echo esc_attr( $demo_email_address ); ?>" />
 
-								<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-2 overflow-hidden position-relative newsletter-list-container" data-list-default-size="<?php echo esc_attr( $demo_default_list_size ); ?>">
+								<?php $demo_has_overflow = count( $demo_newsletters_lists ) > (int) $demo_default_list_size; ?>
+								<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-2 overflow-hidden position-relative newsletter-list-container">
 								<?php
 								foreach ( $demo_newsletters_lists as $list ) {
-									$checkbox_id = sprintf( 'newspack-plugin-list-%s', $list['id'] );
-									$is_hidden   = $loop_index <= $demo_default_list_size ? '' : 'hidden';
+									$checkbox_id   = sprintf( 'newspack-plugin-list-%s', $list['id'] );
+									$is_peek       = $loop_index === (int) $demo_default_list_size;
+									$is_hidden     = $loop_index > (int) $demo_default_list_size;
+									$label_classes = 'newspack-ui__input-card' . ( $is_hidden ? ' hidden' : '' );
+									$label_inert   = ( $is_peek || $is_hidden ) ? ' inert' : '';
 									$loop_index++;
 									?>
-									<label class="newspack-ui__input-card <?php echo esc_attr( $is_hidden ); ?>" for="<?php echo esc_attr( $checkbox_id ); ?>">
+									<label class="<?php echo esc_attr( $label_classes ); ?>" for="<?php echo esc_attr( $checkbox_id ); ?>"<?php echo esc_attr( $label_inert ); ?>>
 										<input
 											type="checkbox"
 											name="lists[]"
@@ -1207,17 +1263,15 @@ class Newspack_UI {
 										<?php endif; ?>
 									</label>
 									<?php
-									if ( $loop_index === (int) $demo_default_list_size && count( $demo_newsletters_lists ) > $demo_default_list_size ) :
-										?>
-										<div class="newspack-ui__gradient-divider"></div>
-										<?php
-									endif;
 								}
 								?>
+								<?php if ( $demo_has_overflow ) : ?>
+									<div class="newspack-ui__gradient-divider"></div>
+								<?php endif; ?>
 								</div>
 
 								<div class="newspack-ui__stack newspack-ui__stack--vertical newspack-ui__stack--gap-2 newspack-ui__spacing-top--5">
-									<?php if ( count( $demo_newsletters_lists ) > $demo_default_list_size ) : ?>
+									<?php if ( $demo_has_overflow ) : ?>
 										<button type="button" class="newspack-ui__button newspack-ui__button--wide newspack-ui__button--secondary see-all-button" aria-label="<?php esc_attr_e( 'See all newsletters', 'newspack-plugin' ); ?>">
 											<span aria-hidden="true"><?php esc_html_e( 'See all', 'newspack-plugin' ); ?></span>
 											<?php Newspack_UI_Icons::print_svg( 'chevronDownSmall' ); ?>
@@ -1229,43 +1283,43 @@ class Newspack_UI {
 						</div>
 						<script>
 							( function() {
-								const container = document.querySelector( '.newspack-newsletters-signup' );
-								if ( ! container ) {
-									return;
-								}
-								const seeAllButton = container.querySelector( '.see-all-button' );
-								const newsletterContainer = container.querySelector( '.newsletter-list-container' );
-								if ( seeAllButton && newsletterContainer ) {
+								const setupReveal = function( container ) {
+									const seeAllButton = container.querySelector( '.see-all-button' );
+									const newsletterContainer = container.querySelector( '.newsletter-list-container' );
+									if ( ! seeAllButton || ! newsletterContainer ) {
+										return;
+									}
 									const divider = newsletterContainer.querySelector( '.newspack-ui__gradient-divider' );
+									const peekItem = newsletterContainer.querySelector( '.newspack-ui__input-card[inert]:not(.hidden)' );
+
 									seeAllButton.addEventListener( 'click', function() {
-										newsletterContainer.querySelectorAll( '.hidden' ).forEach( function( item ) {
+										const firstRevealed = newsletterContainer.querySelector( '.newspack-ui__input-card[inert]' );
+										newsletterContainer.querySelectorAll( '.newspack-ui__input-card[inert]' ).forEach( function( item ) {
 											item.classList.remove( 'hidden' );
+											item.removeAttribute( 'inert' );
 										} );
 										newsletterContainer.style.maxHeight = 'none';
 										if ( divider ) {
 											divider.classList.add( 'hidden' );
 										}
 										seeAllButton.classList.add( 'hidden' );
+										if ( firstRevealed ) {
+											const firstInput = firstRevealed.querySelector( 'input' );
+											if ( firstInput ) {
+												firstInput.focus();
+											}
+										}
 									} );
 
-									// Set the initial height to show partially visible.
-									const listDefaultSize = parseInt( newsletterContainer.dataset.listDefaultSize, 10 );
-									const newsletterItems = newsletterContainer.querySelectorAll( '.newspack-ui__input-card' );
-
-									if ( newsletterItems.length > listDefaultSize ) {
-										const gap = 12;
-										const extraSpace = 32;
-
-										let totalHeight = 0;
-										newsletterItems.forEach( function( item, index ) {
-											if ( index < listDefaultSize ) {
-												totalHeight += item.offsetHeight;
-											}
-										} );
-
-										const maxHeight = totalHeight + listDefaultSize * gap + extraSpace;
-										newsletterContainer.style.maxHeight = maxHeight + 'px';
+									if ( peekItem ) {
+										const peekAmount = ( divider && divider.offsetHeight ) || 32;
+										newsletterContainer.style.maxHeight = ( peekItem.offsetTop + peekAmount ) + 'px';
 									}
+								};
+
+								const container = document.querySelector( '.newspack-newsletters-signup' );
+								if ( container ) {
+									setupReveal( container );
 								}
 							} )();
 						</script>

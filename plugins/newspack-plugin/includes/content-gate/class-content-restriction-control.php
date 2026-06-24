@@ -28,6 +28,26 @@ class Content_Restriction_Control {
 	private static $post_gate_layout_id_map = [];
 
 	/**
+	 * Request-scoped cache of the gates that apply to a post, keyed by post ID.
+	 * The gate set a post matches depends only on the post and the (request-stable)
+	 * gate configuration, so it is safe to memoise for the request lifetime. Caches
+	 * the empty (no-gates) result too, which matters for the Premium Newsletters
+	 * cron loop that evaluates the same post for many readers.
+	 *
+	 * @var array<int,array>
+	 */
+	private static $post_gates_map = [];
+
+	/**
+	 * Request-scoped cache of a hierarchical term's descendant IDs, keyed by
+	 * "{taxonomy}:{term_id}". The term hierarchy is request-stable, so this avoids
+	 * re-walking the tree across content rules and across get_post_gates() calls.
+	 *
+	 * @var array<string,int[]>
+	 */
+	private static $term_descendants_map = [];
+
+	/**
 	 * Post meta key for exempting a post from access control restrictions.
 	 *
 	 * @var string
@@ -121,6 +141,9 @@ class Content_Restriction_Control {
 		if ( ! $post_id ) {
 			return [];
 		}
+		if ( array_key_exists( $post_id, self::$post_gates_map ) ) {
+			return self::$post_gates_map[ $post_id ];
+		}
 		$is_newsletter = false;
 		if ( class_exists( 'Newspack\Newsletters\Subscription_Lists' ) && Subscription_Lists::CPT && get_post_type( $post_id ) === Subscription_Lists::CPT ) {
 			$is_newsletter = true;
@@ -128,7 +151,8 @@ class Content_Restriction_Control {
 
 		$gates = Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', $is_newsletter );
 		if ( empty( $gates ) ) {
-			return [];
+			self::$post_gates_map[ $post_id ] = [];
+			return self::$post_gates_map[ $post_id ];
 		}
 
 		$post_gates = [];
@@ -189,7 +213,13 @@ class Content_Restriction_Control {
 					if ( ( ! $is_exclusion && ! $terms ) || is_wp_error( $terms ) ) {
 						continue 2;
 					}
-					if ( $is_exclusion ? ! empty( array_intersect( $terms, $content_rule['value'] ) ) : empty( array_intersect( $terms, $content_rule['value'] ) ) ) {
+					// For hierarchical taxonomies, a rule targeting a term also covers
+					// that term's descendants, mirroring WooCommerce Memberships' cascade.
+					// The helper also normalizes the rule's term IDs to integers: stored
+					// rule values can be strings, and array_intersect() below compares as
+					// strings, so this keeps both sides of the comparison consistent.
+					$target_terms = self::expand_hierarchical_terms( (array) $content_rule['value'], $taxonomy );
+					if ( $is_exclusion ? ! empty( array_intersect( $terms, $target_terms ) ) : empty( array_intersect( $terms, $target_terms ) ) ) {
 						continue 2;
 					}
 				}
@@ -203,7 +233,44 @@ class Content_Restriction_Control {
 
 			$post_gates[] = $gate;
 		}
+		self::$post_gates_map[ $post_id ] = $post_gates;
 		return $post_gates;
+	}
+
+	/**
+	 * Expand a set of taxonomy term IDs to include descendant terms when the
+	 * taxonomy is hierarchical.
+	 *
+	 * A content rule targeting a parent term should also match content assigned
+	 * only to that term's descendants, mirroring WooCommerce Memberships' cascade
+	 * behavior. Expansion happens at evaluation time so newly-added child terms
+	 * are covered without re-saving the rule. Non-hierarchical taxonomies (e.g.
+	 * tags) have no descendants and are returned as integer-cast IDs unchanged.
+	 *
+	 * Descendant lookups are memoised per (taxonomy, term) for the request so the
+	 * tree is walked at most once per term, even across many rules and posts (e.g.
+	 * the Premium Newsletters cron loop).
+	 *
+	 * @param array        $term_ids Term IDs from a content rule's value (may be stored as strings).
+	 * @param \WP_Taxonomy $taxonomy Taxonomy object the term IDs belong to.
+	 *
+	 * @return int[] De-duplicated term IDs including descendants.
+	 */
+	private static function expand_hierarchical_terms( array $term_ids, \WP_Taxonomy $taxonomy ): array {
+		$term_ids = array_map( 'intval', $term_ids );
+		if ( ! $taxonomy->hierarchical ) {
+			return $term_ids;
+		}
+		$expanded = $term_ids;
+		foreach ( $term_ids as $term_id ) {
+			$cache_key = $taxonomy->name . ':' . $term_id;
+			if ( ! isset( self::$term_descendants_map[ $cache_key ] ) ) {
+				$children = get_term_children( $term_id, $taxonomy->name );
+				self::$term_descendants_map[ $cache_key ] = is_wp_error( $children ) ? [] : array_map( 'intval', $children );
+			}
+			$expanded = array_merge( $expanded, self::$term_descendants_map[ $cache_key ] );
+		}
+		return array_values( array_unique( $expanded ) );
 	}
 
 	/**

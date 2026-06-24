@@ -314,8 +314,8 @@ class Newspack_Test_Institution extends WP_UnitTestCase {
 
 		// phpcs:disable WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 
-		// Set cache-bypass cookie.
-		$_COOKIE[ \Newspack\Content_Gate\IP_Access_Rule::COOKIE_NAME ] = '1';
+		// Set cache-bypass cookie (presence-only signal; the actual access check is ip_matches_ranges()).
+		$_COOKIE[ \Newspack\Content_Gate\IP_Access_Rule::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 
 		$_SERVER['REMOTE_ADDR'] = '10.1.2.3';
 		$this->assertTrue(

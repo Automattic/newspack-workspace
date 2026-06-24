@@ -33,12 +33,13 @@
 		},
 		"panelBackgroundColor": {
 			"type": "string",
-			"default": ""
+			"default": "var(--wp--preset--color--base, #ffffff)"
 		},
 		"panelTextColor": {
 			"type": "string",
-			"default": ""
-		}
+			"default": "var(--wp--preset--color--contrast, #1E1E1E)"
+		},
+		"lock": { "type": "object", "default": { "move": true, "remove": true } }
 	},
 	"supports": {
 		"html": false,

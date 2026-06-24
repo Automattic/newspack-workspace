@@ -3,12 +3,11 @@
 	"description": "An advanced open-source publishing and revenue-generating platform for news organizations",
 	"homepage": "https://newspack.com/",
 	"type": "wordpress-theme",
-	"license": "GPL-3.0-or-later",
+	"license": "GPL-2.0-or-later",
 	"support": {
 		"issues": "https://github.com/Automattic/newspack-block-theme/issues"
 	},
 	"require-dev": {
-		"brainmaestro/composer-git-hooks": "^3.0",
 		"automattic/vipwpcs": "^3.0.0",
 		"wp-coding-standards/wpcs": "*",
 		"dealerdirect/phpcodesniffer-composer-installer": "*",
@@ -20,22 +19,11 @@
 		]
 	},
 	"scripts": {
-		"post-install-cmd": [
-			"vendor/bin/cghooks add --no-lock"
-		],
 		"post-update-cmd": [
 			"vendor/bin/cghooks update"
 		]
 	},
-	"extra": {
-		"hooks": {
-			"pre-commit": "./node_modules/.bin/lint-staged",
-			"pre-push": "./.hooks/pre-push",
-			"commit-msg": [
-				"cat $1 | ./node_modules/.bin/newspack-scripts commitlint"
-			]
-		}
-	},
+	"extra": {},
 	"config": {
 		"platform": {
 			"php": "8.0"

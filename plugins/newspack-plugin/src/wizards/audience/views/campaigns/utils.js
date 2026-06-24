@@ -7,6 +7,7 @@ import { __, sprintf } from '@wordpress/i18n';
 import { addQueryArgs } from '@wordpress/url';
 import { applyFilters, addFilter } from '@wordpress/hooks';
 import { useEffect, useState, Fragment } from '@wordpress/element';
+import { decodeEntities } from '@wordpress/html-entities';
 
 /**
  * External dependencies.
@@ -394,7 +395,13 @@ export const warningForPopup = ( prompts, prompt ) => {
 						{ filteredConflictingPrompts.map( conflictingPrompt => (
 							<li key={ conflictingPrompt.id }>
 								<p data-testid={ `conflict-warning-${ prompt.id }` }>
-									<strong>{ sprintf( '%s: ', conflictingPrompt.title ) }</strong>
+									<strong>
+										{ sprintf(
+											// Translators: %s: title of the conflicting prompt.
+											__( '%s:', 'newspack-plugin' ),
+											decodeEntities( conflictingPrompt.title )
+										) }{ ' ' }
+									</strong>
 									<span>{ buildWarning( prompt, promptCategories ) }</span>
 								</p>
 							</li>

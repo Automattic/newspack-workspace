@@ -9,7 +9,8 @@
 	"parent": [ "newspack/overlay-menu" ],
 	"usesContext": [ "newspack-overlay-menu/instanceId" ],
 	"attributes": {
-		"triggerText": { "type": "string", "default": "Menu" }
+		"triggerText": { "type": "string", "default": "Menu" },
+		"lock": { "type": "object", "default": { "move": true, "remove": true } }
 	},
 	"supports": {
 		"html": false,
@@ -19,7 +20,17 @@
 			"text": true
 		},
 		"typography": {
-			"fontSize": true
+			"fontSize": true,
+			"lineHeight": true,
+			"__experimentalFontFamily": true,
+			"__experimentalFontWeight": true,
+			"__experimentalFontStyle": true,
+			"__experimentalTextTransform": true,
+			"__experimentalTextDecoration": true,
+			"__experimentalLetterSpacing": true,
+			"__experimentalDefaultControls": {
+				"fontSize": true
+			}
 		},
 		"spacing": {
 			"padding": true,
@@ -34,6 +45,11 @@
 			}
 		}
 	},
+	"styles": [
+		{ "name": "default", "label": "Default", "isDefault": true },
+		{ "name": "icon-only", "label": "Icon only" },
+		{ "name": "text-only", "label": "Text only" }
+	],
 	"editorStyle": "file:../../../../dist/blocks.css",
 	"style": "file:../../../../dist/blocks.css"
 }

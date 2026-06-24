@@ -14,9 +14,6 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Overlay_Menu_Trigger_Block {
 
-	// Inline SVG for the menu (overlay) icon.
-	const ICON_MENU = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 5v1.5h14V5H5zm0 7.8h14v-1.5H5v1.5zM5 19h14v-1.5H5V19z"/></svg>';
-
 	/**
 	 * Initializes the block.
 	 *
@@ -51,7 +48,12 @@ final class Overlay_Menu_Trigger_Block {
 	 */
 	public static function render_block( array $attributes, string $content, \WP_Block $block ) {
 		$instance_id  = $block->context['newspack-overlay-menu/instanceId'] ?? '';
-		$trigger_text = $attributes['triggerText'] ?? __( 'Menu', 'newspack-plugin' );
+		$default_text = __( 'Menu', 'newspack-plugin' );
+		$trigger_text = $attributes['triggerText'] ?? $default_text;
+		// Whitespace-only values would leave the button without an accessible name.
+		if ( '' === trim( (string) $trigger_text ) ) {
+			$trigger_text = $default_text;
+		}
 
 		// Display mode from block style class in className (default = icon + text).
 		$classes    = explode( ' ', (string) ( $attributes['className'] ?? '' ) );
@@ -62,22 +64,25 @@ final class Overlay_Menu_Trigger_Block {
 
 		ob_start();
 		?>
-		<button
-			<?php echo $wrapper_attributes; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-			type="button"
-			aria-expanded="false"
-			aria-controls="newspack-overlay-panel-<?php echo esc_attr( $instance_id ); ?>"
-			aria-label="<?php echo esc_attr( $trigger_text ); ?>"
-		>
-			<?php if ( $show_icon ) : ?>
-				<span class="overlay-menu__icon" aria-hidden="true">
-					<?php echo self::ICON_MENU; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-				</span>
-			<?php endif; ?>
-			<span class="<?php echo esc_attr( $text_class ); ?>">
-				<?php echo esc_html( $trigger_text ); ?>
-			</span>
-		</button>
+		<div class="wp-block-buttons is-layout-flex">
+			<div class="wp-block-button">
+				<button
+					<?php echo $wrapper_attributes; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					type="button"
+					aria-expanded="false"
+					aria-controls="newspack-overlay-panel-<?php echo esc_attr( $instance_id ); ?>"
+				>
+					<?php if ( $show_icon ) : ?>
+						<span class="overlay-menu__icon" aria-hidden="true">
+							<?php \Newspack\Newspack_UI_Icons::print_svg( 'menu' ); ?>
+						</span>
+					<?php endif; ?>
+					<span class="<?php echo esc_attr( $text_class ); ?>">
+						<?php echo esc_html( $trigger_text ); ?>
+					</span>
+				</button>
+			</div>
+		</div>
 		<?php
 		return ob_get_clean();
 	}

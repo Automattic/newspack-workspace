@@ -9,12 +9,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { sprintf, __, _n } from '@wordpress/i18n';
 import { useState, useEffect } from '@wordpress/element';
 import { useSelect, useDispatch } from '@wordpress/data';
-import {
-	CheckboxControl,
-	TextControl,
-	Button,
-	Notice,
-} from '@wordpress/components';
+import { CheckboxControl, TextControl, Button, Notice } from '@wordpress/components';
 import { broadcast } from '../../icons';
 import { registerPlugin } from '@wordpress/plugins';
 
@@ -36,14 +31,7 @@ function OutgoingPost() {
 	const [ siteSelection, setSiteSelection ] = useState( [] );
 	const [ statusOnPublish, setStatusOnPublish ] = useState( defaultStatus );
 
-	const {
-		postId,
-		postStatus,
-		savedUrls,
-		hasChangedContent,
-		isSavingPost,
-		isCleanNewPost,
-	} = useSelect( ( select ) => {
+	const { postId, postStatus, savedUrls, hasChangedContent, isSavingPost, isCleanNewPost } = useSelect( select => {
 		const {
 			getCurrentPostId,
 			getCurrentPostAttribute,
@@ -54,8 +42,7 @@ function OutgoingPost() {
 		return {
 			postId: getCurrentPostId(),
 			postStatus: getCurrentPostAttribute( 'status' ),
-			savedUrls:
-				getCurrentPostAttribute( 'meta' )?.[ distributedMetaKey ] || [],
+			savedUrls: getCurrentPostAttribute( 'meta' )?.[ distributedMetaKey ] || [],
 			hasChangedContent: _hasChangedContent(),
 			isSavingPost: _isSavingPost(),
 			isCleanNewPost: _isCleanNewPost(),
@@ -93,20 +80,17 @@ function OutgoingPost() {
 	const { savePost } = useDispatch( 'core/editor' );
 	const { createNotice } = useDispatch( 'core/notices' );
 
-	const sites = networkSites.filter( ( url ) => url.includes( search ) );
+	const sites = networkSites.filter( url => url.includes( search ) );
 
-	const selectableSites = networkSites.filter(
-		( url ) => ! distribution.includes( url )
-	);
+	const selectableSites = networkSites.filter( url => ! distribution.includes( url ) );
 
 	const isUnpublished = postStatus !== 'publish';
 
 	const isAutoDraft = postStatus === 'auto-draft';
 
-	const isDisabled =
-		isSavingPost || isDistributing || isCleanNewPost || isAutoDraft;
+	const isDisabled = isSavingPost || isDistributing || isCleanNewPost || isAutoDraft;
 
-	const getFormattedSite = ( site ) => {
+	const getFormattedSite = site => {
 		const url = new URL( site );
 		return url.hostname;
 	};
@@ -121,19 +105,14 @@ function OutgoingPost() {
 				status_on_publish: statusOnPublish,
 			},
 		} )
-			.then( ( urls ) => {
+			.then( urls => {
 				setDistribution( urls );
 				setSiteSelection( [] );
 				createNotice(
 					'info',
 					sprintf(
 						// translators: %s: post type; %d: number of network sites
-						_n(
-							'%s distributed to one network site.',
-							'%s distributed to %d network sites.',
-							urls.length,
-							'newspack-network'
-						),
+						_n( '%s distributed to one network site.', '%s distributed to %d network sites.', urls.length, 'newspack-network' ),
 						postTypeLabel,
 						urls.length
 					),
@@ -143,7 +122,7 @@ function OutgoingPost() {
 					}
 				);
 			} )
-			.catch( ( error ) => {
+			.catch( error => {
 				createNotice( 'error', error.message );
 			} )
 			.finally( () => {
@@ -158,10 +137,7 @@ function OutgoingPost() {
 					{ isAutoDraft && (
 						<>
 							<Notice status="warning" isDismissible={ false }>
-								{ __(
-									'Save the post at least once before distributing it.',
-									'newspack-network'
-								) }
+								{ __( 'Save the post at least once before distributing it.', 'newspack-network' ) }
 							</Notice>
 							<hr />
 						</>
@@ -171,18 +147,12 @@ function OutgoingPost() {
 							{ networkSites.length === 1
 								? sprintf(
 										// translators: %s: post type
-										__(
-											'This %s has not been distributed to your network site yet.',
-											'newspack-network'
-										),
+										__( 'This %s has not been distributed to your network site yet.', 'newspack-network' ),
 										postTypeLabel.toLowerCase()
 								  )
 								: sprintf(
 										// translators: %s: post type
-										__(
-											'This %s has not been distributed to any network sites yet.',
-											'newspack-network'
-										),
+										__( 'This %s has not been distributed to any network sites yet.', 'newspack-network' ),
 										postTypeLabel.toLowerCase()
 								  ) }
 						</p>
@@ -204,10 +174,7 @@ function OutgoingPost() {
 					{ networkSites.length > 5 && (
 						<TextControl
 							__next40pxDefaultSize
-							placeholder={ __(
-								'Search available network sites',
-								'newspack-network'
-							) }
+							placeholder={ __( 'Search available network sites', 'newspack-network' ) }
 							value={ search }
 							disabled={ isDisabled }
 							onChange={ setSearch }
@@ -217,46 +184,26 @@ function OutgoingPost() {
 			}
 			body={
 				<>
-					{ networkSites.length > 1 &&
-						selectableSites.length !== 0 &&
-						sites.length === networkSites.length && (
-							<CheckboxControl
-								name="select-all"
-								label={ __( 'Select all', 'newspack-network' ) }
-								disabled={ isDisabled }
-								checked={
-									siteSelection.length ===
-									selectableSites.length
-								}
-								indeterminate={
-									siteSelection.length > 0 &&
-									siteSelection.length <
-										selectableSites.length
-								}
-								onChange={ ( checked ) => {
-									setSiteSelection(
-										checked ? selectableSites : []
-									);
-								} }
-							/>
-						) }
-					{ sites.map( ( siteUrl ) => (
+					{ networkSites.length > 1 && selectableSites.length !== 0 && sites.length === networkSites.length && (
+						<CheckboxControl
+							name="select-all"
+							label={ __( 'Select all', 'newspack-network' ) }
+							disabled={ isDisabled }
+							checked={ siteSelection.length === selectableSites.length }
+							indeterminate={ siteSelection.length > 0 && siteSelection.length < selectableSites.length }
+							onChange={ checked => {
+								setSiteSelection( checked ? selectableSites : [] );
+							} }
+						/>
+					) }
+					{ sites.map( siteUrl => (
 						<CheckboxControl
 							key={ siteUrl }
 							label={ getFormattedSite( siteUrl ) }
-							disabled={
-								isDisabled || distribution.includes( siteUrl )
-							} // Do not allow undistributing a site.
-							checked={
-								siteSelection.includes( siteUrl ) ||
-								distribution.includes( siteUrl )
-							}
-							onChange={ ( checked ) => {
-								const urls = checked
-									? [ ...siteSelection, siteUrl ]
-									: siteSelection.filter(
-											( url ) => siteUrl !== url
-									  );
+							disabled={ isDisabled || distribution.includes( siteUrl ) } // Do not allow undistributing a site.
+							checked={ siteSelection.includes( siteUrl ) || distribution.includes( siteUrl ) }
+							onChange={ checked => {
+								const urls = checked ? [ ...siteSelection, siteUrl ] : siteSelection.filter( url => siteUrl !== url );
 								setSiteSelection( urls );
 							} }
 						/>
@@ -270,18 +217,11 @@ function OutgoingPost() {
 							<span>
 								{ sprintf(
 									// translators: %d: number of network sites
-									_n(
-										'One network site selected.',
-										'%d network sites selected.',
-										siteSelection.length,
-										'newspack-network'
-									),
+									_n( 'One network site selected.', '%d network sites selected.', siteSelection.length, 'newspack-network' ),
 									siteSelection.length
 								) }
 							</span>
-							<button onClick={ () => setSiteSelection( [] ) }>
-								Clear
-							</button>
+							<button onClick={ () => setSiteSelection( [] ) }>Clear</button>
 						</p>
 					) }
 				</>
@@ -289,19 +229,8 @@ function OutgoingPost() {
 			buttons={
 				<>
 					<PostStatus
-						label={
-							isUnpublished
-								? __( 'Status on publish', 'newspack-network' )
-								: null
-						}
-						description={
-							isUnpublished
-								? __(
-										"Which status to set the post when it's published.",
-										'newspack-network'
-								  )
-								: null
-						}
+						label={ isUnpublished ? __( 'Status on publish', 'newspack-network' ) : null }
+						description={ isUnpublished ? __( "Which status to set the post when it's published.", 'newspack-network' ) : null }
 						status={ statusOnPublish }
 						onChange={ setStatusOnPublish }
 						disabled={ isDisabled }

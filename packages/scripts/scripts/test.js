@@ -30,17 +30,9 @@ const JEST_CONFIG = {
 	moduleNameMapper: {
 		'\\.(scss|css)$': path.resolve( __dirname, 'utils/babelJestTransformer.js' ),
 	},
-	modulePaths: [
-		path.resolve( modules.rootDirectory, 'node_modules' ),
-		path.resolve( __dirname, '../node_modules' ),
-	],
+	modulePaths: [ path.resolve( modules.rootDirectory, 'node_modules' ), path.resolve( __dirname, '../node_modules' ) ],
 	testEnvironment: 'jsdom',
-	collectCoverageFrom: [
-		'**/*.{js,jsx}',
-		'!**/node_modules/**',
-		'!**/dist/**',
-		'!**/vendor/**',
-	],
+	collectCoverageFrom: [ '**/*.{js,jsx}', '!**/node_modules/**', '!**/dist/**', '!**/vendor/**' ],
 };
 
 args.push( '--config', JSON.stringify( JEST_CONFIG ) );
@@ -51,4 +43,4 @@ const result = spawn.sync( wpScripts, args, {
 	env: { ...process.env, NODE_ENV: 'development' },
 } );
 
-process.exit(result.status);
+process.exit( result.status );

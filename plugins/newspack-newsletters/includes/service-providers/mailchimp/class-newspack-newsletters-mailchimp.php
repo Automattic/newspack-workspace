@@ -1211,9 +1211,117 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			$payload = apply_filters( 'newspack_newsletters_mc_payload_sync', $payload, $post, $mc_campaign_id );
 
 			if ( $mc_campaign_id ) {
-				$campaign_result = $this->validate(
-					$mc->patch( "campaigns/$mc_campaign_id", $payload )
-				);
+				// Mailchimp snapshots ad-hoc "advanced segments"
+				// (segment_opts.conditions, as opposed to a saved segment
+				// referenced by ID) at PATCH time and does not refresh the
+				// campaign's `recipient_count` when a populated segment_opts is
+				// swapped for another populated segment_opts in a subsequent
+				// PATCH — the campaign keeps the prior snapshot's recipient
+				// count even though its stored conditions are correctly updated.
+				// Empirically the only PATCH shape that triggers a fresh
+				// snapshot is the transition from "no segment" to "populated
+				// segment". So before PATCHing a populated segment_opts onto an
+				// existing campaign, first PATCH segment_opts to an empty
+				// object to force Mailchimp through that transition.
+				//
+				// The reset PATCH lands a transient "send to the entire
+				// audience" state on Mailchimp's side. To make sure a failed
+				// main PATCH below can't leave the campaign stuck in that
+				// state (which any subsequent scheduled-send retry,
+				// hub-driven sync, or parallel actions/send would otherwise
+				// blast to the full list), capture the campaign's existing
+				// recipients first and roll back to them if the main PATCH
+				// throws.
+				//
+				// References:
+				// - https://mailchimp.com/help/troubleshooting-advanced-segments.
+				// - https://mailchimp.com/help/schedule-or-pause-a-regular-email-campaign.
+				$rollback_recipients = null;
+				if (
+					isset( $payload['recipients']['segment_opts'], $payload['recipients']['list_id'] ) &&
+					! empty( (array) $payload['recipients']['segment_opts'] )
+				) {
+					// Capture the existing recipients so we can roll back
+					// if the main PATCH below fails. Missing/empty
+					// segment_opts on the existing campaign is fine — we'll
+					// rollback to (object) [] (whole audience) which is the
+					// state the reset left us in anyway.
+					try {
+						$existing = $this->validate( $mc->get( "campaigns/$mc_campaign_id", [ 'fields' => 'recipients' ] ) );
+						if ( is_array( $existing ) && ! empty( $existing['recipients']['list_id'] ) ) {
+							$prior_segment_opts  = $existing['recipients']['segment_opts'] ?? [];
+							$rollback_recipients = [
+								'list_id'      => $existing['recipients']['list_id'],
+								'segment_opts' => empty( $prior_segment_opts ) ? (object) [] : $prior_segment_opts,
+							];
+						}
+					} catch ( Exception $capture_error ) {
+						// Without a prior snapshot we can't safely roll
+						// back. Log so operators can correlate if the main
+						// PATCH then also fails; sync continues.
+						Newspack_Newsletters_Logger::log(
+							'Mailchimp prior recipients capture failed for campaign ' . $mc_campaign_id . ': ' . $capture_error->getMessage() . ' — proceeding without rollback safety.'
+						);
+					}
+
+					// Reset PATCH is best-effort: if Mailchimp rejects it
+					// (e.g. the campaign is already sent or otherwise
+					// locked), let the main PATCH below produce the
+					// canonical error.
+					try {
+						if ( null !== $rollback_recipients ) {
+							$this->validate(
+								$mc->patch(
+									"campaigns/$mc_campaign_id",
+									[
+										'recipients' => [
+											'list_id'      => $payload['recipients']['list_id'],
+											'segment_opts' => (object) [],
+										],
+									]
+								)
+							);
+						}
+					} catch ( Exception $reset_error ) {
+						Newspack_Newsletters_Logger::log(
+							'Mailchimp segment_opts reset failed for campaign ' . $mc_campaign_id . ': ' . $reset_error->getMessage() . ' — proceeding with main PATCH.'
+						);
+						// The reset didn't apply, so the campaign is
+						// still in its prior recipients state and there's
+						// nothing to roll back if the main PATCH also
+						// fails.
+						$rollback_recipients = null;
+					}
+				}
+
+				try {
+					$campaign_result = $this->validate(
+						$mc->patch( "campaigns/$mc_campaign_id", $payload )
+					);
+				} catch ( Exception $main_error ) {
+					// The reset PATCH already neutered segment_opts;
+					// without restoring the prior state the Mailchimp
+					// campaign is now configured to send to the entire
+					// audience. Attempt a rollback PATCH. Rollback
+					// failures are logged but cannot be propagated
+					// further — we re-throw the original main-PATCH
+					// error so callers see the canonical sync error.
+					if ( null !== $rollback_recipients ) {
+						try {
+							$this->validate(
+								$mc->patch( "campaigns/$mc_campaign_id", [ 'recipients' => $rollback_recipients ] )
+							);
+							Newspack_Newsletters_Logger::log(
+								'Mailchimp main PATCH failed after segment_opts reset — rolled back recipients for campaign ' . $mc_campaign_id . '.'
+							);
+						} catch ( Exception $rollback_error ) {
+							Newspack_Newsletters_Logger::log(
+								'Mailchimp rollback PATCH failed for campaign ' . $mc_campaign_id . ': ' . $rollback_error->getMessage() . ' — campaign may be left in an inconsistent recipients state.'
+							);
+						}
+					}
+					throw $main_error;
+				}
 			} else {
 				$campaign_result = $this->validate(
 					$mc->post( 'campaigns', $payload )

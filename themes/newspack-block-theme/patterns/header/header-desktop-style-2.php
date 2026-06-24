@@ -42,7 +42,7 @@
 	<!-- wp:group {"lock":{"move":false,"remove":true},"metadata":{"name":"<?php esc_html_e( 'Menu', 'newspack-block-theme' ); ?>"},"align":"wide","layout":{"type":"flex","flexWrap":"nowrap","justifyContent":"space-between","verticalAlignment":"center"}} -->
 	<div class="wp-block-group alignwide">
 		<!-- wp:newspack/overlay-menu {"instanceId":"fedb5a226df2"} -->
-			<div class="wp-block-newspack-overlay-menu"><!-- wp:newspack/overlay-menu-trigger {"triggerText":"<?php esc_html_e( 'MENU', 'newspack-block-theme' ); ?>","style":{"color":{"background":"#ffffff00"},"elements":{"link":{"color":{"text":"var:preset|color|contrast"}}},"spacing":{"padding":{"top":"var:preset|spacing|20","bottom":"var:preset|spacing|20","left":"var:preset|spacing|20","right":"var:preset|spacing|20"}}},"textColor":"contrast"} /-->
+			<div class="wp-block-newspack-overlay-menu"><!-- wp:newspack/overlay-menu-trigger {"className":"has-background-transparent","triggerText":"<?php esc_html_e( 'Menu', 'newspack-block-theme' ); ?>","style":{"typography":{"textTransform":"uppercase"},"elements":{"link":{"color":{"text":"var:preset|color|contrast"}}},"spacing":{"padding":{"top":"var:preset|spacing|20","bottom":"var:preset|spacing|20","left":"var:preset|spacing|20","right":"var:preset|spacing|20"}}},"textColor":"contrast"} /-->
 			<!-- wp:newspack/overlay-menu-panel -->
 			<div class="wp-block-newspack-overlay-menu-panel"><!-- wp:navigation {"className":"is-style-flatten","layout":{"type":"flex","setCascadingProperties":true,"orientation":"vertical"}} /--></div>
 			<!-- /wp:newspack/overlay-menu-panel --></div>
@@ -50,7 +50,7 @@
 
 		<!-- wp:navigation {"className":"primary-navigation","layout":{"type":"flex","setCascadingProperties":true,"justifyContent":"center","orientation":"horizontal","flexWrap":"wrap"},"style":{"typography":{"textTransform":"uppercase"}}} /-->
 
-		<!-- wp:template-part {"slug":"search-menu","theme":"newspack-block-theme","tagName":"div","className":"search-menu"} /-->
+		<!-- wp:newspack/overlay-search {"className":"is-style-icon-only has-background-transparent","style":{"elements":{"link":{"color":{"text":"var:preset|color|contrast"}}},"spacing":{"padding":{"right":"var:preset|spacing|20","left":"var:preset|spacing|20","top":"var:preset|spacing|20","bottom":"var:preset|spacing|20"}}},"textColor":"contrast"} /-->
 	</div>
 	<!-- /wp:group -->
 

@@ -1,7 +1,7 @@
 === Newspack Newsletters ===
 Contributors: automattic, rabberson, adamboro, thomasguillot, dkoo, laurelfulford, claudiulodro, iuravic, jboydston
-Requires at least: 6.6
-Tested up to: 6.7
+Requires at least: 6.9
+Tested up to: 7.0
 Requires PHP: 7.4
 Stable tag: trunk
 Tags: newsletters, Newspack, Mailchimp, Active Campaign, Constant Contact

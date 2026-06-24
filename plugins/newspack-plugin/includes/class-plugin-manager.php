@@ -32,6 +32,19 @@ class Plugin_Manager {
 	];
 
 	/**
+	 * Per-request memoization for get_managed_plugin_status(), keyed by slug.
+	 *
+	 * The underlying get_installed_plugins() calls wp_get_themes() which rescans
+	 * /themes on every call (get_plugins() is cached intra-request, themes are
+	 * not). With multiple integrations declaring the same required plugin, that
+	 * scan ran once per lookup. The cache is per-request, so plugin state changes
+	 * between requests are picked up on the next call.
+	 *
+	 * @var array<string, string>
+	 */
+	private static $managed_plugin_status_cache = [];
+
+	/**
 	 * Get info about all the managed plugins and their status.
 	 *
 	 * @todo Define what the structure of this looks like better and load it up from a config or something.
@@ -393,6 +406,9 @@ class Plugin_Manager {
 		if ( Newspack::is_debug_mode() ) {
 			return 'active';
 		}
+		if ( isset( self::$managed_plugin_status_cache[ $plugin_slug ] ) ) {
+			return self::$managed_plugin_status_cache[ $plugin_slug ];
+		}
 		$status            = 'uninstalled';
 		$installed_plugins = self::get_installed_plugins();
 
@@ -430,7 +446,18 @@ class Plugin_Manager {
 			}
 		}
 
+		self::$managed_plugin_status_cache[ $plugin_slug ] = $status;
 		return $status;
+	}
+
+	/**
+	 * Reset the per-request memoization of get_managed_plugin_status().
+	 *
+	 * Tests that mutate plugin install/active state mid-test must call this so
+	 * subsequent get_managed_plugin_status() calls re-derive the status.
+	 */
+	public static function reset_managed_plugin_status_cache() {
+		self::$managed_plugin_status_cache = [];
 	}
 
 	/**

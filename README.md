@@ -34,15 +34,7 @@ You only need to run this the first time you set up your env.
 
 The default builds using PHP 8.3. You can also call `./build-image-82.sh` to build an image with PHP 8.2. It's a good idea to have both.
 
-### Clone all repos
-
-This will clone all Newspack repos inside the `repos` folder. Assumes your host machine is authenticated with GitHub. Default git protocol is SSH. Add `-h` or `--https` to clone using HTTPS instead.
-
-```BASH
-./clone-repos.sh
-```
-
-### Lauch the container and install WordPress
+### Launch the container and install WordPress
 
 Now we are going to use the `n` script. (Tip: Create an alias in your `.bashrc` so you can call it from anywhere)
 
@@ -146,18 +138,19 @@ Other commands:
 
 Many of the `n` commands will act on the project you are currently in. For example, if you are in the main plugin folder, `n build` will build the plugin. If you are inside the folder of one of your additional sites, `n shell` will launch the WP Shell for that particular site.
 
-But navigating between all these directories might become tiring, since you have to go to the `repos` folder, and then down to `additional-sites-html` and sometimes inside one particular plugin you want to debug.
+But navigating between all these directories might become tiring, since you have to go to the `plugins` or `themes` folder, and then down to `additional-sites-html` and sometimes inside one particular plugin you want to debug.
 
 To make navigating easier, use the `ncd` terminal command.
 
 `ncd` will take you to the directory you want, no matter where you are at when you type it. When you type `ncd plugin`, it will:
 
-* Look for an exact match in the repos folder: `... /repos/plugin`
-* Look for a repo with the `newspack-` prefix: `... /repos/newspack-plugin`
+* Look for an exact match in the plugins folder: `... /plugins/plugin`
+* Look for a plugin with the `newspack-` prefix: `... /plugins/newspack-plugin`
+* Look for a theme: `... /themes/newspack-theme`
 * Look for an additional site with that name `... /additional-sites-html/plugin`
 * Look for a plugin installed in the main site `... /html/wp-content/plugins/plugin`
 
-So when you arrive at your home folder and want to go to the `newspack-newsletters` project, instead of typing something like `cd my-project/newspack-workspace/repos/newspack-newsletters`, all you need to do is `ncd newsletters`!
+So when you arrive at your home folder and want to go to the `newspack-newsletters` project, instead of typing something like `cd my-project/newspack-workspace/plugins/newspack-newsletters`, all you need to do is `ncd newsletters`!
 
 To start using it, you need to add it to your terminal by running `n cd-install` and then inform the loader file you want to add the script to, for example `.bashrc`, `.zshrc`, etc.
 
@@ -243,7 +236,7 @@ Here's an example of a `launch.json` file for VSCode to be used for the `newspac
         "max_children": 128
       },
       "pathMappings": {
-        "/newspack-repos/newspack-plugin": "${workspaceRoot}"
+        "/newspack-plugins/newspack-plugin": "${workspaceRoot}"
       },
     }
   ]
@@ -267,15 +260,15 @@ n env create my-feature --worktree newspack-plugin:fix/my-feature
 n env up my-feature --build
 
 # 4. Visit http://localhost:8081 — this site uses the worktree branch
-#    Meanwhile http://localhost still uses the main repos/ checkout
+#    Meanwhile http://localhost still uses the main plugins/ checkout
 ```
 
 ### Worktree commands
 
 ```BASH
-n worktree add <repo> <branch>      # Create a worktree from a repo in repos/
-n worktree list [repo]              # List active worktrees (all repos or one)
-n worktree remove <repo> <branch>   # Remove a worktree
+n worktree add <plugin> <branch>    # Create a worktree for a plugin
+n worktree list [plugin]            # List active worktrees (all or one)
+n worktree remove <plugin> <branch> # Remove a worktree
 ```
 
 ### Environment commands
@@ -288,7 +281,7 @@ n env destroy <name>                # Stop and remove the environment
 n env list                          # List all environments and their status
 ```
 
-You can override multiple repos in a single environment:
+You can override multiple plugins in a single environment:
 
 ```BASH
 n worktree add newspack-plugin fix/my-feature
@@ -301,7 +294,7 @@ n env create my-feature \
 
 ### How it works
 
-Each environment is a lightweight Apache/PHP container sharing the same database as the main site. The existing symlinks in `wp-content/plugins/` point to `/newspack-repos/<plugin>` inside the container. By mounting a worktree directory on top of `/newspack-repos/<plugin>`, Docker's mount specificity routes the environment to the correct branch — no symlink changes needed.
+Each environment is a lightweight Apache/PHP container sharing the same database as the main site. The existing symlinks in `wp-content/plugins/` point to `/newspack-plugins/<plugin>` inside the container. By mounting a worktree directory on top of `/newspack-plugins/<plugin>`, Docker's mount specificity routes the environment to the correct branch -- no symlink changes needed.
 
 If `--port` is omitted, a port is automatically assigned starting from 8081, skipping any ports already used by other environments.
 
@@ -322,7 +315,9 @@ Run the one-time setup script to allow these specific operations without a passw
 ./bin/setup-networking.sh
 ```
 
-This installs a locked-down wrapper script (`newspack-manage-host`) that only allows adding/removing `127.0.0.*` loopback aliases and `*.local` hosts entries, and creates a sudoers rule so your user can run it without a password. After this, `n start`, `n env create`, `n env up`, and `n env destroy` will manage networking automatically -- no password prompts, even from non-interactive terminals.
+This installs a locked-down wrapper script (`newspack-manage-host`) that only allows adding/removing `127.0.0.*` loopback aliases and `*.test` (and legacy `*.local`) hosts entries, and creates a sudoers rule so your user can run it without a password. After this, `n start`, `n env create`, `n env up`, and `n env destroy` will manage networking automatically -- no password prompts, even from non-interactive terminals.
+
+> **Already ran this before the `.test` migration?** Re-run `./bin/setup-networking.sh` to install the updated wrapper -- the previous version only accepts `.local` domains and will reject newly-created `.test` environments.
 
 To undo: `sudo rm /etc/sudoers.d/newspack-manage-host /usr/local/bin/newspack-manage-host`
 
@@ -338,7 +333,7 @@ This one command does everything needed to go from nothing to a runnable e2e sit
 
 1. Creates worktrees on `release` for the plugins the suite needs (`newspack-plugin`, `newspack-blocks`, `newspack-popups`, `newspack-newsletters`, `newspack-ads`, `newspack-theme`) and an isolated environment that mounts them.
 2. Starts the environment, installs WordPress, and writes working permalink rewrite rules.
-3. Builds any worktree that's missing compiled assets (it doesn't assume `repos/` is built).
+3. Builds any worktree that's missing compiled assets.
 4. Installs the e2e helper plugin and runs `e2e-reset.sh` (Newspack setup, sample content, snapshots, WooCommerce) — both pulled from the e2e-tests checkout, not vendored here.
 5. Points the e2e repo's `.env` at the new site (`SITE_URL`, admin credentials), preserving any other keys.
 
@@ -348,7 +343,7 @@ It's safe to re-run: an existing environment is reused, and only worktrees missi
 # Options:
 n env e2e-setup <name> \
   --branch <branch>   # branch to check out per plugin (default: release)
-  --domain <domain>   # site domain (default: <name>.local)
+  --domain <domain>   # site domain (default: <name>.test)
   --e2e-repo <path>   # path to the newspack-e2e-tests checkout
                       #   (default: a sibling of this workspace)
 ```
@@ -427,7 +422,7 @@ define( 'NEWSPACK_DOCKER_SITE_URL_CLI_OVERRIDE', 'https://my-domain.my-tunnel.co
 
 If you need to run a couple of additional sites, we got you covered.
 
-You can have a number of additional sites running under `you-name-it.local`. They will live in their own local domain, such as `site1.local` and `another-site.local`.
+You can have a number of additional sites running under `you-name-it.test`. They will live in their own local domain, such as `site1.test` and `another-site.test`.
 
 `n sites-add $site_name` will launch a new site. The site will come with Newpack already initialized and all the plugins linked. Your secrets will also be copied. It's basically the same result as running `n reset-site` for your main site.
 

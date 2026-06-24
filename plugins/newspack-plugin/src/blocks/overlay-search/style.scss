@@ -1,0 +1,101 @@
+/**
+ * Overlay Search Block
+ *
+ * Panel styles are written at root scope (not nested under the block wrapper
+ * selector) because `view.js` moves the panel to `document.body` on open and
+ * loses its ancestor context. Same constraint applies to `overlay-menu`.
+ */
+
+@use "../../newspack-ui/scss/variables/breakpoints";
+@use "../../../packages/colors/colors.module" as colors;
+
+// Panel — root scope.
+.newspack-overlay-search__panel {
+	position: fixed;
+	inset: 0;
+	top: var(--wp-admin--admin-bar--height, 0);
+	z-index: 99998;
+	display: flex;
+	flex-direction: column;
+	// Anchor content near the top, matching newspack-block-theme's search overlay.
+	padding:
+		calc(10vh + var(--wp--custom--spacing--75, 4rem))
+		var(--wp--preset--spacing--30, 1rem)
+		var(--wp--preset--spacing--30, 1rem);
+	background: var(--wp--custom--color--neutral-70, var(--newspack-ui-color-neutral-70, #{colors.$neutral-700}));
+	overflow-y: auto;
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 250ms ease-in-out, visibility 0s linear 250ms;
+
+	@media (min-width: breakpoints.$tablet_width) {
+		padding-right: var(--wp--preset--spacing--40, 1.5rem);
+		padding-left: var(--wp--preset--spacing--40, 1.5rem);
+	}
+
+	&[aria-hidden="false"] {
+		opacity: 1;
+		visibility: visible;
+		transition: opacity 250ms ease-in-out, visibility 0s linear 0s;
+
+		.newspack-overlay-search__content {
+			animation: newspack-overlay-search__fade-in 250ms ease-in-out;
+		}
+	}
+
+	.newspack-overlay-search__content {
+		width: 100%;
+		max-width: var(--wp--style--global--content-size, 632px);
+		margin: 0 auto;
+	}
+
+	.newspack-overlay-search__close {
+		position: absolute;
+		top: var(--wp--preset--spacing--30, 1rem);
+		right: var(--wp--preset--spacing--30, 1rem);
+		display: grid;
+		place-items: center;
+		width: var(--wp--custom--spacing--65, 2.5rem);
+		height: var(--wp--custom--spacing--65, 2.5rem);
+		padding: 0;
+		background: transparent;
+		border: 0;
+		border-radius: var(--wp--custom--border--radius-small, 0.25rem);
+		cursor: pointer;
+		color: inherit;
+
+		&:focus-visible {
+			outline: 2px solid;
+			outline-offset: 1px;
+		}
+
+		svg {
+			display: block;
+			width: var(--wp--preset--spacing--40, 1.5rem);
+			height: var(--wp--preset--spacing--40, 1.5rem);
+			fill: currentcolor;
+		}
+	}
+}
+
+// Lock document scrolling while any search overlay instance is open.
+body:is(
+	[class^="menu-open--overlay-search-"],
+	[class*=" menu-open--overlay-search-"]
+) {
+	overflow: hidden !important; // !important to temporarily override style from block theme's overlay approach.
+}
+
+// Slide-down + fade-in on the content as the panel opens — mirrors the
+// `search-contents__fade-in-animation` in newspack-block-theme.
+@keyframes newspack-overlay-search__fade-in { /* stylelint-disable-line keyframes-name-pattern */
+	0% {
+		opacity: 0;
+		transform: translateY(calc(-1 * var(--wp--preset--spacing--30, 1rem)));
+	}
+
+	100% {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}

@@ -897,11 +897,22 @@ function newspack_override_avatar_downsizing( $default_value, $args ) {
 add_filter( 'jetpack_photon_override_image_downsize', 'newspack_override_avatar_downsizing', 10, 2 );
 
 /**
- * Register meta fields:
- * - Featured Image position option
- * - Article Subtitle
+ * Register the theme's editor-managed post meta:
+ * - Featured image position
+ * - Article subtitle
+ * - Article summary title
+ * - Article summary
+ * - Hide page title (pages)
+ * - Show share buttons (pages)
  */
 function newspack_register_meta() {
+	// These fields are edited through dedicated editor panels via the REST API.
+	// An explicit auth_callback keeps them REST-editable even though
+	// newspack_protect_editor_meta() marks them protected (see that function).
+	$auth_callback = function ( $allowed, $meta_key, $object_id ) {
+		return current_user_can( 'edit_post', $object_id );
+	};
+
 	$featured_image_post_types = newspack_get_featured_image_post_types();
 
 	foreach ( $featured_image_post_types as $post_type ) {
@@ -909,9 +920,10 @@ function newspack_register_meta() {
 			$post_type,
 			'newspack_featured_image_position',
 			array(
-				'show_in_rest' => true,
-				'single'       => true,
-				'type'         => 'string',
+				'show_in_rest'  => true,
+				'single'        => true,
+				'type'          => 'string',
+				'auth_callback' => $auth_callback,
 			)
 		);
 	}
@@ -920,9 +932,10 @@ function newspack_register_meta() {
 		'post',
 		'newspack_post_subtitle',
 		array(
-			'show_in_rest' => true,
-			'single'       => true,
-			'type'         => 'string',
+			'show_in_rest'  => true,
+			'single'        => true,
+			'type'          => 'string',
+			'auth_callback' => $auth_callback,
 		)
 	);
 
@@ -930,10 +943,11 @@ function newspack_register_meta() {
 		'post',
 		'newspack_article_summary_title',
 		array(
-			'default'      => esc_html__( 'Overview:', 'newspack-theme' ),
-			'show_in_rest' => true,
-			'single'       => true,
-			'type'         => 'string',
+			'default'       => esc_html__( 'Overview:', 'newspack-theme' ),
+			'show_in_rest'  => true,
+			'single'        => true,
+			'type'          => 'string',
+			'auth_callback' => $auth_callback,
 		)
 	);
 
@@ -941,9 +955,10 @@ function newspack_register_meta() {
 		'post',
 		'newspack_article_summary',
 		array(
-			'show_in_rest' => true,
-			'single'       => true,
-			'type'         => 'string',
+			'show_in_rest'  => true,
+			'single'        => true,
+			'type'          => 'string',
+			'auth_callback' => $auth_callback,
 		)
 	);
 
@@ -951,9 +966,10 @@ function newspack_register_meta() {
 		'page',
 		'newspack_hide_page_title',
 		array(
-			'show_in_rest' => true,
-			'single'       => true,
-			'type'         => 'boolean',
+			'show_in_rest'  => true,
+			'single'        => true,
+			'type'          => 'boolean',
+			'auth_callback' => $auth_callback,
 		)
 	);
 
@@ -961,14 +977,48 @@ function newspack_register_meta() {
 		'page',
 		'newspack_show_share_buttons',
 		array(
-			'show_in_rest' => true,
-			'single'       => true,
-			'type'         => 'boolean',
-			'default'      => false,
+			'show_in_rest'  => true,
+			'single'        => true,
+			'type'          => 'boolean',
+			'default'       => false,
+			'auth_callback' => $auth_callback,
 		)
 	);
 }
 add_action( 'init', 'newspack_register_meta' );
+
+/**
+ * Mark the theme's editor-managed post meta as protected.
+ *
+ * These fields are managed by dedicated block-editor panels (saved via the REST
+ * API), not by the classic "Custom Fields" box. When that box is enabled, it
+ * renders a row for each non-protected meta key and resubmits its page-load
+ * value on save; if a classic meta box triggers the block editor's separate
+ * meta-box save, that stale value silently overwrites the value the REST save
+ * just wrote. Marking these keys protected removes them from the Custom Fields
+ * box so they can't be clobbered. REST editing is preserved by the explicit
+ * auth_callback set on each registration in newspack_register_meta().
+ *
+ * @param bool   $protected Whether the meta key is considered protected.
+ * @param string $meta_key  The meta key.
+ * @param string $meta_type The type of object the meta belongs to (post, term, user, etc.).
+ * @return bool Whether the meta key is protected.
+ */
+function newspack_protect_editor_meta( $protected, $meta_key, $meta_type ) {
+	if ( 'post' !== $meta_type ) {
+		return $protected;
+	}
+	$editor_meta = array(
+		'newspack_featured_image_position',
+		'newspack_post_subtitle',
+		'newspack_article_summary_title',
+		'newspack_article_summary',
+		'newspack_hide_page_title',
+		'newspack_show_share_buttons',
+	);
+	return in_array( $meta_key, $editor_meta, true ) ? true : $protected;
+}
+add_filter( 'is_protected_meta', 'newspack_protect_editor_meta', 10, 3 );
 
 
 /**
