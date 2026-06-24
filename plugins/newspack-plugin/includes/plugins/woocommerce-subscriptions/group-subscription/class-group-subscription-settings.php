@@ -157,9 +157,9 @@ class Group_Subscription_Settings {
 		$custom_product_pricing_options['newspack_group_subscription_limit'] = [
 			'id'                => self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit',
 			'wrapper_class'     => 'show_if_newspack_group_subscription_enabled',
-			'label'             => __( 'Group subscription member limit', 'newspack-plugin' ),
+			'label'             => __( 'Group subscription member limit (in addition to owner)', 'newspack-plugin' ),
 			'desc_tip'          => true,
-			'description'       => __( 'Set the maximum number of members for group subscriptions. Set to 0 to allow an unlimited number of group members.', 'newspack-plugin' ),
+			'description'       => __( 'Set the maximum number of members allowed in addition to the owner. Set to 0 to allow an unlimited number of group members.', 'newspack-plugin' ),
 			'default'           => self::DEFAULT_SETTINGS['limit'],
 			'product_types'     => [ 'subscription', 'subscription_variation' ],
 			'type'              => 'number',
@@ -188,11 +188,13 @@ class Group_Subscription_Settings {
 		if ( ! Group_Subscription::is_group_subscription( $subscription ) ) {
 			return $column_content;
 		}
-		$settings     = self::get_subscription_settings( $subscription );
-		$members      = Group_Subscription::get_members( $subscription );
-		$member_count = count( $members );
-		$limit        = $settings['limit'] > 0
-			? $settings['limit']
+		$settings = self::get_subscription_settings( $subscription );
+		// The owner counts as a member, so use the owner-inclusive count and a capacity
+		// (limit + owner) so this matches the member-facing card and Members tab.
+		$member_count = Group_Subscription::get_member_count( $subscription );
+		$capacity     = Group_Subscription::get_member_capacity( $subscription );
+		$limit        = null !== $capacity
+			? $capacity
 			: __( 'unlimited', 'newspack-plugin' );
 
 		$group_markup = sprintf(
@@ -201,7 +203,7 @@ class Group_Subscription_Settings {
 			\esc_html( $settings['name'] ),
 			\esc_html(
 				sprintf(
-					/* translators: 1: member count, 2: member limit or "unlimited" */
+					/* translators: 1: member count, 2: member capacity or "unlimited" */
 					__( '%1$s of %2$s members', 'newspack-plugin' ),
 					$member_count,
 					$limit
@@ -356,8 +358,12 @@ class Group_Subscription_Settings {
 		}
 		$settings = self::get_subscription_settings( $subscription );
 		$product  = \wc_get_product( WooCommerce_Subscriptions::get_subscription_product_id( $subscription ) );
-		$members = Group_Subscription::get_members( $subscription );
-		$invites = Group_Subscription_Invite::get_invites( $subscription );
+		$members  = Group_Subscription::get_members( $subscription );
+		$managers = Group_Subscription::get_managers( $subscription );
+		// The owner/manager(s) are rendered (non-removable) at the top of the list below,
+		// so exclude any manager that also carries member meta to avoid a duplicate row.
+		$member_only = array_values( array_diff( array_map( 'intval', $members ), array_map( 'intval', $managers ) ) );
+		$invites  = Group_Subscription_Invite::get_invites( $subscription );
 		?>
 		<div class="newspack-group-subscription__container" data-subscription-id="<?php echo \esc_attr( $subscription->get_id() ); ?>">
 			<div class="newspack-group-subscription__settings">
@@ -421,14 +427,29 @@ class Group_Subscription_Settings {
 						sprintf(
 							// translators: %d: The number of group members.
 							__( 'Group members (<span class="newspack-group-subscription__members-count">%d</span>)', 'newspack-plugin' ),
-							count( $members ) + count( array_values( $invites ) )
+							// The owner counts as a member, so include managers alongside members and pending invites.
+							Group_Subscription::get_member_count( $subscription ) + count( array_values( $invites ) )
 						)
 					);
 					?>
 				</h3>
 				<ul class="newspack-group-subscription__members-list">
 					<?php
-					foreach ( $members as $member_id ) :
+					// The owner counts as a member of the group, so render the manager(s) first
+					// as non-removable rows. The JS keeps the count in sync by tallying list items.
+					foreach ( $managers as $manager_id ) :
+						$manager_user = get_user_by( 'id', $manager_id );
+						if ( ! $manager_user ) {
+							continue;
+						}
+						?>
+						<li>
+							<a class="newspack-group-subscription__member-user-link" href="<?php echo \esc_url( \get_edit_user_link( $manager_user->ID ) ); ?>"><?php echo \esc_html( $manager_user->user_email ); ?></a>
+							<span class="newspack-group-subscription__member-role"><?php \esc_html_e( '(owner)', 'newspack-plugin' ); ?></span>
+						</li>
+						<?php
+					endforeach;
+					foreach ( $member_only as $member_id ) :
 						$user = get_user_by( 'id', $member_id );
 						if ( ! $user || ! Reader_Activation::is_user_reader( $user ) ) {
 							continue;
