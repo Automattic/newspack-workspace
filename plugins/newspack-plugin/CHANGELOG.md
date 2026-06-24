@@ -1,3 +1,10 @@
+## newspack [6.43.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.6...newspack@6.43.7) (2026-06-24)
+
+
+### Bug Fixes
+
+* **reader-verification:** change "go back" button to "skip for now" ([#400](https://github.com/Automattic/newspack-workspace/issues/400)) ([ea8a730](https://github.com/Automattic/newspack-workspace/commit/ea8a730c99cba30c5a2674b5d0a3278d96626769))
+
 ## newspack [6.43.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.5...newspack@6.43.6) (2026-06-23)
 
 
