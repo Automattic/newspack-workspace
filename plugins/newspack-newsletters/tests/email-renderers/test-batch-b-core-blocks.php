@@ -51,28 +51,31 @@ class Test_Batch_B_Core_Blocks extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A default separator renders as a plain rule, matching vanilla WP.
+	 * A default separator renders as an email-safe table-based rule.
 	 *
-	 * Vanilla WP emits a bare `<hr class="wp-block-separator …">` with no inline
-	 * border styling, and so does the WC engine — the package passes the `<hr>`
-	 * through unchanged. No override is needed.
+	 * The Newspack separator override replaces the bare `<hr>` with a centered
+	 * `<table>` carrying an explicit `border-top` on a `<td>`, so the default
+	 * separator renders correctly in email without the `.wp-block-separator`
+	 * stylesheet (which is not loaded in email clients).
 	 */
 	public function test_separator_default_passes_through() {
 		$html = $this->render_newsletter( '<!-- wp:separator --><hr class="wp-block-separator has-alpha-channel-opacity"/><!-- /wp:separator -->' );
-		$this->assertStringContainsString( '<hr class="wp-block-separator', $html, 'Expected the separator <hr> to render with its block class.' );
+		// The override emits a table-based rule, not a bare <hr>.
+		$this->assertStringContainsString( 'border-top:', $html, 'Expected the default separator to render with an explicit border-top on a table cell.' );
+		$this->assertMatchesRegularExpression( '/width:\s*1\d{2}px/', $html, 'Expected the default separator to have a constrained width.' );
 	}
 
 	/**
-	 * A colored separator carries its color as inline styles, matching vanilla WP.
+	 * A colored separator carries its color as a border-top on a table cell.
 	 *
-	 * The preset background/text color must be inlined on the `<hr>` so it shows
-	 * in email clients (which ignore the class-based color stylesheet). The
-	 * package already does this, so no override is needed.
+	 * The Newspack separator override resolves the preset color slug to a hex
+	 * value and emits it as an explicit `border-top` on a `<td>`, so the color
+	 * renders correctly in email clients without external CSS.
 	 */
 	public function test_separator_color_is_inlined() {
 		$content = '<!-- wp:separator {"backgroundColor":"vivid-red","className":"is-style-wide"} --><hr class="wp-block-separator has-text-color has-vivid-red-color has-alpha-channel-opacity has-vivid-red-background-color has-background is-style-wide"/><!-- /wp:separator -->';
 		$html    = $this->render_newsletter( $content );
-		$this->assertMatchesRegularExpression( '/<hr class="wp-block-separator[^"]*"[^>]*style="[^"]*background-color: ?#cf2e2e/', $html, 'Expected the separator background color to be inlined for email.' );
+		$this->assertMatchesRegularExpression( '/<td[^>]*style="[^"]*border-top:[^"]*#cf2e2e/', $html, 'Expected the separator color to appear as a border-top on a table cell.' );
 	}
 
 	/**
