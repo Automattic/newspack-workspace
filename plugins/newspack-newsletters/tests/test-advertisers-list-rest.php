@@ -108,4 +108,54 @@ class Advertisers_List_REST_Test extends WP_UnitTestCase {
 		$this->assertSame( 'Top-level advertiser', $data['name'] );
 		$this->assertSame( 0, $data['parent'] );
 	}
+
+	/**
+	 * The advertiser count must match the Ads list, which shows non-publish
+	 * ads too — so a draft ad should count, not leave the advertiser at `0`.
+	 */
+	public function test_advertiser_count_includes_non_publish_ads() {
+		$term = wp_insert_term( 'Acme', Ads::ADVERTISER_TAX );
+		$this->assertIsArray( $term );
+
+		$ad = self::factory()->post->create(
+			[
+				'post_type'   => Ads::CPT,
+				'post_status' => 'draft',
+			]
+		);
+		wp_set_object_terms( $ad, [ (int) $term['term_id'] ], Ads::ADVERTISER_TAX );
+
+		$fresh = get_term( $term['term_id'], Ads::ADVERTISER_TAX );
+		$this->assertSame( 1, (int) $fresh->count );
+	}
+
+	/**
+	 * A newsletter tagged with an advertiser must not inflate the count —
+	 * only ads (Ads::CPT) should be counted.
+	 */
+	public function test_advertiser_count_excludes_newsletters() {
+		$term = wp_insert_term( 'Newsletter-free Advertiser', Ads::ADVERTISER_TAX );
+		$this->assertIsArray( $term );
+		$term_id = (int) $term['term_id'];
+
+		$ad = self::factory()->post->create(
+			[
+				'post_type'   => Ads::CPT,
+				'post_status' => 'publish',
+			]
+		);
+		wp_set_object_terms( $ad, [ $term_id ], Ads::ADVERTISER_TAX );
+
+		$newsletter = self::factory()->post->create(
+			[
+				'post_type'   => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_status' => 'publish',
+			]
+		);
+		wp_set_object_terms( $newsletter, [ $term_id ], Ads::ADVERTISER_TAX );
+
+		clean_term_cache( [ $term_id ], Ads::ADVERTISER_TAX );
+		$fresh = get_term( $term_id, Ads::ADVERTISER_TAX );
+		$this->assertSame( 1, (int) $fresh->count );
+	}
 }

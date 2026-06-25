@@ -39,6 +39,7 @@ final class Ads {
 		add_action( 'init', [ __CLASS__, 'register_ads_cpt' ] );
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
 		add_action( 'init', [ __CLASS__, 'register_newsletter_meta' ] );
+		add_action( 'admin_init', [ __CLASS__, 'maybe_recount_advertiser_terms' ] );
 		add_action( 'save_post_' . self::CPT, [ __CLASS__, 'ad_default_fields' ], 10, 3 );
 		add_action( 'rest_api_init', [ __CLASS__, 'rest_api_init' ] );
 		add_action( 'admin_menu', [ __CLASS__, 'add_ads_page' ] );
@@ -88,22 +89,24 @@ final class Ads {
 			'post',
 			'start_date',
 			[
-				'object_subtype' => self::CPT,
-				'show_in_rest'   => true,
-				'type'           => 'string',
-				'single'         => true,
-				'auth_callback'  => '__return_true',
+				'object_subtype'    => self::CPT,
+				'show_in_rest'      => true,
+				'type'              => 'string',
+				'single'            => true,
+				'auth_callback'     => '__return_true',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_ad_date' ],
 			]
 		);
 		\register_meta(
 			'post',
 			'expiry_date',
 			[
-				'object_subtype' => self::CPT,
-				'show_in_rest'   => true,
-				'type'           => 'string',
-				'single'         => true,
-				'auth_callback'  => '__return_true',
+				'object_subtype'    => self::CPT,
+				'show_in_rest'      => true,
+				'type'              => 'string',
+				'single'            => true,
+				'auth_callback'     => '__return_true',
+				'sanitize_callback' => [ __CLASS__, 'sanitize_ad_date' ],
 			]
 		);
 		\register_meta(
@@ -297,7 +300,7 @@ final class Ads {
 			self::ADVERTISER_TAX,
 			[ self::CPT, Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT ],
 			[
-				'labels'            => [
+				'labels'                => [
 					'name'                     => __( 'Advertisers', 'newspack-newsletters' ),
 					'singular_name'            => __( 'Advertiser', 'newspack-newsletters' ),
 					'search_items'             => __( 'Search Advertisers', 'newspack-newsletters' ),
@@ -318,11 +321,12 @@ final class Ads {
 					'no_terms'                 => __( 'No advertisers', 'newspack-newsletters' ),
 					'filter_by_item'           => __( 'Filter by advertiser', 'newspack-newsletters' ),
 				],
-				'description'       => __( 'Newspack Newsletters Ads Advertisers', 'newspack-newsletters' ),
-				'public'            => true,
-				'hierarchical'      => true,
-				'show_in_rest'      => true,
-				'show_admin_column' => true,
+				'description'           => __( 'Newspack Newsletters Ads Advertisers', 'newspack-newsletters' ),
+				'public'                => true,
+				'hierarchical'          => true,
+				'show_in_rest'          => true,
+				'show_admin_column'     => true,
+				'update_count_callback' => [ __CLASS__, 'update_advertiser_term_count' ],
 			]
 		);
 	}
@@ -340,6 +344,100 @@ final class Ads {
 			return;
 		}
 		update_post_meta( $post_id, 'position_in_content', 100 );
+
+		// Seed the read-only counters so the editor's round-trip of the
+		// default value is an unchanged no-op, not a denied meta insert.
+		add_post_meta( $post_id, 'tracking_impressions', 0, true );
+		add_post_meta( $post_id, 'tracking_clicks', 0, true );
+	}
+
+	/**
+	 * Normalize an ad date meta value to `Y-m-d`.
+	 *
+	 * Accepts only a leading ISO `Y-m-d` (optionally followed by a time
+	 * component, e.g. `2026-06-29T23:59:59`), matching the SQL filter's
+	 * `STR_TO_DATE(LEFT(meta_value,10),'%Y-%m-%d')` exactly. Any value
+	 * that does not begin with a valid calendar date returns ''.
+	 *
+	 * @param mixed $value Raw meta value.
+	 * @return string `Y-m-d`, or '' when empty or not a valid leading ISO date.
+	 */
+	public static function sanitize_ad_date( $value ) {
+		$value = trim( (string) $value );
+		if ( '' === $value ) {
+			return '';
+		}
+		if ( preg_match( '/^(\d{4})-(\d{2})-(\d{2})/', $value, $matches )
+			&& checkdate( (int) $matches[2], (int) $matches[3], (int) $matches[1] ) ) {
+			return "{$matches[1]}-{$matches[2]}-{$matches[3]}";
+		}
+		return '';
+	}
+
+	/**
+	 * Count only ads (self::CPT) tagged with each advertiser term, across
+	 * the same statuses the Ads list shows. Registered as the taxonomy's
+	 * `update_count_callback` so newsletter posts tagged with an advertiser
+	 * do not inflate the count.
+	 *
+	 * @param int[]               $terms    Array of term-taxonomy IDs to update.
+	 * @param \WP_Taxonomy|string $taxonomy The taxonomy object or name.
+	 */
+	public static function update_advertiser_term_count( $terms, $taxonomy ) {
+		global $wpdb;
+
+		$taxonomy_name = is_object( $taxonomy ) ? $taxonomy->name : $taxonomy;
+		$statuses      = [ 'publish', 'private', 'future', 'draft', 'pending' ];
+
+		foreach ( $terms as $tt_id ) {
+			$tt_id = (int) $tt_id;
+			$count = (int) $wpdb->get_var( // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+				$wpdb->prepare(
+					"SELECT COUNT(*) FROM {$wpdb->term_relationships} tr
+					INNER JOIN {$wpdb->posts} p ON p.ID = tr.object_id
+					WHERE tr.term_taxonomy_id = %d
+					AND p.post_type = %s
+					AND p.post_status IN ( %s, %s, %s, %s, %s )",
+					$tt_id,
+					self::CPT,
+					$statuses[0],
+					$statuses[1],
+					$statuses[2],
+					$statuses[3],
+					$statuses[4]
+				)
+			);
+
+			do_action( 'edit_term_taxonomy', $tt_id, $taxonomy_name );
+			$wpdb->update( $wpdb->term_taxonomy, [ 'count' => $count ], [ 'term_taxonomy_id' => $tt_id ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+			do_action( 'edited_term_taxonomy', $tt_id, $taxonomy_name );
+		}
+	}
+
+	/**
+	 * One-time recount of existing advertiser terms so counts predating
+	 * the custom count callback refresh without waiting for the next edit.
+	 */
+	public static function maybe_recount_advertiser_terms() {
+		$option = 'newspack_nl_advertiser_count_recounted_v2';
+		if ( get_option( $option ) ) {
+			return;
+		}
+
+		$term_ids = get_terms(
+			[
+				'taxonomy'   => self::ADVERTISER_TAX,
+				'hide_empty' => false,
+				'fields'     => 'tt_ids',
+			]
+		);
+		if ( is_wp_error( $term_ids ) ) {
+			return;
+		}
+		if ( ! empty( $term_ids ) ) {
+			wp_update_term_count_now( $term_ids, self::ADVERTISER_TAX );
+		}
+		update_option( $option, 1 );
 	}
 
 	/**
@@ -450,15 +548,15 @@ final class Ads {
 	 */
 	public static function is_ad_active( $ad_id, $post_id = null ) {
 
-		$start_date  = get_post_meta( $ad_id, 'start_date', true );
-		$expiry_date = get_post_meta( $ad_id, 'expiry_date', true );
+		$start_date  = self::sanitize_ad_date( get_post_meta( $ad_id, 'start_date', true ) );
+		$expiry_date = self::sanitize_ad_date( get_post_meta( $ad_id, 'expiry_date', true ) );
 
 		if ( ! $start_date && ! $expiry_date ) {
 			return true;
 		}
 
 		$date_format = 'Y-m-d';
-		$date        = gmdate( $date_format );
+		$date        = current_time( $date_format );
 		if ( $post_id ) {
 			$date = get_the_date( $date_format, $post_id );
 		}

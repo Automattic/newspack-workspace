@@ -32,14 +32,14 @@ const formatTimestampAsDate = timestamp => {
 	return dateI18n( format, timestamp * 1000 );
 };
 
-const formatDate = ymd => {
-	if ( ! ymd ) {
+const formatDate = value => {
+	if ( ! value ) {
 		return '';
 	}
 	const settings = getDateSettings();
 	const format = settings.formats?.date || 'M j, Y';
-	// Append a noon UTC time so the parsed Date object lands on the
-	// intended calendar day in any reasonable site timezone.
+	// Tolerate ISO datetime meta; noon UTC keeps the parsed day timezone-safe.
+	const ymd = String( value ).slice( 0, 10 );
 	return dateI18n( format, `${ ymd }T12:00:00Z` );
 };
 
