@@ -425,6 +425,65 @@ class Test_Newsletters_Access extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that process_utm_fallback_request() grants a bypass even when the
+	 * URL carries multiple utm_source values — only one of them needs to be
+	 * a valid send list ID.
+	 *
+	 * Real-world scenario: Newspack Newsletters writes utm_source=<list_id>
+	 * at send time, then Mailchimp's audience-level Google Analytics option
+	 * appends a second utm_source=<audience-friendly-name> on top of it.
+	 * PHP's $_GET keeps only the last occurrence, so we have to walk the
+	 * raw query string to recover the Newspack-issued list ID.
+	 */
+	public function test_utm_fallback_grants_bypass_when_one_of_multiple_utm_sources_is_valid() {
+		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+
+		$post_id = $this->factory->post->create( [ 'post_type' => 'post' ] );
+		$url     = get_permalink( $post_id );
+		$this->create_sent_newsletter_with_link( 'list_abc', $url );
+
+		// String-concat the query so the duplicate utm_source survives —
+		// add_query_arg would collapse them.
+		$separator   = false === strpos( $url, '?' ) ? '?' : '&';
+		$request_url = $url . $separator . 'utm_medium=email&utm_source=list_abc&utm_source=brand.example';
+		$this->go_to( $request_url );
+
+		add_filter(
+			'newspack_newsletters_access_is_valid_send_list_id',
+			function( $valid, $list_id ) {
+				return 'list_abc' === $list_id ? true : null;
+			},
+			10,
+			2
+		);
+
+		$result = Newsletters_Access::process_utm_fallback_request( false );
+
+		unset( $_GET['utm_medium'], $_GET['utm_source'] );
+		$this->assertSame( 'verified', $result['action'] );
+		$this->assertSame( $post_id, $result['post_id'] );
+	}
+
+	/**
+	 * Test that process_utm_fallback_request() still rejects when NONE of the
+	 * stacked utm_source values matches a known send list.
+	 */
+	public function test_utm_fallback_rejects_when_no_utm_source_is_valid() {
+		update_option( 'newspack_content_gate_newsletter_link_bypass_enabled', 1, false );
+
+		$post_id     = $this->factory->post->create( [ 'post_type' => 'post' ] );
+		$url         = get_permalink( $post_id );
+		$separator   = false === strpos( $url, '?' ) ? '?' : '&';
+		$request_url = $url . $separator . 'utm_medium=email&utm_source=fake_xyz&utm_source=brand.example';
+		$this->go_to( $request_url );
+
+		$result = Newsletters_Access::process_utm_fallback_request( false );
+
+		unset( $_GET['utm_medium'], $_GET['utm_source'] );
+		$this->assertSame( 'invalid', $result['action'] );
+	}
+
+	/**
 	 * Test that process_utm_fallback_request() returns 'skipped' for a logged-in
 	 * editor, who bypasses the gate via capability checks.
 	 */

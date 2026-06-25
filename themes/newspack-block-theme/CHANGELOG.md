@@ -1,3 +1,24 @@
+## newspack-block-theme [1.28.5](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.4...newspack-block-theme@1.28.5) (2026-06-23)
+
+
+### Bug Fixes
+
+* **theme:** stop Custom Fields box overwriting editor post meta ([#375](https://github.com/Automattic/newspack-workspace/issues/375)) ([3738a64](https://github.com/Automattic/newspack-workspace/commit/3738a649164b80508530b75f4cd243b8cf0b94fa))
+
+## newspack-block-theme [1.28.4](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.3...newspack-block-theme@1.28.4) (2026-06-15)
+
+
+### Bug Fixes
+
+* **theme:** square icon-only buttons via theme.json variations ([#452](https://github.com/Automattic/newspack-workspace/issues/452)) ([fb1493d](https://github.com/Automattic/newspack-workspace/commit/fb1493d1741a329430c8c4c4287b0d3f9f01266c))
+
+## newspack-block-theme [1.28.4-alpha.1](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.3...newspack-block-theme@1.28.4-alpha.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* **theme:** square icon-only buttons via theme.json variations ([#452](https://github.com/Automattic/newspack-workspace/issues/452)) ([fb1493d](https://github.com/Automattic/newspack-workspace/commit/fb1493d1741a329430c8c4c4287b0d3f9f01266c))
+
 ## [1.28.1](https://github.com/Automattic/newspack-block-theme/compare/v1.28.0...v1.28.1) (2026-05-18)
 
 

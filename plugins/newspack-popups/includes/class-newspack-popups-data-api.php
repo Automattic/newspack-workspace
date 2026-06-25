@@ -117,6 +117,12 @@ final class Newspack_Popups_Data_Api {
 			'registration'             => 'newspack/reader-registration',
 			'donation'                 => 'newspack-blocks/donate',
 			'newsletters_subscription' => 'newspack-newsletters/subscribe',
+			// NPPD-1755: subscription/paywall capability. Emits `prompt_has_checkout`
+			// on the seen event so Insights can build a checkout-capable impressions
+			// denominator (the prompts analog of the gate `checkout_impressions`),
+			// matched to subscription orders carrying the popup id. Also gives a
+			// checkout-only prompt the `action_type='checkout'` intent (was 'undefined').
+			'checkout'                 => 'newspack-blocks/checkout-button',
 		];
 
 		$data['prompt_blocks']    = [];

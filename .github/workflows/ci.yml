@@ -58,10 +58,23 @@ jobs:
           # otherwise spawn a job that just fails.
           CHANGED=$(pnpm --silent --filter "...[$BASE_REF]" exec node -e 'console.log(process.env.PNPM_PACKAGE_NAME)' 2>/dev/null | grep -v '^newspack-workspace$' | sort -u || true)
 
+          # Root-level dependency files don't appear in pnpm's --filter graph
+          # (no source package owns them), so a Dependabot PR that only bumps
+          # entries in pnpm-lock.yaml or root package.json would otherwise skip
+          # the install job and let a lockfile/package.json mismatch land on
+          # main unchecked. Force install to run when these files change.
+          # No `2>/dev/null` here: surface the diagnostic if BASE_REF can't be
+          # resolved so the failure is loud rather than a silent fail-open.
+          ROOT_DEPS_CHANGED=false
+          if git diff --name-only "$BASE_REF...HEAD" \
+            | grep -qxE 'pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml'; then
+            ROOT_DEPS_CHANGED=true
+          fi
+
           if [ -z "$CHANGED" ]; then
             echo "js-matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
             echo "php-matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
-            echo "any=false" >> "$GITHUB_OUTPUT"
+            echo "any=$ROOT_DEPS_CHANGED" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -277,7 +290,10 @@ jobs:
   # ----------------------------------------------------------------------------
   ci-ok:
     name: CI OK
-    needs: [js, php-lint, php-test]
+    # `install` is in the needs list so a `--frozen-lockfile` failure on a
+    # root-deps-only PR (empty js/php matrices) is treated as a CI failure
+    # rather than masked by the skipped matrix jobs.
+    needs: [install, js, php-lint, php-test]
     if: always()
     runs-on: ubuntu-latest
     steps:

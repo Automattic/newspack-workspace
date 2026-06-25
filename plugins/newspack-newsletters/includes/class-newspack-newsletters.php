@@ -19,6 +19,14 @@ final class Newspack_Newsletters {
 	const API_NAMESPACE                     = 'newspack-newsletters/v1';
 
 	/**
+	 * Send-config meta keys the ESP send path reads. Single source of truth for
+	 * the fields that must be persisted before the send fires (NPPM-2935/2929).
+	 * Keep in lockstep with the send-config get_post_meta reads in the provider
+	 * send/sync path (e.g. Active_Campaign::create_campaign / sync).
+	 */
+	const SEND_CONFIG_META_KEYS = [ 'send_list_id', 'send_sublist_id', 'senderName', 'senderEmail' ];
+
+	/**
 	 * Supported fonts.
 	 *
 	 * @var array
@@ -82,6 +90,7 @@ final class Newspack_Newsletters {
 		add_filter( 'post_row_actions', [ __CLASS__, 'display_view_or_preview_link_in_admin' ] );
 		add_filter( 'jetpack_relatedposts_filter_options', [ __CLASS__, 'disable_jetpack_related_posts' ] );
 		add_action( 'save_post_' . self::NEWSPACK_NEWSLETTERS_CPT, [ __CLASS__, 'save' ], 10, 3 );
+		add_filter( 'rest_pre_insert_' . self::NEWSPACK_NEWSLETTERS_CPT, [ __CLASS__, 'persist_send_config_before_send' ], 10, 2 );
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'branding_scripts' ] );
 		add_filter( 'newspack_theme_featured_image_post_types', [ __CLASS__, 'support_featured_image_options' ] );
 		add_filter( 'gform_force_hooks_js_output', [ __CLASS__, 'suppress_gravityforms_js_on_newsletters' ] );
@@ -342,6 +351,15 @@ final class Newspack_Newsletters {
 				'default'        => -1,
 			]
 		);
+		// The four send-config keys below (SEND_CONFIG_META_KEYS) are also
+		// committed early by persist_send_config_before_send() on rest_pre_insert
+		// so the ESP send reads fresh values. That early write goes through
+		// update_post_meta() — so a registered sanitize_callback is still applied
+		// — but it bypasses the REST schema validation and the per-key
+		// 'edit_post_meta' capability check the normal meta route runs. It is
+		// therefore only safe while these keys stay permissive strings
+		// (auth_callback __return_true, no restrictive schema/sanitize). If that
+		// changes, mirror it in persist_send_config_before_send().
 		\register_meta(
 			'post',
 			'send_list_id',
@@ -548,6 +566,60 @@ final class Newspack_Newsletters {
 			update_post_meta( $post_id, 'template_id', -1 ); // Set default layout. This can be removed once WP 5.5 adoption is sufficient.
 			update_post_meta( $post_id, self::PUBLIC_POST_ID_META, wp_generate_password( 20, false, false ) ); // Generate a token that can be used to identify this post publicly.
 		}
+	}
+
+	/**
+	 * Persist send-config to post meta before the post is updated.
+	 *
+	 * The ESP send is triggered from `pre_post_update`, which fires inside
+	 * `wp_update_post()` — BEFORE the REST controller writes the request's
+	 * post meta. Without this, the send reads stale send-config and emails the
+	 * previously-stored list/segment/sender (NPPM-2935) or fails with an empty
+	 * sender (NPPM-2929). `rest_pre_insert_{cpt}` fires in
+	 * prepare_item_for_database, before `wp_update_post()`, so committing the
+	 * request's send-config here guarantees the send reads current values.
+	 *
+	 * `rest_pre_insert` runs only after the route's edit_post permission check,
+	 * and these meta keys carry no custom sanitize/auth callbacks, so no REST
+	 * guarantee is bypassed; `wp_slash` mirrors the normal meta write so the
+	 * value the send reads matches what is finally stored. Non-scalar values are
+	 * skipped (the REST schema rejects them moments later anyway). The early write
+	 * is committed during prepare and is intentionally not rolled back if the
+	 * enclosing post update later fails — acceptable because the send only fires on
+	 * a successful status transition within that same update.
+	 *
+	 * @param stdClass        $prepared_post Post object about to be inserted/updated.
+	 * @param WP_REST_Request $request       The REST request.
+	 * @return stdClass The unchanged prepared post.
+	 */
+	public static function persist_send_config_before_send( $prepared_post, $request ) {
+		// Only existing posts have a send to protect; a new auto-draft has no ID and no send.
+		if ( empty( $prepared_post->ID ) ) {
+			return $prepared_post;
+		}
+		$meta = $request['meta'];
+		if ( ! is_array( $meta ) ) {
+			return $prepared_post;
+		}
+		foreach ( self::SEND_CONFIG_META_KEYS as $key ) {
+			if ( ! array_key_exists( $key, $meta ) ) {
+				continue;
+			}
+			$value = $meta[ $key ];
+			// Send-config keys are scalar strings; skip a malformed non-scalar value.
+			// It would emit a cast warning below and persist a bogus value the send
+			// reads before REST schema validation rejects the request. null is allowed
+			// (it clears the field, matching the normal meta path's effect on read).
+			if ( null !== $value && ! is_scalar( $value ) ) {
+				continue;
+			}
+			// Skip a redundant write when unchanged (defense-in-depth; keeps unchanged saves byte-identical).
+			if ( (string) $value === (string) get_post_meta( $prepared_post->ID, $key, true ) ) {
+				continue;
+			}
+			update_post_meta( $prepared_post->ID, $key, wp_slash( $value ) );
+		}
+		return $prepared_post;
 	}
 
 	/**
@@ -909,23 +981,6 @@ final class Newspack_Newsletters {
 		}
 		$post->post_content = $request['content'];
 		return \rest_ensure_response( Newspack_Newsletters_Renderer::render_post_to_mjml( $post ) );
-	}
-
-	/**
-	 * Set post meta.
-	 * The save_post action fires before post meta is updated.
-	 * This causes newsletters to be synced to the ESP before recent changes to custom fields have been recorded,
-	 * which leads to incorrect rendering. This is addressed through custom endpoints to update the  fields
-	 * as soon as they are changed in the editor, so that the changes are available the next time sync to ESP occurs.
-	 *
-	 * @param WP_REST_Request $request API request object.
-	 */
-	public static function api_set_post_meta( $request ) {
-		$id    = $request['id'];
-		$key   = $request['key'];
-		$value = $request['value'];
-		update_post_meta( $id, $key, $value );
-		return [];
 	}
 
 	/**

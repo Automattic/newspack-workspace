@@ -22,6 +22,7 @@ final class Subtitle_Block {
 	public static function init() {
 		\add_action( 'init', [ __CLASS__, 'register_block_and_post_meta' ] );
 		\add_action( 'enqueue_block_assets', [ __CLASS__, 'enqueue_block_assets' ] );
+		\add_filter( 'is_protected_meta', [ __CLASS__, 'protect_post_meta' ], 10, 3 );
 	}
 
 	/**
@@ -39,11 +40,39 @@ final class Subtitle_Block {
 			'post',
 			self::POST_META_NAME,
 			[
-				'show_in_rest' => true,
-				'single'       => true,
-				'type'         => 'string',
+				'show_in_rest'  => true,
+				'single'        => true,
+				'type'          => 'string',
+				// Managed by the editor subtitle UI via REST. An explicit
+				// auth_callback keeps it REST-editable while protect_post_meta()
+				// marks it protected (see that method).
+				'auth_callback' => function ( $allowed, $meta_key, $object_id ) {
+					return current_user_can( 'edit_post', $object_id );
+				},
 			]
 		);
+	}
+
+	/**
+	 * Mark the subtitle meta as protected.
+	 *
+	 * The subtitle is edited through the editor subtitle UI (saved via the REST
+	 * API), not the classic "Custom Fields" box. Leaving it unprotected lets
+	 * that box resubmit a stale value on save and silently overwrite the
+	 * REST-saved value when a classic meta box triggers the block editor's
+	 * meta-box save. Protecting it removes it from the Custom Fields box; the
+	 * explicit auth_callback on the registration keeps it REST-editable.
+	 *
+	 * @param bool   $protected Whether the meta key is considered protected.
+	 * @param string $meta_key  The meta key.
+	 * @param string $meta_type The type of object the meta belongs to (post, term, user, etc.).
+	 * @return bool Whether the meta key is protected.
+	 */
+	public static function protect_post_meta( $protected, $meta_key, $meta_type ) {
+		if ( 'post' !== $meta_type ) {
+			return $protected;
+		}
+		return self::POST_META_NAME === $meta_key ? true : $protected;
 	}
 
 	/**

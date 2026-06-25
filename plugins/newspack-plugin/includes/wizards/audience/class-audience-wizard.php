@@ -45,9 +45,16 @@ class Audience_Wizard extends Wizard {
 
 	/**
 	 * Audience Configuration Constructor.
+	 *
+	 * @param array $args Optional. Wizard arguments — forwarded to the
+	 *                    parent so `sections` can be loaded via
+	 *                    `Wizard::load_wizard_sections()`. Used by the
+	 *                    Emails section, which hosts under Audience now
+	 *                    (NPPD-1538) but keeps its REST_BASE pinned to
+	 *                    `newspack-settings` for API stability.
 	 */
-	public function __construct() {
-		parent::__construct();
+	public function __construct( $args = [] ) {
+		parent::__construct( $args );
 		add_action( 'rest_api_init', [ $this, 'register_api_endpoints' ] );
 
 		// Determine active menu items.
@@ -104,6 +111,30 @@ class Audience_Wizard extends Wizard {
 		$data['content_gifting'] = [
 			'can_use_gifting' => Content_Gifting::can_use_gifting( true ),
 			'has_metering'    => Content_Gate::is_metering_enabled( Memberships::GATE_CPT ),
+		];
+
+		$data['is_newspack_feature_enabled'] = Content_Gate::is_newspack_feature_enabled();
+
+		// Bootstrap only the cheap inputs the Emails tab needs to decide
+		// visibility + render its chip bar. Deliberately NOT seeding the
+		// email list: api_get_email_settings() -> Emails::get_emails()
+		// lazily wp_insert_post()s the Newspack email posts on first read,
+		// so seeding it here would create those posts on EVERY Audience page
+		// load even for publishers who never open the Emails tab. The Emails
+		// view fetches the list on mount instead, deferring creation until
+		// the tab is actually opened.
+		//
+		// `isNewspackPlatform` reflects whether Newspack is the reader-revenue
+		// platform (WooCommerce orders drive the commerce emails; RevEngine/NRH
+		// redirects checkout off-site and sends its own receipts; "Other" sends
+		// nothing through Newspack). It drives the chip bar + the email-list
+		// scoping; auth/account emails still surface on any platform with RA on.
+		$data['emails'] = [
+			'dependencies'       => [
+				'newspackNewsletters' => is_plugin_active( 'newspack-newsletters/newspack-newsletters.php' ),
+			],
+			'postType'           => Emails::POST_TYPE,
+			'isNewspackPlatform' => Donations::is_platform_wc(),
 		];
 
 		wp_enqueue_script( 'newspack-wizards' );
@@ -356,6 +387,9 @@ class Audience_Wizard extends Wizard {
 		);
 
 		// Group label settings (publisher-overridable singular/plural for group subscriptions).
+		// The callbacks short-circuit on Content_Gate::is_newspack_feature_enabled() so
+		// stale clients hitting the route after a flag flip get a descriptive error
+		// instead of reading or writing the option directly.
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->slug . '/group-labels',
@@ -1013,9 +1047,13 @@ class Audience_Wizard extends Wizard {
 	 * Get the publisher-configurable group subscription labels. Empty values fall back
 	 * to the defaults baked into Group_Subscription::get_label().
 	 *
-	 * @return WP_REST_Response
+	 * @return WP_REST_Response|WP_Error
 	 */
 	public function api_get_group_labels() {
+		$disabled = self::group_labels_feature_disabled_error();
+		if ( $disabled ) {
+			return $disabled;
+		}
 		return rest_ensure_response(
 			[
 				'label_singular'         => (string) get_option( 'newspack_group_subscription_label_singular', '' ),
@@ -1031,9 +1069,13 @@ class Audience_Wizard extends Wizard {
 	 *
 	 * @param WP_REST_Request $request Request object.
 	 *
-	 * @return WP_REST_Response
+	 * @return WP_REST_Response|WP_Error
 	 */
 	public function api_update_group_labels( $request ) {
+		$disabled = self::group_labels_feature_disabled_error();
+		if ( $disabled ) {
+			return $disabled;
+		}
 		$params = $request->get_params();
 		foreach ( [ 'label_singular', 'label_plural' ] as $field ) {
 			if ( ! array_key_exists( $field, $params ) ) {
@@ -1047,6 +1089,23 @@ class Audience_Wizard extends Wizard {
 			}
 		}
 		return $this->api_get_group_labels();
+	}
+
+	/**
+	 * Shared guard for the /group-labels callbacks: returns a 403 WP_Error when
+	 * the Newspack Content Gate feature flag is off, or null when it's on.
+	 *
+	 * @return WP_Error|null
+	 */
+	private static function group_labels_feature_disabled_error() {
+		if ( Content_Gate::is_newspack_feature_enabled() ) {
+			return null;
+		}
+		return new WP_Error(
+			'newspack_content_gate_disabled',
+			__( 'Group subscription label settings are unavailable: the Newspack Content Gate feature is not enabled on this site.', 'newspack-plugin' ),
+			[ 'status' => 403 ]
+		);
 	}
 
 	/**

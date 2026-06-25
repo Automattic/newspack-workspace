@@ -124,6 +124,7 @@ final class Reader_Activation {
 			\add_filter( 'lostpassword_errors', [ __CLASS__, 'rate_limit_lost_password' ], 10, 2 );
 			\add_filter( 'newspack_esp_sync_contact', [ __CLASS__, 'set_mailchimp_sync_contact_status' ], 10, 2 );
 			\add_filter( 'login_url', [ __CLASS__, 'redirect_oauth_to_ras_login' ], 10, 3 );
+			\add_filter( 'show_admin_bar', [ __CLASS__, 'hide_admin_bar_for_readers' ] ); // phpcs:ignore WordPressVIPMinimum.UserExperience.AdminBarRemoval.RemovalDetected
 
 			/**
 			 * If RAS is enabled, we assume that any user created by Woo is a reader, without a password and unverified.
@@ -147,7 +148,7 @@ final class Reader_Activation {
 			'otp_auth_action'              => Magic_Link::OTP_AUTH_ACTION,
 			'otp_rate_interval'            => Magic_Link::RATE_INTERVAL,
 			'auth_action_result'           => Magic_Link::AUTH_ACTION_RESULT,
-			'account_url'                  => function_exists( 'wc_get_account_endpoint_url' ) ? \wc_get_account_endpoint_url( 'dashboard' ) : '',
+			'account_url'                  => My_Account::get_endpoint_url(),
 			'is_ras_enabled'               => self::is_enabled(),
 			'require_account_verification' => self::show_post_registration_verification(),
 			'verification_url'             => \admin_url( 'admin-ajax.php' ),
@@ -803,26 +804,10 @@ final class Reader_Activation {
 	 */
 	public static function get_prerequisites_status() {
 		$prerequisites = [
-			'emails'           => [
-				'active'      => self::is_transactional_email_configured(),
-				'label'       => __( 'Transactional Emails', 'newspack-plugin' ),
-				'description' => __( 'Your sender name and email address determines how readers find emails related to their account in their inbox. To customize the content of these emails, visit Advanced Settings below.', 'newspack-plugin' ),
-				'help_url'    => 'https://help.newspack.com/engagement/audience-management-system/',
-				'fields'      => [
-					'sender_name'           => [
-						'label'       => __( 'Sender Name', 'newspack-plugin' ),
-						'description' => __( 'Name to use as the sender of transactional emails.', 'newspack-plugin' ),
-					],
-					'sender_email_address'  => [
-						'label'       => __( 'Sender Email Address', 'newspack-plugin' ),
-						'description' => __( 'Email address to use as the sender of transactional emails.', 'newspack-plugin' ),
-					],
-					'contact_email_address' => [
-						'label'       => __( 'Contact Email Address', 'newspack-plugin' ),
-						'description' => __( 'This email will be used as "Reply-To" for transactional emails as well.', 'newspack-plugin' ),
-					],
-				],
-			],
+			// NPPD-1566: the 'emails' prerequisite was removed here — the
+			// three transactional-email settings now live in the Emails
+			// Settings modal with valid derived defaults, so they're no
+			// longer a gating prereq for Reader Activation.
 			'terms_conditions' => [
 				'active'      => self::is_terms_configured(),
 				'label'       => __( 'Legal Pages', 'newspack-plugin' ),
@@ -1077,6 +1062,35 @@ final class Reader_Activation {
 	}
 
 	/**
+	 * Hide the WordPress admin bar on the front end for reader-role users.
+	 *
+	 * Administrators and editors keep the admin bar so they can still manage the
+	 * site. The behavior is filterable via `newspack_hide_admin_bar_for_readers`.
+	 *
+	 * @param bool $show Whether to show the admin bar.
+	 * @return bool
+	 */
+	public static function hide_admin_bar_for_readers( $show ) {
+		if ( \is_admin() ) {
+			return $show;
+		}
+		$user = \wp_get_current_user();
+		if ( ! $user || ! $user->ID || ! self::is_user_reader( $user ) ) {
+			return $show;
+		}
+		/**
+		 * Filters whether to hide the admin bar for reader-role users on the front end.
+		 *
+		 * @param bool     $hide Whether to hide the admin bar for this reader. Default true.
+		 * @param \WP_User $user The current reader user.
+		 */
+		if ( \apply_filters( 'newspack_hide_admin_bar_for_readers', true, $user ) ) {
+			return false;
+		}
+		return $show;
+	}
+
+	/**
 	 * Verify email address of a reader given the user.
 	 *
 	 * @param \WP_User|int $user_or_user_id User object.
@@ -1238,10 +1252,10 @@ final class Reader_Activation {
 	 * Setup nav menu hooks.
 	 */
 	public static function setup_nav_menu() {
-		// The account link works without WooCommerce: signed-out visitors get a JS-driven
-		// auth modal trigger. When WooCommerce is active, signed-in readers additionally
-		// get a "My Account" link to the Woo account page; without Woo, get_account_link()
-		// returns empty for signed-in users and no menu item is rendered.
+		// The account link works with or without WooCommerce. Signed-out visitors
+		// get a JS-driven auth modal trigger; for signed-in readers the URL is
+		// resolved via My_Account::get_endpoint_url(), which falls back to the
+		// native account page when WooCommerce is inactive.
 		if ( ! self::get_setting( 'enabled_account_link' ) ) {
 			return;
 		}
@@ -1339,10 +1353,7 @@ final class Reader_Activation {
 	 * @return string Account link HTML or empty string.
 	 */
 	private static function get_account_link() {
-		$account_url = '';
-		if ( function_exists( 'wc_get_account_endpoint_url' ) ) {
-			$account_url = \wc_get_account_endpoint_url( 'dashboard' );
-		}
+		$account_url = My_Account::get_endpoint_url();
 
 		/** Do not render link for authenticated readers if account page doesn't exist. */
 		if ( empty( $account_url ) && \is_user_logged_in() ) {
@@ -1434,6 +1445,10 @@ final class Reader_Activation {
 			} elseif ( function_exists( 'wc_get_page_permalink' ) && function_exists( 'is_account_page' ) && \is_account_page() ) {
 				// If we are already on the my account page, set the my account URL so the page reloads on submit.
 				$auth_callback_url = \wc_get_page_permalink( 'myaccount' );
+			} elseif ( class_exists( 'Newspack\My_Account' ) && My_Account::is_account_page() ) {
+				// Native (WooCommerce-less) account page: reload it on submit so the
+				// signed-in reader lands on their account.
+				$auth_callback_url = My_Account::get_endpoint_url();
 			}
 		}
 		?>
@@ -1599,7 +1614,7 @@ final class Reader_Activation {
 			<?php esc_html_e( 'Send code', 'newspack-plugin' ); ?>
 		</button>
 		<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close">
-			<?php esc_html_e( 'Go back', 'newspack-plugin' ); ?>
+			<?php esc_html_e( 'Skip for now', 'newspack-plugin' ); ?>
 		</button>
 		<?php
 		$content = ob_get_clean();
@@ -2290,8 +2305,26 @@ final class Reader_Activation {
 		}
 
 		\wp_clear_auth_cookie();
-		\wp_set_current_user( $user->ID );
+		\wp_set_current_user( $user->ID, $user->user_login );
+
+		/*
+		 * Keep $_COOKIE in sync with the auth cookie issued below for the
+		 * remainder of this request. wp_set_auth_cookie() only emits Set-Cookie
+		 * headers; it does not update $_COOKIE. Without this, same-request session
+		 * management that reads the current session token from $_COOKIE — e.g.
+		 * wp_destroy_other_sessions() invoked when set_reader_verified() runs on
+		 * the magic-link verification request — would operate on the previous
+		 * session token, preserve it, and destroy the newly issued session that
+		 * the browser actually receives, logging the reader out.
+		 */
+		$sync_cookie_superglobal = function ( $logged_in_cookie ) {
+			// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+			$_COOKIE[ LOGGED_IN_COOKIE ] = $logged_in_cookie;
+		};
+		\add_action( 'set_logged_in_cookie', $sync_cookie_superglobal );
 		\wp_set_auth_cookie( $user->ID, true );
+		\remove_action( 'set_logged_in_cookie', $sync_cookie_superglobal );
+
 		\do_action( 'wp_login', $user->user_login, $user );
 		Logger::log( 'Logged in user ' . $user->ID );
 
@@ -2699,7 +2732,7 @@ final class Reader_Activation {
 			return new \WP_Error( 'newspack_verification_email_interval', __( 'Please wait before requesting another verification email.', 'newspack-plugin' ) );
 		}
 
-		$redirect_to = function_exists( '\wc_get_account_endpoint_url' ) ? \wc_get_account_endpoint_url( 'dashboard' ) : '';
+		$redirect_to = class_exists( 'Newspack\My_Account' ) ? My_Account::get_endpoint_url() : '';
 		\update_user_meta( $user->ID, self::LAST_EMAIL_DATE, time() );
 
 		$link = Magic_Link::generate_url( $user, $redirect_to );

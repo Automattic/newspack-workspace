@@ -11,17 +11,18 @@ import WizardsActionCard from '../../../../wizards-action-card';
 import { Grid } from '../../../../../../packages/components/src';
 
 const PUBLIC_TOGGLES = [
-	{ key: 'archives', label: __( 'Disable tag archive pages', 'newspack-plugin' ) },
-	{ key: 'feeds', label: __( 'Disable tag RSS feeds', 'newspack-plugin' ) },
-	{ key: 'tag_links', label: __( 'Hide from tag lists on posts', 'newspack-plugin' ) },
-	{ key: 'tag_clouds', label: __( 'Hide from tag cloud widgets', 'newspack-plugin' ) },
+	{ key: 'archives', label: __( 'Disable private tag archive pages', 'newspack-plugin' ) },
+	{ key: 'feeds', label: __( 'Disable private tag RSS feeds', 'newspack-plugin' ) },
+	{ key: 'feed_terms', label: __( 'Remove private tags from RSS feeds', 'newspack-plugin' ) },
+	{ key: 'tag_links', label: __( 'Remove private tags from post tag lists', 'newspack-plugin' ) },
+	{ key: 'tag_clouds', label: __( 'Remove private tags from tag cloud widgets', 'newspack-plugin' ) },
 ];
 
 const INTEGRATION_TOGGLES = [
-	{ key: 'css_classes', label: __( 'Exclude from CSS body classes', 'newspack-plugin' ) },
-	{ key: 'gam_targeting', label: __( 'Exclude from Google Ad Manager targeting', 'newspack-plugin' ) },
-	{ key: 'yoast_metadata', label: __( 'Exclude from Yoast SEO metadata', 'newspack-plugin' ) },
-	{ key: 'yoast_sitemap', label: __( 'Exclude from Yoast XML sitemaps', 'newspack-plugin' ) },
+	{ key: 'css_classes', label: __( 'Remove private tags from CSS classes', 'newspack-plugin' ) },
+	{ key: 'gam_targeting', label: __( 'Exclude private tags from Google Ad Manager targeting', 'newspack-plugin' ) },
+	{ key: 'yoast_metadata', label: __( 'Exclude private tags from Yoast SEO metadata', 'newspack-plugin' ) },
+	{ key: 'yoast_sitemap', label: __( 'Exclude private tags from Yoast XML sitemaps', 'newspack-plugin' ) },
 ];
 
 export default function PrivateTags( { data, isFetching, update }: ThemeModComponentProps< AdvancedSettings > ) {
@@ -45,7 +46,7 @@ export default function PrivateTags( { data, isFetching, update }: ThemeModCompo
 			isMedium
 			title={ __( 'Customize where private tags are hidden', 'newspack-plugin' ) }
 			description={ __(
-				'By default, private tags are hidden in all supported locations. Turn this on to customize where they are hidden.',
+				'By default, private tags are hidden in all supported locations. Turn this on to choose where private tags should be hidden.',
 				'newspack-plugin'
 			) }
 			disabled={ isFetching }

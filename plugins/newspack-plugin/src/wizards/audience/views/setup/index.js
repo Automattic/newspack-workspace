@@ -23,6 +23,9 @@ import Payment from './payment';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import PlatformSelection from '../../components/platform-selection';
 import Groups from './groups';
+// NPPD-1538: Emails relocated under Audience > Configuration; grafted into
+// the existing chooser/platform-toggle setup flow as a tab + route.
+import Emails from './emails';
 
 const { HashRouter, Redirect, Route, Switch } = Router;
 
@@ -94,6 +97,15 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 	}, [ platformSelected, configLoaded, config.enabled, showChooser ] );
 	const chooserOpen = showChooser === true;
 
+	// Emails tab shows when Reader Activation is enabled OR Newspack is the
+	// reader-revenue platform (auth/account emails need RA; commerce emails
+	// fire on the Newspack platform even with RA off). `config.enabled` is the
+	// live RA state; the platform comes from the SSR isNewspackPlatform flag.
+	// Keep in sync with the server-side list scoping in
+	// Emails_Section::api_get_email_settings().
+	const isNewspackPlatform = Boolean( newspackAudience.emails?.isNewspackPlatform );
+	const showEmails = Boolean( config.enabled ) || isNewspackPlatform;
+
 	let tabs = chooserOpen
 		? []
 		: [
@@ -110,7 +122,14 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 					label: __( 'Checkout & Payment', 'newspack-plugin' ),
 					path: '/payment',
 				},
-				{
+				// NPPD-1538: Emails screen under Audience > Configuration.
+				showEmails && {
+					label: __( 'Emails', 'newspack-plugin' ),
+					path: '/emails',
+				},
+				// "Advanced settings" hosts the Group labels override, which only makes
+				// sense when the Newspack Content Gate / Group subscriptions feature is on.
+				newspackAudience.is_newspack_feature_enabled && {
 					label: __( 'Advanced settings', 'newspack-plugin' ),
 					path: '/groups',
 				},
@@ -184,7 +203,20 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 					/>
 					<Route path="/content-gating" render={ () => <ContentGating { ...props } /> } />
 					<Route path="/payment" render={ () => <Payment { ...props } /> } />
-					<Route path="/groups" render={ () => <Groups { ...props } /> } />
+					{ newspackAudience.is_newspack_feature_enabled && <Route path="/groups" render={ () => <Groups { ...props } /> } /> }
+					<Route
+						path="/emails"
+						render={ () =>
+							// Only redirect once config has loaded — config.enabled is
+							// async, so redirecting on first render would bounce a
+							// deep-link/refresh to #/emails before showEmails is known.
+							configLoaded && ! showEmails ? (
+								<Redirect to="/" />
+							) : (
+								<Emails { ...props } className="newspack-wizard__content--full-width" />
+							)
+						}
+					/>
 					<Route path="/campaign" render={ () => ( configLoaded && ! config.enabled ? <Redirect to="/" /> : <Campaign { ...props } /> ) } />
 					<Route path="/complete" render={ () => ( configLoaded && ! config.enabled ? <Redirect to="/" /> : <Complete { ...props } /> ) } />
 					<Redirect to="/" />

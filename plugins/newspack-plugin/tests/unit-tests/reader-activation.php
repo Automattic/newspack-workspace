@@ -252,6 +252,35 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The admin bar is hidden on the front end for readers but kept for admins.
+	 */
+	public function test_hide_admin_bar_for_readers() {
+		$reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $reader_id );
+		$this->assertFalse( Reader_Activation::hide_admin_bar_for_readers( true ) );
+
+		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin_id );
+		$this->assertTrue( Reader_Activation::hide_admin_bar_for_readers( true ) );
+
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * The account link renders for logged-out visitors without WooCommerce.
+	 */
+	public function test_account_link_without_woocommerce() {
+		if ( function_exists( 'wc_get_account_endpoint_url' ) ) {
+			$this->markTestSkipped( 'WooCommerce active; native fallback not exercised.' );
+		}
+		wp_set_current_user( 0 );
+		$method = new ReflectionMethod( 'Newspack\Reader_Activation', 'get_account_link' );
+		$method->setAccessible( true );
+		$link = $method->invoke( null );
+		$this->assertStringContainsString( 'data-newspack-reader-account-link', $link );
+	}
+
+	/**
 	 * Test that the prerequisites status no longer exposes skip-related keys.
 	 */
 	public function test_prerequisites_status_has_no_skip_keys() {
@@ -282,17 +311,20 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 
 		$this->assertArrayNotHasKey( 'reader_revenue', $prerequisites, 'Reader Revenue prerequisite should be removed.' );
 		$this->assertArrayNotHasKey( 'ras_campaign', $prerequisites, 'Campaign defaults prerequisite should be removed.' );
+		// NPPD-1566: the Transactional Emails prerequisite was removed — its
+		// settings moved to the Emails screen with valid derived defaults, so
+		// they no longer gate Reader Activation.
+		$this->assertArrayNotHasKey( 'emails', $prerequisites, 'Transactional Emails prerequisite should be removed (NPPD-1566).' );
 
-		// First three are always present and ordered.
+		// First two are always present and ordered.
 		$keys = array_keys( $prerequisites );
-		$this->assertSame( 'emails', $keys[0], 'Transactional Emails should be first.' );
-		$this->assertSame( 'terms_conditions', $keys[1], 'Legal Pages should be second.' );
-		$this->assertSame( 'recaptcha', $keys[2], 'reCAPTCHA should be third.' );
+		$this->assertSame( 'terms_conditions', $keys[0], 'Legal Pages should be first.' );
+		$this->assertSame( 'recaptcha', $keys[1], 'reCAPTCHA should be second.' );
 
 		// ESP is gated on Newspack Newsletters; in the test env it is absent.
 		if ( class_exists( '\Newspack_Newsletters' ) ) {
 			$this->assertArrayHasKey( 'esp', $prerequisites, 'ESP should be present when Newsletters exists.' );
-			$this->assertSame( 'esp', $keys[3], 'ESP should be fourth when present.' );
+			$this->assertSame( 'esp', $keys[2], 'ESP should be third when present.' );
 		} else {
 			$this->assertArrayNotHasKey( 'esp', $prerequisites, 'ESP should be absent without Newsletters.' );
 		}

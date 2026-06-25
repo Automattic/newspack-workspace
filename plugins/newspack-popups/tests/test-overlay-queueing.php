@@ -417,4 +417,52 @@ class OverlayQueueingTest extends WP_UnitTestCase {
 		$second_footer = ob_get_clean();
 		self::assertStringContainsString( 'newspack-lightbox', $second_footer, 'After a flush, the re-queued overlay must also re-emit its lightbox at the footer.' );
 	}
+
+	/**
+	 * NPPM-2897: an overlay's blocks are rendered inside print_queued_overlays
+	 * via render_block(), which *stores* the block's layout/spacing CSS in the
+	 * style engine's `block-supports` store. WordPress flushes that store with
+	 * wp_enqueue_stored_styles() at wp_footer priority 1. If overlays render
+	 * after that priority, their inline block-support styles (e.g. a Row block's
+	 * `justify-content: space-between`) are stored too late and never printed.
+	 * Guard the ordering: the overlay flush must run before the style flush.
+	 */
+	public function test_overlays_render_before_block_support_style_flush() {
+		$overlay_priority = has_action( 'wp_footer', [ 'Newspack_Popups_Inserter', 'print_queued_overlays' ] );
+		$flush_priority   = has_action( 'wp_footer', 'wp_enqueue_stored_styles' );
+
+		self::assertNotFalse( $overlay_priority, 'print_queued_overlays must be hooked to wp_footer.' );
+		self::assertNotFalse( $flush_priority, 'WordPress core must flush stored block-support styles on wp_footer.' );
+		// A lower wp_footer priority runs earlier. Overlays must render before the
+		// style flush, so the overlay priority must be the smaller number.
+		self::assertTrue(
+			$overlay_priority < $flush_priority,
+			sprintf(
+				'Overlays must render before wp_enqueue_stored_styles flushes block-support styles, or their inline block styles are dropped (NPPM-2897). print_queued_overlays is at wp_footer priority %d; the style flush is at priority %d — the overlay priority must be lower.',
+				$overlay_priority,
+				$flush_priority
+			)
+		);
+	}
+
+	/**
+	 * #194 stacking-context invariant: overlay lightboxes must be portaled out
+	 * to wp_footer (where they land as a direct child of <body> and escape any
+	 * ancestor stacking context), never emitted back inside `the_content`. The
+	 * NPPM-2897 fix only changed the wp_footer *priority*; this guards that it
+	 * stays a wp_footer hook and never regresses to a the_content hook (which
+	 * would re-trap the lightbox's z-index in an ancestor stacking context). The
+	 * complementary behavioral check that the markup is absent from the_content
+	 * output lives in test_overlay_not_inlined_into_returned_content().
+	 */
+	public function test_overlays_portaled_to_footer_not_content() {
+		self::assertNotFalse(
+			has_action( 'wp_footer', [ 'Newspack_Popups_Inserter', 'print_queued_overlays' ] ),
+			'Overlay lightboxes must be flushed from wp_footer so they render as a direct <body> child (#194).'
+		);
+		self::assertFalse(
+			has_action( 'the_content', [ 'Newspack_Popups_Inserter', 'print_queued_overlays' ] ),
+			'print_queued_overlays must never be hooked to the_content — inlining re-traps the lightbox in an ancestor stacking context (#194).'
+		);
+	}
 }

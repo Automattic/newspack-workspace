@@ -49,26 +49,7 @@ final class My_Account_Button_Block {
 	 * @return string
 	 */
 	private static function get_account_url() {
-		if ( function_exists( 'wc_get_account_endpoint_url' ) ) {
-			return \wc_get_account_endpoint_url( 'dashboard' );
-		}
-
-		if ( function_exists( 'wc_get_page_permalink' ) ) {
-			$account_url = \wc_get_page_permalink( 'myaccount' );
-			if ( $account_url ) {
-				return $account_url;
-			}
-		}
-
-		$account_page_id = \get_option( 'woocommerce_myaccount_page_id' );
-		if ( $account_page_id ) {
-			$account_url = \get_permalink( $account_page_id );
-			if ( $account_url ) {
-				return $account_url;
-			}
-		}
-
-		return '';
+		return \Newspack\My_Account::get_endpoint_url();
 	}
 
 	/**

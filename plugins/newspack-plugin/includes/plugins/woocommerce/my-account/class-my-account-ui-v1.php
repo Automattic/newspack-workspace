@@ -393,7 +393,7 @@ class My_Account_UI_V1 {
 				'title'       => __( 'Subscriptions', 'newspack-plugin' ),
 				'description' => __( 'Review and cancel active subscriptions.', 'newspack-plugin' ),
 				'button'      => __( 'Manage subscriptions', 'newspack-plugin' ),
-				'href'        => \wc_get_endpoint_url( 'subscriptions', '', \wc_get_page_permalink( 'myaccount' ) ),
+				'href'        => My_Account::get_endpoint_url( 'subscriptions' ),
 			];
 		}
 		if ( ! empty( $newsletter_subscriptions ) ) {
@@ -401,7 +401,7 @@ class My_Account_UI_V1 {
 				'title'       => __( 'Newsletters', 'newspack-plugin' ),
 				'description' => __( 'Update your newsletter preferences.', 'newspack-plugin' ),
 				'button'      => __( 'Manage newsletters', 'newspack-plugin' ),
-				'href'        => \wc_get_endpoint_url( 'newsletters', '', \wc_get_page_permalink( 'myaccount' ) ),
+				'href'        => My_Account::get_endpoint_url( 'newsletters' ),
 			];
 		}
 		if ( ! empty( $alternative_rows ) ) :
