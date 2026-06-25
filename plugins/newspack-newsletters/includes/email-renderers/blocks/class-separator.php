@@ -42,9 +42,11 @@ defined( 'ABSPATH' ) || exit;
 class Separator extends Abstract_Block_Renderer {
 
 	/**
-	 * Default separator width for the short/default variant.
+	 * Default separator width in pixels for the short/default variant. Stored as
+	 * a number so the CSS (`{N}px`) and the HTML `width="{N}"` attribute are
+	 * composed from one source and can't drift apart.
 	 */
-	const DEFAULT_WIDTH = '100px';
+	const DEFAULT_WIDTH = 100;
 
 	/**
 	 * Default separator color (light gray, matching WP core default).
@@ -72,8 +74,8 @@ class Separator extends Abstract_Block_Renderer {
 		// The CSS width carries the unit, but the HTML `width` attribute must be a
 		// number or a percentage — a `100px` attribute is invalid and some email
 		// clients then fall back to full width — so derive a numeric attribute.
-		$css_width  = $is_wide ? '100%' : self::DEFAULT_WIDTH;
-		$attr_width = $is_wide ? '100%' : (string) (int) self::DEFAULT_WIDTH;
+		$css_width  = $is_wide ? '100%' : self::DEFAULT_WIDTH . 'px';
+		$attr_width = $is_wide ? '100%' : (string) self::DEFAULT_WIDTH;
 
 		// Build the rule cell style: the `<td>` itself IS the line.
 		$rule_td_style = sprintf(
@@ -114,25 +116,56 @@ class Separator extends Abstract_Block_Renderer {
 	 *
 	 * @param array             $attrs             Block attributes.
 	 * @param Rendering_Context $rendering_context Rendering context for slug resolution.
-	 * @return string Hex color value (e.g. `#cf2e2e`).
+	 * @return string A CSS color safe to interpolate into an inline style, or DEFAULT_COLOR.
 	 */
 	private function resolve_color( array $attrs, Rendering_Context $rendering_context ): string {
 		// 1. Arbitrary inline color (style.color.background).
-		$inline_color = $attrs['style']['color']['background'] ?? '';
-		if ( $inline_color ) {
-			return $inline_color;
-		}
+		$candidate = $attrs['style']['color']['background'] ?? '';
 
-		// 2. Named preset color slug.
-		$bg_slug = $attrs['backgroundColor'] ?? '';
-		if ( $bg_slug ) {
-			$resolved = $rendering_context->translate_slug_to_color( $bg_slug );
-			if ( $resolved ) {
-				return $resolved;
+		// 2. Named preset color slug. translate_slug_to_color() returns the slug
+		// unchanged when it isn't in the email theme palette, so an unresolved slug
+		// surfaces here as its own name (e.g. "vivid-red") — rejected below.
+		if ( '' === $candidate ) {
+			$bg_slug = $attrs['backgroundColor'] ?? '';
+			if ( $bg_slug ) {
+				$candidate = (string) $rendering_context->translate_slug_to_color( $bg_slug );
 			}
 		}
 
-		return self::DEFAULT_COLOR;
+		// 3. Fall back to the default gray unless the value is a recognizable CSS
+		// color. This keeps an unresolved slug (or an unexpected author-supplied
+		// value) from emitting an invalid color — which email clients drop, leaving
+		// no rule — and prevents a crafted value from injecting extra declarations
+		// into the cell's inline style.
+		return $this->is_css_color( $candidate ) ? $candidate : self::DEFAULT_COLOR;
+	}
+
+	/**
+	 * Whether a value is a CSS color safe to interpolate into an inline style.
+	 *
+	 * Accepts hex, `rgb()/rgba()/hsl()/hsla()` with numeric components, and
+	 * single-word named colors. Rejects empty values, unresolved color slugs
+	 * (which contain hyphens), and anything carrying CSS-structural characters
+	 * that could break out of the declaration.
+	 *
+	 * @param string $value Candidate color value.
+	 * @return bool
+	 */
+	private function is_css_color( string $value ): bool {
+		$value = trim( $value );
+		if ( '' === $value ) {
+			return false;
+		}
+		// Hex: #rgb, #rgba, #rrggbb, #rrggbbaa.
+		if ( preg_match( '/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i', $value ) ) {
+			return true;
+		}
+		// Functional notation with numeric components only.
+		if ( preg_match( '/^(?:rgb|rgba|hsl|hsla)\(\s*[0-9.,%\s\/]+\)$/i', $value ) ) {
+			return true;
+		}
+		// Single-word named color (letters only — excludes hyphenated slugs).
+		return (bool) preg_match( '/^[a-z]+$/i', $value );
 	}
 }
 

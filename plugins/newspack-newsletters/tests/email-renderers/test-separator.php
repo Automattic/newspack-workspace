@@ -137,4 +137,31 @@ class Test_Separator extends WP_UnitTestCase {
 		$this->assertTrue( $has_constrained, 'Expected the default separator to carry a constrained pixel width.' );
 		$this->assertTrue( $has_full_width, 'Expected the wide separator to carry width: 100%.' );
 	}
+
+	/**
+	 * An unresolvable color slug falls back to the default rule color.
+	 *
+	 * `translate_slug_to_color()` returns the slug unchanged when it isn't in the
+	 * email theme palette, so without validation the renderer would emit an
+	 * invalid `border-top: 1px solid <slug>` that email clients drop, leaving no
+	 * rule. The override must fall back to the default gray so the rule renders.
+	 */
+	public function test_unresolved_color_slug_falls_back_to_default() {
+		$content = '<!-- wp:separator {"backgroundColor":"not-a-palette-color"} -->'
+			. '<hr class="wp-block-separator has-not-a-palette-color-background-color has-background"/>'
+			. '<!-- /wp:separator -->';
+
+		$html = $this->render_newsletter( $content );
+
+		$this->assertStringNotContainsString(
+			'solid not-a-palette-color',
+			$html,
+			'Expected an unresolved color slug not to be emitted as an invalid CSS color.'
+		);
+		$this->assertMatchesRegularExpression(
+			'/border-top:\s*1px\s+solid\s+#dddddd/i',
+			$html,
+			'Expected the separator to fall back to the default gray when the color slug is unresolvable.'
+		);
+	}
 }

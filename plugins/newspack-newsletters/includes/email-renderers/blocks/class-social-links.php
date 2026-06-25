@@ -40,6 +40,11 @@ class Social_Links extends Package_Social_Links {
 	 * WP_Style_Engine) and concatenates the pills with no spacing — so appending
 	 * a margin to this marker spaces them. Whitespace-tolerant so a later
 	 * style-formatting pass (or a package change) can't break the match.
+	 *
+	 * This couples to package-internal markup; correctness is pinned by
+	 * `test_social_links_icons_are_spaced`, which fails loudly if the package
+	 * stops emitting this marker. If the email-editor package gains a native
+	 * inter-icon spacing attribute, prefer that and retire this seam.
 	 */
 	const PILL_STYLE_PATTERN = '/display:\s*inline-table;\s*float:\s*none;/';
 
@@ -63,18 +68,22 @@ class Social_Links extends Package_Social_Links {
 	 * Inject a horizontal margin on each icon pill.
 	 *
 	 * Appends a side margin to the pill style marker the package emits. If the
-	 * package markup ever changes and the marker is absent, the content is
-	 * returned unchanged (no gap added, no breakage).
+	 * marker is absent (a package markup change) or `preg_replace()` errors, the
+	 * original HTML is returned unchanged — no gap added, no breakage.
 	 *
 	 * @param string $html Rendered social-links HTML.
 	 * @return string
 	 */
 	private function space_icons( string $html ): string {
+		// Coalesce to the input so a PCRE error (e.g. a backtrack limit or invalid
+		// UTF-8) yields the unspaced HTML rather than null — which would violate
+		// the `: string` return type and, as the package's render() has no
+		// per-block try/catch, collapse the whole newsletter's rendered body.
 		return preg_replace(
 			self::PILL_STYLE_PATTERN,
 			sprintf( '$0 margin-left: %1$s; margin-right: %1$s;', self::ICON_SIDE_MARGIN ),
 			$html
-		);
+		) ?? $html;
 	}
 }
 
