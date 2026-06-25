@@ -11,12 +11,13 @@ use Newspack\Newsletters\Email_Renderers\Renderer_Controller;
 /**
  * Characterization tests for the Batch B core blocks (NEWS-1904).
  *
- * The audit found the WC email-editor package already renders `core/separator`,
- * `core/button` / `core/buttons`, and `core/social-links` in an email-correct
- * way, so Newspack ships no override for any of them. These tests lock in that
- * decision: they render each block through the WC engine and assert the
- * email-safe output the audit relied on, so a package regression that breaks one
- * of these blocks (and would justify adding an override) fails loudly here.
+ * The audit found the WC email-editor package renders `core/button` /
+ * `core/buttons` email-correctly with no override, and renders `core/separator`
+ * and `core/social-links` mostly correctly — each needs only a small Newspack
+ * override (an email-safe rule for the separator, inter-icon spacing for social
+ * links; see the dedicated renderers in `includes/email-renderers/blocks/`).
+ * These tests render each block through the WC engine and assert the email-safe
+ * output, so a package regression that breaks one of these blocks fails loudly.
  *
  * The reference model is vanilla WordPress output, not legacy MJML. Where the
  * package diverges from vanilla WP it does so in email's favor — most notably
@@ -113,8 +114,9 @@ class Test_Batch_B_Core_Blocks extends WP_UnitTestCase {
 	 * This is the audit's headline finding: vanilla WP emits inline `<svg>` icons
 	 * that Gmail and Outlook strip, leaving empty links. The package instead emits
 	 * `<img>` tags pointing at hosted PNG icons with the service brand color as the
-	 * pill background — the email-correct representation. So the package output is
-	 * better than vanilla for email and needs no override.
+	 * pill background — the email-correct representation, better than vanilla. The
+	 * Newspack override leaves all of that intact and only adds inter-icon spacing
+	 * (see test_social_links_icons_are_spaced).
 	 */
 	public function test_social_links_render_png_icons_not_svg() {
 		$content = '<!-- wp:social-links --><ul class="wp-block-social-links"><!-- wp:social-link {"url":"https://twitter.com/x","service":"twitter"} /--><!-- wp:social-link {"url":"https://facebook.com/x","service":"facebook"} /--></ul><!-- /wp:social-links -->';
@@ -138,5 +140,23 @@ class Test_Batch_B_Core_Blocks extends WP_UnitTestCase {
 		$content = '<!-- wp:social-links {"showLabels":true} --><ul class="wp-block-social-links has-visible-labels"><!-- wp:social-link {"url":"https://twitter.com/x","service":"twitter","label":"Follow us"} /--></ul><!-- /wp:social-links -->';
 		$html    = $this->render_newsletter( $content );
 		$this->assertStringContainsString( 'Follow us', $html, 'Expected the custom social link label to render.' );
+	}
+
+	/**
+	 * Social link icons are spaced apart in email.
+	 *
+	 * The package concatenates each icon pill (`display: inline-table`) with no
+	 * spacing, so icons render flush against each other — unlike the editor canvas,
+	 * which spaces them with the block gap. The Newspack social-links override
+	 * injects a horizontal margin on each pill so the email matches the canvas.
+	 */
+	public function test_social_links_icons_are_spaced() {
+		$content = '<!-- wp:social-links --><ul class="wp-block-social-links"><!-- wp:social-link {"url":"https://twitter.com/x","service":"twitter"} /--><!-- wp:social-link {"url":"https://facebook.com/x","service":"facebook"} /--></ul><!-- /wp:social-links -->';
+		$html    = $this->render_newsletter( $content );
+		$this->assertMatchesRegularExpression(
+			'/display:\s*inline-table;\s*float:\s*none;\s*margin-left:\s*6px;\s*margin-right:\s*6px;/',
+			$html,
+			'Expected each social icon pill to carry a horizontal margin so the icons are spaced apart.'
+		);
 	}
 }
