@@ -94,6 +94,23 @@ class Renderer_Controller {
 			return '';
 		}
 
+		// Apply the `newspack_newsletters_newsletter_content` filter so that
+		// auto-injected ad blocks (inserted by Ads::filter_newsletter_content())
+		// appear in the content before the WC renderer parses it — mirroring
+		// what the MJML renderer does via the same filter.
+		//
+		// WordPress's in-memory object cache clones WP_Post objects on every
+		// get_post() call (WP_Object_Cache::get() clones before returning), so
+		// mutating $post->post_content here does NOT affect what Post_Content::
+		// render_stateless() reads when it calls get_post($post->ID) internally.
+		// The only reliable way to feed it the filtered content is to temporarily
+		// replace the cache entry with a clone carrying the new content, then
+		// restore the original in the finally block.
+		$filtered_content = (string) apply_filters( 'newspack_newsletters_newsletter_content', $post->post_content, $post );
+		$render_post      = clone $post;
+		$render_post->post_content = $filtered_content;
+		wp_cache_replace( $post->ID, $render_post, 'posts' );
+
 		// Save/restore rather than clear so a nested render_wc() (post B mid-render
 		// of post A) leaves the outer render's post intact when the inner one returns.
 		$previous             = self::$rendering_post;
@@ -103,7 +120,7 @@ class Renderer_Controller {
 			$renderer  = $container->get( \Automattic\WooCommerce\EmailEditor\Engine\Renderer\Renderer::class );
 			$preheader = (string) get_post_meta( $post->ID, 'preview_text', true );
 			$result    = $renderer->render(
-				$post,
+				$render_post,
 				(string) $post->post_title,
 				$preheader,
 				(string) get_bloginfo( 'language' ),
@@ -116,6 +133,9 @@ class Renderer_Controller {
 			return '';
 		} finally {
 			self::$rendering_post = $previous;
+			// Restore the original post in the cache so nothing outside this
+			// render sees the temporary filtered content.
+			wp_cache_replace( $post->ID, $post, 'posts' );
 		}
 	}
 
