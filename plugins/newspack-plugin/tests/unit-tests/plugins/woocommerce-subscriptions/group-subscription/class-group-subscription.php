@@ -200,4 +200,25 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 			'A limit of 0 (unlimited) should yield a null capacity.'
 		);
 	}
+
+	/**
+	 * For an ownerless subscription the capacity (denominator) and count (numerator)
+	 * agree about the owner: neither counts a phantom owner, so it reads "0 of limit",
+	 * not "0 of limit + 1".
+	 */
+	public function test_member_capacity_excludes_phantom_owner_when_ownerless() {
+		// customer_id 0 -> get_managers() returns [0], an empty/phantom owner.
+		$sub = $this->create_group_subscription( 0, 10 );
+
+		$this->assertSame(
+			0,
+			Group_Subscription::get_member_count( $sub ),
+			'An ownerless group with no members should report a count of 0.'
+		);
+		$this->assertSame(
+			10,
+			Group_Subscription::get_member_capacity( $sub ),
+			'An ownerless group should not add a phantom owner to capacity (10, not 11), keeping numerator and denominator consistent.'
+		);
+	}
 }

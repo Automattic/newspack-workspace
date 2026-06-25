@@ -306,8 +306,10 @@ class Group_Subscription {
 	 *
 	 * The configured member limit is the number of members allowed *in addition to*
 	 * the manager(s)/owner, so the total capacity is the limit plus the number of
-	 * managers. This keeps "X of Y members" displays consistent with get_member_count(),
-	 * which counts the owner.
+	 * managers. The manager count is filtered the same way get_all_members() filters
+	 * empty IDs, so the capacity (denominator) and get_member_count() (numerator) always
+	 * agree about the owner — including the edge case of an ownerless subscription, where
+	 * neither counts a phantom owner.
 	 *
 	 * @param \WC_Subscription|int $subscription The subscription object or ID.
 	 *
@@ -323,7 +325,7 @@ class Group_Subscription {
 		if ( $limit <= 0 ) {
 			return null;
 		}
-		return $limit + count( self::get_managers( $subscription ) );
+		return $limit + count( array_filter( array_map( 'intval', self::get_managers( $subscription ) ) ) );
 	}
 
 	/**
