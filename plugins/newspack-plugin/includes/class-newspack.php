@@ -509,9 +509,14 @@ final class Newspack {
 		$version = NEWSPACK_PLUGIN_VERSION;
 		// Defense in depth: every current call site passes a literal, but this
 		// helper is publicly callable, so reject anything that isn't a webpack
-		// entry-shaped basename (alphanumerics, hyphens, underscores, dots, and
-		// optional slash-separated segments — no `..`, no leading slashes).
-		if ( ! preg_match( '#^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$#', $name ) ) {
+		// entry-shaped basename. The first pattern restricts the character set
+		// (alphanumerics, hyphens, underscores, dots) to single-level or nested
+		// segments. The second explicitly rejects `..` segments — without it the
+		// dot in the character class above would let `../wp-config` through.
+		if (
+			! preg_match( '#^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$#', $name )
+			|| preg_match( '#(^|/)\.\.(/|$)#', $name )
+		) {
 			Logger::log( "asset_version() rejected unsafe name: \"{$name}\", using NEWSPACK_PLUGIN_VERSION", 'NEWSPACK-ASSETS' );
 			self::$asset_version_cache[ $name ] = $version;
 			return $version;
@@ -531,7 +536,11 @@ final class Newspack {
 		// reaching NEWSPACK_PLUGIN_VERSION.
 		if ( file_exists( $path ) ) {
 			$asset = include $path;
-			if ( is_array( $asset ) && ! empty( $asset['version'] ) ) {
+			if (
+				is_array( $asset )
+				&& ! empty( $asset['version'] )
+				&& is_string( $asset['version'] )
+			) {
 				$version = $asset['version'];
 			}
 		} else {

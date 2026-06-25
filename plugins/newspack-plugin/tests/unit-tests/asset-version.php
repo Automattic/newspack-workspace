@@ -148,14 +148,11 @@ class Newspack_Test_Asset_Version extends WP_UnitTestCase {
 	}
 
 	/**
-	 * It rejects path-traversal sequences and other unsafe names by falling back
-	 * to NEWSPACK_PLUGIN_VERSION without touching the file system.
+	 * It rejects unsafe names by character class — absolute paths, spaces,
+	 * backslashes, etc. fall back to NEWSPACK_PLUGIN_VERSION.
 	 */
 	public function test_falls_back_to_plugin_version_when_name_is_unsafe() {
 		$unsafe = [
-			'../wp-config',
-			'../../etc/passwd',
-			'foo/../bar',
 			'/absolute/path',
 			'has spaces',
 			'name;with;semicolons',
@@ -168,6 +165,50 @@ class Newspack_Test_Asset_Version extends WP_UnitTestCase {
 				"Unsafe name should fall back to plugin version: {$name}"
 			);
 		}
+	}
+
+	/**
+	 * It rejects `..` segments even when the resolved path would point at a
+	 * real fixture. Without this guard a name like `foo/../foo` would resolve
+	 * on disk to `foo` and bypass the character-class regex (which allows `.`
+	 * inside segments). The fixture is intentionally resolvable to prove the
+	 * rejection branch — not the missing-file fallback — is what's working.
+	 */
+	public function test_rejects_dot_dot_segments_even_when_resolvable() {
+		$name    = 'tmp-test-traversal-' . wp_rand();
+		$version = 'fixture-version-that-should-never-be-returned';
+		$this->write_fixture( $name, '<?php return [ "version" => "' . $version . '" ];' );
+
+		// Sanity check: the fixture itself resolves cleanly.
+		$this->assertSame( $version, Newspack::asset_version( $name ) );
+
+		// Each of these would filesystem-resolve to the fixture above if the
+		// `..` guard weren't doing its job. They must all fall back instead.
+		$traversals = [
+			'..',
+			'../' . $name,
+			$name . '/../' . $name,
+			'../../' . $name,
+		];
+		foreach ( $traversals as $traversal ) {
+			Newspack::asset_version_reset_cache();
+			$this->assertSame(
+				NEWSPACK_PLUGIN_VERSION,
+				Newspack::asset_version( $traversal ),
+				"Traversal should fall back, not resolve via filesystem: {$traversal}"
+			);
+		}
+	}
+
+	/**
+	 * It falls back when an asset.php returns a non-string `version` (e.g. a
+	 * webpack regression that emits an array). The helper's return type is
+	 * `string`; this guard keeps the contract airtight.
+	 */
+	public function test_falls_back_when_version_is_not_a_string() {
+		$name = 'tmp-test-non-string-version-' . wp_rand();
+		$this->write_fixture( $name, '<?php return [ "version" => [ "not", "a", "string" ] ];' );
+		$this->assertSame( NEWSPACK_PLUGIN_VERSION, Newspack::asset_version( $name ) );
 	}
 
 	/**
