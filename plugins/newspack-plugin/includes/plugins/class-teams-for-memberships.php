@@ -31,6 +31,8 @@ class Teams_For_Memberships {
 		add_filter( 'newspack_my_account_disabled_pages', [ __CLASS__, 'enable_members_area_for_team_members' ] );
 		add_action( 'woocommerce_checkout_subscription_created', [ __CLASS__, 'update_team_subscription_on_resubscribe' ], 21, 2 );
 		add_filter( 'wc_memberships_for_teams_determine_order_item_action', [ __CLASS__, 'restore_team_meta_on_renewal' ], 10, 2 );
+		// Priority 20 so this runs after Teams' own subscription integration (priority 10), which is a no-op for non-subscription teams.
+		add_action( 'wc_memberships_for_teams_add_team_member', [ __CLASS__, 'sync_member_end_date_to_team' ], 20, 3 );
 	}
 
 	/**
@@ -385,6 +387,68 @@ class Teams_For_Memberships {
 		}
 
 		return $action;
+	}
+
+	/**
+	 * Stamp the team's expiration date onto a member's user membership when they are added.
+	 *
+	 * Teams only propagates the team end date to a member's user membership when the member
+	 * already had an existing membership (see Team::add_member()), or when the team is tied to a
+	 * WooCommerce subscription (see the Teams Subscriptions integration, which bails for
+	 * non-subscription teams). For manually-managed teams that have a fixed end date but no
+	 * subscription, a newly created member membership is left with the plan-relative end date,
+	 * which resolves to empty for unlimited/subscription-typed plans. The member then never
+	 * expires even after the team membership lapses.
+	 *
+	 * This enforces the invariant that a team member's access ends no later than the team's
+	 * expiration date, regardless of subscription status, while preserving a longer end date a
+	 * member may already hold from a separately purchased individual membership. Calling
+	 * set_end_date() also (re)schedules the per-membership expiry event, so the member expires on
+	 * time on their own.
+	 *
+	 * @see https://linear.app/a8c/issue/NPPM-2932
+	 *
+	 * @param \SkyVerge\WooCommerce\Memberships\Teams\Team_Member $member          The team member instance.
+	 * @param \SkyVerge\WooCommerce\Memberships\Teams\Team        $team            The team instance.
+	 * @param \WC_Memberships_User_Membership                     $user_membership The related user membership instance.
+	 */
+	public static function sync_member_end_date_to_team( $member, $team, $user_membership ) {
+		if (
+			! is_a( $team, '\SkyVerge\WooCommerce\Memberships\Teams\Team' ) ||
+			! is_a( $user_membership, '\WC_Memberships_User_Membership' )
+		) {
+			return;
+		}
+
+		$team_end = $team->get_membership_end_date( 'timestamp' );
+
+		// Unlimited team (no end date): there is nothing to enforce.
+		if ( empty( $team_end ) ) {
+			return;
+		}
+
+		$team_end   = (int) $team_end;
+		$member_end = (int) $user_membership->get_end_date( 'timestamp' );
+
+		// Only ever shorten access down to the team end date; never override a longer end date the
+		// member already holds (e.g. a separately purchased individual membership). A missing end
+		// date is read as 0 and corrected here.
+		if ( $member_end >= $team_end ) {
+			return;
+		}
+
+		$user_membership->set_end_date( $team_end );
+
+		// Mirror Team::set_membership_end_date(): reactivate if the new end date is in the future,
+		// or expire if the team has already lapsed.
+		$now = time();
+		if ( $team_end > $now && $user_membership->is_expired() ) {
+			$user_membership->update_status( 'active' );
+		} elseif ( $team_end <= $now ) {
+			$user_membership->update_status( 'expired' );
+		}
+
+		$user_membership->add_note( __( 'Membership end date synced to the team membership expiration date.', 'newspack-plugin' ) );
 	}
 }
 
