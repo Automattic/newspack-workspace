@@ -288,6 +288,14 @@
 			font-size: inherit;
 		}
 
+		// `core/social-link`: the flag-on rule in `../style.scss` gives the block
+		// button a symmetric inset so the icon is round under the WC renderer. The
+		// legacy MJML social styling sizes the `.wp-social-link` wrapper itself and
+		// expects the button's generic inset, so restore it here.
+		.wp-block[data-type="core/social-link"] {
+			padding: 6px 12px;
+		}
+
 		.wp-block {
 			&[data-type="core/button"] {
 				padding: 0;
