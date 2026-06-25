@@ -67,8 +67,13 @@ class Separator extends Abstract_Block_Renderer {
 		$is_dots = str_contains( $class_name, 'is-style-dots' );
 
 		$color  = $this->resolve_color( $attrs, $rendering_context );
-		$width  = $is_wide ? '100%' : self::DEFAULT_WIDTH;
 		$border = $is_dots ? 'dotted' : 'solid';
+
+		// The CSS width carries the unit, but the HTML `width` attribute must be a
+		// number or a percentage — a `100px` attribute is invalid and some email
+		// clients then fall back to full width — so derive a numeric attribute.
+		$css_width  = $is_wide ? '100%' : self::DEFAULT_WIDTH;
+		$attr_width = $is_wide ? '100%' : (string) (int) self::DEFAULT_WIDTH;
 
 		// Build the rule cell style: the `<td>` itself IS the line.
 		$rule_td_style = sprintf(
@@ -88,8 +93,8 @@ class Separator extends Abstract_Block_Renderer {
 		// we are already supplying the full `<td>`.
 		$table_attrs = array(
 			'align' => 'center',
-			'width' => $width,
-			'style' => sprintf( 'width: %s; margin: 0 auto;', esc_attr( $width ) ),
+			'width' => $attr_width,
+			'style' => sprintf( 'width: %s; margin: 0 auto;', esc_attr( $css_width ) ),
 		);
 
 		return Table_Wrapper_Helper::render_table_wrapper( $cell_html, $table_attrs, array(), array(), false );

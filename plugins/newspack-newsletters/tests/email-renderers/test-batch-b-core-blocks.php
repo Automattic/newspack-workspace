@@ -59,7 +59,7 @@ class Test_Batch_B_Core_Blocks extends WP_UnitTestCase {
 	 * separator renders correctly in email without the `.wp-block-separator`
 	 * stylesheet (which is not loaded in email clients).
 	 */
-	public function test_separator_default_passes_through() {
+	public function test_separator_default_renders_email_rule() {
 		$html = $this->render_newsletter( '<!-- wp:separator --><hr class="wp-block-separator has-alpha-channel-opacity"/><!-- /wp:separator -->' );
 		// The override emits a table-based rule, not a bare <hr>.
 		$this->assertStringContainsString( 'border-top:', $html, 'Expected the default separator to render with an explicit border-top on a table cell.' );
@@ -92,7 +92,7 @@ class Test_Batch_B_Core_Blocks extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'href="https://example.com"', $html, 'Expected the button link href to survive.' );
 		$this->assertStringContainsString( 'target="_blank"', $html, 'Expected the button link to open in a new tab.' );
 		$this->assertStringContainsString( '>Click me</a>', $html, 'Expected the button label to render.' );
-		$this->assertStringContainsString( 'class=" wp-block-button"', $html, 'Expected the button to render inside a wp-block-button table cell.' );
+		$this->assertMatchesRegularExpression( '/class="[^"]*\bwp-block-button\b/', $html, 'Expected the button to render inside a wp-block-button table cell.' );
 	}
 
 	/**
@@ -104,8 +104,8 @@ class Test_Batch_B_Core_Blocks extends WP_UnitTestCase {
 	public function test_button_preset_colors_are_inlined() {
 		$content = '<!-- wp:buttons --><div class="wp-block-buttons"><!-- wp:button {"backgroundColor":"vivid-red","textColor":"white"} --><div class="wp-block-button"><a class="wp-block-button__link has-white-color has-vivid-red-background-color has-text-color has-background wp-element-button" href="https://example.com">Buy</a></div><!-- /wp:button --></div><!-- /wp:buttons -->';
 		$html    = $this->render_newsletter( $content );
-		$this->assertStringContainsString( 'background-color: #cf2e2e', $html, 'Expected the button background color to be inlined.' );
-		$this->assertStringContainsString( 'color: #ffffff', $html, 'Expected the button text color to be inlined.' );
+		$this->assertMatchesRegularExpression( '/background-color:\s*#cf2e2e/', $html, 'Expected the button background color to be inlined.' );
+		$this->assertMatchesRegularExpression( '/(?<!-)color:\s*#ffffff/', $html, 'Expected the button text color to be inlined.' );
 	}
 
 	/**
