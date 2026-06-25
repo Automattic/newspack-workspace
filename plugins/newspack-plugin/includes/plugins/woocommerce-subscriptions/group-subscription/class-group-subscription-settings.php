@@ -360,6 +360,9 @@ class Group_Subscription_Settings {
 		$invites = Group_Subscription_Invite::get_invites( $subscription );
 		?>
 		<div class="newspack-group-subscription__container" data-subscription-id="<?php echo \esc_attr( $subscription->get_id() ); ?>">
+			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled_baseline' ); ?>" value="<?php echo \esc_attr( \wc_bool_to_string( $settings['enabled'] ) ); ?>" />
+			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit_baseline' ); ?>" value="<?php echo \esc_attr( (int) $settings['limit'] ); ?>" />
+			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'name_baseline' ); ?>" value="<?php echo \esc_attr( $settings['name'] ); ?>" />
 			<div class="newspack-group-subscription__settings">
 				<h3><?php \esc_html_e( 'Settings', 'newspack-plugin' ); ?></h3>
 				<p>
@@ -493,21 +496,52 @@ class Group_Subscription_Settings {
 
 		// Get subscription object.
 		$subscription = is_a( $subscription, 'WC_Subscription' ) ? $subscription : \wcs_get_subscription( $subscription_id );
-		$is_enabled   = isset( $_POST[ self::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled' ] );
-		$limit        = isset( $_POST[ self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit' ] )
-			? absint( wp_unslash( $_POST[ self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit' ] ) )
-			: 0;
-		$name         = isset( $_POST[ self::GROUP_SUBSCRIPTION_META_PREFIX . 'name' ] )
-			? sanitize_text_field( wp_unslash( $_POST[ self::GROUP_SUBSCRIPTION_META_PREFIX . 'name' ] ) )
-			: '';
-		self::update_subscription_settings(
-			$subscription,
-			[
-				'enabled' => $is_enabled,
-				'limit'   => $limit,
-				'name'    => $name,
-			]
-		);
+		$prefix       = self::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		$submitted = [
+			'enabled' => isset( $_POST[ $prefix . 'enabled' ] ),
+			'limit'   => isset( $_POST[ $prefix . 'limit' ] )
+				? absint( wp_unslash( $_POST[ $prefix . 'limit' ] ) )
+				: 0,
+			'name'    => isset( $_POST[ $prefix . 'name' ] )
+				? sanitize_text_field( wp_unslash( $_POST[ $prefix . 'name' ] ) )
+				: '',
+		];
+
+		$changed = [];
+		foreach ( [ 'enabled', 'limit', 'name' ] as $key ) {
+			$baseline_field = $prefix . $key . '_baseline';
+			if ( ! isset( $_POST[ $baseline_field ] ) ) {
+				continue;
+			}
+			$baseline_raw = sanitize_text_field( wp_unslash( $_POST[ $baseline_field ] ) );
+			switch ( $key ) {
+				case 'enabled':
+					$baseline_value = \wc_string_to_bool( $baseline_raw );
+					break;
+				case 'limit':
+					$baseline_value = absint( $baseline_raw );
+					break;
+				default:
+					$baseline_value = $baseline_raw;
+					break;
+			}
+			if ( $submitted[ $key ] !== $baseline_value ) {
+				$changed[ $key ] = $submitted[ $key ];
+			}
+		}
+
+		if ( ! empty( $changed ) ) {
+			self::update_subscription_settings( $subscription, $changed );
+		}
+
+		// Effective group status can flip via inherited product settings without a meta write; refresh the cached ID set when it changed.
+		if ( isset( $_POST[ $prefix . 'enabled_baseline' ] ) ) {
+			$baseline_enabled = \wc_string_to_bool( sanitize_text_field( wp_unslash( $_POST[ $prefix . 'enabled_baseline' ] ) ) );
+			if ( $baseline_enabled !== self::get_subscription_settings( $subscription )['enabled'] ) {
+				self::clear_group_subscription_ids_cache();
+			}
+		}
 	}
 
 	/**
