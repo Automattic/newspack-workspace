@@ -144,19 +144,21 @@ class Test_Separator extends WP_UnitTestCase {
 	 * `translate_slug_to_color()` returns the slug unchanged when it isn't in the
 	 * email theme palette, so without validation the renderer would emit an
 	 * invalid `border-top: 1px solid <slug>` that email clients drop, leaving no
-	 * rule. The override must fall back to the default gray so the rule renders.
+	 * rule. A letters-only slug (e.g. a palette name like `primary`) is the tricky
+	 * case — it must not be mistaken for a CSS named color. The override must fall
+	 * back to the default gray so the rule still renders.
 	 */
 	public function test_unresolved_color_slug_falls_back_to_default() {
-		$content = '<!-- wp:separator {"backgroundColor":"not-a-palette-color"} -->'
-			. '<hr class="wp-block-separator has-not-a-palette-color-background-color has-background"/>'
+		$content = '<!-- wp:separator {"backgroundColor":"notacolorslug"} -->'
+			. '<hr class="wp-block-separator has-notacolorslug-background-color has-background"/>'
 			. '<!-- /wp:separator -->';
 
 		$html = $this->render_newsletter( $content );
 
 		$this->assertStringNotContainsString(
-			'solid not-a-palette-color',
+			'solid notacolorslug',
 			$html,
-			'Expected an unresolved color slug not to be emitted as an invalid CSS color.'
+			'Expected an unresolved letters-only color slug not to be emitted as an invalid CSS color.'
 		);
 		$this->assertMatchesRegularExpression(
 			'/border-top:\s*1px\s+solid\s+#dddddd/i',

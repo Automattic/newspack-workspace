@@ -54,6 +54,37 @@ class Separator extends Abstract_Block_Renderer {
 	const DEFAULT_COLOR = '#dddddd';
 
 	/**
+	 * Recognized CSS named colors (the HTML basic keywords plus a few common
+	 * extras). A safety net only — the block editor emits hex, never a bare color
+	 * name — kept deliberately small so an unresolved palette slug that happens to
+	 * be letters-only (e.g. `primary`) is rejected rather than emitted as an
+	 * invalid color.
+	 *
+	 * @var string[]
+	 */
+	const NAMED_COLORS = array(
+		'aqua',
+		'black',
+		'blue',
+		'fuchsia',
+		'gray',
+		'grey',
+		'green',
+		'lime',
+		'maroon',
+		'navy',
+		'olive',
+		'orange',
+		'purple',
+		'red',
+		'silver',
+		'teal',
+		'transparent',
+		'white',
+		'yellow',
+	);
+
+	/**
 	 * Render the separator block as an email-safe table-based horizontal rule.
 	 *
 	 * @param string            $block_content     Original block content (bare `<hr>`).
@@ -164,8 +195,11 @@ class Separator extends Abstract_Block_Renderer {
 		if ( preg_match( '/^(?:rgb|rgba|hsl|hsla)\(\s*[0-9.,%\s\/]+\)$/i', $value ) ) {
 			return true;
 		}
-		// Single-word named color (letters only — excludes hyphenated slugs).
-		return (bool) preg_match( '/^[a-z]+$/i', $value );
+		// A named color, from a small whitelist. A bare word is only treated as a
+		// color when it's a real CSS keyword, so an unresolved palette slug like
+		// `primary` (letters-only, but not a color) is rejected and falls back to
+		// DEFAULT_COLOR rather than producing an invalid rule.
+		return in_array( strtolower( $value ), self::NAMED_COLORS, true );
 	}
 }
 
