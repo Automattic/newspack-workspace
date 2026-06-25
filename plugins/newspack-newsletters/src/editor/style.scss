@@ -154,6 +154,36 @@
 				padding: 0;
 			}
 
+			// The canvas default separator uses core's 2px editor rule in a darker
+			// gray; the email and the standard post editor render a light-gray 1px
+			// rule. Thin it to 1px and set the email's default color (#dddddd, the
+			// Separator renderer's DEFAULT_COLOR). A colour-styled separator
+			// additionally fills the generic `.wp-block` inset (6px 12px) with its
+			// inline background colour (`box-sizing: border-box`), rendering as a
+			// thick bar — clear the fill (`!important` beats the inline colour) and
+			// draw the rule as a 1px border instead (`currentColor` is the
+			// separator's chosen colour), keeping the block inset so stacked
+			// separators stay spaced. Flag-off needs no cancellation: it renders a
+			// 1px rule already, and its legacy `border-bottom` shorthand resets the
+			// colour back to `currentColor`.
+			&[data-type="core/separator"] {
+				border-bottom-width: 1px;
+				border-bottom-color: #dddddd;
+
+				&.has-background {
+					background-color: transparent !important;
+					border-bottom: 1px solid;
+				}
+			}
+
+			// The social-link block button inherits the generic `.wp-block` inset
+			// (6px 12px); the asymmetric padding stretches each round icon into an
+			// oval. Use a symmetric inset so the icon keeps the round shape shown in
+			// the email and the standard post editor.
+			&[data-type="core/social-link"] {
+				padding: 6px;
+			}
+
 			// Batch C canvas↔email parity. On a classic theme the canvas otherwise
 			// falls to WP-core editor defaults (common.css / block-library theme.css)
 			// plus this generic `.wp-block` inset, which under-render these blocks
