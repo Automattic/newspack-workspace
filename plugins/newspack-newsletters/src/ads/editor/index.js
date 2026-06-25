@@ -2,14 +2,30 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
+import apiFetch from '@wordpress/api-fetch';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { Fragment, useState } from '@wordpress/element';
 import { PluginDocumentSettingPanel, PluginPrePublishPanel, store as editPostStore } from '@wordpress/edit-post';
 import { registerPlugin } from '@wordpress/plugins';
 import { ToggleControl, TextControl, DatePicker, Notice, RangeControl, Button, Modal } from '@wordpress/components';
-import { format, isInTheFuture } from '@wordpress/date';
+import { date as wpDate, format, isInTheFuture } from '@wordpress/date';
 import { SelectControl } from 'newspack-components';
 import AdPlacements from '../../components/ad-placements';
+
+// Strip the read-only counters from ad saves: the editor round-trips the full
+// meta object, and a stale counter value would trip their `auth_callback`.
+const AD_REST_PATH = /\/wp\/v2\/newspack_nl_ads_cpt(\/|\?|$)/;
+apiFetch.use( ( options, next ) => {
+	const method = ( options.method || 'GET' ).toUpperCase();
+	const target = options.path || options.url || '';
+	if ( ( method === 'POST' || method === 'PUT' ) && options.data?.meta && AD_REST_PATH.test( target ) ) {
+		const meta = { ...options.data.meta };
+		delete meta.tracking_impressions;
+		delete meta.tracking_clicks;
+		options.data = { ...options.data, meta };
+	}
+	return next( options );
+} );
 
 function AdEdit() {
 	const { price, startDate, expiryDate, insertionStrategy, positionInContent, positionBlockCount } = useSelect( select => {
@@ -45,7 +61,8 @@ function AdEdit() {
 	const { saveEntityRecord } = useDispatch( 'core' );
 	const { removeEditorPanel } = useDispatch( editPostStore );
 	const messages = [];
-	if ( expiryDate && expiryDate < format( 'Y-m-d', new Date() ) ) {
+	// Site-timezone "today" so this advisory agrees with the server.
+	if ( expiryDate && expiryDate < wpDate( 'Y-m-d' ) ) {
 		messages.push( __( 'The expiration date is set in the past. This ad will not be displayed.', 'newspack-newsletters' ) );
 	}
 	if ( startDate && startDate > expiryDate ) {

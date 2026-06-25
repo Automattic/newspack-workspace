@@ -174,14 +174,16 @@ export function getFields( { advertisers = [], placements = [] } = {} ) {
 			id: 'start_date',
 			label: __( 'Start date', 'newspack-newsletters' ),
 			enableSorting: true,
-			getValue: ( { item } ) => item?.meta?.start_date || '',
+			// Slice legacy ISO datetime to Y-m-d for consistent sort/export.
+			getValue: ( { item } ) => String( item?.meta?.start_date || '' ).slice( 0, 10 ),
 			render: renderStartDate,
 		},
 		{
 			id: 'expiry_date',
 			label: __( 'Expiration date', 'newspack-newsletters' ),
 			enableSorting: true,
-			getValue: ( { item } ) => item?.meta?.expiry_date || '',
+			// Slice legacy ISO datetime to Y-m-d for consistent sort/export.
+			getValue: ( { item } ) => String( item?.meta?.expiry_date || '' ).slice( 0, 10 ),
 			render: renderExpiryDate,
 		},
 		{

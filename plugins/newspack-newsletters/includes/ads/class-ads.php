@@ -345,8 +345,7 @@ final class Ads {
 		}
 		update_post_meta( $post_id, 'position_in_content', 100 );
 
-		// Seed the read-only counters so the editor's round-trip of the
-		// default value is an unchanged no-op, not a denied meta insert.
+		// Seed the read-only counters so their meta rows exist and the list shows 0.
 		add_post_meta( $post_id, 'tracking_impressions', 0, true );
 		add_post_meta( $post_id, 'tracking_clicks', 0, true );
 	}
@@ -354,10 +353,11 @@ final class Ads {
 	/**
 	 * Normalize an ad date meta value to `Y-m-d`.
 	 *
-	 * Accepts only a leading ISO `Y-m-d` (optionally followed by a time
-	 * component, e.g. `2026-06-29T23:59:59`), matching the SQL filter's
-	 * `STR_TO_DATE(LEFT(meta_value,10),'%Y-%m-%d')` exactly. Any value
-	 * that does not begin with a valid calendar date returns ''.
+	 * Accepts only a leading, zero-padded ISO `Y-m-d` (an optional time
+	 * component is ignored, e.g. `2026-06-29T23:59:59`). Stricter than the SQL
+	 * filter's `STR_TO_DATE(LEFT(meta_value,10),'%Y-%m-%d')` on single-digit
+	 * components, but values are normalized here so stored data always agrees.
+	 * Any value not beginning with a valid calendar date returns ''.
 	 *
 	 * @param mixed $value Raw meta value.
 	 * @return string `Y-m-d`, or '' when empty or not a valid leading ISO date.
@@ -387,7 +387,8 @@ final class Ads {
 		global $wpdb;
 
 		$taxonomy_name = is_object( $taxonomy ) ? $taxonomy->name : $taxonomy;
-		$statuses      = [ 'publish', 'private', 'future', 'draft', 'pending' ];
+		// Include auto-draft to match the Ads list's draft bucket.
+		$statuses = [ 'publish', 'private', 'future', 'draft', 'pending', 'auto-draft' ];
 
 		foreach ( $terms as $tt_id ) {
 			$tt_id = (int) $tt_id;
@@ -397,14 +398,15 @@ final class Ads {
 					INNER JOIN {$wpdb->posts} p ON p.ID = tr.object_id
 					WHERE tr.term_taxonomy_id = %d
 					AND p.post_type = %s
-					AND p.post_status IN ( %s, %s, %s, %s, %s )",
+					AND p.post_status IN ( %s, %s, %s, %s, %s, %s )",
 					$tt_id,
 					self::CPT,
 					$statuses[0],
 					$statuses[1],
 					$statuses[2],
 					$statuses[3],
-					$statuses[4]
+					$statuses[4],
+					$statuses[5]
 				)
 			);
 
@@ -417,9 +419,11 @@ final class Ads {
 	/**
 	 * One-time recount of existing advertiser terms so counts predating
 	 * the custom count callback refresh without waiting for the next edit.
+	 * Bump the sentinel whenever the counted statuses change so already
+	 * recounted sites pick up the new semantics (v3: added auto-draft).
 	 */
 	public static function maybe_recount_advertiser_terms() {
-		$option = 'newspack_nl_advertiser_count_recounted_v2';
+		$option = 'newspack_nl_advertiser_count_recounted_v3';
 		if ( get_option( $option ) ) {
 			return;
 		}
