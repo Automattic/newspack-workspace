@@ -536,6 +536,9 @@ class Group_Subscription_Settings {
 		}
 
 		// Effective group status can flip via inherited product settings without a meta write; refresh the cached ID set when it changed.
+		// On the Add-subscription screen the product line item may not be linked yet, so this read can resolve the un-inherited
+		// default and leave the cached ID set briefly stale. That is harmless: it only drives the admin list-table group filter and
+		// self-heals via the transient's TTL plus the product save/trash/delete clear hooks. It is never an access-control path.
 		if ( isset( $_POST[ $prefix . 'enabled_baseline' ] ) ) {
 			$baseline_enabled = \wc_string_to_bool( sanitize_text_field( wp_unslash( $_POST[ $prefix . 'enabled_baseline' ] ) ) );
 			if ( $baseline_enabled !== self::get_subscription_settings( $subscription )['enabled'] ) {
