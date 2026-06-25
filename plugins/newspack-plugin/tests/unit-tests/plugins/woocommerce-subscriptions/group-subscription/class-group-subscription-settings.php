@@ -351,6 +351,57 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 	}
 
 	/**
+	 * An unchanged name (submitted value equals the rendered baseline) writes no override.
+	 */
+	public function test_save_does_not_override_name_when_unchanged_from_baseline() {
+		$subscription = $this->make_subscription_with_product(
+			[ 'enabled' => 'yes' ],
+			[],
+			[],
+			[ 'name' => 'Daily Reader' ]
+		);
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'name'             => 'Daily Reader',
+				$prefix . 'name_baseline'    => 'Daily Reader',
+			]
+		);
+
+		$this->assertSame( '', $subscription->get_meta( $prefix . 'name', true ), 'No own name override should be written when the submitted name matches its baseline.' );
+		$this->assertSame( 'Daily Reader', Group_Subscription_Settings::get_subscription_settings( $subscription )['name'], 'The subscription should still inherit the product name.' );
+	}
+
+	/**
+	 * A changed name (submitted value differs from the rendered baseline) writes the override.
+	 */
+	public function test_save_writes_name_override_when_changed_from_baseline() {
+		$subscription = $this->make_subscription_with_product(
+			[ 'enabled' => 'yes' ],
+			[],
+			[],
+			[ 'name' => 'Daily Reader' ]
+		);
+		$prefix = Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX;
+
+		$this->run_meta_box_save(
+			$subscription,
+			[
+				$prefix . 'enabled'          => 'yes',
+				$prefix . 'enabled_baseline' => 'yes',
+				$prefix . 'name'             => 'My Custom Group',
+				$prefix . 'name_baseline'    => 'Daily Reader',
+			]
+		);
+
+		$this->assertSame( 'My Custom Group', Group_Subscription_Settings::get_subscription_settings( $subscription )['name'], 'A changed name should override the inherited product name.' );
+	}
+
+	/**
 	 * A no-op save on a subscription that inherits group-enabled status from its
 	 * product still refreshes the cached group-subscription ID set, so the new
 	 * subscription appears in the admin group filters without waiting for expiry.
@@ -415,7 +466,7 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 			[
 				'id'   => 123,
 				'meta' => [ $prefix . 'enabled' => 'no' ],
-			] 
+			]
 		);
 
 		$this->run_meta_box_save(
