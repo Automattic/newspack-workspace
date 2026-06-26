@@ -390,15 +390,17 @@ final class Prompts_Metric {
 	 * @param bool      $computable       Whether the value is a real computed figure.
 	 * @param int|null  $denominator      Optional denominator.
 	 * @param string    $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
+	 * @param bool      $data_missing     Whether underlying data is absent (default false).
 	 * @return array
 	 */
-	private function populated_scalar( $value, bool $computable, ?int $denominator, string $placeholder_type ): array {
+	private function populated_scalar( $value, bool $computable, ?int $denominator, string $placeholder_type, bool $data_missing = false ): array {
 		return [
 			'state'            => 'populated',
 			'value'            => $value,
 			'computable'       => $computable,
 			'denominator'      => $denominator,
 			'placeholder_type' => $placeholder_type,
+			'data_missing'     => $data_missing,
 		];
 	}
 

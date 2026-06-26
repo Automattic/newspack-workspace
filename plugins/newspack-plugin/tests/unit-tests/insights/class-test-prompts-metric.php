@@ -2319,4 +2319,18 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 
 		unregister_post_type( 'newspack_popups_cpt' );
 	}
+
+	/**
+	 * Populated_scalar must expose a `data_missing` key (defaults false;
+	 * can be set true via the optional 5th param).
+	 */
+	public function test_populated_scalar_includes_data_missing_flag() {
+		$metric = new Prompts_Metric( $this->createMock( BigQuery_Proxy_Client::class ) );
+		$ref    = new \ReflectionMethod( $metric, 'populated_scalar' );
+		$ref->setAccessible( true );
+		$default = $ref->invoke( $metric, 1.0, true, 5, 'rate' );
+		$this->assertArrayHasKey( 'data_missing', $default );
+		$this->assertFalse( $default['data_missing'] );
+		$this->assertTrue( $ref->invoke( $metric, 0.0, false, null, 'rate', true )['data_missing'] );
+	}
 }
