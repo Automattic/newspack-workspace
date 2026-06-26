@@ -41,6 +41,7 @@ import apiFetch from '@wordpress/api-fetch';
  */
 import './edit.scss';
 import RedirectAfterSuccess from '../../components/redirect-after-success';
+import CouponControl from './coupon-control';
 
 function getVariationName( variation ) {
 	const attributes = [];
@@ -201,7 +202,7 @@ function ProductControl( props ) {
 
 function CheckoutButtonEdit( props ) {
 	const { attributes, setAttributes, className } = props;
-	const { placeholder, style, text, product, price, variation, width } = attributes;
+	const { placeholder, style, text, product, price, variation, width, coupon } = attributes;
 
 	const [ productData, setProductData ] = useState( {} );
 	const [ variations, setVariations ] = useState( [] );
@@ -338,6 +339,10 @@ function CheckoutButtonEdit( props ) {
 						) }
 					</ProductControl>
 					<WidthControl selectedWidth={ width } setAttributes={ setAttributes } />
+					<CouponControl
+						value={ coupon }
+						onChange={ value => setAttributes( { coupon: value } ) }
+					/>
 				</PanelBody>
 				<PanelBody title={ __( 'After purchase', 'newspack-blocks' ) }>
 					<RedirectAfterSuccess setAttributes={ setAttributes } attributes={ attributes } />
