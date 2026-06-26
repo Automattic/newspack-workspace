@@ -360,10 +360,26 @@ class Group_Subscription_Settings {
 		$product  = \wc_get_product( WooCommerce_Subscriptions::get_subscription_product_id( $subscription ) );
 		$members  = Group_Subscription::get_members( $subscription );
 		$managers = Group_Subscription::get_managers( $subscription );
-		// The owner/manager(s) are rendered (non-removable) at the top of the list below,
-		// so exclude any manager that also carries member meta to avoid a duplicate row.
-		$member_only = array_values( array_diff( array_map( 'intval', $members ), array_map( 'intval', $managers ) ) );
 		$invites  = Group_Subscription_Invite::get_invites( $subscription );
+		// Resolve the rows once, applying the same guards used when rendering below, so the
+		// header count always matches the rendered list (and the admin JS, which re-tallies the
+		// list items on add/remove/invite). The owner/manager(s) render as non-removable rows;
+		// members exclude any manager that also carries member meta (avoiding a duplicate row)
+		// and must be readers.
+		$manager_users = [];
+		foreach ( array_map( 'intval', $managers ) as $manager_id ) {
+			$manager_user = get_user_by( 'id', $manager_id );
+			if ( $manager_user ) {
+				$manager_users[] = $manager_user;
+			}
+		}
+		$member_users = [];
+		foreach ( array_diff( array_map( 'intval', $members ), array_map( 'intval', $managers ) ) as $member_id ) {
+			$member_user = get_user_by( 'id', $member_id );
+			if ( $member_user && Reader_Activation::is_user_reader( $member_user ) ) {
+				$member_users[] = $member_user;
+			}
+		}
 		?>
 		<div class="newspack-group-subscription__container" data-subscription-id="<?php echo \esc_attr( $subscription->get_id() ); ?>">
 			<div class="newspack-group-subscription__settings">
@@ -427,8 +443,9 @@ class Group_Subscription_Settings {
 						sprintf(
 							// translators: %d: The number of group members.
 							__( 'Group members (<span class="newspack-group-subscription__members-count">%d</span>)', 'newspack-plugin' ),
-							// The owner counts as a member, so include managers alongside members and pending invites.
-							Group_Subscription::get_member_count( $subscription ) + count( array_values( $invites ) )
+							// Count exactly the rows rendered below (owner(s) + reader-members + invites)
+							// so the header never drifts from the list.
+							count( $manager_users ) + count( $member_users ) + count( $invites )
 						)
 					);
 					?>
@@ -437,11 +454,7 @@ class Group_Subscription_Settings {
 					<?php
 					// The owner counts as a member of the group, so render the manager(s) first
 					// as non-removable rows. The JS keeps the count in sync by tallying list items.
-					foreach ( $managers as $manager_id ) :
-						$manager_user = get_user_by( 'id', $manager_id );
-						if ( ! $manager_user ) {
-							continue;
-						}
+					foreach ( $manager_users as $manager_user ) :
 						?>
 						<li>
 							<a class="newspack-group-subscription__member-user-link" href="<?php echo \esc_url( \get_edit_user_link( $manager_user->ID ) ); ?>"><?php echo \esc_html( $manager_user->user_email ); ?></a>
@@ -449,11 +462,7 @@ class Group_Subscription_Settings {
 						</li>
 						<?php
 					endforeach;
-					foreach ( $member_only as $member_id ) :
-						$user = get_user_by( 'id', $member_id );
-						if ( ! $user || ! Reader_Activation::is_user_reader( $user ) ) {
-							continue;
-						}
+					foreach ( $member_users as $user ) :
 						?>
 						<li>
 							<a class="newspack-group-subscription__member-user-link" href="<?php echo \esc_url( \get_edit_user_link( $user->ID ) ); ?>"><?php echo \esc_html( $user->user_email ); ?></a>
