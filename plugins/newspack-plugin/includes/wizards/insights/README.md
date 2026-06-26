@@ -27,7 +27,6 @@ includes/wizards/insights/
 ├── class-insights-section-*.php    Per-tab init: loads metric + REST controller, registers route
 ├── class-cache.php                 Shared transient wrapper with per-source TTLs + BQ cooldown
 ├── class-bigquery-proxy-client.php Hub-proxied BigQuery queries (Newspack Manager auth)
-├── class-woo-order-resolver.php    Joins BQ paywall attempts to local Woo orders (conversion paths)
 ├── api/                            REST controllers (one per tab) + Cached_Controller_Trait
 ├── classifiers/                    Donation product classifier (cached)
 ├── fixtures/                       Per-tab fixture payloads for FIXTURE_MODE
@@ -94,7 +93,6 @@ Current tab status:
 - **[`class-bigquery-proxy-client.php`](class-bigquery-proxy-client.php)** — `wp_remote_post` to the hub's `/wp-json/newspack-manager-admin/v1/bigquery-query` endpoint. Auth via Newspack Manager admin signing. Date inputs normalized to UTC `Ymd` (GA4 daily-shard format). Returns `WP_Error` on every failure path; logs to Logstash with `NEWSPACK-INSIGHTS-BIGQUERY` header.
 - **[`ga4/class-client.php`](ga4/class-client.php)** — `runReport` primitives. Reuses Newspack's existing Google OAuth (`analytics` scope already granted; no re-auth). Pre-flight check inspects `customEvent:<param>` references against `GA4_Custom_Dimensions::get_registered_parameter_names()` and returns a `custom_dimension_missing` `WP_Error` when the property doesn't have the dimension registered. Per-request memo cache on registered-dimension lookups.
 - **[`gam/class-client.php`](gam/class-client.php)** — Async SOAP via the vendored `googleads-php-lib` (`NEWSPACK_ADS_COMPOSER_ABSPATH`). OAuth-only (no service-account fallback — service accounts are an OSS path and don't apply to managed customers). `is_gam_active()` reads the Ad Providers option; `can_run_reports()` does a one-shot tokeninfo + network-code check (don't call on every poll).
-- **[`class-woo-order-resolver.php`](class-woo-order-resolver.php)** — Joins BQ paywall-attempt rows (`uid`/`user_pseudo_id`, `session_id`, `attempt_ts`) against `wp_wc_orders` to identify completed orders inside a configurable window (default 30 min). Anonymous attempts (non-numeric pseudo-IDs) are silently dropped. Instance-level cache to avoid re-running customer queries when stacking count/sum/unique-users on the same row set.
 
 ### REST API (`api/`)
 
