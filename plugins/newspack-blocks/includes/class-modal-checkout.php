@@ -436,6 +436,18 @@ final class Modal_Checkout {
 		\WC()->cart->empty_cart();
 		\WC()->cart->add_to_cart( $product_id, 1, 0, [], $cart_item_data );
 
+		// Auto-apply a coupon attached to the checkout button, if present and valid.
+		// Validating first means an invalid coupon is skipped silently, with no
+		// WooCommerce error notice shown to the reader (who never typed it).
+		$coupon_code = filter_input( INPUT_GET, 'coupon', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		if ( $coupon_code && function_exists( 'wc_coupons_enabled' ) && \wc_coupons_enabled() ) {
+			$coupon    = new \WC_Coupon( $coupon_code );
+			$discounts = new \WC_Discounts( \WC()->cart );
+			if ( true === $discounts->is_coupon_valid( $coupon ) ) {
+				\WC()->cart->apply_coupon( $coupon_code );
+			}
+		}
+
 		// Set checkout registration flag if user is logged not logged in.
 		if ( ! is_user_logged_in() ) {
 			self::set_checkout_registration_flag();
