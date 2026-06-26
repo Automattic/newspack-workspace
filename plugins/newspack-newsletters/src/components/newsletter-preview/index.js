@@ -20,11 +20,23 @@ const CORE_STYLESHEET_IDS = [ 'wp-block-library-css', 'wp-block-library-theme-cs
 const DEFAULT_FONTS_CSS =
 	'body *:not(code) { font-family: georgia, serif; } body h1, body h2, body h3, body h4, body h5, body h6 { font-family: arial, sans-serif; }';
 
-const buildResolvedStyles = () =>
-	CORE_STYLESHEET_IDS.map( id => document.getElementById( id ) )
+const buildResolvedStyles = () => {
+	const sources = CORE_STYLESHEET_IDS.map( id => [ id, document.getElementById( id ) ] );
+	if ( process.env.NODE_ENV !== 'production' ) {
+		const missing = sources.filter( ( [ , node ] ) => ! node ).map( ( [ id ] ) => id );
+		if ( missing.length ) {
+			// eslint-disable-next-line no-console
+			console.warn(
+				`[newspack-newsletters] NewsletterPreview: core stylesheet(s) not enqueued, preview may render unstyled: ${ missing.join( ', ' ) }`
+			);
+		}
+	}
+	return sources
+		.map( ( [ , node ] ) => node )
 		.filter( Boolean )
 		.map( source => source.outerHTML )
 		.join( '\n' );
+};
 
 const withSamplePostsInserter = blocks => {
 	if ( ! Array.isArray( blocks ) ) {
@@ -56,7 +68,11 @@ const NewsletterPreview = ( { layoutId = null, meta = {}, blocks, ...props } ) =
 	const [ isReady, setIsReady ] = useState( false );
 
 	// Admin-shell previews lack the editor-provided assets, so seed them; skip
-	// the live editor (populated string) so its canvas isn't reloaded.
+	// the live editor (populated string) so its canvas isn't reloaded. Environment
+	// is inferred from the private `__unstableResolvedAssets.styles` field: the live
+	// editor populates it before any preview mounts, the admin shell leaves it
+	// undefined. If a future WP populates it everywhere, admin-shell previews would
+	// stop seeding and an explicit mount-site flag would be needed instead.
 	const { updateSettings } = useDispatch( blockEditorStore );
 	const resolvedAssets = useSelect( select => select( blockEditorStore ).getSettings().__unstableResolvedAssets, [] );
 	useEffect( () => {
