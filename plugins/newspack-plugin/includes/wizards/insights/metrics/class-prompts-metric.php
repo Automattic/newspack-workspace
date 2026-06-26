@@ -62,7 +62,7 @@ final class Prompts_Metric {
 	 *
 	 * @var string
 	 */
-	const CACHE_PREFIX = 'newspack_insights_tab5_v1:';
+	const CACHE_PREFIX = 'newspack_insights_tab5_v2:';
 
 	/**
 	 * Display labels for each `action_type` (intent) value. Spec §7.2 prescribes
