@@ -99,6 +99,7 @@ type Gate = {
 	isExpanded?: boolean;
 	collapse?: boolean;
 	content_rules: GateContentRule[];
+	content_rules_match: 'all' | 'any';
 	registration: Registration;
 	custom_access: CustomAccess;
 };

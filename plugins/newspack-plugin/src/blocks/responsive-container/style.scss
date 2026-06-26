@@ -1,0 +1,11 @@
+// Editor-only helpers (these classes are added only in the editor).
+.newspack-responsive-container-breakpoint {
+	&.is-inactive-view {
+		display: none !important;
+	}
+
+	// Keep an empty breakpoint clickable instead of collapsing.
+	&.is-empty {
+		min-height: 48px;
+	}
+}

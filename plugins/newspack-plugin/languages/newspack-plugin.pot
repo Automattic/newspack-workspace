@@ -2,14 +2,14 @@
 # This file is distributed under the GPL2.
 msgid ""
 msgstr ""
-"Project-Id-Version: Newspack 6.42.1\n"
+"Project-Id-Version: Newspack 6.42.3\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-plugin\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-06-10T00:44:57+00:00\n"
+"POT-Creation-Date: 2026-06-25T00:37:38+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: newspack-plugin\n"
@@ -740,13 +740,13 @@ msgid "INN Labs, Automattic"
 msgstr ""
 
 #: includes/class-plugin-manager.php:325
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-refresh-control/index.js:129
 msgid "Ad Refresh Control"
 msgstr ""
 
 #: includes/class-plugin-manager.php:326
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-refresh-control/index.js:130
 msgid "Enable Active View refresh for Google Ad Manager ads without needing to modify any code."
 msgstr ""
@@ -1077,7 +1077,7 @@ msgstr ""
 
 #: includes/collections/class-collection-category-taxonomy.php:99
 #: includes/lite-site/class-lite-site.php:136
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/suppression/index.js:126
 msgid "Categories"
 msgstr ""
@@ -2055,7 +2055,7 @@ msgid "Content labeled with certain tags."
 msgstr ""
 
 #: includes/content-gate/class-content-rules.php:23
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/suppression/index.js:78
 msgid "Post types"
 msgstr ""
@@ -2864,7 +2864,7 @@ msgstr ""
 #: includes/wizards/newspack/class-newspack-settings.php:186
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:31
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:92
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: dist/blocks.js:4
 #: dist/blocks.js:6
 #: dist/commons.js:1
@@ -3163,7 +3163,7 @@ msgstr ""
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:92
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:108
 #: dist/billboard.js:1
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: dist/newsletters-wizards.5de45bf92dc8175d1de2.js:31
 #: dist/newsletters-wizards.5de45bf92dc8175d1de2.js:46
 #: dist/newsletters.js:4
@@ -3710,7 +3710,7 @@ msgid "Check availability"
 msgstr ""
 
 #. translators: %s: Subscription ID
-#: includes/plugins/wc-memberships/class-membership-expiry.php:60
+#: includes/plugins/wc-memberships/class-membership-expiry.php:65
 #, php-format
 msgid "Another active subscription for this product was found (Subscription ID: %s). Expiry prevented."
 msgstr ""
@@ -3854,8 +3854,8 @@ msgstr ""
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:79
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:91
 #: dist/billboard.js:1
-#: dist/billboard.js:9
-#: dist/billboard.js:15
+#: dist/billboard.js:11
+#: dist/billboard.js:17
 #: dist/commons.js:13
 #: dist/componentsDemo.js:1
 #: dist/newsletters-wizards.5de45bf92dc8175d1de2.js:31
@@ -3867,7 +3867,7 @@ msgstr ""
 #: packages/components/src/with-wizard/index.js:261
 #: src/other-scripts/corrections-modal/index.js:410
 #: src/wizards/advertising/views/ad-unit/index.js:170
-#: src/wizards/advertising/views/placements/index.js:217
+#: src/wizards/advertising/views/placements/index.js:228
 #: src/wizards/advertising/views/providers/index.js:108
 #: src/wizards/audience/components/prompt-action-card/index.js:167
 #: src/wizards/audience/components/settings-modal/index.js:176
@@ -5012,7 +5012,7 @@ msgstr ""
 #: includes/plugins/woocommerce/my-account/templates/v1/group-subscription-members.php:189
 #: includes/reader-activation/class-comment-display-name.php:113
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:91
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:1
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:30
 #: src/wizards/advertising/views/ad-unit/index.js:79
@@ -5269,8 +5269,8 @@ msgstr ""
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:91
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:98
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:106
-#: dist/billboard.js:9
-#: dist/billboard.js:15
+#: dist/billboard.js:11
+#: dist/billboard.js:17
 #: dist/componentsDemo.js:1
 #: dist/newsletters-wizards.5de45bf92dc8175d1de2.js:25
 #: dist/newsletters-wizards.5de45bf92dc8175d1de2.js:36
@@ -5279,7 +5279,7 @@ msgstr ""
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:1
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:14
 #: src/wizards/advertising/views/ad-units/options-popover.js:37
-#: src/wizards/advertising/views/placements/index.js:217
+#: src/wizards/advertising/views/placements/index.js:231
 #: src/wizards/audience/components/prompt-action-card/index.js:142
 #: src/wizards/audience/components/prompt-popovers/primary.js:64
 #: src/wizards/audience/views/campaigns/segments/segments-list.js:114
@@ -6313,6 +6313,30 @@ msgstr ""
 msgid "the recurring donation management url"
 msgstr ""
 
+#: includes/tag-labels/class-tag-labels.php:189
+#: includes/tag-labels/class-tag-labels.php:238
+msgid "Display as label"
+msgstr ""
+
+#: includes/tag-labels/class-tag-labels.php:198
+#: includes/tag-labels/class-tag-labels.php:251
+msgid "Show this tag as a highlighted label wherever posts are displayed."
+msgstr ""
+
+#: includes/tag-labels/class-tag-labels.php:202
+#: includes/tag-labels/class-tag-labels.php:256
+msgid "Label text"
+msgstr ""
+
+#: includes/tag-labels/class-tag-labels.php:208
+msgid "Enter custom label text"
+msgstr ""
+
+#: includes/tag-labels/class-tag-labels.php:213
+#: includes/tag-labels/class-tag-labels.php:271
+msgid "Custom text to display instead of the tag name."
+msgstr ""
+
 #. translators: suffix appended to tag names in the admin to indicate they are private
 #: includes/tags/class-private-tags.php:366
 msgid "(private)"
@@ -6912,7 +6936,7 @@ msgid "Ad Units failed to fetch."
 msgstr ""
 
 #: includes/wizards/advertising/class-advertising-display-ads.php:692
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/index.js:168
 #: src/wizards/advertising/index.js:179
 #: src/wizards/advertising/index.js:185
@@ -7370,11 +7394,12 @@ msgstr ""
 msgid "Troubleshoot issues by viewing all events across your network."
 msgstr ""
 
+#. translators: %s: placement name (e.g. "Sticky Footer").
 #: includes/wizards/newspack/class-newspack-dashboard.php:262
-#: dist/billboard.js:9
+#: dist/billboard.js:11
 #: dist/commons.js:13
 #: dist/componentsDemo.js:1
-#: src/wizards/advertising/views/placements/index.js:199
+#: src/wizards/advertising/views/placements/index.js:206
 #: src/wizards/componentsDemo/index.js:1016
 msgid "Enabled"
 msgstr ""
@@ -7867,7 +7892,7 @@ msgstr ""
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:55
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:61
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:64
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:8
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:29
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:31
@@ -7880,7 +7905,7 @@ msgid "Save Settings"
 msgstr ""
 
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:22
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:1
 #: src/wizards/advertising/views/ad-units/options-popover.js:34
 #: src/wizards/audience/components/campaign-management-popover/index.js:32
@@ -7919,7 +7944,7 @@ msgid "Rename"
 msgstr ""
 
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:22
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/options-popover.js:40
 #: src/wizards/audience/components/campaign-management-popover/index.js:83
 msgid "Archive"
@@ -7937,7 +7962,7 @@ msgstr ""
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:91
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:93
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:108
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: dist/componentsDemo.js:1
 #: dist/newsletters-wizards.5de45bf92dc8175d1de2.js:16
 #: dist/newsletters-wizards.5de45bf92dc8175d1de2.js:25
@@ -8283,7 +8308,7 @@ msgid "Placement"
 msgstr ""
 
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:31
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: dist/blocks.js:6
 #: dist/content-gate-editor.js:25
 #: src/blocks/collections/components/InspectorPanel.jsx:182
@@ -8382,7 +8407,7 @@ msgid "Prompt settings"
 msgstr ""
 
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:34
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: dist/commons.js:13
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:1
 #: packages/components/src/section-header/index.js:102
@@ -8763,13 +8788,13 @@ msgstr ""
 
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:46
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:61
-#: dist/billboard.js:13
+#: dist/billboard.js:15
 #: dist/bylines.js:1
 #: dist/componentsDemo.js:1
 #: dist/other-scripts/nextdoor.js:1
 #: src/bylines/index.js:396
 #: src/other-scripts/nextdoor/index.js:247
-#: src/wizards/advertising/views/placements/index.js:308
+#: src/wizards/advertising/views/placements/index.js:325
 #: src/wizards/componentsDemo/index.js:1046
 msgid "Update"
 msgstr ""
@@ -9058,7 +9083,7 @@ msgid "Retrieving prompts…"
 msgstr ""
 
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:61
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:8
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:37
 #: src/wizards/advertising/views/ad-units/index.js:106
@@ -9838,10 +9863,10 @@ msgstr ""
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:85
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:88
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:92
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: dist/componentsDemo.js:1
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:39
-#: src/wizards/advertising/views/placements/index.js:329
+#: src/wizards/advertising/views/placements/index.js:346
 #: src/wizards/audience/views/integrations/settings-section.js:108
 #: src/wizards/componentsDemo/index.js:917
 #: src/wizards/componentsDemo/index.js:932
@@ -9922,13 +9947,13 @@ msgstr ""
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:85
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:88
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:92
-#: dist/billboard.js:9
-#: dist/billboard.js:13
+#: dist/billboard.js:11
+#: dist/billboard.js:15
 #: dist/commons.js:13
 #: dist/componentsDemo.js:1
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:32
-#: src/wizards/advertising/views/placements/index.js:227
-#: src/wizards/advertising/views/placements/index.js:308
+#: src/wizards/advertising/views/placements/index.js:244
+#: src/wizards/advertising/views/placements/index.js:325
 #: src/wizards/audience/views/integrations/settings-section.js:81
 #: src/wizards/componentsDemo/index.js:1036
 #: src/wizards/componentsDemo/index.js:1046
@@ -10323,9 +10348,12 @@ msgid "Reset primary product"
 msgstr ""
 
 #. translators: %s: product title
+#. translators: %s: placement name (e.g. "Sticky Footer").
 #. translators: %s is the list name.
 #: dist/audience-wizards.22b1cd36c9ab49c612e9.js:93
+#: dist/billboard.js:10
 #: dist/newsletters.js:7
+#: src/wizards/advertising/views/placements/index.js:193
 #: src/wizards/newsletters/views/settings/index.js:719
 #, js-format
 msgid "Edit %s"
@@ -10667,14 +10695,14 @@ msgid "Display post author avatar."
 msgstr ""
 
 #: dist/billboard.js:1
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:166
 #: src/wizards/advertising/views/providers/index.js:48
 msgid "Created custom targeting keys:"
 msgstr ""
 
 #: dist/billboard.js:1
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:172
 #: src/wizards/advertising/views/providers/index.js:55
 msgid "Visit your GAM dashboard"
@@ -10686,7 +10714,7 @@ msgid "Click here to connect your account."
 msgstr ""
 
 #: dist/billboard.js:1
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/index.js:145
 #: src/wizards/advertising/views/providers/index.js:70
 msgid "Providers"
@@ -10708,9 +10736,9 @@ msgid "Select a provider"
 msgstr ""
 
 #: dist/billboard.js:1
-#: dist/billboard.js:9
+#: dist/billboard.js:11
 #: src/wizards/advertising/components/placement-control/index.js:81
-#: src/wizards/advertising/views/placements/index.js:258
+#: src/wizards/advertising/views/placements/index.js:275
 msgid "Ad Unit"
 msgstr ""
 
@@ -10753,300 +10781,314 @@ msgid "There is no provider available."
 msgstr ""
 
 #: dist/billboard.js:9
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/index.js:150
 #: src/wizards/advertising/views/placements/index.js:171
 msgid "Placements"
 msgstr ""
 
-#: dist/billboard.js:9
-#: src/wizards/advertising/views/placements/index.js:269
+#. translators: %s: placement name (e.g. "Sticky Footer").
+#: dist/billboard.js:10
+#: src/wizards/advertising/views/placements/index.js:195
+#, js-format
+msgid "Cancel editing %s"
+msgstr ""
+
+#. translators: %s: placement name (e.g. "Sticky Footer").
+#: dist/billboard.js:10
+#: src/wizards/advertising/views/placements/index.js:197
+#, js-format
+msgid "Enable %s"
+msgstr ""
+
+#: dist/billboard.js:11
+#: src/wizards/advertising/views/placements/index.js:286
 msgid "Stick to Top"
 msgstr ""
 
 #. translators: %s: placement name.
-#: dist/billboard.js:11
-#: src/wizards/advertising/views/placements/index.js:301
+#: dist/billboard.js:13
+#: src/wizards/advertising/views/placements/index.js:318
 #, js-format
 msgid "%s enabled."
 msgstr ""
 
 #. translators: %s: placement name.
-#: dist/billboard.js:11
-#: src/wizards/advertising/views/placements/index.js:303
+#: dist/billboard.js:13
+#: src/wizards/advertising/views/placements/index.js:320
 #, js-format
 msgid "%s updated."
 msgstr ""
 
 #. translators: %s: placement name.
-#: dist/billboard.js:15
-#: src/wizards/advertising/views/placements/index.js:325
+#: dist/billboard.js:17
+#: src/wizards/advertising/views/placements/index.js:342
 #, js-format
 msgid "%s disabled."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/suppression/index.js:73
 msgid "Suppression settings"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/suppression/index.js:74
 msgid "Configure where ads are suppressed."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/suppression/index.js:80
 msgid "Suppress ads on specific post types."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/suppression/index.js:101
 msgid "Tags"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/suppression/index.js:103
 msgid "Suppress ads on specific tags and their archive pages."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/suppression/index.js:114
 msgid "Tags to suppress ads on (archives and posts)"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/suppression/index.js:123
 msgid "All tag archive pages"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/suppression/index.js:128
 msgid "Suppress ads on specific categories and their archive pages."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/suppression/index.js:139
 msgid "Categories to suppress ads on (archives and posts)"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/suppression/index.js:147
 msgid "All category archive pages"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/suppression/index.js:150
 msgid "Author Archive Pages"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/suppression/index.js:152
 msgid "Suppress ads on automatically generated pages displaying a list of posts by an author."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/suppression/index.js:160
 msgid "Suppress ads on author archive pages"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-refresh-control/index.js:21
 msgid "Viewability Threshold"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-refresh-control/index.js:22
 msgid "The percentage of the ad slot which must be visible in the viewport in order to be considered eligible for being refreshed. It's recommended you do not lower this below 50 or you risk third-party viewability tracking platforms flagging your ad impressions as not having been viewed before refreshing."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-refresh-control/index.js:30
 msgid "Refresh Interval"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-refresh-control/index.js:31
 msgid "The number of seconds that must pass between an ad crossing the viewability threshold and the the ad refreshing. The plugin enforces a minimum of 30 in order to avoid your site being flagged for abusing ad refreshes by advertisers. This value may however be overridden via the avc_refresh_interval_value filter hook."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-refresh-control/index.js:39
 msgid "Maximum Refreshes"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-refresh-control/index.js:40
 msgid "The number of times each ad slot is allowed to be refreshed. If this is set to 4 then an ad slot could have a total of 5 impressions by combining the initial loading of the ad with the 4 times it can refresh."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-refresh-control/index.js:48
 msgid "Excluded Advertiser IDs"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-refresh-control/index.js:49
 msgid "Prevent ad refreshes for specific advertiser IDs in the format of a comma separated list (e.g., 125,594,293). If an ad slot ever displays an ad creative from one of the listed advertiser IDs then that ad slot will stop refreshing for the remainder of the page view. AdSense does not allow their ads to be auto-refreshed. When Newspack detects that AdSense is the advertiser for any given impression, a refresh will not take place."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-refresh-control/index.js:57
 msgid "Line Items IDs to Exclude"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-refresh-control/index.js:58
 msgid "Prevent ad refreshs for specific line item IDs. (Comma Seperated List)"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-refresh-control/index.js:63
 msgid "Sizes to Exclude"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-refresh-control/index.js:64
 msgid "Prevent ad refreshs for specific sizes. Accepts string (fluid) or array (300x250). Example: fluid, 300x250."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-refresh-control/index.js:69
 msgid "Slot IDs to Exclude"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-refresh-control/index.js:70
 msgid "Prevent ad refreshs for specific slot IDs e.g. div-gpt-ad-grid-1. (Comma Seperated List)."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/media-kit/index.js:28
 msgid "Something went wrong, the Media Kit feature is unavailable."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/media-kit/index.js:48
 msgid "Media kit page is created but unpublished. Click the link to review and publish."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/media-kit/index.js:49
 msgid "Edit Media Kit page"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/media-kit/index.js:53
 msgid "Media Kit page is published. Click the link to edit it, or toggle this card to unpublish."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/media-kit/index.js:57
 msgid "Review draft page"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/media-kit/index.js:61
 msgid "Media Kit page has not been created. Toggle this card to create it."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/media-kit/index.js:74
 msgid "Media Kit"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:27
 msgid "Google Ad Manager Error"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:91
 msgid "None (all ad units will be used)"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:113
 msgid "Connected GAM network code"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:122
 msgid "Parent network code (optional)"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:128
 msgid "Set parent ad unit for the site inventory"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:146
 msgid "The current parent ad unit is inactive or archived. Please select a different parent ad unit."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:155
 msgid "Your GAM network code is different than the network code the site was configured with. Legacy ad units are likely to not load."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:180
 msgid "Currently operating in legacy mode."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:183
 msgid "Network Code"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:197
 msgid "Set up multiple ad units to use on your homepage, articles and other places throughout your site."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:199
 msgid "You can place ads through our Newspack Ad Block in the Editor, Newspack Ad widget, and using the global placements."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/index.js:211
 #: src/wizards/advertising/views/ad-units/index.js:207
 msgid "Add New Ad Unit"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:229
 msgid "Code:"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:235
 msgid "Sizes:"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:239
 msgid "Fluid"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:245
 msgid "Legacy ad unit."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:251
 msgid "Default ad unit."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-units/index.js:257
 msgid "Disconnected from GAM."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: dist/content-gate-block-visibility.js:1
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:30
 #: dist/setup.js:7
@@ -11054,7 +11096,7 @@ msgstr ""
 msgid "Custom"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: dist/blocks.js:6
 #: src/blocks/overlay-menu/panel/edit.js:154
 #: src/wizards/advertising/components/ad-unit-size-control/index.js:92
@@ -11062,75 +11104,75 @@ msgstr ""
 msgid "Width"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-unit-size-control/index.js:100
 #: src/wizards/advertising/views/ad-unit/index.js:119
 msgid "Height"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/components/ad-unit-size-control/index.js:84
 msgid "Fluid is a native ad size that allows more flexibility when styling your ad. It automatically sizes the ad by filling the width of the enclosing column and adjusting the height as appropriate."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-unit/index.js:74
 msgid "Ad Unit Details"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-unit/index.js:85
 msgid "Code"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-unit/index.js:91
 msgid "Identifies the ad unit in the associated ad tag. Once you've created the ad unit, you can't change the code."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-unit/index.js:103
 msgid "Ad Unit Sizes"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-unit/index.js:103
 msgid "Ad Unit Size"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-unit/index.js:105
 msgid "Add New Size"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/views/ad-unit/index.js:112
 msgid "The ad unit must have at least one valid size or fluid size enabled."
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: dist/newspack-wizards.77414b1702658f71d4a7.js:17
 #: src/wizards/advertising/views/ad-unit/index.js:120
 msgid "Action"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/index.js:119
 msgid "Are you sure you want to archive this ad unit?"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/index.js:194
 msgid "Monetize your content through Google Ad Manager"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/index.js:212
 #: src/wizards/advertising/index.js:245
 msgid "Allows you to place ads on your site"
 msgstr ""
 
-#: dist/billboard.js:15
+#: dist/billboard.js:17
 #: src/wizards/advertising/index.js:244
 msgid "Edit Ad Unit"
 msgstr ""

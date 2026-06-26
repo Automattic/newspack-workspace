@@ -97,14 +97,14 @@ class Group_Subscription_Settings {
 			'newspack-group-subscription-admin',
 			Newspack::plugin_url() . '/dist/group-subscription-admin.js',
 			[],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'group-subscription-admin' ),
 			true
 		);
 		\wp_enqueue_style(
 			'newspack-group-subscription-admin',
 			Newspack::plugin_url() . '/dist/group-subscription-admin.css',
 			[],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'group-subscription-admin' )
 		);
 		\wp_localize_script(
 			'newspack-group-subscription-admin',
@@ -857,6 +857,9 @@ class Group_Subscription_Settings {
 	 * Register the publisher-configurable group label settings.
 	 */
 	public static function register_label_settings() {
+		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
+			return;
+		}
 		// Group name is unused (no settings_fields() form); registers sanitize_callback via update_option().
 		\register_setting(
 			'newspack_group_subscription',

@@ -1,3 +1,24 @@
+## newspack-theme [2.23.4](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.3...newspack-theme@2.23.4) (2026-06-23)
+
+
+### Bug Fixes
+
+* **theme:** stop Custom Fields box overwriting editor post meta ([#375](https://github.com/Automattic/newspack-workspace/issues/375)) ([3738a64](https://github.com/Automattic/newspack-workspace/commit/3738a649164b80508530b75f4cd243b8cf0b94fa))
+
+## newspack-theme [2.23.3](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.2...newspack-theme@2.23.3) (2026-06-19)
+
+
+### Bug Fixes
+
+* **separator:** restore Default separator width on WP 7.0 ([#324](https://github.com/Automattic/newspack-workspace/issues/324)) ([8a8b315](https://github.com/Automattic/newspack-workspace/commit/8a8b3158daba9774022e64b9ef929d6509856acc))
+
+## newspack-theme [2.23.2](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.1...newspack-theme@2.23.2) (2026-06-17)
+
+
+### Bug Fixes
+
+* **theme:** allow wide/full alignment inside content wrappers ([9ed447b](https://github.com/Automattic/newspack-workspace/commit/9ed447b3776815b96315ee3c5d255811b2eacb86))
+
 ## newspack-theme [2.23.1](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.0...newspack-theme@2.23.1) (2026-06-03)
 
 ### Bug Fixes

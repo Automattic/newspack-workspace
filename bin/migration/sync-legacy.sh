@@ -221,6 +221,7 @@ integrate_all() {
     fi
 
     apply_structural_overrides "$target"
+    restore_release_artifacts "$target"
 
     # newspack-plugin always runs the extracted-package routing — files under
     # plugins/newspack-plugin/packages/{colors,components,icons}/ leak in even

@@ -179,6 +179,7 @@ if ( ! function_exists( 'newspack_setup' ) ) :
 		$secondary_color_variation = newspack_adjust_brightness( $secondary_color, -40 );
 
 		// Editor color palette.
+		// phpcs:disable Squiz.Commenting.InlineComment.InvalidEndChar -- Let's not be too precious about the brief comments here.
 		add_theme_support(
 			'editor-color-palette',
 			array(
@@ -224,6 +225,7 @@ if ( ! function_exists( 'newspack_setup' ) ) :
 				),
 			)
 		);
+		// phpcs:enable Squiz.Commenting.InlineComment.InvalidEndChar
 
 		add_theme_support(
 			'editor-gradient-presets',
@@ -267,7 +269,7 @@ if ( ! function_exists( 'newspack_setup' ) ) :
 		// Add support for responsive embedded content.
 		add_theme_support( 'responsive-embeds' );
 
-		// Make our theme AMP/PWA Native
+		// Make our theme AMP/PWA Native.
 		add_theme_support(
 			'amp',
 			array(
@@ -278,7 +280,7 @@ if ( ! function_exists( 'newspack_setup' ) ) :
 			)
 		);
 
-		// Add custom theme support - post subtitle
+		// Add custom theme support - post subtitle.
 		add_theme_support( 'post-subtitle' );
 	}
 endif;
@@ -411,7 +413,7 @@ add_action( 'widgets_init', 'newspack_widgets_init' );
 function newspack_content_width() {
 	$content_width = 780;
 
-	// Check if front page or using One-Column Wide template
+	// Check if front page or using One-Column Wide template.
 	if ( ( is_front_page() && 'posts' !== get_option( 'show_on_front' ) ) || is_page_template( 'single-wide.php' ) ) {
 		$content_width = 1200;
 	}
@@ -585,6 +587,7 @@ function newspack_enqueue_scripts() {
 	}
 
 	// Featured Image options.
+	// phpcs:ignore WordPress.WP.EnqueuedResourceParameters.NotInFooter -- TODO: Should we set $in_footer?
 	wp_register_script(
 		'newspack-extend-featured-image-script',
 		get_theme_file_uri( '/js/dist/extend-featured-image-editor.js' ),
@@ -814,6 +817,8 @@ function newspack_check_current_template() {
  *
  * The 'admin-color-' prefix is used to make sure the classes get moved to the <body> tag in the iframed editor as a work-around.
  * See https://github.com/WordPress/gutenberg/issues/28538 for more details.
+ *
+ * @param string $classes Existing classes.
  */
 function newspack_filter_admin_body_class( $classes ) {
 	if ( ! function_exists( 'get_current_screen' ) ) {
@@ -897,11 +902,22 @@ function newspack_override_avatar_downsizing( $default_value, $args ) {
 add_filter( 'jetpack_photon_override_image_downsize', 'newspack_override_avatar_downsizing', 10, 2 );
 
 /**
- * Register meta fields:
- * - Featured Image position option
- * - Article Subtitle
+ * Register the theme's editor-managed post meta:
+ * - Featured image position
+ * - Article subtitle
+ * - Article summary title
+ * - Article summary
+ * - Hide page title (pages)
+ * - Show share buttons (pages)
  */
 function newspack_register_meta() {
+	// These fields are edited through dedicated editor panels via the REST API.
+	// An explicit auth_callback keeps them REST-editable even though
+	// newspack_protect_editor_meta() marks them protected (see that function).
+	$auth_callback = function ( $allowed, $meta_key, $object_id ) {
+		return current_user_can( 'edit_post', $object_id );
+	};
+
 	$featured_image_post_types = newspack_get_featured_image_post_types();
 
 	foreach ( $featured_image_post_types as $post_type ) {
@@ -909,9 +925,10 @@ function newspack_register_meta() {
 			$post_type,
 			'newspack_featured_image_position',
 			array(
-				'show_in_rest' => true,
-				'single'       => true,
-				'type'         => 'string',
+				'show_in_rest'  => true,
+				'single'        => true,
+				'type'          => 'string',
+				'auth_callback' => $auth_callback,
 			)
 		);
 	}
@@ -920,9 +937,10 @@ function newspack_register_meta() {
 		'post',
 		'newspack_post_subtitle',
 		array(
-			'show_in_rest' => true,
-			'single'       => true,
-			'type'         => 'string',
+			'show_in_rest'  => true,
+			'single'        => true,
+			'type'          => 'string',
+			'auth_callback' => $auth_callback,
 		)
 	);
 
@@ -930,10 +948,11 @@ function newspack_register_meta() {
 		'post',
 		'newspack_article_summary_title',
 		array(
-			'default'      => esc_html__( 'Overview:', 'newspack-theme' ),
-			'show_in_rest' => true,
-			'single'       => true,
-			'type'         => 'string',
+			'default'       => esc_html__( 'Overview:', 'newspack-theme' ),
+			'show_in_rest'  => true,
+			'single'        => true,
+			'type'          => 'string',
+			'auth_callback' => $auth_callback,
 		)
 	);
 
@@ -941,9 +960,10 @@ function newspack_register_meta() {
 		'post',
 		'newspack_article_summary',
 		array(
-			'show_in_rest' => true,
-			'single'       => true,
-			'type'         => 'string',
+			'show_in_rest'  => true,
+			'single'        => true,
+			'type'          => 'string',
+			'auth_callback' => $auth_callback,
 		)
 	);
 
@@ -951,9 +971,10 @@ function newspack_register_meta() {
 		'page',
 		'newspack_hide_page_title',
 		array(
-			'show_in_rest' => true,
-			'single'       => true,
-			'type'         => 'boolean',
+			'show_in_rest'  => true,
+			'single'        => true,
+			'type'          => 'boolean',
+			'auth_callback' => $auth_callback,
 		)
 	);
 
@@ -961,18 +982,55 @@ function newspack_register_meta() {
 		'page',
 		'newspack_show_share_buttons',
 		array(
-			'show_in_rest' => true,
-			'single'       => true,
-			'type'         => 'boolean',
-			'default'      => false,
+			'show_in_rest'  => true,
+			'single'        => true,
+			'type'          => 'boolean',
+			'default'       => false,
+			'auth_callback' => $auth_callback,
 		)
 	);
 }
 add_action( 'init', 'newspack_register_meta' );
 
+/**
+ * Mark the theme's editor-managed post meta as protected.
+ *
+ * These fields are managed by dedicated block-editor panels (saved via the REST
+ * API), not by the classic "Custom Fields" box. When that box is enabled, it
+ * renders a row for each non-protected meta key and resubmits its page-load
+ * value on save; if a classic meta box triggers the block editor's separate
+ * meta-box save, that stale value silently overwrites the value the REST save
+ * just wrote. Marking these keys protected removes them from the Custom Fields
+ * box so they can't be clobbered. REST editing is preserved by the explicit
+ * auth_callback set on each registration in newspack_register_meta().
+ *
+ * @param bool   $protected Whether the meta key is considered protected.
+ * @param string $meta_key  The meta key.
+ * @param string $meta_type The type of object the meta belongs to (post, term, user, etc.).
+ * @return bool Whether the meta key is protected.
+ */
+function newspack_protect_editor_meta( $protected, $meta_key, $meta_type ) {
+	if ( 'post' !== $meta_type ) {
+		return $protected;
+	}
+	$editor_meta = array(
+		'newspack_featured_image_position',
+		'newspack_post_subtitle',
+		'newspack_article_summary_title',
+		'newspack_article_summary',
+		'newspack_hide_page_title',
+		'newspack_show_share_buttons',
+	);
+	return in_array( $meta_key, $editor_meta, true ) ? true : $protected;
+}
+add_filter( 'is_protected_meta', 'newspack_protect_editor_meta', 10, 3 );
+
 
 /**
  * Migrate theme settings when switching within the family of Newspack themes.
+ *
+ * @param string         $old_name  The name of the old theme.
+ * @param WP_Theme|false $old_theme The old theme object (default: false).
  *
  * @since Newspack Theme 1.0.0
  */
@@ -1123,6 +1181,10 @@ function newspack_sanitize_svgs() {
 
 /**
  * Truncates text to a specific character length, without breaking a character.
+ *
+ * @param string $content The text to truncate.
+ * @param int    $length The character length to truncate to.
+ * @param string $after Text to append after truncation. Default is '...'.
  */
 function newspack_truncate_text( $content, $length, $after = '...' ) {
 	// If content is already shorter than the truncate length, return it.
@@ -1130,10 +1192,10 @@ function newspack_truncate_text( $content, $length, $after = '...' ) {
 		return $content;
 	}
 
-	// Find the first space after the desired length:
+	// Find the first space after the desired length.
 	$breakpoint = strpos( $content, ' ', $length );
 
-	// Make sure $breakpoint isn't returning false, and is less than length of content:
+	// Make sure $breakpoint isn't returning false, and is less than length of content.
 	if ( false !== $breakpoint && $breakpoint < strlen( $content ) - 1 ) {
 		$content = substr( $content, 0, $breakpoint ) . $after;
 	}
@@ -1200,9 +1262,11 @@ add_filter( 'newspack_ads_maybe_use_responsive_placement', 'newspack_theme_newsp
 
 /**
  * Add a extra span and class to the_archive_title, for easier styling.
+ *
+ * @param string $title Archive title to be displayed.
  */
 function newspack_update_the_archive_title( $title ) {
-	// Split the title into parts so we can wrap them with spans:
+	// Split the title into parts so we can wrap them with spans.
 	$title_parts  = explode( '<span class="page-description">', $title, 2 );
 	$title_format = get_theme_mod( 'archive_title_format', 'default' );
 
@@ -1335,6 +1399,13 @@ if ( function_exists( '\Newspack_Sponsors\get_sponsors_for_post' ) ) {
 }
 
 /**
+ * Load Tag Labels compatibility file.
+ */
+if ( class_exists( '\Newspack\Tag_Labels' ) ) {
+	require get_template_directory() . '/inc/newspack-tag-labels.php';
+}
+
+/**
  * Load Newsletters compatibility file.
  */
 if ( class_exists( '\Newspack_Newsletters' ) ) {
@@ -1361,7 +1432,13 @@ if ( class_exists( 'Newspack_Multibranded_Site\Customizations\Theme_Colors' ) ) 
 }
 
 /**
+ * Load Block Editor Colors compatibility file.
+ */
+if ( defined( 'BEC_PLUGIN_VERSION' ) ) {
+	require get_template_directory() . '/inc/block-editor-colors.php';
+}
+
+/**
  * Woo Templates cache handling
  */
 require get_template_directory() . '/woocommerce/templates.php';
-

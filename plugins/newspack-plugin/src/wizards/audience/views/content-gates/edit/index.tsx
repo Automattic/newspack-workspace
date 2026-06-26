@@ -6,7 +6,7 @@
  * WordPress dependencies.
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { __experimentalVStack as VStack, CardDivider } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useDispatch } from '@wordpress/data';
 import { createInterpolateElement, useCallback, useEffect, useRef, useState } from '@wordpress/element';
 import { commentAuthorAvatar, currencyDollar, envelope, pencil, postList, settings } from '@wordpress/icons';
@@ -29,6 +29,7 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../../packages/components/sr
 import { useWizardData } from '../../../../../../packages/components/src/wizard/store/utils';
 import { useWizardApiFetch } from '../../../../hooks/use-wizard-api-fetch';
 import ContentRules from './content-rules';
+import MatchLogicToggle from './match-logic-toggle';
 import Registration from './registration';
 import CustomAccess from './custom-access';
 import { getEditGateLayoutUrl, getGateStatus, getGateStatusBadgeLevel } from '../utils';
@@ -73,6 +74,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		priority: 0,
 		status: 'publish',
 		content_rules: isNewsletter ? [ { slug: 'newsletters', value: [] } ] : [ { slug: 'post_types', value: [ 'post' ] } ],
+		content_rules_match: 'all',
 		registration: { active: false, metering: { enabled: false, count: 1, period: 'month' }, require_verification: false, gate_layout_id: 0 },
 		custom_access: { active: false, metering: { enabled: false, count: 1, period: 'month' }, gate_layout_id: 0, access_rules: [] },
 	};
@@ -88,6 +90,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	const [ isRenaming, setIsRenaming ] = useState< boolean >( false );
 	const [ isDeleting, setIsDeleting ] = useState< boolean >( false );
 	const [ contentRules, setContentRules ] = useState< GateContentRule[] >( gate.content_rules );
+	const [ contentRulesMatch, setContentRulesMatch ] = useState< 'all' | 'any' >( gate.content_rules_match || 'all' );
 	const [ registration, setRegistration ] = useState< Registration >( gate.registration );
 	const [ customAccess, setCustomAccess ] = useState< CustomAccess >( gate.custom_access );
 	const [ contentType, setContentType ] = useState< 'all' | 'custom' | undefined >( type as 'all' | 'custom' | undefined );
@@ -107,6 +110,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		isNew ||
 		title !== gate.title ||
 		JSON.stringify( contentRules ) !== JSON.stringify( gate.content_rules ) ||
+		contentRulesMatch !== ( gate.content_rules_match || 'all' ) ||
 		JSON.stringify( registration ) !== JSON.stringify( gate.registration ) ||
 		JSON.stringify( customAccess ) !== JSON.stringify( gate.custom_access );
 
@@ -139,6 +143,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				...gate,
 				title,
 				content_rules: contentRules,
+				content_rules_match: contentRulesMatch,
 				registration,
 				custom_access: customAccess,
 			};
@@ -170,7 +175,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				}
 			);
 		},
-		[ gate, contentRules, registration, customAccess, status, title ]
+		[ gate, contentRules, contentRulesMatch, registration, customAccess, status, title ]
 	);
 
 	const handleSave = useCallback( () => {
@@ -185,6 +190,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			...gate,
 			title,
 			content_rules: contentRules,
+			content_rules_match: contentRulesMatch,
 			registration,
 			custom_access: customAccess,
 			status,
@@ -214,7 +220,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 				},
 			}
 		);
-	}, [ gate, contentRules, registration, customAccess, status, title ] );
+	}, [ gate, contentRules, contentRulesMatch, registration, customAccess, status, title ] );
 
 	const updateStatus = useRef< ( _status: GateStatus ) => void >();
 	const handleStatusChange = ( _status: GateStatus ) => {
@@ -318,6 +324,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			setGate( DEFAULT_GATE );
 			setTitle( '' );
 			setContentRules( DEFAULT_GATE.content_rules );
+			setContentRulesMatch( 'all' );
 			setRegistration( DEFAULT_GATE.registration );
 			setCustomAccess( DEFAULT_GATE.custom_access );
 			setStatus( 'draft' );
@@ -328,6 +335,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		setGate( matchedGate );
 		setTitle( matchedGate.title );
 		setContentRules( matchedGate.content_rules );
+		setContentRulesMatch( matchedGate.content_rules_match || 'all' );
 		savedCustomRules.current = matchedGate.content_rules;
 		setRegistration( matchedGate.registration );
 		setCustomAccess( matchedGate.custom_access );
@@ -531,6 +539,12 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 						onHeaderClick={ () => setContentType( 'custom' ) }
 					>
 						<ContentRules rules={ contentRules } onChange={ setContentRules } isNewsletter={ isNewsletter } />
+						<CardDivider />
+						<MatchLogicToggle
+							value={ contentRulesMatch }
+							ruleCount={ contentRules.filter( r => r.slug !== 'specific_posts' ).length }
+							onChange={ setContentRulesMatch }
+						/>
 					</CardSettingsGroup>
 				</VStack>
 			</Grid>
