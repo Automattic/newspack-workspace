@@ -339,10 +339,7 @@ function CheckoutButtonEdit( props ) {
 						) }
 					</ProductControl>
 					<WidthControl selectedWidth={ width } setAttributes={ setAttributes } />
-					<CouponControl
-						value={ coupon }
-						onChange={ value => setAttributes( { coupon: value } ) }
-					/>
+					<CouponControl value={ coupon } onChange={ value => setAttributes( { coupon: value } ) } />
 				</PanelBody>
 				<PanelBody title={ __( 'After purchase', 'newspack-blocks' ) }>
 					<RedirectAfterSuccess setAttributes={ setAttributes } attributes={ attributes } />

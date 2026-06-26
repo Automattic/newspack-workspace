@@ -88,10 +88,7 @@ export default function CouponControl( { value, onChange } ) {
 
 	if ( selected && ! isChanging ) {
 		return (
-			<BaseControl
-				label={ __( 'Coupon', 'newspack-blocks' ) }
-				id="newspack-checkout-button-coupon"
-			>
+			<BaseControl label={ __( 'Coupon', 'newspack-blocks' ) } id="newspack-checkout-button-coupon">
 				<TextControl value={ selected } __next40pxDefaultSize disabled />
 				<Button variant="link" onClick={ () => setIsChanging( true ) }>
 					{ __( 'Edit', 'newspack-blocks' ) }
