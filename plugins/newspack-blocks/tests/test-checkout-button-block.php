@@ -167,4 +167,12 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$this->assertStringContainsString( 'value="A&quot;B"', $output );
 		$this->assertStringNotContainsString( 'value="A"B"', $output );
 	}
+
+	/**
+	 * An empty coupon attribute should render no coupon field.
+	 */
+	public function test_empty_coupon_attribute_emits_no_field() {
+		$output = $this->render( [ 'coupon' => '' ] );
+		$this->assertStringNotContainsString( 'name="coupon"', $output );
+	}
 }

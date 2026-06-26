@@ -115,6 +115,8 @@ function render_callback( $attributes ) {
 		$hidden_fields .= $after_success_button_label ? '<input type="hidden" name="after_success_button_label" value="' . esc_attr( $after_success_button_label ) . '" />' : '';
 		$hidden_fields .= $after_success_url ? '<input type="hidden" name="after_success_url" value="' . esc_attr( $after_success_url ) . '" />' : '';
 	}
+	// Always emit the coupon field (not gated on the gateway check): it is
+	// applied server-side for both the modal and the redirect checkout flows.
 	if ( $coupon ) {
 		$hidden_fields .= '<input type="hidden" name="coupon" value="' . esc_attr( $coupon ) . '" />';
 	}
