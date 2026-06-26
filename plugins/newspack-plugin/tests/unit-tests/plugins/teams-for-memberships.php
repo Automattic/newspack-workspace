@@ -193,10 +193,11 @@ class Test_Teams_For_Memberships extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A finite member end date that is shorter than the team end should be
-	 * extended up to the team end.
+	 * A membership that already has an end date is left untouched -- whatever the
+	 * plan or upstream Team::add_member() set is owned by them. This is true even
+	 * when that date is shorter than the team end (we only fill missing dates).
 	 */
-	public function test_sync_extends_shorter_member_end() {
+	public function test_sync_skips_member_with_existing_end_date() {
 		$team_end   = time() + ( 60 * DAY_IN_SECONDS );
 		$member_end = time() + ( 10 * DAY_IN_SECONDS );
 		$team       = new \SkyVerge\WooCommerce\Memberships\Teams\Team( 102, $team_end );
@@ -204,7 +205,8 @@ class Test_Teams_For_Memberships extends WP_UnitTestCase {
 
 		Teams_For_Memberships::sync_member_end_date_to_team( null, $team, $um );
 
-		$this->assertSame( [ gmdate( 'Y-m-d H:i:s', $team_end ) ], $um->set_end_calls );
+		$this->assertSame( [], $um->set_end_calls, 'An existing end date must not be overwritten.' );
+		$this->assertSame( [], $um->status_calls );
 	}
 
 	/**
@@ -236,10 +238,11 @@ class Test_Teams_For_Memberships extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A previously-expired membership absorbed into a still-current team should
-	 * be reactivated (is_active() does not auto-reactivate).
+	 * The hook only fills the end date; it never changes membership status, so it
+	 * triggers no synchronous ESP list mutations. Upstream Team::add_member()
+	 * already reconciles status, and is_active() handles lazy expiry.
 	 */
-	public function test_sync_reactivates_expired_member_for_future_team() {
+	public function test_sync_does_not_change_status_when_filling_date() {
 		$team_end = time() + ( 30 * DAY_IN_SECONDS );
 		$team     = new \SkyVerge\WooCommerce\Memberships\Teams\Team( 105, $team_end );
 		$um       = new \WC_Memberships_User_Membership( 0, 'expired' );
@@ -247,7 +250,7 @@ class Test_Teams_For_Memberships extends WP_UnitTestCase {
 		Teams_For_Memberships::sync_member_end_date_to_team( null, $team, $um );
 
 		$this->assertSame( [ gmdate( 'Y-m-d H:i:s', $team_end ) ], $um->set_end_calls );
-		$this->assertSame( [ 'active' ], $um->status_calls, 'An expired member on a current team should be reactivated.' );
+		$this->assertSame( [], $um->status_calls, 'The hook must not change membership status.' );
 	}
 
 	/**
