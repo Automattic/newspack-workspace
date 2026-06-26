@@ -453,9 +453,9 @@ class Donors_Metric {
 	/**
 	 * NPPD-1685: prompt-attributed completed donation conversions for the window,
 	 * sourced from order meta (`_newspack_popup_id`) — the anonymous-inclusive,
-	 * join-free source for the DIRECT prompt-donation metrics, replacing the GA4
-	 * attempt → {@see Woo_Order_Resolver} path that dropped anonymous-at-attempt
-	 * donors. Keyed by popup id: `{ conversions, revenue }`. Reused by
+	 * join-free source for the DIRECT prompt-donation metrics. Captures donors
+	 * who were anonymous at attempt time and are excluded by GA4-based joins.
+	 * Keyed by popup id: `{ conversions, revenue }`. Reused by
 	 * {@see Prompts_Metric::get_donation_revenue_direct()} (and the direct
 	 * conversion-rate / per-prompt cards).
 	 *
