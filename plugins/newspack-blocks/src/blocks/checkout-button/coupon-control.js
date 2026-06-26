@@ -1,4 +1,3 @@
-/* eslint-disable @wordpress/no-unsafe-wp-apis */
 /**
  * External dependencies
  */
@@ -9,7 +8,7 @@ import { debounce } from 'lodash';
  */
 import { __ } from '@wordpress/i18n';
 import { BaseControl, TextControl, FormTokenField, Button, Spinner } from '@wordpress/components';
-import { useState, useEffect } from '@wordpress/element';
+import { useState, useEffect, useMemo } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 
 /**
@@ -25,7 +24,7 @@ import apiFetch from '@wordpress/api-fetch';
  */
 export default function CouponControl( { value, onChange } ) {
 	const [ inFlight, setInFlight ] = useState( false );
-	const [ suggestions, setSuggestions ] = useState( {} );
+	const [ suggestions, setSuggestions ] = useState( [] );
 	const [ selected, setSelected ] = useState( false );
 	const [ isChanging, setIsChanging ] = useState( false );
 
@@ -35,11 +34,7 @@ export default function CouponControl( { value, onChange } ) {
 			path: `/wc/v3/coupons?search=${ encodeURIComponent( search ) }`,
 		} )
 			.then( coupons => {
-				const _suggestions = {};
-				coupons.forEach( coupon => {
-					_suggestions[ coupon.code ] = coupon.code;
-				} );
-				setSuggestions( _suggestions );
+				setSuggestions( coupons.map( coupon => coupon.code ) );
 			} )
 			.finally( () => setInFlight( false ) );
 	}
@@ -72,7 +67,13 @@ export default function CouponControl( { value, onChange } ) {
 		onChange( tokens[ 0 ] || '' );
 	}
 
-	const debouncedFetch = debounce( fetchSuggestions, 200 );
+	const debouncedFetch = useMemo(
+		() => debounce( fetchSuggestions, 200 ),
+		// fetchSuggestions only closes over stable state setters, so an empty
+		// dependency array is intentional.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[]
+	);
 	function handleInputChange( search ) {
 		if ( search.length > 2 ) {
 			setInFlight( true );
@@ -116,7 +117,7 @@ export default function CouponControl( { value, onChange } ) {
 				value={ [] }
 				onChange={ onTokenChange }
 				onInputChange={ handleInputChange }
-				suggestions={ Object.values( suggestions ) }
+				suggestions={ suggestions }
 				__next40pxDefaultSize
 			/>
 			{ inFlight && <Spinner /> }
