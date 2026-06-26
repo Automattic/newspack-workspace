@@ -11,16 +11,15 @@
  *     returns a non-numeric column.
  *
  * The 8 paid-conversion + revenue methods are also pinned (Task 3.2): they
- * dispatch through the BigQuery proxy, Woo-join the rows via Woo_Order_Resolver,
- * and share a per-window memoization cache (one proxy call per intent +
- * direction).
+ * dispatch through the BigQuery proxy and return hub-computed rates and revenue
+ * directly (one proxy call per intent + direction).
  *
  * The 5 collection methods are pinned (Task 3.3): funnel + distribution mirror
  * the Gates state-envelope contract one-for-one; the per-prompt performance
- * table additionally augments each row with per-popup Woo-completed donation
- * and subscription counts and is asserted to degrade gracefully (engagement
- * columns still render with zeros in the Woo columns) when the Woo-side proxy
- * call fails.
+ * table additionally augments each row with per-popup donation and subscription
+ * counts sourced from order meta via Donors_Metric / Subscribers_Metric and is
+ * asserted to degrade gracefully (engagement columns still render with zeros in
+ * the conversion columns) when WooCommerce is not active.
  *
  * @package Newspack\Tests\Insights
  */
@@ -33,7 +32,6 @@ use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Donors_Metric;
 use Newspack\Insights\Prompts_Metric;
 use Newspack\Insights\Subscribers_Metric;
-use Newspack\Insights\Woo_Order_Resolver;
 use WP_UnitTestCase;
 
 /**
@@ -91,6 +89,26 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$proxy  = $this->createMock( BigQuery_Proxy_Client::class );
 		$metric = new Prompts_Metric( $proxy );
 		$this->assertInstanceOf( Prompts_Metric::class, $metric );
+	}
+
+	/**
+	 * Prompts_Metric constructor must not declare Woo_Order_Resolver as a param
+	 * or typed property (mirrors Gates_Metric after C2 cleanup).
+	 */
+	public function test_constructor_needs_no_woo_order_resolver() {
+		$class    = new \ReflectionClass( \Newspack\Insights\Prompts_Metric::class );
+		$resolver = \Newspack\Insights\Woo_Order_Resolver::class;
+		foreach ( $class->getConstructor()->getParameters() as $param ) {
+			$type = $param->getType();
+			$name = $type instanceof \ReflectionNamedType ? ltrim( $type->getName(), '\\' ) : null;
+			$this->assertNotSame( $resolver, $name, 'Constructor must not depend on Woo_Order_Resolver.' );
+		}
+		foreach ( $class->getProperties() as $property ) {
+			$type = $property->getType();
+			$name = $type instanceof \ReflectionNamedType ? ltrim( $type->getName(), '\\' ) : null;
+			$this->assertNotSame( $resolver, $name, 'No property may be typed Woo_Order_Resolver.' );
+		}
+		$this->assertInstanceOf( \Newspack\Insights\Prompts_Metric::class, new \Newspack\Insights\Prompts_Metric() );
 	}
 
 	// --- Section 1: Prompt exposure ------------------------------------
@@ -489,7 +507,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	 */
 	private function make_direct_donation_metric( ?BigQuery_Proxy_Client $proxy, Donors_Metric $donors, bool $wc ): Prompts_Metric {
 		add_filter( 'newspack_insights_woocommerce_active', $wc ? '__return_true' : '__return_false' );
-		return new Prompts_Metric( $proxy, null, null, $donors );
+		return new Prompts_Metric( $proxy, null, $donors );
 	}
 
 	/**
@@ -762,7 +780,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	 */
 	private function make_direct_subscription_metric( ?BigQuery_Proxy_Client $proxy, Subscribers_Metric $subscribers, bool $wc ): Prompts_Metric {
 		add_filter( 'newspack_insights_woocommerce_active', $wc ? '__return_true' : '__return_false' );
-		return new Prompts_Metric( $proxy, null, null, null, $subscribers );
+		return new Prompts_Metric( $proxy, null, null, $subscribers );
 	}
 
 	/**
@@ -1608,7 +1626,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 			]
 		);
 
-		$metric = new Prompts_Metric( $proxy, null, null, $donors, $subscribers );
+		$metric = new Prompts_Metric( $proxy, null, $donors, $subscribers );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame( 'populated', $result['state'] );
@@ -1665,7 +1683,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 			]
 		);
 
-		$metric = new Prompts_Metric( $proxy, null, null, $donors, $subscribers );
+		$metric = new Prompts_Metric( $proxy, null, $donors, $subscribers );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame( '', $result['rows'][0]['intent'], 'guard: the row really is non-registration intent' );
@@ -1702,7 +1720,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 			]
 		);
 
-		$metric = new Prompts_Metric( $proxy, null, null, $donors, $this->empty_subscribers() );
+		$metric = new Prompts_Metric( $proxy, null, $donors, $this->empty_subscribers() );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame( 'undefined', $result['rows'][0]['intent'], 'guard: row is non-donation intent' );
@@ -1728,7 +1746,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 			]
 		);
 
-		$metric = new Prompts_Metric( $proxy, null, null, $donors, $this->empty_subscribers() );
+		$metric = new Prompts_Metric( $proxy, null, $donors, $this->empty_subscribers() );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame( 50, $result['rows'][0]['donation_conversions'] );
@@ -1745,7 +1763,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$donors = $this->createMock( Donors_Metric::class );
 		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn( [] ); // No conversions for popup 42.
 
-		$metric = new Prompts_Metric( $proxy, null, null, $donors, $this->empty_subscribers() );
+		$metric = new Prompts_Metric( $proxy, null, $donors, $this->empty_subscribers() );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame( 0, $result['rows'][0]['donation_conversions'] );
@@ -1768,7 +1786,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$donors = $this->createMock( Donors_Metric::class );
 		$donors->method( 'get_prompt_attributed_donation_conversions' )->willReturn( [] ); // No conversions for popup 42.
 
-		$metric = new Prompts_Metric( $proxy, null, null, $donors, $this->empty_subscribers() );
+		$metric = new Prompts_Metric( $proxy, null, $donors, $this->empty_subscribers() );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame( 0, $result['rows'][0]['donation_conversions'] );
@@ -1805,7 +1823,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 			]
 		);
 
-		$metric = new Prompts_Metric( $proxy, null, null, $donors, $subscribers );
+		$metric = new Prompts_Metric( $proxy, null, $donors, $subscribers );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame( 3, $result['rows'][0]['subscription_conversions'] );
@@ -1843,7 +1861,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 			]
 		);
 
-		$metric = new Prompts_Metric( $proxy, null, null, $donors, $subscribers );
+		$metric = new Prompts_Metric( $proxy, null, $donors, $subscribers );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame( 0, $result['rows'][0]['subscription_conversions'], 'capability gate (checkout_impressions 0) overrides map membership' );
@@ -1859,11 +1877,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$perf_rows = [ $this->performance_row( 42, 'Donate now', 'donation', 100 ) ];
 		$proxy     = $this->make_performance_proxy( $perf_rows, [], [], 1 ); // Non-WC env: perf query only.
 
-		$resolver = $this->createMock( Woo_Order_Resolver::class );
-		$resolver->method( 'count_completed_orders' )->willReturn( 0 );
-		$resolver->method( 'sum_completed_revenue' )->willReturn( 0.0 );
-
-		$metric = new Prompts_Metric( $proxy, $resolver );
+		$metric = new Prompts_Metric( $proxy );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame(
@@ -1900,7 +1914,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 			->with( 'prompts_performance_by_prompt' )
 			->willReturn( [] );
 
-		$metric = new Prompts_Metric( $proxy, $this->createMock( Woo_Order_Resolver::class ) );
+		$metric = new Prompts_Metric( $proxy );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame( 'empty', $result['state'] );
@@ -1918,7 +1932,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 			->with( 'prompts_performance_by_prompt' )
 			->willReturn( new \WP_Error( 'bigquery_query_failed', 'BQ down' ) );
 
-		$metric = new Prompts_Metric( $proxy, $this->createMock( Woo_Order_Resolver::class ) );
+		$metric = new Prompts_Metric( $proxy );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame( 'error', $result['state'] );
@@ -1937,7 +1951,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 			->with( 'prompts_performance_by_prompt' )
 			->willReturn( 'not-an-array' );
 
-		$metric = new Prompts_Metric( $proxy, $this->createMock( Woo_Order_Resolver::class ) );
+		$metric = new Prompts_Metric( $proxy );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame( 'error', $result['state'] );
@@ -1953,7 +1967,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->method( 'query' )->willReturn( [ 'not-a-row' ] );
 
-		$metric = new Prompts_Metric( $proxy, $this->createMock( Woo_Order_Resolver::class ) );
+		$metric = new Prompts_Metric( $proxy );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		$this->assertSame( 'error', $result['state'] );
@@ -1976,7 +1990,7 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$donors = $this->createMock( Donors_Metric::class );
 		$donors->expects( $this->never() )->method( 'get_prompt_attributed_donation_conversions' );
 
-		$metric = new Prompts_Metric( $proxy, null, null, $donors, $this->empty_subscribers() );
+		$metric = new Prompts_Metric( $proxy, null, $donors, $this->empty_subscribers() );
 		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
 
 		// Table renders successfully — engagement data is load-bearing.
@@ -2214,7 +2228,6 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	protected function make_metric_with_prompts( array $prompts ): Prompts_Metric {
 		return new Prompts_Metric(
 			$this->createMock( BigQuery_Proxy_Client::class ),
-			null,
 			function () use ( $prompts ) {
 				return $prompts;
 			}

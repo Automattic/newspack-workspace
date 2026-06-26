@@ -20,14 +20,14 @@
  * breakdown — but the per-metric envelope is identical.
  *
  * Phase 2 wiring is now complete in this class: 10 scalar metrics (Task 3.1),
- * 8 paid conversion + revenue metrics joined via {@see Woo_Order_Resolver}
- * (Task 3.2), and 5 collection metrics — conversion funnel, exposures
- * distribution, and three performance breakdown tables (Task 3.3). The
- * performance-by-prompt table additionally augments each row with per-popup
- * donation and subscription conversion counts using a Woo join scoped to the
- * popup's intent; that augmentation degrades gracefully (engagement columns
- * still render with zeros in the Woo columns) if the conversion-attempt query
- * fails.
+ * 8 paid conversion + revenue metrics (Task 3.2) — rates and revenue are
+ * hub-computed in BigQuery and returned directly by the proxy, and 5 collection
+ * metrics — conversion funnel, exposures distribution, and three performance
+ * breakdown tables (Task 3.3). The performance-by-prompt table augments each
+ * row with per-popup donation and subscription conversion counts sourced from
+ * order meta via {@see Donors_Metric} and {@see Subscribers_Metric}; that
+ * augmentation degrades gracefully (engagement columns still render with zeros
+ * in the conversion columns) when WooCommerce is not active.
  *
  * @package Newspack
  */
@@ -40,7 +40,6 @@ use DateTimeInterface;
 use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Donors_Metric;
 use Newspack\Insights\Subscribers_Metric;
-use Newspack\Insights\Woo_Order_Resolver;
 
 /**
  * Tab 5 metric orchestrator.
@@ -195,20 +194,11 @@ final class Prompts_Metric {
 	private BigQuery_Proxy_Client $proxy;
 
 	/**
-	 * Resolver used to match BQ paid-conversion attempts against Woo orders.
-	 *
-	 * @var Woo_Order_Resolver
-	 */
-	private Woo_Order_Resolver $woo_resolver;
-
-	/**
 	 * Donors_Metric collaborator (NPPD-1685). Owns the WC-native donation
 	 * storage + caching used to source the DIRECT prompt-donation metrics from
-	 * order meta instead of the GA4 attempt → Woo_Order_Resolver join. Lazily
-	 * built on first direct-donation call ({@see self::donors_metric()}) so the
-	 * storage detector + classifier don't run for requests that never touch a
-	 * direct-donation card. Influenced (14d) donation metrics still use the
-	 * resolver and do NOT use this collaborator.
+	 * order meta. Lazily built on first direct-donation call
+	 * ({@see self::donors_metric()}) so the storage detector + classifier don't
+	 * run for requests that never touch a direct-donation card.
 	 *
 	 * @var Donors_Metric|null
 	 */
@@ -217,11 +207,9 @@ final class Prompts_Metric {
 	/**
 	 * Subscribers_Metric collaborator (NPPD-1746). Owns the WC-native subscription
 	 * storage + caching used to source the DIRECT prompt-subscription metrics
-	 * (popup surface) from order meta instead of the GA4 attempt → Woo_Order_Resolver
-	 * join — the subscription counterpart to {@see self::$donors_metric}. Lazily
-	 * built on first direct-subscription call ({@see self::subscribers_metric()}).
-	 * Influenced (14d) subscription metrics still use the resolver and do NOT use
-	 * this collaborator.
+	 * (popup surface) from order meta — the subscription counterpart to
+	 * {@see self::$donors_metric}. Lazily built on first direct-subscription
+	 * call ({@see self::subscribers_metric()}).
 	 *
 	 * @var Subscribers_Metric|null
 	 */
@@ -261,22 +249,19 @@ final class Prompts_Metric {
 	/**
 	 * Constructor. Optionally inject collaborators (used in tests).
 	 *
-	 * @param BigQuery_Proxy_Client|null $proxy           Injected proxy client, or null to lazy-resolve.
-	 * @param Woo_Order_Resolver|null    $woo_resolver    Injected Woo resolver, or null to lazy-create.
-	 * @param callable|null              $prompt_provider Injected active-prompt provider (test seam),
-	 *                                                    or null to read published prompt content via get_posts().
-	 * @param Donors_Metric|null         $donors_metric   Injected donors collaborator (NPPD-1685), or null to lazy-create.
+	 * @param BigQuery_Proxy_Client|null $proxy              Injected proxy client, or null to lazy-resolve.
+	 * @param callable|null              $prompt_provider    Injected active-prompt provider (test seam),
+	 *                                                       or null to read published prompt content via get_posts().
+	 * @param Donors_Metric|null         $donors_metric      Injected donors collaborator (NPPD-1685), or null to lazy-create.
 	 * @param Subscribers_Metric|null    $subscribers_metric Injected subscribers collaborator (NPPD-1746), or null to lazy-create.
 	 */
 	public function __construct(
 		?BigQuery_Proxy_Client $proxy = null,
-		?Woo_Order_Resolver $woo_resolver = null,
 		?callable $prompt_provider = null,
 		?Donors_Metric $donors_metric = null,
 		?Subscribers_Metric $subscribers_metric = null
 	) {
 		$this->proxy              = $proxy ?? new BigQuery_Proxy_Client();
-		$this->woo_resolver       = $woo_resolver ?? new Woo_Order_Resolver();
 		$this->prompt_provider    = $prompt_provider;
 		$this->donors_metric      = $donors_metric;
 		$this->subscribers_metric = $subscribers_metric;
@@ -809,11 +794,10 @@ final class Prompts_Metric {
 
 	// --- Section 4: Paid reader conversion ------------------------------
 	//
-	// Each rate dispatches the BQ "attempt" query for the intent + direction,
-	// Woo-joins the rows via Woo_Order_Resolver, and returns
-	// `conversions / attempts`. The BQ-side `action_type` filter on the hub
-	// already scopes attempts to the right product intent (donation vs
-	// subscription), so the resolver's product-type-agnostic match is safe.
+	// Each rate dispatches the BQ "attempt" query for the intent + direction;
+	// the hub returns hub-computed rates and revenue directly from BigQuery.
+	// The BQ-side `action_type` filter on the hub already scopes attempts to
+	// the right product intent (donation vs subscription).
 	//
 	// v1 simplification: we use attempts as the denominator (not impressions).
 	// The spec acknowledges this as a known trade-off (see formulas-doc
