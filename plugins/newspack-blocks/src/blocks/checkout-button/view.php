@@ -62,6 +62,7 @@ function render_callback( $attributes ) {
 	$after_success_behavior     = $attributes['afterSuccessBehavior'] ?? '';
 	$after_success_button_label = $attributes['afterSuccessButtonLabel'] ?? '';
 	$after_success_url          = $attributes['afterSuccessURL'] ?? '';
+	$coupon                     = $attributes['coupon'] ?? '';
 	$is_variable                = $attributes['is_variable'];
 
 	if ( $is_variable && $variation_id ) {
@@ -113,6 +114,9 @@ function render_callback( $attributes ) {
 		$hidden_fields .= $after_success_behavior ? '<input type="hidden" name="after_success_behavior" value="' . esc_attr( $after_success_behavior ) . '" />' : '';
 		$hidden_fields .= $after_success_button_label ? '<input type="hidden" name="after_success_button_label" value="' . esc_attr( $after_success_button_label ) . '" />' : '';
 		$hidden_fields .= $after_success_url ? '<input type="hidden" name="after_success_url" value="' . esc_attr( $after_success_url ) . '" />' : '';
+	}
+	if ( $coupon ) {
+		$hidden_fields .= '<input type="hidden" name="coupon" value="' . esc_attr( $coupon ) . '" />';
 	}
 
 	ob_start();
