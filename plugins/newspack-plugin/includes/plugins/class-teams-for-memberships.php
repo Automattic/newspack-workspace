@@ -436,8 +436,12 @@ class Teams_For_Memberships {
 
 		$team_end = $team->get_membership_end_date( 'timestamp' );
 
-		// Unlimited team (no end date): there is nothing to enforce.
-		if ( empty( $team_end ) ) {
+		// Unlimited team (no end date): there is nothing to enforce. The is_numeric() check is
+		// belt-and-suspenders for this access-control path: get_membership_end_date( 'timestamp' )
+		// returns int|null today, but if a future upstream change returned a date string, casting it
+		// to int below would collapse it to a ~1970 timestamp and wrongly expire the member -- so we
+		// bail instead.
+		if ( empty( $team_end ) || ! is_numeric( $team_end ) ) {
 			return;
 		}
 

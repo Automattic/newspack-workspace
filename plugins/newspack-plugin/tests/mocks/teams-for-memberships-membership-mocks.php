@@ -4,9 +4,11 @@
  * Stub User Membership for sync_member_end_date_to_team() unit tests, plus the
  * namespaced Team stub it pairs with.
  *
- * These carry the real class names so the method's is_a() guards pass, and record
- * set_end_date()/update_status() calls so tests can assert on the side effects, in
- * an environment where neither WC Memberships nor SkyVerge Teams is loaded.
+ * These carry the real class names so the method's is_a() guards pass. The hook
+ * records set_end_date() calls; update_status()/status_calls are retained only as a
+ * forward regression guard -- the hook makes no status change today, so the
+ * status_calls assertions trip only if one is ever reintroduced. Runs where neither
+ * WC Memberships nor SkyVerge Teams is loaded.
  *
  * @package Newspack\Tests
  */
@@ -36,10 +38,6 @@ if ( ! class_exists( 'WC_Memberships_User_Membership' ) ) {
 		public function set_end_date( $date = '' ) {
 			$this->set_end_calls[] = $date;
 			$this->end_ts          = is_numeric( $date ) ? (int) $date : strtotime( $date );
-		}
-
-		public function is_expired() {
-			return 'expired' === $this->status;
 		}
 
 		public function update_status( $status ) {
