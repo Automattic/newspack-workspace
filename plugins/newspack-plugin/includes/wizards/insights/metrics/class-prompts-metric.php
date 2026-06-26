@@ -228,17 +228,6 @@ final class Prompts_Metric {
 	private ?Subscribers_Metric $subscribers_metric;
 
 	/**
-	 * Per-request memoization for paid-conversion BQ row fetches.
-	 *
-	 * Keyed by `<query_name>|Ymd|Ymd` of (query_name, start UTC, end UTC). The
-	 * conversion-rate and revenue methods for the same intent + same window
-	 * share one round-trip to the hub.
-	 *
-	 * @var array<string, array{rows:array, conversions:int, revenue:float}|\WP_Error>
-	 */
-	private array $paid_attempt_cache = [];
-
-	/**
 	 * Per-request memo for `prompts_performance_by_prompt` hub rows, keyed by
 	 * `Ymd|Ymd` window (NPPD-1745). The direct donation-rate denominator
 	 * ({@see self::fetch_donation_prompt_impressions()}) and the per-prompt table
@@ -609,59 +598,77 @@ final class Prompts_Metric {
 	}
 
 	/**
-	 * Fetch paid-conversion rows for a given query and Woo-join them.
+	 * Fetch the hub-internal influenced rate from the proxy and shape it into a
+	 * scalar envelope. The hub returns ONE row with the pre-computed rate,
+	 * integer denominator, and revenue — no Woo join required on the consumer.
 	 *
-	 * Returns { rows, conversions, revenue } on success or a WP_Error on proxy
-	 * failure. Used by both the conversion-rate and revenue methods for the
-	 * same intent + direction; the per-(query_name, window) memoization avoids
-	 * a redundant round-trip to the hub when both methods run in one request.
+	 * Ported from {@see Gates_Metric::compute_influenced_rate_from_proxy()}, adapted
+	 * for Prompts' `populated_scalar` arg order where `data_missing` is the 5th param
+	 * and there is no `numerator`.
 	 *
-	 * @param string            $query_name One of the 4 distinct paid query names
-	 *                                      (the 4 revenue aliases share rows with
-	 *                                      their conversion counterparts; pass the
-	 *                                      conversion name so the cache is shared).
-	 * @param DateTimeInterface $start      Window start.
-	 * @param DateTimeInterface $end        Window end.
-	 * @return array{rows:array, conversions:int, revenue:float}|\WP_Error
+	 * @param string            $query_name       Catalog query name.
+	 * @param string            $rate_key         Column holding the pre-computed rate.
+	 * @param string            $denominator_key  Column holding the integer denominator.
+	 * @param DateTimeInterface $start            Window start.
+	 * @param DateTimeInterface $end              Window end.
+	 * @return array
 	 */
-	private function fetch_paid_attempts_woo_join(
-		string $query_name,
-		DateTimeInterface $start,
-		DateTimeInterface $end
-	) {
-		// Normalize both bounds to UTC Ymd so callers passing different timezone
-		// objects don't bust the cache for the same logical window. Matches the
-		// proxy client's own UTC normalization.
-		$utc       = new \DateTimeZone( 'UTC' );
-		$cache_key = $query_name . '|'
-			. \DateTimeImmutable::createFromInterface( $start )->setTimezone( $utc )->format( 'Ymd' )
-			. '|'
-			. \DateTimeImmutable::createFromInterface( $end )->setTimezone( $utc )->format( 'Ymd' );
-
-		if ( array_key_exists( $cache_key, $this->paid_attempt_cache ) ) {
-			return $this->paid_attempt_cache[ $cache_key ];
-		}
-
+	private function compute_influenced_rate_from_proxy( string $query_name, string $rate_key, string $denominator_key, DateTimeInterface $start, DateTimeInterface $end ): array {
 		$rows = $this->proxy->query( $query_name, $start, $end );
 		if ( is_wp_error( $rows ) ) {
-			$this->paid_attempt_cache[ $cache_key ] = $rows;
-			return $rows;
+			return $this->error_scalar( 'rate', $rows );
 		}
+		if ( empty( $rows ) ) {
+			return $this->populated_scalar( 0.0, false, null, 'rate' );
+		}
+		if ( ! is_array( $rows[0] ) || ! array_key_exists( $rate_key, $rows[0] ) || ! array_key_exists( $denominator_key, $rows[0] ) ) {
+			return $this->populated_scalar( 0.0, false, null, 'rate', true );
+		}
+		$denominator = $rows[0][ $denominator_key ];
+		if ( ! is_numeric( $denominator ) || (float) $denominator !== (float) (int) $denominator ) {
+			return $this->error_scalar( 'rate', new \WP_Error( 'bigquery_proxy_malformed_value', __( 'The query returned a non-integer denominator.', 'newspack-plugin' ) ) );
+		}
+		$denominator = (int) $denominator;
+		$rate        = $rows[0][ $rate_key ];
+		if ( null === $rate ) {
+			return $this->populated_scalar( 0.0, false, $denominator, 'rate' );
+		}
+		if ( ! is_numeric( $rate ) ) {
+			return $this->error_scalar( 'rate', new \WP_Error( 'bigquery_proxy_malformed_value', __( 'The query returned a non-numeric value.', 'newspack-plugin' ) ) );
+		}
+		return $this->populated_scalar( (float) $rate, $denominator > 0, $denominator, 'rate' );
+	}
 
-		// A successful but empty response is real "no attempts", not an error:
-		// zero rows / zero conversions / zero revenue. Callers treat an empty window
-		// (no in-intent prompts viewed) as non-computable — both the rate and revenue
-		// methods gate `computable` on `count( rows ) > 0` — so it renders the
-		// not-computable em-dash. A window WITH attempts but no conversions is a real
-		// 0 / $0.00 (computable).
-		$rows   = is_array( $rows ) ? $rows : [];
-		$result = [
-			'rows'        => $rows,
-			'conversions' => $this->woo_resolver->count_completed_orders( $rows ),
-			'revenue'     => $this->woo_resolver->sum_completed_revenue( $rows ),
-		];
-		$this->paid_attempt_cache[ $cache_key ] = $result;
-		return $result;
+	/**
+	 * Fetch the hub-internal influenced revenue from the proxy and shape it into a
+	 * scalar envelope. The hub returns ONE row with the pre-computed revenue
+	 * alongside the rate — no Woo join required on the consumer.
+	 *
+	 * @param string            $query_name  Catalog query name.
+	 * @param string            $revenue_key Column holding the pre-computed revenue.
+	 * @param DateTimeInterface $start       Window start.
+	 * @param DateTimeInterface $end         Window end.
+	 * @return array
+	 */
+	private function compute_influenced_revenue_from_proxy( string $query_name, string $revenue_key, DateTimeInterface $start, DateTimeInterface $end ): array {
+		$rows = $this->proxy->query( $query_name, $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return $this->error_scalar( 'currency', $rows );
+		}
+		if ( empty( $rows ) ) {
+			return $this->populated_scalar( 0.0, false, null, 'currency' );
+		}
+		if ( ! is_array( $rows[0] ) || ! array_key_exists( $revenue_key, $rows[0] ) ) {
+			return $this->populated_scalar( 0.0, false, null, 'currency', true );
+		}
+		$revenue = $rows[0][ $revenue_key ];
+		if ( null === $revenue ) {
+			return $this->populated_scalar( 0.0, false, null, 'currency' );
+		}
+		if ( ! is_numeric( $revenue ) ) {
+			return $this->error_scalar( 'currency', new \WP_Error( 'bigquery_proxy_malformed_value', __( 'The query returned a non-numeric revenue.', 'newspack-plugin' ) ) );
+		}
+		return $this->populated_scalar( (float) $revenue, true, null, 'currency' );
 	}
 
 	// --- Section 1: Prompt exposure -------------------------------------
@@ -1112,40 +1119,20 @@ final class Prompts_Metric {
 	}
 
 	/**
-	 * Donation conversion rate, influenced (14-day lookback), converter-denominated (NPPD-1822).
+	 * Donation conversion rate, influenced (14-day lookback), hub-internal (NPPD-1822).
 	 *
-	 * = distinct donors whose conversion had a prompt exposure in a PRIOR session within 14d
-	 * ÷ ALL new donors in the window. "Of our donors, what share were prompt-influenced" —
-	 * user-level, matching the doc's framing and the Gates paywall rate (NPPD-1764). Replaces
-	 * the prior attempt-denominated rate (÷ `count($joined['rows'])`), which keyed off
-	 * influenced checkout attempts and read inflated.
+	 * The hub builder returns ONE row with the pre-computed rate, integer denominator,
+	 * and influenced revenue for `prompts_donation_conversion_influenced_14d`. The rate
+	 * is fully BQ-internal — no Woo join required on the consumer.
 	 *
-	 * Numerator stays hub/GA4-cross-session-sourced and Woo-matched (distinct converting
-	 * users); it remains anonymous-undercounted (NPPD-1685) until NPPD-1747. Denominator is
-	 * the anonymous-inclusive Woo new-donor spine. The GA4-matched numerator is not a strict
-	 * subset of it, so `rate_value()` suppresses any >100% to a non-computable em-dash. Local
-	 * denominator + hub numerator → 'hybrid' (see METRIC_SOURCES).
+	 * @see self::compute_influenced_rate_from_proxy()
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_donation_conversion_influenced_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		if ( ! $this->woocommerce_active() ) {
-			// Non-WC publisher: no local donors to denominate against. Empty state, not a
-			// fake 0% (NPPD-1737 Option A scoping).
-			return $this->populated_scalar( 0.0, false, 0, 'rate' );
-		}
-		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_donation_conversion_influenced_14d', $start, $end );
-		if ( is_wp_error( $joined ) ) {
-			return $this->error_scalar( 'rate', $joined );
-		}
-		$numerator   = $this->woo_resolver->count_unique_completed_users( $joined['rows'] );
-		$denominator = $this->donors_metric()->get_new_donors_in_window( $start, $end );
-		$rate        = $this->rate_value( $numerator, $denominator );
-		return null === $rate
-			? $this->populated_scalar( 0.0, false, $denominator, 'rate' )
-			: $this->populated_scalar( $rate, true, $denominator, 'rate' );
+		return $this->compute_influenced_rate_from_proxy( 'prompts_donation_conversion_influenced_14d', 'donation_conversion_influenced_rate', 'conversion_denominator', $start, $end );
 	}
 
 	/**
@@ -1225,33 +1212,21 @@ final class Prompts_Metric {
 	}
 
 	/**
-	 * Subscription conversion rate, influenced (14-day lookback), converter-denominated (NPPD-1822).
+	 * Subscription conversion rate, influenced (14-day lookback), hub-internal (NPPD-1822).
 	 *
-	 * = distinct subscribers whose conversion had a prompt exposure in a PRIOR session within
-	 * 14d ÷ ALL new subscribers in the window. Subscription sibling of
-	 * {@see self::get_donation_conversion_influenced_14d()}; same converter framing, em-dash
-	 * coherence guard, and 'hybrid' source. Numerator completeness → NPPD-1747.
+	 * Subscription sibling of {@see self::get_donation_conversion_influenced_14d()}.
+	 * The hub builder returns ONE row with the pre-computed rate, integer denominator,
+	 * and influenced revenue for `prompts_subscription_conversion_influenced_14d`.
+	 * The rate is fully BQ-internal — no Woo join required on the consumer.
+	 *
+	 * @see self::compute_influenced_rate_from_proxy()
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_subscription_conversion_influenced_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		if ( ! $this->woocommerce_active() ) {
-			// Non-WC publisher: no local subscribers to denominate against. Empty state, not
-			// a fake 0% (NPPD-1737 Option A scoping).
-			return $this->populated_scalar( 0.0, false, 0, 'rate' );
-		}
-		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_subscription_conversion_influenced_14d', $start, $end );
-		if ( is_wp_error( $joined ) ) {
-			return $this->error_scalar( 'rate', $joined );
-		}
-		$numerator   = $this->woo_resolver->count_unique_completed_users( $joined['rows'] );
-		$denominator = $this->subscribers_metric()->get_new_subscribers_in_window( $start, $end );
-		$rate        = $this->rate_value( $numerator, $denominator );
-		return null === $rate
-			? $this->populated_scalar( 0.0, false, $denominator, 'rate' )
-			: $this->populated_scalar( $rate, true, $denominator, 'rate' );
+		return $this->compute_influenced_rate_from_proxy( 'prompts_subscription_conversion_influenced_14d', 'subscription_conversion_influenced_rate', 'conversion_denominator', $start, $end );
 	}
 
 	// --- Section 5: Revenue from prompts --------------------------------
@@ -1302,22 +1277,20 @@ final class Prompts_Metric {
 	}
 
 	/**
-	 * Total donation revenue from prompts, influenced (14-day lookback).
+	 * Total donation revenue from prompts, influenced (14-day lookback), hub-internal.
+	 *
+	 * Reads `influenced_revenue` from the same ONE-row response as the rate
+	 * ({@see self::get_donation_conversion_influenced_14d()}). The revenue is
+	 * fully BQ-internal — no Woo join required on the consumer.
+	 *
+	 * @see self::compute_influenced_revenue_from_proxy()
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_donation_revenue_influenced_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_donation_conversion_influenced_14d', $start, $end );
-		if ( is_wp_error( $joined ) ) {
-			return $this->error_scalar( 'currency', $joined );
-		}
-		// Computable only when at least one paid-intent prompt was viewed (mirrors
-		// the matching conversion-rate method's `count( rows ) > 0` gate). An empty
-		// window is "no in-intent prompts viewed", not a real $0 — so it renders the
-		// not-computable em-dash, consistent with its sibling rate card (NPPD-1704).
-		return $this->populated_scalar( $joined['revenue'], count( $joined['rows'] ) > 0, $joined['conversions'], 'currency' );
+		return $this->compute_influenced_revenue_from_proxy( 'prompts_donation_conversion_influenced_14d', 'influenced_revenue', $start, $end );
 	}
 
 	/**
@@ -1357,22 +1330,20 @@ final class Prompts_Metric {
 	}
 
 	/**
-	 * Total subscription revenue from prompts, influenced (14-day lookback).
+	 * Total subscription revenue from prompts, influenced (14-day lookback), hub-internal.
+	 *
+	 * Reads `influenced_revenue` from the same ONE-row response as the rate
+	 * ({@see self::get_subscription_conversion_influenced_14d()}). The revenue is
+	 * fully BQ-internal — no Woo join required on the consumer.
+	 *
+	 * @see self::compute_influenced_revenue_from_proxy()
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
 	 */
 	public function get_subscription_revenue_influenced_14d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		$joined = $this->fetch_paid_attempts_woo_join( 'prompts_subscription_conversion_influenced_14d', $start, $end );
-		if ( is_wp_error( $joined ) ) {
-			return $this->error_scalar( 'currency', $joined );
-		}
-		// Computable only when at least one paid-intent prompt was viewed (mirrors
-		// the matching conversion-rate method's `count( rows ) > 0` gate). An empty
-		// window is "no in-intent prompts viewed", not a real $0 — so it renders the
-		// not-computable em-dash, consistent with its sibling rate card (NPPD-1704).
-		return $this->populated_scalar( $joined['revenue'], count( $joined['rows'] ) > 0, $joined['conversions'], 'currency' );
+		return $this->compute_influenced_revenue_from_proxy( 'prompts_subscription_conversion_influenced_14d', 'influenced_revenue', $start, $end );
 	}
 
 	// --- Section 6: How readers convert ---------------------------------
