@@ -2456,4 +2456,19 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$this->assertFalse( $default['data_missing'] );
 		$this->assertTrue( $ref->invoke( $metric, 0.0, false, null, 'rate', true )['data_missing'] );
 	}
+
+	/**
+	 * The 4 paid-influenced metrics are fully BQ-internal and must be classified
+	 * as 'hub' so hub outages always count toward the tab error banner.
+	 */
+	public function test_paid_influenced_metrics_are_hub_sourced() {
+		foreach ( [
+			'donation_conversion_influenced_14d',
+			'subscription_conversion_influenced_14d',
+			'donation_revenue_influenced_14d',
+			'subscription_revenue_influenced_14d',
+		] as $key ) {
+			$this->assertSame( 'hub', Prompts_Metric::METRIC_SOURCES[ $key ], "$key must be hub-sourced (fully BQ-internal)." );
+		}
+	}
 }

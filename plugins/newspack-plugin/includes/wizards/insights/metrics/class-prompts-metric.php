@@ -172,13 +172,13 @@ final class Prompts_Metric {
 		'newsletter_signup_conversion_direct'        => 'hub',
 		'newsletter_signup_conversion_influenced_7d' => 'hub',
 		'donation_conversion_direct'                 => 'hybrid', // Local order-meta numerator + hub donation-impressions denominator.
-		'donation_conversion_influenced_14d'         => 'hybrid', // NPPD-1822: hub influenced numerator + local Woo new-donor-spine denominator (converter-denominated).
+		'donation_conversion_influenced_14d'         => 'hub',    // NPPD-1822: fully BQ-internal (rate, conversion_denominator, influenced_revenue); no local Woo component.
 		'subscription_conversion_direct'             => 'hybrid', // NPPD-1746: local order-meta (popup) numerator + hub per-popup-impressions denominator.
-		'subscription_conversion_influenced_14d'     => 'hybrid', // NPPD-1822: hub influenced numerator + local Woo new-subscriber-spine denominator (converter-denominated).
+		'subscription_conversion_influenced_14d'     => 'hub',    // NPPD-1822: fully BQ-internal (rate, conversion_denominator, influenced_revenue); no local Woo component.
 		'donation_revenue_direct'                    => 'local',   // Pure Woo order meta; survives a hub outage.
-		'donation_revenue_influenced_14d'            => 'hub',
+		'donation_revenue_influenced_14d'            => 'hub',    // NPPD-1822: fully BQ-internal (influenced_revenue); no local Woo component.
 		'subscription_revenue_direct'                => 'local',   // NPPD-1746: pure Woo order meta (popup surface); survives a hub outage.
-		'subscription_revenue_influenced_14d'        => 'hub',
+		'subscription_revenue_influenced_14d'        => 'hub',    // NPPD-1822: fully BQ-internal (influenced_revenue); no local Woo component.
 		'conversion_funnel'                          => 'hub',
 		'exposures_distribution'                     => 'hub',
 		'performance_by_prompt'                      => 'hub',
