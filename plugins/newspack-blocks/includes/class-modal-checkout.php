@@ -439,7 +439,7 @@ final class Modal_Checkout {
 		// Auto-apply a coupon attached to the checkout button, if present and valid.
 		// Validating first means an invalid coupon is skipped silently, with no
 		// WooCommerce error notice shown to the reader (who never typed it).
-		$coupon_code = filter_input( INPUT_GET, 'coupon', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		$coupon_code = sanitize_text_field( filter_input( INPUT_GET, 'coupon', FILTER_DEFAULT ) );
 		if ( $coupon_code && function_exists( 'wc_coupons_enabled' ) && \wc_coupons_enabled() ) {
 			$coupon    = new \WC_Coupon( $coupon_code );
 			$discounts = new \WC_Discounts( \WC()->cart );
