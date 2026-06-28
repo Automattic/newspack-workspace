@@ -69,7 +69,6 @@ class My_Account {
 				$message,
 				[
 					'type'           => 'error' === $type ? 'error' : 'success',
-					'corner'         => 'top-right',
 					'autohide'       => true,
 					'active_on_load' => true,
 				]
