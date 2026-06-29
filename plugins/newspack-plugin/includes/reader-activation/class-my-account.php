@@ -157,7 +157,7 @@ class My_Account {
 		if ( ! \is_user_logged_in() ) {
 			\wp_add_inline_style(
 				'newspack-my-account-v1',
-				'.newspack-my-account--logged-out .newspack-reader-auth__inline-wrapper{margin-left:auto;margin-right:auto;max-width:var(--newspack-ui-modal-width-s)}'
+				'.newspack-my-account--logged-out .newspack-reader-auth__inline-wrapper{margin-left:auto;margin-right:auto;max-width:var(--newspack-ui-width-s)}'
 			);
 			return;
 		}
