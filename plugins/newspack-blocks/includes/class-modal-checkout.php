@@ -1797,26 +1797,19 @@ final class Modal_Checkout {
 		$product_id = $cart_item['variation_id'] ? $cart_item['variation_id'] : $cart_item['product_id'];
 		$class_prefix = self::get_class_prefix();
 		?>
-			<div class="<?php echo esc_attr( "order-details-summary {$class_prefix}__box {$class_prefix}__box--text-center" ); ?>">
 			<?php
 			// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
 			$_product = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
 			if ( $_product && $_product->exists() && $cart_item['quantity'] > 0 && apply_filters( 'woocommerce_checkout_cart_item_visible', true, $cart_item, $cart_item_key ) ) :
+				// Hidden data carrier only — the visible price-summary card was removed. The modal
+				// dialog (modal.js) still reads this element's data-checkout for the RAS
+				// checkout_completed event and post-auth checkout routing.
 				?>
-				<p id="modal-checkout-product-details" data-checkout='<?php echo wp_json_encode( Checkout_Data::get_checkout_data( $cart ) ); ?>'>
-					<strong>
-						<?php
-						echo apply_filters( 'woocommerce_cart_item_name', $_product->get_name(), $cart_item, $cart_item_key ) . ': '; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-						echo wc_get_formatted_cart_item_data( $cart_item ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-						?>
-						<?php echo apply_filters( 'woocommerce_cart_item_subtotal', $cart->get_product_subtotal( $_product, $cart_item['quantity'] ), $cart_item, $cart_item_key ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
-					</strong>
-				</p>
+				<p id="modal-checkout-product-details" data-checkout='<?php echo wp_json_encode( Checkout_Data::get_checkout_data( $cart ) ); ?>' hidden></p>
 				<?php
 			endif;
 			// phpcs:enable
 			?>
-			</div>
 		<?php
 	}
 

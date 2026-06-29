@@ -657,7 +657,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						}
 					}
 
-					$( '.order-details-summary' ).after( '<div id="checkout_details">' + html.join( '' ) + '</div>' );
+					$( '#modal-checkout-product-details' ).after( '<div id="checkout_details">' + html.join( '' ) + '</div>' );
 				}
 
 				/**
