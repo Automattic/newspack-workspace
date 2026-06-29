@@ -218,6 +218,68 @@ class Test_Content_Inserter extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Test the card indicator is not re-injected into nested the_content renders.
+	 *
+	 * Regression: insert_after_nth_block() calls render_block() while running on
+	 * the_content at priority 1. Dynamic blocks (core/post-content, core/template-part,
+	 * Query Loop, etc.) re-apply the_content as they render. If the run-once guard is
+	 * set only after insertion, that nested render re-enters this filter with the guard
+	 * still false and injects the outer post's collection card into the nested/queried
+	 * content - which is then cached. The guard must be set before blocks are rendered
+	 * so any re-entry short-circuits.
+	 *
+	 * @covers \Newspack\Collections\Content_Inserter::maybe_insert_collection_indicators
+	 */
+	public function test_card_indicator_not_reinjected_into_nested_the_content() {
+		$collection_id = $this->create_test_collection( [ 'post_title' => 'Nested Test Collection' ] );
+
+		$reflection = new \ReflectionClass( Content_Inserter::class );
+		$reflection->setStaticPropertyValue( 'post_collections', [ $collection_id ] );
+
+		add_filter(
+			'pre_option_newspack_collections_settings',
+			function () {
+				return [ 'post_indicator_style' => 'card' ];
+			}
+		);
+
+		// in_the_loop() reads the global main query, which stays in-loop during a synchronous render.
+		global $wp_query;
+		$wp_query->in_the_loop = true;
+
+		// Register the indicator filter exactly as check_if_post_is_in_collection() does.
+		add_filter( 'the_content', [ Content_Inserter::class, 'maybe_insert_collection_indicators' ], 1 );
+
+		// A dynamic block that re-applies the_content as it renders, mimicking core/post-content / Query Loop.
+		register_block_type(
+			'test/reentrant-content',
+			[
+				'render_callback' => function () {
+					return apply_filters( 'the_content', '<p>Nested post body.</p>' );
+				},
+			]
+		);
+
+		$content = "<!-- wp:paragraph -->\n<p>First paragraph.</p>\n<!-- /wp:paragraph -->\n\n"
+			. "<!-- wp:paragraph -->\n<p>Second paragraph.</p>\n<!-- /wp:paragraph -->\n\n"
+			. '<!-- wp:test/reentrant-content /-->';
+
+		$result = apply_filters( 'the_content', $content );
+
+		unregister_block_type( 'test/reentrant-content' );
+
+		// The 'See more' button is unique to a rendered card; it must appear exactly once.
+		$this->assertSame(
+			1,
+			substr_count( $result, 'See more' ),
+			'Collection card should be inserted once, not leaked into the nested the_content render.'
+		);
+
+		// Clean up.
+		remove_all_filters( 'pre_option_newspack_collections_settings' );
+	}
+
+	/**
 	 * Test build_card_html respects limit parameter.
 	 *
 	 * @covers \Newspack\Collections\Content_Inserter::build_card_html
@@ -264,16 +326,17 @@ class Test_Content_Inserter extends \WP_UnitTestCase {
 		$block_content = "<!-- wp:paragraph -->\n<p>First paragraph.</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>Second paragraph.</p>\n<!-- /wp:paragraph -->\n\n<!-- wp:paragraph -->\n<p>Third paragraph.</p>\n<!-- /wp:paragraph -->";
 		$block_result  = Content_Inserter::insert_after_nth_block( $block_content, $insert_html, 2 );
 
-		// WP 7.0+ adds a `wp-block-paragraph` class to rendered paragraph blocks.
-		$this->assertStringContainsString( '<p class="wp-block-paragraph">First paragraph.</p>', $block_result, 'First paragraph should be present.' );
-		$this->assertStringContainsString( '<p class="wp-block-paragraph">Second paragraph.</p>', $block_result, 'Second paragraph should be present.' );
+		// Assert on the paragraph text rather than the rendered wrapper markup, which
+		// varies by WP version (e.g. WP 7.0+ adds a `wp-block-paragraph` class).
+		$this->assertStringContainsString( 'First paragraph.', $block_result, 'First paragraph should be present.' );
+		$this->assertStringContainsString( 'Second paragraph.', $block_result, 'Second paragraph should be present.' );
 		$this->assertStringContainsString( $insert_html, $block_result, 'Inserted content should be present.' );
-		$this->assertStringContainsString( '<p class="wp-block-paragraph">Third paragraph.</p>', $block_result, 'Third paragraph should be present.' );
+		$this->assertStringContainsString( 'Third paragraph.', $block_result, 'Third paragraph should be present.' );
 
 		// Verify proper insertion order for Gutenberg blocks.
-		$second_pos = strpos( $block_result, '<p class="wp-block-paragraph">Second paragraph.</p>' );
+		$second_pos = strpos( $block_result, 'Second paragraph.' );
 		$insert_pos = strpos( $block_result, $insert_html );
-		$third_pos  = strpos( $block_result, '<p class="wp-block-paragraph">Third paragraph.</p>' );
+		$third_pos  = strpos( $block_result, 'Third paragraph.' );
 
 		$this->assertGreaterThan( $second_pos, $insert_pos, 'Inserted content should come after second paragraph.' );
 		$this->assertLessThan( $third_pos, $insert_pos, 'Inserted content should come before third paragraph.' );
@@ -300,6 +363,19 @@ class Test_Content_Inserter extends \WP_UnitTestCase {
 
 		$this->assertStringContainsString( '<li>Item one</li>', $result, 'First list item should be preserved.' );
 		$this->assertStringContainsString( '<li>Item two</li>', $result, 'Second list item should be preserved.' );
+		$this->assertStringContainsString( '<ul class="wp-block-list">', $result, 'List wrapper should be preserved.' );
+
+		// Lock in that the items render *within* their parent list, after the inserted content.
+		$insert_pos    = strpos( $result, $insert_html );
+		$ul_open_pos   = strpos( $result, '<ul class="wp-block-list">' );
+		$ul_close_pos  = strpos( $result, '</ul>' );
+		$item_one_pos  = strpos( $result, '<li>Item one</li>' );
+		$item_two_pos  = strpos( $result, '<li>Item two</li>' );
+
+		$this->assertLessThan( $ul_open_pos, $insert_pos, 'Inserted content should come before the list (inserted after the 2nd block).' );
+		$this->assertGreaterThan( $ul_open_pos, $item_one_pos, 'First list item should render inside the list wrapper.' );
+		$this->assertLessThan( $ul_close_pos, $item_two_pos, 'Second list item should render inside the list wrapper.' );
+		$this->assertLessThan( $item_two_pos, $item_one_pos, 'List items should keep their order.' );
 	}
 
 	/**
