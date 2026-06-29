@@ -1457,56 +1457,11 @@ final class Modal_Checkout {
 	 * @return bool
 	 */
 	public static function should_show_order_details() {
-		$cart = \WC()->cart;
-		if ( $cart->is_empty() ) {
-			return false;
-		}
-		if ( ! empty( $cart->get_applied_coupons() ) ) {
-			return true;
-		}
-		if ( \wc_tax_enabled() && ! $cart->display_prices_including_tax() ) {
-			return true;
-		}
-		if ( 1 < $cart->get_cart_contents_count() ) {
-			return true;
-		}
-		if ( ! empty( $cart->get_fees() ) ) {
-			return true;
-		}
-		if ( method_exists( 'WC_Subscriptions_Switcher', 'cart_contains_switches' ) && \WC_Subscriptions_Switcher::cart_contains_switches( 'any' ) ) {
-			return true;
-		}
-		if ( $cart->needs_shipping_address() ) {
-			$shipping       = \WC()->shipping;
-			$packages       = $shipping->get_packages();
-			$totals         = $cart->get_totals();
-			$shipping_rates = [];
-
-			// Find all the shipping rates that apply to the current transaction.
-			foreach ( $packages as $package ) {
-				if ( ! empty( $package['rates'] ) ) {
-					foreach ( $package['rates'] as $rate_key => $rate ) {
-						$shipping_rates[ $rate_key ] = $rate;
-					}
-				}
-			}
-
-			// Show details if shipping requires a fee or if there are multiple shipping rates to choose from.
-			if ( (float) $totals['total'] !== (float) $totals['subtotal'] || 1 < count( array_values( $shipping_rates ) ) ) {
-				return true;
-			}
-		}
-
-		if ( class_exists( 'WC_Subscriptions_Cart' ) && \WC_Subscriptions_Cart::cart_contains_subscription() ) {
-			return true;
-		}
-
-		// Show details if the cart contains a subscription renewal.
-		if ( function_exists( 'wcs_cart_contains_renewal' ) && \wcs_cart_contains_renewal() ) {
-			return true;
-		}
-
-		return false;
+		// The transaction details table is always shown for any non-empty cart. Simple
+		// single-item carts previously hid it and relied on the static price-summary card
+		// above the form; that card was removed, so the real, deal-accurate order details
+		// must always be visible.
+		return ! \WC()->cart->is_empty();
 	}
 
 	/**
