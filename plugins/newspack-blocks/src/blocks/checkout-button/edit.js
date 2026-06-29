@@ -338,7 +338,9 @@ function CheckoutButtonEdit( props ) {
 							</>
 						) }
 					</ProductControl>
-					<CouponControl value={ coupon } onChange={ value => setAttributes( { coupon: value } ) } />
+					{ newspack_blocks_data?.coupons_enabled && (
+						<CouponControl value={ coupon } onChange={ value => setAttributes( { coupon: value } ) } />
+					) }
 					<WidthControl selectedWidth={ width } setAttributes={ setAttributes } />
 				</PanelBody>
 				<PanelBody title={ __( 'After purchase', 'newspack-blocks' ) }>
