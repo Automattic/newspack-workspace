@@ -12,6 +12,14 @@
  * every file in that directory so the overrides register themselves. Adding an
  * override is therefore a drop-in new file with no edits to this class.
  *
+ * The `block_type_metadata_settings` filter only fires for blocks registered via
+ * `register_block_type_from_metadata()`. Blocks registered with a plain
+ * `register_block_type()` call (e.g. `newspack-newsletters/posts-inserter`) never
+ * run that filter, so their override would never be wired up. To cover those, a
+ * second pass (`apply_to_registered_blocks()`) runs at render start and sets
+ * `render_email_callback` directly on any already-registered block type that has
+ * an override but no callback yet — the same dynamic property the package reads.
+ *
  * @package Newspack
  */
 
@@ -84,6 +92,48 @@ class Block_Renderer_Registry {
 		self::discover( __DIR__ . '/blocks' );
 
 		add_filter( 'block_type_metadata_settings', [ __CLASS__, 'update_block_settings' ], 11, 1 );
+
+		// The metadata filter above misses blocks registered without metadata (plain
+		// register_block_type()), so it never sets their render_email_callback. Apply
+		// the overrides to already-registered block types at render start instead.
+		// The package fires this action inside its content renderer right before it
+		// renders the blocks, so it runs after all blocks are registered, only when a
+		// WC email render actually happens, in every render context (REST preview,
+		// sending, cron) — and never for the MJML renderer, which doesn't boot the
+		// package and so never fires it.
+		add_action( 'woocommerce_email_editor_render_start', [ __CLASS__, 'apply_to_registered_blocks' ] );
+	}
+
+	/**
+	 * Set render_email_callback on already-registered block types that have an
+	 * override but no callback yet.
+	 *
+	 * Covers blocks registered without metadata, for which
+	 * `block_type_metadata_settings` never fires. Idempotent: only fills in a
+	 * callback that is missing, so the metadata path stays authoritative for the
+	 * blocks it already handled and re-running this is a no-op. Setting the dynamic
+	 * `render_email_callback` property directly is what the package itself relies on.
+	 *
+	 * @return void
+	 */
+	public static function apply_to_registered_blocks(): void {
+		if ( empty( self::$renderers ) ) {
+			return;
+		}
+		$block_registry = \WP_Block_Type_Registry::get_instance();
+		foreach ( array_keys( self::$renderers ) as $name ) {
+			$block_type = $block_registry->get_registered( $name );
+			// Skip unregistered blocks and any block that already has a callback
+			// (e.g. set by the metadata filter) so that path stays authoritative.
+			if ( ! $block_type instanceof \WP_Block_Type || isset( $block_type->render_email_callback ) ) {
+				continue;
+			}
+			$instance = self::get_renderer_instance( $name );
+			if ( null === $instance ) {
+				continue;
+			}
+			$block_type->render_email_callback = [ $instance, 'render' ];
+		}
 	}
 
 	/**
@@ -116,30 +166,51 @@ class Block_Renderer_Registry {
 	 * @return array The (possibly modified) settings.
 	 */
 	public static function update_block_settings( array $settings ): array {
-		$name = $settings['name'] ?? '';
-		if ( ! isset( self::$renderers[ $name ] ) ) {
+		$name     = $settings['name'] ?? '';
+		$instance = self::get_renderer_instance( $name );
+		if ( null === $instance ) {
 			return $settings;
 		}
-		if ( ! isset( self::$instances[ $name ] ) ) {
-			$renderer_class = self::$renderers[ $name ];
-			// Fail closed: a class that isn't a package block renderer (missing,
-			// wrong type, the abstract base itself) leaves the package callback in
-			// place rather than fataling during block registration. is_subclass_of
-			// autoloads and returns false for a non-existent class.
-			if ( ! is_subclass_of( $renderer_class, Abstract_Block_Renderer::class ) ) {
-				\Newspack_Newsletters_Logger::log( 'Email editor: skipping invalid block override for ' . $name . ' (' . $renderer_class . ' is not a block renderer).' );
-				return $settings;
-			}
-			try {
-				// Guards above don't catch an abstract subclass or a throwing /
-				// required-arg constructor, so instantiation stays in a try/catch.
-				self::$instances[ $name ] = new $renderer_class();
-			} catch ( \Throwable $e ) {
-				\Newspack_Newsletters_Logger::log( 'Email editor: could not instantiate block override for ' . $name . ' (' . $renderer_class . '): ' . $e->getMessage() );
-				return $settings;
-			}
-		}
-		$settings['render_email_callback'] = [ self::$instances[ $name ], 'render' ];
+		$settings['render_email_callback'] = [ $instance, 'render' ];
 		return $settings;
+	}
+
+	/**
+	 * Resolve (and lazily instantiate) the override renderer for a block name.
+	 *
+	 * Shared by both override paths — the metadata filter
+	 * (update_block_settings()) and the render-start pass
+	 * (apply_to_registered_blocks()) — so they share one fail-closed guard.
+	 *
+	 * Fails closed (returns null) when the block has no override, the override
+	 * class isn't a package block renderer (missing, wrong type, the abstract base
+	 * itself), or its constructor throws — so a bad override leaves the package
+	 * callback in place rather than fataling during block registration or render.
+	 * is_subclass_of() autoloads and returns false for a non-existent class.
+	 *
+	 * @param string $name Block name, e.g. `core/column`.
+	 * @return object|null The renderer instance, or null when unavailable.
+	 */
+	private static function get_renderer_instance( string $name ): ?object {
+		if ( ! isset( self::$renderers[ $name ] ) ) {
+			return null;
+		}
+		if ( isset( self::$instances[ $name ] ) ) {
+			return self::$instances[ $name ];
+		}
+		$renderer_class = self::$renderers[ $name ];
+		if ( ! is_subclass_of( $renderer_class, Abstract_Block_Renderer::class ) ) {
+			\Newspack_Newsletters_Logger::log( 'Email editor: skipping invalid block override for ' . $name . ' (' . $renderer_class . ' is not a block renderer).' );
+			return null;
+		}
+		try {
+			// The type guard above doesn't catch an abstract subclass or a throwing /
+			// required-arg constructor, so instantiation stays in a try/catch.
+			self::$instances[ $name ] = new $renderer_class();
+		} catch ( \Throwable $e ) {
+			\Newspack_Newsletters_Logger::log( 'Email editor: could not instantiate block override for ' . $name . ' (' . $renderer_class . '): ' . $e->getMessage() );
+			return null;
+		}
+		return self::$instances[ $name ];
 	}
 }
