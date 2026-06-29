@@ -190,22 +190,22 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 					}
 
 					const $details = $( '#after_customer_details' );
-					const expanded = $details.hasClass( 'transaction-details-expanded' );
+
+					// Always show the Transaction Details expanded. The static price-summary
+					// card was removed, so these order details are the price display and must
+					// be visible on load without requiring a click to open.
+					$details.addClass( 'transaction-details-expanded' );
 
 					// Move new order review table to the payment methods.
 					const $payment_methods = $( '.payment_methods' );
 					if ( $payment_methods.length ) {
 						const $el = $wrapper.clone();
-						// Make sure Transaction Details toggle's aria-expanded value is correct in cloned version.
-						if ( expanded ) {
-							$( '[id="order_review_heading"]', $el ).attr( 'aria-expanded', 'true' );
-						}
 						$( '.order-review-wrapper' ).remove();
 						$payment_methods.after( $el );
-					} else if ( ! expanded ) {
-						// If there's no payment method, make sure to expand the Transaction Details on load.
-						$wrapper.find( '#order_review_heading' ).trigger( 'click' );
 					}
+
+					// Keep the toggle's aria-expanded in sync with the always-expanded state.
+					$( '#order_review_heading' ).attr( 'aria-expanded', 'true' );
 				} );
 
 				/**
