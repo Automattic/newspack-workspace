@@ -60,8 +60,38 @@ class Social_Links extends Package_Social_Links {
 	 * @return string
 	 */
 	protected function render_content( $block_content, array $parsed_block, Rendering_Context $rendering_context ): string {
-		$html = parent::render_content( $block_content, $parsed_block, $rendering_context );
+		$parsed_block = self::apply_justification( $parsed_block );
+		$html         = parent::render_content( $block_content, $parsed_block, $rendering_context );
 		return $this->space_icons( $html );
+	}
+
+	/**
+	 * Translate the block's flex `layout.justifyContent` into the `textAlign`
+	 * attribute the package renderer understands.
+	 *
+	 * The editor centers (or right-aligns) a social row via the flex layout's
+	 * `justifyContent`, but the package derives the row's alignment only from
+	 * `textAlign`/`align` — so a centered row in the editor renders left-aligned
+	 * in the email. Map justifyContent to the equivalent textAlign (only when the
+	 * author hasn't already set one explicitly) so the two surfaces agree.
+	 *
+	 * @param array $parsed_block Parsed block.
+	 * @return array The parsed block, possibly with `attrs.textAlign` set.
+	 */
+	private static function apply_justification( array $parsed_block ): array {
+		if ( ! empty( $parsed_block['attrs']['textAlign'] ) ) {
+			return $parsed_block;
+		}
+		$justify = $parsed_block['attrs']['layout']['justifyContent'] ?? '';
+		$map     = [
+			'left'   => 'left',
+			'center' => 'center',
+			'right'  => 'right',
+		];
+		if ( isset( $map[ $justify ] ) ) {
+			$parsed_block['attrs']['textAlign'] = $map[ $justify ];
+		}
+		return $parsed_block;
 	}
 
 	/**

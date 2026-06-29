@@ -159,4 +159,35 @@ class Test_Batch_B_Core_Blocks extends WP_UnitTestCase {
 			'Expected each social icon pill to carry a horizontal margin so the icons are spaced apart.'
 		);
 	}
+
+	/**
+	 * An outline button renders transparent with a colored border, not a solid fill.
+	 *
+	 * The package ignores `is-style-outline` and renders it identically to a filled
+	 * button. The Newspack override writes a transparent background, a 2px solid
+	 * border, and matching text colour onto the block style — matching the editor
+	 * canvas. With a custom button colour the outline uses that colour for both the
+	 * border and the text (a filled button would have used it as the background).
+	 */
+	public function test_button_outline_renders_transparent_with_border() {
+		$content = '<!-- wp:buttons --><div class="wp-block-buttons"><!-- wp:button {"className":"is-style-outline","style":{"color":{"background":"#cc0000"}}} --><div class="wp-block-button is-style-outline"><a class="wp-block-button__link has-background wp-element-button" style="background-color:#cc0000" href="https://example.com">Outline</a></div><!-- /wp:button --></div><!-- /wp:buttons -->';
+		$html    = $this->render_newsletter( $content );
+		$this->assertMatchesRegularExpression( '/background-color:\s*transparent/', $html, 'Expected the outline button background to be transparent, not a solid fill.' );
+		$this->assertMatchesRegularExpression( '/border-width:\s*2px/', $html, 'Expected the outline button to have a 2px border.' );
+		$this->assertMatchesRegularExpression( '/border-color:\s*#cc0000/i', $html, 'Expected the outline border to use the button accent colour.' );
+		$this->assertMatchesRegularExpression( '/(?<!-)color:\s*#cc0000/i', $html, 'Expected the outline text to use the accent colour, not the filled white.' );
+	}
+
+	/**
+	 * A centered social-links row is centered in the email.
+	 *
+	 * The editor centers a social row via the flex layout's `justifyContent`, but
+	 * the package derives alignment only from `textAlign`/`align` — so the override
+	 * maps justifyContent to textAlign. Without it the row renders left-aligned.
+	 */
+	public function test_social_links_center_justification_is_applied() {
+		$content = '<!-- wp:social-links {"layout":{"type":"flex","justifyContent":"center"}} --><ul class="wp-block-social-links"><!-- wp:social-link {"url":"https://twitter.com/x","service":"twitter"} /--></ul><!-- /wp:social-links -->';
+		$html    = $this->render_newsletter( $content );
+		$this->assertMatchesRegularExpression( '/text-align:\s*center/', $html, 'Expected the centered social row to carry text-align:center.' );
+	}
 }
