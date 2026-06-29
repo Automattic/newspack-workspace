@@ -1,3 +1,10 @@
+## newspack-block-theme [1.28.6](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.5...newspack-block-theme@1.28.6) (2026-06-26)
+
+
+### Bug Fixes
+
+* **theme:** prevent Custom Fields clobber, keep box editable ([#439](https://github.com/Automattic/newspack-workspace/issues/439)) ([f19e1f9](https://github.com/Automattic/newspack-workspace/commit/f19e1f9c1371e9e8a5e0d9bf4420f5ef866be05d))
+
 ## newspack-block-theme [1.28.5](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.4...newspack-block-theme@1.28.5) (2026-06-23)
 
 

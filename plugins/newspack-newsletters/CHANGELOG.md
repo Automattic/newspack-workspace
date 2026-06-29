@@ -1,3 +1,10 @@
+## newspack-newsletters [3.34.4](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.34.3...newspack-newsletters@3.34.4) (2026-06-24)
+
+
+### Bug Fixes
+
+* **newsletters:** harden ActiveCampaign sends against API timeouts ([#269](https://github.com/Automattic/newspack-workspace/issues/269), NPPM-2878) ([fb89d70](https://github.com/Automattic/newspack-workspace/commit/fb89d70b6201842ee5d7ef04ac8348a6cd9f7720))
+
 ## newspack-newsletters [3.34.3](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.34.2...newspack-newsletters@3.34.3) (2026-06-23)
 
 

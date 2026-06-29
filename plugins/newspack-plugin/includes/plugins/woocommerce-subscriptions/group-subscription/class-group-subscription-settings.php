@@ -97,14 +97,14 @@ class Group_Subscription_Settings {
 			'newspack-group-subscription-admin',
 			Newspack::plugin_url() . '/dist/group-subscription-admin.js',
 			[],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'group-subscription-admin' ),
 			true
 		);
 		\wp_enqueue_style(
 			'newspack-group-subscription-admin',
 			Newspack::plugin_url() . '/dist/group-subscription-admin.css',
 			[],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'group-subscription-admin' )
 		);
 		\wp_localize_script(
 			'newspack-group-subscription-admin',

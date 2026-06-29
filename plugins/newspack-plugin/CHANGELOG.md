@@ -1,3 +1,24 @@
+## newspack [6.43.9](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.8...newspack@6.43.9) (2026-06-26)
+
+
+### Bug Fixes
+
+* handle case where metadata not present ([47c6fd5](https://github.com/Automattic/newspack-workspace/commit/47c6fd572d10cb3b7102ffc60efef6845f88384b))
+
+## newspack [6.43.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.7...newspack@6.43.8) (2026-06-26)
+
+
+### Bug Fixes
+
+* **memberships:** sync team member end date to team expiration ([#424](https://github.com/Automattic/newspack-workspace/issues/424)) ([29f0120](https://github.com/Automattic/newspack-workspace/commit/29f012002ae95993676cb2fbb8fcf7daf8b98758))
+
+## newspack [6.43.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.6...newspack@6.43.7) (2026-06-24)
+
+
+### Bug Fixes
+
+* **reader-verification:** change "go back" button to "skip for now" ([#400](https://github.com/Automattic/newspack-workspace/issues/400)) ([ea8a730](https://github.com/Automattic/newspack-workspace/commit/ea8a730c99cba30c5a2674b5d0a3278d96626769))
+
 ## newspack [6.43.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.5...newspack@6.43.6) (2026-06-23)
 
 

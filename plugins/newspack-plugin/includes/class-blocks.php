@@ -63,7 +63,7 @@ final class Blocks {
 			'newspack-blocks',
 			Newspack::plugin_url() . '/dist/blocks.js',
 			[],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'blocks' ),
 			true
 		);
 		$script_data = [
@@ -99,7 +99,7 @@ final class Blocks {
 			'newspack-blocks',
 			Newspack::plugin_url() . '/dist/blocks.css',
 			[],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'blocks' )
 		);
 	}
 
@@ -113,7 +113,7 @@ final class Blocks {
 				'newspack-blocks-frontend',
 				Newspack::plugin_url() . '/dist/blocks.css',
 				[],
-				NEWSPACK_PLUGIN_VERSION
+				Newspack::asset_version( 'blocks' )
 			);
 		}
 	}
