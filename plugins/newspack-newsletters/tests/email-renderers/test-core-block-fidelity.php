@@ -11,21 +11,10 @@ use Newspack\Newsletters\Email_Renderers\Renderer_Controller;
 /**
  * Core Block Fidelity Test.
  *
- * Locks in the Batch C audit finding (NEWS-1904): the core blocks `core/list`
- * (with its `core/list-item` children) and `core/site-title` render correctly
- * through the WC email engine without a Newspack override. The package's own
- * renderers already match vanilla WordPress block semantics in a way that is
- * email-safe.
- *
- * `core/quote` does have a Newspack override (blocks/class-quote.php) solely to
- * un-italic the cite element — the package theme.json forces `fontStyle: italic`
- * on the cite, but the editor canvas renders it upright. The override is a theme.json
- * filter, not a render_content override, so all structural quote traits (wrapper,
- * content, citation) remain the package's responsibility and are tested here.
- *
- * These tests render each block through `Renderer_Controller::render_wc()` and
- * assert the structural traits that would break if the package regressed
- * (list markers, the quote wrapper, the dynamic site-title resolving).
+ * Locks in the Batch C audit finding (NEWS-1904): core/list and core/site-title render correctly
+ * without a Newspack override. core/quote has a Newspack override only to un-italic the cite element
+ * (the package theme.json forces fontStyle:italic); all structural quote traits tested here are
+ * still the package's responsibility.
  */
 class Test_Core_Block_Fidelity extends WP_UnitTestCase {
 	/**
@@ -55,12 +44,8 @@ class Test_Core_Block_Fidelity extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An unordered list keeps its `<ul>`, items, and left padding for markers.
-	 *
-	 * The package List_Block renderer emits the `<ul class="wp-block-list">` with
-	 * `padding: 0 0 0 40px` so the bullets render in email clients, and keeps both
-	 * `<li>` children. That matches vanilla WP, so no override is needed — this
-	 * asserts the marker padding and item survival that would break otherwise.
+	 * An unordered list keeps its `<ul>`, items, and 40px left padding for bullet markers.
+	 * The package List_Block renderer matches vanilla WP and is email-safe without an override.
 	 */
 	public function test_unordered_list_preserves_markers_and_items() {
 		$content = '<!-- wp:list --><ul class="wp-block-list">'
@@ -77,10 +62,7 @@ class Test_Core_Block_Fidelity extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An ordered list renders an `<ol>` (not a `<ul>`) with its items.
-	 *
-	 * The package keys the tag off `attrs.ordered`, so an ordered list must emit
-	 * `<ol>`. This guards the ordered/unordered distinction surviving the WC render.
+	 * An ordered list renders as `<ol>` — guards the ordered/unordered distinction surviving the WC render.
 	 */
 	public function test_ordered_list_renders_ol() {
 		$content = '<!-- wp:list {"ordered":true} --><ol class="wp-block-list">'
@@ -96,11 +78,8 @@ class Test_Core_Block_Fidelity extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A nested list keeps both levels, each with its own marker padding.
-	 *
-	 * Nested `core/list` blocks are the likeliest place a list renderer drops
-	 * structure. Two `<ul class="wp-block-list">` with marker padding must appear
-	 * (parent + child), and both items' text must survive.
+	 * A nested list keeps both levels, each with its own marker padding — the likeliest place a
+	 * list renderer would drop structure.
 	 */
 	public function test_nested_list_preserves_both_levels() {
 		$content = '<!-- wp:list --><ul class="wp-block-list">'
@@ -119,13 +98,8 @@ class Test_Core_Block_Fidelity extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A quote renders the email-block-quote wrapper with its content and citation.
-	 *
-	 * The package wraps the quote in an `email-block-quote` table (the visual
-	 * indent that survives in email) and keeps both the quoted paragraph and the
-	 * `<cite>` citation. The Newspack Quote override exists only to fix cite
-	 * italic parity via theme.json — the structural layout here (wrapper, content,
-	 * citation presence) is still fully the package's responsibility.
+	 * A quote renders the email-block-quote table wrapper, the quoted paragraph, and the cite element.
+	 * These structural traits are the package's responsibility; the Newspack override only fixes cite italic.
 	 */
 	public function test_quote_renders_wrapper_content_and_citation() {
 		$content = '<!-- wp:quote --><blockquote class="wp-block-quote">'
@@ -149,11 +123,8 @@ class Test_Core_Block_Fidelity extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The dynamic site-title block resolves to the site name and home link.
-	 *
-	 * `core/site-title` is a dynamic block; the audit confirmed it resolves under
-	 * the WC engine (the package routes it through the Text renderer). It must emit
-	 * the real blog name inside an `<h1 class="wp-block-site-title">` linked home.
+	 * The dynamic site-title block resolves to the real blog name inside an h1.wp-block-site-title
+	 * linked home — the WC engine routes it through the Text renderer.
 	 */
 	public function test_site_title_resolves_name_and_link() {
 		$html = $this->render( '<!-- wp:site-title /-->' );
@@ -164,10 +135,7 @@ class Test_Core_Block_Fidelity extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The site-title block honors a non-default heading level.
-	 *
-	 * With `level:2` the block must render `<h2>` (not `<h1>`), proving the WC
-	 * engine respects the authored heading level rather than flattening it.
+	 * With level:2 the site-title renders `<h2>` — the WC engine respects the authored heading level.
 	 */
 	public function test_site_title_honors_heading_level() {
 		$html = $this->render( '<!-- wp:site-title {"level":2} /-->' );
@@ -177,10 +145,7 @@ class Test_Core_Block_Fidelity extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The site-title block honors `isLink:false` by dropping the anchor.
-	 *
-	 * With linking disabled the rendered title must be plain text with no `<a>`
-	 * wrapping the site name — matching vanilla WP for that attribute.
+	 * With isLink:false the site-title renders as plain text with no anchor, matching vanilla WP.
 	 */
 	public function test_site_title_honors_is_link_false() {
 		$html = $this->render( '<!-- wp:site-title {"isLink":false} /-->' );

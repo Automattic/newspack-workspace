@@ -19,24 +19,18 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Renders a newspack-newsletters/posts-inserter block under the WC engine.
  *
- * The block stores its content in the `innerBlocksToInsert` attribute, an array
- * of child blocks shaped `{ blockName, attrs, innerHTML, innerBlocks }`. The
- * block's own server render callback concatenates each child's raw `innerHTML`,
- * so any child carrying nested blocks leaks literal `<!-- wp:... -->` delimiters
- * into the output. This override instead pushes each child's `innerHTML` through
- * `do_blocks()`. Because the package's `render_block` filter is still active mid
- * render, the rendered children come back email-processed for free.
+ * The block's server callback concatenates each child's raw `innerHTML`, leaking
+ * `<!-- wp:... -->` delimiters when children contain nested blocks. This override
+ * wraps each child in its block delimiter and runs it through `do_blocks()` so
+ * the WC email callbacks fire automatically.
  */
 class Posts_Inserter extends Abstract_Block_Renderer {
 	/**
-	 * Render the posts-inserter content.
+	 * Render the posts-inserter content from `innerBlocksToInsert` attrs.
 	 *
-	 * Rebuilds the output from the `innerBlocksToInsert` attribute rather than the
-	 * supplied `$block_content` (the block's own callback produces the leaky raw
-	 * concatenation). The base `render()` adds the spacer and the package adds the
-	 * root horizontal padding around the result.
+	 * Ignores `$block_content` (the block's own callback produces leaky raw HTML).
 	 *
-	 * @param string            $block_content     Block content (ignored; rebuilt from attrs).
+	 * @param string            $block_content     Ignored; rebuilt from attrs.
 	 * @param array             $parsed_block      Parsed block.
 	 * @param Rendering_Context $rendering_context Rendering context.
 	 * @return string
@@ -50,49 +44,32 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	}
 
 	/**
-	 * Vertical gap between the meta blocks within a post item (title, subtitle,
-	 * date, excerpt, continue-reading), replacing the package's uniform 16px.
-	 *
-	 * The posts-inserter has no post-editor equivalent, so it matches the tighter
-	 * MJML newsletter look rather than the package default.
+	 * Vertical gap between meta blocks within a post item (title, subtitle, date,
+	 * excerpt, continue-reading). Matches the MJML look — tighter than the package's 16px.
 	 */
 	const META_GAP = '8px';
 
 	/**
-	 * Vertical gap between consecutive post items. The package concatenates the
-	 * inserted children with no gap, so each item after the first gets this top
-	 * margin to separate the posts.
+	 * Vertical margin between consecutive post items (the package concatenates them with no gap).
 	 */
 	const POST_GAP = '24px';
 
 	/**
-	 * Top/bottom padding wrapped around each block of the flat ("image on top", or
-	 * no featured image) layout. There the inserted children are the individual
-	 * heading/paragraph/image blocks, which the package stacks flush; the editor
-	 * canvas gives every such block a 6px top/bottom padding, so match it here so
-	 * the email and the editor read the same.
+	 * Top/bottom padding for each block in the flat layout (image-on-top or no image).
+	 * Matches the editor canvas's per-block 6px padding so email and editor read the same.
 	 */
 	const FLAT_BLOCK_PAD = '6px';
 
 	/**
-	 * Restyle the rendered post items to match the MJML newsletter look.
+	 * Restyle rendered post items to match the MJML newsletter look.
 	 *
-	 * Two adjustments, since the posts-inserter has no post-editor equivalent and
-	 * matches MJML:
-	 * 1. Post title / "continue reading" links: the package renders them with no
-	 *    colour (→ the client's default blue) and `text-decoration: none`. Set
-	 *    them underlined and inheriting their element's colour, so they read black
-	 *    by default but follow the block's own heading/text colour when one is set
-	 *    (forcing `#000000` clobbered the title's colour). Anchors are bare at this
-	 *    stage; the CSS inliner adds its styles downstream but preserves existing
-	 *    inline styles, so this wins. Image-wrapping anchors are skipped via the
-	 *    `<img` lookahead, and any anchor that already carries a `style` attribute
-	 *    is skipped too (the `style=` lookahead) so we never emit a duplicate one.
-	 * 2. Block spacing: collapse the package's uniform 16px gap to META_GAP.
-	 * 3. Root padding: each child renders as a top-level block and so gets the
-	 *    email's 24px root padding again — on top of the posts-inserter block's
-	 *    own root padding — double-indenting the posts. Zero the inner root
-	 *    padding so the posts line up flush with the other blocks.
+	 * 1. Links: set underline + inherit color so they follow the block's text color
+	 *    (forcing #000 would clobber it). Skips image-wrapping anchors and any
+	 *    anchor already carrying a style attribute (no duplicate). The CSS inliner
+	 *    preserves existing inline styles, so this wins.
+	 * 2. Block spacing: collapse the package's 16px gap to META_GAP.
+	 * 3. Root padding: zero the inner 24px root padding to prevent double-indent
+	 *    (each child picks up the email's root padding again as a top-level block).
 	 *
 	 * @param string $html Rendered posts-inserter HTML.
 	 * @return string
@@ -110,17 +87,13 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	/**
 	 * Render the inserted child blocks to email-safe HTML.
 	 *
-	 * Wraps each child back into its block delimiter, then runs it through
-	 * `do_blocks()` so the child block itself is rendered — its own
-	 * `render_email_callback` fires via the package's `render_block` filter, and
-	 * any nested blocks render too (no raw block-comment delimiters survive).
-	 * Rendering the bare `innerHTML` instead would render only the inner blocks
-	 * and leave the outer block (e.g. `core/columns`) as raw markup that never
-	 * gets its email wrapper — so its columns overflow the email width. Kept as a
-	 * static so it stays unit-testable without booting the WC engine.
+	 * Wraps each child in its block delimiter and runs it through `do_blocks()` so
+	 * the child's `render_email_callback` fires and nested blocks render fully.
+	 * Rendering bare `innerHTML` would leave the outer block (e.g. `core/columns`)
+	 * as raw markup — its columns would overflow the email width.
 	 *
-	 * @param array $children The `innerBlocksToInsert` array of child blocks.
-	 * @return string The concatenated rendered HTML, in child order.
+	 * @param array $children The `innerBlocksToInsert` child-block array.
+	 * @return string Concatenated rendered HTML in child order.
 	 */
 	public static function render_inserted_blocks( array $children ): string {
 		$html  = '';
@@ -129,9 +102,8 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 			if ( ! is_array( $child ) ) {
 				continue;
 			}
-			// A child without a block name is unexpected — the editor always stores
-			// one — but fall back to rendering its inner HTML so content is never
-			// dropped.
+			// A child without a block name is unexpected — fall back to rendering its
+			// inner HTML so content is never silently dropped.
 			if ( empty( $child['blockName'] ) ) {
 				$html .= do_blocks( (string) ( $child['innerHTML'] ?? '' ) );
 				++$index;
@@ -139,20 +111,14 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 			}
 			if ( 'core/columns' === $child['blockName'] ) {
 				// Side-by-side layout (image left/right): each child is a whole post
-				// wrapped in a columns block. Separate consecutive posts with a top
-				// margin (the package concatenates them with no gap).
+				// in a columns block. Add top margin between posts (the package omits it).
 				if ( $index > 0 ) {
 					$child['attrs']['style']['spacing']['margin']['top'] = self::POST_GAP;
 				}
-				// Wrap the child back into its delimiter so the outer block is
-				// email-rendered (its render_email_callback fires).
 				$html .= do_blocks( self::serialize_inserted_block( $child ) );
 			} else {
-				// Flat layout (image on top, or no featured image): each child is an
-				// individual heading/paragraph/image block. The package stacks these
-				// flush and ignores their margin/padding attrs, so wrap each rendered
-				// block in a padded cell — matching the editor canvas's per-block
-				// 6px top/bottom padding so the email and the editor read the same.
+				// Flat layout (image on top, or no image): wrap each rendered block in
+				// a padded cell to match the editor canvas's per-block 6px padding.
 				$html .= self::wrap_flat_block( do_blocks( self::serialize_inserted_block( $child ) ) );
 			}
 			++$index;
@@ -161,16 +127,14 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	}
 
 	/**
-	 * Wrap a rendered flat-layout block in a table cell with top/bottom padding.
+	 * Wrap a flat-layout block in a padded table cell.
 	 *
-	 * The flat ("image on top" / no featured image) layout renders each post block
-	 * as a standalone top-level block; the package stacks them flush and ignores
-	 * their spacing attrs, so an email-safe padded `<td>` re-creates the editor
-	 * canvas's per-block 6px top/bottom padding (kept symmetric on every block so
-	 * the gap between any two is 12px, matching the canvas).
+	 * The package stacks flat-layout blocks flush and ignores their spacing attrs,
+	 * so a padded `<td>` re-creates the editor canvas's per-block 6px top/bottom
+	 * padding (12px gap between any two blocks, matching the canvas).
 	 *
 	 * @param string $block_html Rendered email HTML for a single block.
-	 * @return string The block wrapped in a padded cell.
+	 * @return string Block wrapped in a padded cell.
 	 */
 	private static function wrap_flat_block( string $block_html ): string {
 		return sprintf(
@@ -183,13 +147,10 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	/**
 	 * Wrap a parsed child block back into block markup for `do_blocks()`.
 	 *
-	 * Rebuilds the block delimiter around the saved `innerHTML` (which already
-	 * carries the child's own inner-block delimiters), so `do_blocks()` re-parses
-	 * and renders the full block — outer wrapper included. Mirrors core's
-	 * `serialize_block()` but reads from `innerHTML`, since the inserted children
-	 * carry `innerHTML` but not necessarily `innerContent`.
+	 * Reads from `innerHTML` (inserted children carry `innerHTML`, not necessarily
+	 * `innerContent`), mirroring core's `serialize_block()`.
 	 *
-	 * @param array $child A child block shaped `{ blockName, attrs, innerHTML }`.
+	 * @param array $child Child block shaped `{ blockName, attrs, innerHTML }`.
 	 * @return string Block markup ready for `do_blocks()`.
 	 */
 	private static function serialize_inserted_block( array $child ): string {
@@ -205,5 +166,5 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	}
 }
 
-// Self-register this override so the registry discovers it via the blocks/ glob.
+// Self-register via the blocks/ glob.
 \Newspack\Newsletters\Email_Renderers\Block_Renderer_Registry::add( 'newspack-newsletters/posts-inserter', Posts_Inserter::class );

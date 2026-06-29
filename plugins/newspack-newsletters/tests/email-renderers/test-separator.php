@@ -11,16 +11,9 @@ use Newspack\Newsletters\Email_Renderers\Renderer_Controller;
 /**
  * Separator block renderer override tests.
  *
- * The WC email-editor package passes `core/separator` through the fallback
- * renderer, which wraps the bare `<hr>` in a table cell but adds no email-safe
- * dimensions. The `.wp-block-separator` stylesheet (which gives it `height`,
- * `border`, and a short `width`) is NOT present in email clients, so a
- * default-style separator degrades to a full-width gray browser `<hr>`, and
- * a colored separator loses its color appearance.
- *
- * The Newspack override must emit an email-safe structure — a horizontal rule
- * built from a table `<td>` with an explicit `border-top` (rather than a bare
- * `<hr>`) — so color, width, and alignment all survive without any external CSS.
+ * Without an override the package wraps the bare `<hr>` in a table cell but adds no email-safe
+ * dimensions, and `.wp-block-separator` CSS is absent in email clients. The Newspack override
+ * emits an explicit border-top on a `<td>` so color, width, and alignment survive.
  */
 class Test_Separator extends WP_UnitTestCase {
 	/**
@@ -50,13 +43,8 @@ class Test_Separator extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A colored separator must carry its color on a table-based structure.
-	 *
-	 * The WC fallback path passes the `<hr>` through with Emogrifier inlining
-	 * CSS, but `.wp-block-separator` (which sets `height`, `border`, and `width`)
-	 * is not present in email, so color on a bare `<hr>` relies on browser
-	 * defaults for dimensions. The override must emit the color as an explicit
-	 * `border-top` or `background-color` on a table `<td>` instead.
+	 * A colored separator emits the color as border-top or background-color on a `<td>` — color on a
+	 * bare `<hr>` relies on missing `.wp-block-separator` CSS for dimensions in email.
 	 */
 	public function test_colored_separator_carries_color_on_table_cell() {
 		$content = '<!-- wp:separator {"backgroundColor":"vivid-red","className":"is-style-wide"} -->'
@@ -75,11 +63,7 @@ class Test_Separator extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A default-style separator must have an explicit, constrained width.
-	 *
-	 * Without the `.wp-block-separator` stylesheet, a bare `<hr>` stretches to
-	 * 100% in all email clients. The override must emit an explicit short width
-	 * (matching the editor preview: ~100px) so it looks correct in email.
+	 * A default-style separator has an explicit, constrained width — without CSS a bare `<hr>` stretches to 100%.
 	 */
 	public function test_default_separator_has_constrained_width() {
 		$content = '<!-- wp:separator -->'
@@ -97,10 +81,7 @@ class Test_Separator extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A wide separator spans the full width.
-	 *
-	 * `is-style-wide` stretches edge to edge in the editor preview. The override
-	 * must honor this via an explicit `width: 100%` on the table-based structure.
+	 * A wide separator (is-style-wide) spans 100% via an explicit width on the table structure.
 	 */
 	public function test_wide_separator_spans_full_width() {
 		$content = '<!-- wp:separator {"className":"is-style-wide"} -->'
@@ -118,10 +99,7 @@ class Test_Separator extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Default and wide separators differ in width.
-	 *
-	 * This is the parity assertion: the two variants must produce measurably
-	 * different widths in the email output — not both full-width or both short.
+	 * Default and wide separators produce measurably different widths in email output.
 	 */
 	public function test_default_and_wide_separator_widths_differ() {
 		$default_html = $this->render_newsletter(
@@ -139,14 +117,8 @@ class Test_Separator extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An unresolvable color slug falls back to the default rule color.
-	 *
-	 * `translate_slug_to_color()` returns the slug unchanged when it isn't in the
-	 * email theme palette, so without validation the renderer would emit an
-	 * invalid `border-top: 1px solid <slug>` that email clients drop, leaving no
-	 * rule. A letters-only slug (e.g. a palette name like `primary`) is the tricky
-	 * case — it must not be mistaken for a CSS named color. The override must fall
-	 * back to the default gray so the rule still renders.
+	 * An unresolvable color slug falls back to the default gray — a letters-only slug must not be
+	 * emitted as an invalid CSS color, which email clients would drop leaving no rule.
 	 */
 	public function test_unresolved_color_slug_falls_back_to_default() {
 		$content = '<!-- wp:separator {"backgroundColor":"notacolorslug"} -->'

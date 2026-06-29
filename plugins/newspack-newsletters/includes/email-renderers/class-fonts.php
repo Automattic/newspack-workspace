@@ -1,11 +1,9 @@
 <?php
 /**
- * Shared font resolver for newsletter email rendering and the editor canvas.
+ * Shared font resolver used by both the WC email renderer and the editor canvas.
  *
- * Resolves the body/header font stacks a newsletter should use, with a clear
- * precedence so the email render and the editor canvas agree, and so an
- * un-customized newsletter inherits the active theme's fonts (matching the
- * standard post editor) instead of a hardcoded default.
+ * Ensures render and canvas agree: un-customized newsletters inherit the active
+ * theme's fonts instead of a hardcoded default.
  *
  * @package Newspack_Newsletters
  */
@@ -15,55 +13,36 @@ namespace Newspack\Newsletters\Email_Renderers;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Resolves newsletter body/header font stacks.
- *
- * Precedence (highest first):
- *   1. Explicit newsletter font meta (font_header/font_body), validated against
- *      the supported-fonts whitelist — preserves the legacy authoring behaviour.
- *   2. Global styles typography.fontFamily (the "unless global fonts are set"
- *      branch) — site-wide/global-styles typography wins over the theme default.
- *   3. Active theme fonts via the theme's newspack_font_stack() — the new default
- *      that matches what the standard post editor shows.
+ * Resolves newsletter body/header font stacks with this precedence:
+ *   1. Explicit newsletter font meta (font_header/font_body) — whitelist-validated.
+ *   2. Global styles typography.fontFamily.
+ *   3. Active theme fonts via newspack_font_stack() — matches the standard post editor.
  *   4. Hardcoded fallback (Theme_Json_Builder defaults) — standalone / no-theme.
  *
- * Every theme function and theme-mod call is guarded so the plugin works
- * standalone with no Newspack theme installed.
+ * All theme function and theme-mod calls are guarded for standalone use.
  */
 class Fonts {
 
 	/**
-	 * Newspack-theme default body font stack.
-	 *
-	 * Mirrors `--newspack-theme-font-body` in newspack-theme's
-	 * sass/variables-site/_fonts.scss. This is what the standard post editor
-	 * shows when no `font_body` customizer mod is set — newspack_font_stack()
-	 * returns a degenerate `"","Georgia","serif"` for an unset mod, so we use the
-	 * theme's actual CSS default here to match the post editor exactly.
+	 * Mirrors `--newspack-theme-font-body` (sass/variables-site/_fonts.scss).
+	 * Used when no `font_body` mod is set — newspack_font_stack() returns a
+	 * degenerate stack for an unset mod, so we use the theme's CSS default instead.
 	 *
 	 * @var string
 	 */
 	const THEME_DEFAULT_BODY_FONT = 'georgia, garamond, "Times New Roman", serif';
 
 	/**
-	 * Newspack-theme default heading font stack.
-	 *
-	 * Mirrors `--newspack-theme-font-heading` in newspack-theme's
-	 * sass/variables-site/_fonts.scss — the stack the standard post editor shows
-	 * when no `font_header` customizer mod is set.
+	 * Mirrors `--newspack-theme-font-heading` (sass/variables-site/_fonts.scss);
+	 * used when no `font_header` mod is set.
 	 *
 	 * @var string
 	 */
 	const THEME_DEFAULT_HEADER_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif';
 
 	/**
-	 * Per-request memo of resolved font stacks, keyed by post ID.
-	 *
-	 * The resolve() chain (post meta + global styles + up to four
-	 * get_theme_mod calls) is invoked from Theme_Json_Builder::build() and the
-	 * wp_theme_json_data_default filter, which fires several times per request.
-	 * The memo is request-scoped (static) and a newsletter's font meta is stable
-	 * within one request. The no-post case (post-new.php) shares a stable sentinel
-	 * key so it is memoized too.
+	 * Per-request memo of resolved font stacks, keyed by post ID (or NO_POST_MEMO_KEY).
+	 * The resolve() chain fires multiple times per request; memo avoids repeated lookups.
 	 *
 	 * @var array<int|string,array{body:string,header:string}>
 	 */
@@ -77,13 +56,12 @@ class Fonts {
 	const NO_POST_MEMO_KEY = '__no_post__';
 
 	/**
-	 * Resolve the body and header font stacks for a newsletter.
+	 * Resolve body and header font stacks for a newsletter.
 	 *
-	 * When $post is null (e.g. post-new.php before a draft exists), the per-post
-	 * meta step is skipped and resolution runs the global → theme → fallback chain,
-	 * so a brand-new newsletter's canvas still shows the resolved theme fonts.
+	 * When $post is null (e.g. post-new.php), the per-post meta step is skipped
+	 * and resolution falls through global → theme → fallback.
 	 *
-	 * @param \WP_Post|null $post Newsletter post, or null to resolve without meta.
+	 * @param \WP_Post|null $post Newsletter post, or null to skip meta resolution.
 	 * @return array{body:string,header:string} Resolved font stacks.
 	 */
 	public static function resolve( ?\WP_Post $post ): array {
@@ -113,11 +91,8 @@ class Fonts {
 	}
 
 	/**
-	 * Clear the per-request resolution memo.
-	 *
-	 * Primarily a test seam: the memo is keyed by post ID (with a stable sentinel
-	 * for the no-post case), so tests that mutate global styles or theme mods for a
-	 * reused key must reset it between cases. Harmless to call at runtime.
+	 * Clear the resolution memo. Test seam: call between cases that mutate
+	 * global styles or theme mods for a reused post ID.
 	 *
 	 * @return void
 	 */
@@ -157,13 +132,10 @@ class Fonts {
 	}
 
 	/**
-	 * Validate an explicit font meta value against the supported-fonts whitelist.
-	 *
-	 * Mirrors the builder's former resolve_font() validation so the explicit
-	 * authoring path is unchanged.
+	 * Validate a font meta value against the supported-fonts whitelist.
 	 *
 	 * @param string $font Stored font meta value.
-	 * @return string|null The font when supported, or null to fall through.
+	 * @return string|null The font if supported, or null.
 	 */
 	private static function validate_meta_font( string $font ): ?string {
 		if ( $font && \in_array( $font, \Newspack_Newsletters::$supported_fonts, true ) ) {
@@ -175,10 +147,8 @@ class Fonts {
 	/**
 	 * Resolve the global-styles font family for a side, if set.
 	 *
-	 * Reads `typography.fontFamily` (body) or
-	 * `elements.heading.typography.fontFamily` (header) from the site's global
-	 * styles. A test seam filter (`newspack_newsletters_test_global_styles`)
-	 * allows unit tests to inject a global-styles array without a live theme.
+	 * Reads typography.fontFamily (body) or elements.heading.typography.fontFamily
+	 * (header). The newspack_newsletters_test_global_styles filter is a test seam.
 	 *
 	 * @param string $side 'body' or 'header'.
 	 * @return string|null The global font family, or null when unset/unavailable.
@@ -199,11 +169,8 @@ class Fonts {
 			return null;
 		}
 
-		// Block themes often return a CSS custom property reference such as
-		// `var(--wp--preset--font-family--inter)`. The email CSS inliner and email
-		// clients can't resolve custom properties, so treat it as UNSET and fall
-		// through to the theme/fallback branch rather than emitting an unresolvable
-		// var() into the email theme.json.
+		// Block themes return CSS custom property references (e.g. var(--wp--preset--font-family--inter)).
+		// Email clients can't resolve var(), so treat it as unset and fall through.
 		if ( false !== \stripos( $value, 'var(' ) ) {
 			return null;
 		}
@@ -238,25 +205,13 @@ class Fonts {
 	/**
 	 * Resolve the active theme's font stack for a side.
 	 *
-	 * Mirrors the newspack-theme contract (sass/variables-site/_fonts.scss +
-	 * inc/typography.php), which is what the standard post editor renders:
+	 * Mirrors the newspack-theme contract: when font_body/font_header mod is set,
+	 * builds the stack via newspack_font_stack(); when unset, uses the THEME_DEFAULT_*
+	 * constants to match the post editor exactly (newspack_font_stack('','serif')
+	 * yields a degenerate stack for an unset mod). Returns null when no Newspack
+	 * theme is detected (standalone install).
 	 *
-	 *  - When the customizer `font_body`/`font_header` mod IS set, the theme
-	 *    builds the stack with newspack_font_stack( <mod>, <stack> ) — replicated
-	 *    here so a customized site matches the post editor.
-	 *  - When the mod is UNSET, the theme falls back to its CSS-var defaults
-	 *    (`--newspack-theme-font-body` / `--newspack-theme-font-heading`).
-	 *    newspack_font_stack( '', 'serif' ) would instead yield a degenerate
-	 *    `"","Georgia","serif"`, so we use the theme's actual default stacks here
-	 *    to match the post editor exactly.
-	 *
-	 * Returns null only when no Newspack theme is detected (standalone install),
-	 * so the caller falls through to the hardcoded email-safe default.
-	 *
-	 * Caveat: detection keys off function_exists( 'newspack_font_stack' ). A
-	 * non-Newspack theme (or a plugin) that defines a function by that name would
-	 * receive Newspack's font stacks rather than its own — the "matches the post
-	 * editor" guarantee holds for genuine Newspack themes.
+	 * Note: detection keys off function_exists('newspack_font_stack').
 	 *
 	 * @param string $side 'body' or 'header'.
 	 * @return string|null The theme font stack, or null when no Newspack theme.

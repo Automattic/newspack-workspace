@@ -2,18 +2,12 @@
 /**
  * Newspack override of the WC email-editor core/button renderer.
  *
- * The package renderer ignores the `is-style-outline` block style: it renders an
- * outline button identically to a filled one (solid theme background, white
- * text, no border). The editor canvas (and vanilla WP) render outline buttons as
- * transparent with a colored border and matching text.
- *
- * The button's fill colour and text colour are applied by the email CSS inliner
- * from theme.json *after* block render, so they aren't visible to a per-block
- * post-process. Instead, for outline buttons this override writes explicit
- * border / transparent-background / text-colour values onto the block's `style`
- * attribute before deferring to the package renderer. The package emits those as
- * inline styles, which beat the theme stylesheet during inlining — producing a
- * transparent button with a 2px border and text in the accent colour.
+ * The package ignores `is-style-outline` and renders outline buttons identically
+ * to filled ones. The fill/text colours are applied by the CSS inliner post-render
+ * so they can't be caught by a per-block hook. Instead, this override writes
+ * explicit border/transparent-background/text-colour values onto the block's
+ * `style` attribute before deferring to the package — the package emits them as
+ * inline styles, which beat the inliner's theme stylesheet.
  *
  * @package Newspack
  */
@@ -67,15 +61,14 @@ class Button extends Package_Button {
 	}
 
 	/**
-	 * Resolve the outline accent colour (used for the border and text).
+	 * Resolve the outline accent colour (border and text).
 	 *
-	 * A custom background colour on the button wins (a red button yields a red
-	 * outline); otherwise fall back to the theme's button background so the
-	 * outline matches the colour the filled button would have used.
+	 * A custom background on the button wins; otherwise falls back to the theme's
+	 * button background so the outline matches what the filled variant would use.
 	 *
 	 * @param array             $parsed_block      Parsed block.
 	 * @param Rendering_Context $rendering_context Rendering context.
-	 * @return string The accent colour, or '' when none can be resolved.
+	 * @return string Accent colour, or '' when none can be resolved.
 	 */
 	private static function resolve_accent( array $parsed_block, Rendering_Context $rendering_context ): string {
 		$custom = $parsed_block['attrs']['style']['color']['background'] ?? '';
@@ -90,11 +83,11 @@ class Button extends Package_Button {
 	}
 
 	/**
-	 * Write transparent-background / border / text-colour onto the block style.
+	 * Apply transparent-background, border, and text-colour styles for outline buttons.
 	 *
 	 * @param array  $parsed_block Parsed block.
 	 * @param string $accent       Resolved accent colour.
-	 * @return array The parsed block with outline styles applied.
+	 * @return array Parsed block with outline styles applied.
 	 */
 	private static function apply_outline_attrs( array $parsed_block, string $accent ): array {
 		$parsed_block['attrs']['style']['color']['background'] = 'transparent';
@@ -113,5 +106,5 @@ class Button extends Package_Button {
 	}
 }
 
-// Self-register this override so the registry discovers it via the blocks/ glob.
+// Self-register via the blocks/ glob.
 \Newspack\Newsletters\Email_Renderers\Block_Renderer_Registry::add( 'core/button', Button::class );

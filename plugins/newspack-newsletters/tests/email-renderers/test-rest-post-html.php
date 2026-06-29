@@ -18,14 +18,7 @@ class Test_REST_Post_Html extends WP_UnitTestCase {
 	const ROUTE = '/' . \Newspack_Newsletters::API_NAMESPACE . '/post-html';
 
 	/**
-	 * Enable the WC renderer flag and register the plugin's REST routes against a
-	 * fresh server instance.
-	 *
-	 * A dedicated `WP_REST_Server` is created before `rest_api_init` (the
-	 * established pattern in this plugin's REST tests) to avoid order-dependent
-	 * route registration and global state leaking between tests. `Editor_Bootstrap`
-	 * is already booted (idempotently) at plugin load, so the WC render path is
-	 * available without re-initializing it here.
+	 * Enable the WC renderer flag and register the plugin's REST routes on a fresh server instance.
 	 *
 	 * @return void
 	 */
@@ -67,10 +60,7 @@ class Test_REST_Post_Html extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An authorized request returns 200 with email-safe HTML containing the body.
-	 *
-	 * The WC engine wraps content in tables for email-client compatibility, so a
-	 * successful render both echoes the body text and emits at least one table.
+	 * An authorized request returns 200 with email-safe HTML (at least one table) containing the body text.
 	 *
 	 * @return void
 	 */
@@ -105,9 +95,7 @@ class Test_REST_Post_Html extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A request for an existing post that is not a newsletter returns a 404,
-	 * confirming the endpoint only renders the newsletter CPT and not arbitrary
-	 * post types.
+	 * A request for a non-newsletter post type returns 404 — the endpoint only renders the newsletter CPT.
 	 *
 	 * @return void
 	 */
@@ -129,12 +117,8 @@ class Test_REST_Post_Html extends WP_UnitTestCase {
 	}
 
 	/**
-	 * When the WC engine fails to render (returns an empty string), the endpoint
-	 * surfaces a 500 rather than a misleading 200 with empty HTML.
-	 *
-	 * The render failure is simulated by forcing the email-editor's theme.json
-	 * filter to throw; render_wc() swallows the throwable into an empty string,
-	 * which is exactly the failure mode the endpoint must report as an error.
+	 * When the WC engine returns '' (render failure), the endpoint surfaces 500 rather than a misleading
+	 * 200 with empty HTML. Failure is simulated by throwing in the theme.json filter.
 	 *
 	 * @return void
 	 */
@@ -161,8 +145,7 @@ class Test_REST_Post_Html extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A request from an unauthorized (logged-out) user is rejected, confirming
-	 * the route is gated by api_authoring_permissions_check.
+	 * A request from an unauthorized user is rejected (401/403) — the route is gated by api_authoring_permissions_check.
 	 *
 	 * @return void
 	 */

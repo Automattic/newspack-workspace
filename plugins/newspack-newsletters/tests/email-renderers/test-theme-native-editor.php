@@ -6,11 +6,9 @@
  */
 
 /**
- * Guard test for irreducible email-structural constraints under the WC renderer.
- *
- * These constraints must hold regardless of which theme is active or whether the
- * theme-native flag is on or off: the newsletter canvas is always capped at 600 px
- * and the allowed-block list is always restricted to email-safe blocks.
+ * Guard tests for irreducible email-structural constraints: the newsletter canvas is always
+ * capped at 600 px and the allowed-block list is always restricted to email-safe blocks,
+ * regardless of which theme is active or the theme-native flag state.
  */
 class Test_Theme_Native_Editor extends WP_UnitTestCase {
 
@@ -31,12 +29,8 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Build a minimal block-editor-settings array that mirrors what
-	 * block_editor_settings_all passes into override_email_editor_settings().
-	 *
-	 * The method inspects $editor_settings['__experimentalFeatures']['layout']
-	 * to apply the 600 px override, so that key must exist (any non-empty values
-	 * are fine — the method replaces them).
+	 * Build a minimal block-editor-settings array mirroring what block_editor_settings_all passes
+	 * to override_email_editor_settings() — the layout key is required for the 600 px override.
 	 *
 	 * @return array
 	 */
@@ -60,9 +54,7 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Build a WP_Block_Editor_Context with the newsletter post attached,
-	 * mirroring what WordPress passes to block_editor_settings_all for a
-	 * newsletter editor request.
+	 * Build a WP_Block_Editor_Context with the newsletter post attached.
 	 *
 	 * @param \WP_Post $post Newsletter post.
 	 * @return \WP_Block_Editor_Context
@@ -76,13 +68,8 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Verify that contentSize is pinned to 600 px for a newsletter CPT context.
-	 *
-	 * The override_email_editor_settings() method must force contentSize to 600 px
-	 * so the editor canvas always matches the email max-width, regardless of what
-	 * the active theme declares. This is a structural invariant: even with the
-	 * theme-native flag ON the email canvas must be 600 px wide (email clients
-	 * clip wider content).
+	 * Pins contentSize to 600 px for a newsletter CPT context — email clients clip wider content
+	 * so this is a structural invariant even with the theme-native flag ON.
 	 */
 	public function test_override_sets_content_size_to_600px_for_newsletter_post() {
 		$post     = $this->create_newsletter_post();
@@ -99,10 +86,7 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Verify that wideSize is pinned to 600 px for a newsletter CPT context.
-	 *
-	 * The override_email_editor_settings() method must force wideSize to 600 px
-	 * so a "wide" block alignment cannot exceed the 600 px email envelope.
+	 * Pins wideSize to 600 px so a "wide" block alignment cannot exceed the email envelope.
 	 */
 	public function test_override_sets_wide_size_to_600px_for_newsletter_post() {
 		$post     = $this->create_newsletter_post();
@@ -119,10 +103,7 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Verify that non-newsletter posts are not affected by the email width override.
-	 *
-	 * The override_email_editor_settings() method must be a no-op for a regular
-	 * post so that standard post editors retain their theme-supplied layout sizes.
+	 * Leaves theme-supplied sizes untouched for non-newsletter posts (the override is a no-op).
 	 */
 	public function test_override_does_not_affect_non_newsletter_post() {
 		$post_id  = self::factory()->post->create( [ 'post_type' => 'post' ] );
@@ -144,16 +125,8 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Verify that newsletters_allowed_block_types() returns an array, not true.
-	 *
-	 * Returning boolean true would allow every registered block, which is wrong
-	 * for email because many blocks (gallery, video, table-of-contents, etc.)
-	 * have no email-safe rendering path. The method must restrict to the curated
-	 * email-safe subset.
-	 *
-	 * Note: is_editing_email() uses get_the_ID() which reads from the global
-	 * $post; we prime it via setup_postdata() so the method resolves the CPT
-	 * correctly in the test environment (no HTTP request / $pagenow available).
+	 * Returns an array (not true) for newsletters — boolean true
+	 * would allow every registered block, many of which have no email-safe rendering path.
 	 */
 	public function test_allowed_block_types_returns_array_not_true_for_newsletter() {
 		$newsletter = $this->create_newsletter_post();
@@ -209,11 +182,8 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Verify that non-newsletter posts are not subject to the block restriction.
-	 *
-	 * The newsletters_allowed_block_types() method must pass through the incoming
-	 * value unchanged for post types that are not email editor CPTs, so standard
-	 * post editors retain access to all registered blocks.
+	 * Passes the incoming value through unchanged for non-newsletter
+	 * posts, leaving standard post editors access to all registered blocks.
 	 */
 	public function test_allowed_block_types_passes_through_for_non_newsletter() {
 		$post_id      = self::factory()->post->create( [ 'post_type' => 'post' ] );
@@ -301,19 +271,8 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Flag ON + block theme: strip_editor_modifications() must early-return
-	 * (i.e. NOT call remove_editor_styles) for a newsletter request.
-	 *
-	 * The invariant: when the WC renderer is active and a block theme is in use,
-	 * editor styles are preserved so the canvas reflects the theme 1:1.
-	 * We verify this by checking that remove_editor_styles had no effect —
-	 * specifically that the method returns before reaching the remove_editor_styles()
-	 * call. The cleanest observable proxy is `did_action` state: we hook a counter
-	 * onto `remove_editor_styles` equivalent (or simply assert the editor_styles
-	 * global remains non-empty after the call).
-	 *
-	 * Practical approach: add a stylesheet via add_editor_style(), call the method,
-	 * assert the stylesheet is still registered (= early-return, styles NOT stripped).
+	 * Flag ON + block theme: strip_editor_modifications() must NOT strip editor styles — verified by
+	 * adding a sentinel style and checking that editor-styles theme support survives the call.
 	 */
 	public function test_strip_does_not_run_for_block_theme_with_flag_on() {
 		$original = get_stylesheet();
@@ -348,11 +307,8 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Flag ON + classic theme: strip_editor_modifications() must run the full strip
-	 * (i.e. does NOT early-return after the block-theme guard).
-	 *
-	 * Classic themes style blocks via editor CSS that the WC email render cannot
-	 * reproduce, so stripping is correct behavior.
+	 * Flag ON + classic theme: strip_editor_modifications() runs the full strip — classic-theme editor
+	 * CSS can't be reproduced by the WC email render, so stripping is correct.
 	 */
 	public function test_strip_runs_for_classic_theme_with_flag_on() {
 		$original = get_stylesheet();
@@ -385,11 +341,7 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Flag OFF: strip_editor_modifications() must run the full strip (legacy path),
-	 * regardless of which theme type is active.
-	 *
-	 * When the WC renderer flag is off, the block-theme early-return guard is not
-	 * reached — the method falls through to the full strip unconditionally.
+	 * Flag OFF: strip_editor_modifications() runs the full strip regardless of theme type (legacy path).
 	 */
 	public function test_strip_runs_when_flag_is_off() {
 		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );

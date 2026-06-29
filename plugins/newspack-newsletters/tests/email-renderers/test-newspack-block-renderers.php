@@ -26,11 +26,8 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The posts-inserter helper renders nested blocks, leaking no delimiters.
-	 *
-	 * A child whose innerHTML carries a nested core/columns block must come back
-	 * fully rendered (the wp-block-columns markup) with no raw `<!-- wp:`
-	 * block-comment delimiters surviving into the output.
+	 * Fully processes nested blocks and leaks no raw `<!-- wp:` delimiters —
+	 * raw innerHTML is passed through do_blocks(), not concatenated.
 	 */
 	public function test_posts_inserter_renders_nested_blocks_without_delimiters() {
 		$children = [
@@ -59,10 +56,7 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The posts-inserter helper concatenates children in document order.
-	 *
-	 * Two paragraph children must render in the same order they appear in the
-	 * innerBlocksToInsert array.
+	 * Concatenates children in document order.
 	 */
 	public function test_posts_inserter_preserves_child_order() {
 		$children = [
@@ -86,12 +80,8 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The flat layout ("image on top" / no featured image) pads each block.
-	 *
-	 * There the inserted children are individual heading/paragraph/image blocks
-	 * the package stacks flush, so each must be wrapped in a 6px top/bottom padded
-	 * cell to match the editor canvas — while a side-by-side `core/columns` child
-	 * (a whole post) must NOT be wrapped (it uses the post-gap margin instead).
+	 * Flat-layout blocks (heading/paragraph/image) get 6px top/bottom padding; a columns child
+	 * (a whole post) does not — it uses the post-gap margin instead.
 	 */
 	public function test_posts_inserter_pads_flat_layout_blocks() {
 		$flat = [
@@ -129,18 +119,10 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Serialize a posts-inserter block whose innerBlocksToInsert holds the given
-	 * children, the way the block editor stores it.
+	 * Serialize a posts-inserter block with the given children exactly as the editor stores it.
 	 *
-	 * Uses serialize_block() so the children's HTML is JSON-escaped exactly as the
-	 * editor writes it (e.g. `<!-- wp:columns -->`).
-	 * Critically, the saved comment carries no raw `<` for kses to strip, so when
-	 * stored via wp_slash()+wp_insert_post the markup survives byte-for-byte and
-	 * parse_blocks() decodes each child's innerHTML back to real block delimiters.
-	 *
-	 * A naive `'<!-- wp:... ' . wp_json_encode( $attrs ) . ' /-->'` does NOT survive
-	 * kses on save (the unescaped child HTML is stripped), which is why this fixture
-	 * had to mirror the editor's escaping to reproduce the production leak.
+	 * Uses serialize_block() so child HTML is JSON-escaped — avoiding kses stripping bare `<` on
+	 * wp_insert_post. A naive wp_json_encode() approach does not survive kses on save.
 	 *
 	 * @param array $children innerBlocksToInsert child blocks (blockName/innerHTML).
 	 * @return string Serialized posts-inserter block markup.
@@ -158,10 +140,7 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Create a newsletter CPT carrying the given block markup, kses-safe.
-	 *
-	 * Slashing preserves the editor's backslash escapes through wp_insert_post so
-	 * the stored content is byte-identical to the serialized markup.
+	 * Create a newsletter CPT post with the given block markup, slashed for kses safety.
 	 *
 	 * @param string $content Serialized block markup.
 	 * @return int Created post ID.
@@ -178,19 +157,9 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A real posts-inserter render emits the child columns as email tables and
-	 * leaks no raw block-comment delimiters.
-	 *
-	 * This is the end-to-end regression for the override never wiring up in the real
-	 * WC pipeline. The posts-inserter block is registered via register_block_type()
-	 * (no metadata), so the package's `block_type_metadata_settings` filter — the
-	 * only path the registry used to set `render_email_callback` — never fired for
-	 * it. The engine then fell back to the block's own server callback, which
-	 * concatenates each child's raw innerHTML, leaking `<!-- wp:columns -->` and
-	 * never turning the columns into email tables.
-	 *
-	 * The fixture mirrors post 76: a heading child plus a nested columns child,
-	 * serialized exactly as the editor stores it (see serialize_posts_inserter).
+	 * End-to-end regression: a real posts-inserter render emits column email tables with no raw
+	 * block-comment delimiters — the fix for the block being registered without metadata so the
+	 * block_type_metadata_settings filter never wired up its render_email_callback, causing delimiter leakage.
 	 */
 	public function test_posts_inserter_integration_renders_columns() {
 		Editor_Bootstrap::init();
@@ -243,16 +212,8 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Post-item text links render underlined and inherit their element's colour
-	 * (black by default, or the block's heading/text colour); image links are left
-	 * alone.
-	 *
-	 * The package renders post title / "continue reading" links with no colour
-	 * (so they fall to the client's default blue) and no underline. Since the
-	 * posts-inserter has no post-editor equivalent, the override restyles its text
-	 * links to the MJML newsletter look — but via `color: inherit` so a custom
-	 * heading/text colour is not clobbered. Image-wrapping anchors must be
-	 * untouched.
+	 * Post-item text links render underlined with color:inherit — the package emits no colour or underline,
+	 * so the override applies them. Image-wrapping anchors are left alone.
 	 */
 	public function test_posts_inserter_styles_text_links_for_email() {
 		Editor_Bootstrap::init();
@@ -310,12 +271,8 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The share builder applies the block's background/text colours inline.
-	 *
-	 * The override builds the markup itself, so the block's chosen colours must be
-	 * set as inline styles (resolved hex) to survive into the email — with the
-	 * editor's 6px/12px padding when a background is present. With no colours the
-	 * paragraph carries no background/padding.
+	 * The share builder inlines background/text colors and applies 6px/12px padding when a
+	 * background is present; no color styles when unset.
 	 */
 	public function test_share_builder_applies_colors() {
 		$styled = Share::build_share_html( 'mailto:?body=x', 'Share this', '#003da5', '#ffffff', '44px' );
@@ -331,13 +288,8 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The share resolvers turn named theme.json presets into inline values.
-	 *
-	 * This locks in the trickiest part of the override: resolving a `backgroundColor`
-	 * /`textColor`/`fontSize` slug against the active theme.json. It also guards the
-	 * font-size edge where a preset slug carries a digit (e.g. `h1`) — which must
-	 * resolve to the preset's size, not be misread as a literal — and that an
-	 * unknown slug resolves to an empty string.
+	 * The share resolvers turn named theme.json color/fontSize presets into inline values —
+	 * including digit-bearing slugs (e.g. `h1`) and the var:preset colour form; unknown slugs resolve to ''.
 	 */
 	public function test_share_resolves_named_presets() {
 		$inject = function ( $data ) {
@@ -390,10 +342,8 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A public newsletter renders the share anchor.
-	 *
-	 * With `is_public` meta truthy the override must emit the saved share anchor
-	 * (the mailto link) into the rendered email.
+	 * A public newsletter renders the share anchor (the href is not in the block comment, so the
+	 * override must recover it from the inner HTML).
 	 */
 	public function test_share_integration_public_renders_anchor() {
 		Editor_Bootstrap::init();
@@ -422,10 +372,7 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A non-public newsletter renders no share anchor.
-	 *
-	 * Without `is_public` meta the share link points nowhere, so the override must
-	 * emit nothing for the share block.
+	 * A non-public newsletter renders no share anchor — without is_public meta the share link points nowhere.
 	 */
 	public function test_share_integration_non_public_renders_no_anchor() {
 		Editor_Bootstrap::init();

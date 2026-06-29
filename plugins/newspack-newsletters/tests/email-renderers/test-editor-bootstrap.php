@@ -40,10 +40,8 @@ class Test_Editor_Bootstrap extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The canonical newsletters CPT definition stays authoritative after the
-	 * editor bootstraps. The email-editor package re-registers every opted-in
-	 * post type on `init`, so this guards against it clobbering Newspack's
-	 * registration (public flag, labels, etc.) with the package's email defaults.
+	 * The newsletter CPT remains public with its canonical labels after the editor bootstraps —
+	 * the package re-registers opted-in CPTs on init and must not clobber Newspack's registration.
 	 */
 	public function test_canonical_cpt_args_remain_authoritative() {
 		$post_type = get_post_type_object( \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT );
