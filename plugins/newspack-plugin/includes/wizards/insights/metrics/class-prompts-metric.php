@@ -194,6 +194,19 @@ final class Prompts_Metric {
 	private BigQuery_Proxy_Client $proxy;
 
 	/**
+	 * Per-request memo of proxy query results, keyed by `query_name|start|end`.
+	 *
+	 * The influenced rate and revenue cards read the SAME hub row (the builder
+	 * returns `{rate, denominator, revenue}` together), so without this they would
+	 * dispatch the identical proxy query twice — doubling to four in comparison
+	 * mode. Memoizing per (query_name, window) lets the revenue reader reuse the
+	 * rate reader's fetch within a single request.
+	 *
+	 * @var array<string, array|\WP_Error>
+	 */
+	private array $proxy_query_cache = [];
+
+	/**
 	 * Donors_Metric collaborator (NPPD-1685). Owns the WC-native donation
 	 * storage + caching used to source the DIRECT prompt-donation metrics from
 	 * order meta. Lazily built on first direct-donation call
@@ -350,6 +363,9 @@ final class Prompts_Metric {
 			'computable'       => false,
 			'denominator'      => null,
 			'placeholder_type' => $placeholder_type,
+			// Always present so the scalar envelope is consistent across populated/error
+			// states and matches the Conversion/Gates tabs (an error is not schema drift).
+			'data_missing'     => false,
 			'error_code'       => $error->get_error_code(),
 			'error_message'    => $error->get_error_message(),
 		];
@@ -559,9 +575,15 @@ final class Prompts_Metric {
 			return $this->error_scalar( $placeholder_type, $rows );
 		}
 		$zero = 'decimal' === $placeholder_type ? 0.0 : 0;
-		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $row_key, $rows[0] ) ) {
-			// Query succeeded with no usable value → non-computable zero.
+		// Empty window: legitimately nothing to compute → non-computable zero, NOT drift.
+		if ( empty( $rows ) ) {
 			return $this->populated_scalar( $zero, false, null, $placeholder_type );
+		}
+		// Row present but malformed / missing the expected key: hub schema drift. Flag
+		// data_missing so the card warns instead of rendering a misleading zero (mirrors
+		// Conversion_Metric and the influenced readers below).
+		if ( ! is_array( $rows[0] ) || ! array_key_exists( $row_key, $rows[0] ) ) {
+			return $this->populated_scalar( $zero, false, null, $placeholder_type, true );
 		}
 		$value = $rows[0][ $row_key ];
 		// SAFE_DIVIDE returns NULL when the denominator is zero — a legitimate
@@ -583,6 +605,23 @@ final class Prompts_Metric {
 	}
 
 	/**
+	 * Dispatch a catalog query through a per-request memo so callers reading the
+	 * same hub row (e.g. the influenced rate and revenue cards) share one fetch.
+	 *
+	 * @param string            $query_name Catalog query name.
+	 * @param DateTimeInterface $start      Window start.
+	 * @param DateTimeInterface $end        Window end.
+	 * @return array|\WP_Error Proxy rows, or the proxy WP_Error (cached as-is).
+	 */
+	private function query_memoized( string $query_name, DateTimeInterface $start, DateTimeInterface $end ) {
+		$key = $query_name . '|' . $start->format( 'Ymd' ) . '|' . $end->format( 'Ymd' );
+		if ( ! array_key_exists( $key, $this->proxy_query_cache ) ) {
+			$this->proxy_query_cache[ $key ] = $this->proxy->query( $query_name, $start, $end );
+		}
+		return $this->proxy_query_cache[ $key ];
+	}
+
+	/**
 	 * Fetch the hub-internal influenced rate from the proxy and shape it into a
 	 * scalar envelope. The hub returns ONE row with the pre-computed rate,
 	 * integer denominator, and revenue — no Woo join required on the consumer.
@@ -599,7 +638,7 @@ final class Prompts_Metric {
 	 * @return array
 	 */
 	private function compute_influenced_rate_from_proxy( string $query_name, string $rate_key, string $denominator_key, DateTimeInterface $start, DateTimeInterface $end ): array {
-		$rows = $this->proxy->query( $query_name, $start, $end );
+		$rows = $this->query_memoized( $query_name, $start, $end );
 		if ( is_wp_error( $rows ) ) {
 			return $this->error_scalar( 'rate', $rows );
 		}
@@ -621,7 +660,12 @@ final class Prompts_Metric {
 		if ( ! is_numeric( $rate ) ) {
 			return $this->error_scalar( 'rate', new \WP_Error( 'bigquery_proxy_malformed_value', __( 'The query returned a non-numeric value.', 'newspack-plugin' ) ) );
 		}
-		return $this->populated_scalar( (float) $rate, $denominator > 0, $denominator, 'rate' );
+		// Defensive coherence clamp: a rate > 1 (>100%) is structurally impossible for an
+		// influenced-converter fraction (influenced ⊆ converters). The hub enforces this
+		// today, but if that invariant ever breaks we render an honest em-dash rather than a
+		// confident e.g. "143%" — `formatPercent` does not cap on the consumer side.
+		$computable = $denominator > 0 && (float) $rate <= 1.0;
+		return $this->populated_scalar( (float) $rate, $computable, $denominator, 'rate' );
 	}
 
 	/**
@@ -636,7 +680,7 @@ final class Prompts_Metric {
 	 * @return array
 	 */
 	private function compute_influenced_revenue_from_proxy( string $query_name, string $revenue_key, DateTimeInterface $start, DateTimeInterface $end ): array {
-		$rows = $this->proxy->query( $query_name, $start, $end );
+		$rows = $this->query_memoized( $query_name, $start, $end );
 		if ( is_wp_error( $rows ) ) {
 			return $this->error_scalar( 'currency', $rows );
 		}

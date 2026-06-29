@@ -265,6 +265,36 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'rate', $result['placeholder_type'] );
 	}
 
+	/**
+	 * A row is present but the expected value key is absent (hub schema drift) →
+	 * non-computable AND `data_missing` true, distinct from the empty-window case
+	 * (data_missing false). Without this, other scalars could render a misleading 0%.
+	 */
+	public function test_scalar_flags_data_missing_on_missing_key() {
+		$metric = $this->make_metric_with_proxy_returning(
+			'prompts_form_submission_rate',
+			[ [ 'some_other_key' => 1 ] ]
+		);
+		$result = $metric->get_form_submission_rate( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertTrue( $result['data_missing'] );
+	}
+
+	/**
+	 * An empty window is NOT schema drift: data_missing stays false so the card shows
+	 * an honest 0 rather than a "data missing" warning.
+	 */
+	public function test_scalar_does_not_flag_data_missing_on_empty() {
+		$metric = $this->make_metric_with_proxy_returning( 'prompts_form_submission_rate', [] );
+		$result = $metric->get_form_submission_rate( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertFalse( $result['data_missing'] );
+	}
+
 	// --- Section 4: Paid reader conversion (BQ-internal) ----------------
 
 	/**
@@ -330,6 +360,35 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 
 		$this->assertSame( 'error', $result['state'] );
 		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
+		// Envelope parity: an error scalar still carries data_missing (false — an error
+		// is not schema drift), matching the populated state and the Conversion/Gates tabs.
+		$this->assertArrayHasKey( 'data_missing', $result );
+		$this->assertFalse( $result['data_missing'] );
+	}
+
+	/**
+	 * Defensive coherence clamp: a hub rate > 1 (>100%) is structurally impossible for an
+	 * influenced-converter fraction. If the hub invariant ever breaks, the consumer renders
+	 * a non-computable em-dash rather than a confident "143%".
+	 */
+	public function test_paid_influenced_rate_clamps_above_one_to_non_computable() {
+		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+		$proxy->method( 'query' )->willReturn(
+			[
+				[
+					'donation_conversion_influenced_rate' => 1.43,
+					'conversion_denominator'              => 12,
+					'influenced_revenue'                  => 300.0,
+				],
+			]
+		);
+
+		$metric = new Prompts_Metric( $proxy );
+		$result = $metric->get_donation_conversion_influenced_14d( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'], 'a >100% rate must be non-computable, not a confident percentage' );
+		$this->assertSame( 12, $result['denominator'] );
 	}
 
 	// --- Section 5: Revenue from prompts --------------------------------
@@ -414,6 +473,53 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		$this->assertSame( 0.0, $result['value'] );
 		$this->assertFalse( $result['computable'] );
 		$this->assertSame( 'currency', $result['placeholder_type'] );
+	}
+
+	/**
+	 * Influenced revenue: a row is present but the `influenced_revenue` key is absent
+	 * (hub schema drift) → non-computable AND `data_missing` true, so the card warns
+	 * instead of rendering a misleading $0.
+	 *
+	 * @dataProvider provide_paid_revenue_methods
+	 * @param string $method     Method on Prompts_Metric to call.
+	 * @param string $query_name Catalog query name dispatched.
+	 * @param string $rate_key   Rate key present in the row (revenue key deliberately omitted).
+	 */
+	public function test_paid_revenue_flags_data_missing_on_missing_key( string $method, string $query_name, string $rate_key ) {
+		$metric = $this->make_metric_with_proxy_returning(
+			$query_name,
+			[
+				[
+					$rate_key                => 0.1,
+					'conversion_denominator' => 10,
+				],
+			]
+		);
+		$result = $metric->$method( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertTrue( $result['data_missing'], 'a row missing influenced_revenue is schema drift, not a real $0' );
+		$this->assertSame( 'currency', $result['placeholder_type'] );
+	}
+
+	/**
+	 * Influenced revenue: a non-numeric `influenced_revenue` is malformed data (not an
+	 * empty window) → state 'error' so a real data-quality regression isn't masked.
+	 *
+	 * @dataProvider provide_paid_revenue_methods
+	 * @param string $method     Method on Prompts_Metric to call.
+	 * @param string $query_name Catalog query name dispatched.
+	 */
+	public function test_paid_revenue_errors_on_non_numeric( string $method, string $query_name ) {
+		$metric = $this->make_metric_with_proxy_returning(
+			$query_name,
+			[ [ 'influenced_revenue' => 'banana' ] ]
+		);
+		$result = $metric->$method( $this->start(), $this->end() );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_value', $result['error_code'] );
 	}
 
 	/**

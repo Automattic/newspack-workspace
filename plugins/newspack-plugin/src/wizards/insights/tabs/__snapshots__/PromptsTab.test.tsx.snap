@@ -823,7 +823,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
             </h2>
           </div>
           <p>
-            Sum of Woo order totals from donations and subscriptions completed after a prompt impression. Direct totals revenue from same-session completions. Influenced totals revenue from later-session completions within 14 days of seeing a prompt.
+            Donation and subscription revenue completed after a prompt impression. Direct totals Woo order revenue from same-session completions. Influenced totals checkout revenue from later-session completions within 14 days of seeing a prompt.
           </p>
         </div>
       </div>
@@ -903,7 +903,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Sum of Woo donation order totals from later-session completions within 14 days of seeing a donation-intent prompt
+                Checkout revenue from donation completions in a later session within 14 days of seeing a donation-intent prompt
               </div>
             </div>
           </div>
@@ -993,7 +993,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Sum of Woo subscription order totals from later-session completions within 14 days of seeing a subscription-intent prompt
+                Checkout revenue from subscription completions in a later session within 14 days of seeing a subscription-intent prompt
               </div>
             </div>
           </div>
