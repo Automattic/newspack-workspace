@@ -159,7 +159,7 @@ function ProductControl( props ) {
 		return <Spinner />;
 	}
 	return (
-		<div className="newspack-checkout-button__product-field" style={ { marginBottom: '16px' } }>
+		<div className="newspack-checkout-button__product-field">
 			{ selected && ! isChanging ? (
 				<>
 					<BaseControl label={ __( 'Product', 'newspack-blocks' ) } id="selected-product-control">
@@ -338,8 +338,8 @@ function CheckoutButtonEdit( props ) {
 							</>
 						) }
 					</ProductControl>
-					<WidthControl selectedWidth={ width } setAttributes={ setAttributes } />
 					<CouponControl value={ coupon } onChange={ value => setAttributes( { coupon: value } ) } />
+					<WidthControl selectedWidth={ width } setAttributes={ setAttributes } />
 				</PanelBody>
 				<PanelBody title={ __( 'After purchase', 'newspack-blocks' ) }>
 					<RedirectAfterSuccess setAttributes={ setAttributes } attributes={ attributes } />

@@ -89,22 +89,24 @@ export default function CouponControl( { value, onChange } ) {
 
 	if ( selected && ! isChanging ) {
 		return (
-			<BaseControl label={ __( 'Coupon', 'newspack-blocks' ) } id="newspack-checkout-button-coupon">
-				<TextControl value={ selected } __next40pxDefaultSize disabled />
-				<Button variant="link" onClick={ () => setIsChanging( true ) }>
-					{ __( 'Edit', 'newspack-blocks' ) }
-				</Button>
-				<Button
-					variant="link"
-					isDestructive
-					onClick={ () => {
-						setSelected( false );
-						onChange( '' );
-					} }
-				>
-					{ __( 'Remove', 'newspack-blocks' ) }
-				</Button>
-			</BaseControl>
+			<div className="newspack-checkout-button__coupon-field">
+				<BaseControl label={ __( 'Coupon', 'newspack-blocks' ) } id="newspack-checkout-button-coupon">
+					<TextControl value={ selected } __next40pxDefaultSize disabled />
+					<Button variant="link" onClick={ () => setIsChanging( true ) }>
+						{ __( 'Edit', 'newspack-blocks' ) }
+					</Button>{ ' ' }
+					<Button
+						variant="link"
+						isDestructive
+						onClick={ () => {
+							setSelected( false );
+							onChange( '' );
+						} }
+					>
+						{ __( 'Remove', 'newspack-blocks' ) }
+					</Button>
+				</BaseControl>
+			</div>
 		);
 	}
 
@@ -121,6 +123,11 @@ export default function CouponControl( { value, onChange } ) {
 				__next40pxDefaultSize
 			/>
 			{ inFlight && <Spinner /> }
+			{ selected && (
+				<Button variant="link" onClick={ () => setIsChanging( false ) }>
+					{ __( 'Cancel', 'newspack-blocks' ) }
+				</Button>
+			) }
 		</div>
 	);
 }
