@@ -6,8 +6,9 @@
  * engaged the audience is at a high level. The "lobby" of the Insights
  * page — answers "what's the shape of my audience this period?"
  *
- * The Tab 1 data layer (GA4-first, NPPD-1648) registers its REST route
- * from {@see self::register_hooks()} via {@see \Newspack\Insights\Audience_REST_Controller}.
+ * The Tab 1 data layer (NPPD-1648, BQ-backed since NPPD-1729) registers its
+ * REST route from {@see self::register_hooks()} via
+ * {@see \Newspack\Insights\Audience_REST_Controller}.
  *
  * @package Newspack
  */

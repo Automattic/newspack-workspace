@@ -7,13 +7,13 @@
  * {@see Gates_REST_Controller}.
  *
  * Response shape:
- *   tab_error / banner_text — present (and the only keys) when GA4 isn't
- *                             connected; React renders a single connect banner.
+ *   tab_error / banner_text — present (and the only keys) when BQ returns an
+ *                             error; React renders a single connect banner.
  *   current  — keyed metric payload for the requested window.
  *   previous — same for the comparison window, or null.
  *
- * Data comes from {@see Audience_Metric}, which dispatches GA4 (v1) vs BQ
- * (v1.1, NPPD-1630) per the NEWSPACK_INSIGHTS_AUDIENCE_USE_GA4 constant.
+ * Data comes from {@see Audience_Metric}, which dispatches all metrics through
+ * the BigQuery proxy (NPPD-1729). The GA4 path has been removed.
  *
  * @package Newspack
  */
@@ -125,7 +125,7 @@ class Audience_REST_Controller extends WP_REST_Controller {
 	 */
 	public function get_audience_data( WP_REST_Request $request ) {
 		// Dev smoke-test path: serve canned fixture data so the UI renders
-		// without a GA4 connection. Never enable in production.
+		// without a BQ connection. Never enable in production.
 		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
 			$response = rest_ensure_response(
 				[
@@ -234,8 +234,8 @@ class Audience_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Assemble the top-level response. When GA4 isn't connected the metric
-	 * returns a tab_error payload, which is surfaced as the whole response.
+	 * Assemble the top-level response. When the metric returns a tab_error
+	 * payload it is surfaced as the whole response.
 	 *
 	 * @param DateTimeImmutable      $start         Current window start.
 	 * @param DateTimeImmutable      $end           Current window end.
@@ -249,11 +249,10 @@ class Audience_REST_Controller extends WP_REST_Controller {
 		?DateTimeImmutable $compare_start,
 		?DateTimeImmutable $compare_end
 	): array {
-		// Registered readers come from the local wp_users table, not GA4/BQ, so
-		// they are computed here — outside Audience_Metric::get_all()'s GA4
-		// connection gate (NPPD-1733). Attached at a stable top-level key in both
-		// response shapes so the cards render even when the rest of the tab is a
-		// connect banner.
+		// Registered readers come from the local wp_users table, not BigQuery, so
+		// they are computed here — outside Audience_Metric::get_all() (NPPD-1733).
+		// Attached at a stable top-level key in both response shapes so the cards
+		// render even when the rest of the tab is a connect banner.
 		$registered_readers = [
 			'total' => Audience_Metric::registered_readers_total(),
 			'new'   => [
