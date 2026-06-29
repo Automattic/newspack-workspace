@@ -59,6 +59,16 @@ class Newspack_UI {
 			Newspack::asset_version( 'newspack-ui' ),
 			true
 		);
+
+		wp_localize_script(
+			'newspack-ui',
+			'newspackUIData',
+			[
+				'icons' => [
+					'error' => Newspack_UI_Icons::get_svg( 'error' ),
+				],
+			]
+		);
 	}
 
 	/**
@@ -108,9 +118,12 @@ class Newspack_UI {
 						data-active-on-load="<?php echo $notice['active_on_load'] ? 'true' : 'false'; ?>"
 					>
 						<?php if ( ! $notice['autohide'] ) : ?>
-							<button class="newspack-ui__snackbar__close" aria-label="<?php esc_attr_e( 'Close', 'newspack-plugin' ); ?>" title="<?php esc_attr_e( 'Close', 'newspack-plugin' ); ?>">
+							<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost-dark newspack-ui__snackbar__close" aria-label="<?php esc_attr_e( 'Close', 'newspack-plugin' ); ?>" title="<?php esc_attr_e( 'Close', 'newspack-plugin' ); ?>">
 								<?php Newspack_UI_Icons::print_svg( 'closeSmall' ); ?>
 							</button>
+						<?php endif; ?>
+						<?php if ( 'error' === $notice['type'] ) : ?>
+							<span class="newspack-ui__snackbar__icon"><?php Newspack_UI_Icons::print_svg( 'error' ); ?></span>
 						<?php endif; ?>
 						<div class="newspack-ui__snackbar__content">
 							<?php echo wp_kses_post( $notice['message'] ); ?>
@@ -511,18 +524,37 @@ class Newspack_UI {
 					<p>"Error" notice with icon style</p>
 				</div>
 			</div>
-			<button id="show-snackbar-example" class="newspack-ui__button newspack-ui__button--primary">Show snackbar</button>
-			<div class="newspack-ui__snackbar">
-				<div id="snackbar-example" class="newspack-ui__snackbar__item" data-type="success" data-autohide="true">
-					<div class="newspack-ui__snackbar__content">This is a snackbar message</div>
-				</div>
+			<div class="newspack-ui__stack newspack-ui__stack--horizontal">
+				<button id="show-snackbar-example" class="newspack-ui__button newspack-ui__button--primary">Show snackbar</button>
+				<button id="show-snackbar-persistent" class="newspack-ui__button newspack-ui__button--secondary">Show persistent snackbar</button>
 			</div>
+			<div class="newspack-ui__snackbar"></div>
+			<template id="snackbar-persistent-template">
+				<div class="newspack-ui__snackbar__item" data-type="error" data-autohide="false">
+					<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost-dark newspack-ui__snackbar__close" aria-label="<?php esc_attr_e( 'Close', 'newspack-plugin' ); ?>" title="<?php esc_attr_e( 'Close', 'newspack-plugin' ); ?>">
+						<?php Newspack_UI_Icons::print_svg( 'closeSmall' ); ?>
+					</button>
+					<span class="newspack-ui__snackbar__icon"><?php Newspack_UI_Icons::print_svg( 'error' ); ?></span>
+					<div class="newspack-ui__snackbar__content">This snackbar stays until dismissed. Please <a href="#">take action</a>.</div>
+				</div>
+			</template>
 			<script>
 				( function() {
-					const snackbar = document.getElementById( 'snackbar-example' );
-					const button = document.getElementById( 'show-snackbar-example' );
-					button.addEventListener( 'click', function() {
-						newspackUI.notices.openNotice( snackbar, false );
+					const snackbar = document.querySelector( '.newspack-ui__snackbar' );
+					document.getElementById( 'show-snackbar-example' ).addEventListener( 'click', function() {
+						newspackUI.notices.createNotice( 'This is a snackbar message' );
+					} );
+					const template = document.getElementById( 'snackbar-persistent-template' );
+					document.getElementById( 'show-snackbar-persistent' ).addEventListener( 'click', function() {
+						const item = template.content.firstElementChild.cloneNode( true );
+						snackbar.appendChild( item );
+						item.querySelectorAll( 'a, button' ).forEach( function( el ) {
+							el.addEventListener( 'click', function() {
+								newspackUI.notices.closeNotice( item );
+							} );
+						} );
+						void item.offsetWidth;
+						newspackUI.notices.openNotice( item, true );
 					} );
 				} )();
 			</script>

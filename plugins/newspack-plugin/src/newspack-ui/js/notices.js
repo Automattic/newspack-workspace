@@ -106,9 +106,10 @@ function openNotice( element, remove = true ) {
 function closeNotice( element, remove = true ) {
 	element.classList.remove( 'active' );
 	if ( remove ) {
+		// Wait for the slide-out and slot collapse before removing from the DOM.
 		setTimeout( () => {
 			element.remove();
-		}, 250 );
+		}, 500 );
 	}
 	if ( element.dataset.noticeId ) {
 		wp.ajax.send( 'newspack_ui_notice_dismissed', {
@@ -124,7 +125,7 @@ function closeNotice( element, remove = true ) {
  * Dynamically create and show a snackbar notice.
  *
  * @param {string} message Message text to show.
- * @param {string} type    Severity; drives the ARIA announcement only ('error' announces assertively, anything else politely).
+ * @param {string} type    Severity; drives the ARIA announcement and, for 'error', shows the error icon.
  */
 function createNotice( message, type = 'success' ) {
 	let snackbar = document.querySelector( '.newspack-ui__snackbar' );
@@ -139,12 +140,23 @@ function createNotice( message, type = 'success' ) {
 	item.dataset.type = type;
 	item.setAttribute( 'data-autohide', 'true' );
 
+	const errorIcon = window.newspackUIData?.icons?.error;
+	if ( type === 'error' && errorIcon ) {
+		const icon = document.createElement( 'span' );
+		icon.classList.add( 'newspack-ui__snackbar__icon' );
+		icon.innerHTML = errorIcon;
+		item.appendChild( icon );
+	}
+
 	const content = document.createElement( 'div' );
 	content.classList.add( 'newspack-ui__snackbar__content' );
 	content.textContent = message;
 
 	item.appendChild( content );
 	snackbar.appendChild( item );
+	// Force a reflow so the off-screen start state is painted before `.active`
+	// is added, otherwise the enter transition is skipped.
+	void item.offsetWidth;
 	openNotice( item, true );
 }
 
