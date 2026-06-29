@@ -298,4 +298,37 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 		$this->assertFalse( $out['computable'] );
 		$this->assertSame( 0, $out['value'] );
 	}
+
+	/*
+	===================================================================
+	 * BQ proxy shaper tests (NPPD-1729 Task B2)
+	 * ===================================================================
+	 */
+
+	/**
+	 * traffic_sources_breakdown_via_bq passes rows through with type 'breakdown'.
+	 */
+	public function test_traffic_sources_breakdown_via_bq_passes_rows() {
+		$proxy = $this->makeProxyReturning( 'audience_traffic_sources_breakdown', [
+			[ 'channel' => 'Organic Search', 'readers' => 100 ],
+			[ 'channel' => '(direct)', 'readers' => 40 ],
+		] );
+		$out = Audience_Metric::traffic_sources_breakdown_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 'breakdown', $out['type'] );
+		$this->assertCount( 2, $out['rows'] );
+		$this->assertSame( 'Organic Search', $out['rows'][0]['channel'] );
+	}
+
+	/**
+	 * readership_by_hour_of_day_via_bq shifts UTC hours by the given offset.
+	 * UTC hour 0 with a -5h site offset maps to local hour 19.
+	 */
+	public function test_readership_by_hour_applies_timezone_offset() {
+		$proxy = $this->makeProxyReturning( 'audience_readership_by_hour_of_day', [
+			[ 'hour_of_day' => 0, 'active_readers' => 10 ],
+		] );
+		// With a -5h site offset, UTC hour 0 maps to local hour 19.
+		$out = Audience_Metric::readership_by_hour_of_day_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ), -5 );
+		$this->assertSame( 19, $out['rows'][0]['hour_of_day'] );
+	}
 }

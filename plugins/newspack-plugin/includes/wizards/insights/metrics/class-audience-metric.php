@@ -358,22 +358,34 @@ final class Audience_Metric {
 		$start = new \DateTimeImmutable( $start_date );
 		$end   = new \DateTimeImmutable( $end_date );
 		$payload = [
-			'window'                  => [ 'start' => $start_date, 'end' => $end_date ],
-			'active_readers'          => self::active_readers_via_bq( $proxy, $start, $end ),
-			'pageviews'               => self::pageviews_via_bq( $proxy, $start, $end ),
-			'avg_sessions_per_reader' => self::avg_sessions_per_reader_via_bq( $proxy, $start, $end ),
-			'newsletter_signups'      => self::newsletter_signups_via_bq( $proxy, $start, $end ),
+			'window'                             => [ 'start' => $start_date, 'end' => $end_date ],
+			// Reach.
+			'active_readers'                     => self::active_readers_via_bq( $proxy, $start, $end ),
+			'pageviews'                          => self::pageviews_via_bq( $proxy, $start, $end ),
+			'avg_sessions_per_reader'            => self::avg_sessions_per_reader_via_bq( $proxy, $start, $end ),
+			'newsletter_signups'                 => self::newsletter_signups_via_bq( $proxy, $start, $end ),
+			// Time trends.
+			'new_vs_returning_over_time'         => self::new_vs_returning_over_time_via_bq( $proxy, $start, $end ),
+			'readership_by_day_of_week'          => self::readership_by_day_of_week_via_bq( $proxy, $start, $end ),
+			'readership_by_hour_of_day'          => self::readership_by_hour_of_day_via_bq( $proxy, $start, $end ),
+			// Traffic sources.
+			'traffic_sources_breakdown'          => self::traffic_sources_breakdown_via_bq( $proxy, $start, $end ),
+			'top_campaigns'                      => self::top_campaigns_via_bq( $proxy, $start, $end ),
+			// Composition (pies only).
+			'device_breakdown'                   => self::device_breakdown_via_bq( $proxy, $start, $end ),
+			'newsletter_subscriber_composition'  => self::newsletter_subscriber_composition_via_bq( $proxy, $start, $end ),
+			'logged_in_vs_anonymous_composition' => self::logged_in_vs_anonymous_composition_via_bq( $proxy, $start, $end ),
+			'supporter_type'                     => self::supporter_type_via_bq( $proxy, $start, $end ),
+			// Geographic.
+			'top_regions'                        => self::top_regions_via_bq( $proxy, $start, $end ),
+			'top_cities'                         => self::top_cities_via_bq( $proxy, $start, $end ),
+			// Content performance.
+			'top_pages'                          => self::top_pages_via_bq( $proxy, $start, $end ),
+			'top_authors_by_reader_count'        => self::top_authors_by_reader_count_via_bq( $proxy, $start, $end ),
+			// BQ-only (hidden in v1).
+			'top_categories'                     => self::bq_only_payload( 'available when BigQuery catalog ships' ),
+			'returning_reader_rate_strict'       => self::hidden_in_v1_payload(),
 		];
-		foreach ( [
-			'new_vs_returning_over_time', 'readership_by_day_of_week', 'readership_by_hour_of_day',
-			'traffic_sources_breakdown', 'top_campaigns', 'device_breakdown',
-			'newsletter_subscriber_composition', 'logged_in_vs_anonymous_composition', 'supporter_type',
-			'top_regions', 'top_cities', 'top_pages', 'top_authors_by_reader_count',
-		] as $key ) {
-			$payload[ $key ] = self::not_implemented_payload();
-		}
-		$payload['top_categories']               = self::bq_only_payload( 'available when BigQuery catalog ships' );
-		$payload['returning_reader_rate_strict'] = self::hidden_in_v1_payload();
 		return $payload;
 	}
 
@@ -499,6 +511,183 @@ final class Audience_Metric {
 			'numerator'   => $sessions,
 			'denominator' => $readers,
 		];
+	}
+
+	/*
+	===================================================================
+	 * BigQuery breakdown / table / timeseries methods (NPPD-1729 Task B2)
+	 * ===================================================================
+	 */
+
+	/**
+	 * New vs Returning Over Time via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function new_vs_returning_over_time_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'audience_new_vs_returning_over_time', 'timeseries', $start, $end );
+	}
+
+	/**
+	 * Readership by Day of Week via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function readership_by_day_of_week_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'audience_readership_by_day_of_week', 'breakdown', $start, $end );
+	}
+
+	/**
+	 * Traffic Sources Breakdown via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function traffic_sources_breakdown_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'audience_traffic_sources_breakdown', 'breakdown', $start, $end );
+	}
+
+	/**
+	 * Top Campaigns via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function top_campaigns_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'audience_top_campaigns', 'table', $start, $end );
+	}
+
+	/**
+	 * Device Breakdown via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function device_breakdown_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'audience_device_breakdown', 'breakdown', $start, $end );
+	}
+
+	/**
+	 * Newsletter Subscriber Composition via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function newsletter_subscriber_composition_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'audience_newsletter_subscriber_composition', 'breakdown', $start, $end );
+	}
+
+	/**
+	 * Logged-In vs Anonymous Composition via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function logged_in_vs_anonymous_composition_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'audience_logged_in_vs_anonymous_composition', 'breakdown', $start, $end );
+	}
+
+	/**
+	 * Supporter Type via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function supporter_type_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'audience_supporter_type', 'breakdown', $start, $end );
+	}
+
+	/**
+	 * Top Regions via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function top_regions_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'audience_top_regions', 'table', $start, $end );
+	}
+
+	/**
+	 * Top Cities via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function top_cities_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'audience_top_cities', 'table', $start, $end );
+	}
+
+	/**
+	 * Top Pages via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function top_pages_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'audience_top_pages', 'table', $start, $end );
+	}
+
+	/**
+	 * Top Authors by Reader Count via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function top_authors_by_reader_count_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'audience_top_authors_by_reader_count', 'table', $start, $end );
+	}
+
+	/**
+	 * Readership by Hour of Day via BQ. BQ returns UTC hours; shift by the site's
+	 * whole-hour UTC offset so the chart matches the publisher's local clock.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy        Proxy client.
+	 * @param \DateTimeInterface    $start        Window start.
+	 * @param \DateTimeInterface    $end          Window end.
+	 * @param int|null              $offset_hours Whole-hour UTC offset; null = derive from wp_timezone().
+	 * @return array
+	 */
+	public static function readership_by_hour_of_day_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end, ?int $offset_hours = null ): array {
+		$payload = self::proxy_rows( $proxy, 'audience_readership_by_hour_of_day', 'breakdown', $start, $end );
+		if ( empty( $payload['rows'] ) ) {
+			return $payload;
+		}
+		if ( null === $offset_hours ) {
+			$offset_hours = (int) round( (int) wp_timezone()->getOffset( new \DateTimeImmutable( 'now' ) ) / 3600 );
+		}
+		foreach ( $payload['rows'] as &$row ) {
+			if ( isset( $row['hour_of_day'] ) ) {
+				$row['hour_of_day'] = ( (int) $row['hour_of_day'] + $offset_hours + 24 ) % 24;
+			}
+		}
+		unset( $row );
+		return $payload;
 	}
 
 	/*
