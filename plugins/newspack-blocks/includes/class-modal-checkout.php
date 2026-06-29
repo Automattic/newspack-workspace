@@ -1460,8 +1460,9 @@ final class Modal_Checkout {
 		// The transaction details table is always shown for any non-empty cart. Simple
 		// single-item carts previously hid it and relied on the static price-summary card
 		// above the form; that card was removed, so the real, deal-accurate order details
-		// must always be visible.
-		return ! \WC()->cart->is_empty();
+		// must always be visible. Guard against a missing cart (early hooks / edge AJAX).
+		$cart = \WC()->cart;
+		return $cart && ! $cart->is_empty();
 	}
 
 	/**
@@ -1749,18 +1750,18 @@ final class Modal_Checkout {
 		}
 		$cart_item_key = array_key_first( $cart->get_cart() );
 		$cart_item = $cart->get_cart_item( $cart_item_key );
-		$product_id = $cart_item['variation_id'] ? $cart_item['variation_id'] : $cart_item['product_id'];
-		$class_prefix = self::get_class_prefix();
 		?>
 			<?php
 			// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
 			$_product = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
-			if ( $_product && $_product->exists() && $cart_item['quantity'] > 0 && apply_filters( 'woocommerce_checkout_cart_item_visible', true, $cart_item, $cart_item_key ) ) :
-				// Hidden data carrier only — the visible price-summary card was removed. The modal
-				// dialog (modal.js) still reads this element's data-checkout for the RAS
-				// checkout_completed event and post-auth checkout routing.
+			// Hidden data carrier only — the visible price-summary card was removed. The modal
+			// dialog (modal.js) still reads this element's data-checkout for the RAS
+			// checkout_completed event and post-auth checkout routing. It is intentionally not
+			// gated on woocommerce_checkout_cart_item_visible (it carries data, not a visible
+			// row), so the JS anchor and analytics survive a plugin hiding the cart item.
+			if ( $_product && $_product->exists() && $cart_item['quantity'] > 0 ) :
 				?>
-				<p id="modal-checkout-product-details" data-checkout='<?php echo wp_json_encode( Checkout_Data::get_checkout_data( $cart ) ); ?>' hidden></p>
+				<p id="modal-checkout-product-details" data-checkout='<?php echo esc_attr( wp_json_encode( Checkout_Data::get_checkout_data( $cart ) ) ); ?>' hidden></p>
 				<?php
 			endif;
 			// phpcs:enable

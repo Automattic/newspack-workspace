@@ -635,7 +635,12 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 						}
 					}
 
-					$( '#modal-checkout-product-details' ).after( '<div id="checkout_details">' + html.join( '' ) + '</div>' );
+					// Anchor the summary to the hidden product-details carrier, falling back to
+					// #after_customer_details when the carrier isn't present (e.g. multi-item carts).
+					const $anchor = $( '#modal-checkout-product-details' ).length
+						? $( '#modal-checkout-product-details' )
+						: $( '#after_customer_details' );
+					$anchor.after( '<div id="checkout_details">' + html.join( '' ) + '</div>' );
 				}
 
 				/**
