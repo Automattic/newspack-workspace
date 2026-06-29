@@ -326,6 +326,65 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The share resolvers turn named theme.json presets into inline values.
+	 *
+	 * This locks in the trickiest part of the override: resolving a `backgroundColor`
+	 * /`textColor`/`fontSize` slug against the active theme.json. It also guards the
+	 * font-size edge where a preset slug carries a digit (e.g. `h1`) — which must
+	 * resolve to the preset's size, not be misread as a literal — and that an
+	 * unknown slug resolves to an empty string.
+	 */
+	public function test_share_resolves_named_presets() {
+		$inject = function ( $data ) {
+			return $data->update_with(
+				[
+					'version'  => 2,
+					'settings' => [
+						'color'      => [
+							'palette' => [
+								[
+									'slug'  => 'brand',
+									'color' => '#abcdef',
+									'name'  => 'Brand',
+								],
+							],
+						],
+						'typography' => [
+							'fontSizes' => [
+								[
+									'slug' => 'h1',
+									'size' => '77px',
+									'name' => 'H1',
+								],
+							],
+						],
+					],
+				]
+			);
+		};
+		add_filter( 'wp_theme_json_data_theme', $inject );
+		\WP_Theme_JSON_Resolver::clean_cached_data();
+
+		$resolve = function ( $method, $arg ) {
+			$reflection = new \ReflectionMethod( Share::class, $method );
+			$reflection->setAccessible( true );
+			return $reflection->invoke( null, $arg );
+		};
+
+		try {
+			$this->assertSame( '#abcdef', $resolve( 'resolve_color', 'brand' ), 'Expected a named colour preset to resolve to its hex.' );
+			$this->assertSame( '#abcdef', $resolve( 'resolve_color', 'var:preset|color|brand' ), 'Expected the var:preset colour form to resolve too.' );
+			$this->assertSame( '', $resolve( 'resolve_color', 'nope' ), 'Expected an unknown colour slug to resolve to an empty string.' );
+			$this->assertSame( '77px', $resolve( 'resolve_font_size', 'h1' ), 'Expected a digit-bearing preset slug to resolve to its size, not be read as a literal.' );
+			$this->assertSame( '44px', $resolve( 'resolve_font_size', '44px' ), 'Expected a literal size to be returned as-is.' );
+			$this->assertSame( '', $resolve( 'resolve_font_size', 'nope' ), 'Expected an unknown font-size slug to resolve to an empty string.' );
+		} finally {
+			remove_filter( 'wp_theme_json_data_theme', $inject );
+			\WP_Theme_JSON_Resolver::clean_cached_data();
+		}
+	}
+
+	/**
 	 * A public newsletter renders the share anchor.
 	 *
 	 * With `is_public` meta truthy the override must emit the saved share anchor

@@ -112,8 +112,11 @@ class Share extends Abstract_Block_Renderer {
 			$value = substr( $value, strlen( 'var:preset|color|' ) );
 		}
 		$palette = wp_get_global_settings( [ 'color', 'palette' ] );
-		$colors  = isset( $palette['theme'] ) || isset( $palette['default'] ) || isset( $palette['custom'] )
-			? array_merge( $palette['theme'] ?? [], $palette['custom'] ?? [], $palette['default'] ?? [] )
+		// Search custom → theme → default and return the first slug match, mirroring
+		// WordPress' own origin precedence (user/custom overrides theme overrides
+		// default) so a customised preset wins over a colliding theme slug.
+		$colors = isset( $palette['theme'] ) || isset( $palette['default'] ) || isset( $palette['custom'] )
+			? array_merge( $palette['custom'] ?? [], $palette['theme'] ?? [], $palette['default'] ?? [] )
 			: (array) $palette;
 		foreach ( $colors as $color ) {
 			if ( is_array( $color ) && ( $color['slug'] ?? '' ) === $value ) {
@@ -138,17 +141,22 @@ class Share extends Abstract_Block_Renderer {
 		if ( '' === $value ) {
 			return '';
 		}
-		if ( preg_match( '/[\d(]/', $value ) ) {
-			return $value;
-		}
+		// Try a named preset first — searching custom → theme → default to mirror
+		// WordPress' origin precedence — so a preset slug that happens to carry a
+		// digit (e.g. `h1`, `step-2`) isn't misread as a literal size below.
 		$sizes = wp_get_global_settings( [ 'typography', 'fontSizes' ] );
 		$list  = isset( $sizes['theme'] ) || isset( $sizes['default'] ) || isset( $sizes['custom'] )
-			? array_merge( $sizes['theme'] ?? [], $sizes['custom'] ?? [], $sizes['default'] ?? [] )
+			? array_merge( $sizes['custom'] ?? [], $sizes['theme'] ?? [], $sizes['default'] ?? [] )
 			: (array) $sizes;
 		foreach ( $list as $size ) {
 			if ( is_array( $size ) && ( $size['slug'] ?? '' ) === $value ) {
 				return (string) ( $size['size'] ?? '' );
 			}
+		}
+		// No preset matched: a value carrying a digit or `clamp(` is a literal size;
+		// anything else is an unknown slug we can't resolve.
+		if ( preg_match( '/[\d(]/', $value ) ) {
+			return $value;
 		}
 		return '';
 	}

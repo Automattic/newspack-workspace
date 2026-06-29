@@ -86,7 +86,8 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	 *    (forcing `#000000` clobbered the title's colour). Anchors are bare at this
 	 *    stage; the CSS inliner adds its styles downstream but preserves existing
 	 *    inline styles, so this wins. Image-wrapping anchors are skipped via the
-	 *    lookahead.
+	 *    `<img` lookahead, and any anchor that already carries a `style` attribute
+	 *    is skipped too (the `style=` lookahead) so we never emit a duplicate one.
 	 * 2. Block spacing: collapse the package's uniform 16px gap to META_GAP.
 	 * 3. Root padding: each child renders as a top-level block and so gets the
 	 *    email's 24px root padding again — on top of the posts-inserter block's
@@ -98,7 +99,7 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	 */
 	private static function apply_email_styles( string $html ): string {
 		$html = (string) preg_replace(
-			'/<a\b([^>]*)>(?!\s*<img)/i',
+			'/<a\b(?![^>]*\bstyle=)([^>]*)>(?!\s*<img)/i',
 			'<a$1 style="text-decoration: underline; color: inherit;">',
 			$html
 		);
