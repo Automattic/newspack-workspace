@@ -435,4 +435,56 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 			'With no post in context the override must not add the Newspack border.'
 		);
 	}
+
+	/**
+	 * The render-start pass sets render_email_callback on a non-metadata block.
+	 *
+	 * `newspack-newsletters/posts-inserter` is registered with a plain
+	 * register_block_type() (no metadata), so the `block_type_metadata_settings`
+	 * filter never fires for it and its callback is never set by the metadata path.
+	 * apply_to_registered_blocks() must fill it in directly, bound to the Newspack
+	 * Posts_Inserter renderer — the fix for the production delimiter leak.
+	 */
+	public function test_render_start_pass_sets_callback_on_non_metadata_block() {
+		$registry = \WP_Block_Type_Registry::get_instance();
+		if ( ! $registry->is_registered( 'newspack-newsletters/posts-inserter' ) ) {
+			\Newspack_Newsletters::register_blocks();
+		}
+		$block_type = $registry->get_registered( 'newspack-newsletters/posts-inserter' );
+		unset( $block_type->render_email_callback );
+
+		Block_Renderer_Registry::apply_to_registered_blocks();
+
+		$this->assertTrue( isset( $block_type->render_email_callback ), 'Expected the render-start pass to set render_email_callback on the non-metadata block.' );
+		$this->assertIsCallable( $block_type->render_email_callback, 'The render_email_callback must be callable.' );
+		$this->assertInstanceOf(
+			\Newspack\Newsletters\Email_Renderers\Blocks\Posts_Inserter::class,
+			$block_type->render_email_callback[0],
+			'The callback must be bound to the Newspack Posts_Inserter renderer.'
+		);
+	}
+
+	/**
+	 * The render-start pass never clobbers a callback the metadata path already set.
+	 *
+	 * For a metadata-registered block whose callback is already in place, the pass
+	 * must be a no-op (idempotent), leaving the existing instance untouched so the
+	 * metadata filter stays authoritative.
+	 */
+	public function test_render_start_pass_does_not_clobber_existing_callback() {
+		$registry   = \WP_Block_Type_Registry::get_instance();
+		$block_type = $registry->get_registered( 'core/column' );
+		$this->assertInstanceOf( \WP_Block_Type::class, $block_type, 'core/column must be registered for this test.' );
+
+		$sentinel                          = static function () {
+			return '';
+		};
+		$block_type->render_email_callback = $sentinel;
+
+		Block_Renderer_Registry::apply_to_registered_blocks();
+
+		$this->assertSame( $sentinel, $block_type->render_email_callback, 'Expected the existing callback to be left untouched.' );
+
+		unset( $block_type->render_email_callback );
+	}
 }
