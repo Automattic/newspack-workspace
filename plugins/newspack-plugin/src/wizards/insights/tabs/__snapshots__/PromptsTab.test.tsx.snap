@@ -487,7 +487,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Readers who registered in a later session within 7 days of seeing a prompt with a registration block ÷ readers who saw a prompt with a registration block
+                Registrants whose registration followed a registration-prompt exposure in a prior session within 7 days ÷ all new registrations
               </div>
             </div>
           </div>
@@ -577,7 +577,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Readers who signed up for a newsletter in a later session within 7 days of seeing a prompt with a newsletter block ÷ readers who saw a prompt with a newsletter block
+                New newsletter subscribers whose signup followed a newsletter-prompt exposure in a prior session within 7 days ÷ all new newsletter signups
               </div>
             </div>
           </div>

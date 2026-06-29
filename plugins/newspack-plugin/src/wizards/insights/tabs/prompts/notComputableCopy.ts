@@ -12,13 +12,13 @@
  *
  * Intent-grouped: the four conversion intents (newsletter, registration,
  * donation, subscription) each share one string across their Direct and Revenue
- * cards, plus the cross-intent form-submission case. The paid Influenced rates
- * (donation, subscription) are converter-denominated (NPPD-1822) — their
- * non-computable trigger is "no new donors/subscribers in the window", not "no
- * in-intent prompts viewed" — so they use the dedicated `*Influenced` strings.
- * Centralized here (rather than inline on each card) so the cross-tab
- * voice-and-tone audit (NPPD-1698) has a single place to review them. Strings end
- * with a period to match 1720's nudges.
+ * cards, plus the cross-intent form-submission case. All four **Influenced** rates
+ * are converter-denominated (paid: NPPD-1822; free registration/newsletter:
+ * NPPD-1824) — their non-computable trigger is "no new converters of that type in
+ * the window", not "no in-intent prompts viewed" — so they use the dedicated
+ * `*Influenced` strings. Centralized here (rather than inline on each card) so the
+ * cross-tab voice-and-tone audit (NPPD-1698) has a single place to review them.
+ * Strings end with a period to match 1720's nudges.
  */
 
 /**
@@ -33,8 +33,10 @@ export const NOT_COMPUTABLE_COPY = {
 	registration: __( 'No prompts with a registration block viewed in this timeframe.', 'newspack-plugin' ),
 	donation: __( 'No prompts with a donation block viewed in this timeframe.', 'newspack-plugin' ),
 	subscription: __( 'No subscription-intent prompts viewed in this timeframe.', 'newspack-plugin' ),
-	// Converter-denominated Influenced rates (NPPD-1822): non-computable means no new
-	// donors/subscribers in the window, not "no prompts viewed".
+	// Converter-denominated Influenced rates (paid NPPD-1822, free NPPD-1824): non-
+	// computable means no new converters of that type in the window, not "no prompts viewed".
 	donationInfluenced: __( 'No new donors in this timeframe.', 'newspack-plugin' ),
 	subscriptionInfluenced: __( 'No new subscribers in this timeframe.', 'newspack-plugin' ),
+	registrationInfluenced: __( 'No new registrations in this timeframe.', 'newspack-plugin' ),
+	newsletterInfluenced: __( 'No new newsletter signups in this timeframe.', 'newspack-plugin' ),
 };

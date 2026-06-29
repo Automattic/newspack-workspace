@@ -1054,11 +1054,13 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 	 * the Paid rate scalars — so the card can render "0 of N".
 	 *
 	 * @dataProvider provide_regwall_methods
-	 * @param string $method     Method on Gates_Metric to call.
-	 * @param string $query_name Catalog query name.
-	 * @param string $rate_key   Precomputed-rate column.
+	 * @param string $method          Method on Gates_Metric to call.
+	 * @param string $query_name      Catalog query name.
+	 * @param string $rate_key        Precomputed-rate column.
+	 * @param string $denominator_col Column holding the denominator count.
+	 * @param string $numerator_col   Column holding the numerator count.
 	 */
-	public function test_regwall_surfaces_counts_when_fields_present( string $method, string $query_name, string $rate_key ) {
+	public function test_regwall_surfaces_counts_when_fields_present( string $method, string $query_name, string $rate_key, string $denominator_col, string $numerator_col ) {
 		$proxy = $this->createMock( BigQuery_Proxy_Client::class );
 		$proxy->expects( $this->once() )
 			->method( 'query' )
@@ -1066,9 +1068,9 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 			->willReturn(
 				[
 					[
-						$rate_key                        => 0.05,
-						'registration_impressions_total' => 200,
-						'registrations_total'            => 10,
+						$rate_key        => 0.05,
+						$denominator_col => 200,
+						$numerator_col   => 10,
 					],
 				]
 			);
@@ -1190,8 +1192,11 @@ class Test_Gates_Metric extends WP_UnitTestCase {
 	 */
 	public function provide_regwall_methods(): array {
 		return [
-			'direct'     => [ 'get_regwall_conversion_direct', 'gates_regwall_conversion_direct', 'regwall_conversion_rate_direct' ],
-			'influenced' => [ 'get_regwall_conversion_influenced_7d', 'gates_regwall_conversion_influenced_7d', 'regwall_conversion_influenced' ],
+			// method, query, rate_key, denominator_col, numerator_col. NPPD-1821: the
+			// influenced query is converter-denominated, so it exposes different count
+			// columns than Direct.
+			'direct'     => [ 'get_regwall_conversion_direct', 'gates_regwall_conversion_direct', 'regwall_conversion_rate_direct', 'registration_impressions_total', 'registrations_total' ],
+			'influenced' => [ 'get_regwall_conversion_influenced_7d', 'gates_regwall_conversion_influenced_7d', 'regwall_conversion_influenced', 'new_registrations_total', 'influenced_registrations_total' ],
 		];
 	}
 

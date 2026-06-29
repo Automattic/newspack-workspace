@@ -328,10 +328,11 @@ final class Gates_Metric {
 	 *
 	 * Unlike the paywall rate (computed locally from a Woo join), the regwall rate
 	 * is precomputed server-side by the hub. This method reads that rate exactly as
-	 * `compute_metric_from_proxy` would, then *additionally* reads two integer
-	 * columns the hub query will start returning once Derrick's Newspack Manager
-	 * change ships: `registration_impressions_total` (the denominator / {N}) and
-	 * `registrations_total` (the numerator).
+	 * `compute_metric_from_proxy` would, then *additionally* reads two integer count
+	 * columns whose names vary by rate (passed via `$denominator_col` / `$numerator_col`):
+	 * the Direct query exposes `registration_impressions_total` (denominator / {N}) and
+	 * `registrations_total` (numerator); the converter-denominated Influenced query
+	 * (NPPD-1821) exposes `new_registrations_total` and `influenced_registrations_total`.
 	 *
 	 * The production-safety crux: those columns do not exist in the hub response
 	 * yet. When they are absent, this returns numerator + denominator as `null` —
@@ -343,17 +344,21 @@ final class Gates_Metric {
 	 * response (one present, one absent/non-numeric) is treated as absent so a
 	 * malformed envelope degrades rather than half-renders a count fallback.
 	 *
-	 * @param string            $query_name Catalog name (`gates_regwall_conversion_*`).
-	 * @param string            $rate_key   Column holding the precomputed rate.
-	 * @param DateTimeInterface $start      Window start.
-	 * @param DateTimeInterface $end        Window end.
+	 * @param string            $query_name      Catalog name (`gates_regwall_conversion_*`).
+	 * @param string            $rate_key        Column holding the precomputed rate.
+	 * @param DateTimeInterface $start           Window start.
+	 * @param DateTimeInterface $end             Window end.
+	 * @param string            $denominator_col Column holding the denominator count ({N}).
+	 * @param string            $numerator_col   Column holding the numerator count.
 	 * @return array
 	 */
 	private function compute_regwall_rate_from_proxy(
 		string $query_name,
 		string $rate_key,
 		DateTimeInterface $start,
-		DateTimeInterface $end
+		DateTimeInterface $end,
+		string $denominator_col = 'registration_impressions_total',
+		string $numerator_col = 'registrations_total'
 	): array {
 		$rows = $this->proxy->query( $query_name, $start, $end );
 		if ( is_wp_error( $rows ) ) {
@@ -379,10 +384,13 @@ final class Gates_Metric {
 				new \WP_Error( 'bigquery_proxy_malformed_value', __( 'The query returned a non-numeric value.', 'newspack-plugin' ) )
 			);
 		}
-		// Read the new count columns iff BOTH are present and integer-valued.
-		// Absent (pre-hub-deploy) → null counts → today's envelope, today's render.
-		$impressions = $this->read_optional_count( $row, 'registration_impressions_total' );
-		$registrations = $this->read_optional_count( $row, 'registrations_total' );
+		// Read the denominator + numerator count columns iff BOTH are present and
+		// integer-valued. Column names vary by rate: the Direct query exposes
+		// `registration_impressions_total` / `registrations_total`; the converter-
+		// denominated Influenced query (NPPD-1821) exposes `new_registrations_total` /
+		// `influenced_registrations_total`. Absent → null counts → today's envelope.
+		$impressions = $this->read_optional_count( $row, $denominator_col );
+		$registrations = $this->read_optional_count( $row, $numerator_col );
 		if ( null === $impressions || null === $registrations ) {
 			return $this->populated_scalar( (float) $value, true, null, 'rate' );
 		}
@@ -650,7 +658,10 @@ final class Gates_Metric {
 	 * @return array
 	 */
 	public function get_regwall_conversion_influenced_7d( DateTimeInterface $start, DateTimeInterface $end ): array {
-		return $this->compute_regwall_rate_from_proxy( 'gates_regwall_conversion_influenced_7d', 'regwall_conversion_influenced', $start, $end );
+		// NPPD-1821: the influenced query is converter-denominated, so its count columns
+		// are `new_registrations_total` (denominator) / `influenced_registrations_total`
+		// (numerator), not the Direct query's `registration_impressions_total` / `registrations_total`.
+		return $this->compute_regwall_rate_from_proxy( 'gates_regwall_conversion_influenced_7d', 'regwall_conversion_influenced', $start, $end, 'new_registrations_total', 'influenced_registrations_total' );
 	}
 
 	// --- Section 3: Paid reader conversion ------------------------------

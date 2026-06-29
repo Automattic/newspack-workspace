@@ -50,6 +50,10 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 		'newspack-plugin'
 	);
 	const impressionsLabel = __( 'registration gate impressions', 'newspack-plugin' );
+	// NPPD-1821: the Influenced rate is converter-denominated, so its count fallback
+	// reads "0 of N new registrations" (the denominator is all new registrations),
+	// not gate impressions like the Direct card.
+	const newRegistrationsLabel = __( 'new registrations', 'newspack-plugin' );
 
 	const impressions = current.registration_impressions_total;
 	const registrations = current.registrations_total;
@@ -127,7 +131,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 					{ ...scalarToMetricCardProps( {
 						label: __( 'Regwall Conversion (Influenced, 7d)', 'newspack-plugin' ),
 						description: __(
-							'Readers who registered in a later session within 7 days of seeing a registration gate ÷ readers who saw a registration gate',
+							'Registrants whose registration followed a registration-gate view in a prior session within 7 days ÷ all new registrations',
 							'newspack-plugin'
 						),
 						current: current.regwall_conversion_influenced_7d,
@@ -135,7 +139,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 						zeroFallback: {
 							numerator: current.regwall_conversion_influenced_7d.numerator ?? undefined,
 							denominator: current.regwall_conversion_influenced_7d.denominator ?? undefined,
-							attemptsLabel: impressionsLabel,
+							attemptsLabel: newRegistrationsLabel,
 						},
 					} ) }
 				/>

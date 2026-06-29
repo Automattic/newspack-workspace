@@ -54,13 +54,13 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Registration Conversion (Influenced, 7d)', 'newspack-plugin' ),
 					description: __(
-						'Readers who registered in a later session within 7 days of seeing a prompt with a registration block ÷ readers who saw a prompt with a registration block',
+						'Registrants whose registration followed a registration-prompt exposure in a prior session within 7 days ÷ all new registrations',
 						'newspack-plugin'
 					),
 					current: current.registration_conversion_influenced_7d,
 					previous: previous?.registration_conversion_influenced_7d,
 					notCapableMessage: NOT_CAPABLE_COPY.registration,
-					notComputableMessage: NOT_COMPUTABLE_COPY.registration,
+					notComputableMessage: NOT_COMPUTABLE_COPY.registrationInfluenced,
 				} ) }
 			/>
 			<MetricCard
@@ -80,13 +80,13 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Newsletter Signup Conversion (Influenced, 7d)', 'newspack-plugin' ),
 					description: __(
-						'Readers who signed up for a newsletter in a later session within 7 days of seeing a prompt with a newsletter block ÷ readers who saw a prompt with a newsletter block',
+						'New newsletter subscribers whose signup followed a newsletter-prompt exposure in a prior session within 7 days ÷ all new newsletter signups',
 						'newspack-plugin'
 					),
 					current: current.newsletter_signup_conversion_influenced_7d,
 					previous: previous?.newsletter_signup_conversion_influenced_7d,
 					notCapableMessage: NOT_CAPABLE_COPY.newsletter,
-					notComputableMessage: NOT_COMPUTABLE_COPY.newsletter,
+					notComputableMessage: NOT_COMPUTABLE_COPY.newsletterInfluenced,
 				} ) }
 			/>
 		</div>
