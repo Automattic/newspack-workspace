@@ -25,6 +25,12 @@ class Group_Subscription_API {
 	 * Register REST API routes.
 	 */
 	public static function register_routes() {
+		// The group management REST routes back the reader-facing My Account UX
+		// and the admin meta box, both gated behind the Access Control feature
+		// flag. Don't register the routes on un-migrated sites.
+		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
+			return;
+		}
 		\register_rest_route(
 			self::NAMESPACE,
 			'/search-users',
