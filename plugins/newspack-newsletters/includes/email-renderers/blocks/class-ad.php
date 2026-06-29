@@ -43,6 +43,13 @@ defined( 'ABSPATH' ) || exit;
 class Ad extends Abstract_Block_Renderer {
 
 	/**
+	 * Ad post IDs currently on the render stack, used to break ad→ad cycles.
+	 *
+	 * @var int[]
+	 */
+	private static $render_stack = array();
+
+	/**
 	 * Render the ad block.
 	 *
 	 * Resolves the ad post (by direct ID, placement ID, or auto-selection),
@@ -63,18 +70,35 @@ class Ad extends Abstract_Block_Renderer {
 			return '';
 		}
 
-		// Mark the ad as inserted so auto-selection skips it on the next ad
-		// block and tracking counts each ad once — mirrors the MJML renderer.
-		$newsletter = Renderer_Controller::get_rendering_post();
-		if ( $newsletter instanceof \WP_Post ) {
-			Ads::mark_ad_inserted( $newsletter->ID, $ad_post->ID );
+		// Break ad-reference cycles. An ad's content can itself embed an ad block,
+		// which re-enters this renderer via do_blocks(); a self- or mutually-
+		// referencing ad would otherwise recurse until it blanks the whole render.
+		// If this ad is already on the render stack, stop here.
+		if ( in_array( $ad_post->ID, self::$render_stack, true ) ) {
+			return '';
 		}
 
 		// Render the ad post's block content through the currently-active WC
 		// email pipeline. Content_Renderer::initialize() hooks render_block at
 		// priority 10 for the duration of render_wc(), so do_blocks() here
 		// routes each inner block through email-specific renderers automatically.
-		return (string) do_blocks( $ad_post->post_content );
+		self::$render_stack[] = $ad_post->ID;
+		try {
+			$html = (string) do_blocks( $ad_post->post_content );
+		} finally {
+			array_pop( self::$render_stack );
+		}
+
+		// Mark the ad as inserted *after* rendering (mirroring the MJML renderer)
+		// so a render that throws never persists a phantom insertion, while
+		// auto-selection still skips this ad on a later block and tracking counts
+		// it once.
+		$newsletter = Renderer_Controller::get_rendering_post();
+		if ( $newsletter instanceof \WP_Post ) {
+			Ads::mark_ad_inserted( $newsletter->ID, $ad_post->ID );
+		}
+
+		return $html;
 	}
 
 	/**
@@ -84,7 +108,9 @@ class Ad extends Abstract_Block_Renderer {
 	 * `render_mjml_component()` case for `newspack-newsletters/ad`:
 	 *
 	 * 1. `placement:<term_id>` — look up the ad assigned to that placement.
-	 * 2. Non-empty string (numeric post ID) — fetch directly via get_post().
+	 * 2. Non-empty string (numeric post ID) — fetch directly, but only return it
+	 *    when it is an active post of the ads CPT, so a stale or wrong id can't
+	 *    leak an arbitrary post's content into a sent email.
 	 * 3. Empty / absent — auto-select the first un-inserted active ad for
 	 *    the newsletter currently being rendered.
 	 *
@@ -104,10 +130,17 @@ class Ad extends Abstract_Block_Renderer {
 			return $post instanceof \WP_Post ? $post : null;
 		}
 
-		// 2. Direct post ID.
+		// 2. Direct post ID — only an active ad of the ads CPT, so a stale or wrong
+		// id renders empty (matching the unknown-ID contract) rather than leaking
+		// an arbitrary post's content into the email.
 		if ( '' !== $ad_id ) {
 			$post = get_post( (int) $ad_id );
-			return $post instanceof \WP_Post ? $post : null;
+			if ( ! $post instanceof \WP_Post || Ads::CPT !== $post->post_type ) {
+				return null;
+			}
+			$newsletter = Renderer_Controller::get_rendering_post();
+			$nl_id      = $newsletter instanceof \WP_Post ? $newsletter->ID : null;
+			return Ads::is_ad_active( $post->ID, $nl_id ) ? $post : null;
 		}
 
 		// 3. Auto-select the first un-inserted active ad for this newsletter.

@@ -183,4 +183,129 @@ class Test_Ad_Block extends WP_UnitTestCase {
 			'Expected auto-inserted ad content to appear in the WC-rendered newsletter.'
 		);
 	}
+
+	/**
+	 * Auto-inserted ads still render when the post cache is cold.
+	 *
+	 * The renderer feeds the filtered (ad-injected) content to the package via a
+	 * render-scoped `the_content` filter rather than swapping the shared `posts`
+	 * cache entry. This regression test busts the cache for the newsletter before
+	 * rendering — the old cache-swap approach silently dropped the ad here because
+	 * `wp_cache_replace()` is a no-op on a missing key.
+	 */
+	public function test_auto_inserted_ad_renders_on_cold_post_cache() {
+		$this->create_ad_post( 'COLD CACHE AD TEXT' );
+
+		$newsletter_id = self::factory()->post->create(
+			[
+				'post_type'    => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_status'  => 'draft',
+				'post_title'   => 'Cold cache newsletter',
+				'post_content' => '<!-- wp:paragraph --><p>Article content.</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$newsletter = get_post( $newsletter_id );
+		// Force the package's internal get_post() to miss the cache and read the
+		// canonical (un-injected) content from the database.
+		clean_post_cache( $newsletter_id );
+		wp_cache_delete( $newsletter_id, 'posts' );
+
+		$html = Renderer_Controller::render_wc( $newsletter );
+
+		$this->assertStringContainsString(
+			'COLD CACHE AD TEXT',
+			$html,
+			'Expected the auto-inserted ad to render even with a cold post cache.'
+		);
+	}
+
+	// ------------------------------------------------------------------
+	// Direct-ID guards: only an active ad of the ads CPT may render
+	// ------------------------------------------------------------------
+
+	/**
+	 * An ad block pointing at a non-ad post renders nothing.
+	 *
+	 * The direct-ID path must confirm the resolved post is of the ads CPT, so a
+	 * stale or wrong id can't leak an arbitrary post's content into the email.
+	 */
+	public function test_direct_id_non_ad_post_renders_empty() {
+		$plain_id = self::factory()->post->create(
+			[
+				'post_type'    => 'post',
+				'post_status'  => 'publish',
+				'post_title'   => 'Regular article',
+				'post_content' => '<!-- wp:paragraph --><p>SECRET ARTICLE BODY</p><!-- /wp:paragraph -->',
+			]
+		);
+
+		$html = $this->render_newsletter( '<!-- wp:newspack-newsletters/ad {"adId":"' . $plain_id . '"} /-->' );
+
+		$this->assertStringNotContainsString(
+			'SECRET ARTICLE BODY',
+			$html,
+			'Expected a non-ad post pointed at by adId to render nothing.'
+		);
+	}
+
+	/**
+	 * An ad block pointing at an expired ad renders nothing.
+	 *
+	 * The direct-ID path runs the same `is_ad_active()` check as auto-select, so an
+	 * ad past its expiry date is skipped instead of rendered.
+	 */
+	public function test_direct_id_inactive_ad_renders_empty() {
+		$ad_post = $this->create_ad_post( 'EXPIRED AD TEXT' );
+		update_post_meta( $ad_post->ID, 'expiry_date', '2000-01-01' );
+
+		$html = $this->render_newsletter( '<!-- wp:newspack-newsletters/ad {"adId":"' . $ad_post->ID . '"} /-->' );
+
+		$this->assertStringNotContainsString(
+			'EXPIRED AD TEXT',
+			$html,
+			'Expected an expired ad pointed at by adId to render nothing.'
+		);
+	}
+
+	/**
+	 * A self-referencing ad renders once and does not blank the newsletter.
+	 *
+	 * An ad whose content embeds an ad block for itself re-enters the renderer;
+	 * the render-stack cycle guard must stop the recursion so the ad's own content
+	 * still renders (once) rather than recursing until the whole render is empty.
+	 */
+	public function test_cyclic_ad_reference_renders_without_blanking() {
+		// Create the ad, then point its embedded ad block at its own ID.
+		$ad_id = self::factory()->post->create(
+			[
+				'post_type'   => Ads::CPT,
+				'post_status' => 'publish',
+				'post_title'  => 'Self-referencing ad',
+			]
+		);
+		wp_update_post(
+			[
+				'ID'           => $ad_id,
+				'post_content' => '<!-- wp:paragraph --><p>CYCLE AD MARKER</p><!-- /wp:paragraph -->'
+					. '<!-- wp:newspack-newsletters/ad {"adId":"' . $ad_id . '"} /-->',
+			]
+		);
+
+		$html = $this->render_newsletter(
+			'<!-- wp:paragraph --><p>Intro.</p><!-- /wp:paragraph -->'
+			. '<!-- wp:newspack-newsletters/ad {"adId":"' . $ad_id . '"} /-->'
+			. '<!-- wp:paragraph --><p>Outro.</p><!-- /wp:paragraph -->'
+		);
+
+		// The surrounding content renders, and the ad marker appears exactly once
+		// (the nested self-reference is stopped by the cycle guard).
+		$this->assertStringContainsString( 'Intro.', $html, 'Expected the intro paragraph to render.' );
+		$this->assertStringContainsString( 'Outro.', $html, 'Expected the outro paragraph to render.' );
+		$this->assertSame(
+			1,
+			substr_count( $html, 'CYCLE AD MARKER' ),
+			'Expected the self-referencing ad to render its content exactly once.'
+		);
+	}
 }

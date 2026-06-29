@@ -94,22 +94,39 @@ class Renderer_Controller {
 			return '';
 		}
 
+		// Reset the per-newsletter ad-insertion tracking before this render. The
+		// tracking static (Ads::$inserted_ads) is process-global and otherwise
+		// never cleared within a request, so a second render of the same
+		// newsletter in one request (e.g. preview then send) would find every ad
+		// already "inserted" and silently drop it.
+		if ( class_exists( '\Newspack_Newsletters\Ads' ) && method_exists( '\Newspack_Newsletters\Ads', 'reset_inserted_ads' ) ) {
+			\Newspack_Newsletters\Ads::reset_inserted_ads( $post->ID );
+		}
+
 		// Apply the `newspack_newsletters_newsletter_content` filter so that
 		// auto-injected ad blocks (inserted by Ads::filter_newsletter_content())
 		// appear in the content before the WC renderer parses it — mirroring
 		// what the MJML renderer does via the same filter.
 		//
-		// WordPress's in-memory object cache clones WP_Post objects on every
-		// get_post() call (WP_Object_Cache::get() clones before returning), so
-		// mutating $post->post_content here does NOT affect what Post_Content::
-		// render_stateless() reads when it calls get_post($post->ID) internally.
-		// The only reliable way to feed it the filtered content is to temporarily
-		// replace the cache entry with a clone carrying the new content, then
-		// restore the original in the finally block.
-		$filtered_content = (string) apply_filters( 'newspack_newsletters_newsletter_content', $post->post_content, $post );
-		$render_post      = clone $post;
+		// Feed that filtered content to the package WITHOUT mutating the shared
+		// object cache. The package's stateless post-content renderer re-fetches
+		// the newsletter by ID (get_post) and runs its raw content through the
+		// `the_content` filter, so we intercept that one pass — matched by post ID
+		// and scoped to this render — and substitute the filtered markup. A
+		// previous approach swapped the `posts` cache entry, but `posts` is a
+		// persistent group here (memcached/Redis), so the ad-injected clone was
+		// visible to any concurrent request that read the post mid-render. This
+		// filter is request-local and never touches the shared cache.
+		$filtered_content          = (string) apply_filters( 'newspack_newsletters_newsletter_content', $post->post_content, $post );
+		$render_post               = clone $post;
 		$render_post->post_content = $filtered_content;
-		wp_cache_replace( $post->ID, $render_post, 'posts' );
+
+		$inject_content = static function ( $content ) use ( $post, $filtered_content ) {
+			return ( isset( $GLOBALS['post'] ) && $GLOBALS['post'] instanceof \WP_Post && (int) $GLOBALS['post']->ID === (int) $post->ID )
+				? $filtered_content
+				: $content;
+		};
+		add_filter( 'the_content', $inject_content, 0 );
 
 		// Save/restore rather than clear so a nested render_wc() (post B mid-render
 		// of post A) leaves the outer render's post intact when the inner one returns.
@@ -133,9 +150,7 @@ class Renderer_Controller {
 			return '';
 		} finally {
 			self::$rendering_post = $previous;
-			// Restore the original post in the cache so nothing outside this
-			// render sees the temporary filtered content.
-			wp_cache_replace( $post->ID, $post, 'posts' );
+			remove_filter( 'the_content', $inject_content, 0 );
 		}
 	}
 
