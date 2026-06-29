@@ -331,4 +331,43 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 		$out = Audience_Metric::readership_by_hour_of_day_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ), -5 );
 		$this->assertSame( 19, $out['rows'][0]['hour_of_day'] );
 	}
+
+	/*
+	===================================================================
+	 * BQ proxy shaper tests (NPPD-1729 Task B3 — hidden metrics enabled)
+	 * ===================================================================
+	 */
+
+	/**
+	 * top_categories_via_bq passes rows through with type 'table'.
+	 */
+	public function test_top_categories_via_bq_enabled() {
+		$proxy = $this->makeProxyReturning( 'audience_top_categories', [ [ 'category' => 'Politics', 'unique_readers' => 50, 'pageviews' => 120 ] ] );
+		$out   = Audience_Metric::top_categories_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 'table', $out['type'] );
+		$this->assertSame( 'Politics', $out['rows'][0]['category'] );
+	}
+
+	/**
+	 * returning_reader_rate_via_bq shapes a single-row rate into a
+	 * { value, computable, type: 'rate' } payload.
+	 */
+	public function test_returning_reader_rate_via_bq_enabled() {
+		$proxy = $this->makeProxyReturning( 'audience_returning_reader_rate', [ [ 'returning_reader_rate' => 0.42 ] ] );
+		$out   = Audience_Metric::returning_reader_rate_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 0.42, $out['value'] );
+		$this->assertTrue( $out['computable'] );
+		$this->assertSame( 'rate', $out['type'] );
+	}
+
+	/**
+	 * Guard: no GA4 constant, no _via_ga4 methods, no safe_run_report remain in
+	 * class-audience-metric.php after the GA4 path has been deleted.
+	 */
+	public function test_no_ga4_constant_or_methods_remain() {
+		$src = file_get_contents( NEWSPACK_ABSPATH . 'includes/wizards/insights/metrics/class-audience-metric.php' );
+		$this->assertStringNotContainsString( 'NEWSPACK_INSIGHTS_AUDIENCE_USE_GA4', $src );
+		$this->assertStringNotContainsString( '_via_ga4', $src );
+		$this->assertStringNotContainsString( 'safe_run_report', $src );
+	}
 }
