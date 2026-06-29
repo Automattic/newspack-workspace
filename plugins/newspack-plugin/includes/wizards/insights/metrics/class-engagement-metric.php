@@ -264,7 +264,7 @@ final class Engagement_Metric {
 	 * @param BigQuery_Proxy_Client $proxy      Proxy client.
 	 * @param string                $query_name Catalog query name.
 	 * @param string                $column     Column to read from the first row.
-	 * @param string                $type       'count' | 'decimal'.
+	 * @param string                $type       'count' | 'decimal' | 'duration' | 'rate'.
 	 * @param \DateTimeInterface    $start      Window start.
 	 * @param \DateTimeInterface    $end        Window end.
 	 * @return array
@@ -363,7 +363,7 @@ final class Engagement_Metric {
 	 * @return array
 	 */
 	public static function avg_engaged_session_duration_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
-		return self::proxy_scalar( $proxy, 'engagement_avg_engaged_session_duration', 'avg_engaged_session_duration_sec', 'decimal', $start, $end );
+		return self::proxy_scalar( $proxy, 'engagement_avg_engaged_session_duration', 'avg_engaged_session_duration_sec', 'duration', $start, $end );
 	}
 
 	/**

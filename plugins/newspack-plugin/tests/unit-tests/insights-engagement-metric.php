@@ -326,14 +326,16 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * avg_engaged_session_duration_via_bq shapes into a decimal scalar payload.
+	 * avg_engaged_session_duration_via_bq shapes into a duration scalar payload
+	 * (matches the GA4 path's 'duration' type so the frontend formats it as a
+	 * time, not a raw number — zero-UI-change parity).
 	 */
-	public function test_avg_engaged_session_duration_via_bq_shapes_decimal() {
+	public function test_avg_engaged_session_duration_via_bq_shapes_duration() {
 		$proxy = $this->makeProxyReturning( 'engagement_avg_engaged_session_duration', [ [ 'avg_engaged_session_duration_sec' => 120.5 ] ] );
 		$out   = Engagement_Metric::avg_engaged_session_duration_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
 		$this->assertSame( 120.5, $out['value'] );
 		$this->assertTrue( $out['computable'] );
-		$this->assertSame( 'decimal', $out['type'] );
+		$this->assertSame( 'duration', $out['type'] );
 	}
 
 	/**
