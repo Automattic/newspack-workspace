@@ -549,6 +549,19 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Prompts_REST_Controller overrides cache_schema_version() with Prompts_Metric::CACHE_PREFIX
+	 * (tab5_v2), so bumping the prefix on a response-shape change busts stale-shape
+	 * transients on deploy.
+	 */
+	public function test_prompts_controller_cache_version_is_tab5_v2_prefix() {
+		$controller = new Prompts_REST_Controller();
+		$ref        = new \ReflectionMethod( $controller, 'cache_schema_version' );
+		$ref->setAccessible( true );
+		$this->assertSame( Prompts_Metric::CACHE_PREFIX, $ref->invoke( $controller ) );
+		$this->assertStringContainsString( 'v2', Prompts_Metric::CACHE_PREFIX );
+	}
+
+	/**
 	 * NPPD-1745 #5 drift guard: every state-bearing metric that build_window()
 	 * emits must have a METRIC_SOURCES entry. is_window_all_error() iterates
 	 * METRIC_SOURCES, so a card added to the window but never classified in the map

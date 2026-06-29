@@ -56,6 +56,15 @@ class Prompts_REST_Controller extends WP_REST_Controller {
 	protected $rest_base = 'prompts';
 
 	/**
+	 * Bust cached responses when the Tab 5 response shape changes.
+	 *
+	 * @return string
+	 */
+	protected function cache_schema_version(): string {
+		return Prompts_Metric::CACHE_PREFIX;
+	}
+
+	/**
 	 * Cache source classification for this controller.
 	 *
 	 * @return string

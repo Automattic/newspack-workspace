@@ -46,6 +46,7 @@ const scalar = ( placeholder_type: PromptsPlaceholderType ): PromptsScalarMetric
 	computable: false,
 	denominator: null,
 	placeholder_type,
+	data_missing: false,
 } );
 
 const errorScalar = ( placeholder_type: PromptsPlaceholderType ): PromptsScalarMetric => ( {
@@ -54,6 +55,7 @@ const errorScalar = ( placeholder_type: PromptsPlaceholderType ): PromptsScalarM
 	computable: false,
 	denominator: null,
 	placeholder_type,
+	data_missing: false,
 	error_code: 'bq_unavailable',
 	error_message: 'BigQuery is unavailable.',
 } );

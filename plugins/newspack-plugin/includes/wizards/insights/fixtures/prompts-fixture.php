@@ -84,6 +84,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 				'computable'       => false,
 				'denominator'      => null,
 				'placeholder_type' => $type,
+				'data_missing'     => false,
 				'error_code'       => 'bigquery_proxy_http_error',
 				'error_message'    => 'HTTP 500',
 			];
@@ -120,6 +121,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 				'computable'       => false,
 				'denominator'      => 'rate' === $type ? 0 : null,
 				'placeholder_type' => $type,
+				'data_missing'     => false,
 			];
 		}
 		$current['conversion_funnel']        = [
@@ -157,6 +159,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 			'computable'       => true,
 			'denominator'      => $denominator,
 			'placeholder_type' => $type,
+			'data_missing'     => false,
 		];
 	};
 

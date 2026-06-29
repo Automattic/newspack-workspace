@@ -43,6 +43,9 @@ export interface PromptsErrorFields {
 /**
  * Standard scorecard metric payload. `state` is 'error' or 'populated'
  * (an absent value is a non-computable zero, not an 'empty' state).
+ * `data_missing` flags a non-computable zero caused by a hub row missing
+ * required column(s) (schema drift) so the card can warn instead of showing
+ * a misleading zero. Mirrors `ConversionScalarMetric` and `GatesScalarMetric`.
  */
 export interface PromptsScalarMetric extends PromptsErrorFields {
 	state: 'error' | 'populated';
@@ -50,6 +53,7 @@ export interface PromptsScalarMetric extends PromptsErrorFields {
 	computable: boolean;
 	denominator: number | null;
 	placeholder_type: PromptsPlaceholderType;
+	data_missing: boolean;
 	/**
 	 * Per-intent capability gate (NPPD-1720). Present only on the 13
 	 * conversion-tied scalars; `false` when no active prompt contains the block

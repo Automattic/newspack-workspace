@@ -1,10 +1,11 @@
 /**
  * RevenueFromPromptsSection (NPPD-1607, Section 5).
  *
- * Four scorecards summing Woo order totals from donations and
- * subscriptions completed after a prompt impression, in Direct and
- * Influenced (14-day lookback) attribution. Revenue is computed from
- * actual Woo orders, not prompt-event amounts.
+ * Four scorecards for donation and subscription revenue completed after a
+ * prompt impression, in Direct and Influenced (14-day lookback) attribution.
+ * Direct revenue sums actual Woo order totals (order meta). Influenced revenue
+ * is hub-computed (BQ-internal) from the checkout `amount` of the influenced
+ * conversion events — no Woo join on the consumer.
  */
 
 /**
@@ -33,7 +34,7 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 			id="newspack-insights-prompts-revenue-heading"
 			title={ __( 'Revenue from prompts', 'newspack-plugin' ) }
 			description={ __(
-				'Sum of Woo order totals from donations and subscriptions completed after a prompt impression. Direct totals revenue from same-session completions. Influenced totals revenue from later-session completions within 14 days of seeing a prompt.',
+				'Donation and subscription revenue completed after a prompt impression. Direct totals Woo order revenue from same-session completions. Influenced totals checkout revenue from later-session completions within 14 days of seeing a prompt.',
 				'newspack-plugin'
 			) }
 		/>
@@ -55,7 +56,7 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Donation Revenue (Influenced, 14d)', 'newspack-plugin' ),
 					description: __(
-						'Sum of Woo donation order totals from later-session completions within 14 days of seeing a donation-intent prompt',
+						'Checkout revenue from donation completions in a later session within 14 days of seeing a donation-intent prompt',
 						'newspack-plugin'
 					),
 					current: current.donation_revenue_influenced_14d,
@@ -84,7 +85,7 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Subscription Revenue (Influenced, 14d)', 'newspack-plugin' ),
 					description: __(
-						'Sum of Woo subscription order totals from later-session completions within 14 days of seeing a subscription-intent prompt',
+						'Checkout revenue from subscription completions in a later session within 14 days of seeing a subscription-intent prompt',
 						'newspack-plugin'
 					),
 					current: current.subscription_revenue_influenced_14d,

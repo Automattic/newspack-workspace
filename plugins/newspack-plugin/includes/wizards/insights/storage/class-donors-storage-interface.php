@@ -371,12 +371,11 @@ interface Donors_Storage_Interface {
 
 	/**
 	 * Prompt-attributed completed donation conversions in a window, sourced from
-	 * order meta (`_newspack_popup_id`) rather than the GA4 attempt → customer_id
-	 * join (NPPD-1685). The originating prompt id is written onto the order at
-	 * checkout ({@see \Newspack\Donations::checkout_create_order_line_item()}),
-	 * alongside a real `customer_id` and total — so this captures the
-	 * anonymous-at-attempt donors the {@see \Newspack\Insights\Woo_Order_Resolver}
-	 * join silently dropped.
+	 * order meta (`_newspack_popup_id`) (NPPD-1685). The originating prompt id is
+	 * written onto the order at checkout
+	 * ({@see \Newspack\Donations::checkout_create_order_line_item()}), alongside a
+	 * real `customer_id` and total — capturing anonymous-at-attempt donors that
+	 * GA4-based customer_id joins would silently drop.
 	 *
 	 * Scope: INITIAL completed/processing donation orders only — recurring renewal
 	 * orders inherit the parent's `_newspack_popup_id` and are excluded via

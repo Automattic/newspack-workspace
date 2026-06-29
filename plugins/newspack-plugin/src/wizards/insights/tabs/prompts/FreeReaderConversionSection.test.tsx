@@ -22,6 +22,7 @@ const scalar = ( over: Partial< PromptsScalarMetric > = {} ): PromptsScalarMetri
 	computable: false,
 	denominator: null,
 	placeholder_type: 'rate',
+	data_missing: false,
 	...over,
 } );
 
