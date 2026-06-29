@@ -2,11 +2,11 @@
 /**
  * Newspack Insights — Engagement Metric orchestrator (Tab 2, NPPD-1648).
  *
- * Composes GA4 Data API `runReport` bodies (translated from
- * `~/Sites/insights-docs/formulas/tab-2-engagement.md`) and returns
- * MetricCard-ready payloads. Dispatches between GA4 (v1, default) and the
- * BigQuery proxy (v1.1, NPPD-1630 — stubbed here) per the
- * `NEWSPACK_INSIGHTS_ENGAGEMENT_USE_GA4` constant (default true).
+ * Returns MetricCard-ready payloads for all Engagement tab metrics via the
+ * BigQuery proxy client (NPPD-1729). All 10 visible metrics and the 3
+ * previously-hidden metrics are now dispatched through BQ. The GA4 path has
+ * been removed (NPPD-1729 Task B5). `article_freshness_vs_engagement` remains
+ * hidden in v1.
  *
  * The three box-plot distributions from the original Tab 2 design are cut
  * from the spec entirely and intentionally absent here.
@@ -16,7 +16,6 @@
 
 namespace Newspack\Insights;
 
-use Newspack\Insights\GA4\Client;
 use Newspack\Insights\BigQuery_Proxy_Client;
 
 defined( 'ABSPATH' ) || exit;
@@ -41,18 +40,11 @@ final class Engagement_Metric {
 	const NEWSLETTER_SESSION_FLOOR = 100;
 
 	/**
-	 * Session mediums that count as newsletter traffic. Everything else is "other".
+	 * Channel names (case-insensitive) that count as newsletter traffic. Everything
+	 * else is "other". The BQ query groups by channel (e.g. "Email") rather than the
+	 * raw sessionMedium dimension, so we match on channel label.
 	 */
-	const NEWSLETTER_MEDIUMS = [ 'email', 'newsletter' ];
-
-	/**
-	 * Whether this tab uses the GA4 path. Default true.
-	 *
-	 * @return bool
-	 */
-	private static function use_ga4(): bool {
-		return ! defined( 'NEWSPACK_INSIGHTS_ENGAGEMENT_USE_GA4' ) || NEWSPACK_INSIGHTS_ENGAGEMENT_USE_GA4;
-	}
+	const NEWSLETTER_CHANNELS = [ 'email', 'newsletter' ];
 
 	/**
 	 * Resolve the GA4 property ID.
@@ -68,40 +60,29 @@ final class Engagement_Metric {
 	}
 
 	/**
-	 * Build the per-window transient cache key. Includes the GA4 property ID so
-	 * that a reconnect to a different property never serves the previous
-	 * property's cached payload within the TTL.
+	 * Build the per-window transient cache key. Uses a 'bq' backend suffix so
+	 * existing GA4-keyed transients never collide after the path switch. Includes
+	 * the GA4 property ID so that a reconnect to a different property never serves
+	 * the previous property's cached payload within the TTL.
 	 *
 	 * @param string $start_date YYYY-MM-DD.
 	 * @param string $end_date   YYYY-MM-DD.
-	 * @param bool   $use_ga4    Whether the GA4 backend is active.
 	 * @return string
 	 */
-	private static function window_cache_key( string $start_date, string $end_date, bool $use_ga4 ): string {
+	private static function window_cache_key( string $start_date, string $end_date ): string {
 		return self::CACHE_KEY_PREFIX . md5(
-			self::resolve_property_id() . '|' . $start_date . '|' . $end_date . '|' . ( $use_ga4 ? 'ga4' : 'bq' )
+			self::resolve_property_id() . '|' . $start_date . '|' . $end_date . '|bq'
 		);
 	}
 
 	/**
-	 * Tab-level connection check (GA4 path only).
+	 * Tab-level connection check. BQ path requires no OAuth gate; always returns
+	 * null (no error). Retained for API compatibility with the REST controller.
 	 *
 	 * @return array|null
 	 */
 	public static function connection_error(): ?array {
-		if ( ! self::use_ga4() ) {
-			return null;
-		}
-		$connected = class_exists( '\Newspack\Google_OAuth' )
-			&& \Newspack\Google_OAuth::is_oauth_configured()
-			&& '' !== self::resolve_property_id();
-		if ( $connected ) {
-			return null;
-		}
-		return [
-			'tab_error'   => 'oauth_not_connected',
-			'banner_text' => __( 'Engagement metrics come from a GA4 property connected through Site Kit. Set up Site Kit to start seeing data here.', 'newspack-plugin' ),
-		];
+		return null;
 	}
 
 	/**
@@ -162,56 +143,18 @@ final class Engagement_Metric {
 	 * @return array
 	 */
 	private static function compute_window_cached( string $start_date, string $end_date ): array {
-		$use_ga4   = self::use_ga4();
-		$cache_key = self::window_cache_key( $start_date, $end_date, $use_ga4 );
+		$cache_key = self::window_cache_key( $start_date, $end_date );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached ) {
 			return $cached;
 		}
-		$payload = $use_ga4
-			? self::compute_via_ga4( $start_date, $end_date )
-			: self::compute_via_bq( $start_date, $end_date );
+		$payload = self::compute_via_bq( $start_date, $end_date );
 		set_transient( $cache_key, $payload, self::CACHE_TTL );
 		return $payload;
 	}
 
 	/**
-	 * GA4 path — every metric for the window.
-	 *
-	 * @param string $start_date YYYY-MM-DD.
-	 * @param string $end_date   YYYY-MM-DD.
-	 * @return array
-	 */
-	private static function compute_via_ga4( string $start_date, string $end_date ): array {
-		$pid = self::resolve_property_id();
-		return [
-			'window'                                => [
-				'start' => $start_date,
-				'end'   => $end_date,
-			],
-			// Overall engagement quality.
-			'avg_pages_per_session'                 => self::avg_pages_per_session_via_ga4( $pid, $start_date, $end_date ),
-			'avg_engaged_session_duration'          => self::avg_engaged_session_duration_via_ga4( $pid, $start_date, $end_date ),
-			'bounce_rate'                           => self::bounce_rate_via_ga4( $pid, $start_date, $end_date ),
-			'article_completion_rate'               => self::article_completion_rate_via_ga4( $pid, $start_date, $end_date ),
-			// Content engagement.
-			'most_read_articles'                    => self::most_read_articles_via_ga4( $pid, $start_date, $end_date ),
-			'articles_by_completion_rate'           => self::articles_by_completion_rate_via_ga4( $pid, $start_date, $end_date ),
-			'top_authors_by_avg_engagement_time'    => self::top_authors_by_avg_engagement_time_via_ga4( $pid, $start_date, $end_date ),
-			// Reader segments.
-			'engagement_by_device_type'             => self::engagement_by_device_type_via_ga4( $pid, $start_date, $end_date ),
-			'engagement_by_traffic_source'          => self::engagement_by_traffic_source_via_ga4( $pid, $start_date, $end_date ),
-			'engagement_by_returning_vs_new'        => self::engagement_by_returning_vs_new_via_ga4( $pid, $start_date, $end_date ),
-			// BQ-only (hidden in v1).
-			'top_categories_by_engagement'          => self::hidden_in_v1_payload(),
-			'mobile_vs_desktop_content_preferences' => self::hidden_in_v1_payload(),
-			'top_authors_by_repeat_reader_rate'     => self::hidden_in_v1_payload(),
-			'article_freshness_vs_engagement'       => self::hidden_in_v1_payload(),
-		];
-	}
-
-	/**
-	 * BQ path — quality scalars wired; remaining metrics stubbed for B5.
+	 * BQ path — every metric for the window.
 	 *
 	 * @param string $start_date YYYY-MM-DD.
 	 * @param string $end_date   YYYY-MM-DD.
@@ -222,34 +165,31 @@ final class Engagement_Metric {
 		$start = new \DateTimeImmutable( $start_date );
 		$end   = new \DateTimeImmutable( $end_date );
 
-		$not_implemented_keys = [
-			'most_read_articles',
-			'articles_by_completion_rate',
-			'top_authors_by_avg_engagement_time',
-			'engagement_by_device_type',
-			'engagement_by_traffic_source',
-			'engagement_by_returning_vs_new',
-		];
-
-		$payload = [
-			'window'                   => [
+		return [
+			'window'                                => [
 				'start' => $start_date,
 				'end'   => $end_date,
 			],
 			// Overall engagement quality (wired in B4).
-			'avg_pages_per_session'    => self::avg_pages_per_session_via_bq( $proxy, $start, $end ),
-			'avg_engaged_session_duration' => self::avg_engaged_session_duration_via_bq( $proxy, $start, $end ),
-			'bounce_rate'              => self::bounce_rate_via_bq( $proxy, $start, $end ),
-			'article_completion_rate'  => self::article_completion_rate_via_bq( $proxy, $start, $end ),
+			'avg_pages_per_session'                 => self::avg_pages_per_session_via_bq( $proxy, $start, $end ),
+			'avg_engaged_session_duration'          => self::avg_engaged_session_duration_via_bq( $proxy, $start, $end ),
+			'bounce_rate'                           => self::bounce_rate_via_bq( $proxy, $start, $end ),
+			'article_completion_rate'               => self::article_completion_rate_via_bq( $proxy, $start, $end ),
+			// Content engagement.
+			'most_read_articles'                    => self::most_read_articles_via_bq( $proxy, $start, $end ),
+			'articles_by_completion_rate'           => self::articles_by_completion_rate_via_bq( $proxy, $start, $end ),
+			'top_authors_by_avg_engagement_time'    => self::top_authors_by_avg_engagement_time_via_bq( $proxy, $start, $end ),
+			// Reader segments.
+			'engagement_by_device_type'             => self::engagement_by_device_type_via_bq( $proxy, $start, $end ),
+			'engagement_by_traffic_source'          => self::engagement_by_traffic_source_via_bq( $proxy, $start, $end ),
+			'engagement_by_returning_vs_new'        => self::engagement_by_returning_vs_new_via_bq( $proxy, $start, $end ),
+			// Previously BQ-only hidden; now enabled.
+			'top_categories_by_engagement'          => self::top_categories_by_engagement_via_bq( $proxy, $start, $end ),
+			'mobile_vs_desktop_content_preferences' => self::mobile_vs_desktop_content_preferences_via_bq( $proxy, $start, $end ),
+			'top_authors_by_repeat_reader_rate'     => self::top_authors_by_repeat_reader_rate_via_bq( $proxy, $start, $end ),
+			// Still hidden in v1.
+			'article_freshness_vs_engagement'       => self::hidden_in_v1_payload(),
 		];
-
-		foreach ( $not_implemented_keys as $key ) {
-			$payload[ $key ] = self::not_implemented_payload();
-		}
-		foreach ( [ 'top_categories_by_engagement', 'mobile_vs_desktop_content_preferences', 'top_authors_by_repeat_reader_rate', 'article_freshness_vs_engagement' ] as $hidden ) {
-			$payload[ $hidden ] = self::hidden_in_v1_payload();
-		}
-		return $payload;
 	}
 
 	/*
@@ -400,368 +340,157 @@ final class Engagement_Metric {
 
 	/*
 	===================================================================
-	 * GA4-standard metrics
+	 * BigQuery table methods (NPPD-1729 Task B5)
 	 * ===================================================================
 	 */
 
 	/**
-	 * Avg Pages per Session — screenPageViewsPerSession.
+	 * Most Read Articles via BigQuery.
 	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
+	 * The BQ SQL handles HAVING (reader threshold), ranking, LIMIT 50, and column
+	 * selection (page_title, unique_readers, avg_engagement_seconds). A plain
+	 * proxy_rows passthrough is correct — the PHP shaping done in the GA4 path
+	 * (two-report join, engagement_score computation, sort, strip) is already
+	 * performed in the BQ query.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
 	 * @return array
 	 */
-	private static function avg_pages_per_session_via_ga4( string $pid, string $s, string $e ): array {
-		$result = self::safe_run_report( $pid, self::body( $s, $e, [], [ 'screenPageViewsPerSession' ] ) );
-		return self::scalar( $result, 'decimal' );
+	public static function most_read_articles_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'engagement_most_read_articles', 'table', $start, $end );
 	}
 
 	/**
-	 * Avg Engaged Session Duration — averageSessionDuration (seconds).
+	 * Articles by Completion Rate via BigQuery.
 	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
+	 * The BQ SQL handles HAVING (reader threshold), completion_rate computation,
+	 * ORDER BY (rate desc, readers desc), and LIMIT 50. A plain proxy_rows
+	 * passthrough is correct.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
 	 * @return array
 	 */
-	private static function avg_engaged_session_duration_via_ga4( string $pid, string $s, string $e ): array {
-		$result = self::safe_run_report( $pid, self::body( $s, $e, [], [ 'averageSessionDuration' ] ) );
-		return self::scalar( $result, 'duration' );
+	public static function articles_by_completion_rate_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'engagement_articles_by_completion_rate', 'table', $start, $end );
 	}
 
 	/**
-	 * Bounce Rate — bounceRate (0-1).
+	 * Top Authors by Avg Engagement Time via BigQuery.
 	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
+	 * The BQ SQL computes avg_engagement_seconds per author, orders by it
+	 * descending, and applies a LIMIT. A plain proxy_rows passthrough is correct —
+	 * the GA4 path's re-sort by avg_engagement_seconds is already done in SQL.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
 	 * @return array
 	 */
-	private static function bounce_rate_via_ga4( string $pid, string $s, string $e ): array {
-		$result = self::safe_run_report( $pid, self::body( $s, $e, [], [ 'bounceRate' ] ) );
-		return self::scalar( $result, 'rate' );
+	public static function top_authors_by_avg_engagement_time_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'engagement_top_authors_by_avg_engagement_time', 'table', $start, $end );
 	}
 
 	/**
-	 * Engagement by Device Type — deviceCategory / sessions, userEngagementDuration, screenPageViewsPerSession.
+	 * Engagement by Device Type via BigQuery.
 	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
+	 * The BQ SQL computes avg_engagement_seconds = total_engagement / sessions per
+	 * device, so the GA4 path's PHP division is already done in SQL. A plain
+	 * proxy_rows passthrough is correct (columns: device, sessions,
+	 * avg_pages_per_session, avg_engagement_seconds).
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
 	 * @return array
 	 */
-	private static function engagement_by_device_type_via_ga4( string $pid, string $s, string $e ): array {
-		$body   = self::body( $s, $e, [ 'deviceCategory' ], [ 'sessions', 'userEngagementDuration', 'screenPageViewsPerSession' ] );
-		$body  += self::order_by_metric_desc( 'sessions' );
-		$result = self::safe_run_report( $pid, $body );
-		if ( isset( $result['error'] ) || isset( $result['overlay'] ) ) {
-			return $result;
-		}
-		$out = [];
-		foreach ( $result['raw']['rows'] ?? [] as $row ) {
-			$sessions = self::num( $row, 0 );
-			$out[]    = [
-				'device'                 => $row['dimensionValues'][0]['value'] ?? null,
-				'sessions'               => (int) $sessions,
-				'avg_engagement_seconds' => $sessions > 0 ? self::num( $row, 1 ) / $sessions : 0,
-				'avg_pages_per_session'  => self::num( $row, 2 ),
+	public static function engagement_by_device_type_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'engagement_by_device_type', 'table', $start, $end );
+	}
+
+	/**
+	 * Engagement by Traffic Source via BigQuery.
+	 *
+	 * Non-trivial shaping: the BQ query returns one row per channel (e.g. "Email",
+	 * "Organic Search", "Direct") with pre-computed avg_engagement_seconds. These
+	 * must be bucketed into the same "newsletter" / "other" cohorts the GA4 path
+	 * produced, and the same NEWSLETTER_SESSION_FLOOR needs_data guard must be
+	 * applied.
+	 *
+	 * The GA4 path received raw per-medium totals (userEngagementDuration,
+	 * sessions) and computed the weighted average in `bucket_by_traffic_source()`.
+	 * Here we recover the total engagement per channel by multiplying
+	 * avg_engagement_seconds × sessions, then sum within each cohort and divide
+	 * again for the cohort average.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function engagement_by_traffic_source_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		$rows = $proxy->query( 'engagement_by_traffic_source', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return [
+				'rows'       => [],
+				'computable' => false,
+				'type'       => 'table',
+				'error'      => $rows->get_error_message(),
 			];
 		}
-		return [
-			'rows'       => $out,
-			'computable' => true,
-			'type'       => 'table',
-		];
-	}
-
-	/**
-	 * Engagement by Returning vs New — newVsReturning / sessions, screenPageViewsPerSession, userEngagementDuration.
-	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
-	 * @return array
-	 */
-	private static function engagement_by_returning_vs_new_via_ga4( string $pid, string $s, string $e ): array {
-		$result = self::safe_run_report( $pid, self::body( $s, $e, [ 'newVsReturning' ], [ 'sessions', 'screenPageViewsPerSession', 'userEngagementDuration' ] ) );
-		if ( isset( $result['error'] ) || isset( $result['overlay'] ) ) {
-			return $result;
-		}
-		$out = [];
-		foreach ( $result['raw']['rows'] ?? [] as $row ) {
-			$sessions = self::num( $row, 0 );
-			$out[]    = [
-				'reader_type'            => $row['dimensionValues'][0]['value'] ?? null,
-				'sessions'               => (int) $sessions,
-				'avg_pages_per_session'  => self::num( $row, 1 ),
-				'avg_engagement_seconds' => $sessions > 0 ? self::num( $row, 2 ) / $sessions : 0,
+		if ( ! is_array( $rows ) ) {
+			return [
+				'rows'       => [],
+				'computable' => false,
+				'type'       => 'table',
 			];
 		}
-		return [
-			'rows'       => $out,
-			'computable' => true,
-			'type'       => 'table',
-		];
-	}
-
-	/*
-	===================================================================
-	 * GA4-conditional metrics
-	 * ===================================================================
-	 */
-
-	/**
-	 * Completion Rate — page reads that reached the end ÷ total page reads. A
-	 * `scroll` event is the completion signal under GA4 default enhanced
-	 * measurement (it fires once a reader reaches the end of the page). Computed
-	 * across all pageviews (no post_id / singular filter), so it reflects
-	 * site-wide read-through, not just article posts.
-	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
-	 * @return array
-	 */
-	private static function article_completion_rate_via_ga4( string $pid, string $s, string $e ): array {
-		$num_body                    = self::body( $s, $e, [], [ 'eventCount' ] );
-		$num_body['dimensionFilter'] = self::event_name_expression( 'scroll' );
-		$num                         = self::safe_run_report( $pid, $num_body );
-		if ( isset( $num['error'] ) || isset( $num['overlay'] ) ) {
-			return $num;
-		}
-
-		$den_body = self::body( $s, $e, [], [ 'screenPageViews' ] );
-		$den      = self::safe_run_report( $pid, $den_body );
-		if ( isset( $den['error'] ) || isset( $den['overlay'] ) ) {
-			return $den;
-		}
-
-		$numerator   = (int) ( $num['raw']['rows'][0]['metricValues'][0]['value'] ?? 0 );
-		$denominator = (int) ( $den['raw']['rows'][0]['metricValues'][0]['value'] ?? 0 );
-		// Clamp to 1.0: a `scroll` event implies a pageview, so the ratio should
-		// not exceed 1, but edge cases (AMP, multiple scroll fires) can nudge it
-		// over — match the per-page completion clamps and never show >100%.
-		return [
-			'value'       => $denominator > 0 ? min( 1.0, $numerator / $denominator ) : 0,
-			'computable'  => $denominator > 0,
-			'type'        => 'rate',
-			'numerator'   => $numerator,
-			'denominator' => $denominator,
-		];
+		return self::bucket_bq_by_traffic_source( $rows );
 	}
 
 	/**
-	 * Most-Engaged Pages — grouped by pageTitle across all URL types, ranked by a
-	 * composite of reach, scroll completion, and engagement time (scroll still
-	 * factors into the ranking even though it isn't a displayed column). Two
-	 * reports joined and scored in PHP; the row payload exposes readers + avg
-	 * engagement time.
+	 * Bucket BQ per-channel rows into the newsletter/other cohorts.
 	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
+	 * Each input row has the shape:
+	 *   { channel: string, sessions: int, avg_pages_per_session: float,
+	 *     avg_engagement_seconds: float }
+	 *
+	 * To produce a cohort-level weighted average: recover total engagement
+	 * (sessions × avg_engagement_seconds), sum within the cohort, then divide by
+	 * cohort total sessions. This mirrors `bucket_by_traffic_source()` which
+	 * operated on raw GA4 totals (userEngagementDuration, sessions).
+	 *
+	 * @param array $rows BQ rows (channel, sessions, avg_pages_per_session, avg_engagement_seconds).
 	 * @return array
 	 */
-	private static function most_read_articles_via_ga4( string $pid, string $s, string $e ): array {
-		$reach_body          = self::body( $s, $e, [ 'pageTitle' ], [ 'totalUsers', 'userEngagementDuration' ] );
-		$reach_body         += self::order_by_metric_desc( 'totalUsers' );
-		$reach_body['limit'] = 200;
-		$reach               = self::safe_run_report( $pid, $reach_body );
-		if ( isset( $reach['error'] ) || isset( $reach['overlay'] ) ) {
-			return $reach;
-		}
-
-		$scroll_by_title = self::scroll_events_by_page_title( $pid, $s, $e );
-
-		$articles = [];
-		foreach ( $reach['raw']['rows'] ?? [] as $row ) {
-			$readers = (int) self::num( $row, 0 );
-			if ( $readers < self::READER_THRESHOLD ) {
-				continue;
-			}
-			$page_title = $row['dimensionValues'][0]['value'] ?? '';
-			$avg_eng    = $readers > 0 ? self::num( $row, 1 ) / $readers : 0;
-			$scroll     = $scroll_by_title[ $page_title ] ?? 0;
-			// Scroll completion still feeds the composite ranking score, but is
-			// no longer surfaced as a displayed column.
-			$avg_scroll = $readers > 0 ? min( 1.0, $scroll / $readers ) : 0;
-			$articles[] = [
-				'page_title'             => $page_title,
-				'unique_readers'         => $readers,
-				'avg_engagement_seconds' => $avg_eng,
-				'engagement_score'       => $readers * max( $avg_scroll, 0.1 ) * ( 1 + log( $avg_eng + 1 ) ),
-			];
-		}
-		usort(
-			$articles,
-			function ( $a, $b ) {
-				return $b['engagement_score'] <=> $a['engagement_score'];
-			}
-		);
-		return [
-			'rows'       => array_slice( $articles, 0, 50 ),
-			'computable' => true,
-			'type'       => 'table',
-		];
-	}
-
-	/**
-	 * Pages by Completion Rate — scroll-completion events ÷ pageviews per page,
-	 * grouped by pageTitle across all URL types. completion_rate = (pageviews
-	 * that fired the `scroll` completion event) / (total pageviews).
-	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
-	 * @return array
-	 */
-	private static function articles_by_completion_rate_via_ga4( string $pid, string $s, string $e ): array {
-		$readers_body          = self::body( $s, $e, [ 'pageTitle' ], [ 'totalUsers', 'screenPageViews' ] );
-		$readers_body['limit'] = 1000;
-		$readers               = self::safe_run_report( $pid, $readers_body );
-		if ( isset( $readers['error'] ) || isset( $readers['overlay'] ) ) {
-			return $readers;
-		}
-
-		$scroll_by_title = self::scroll_events_by_page_title( $pid, $s, $e );
-
-		$rows = [];
-		foreach ( $readers['raw']['rows'] ?? [] as $row ) {
-			$count = (int) self::num( $row, 0 );
-			if ( $count < self::READER_THRESHOLD ) {
-				continue;
-			}
-			$page_title = $row['dimensionValues'][0]['value'] ?? '';
-			$pageviews  = (int) self::num( $row, 1 );
-			$scroll     = $scroll_by_title[ $page_title ] ?? 0;
-			$rows[]     = [
-				'page_title'      => $page_title,
-				'readers'         => $count,
-				'completion_rate' => $pageviews > 0 ? min( 1.0, $scroll / $pageviews ) : 0,
-			];
-		}
-		usort(
-			$rows,
-			function ( $a, $b ) {
-				$by_rate = $b['completion_rate'] <=> $a['completion_rate'];
-				return 0 !== $by_rate ? $by_rate : ( $b['readers'] <=> $a['readers'] );
-			}
-		);
-		return [
-			'rows'       => array_slice( $rows, 0, 50 ),
-			'computable' => true,
-			'type'       => 'table',
-		];
-	}
-
-	/**
-	 * Top Authors by Avg Engagement Time — customEvent:author. The author custom
-	 * dimension is auto-provisioned on every GA4-connected Newspack site, so it
-	 * stands on its own without a post_id co-requirement.
-	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
-	 * @return array
-	 */
-	private static function top_authors_by_avg_engagement_time_via_ga4( string $pid, string $s, string $e ): array {
-		$body                    = self::body( $s, $e, [ 'customEvent:author' ], [ 'totalUsers', 'userEngagementDuration' ] );
-		$body['dimensionFilter'] = self::custom_event_meaningful_filter( 'author' );
-		$body                   += self::order_by_metric_desc( 'userEngagementDuration' );
-		$body['limit']           = 25;
-		$result                  = self::safe_run_report( $pid, $body );
-		if ( isset( $result['error'] ) || isset( $result['overlay'] ) ) {
-			return $result;
-		}
-		$out = [];
-		foreach ( $result['raw']['rows'] ?? [] as $row ) {
-			$readers = (int) self::num( $row, 0 );
-			$out[]   = [
-				'author'                 => $row['dimensionValues'][0]['value'] ?? null,
-				'unique_readers'         => $readers,
-				'avg_engagement_seconds' => $readers > 0 ? self::num( $row, 1 ) / $readers : 0,
-			];
-		}
-		// The query orders by total userEngagementDuration to pull a strong
-		// candidate set (authors with real readership, not one-reader outliers);
-		// re-sort that set by the computed per-reader average so the ranking
-		// actually matches the metric — "Top Authors by Avg Engagement Time".
-		usort(
-			$out,
-			static function ( $a, $b ) {
-				return $b['avg_engagement_seconds'] <=> $a['avg_engagement_seconds'];
-			}
-		);
-		return [
-			'rows'       => $out,
-			'computable' => true,
-			'type'       => 'table',
-		];
-	}
-
-	/**
-	 * Engagement by traffic source — sessionMedium.
-	 *
-	 * Partitions sessions into two cohorts by traffic medium: "newsletter"
-	 * (sessionMedium IN 'email', 'newsletter') vs "other" (everything else), and
-	 * reports average engagement seconds per session for each. sessionMedium is a
-	 * GA4 standard dimension, so unlike the previous newsletter-status cut this has
-	 * no custom-dimension dependency. The returned shape is source-agnostic so the
-	 * BigQuery migration is a mechanical backend swap.
-	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
-	 * @return array
-	 */
-	private static function engagement_by_traffic_source_via_ga4( string $pid, string $s, string $e ): array {
-		$result = self::safe_run_report( $pid, self::body( $s, $e, [ 'sessionMedium' ], [ 'userEngagementDuration', 'sessions' ] ) );
-		if ( isset( $result['error'] ) || isset( $result['overlay'] ) ) {
-			return $result;
-		}
-		return self::bucket_by_traffic_source( $result['raw']['rows'] ?? [] );
-	}
-
-	/**
-	 * Bucket raw GA4 sessionMedium rows into the newsletter/other cohorts.
-	 *
-	 * Pure transform (no GA4 client) so the cohort math and the minimum-sessions
-	 * floor are unit-testable in isolation. Each input row is
-	 * `{ dimensionValues: [ { value: <medium> } ], metricValues: [ <eng>, <sessions> ] }`.
-	 *
-	 * Below NEWSLETTER_SESSION_FLOOR newsletter sessions the comparison is too
-	 * noisy to render, so the payload carries `needs_data` and the card falls back
-	 * to its "Not enough data in this timeframe." state.
-	 *
-	 * @param array $rows GA4 report rows (userEngagementDuration, sessions).
-	 * @return array
-	 */
-	private static function bucket_by_traffic_source( array $rows ): array {
+	private static function bucket_bq_by_traffic_source( array $rows ): array {
 		$buckets = [
 			'newsletter' => [
-				'sessions' => 0,
-				'eng'      => 0.0,
+				'sessions'    => 0,
+				'total_eng'   => 0.0,
 			],
 			'other'      => [
-				'sessions' => 0,
-				'eng'      => 0.0,
+				'sessions'    => 0,
+				'total_eng'   => 0.0,
 			],
 		];
 		foreach ( $rows as $row ) {
-			$medium = strtolower( (string) ( $row['dimensionValues'][0]['value'] ?? '' ) );
-			$key    = in_array( $medium, self::NEWSLETTER_MEDIUMS, true ) ? 'newsletter' : 'other';
-			$buckets[ $key ]['eng']      += self::num( $row, 0 );
-			$buckets[ $key ]['sessions'] += (int) self::num( $row, 1 );
+			$channel  = strtolower( (string) ( $row['channel'] ?? '' ) );
+			$sessions = (int) ( $row['sessions'] ?? 0 );
+			$avg_eng  = (float) ( $row['avg_engagement_seconds'] ?? 0 );
+			$key      = in_array( $channel, self::NEWSLETTER_CHANNELS, true ) ? 'newsletter' : 'other';
+			$buckets[ $key ]['sessions']  += $sessions;
+			$buckets[ $key ]['total_eng'] += $sessions * $avg_eng;
 		}
 		$out = [];
 		foreach ( $buckets as $key => $b ) {
-			// Emit a stable, non-translated segment key so the UI can match on it
-			// reliably and render its own translated labels. See ReaderSegmentsSection.
 			$out[] = [
 				'segment'                => $key,
 				'sessions'               => $b['sessions'],
-				'avg_engagement_seconds' => $b['sessions'] > 0 ? $b['eng'] / $b['sessions'] : 0,
+				'avg_engagement_seconds' => $b['sessions'] > 0 ? $b['total_eng'] / $b['sessions'] : 0,
 			];
 		}
 		return [
@@ -773,35 +502,56 @@ final class Engagement_Metric {
 	}
 
 	/**
-	 * Scroll-completion event counts keyed by pageTitle. Empty array on
-	 * error/overlay (callers treat missing scroll data as zero completion).
+	 * Engagement by Returning vs New via BigQuery.
 	 *
-	 * Note: pageTitle is the join key for Most-Engaged Pages and Pages by
-	 * Completion Rate. It's a display string, not a stable id — distinct URLs
-	 * sharing a title merge here and in the readers report, and a retitled page
-	 * splits across two. Accepted in exchange for working without post_id.
+	 * The BQ SQL computes avg_engagement_seconds = total_engagement / sessions per
+	 * reader_type, so the GA4 path's PHP division is already done in SQL. A plain
+	 * proxy_rows passthrough is correct (columns: reader_type, sessions,
+	 * avg_pages_per_session, avg_engagement_seconds).
 	 *
-	 * @param string $pid Property ID.
-	 * @param string $s   Start date.
-	 * @param string $e   End date.
-	 * @return array<string,int>
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
 	 */
-	private static function scroll_events_by_page_title( string $pid, string $s, string $e ): array {
-		$body                    = self::body( $s, $e, [ 'pageTitle' ], [ 'eventCount' ] );
-		$body['dimensionFilter'] = self::event_name_expression( 'scroll' );
-		$body['limit']           = 1000;
-		$result                  = self::safe_run_report( $pid, $body );
-		if ( isset( $result['error'] ) || isset( $result['overlay'] ) ) {
-			return [];
-		}
-		$map = [];
-		foreach ( $result['raw']['rows'] ?? [] as $row ) {
-			$key = $row['dimensionValues'][0]['value'] ?? '';
-			if ( '' !== $key ) {
-				$map[ $key ] = (int) ( $row['metricValues'][0]['value'] ?? 0 );
-			}
-		}
-		return $map;
+	public static function engagement_by_returning_vs_new_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'engagement_by_returning_vs_new', 'table', $start, $end );
+	}
+
+	/**
+	 * Top Categories by Engagement via BigQuery (previously hidden in v1, now enabled).
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function top_categories_by_engagement_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'engagement_top_categories_by_engagement', 'table', $start, $end );
+	}
+
+	/**
+	 * Mobile vs Desktop Content Preferences via BigQuery (previously hidden in v1, now enabled).
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function mobile_vs_desktop_content_preferences_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'engagement_mobile_vs_desktop_content_preferences', 'table', $start, $end );
+	}
+
+	/**
+	 * Top Authors by Repeat Reader Rate via BigQuery (previously hidden in v1, now enabled).
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function top_authors_by_repeat_reader_rate_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_rows( $proxy, 'engagement_top_authors_by_repeat_reader_rate', 'table', $start, $end );
 	}
 
 	/*
@@ -809,221 +559,6 @@ final class Engagement_Metric {
 	 * Shared helpers
 	 * ===================================================================
 	 */
-
-	/**
-	 * Build a base runReport body.
-	 *
-	 * @param string   $s       Start date.
-	 * @param string   $e       End date.
-	 * @param string[] $dims    Dimension names.
-	 * @param string[] $metrics Metric names.
-	 * @return array
-	 */
-	private static function body( string $s, string $e, array $dims, array $metrics ): array {
-		$body = [
-			'dateRanges' => [
-				[
-					'startDate' => $s,
-					'endDate'   => $e,
-				],
-			],
-			'metrics'    => array_map(
-				function ( $m ) {
-					return [ 'name' => $m ];
-				},
-				$metrics
-			),
-		];
-		if ( ! empty( $dims ) ) {
-			$body['dimensions'] = array_map(
-				function ( $d ) {
-					return [ 'name' => $d ];
-				},
-				$dims
-			);
-		}
-		return $body;
-	}
-
-	/**
-	 * Build an orderBys fragment: one metric, descending.
-	 *
-	 * @param string $metric Metric name.
-	 * @return array
-	 */
-	private static function order_by_metric_desc( string $metric ): array {
-		return [
-			'orderBys' => [
-				[
-					'metric' => [ 'metricName' => $metric ],
-					'desc'   => true,
-				],
-			],
-		];
-	}
-
-	/**
-	 * FilterExpression: eventName EXACT match.
-	 *
-	 * @param string $event_name Event name.
-	 * @return array
-	 */
-	private static function event_name_expression( string $event_name ): array {
-		return [
-			'filter' => [
-				'fieldName'    => 'eventName',
-				'stringFilter' => [
-					'matchType' => 'EXACT',
-					'value'     => $event_name,
-				],
-			],
-		];
-	}
-
-	/**
-	 * FilterExpression: a customEvent dimension is present (non-empty).
-	 *
-	 * @param string $param Event parameter name.
-	 * @return array
-	 */
-	private static function custom_event_present_expression( string $param ): array {
-		return [
-			'filter' => [
-				'fieldName'    => 'customEvent:' . $param,
-				'stringFilter' => [
-					'matchType' => 'FULL_REGEXP',
-					'value'     => '.+',
-				],
-			],
-		];
-	}
-
-	/**
-	 * Build a dimensionFilter requiring a customEvent dimension to be present and
-	 * not GA4's literal "(not set)" placeholder. A bare present-filter (`.+`)
-	 * matches "(not set)", which would surface a bogus aggregated row (e.g. a
-	 * "(not set)" author from non-article pageviews where the dimension is unset).
-	 *
-	 * @param string $param Event parameter name.
-	 * @return array
-	 */
-	private static function custom_event_meaningful_filter( string $param ): array {
-		return [
-			'andGroup' => [
-				'expressions' => [
-					self::custom_event_present_expression( $param ),
-					[
-						'notExpression' => [
-							'filter' => [
-								'fieldName'    => 'customEvent:' . $param,
-								'stringFilter' => [
-									'matchType' => 'EXACT',
-									'value'     => '(not set)',
-								],
-							],
-						],
-					],
-				],
-			],
-		];
-	}
-
-	/**
-	 * Read a metric value from a report row as a number.
-	 *
-	 * @param array $row   Report row.
-	 * @param int   $index Metric index.
-	 * @return float
-	 */
-	private static function num( array $row, int $index ): float {
-		return (float) ( $row['metricValues'][ $index ]['value'] ?? 0 );
-	}
-
-	/**
-	 * Run a report, normalizing WP_Error into payload-shaped failures.
-	 *
-	 * @param string $property_id Property ID.
-	 * @param array  $body        runReport body.
-	 * @return array
-	 */
-	private static function safe_run_report( string $property_id, array $body ): array {
-		$result = Client::run_report( $property_id, $body );
-
-		if ( is_wp_error( $result ) ) {
-			if ( 'custom_dimension_missing' === $result->get_error_code() ) {
-				$data = $result->get_error_data();
-				return [
-					'value'      => null,
-					'computable' => false,
-					'overlay'    => [
-						'type'       => 'custom_dimension_missing',
-						'dimensions' => is_array( $data ) && isset( $data['dimensions'] ) ? $data['dimensions'] : [],
-					],
-				];
-			}
-			return [
-				'value'      => null,
-				'computable' => false,
-				'error'      => $result->get_error_message(),
-			];
-		}
-
-		return [ 'raw' => $result ];
-	}
-
-	/**
-	 * Transform a single scalar metric value.
-	 *
-	 * @param array  $result safe_run_report result.
-	 * @param string $type   'count' (int) or 'decimal'/'rate'/'duration' (float).
-	 * @return array
-	 */
-	private static function scalar( array $result, string $type ): array {
-		if ( isset( $result['error'] ) || isset( $result['overlay'] ) ) {
-			return $result;
-		}
-		$raw   = $result['raw']['rows'][0]['metricValues'][0]['value'] ?? null;
-		$value = null === $raw
-			? ( 'count' === $type ? 0 : 0.0 )
-			: ( 'count' === $type ? (int) $raw : (float) $raw );
-		return [
-			'value'      => $value,
-			'computable' => true,
-			'type'       => $type,
-		];
-	}
-
-	/**
-	 * Transform report rows into a list of associative rows.
-	 *
-	 * @param array    $result      safe_run_report result.
-	 * @param string[] $dim_keys    Output keys per dimension.
-	 * @param string[] $metric_keys Output keys per metric.
-	 * @param string   $type        Payload type token.
-	 * @return array
-	 */
-	private static function rows( array $result, array $dim_keys, array $metric_keys, string $type ): array {
-		if ( isset( $result['error'] ) || isset( $result['overlay'] ) ) {
-			return $result;
-		}
-		$out = [];
-		foreach ( $result['raw']['rows'] ?? [] as $row ) {
-			$entry = [];
-			foreach ( $dim_keys as $i => $key ) {
-				$entry[ $key ] = $row['dimensionValues'][ $i ]['value'] ?? null;
-			}
-			foreach ( $metric_keys as $i => $key ) {
-				$raw           = $row['metricValues'][ $i ]['value'] ?? null;
-				$entry[ $key ] = null === $raw ? null : ( str_contains( (string) $raw, '.' ) ? (float) $raw : (int) $raw );
-			}
-			$out[] = $entry;
-		}
-		return [
-			'rows'       => $out,
-			'computable' => true,
-			'type'       => $type,
-		];
-	}
 
 	/**
 	 * BQ-only metric payload: hidden in v1.
@@ -1035,19 +570,6 @@ final class Engagement_Metric {
 			'value'        => null,
 			'computable'   => false,
 			'hidden_in_v1' => true,
-		];
-	}
-
-	/**
-	 * Standard v1 BQ stub payload.
-	 *
-	 * @return array
-	 */
-	private static function not_implemented_payload(): array {
-		return [
-			'value'      => null,
-			'computable' => false,
-			'error'      => __( 'BQ path not yet implemented. See NPPD-1630.', 'newspack-plugin' ),
 		];
 	}
 }
