@@ -13,6 +13,7 @@
 namespace Newspack\Tests\Insights;
 
 use Newspack\Insights\Audience_Metric;
+use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\Donation_Product_Classifier;
 use WP_UnitTestCase;
 
@@ -196,5 +197,105 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 		$result = $this->detect_supporter_products();
 
 		$this->assertTrue( $result['subscriptions'], 'a non-donation subscription product counts as a subscription' );
+	}
+
+	/*
+	===================================================================
+	 * BQ proxy shaper tests (NPPD-1729 Task B1)
+	 * ===================================================================
+	 */
+
+	/**
+	 * Build a fake BigQuery_Proxy_Client that returns canned rows for a
+	 * specific query name. Any other query name returns an empty array.
+	 *
+	 * @param string $expected_name  Catalog query name to intercept.
+	 * @param array  $rows           Rows to return for that query.
+	 * @return BigQuery_Proxy_Client
+	 */
+	private function makeProxyReturning( string $expected_name, array $rows ): BigQuery_Proxy_Client {
+		return new class( $expected_name, $rows ) extends BigQuery_Proxy_Client {
+			public function __construct( private string $expected_name, private array $rows ) {}
+			public function query( string $query_name, \DateTimeInterface $start, \DateTimeInterface $end ) {
+				return $query_name === $this->expected_name ? $this->rows : [];
+			}
+		};
+	}
+
+	/**
+	 * active_readers_via_bq shapes a first-row 'active_readers' column into a
+	 * scalar { value, computable, type: 'count' } payload.
+	 */
+	public function test_active_readers_via_bq_shapes_scalar() {
+		$proxy = $this->makeProxyReturning( 'audience_active_readers', [ [ 'active_readers' => 4200 ] ] );
+		$out   = Audience_Metric::active_readers_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 4200, $out['value'] );
+		$this->assertTrue( $out['computable'] );
+		$this->assertSame( 'count', $out['type'] );
+	}
+
+	/**
+	 * pageviews_via_bq shapes a first-row 'pageviews' column into a
+	 * scalar { value, computable, type: 'count' } payload.
+	 */
+	public function test_pageviews_via_bq_shapes_scalar() {
+		$proxy = $this->makeProxyReturning( 'audience_pageviews', [ [ 'pageviews' => 98765 ] ] );
+		$out   = Audience_Metric::pageviews_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 98765, $out['value'] );
+		$this->assertTrue( $out['computable'] );
+		$this->assertSame( 'count', $out['type'] );
+	}
+
+	/**
+	 * newsletter_signups_via_bq shapes a first-row 'newsletter_signups' column
+	 * into a scalar { value, computable, type: 'count' } payload.
+	 */
+	public function test_newsletter_signups_via_bq_shapes_scalar() {
+		$proxy = $this->makeProxyReturning( 'audience_newsletter_signups', [ [ 'newsletter_signups' => 150 ] ] );
+		$out   = Audience_Metric::newsletter_signups_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 150, $out['value'] );
+		$this->assertTrue( $out['computable'] );
+		$this->assertSame( 'count', $out['type'] );
+	}
+
+	/**
+	 * avg_sessions_per_reader_via_bq computes sessions / active_readers and
+	 * exposes the numerator/denominator alongside the decimal value.
+	 */
+	public function test_avg_sessions_per_reader_via_bq_computes_ratio() {
+		$proxy = $this->makeProxyReturning(
+			'audience_avg_sessions_per_reader',
+			[ [ 'sessions' => 6000, 'active_readers' => 2000 ] ]
+		);
+		$out = Audience_Metric::avg_sessions_per_reader_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 3.0, $out['value'] );
+		$this->assertTrue( $out['computable'] );
+		$this->assertSame( 'decimal', $out['type'] );
+		$this->assertSame( 6000, $out['numerator'] );
+		$this->assertSame( 2000, $out['denominator'] );
+	}
+
+	/**
+	 * avg_sessions_per_reader_via_bq returns computable=false with value 0
+	 * when active_readers is zero (avoids divide-by-zero).
+	 */
+	public function test_avg_sessions_per_reader_via_bq_zero_readers_not_computable() {
+		$proxy = $this->makeProxyReturning(
+			'audience_avg_sessions_per_reader',
+			[ [ 'sessions' => 0, 'active_readers' => 0 ] ]
+		);
+		$out = Audience_Metric::avg_sessions_per_reader_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 0, $out['value'] );
+		$this->assertFalse( $out['computable'] );
+	}
+
+	/**
+	 * proxy_scalar returns computable=false when the column is absent.
+	 */
+	public function test_active_readers_via_bq_missing_column_not_computable() {
+		$proxy = $this->makeProxyReturning( 'audience_active_readers', [ [ 'some_other_column' => 99 ] ] );
+		$out   = Audience_Metric::active_readers_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertFalse( $out['computable'] );
+		$this->assertSame( 0, $out['value'] );
 	}
 }

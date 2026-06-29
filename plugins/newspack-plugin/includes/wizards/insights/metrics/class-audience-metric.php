@@ -26,6 +26,7 @@
 
 namespace Newspack\Insights;
 
+use Newspack\Insights\BigQuery_Proxy_Client;
 use Newspack\Insights\GA4\Client;
 
 defined( 'ABSPATH' ) || exit;
@@ -49,13 +50,16 @@ final class Audience_Metric {
 	}
 
 	/**
-	 * Resolve the GA4 property ID from Site Kit's stored settings.
+	 * Resolve the GA4 property ID.
+	 *
+	 * Reads from `newspack_ga4_info` (set by the Newspack GA4 integration) rather
+	 * than the old Site Kit option. Falls back to '' when no property is connected.
 	 *
 	 * @return string Numeric property ID, or '' when none is connected.
 	 */
 	private static function resolve_property_id(): string {
-		$settings = get_option( 'googlesitekit_analytics-4_settings', [] );
-		return is_array( $settings ) && ! empty( $settings['propertyID'] ) ? (string) $settings['propertyID'] : '';
+		$info = get_option( 'newspack_ga4_info', [] );
+		return is_array( $info ) && ! empty( $info['property_id'] ) ? (string) $info['property_id'] : '';
 	}
 
 	/**
@@ -341,8 +345,8 @@ final class Audience_Metric {
 	}
 
 	/**
-	 * BQ path — v1 stub. Every metric returns a not_implemented error with the
-	 * same key set as the GA4 path; NPPD-1630 fills these in. BQ-only metrics
+	 * BQ path — dispatches the 4 reach scalars via the proxy; remaining metrics
+	 * remain not_implemented until later tasks (B2+) fill them in. BQ-only metrics
 	 * stay hidden_in_v1 even here (their GA4 counterpart can never compute them).
 	 *
 	 * @param string $start_date YYYY-MM-DD.
@@ -350,37 +354,151 @@ final class Audience_Metric {
 	 * @return array
 	 */
 	private static function compute_via_bq( string $start_date, string $end_date ): array {
-		$keys = [
-			'active_readers',
-			'pageviews',
-			'avg_sessions_per_reader',
-			'newsletter_signups',
-			'new_vs_returning_over_time',
-			'readership_by_day_of_week',
-			'readership_by_hour_of_day',
-			'traffic_sources_breakdown',
-			'top_campaigns',
-			'device_breakdown',
-			'newsletter_subscriber_composition',
-			'logged_in_vs_anonymous_composition',
-			'supporter_type',
-			'top_regions',
-			'top_cities',
-			'top_pages',
-			'top_authors_by_reader_count',
-		];
+		$proxy = new BigQuery_Proxy_Client();
+		$start = new \DateTimeImmutable( $start_date );
+		$end   = new \DateTimeImmutable( $end_date );
 		$payload = [
-			'window' => [
-				'start' => $start_date,
-				'end'   => $end_date,
-			],
+			'window'                  => [ 'start' => $start_date, 'end' => $end_date ],
+			'active_readers'          => self::active_readers_via_bq( $proxy, $start, $end ),
+			'pageviews'               => self::pageviews_via_bq( $proxy, $start, $end ),
+			'avg_sessions_per_reader' => self::avg_sessions_per_reader_via_bq( $proxy, $start, $end ),
+			'newsletter_signups'      => self::newsletter_signups_via_bq( $proxy, $start, $end ),
 		];
-		foreach ( $keys as $key ) {
+		foreach ( [
+			'new_vs_returning_over_time', 'readership_by_day_of_week', 'readership_by_hour_of_day',
+			'traffic_sources_breakdown', 'top_campaigns', 'device_breakdown',
+			'newsletter_subscriber_composition', 'logged_in_vs_anonymous_composition', 'supporter_type',
+			'top_regions', 'top_cities', 'top_pages', 'top_authors_by_reader_count',
+		] as $key ) {
 			$payload[ $key ] = self::not_implemented_payload();
 		}
 		$payload['top_categories']               = self::bq_only_payload( 'available when BigQuery catalog ships' );
 		$payload['returning_reader_rate_strict'] = self::hidden_in_v1_payload();
 		return $payload;
+	}
+
+	/*
+	===================================================================
+	 * BigQuery proxy shapers (NPPD-1729)
+	 * ===================================================================
+	 */
+
+	/**
+	 * Dispatch a catalog query and shape its first-row column into a scalar payload.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy      Proxy client.
+	 * @param string                $query_name Catalog query name.
+	 * @param string                $column     Column to read from the first row.
+	 * @param string                $type       'count' | 'decimal'.
+	 * @param \DateTimeInterface    $start      Window start.
+	 * @param \DateTimeInterface    $end        Window end.
+	 * @return array
+	 */
+	private static function proxy_scalar( BigQuery_Proxy_Client $proxy, string $query_name, string $column, string $type, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		$rows = $proxy->query( $query_name, $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return [ 'value' => 0, 'computable' => false, 'type' => $type, 'error' => $rows->get_error_message() ];
+		}
+		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $column, $rows[0] ) ) {
+			return [ 'value' => 0, 'computable' => false, 'type' => $type ];
+		}
+		$value = $rows[0][ $column ];
+		if ( null === $value || ! is_numeric( $value ) ) {
+			return [ 'value' => 0, 'computable' => false, 'type' => $type ];
+		}
+		return [
+			'value'      => 'count' === $type ? (int) $value : (float) $value,
+			'computable' => true,
+			'type'       => $type,
+		];
+	}
+
+	/**
+	 * Dispatch a catalog query and shape all rows into a rows payload. The SQL
+	 * column aliases are the row keys (chosen to match the display contract).
+	 *
+	 * @param BigQuery_Proxy_Client $proxy      Proxy client.
+	 * @param string                $query_name Catalog query name.
+	 * @param string                $type       'breakdown' | 'table' | 'timeseries'.
+	 * @param \DateTimeInterface    $start      Window start.
+	 * @param \DateTimeInterface    $end        Window end.
+	 * @return array
+	 */
+	private static function proxy_rows( BigQuery_Proxy_Client $proxy, string $query_name, string $type, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		$rows = $proxy->query( $query_name, $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return [ 'rows' => [], 'computable' => false, 'type' => $type, 'error' => $rows->get_error_message() ];
+		}
+		if ( ! is_array( $rows ) ) {
+			return [ 'rows' => [], 'computable' => false, 'type' => $type ];
+		}
+		return [ 'rows' => array_values( $rows ), 'computable' => true, 'type' => $type ];
+	}
+
+	/*
+	===================================================================
+	 * BigQuery reach scalars (NPPD-1729 Task B1)
+	 * ===================================================================
+	 */
+
+	/**
+	 * Active Readers via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function active_readers_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_scalar( $proxy, 'audience_active_readers', 'active_readers', 'count', $start, $end );
+	}
+
+	/**
+	 * Pageviews via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function pageviews_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_scalar( $proxy, 'audience_pageviews', 'pageviews', 'count', $start, $end );
+	}
+
+	/**
+	 * Newsletter Signups via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function newsletter_signups_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_scalar( $proxy, 'audience_newsletter_signups', 'newsletter_signups', 'count', $start, $end );
+	}
+
+	/**
+	 * Avg Sessions per Reader via BigQuery — sessions / active_readers from one row.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function avg_sessions_per_reader_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		$rows = $proxy->query( 'audience_avg_sessions_per_reader', $start, $end );
+		if ( is_wp_error( $rows ) || empty( $rows ) || ! is_array( $rows[0] ) ) {
+			return [ 'value' => 0, 'computable' => false, 'type' => 'decimal', 'numerator' => 0, 'denominator' => 0 ];
+		}
+		$sessions = (int) ( $rows[0]['sessions'] ?? 0 );
+		$readers  = (int) ( $rows[0]['active_readers'] ?? 0 );
+		return [
+			'value'       => $readers > 0 ? (float) $sessions / $readers : 0,
+			'computable'  => $readers > 0,
+			'type'        => 'decimal',
+			'numerator'   => $sessions,
+			'denominator' => $readers,
+		];
 	}
 
 	/*
