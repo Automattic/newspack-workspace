@@ -11,9 +11,12 @@
  */
 
 use Newspack\Insights\Engagement_Metric;
+use Newspack\Insights\BigQuery_Proxy_Client;
 
 /**
  * Test \Newspack\Insights\Engagement_Metric.
+ *
+ * @group insights
  */
 class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 
@@ -31,29 +34,30 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The per-window cache key incorporates the GA4 property ID, so a reconnect
-	 * to a different property never serves the previous property's cache within
+	 * The per-window cache key incorporates the GA4 property ID (read from
+	 * newspack_ga4_info after the B4 resolver swap), so a reconnect to a
+	 * different property never serves the previous property's cache within
 	 * the TTL.
 	 */
 	public function test_window_cache_key_varies_by_property() {
-		$previous = get_option( 'googlesitekit_analytics-4_settings' );
+		$previous = get_option( 'newspack_ga4_info' );
 		try {
-			update_option( 'googlesitekit_analytics-4_settings', [ 'propertyID' => '111111' ] );
+			update_option( 'newspack_ga4_info', [ 'property_id' => '111111' ] );
 			$key_a = $this->invoke( 'window_cache_key', [ '2026-01-01', '2026-01-31', true ] );
 
-			update_option( 'googlesitekit_analytics-4_settings', [ 'propertyID' => '222222' ] );
+			update_option( 'newspack_ga4_info', [ 'property_id' => '222222' ] );
 			$key_b = $this->invoke( 'window_cache_key', [ '2026-01-01', '2026-01-31', true ] );
 
 			$this->assertNotSame( $key_a, $key_b, 'Different properties must produce different cache keys.' );
 
 			// Same property + window is stable.
-			update_option( 'googlesitekit_analytics-4_settings', [ 'propertyID' => '111111' ] );
+			update_option( 'newspack_ga4_info', [ 'property_id' => '111111' ] );
 			$this->assertSame( $key_a, $this->invoke( 'window_cache_key', [ '2026-01-01', '2026-01-31', true ] ) );
 		} finally {
 			if ( false === $previous ) {
-				delete_option( 'googlesitekit_analytics-4_settings' );
+				delete_option( 'newspack_ga4_info' );
 			} else {
-				update_option( 'googlesitekit_analytics-4_settings', $previous );
+				update_option( 'newspack_ga4_info', $previous );
 			}
 		}
 	}
@@ -68,12 +72,14 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * BQ stub returns not_implemented for every standard metric.
+	 * BQ path: metrics not yet wired in B4 still carry the not_implemented stub.
+	 * (avg_pages_per_session and the other 3 quality scalars were wired in B4.)
 	 */
-	public function test_bq_stub_returns_not_implemented() {
+	public function test_bq_stub_returns_not_implemented_for_unwired_metrics() {
 		$payload = $this->invoke( 'compute_via_bq', [ '2026-05-09', '2026-06-08' ] );
-		$this->assertFalse( $payload['avg_pages_per_session']['computable'] );
-		$this->assertStringContainsString( 'NPPD-1630', $payload['avg_pages_per_session']['error'] );
+		// most_read_articles is still stubbed for B5.
+		$this->assertFalse( $payload['most_read_articles']['computable'] );
+		$this->assertStringContainsString( 'NPPD-1630', $payload['most_read_articles']['error'] );
 	}
 
 	/**
@@ -273,5 +279,90 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 		$payload = $this->invoke( 'rows', [ $overlay, [ 'post_id' ], [ 'readers' ], 'table' ] );
 		$this->assertSame( 'custom_dimension_missing', $payload['overlay']['type'] );
 		$this->assertSame( [ 'post_id' ], $payload['overlay']['dimensions'] );
+	}
+
+	/*
+	===================================================================
+	 * BQ proxy shaper tests (NPPD-1729 Task B4)
+	 * ===================================================================
+	 */
+
+	/**
+	 * Build a fake BigQuery_Proxy_Client that returns canned rows for a
+	 * specific query name. Any other query name returns an empty array.
+	 *
+	 * @param string $expected_name  Catalog query name to intercept.
+	 * @param array  $rows           Rows to return for that query.
+	 * @return BigQuery_Proxy_Client
+	 */
+	private function makeProxyReturning( string $expected_name, array $rows ): BigQuery_Proxy_Client {
+		return new class( $expected_name, $rows ) extends BigQuery_Proxy_Client {
+			public function __construct( private string $expected_name, private array $rows ) {}
+			public function query( string $query_name, \DateTimeInterface $start, \DateTimeInterface $end ) {
+				return $query_name === $this->expected_name ? $this->rows : [];
+			}
+		};
+	}
+
+	/**
+	 * bounce_rate_via_bq shapes a first-row 'bounce_rate' column into a rate payload.
+	 */
+	public function test_bounce_rate_via_bq_shapes_rate() {
+		$proxy = $this->makeProxyReturning( 'engagement_bounce_rate', [ [ 'bounce_rate' => 0.62 ] ] );
+		$out = Engagement_Metric::bounce_rate_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 0.62, $out['value'] );
+		$this->assertSame( 'rate', $out['type'] );
+	}
+
+	/**
+	 * avg_pages_per_session_via_bq shapes into a decimal scalar payload.
+	 */
+	public function test_avg_pages_per_session_via_bq_shapes_decimal() {
+		$proxy = $this->makeProxyReturning( 'engagement_avg_pages_per_session', [ [ 'avg_pages_per_session' => 3.5 ] ] );
+		$out   = Engagement_Metric::avg_pages_per_session_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 3.5, $out['value'] );
+		$this->assertTrue( $out['computable'] );
+		$this->assertSame( 'decimal', $out['type'] );
+	}
+
+	/**
+	 * avg_engaged_session_duration_via_bq shapes into a decimal scalar payload.
+	 */
+	public function test_avg_engaged_session_duration_via_bq_shapes_decimal() {
+		$proxy = $this->makeProxyReturning( 'engagement_avg_engaged_session_duration', [ [ 'avg_engaged_session_duration_sec' => 120.5 ] ] );
+		$out   = Engagement_Metric::avg_engaged_session_duration_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 120.5, $out['value'] );
+		$this->assertTrue( $out['computable'] );
+		$this->assertSame( 'decimal', $out['type'] );
+	}
+
+	/**
+	 * article_completion_rate_via_bq shapes the scroll_to_90_rate column into a rate payload.
+	 */
+	public function test_article_completion_rate_via_bq_shapes_rate() {
+		$proxy = $this->makeProxyReturning( 'engagement_article_completion_rate', [ [ 'scroll_to_90_rate' => 0.45 ] ] );
+		$out   = Engagement_Metric::article_completion_rate_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 0.45, $out['value'] );
+		$this->assertTrue( $out['computable'] );
+		$this->assertSame( 'rate', $out['type'] );
+	}
+
+	/**
+	 * compute_via_bq wires the 4 quality scalars (no longer not_implemented stub).
+	 * In the test environment the proxy is unconfigured (WP_Error), so each scalar
+	 * returns computable=false — but the NPPD-1630 "not yet implemented" stub error
+	 * must be gone, proving the method dispatches to the BQ shaper instead of the
+	 * not_implemented_payload() fallback.
+	 */
+	public function test_compute_via_bq_quality_scalars_are_wired() {
+		$payload = $this->invoke( 'compute_via_bq', [ '2026-05-09', '2026-06-08' ] );
+		// These four should no longer carry 'NPPD-1630' not-implemented errors.
+		$wired = [ 'avg_pages_per_session', 'avg_engaged_session_duration', 'bounce_rate', 'article_completion_rate' ];
+		foreach ( $wired as $key ) {
+			$this->assertArrayHasKey( $key, $payload, "$key present in BQ payload" );
+			if ( isset( $payload[ $key ]['error'] ) ) {
+				$this->assertStringNotContainsString( 'NPPD-1630', $payload[ $key ]['error'], "$key must not carry the not-implemented stub error" );
+			}
+		}
 	}
 }

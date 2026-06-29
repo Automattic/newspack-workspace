@@ -17,6 +17,7 @@
 namespace Newspack\Insights;
 
 use Newspack\Insights\GA4\Client;
+use Newspack\Insights\BigQuery_Proxy_Client;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -54,13 +55,16 @@ final class Engagement_Metric {
 	}
 
 	/**
-	 * Resolve the GA4 property ID from Site Kit's stored settings.
+	 * Resolve the GA4 property ID.
 	 *
-	 * @return string
+	 * Reads from `newspack_ga4_info` (set by the Newspack GA4 integration) rather
+	 * than the old Site Kit option. Falls back to '' when no property is connected.
+	 *
+	 * @return string Numeric property ID, or '' when none is connected.
 	 */
 	private static function resolve_property_id(): string {
-		$settings = get_option( 'googlesitekit_analytics-4_settings', [] );
-		return is_array( $settings ) && ! empty( $settings['propertyID'] ) ? (string) $settings['propertyID'] : '';
+		$info = get_option( 'newspack_ga4_info', [] );
+		return is_array( $info ) && ! empty( $info['property_id'] ) ? (string) $info['property_id'] : '';
 	}
 
 	/**
@@ -207,18 +211,18 @@ final class Engagement_Metric {
 	}
 
 	/**
-	 * BQ path — v1 stub.
+	 * BQ path — quality scalars wired; remaining metrics stubbed for B5.
 	 *
 	 * @param string $start_date YYYY-MM-DD.
 	 * @param string $end_date   YYYY-MM-DD.
 	 * @return array
 	 */
 	private static function compute_via_bq( string $start_date, string $end_date ): array {
-		$keys = [
-			'avg_pages_per_session',
-			'avg_engaged_session_duration',
-			'bounce_rate',
-			'article_completion_rate',
+		$proxy = new BigQuery_Proxy_Client();
+		$start = new \DateTimeImmutable( $start_date );
+		$end   = new \DateTimeImmutable( $end_date );
+
+		$not_implemented_keys = [
 			'most_read_articles',
 			'articles_by_completion_rate',
 			'top_authors_by_avg_engagement_time',
@@ -226,19 +230,172 @@ final class Engagement_Metric {
 			'engagement_by_traffic_source',
 			'engagement_by_returning_vs_new',
 		];
+
 		$payload = [
-			'window' => [
+			'window'                   => [
 				'start' => $start_date,
 				'end'   => $end_date,
 			],
+			// Overall engagement quality (wired in B4).
+			'avg_pages_per_session'    => self::avg_pages_per_session_via_bq( $proxy, $start, $end ),
+			'avg_engaged_session_duration' => self::avg_engaged_session_duration_via_bq( $proxy, $start, $end ),
+			'bounce_rate'              => self::bounce_rate_via_bq( $proxy, $start, $end ),
+			'article_completion_rate'  => self::article_completion_rate_via_bq( $proxy, $start, $end ),
 		];
-		foreach ( $keys as $key ) {
+
+		foreach ( $not_implemented_keys as $key ) {
 			$payload[ $key ] = self::not_implemented_payload();
 		}
 		foreach ( [ 'top_categories_by_engagement', 'mobile_vs_desktop_content_preferences', 'top_authors_by_repeat_reader_rate', 'article_freshness_vs_engagement' ] as $hidden ) {
 			$payload[ $hidden ] = self::hidden_in_v1_payload();
 		}
 		return $payload;
+	}
+
+	/*
+	===================================================================
+	 * BigQuery proxy shapers (NPPD-1729 Task B4)
+	 * ===================================================================
+	 */
+
+	/**
+	 * Dispatch a catalog query and shape its first-row column into a scalar payload.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy      Proxy client.
+	 * @param string                $query_name Catalog query name.
+	 * @param string                $column     Column to read from the first row.
+	 * @param string                $type       'count' | 'decimal'.
+	 * @param \DateTimeInterface    $start      Window start.
+	 * @param \DateTimeInterface    $end        Window end.
+	 * @return array
+	 */
+	private static function proxy_scalar( BigQuery_Proxy_Client $proxy, string $query_name, string $column, string $type, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		$rows = $proxy->query( $query_name, $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return [
+				'value'      => 0,
+				'computable' => false,
+				'type'       => $type,
+				'error'      => $rows->get_error_message(),
+			];
+		}
+		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $column, $rows[0] ) ) {
+			return [
+				'value'      => 0,
+				'computable' => false,
+				'type'       => $type,
+			];
+		}
+		$value = $rows[0][ $column ];
+		if ( null === $value || ! is_numeric( $value ) ) {
+			return [
+				'value'      => 0,
+				'computable' => false,
+				'type'       => $type,
+			];
+		}
+		return [
+			'value'      => 'count' === $type ? (int) $value : (float) $value,
+			'computable' => true,
+			'type'       => $type,
+		];
+	}
+
+	/**
+	 * Dispatch a catalog query and shape all rows into a rows payload. The SQL
+	 * column aliases are the row keys (chosen to match the display contract).
+	 *
+	 * @param BigQuery_Proxy_Client $proxy      Proxy client.
+	 * @param string                $query_name Catalog query name.
+	 * @param string                $type       'breakdown' | 'table' | 'timeseries'.
+	 * @param \DateTimeInterface    $start      Window start.
+	 * @param \DateTimeInterface    $end        Window end.
+	 * @return array
+	 */
+	private static function proxy_rows( BigQuery_Proxy_Client $proxy, string $query_name, string $type, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		$rows = $proxy->query( $query_name, $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return [
+				'rows'       => [],
+				'computable' => false,
+				'type'       => $type,
+				'error'      => $rows->get_error_message(),
+			];
+		}
+		if ( ! is_array( $rows ) ) {
+			return [
+				'rows'       => [],
+				'computable' => false,
+				'type'       => $type,
+			];
+		}
+		return [
+			'rows'       => array_values( $rows ),
+			'computable' => true,
+			'type'       => $type,
+		];
+	}
+
+	/*
+	===================================================================
+	 * BigQuery quality scalar methods (NPPD-1729 Task B4)
+	 * ===================================================================
+	 */
+
+	/**
+	 * Avg Pages per Session via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function avg_pages_per_session_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_scalar( $proxy, 'engagement_avg_pages_per_session', 'avg_pages_per_session', 'decimal', $start, $end );
+	}
+
+	/**
+	 * Avg Engaged Session Duration via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function avg_engaged_session_duration_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		return self::proxy_scalar( $proxy, 'engagement_avg_engaged_session_duration', 'avg_engaged_session_duration_sec', 'decimal', $start, $end );
+	}
+
+	/**
+	 * Bounce Rate via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function bounce_rate_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		$rows = $proxy->query( 'engagement_bounce_rate', $start, $end );
+		if ( is_wp_error( $rows ) || empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( 'bounce_rate', $rows[0] ) || ! is_numeric( $rows[0]['bounce_rate'] ) ) {
+			return [ 'value' => 0, 'computable' => false, 'type' => 'rate' ];
+		}
+		return [ 'value' => (float) $rows[0]['bounce_rate'], 'computable' => true, 'type' => 'rate' ];
+	}
+
+	/**
+	 * Article Completion Rate via BigQuery.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array
+	 */
+	public static function article_completion_rate_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		$rows = $proxy->query( 'engagement_article_completion_rate', $start, $end );
+		if ( is_wp_error( $rows ) || empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( 'scroll_to_90_rate', $rows[0] ) || ! is_numeric( $rows[0]['scroll_to_90_rate'] ) ) {
+			return [ 'value' => 0, 'computable' => false, 'type' => 'rate' ];
+		}
+		return [ 'value' => (float) $rows[0]['scroll_to_90_rate'], 'computable' => true, 'type' => 'rate' ];
 	}
 
 	/*
