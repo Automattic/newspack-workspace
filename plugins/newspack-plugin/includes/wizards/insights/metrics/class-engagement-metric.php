@@ -347,11 +347,12 @@ final class Engagement_Metric {
 	/**
 	 * Most Read Articles via BigQuery.
 	 *
-	 * The BQ SQL handles HAVING (reader threshold), ranking, LIMIT 50, and column
-	 * selection (page_title, unique_readers, avg_engagement_seconds). A plain
-	 * proxy_rows passthrough is correct — the PHP shaping done in the GA4 path
-	 * (two-report join, engagement_score computation, sort, strip) is already
-	 * performed in the BQ query.
+	 * The BQ SQL handles HAVING (reader threshold), ranking, and LIMIT, but its
+	 * SELECT carries two columns the frontend table never renders: `page_url`
+	 * (used only for keying/dedup) and `avg_scroll_depth` (a ranking input folded
+	 * into `engagement_score`). The fixture contract is exactly
+	 * { page_title, unique_readers, avg_engagement_seconds, engagement_score }, so
+	 * project the proxy rows down to those four keys.
 	 *
 	 * @param BigQuery_Proxy_Client $proxy Proxy client.
 	 * @param \DateTimeInterface    $start Window start.
@@ -359,15 +360,28 @@ final class Engagement_Metric {
 	 * @return array
 	 */
 	public static function most_read_articles_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
-		return self::proxy_rows( $proxy, 'engagement_most_read_articles', 'table', $start, $end );
+		$payload         = self::proxy_rows( $proxy, 'engagement_most_read_articles', 'table', $start, $end );
+		$payload['rows'] = array_map(
+			function ( $row ) {
+				return [
+					'page_title'             => (string) ( $row['page_title'] ?? '' ),
+					'unique_readers'         => (int) ( $row['unique_readers'] ?? 0 ),
+					'avg_engagement_seconds' => (float) ( $row['avg_engagement_seconds'] ?? 0 ),
+					'engagement_score'       => (float) ( $row['engagement_score'] ?? 0 ),
+				];
+			},
+			$payload['rows']
+		);
+		return $payload;
 	}
 
 	/**
 	 * Articles by Completion Rate via BigQuery.
 	 *
 	 * The BQ SQL handles HAVING (reader threshold), completion_rate computation,
-	 * ORDER BY (rate desc, readers desc), and LIMIT 50. A plain proxy_rows
-	 * passthrough is correct.
+	 * ORDER BY (rate desc, readers desc), and LIMIT. Its SELECT carries `page_url`
+	 * for keying, which the frontend table never renders. The fixture contract is
+	 * { page_title, readers, completion_rate }, so drop `page_url`.
 	 *
 	 * @param BigQuery_Proxy_Client $proxy Proxy client.
 	 * @param \DateTimeInterface    $start Window start.
@@ -375,15 +389,28 @@ final class Engagement_Metric {
 	 * @return array
 	 */
 	public static function articles_by_completion_rate_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
-		return self::proxy_rows( $proxy, 'engagement_articles_by_completion_rate', 'table', $start, $end );
+		$payload         = self::proxy_rows( $proxy, 'engagement_articles_by_completion_rate', 'table', $start, $end );
+		$payload['rows'] = array_map(
+			function ( $row ) {
+				return [
+					'page_title'      => (string) ( $row['page_title'] ?? '' ),
+					'readers'         => (int) ( $row['readers'] ?? 0 ),
+					'completion_rate' => (float) ( $row['completion_rate'] ?? 0 ),
+				];
+			},
+			$payload['rows']
+		);
+		return $payload;
 	}
 
 	/**
 	 * Top Authors by Avg Engagement Time via BigQuery.
 	 *
 	 * The BQ SQL computes avg_engagement_seconds per author, orders by it
-	 * descending, and applies a LIMIT. A plain proxy_rows passthrough is correct —
-	 * the GA4 path's re-sort by avg_engagement_seconds is already done in SQL.
+	 * descending, and applies a LIMIT. Its SELECT also carries `article_reads`
+	 * (the HAVING input) and `avg_scroll_depth`, neither of which the frontend
+	 * table renders. The fixture contract is
+	 * { author, unique_readers, avg_engagement_seconds }, so project down to those.
 	 *
 	 * @param BigQuery_Proxy_Client $proxy Proxy client.
 	 * @param \DateTimeInterface    $start Window start.
@@ -391,16 +418,31 @@ final class Engagement_Metric {
 	 * @return array
 	 */
 	public static function top_authors_by_avg_engagement_time_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
-		return self::proxy_rows( $proxy, 'engagement_top_authors_by_avg_engagement_time', 'table', $start, $end );
+		$payload         = self::proxy_rows( $proxy, 'engagement_top_authors_by_avg_engagement_time', 'table', $start, $end );
+		$payload['rows'] = array_map(
+			function ( $row ) {
+				return [
+					'author'                 => (string) ( $row['author'] ?? '' ),
+					'unique_readers'         => (int) ( $row['unique_readers'] ?? 0 ),
+					'avg_engagement_seconds' => (float) ( $row['avg_engagement_seconds'] ?? 0 ),
+				];
+			},
+			$payload['rows']
+		);
+		return $payload;
 	}
 
 	/**
 	 * Engagement by Device Type via BigQuery.
 	 *
 	 * The BQ SQL computes avg_engagement_seconds = total_engagement / sessions per
-	 * device, so the GA4 path's PHP division is already done in SQL. A plain
-	 * proxy_rows passthrough is correct (columns: device, sessions,
-	 * avg_pages_per_session, avg_engagement_seconds).
+	 * device. Its SELECT carries `avg_scroll_depth` (not rendered) but does NOT
+	 * yet return `avg_pages_per_session`, which the fixture contract
+	 * { device, sessions, avg_engagement_seconds, avg_pages_per_session } requires.
+	 * This is a PR 1 SQL gap (see the report): until the query adds the column the
+	 * card renders without per-session pages. We drop `avg_scroll_depth`, keep the
+	 * available keys, and surface `avg_pages_per_session` if/when the proxy starts
+	 * returning it so no further plugin change is needed when PR 1 lands.
 	 *
 	 * @param BigQuery_Proxy_Client $proxy Proxy client.
 	 * @param \DateTimeInterface    $start Window start.
@@ -408,7 +450,24 @@ final class Engagement_Metric {
 	 * @return array
 	 */
 	public static function engagement_by_device_type_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
-		return self::proxy_rows( $proxy, 'engagement_by_device_type', 'table', $start, $end );
+		$payload         = self::proxy_rows( $proxy, 'engagement_by_device_type', 'table', $start, $end );
+		$payload['rows'] = array_map(
+			function ( $row ) {
+				$out = [
+					'device'                 => (string) ( $row['device'] ?? '' ),
+					'sessions'               => (int) ( $row['sessions'] ?? 0 ),
+					'avg_engagement_seconds' => (float) ( $row['avg_engagement_seconds'] ?? 0 ),
+				];
+				// PR 1 SQL gap: avg_pages_per_session is not yet returned. Forward it
+				// only once it arrives so the contract completes itself without a code change.
+				if ( array_key_exists( 'avg_pages_per_session', $row ) ) {
+					$out['avg_pages_per_session'] = (float) $row['avg_pages_per_session'];
+				}
+				return $out;
+			},
+			$payload['rows']
+		);
+		return $payload;
 	}
 
 	/**
