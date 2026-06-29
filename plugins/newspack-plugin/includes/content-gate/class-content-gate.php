@@ -37,11 +37,19 @@ class Content_Gate {
 	private static $is_gated = false;
 
 	/**
-	 * Whether the post is being shown via metering.
+	 * Whether the queried post's content is locked for the current reader, i.e.
+	 * fully gated with no access (the content has been replaced by a gate).
+	 *
+	 * Distinct from $is_gated, which only signals that gate markup is being
+	 * rendered: that flag is also raised while building the metering excerpt
+	 * and while rendering an overlay gate for a *metered* (still-readable) post.
+	 * Comment gating must key off the access decision instead so it stays
+	 * correct regardless of when gate markup happens to render. Set once, on the
+	 * `the_post` action, before any content or comments are rendered.
 	 *
 	 * @var boolean
 	 */
-	private static $is_metered = false;
+	private static $is_content_locked = false;
 
 	/**
 	 * Valid gate post statuses.
@@ -217,13 +225,13 @@ class Content_Gate {
 			 */
 			! apply_filters( 'newspack_content_gate_restrict_post', true, $post->ID )
 		) {
-			// Content is accessible via metering — show comments but prevent commenting.
-			self::$is_metered        = true;
-			$post->comment_status    = 'closed';
+			// Content is accessible (e.g. via metering); leave commenting governed
+			// by the site's Discussion Settings rather than gating it.
 			return;
 		}
 
-		self::$is_gated = true;
+		self::$is_gated          = true;
+		self::$is_content_locked = true;
 
 		$content = self::get_restricted_post_excerpt( $post );
 
@@ -263,7 +271,9 @@ class Content_Gate {
 	/**
 	 * Filter whether comments are open.
 	 *
-	 * Close comments on gated and metered posts.
+	 * Close comments only on fully locked posts, where the reader cannot access
+	 * the content. Metered (currently-accessible) posts are left untouched so
+	 * the site's Discussion Settings continue to govern commenting.
 	 *
 	 * @param bool $open    Whether comments are open.
 	 * @param int  $post_id Post ID.
@@ -271,7 +281,7 @@ class Content_Gate {
 	 * @return bool
 	 */
 	public static function filter_comments_open( $open, $post_id ) {
-		if ( ( self::$is_gated || self::$is_metered ) && (int) $post_id === (int) get_queried_object_id() ) {
+		if ( self::$is_content_locked && (int) $post_id === (int) get_queried_object_id() ) {
 			return false;
 		}
 		return $open;
@@ -280,7 +290,7 @@ class Content_Gate {
 	/**
 	 * Filter comments array.
 	 *
-	 * Hide all comments on fully gated posts.
+	 * Hide all comments on fully locked posts.
 	 *
 	 * @param array $comments Array of comments.
 	 * @param int   $post_id  Post ID.
@@ -288,7 +298,7 @@ class Content_Gate {
 	 * @return array
 	 */
 	public static function filter_comments_array( $comments, $post_id ) {
-		if ( self::$is_gated && (int) $post_id === (int) get_queried_object_id() ) {
+		if ( self::$is_content_locked && (int) $post_id === (int) get_queried_object_id() ) {
 			return [];
 		}
 		return $comments;
@@ -297,7 +307,7 @@ class Content_Gate {
 	/**
 	 * Filter the comment count.
 	 *
-	 * Return 0 on fully gated posts.
+	 * Return 0 on fully locked posts.
 	 *
 	 * @param int $count   Comment count.
 	 * @param int $post_id Post ID.
@@ -305,7 +315,7 @@ class Content_Gate {
 	 * @return int
 	 */
 	public static function filter_comments_number( $count, $post_id ) {
-		if ( self::$is_gated && (int) $post_id === (int) get_queried_object_id() ) {
+		if ( self::$is_content_locked && (int) $post_id === (int) get_queried_object_id() ) {
 			return 0;
 		}
 		return $count;
