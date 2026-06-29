@@ -72,6 +72,11 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 
 		$result = Posts_Inserter::render_inserted_blocks( $children );
 
+		// Assert both children rendered before comparing positions — otherwise a
+		// missing child makes strpos() return false (== 0) and the order check
+		// could pass for the wrong reason.
+		$this->assertStringContainsString( 'First', $result, 'Expected the first child to render.' );
+		$this->assertStringContainsString( 'Second', $result, 'Expected the second child to render.' );
 		$this->assertLessThan(
 			strpos( $result, 'Second' ),
 			strpos( $result, 'First' ),
