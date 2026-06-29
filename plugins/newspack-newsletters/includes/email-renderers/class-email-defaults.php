@@ -1,14 +1,9 @@
 <?php
 /**
- * Newsletter email defaults provider.
- *
- * Injects Newspack fallback values at the theme.json `default` origin so the
- * newsletter editor canvas reflects them when the active theme defines nothing,
- * while still allowing any theme-origin value to win via the normal merge order.
- *
- * This class's sole responsibility is injecting *fallback* defaults — it must
- * NOT touch any non-newsletter context. Every public method is flag-gated and
- * email-editor-request-gated.
+ * Injects Newspack fallback values at the theme.json default origin so the
+ * newsletter editor canvas reflects them when the active theme defines nothing.
+ * Theme-origin values still win. Every method is flag-gated and
+ * email-editor-request-gated — must NOT touch any non-newsletter context.
  *
  * @package Newspack_Newsletters
  */
@@ -18,33 +13,23 @@ namespace Newspack\Newsletters\Email_Renderers;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Provides Newspack-specific fallback defaults at the theme.json default origin.
+ * Provides Newspack fallback defaults at the theme.json default origin.
  *
- * The `wp_theme_json_data_default` filter fires during global theme.json
- * resolution for every request. The callback is carefully guarded so it only
- * injects in the newsletter email-editor context with the WC renderer flag on.
+ * The `wp_theme_json_data_default` hook fires globally; callbacks guard on the WC renderer
+ * flag and the email-editor request context.
  */
 class Email_Defaults {
 
 	/**
-	 * Fallback button border-radius injected at the default origin.
-	 *
-	 * Task 8 (render side) must import this same constant so the canvas and the
-	 * rendered email agree on the fallback value when no theme defines one.
+	 * Fallback button border-radius. Used by the render side too, so canvas and
+	 * email agree when no theme defines a radius.
 	 *
 	 * @var string
 	 */
 	const DEFAULT_BUTTON_BORDER_RADIUS = '4px';
 
 	/**
-	 * Register the wp_theme_json_data_default filter.
-	 *
-	 * Call this once from Editor_Bootstrap::init() (or equivalent) so the hook
-	 * is only wired up when the email-editor package is available.
-	 *
-	 * The `wp_theme_json_data_default` filter fires globally on every theme.json
-	 * resolution. Only register it when the WC renderer flag is on to avoid
-	 * unnecessary overhead on sites where the flag is off.
+	 * Wire up wp_theme_json_data_default only when the WC renderer flag is on.
 	 *
 	 * @return void
 	 */
@@ -57,19 +42,12 @@ class Email_Defaults {
 	}
 
 	/**
-	 * Inject the Newspack fallback button border-radius at the default origin.
+	 * Inject the fallback button border-radius at the default origin.
 	 *
-	 * The `wp_theme_json_data_default` filter is GLOBAL — it fires for every
-	 * theme.json resolution on the site. We must guard it tightly:
-	 *
-	 * - WC renderer flag must be on (feature-flag guard).
-	 * - Must be an email-editor request (`Newspack_Newsletters_Editor::is_email_editor_request()`).
-	 *
-	 * Any false positive here would silently change button styling across the
-	 * entire front-end, so returning early is always the safe path.
-	 *
-	 * Because `_default` fires before `_theme`, the theme's own button radius
-	 * (theme origin) merges on top and wins — this is pure fallback behaviour.
+	 * The `wp_theme_json_data_default` hook fires globally — a false positive would change
+	 * button styling site-wide, so guard tightly: WC renderer flag on AND an
+	 * email-editor request. The default origin fires before _theme, so any
+	 * theme-origin radius still wins.
 	 *
 	 * @param \WP_Theme_JSON_Data $theme_json Incoming default theme.json data.
 	 * @return \WP_Theme_JSON_Data Potentially modified default theme.json data.
@@ -100,21 +78,12 @@ class Email_Defaults {
 	}
 
 	/**
-	 * Inject the resolved newsletter body/header fonts at the default origin.
+	 * Inject the resolved body/header fonts at the default origin.
 	 *
-	 * This makes the editor canvas show the same fonts the rendered email uses
-	 * for an un-customized newsletter — by default the active theme's fonts,
-	 * matching the standard post editor. Injecting at the `default` origin (this
-	 * filter fires before `_theme`/`_user`) means any global-styles or
-	 * theme-origin font family still overrides it: that is exactly the "unless
-	 * global fonts are set" requirement.
-	 *
-	 * Guarded identically to inject_button_border_radius(): WC renderer flag on
-	 * AND an email-editor request. is_email_editor_request() is also true on
-	 * post-new.php (create), where there is no post yet — in that case fonts are
-	 * resolved with empty meta (global → theme → default), so a brand-new
-	 * newsletter's canvas still shows the resolved theme fonts instead of the
-	 * hardcoded builder defaults.
+	 * Guarded identically to inject_button_border_radius(). Fires before _theme/
+	 * _user, so global-styles or theme-origin fonts still override. On post-new.php
+	 * (no post yet) fonts resolve via global → theme → fallback, so new newsletters
+	 * show theme fonts instead of the hardcoded builder defaults.
 	 *
 	 * @param \WP_Theme_JSON_Data $theme_json Incoming default theme.json data.
 	 * @return \WP_Theme_JSON_Data Potentially modified default theme.json data.
@@ -128,8 +97,7 @@ class Email_Defaults {
 			return $theme_json;
 		}
 
-		// On post-new.php there is no editing post yet; resolve() accepts null and
-		// skips the per-post meta step, running the global → theme → default chain.
+		// On post-new.php there is no post yet; resolve() accepts null and skips meta.
 		$fonts = Fonts::resolve( self::get_editing_post() );
 
 		return $theme_json->update_with(
@@ -152,13 +120,9 @@ class Email_Defaults {
 	}
 
 	/**
-	 * Resolve the newsletter post currently being edited, if any.
+	 * The post currently being edited, or null on post-new.php / when absent.
 	 *
-	 * Reads the `post` URL param (the same signal is_email_editor_request()
-	 * validates for post.php). Returns null on post-new.php / when absent so the
-	 * caller can skip injection gracefully.
-	 *
-	 * @return \WP_Post|null The post being edited, or null.
+	 * @return \WP_Post|null
 	 */
 	private static function get_editing_post(): ?\WP_Post {
 		$post_id = isset( $_GET['post'] ) ? \absint( $_GET['post'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended

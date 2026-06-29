@@ -60,8 +60,8 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * With no palette configured, the palette key is omitted so the merge does
-	 * not wipe the editor's default color presets.
+	 * With no palette configured, the palette key is omitted so the merge does not wipe
+	 * the editor's default color presets.
 	 */
 	public function test_omits_palette_when_option_unconfigured() {
 		$post_id = self::factory()->post->create();
@@ -182,7 +182,7 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Unsupported or empty font meta falls back to the default font stacks.
+	 * Unsupported or empty font meta falls back to the hardcoded default font stacks.
 	 */
 	public function test_font_meta_falls_back_to_defaults_when_unsupported() {
 		if ( function_exists( 'newspack_font_stack' ) ) {
@@ -199,11 +199,8 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Flag on: builder emits styles.elements.button.border.radius as a px string.
-	 *
-	 * The test environment runs with the default (classic) theme which defines no
-	 * button border-radius, so the fallback Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS
-	 * ("4px") is expected.
+	 * Flag on: builder emits styles.elements.button.border.radius as a px string — falls back to
+	 * DEFAULT_BUTTON_BORDER_RADIUS (4px) when the classic/default theme defines no radius.
 	 */
 	public function test_flag_on_emits_button_border_radius_as_px() {
 		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
@@ -219,10 +216,7 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Flag on: builder emits no button color (only border.radius; padding only when theme defines it).
-	 *
-	 * The test environment runs with the default (classic) theme which defines no button padding
-	 * in theme.json, so no spacing key should be emitted for that theme.
+	 * Flag on: builder emits no button color — only border.radius (and padding when the theme defines it).
 	 */
 	public function test_flag_on_does_not_emit_button_color() {
 		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
@@ -234,10 +228,7 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Flag on, classic/default theme (no button padding in theme.json): spacing key is absent.
-	 *
-	 * When the active theme defines no `styles.elements.button.spacing.padding`,
-	 * the builder must not emit a spacing key — leaving classic-theme renders unchanged.
+	 * Flag on, classic/default theme: spacing key is absent when the theme defines no button padding.
 	 */
 	public function test_flag_on_omits_spacing_when_theme_defines_no_button_padding() {
 		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
@@ -296,9 +287,7 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Resolver: var( --wp--custom--border--radius-medium ) → 0.375rem → 6px.
-	 *
-	 * Exercises the full var-resolution + rem→px path without needing a live theme.
+	 * Resolver: var( --wp--custom--border--radius-medium ) → 0.375rem → 6px (full var + rem→px path).
 	 */
 	public function test_resolver_resolves_var_rem_to_px() {
 		$raw = [
@@ -324,10 +313,8 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A non-px value like "50%" is not email-safe and must fall back to the default.
-	 *
-	 * Covers the Important fix: the final guard that prevents pass-through of
-	 * non-px values (percentages, vw, unresolvable vars, etc.).
+	 * A non-px value like "50%" is not email-safe and falls back to the default — the final guard
+	 * prevents pass-through of percentages, vw, or unresolvable vars.
 	 */
 	public function test_resolver_falls_back_for_non_px_value() {
 		$raw = [
@@ -346,9 +333,7 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A genuine px value from a theme must pass through unchanged.
-	 *
-	 * Verifies the final guard allows real px values (e.g. "8px", "4.5px").
+	 * A genuine px value from a theme passes through unchanged.
 	 */
 	public function test_resolver_passes_through_px_value() {
 		$raw = [
@@ -393,19 +378,14 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Length resolver: preset spacing var resolves via SPACING_SIZES fallback.
-	 *
-	 * `var( --wp--preset--spacing--40 )` → slug "40" → "24px" via Theme_Json_Builder::SPACING_SIZES.
+	 * Preset spacing var `var( --wp--preset--spacing--40 )` resolves via SPACING_SIZES fallback to 24px.
 	 */
 	public function test_length_resolver_resolves_preset_spacing_var() {
 		$this->assertSame( '24px', $this->resolve_length( 'var( --wp--preset--spacing--40 )' ) );
 	}
 
 	/**
-	 * Length resolver: preset spacing var resolves via raw theme.json spacingSizes.
-	 *
-	 * When the raw data contains the slug in `settings.spacing.spacingSizes`,
-	 * that size value takes priority (can be a rem that further converts to px).
+	 * Preset spacing var resolves from raw theme.json spacingSizes when present, with further rem→px conversion.
 	 */
 	public function test_length_resolver_resolves_preset_spacing_var_from_raw() {
 		$raw = [
@@ -425,21 +405,15 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Length resolver: fractional rem converts to fractional px.
-	 *
-	 * `0.28125rem` = 4.5 px — the fractional result must be preserved, not truncated.
+	 * Fractional rem converts to fractional px (0.28125rem = 4.5px), preserving the decimal.
 	 */
 	public function test_length_resolver_converts_fractional_rem_to_fractional_px() {
 		$this->assertSame( '4.5px', $this->resolve_length( '0.28125rem' ) );
 	}
 
 	/**
-	 * Length resolver: preset spacing var whose theme size is a clamp() (fluid)
-	 * falls back to the email-safe SPACING_SIZES map, not null.
-	 *
-	 * Newspack-block-theme spacingSizes entries 60/70/80 use `clamp(...)` values.
-	 * Feeding such a size to the resolver must return the email-safe fallback px
-	 * value from SPACING_SIZES, not drop the side entirely.
+	 * A preset spacing var whose theme size is a clamp() (fluid) falls back to the email-safe
+	 * SPACING_SIZES map — newspack-block-theme uses clamp() for entries 60/70/80.
 	 */
 	public function test_length_resolver_clamp_preset_falls_back_to_spacing_sizes() {
 		// Simulate a block-theme spacingSizes entry with a fluid clamp value.
@@ -466,8 +440,7 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Length resolver: preset spacing var whose theme size has a missing 'size' key
-	 * falls back to the SPACING_SIZES map (no PHP notice).
+	 * A malformed spacingSizes entry missing the 'size' key falls back to SPACING_SIZES without a PHP notice.
 	 */
 	public function test_length_resolver_missing_size_key_falls_back_to_spacing_sizes() {
 		// Malformed entry: 'size' key absent.
@@ -494,9 +467,7 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Length resolver: custom spacing var resolves via settings.custom path.
-	 *
-	 * `var( --wp--custom--spacing--25 )` → `settings.custom.spacing.25` → "0.75rem" → 12px.
+	 * A custom spacing var (`var( --wp--custom--spacing--25 )`) resolves via settings.custom path to 12px.
 	 */
 	public function test_length_resolver_resolves_custom_spacing_var() {
 		$raw = [
@@ -534,11 +505,8 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Padding resolver (block-theme scenario): custom var top/bottom → 12px, preset var left/right → 24px.
-	 *
-	 * `var( --wp--custom--spacing--25 )` top/bottom and `var( --wp--preset--spacing--40 )` left/right.
-	 * This is the core parity test: before the fix, all sides resolved to 24px.
-	 * After the fix, top/bottom = 12px, left/right = 24px.
+	 * Block-theme scenario: custom var top/bottom → 12px, preset var left/right → 24px — the core
+	 * parity test where previously all sides incorrectly resolved to 24px.
 	 */
 	public function test_padding_resolver_block_theme_scenario() {
 		$raw = [
@@ -611,10 +579,8 @@ class Test_Theme_Json_Builder extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Flag on, block-theme mock: build() emits spacing.padding with correct px values.
-	 *
-	 * A mock theme injected via wp_theme_json_data_theme filter provides the same
-	 * var structure as the real newspack-block-theme. No live theme required.
+	 * Emits spacing.padding with correct px values for a block-theme scenario — uses a
+	 * mock theme with the same var structure as newspack-block-theme, no live theme required.
 	 */
 	public function test_build_emits_button_padding_for_block_theme_scenario() {
 		// Inject a mock theme that defines button padding with the block-theme var values.

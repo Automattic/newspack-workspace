@@ -2,10 +2,8 @@
 /**
  * Boots the WooCommerce Email Editor package for the newsletters CPT.
  *
- * Initializes the email-editor package container, opts the newsletters CPT
- * into the editor, and registers a wrapping block template that locks the
- * newsletter content into a constrained group. No renderer wiring yet — this
- * only bootstraps the package and registers the template.
+ * Initializes the email-editor package container, opts the newsletters CPT into
+ * the editor, and registers a wrapping block template.
  *
  * @package Newspack
  */
@@ -24,10 +22,7 @@ defined( 'ABSPATH' ) || exit;
  */
 class Editor_Bootstrap {
 	/**
-	 * Plugin namespace used as the prefix of the registered template id.
-	 * The package composes the template id as "{namespace}//{slug}", so the
-	 * full id is "newspack//newspack-newsletter" — unique to this plugin's
-	 * wrapping template (the slug below is newsletters-specific).
+	 * Plugin namespace prefixing the template id ("newspack//newspack-newsletter").
 	 */
 	const TEMPLATE_NAMESPACE = 'newspack';
 
@@ -56,41 +51,29 @@ class Editor_Bootstrap {
 		add_filter( 'woocommerce_email_editor_post_types', [ __CLASS__, 'add_post_type' ] );
 		add_filter( 'woocommerce_email_editor_register_templates', [ __CLASS__, 'register_template' ] );
 
-		// The package re-registers every opted-in post type on `init` (priority 10)
-		// via register_post_type(). Its callback runs after
-		// Newspack_Newsletters::register_cpt(), so without this it would overwrite
-		// the canonical CPT's scalar args (public, labels, rewrite, menu_icon,
-		// rendering mode) with the package's email defaults. Re-assert the canonical
-		// definition at a later priority so Newspack's registration stays authoritative.
+		// The package re-registers opted-in post types on init:10, overwriting the
+		// canonical CPT args with email defaults. Re-assert at priority 11 to keep
+		// Newspack's registration authoritative.
 		add_action( 'init', [ \Newspack_Newsletters::class, 'register_cpt' ], 11 );
 
 		// Inject per-newsletter theme colors at render time. See merge_theme_json().
 		add_filter( 'woocommerce_email_editor_theme_json', [ __CLASS__, 'merge_theme_json' ] );
 
-		// Override the package's per-block renderers with Newspack's (e.g. the
-		// columns percentage-width fix). Hooks block_type_metadata_settings at a
-		// later priority than the package, which runs before core blocks register
-		// on init:10, so the override lands in time.
+		// Override the package's per-block renderers (e.g. the columns
+		// percentage-width fix) via block_type_metadata_settings at priority 11.
 		Block_Renderer_Registry::init();
 
-		// Inject Newspack fallback defaults at the theme.json `default` origin.
-		// This wires up the wp_theme_json_data_default filter (flag-gated + email-editor-request-gated).
+		// Inject Newspack fallback defaults at the theme.json default origin.
 		Email_Defaults::init();
 	}
 
 	/**
 	 * Merge per-newsletter theme colors into the editor theme at render time.
 	 *
-	 * ThemeController applies the `woocommerce_email_editor_theme_json` filter
-	 * with no post argument, so resolve the render post from Renderer_Controller
-	 * first (set during render_wc), falling back to the global $post only when not
-	 * actively rendering.
-	 *
-	 * The built WP_Theme_JSON is memoized per post: get_theme() — and therefore
-	 * this filter — fires several times during one render, and WP_Theme_JSON::merge()
-	 * reads but never mutates its argument, so the cached instance is safe to reuse.
-	 * The cache is request-scoped (static) and a newsletter's color meta is stable
-	 * within a single render.
+	 * The filter provides no post argument, so the render post is read from
+	 * Renderer_Controller (set during render_wc), falling back to global $post.
+	 * The WP_Theme_JSON result is memoized per post — this filter fires several
+	 * times per render, and merge() never mutates its argument.
 	 *
 	 * @param \WP_Theme_JSON $theme The editor theme being assembled.
 	 * @return \WP_Theme_JSON The theme with per-newsletter colors merged in.
@@ -116,15 +99,11 @@ class Editor_Bootstrap {
 	/**
 	 * Opt the newsletters CPT into the email editor.
 	 *
-	 * The package expects each entry to be an array with `name` and `args`
-	 * keys. We pass empty `args` and opt the CPT in only for the editor's
-	 * post-type-aware features (templates, REST fields). The package re-registers
-	 * opted-in post types, so `init()` re-asserts the canonical
-	 * Newspack_Newsletters CPT definition at a later priority to keep it
-	 * authoritative (see init()).
+	 * The package expects `name` + `args` entries; empty args is fine. The package
+	 * re-registers opted-in CPTs (see init() for the priority-11 re-assertion).
 	 *
 	 * @param array $post_types List of email editor post types.
-	 * @return array Modified list of post types.
+	 * @return array Modified list.
 	 */
 	public static function add_post_type( $post_types ) {
 		$post_types[] = [

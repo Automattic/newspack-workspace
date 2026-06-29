@@ -12,18 +12,9 @@ use Newspack_Newsletters\Ads;
 /**
  * Ad block renderer tests.
  *
- * The `newspack-newsletters/ad` block has no save output (`html: false` in
- * block.json), so without a custom renderer the WC email-editor package would
- * silently drop the ad from the rendered email. The Newspack override
- * (`Email_Renderers\Blocks\Ad`) resolves the ad post and renders its block
- * content through the active WC email pipeline, mirroring what the legacy MJML
- * renderer does via `post_to_mjml_components()`.
- *
- * These tests use `render_wc()` end-to-end and assert that ad block content
- * appears in the output. They also cover auto-insertion: `render_wc()` now
- * applies the `newspack_newsletters_newsletter_content` filter (which runs
- * Ads::filter_newsletter_content()) before passing content to the WC renderer,
- * so ads scheduled for auto-injection also render correctly.
+ * The `newspack-newsletters/ad` block has no save output, so without a custom renderer the WC
+ * package silently drops ads. Covers manual ad blocks, auto-insertion via the
+ * `newspack_newsletters_newsletter_content` filter, and guards (type check, expiry, cycle detection).
  */
 class Test_Ad_Block extends WP_UnitTestCase {
 	/**
@@ -39,13 +30,10 @@ class Test_Ad_Block extends WP_UnitTestCase {
 	// ------------------------------------------------------------------
 
 	/**
-	 * Create a minimal ad CPT post with simple block content.
+	 * Create a minimal ad CPT post with no date meta (so is_ad_active() returns true).
 	 *
-	 * No start/expiry date meta is set, so Ads::is_ad_active() returns true.
-	 * The ad content is a single paragraph so the rendered output is predictable.
-	 *
-	 * @param string $ad_text The text to include in the ad paragraph.
-	 * @return \WP_Post The ad post.
+	 * @param string $ad_text Text in the ad paragraph.
+	 * @return \WP_Post
 	 */
 	private function create_ad_post( string $ad_text ): \WP_Post {
 		$post_id = self::factory()->post->create(
@@ -82,12 +70,8 @@ class Test_Ad_Block extends WP_UnitTestCase {
 	// ------------------------------------------------------------------
 
 	/**
-	 * A manually-placed ad block renders the ad post's content.
-	 *
-	 * Without the override the WC package receives an empty $block_content
-	 * (the block has no save output) and its fallback renderer emits nothing —
-	 * the ad is silently dropped. The override must resolve the ad post and
-	 * render its block content so the recipient sees the ad.
+	 * A manually-placed ad block renders the ad post's content — without the override the WC package
+	 * receives empty block content and silently drops the ad.
 	 */
 	public function test_manual_ad_block_renders_ad_content() {
 		$ad_post    = $this->create_ad_post( 'BUY OUR PRODUCT' );
@@ -103,11 +87,7 @@ class Test_Ad_Block extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An ad block with an unresolvable post ID renders nothing (not fatal).
-	 *
-	 * When the referenced post doesn't exist the override must return an empty
-	 * string (not throw, not render garbage) — the rest of the newsletter still
-	 * renders correctly.
+	 * An ad block with an unresolvable post ID renders nothing (not fatal) — surrounding content is unaffected.
 	 */
 	public function test_ad_block_with_unknown_id_renders_empty() {
 		$newsletter = '<!-- wp:paragraph --><p>Before ad.</p><!-- /wp:paragraph -->'
@@ -123,12 +103,8 @@ class Test_Ad_Block extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The ad block marks the ad as inserted after rendering.
-	 *
-	 * The MJML renderer calls Ads::mark_ad_inserted() after rendering the ad.
-	 * The WC override must do the same so that impression tracking and
-	 * de-duplication work correctly when the same newsletter is rendered twice
-	 * in the same request (e.g., preview + send).
+	 * Rendering an ad block marks it as inserted for impression tracking and de-duplication,
+	 * mirroring what the MJML renderer does via Ads::mark_ad_inserted().
 	 */
 	public function test_manual_ad_block_marks_ad_as_inserted() {
 		$ad_post = $this->create_ad_post( 'Marked Ad' );
@@ -154,13 +130,8 @@ class Test_Ad_Block extends WP_UnitTestCase {
 	// ------------------------------------------------------------------
 
 	/**
-	 * Auto-inserted ads appear in the WC-rendered email.
-	 *
-	 * The legacy MJML renderer applies `newspack_newsletters_newsletter_content`
-	 * to the newsletter's content before parsing, which lets Ads::filter_newsletter_content()
-	 * inject ad blocks at the right positions. render_wc() must apply the same
-	 * filter so auto-scheduled ads also reach the WC renderer as real block
-	 * comments that the Ad block renderer then expands.
+	 * Auto-inserted ads appear in the WC-rendered email via the `newspack_newsletters_newsletter_content`
+	 * filter — render_wc() must apply this filter before passing content to the WC renderer.
 	 */
 	public function test_auto_inserted_ad_renders_in_wc_output() {
 		$ad_post = $this->create_ad_post( 'AUTO INSERTED AD TEXT' );
@@ -185,13 +156,8 @@ class Test_Ad_Block extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Auto-inserted ads still render when the post cache is cold.
-	 *
-	 * The renderer feeds the filtered (ad-injected) content to the package via a
-	 * render-scoped `the_content` filter rather than swapping the shared `posts`
-	 * cache entry. This regression test busts the cache for the newsletter before
-	 * rendering — the old cache-swap approach silently dropped the ad here because
-	 * `wp_cache_replace()` is a no-op on a missing key.
+	 * Auto-inserted ads render even with a cold post cache — guards the regression where the old
+	 * cache-swap approach used wp_cache_replace(), which is a no-op on a missing key and silently dropped ads.
 	 */
 	public function test_auto_inserted_ad_renders_on_cold_post_cache() {
 		$this->create_ad_post( 'COLD CACHE AD TEXT' );
@@ -225,10 +191,7 @@ class Test_Ad_Block extends WP_UnitTestCase {
 	// ------------------------------------------------------------------
 
 	/**
-	 * An ad block pointing at a non-ad post renders nothing.
-	 *
-	 * The direct-ID path must confirm the resolved post is of the ads CPT, so a
-	 * stale or wrong id can't leak an arbitrary post's content into the email.
+	 * An ad block pointing at a non-ad post renders nothing — prevents arbitrary post content leaking into email.
 	 */
 	public function test_direct_id_non_ad_post_renders_empty() {
 		$plain_id = self::factory()->post->create(
@@ -250,10 +213,7 @@ class Test_Ad_Block extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An ad block pointing at an expired ad renders nothing.
-	 *
-	 * The direct-ID path runs the same `is_ad_active()` check as auto-select, so an
-	 * ad past its expiry date is skipped instead of rendered.
+	 * An ad block pointing at an expired ad renders nothing — the direct-ID path runs the same is_ad_active() check.
 	 */
 	public function test_direct_id_inactive_ad_renders_empty() {
 		$ad_post = $this->create_ad_post( 'EXPIRED AD TEXT' );
@@ -269,11 +229,7 @@ class Test_Ad_Block extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A self-referencing ad renders once and does not blank the newsletter.
-	 *
-	 * An ad whose content embeds an ad block for itself re-enters the renderer;
-	 * the render-stack cycle guard must stop the recursion so the ad's own content
-	 * still renders (once) rather than recursing until the whole render is empty.
+	 * A self-referencing ad renders once — the render-stack cycle guard stops recursion without blanking the newsletter.
 	 */
 	public function test_cyclic_ad_reference_renders_without_blanking() {
 		// Create the ad, then point its embedded ad block at its own ID.
