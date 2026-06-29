@@ -265,7 +265,12 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	public function test_avg_sessions_per_reader_via_bq_computes_ratio() {
 		$proxy = $this->makeProxyReturning(
 			'audience_avg_sessions_per_reader',
-			[ [ 'sessions' => 6000, 'active_readers' => 2000 ] ]
+			[
+				[
+					'sessions'       => 6000,
+					'active_readers' => 2000,
+				],
+			]
 		);
 		$out = Audience_Metric::avg_sessions_per_reader_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
 		$this->assertSame( 3.0, $out['value'] );
@@ -282,7 +287,12 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	public function test_avg_sessions_per_reader_via_bq_zero_readers_not_computable() {
 		$proxy = $this->makeProxyReturning(
 			'audience_avg_sessions_per_reader',
-			[ [ 'sessions' => 0, 'active_readers' => 0 ] ]
+			[
+				[
+					'sessions'       => 0,
+					'active_readers' => 0,
+				],
+			]
 		);
 		$out = Audience_Metric::avg_sessions_per_reader_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
 		$this->assertSame( 0, $out['value'] );
@@ -309,10 +319,19 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	 * traffic_sources_breakdown_via_bq passes rows through with type 'breakdown'.
 	 */
 	public function test_traffic_sources_breakdown_via_bq_passes_rows() {
-		$proxy = $this->makeProxyReturning( 'audience_traffic_sources_breakdown', [
-			[ 'channel' => 'Organic Search', 'readers' => 100 ],
-			[ 'channel' => '(direct)', 'readers' => 40 ],
-		] );
+		$proxy = $this->makeProxyReturning(
+			'audience_traffic_sources_breakdown',
+			[
+				[
+					'channel' => 'Organic Search',
+					'readers' => 100,
+				],
+				[
+					'channel' => '(direct)',
+					'readers' => 40,
+				],
+			] 
+		);
 		$out = Audience_Metric::traffic_sources_breakdown_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
 		$this->assertSame( 'breakdown', $out['type'] );
 		$this->assertCount( 2, $out['rows'] );
@@ -324,9 +343,15 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	 * UTC hour 0 with a -5h site offset maps to local hour 19.
 	 */
 	public function test_readership_by_hour_applies_timezone_offset() {
-		$proxy = $this->makeProxyReturning( 'audience_readership_by_hour_of_day', [
-			[ 'hour_of_day' => 0, 'active_readers' => 10 ],
-		] );
+		$proxy = $this->makeProxyReturning(
+			'audience_readership_by_hour_of_day',
+			[
+				[
+					'hour_of_day'    => 0,
+					'active_readers' => 10,
+				],
+			] 
+		);
 		// With a -5h site offset, UTC hour 0 maps to local hour 19.
 		$out = Audience_Metric::readership_by_hour_of_day_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ), -5 );
 		$this->assertSame( 19, $out['rows'][0]['hour_of_day'] );
@@ -342,7 +367,16 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	 * top_categories_via_bq passes rows through with type 'table'.
 	 */
 	public function test_top_categories_via_bq_enabled() {
-		$proxy = $this->makeProxyReturning( 'audience_top_categories', [ [ 'category' => 'Politics', 'unique_readers' => 50, 'pageviews' => 120 ] ] );
+		$proxy = $this->makeProxyReturning(
+			'audience_top_categories',
+			[
+				[
+					'category'       => 'Politics',
+					'unique_readers' => 50,
+					'pageviews'      => 120,
+				],
+			] 
+		);
 		$out   = Audience_Metric::top_categories_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
 		$this->assertSame( 'table', $out['type'] );
 		$this->assertSame( 'Politics', $out['rows'][0]['category'] );
@@ -369,5 +403,124 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 		$this->assertStringNotContainsString( 'NEWSPACK_INSIGHTS_AUDIENCE_USE_GA4', $src );
 		$this->assertStringNotContainsString( '_via_ga4', $src );
 		$this->assertStringNotContainsString( 'safe_run_report', $src );
+	}
+
+	/*
+	===================================================================
+	 * supporter_type_via_bq product-gating + slice-fold (NPPD-1729 Task B3 regression fix)
+	 * ===================================================================
+	 */
+
+	/**
+	 * BQ rows for all four segments, used across the gating/folding tests.
+	 *
+	 * @return array
+	 */
+	private function supporterTypeBqRows(): array {
+		return [
+			[
+				'segment'      => 'Both',
+				'reader_count' => 300,
+			],
+			[
+				'segment'      => 'Subscriber only',
+				'reader_count' => 700,
+			],
+			[
+				'segment'      => 'Donor only',
+				'reader_count' => 200,
+			],
+			[
+				'segment'      => 'Logged-in only',
+				'reader_count' => 800,
+			],
+		];
+	}
+
+	/**
+	 * (a) Neither product configured → hidden_in_v1 payload; proxy NOT called.
+	 * Verifies product-gating: if the publisher has no supporter products, the
+	 * card must be hidden (there is nothing to segment by).
+	 */
+	public function test_supporter_type_via_bq_neither_product_returns_hidden_payload() {
+		// No donation products, no subscription products.
+		$this->set_donation_product_ids( [] );
+		// newspack_test_wc_products is unset by tear_down, so no subscription products exist here.
+
+		// Use a proxy that would fail if query() were called.
+		$proxy = $this->makeProxyReturning( 'audience_supporter_type', $this->supporterTypeBqRows() );
+
+		$out = Audience_Metric::supporter_type_via_bq(
+			$proxy,
+			new \DateTimeImmutable( '2026-01-01' ),
+			new \DateTimeImmutable( '2026-01-31' )
+		);
+
+		$this->assertTrue( isset( $out['hidden_in_v1'] ) && $out['hidden_in_v1'], 'hidden_in_v1 must be true when neither product is configured' );
+		$this->assertFalse( $out['computable'] );
+		$this->assertNull( $out['value'] );
+		// Ensure BQ was NOT queried: a real proxy call would have returned rows.
+		$this->assertArrayNotHasKey( 'rows', $out, 'proxy must not be called; no rows key should appear' );
+	}
+
+	/**
+	 * (b) Donations only → two-slice fold.
+	 * "Both" folds into "Donor" (300+200=500).
+	 * "Subscriber only" folds into "Logged-in only" (800+700=1500).
+	 */
+	public function test_supporter_type_via_bq_donations_only_folds_to_two_slices() {
+		$this->set_donation_product_ids( [ 42 ] );
+		// No subscription products.
+		unset( $GLOBALS['newspack_test_wc_products'] );
+
+		$proxy = $this->makeProxyReturning( 'audience_supporter_type', $this->supporterTypeBqRows() );
+
+		$out = Audience_Metric::supporter_type_via_bq(
+			$proxy,
+			new \DateTimeImmutable( '2026-01-01' ),
+			new \DateTimeImmutable( '2026-01-31' )
+		);
+
+		$this->assertArrayNotHasKey( 'hidden_in_v1', $out, 'should NOT be hidden when donations exist' );
+		$this->assertSame( 'breakdown', $out['type'] );
+		$this->assertCount( 2, $out['rows'] );
+
+		// Build a label → value map for order-independent assertions.
+		$by_label = array_column( $out['rows'], 'value', 'label' );
+
+		$this->assertArrayHasKey( 'Donor', $by_label, 'Donor slice must be present' );
+		$this->assertArrayHasKey( 'Logged-in only', $by_label, 'Logged-in only slice must be present' );
+
+		// Both (300) + Donor only (200) = 500.
+		$this->assertSame( 500, $by_label['Donor'], 'Both folds into Donor' );
+		// Logged-in only (800) + Subscriber only (700) = 1500.
+		$this->assertSame( 1500, $by_label['Logged-in only'], 'Subscriber only folds into Logged-in only' );
+	}
+
+	/**
+	 * (c) Both products → four buckets pass through unchanged.
+	 */
+	public function test_supporter_type_via_bq_both_products_passes_four_buckets() {
+		$this->set_donation_product_ids( [ 42 ] );
+		// A non-donation subscription product.
+		$GLOBALS['newspack_test_wc_products'] = [ 99 ];
+
+		$proxy = $this->makeProxyReturning( 'audience_supporter_type', $this->supporterTypeBqRows() );
+
+		$out = Audience_Metric::supporter_type_via_bq(
+			$proxy,
+			new \DateTimeImmutable( '2026-01-01' ),
+			new \DateTimeImmutable( '2026-01-31' )
+		);
+
+		$this->assertArrayNotHasKey( 'hidden_in_v1', $out, 'should NOT be hidden when both products exist' );
+		$this->assertSame( 'breakdown', $out['type'] );
+		// Both products → BQ rows passed through as-is (four rows).
+		$this->assertCount( 4, $out['rows'] );
+		$segments = array_column( $out['rows'], 'segment' );
+		$this->assertContains( 'Both', $segments );
+		$this->assertContains( 'Subscriber only', $segments );
+		$this->assertContains( 'Donor only', $segments );
+		$this->assertContains( 'Logged-in only', $segments );
 	}
 }

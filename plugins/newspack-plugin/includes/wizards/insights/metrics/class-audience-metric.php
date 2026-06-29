@@ -277,7 +277,10 @@ final class Audience_Metric {
 		$start = new \DateTimeImmutable( $start_date );
 		$end   = new \DateTimeImmutable( $end_date );
 		$payload = [
-			'window'                             => [ 'start' => $start_date, 'end' => $end_date ],
+			'window'                             => [
+				'start' => $start_date,
+				'end'   => $end_date,
+			],
 			// Reach.
 			'active_readers'                     => self::active_readers_via_bq( $proxy, $start, $end ),
 			'pageviews'                          => self::pageviews_via_bq( $proxy, $start, $end ),
@@ -328,14 +331,27 @@ final class Audience_Metric {
 	private static function proxy_scalar( BigQuery_Proxy_Client $proxy, string $query_name, string $column, string $type, \DateTimeInterface $start, \DateTimeInterface $end ): array {
 		$rows = $proxy->query( $query_name, $start, $end );
 		if ( is_wp_error( $rows ) ) {
-			return [ 'value' => 0, 'computable' => false, 'type' => $type, 'error' => $rows->get_error_message() ];
+			return [
+				'value'      => 0,
+				'computable' => false,
+				'type'       => $type,
+				'error'      => $rows->get_error_message(),
+			];
 		}
 		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $column, $rows[0] ) ) {
-			return [ 'value' => 0, 'computable' => false, 'type' => $type ];
+			return [
+				'value'      => 0,
+				'computable' => false,
+				'type'       => $type,
+			];
 		}
 		$value = $rows[0][ $column ];
 		if ( null === $value || ! is_numeric( $value ) ) {
-			return [ 'value' => 0, 'computable' => false, 'type' => $type ];
+			return [
+				'value'      => 0,
+				'computable' => false,
+				'type'       => $type,
+			];
 		}
 		return [
 			'value'      => 'count' === $type ? (int) $value : (float) $value,
@@ -358,12 +374,25 @@ final class Audience_Metric {
 	private static function proxy_rows( BigQuery_Proxy_Client $proxy, string $query_name, string $type, \DateTimeInterface $start, \DateTimeInterface $end ): array {
 		$rows = $proxy->query( $query_name, $start, $end );
 		if ( is_wp_error( $rows ) ) {
-			return [ 'rows' => [], 'computable' => false, 'type' => $type, 'error' => $rows->get_error_message() ];
+			return [
+				'rows'       => [],
+				'computable' => false,
+				'type'       => $type,
+				'error'      => $rows->get_error_message(),
+			];
 		}
 		if ( ! is_array( $rows ) ) {
-			return [ 'rows' => [], 'computable' => false, 'type' => $type ];
+			return [
+				'rows'       => [],
+				'computable' => false,
+				'type'       => $type,
+			];
 		}
-		return [ 'rows' => array_values( $rows ), 'computable' => true, 'type' => $type ];
+		return [
+			'rows'       => array_values( $rows ),
+			'computable' => true,
+			'type'       => $type,
+		];
 	}
 
 	/*
@@ -419,7 +448,13 @@ final class Audience_Metric {
 	public static function avg_sessions_per_reader_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
 		$rows = $proxy->query( 'audience_avg_sessions_per_reader', $start, $end );
 		if ( is_wp_error( $rows ) || empty( $rows ) || ! is_array( $rows[0] ) ) {
-			return [ 'value' => 0, 'computable' => false, 'type' => 'decimal', 'numerator' => 0, 'denominator' => 0 ];
+			return [
+				'value'       => 0,
+				'computable'  => false,
+				'type'        => 'decimal',
+				'numerator'   => 0,
+				'denominator' => 0,
+			];
 		}
 		$sessions = (int) ( $rows[0]['sessions'] ?? 0 );
 		$readers  = (int) ( $rows[0]['active_readers'] ?? 0 );
@@ -525,13 +560,98 @@ final class Audience_Metric {
 	/**
 	 * Supporter Type via BigQuery.
 	 *
+	 * Adapts to which products the publisher actually sells, mirroring the GA4
+	 * path's product-gating and slice-fold logic:
+	 *
+	 * - Neither subscriptions nor donations configured → hidden_in_v1 payload
+	 *   (no products to segment by; UI skips the card entirely).
+	 * - Both products → four buckets pass through as-is.
+	 * - Subscriptions only → fold "Both" into "Subscriber", "Donor only" into
+	 *   "Logged-in only" — same two-slice shape as the GA4 path.
+	 * - Donations only → fold "Both" into "Donor", "Subscriber only" into
+	 *   "Logged-in only" — same two-slice shape as the GA4 path.
+	 *
+	 * BQ rows have keys `segment` ∈ {Both, Subscriber only, Donor only,
+	 * Logged-in only} and `reader_count`.
+	 *
 	 * @param BigQuery_Proxy_Client $proxy Proxy client.
 	 * @param \DateTimeInterface    $start Window start.
 	 * @param \DateTimeInterface    $end   Window end.
 	 * @return array
 	 */
 	public static function supporter_type_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
-		return self::proxy_rows( $proxy, 'audience_supporter_type', 'breakdown', $start, $end );
+		$products = self::detect_supporter_products();
+
+		if ( ! $products['subscriptions'] && ! $products['donations'] ) {
+			return self::bq_only_payload( 'no subscription or donation products configured' );
+		}
+
+		$payload = self::proxy_rows( $proxy, 'audience_supporter_type', 'breakdown', $start, $end );
+
+		// Both products → pass the four BQ buckets through unchanged.
+		if ( $products['subscriptions'] && $products['donations'] ) {
+			return $payload;
+		}
+
+		// Single-product publishers: fold the four BQ segments down to the two
+		// relevant slices, mirroring the GA4 path's bucket-merging arithmetic.
+		$counts = [
+			'both'       => 0,
+			'sub_only'   => 0,
+			'donor_only' => 0,
+			'logged_in'  => 0,
+		];
+		foreach ( $payload['rows'] as $row ) {
+			$segment = $row['segment'] ?? '';
+			$count   = (int) ( $row['reader_count'] ?? 0 );
+			switch ( $segment ) {
+				case 'Both':
+					$counts['both'] += $count;
+					break;
+				case 'Subscriber only':
+					$counts['sub_only'] += $count;
+					break;
+				case 'Donor only':
+					$counts['donor_only'] += $count;
+					break;
+				case 'Logged-in only':
+					$counts['logged_in'] += $count;
+					break;
+			}
+		}
+
+		if ( $products['subscriptions'] ) {
+			// Subscriptions only: Both → Subscriber; Donor only → Logged-in only.
+			$rows = [
+				[
+					'label' => __( 'Subscriber', 'newspack-plugin' ),
+					'value' => $counts['sub_only'] + $counts['both'],
+				],
+				[
+					'label' => __( 'Logged-in only', 'newspack-plugin' ),
+					'value' => $counts['logged_in'] + $counts['donor_only'],
+				],
+			];
+		} else {
+			// Donations only: Both → Donor; Subscriber only → Logged-in only.
+			$rows = [
+				[
+					'label' => __( 'Donor', 'newspack-plugin' ),
+					'value' => $counts['donor_only'] + $counts['both'],
+				],
+				[
+					'label' => __( 'Logged-in only', 'newspack-plugin' ),
+					'value' => $counts['logged_in'] + $counts['sub_only'],
+				],
+			];
+		}
+
+		$total = array_sum( array_column( $rows, 'value' ) );
+		return [
+			'rows'       => $rows,
+			'computable' => $total > 0,
+			'type'       => 'breakdown',
+		];
 	}
 
 	/**
@@ -605,13 +725,25 @@ final class Audience_Metric {
 	public static function returning_reader_rate_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
 		$rows = $proxy->query( 'audience_returning_reader_rate', $start, $end );
 		if ( is_wp_error( $rows ) || empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( 'returning_reader_rate', $rows[0] ) ) {
-			return [ 'value' => 0, 'computable' => false, 'type' => 'rate' ];
+			return [
+				'value'      => 0,
+				'computable' => false,
+				'type'       => 'rate',
+			];
 		}
 		$rate = $rows[0]['returning_reader_rate'];
 		if ( null === $rate || ! is_numeric( $rate ) ) {
-			return [ 'value' => 0, 'computable' => false, 'type' => 'rate' ];
+			return [
+				'value'      => 0,
+				'computable' => false,
+				'type'       => 'rate',
+			];
 		}
-		return [ 'value' => (float) $rate, 'computable' => (float) $rate <= 1.0, 'type' => 'rate' ];
+		return [
+			'value'      => (float) $rate,
+			'computable' => (float) $rate <= 1.0,
+			'type'       => 'rate',
+		];
 	}
 
 	/**
@@ -686,4 +818,34 @@ final class Audience_Metric {
 		];
 	}
 
+	/**
+	 * Standard payload for metrics that are hidden in v1 because they require
+	 * BigQuery (UI skips rendering on `hidden_in_v1`).
+	 *
+	 * @return array
+	 */
+	private static function hidden_in_v1_payload(): array {
+		return [
+			'value'        => null,
+			'computable'   => false,
+			'hidden_in_v1' => true,
+		];
+	}
+
+	/**
+	 * Hidden_in_v1 payload that records why the metric is unavailable (e.g. a
+	 * publisher with no supporter products). The UI skips rendering on
+	 * `hidden_in_v1`; the reason is for docs/diagnostics.
+	 *
+	 * @param string $reason Short machine-ish reason.
+	 * @return array
+	 */
+	private static function bq_only_payload( string $reason ): array {
+		return [
+			'value'        => null,
+			'computable'   => false,
+			'hidden_in_v1' => true,
+			'reason'       => $reason,
+		];
+	}
 }
