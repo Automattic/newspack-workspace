@@ -29,13 +29,11 @@ class Renderer_Controller {
 	const ENGINE_WC = 'wc';
 
 	/**
-	 * The newsletter currently being rendered by render_wc().
+	 * The newsletter post currently being rendered by render_wc().
 	 *
-	 * Made available to the `woocommerce_email_editor_theme_json` filter so it can
-	 * apply per-newsletter colors. The package's ThemeController applies that
-	 * filter with no post argument and Renderer::render() does not set up the
-	 * global $post, so a filter resolving the post via get_post() would get null
-	 * during a REST round-trip. This static carries the post explicitly instead.
+	 * The `woocommerce_email_editor_theme_json` hook provides no post argument and
+	 * Renderer::render() does not set global $post, so this static carries the
+	 * post explicitly for per-newsletter color injection.
 	 *
 	 * @var \WP_Post|null
 	 */
@@ -67,10 +65,7 @@ class Renderer_Controller {
 	/**
 	 * The post currently being rendered by render_wc(), or null when idle.
 	 *
-	 * The `woocommerce_email_editor_theme_json` filter reads this to apply
-	 * per-newsletter colors without depending on the global $post.
-	 *
-	 * @return \WP_Post|null The render post, or null when not rendering.
+	 * @return \WP_Post|null
 	 */
 	public static function get_rendering_post(): ?\WP_Post {
 		return self::$rendering_post;
@@ -79,44 +74,29 @@ class Renderer_Controller {
 	/**
 	 * Render a newsletter to email-safe HTML via the WC email-editor engine.
 	 *
-	 * Sets the render post on a static accessor before delegating to the package
-	 * renderer so the theme.json filter can apply per-newsletter colors, then
-	 * clears it in a finally block so it is reset even if rendering throws.
-	 *
-	 * Returns an empty string (never fatals) when the post is invalid, the WC
-	 * email-editor package is unavailable, or the renderer throws.
+	 * Sets $rendering_post before delegating so the theme.json filter can apply
+	 * per-newsletter colors; clears it in a finally block. Returns '' on any
+	 * failure (never fatals).
 	 *
 	 * @param \WP_Post|null $post Newsletter post to render.
-	 * @return string Rendered email HTML, or an empty string when unavailable.
+	 * @return string Rendered email HTML, or '' on failure.
 	 */
 	public static function render_wc( ?\WP_Post $post ): string {
 		if ( ! $post instanceof \WP_Post || ! class_exists( \Automattic\WooCommerce\EmailEditor\Email_Editor_Container::class ) ) {
 			return '';
 		}
 
-		// Reset the per-newsletter ad-insertion tracking before this render. The
-		// tracking static (Ads::$inserted_ads) is process-global and otherwise
-		// never cleared within a request, so a second render of the same
-		// newsletter in one request (e.g. preview then send) would find every ad
-		// already "inserted" and silently drop it.
+		// Reset ad-insertion tracking before each render — Ads::$inserted_ads is
+		// process-global, so a second render in the same request would silently drop all ads.
 		if ( class_exists( '\Newspack_Newsletters\Ads' ) && method_exists( '\Newspack_Newsletters\Ads', 'reset_inserted_ads' ) ) {
 			\Newspack_Newsletters\Ads::reset_inserted_ads( $post->ID );
 		}
 
-		// Apply the `newspack_newsletters_newsletter_content` filter so that
-		// auto-injected ad blocks (inserted by Ads::filter_newsletter_content())
-		// appear in the content before the WC renderer parses it — mirroring
-		// what the MJML renderer does via the same filter.
-		//
-		// Feed that filtered content to the package WITHOUT mutating the shared
-		// object cache. The package's stateless post-content renderer re-fetches
-		// the newsletter by ID (get_post) and runs its raw content through the
-		// `the_content` filter, so we intercept that one pass — matched by post ID
-		// and scoped to this render — and substitute the filtered markup. A
-		// previous approach swapped the `posts` cache entry, but `posts` is a
-		// persistent group here (memcached/Redis), so the ad-injected clone was
-		// visible to any concurrent request that read the post mid-render. This
-		// filter is request-local and never touches the shared cache.
+		// Apply the newspack_newsletters_newsletter_content filter to inject ad blocks,
+		// mirroring what the MJML renderer does. Feed the result to the package via a
+		// render-scoped `the_content` filter rather than the object cache — the package
+		// re-fetches the post by ID, and swapping the `posts` cache entry (a persistent
+		// group) would expose ad content to concurrent requests reading the post mid-render.
 		$filtered_content          = (string) apply_filters( 'newspack_newsletters_newsletter_content', $post->post_content, $post );
 		$render_post               = clone $post;
 		$render_post->post_content = $filtered_content;
@@ -128,8 +108,7 @@ class Renderer_Controller {
 		};
 		add_filter( 'the_content', $inject_content, 0 );
 
-		// Save/restore rather than clear so a nested render_wc() (post B mid-render
-		// of post A) leaves the outer render's post intact when the inner one returns.
+		// Save/restore so nested render_wc() calls leave the outer post intact.
 		$previous             = self::$rendering_post;
 		self::$rendering_post = $post;
 		try {

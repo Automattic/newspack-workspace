@@ -30,11 +30,8 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The width helper restores a percentage width the package stripped to px.
-	 *
-	 * The package's Column renderer runs `Styles_Helper::parse_value( '70%' )`,
-	 * which strips the `%` and emits `width="70"` (= 70px). The helper restores
-	 * the percent so the wrapper cell reads `width="70%"` again.
+	 * The width helper restores a percentage width the package stripped to px — parse_value('70%')
+	 * emits `width="70"` (70px); the helper restores it to `width="70%"`.
 	 */
 	public function test_width_helper_restores_percent() {
 		$html   = '<td class="x" width="70"><table width="100%"></table></td>';
@@ -44,10 +41,7 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The width helper leaves non-percentage widths untouched.
-	 *
-	 * A pixel width never lost information to `parse_value`, so the helper must
-	 * be a no-op and return the HTML byte-for-byte.
+	 * A pixel width was never stripped by parse_value, so the helper is a no-op.
 	 */
 	public function test_width_helper_ignores_non_percent() {
 		$html = '<td class="x" width="200"><table width="100%"></table></td>';
@@ -55,10 +49,7 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The width helper leaves an empty width untouched.
-	 *
-	 * With no width attribute the package falls back to the layout width, so
-	 * there is nothing to restore and the HTML must pass through unchanged.
+	 * An empty width passes through unchanged — the package falls back to the layout width, nothing to restore.
 	 */
 	public function test_width_helper_ignores_empty_width() {
 		$html = '<td class="x" width="600"><table width="100%"></table></td>';
@@ -66,11 +57,7 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The width helper restores a decimal percentage on the wrapper cell.
-	 *
-	 * The package emits `parse_value( '33.33%' )` = `33.33`, so the wrapper cell
-	 * reads `width="33.33"`. The helper must target that canonical numeric and
-	 * restore the percent to `width="33.33%"`.
+	 * The width helper restores decimal percentage widths — parse_value('33.33%') emits `width="33.33"`.
 	 */
 	public function test_width_helper_restores_decimal_percent() {
 		$html   = '<td class="x" width="33.33"><table width="100%"></table></td>';
@@ -80,12 +67,8 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The width helper normalizes a trailing-zero percentage to the package value.
-	 *
-	 * A `30.0%` attribute is emitted by the package as `parse_value( '30.0%' )` =
-	 * `30`, i.e. `width="30"`. The helper must compute the same canonical numeric
-	 * and restore the percent on `width="30"` (the value the package actually
-	 * emitted), not look for a literal `width="30.0"` that never exists.
+	 * The width helper normalizes trailing-zero percentages — `30.0%` is emitted as `width="30"` by the
+	 * package, so the helper targets `30` (not `30.0`) to restore `width="30%"`.
 	 */
 	public function test_width_helper_normalizes_trailing_zero_percent() {
 		$html   = '<td class="x" width="30"><table width="100%"></table></td>';
@@ -95,11 +78,8 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The width helper only rewrites the first (wrapper cell) width occurrence.
-	 *
-	 * The wrapper `<td>` is the only cell carrying the column's numeric width and
-	 * it is the first cell in the column output; any later identical numeric width
-	 * must be left untouched so unrelated cells are never rewritten.
+	 * The width helper only rewrites the first (wrapper cell) width occurrence — later identical
+	 * values are left untouched so unrelated cells are never rewritten.
 	 */
 	public function test_width_helper_restores_first_occurrence_only() {
 		$html   = '<td width="70"></td><td width="70"></td>';
@@ -121,12 +101,8 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Registering via add() maps any block name (no hardcoded list).
-	 *
-	 * Overrides self-register by calling add() at the bottom of their file, so the
-	 * registry must map whatever block name is passed to a lazily-instantiated
-	 * renderer of the given class — proving registration is data-driven, not a
-	 * hardcoded list.
+	 * Maps any block name to a lazily-instantiated renderer class — registration is data-driven,
+	 * not a hardcoded list.
 	 */
 	public function test_add_registers_an_arbitrary_block_override() {
 		Block_Renderer_Registry::add( 'test/dummy', Column::class );
@@ -137,15 +113,8 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Glob discovery loads override files so they self-register.
-	 *
-	 * This is the only test that exercises the headline glob discovery in
-	 * isolation. The fixture renderer lives in a non-autoloaded `fixtures/` dir
-	 * and is never referenced by name, so the sole path to mapping
-	 * `test/fixture-block` is discover() globbing the directory and requiring the
-	 * file (which self-registers at its bottom). Delete the glob loop and this
-	 * fails — unlike the other registry tests, where classmap autoloading of
-	 * Blocks\Column would mask a broken glob.
+	 * Glob discovery loads override files so they self-register — the only test that exercises the
+	 * glob path in isolation; autoloading would mask a broken glob for known classes like Blocks\Column.
 	 */
 	public function test_discover_registers_overrides_via_glob() {
 		Block_Renderer_Registry::discover( __DIR__ . '/fixtures/block-renderers' );
@@ -157,11 +126,8 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A non-renderer override class fails closed (no callback, no fatal).
-	 *
-	 * The instantiation guard requires the class to be a package block-renderer
-	 * subclass. A class that exists but isn't one (here stdClass) must be skipped,
-	 * leaving the package callback in place rather than binding a bad renderer.
+	 * A non-renderer override class is skipped (no fatal) — the registry requires the class to be
+	 * a package block-renderer subclass; stdClass fails that check.
 	 */
 	public function test_non_renderer_override_fails_closed() {
 		Block_Renderer_Registry::add( 'test/not-a-renderer', \stdClass::class );
@@ -172,12 +138,8 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An override whose constructor throws fails closed (no callback, no fatal).
-	 *
-	 * The is_subclass_of() guard can't catch an instantiable subclass that throws
-	 * (or needs constructor args), so the registry wraps `new` in a try/catch. The throwing
-	 * fixture is a valid subclass, so it clears the type guard and exercises that
-	 * catch — registration must survive without a render callback.
+	 * A renderer whose constructor throws is skipped (no fatal) — the is_subclass_of() guard passes
+	 * for a valid subclass that throws, so the registry wraps `new` in a try/catch.
 	 */
 	public function test_uninstantiable_override_fails_closed() {
 		require_once __DIR__ . '/fixtures/class-throwing-block-renderer.php';
@@ -189,10 +151,7 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The registry leaves an unmapped block untouched.
-	 *
-	 * A block with no override (e.g. core/paragraph) must pass through with no
-	 * `render_email_callback` injected.
+	 * A block with no override (e.g. core/paragraph) passes through with no render_email_callback injected.
 	 */
 	public function test_registry_leaves_unmapped_block_untouched() {
 		$settings = Block_Renderer_Registry::update_block_settings( [ 'name' => 'core/paragraph' ] );
@@ -200,13 +159,8 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The Newspack Column renderer extends the package Column renderer.
-	 *
-	 * This is the structural lock for the double-wrapper regression: the package
-	 * Column overrides `add_spacer()` to a no-op because columns render side by
-	 * side. The override MUST inherit that behavior — extending the abstract base
-	 * instead re-applies the abstract `add_spacer()` (an extra
-	 * `email-block-layout` wrapper) around each already-wrapped column.
+	 * The Newspack Column renderer must extend the package Column (not the abstract base) to inherit
+	 * its no-op add_spacer() — otherwise an extra email-block-layout wrapper wraps each column.
 	 */
 	public function test_column_renderer_extends_package_column() {
 		$this->assertTrue(
@@ -216,17 +170,8 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A real two-column render restores both percentages with no double-wrapper.
-	 *
-	 * Renders a real `core/columns` with 70% / 30% columns through the WC
-	 * pipeline (Renderer_Controller::render_wc) and asserts both that the
-	 * percentage widths survive (no bare px) and that no column `<td>` is wrapped
-	 * in an extra `<div class="email-block-layout">` — the f1 double-wrapper.
-	 *
-	 * Before the f1 fix each column cell is spacer-wrapped (one
-	 * div.email-block-layout immediately wrapping the column td per column); after
-	 * the fix the package's no-op add_spacer() is inherited and the wrappers are
-	 * gone.
+	 * A real two-column render preserves both percentage widths and has no per-column
+	 * email-block-layout double-wrapper (the f1 regression fixed by inheriting the package's no-op add_spacer()).
 	 */
 	public function test_two_column_render_preserves_percentages_without_double_wrapper() {
 		Editor_Bootstrap::init();
@@ -259,13 +204,8 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The Newspack Quote renderer extends the package Quote renderer.
-	 *
-	 * The override must extend the package class (not just the abstract base) so
-	 * all the package's quote layout, border, and wrapper logic is inherited
-	 * unchanged. The cite parity fix is applied via theme.json filter, not
-	 * via render_content(), so the class is a structural shim that satisfies
-	 * the registry type-guard.
+	 * The Newspack Quote renderer must extend the package Quote to inherit all layout logic — the
+	 * cite-italic fix is in theme.json, so no render_content override is needed.
 	 */
 	public function test_quote_renderer_extends_package_quote() {
 		$this->assertTrue(
@@ -275,14 +215,8 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A rendered quote cite does NOT carry font-style: italic.
-	 *
-	 * The package vendor theme.json declares `fontStyle: italic` for the cite
-	 * element inside core/quote. The editor canvas renders the cite upright
-	 * (font-style: normal), so the email must match. This test renders a
-	 * quote-with-cite through the real WC pipeline and confirms the cite's
-	 * inline style no longer contains font-style: italic while still carrying the
-	 * other citation styles (font-size, font-weight) that the package provides.
+	 * A rendered quote cite does NOT carry font-style:italic — the package theme.json forces italic
+	 * but the editor canvas renders the cite upright, so the override must correct this.
 	 */
 	public function test_quote_cite_is_not_italic() {
 		Editor_Bootstrap::init();
@@ -322,13 +256,8 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The quote un-italic filter overrides the vendor cite italic in theme.json.
-	 *
-	 * The Core Initializer merges `core/quote.elements.cite.typography.fontStyle =
-	 * "italic"` at priority 10. The quote file registers a filter at priority 11
-	 * that merges `"normal"` so the CSS inliner sees `font-style: normal`. This
-	 * test simulates both filter calls in order and verifies the final merged
-	 * theme.json reports `normal` for the cite element.
+	 * The quote un-italic filter (priority 11) overrides the vendor cite italic (priority 10) in theme.json,
+	 * leaving the merged result as font-style:normal with the Newspack 2px left border.
 	 */
 	public function test_quote_theme_json_filter_overrides_vendor_italic() {
 		// The override is guarded to the newsletter CPT — set a newsletter as the
@@ -375,13 +304,8 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The quote override is a NO-OP outside the newsletter CPT context.
-	 *
-	 * `woocommerce_email_editor_theme_json` is a global hook shared with the
-	 * WooCommerce block-email editor. When the rendering post is not a newsletter
-	 * (here: a regular post, or no post at all), the override must return the theme
-	 * untouched so it never bleeds the Newspack quote styles into WC transactional
-	 * emails on a site running both editors.
+	 * The quote override is a no-op outside the newsletter CPT — the filter is global and must not
+	 * bleed Newspack quote styles into WC transactional emails on a site running both editors.
 	 */
 	public function test_quote_override_is_no_op_for_non_newsletter_context() {
 		$base_styles = [
@@ -437,13 +361,8 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The render-start pass sets render_email_callback on a non-metadata block.
-	 *
-	 * `newspack-newsletters/posts-inserter` is registered with a plain
-	 * register_block_type() (no metadata), so the `block_type_metadata_settings`
-	 * filter never fires for it and its callback is never set by the metadata path.
-	 * apply_to_registered_blocks() must fill it in directly, bound to the Newspack
-	 * Posts_Inserter renderer — the fix for the production delimiter leak.
+	 * The render-start pass sets render_email_callback on non-metadata blocks (e.g. posts-inserter
+	 * registered via register_block_type()) which the block_type_metadata_settings filter never fires for.
 	 */
 	public function test_render_start_pass_sets_callback_on_non_metadata_block() {
 		$registry = \WP_Block_Type_Registry::get_instance();
@@ -465,11 +384,7 @@ class Test_Block_Renderer_Overrides extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The render-start pass never clobbers a callback the metadata path already set.
-	 *
-	 * For a metadata-registered block whose callback is already in place, the pass
-	 * must be a no-op (idempotent), leaving the existing instance untouched so the
-	 * metadata filter stays authoritative.
+	 * The render-start pass is a no-op (idempotent) when a metadata-registered block already has a callback.
 	 */
 	public function test_render_start_pass_does_not_clobber_existing_callback() {
 		$registry   = \WP_Block_Type_Registry::get_instance();

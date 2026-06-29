@@ -15,9 +15,8 @@ defined( 'ABSPATH' ) || exit;
  */
 class Theme_Json_Builder {
 	/**
-	 * Newspack newsletter font-size scale (slug => CSS size). Mirrors
-	 * Newspack_Newsletters_Renderer::get_font_size() so presets resolve to the
-	 * same pixel values the newsletter editor has always used.
+	 * Font-size scale (slug => CSS size). Mirrors Newspack_Newsletters_Renderer::get_font_size()
+	 * so presets resolve to the same pixel values as the legacy editor.
 	 *
 	 * @var array
 	 */
@@ -38,9 +37,8 @@ class Theme_Json_Builder {
 	];
 
 	/**
-	 * Newspack newsletter spacing scale (slug => CSS size). Mirrors the presets
-	 * in Newspack_Newsletters_Renderer::get_spacing_value() so
-	 * `var:preset|spacing|*` references resolve.
+	 * Spacing scale (slug => CSS size). Mirrors Newspack_Newsletters_Renderer::get_spacing_value()
+	 * so var:preset|spacing|* references resolve to the same values.
 	 *
 	 * @var array
 	 */
@@ -78,10 +76,7 @@ class Theme_Json_Builder {
 		$background = \sanitize_hex_color( (string) \get_post_meta( $post->ID, 'background_color', true ) );
 		$text       = \sanitize_hex_color( (string) \get_post_meta( $post->ID, 'text_color', true ) );
 
-		// Resolve fonts through the shared precedence chain: explicit newsletter
-		// meta → global styles → active theme fonts → hardcoded default. An
-		// un-customized newsletter therefore inherits the theme's fonts (matching
-		// the standard post editor) instead of the hardcoded Arial/Georgia.
+		// Resolve fonts: explicit meta → global styles → active theme fonts → hardcoded default.
 		$fonts       = Fonts::resolve( $post );
 		$header_font = $fonts['header'];
 		$body_font   = $fonts['body'];
@@ -122,9 +117,8 @@ class Theme_Json_Builder {
 			],
 		];
 
-		// Emit email-safe button styles when the WC renderer is active.
-		// The WC email package drops CSS-var and rem values it cannot resolve,
-		// so we resolve the theme's button radius and padding to px literals here.
+		// Emit email-safe button styles when the WC renderer is active. The WC email
+		// package drops CSS-var and rem values, so resolve radius and padding to px here.
 		if ( Feature_Flag::is_enabled() ) {
 			$styles['elements']['button'] = [
 				'border' => [
@@ -132,9 +126,8 @@ class Theme_Json_Builder {
 				],
 			];
 
-			// Emit padding only when the active theme defines button padding.
-			// Classic themes (newspack-theme) define no button padding in theme.json,
-			// so we must not emit a padding key for them — leaving the render unchanged.
+			// Only emit padding when the theme defines it. Classic themes
+			// (newspack-theme) define no button padding in theme.json.
 			$padding = self::resolve_button_padding();
 			if ( ! empty( $padding ) ) {
 				$styles['elements']['button']['spacing'] = [
@@ -151,13 +144,10 @@ class Theme_Json_Builder {
 	}
 
 	/**
-	 * Resolve the active theme's button border-radius to an email-safe px string.
+	 * Resolve the theme's button border-radius to an email-safe px string.
+	 * Falls back to Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS.
 	 *
-	 * Reads `styles.elements.button.border.radius` from the merged theme.json.
-	 * Falls back to `Email_Defaults::DEFAULT_BUTTON_BORDER_RADIUS` when the theme
-	 * defines nothing.
-	 *
-	 * @return string Email-safe border-radius value (e.g. "6px", "4px").
+	 * @return string E.g. "6px".
 	 */
 	private static function resolve_button_border_radius(): string {
 		$merged = \WP_Theme_JSON_Resolver::get_merged_data();
@@ -165,15 +155,13 @@ class Theme_Json_Builder {
 	}
 
 	/**
-	 * Resolve a button border-radius from a raw theme.json data array.
+	 * Resolve button border-radius from raw theme.json data.
 	 *
-	 * If the value is a `var( --wp--custom--... )` reference, it is resolved via
-	 * `settings.custom`. rem/em values are converted to px (× 16). Values already
-	 * in px pass through unchanged. Any non-px result (e.g. `50%`, `vw` units, or
-	 * an unresolvable var) falls back to the email-safe default.
+	 * Resolves var(--wp--custom--*), converts rem/em to px. Falls back to
+	 * DEFAULT_BUTTON_BORDER_RADIUS for anything non-px or unresolvable.
 	 *
-	 * @param array $raw Raw theme.json data array (from WP_Theme_JSON::get_raw_data()).
-	 * @return string Email-safe border-radius px value (e.g. "6px", "4px").
+	 * @param array $raw Raw theme.json data (from WP_Theme_JSON::get_raw_data()).
+	 * @return string Email-safe px value (e.g. "6px").
 	 */
 	protected static function resolve_button_border_radius_from_raw( array $raw ): string {
 		$radius = $raw['styles']['elements']['button']['border']['radius'] ?? null;
@@ -192,13 +180,10 @@ class Theme_Json_Builder {
 	}
 
 	/**
-	 * Resolve the active theme's button padding to email-safe px strings, keyed
-	 * by side (`top`, `right`, `bottom`, `left`).
+	 * Resolve the theme's button padding to email-safe px strings per side.
+	 * Returns [] when no button padding is defined (caller skips the key).
 	 *
-	 * Returns an empty array when the theme defines no button padding (classic
-	 * theme scenario), so callers can skip emitting the key entirely.
-	 *
-	 * @return array<string,string> Map of side → px value for each resolved side.
+	 * @return array<string,string> Map of side → px value.
 	 */
 	private static function resolve_button_padding(): array {
 		$merged = \WP_Theme_JSON_Resolver::get_merged_data();
@@ -206,15 +191,12 @@ class Theme_Json_Builder {
 	}
 
 	/**
-	 * Resolve button padding sides from a raw theme.json data array.
+	 * Resolve button padding from raw theme.json data. Reads
+	 * styles.elements.button.spacing.padding and converts each side to px;
+	 * unresolvable sides are omitted.
 	 *
-	 * Reads `styles.elements.button.spacing.padding` and resolves each side
-	 * (`top`, `right`, `bottom`, `left`) to a px value via the shared length
-	 * resolver. Sides that cannot resolve to px are omitted. Returns an empty
-	 * array when no button padding is defined (theme defines nothing → no emit).
-	 *
-	 * @param array $raw Raw theme.json data array (from WP_Theme_JSON::get_raw_data()).
-	 * @return array<string,string> Map of side → px value for each resolved side.
+	 * @param array $raw Raw theme.json data (from WP_Theme_JSON::get_raw_data()).
+	 * @return array<string,string> Map of side → px value.
 	 */
 	protected static function resolve_button_padding_from_raw( array $raw ): array {
 		$padding = $raw['styles']['elements']['button']['spacing']['padding'] ?? null;
@@ -239,24 +221,18 @@ class Theme_Json_Builder {
 	}
 
 	/**
-	 * Resolve a CSS length value to an email-safe px string.
+	 * Resolve a CSS length to an email-safe px string.
 	 *
-	 * Handles:
-	 * - `var( --wp--custom--... )` → traverses `settings.custom` by the
-	 *   double-dash-delimited path segments.
-	 * - `var( --wp--preset--spacing--N )` → looks up the slug in
-	 *   `settings.spacing.spacingSizes` (theme.json preset array format).
-	 *   When the theme's size is a px-convertible value (px/rem/em), it is
-	 *   used directly; when it is a fluid `clamp(...)` or any other
-	 *   non-convertible value the email-safe `SPACING_SIZES` map is used as
-	 *   a fallback.
-	 * - `rem` / `em` → converts to px (× 16, standard email base font size).
-	 * - Plain `px` → passes through unchanged.
-	 * - Anything else (percentages, vw, unresolvable vars, etc.) → returns null.
+	 * - var(--wp--preset--spacing--N): looks up spacingSizes; falls back to
+	 *   SPACING_SIZES when the theme size is fluid (clamp) or non-convertible.
+	 * - var(--wp--custom--*): traverses settings.custom by -- delimiters.
+	 * - rem/em: converts to px (× 16).
+	 * - px: passes through unchanged.
+	 * - Anything else (%, vw, unresolvable var): returns null.
 	 *
-	 * @param string $value CSS length string to resolve (e.g. "var( --wp--custom--spacing--25 )").
+	 * @param string $value CSS length string (e.g. "var( --wp--custom--spacing--25 )").
 	 * @param array  $raw   Raw theme.json data (from WP_Theme_JSON::get_raw_data()).
-	 * @return string|null Resolved px string (e.g. "12px") or null if unresolvable.
+	 * @return string|null Resolved px string (e.g. "12px") or null.
 	 */
 	protected static function resolve_length_to_px( string $value, array $raw ): ?string {
 		$value = trim( $value );
@@ -270,10 +246,9 @@ class Theme_Json_Builder {
 				$slug       = $preset_matches[1];
 				$size_items = $raw['settings']['spacing']['spacingSizes'] ?? [];
 
-				// Prefer the theme's own preset size — but ONLY when it is a value
-				// we can convert to px (px/rem/em literal). Fluid `clamp(...)` values
-				// (e.g. newspack-block-theme presets 60/70/80) are NOT email-safe and
-				// must be bypassed in favour of the email-safe SPACING_SIZES scale.
+				// Use the theme's preset size only if directly convertible (px/rem/em).
+				// Fluid clamp() values (e.g. newspack-block-theme presets 60/70/80)
+				// are not email-safe and fall through to the SPACING_SIZES map.
 				$theme_size = null;
 				foreach ( $size_items as $item ) {
 					if (
@@ -290,8 +265,7 @@ class Theme_Json_Builder {
 				if ( null !== $theme_size && preg_match( '/^[\d.]+r?em$|^\d+(?:\.\d+)?px$/i', $theme_size ) ) {
 					$value = $theme_size;
 				} else {
-					// Theme size is absent, clamp/fluid, or not a plain px/rem/em →
-					// fall back to the email-safe built-in scale.
+					// Fall back to the email-safe SPACING_SIZES scale.
 					$value = self::SPACING_SIZES[ $slug ] ?? null;
 					if ( null === $value ) {
 						return null;
@@ -364,16 +338,14 @@ class Theme_Json_Builder {
 	/**
 	 * Convert a slug => size map into theme.json preset entries.
 	 *
-	 * Font-size presets get translatable display names so they surface correctly
-	 * in the editor typography panel (matching the labels the legacy MJML path used).
-	 * Spacing presets keep slug names (not user-facing).
+	 * Font-size presets get translatable display names (matching the legacy MJML
+	 * labels); spacing presets use slug names (not user-facing).
 	 *
 	 * @param array $map Slug => CSS size.
 	 * @return array Theme.json preset entries ({ slug, size, name }).
 	 */
 	private static function build_presets( array $map ): array {
-		// Translatable display names for the editor-visible font-size presets.
-		// Only the slugs that appear in FONT_SIZES and surface in the typography panel.
+		// Display names for font-size presets shown in the editor typography panel.
 		$font_size_labels = [
 			'xx-small'     => _x( 'Extra Extra Small', 'font size name', 'newspack-newsletters' ),
 			'x-small'      => _x( 'Extra Small', 'font size name', 'newspack-newsletters' ),

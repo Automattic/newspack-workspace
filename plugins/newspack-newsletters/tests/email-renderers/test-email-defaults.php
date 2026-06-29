@@ -9,16 +9,11 @@ use Newspack\Newsletters\Email_Renderers\Email_Defaults;
 use Newspack\Newsletters\Email_Renderers\Feature_Flag;
 
 /**
- * Tests for Email_Defaults — the Newspack fallback button radius at the default origin.
+ * Tests for Email_Defaults — the Newspack fallback button radius injected at the default origin.
  *
- * The `wp_theme_json_data_default` filter is GLOBAL: it fires for every theme.json
- * resolution on the site. The guard must ensure zero effect outside the newsletter
- * email editor with the WC renderer flag on. These tests verify:
- *
- * - Flag OFF → callback is a no-op.
- * - Flag ON + not an email-editor request → callback is a no-op.
- * - Flag ON + email-editor request → injects DEFAULT_BUTTON_BORDER_RADIUS at default origin.
- * - Theme-origin radius wins after the normal WP merge order (default < theme < user).
+ * The `wp_theme_json_data_default` filter is GLOBAL (fires for every theme.json resolution), so the
+ * guard must ensure zero effect outside the newsletter email editor with the WC renderer flag on.
+ * Theme-origin radius wins after the normal WP merge order (default < theme < user).
  */
 class Test_Email_Defaults extends WP_UnitTestCase {
 
@@ -123,10 +118,8 @@ class Test_Email_Defaults extends WP_UnitTestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * With the WC renderer flag OFF the callback must be a no-op even when called
-	 * in a simulated email-editor request context. This is the most critical guard:
-	 * the filter is global and must never alter default theme.json outside its
-	 * intended scope.
+	 * Flag OFF → the callback is a no-op even in an email-editor context; the global filter must
+	 * never alter default theme.json outside its intended scope.
 	 */
 	public function test_no_op_when_flag_is_off() {
 		// Flag is off by default (no option set).
@@ -146,10 +139,8 @@ class Test_Email_Defaults extends WP_UnitTestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * With the flag ON but NOT an email-editor request the callback must be a no-op.
-	 *
-	 * This covers the global-filter scenario: the filter fires for every page load,
-	 * so the request-context guard is essential for the front-end.
+	 * Flag ON but not an email-editor request → the callback is a no-op; the filter fires on every
+	 * page load so the request-context guard is essential.
 	 */
 	public function test_no_op_when_not_email_editor_request() {
 		update_option( Feature_Flag::OPTION, '1' );
@@ -195,8 +186,7 @@ class Test_Email_Defaults extends WP_UnitTestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * With the flag ON and a proper email-editor request the callback must inject
-	 * DEFAULT_BUTTON_BORDER_RADIUS into styles.elements.button.border.radius.
+	 * Flag ON + email-editor request → injects DEFAULT_BUTTON_BORDER_RADIUS at the default origin.
 	 */
 	public function test_injects_button_radius_when_flag_on_and_email_editor() {
 		update_option( Feature_Flag::OPTION, '1' );
@@ -275,8 +265,8 @@ class Test_Email_Defaults extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Flag ON + email-editor request → resolved body/header fonts are injected
-	 * at the default origin so global/theme fonts can still override them.
+	 * Flag ON + email-editor request → resolved body/header fonts are injected at the default origin
+	 * so global/theme fonts can still override them.
 	 */
 	public function test_fonts_injected_when_flag_on_and_email_editor() {
 		update_option( Feature_Flag::OPTION, '1' );
@@ -292,8 +282,7 @@ class Test_Email_Defaults extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A theme-origin font must win over the Newspack default-origin font, proving
-	 * the "unless global/theme fonts are set" semantics of the default origin.
+	 * A theme-origin font wins over the Newspack default-origin font (default < theme in WP merge order).
 	 */
 	public function test_theme_origin_font_wins_over_default() {
 		update_option( Feature_Flag::OPTION, '1' );
@@ -324,14 +313,8 @@ class Test_Email_Defaults extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A theme-origin button radius must win over the Newspack default-origin value.
-	 *
-	 * WP_Theme_JSON merges origins in ascending order (default < theme < user).
-	 * We simulate this by:
-	 *  1. Starting with a default-origin WP_Theme_JSON_Data after our callback ran.
-	 *  2. Building a WP_Theme_JSON from it.
-	 *  3. Merging a theme-origin WP_Theme_JSON on top.
-	 *  4. Asserting the theme value wins.
+	 * A theme-origin button radius wins over the Newspack default-origin value, simulating the
+	 * normal WP merge order (default < theme).
 	 */
 	public function test_theme_origin_radius_wins_over_default() {
 		update_option( Feature_Flag::OPTION, '1' );

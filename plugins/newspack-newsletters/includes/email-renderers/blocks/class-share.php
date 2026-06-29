@@ -2,10 +2,9 @@
 /**
  * Newspack WC email-editor renderer for the share block.
  *
- * Emits the saved share anchor when the newsletter is public, mirroring the
- * legacy MJML renderer's intent. The block's own server render callback returns
- * an empty string unconditionally, so under the WC engine a public newsletter's
- * valid share link renders empty.
+ * The block's server callback always returns empty, so a public newsletter's
+ * share link renders empty under the WC engine. This override emits the saved
+ * anchor when the newsletter is public — mirroring the legacy MJML renderer's intent.
  *
  * @package Newspack
  */
@@ -21,24 +20,17 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Renders a newspack-newsletters/share block under the WC engine.
  *
- * The share link only makes sense when the newsletter has a public permalink,
- * so the override renders the saved anchor only when the newsletter's
- * `is_public` meta is truthy, and nothing otherwise. The anchor is rebuilt from
- * the saved `href` and `content` attributes (v1 reuses the saved values,
- * matching the legacy MJML path).
+ * Renders the saved anchor only when the newsletter's `is_public` meta is set;
+ * rebuilds it from the saved `href` and `content` attrs (matching the MJML path).
  */
 class Share extends Abstract_Block_Renderer {
 	/**
 	 * Render the share block content.
 	 *
-	 * Resolves the newsletter post, gates on its `is_public` meta, and emits the
-	 * saved share anchor. Returns an empty string when the post cannot be resolved
-	 * or the newsletter is not public.
-	 *
-	 * @param string            $block_content     Block content (ignored; rebuilt from attrs).
+	 * @param string            $block_content     Ignored; rebuilt from attrs.
 	 * @param array             $parsed_block      Parsed block.
 	 * @param Rendering_Context $rendering_context Rendering context.
-	 * @return string
+	 * @return string Share anchor HTML, or '' when post is unresolvable or not public.
 	 */
 	protected function render_content( string $block_content, array $parsed_block, Rendering_Context $rendering_context ): string {
 		$post = Renderer_Controller::get_rendering_post();
@@ -58,18 +50,14 @@ class Share extends Abstract_Block_Renderer {
 		$href    = (string) ( $attrs['href'] ?? '' );
 		$content = (string) ( $attrs['content'] ?? '' );
 
-		// `content` is an HTML-sourced RichText attribute, so it is not serialized
-		// into the block delimiter that email rendering parses — the link text
-		// lives in the saved markup. Fall back to the saved anchor's inner HTML
-		// (mirroring the legacy renderer, which renders the share block from its
-		// inner HTML) so the email link isn't empty.
+		// `content` is an HTML-sourced RichText attr not serialized into the block
+		// delimiter, so fall back to the saved anchor's inner HTML (mirrors the
+		// legacy renderer) to avoid an empty link text.
 		if ( '' === $content && preg_match( '/<a\b[^>]*>(.*?)<\/a>/is', (string) ( $parsed_block['innerHTML'] ?? '' ), $matches ) ) {
 			$content = $matches[1];
 		}
 
-		// Resolve the block's chosen background/text colours. Named presets
-		// (`backgroundColor`/`textColor`) resolve through the palette; a custom
-		// value lives under `style.color`.
+		// Resolve colors: named presets via the palette, custom via style.color.
 		$background = self::resolve_color( (string) ( $attrs['backgroundColor'] ?? '' ) );
 		if ( '' === $background ) {
 			$background = (string) ( $attrs['style']['color']['background'] ?? '' );
@@ -79,8 +67,7 @@ class Share extends Abstract_Block_Renderer {
 			$text = (string) ( $attrs['style']['color']['text'] ?? '' );
 		}
 
-		// Resolve the chosen font size. A named preset (`fontSize`) resolves through
-		// the font-size scale; a custom value lives under `style.typography`.
+		// Resolve font size: named preset via the scale, custom via style.typography.
 		$font_size = self::resolve_font_size( (string) ( $attrs['fontSize'] ?? '' ) );
 		if ( '' === $font_size ) {
 			$font_size = (string) ( $attrs['style']['typography']['fontSize'] ?? '' );
@@ -90,16 +77,14 @@ class Share extends Abstract_Block_Renderer {
 	}
 
 	/**
-	 * Resolve a colour preset slug (or `var:preset|color|slug`) to its hex value.
+	 * Resolve a colour preset slug or `var:preset|color|slug` to its hex value.
 	 *
-	 * The override builds the share markup itself, so it bypasses the package's
-	 * colour handling — and class-based preset colours would inline as unresolved
-	 * `var(--wp--preset--color--*)` (dead in email clients). Resolve the slug
-	 * against the active (email) theme.json palette so an inline hex can be set.
-	 * A value that is already a literal colour (hex / rgb) is returned as-is.
+	 * Class-based presets would inline as dead `var(--wp--preset--color--*)` in
+	 * email clients, so we resolve against the active theme.json palette instead.
+	 * Already-literal colours (hex, rgb) pass through unchanged.
 	 *
 	 * @param string $value Preset slug, `var:preset|color|slug`, or literal colour.
-	 * @return string The hex/literal colour, or an empty string when unresolved.
+	 * @return string Resolved colour, or '' when unresolved.
 	 */
 	private static function resolve_color( string $value ): string {
 		if ( '' === $value ) {
@@ -112,9 +97,7 @@ class Share extends Abstract_Block_Renderer {
 			$value = substr( $value, strlen( 'var:preset|color|' ) );
 		}
 		$palette = wp_get_global_settings( [ 'color', 'palette' ] );
-		// Search custom → theme → default and return the first slug match, mirroring
-		// WordPress' own origin precedence (user/custom overrides theme overrides
-		// default) so a customised preset wins over a colliding theme slug.
+		// Search custom → theme → default to mirror WordPress origin precedence.
 		$colors = isset( $palette['theme'] ) || isset( $palette['default'] ) || isset( $palette['custom'] )
 			? array_merge( $palette['custom'] ?? [], $palette['theme'] ?? [], $palette['default'] ?? [] )
 			: (array) $palette;
@@ -129,21 +112,18 @@ class Share extends Abstract_Block_Renderer {
 	/**
 	 * Resolve a font-size preset slug (e.g. `huge`) to its value.
 	 *
-	 * Like the colour resolution, the override builds the markup itself, so the
-	 * block's chosen size must be set inline. A named preset resolves against the
-	 * active (email) theme.json font-size scale; a literal size (carrying a digit
-	 * or `clamp(`) is returned as-is.
+	 * Resolves named presets (custom → theme → default) against the active
+	 * theme.json scale. Already-literal sizes (carrying a digit or `clamp(`) pass through.
 	 *
 	 * @param string $value Preset slug or literal size (e.g. `huge`, `44px`).
-	 * @return string The resolved size, or an empty string when unresolved.
+	 * @return string Resolved size, or '' when unresolved.
 	 */
 	private static function resolve_font_size( string $value ): string {
 		if ( '' === $value ) {
 			return '';
 		}
-		// Try a named preset first — searching custom → theme → default to mirror
-		// WordPress' origin precedence — so a preset slug that happens to carry a
-		// digit (e.g. `h1`, `step-2`) isn't misread as a literal size below.
+		// Named-preset lookup first (custom → theme → default) so a slug containing
+		// a digit (e.g. `step-2`) isn't misread as a literal size below.
 		$sizes = wp_get_global_settings( [ 'typography', 'fontSizes' ] );
 		$list  = isset( $sizes['theme'] ) || isset( $sizes['default'] ) || isset( $sizes['custom'] )
 			? array_merge( $sizes['custom'] ?? [], $sizes['theme'] ?? [], $sizes['default'] ?? [] )
@@ -153,8 +133,7 @@ class Share extends Abstract_Block_Renderer {
 				return (string) ( $size['size'] ?? '' );
 			}
 		}
-		// No preset matched: a value carrying a digit or `clamp(` is a literal size;
-		// anything else is an unknown slug we can't resolve.
+		// No preset matched: a digit or `clamp(` means a literal size; otherwise unknown slug.
 		if ( preg_match( '/[\d(]/', $value ) ) {
 			return $value;
 		}
@@ -164,26 +143,21 @@ class Share extends Abstract_Block_Renderer {
 	/**
 	 * Build the share anchor markup.
 	 *
-	 * Pure string builder kept separate from the post resolution so it stays
-	 * unit-testable without booting the WC engine. Mirrors the block's saved
-	 * markup: a paragraph wrapping a single anchor. Returns an empty string when
-	 * there is no link to point at.
+	 * Pure function — kept separate so it stays unit-testable without the WC engine.
 	 *
-	 * @param string $href       The share link URL.
-	 * @param string $content    The link text.
-	 * @param string $background Resolved background colour (hex/literal), or ''.
-	 * @param string $text       Resolved text colour (hex/literal), or ''.
-	 * @param string $font_size  Resolved font size (e.g. `44px`), or ''.
-	 * @return string The share anchor HTML, or an empty string when href is empty.
+	 * @param string $href       Share link URL.
+	 * @param string $content    Link text.
+	 * @param string $background Background colour (hex/literal), or ''.
+	 * @param string $text       Text colour (hex/literal), or ''.
+	 * @param string $font_size  Font size (e.g. `44px`), or ''.
+	 * @return string Share anchor HTML, or '' when href is empty.
 	 */
 	public static function build_share_html( string $href, string $content, string $background = '', string $text = '', string $font_size = '' ): string {
 		if ( '' === $href ) {
 			return '';
 		}
-		// Apply the block's background/text colours and font size inline on the
-		// paragraph so they survive into the email. A background-carrying block also
-		// gets the editor canvas's 6px/12px padding so the colour block reads the
-		// same.
+		// Inline the block's colors and font size. A background also gets the
+		// editor canvas's 6px/12px padding so the color block reads the same.
 		$p_styles = [];
 		if ( '' !== $background ) {
 			$p_styles[] = 'background-color: ' . $background;
@@ -196,10 +170,8 @@ class Share extends Abstract_Block_Renderer {
 			$p_styles[] = 'font-size: ' . $font_size;
 		}
 		$p_style = empty( $p_styles ) ? '' : ' style="' . esc_attr( implode( '; ', $p_styles ) . ';' ) . '"';
-		// Match the editor's default link rendering: underlined and inheriting the
-		// text colour (so it follows the block's text colour). The package's CSS
-		// inliner otherwise gives the anchor the client-default blue with no
-		// underline; it preserves existing inline styles, so styling here wins.
+		// Style the anchor underlined + inherit color so it follows the block's text
+		// color. The CSS inliner preserves existing inline styles, so this wins.
 		return sprintf(
 			'<p class="newspack-newsletters-share-block"%3$s><a href="%1$s" style="text-decoration: underline; color: inherit;">%2$s</a></p>',
 			esc_url( $href, [ 'http', 'https', 'mailto' ] ),
@@ -209,5 +181,5 @@ class Share extends Abstract_Block_Renderer {
 	}
 }
 
-// Self-register this override so the registry discovers it via the blocks/ glob.
+// Self-register via the blocks/ glob.
 \Newspack\Newsletters\Email_Renderers\Block_Renderer_Registry::add( 'newspack-newsletters/share', Share::class );

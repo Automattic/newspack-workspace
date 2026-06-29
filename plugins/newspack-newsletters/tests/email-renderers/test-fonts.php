@@ -11,12 +11,8 @@ use Newspack\Newsletters\Email_Renderers\Theme_Json_Builder;
 /**
  * Tests for the shared font resolver.
  *
- * Precedence (highest first):
- *  1. Explicit newsletter font meta (font_header/font_body), validated against
- *     Newspack_Newsletters::$supported_fonts.
- *  2. Global styles typography.fontFamily (the "unless global fonts are set" branch).
- *  3. Active theme fonts via newspack_font_stack() when available.
- *  4. Hardcoded DEFAULT_BODY_FONT / DEFAULT_HEADER_FONT fallback.
+ * Precedence (highest first): explicit newsletter font meta → global styles typography.fontFamily →
+ * active theme newspack_font_stack() → hardcoded DEFAULT_BODY_FONT / DEFAULT_HEADER_FONT fallback.
  */
 class Test_Fonts extends WP_UnitTestCase {
 
@@ -44,10 +40,8 @@ class Test_Fonts extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Unsupported explicit meta is rejected and falls through to the next branch.
-	 *
-	 * With no theme function available and no global styles, that next branch is
-	 * the hardcoded fallback.
+	 * Unsupported explicit meta is rejected and falls through to the hardcoded fallback
+	 * (when no theme function or global styles are available).
 	 */
 	public function test_unsupported_meta_falls_through() {
 		if ( function_exists( 'newspack_font_stack' ) ) {
@@ -65,8 +59,7 @@ class Test_Fonts extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Global styles typography.fontFamily wins over theme fonts and fallback when
-	 * no explicit meta is set. Simulated via the resolver's test seam filter.
+	 * Global styles typography.fontFamily wins over theme fonts and fallback when no explicit meta is set.
 	 */
 	public function test_global_styles_win_over_theme_and_fallback() {
 		$post_id = self::factory()->post->create();
@@ -92,8 +85,8 @@ class Test_Fonts extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A global body font with no heading override applies to body; the header
-	 * falls through to the next branch (theme/fallback) independently.
+	 * A global body font with no heading override applies to body; header falls through to the
+	 * next branch (theme/fallback) independently.
 	 */
 	public function test_global_body_only_leaves_header_to_fall_through() {
 		if ( function_exists( 'newspack_font_stack' ) ) {
@@ -118,13 +111,7 @@ class Test_Fonts extends WP_UnitTestCase {
 	}
 
 	/**
-	 * When the theme exposes newspack_font_stack(), its resolved stacks are used
-	 * as the default (no explicit meta, no global styles). Simulated by defining
-	 * stand-in theme functions only if the real theme isn't loaded.
-	 *
-	 * The default test theme has no newspack_font_stack(), so this asserts the
-	 * resolver's wiring: when the function is absent, it must NOT fatal and must
-	 * fall back to the hardcoded defaults.
+	 * When newspack_font_stack() is absent, the resolver falls back to the hardcoded defaults without fataling.
 	 */
 	public function test_falls_back_to_hardcoded_when_theme_fn_absent() {
 		if ( function_exists( 'newspack_font_stack' ) ) {
@@ -140,13 +127,8 @@ class Test_Fonts extends WP_UnitTestCase {
 	}
 
 	/**
-	 * When the theme's newspack_font_stack() exists, the resolver uses the
-	 * theme's resolved stacks (no explicit meta, no global styles).
-	 *
-	 * The default test theme defines no such function, so we define stand-ins
-	 * that mirror the real theme contract. Function definitions persist for the
-	 * PHP process; that is acceptable because they reproduce the real theme's API
-	 * exactly (and other tests guard on function_exists()).
+	 * When newspack_font_stack() exists, the resolver uses the theme's resolved stacks as the default.
+	 * Stand-in functions are defined to mirror the real theme's API (function definitions persist per-process).
 	 */
 	public function test_theme_fonts_used_as_default_when_theme_fn_present() {
 		require_once __DIR__ . '/fixtures/theme-font-functions.php';
@@ -193,9 +175,8 @@ class Test_Fonts extends WP_UnitTestCase {
 	}
 
 	/**
-	 * When the Newspack theme is present but the customizer font mods are UNSET,
-	 * the resolver uses the theme's CSS-var default stacks (what the standard
-	 * post editor shows) — NOT the degenerate newspack_font_stack( '', 'serif' ).
+	 * Unset customizer font mods use the theme's CSS-var default stacks — not the degenerate
+	 * newspack_font_stack('', 'serif') result.
 	 */
 	public function test_unset_theme_mods_use_theme_css_default_stacks() {
 		require_once __DIR__ . '/fixtures/theme-font-functions.php';
@@ -218,9 +199,8 @@ class Test_Fonts extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A global font expressed as a CSS custom property (var(...)) is treated as
-	 * UNSET and falls through to the theme/fallback branch, because the email CSS
-	 * inliner and email clients can't resolve custom properties.
+	 * A global font expressed as a CSS custom property (var(...)) falls through to the theme branch —
+	 * the email CSS inliner and email clients can't resolve custom properties.
 	 */
 	public function test_global_var_font_falls_through_to_theme() {
 		require_once __DIR__ . '/fixtures/theme-font-functions.php';
@@ -260,11 +240,8 @@ class Test_Fonts extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Resolving with null (the post-new.php create path) skips the per-post meta
-	 * step and runs the global → theme → fallback chain, returning both keys.
-	 *
-	 * With no theme fn and no global styles, that chain lands on the hardcoded
-	 * fallback — proving null is accepted and the meta lookups are skipped.
+	 * Resolving with null (post-new.php create path) skips per-post meta and falls through to the
+	 * hardcoded fallback — null is accepted and meta lookups are skipped.
 	 */
 	public function test_resolves_without_post_falls_through_to_fallback() {
 		if ( function_exists( 'newspack_font_stack' ) ) {
@@ -278,9 +255,7 @@ class Test_Fonts extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Resolving with null honors global styles (the create path still picks up
-	 * site-wide global typography), proving the meta step is skipped but the
-	 * global/theme chain still runs.
+	 * Resolving with null still picks up site-wide global styles typography — only the meta step is skipped.
 	 */
 	public function test_resolves_without_post_honors_global_styles() {
 		add_filter(

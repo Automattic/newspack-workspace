@@ -11,11 +11,8 @@
 use Newspack\Newsletters\Email_Renderers\Renderer_Controller;
 
 /**
- * Minimal test-double provider whose send() outcome is configurable.
- *
- * Implements every ESP API and hookable method as a no-op stub so the test can
- * drive send_newsletter()'s success branch without any real ESP coupling. Only
- * send() carries behaviour: it returns whatever was injected via set_send_result().
+ * Minimal test-double provider — stubs every ESP API method as a no-op so tests can drive
+ * send_newsletter() without real ESP coupling; send() returns whatever set_send_result() injects.
  */
 class Stamp_On_Send_Test_Provider extends Newspack_Newsletters_Service_Provider {
 	/**
@@ -26,7 +23,7 @@ class Stamp_On_Send_Test_Provider extends Newspack_Newsletters_Service_Provider 
 	private $send_result = true;
 
 	/**
-	 * Construct the test-double, registering its service slug.
+	 * Skip parent::__construct() to avoid accumulating global hooks across the test suite.
 	 */
 	public function __construct() {
 		// Intentionally skip parent::__construct(): it registers global send/transition
@@ -384,7 +381,7 @@ class Test_Stamp_On_Send extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Flag OFF plus a successful send stamps the MJML engine.
+	 * Flag OFF plus a successful send stamps the MJML engine (filter wins over leaked option state).
 	 */
 	public function test_successful_send_stamps_mjml_when_flag_off() {
 		// Force the flag off so the assertion is independent of option/filter state

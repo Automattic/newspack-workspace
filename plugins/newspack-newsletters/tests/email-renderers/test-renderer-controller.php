@@ -55,10 +55,7 @@ class Test_Renderer_Controller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The WC render path produces email-safe HTML containing the post body.
-	 *
-	 * The WC engine wraps content in tables for email-client compatibility, so a
-	 * successful render both echoes the body text and emits at least one table.
+	 * Produces email-safe HTML (at least one table) containing the post body text.
 	 */
 	public function test_render_wc_returns_html_with_content() {
 		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
@@ -70,11 +67,8 @@ class Test_Renderer_Controller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The WC render path injects the per-newsletter background color into the output.
-	 *
-	 * This proves the static-post plumbing: the theme filter resolves the render
-	 * post from Renderer_Controller::get_rendering_post() rather than the global
-	 * $post (which is never set here, simulating the REST round-trip path).
+	 * Applies the per-newsletter background color via get_rendering_post() rather than
+	 * global $post, simulating the REST round-trip path where $post is never set.
 	 */
 	public function test_render_wc_applies_per_newsletter_background() {
 		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
@@ -100,20 +94,15 @@ class Test_Renderer_Controller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Renders to an empty string for an invalid post instead of fataling on a
-	 * non-WP_Post argument, honoring the documented render_wc() contract.
+	 * Returns an empty string for a non-WP_Post argument rather than fataling.
 	 */
 	public function test_render_wc_returns_empty_string_for_invalid_post() {
 		$this->assertSame( '', Renderer_Controller::render_wc( null ) );
 	}
 
 	/**
-	 * A failure raised inside the package renderer is swallowed: render_wc() logs
-	 * and returns an empty string instead of letting the \Throwable escape, and the
-	 * render post is still cleared by the finally block.
-	 *
-	 * Forces the failure by hooking the theme.json filter (which fires inside the
-	 * render) to throw, exercising the catch ( \Throwable ) branch directly.
+	 * A failure inside the package renderer is swallowed: render_wc() returns '' and clears the
+	 * render post in finally, even when the renderer throws.
 	 */
 	public function test_render_wc_returns_empty_string_when_renderer_throws() {
 		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();

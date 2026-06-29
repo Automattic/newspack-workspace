@@ -2,8 +2,7 @@
 /**
  * Newspack override of the WC email-editor core/column renderer.
  *
- * Extends the package's Column renderer and restores percentage column widths
- * that the package strips to bare pixels.
+ * Restores percentage column widths that the package strips to bare pixels.
  *
  * @package Newspack
  */
@@ -18,20 +17,14 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Renders a core/column block, preserving percentage widths.
  *
- * The package's Column wrapper sets the cell width via
- * `Styles_Helper::parse_value( $width )`, whose regex grabs the leading number
- * and drops the unit — so a `70%` column renders `width="70"` (= 70px) and
- * collapses the layout. This subclass extends the package renderer (so it reuses
- * the package's column markup AND inherits its no-op `add_spacer()` — columns
- * render side by side and must NOT be spacer-wrapped) and then restores the
- * percent on the wrapper cell.
+ * The package's `Styles_Helper::parse_value()` drops the unit from `70%`,
+ * emitting `width="70"` (70px) and collapsing the layout. This subclass
+ * delegates to the package (inheriting its no-op `add_spacer()` — columns
+ * must not be spacer-wrapped) and restores the percent on the wrapper cell.
  */
 class Column extends Package_Column {
 	/**
-	 * Render the column content, restoring its percentage width.
-	 *
-	 * Delegates to the package's `render_content()` for the column markup, then
-	 * restores the percentage width the package stripped to bare pixels.
+	 * Render the column, then restore its percentage width.
 	 *
 	 * @param string            $block_content     Block content.
 	 * @param array             $parsed_block      Parsed block.
@@ -46,24 +39,16 @@ class Column extends Package_Column {
 	}
 
 	/**
-	 * Restore a percentage column width that the package stripped to pixels.
+	 * Restore a percentage column width stripped to pixels by the package.
 	 *
-	 * Pure string transform so it stays unit-testable in isolation. The package
-	 * emits the width via `Styles_Helper::parse_value( $width )`, which casts the
-	 * leading number to a float and drops the unit — so `70%` becomes `width="70"`
-	 * and `33.33%` becomes `width="33.33"`. We reproduce that canonical numeric
-	 * (`(float) "30.0" === 30.0`, rendered as `30`) and rewrite the first wrapper
-	 * cell carrying it back to a percentage. The wrapper `<td>` is the only cell
-	 * with a numeric width (inner cells have none; the inner table is
-	 * `width="100%"`) and it is the first `<td>` in the column output, so the
-	 * first-occurrence callback targets exactly that cell.
+	 * `Styles_Helper::parse_value()` casts the leading number and drops the unit
+	 * (`70%` → `width="70"`). We reproduce that canonical numeric and rewrite the
+	 * first wrapper `<td>` carrying it back to a percentage. Returns HTML unchanged
+	 * when the width is empty or not a percentage.
 	 *
-	 * When the width is empty or not a percentage there is nothing to restore, so
-	 * the HTML is returned unchanged.
-	 *
-	 * @param string $html  The rendered column HTML.
-	 * @param string $width The original column width attribute (e.g. `70%`).
-	 * @return string The HTML with the percentage width restored.
+	 * @param string $html  Rendered column HTML.
+	 * @param string $width Original column width attribute (e.g. `70%`).
+	 * @return string HTML with percentage width restored.
 	 */
 	public static function preserve_percentage_width( string $html, string $width ): string {
 		if ( '' === $width || '%' !== substr( $width, -1 ) ) {
@@ -78,10 +63,8 @@ class Column extends Package_Column {
 		// The canonical numeric the package emits, e.g. `30` for `30.0%`, `33.33` for `33.33%`.
 		$canonical = (string) ( (float) $num );
 
-		// Restore the percent on the first wrapper <td> carrying that numeric width.
-		// preg_replace_callback avoids replacement-string backreference hazards. The
-		// canonical numeric (not the raw input) is re-percented, so `30.0%` and `30%`
-		// both normalize to `width="30%"`.
+		// Re-add % on the first wrapper <td> carrying that numeric width.
+		// preg_replace_callback avoids backreference hazards in the replacement string.
 		$did_replace = false;
 		return preg_replace_callback(
 			'/<td\b[^>]*\bwidth="' . preg_quote( $canonical, '/' ) . '"/',
@@ -101,5 +84,5 @@ class Column extends Package_Column {
 	}
 }
 
-// Self-register this override so the registry discovers it via the blocks/ glob.
+// Self-register via the blocks/ glob.
 \Newspack\Newsletters\Email_Renderers\Block_Renderer_Registry::add( 'core/column', Column::class );

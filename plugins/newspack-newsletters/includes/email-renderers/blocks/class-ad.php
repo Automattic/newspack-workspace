@@ -2,24 +2,11 @@
 /**
  * Newspack email-renderer for the newspack-newsletters/ad block.
  *
- * The `newspack-newsletters/ad` block is self-closing and has no save output
- * (`html: false` in block.json), so the WC email-editor package receives an
- * empty `$block_content` string and its fallback renderer emits nothing — the
- * ad is silently dropped from the rendered email.
- *
- * This override resolves the ad post from the block's `adId` attribute (or
- * auto-selects the first un-inserted active ad when `adId` is absent), renders
- * the ad post's block content through the active WC email-rendering pipeline,
- * and marks the ad as inserted — mirroring the `newspack-newsletters/ad` case
- * in the legacy MJML renderer (class-newspack-newsletters-renderer.php, line
- * 1702).
- *
- * The WC pipeline is active during a `render_wc()` call because
- * `Content_Renderer::initialize()` hooks `render_block` at priority 10 for
- * the duration of the render. Calling `do_blocks()` on the ad post's content
- * from inside a `render_email_callback` therefore routes each inner block
- * through the same WC email-rendering pass — `render_email_callback` for
- * blocks that have one, the WC fallback otherwise.
+ * The block has no save output (`html: false` in block.json), so the WC engine
+ * receives empty `$block_content` and the fallback renderer emits nothing. This
+ * override resolves the ad post, renders it through the active WC email pipeline,
+ * and marks it inserted — mirroring the MJML renderer's ad case
+ * (class-newspack-newsletters-renderer.php:1702).
  *
  * @package Newspack
  */
@@ -52,14 +39,13 @@ class Ad extends Abstract_Block_Renderer {
 	/**
 	 * Render the ad block.
 	 *
-	 * Resolves the ad post (by direct ID, placement ID, or auto-selection),
-	 * renders its block content through the currently-active WC email pipeline,
-	 * then marks the ad as inserted for tracking and de-duplication.
+	 * Resolves the ad post, renders its content through the WC email pipeline,
+	 * and marks it inserted. Returns '' when no ad post is found.
 	 *
-	 * @param string            $block_content     Original block content (always empty — the block has no save output).
-	 * @param array             $parsed_block      Parsed block data including attrs.
+	 * @param string            $block_content     Block content (always empty — no save output).
+	 * @param array             $parsed_block      Parsed block data.
 	 * @param Rendering_Context $rendering_context Rendering context.
-	 * @return string Rendered ad HTML, or empty string when no ad post is found.
+	 * @return string Rendered ad HTML, or ''.
 	 */
 	protected function render_content( string $block_content, array $parsed_block, Rendering_Context $rendering_context ): string {
 		$attrs   = $parsed_block['attrs'] ?? array();
@@ -70,18 +56,14 @@ class Ad extends Abstract_Block_Renderer {
 			return '';
 		}
 
-		// Break ad-reference cycles. An ad's content can itself embed an ad block,
-		// which re-enters this renderer via do_blocks(); a self- or mutually-
-		// referencing ad would otherwise recurse until it blanks the whole render.
-		// If this ad is already on the render stack, stop here.
+		// Guard against ad→ad recursion: a self- or mutually-referencing ad
+		// re-enters this renderer via do_blocks() and would recurse indefinitely.
 		if ( in_array( $ad_post->ID, self::$render_stack, true ) ) {
 			return '';
 		}
 
-		// Render the ad post's block content through the currently-active WC
-		// email pipeline. Content_Renderer::initialize() hooks render_block at
-		// priority 10 for the duration of render_wc(), so do_blocks() here
-		// routes each inner block through email-specific renderers automatically.
+		// do_blocks() routes inner blocks through the WC email pipeline because
+		// Content_Renderer::initialize() keeps its render_block hook active during render_wc().
 		self::$render_stack[] = $ad_post->ID;
 		try {
 			$html = (string) do_blocks( $ad_post->post_content );
@@ -89,10 +71,8 @@ class Ad extends Abstract_Block_Renderer {
 			array_pop( self::$render_stack );
 		}
 
-		// Mark the ad as inserted *after* rendering (mirroring the MJML renderer)
-		// so a render that throws never persists a phantom insertion, while
-		// auto-selection still skips this ad on a later block and tracking counts
-		// it once.
+		// Mark inserted after rendering (mirrors MJML) so a failed render doesn't
+		// persist a phantom insertion while auto-selection still dedupes correctly.
 		$newsletter = Renderer_Controller::get_rendering_post();
 		if ( $newsletter instanceof \WP_Post ) {
 			Ads::mark_ad_inserted( $newsletter->ID, $ad_post->ID );
@@ -102,23 +82,18 @@ class Ad extends Abstract_Block_Renderer {
 	}
 
 	/**
-	 * Resolve the ad WP_Post from the adId attribute value.
+	 * Resolve the ad WP_Post from the adId attribute.
 	 *
-	 * Mirrors the resolution order in the MJML renderer's
-	 * `render_mjml_component()` case for `newspack-newsletters/ad`:
+	 * Resolution order (mirrors the MJML renderer):
+	 * 1. `placement:<term_id>` — ad assigned to that placement.
+	 * 2. Non-empty string — direct post ID, verified active and ads-CPT-only
+	 *    to prevent stale/wrong IDs leaking arbitrary post content.
+	 * 3. Empty / absent — auto-select the first un-inserted active ad.
 	 *
-	 * 1. `placement:<term_id>` — look up the ad assigned to that placement.
-	 * 2. Non-empty string (numeric post ID) — fetch directly, but only return it
-	 *    when it is an active post of the ads CPT, so a stale or wrong id can't
-	 *    leak an arbitrary post's content into a sent email.
-	 * 3. Empty / absent — auto-select the first un-inserted active ad for
-	 *    the newsletter currently being rendered.
+	 * Returns null (not false) so callers can use instanceof.
 	 *
-	 * Returns null (never false) when no ad post can be resolved so the caller
-	 * can use a strict instanceof check.
-	 *
-	 * @param string $ad_id The raw adId block attribute value, or empty string.
-	 * @return \WP_Post|null Resolved ad post, or null when none is found.
+	 * @param string $ad_id Raw adId attribute value, or empty string.
+	 * @return \WP_Post|null Resolved ad post, or null.
 	 */
 	private function resolve_ad_post( string $ad_id ): ?\WP_Post {
 		// 1. Placement-based lookup: `placement:<term_id>`.
@@ -130,9 +105,8 @@ class Ad extends Abstract_Block_Renderer {
 			return $post instanceof \WP_Post ? $post : null;
 		}
 
-		// 2. Direct post ID — only an active ad of the ads CPT, so a stale or wrong
-		// id renders empty (matching the unknown-ID contract) rather than leaking
-		// an arbitrary post's content into the email.
+		// 2. Direct post ID — verify active and ads-CPT-only so a stale ID doesn't
+		// leak arbitrary post content into the email.
 		if ( '' !== $ad_id ) {
 			$post = get_post( (int) $ad_id );
 			if ( ! $post instanceof \WP_Post || Ads::CPT !== $post->post_type ) {
@@ -158,5 +132,5 @@ class Ad extends Abstract_Block_Renderer {
 	}
 }
 
-// Self-register so the registry discovers this override via the blocks/ glob.
+// Self-register via the blocks/ glob.
 \Newspack\Newsletters\Email_Renderers\Block_Renderer_Registry::add( 'newspack-newsletters/ad', Ad::class );
