@@ -74,6 +74,11 @@ export default function CouponControl( { value, onChange } ) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 		[]
 	);
+
+	// Cancel a pending debounced fetch if the control unmounts, so it can't
+	// fire and update state after the component is gone.
+	useEffect( () => () => debouncedFetch.cancel(), [ debouncedFetch ] );
+
 	function handleInputChange( search ) {
 		if ( search.length > 2 ) {
 			setInFlight( true );

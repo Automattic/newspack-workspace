@@ -117,7 +117,8 @@ function render_callback( $attributes ) {
 	}
 	// Always emit the coupon field (not gated on the gateway check): it is
 	// applied server-side for both the modal and the redirect checkout flows.
-	if ( $coupon ) {
+	// Strict check so a coupon code of "0" is still emitted.
+	if ( '' !== $coupon ) {
 		$hidden_fields .= '<input type="hidden" name="coupon" value="' . esc_attr( $coupon ) . '" />';
 	}
 

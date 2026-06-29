@@ -452,8 +452,12 @@ final class Modal_Checkout {
 		if ( \WC()->session ) {
 			\WC()->session->set( self::AUTO_APPLIED_COUPON_SESSION_KEY, null );
 		}
-		$coupon_code = sanitize_text_field( filter_input( INPUT_GET, 'coupon', FILTER_DEFAULT ) );
-		if ( $coupon_code && function_exists( 'wc_coupons_enabled' ) && \wc_coupons_enabled() ) {
+		// Read with a sanitizing filter (satisfies input-sanitization checks),
+		// then decode entities so a literal code (e.g. one containing "&") still
+		// matches. The strict empty-string check keeps a coupon code of "0" valid.
+		$coupon_code = (string) filter_input( INPUT_GET, 'coupon', FILTER_SANITIZE_FULL_SPECIAL_CHARS );
+		$coupon_code = html_entity_decode( $coupon_code, ENT_QUOTES );
+		if ( '' !== $coupon_code && function_exists( 'wc_coupons_enabled' ) && \wc_coupons_enabled() ) {
 			$coupon    = new \WC_Coupon( $coupon_code );
 			$discounts = new \WC_Discounts( \WC()->cart );
 			if ( true === $discounts->is_coupon_valid( $coupon ) && \WC()->cart->apply_coupon( $coupon_code ) ) {
