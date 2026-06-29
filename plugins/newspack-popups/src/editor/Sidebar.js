@@ -7,7 +7,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { Fragment } from '@wordpress/element';
-import { RadioControl, RangeControl, SelectControl, ToggleControl, CheckboxControl } from '@wordpress/components';
+import { Notice, RadioControl, RangeControl, SelectControl, ToggleControl, CheckboxControl } from '@wordpress/components';
 
 /**
  * External dependencies
@@ -112,6 +112,15 @@ const Sidebar = props => {
 						} ) )
 					) }
 				/>
+			) }
+
+			{ placement === 'above_header' && (
+				<Notice status="warning" isDismissible={ false }>
+					{ __(
+						'Above-header prompts appear at the very top of the page and push the rest of the content down as they load, which can lower your Cumulative Layout Shift (CLS) score. To reduce the impact, keep the prompt short, or use an overlay placement instead.',
+						'newspack-popups'
+					) }
+				</Notice>
 			) }
 
 			{ isOverlay && (

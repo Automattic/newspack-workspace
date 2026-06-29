@@ -12,6 +12,13 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Newspack_Popups_Model {
 	/**
+	 * Transient key caching whether the site has any published above-header prompts.
+	 *
+	 * @var string
+	 */
+	const HAS_ABOVE_HEADER_TRANSIENT = 'newspack_popups_has_above_header';
+
+	/**
 	 * Possible placements of overlay popups.
 	 *
 	 * @var array
@@ -840,6 +847,65 @@ final class Newspack_Popups_Model {
 			return false;
 		}
 		return 'above_header' === $popup['options']['placement'];
+	}
+
+	/**
+	 * Whether the site has at least one published above-header prompt.
+	 *
+	 * Detection is intentionally coarse: it keys only on post status (`publish`) and
+	 * placement (`above_header`), not on full display eligibility (active campaign
+	 * group, activation/deactivation window, segment match). Evaluating real display
+	 * eligibility would duplicate the Inserter's per-request logic and is too expensive
+	 * for this path, which the Perfmatters integration reads on essentially every
+	 * front-end request. The trade-off is deliberate and fail-safe: a published
+	 * above-header prompt that never actually renders (parked in an inactive campaign,
+	 * expired, or behind a non-matching segment) will keep the reveal-path scripts out
+	 * of Perfmatters' JS delay/defer queues site-wide, forfeiting that optimization
+	 * until the prompt is unpublished or deleted. Nothing breaks – it only loses a
+	 * performance win – so over-counting is preferred to a delayed (invisible) prompt.
+	 *
+	 * The result is cached in a transient flushed via flush_above_header_cache()
+	 * whenever a prompt is saved, has its status transitioned, has its `placement` meta
+	 * changed, or is deleted (see Newspack_Popups). The transient flush is immediate, but
+	 * on a cached page (batcache / Perfmatters page cache) the script-loading change only
+	 * takes effect once that page's own cache entry is purged or expires. Publishing a
+	 * prompt purges the prompt's own URL, not necessarily the article/home pages where
+	 * the reveal scripts actually matter, so already-cached pages keep the old behavior
+	 * until their cache entries turn over.
+	 *
+	 * @return boolean True if at least one published above-header prompt exists.
+	 */
+	public static function has_published_above_header_prompts() {
+		$cached = get_transient( self::HAS_ABOVE_HEADER_TRANSIENT );
+		if ( false !== $cached ) {
+			return '1' === $cached;
+		}
+
+		$query = new WP_Query(
+			[
+				'post_type'              => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'            => 'publish',
+				'posts_per_page'         => 1,
+				'fields'                 => 'ids',
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+				'meta_key'               => 'placement', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
+				'meta_value'             => 'above_header', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			]
+		);
+		$has_above_header = $query->have_posts();
+
+		set_transient( self::HAS_ABOVE_HEADER_TRANSIENT, $has_above_header ? '1' : '0', DAY_IN_SECONDS );
+
+		return $has_above_header;
+	}
+
+	/**
+	 * Flush the cached above-header prompt detection.
+	 */
+	public static function flush_above_header_cache() {
+		delete_transient( self::HAS_ABOVE_HEADER_TRANSIENT );
 	}
 
 	/**

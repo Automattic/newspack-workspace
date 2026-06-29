@@ -26,8 +26,11 @@ class Perfmatters {
 
 	/**
 	 * Scripts to delay spec.
+	 *
+	 * @param bool $exclude_above_header_reveal Whether to drop the above-header reveal
+	 *                                          scripts from the delay queue (NPPM-2934).
 	 */
-	private static function scripts_to_delay() {
+	private static function scripts_to_delay( $exclude_above_header_reveal = false ) {
 		$scripts_to_delay = [
 			// Newspack.
 			'newspack-popups',
@@ -81,7 +84,54 @@ class Perfmatters {
 			$scripts_to_delay[] = 'newspack-plugin';
 		}
 
+		// When the site has published above-header prompts, keep the scripts that reveal
+		// them out of the delay queue so the prompts appear immediately instead of after
+		// the first interaction (NPPM-2934).
+		if ( $exclude_above_header_reveal ) {
+			$scripts_to_delay = array_values( array_diff( $scripts_to_delay, self::above_header_reveal_scripts() ) );
+		}
+
 		return $scripts_to_delay;
+	}
+
+	/**
+	 * Scripts on the reveal path of above-header prompts.
+	 *
+	 * These are excluded from JS delay when published above-header prompts exist so the
+	 * prompts show immediately: the Campaigns view script (newspack-popups) removes the
+	 * prompt's `hidden` class, and the reader data library (window.newspack /
+	 * newspack-plugin) drives that reveal when segments are configured.
+	 *
+	 * @return string[] Script identifiers.
+	 */
+	private static function above_header_reveal_scripts() {
+		return [ 'newspack-popups', 'window.newspack', 'newspack-plugin' ];
+	}
+
+	/**
+	 * Reveal-path scripts to exclude from JS deferral when above-header prompts exist.
+	 *
+	 * Derived from above_header_reveal_scripts() minus `window.newspack`: that token
+	 * matches an inline script, and Perfmatters' deferral only applies to external
+	 * `<script src>` files, so it is meaningless as a defer exclusion. Kept derived from
+	 * the reveal-script set so the delay and defer lists cannot silently drift.
+	 *
+	 * @return string[] Script identifiers.
+	 */
+	private static function above_header_defer_exclusions() {
+		return array_values( array_diff( self::above_header_reveal_scripts(), [ 'window.newspack' ] ) );
+	}
+
+	/**
+	 * Whether above-header prompts should be revealed immediately (excluded from JS
+	 * delay/deferral). True when the Campaigns plugin reports at least one published
+	 * above-header prompt.
+	 *
+	 * @return bool
+	 */
+	private static function has_immediate_above_header_prompts() {
+		return method_exists( 'Newspack_Popups_Model', 'has_published_above_header_prompts' )
+			&& \Newspack_Popups_Model::has_published_above_header_prompts();
 	}
 
 	/**
@@ -150,15 +200,24 @@ class Perfmatters {
 		// https://perfmatters.io/docs/disable-woocommerce-cart-fragments-ajax/
 		$options['disable_woocommerce_cart_fragmentation'] = true;
 
+		// Resolve once per filter pass – this is read on essentially every front-end
+		// request, and both the defer and delay blocks below need it (NPPM-2934).
+		$reveal_above_header = self::has_immediate_above_header_prompts();
+
 		// JS deferral.
 		if ( ! isset( $options['assets'] ) ) {
 			$options['assets'] = [];
 		}
-		$defer_js_exclusions           = [
+		$defer_js_exclusions = [
 			'wp-includes',
 			'jwplayer.com', // This platform won't work if the JS is deferred.
 			'adsrvr.org', // This platform won't work if the JS is deferred.
 		];
+		// When the site has published above-header prompts, exclude the prompt reveal
+		// scripts from deferral too, so they execute as early as possible (NPPM-2934).
+		if ( $reveal_above_header ) {
+			$defer_js_exclusions = array_merge( $defer_js_exclusions, self::above_header_defer_exclusions() );
+		}
 		$options['assets']['defer_js'] = true;
 		if ( isset( $options['assets']['js_exclusions'] ) && is_array( $options['assets']['js_exclusions'] ) ) {
 			$options['assets']['js_exclusions'] = array_unique(
@@ -178,11 +237,11 @@ class Perfmatters {
 			$options['assets']['delay_js_inclusions'] = array_unique(
 				array_merge(
 					$options['assets']['delay_js_inclusions'],
-					self::scripts_to_delay()
+					self::scripts_to_delay( $reveal_above_header )
 				)
 			);
 		} else {
-			$options['assets']['delay_js_inclusions'] = self::scripts_to_delay();
+			$options['assets']['delay_js_inclusions'] = self::scripts_to_delay( $reveal_above_header );
 		}
 		$options['assets']['delay_timeout'] = true;
 		$options['assets']['fastclick']     = true;
