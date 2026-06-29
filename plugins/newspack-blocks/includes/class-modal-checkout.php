@@ -30,6 +30,14 @@ final class Modal_Checkout {
 	const CHECKOUT_REGISTRATION_ORDER_META_KEY = '_newspack_checkout_registration_meta';
 
 	/**
+	 * Session key tracking a coupon auto-applied from a Checkout Button block,
+	 * used to hide the in-modal coupon form for that coupon.
+	 *
+	 * @var string
+	 */
+	const AUTO_APPLIED_COUPON_SESSION_KEY = 'newspack_blocks_auto_applied_coupon';
+
+	/**
 	 * Whether the modal checkout has been enqueued.
 	 *
 	 * @var boolean
@@ -438,13 +446,20 @@ final class Modal_Checkout {
 
 		// Auto-apply a coupon attached to the checkout button, if present and valid.
 		// Validating first means an invalid coupon is skipped silently, with no
-		// WooCommerce error notice shown to the reader (who never typed it).
+		// WooCommerce error notice shown to the reader (who never typed it). A
+		// successful auto-apply is tracked in the session so the modal can hide
+		// its coupon form for that coupon (see should_hide_coupon_form()).
+		if ( \WC()->session ) {
+			\WC()->session->set( self::AUTO_APPLIED_COUPON_SESSION_KEY, null );
+		}
 		$coupon_code = sanitize_text_field( filter_input( INPUT_GET, 'coupon', FILTER_DEFAULT ) );
 		if ( $coupon_code && function_exists( 'wc_coupons_enabled' ) && \wc_coupons_enabled() ) {
 			$coupon    = new \WC_Coupon( $coupon_code );
 			$discounts = new \WC_Discounts( \WC()->cart );
-			if ( true === $discounts->is_coupon_valid( $coupon ) ) {
-				\WC()->cart->apply_coupon( $coupon_code );
+			if ( true === $discounts->is_coupon_valid( $coupon ) && \WC()->cart->apply_coupon( $coupon_code ) ) {
+				if ( \WC()->session ) {
+					\WC()->session->set( self::AUTO_APPLIED_COUPON_SESSION_KEY, \wc_format_coupon_code( $coupon_code ) );
+				}
 			}
 		}
 
@@ -1461,6 +1476,24 @@ final class Modal_Checkout {
 				}
 			}
 		}
+	}
+
+	/**
+	 * Whether the in-modal coupon form should be hidden.
+	 *
+	 * True when a coupon was auto-applied from a Checkout Button block (tracked
+	 * in the session) and is still applied to the cart. The reader never entered
+	 * the code, so they should not be prompted to add or stack coupons. If they
+	 * remove the auto-applied coupon, the form is shown again.
+	 *
+	 * @return bool
+	 */
+	public static function should_hide_coupon_form() {
+		if ( ! function_exists( 'WC' ) || ! \WC()->session || ! \WC()->cart ) {
+			return false;
+		}
+		$auto_applied = \WC()->session->get( self::AUTO_APPLIED_COUPON_SESSION_KEY );
+		return ! empty( $auto_applied ) && in_array( $auto_applied, \WC()->cart->get_applied_coupons(), true );
 	}
 
 	/**
