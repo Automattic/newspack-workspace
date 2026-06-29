@@ -732,6 +732,18 @@ final class Newspack_Newsletters {
 				'render_callback' => [ __CLASS__, 'render_share_block' ],
 			]
 		);
+		// Register the ad block so the WC email renderer can locate its
+		// render_email_callback. Block_Renderer_Registry sets that callback via
+		// the `block_type_metadata_settings` filter (priority 11), which fires
+		// here during register_block_type_from_metadata() — after the registry's
+		// init() has already hooked it at plugin-load time (before `init`). Guard
+		// against a context that re-runs registration (multibranded/network) so we
+		// don't trip a `_doing_it_wrong` notice for a double registration.
+		if ( ! \WP_Block_Type_Registry::get_instance()->is_registered( 'newspack-newsletters/ad' ) ) {
+			register_block_type_from_metadata(
+				__DIR__ . '/../src/editor/blocks/ad/block.json'
+			);
+		}
 	}
 
 	/**

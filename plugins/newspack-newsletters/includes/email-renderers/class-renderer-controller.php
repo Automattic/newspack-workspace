@@ -94,6 +94,40 @@ class Renderer_Controller {
 			return '';
 		}
 
+		// Reset the per-newsletter ad-insertion tracking before this render. The
+		// tracking static (Ads::$inserted_ads) is process-global and otherwise
+		// never cleared within a request, so a second render of the same
+		// newsletter in one request (e.g. preview then send) would find every ad
+		// already "inserted" and silently drop it.
+		if ( class_exists( '\Newspack_Newsletters\Ads' ) && method_exists( '\Newspack_Newsletters\Ads', 'reset_inserted_ads' ) ) {
+			\Newspack_Newsletters\Ads::reset_inserted_ads( $post->ID );
+		}
+
+		// Apply the `newspack_newsletters_newsletter_content` filter so that
+		// auto-injected ad blocks (inserted by Ads::filter_newsletter_content())
+		// appear in the content before the WC renderer parses it — mirroring
+		// what the MJML renderer does via the same filter.
+		//
+		// Feed that filtered content to the package WITHOUT mutating the shared
+		// object cache. The package's stateless post-content renderer re-fetches
+		// the newsletter by ID (get_post) and runs its raw content through the
+		// `the_content` filter, so we intercept that one pass — matched by post ID
+		// and scoped to this render — and substitute the filtered markup. A
+		// previous approach swapped the `posts` cache entry, but `posts` is a
+		// persistent group here (memcached/Redis), so the ad-injected clone was
+		// visible to any concurrent request that read the post mid-render. This
+		// filter is request-local and never touches the shared cache.
+		$filtered_content          = (string) apply_filters( 'newspack_newsletters_newsletter_content', $post->post_content, $post );
+		$render_post               = clone $post;
+		$render_post->post_content = $filtered_content;
+
+		$inject_content = static function ( $content ) use ( $post, $filtered_content ) {
+			return ( isset( $GLOBALS['post'] ) && $GLOBALS['post'] instanceof \WP_Post && (int) $GLOBALS['post']->ID === (int) $post->ID )
+				? $filtered_content
+				: $content;
+		};
+		add_filter( 'the_content', $inject_content, 0 );
+
 		// Save/restore rather than clear so a nested render_wc() (post B mid-render
 		// of post A) leaves the outer render's post intact when the inner one returns.
 		$previous             = self::$rendering_post;
@@ -103,7 +137,7 @@ class Renderer_Controller {
 			$renderer  = $container->get( \Automattic\WooCommerce\EmailEditor\Engine\Renderer\Renderer::class );
 			$preheader = (string) get_post_meta( $post->ID, 'preview_text', true );
 			$result    = $renderer->render(
-				$post,
+				$render_post,
 				(string) $post->post_title,
 				$preheader,
 				(string) get_bloginfo( 'language' ),
@@ -116,6 +150,7 @@ class Renderer_Controller {
 			return '';
 		} finally {
 			self::$rendering_post = $previous;
+			remove_filter( 'the_content', $inject_content, 0 );
 		}
 	}
 

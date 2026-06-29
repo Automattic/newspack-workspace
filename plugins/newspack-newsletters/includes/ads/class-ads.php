@@ -898,6 +898,24 @@ final class Ads {
 	}
 
 	/**
+	 * Reset the in-memory inserted-ads tracking.
+	 *
+	 * `mark_ad_inserted()`/`is_ad_inserted()` use a process-global static that is
+	 * otherwise never cleared within a request, so a second render of the same
+	 * newsletter in one request would see every ad already inserted and drop it.
+	 * Callers starting a fresh render should reset first.
+	 *
+	 * @param int|null $newsletter_id Newsletter to reset, or null to reset all.
+	 */
+	public static function reset_inserted_ads( $newsletter_id = null ) {
+		if ( null === $newsletter_id ) {
+			self::$inserted_ads = [];
+			return;
+		}
+		unset( self::$inserted_ads[ $newsletter_id ] );
+	}
+
+	/**
 	 * Mark the ad as inserted
 	 *
 	 * @param int $newsletter_id Newsletter ID.
