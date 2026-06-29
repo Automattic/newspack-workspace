@@ -290,7 +290,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 							echo esc_html(
 								sprintf(
 									/* translators: 1: lowercase singular group label, 2: lowercase singular group label (again). */
-									__( 'You have reached the member limit for this %1$s. Please remove some members or cancel pending invitations before inviting more %2$s members.', 'newspack-plugin' ),
+									__( 'You have reached the seat limit for this %1$s. Please remove some members or cancel pending invitations before inviting more %2$s members.', 'newspack-plugin' ),
 									$group_label_lower,
 									$group_label_lower
 								)
@@ -345,8 +345,8 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 						<?php
 						echo esc_html(
 							sprintf(
-								/* translators: 1: lowercase singular group label, 2: current member limit. */
-								__( 'Your %1$s currently allows %2$d members. Tell the publication the new limit you need and they\'ll be in touch.', 'newspack-plugin' ),
+								/* translators: 1: lowercase singular group label, 2: current seat count. */
+								__( 'Your %1$s currently has %2$d seats. Tell the publication the new limit you need and they\'ll be in touch.', 'newspack-plugin' ),
 								$group_label_lower,
 								$member_limit
 							)
@@ -358,7 +358,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 						<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $subscription->get_id() ); ?>">
 						<?php wp_nonce_field( Group_Subscription_MyAccount::REQUEST_SEATS_NONCE_ACTION ); ?>
 						<p>
-							<label for="newspack-group-subscription-requested-limit"><?php esc_html_e( 'New member limit', 'newspack-plugin' ); ?></label>
+							<label for="newspack-group-subscription-requested-limit"><?php esc_html_e( 'New seat limit', 'newspack-plugin' ); ?></label>
 							<input type="number" id="newspack-group-subscription-requested-limit" name="newspack-group-subscription-requested-limit" min="<?php echo esc_attr( $member_limit + 1 ); ?>" value="<?php echo esc_attr( $member_limit + 1 ); ?>" required>
 						</p>
 

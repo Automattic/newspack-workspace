@@ -616,7 +616,7 @@ class Group_Subscription_MyAccount {
 		if ( ! $subscription || $current_limit <= 0 || $requested <= $current_limit ) {
 			$invalid_message = sprintf(
 				/* translators: %s: lowercase singular group label. */
-				__( 'Enter a member limit higher than your %s\'s current limit.', 'newspack-plugin' ),
+				__( 'Enter a seat limit higher than your %s\'s current limit.', 'newspack-plugin' ),
 				Group_Subscription::get_label_lower( 'singular' )
 			);
 			self::redirect(
@@ -675,13 +675,13 @@ class Group_Subscription_MyAccount {
 			),
 			'',
 			sprintf(
-				/* translators: %d: current member limit. */
-				__( 'Current member limit: %d', 'newspack-plugin' ),
+				/* translators: %d: current seat limit. */
+				__( 'Current seat limit: %d', 'newspack-plugin' ),
 				$current_limit
 			),
 			sprintf(
-				/* translators: %d: requested member limit. */
-				__( 'Requested member limit: %d', 'newspack-plugin' ),
+				/* translators: %d: requested seat limit. */
+				__( 'Requested seat limit: %d', 'newspack-plugin' ),
 				$requested_limit
 			),
 			'',

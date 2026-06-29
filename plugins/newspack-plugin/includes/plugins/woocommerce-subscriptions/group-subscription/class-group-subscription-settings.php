@@ -157,9 +157,9 @@ class Group_Subscription_Settings {
 		$custom_product_pricing_options['newspack_group_subscription_limit'] = [
 			'id'                => self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit',
 			'wrapper_class'     => 'show_if_newspack_group_subscription_enabled',
-			'label'             => __( 'Group subscription member limit', 'newspack-plugin' ),
+			'label'             => __( 'Group subscription seat limit', 'newspack-plugin' ),
 			'desc_tip'          => true,
-			'description'       => __( 'Set the maximum number of members for group subscriptions. Set to 0 to allow an unlimited number of group members.', 'newspack-plugin' ),
+			'description'       => __( 'Set the maximum number of seats for group subscriptions. Set to 0 to allow an unlimited number of seats.', 'newspack-plugin' ),
 			'default'           => self::DEFAULT_SETTINGS['limit'],
 			'product_types'     => [ 'subscription', 'subscription_variation' ],
 			'type'              => 'number',
@@ -201,8 +201,8 @@ class Group_Subscription_Settings {
 			\esc_html( $settings['name'] ),
 			\esc_html(
 				sprintf(
-					/* translators: 1: member count, 2: member limit or "unlimited" */
-					__( '%1$s of %2$s members', 'newspack-plugin' ),
+					/* translators: 1: seats used, 2: seat limit or "unlimited" */
+					__( '%1$s of %2$s seats', 'newspack-plugin' ),
 					$member_count,
 					$limit
 				)
