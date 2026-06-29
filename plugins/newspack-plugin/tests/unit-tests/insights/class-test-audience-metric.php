@@ -339,8 +339,10 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * readership_by_hour_of_day_via_bq shifts UTC hours by the given offset.
-	 * UTC hour 0 with a -5h site offset maps to local hour 19.
+	 * readership_by_hour_of_day_via_bq shifts UTC hours by the given offset, then
+	 * emits the frontend contract key `hour` as a zero-padded 2-char string (the
+	 * proxy's int `hour_of_day` must not survive in the payload). UTC hour 0 with a
+	 * -5h site offset maps to local hour 19 → '19'.
 	 */
 	public function test_readership_by_hour_applies_timezone_offset() {
 		$proxy = $this->makeProxyReturning(
@@ -350,11 +352,31 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 					'hour_of_day'    => 0,
 					'active_readers' => 10,
 				],
-			] 
+			]
 		);
 		// With a -5h site offset, UTC hour 0 maps to local hour 19.
 		$out = Audience_Metric::readership_by_hour_of_day_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ), -5 );
-		$this->assertSame( 19, $out['rows'][0]['hour_of_day'] );
+		$this->assertSame( '19', $out['rows'][0]['hour'], 'frontend reads the `hour` key, zero-padded' );
+		$this->assertSame( 10, $out['rows'][0]['active_readers'] );
+		$this->assertArrayNotHasKey( 'hour_of_day', $out['rows'][0], 'raw proxy column must be dropped' );
+	}
+
+	/**
+	 * Pre-midnight local hours stay 2-char zero-padded: UTC hour 5 with a -5h
+	 * offset maps to local hour 0 → '00' (not '0').
+	 */
+	public function test_readership_by_hour_zero_pads_single_digit_hours() {
+		$proxy = $this->makeProxyReturning(
+			'audience_readership_by_hour_of_day',
+			[
+				[
+					'hour_of_day'    => 5,
+					'active_readers' => 7,
+				],
+			]
+		);
+		$out = Audience_Metric::readership_by_hour_of_day_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ), -5 );
+		$this->assertSame( '00', $out['rows'][0]['hour'] );
 	}
 
 	/*
@@ -515,12 +537,305 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 
 		$this->assertArrayNotHasKey( 'hidden_in_v1', $out, 'should NOT be hidden when both products exist' );
 		$this->assertSame( 'breakdown', $out['type'] );
-		// Both products → BQ rows passed through as-is (four rows).
+		// Both products → four slices, relabeled to the frontend label/value contract
+		// (the proxy's segment/reader_count keys must not leak through).
 		$this->assertCount( 4, $out['rows'] );
-		$segments = array_column( $out['rows'], 'segment' );
-		$this->assertContains( 'Both', $segments );
-		$this->assertContains( 'Subscriber only', $segments );
-		$this->assertContains( 'Donor only', $segments );
-		$this->assertContains( 'Logged-in only', $segments );
+		$this->assertArrayHasKey( 'label', $out['rows'][0], 'pie reads `label`, not `segment`' );
+		$this->assertArrayHasKey( 'value', $out['rows'][0], 'pie reads `value`, not `reader_count`' );
+		$this->assertArrayNotHasKey( 'segment', $out['rows'][0] );
+		$this->assertArrayNotHasKey( 'reader_count', $out['rows'][0] );
+
+		$by_label = array_column( $out['rows'], 'value', 'label' );
+		$this->assertSame( 300, $by_label['Both'] );
+		$this->assertSame( 700, $by_label['Subscriber only'] );
+		$this->assertSame( 200, $by_label['Donor only'] );
+		$this->assertSame( 800, $by_label['Logged-in only'] );
+	}
+
+	/*
+	===================================================================
+	 * Fixture-parity reconciliation tests (NPPD-1729 — payload contract).
+	 *
+	 * The Audience tab BQ swap is "zero UI change": each *_via_bq payload must
+	 * match the canonical fixture's shape key-for-key, since the React components
+	 * (and the dev fixture) are unchanged. These tests load the fixture as the
+	 * spec and assert each metric's row keys (and relabeled strings) against it.
+	 * ===================================================================
+	 */
+
+	/**
+	 * Load the current-window block of the canonical Audience fixture — the
+	 * authoritative payload contract the frontend renders.
+	 *
+	 * @return array
+	 */
+	private function fixture_current(): array {
+		$fixture = require NEWSPACK_ABSPATH . 'includes/wizards/insights/fixtures/audience-fixture.php';
+		return $fixture['current'];
+	}
+
+	/**
+	 * The row-key set the fixture defines for a given metric.
+	 *
+	 * @param string $metric Fixture metric key.
+	 * @return string[] Sorted row keys.
+	 */
+	private function fixture_row_keys( string $metric ): array {
+		$rows = $this->fixture_current()[ $metric ]['rows'];
+		$keys = array_keys( $rows[0] );
+		sort( $keys );
+		return $keys;
+	}
+
+	/**
+	 * Assert a shaped payload's first-row keys equal the fixture metric's keys.
+	 *
+	 * @param string $metric Fixture metric key.
+	 * @param array  $out    Shaped via_bq payload.
+	 */
+	private function assertRowKeysMatchFixture( string $metric, array $out ): void {
+		$keys = array_keys( $out['rows'][0] );
+		sort( $keys );
+		$this->assertSame(
+			$this->fixture_row_keys( $metric ),
+			$keys,
+			"row keys for $metric must match the frontend fixture contract"
+		);
+	}
+
+	/**
+	 * New_vs_returning_over_time: proxy day/new_readers/returning_readers →
+	 * fixture date/new/returning.
+	 */
+	public function test_new_vs_returning_matches_fixture_keys() {
+		$proxy = $this->makeProxyReturning(
+			'audience_new_vs_returning_over_time',
+			[
+				[
+					'day'               => '20260101',
+					'new_readers'       => 120,
+					'returning_readers' => 80,
+				],
+			]
+		);
+		$out = Audience_Metric::new_vs_returning_over_time_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 'timeseries', $out['type'] );
+		$this->assertRowKeysMatchFixture( 'new_vs_returning_over_time', $out );
+		$this->assertSame( '20260101', $out['rows'][0]['date'] );
+		$this->assertSame( 120, $out['rows'][0]['new'] );
+		$this->assertSame( 80, $out['rows'][0]['returning'] );
+	}
+
+	/**
+	 * Readership_by_day_of_week: proxy int day_of_week (1-7, Sun=1) → fixture day
+	 * NAME, ordered Monday→Sunday.
+	 */
+	public function test_readership_by_day_of_week_maps_to_names_and_order() {
+		// Supply rows out of order and as BigQuery's 1-7 (Sun=1) ints.
+		$proxy = $this->makeProxyReturning(
+			'audience_readership_by_day_of_week',
+			[
+				[
+					'day_of_week'    => 1, // Sunday.
+					'active_readers' => 70,
+				],
+				[
+					'day_of_week'    => 4, // Wednesday.
+					'active_readers' => 40,
+				],
+				[
+					'day_of_week'    => 2, // Monday.
+					'active_readers' => 10,
+				],
+			]
+		);
+		$out = Audience_Metric::readership_by_day_of_week_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 'breakdown', $out['type'] );
+		$this->assertRowKeysMatchFixture( 'readership_by_day_of_week', $out );
+
+		// Present days are ordered Monday→Sunday (matching the fixture order).
+		$days = array_column( $out['rows'], 'day_of_week' );
+		$this->assertSame( [ 'Monday', 'Wednesday', 'Sunday' ], $days );
+		$by_day = array_column( $out['rows'], 'active_readers', 'day_of_week' );
+		$this->assertSame( 10, $by_day['Monday'] );
+		$this->assertSame( 40, $by_day['Wednesday'] );
+		$this->assertSame( 70, $by_day['Sunday'] );
+	}
+
+	/**
+	 * Readership_by_hour_of_day: padded `hour` string key matches the fixture.
+	 */
+	public function test_readership_by_hour_matches_fixture_keys() {
+		$proxy = $this->makeProxyReturning(
+			'audience_readership_by_hour_of_day',
+			[
+				[
+					'hour_of_day'    => 13,
+					'active_readers' => 10,
+				],
+			]
+		);
+		$out = Audience_Metric::readership_by_hour_of_day_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ), 0 );
+		$this->assertRowKeysMatchFixture( 'readership_by_hour_of_day', $out );
+		$this->assertSame( '13', $out['rows'][0]['hour'] );
+	}
+
+	/**
+	 * Newsletter_subscriber_composition: proxy segment/reader_count → fixture
+	 * label/value, with the segment strings relabeled to the fixture's labels.
+	 */
+	public function test_newsletter_subscriber_composition_relabels_to_fixture() {
+		$proxy = $this->makeProxyReturning(
+			'audience_newsletter_subscriber_composition',
+			[
+				[
+					'segment'      => 'newsletter subscriber',
+					'reader_count' => 320,
+				],
+				[
+					'segment'      => 'not subscribed',
+					'reader_count' => 960,
+				],
+			]
+		);
+		$out = Audience_Metric::newsletter_subscriber_composition_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 'breakdown', $out['type'] );
+		$this->assertRowKeysMatchFixture( 'newsletter_subscriber_composition', $out );
+
+		$by_label = array_column( $out['rows'], 'value', 'label' );
+		// Labels must match the fixture strings exactly.
+		$fixture_labels = array_column( $this->fixture_current()['newsletter_subscriber_composition']['rows'], 'label' );
+		$this->assertContains( 'Newsletter subscriber', $fixture_labels );
+		$this->assertContains( 'Not subscribed', $fixture_labels );
+		$this->assertSame( 320, $by_label['Newsletter subscriber'] );
+		$this->assertSame( 960, $by_label['Not subscribed'] );
+	}
+
+	/**
+	 * Logged_in_vs_anonymous_composition: proxy segment/reader_count → fixture
+	 * label/value with relabeled strings.
+	 */
+	public function test_logged_in_vs_anonymous_composition_relabels_to_fixture() {
+		$proxy = $this->makeProxyReturning(
+			'audience_logged_in_vs_anonymous_composition',
+			[
+				[
+					'segment'      => 'logged in',
+					'reader_count' => 385,
+				],
+				[
+					'segment'      => 'anonymous',
+					'reader_count' => 899,
+				],
+			]
+		);
+		$out = Audience_Metric::logged_in_vs_anonymous_composition_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 'breakdown', $out['type'] );
+		$this->assertRowKeysMatchFixture( 'logged_in_vs_anonymous_composition', $out );
+
+		$by_label = array_column( $out['rows'], 'value', 'label' );
+		$this->assertSame( 385, $by_label['Logged in'] );
+		$this->assertSame( 899, $by_label['Anonymous'] );
+	}
+
+	/**
+	 * Top_pages: proxy carries post_id + page_url; the fixture (and frontend) only
+	 * render page_title/unique_readers/pageviews — the extra columns must be dropped.
+	 */
+	public function test_top_pages_drops_post_id_and_page_url() {
+		$proxy = $this->makeProxyReturning(
+			'audience_top_pages',
+			[
+				[
+					'post_id'        => 42,
+					'page_url'       => 'https://example.test/a',
+					'page_title'     => 'Headline A',
+					'unique_readers' => 500,
+					'pageviews'      => 900,
+				],
+			]
+		);
+		$out = Audience_Metric::top_pages_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 'table', $out['type'] );
+		$this->assertRowKeysMatchFixture( 'top_pages', $out );
+		$this->assertArrayNotHasKey( 'post_id', $out['rows'][0] );
+		$this->assertArrayNotHasKey( 'page_url', $out['rows'][0] );
+		$this->assertSame( 'Headline A', $out['rows'][0]['page_title'] );
+	}
+
+	/**
+	 * Passthrough metrics whose proxy aliases already match the fixture keep their
+	 * shape: top_regions, top_cities, top_authors_by_reader_count, top_campaigns,
+	 * traffic_sources_breakdown, device_breakdown.
+	 */
+	public function test_passthrough_metrics_match_fixture_keys() {
+		$cases = [
+			[
+				'method' => 'top_regions_via_bq',
+				'query'  => 'audience_top_regions',
+				'metric' => 'top_regions',
+				'row'    => [
+					'country' => 'United States',
+					'region'  => 'Illinois',
+					'readers' => 41200,
+				],
+			],
+			[
+				'method' => 'top_cities_via_bq',
+				'query'  => 'audience_top_cities',
+				'metric' => 'top_cities',
+				'row'    => [
+					'country' => 'United States',
+					'region'  => 'Illinois',
+					'city'    => 'Chicago',
+					'readers' => 33400,
+				],
+			],
+			[
+				'method' => 'top_authors_by_reader_count_via_bq',
+				'query'  => 'audience_top_authors_by_reader_count',
+				'metric' => 'top_authors_by_reader_count',
+				'row'    => [
+					'author'         => 'Maria Alvarez',
+					'unique_readers' => 34200,
+					'pageviews'      => 51200,
+				],
+			],
+			[
+				'method' => 'top_campaigns_via_bq',
+				'query'  => 'audience_top_campaigns',
+				'metric' => 'top_campaigns',
+				'row'    => [
+					'source'   => 'newsletter',
+					'medium'   => 'email',
+					'campaign' => 'weekly-digest',
+					'readers'  => 8200,
+					'sessions' => 11400,
+				],
+			],
+			[
+				'method' => 'traffic_sources_breakdown_via_bq',
+				'query'  => 'audience_traffic_sources_breakdown',
+				'metric' => 'traffic_sources_breakdown',
+				'row'    => [
+					'channel' => 'Organic Search',
+					'readers' => 51200,
+				],
+			],
+			[
+				'method' => 'device_breakdown_via_bq',
+				'query'  => 'audience_device_breakdown',
+				'metric' => 'device_breakdown',
+				'row'    => [
+					'device'  => 'mobile',
+					'readers' => 89400,
+				],
+			],
+		];
+		foreach ( $cases as $case ) {
+			$proxy = $this->makeProxyReturning( $case['query'], [ $case['row'] ] );
+			$out   = Audience_Metric::{$case['method']}( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+			$this->assertRowKeysMatchFixture( $case['metric'], $out );
+		}
 	}
 }

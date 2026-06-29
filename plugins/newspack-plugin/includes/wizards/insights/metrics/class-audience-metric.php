@@ -482,7 +482,20 @@ final class Audience_Metric {
 	 * @return array
 	 */
 	public static function new_vs_returning_over_time_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
-		return self::proxy_rows( $proxy, 'audience_new_vs_returning_over_time', 'timeseries', $start, $end );
+		$payload = self::proxy_rows( $proxy, 'audience_new_vs_returning_over_time', 'timeseries', $start, $end );
+		// Rename the BQ aliases (day/new_readers/returning_readers) to the frontend
+		// contract keys (date/new/returning). `day` is already 'Ymd' from event_date.
+		$payload['rows'] = array_map(
+			function ( $row ) {
+				return [
+					'date'      => (string) ( $row['day'] ?? '' ),
+					'new'       => (int) ( $row['new_readers'] ?? 0 ),
+					'returning' => (int) ( $row['returning_readers'] ?? 0 ),
+				];
+			},
+			$payload['rows']
+		);
+		return $payload;
 	}
 
 	/**
@@ -494,7 +507,42 @@ final class Audience_Metric {
 	 * @return array
 	 */
 	public static function readership_by_day_of_week_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
-		return self::proxy_rows( $proxy, 'audience_readership_by_day_of_week', 'breakdown', $start, $end );
+		$payload = self::proxy_rows( $proxy, 'audience_readership_by_day_of_week', 'breakdown', $start, $end );
+
+		// BigQuery DAYOFWEEK is 1-7 with Sunday=1; the frontend renders day NAMES in
+		// Monday→Sunday order. Map each numeric bucket to its name, then reorder so a
+		// row's position matches the fixture (only days present in the data appear).
+		$names = [
+			1 => __( 'Sunday', 'newspack-plugin' ),
+			2 => __( 'Monday', 'newspack-plugin' ),
+			3 => __( 'Tuesday', 'newspack-plugin' ),
+			4 => __( 'Wednesday', 'newspack-plugin' ),
+			5 => __( 'Thursday', 'newspack-plugin' ),
+			6 => __( 'Friday', 'newspack-plugin' ),
+			7 => __( 'Saturday', 'newspack-plugin' ),
+		];
+		// Display order: Monday(2) … Saturday(7), Sunday(1) last.
+		$order = [ 2, 3, 4, 5, 6, 7, 1 ];
+
+		$by_dow = [];
+		foreach ( $payload['rows'] as $row ) {
+			$dow = (int) ( $row['day_of_week'] ?? 0 );
+			if ( isset( $names[ $dow ] ) ) {
+				$by_dow[ $dow ] = (int) ( $row['active_readers'] ?? 0 );
+			}
+		}
+
+		$rows = [];
+		foreach ( $order as $dow ) {
+			if ( array_key_exists( $dow, $by_dow ) ) {
+				$rows[] = [
+					'day_of_week'    => $names[ $dow ],
+					'active_readers' => $by_dow[ $dow ],
+				];
+			}
+		}
+		$payload['rows'] = $rows;
+		return $payload;
 	}
 
 	/**
@@ -542,7 +590,38 @@ final class Audience_Metric {
 	 * @return array
 	 */
 	public static function newsletter_subscriber_composition_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
-		return self::proxy_rows( $proxy, 'audience_newsletter_subscriber_composition', 'breakdown', $start, $end );
+		$payload = self::proxy_rows( $proxy, 'audience_newsletter_subscriber_composition', 'breakdown', $start, $end );
+		return self::relabel_composition(
+			$payload,
+			[
+				'newsletter subscriber' => __( 'Newsletter subscriber', 'newspack-plugin' ),
+				'not subscribed'        => __( 'Not subscribed', 'newspack-plugin' ),
+			]
+		);
+	}
+
+	/**
+	 * Remap a `segment`/`reader_count` composition payload to the frontend pie
+	 * contract `label`/`value`, relabeling each known SQL segment string to its
+	 * display label. Unknown segments fall back to their raw segment string so a
+	 * SQL drift surfaces visibly rather than vanishing.
+	 *
+	 * @param array                $payload Proxy rows payload.
+	 * @param array<string,string> $labels  segment string → display label.
+	 * @return array
+	 */
+	private static function relabel_composition( array $payload, array $labels ): array {
+		$payload['rows'] = array_map(
+			function ( $row ) use ( $labels ) {
+				$segment = (string) ( $row['segment'] ?? '' );
+				return [
+					'label' => $labels[ $segment ] ?? $segment,
+					'value' => (int) ( $row['reader_count'] ?? 0 ),
+				];
+			},
+			$payload['rows']
+		);
+		return $payload;
 	}
 
 	/**
@@ -554,7 +633,14 @@ final class Audience_Metric {
 	 * @return array
 	 */
 	public static function logged_in_vs_anonymous_composition_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
-		return self::proxy_rows( $proxy, 'audience_logged_in_vs_anonymous_composition', 'breakdown', $start, $end );
+		$payload = self::proxy_rows( $proxy, 'audience_logged_in_vs_anonymous_composition', 'breakdown', $start, $end );
+		return self::relabel_composition(
+			$payload,
+			[
+				'logged in' => __( 'Logged in', 'newspack-plugin' ),
+				'anonymous' => __( 'Anonymous', 'newspack-plugin' ),
+			]
+		);
 	}
 
 	/**
@@ -588,9 +674,18 @@ final class Audience_Metric {
 
 		$payload = self::proxy_rows( $proxy, 'audience_supporter_type', 'breakdown', $start, $end );
 
-		// Both products → pass the four BQ buckets through unchanged.
+		// Both products → all four buckets, relabeled from the proxy's
+		// segment/reader_count to the frontend pie contract label/value.
 		if ( $products['subscriptions'] && $products['donations'] ) {
-			return $payload;
+			return self::relabel_composition(
+				$payload,
+				[
+					'Subscriber only' => __( 'Subscriber only', 'newspack-plugin' ),
+					'Donor only'      => __( 'Donor only', 'newspack-plugin' ),
+					'Both'            => __( 'Both', 'newspack-plugin' ),
+					'Logged-in only'  => __( 'Logged-in only', 'newspack-plugin' ),
+				]
+			);
 		}
 
 		// Single-product publishers: fold the four BQ segments down to the two
@@ -687,7 +782,20 @@ final class Audience_Metric {
 	 * @return array
 	 */
 	public static function top_pages_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
-		return self::proxy_rows( $proxy, 'audience_top_pages', 'table', $start, $end );
+		$payload = self::proxy_rows( $proxy, 'audience_top_pages', 'table', $start, $end );
+		// The proxy carries post_id + page_url for keying/dedup; the frontend table
+		// renders only page_title/unique_readers/pageviews. Drop the extra columns.
+		$payload['rows'] = array_map(
+			function ( $row ) {
+				return [
+					'page_title'     => (string) ( $row['page_title'] ?? '' ),
+					'unique_readers' => (int) ( $row['unique_readers'] ?? 0 ),
+					'pageviews'      => (int) ( $row['pageviews'] ?? 0 ),
+				];
+			},
+			$payload['rows']
+		);
+		return $payload;
 	}
 
 	/**
@@ -764,10 +872,16 @@ final class Audience_Metric {
 		if ( null === $offset_hours ) {
 			$offset_hours = (int) round( (int) wp_timezone()->getOffset( new \DateTimeImmutable( 'now' ) ) / 3600 );
 		}
+		// Shift each UTC hour to local time, then emit the frontend contract key
+		// `hour` as a 2-char zero-padded string ('00'..'23'); the raw int
+		// `hour_of_day` alias is dropped.
 		foreach ( $payload['rows'] as &$row ) {
-			if ( isset( $row['hour_of_day'] ) ) {
-				$row['hour_of_day'] = ( (int) $row['hour_of_day'] + $offset_hours + 24 ) % 24;
-			}
+			$local_hour      = ( (int) ( $row['hour_of_day'] ?? 0 ) + $offset_hours + 24 ) % 24;
+			$active_readers  = (int) ( $row['active_readers'] ?? 0 );
+			$row             = [
+				'hour'           => str_pad( (string) $local_hour, 2, '0', STR_PAD_LEFT ),
+				'active_readers' => $active_readers,
+			];
 		}
 		unset( $row );
 		return $payload;
