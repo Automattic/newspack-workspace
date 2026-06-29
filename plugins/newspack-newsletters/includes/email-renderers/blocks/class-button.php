@@ -55,9 +55,11 @@ class Button extends Package_Button {
 	 * @return bool
 	 */
 	private static function is_outline( array $parsed_block, string $block_content ): bool {
+		// Match the class as a whole token so `is-style-outline-thick` (or the
+		// string in label/href text) doesn't trip the outline path.
 		$class_name = (string) ( $parsed_block['attrs']['className'] ?? '' );
-		return false !== strpos( $class_name, 'is-style-outline' )
-			|| false !== strpos( $block_content, 'is-style-outline' );
+		return (bool) preg_match( '/\bis-style-outline\b/', $class_name )
+			|| (bool) preg_match( '/\bis-style-outline\b/', $block_content );
 	}
 
 	/**
@@ -85,6 +87,10 @@ class Button extends Package_Button {
 	/**
 	 * Apply transparent-background, border, and text-colour styles for outline buttons.
 	 *
+	 * The accent is written into the block's `style` attrs and serialized by the
+	 * package's WP style engine (safecss_filter_attr), so it needs no explicit
+	 * CSS-colour whitelist — unlike the Separator override, which hand-concatenates.
+	 *
 	 * @param array  $parsed_block Parsed block.
 	 * @param string $accent       Resolved accent colour.
 	 * @return array Parsed block with outline styles applied.
@@ -92,7 +98,9 @@ class Button extends Package_Button {
 	private static function apply_outline_attrs( array $parsed_block, string $accent ): array {
 		$parsed_block['attrs']['style']['color']['background'] = 'transparent';
 		$parsed_block['attrs']['style']['color']['text']       = $accent;
-		// Clear any preset text colour so the accent text colour above takes effect.
+		// Belt-and-suspenders: style.color.text (above) already wins over a textColor
+		// slug in the package's style normalization, and this path emits no
+		// has-*-color class — drop the slug anyway so the intent is explicit.
 		unset( $parsed_block['attrs']['textColor'] );
 		$parsed_block['attrs']['style']['border'] = array_merge(
 			$parsed_block['attrs']['style']['border'] ?? [],

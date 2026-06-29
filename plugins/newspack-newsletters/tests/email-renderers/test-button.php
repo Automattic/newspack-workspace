@@ -76,4 +76,33 @@ class Test_Button extends WP_UnitTestCase {
 		$this->assertMatchesRegularExpression( '/border-color:\s*#cc0000/i', $html, 'Expected the outline border to use the button accent colour.' );
 		$this->assertMatchesRegularExpression( '/(?<!-)color:\s*#cc0000/i', $html, 'Expected the outline text to use the accent colour, not the filled white.' );
 	}
+
+	/**
+	 * An outline button with no custom colour falls back to the theme button colour
+	 * for its border and text, keeping a transparent background.
+	 */
+	public function test_button_outline_falls_back_to_theme_color() {
+		$inject = function ( $theme ) {
+			$theme->merge(
+				new \WP_Theme_JSON(
+					[
+						'version' => 3,
+						'styles'  => [ 'blocks' => [ 'core/button' => [ 'color' => [ 'background' => '#112233' ] ] ] ],
+					],
+					'default'
+				)
+			);
+			return $theme;
+		};
+		add_filter( 'woocommerce_email_editor_theme_json', $inject, 12 );
+		try {
+			$content = '<!-- wp:buttons --><div class="wp-block-buttons"><!-- wp:button {"className":"is-style-outline"} --><div class="wp-block-button is-style-outline"><a class="wp-block-button__link wp-element-button" href="https://example.com">Outline</a></div><!-- /wp:button --></div><!-- /wp:buttons -->';
+			$html    = $this->render_newsletter( $content );
+			$this->assertMatchesRegularExpression( '/background-color:\s*transparent/', $html, 'Expected a transparent background even with no custom colour.' );
+			$this->assertMatchesRegularExpression( '/border-color:\s*#112233/i', $html, 'Expected the outline border to fall back to the theme button colour.' );
+			$this->assertMatchesRegularExpression( '/(?<!-)color:\s*#112233/i', $html, 'Expected the outline text to fall back to the theme button colour.' );
+		} finally {
+			remove_filter( 'woocommerce_email_editor_theme_json', $inject, 12 );
+		}
+	}
 }

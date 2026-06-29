@@ -89,4 +89,23 @@ class Test_Social_Links extends WP_UnitTestCase {
 		$html    = $this->render_newsletter( $content );
 		$this->assertMatchesRegularExpression( '/text-align:\s*center/', $html, 'Expected the centered social row to carry text-align:center.' );
 	}
+
+	/**
+	 * A right-justified social row carries text-align:right.
+	 */
+	public function test_social_links_right_justification_is_applied() {
+		$content = '<!-- wp:social-links {"layout":{"type":"flex","justifyContent":"right"}} --><ul class="wp-block-social-links"><!-- wp:social-link {"url":"https://twitter.com/x","service":"twitter"} /--></ul><!-- /wp:social-links -->';
+		$html    = $this->render_newsletter( $content );
+		$this->assertMatchesRegularExpression( '/text-align:\s*right/', $html, 'Expected the right-justified social row to carry text-align:right.' );
+	}
+
+	/**
+	 * An explicit textAlign is not overridden by justifyContent — the override only
+	 * maps justifyContent when textAlign is unset.
+	 */
+	public function test_social_links_explicit_textalign_wins_over_justify() {
+		$content = '<!-- wp:social-links {"textAlign":"right","layout":{"type":"flex","justifyContent":"center"}} --><ul class="wp-block-social-links"><!-- wp:social-link {"url":"https://twitter.com/x","service":"twitter"} /--></ul><!-- /wp:social-links -->';
+		$html    = $this->render_newsletter( $content );
+		$this->assertMatchesRegularExpression( '/text-align:\s*right/', $html, 'Expected the explicit textAlign=right to win over justifyContent=center.' );
+	}
 }
