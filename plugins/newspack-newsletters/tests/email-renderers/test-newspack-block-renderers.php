@@ -397,4 +397,43 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 
 		$this->assertStringNotContainsString( 'mailto:?body=read-this', $html, 'Expected no share anchor href in a non-public newsletter email.' );
 	}
+
+	/**
+	 * A posts-inserter nested in a column constrains its inserted image to the column
+	 * width, not the full email width — otherwise the image overflows and blows the
+	 * email layout out (the 4-article-grid layout).
+	 */
+	public function test_posts_inserter_image_constrained_to_column_width() {
+		Editor_Bootstrap::init();
+
+		// A real attachment so the package image renderer resolves a size and emits a
+		// width (it drops images it can't resolve). canola.jpg is 640px wide.
+		$attachment_id = self::factory()->attachment->create_upload_object( DIR_TESTDATA . '/images/canola.jpg' );
+		$src           = wp_get_attachment_url( $attachment_id );
+		$image_inner   = '<figure class="wp-block-image size-full"><img class="wp-image-' . $attachment_id . '" src="' . esc_url( $src ) . '" alt=""/></figure>';
+		$inserter      = $this->serialize_posts_inserter(
+			[
+				[
+					'blockName'    => 'core/image',
+					'attrs'        => [
+						'id'       => $attachment_id,
+						'sizeSlug' => 'full',
+					],
+					'innerHTML'    => $image_inner,
+					'innerContent' => [ $image_inner ],
+					'innerBlocks'  => [],
+				],
+			]
+		);
+		$content = '<!-- wp:columns --><div class="wp-block-columns">'
+			. '<!-- wp:column {"width":"50%"} --><div class="wp-block-column" style="flex-basis:50%">' . $inserter . '</div><!-- /wp:column -->'
+			. '<!-- wp:column {"width":"50%"} --><div class="wp-block-column" style="flex-basis:50%"><!-- wp:paragraph --><p>Side</p><!-- /wp:paragraph --></div><!-- /wp:column -->'
+			. '</div><!-- /wp:columns -->';
+
+		$html = Renderer_Controller::render_wc( get_post( $this->create_newsletter_with_content( $content ) ) );
+
+		$this->assertMatchesRegularExpression( '/<img\b[^>]*\bwidth="\d+"/', $html, 'Expected the inserted image to render with an explicit width.' );
+		preg_match( '/<img\b[^>]*\bwidth="(\d+)"/', $html, $matches );
+		$this->assertLessThan( 400, (int) $matches[1], 'Expected the column-nested posts-inserter image to be constrained to the column width, not the full email width.' );
+	}
 }
