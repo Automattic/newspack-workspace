@@ -84,6 +84,9 @@ export default function CouponControl( { value, onChange } ) {
 			setInFlight( true );
 			debouncedFetch( search );
 		} else {
+			// Cancel any fetch queued for a longer previous query so it can't
+			// fire after the input was shortened or cleared.
+			debouncedFetch.cancel();
 			setInFlight( false );
 		}
 	}
