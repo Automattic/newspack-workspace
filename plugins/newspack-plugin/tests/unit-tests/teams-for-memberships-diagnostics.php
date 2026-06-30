@@ -118,4 +118,31 @@ class Test_Teams_For_Memberships_Diagnostics extends WP_UnitTestCase {
 		$this->assertEqualSets( [ 200 ], wp_list_pluck( $result['duplicates'], 'ID' ), 'The newer unlinked team is the duplicate.' );
 		$this->assertEmpty( $result['separate_purchases'] );
 	}
+
+	/**
+	 * The renewal bug can regenerate the replacement team with a cosmetically different
+	 * title – a different possessive apostrophe, letter case, or stray whitespace. Those
+	 * variants must normalize to one bucket key, or Check 1 never groups the duplicate and
+	 * the orphan escapes repair (the gap that left a paying reader's membership stranded:
+	 * "John Collyns' Team" vs "John Collyns's Team").
+	 */
+	public function test_cosmetic_title_variants_share_one_bucket_key() {
+		$apostrophe_only = Teams_For_Memberships_Diagnostics::normalize_team_title( "John Collyns' Team" );
+		$apostrophe_s    = Teams_For_Memberships_Diagnostics::normalize_team_title( "John Collyns's Team" );
+		$case_and_space  = Teams_For_Memberships_Diagnostics::normalize_team_title( "  JOHN   Collyns's   TEAM  " );
+
+		$this->assertSame( $apostrophe_only, $apostrophe_s, "Collyns' and Collyns's must bucket together." );
+		$this->assertSame( $apostrophe_only, $case_and_space, 'Case and whitespace must not split the bucket.' );
+	}
+
+	/**
+	 * Normalization must not over-collapse: genuinely different team names keep distinct
+	 * keys, so separate memberships are never grouped (and merged) into each other.
+	 */
+	public function test_distinct_titles_keep_distinct_bucket_keys() {
+		$acme = Teams_For_Memberships_Diagnostics::normalize_team_title( "Acme Co's Team" );
+		$beta = Teams_For_Memberships_Diagnostics::normalize_team_title( "Beta LLC's Team" );
+
+		$this->assertNotSame( $acme, $beta, 'Different team names must not collapse into one bucket.' );
+	}
 }

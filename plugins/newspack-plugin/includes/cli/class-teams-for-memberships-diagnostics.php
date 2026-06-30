@@ -148,20 +148,26 @@ class Teams_For_Memberships_Diagnostics {
 	}
 
 	/**
-	 * Check 1: duplicate teams with the same title + post_author.
+	 * Check 1: duplicate teams owned by the same author (title-insensitive).
 	 *
 	 * These appear when SkyVerge Teams creates a replacement team on renewal
-	 * because the subscription's line item lost its dispatch meta.
+	 * because the subscription's line item lost its dispatch meta. The replacement's
+	 * title can differ from the original only cosmetically (a possessive apostrophe,
+	 * case, or whitespace), so teams are bucketed by owner + a normalized title rather
+	 * than an exact title match – otherwise such an orphan escapes detection and leaves
+	 * a membership stranded. See normalize_team_title().
 	 *
 	 * @return void
 	 */
 	private static function check_duplicate_teams() {
-		WP_CLI::line( 'Check 1: duplicate teams (same title + same post_author)' );
+		WP_CLI::line( 'Check 1: duplicate teams (same owner, title-insensitive)' );
 
 		if ( self::$team_id ) {
 			// A naive `get_all_teams()` here returns the single requested row and Check 1
-			// becomes a no-op. Widen the search to every team sharing the target team's
-			// title + author so `--team-id` can still surface a known-duplicated team.
+			// becomes a no-op. Widen the search to every team owned by the same author so
+			// `--team-id` can still surface a known-duplicated team. Titles are bucketed
+			// insensitively below, so an orphan whose title differs only cosmetically still
+			// groups in.
 			$target = get_post( self::$team_id );
 			if ( ! $target || 'wc_memberships_team' !== $target->post_type ) {
 				WP_CLI::warning( '  SKIP: --team-id does not point to a wc_memberships_team post.' );
@@ -174,7 +180,6 @@ class Teams_For_Memberships_Diagnostics {
 					'post_status'    => 'any',
 					'posts_per_page' => -1,
 					'author'         => $target->post_author,
-					'title'          => $target->post_title,
 				]
 			);
 		} else {
@@ -183,11 +188,18 @@ class Teams_For_Memberships_Diagnostics {
 
 		$buckets = [];
 		foreach ( $teams as $team ) {
-			$key = $team->post_author . '|' . $team->post_title;
+			$key = $team->post_author . '|' . self::normalize_team_title( $team->post_title );
 			if ( ! isset( $buckets[ $key ] ) ) {
 				$buckets[ $key ] = [];
 			}
 			$buckets[ $key ][] = $team;
+		}
+
+		// When scoped with `--team-id`, only the requested team's bucket is relevant –
+		// widening by author can pull in the owner's other, unrelated teams, so drop them.
+		if ( self::$team_id ) {
+			$target_key = $target->post_author . '|' . self::normalize_team_title( $target->post_title );
+			$buckets    = isset( $buckets[ $target_key ] ) ? [ $target_key => $buckets[ $target_key ] ] : [];
 		}
 
 		$duplicate_sets = array_filter(
@@ -357,6 +369,29 @@ class Teams_For_Memberships_Diagnostics {
 			'separate_purchases'   => [],
 			'unattributed_orphans' => [],
 		];
+	}
+
+	/**
+	 * Normalize a team title into a duplicate-bucketing key.
+	 *
+	 * The renewal bug can regenerate a replacement team whose title differs from the
+	 * original only cosmetically – a possessive apostrophe ("Smith' Team" vs
+	 * "Smith's Team"), letter case, or surrounding whitespace. Bucketing on the raw
+	 * title files those as separate teams and the duplicate goes undetected, so collapse
+	 * those differences to a single comparison key. The result is only ever used as a
+	 * grouping key, never displayed.
+	 *
+	 * @param string $title Raw team post_title.
+	 * @return string
+	 */
+	public static function normalize_team_title( $title ) {
+		$title = function_exists( 'mb_strtolower' ) ? mb_strtolower( (string) $title ) : strtolower( (string) $title );
+		// Drop possessive markers: a straight or curly apostrophe with an optional trailing
+		// 's', so "collyns'" and "collyns's" collapse to the same stem.
+		$title = preg_replace( '/[\'\x{2019}]s?/u', '', $title );
+		// Collapse internal whitespace runs and trim.
+		$title = trim( (string) preg_replace( '/\s+/u', ' ', (string) $title ) );
+		return $title;
 	}
 
 	/**
