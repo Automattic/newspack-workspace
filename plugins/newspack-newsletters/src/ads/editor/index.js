@@ -2,14 +2,30 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
+import apiFetch from '@wordpress/api-fetch';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { Fragment, useState } from '@wordpress/element';
 import { PluginDocumentSettingPanel, PluginPrePublishPanel, store as editPostStore } from '@wordpress/edit-post';
 import { registerPlugin } from '@wordpress/plugins';
 import { ToggleControl, TextControl, DatePicker, Notice, RangeControl, Button, Modal } from '@wordpress/components';
-import { format, isInTheFuture } from '@wordpress/date';
+import { date as wpDate, format, isInTheFuture } from '@wordpress/date';
 import { SelectControl } from 'newspack-components';
 import AdPlacements from '../../components/ad-placements';
+
+// Strip the read-only counters from ad saves: the editor round-trips the full
+// meta object, and a stale counter value would trip their `auth_callback`.
+const AD_REST_PATH = /\/wp\/v2\/newspack_nl_ads_cpt(\/|\?|$)/;
+apiFetch.use( ( options, next ) => {
+	const method = ( options.method || 'GET' ).toUpperCase();
+	const target = options.path || options.url || '';
+	if ( ( method === 'POST' || method === 'PUT' ) && options.data?.meta && AD_REST_PATH.test( target ) ) {
+		const meta = { ...options.data.meta };
+		delete meta.tracking_impressions;
+		delete meta.tracking_clicks;
+		options.data = { ...options.data, meta };
+	}
+	return next( options );
+} );
 
 function AdEdit() {
 	const { price, startDate, expiryDate, insertionStrategy, positionInContent, positionBlockCount } = useSelect( select => {
@@ -17,8 +33,10 @@ function AdEdit() {
 		const meta = getEditedPostAttribute( 'meta' );
 		return {
 			price: meta.price,
-			startDate: meta.start_date,
-			expiryDate: meta.expiry_date,
+			// Normalize to Y-m-d on read so all client-side date comparisons are
+			// plain string compares regardless of any legacy ISO-datetime value.
+			startDate: meta.start_date ? String( meta.start_date ).slice( 0, 10 ) : meta.start_date,
+			expiryDate: meta.expiry_date ? String( meta.expiry_date ).slice( 0, 10 ) : meta.expiry_date,
 			insertionStrategy: meta.insertion_strategy,
 			positionInContent: meta.position_in_content,
 			positionBlockCount: meta.position_block_count,
@@ -43,7 +61,8 @@ function AdEdit() {
 	const { saveEntityRecord } = useDispatch( 'core' );
 	const { removeEditorPanel } = useDispatch( editPostStore );
 	const messages = [];
-	if ( expiryDate && ! isInTheFuture( expiryDate ) ) {
+	// Site-timezone "today" so this advisory agrees with the server.
+	if ( expiryDate && expiryDate < wpDate( 'Y-m-d' ) ) {
 		messages.push( __( 'The expiration date is set in the past. This ad will not be displayed.', 'newspack-newsletters' ) );
 	}
 	if ( startDate && startDate > expiryDate ) {
@@ -247,14 +266,14 @@ function AdEdit() {
 						if ( startDate ) {
 							editPost( { meta: { start_date: null } } );
 						} else {
-							editPost( { meta: { start_date: new Date() } } );
+							editPost( { meta: { start_date: format( 'Y-m-d', new Date() ) } } );
 						}
 					} }
 				/>
 				{ startDate ? (
 					<DatePicker
 						currentDate={ startDate }
-						onChange={ start_date => editPost( { meta: { start_date } } ) }
+						onChange={ next => editPost( { meta: { start_date: format( 'Y-m-d', next ) } } ) }
 						isInvalidDate={ date => ! isInTheFuture( date ) }
 					/>
 				) : null }
@@ -268,7 +287,7 @@ function AdEdit() {
 						} else {
 							editPost( {
 								meta: {
-									expiry_date: startDate ? new Date( startDate ) : new Date(),
+									expiry_date: format( 'Y-m-d', startDate ? startDate : new Date() ),
 								},
 							} );
 						}
@@ -277,9 +296,9 @@ function AdEdit() {
 				{ expiryDate ? (
 					<DatePicker
 						currentDate={ expiryDate }
-						onChange={ expiry_date => editPost( { meta: { expiry_date } } ) }
+						onChange={ next => editPost( { meta: { expiry_date: format( 'Y-m-d', next ) } } ) }
 						isInvalidDate={ date => {
-							return startDate ? date < new Date( startDate ) : ! isInTheFuture( date );
+							return startDate ? format( 'Y-m-d', date ) < startDate : ! isInTheFuture( date );
 						} }
 					/>
 				) : null }
