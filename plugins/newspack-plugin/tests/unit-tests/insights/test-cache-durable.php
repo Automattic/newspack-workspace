@@ -197,6 +197,58 @@ class Test_Cache_Durable extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Manual refresh overwrites an existing durable entry so the next store()
+	 * call returns the freshly-computed payload rather than the older pre-warmed
+	 * one, and the compute closure is never invoked.
+	 *
+	 * @covers Cache::refresh
+	 */
+	public function test_refresh_overwrites_existing_durable_entry() {
+		// Seed the durable store with a pre-warmed payload.
+		Cache::store_durable( $this->tab, $this->source, $this->key, [ 'warm' => true ], $this->window );
+
+		// Manually refresh — must overwrite the durable entry.
+		Cache::refresh( $this->tab, $this->source, $this->key, fn() => [ 'fresh' => true ] );
+
+		// Durable entry now holds the refreshed payload with the same window.
+		$durable = Cache::peek_durable( $this->tab, $this->source, $this->key );
+		$this->assertNotNull( $durable, 'Durable entry should still exist after refresh.' );
+		$this->assertSame( [ 'fresh' => true ], $durable['payload'], 'Durable payload should be the refreshed data.' );
+		$this->assertSame( $this->window, $durable['window'], 'Window metadata should be preserved.' );
+
+		// A subsequent store() must serve the refreshed durable — compute must not be called.
+		$called = false;
+		$env    = Cache::store(
+			$this->tab,
+			$this->source,
+			$this->key,
+			function () use ( &$called ) {
+				$called = true;
+				return [ 'compute' => true ];
+			}
+		);
+		$this->assertSame( [ 'fresh' => true ], $env['payload'], 'store() should serve the refreshed durable, not the older warm data.' );
+		$this->assertFalse( $called, 'Compute closure must not be invoked when a fresh durable entry exists.' );
+	}
+
+	/**
+	 * Manual refresh does not create a durable entry when none was pre-warmed
+	 * for the requested window, keeping durable storage bounded to preset windows.
+	 *
+	 * @covers Cache::refresh
+	 */
+	public function test_refresh_does_not_create_durable_for_unwarmed_window() {
+		// No durable entry exists — only a transient will be written by refresh.
+		Cache::refresh( $this->tab, $this->source, $this->key, fn() => [ 'fresh' => true ] );
+
+		// Durable store must remain empty for this window.
+		$this->assertNull(
+			Cache::peek_durable( $this->tab, $this->source, $this->key ),
+			'refresh() must not fabricate a durable entry for a never-warmed window.'
+		);
+	}
+
+	/**
 	 * Cache is fully disabled when NEWSPACK_INSIGHTS_CACHE_DISABLED is true.
 	 *
 	 * Runs in a separate process so the define() does not leak into the parent

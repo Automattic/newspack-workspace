@@ -467,6 +467,20 @@ final class Cache {
 			if ( self::SOURCE_SNAPSHOT !== $source ) {
 				self::index_add( $tab, $key );
 			}
+
+			// If a durable (pre-warmed) entry already exists for this window, overwrite
+			// it so the durable store stays in sync with the manually-refreshed data.
+			// This ensures the read-precedence path in store() (durable → transient →
+			// compute) returns fresh data on the next request rather than serving the
+			// older pre-warmed entry. Reusing $existing_durable['window'] avoids having
+			// to parse start/end from $key_parts, and store_durable() builds its own
+			// envelope with a fresh computed_at — resetting the ~25h SWR clock.
+			// We deliberately do NOT create a durable entry when none exists: durable
+			// storage must remain bounded to windows the pre-warm job created.
+			$existing_durable = self::peek_durable( $tab, $source, $key_parts );
+			if ( null !== $existing_durable ) {
+				self::store_durable( $tab, $source, $key_parts, $envelope['payload'], $existing_durable['window'] );
+			}
 		}
 
 		// BigQuery refreshes always come back with the active cooldown stamp
