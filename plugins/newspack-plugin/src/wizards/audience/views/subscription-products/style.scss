@@ -1,0 +1,133 @@
+/**
+ * Subscription Products page styles.
+ *
+ * Deliberately minimal — the page inherits the wizard chrome, DataViews layout, and
+ * Badge styling from the shared component library. These rules only cover the scope
+ * chip-bar, bundled-plan/unlocks chips, the create/edit form, and a few muted states.
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-subscription-products {
+	&__muted {
+		color: wp-colors.$gray-700;
+	}
+
+	// Product name acts as an edit trigger, but should read like a title link.
+	&__name-link.components-button {
+		height: auto;
+		padding: 0;
+		text-align: left;
+		text-decoration: none;
+	}
+
+	// Top-level grouping chip-bar (Subscriptions / Donations / All).
+	// Mirrors the transactional-emails chip bar: padded 24px to align with the
+	// DataViews controls below, and margin-bottom 24px to leave an 8px gap after the
+	// Newspack DataViews wrapper's full-width margin-top: -16px pull-up resolves.
+	&__scope-chips {
+		display: flex;
+		gap: 8px;
+		margin-bottom: 24px;
+		padding: 0 24px;
+		align-items: center;
+
+		// "Plan bundles" is a separate structural lens — set it apart from the purpose chips.
+		.newspack-subscription-products__scope-chip.is-separated {
+			margin-left: 16px;
+			position: relative;
+
+			&::before {
+				content: "";
+				position: absolute;
+				left: -8px;
+				top: 50%;
+				transform: translateY(-50%);
+				height: 20px;
+				border-left: 1px solid wp-colors.$gray-300;
+			}
+		}
+
+		// Nested under `.components-button` for specificity over WP Button defaults —
+		// otherwise the pill shape and padding lose to WP's default button styling.
+		.newspack-subscription-products__scope-chip.components-button {
+			border-radius: 20px;
+			padding: 4px 16px;
+			font-size: 13px;
+			line-height: 1.4;
+		}
+	}
+
+	// Bundled-plan chips (grouped "Plan bundle" products).
+	&__bundled {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+
+	// Add-product modal.
+	&__add-modal {
+		min-width: 480px;
+		max-width: 640px;
+	}
+
+	&__add-modal-label {
+		font-weight: 500;
+	}
+
+	// A variable plan row (label + remove, then price/every/period) — separated so each
+	// block reads as a single plan in the narrow side panel.
+	&__plan {
+		padding-bottom: 12px;
+		border-bottom: 1px solid wp-colors.$gray-100;
+	}
+
+	&__add-modal-help {
+		margin: 0;
+		color: wp-colors.$gray-700;
+		font-size: 12px;
+	}
+
+	&__bundle-picker {
+		max-height: 220px;
+		overflow-y: auto;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 2px;
+		padding: 12px;
+	}
+
+	// "Unlocks" — content gates this product unlocks (Access control).
+	&__unlocks {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+
+	// Edit modal.
+	&__modal {
+		min-width: 360px;
+	}
+
+	&__modal-label {
+		color: wp-colors.$gray-700;
+		font-weight: 500;
+	}
+
+	&__modal-value {
+		text-align: right;
+	}
+
+	&__modal-divider {
+		width: 100%;
+		border: none;
+		border-top: 1px solid wp-colors.$gray-200;
+		margin: 0;
+	}
+
+	&__modal-note {
+		color: wp-colors.$gray-700;
+		font-size: 12px;
+		font-style: italic;
+		margin: 0;
+	}
+}
