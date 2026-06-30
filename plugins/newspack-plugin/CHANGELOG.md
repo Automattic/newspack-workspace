@@ -1,3 +1,10 @@
+## newspack [6.44.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.0...newspack@6.44.1) (2026-06-30)
+
+
+### Bug Fixes
+
+* **collections:** preserve inner blocks in card indicator ([#407](https://github.com/Automattic/newspack-workspace/issues/407)) ([96f5e6e](https://github.com/Automattic/newspack-workspace/commit/96f5e6e664467ffa1d885ca8e819b68552b3bab3))
+
 # newspack [6.44.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.9...newspack@6.44.0) (2026-06-29)
 
 
