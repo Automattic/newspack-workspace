@@ -8,20 +8,50 @@
 use Newspack\Insights\Cache;
 
 /**
+ * Tests for Insights Cache durable-option store.
+ *
  * @group insights
  */
 class Test_Cache_Durable extends WP_UnitTestCase {
 
-	private $tab    = 'gates';
-	private $source = Cache::SOURCE_BIGQUERY;
-	private $key    = [ '2026-06-01', '2026-06-30', null, null ];
-	private $window = [ 'start' => '2026-06-01', 'end' => '2026-06-30' ];
+	/**
+	 * Tab slug used in tests.
+	 *
+	 * @var string
+	 */
+	private $tab = 'gates';
 
+	/**
+	 * Data source constant used in tests.
+	 *
+	 * @var string
+	 */
+	private $source = Cache::SOURCE_BIGQUERY;
+
+	/**
+	 * Cache key tuple used in tests.
+	 *
+	 * @var array
+	 */
+	private $key = [ '2026-06-01', '2026-06-30', null, null ];
+
+	/**
+	 * Window array used in tests.
+	 *
+	 * @var array
+	 */
+	private $window = [
+		'start' => '2026-06-01',
+		'end'   => '2026-06-30',
+	];
+
+	/** Cleans up durable cache entries after each test. */
 	public function tearDown(): void {
 		Cache::prune_durable( $this->tab, [] );
 		parent::tearDown();
 	}
 
+	/** Stored payload, source, and window are returned verbatim by peek. */
 	public function test_store_then_peek_round_trips() {
 		Cache::store_durable( $this->tab, $this->source, $this->key, [ 'a' => 1 ], $this->window );
 		$got = Cache::peek_durable( $this->tab, $this->source, $this->key );
@@ -31,23 +61,27 @@ class Test_Cache_Durable extends WP_UnitTestCase {
 		$this->assertNotEmpty( $got['computed_at'] );
 	}
 
+	/** Peek returns null when the stored source does not match the requested source. */
 	public function test_peek_returns_null_on_source_mismatch() {
 		Cache::store_durable( $this->tab, $this->source, $this->key, [ 'a' => 1 ], $this->window );
 		$this->assertNull( Cache::peek_durable( $this->tab, Cache::SOURCE_EXTERNAL, $this->key ) );
 	}
 
+	/** Peek returns null when no entry exists for the given key. */
 	public function test_peek_returns_null_when_absent() {
 		$this->assertNull( Cache::peek_durable( $this->tab, $this->source, $this->key ) );
 	}
 
+	/** Durable cache options are stored with autoload disabled. */
 	public function test_durable_option_is_not_autoloaded() {
 		Cache::store_durable( $this->tab, $this->source, $this->key, [ 'a' => 1 ], $this->window );
 		global $wpdb;
 		$name     = 'newspack_insights_warm_' . $this->tab . '_' . md5( (string) wp_json_encode( $this->key ) );
-		$autoload = $wpdb->get_var( $wpdb->prepare( "SELECT autoload FROM {$wpdb->options} WHERE option_name = %s", $name ) );
+		$autoload = $wpdb->get_var( $wpdb->prepare( "SELECT autoload FROM {$wpdb->options} WHERE option_name = %s", $name ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$this->assertContains( $autoload, [ 'no', 'off' ], 'Durable cache option must not autoload.' );
 	}
 
+	/** Is_fresh returns true within the TTL and false outside it. */
 	public function test_is_fresh_boundary() {
 		$fresh = gmdate( 'Y-m-d\TH:i:s\Z', time() - HOUR_IN_SECONDS );
 		$stale = gmdate( 'Y-m-d\TH:i:s\Z', time() - 26 * HOUR_IN_SECONDS );
@@ -55,11 +89,30 @@ class Test_Cache_Durable extends WP_UnitTestCase {
 		$this->assertFalse( Cache::is_fresh( $stale ) );
 	}
 
+	/** Prune_durable preserves listed keys and deletes unlisted ones. */
 	public function test_prune_keeps_listed_deletes_others() {
 		$keep = [ '2026-06-01', '2026-06-30', null, null ];
 		$drop = [ '2026-05-01', '2026-05-31', null, null ];
-		Cache::store_durable( $this->tab, $this->source, $keep, [ 'k' => 1 ], [ 'start' => '2026-06-01', 'end' => '2026-06-30' ] );
-		Cache::store_durable( $this->tab, $this->source, $drop, [ 'd' => 1 ], [ 'start' => '2026-05-01', 'end' => '2026-05-31' ] );
+		Cache::store_durable(
+			$this->tab,
+			$this->source,
+			$keep,
+			[ 'k' => 1 ],
+			[
+				'start' => '2026-06-01',
+				'end'   => '2026-06-30',
+			]
+		);
+		Cache::store_durable(
+			$this->tab,
+			$this->source,
+			$drop,
+			[ 'd' => 1 ],
+			[
+				'start' => '2026-05-01',
+				'end'   => '2026-05-31',
+			]
+		);
 
 		Cache::prune_durable( $this->tab, [ $keep ] );
 
@@ -143,6 +196,7 @@ class Test_Cache_Durable extends WP_UnitTestCase {
 		$this->assertFalse( $fired );
 	}
 
+	/** Cache is fully disabled when NEWSPACK_INSIGHTS_CACHE_DISABLED is true. */
 	public function test_disabled_skips_write_and_read() {
 		if ( ! defined( 'NEWSPACK_INSIGHTS_CACHE_DISABLED' ) ) {
 			define( 'NEWSPACK_INSIGHTS_CACHE_DISABLED', true );
