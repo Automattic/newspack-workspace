@@ -394,6 +394,7 @@ class Edit extends Component {
 										</figure>
 										{ ( post.newspack_post_sponsors ||
 											showCategory ||
+											( showTagLabels && post.newspack_tag_labels ) ||
 											showTitle ||
 											showAuthor ||
 											showDate ||
