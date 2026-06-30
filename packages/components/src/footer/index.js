@@ -16,6 +16,7 @@ import './style.scss';
 const Footer = ( { simple = undefined } ) => {
 	const {
 		components_demo: componentsDemo = false,
+		subscribers_demo: subscribersDemo = false,
 		support = false,
 		setup_wizard: setupWizard = false,
 		reset_url: resetUrl = false,
@@ -45,6 +46,12 @@ const Footer = ( { simple = undefined } ) => {
 		footerElements.push( {
 			label: __( 'Components Demo', 'newspack-plugin' ),
 			url: componentsDemo,
+		} );
+	}
+	if ( subscribersDemo ) {
+		footerElements.push( {
+			label: __( 'Subscribers Demo', 'newspack-plugin' ),
+			url: subscribersDemo,
 		} );
 	}
 	if ( setupWizard ) {

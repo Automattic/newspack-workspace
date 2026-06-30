@@ -118,4 +118,14 @@ webpackConfig.module.rules.push( {
 	type: 'asset/resource',
 } );
 
+// Let webpack resolve loaders (e.g. url-loader) nested under @wordpress/scripts by pnpm.
+const wpScriptsLoaderDir = path.resolve(
+	path.dirname( require.resolve( '@wordpress/scripts/package.json' ) ),
+	'../..'
+);
+webpackConfig.resolveLoader = {
+	...( webpackConfig.resolveLoader || {} ),
+	modules: [ wpScriptsLoaderDir, 'node_modules' ],
+};
+
 module.exports = webpackConfig;

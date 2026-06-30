@@ -36,3 +36,7 @@ plugins/*/package-lock.json
 themes/*/package-lock.json
 packages/*/package-lock.json
 .cursorignore
+
+# Superpowers brainstorm scratch
+.superpowers/
+docs/superpowers/
