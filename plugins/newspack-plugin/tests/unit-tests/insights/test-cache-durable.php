@@ -196,7 +196,15 @@ class Test_Cache_Durable extends WP_UnitTestCase {
 		$this->assertFalse( $fired );
 	}
 
-	/** Cache is fully disabled when NEWSPACK_INSIGHTS_CACHE_DISABLED is true. */
+	/**
+	 * Cache is fully disabled when NEWSPACK_INSIGHTS_CACHE_DISABLED is true.
+	 *
+	 * Runs in a separate process so the define() does not leak into the parent
+	 * and poison other tests (PHP constants cannot be unset).
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
 	public function test_disabled_skips_write_and_read() {
 		if ( ! defined( 'NEWSPACK_INSIGHTS_CACHE_DISABLED' ) ) {
 			define( 'NEWSPACK_INSIGHTS_CACHE_DISABLED', true );

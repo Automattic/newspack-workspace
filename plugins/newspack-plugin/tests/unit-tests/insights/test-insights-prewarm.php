@@ -114,6 +114,22 @@ class Test_Insights_Prewarm extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Maybe_schedule() must not enqueue a warm when the cache is disabled.
+	 *
+	 * Runs in a separate process so the define() does not leak into the parent
+	 * and poison other tests (PHP constants cannot be unset).
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_maybe_schedule_skips_when_cache_disabled() {
+		define( 'NEWSPACK_INSIGHTS_CACHE_DISABLED', true ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound
+		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
+		Prewarm::maybe_schedule();
+		$this->assertFalse( as_has_scheduled_action( Prewarm::WARM_ACTION, [], Prewarm::WARM_GROUP ) );
+	}
+
+	/**
 	 * The run_warm_refresh method calls the registered warmer with the correct DTI range.
 	 */
 	public function test_run_warm_refresh_calls_registered_warmer() {

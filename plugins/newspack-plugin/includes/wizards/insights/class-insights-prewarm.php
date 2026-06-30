@@ -81,12 +81,6 @@ final class Prewarm {
 	/**
 	 * Whether warming should run at all in this environment.
 	 *
-	 * Note: Cache::is_disabled() is intentionally NOT checked here. When the
-	 * durable store is off, warm_window calls are silently no-ops inside
-	 * Cache::store_durable(), so warming is harmless. Checking is_disabled()
-	 * here causes test-ordering issues because test suites define
-	 * NEWSPACK_INSIGHTS_CACHE_DISABLED as a PHP constant that cannot be unset.
-	 *
 	 * @return bool
 	 */
 	private static function is_warmable(): bool {
@@ -94,6 +88,9 @@ final class Prewarm {
 			return false;
 		}
 		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			return false;
+		}
+		if ( Cache::is_disabled() ) {
 			return false;
 		}
 		return true;
@@ -142,7 +139,12 @@ final class Prewarm {
 				}
 				$keep[] = [ $w['start']->format( 'Y-m-d' ), $w['end']->format( 'Y-m-d' ), null, null ];
 			}
-			Cache::prune_durable( $tab, $keep );
+			// Only prune when at least one window warmed successfully. An empty
+			// $keep (total-failure run, e.g. BQ outage) would wipe all durable
+			// entries, removing yesterday's still-serveable cache on a transient error.
+			if ( ! empty( $keep ) ) {
+				Cache::prune_durable( $tab, $keep );
+			}
 		}
 		update_option( self::MARKER_OPTION, self::today(), false );
 	}
