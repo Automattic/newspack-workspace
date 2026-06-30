@@ -14,6 +14,11 @@ defined( 'ABSPATH' ) || exit;
 
 /**
  * Pure segment-membership check against the reader-data snapshot.
+ *
+ * The snapshot is client-asserted — written by the browser via reader-data (see
+ * Reader_Data::get_matched_segments) — so this gate is best-effort targeting for
+ * promotional pricing, not a hard entitlement. A reader could spoof their segment
+ * membership, so never use it as a security boundary (e.g. to gate paid content).
  */
 final class Reader_Segment_Eligibility {
 	/**
