@@ -53,10 +53,16 @@ trait Cached_Controller_Trait {
 	 * Build and durably store one pre-warmed base window. Uses the controller's
 	 * own tab/source/versioned key so the entry key-matches the GET read path.
 	 *
+	 * Returns the versioned key parts the entry was stored under, so the
+	 * pre-warm caller can build the prune keep-list from the exact key written
+	 * (single source of truth — avoids re-computing key parts in a separate
+	 * code path that may diverge from cache_schema_version()).
+	 *
 	 * @param DateTimeImmutable $start Window start.
 	 * @param DateTimeImmutable $end   Window end.
+	 * @return array Versioned key parts passed to Cache::store_durable().
 	 */
-	public function warm_window( DateTimeImmutable $start, DateTimeImmutable $end ): void {
+	public function warm_window( DateTimeImmutable $start, DateTimeImmutable $end ): array {
 		$key_parts = $this->versioned_key_parts_from(
 			$start->format( 'Y-m-d' ),
 			$end->format( 'Y-m-d' ),
@@ -73,6 +79,7 @@ trait Cached_Controller_Trait {
 				'end'   => $end->format( 'Y-m-d' ),
 			]
 		);
+		return $key_parts;
 	}
 
 	/**
@@ -137,6 +144,13 @@ trait Cached_Controller_Trait {
 	 * Canonical window key parts with the response-shape version prepended when
 	 * the controller sets one. An empty version leaves the window parts
 	 * untouched, so a non-overriding controller's cache key is unchanged.
+	 *
+	 * NOTE — truthiness coupling: empty-string compare_start / compare_end are
+	 * treated as absent here (falsy → null) to match the behaviour of
+	 * Insights_REST_Trait::parse_window_args(), which treats a falsy param as
+	 * "no comparison window". Both sides must change together if either switches
+	 * to isset() / !== '' checks; otherwise cache keys and parsed comparison
+	 * windows will disagree on what "absent" means.
 	 *
 	 * @param WP_REST_Request $request Incoming request.
 	 * @return array

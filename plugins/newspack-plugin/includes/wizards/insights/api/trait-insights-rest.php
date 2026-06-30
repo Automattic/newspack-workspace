@@ -24,12 +24,13 @@ defined( 'ABSPATH' ) || exit;
 trait Insights_REST_Trait {
 
 	/**
-	 * Permission check — requires the Insights wizard capability.
+	 * Permission check — requires the capability defined by
+	 * {@see \Newspack\Insights_Wizard::get_required_capability()}.
 	 *
 	 * @return bool|WP_Error
 	 */
 	public function permissions_check() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( \Newspack\Insights_Wizard::get_required_capability() ) ) {
 			return new WP_Error(
 				'newspack_insights_rest_forbidden',
 				__( 'You do not have permission to view Insights data.', 'newspack-plugin' ),
@@ -82,28 +83,28 @@ trait Insights_REST_Trait {
 				[
 					'description' => __( 'Inclusive window start date (YYYY-MM-DD, site timezone).', 'newspack-plugin' ),
 					'required'    => true,
-				] 
+				]
 			),
 			'end'           => array_merge(
 				$base,
 				[
 					'description' => __( 'Inclusive window end date (YYYY-MM-DD, site timezone).', 'newspack-plugin' ),
 					'required'    => true,
-				] 
+				]
 			),
 			'compare_start' => array_merge(
 				$base,
 				[
 					'description' => __( 'Optional comparison window start. Must pair with compare_end.', 'newspack-plugin' ),
 					'required'    => false,
-				] 
+				]
 			),
 			'compare_end'   => array_merge(
 				$base,
 				[
 					'description' => __( 'Optional comparison window end. Must pair with compare_start.', 'newspack-plugin' ),
 					'required'    => false,
-				] 
+				]
 			),
 		];
 	}

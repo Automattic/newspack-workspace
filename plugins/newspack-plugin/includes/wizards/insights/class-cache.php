@@ -245,11 +245,17 @@ final class Cache {
 		if ( $stored['source'] !== $source ) {
 			return null;
 		}
-		if ( ! isset( $stored['window'] ) || ! is_array( $stored['window'] ) ) {
-			$stored['window'] = [
-				'start' => '',
-				'end'   => '',
-			];
+		// A durable entry with a missing or empty window cannot be SWR-refreshed:
+		// on_durable_stale() bails when start/end are empty, so the entry would be
+		// served forever-stale with no way to refresh. Return null to fall through
+		// to a live recompute rather than serving an unserviceable entry.
+		if (
+			! isset( $stored['window'] ) ||
+			! is_array( $stored['window'] ) ||
+			empty( $stored['window']['start'] ) ||
+			empty( $stored['window']['end'] )
+		) {
+			return null;
 		}
 		return $stored;
 	}
@@ -314,7 +320,12 @@ final class Cache {
 				delete_option( 'newspack_insights_warm_' . $tab . '_' . $hash );
 			}
 		}
-		update_option( $option, array_values( $keep_hashes ), false );
+		// Rewrite the index as the intersection of what was already indexed and
+		// what the caller wants to keep. This is self-consistent: an entry that
+		// was never stored (e.g. a phantom versioned hash computed incorrectly)
+		// cannot survive a prune cycle.
+		$surviving = array_values( array_intersect( $hashes, $keep_hashes ) );
+		update_option( $option, $surviving, false );
 	}
 
 	/**

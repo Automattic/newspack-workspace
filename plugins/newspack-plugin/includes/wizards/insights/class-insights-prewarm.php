@@ -61,10 +61,13 @@ final class Prewarm {
 
 	/**
 	 * Register a tab's warmer. The warmer builds + durably stores one base
-	 * window. Typically [ $controller, 'warm_window' ].
+	 * window and RETURNS the versioned key parts it stored under. Typically
+	 * [ $controller, 'warm_window' ] — the Cached_Controller_Trait implementation
+	 * returns the key array from warm_window() so the prune keep-list is derived
+	 * from the actual stored key rather than a re-derived approximation.
 	 *
 	 * @param string   $tab    Tab slug.
-	 * @param callable $warmer fn( DateTimeImmutable $start, DateTimeImmutable $end ): void.
+	 * @param callable $warmer fn( DateTimeImmutable $start, DateTimeImmutable $end ): array.
 	 */
 	public static function register_tab( string $tab, callable $warmer ): void {
 		self::$tabs[ $tab ] = $warmer;
@@ -134,18 +137,29 @@ final class Prewarm {
 		if ( ! self::is_warmable() ) {
 			return;
 		}
+		if ( empty( self::$tabs ) ) {
+			if ( class_exists( '\Newspack\Logger' ) ) {
+				\Newspack\Logger::newspack_log(
+					'newspack_insights_prewarm_empty_registry',
+					'Pre-warm ran with an empty tab registry — no warmers registered.',
+					[ 'header' => Cache::LOGGER_HEADER ],
+					'warning'
+				);
+			}
+			return;
+		}
 		$windows     = Preset_Windows::all( current_datetime() );
 		$any_success = false;
 		foreach ( self::$tabs as $tab => $warmer ) {
 			$keep = [];
 			foreach ( $windows as $w ) {
 				try {
-					$warmer( $w['start'], $w['end'] );
+					$key_parts = $warmer( $w['start'], $w['end'] );
 				} catch ( \Throwable $e ) {
 					self::log_failure( $tab, $w['preset'], $e );
 					continue;
 				}
-				$keep[] = [ $w['start']->format( 'Y-m-d' ), $w['end']->format( 'Y-m-d' ), null, null ];
+				$keep[] = $key_parts; // the actual (versioned) key the warmer wrote.
 			}
 			// Only prune when at least one window warmed successfully. An empty
 			// $keep (total-failure run, e.g. BQ outage) would wipe all durable
@@ -209,7 +223,10 @@ final class Prewarm {
 		$tz    = wp_timezone();
 		$start = DateTimeImmutable::createFromFormat( 'Y-m-d', (string) ( $args['start'] ?? '' ), $tz );
 		$end   = DateTimeImmutable::createFromFormat( 'Y-m-d', (string) ( $args['end'] ?? '' ), $tz );
-		if ( ! $start || ! $end ) {
+		if ( ! $start || $start->format( 'Y-m-d' ) !== (string) ( $args['start'] ?? '' ) ) {
+			return;
+		}
+		if ( ! $end || $end->format( 'Y-m-d' ) !== (string) ( $args['end'] ?? '' ) ) {
 			return;
 		}
 		try {

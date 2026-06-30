@@ -7,6 +7,7 @@
 
 use Newspack\Insights\Prewarm;
 use Newspack\Insights\Cache;
+use Newspack\Insights\Preset_Windows;
 
 /**
  * Tests for Prewarm.
@@ -44,21 +45,23 @@ class Test_Insights_Prewarm extends WP_UnitTestCase {
 			'gates',
 			function ( $start, $end ) use ( &$calls ) {
 				$calls[] = $start->format( 'Y-m-d' ) . '..' . $end->format( 'Y-m-d' );
+				$key     = [
+					$start->format( 'Y-m-d' ),
+					$end->format( 'Y-m-d' ),
+					null,
+					null,
+				];
 				Cache::store_durable(
 					'gates',
 					Cache::SOURCE_BIGQUERY,
-					[
-						$start->format( 'Y-m-d' ),
-						$end->format( 'Y-m-d' ),
-						null,
-						null,
-					],
+					$key,
 					[ 'ok' => true ],
 					[
 						'start' => $start->format( 'Y-m-d' ),
 						'end'   => $end->format( 'Y-m-d' ),
 					]
 				);
+				return $key;
 			}
 		);
 
@@ -154,6 +157,7 @@ class Test_Insights_Prewarm extends WP_UnitTestCase {
 			'gates',
 			function ( $start, $end ) use ( &$got ) {
 				$got = $start->format( 'Y-m-d' ) . '..' . $end->format( 'Y-m-d' );
+				return [ $start->format( 'Y-m-d' ), $end->format( 'Y-m-d' ), null, null ];
 			}
 		);
 		Prewarm::run_warm_refresh(
@@ -164,5 +168,70 @@ class Test_Insights_Prewarm extends WP_UnitTestCase {
 			]
 		);
 		$this->assertSame( '2026-06-01..2026-06-30', $got );
+	}
+
+	/**
+	 * REGRESSION — versioned-key prune correctness (FIX 1 / blocker).
+	 *
+	 * Uses the real Gates_REST_Controller (which overrides cache_schema_version()
+	 * with Gates_Metric::CACHE_PREFIX) to prove that after run_prewarm() the
+	 * durable entry SURVIVES the prune call under the versioned key.
+	 *
+	 * The bug: run_prewarm() previously built its keep-list from unversioned key
+	 * parts [ $start, $end, null, null ], but warm_window() stored entries under
+	 * versioned parts [ CACHE_PREFIX, $start, $end, null, null ]. The keep hash
+	 * never matched the stored hash, so prune_durable() deleted the entry the run
+	 * had just warmed, giving zero durable benefit on any tab with a non-empty
+	 * cache_schema_version(). This test FAILS against the pre-fix code and PASSES
+	 * after the fix.
+	 *
+	 * @group insights
+	 */
+	public function test_versioned_tab_durable_entry_survives_prune() {
+		// Ensure the Gates controller and metric are loaded (they live in the gates
+		// section file which is only included when NEWSPACK_INSIGHTS_GATES_PREVIEW is
+		// set; in the unit harness we load them directly).
+		$base = NEWSPACK_ABSPATH . 'includes/wizards/insights/';
+		if ( ! class_exists( 'Newspack\Insights\Gates_Metric' ) ) {
+			include_once $base . 'metrics/class-gates-metric.php';
+		}
+		if ( ! class_exists( 'Newspack\Insights\Gates_REST_Controller' ) ) {
+			include_once $base . 'api/class-gates-rest-controller.php';
+		}
+
+		$controller = new \Newspack\Insights\Gates_REST_Controller();
+
+		Prewarm::register_tab( 'gates', [ $controller, 'warm_window' ] );
+
+		// Run the full prewarm (warms + prunes) against today's preset windows.
+		Prewarm::run_prewarm();
+
+		// Find the last-30 preset to check a concrete window.
+		$today   = current_datetime();
+		$windows = Preset_Windows::all( $today );
+		$last30  = null;
+		foreach ( $windows as $w ) {
+			if ( 'last-30' === $w['preset'] ) {
+				$last30 = $w;
+				break;
+			}
+		}
+		$this->assertNotNull( $last30, 'last-30 preset must exist.' );
+
+		$start_str = $last30['start']->format( 'Y-m-d' );
+		$end_str   = $last30['end']->format( 'Y-m-d' );
+
+		// The durable entry must exist under the VERSIONED key (CACHE_PREFIX + window).
+		$versioned_key = array_merge(
+			[ \Newspack\Insights\Gates_Metric::CACHE_PREFIX ],
+			[ $start_str, $end_str, null, null ]
+		);
+		$durable = Cache::peek_durable( 'gates', Cache::SOURCE_BIGQUERY, $versioned_key );
+
+		$this->assertNotNull(
+			$durable,
+			'Durable entry must survive prune under the versioned key. ' .
+			'If null, prune deleted the entry because the keep-list used unversioned keys (pre-fix bug).'
+		);
 	}
 }
