@@ -317,9 +317,17 @@ final class Engagement_Metric {
 	public static function bounce_rate_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
 		$rows = $proxy->query( 'engagement_bounce_rate', $start, $end );
 		if ( is_wp_error( $rows ) || empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( 'bounce_rate', $rows[0] ) || ! is_numeric( $rows[0]['bounce_rate'] ) ) {
-			return [ 'value' => 0, 'computable' => false, 'type' => 'rate' ];
+			return [
+				'value'      => 0,
+				'computable' => false,
+				'type'       => 'rate',
+			];
 		}
-		return [ 'value' => (float) $rows[0]['bounce_rate'], 'computable' => true, 'type' => 'rate' ];
+		return [
+			'value'      => (float) $rows[0]['bounce_rate'],
+			'computable' => true,
+			'type'       => 'rate',
+		];
 	}
 
 	/**
@@ -333,9 +341,17 @@ final class Engagement_Metric {
 	public static function article_completion_rate_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
 		$rows = $proxy->query( 'engagement_article_completion_rate', $start, $end );
 		if ( is_wp_error( $rows ) || empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( 'scroll_to_90_rate', $rows[0] ) || ! is_numeric( $rows[0]['scroll_to_90_rate'] ) ) {
-			return [ 'value' => 0, 'computable' => false, 'type' => 'rate' ];
+			return [
+				'value'      => 0,
+				'computable' => false,
+				'type'       => 'rate',
+			];
 		}
-		return [ 'value' => (float) $rows[0]['scroll_to_90_rate'], 'computable' => true, 'type' => 'rate' ];
+		return [
+			'value'      => (float) $rows[0]['scroll_to_90_rate'],
+			'computable' => true,
+			'type'       => 'rate',
+		];
 	}
 
 	/*
@@ -528,12 +544,12 @@ final class Engagement_Metric {
 	private static function bucket_bq_by_traffic_source( array $rows ): array {
 		$buckets = [
 			'newsletter' => [
-				'sessions'    => 0,
-				'total_eng'   => 0.0,
+				'sessions'  => 0,
+				'total_eng' => 0.0,
 			],
 			'other'      => [
-				'sessions'    => 0,
-				'total_eng'   => 0.0,
+				'sessions'  => 0,
+				'total_eng' => 0.0,
 			],
 		];
 		foreach ( $rows as $row ) {

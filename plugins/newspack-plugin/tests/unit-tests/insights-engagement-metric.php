@@ -72,7 +72,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * only article_freshness_vs_engagement is hidden in v1 in the BQ path.
+	 * Verifies only article_freshness_vs_engagement is hidden in v1 in the BQ path.
 	 * The three previously-hidden metrics are now enabled.
 	 */
 	public function test_only_article_freshness_hidden_in_bq_path() {
@@ -230,8 +230,10 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	 * a computable=false payload and does NOT run the bucketing helper.
 	 */
 	public function test_traffic_source_bq_wp_error_returns_not_computable() {
-		$proxy = new class extends BigQuery_Proxy_Client {
+		$proxy = new class() extends BigQuery_Proxy_Client {
+			// phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 			public function __construct() {}
+			// phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 			public function query( string $query_name, \DateTimeInterface $start, \DateTimeInterface $end ) {
 				return new \WP_Error( 'bq_error', 'BQ unavailable' );
 			}
@@ -257,7 +259,9 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	 */
 	private function makeProxyReturning( string $expected_name, array $rows ): BigQuery_Proxy_Client {
 		return new class( $expected_name, $rows ) extends BigQuery_Proxy_Client {
+			// phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 			public function __construct( private string $expected_name, private array $rows ) {}
+			// phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 			public function query( string $query_name, \DateTimeInterface $start, \DateTimeInterface $end ) {
 				return $query_name === $this->expected_name ? $this->rows : [];
 			}
@@ -265,7 +269,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * bounce_rate_via_bq shapes a first-row 'bounce_rate' column into a rate payload.
+	 * Tests that bounce_rate_via_bq shapes a first-row 'bounce_rate' column into a rate payload.
 	 */
 	public function test_bounce_rate_via_bq_shapes_rate() {
 		$proxy = $this->makeProxyReturning( 'engagement_bounce_rate', [ [ 'bounce_rate' => 0.62 ] ] );
@@ -275,7 +279,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * avg_pages_per_session_via_bq shapes into a decimal scalar payload.
+	 * Tests that avg_pages_per_session_via_bq shapes into a decimal scalar payload.
 	 */
 	public function test_avg_pages_per_session_via_bq_shapes_decimal() {
 		$proxy = $this->makeProxyReturning( 'engagement_avg_pages_per_session', [ [ 'avg_pages_per_session' => 3.5 ] ] );
@@ -286,7 +290,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * avg_engaged_session_duration_via_bq shapes into a duration scalar payload
+	 * Tests that avg_engaged_session_duration_via_bq shapes into a duration scalar payload
 	 * (matches the GA4 path's 'duration' type so the frontend formats it as a
 	 * time, not a raw number — zero-UI-change parity).
 	 */
@@ -299,7 +303,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * article_completion_rate_via_bq shapes the scroll_to_90_rate column into a rate payload.
+	 * Tests that article_completion_rate_via_bq shapes the scroll_to_90_rate column into a rate payload.
 	 */
 	public function test_article_completion_rate_via_bq_shapes_rate() {
 		$proxy = $this->makeProxyReturning( 'engagement_article_completion_rate', [ [ 'scroll_to_90_rate' => 0.45 ] ] );
@@ -310,7 +314,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * compute_via_bq wires the 4 quality scalars (no longer not_implemented stub).
+	 * Tests that compute_via_bq wires the 4 quality scalars (no longer not_implemented stub).
 	 * In the test environment the proxy is unconfigured (WP_Error), so each scalar
 	 * returns computable=false — but the NPPD-1630 "not yet implemented" stub error
 	 * must be gone, proving the method dispatches to the BQ shaper instead of the
@@ -335,7 +339,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	 */
 
 	/**
-	 * most_read_articles_via_bq passes rows through with type 'table'.
+	 * Tests that most_read_articles_via_bq passes rows through with type 'table'.
 	 */
 	public function test_most_read_articles_via_bq_passes_rows() {
 		$proxy = $this->makeProxyReturning(
@@ -355,7 +359,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * articles_by_completion_rate_via_bq passes rows through with type 'table'.
+	 * Tests that articles_by_completion_rate_via_bq passes rows through with type 'table'.
 	 */
 	public function test_articles_by_completion_rate_via_bq_passes_rows() {
 		$proxy = $this->makeProxyReturning(
@@ -375,7 +379,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * top_authors_by_avg_engagement_time_via_bq passes rows through with type 'table'.
+	 * Tests that top_authors_by_avg_engagement_time_via_bq passes rows through with type 'table'.
 	 */
 	public function test_top_authors_by_avg_engagement_time_via_bq_passes_rows() {
 		$proxy = $this->makeProxyReturning(
@@ -395,7 +399,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * engagement_by_device_type_via_bq passes rows through with type 'table'.
+	 * Tests that engagement_by_device_type_via_bq passes rows through with type 'table'.
 	 */
 	public function test_engagement_by_device_type_via_bq_passes_rows() {
 		$proxy = $this->makeProxyReturning(
@@ -416,7 +420,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * engagement_by_returning_vs_new_via_bq passes rows through with type 'table'.
+	 * Tests that engagement_by_returning_vs_new_via_bq passes rows through with type 'table'.
 	 */
 	public function test_engagement_by_returning_vs_new_via_bq_passes_rows() {
 		$proxy = $this->makeProxyReturning(
@@ -437,7 +441,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * engagement_by_traffic_source_via_bq: Email/Newsletter channel rows are bucketed
+	 * Tests engagement_by_traffic_source_via_bq: Email/Newsletter channel rows are bucketed
 	 * as "newsletter" cohort, all others as "other". avg_engagement_seconds for each
 	 * cohort is computed as weighted average (sessions * avg_seconds / total_sessions).
 	 * Above the 100-session floor → needs_data is false.
@@ -491,7 +495,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * engagement_by_traffic_source_via_bq: below-floor newsletter sessions
+	 * Tests engagement_by_traffic_source_via_bq: below-floor newsletter sessions
 	 * (< NEWSLETTER_SESSION_FLOOR = 100) → needs_data is true.
 	 */
 	public function test_engagement_by_traffic_source_via_bq_below_floor_sets_needs_data() {
@@ -521,7 +525,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * engagement_by_traffic_source_via_bq: zero newsletter sessions → needs_data true,
+	 * Tests engagement_by_traffic_source_via_bq: zero newsletter sessions → needs_data true,
 	 * no divide-by-zero.
 	 */
 	public function test_engagement_by_traffic_source_via_bq_zero_newsletter_needs_data() {
@@ -545,7 +549,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * top_categories_by_engagement_via_bq: enabled metric returns rows with type 'table'.
+	 * Tests top_categories_by_engagement_via_bq: enabled metric returns rows with type 'table'.
 	 */
 	public function test_top_categories_by_engagement_via_bq_enabled() {
 		$proxy = $this->makeProxyReturning(
@@ -564,7 +568,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * mobile_vs_desktop_content_preferences_via_bq: enabled metric returns rows with type 'table'.
+	 * Tests mobile_vs_desktop_content_preferences_via_bq: enabled metric returns rows with type 'table'.
 	 */
 	public function test_mobile_vs_desktop_via_bq_enabled() {
 		$proxy = $this->makeProxyReturning(
@@ -583,7 +587,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * top_authors_by_repeat_reader_rate_via_bq: enabled metric returns rows with type 'table'.
+	 * Tests top_authors_by_repeat_reader_rate_via_bq: enabled metric returns rows with type 'table'.
 	 */
 	public function test_top_authors_by_repeat_reader_rate_via_bq_enabled() {
 		$proxy = $this->makeProxyReturning(
@@ -602,7 +606,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * article_freshness_vs_engagement is still hidden in v1 in the BQ compute path.
+	 * Verifies article_freshness_vs_engagement is still hidden in v1 in the BQ compute path.
 	 */
 	public function test_article_freshness_stays_hidden() {
 		$payload = $this->invoke( 'compute_via_bq', [ '2026-01-01', '2026-01-31' ] );
@@ -610,7 +614,7 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The three newly-enabled hidden metrics are now wired (not hidden_in_v1) in the BQ path.
+	 * Verifies the three newly-enabled hidden metrics are now wired (not hidden_in_v1) in the BQ path.
 	 */
 	public function test_previously_hidden_metrics_now_wired_in_bq() {
 		$payload = $this->invoke( 'compute_via_bq', [ '2026-01-01', '2026-01-31' ] );

@@ -215,7 +215,9 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	 */
 	private function makeProxyReturning( string $expected_name, array $rows ): BigQuery_Proxy_Client {
 		return new class( $expected_name, $rows ) extends BigQuery_Proxy_Client {
+			// phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 			public function __construct( private string $expected_name, private array $rows ) {}
+			// phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 			public function query( string $query_name, \DateTimeInterface $start, \DateTimeInterface $end ) {
 				return $query_name === $this->expected_name ? $this->rows : [];
 			}
@@ -223,7 +225,7 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * active_readers_via_bq shapes a first-row 'active_readers' column into a
+	 * Tests that active_readers_via_bq shapes a first-row 'active_readers' column into a
 	 * scalar { value, computable, type: 'count' } payload.
 	 */
 	public function test_active_readers_via_bq_shapes_scalar() {
@@ -235,7 +237,7 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * pageviews_via_bq shapes a first-row 'pageviews' column into a
+	 * Tests that pageviews_via_bq shapes a first-row 'pageviews' column into a
 	 * scalar { value, computable, type: 'count' } payload.
 	 */
 	public function test_pageviews_via_bq_shapes_scalar() {
@@ -247,7 +249,7 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * newsletter_signups_via_bq shapes a first-row 'newsletter_signups' column
+	 * Tests that newsletter_signups_via_bq shapes a first-row 'newsletter_signups' column
 	 * into a scalar { value, computable, type: 'count' } payload.
 	 */
 	public function test_newsletter_signups_via_bq_shapes_scalar() {
@@ -259,7 +261,7 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * avg_sessions_per_reader_via_bq computes sessions / active_readers and
+	 * Tests that avg_sessions_per_reader_via_bq computes sessions / active_readers and
 	 * exposes the numerator/denominator alongside the decimal value.
 	 */
 	public function test_avg_sessions_per_reader_via_bq_computes_ratio() {
@@ -281,7 +283,7 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * avg_sessions_per_reader_via_bq returns computable=false with value 0
+	 * Tests that avg_sessions_per_reader_via_bq returns computable=false with value 0
 	 * when active_readers is zero (avoids divide-by-zero).
 	 */
 	public function test_avg_sessions_per_reader_via_bq_zero_readers_not_computable() {
@@ -300,7 +302,7 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * proxy_scalar returns computable=false when the column is absent.
+	 * Tests that proxy_scalar returns computable=false when the column is absent.
 	 */
 	public function test_active_readers_via_bq_missing_column_not_computable() {
 		$proxy = $this->makeProxyReturning( 'audience_active_readers', [ [ 'some_other_column' => 99 ] ] );
@@ -316,7 +318,7 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	 */
 
 	/**
-	 * traffic_sources_breakdown_via_bq passes rows through with type 'breakdown'.
+	 * Tests that traffic_sources_breakdown_via_bq passes rows through with type 'breakdown'.
 	 */
 	public function test_traffic_sources_breakdown_via_bq_passes_rows() {
 		$proxy = $this->makeProxyReturning(
@@ -339,7 +341,7 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * readership_by_hour_of_day_via_bq shifts UTC hours by the given offset, then
+	 * Tests that readership_by_hour_of_day_via_bq shifts UTC hours by the given offset, then
 	 * emits the frontend contract key `hour` as a zero-padded 2-char string (the
 	 * proxy's int `hour_of_day` must not survive in the payload). UTC hour 0 with a
 	 * -5h site offset maps to local hour 19 → '19'.
@@ -386,7 +388,7 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	 */
 
 	/**
-	 * top_categories_via_bq passes rows through with type 'table'.
+	 * Tests that top_categories_via_bq passes rows through with type 'table'.
 	 */
 	public function test_top_categories_via_bq_enabled() {
 		$proxy = $this->makeProxyReturning(
@@ -405,7 +407,7 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * returning_reader_rate_via_bq shapes a single-row rate into a
+	 * Tests that returning_reader_rate_via_bq shapes a single-row rate into a
 	 * { value, computable, type: 'rate' } payload.
 	 */
 	public function test_returning_reader_rate_via_bq_enabled() {

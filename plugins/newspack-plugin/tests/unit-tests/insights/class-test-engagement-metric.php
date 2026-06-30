@@ -34,7 +34,9 @@ class Test_Engagement_Metric extends WP_UnitTestCase {
 	 */
 	private function makeProxyReturning( string $expected_name, array $rows ): BigQuery_Proxy_Client {
 		return new class( $expected_name, $rows ) extends BigQuery_Proxy_Client {
+			// phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 			public function __construct( private string $expected_name, private array $rows ) {}
+			// phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 			public function query( string $query_name, \DateTimeInterface $start, \DateTimeInterface $end ) {
 				return $query_name === $this->expected_name ? $this->rows : [];
 			}
@@ -97,7 +99,7 @@ class Test_Engagement_Metric extends WP_UnitTestCase {
 	 */
 
 	/**
-	 * avg_pages_per_session_via_bq → { value, computable, type: 'decimal' }.
+	 * Tests that avg_pages_per_session_via_bq produces { value, computable, type: 'decimal' }.
 	 */
 	public function test_avg_pages_per_session_via_bq_shapes_decimal() {
 		[ $start, $end ] = $this->window();
@@ -109,7 +111,7 @@ class Test_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * avg_engaged_session_duration_via_bq reads the proxy's *_sec alias and emits
+	 * Tests that avg_engaged_session_duration_via_bq reads the proxy's *_sec alias and emits
 	 * type 'duration'.
 	 */
 	public function test_avg_engaged_session_duration_via_bq_shapes_duration() {
@@ -122,7 +124,7 @@ class Test_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * bounce_rate_via_bq → { value, computable, type: 'rate' }.
+	 * Tests that bounce_rate_via_bq produces { value, computable, type: 'rate' }.
 	 */
 	public function test_bounce_rate_via_bq_shapes_rate() {
 		[ $start, $end ] = $this->window();
@@ -134,7 +136,7 @@ class Test_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * article_completion_rate_via_bq reads the proxy's scroll_to_90_rate alias and
+	 * Tests that article_completion_rate_via_bq reads the proxy's scroll_to_90_rate alias and
 	 * emits type 'rate'.
 	 */
 	public function test_article_completion_rate_via_bq_shapes_rate() {
@@ -153,7 +155,7 @@ class Test_Engagement_Metric extends WP_UnitTestCase {
 	 */
 
 	/**
-	 * most_read_articles: proxy carries page_url + avg_scroll_depth; the fixture
+	 * Tests most_read_articles: proxy carries page_url + avg_scroll_depth; the fixture
 	 * renders only { page_title, unique_readers, avg_engagement_seconds,
 	 * engagement_score } — the extra columns must be dropped.
 	 */
@@ -183,7 +185,7 @@ class Test_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * articles_by_completion_rate: proxy carries page_url; the fixture renders only
+	 * Tests articles_by_completion_rate: proxy carries page_url; the fixture renders only
 	 * { page_title, readers, completion_rate } — page_url must be dropped.
 	 */
 	public function test_articles_by_completion_rate_drops_url() {
@@ -208,7 +210,7 @@ class Test_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * top_authors_by_avg_engagement_time: proxy carries article_reads +
+	 * Tests top_authors_by_avg_engagement_time: proxy carries article_reads +
 	 * avg_scroll_depth; the fixture renders only
 	 * { author, unique_readers, avg_engagement_seconds } — drop the extras.
 	 */
@@ -236,7 +238,7 @@ class Test_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * engagement_by_device_type: proxy carries avg_scroll_depth (dropped) and does
+	 * Tests engagement_by_device_type: proxy carries avg_scroll_depth (dropped) and does
 	 * NOT yet return avg_pages_per_session (a PR 1 SQL gap). The shaper keeps the
 	 * available keys and drops avg_scroll_depth; it must not invent the missing key.
 	 */
@@ -265,7 +267,7 @@ class Test_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * engagement_by_device_type: once PR 1 adds avg_pages_per_session to the proxy
+	 * Tests engagement_by_device_type: once PR 1 adds avg_pages_per_session to the proxy
 	 * SELECT, the shaper forwards it and the row matches the fixture exactly — no
 	 * further plugin change required.
 	 */
@@ -289,7 +291,7 @@ class Test_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * engagement_by_traffic_source: per-channel proxy rows are bucketed into the
+	 * Tests engagement_by_traffic_source: per-channel proxy rows are bucketed into the
 	 * newsletter/other cohorts, weighting avg_engagement_seconds by sessions. The
 	 * cohort row shape must match the fixture { segment, sessions,
 	 * avg_engagement_seconds } and the NEWSLETTER_SESSION_FLOOR needs_data guard.
@@ -336,7 +338,7 @@ class Test_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * engagement_by_traffic_source: below NEWSLETTER_SESSION_FLOOR newsletter
+	 * Tests engagement_by_traffic_source: below NEWSLETTER_SESSION_FLOOR newsletter
 	 * sessions, needs_data flips true so the card shows its low-data state.
 	 */
 	public function test_engagement_by_traffic_source_needs_data_below_floor() {
@@ -363,7 +365,7 @@ class Test_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * engagement_by_returning_vs_new: proxy aliases already match the fixture
+	 * Tests engagement_by_returning_vs_new: proxy aliases already match the fixture
 	 * { reader_type, sessions, avg_pages_per_session, avg_engagement_seconds }.
 	 */
 	public function test_engagement_by_returning_vs_new_matches_fixture_keys() {
@@ -416,7 +418,7 @@ class Test_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * article_freshness_vs_engagement stays a hidden_in_v1 payload (no proxy call).
+	 * Verifies article_freshness_vs_engagement stays a hidden_in_v1 payload (no proxy call).
 	 */
 	public function test_article_freshness_stays_hidden() {
 		[ $start, $end ] = $this->window();
@@ -439,6 +441,7 @@ class Test_Engagement_Metric extends WP_UnitTestCase {
 	 */
 	public function test_table_shaper_degrades_on_proxy_error() {
 		$proxy = new class() extends BigQuery_Proxy_Client {
+			// phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 			public function query( string $query_name, \DateTimeInterface $start, \DateTimeInterface $end ) {
 				return new \WP_Error( 'bq_failure', 'boom' );
 			}
