@@ -225,6 +225,24 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Build a fake BigQuery_Proxy_Client whose query() always returns a WP_Error,
+	 * simulating a proxy/hub outage.
+	 *
+	 * @param string $message Error message to surface.
+	 * @return BigQuery_Proxy_Client
+	 */
+	private function makeProxyError( string $message = 'proxy unavailable' ): BigQuery_Proxy_Client {
+		return new class( $message ) extends BigQuery_Proxy_Client {
+			// phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+			public function __construct( private string $message ) {}
+			// phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+			public function query( string $query_name, \DateTimeInterface $start, \DateTimeInterface $end ) {
+				return new \WP_Error( 'bigquery_proxy_error', $this->message );
+			}
+		};
+	}
+
+	/**
 	 * Tests that active_readers_via_bq shapes a first-row 'active_readers' column into a
 	 * scalar { value, computable, type: 'count' } payload.
 	 */
@@ -332,7 +350,7 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 					'channel' => '(direct)',
 					'readers' => 40,
 				],
-			] 
+			]
 		);
 		$out = Audience_Metric::traffic_sources_breakdown_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
 		$this->assertSame( 'breakdown', $out['type'] );
@@ -399,7 +417,7 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 					'unique_readers' => 50,
 					'pageviews'      => 120,
 				],
-			] 
+			]
 		);
 		$out   = Audience_Metric::top_categories_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
 		$this->assertSame( 'table', $out['type'] );
@@ -839,5 +857,81 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 			$out   = Audience_Metric::{$case['method']}( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
 			$this->assertRowKeysMatchFixture( $case['metric'], $out );
 		}
+	}
+
+	/**
+	 * Tests that readership_by_hour_of_day_via_bq re-sorts to a stable 0→23
+	 * local-hour axis after the UTC offset shift, rather than leaving rows in
+	 * the proxy's UTC order (which would rotate the chart on a non-UTC site).
+	 */
+	public function test_readership_by_hour_resorts_to_local_axis() {
+		// Proxy returns UTC hours 0,1,22,23 (ascending UTC). With a -5 offset
+		// they become local 19,20,17,18 — i.e. unsorted unless re-sorted.
+		$proxy = $this->makeProxyReturning(
+			'audience_readership_by_hour_of_day',
+			[
+				[
+					'hour_of_day'    => 0,
+					'active_readers' => 10,
+				],
+				[
+					'hour_of_day'    => 1,
+					'active_readers' => 11,
+				],
+				[
+					'hour_of_day'    => 22,
+					'active_readers' => 12,
+				],
+				[
+					'hour_of_day'    => 23,
+					'active_readers' => 13,
+				],
+			]
+		);
+		$out   = Audience_Metric::readership_by_hour_of_day_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ), -5 );
+		$hours = array_column( $out['rows'], 'hour' );
+		// Local hours: 0→19, 1→20, 22→17, 23→18, re-sorted ascending.
+		$this->assertSame( [ '17', '18', '19', '20' ], $hours, 'hour buckets must be re-sorted to a 0→23 local axis' );
+		// And the readers stay bound to their (shifted) hour: 17 ← UTC 22 (12).
+		$by_hour = array_column( $out['rows'], 'active_readers', 'hour' );
+		$this->assertSame( 12, $by_hour['17'] );
+		$this->assertSame( 10, $by_hour['19'] );
+	}
+
+	/**
+	 * Tests that returning_reader_rate_via_bq preserves the proxy error message
+	 * on an outage, so the Scorecard renders its unavailable state (keyed on
+	 * `error`) instead of a literal 0.
+	 */
+	public function test_returning_reader_rate_via_bq_preserves_proxy_error() {
+		$out = Audience_Metric::returning_reader_rate_via_bq( $this->makeProxyError(), new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertFalse( $out['computable'] );
+		$this->assertArrayHasKey( 'error', $out );
+		$this->assertSame( 'proxy unavailable', $out['error'] );
+	}
+
+	/**
+	 * Tests that avg_sessions_per_reader_via_bq preserves the proxy error
+	 * message on an outage rather than reporting a non-computable 0 with no
+	 * diagnostic.
+	 */
+	public function test_avg_sessions_per_reader_via_bq_preserves_proxy_error() {
+		$out = Audience_Metric::avg_sessions_per_reader_via_bq( $this->makeProxyError(), new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertFalse( $out['computable'] );
+		$this->assertArrayHasKey( 'error', $out );
+	}
+
+	/**
+	 * Tests that supporter_type_via_bq surfaces a proxy outage as an error
+	 * payload instead of folding it into a zero-value pie (which would read as
+	 * "no data" and drop the diagnostic).
+	 */
+	public function test_supporter_type_via_bq_preserves_proxy_error() {
+		$this->set_donation_product_ids( [ 42 ] );
+		unset( $GLOBALS['newspack_test_wc_products'] );
+
+		$out = Audience_Metric::supporter_type_via_bq( $this->makeProxyError(), new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertFalse( $out['computable'] );
+		$this->assertArrayHasKey( 'error', $out );
 	}
 }

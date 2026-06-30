@@ -243,7 +243,15 @@ final class Engagement_Metric {
 
 	/**
 	 * Dispatch a catalog query and shape all rows into a rows payload. The SQL
-	 * column aliases are the row keys (chosen to match the display contract).
+	 * column aliases are the row keys and ARE the frontend contract — for the
+	 * raw passthrough metrics they reach the React components unremapped.
+	 *
+	 * Those aliases are defined in the companion `newspack-manager-admin` repo
+	 * (the `audience_*`/`engagement_*` query builders, NPPD-1729 PR #475), which
+	 * lives outside this monorepo. An alias change there would silently blank the
+	 * corresponding card with green CI here, so #475 must merge/deploy first and
+	 * any alias edit there must be checked against the fixtures these metrics
+	 * match (`fixtures/audience-fixture.php`, `engagement-fixture.php`).
 	 *
 	 * @param BigQuery_Proxy_Client $proxy      Proxy client.
 	 * @param string                $query_name Catalog query name.
@@ -315,19 +323,7 @@ final class Engagement_Metric {
 	 * @return array
 	 */
 	public static function bounce_rate_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
-		$rows = $proxy->query( 'engagement_bounce_rate', $start, $end );
-		if ( is_wp_error( $rows ) || empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( 'bounce_rate', $rows[0] ) || ! is_numeric( $rows[0]['bounce_rate'] ) ) {
-			return [
-				'value'      => 0,
-				'computable' => false,
-				'type'       => 'rate',
-			];
-		}
-		return [
-			'value'      => (float) $rows[0]['bounce_rate'],
-			'computable' => true,
-			'type'       => 'rate',
-		];
+		return self::proxy_scalar( $proxy, 'engagement_bounce_rate', 'bounce_rate', 'rate', $start, $end );
 	}
 
 	/**
@@ -339,19 +335,7 @@ final class Engagement_Metric {
 	 * @return array
 	 */
 	public static function article_completion_rate_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
-		$rows = $proxy->query( 'engagement_article_completion_rate', $start, $end );
-		if ( is_wp_error( $rows ) || empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( 'scroll_to_90_rate', $rows[0] ) || ! is_numeric( $rows[0]['scroll_to_90_rate'] ) ) {
-			return [
-				'value'      => 0,
-				'computable' => false,
-				'type'       => 'rate',
-			];
-		}
-		return [
-			'value'      => (float) $rows[0]['scroll_to_90_rate'],
-			'computable' => true,
-			'type'       => 'rate',
-		];
+		return self::proxy_scalar( $proxy, 'engagement_article_completion_rate', 'scroll_to_90_rate', 'rate', $start, $end );
 	}
 
 	/*

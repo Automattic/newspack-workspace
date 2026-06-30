@@ -362,7 +362,15 @@ final class Audience_Metric {
 
 	/**
 	 * Dispatch a catalog query and shape all rows into a rows payload. The SQL
-	 * column aliases are the row keys (chosen to match the display contract).
+	 * column aliases are the row keys and ARE the frontend contract — for the
+	 * raw passthrough metrics they reach the React components unremapped.
+	 *
+	 * Those aliases are defined in the companion `newspack-manager-admin` repo
+	 * (the `audience_*`/`engagement_*` query builders, NPPD-1729 PR #475), which
+	 * lives outside this monorepo. An alias change there would silently blank the
+	 * corresponding card with green CI here, so #475 must merge/deploy first and
+	 * any alias edit there must be checked against the fixtures these metrics
+	 * match (`fixtures/audience-fixture.php`, `engagement-fixture.php`).
 	 *
 	 * @param BigQuery_Proxy_Client $proxy      Proxy client.
 	 * @param string                $query_name Catalog query name.
@@ -447,7 +455,19 @@ final class Audience_Metric {
 	 */
 	public static function avg_sessions_per_reader_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
 		$rows = $proxy->query( 'audience_avg_sessions_per_reader', $start, $end );
-		if ( is_wp_error( $rows ) || empty( $rows ) || ! is_array( $rows[0] ) ) {
+		// Preserve the proxy error on an outage so the Scorecard renders its
+		// unavailable state instead of a literal 0 (consumers key on `error`).
+		if ( is_wp_error( $rows ) ) {
+			return [
+				'value'       => 0,
+				'computable'  => false,
+				'type'        => 'decimal',
+				'numerator'   => 0,
+				'denominator' => 0,
+				'error'       => $rows->get_error_message(),
+			];
+		}
+		if ( empty( $rows ) || ! is_array( $rows[0] ) ) {
 			return [
 				'value'       => 0,
 				'computable'  => false,
@@ -674,6 +694,12 @@ final class Audience_Metric {
 
 		$payload = self::proxy_rows( $proxy, 'audience_supporter_type', 'breakdown', $start, $end );
 
+		// Surface a proxy outage as-is rather than folding it into a zero-value
+		// pie — otherwise a failure reads as "no data" and the error is lost.
+		if ( ! empty( $payload['error'] ) ) {
+			return $payload;
+		}
+
 		// Both products → all four buckets, relabeled from the proxy's
 		// segment/reader_count to the frontend pie contract label/value.
 		if ( $products['subscriptions'] && $products['donations'] ) {
@@ -832,7 +858,17 @@ final class Audience_Metric {
 	 */
 	public static function returning_reader_rate_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
 		$rows = $proxy->query( 'audience_returning_reader_rate', $start, $end );
-		if ( is_wp_error( $rows ) || empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( 'returning_reader_rate', $rows[0] ) ) {
+		// Preserve the proxy error on an outage so the Scorecard renders its
+		// unavailable state instead of a literal 0 (consumers key on `error`).
+		if ( is_wp_error( $rows ) ) {
+			return [
+				'value'      => 0,
+				'computable' => false,
+				'type'       => 'rate',
+				'error'      => $rows->get_error_message(),
+			];
+		}
+		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( 'returning_reader_rate', $rows[0] ) ) {
 			return [
 				'value'      => 0,
 				'computable' => false,
@@ -869,8 +905,11 @@ final class Audience_Metric {
 		if ( empty( $payload['rows'] ) ) {
 			return $payload;
 		}
+		// Derive the whole-hour UTC offset from the window START, not "now": a
+		// window that falls under a different DST offset than the current date
+		// would otherwise be shifted by the wrong amount.
 		if ( null === $offset_hours ) {
-			$offset_hours = (int) round( (int) wp_timezone()->getOffset( new \DateTimeImmutable( 'now' ) ) / 3600 );
+			$offset_hours = (int) round( wp_timezone()->getOffset( $start ) / 3600 );
 		}
 		// Shift each UTC hour to local time, then emit the frontend contract key
 		// `hour` as a 2-char zero-padded string ('00'..'23'); the raw int
@@ -884,6 +923,15 @@ final class Audience_Metric {
 			];
 		}
 		unset( $row );
+		// The shift leaves rows in their original UTC order, so re-sort by the
+		// local hour to keep a stable 0→23 x-axis — otherwise a non-UTC site's
+		// chart is rotated and wraps at midnight (e.g. 19,20,…,23,00,…,18).
+		usort(
+			$payload['rows'],
+			static function ( $a, $b ) {
+				return (int) $a['hour'] <=> (int) $b['hour'];
+			}
+		);
 		return $payload;
 	}
 

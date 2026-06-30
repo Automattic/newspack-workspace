@@ -7,9 +7,11 @@
  * {@see Gates_REST_Controller}.
  *
  * Response shape:
- *   tab_error / banner_text — present (and the only keys) when BQ returns an
- *                             error; React renders a single connect banner.
- *   current  — keyed metric payload for the requested window.
+ *   current  — keyed metric payload for the requested window. The BQ path has
+ *              no tab-level error gate (the connection check always passes), so
+ *              a proxy failure surfaces per-metric: the affected metric carries
+ *              `computable: false` + an `error` key while the rest of the tab
+ *              still renders.
  *   previous — same for the comparison window, or null.
  *
  * Data comes from {@see Audience_Metric}, which dispatches all metrics through

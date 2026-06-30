@@ -269,6 +269,36 @@ class Newspack_Test_Insights_Engagement_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Build a fake BigQuery_Proxy_Client whose query() always returns a WP_Error.
+	 *
+	 * @param string $message Error message to surface.
+	 * @return BigQuery_Proxy_Client
+	 */
+	private function makeProxyError( string $message = 'proxy unavailable' ): BigQuery_Proxy_Client {
+		return new class( $message ) extends BigQuery_Proxy_Client {
+			// phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+			public function __construct( private string $message ) {}
+			// phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+			public function query( string $query_name, \DateTimeInterface $start, \DateTimeInterface $end ) {
+				return new \WP_Error( 'bigquery_proxy_error', $this->message );
+			}
+		};
+	}
+
+	/**
+	 * Tests that the scalar quality metrics (now routed through proxy_scalar)
+	 * preserve the proxy error on an outage so the Scorecard renders its
+	 * unavailable state instead of a literal 0.
+	 */
+	public function test_quality_scalars_preserve_proxy_error() {
+		foreach ( [ 'bounce_rate_via_bq', 'article_completion_rate_via_bq', 'avg_pages_per_session_via_bq', 'avg_engaged_session_duration_via_bq' ] as $method ) {
+			$out = Engagement_Metric::{$method}( $this->makeProxyError(), new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+			$this->assertFalse( $out['computable'], "$method must be non-computable on a proxy error" );
+			$this->assertArrayHasKey( 'error', $out, "$method must preserve the proxy error message" );
+		}
+	}
+
+	/**
 	 * Tests that bounce_rate_via_bq shapes a first-row 'bounce_rate' column into a rate payload.
 	 */
 	public function test_bounce_rate_via_bq_shapes_rate() {
