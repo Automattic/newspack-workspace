@@ -1,3 +1,13 @@
+## newspack-theme [2.23.6](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.5...newspack-theme@2.23.6) (2026-06-29)
+
+
+### Bug Fixes
+
+* **ads:** move shared sticky ads styles to newspack-ads plugin ([#233](https://github.com/Automattic/newspack-workspace/issues/233)) ([165e48c](https://github.com/Automattic/newspack-workspace/commit/165e48c351536e5be2559b20e2ac029c82b14a6a))
+* allow wide/full alignment inside content wrappers ([3ee93dc](https://github.com/Automattic/newspack-workspace/commit/3ee93dcd0fe8382c4e1033bdd806fc702c2a8552))
+* **comments:** add Customizer toggle for comment meta position ([#2691](https://github.com/Automattic/newspack-workspace/issues/2691)) ([954719d](https://github.com/Automattic/newspack-workspace/commit/954719d42be46c9ac3754b8ebf22eb6604bffbdd)), closes [#2310](https://github.com/Automattic/newspack-workspace/issues/2310)
+* temporary patch BEC editor preview ([#198](https://github.com/Automattic/newspack-workspace/issues/198)) ([34089fe](https://github.com/Automattic/newspack-workspace/commit/34089fe6422ce412b1648b7ff20a61e56a94696a))
+
 ## newspack-theme [2.23.5](https://github.com/Automattic/newspack-workspace/compare/newspack-theme@2.23.4...newspack-theme@2.23.5) (2026-06-26)
 
 

@@ -118,4 +118,103 @@ class Test_Teams_For_Memberships_Diagnostics extends WP_UnitTestCase {
 		$this->assertEqualSets( [ 200 ], wp_list_pluck( $result['duplicates'], 'ID' ), 'The newer unlinked team is the duplicate.' );
 		$this->assertEmpty( $result['separate_purchases'] );
 	}
+
+	/**
+	 * The renewal bug can regenerate the replacement team with a cosmetically different
+	 * title – a different possessive apostrophe, letter case, or stray whitespace. Those
+	 * variants must normalize to one bucket key, or Check 1 never groups the duplicate and
+	 * the orphan escapes repair (the gap that left a paying reader's membership stranded:
+	 * "John Collyns' Team" vs "John Collyns's Team").
+	 */
+	public function test_cosmetic_title_variants_share_one_bucket_key() {
+		$apostrophe_only = Teams_For_Memberships_Diagnostics::normalize_team_title( "John Collyns' Team" );
+		$apostrophe_s    = Teams_For_Memberships_Diagnostics::normalize_team_title( "John Collyns's Team" );
+		$case_and_space  = Teams_For_Memberships_Diagnostics::normalize_team_title( "  JOHN   Collyns's   TEAM  " );
+
+		$this->assertSame( $apostrophe_only, $apostrophe_s, "Collyns' and Collyns's must bucket together." );
+		$this->assertSame( $apostrophe_only, $case_and_space, 'Case and whitespace must not split the bucket.' );
+	}
+
+	/**
+	 * Normalization must not over-collapse: genuinely different team names keep distinct
+	 * keys, so separate memberships are never grouped (and merged) into each other.
+	 */
+	public function test_distinct_titles_keep_distinct_bucket_keys() {
+		$acme = Teams_For_Memberships_Diagnostics::normalize_team_title( "Acme Co's Team" );
+		$beta = Teams_For_Memberships_Diagnostics::normalize_team_title( "Beta LLC's Team" );
+
+		$this->assertNotSame( $acme, $beta, 'Different team names must not collapse into one bucket.' );
+	}
+
+	/**
+	 * WordPress runs stored titles through wptexturize, which rewrites a straight apostrophe
+	 * to a curly one (U+2019). That curly variant is the load-bearing case the real stranded
+	 * membership hit, so the regex's curly branch and the `/u` modifier must collapse it to
+	 * the same key as the straight form – an ASCII-only assertion would miss the actual fix.
+	 */
+	public function test_curly_apostrophe_normalizes_like_straight() {
+		$straight        = Teams_For_Memberships_Diagnostics::normalize_team_title( "John Collyns' Team" );
+		$curly           = Teams_For_Memberships_Diagnostics::normalize_team_title( 'John Collyns’ Team' );
+		$curly_possessive = Teams_For_Memberships_Diagnostics::normalize_team_title( 'John Collyns’s Team' );
+
+		$this->assertSame( $straight, $curly, 'A curly apostrophe must bucket with the straight form.' );
+		$this->assertSame( $straight, $curly_possessive, 'A curly possessive-s must bucket with it too.' );
+	}
+
+	/**
+	 * The `--team-id` path widens the lookup to every team owned by the same author, then
+	 * restricts to the target team's bucket. An owner who has the duplicated team *and* a
+	 * genuinely distinct second team must see only the duplicate's bucket – the unrelated
+	 * team is never pulled into the merge set.
+	 */
+	public function test_team_id_scope_returns_only_the_targets_bucket() {
+		$original  = (object) [
+			'ID'          => 10,
+			'post_author' => 7,
+			'post_title'  => "Smith's Team",
+		];
+		$orphan    = (object) [
+			'ID'          => 11,
+			'post_author' => 7,
+			'post_title'  => "Smith' Team",
+		];
+		$unrelated = (object) [
+			'ID'          => 12,
+			'post_author' => 7,
+			'post_title'  => 'Garden Club',
+		];
+
+		$only_key = Teams_For_Memberships_Diagnostics::team_bucket_key( $original );
+		$buckets  = Teams_For_Memberships_Diagnostics::bucket_teams_by_owner( [ $original, $orphan, $unrelated ], $only_key );
+
+		$this->assertCount( 1, $buckets, "Only the target team's bucket is returned." );
+		$bucketed_ids = wp_list_pluck( array_values( $buckets )[0], 'ID' );
+		$this->assertEqualSets( [ 10, 11 ], $bucketed_ids, 'The apostrophe-variant orphan buckets with the original; the unrelated team is excluded.' );
+	}
+
+	/**
+	 * Without a scope key, every owner+title bucket is returned (the site-wide pass), so
+	 * the unrelated team forms its own single-team bucket rather than vanishing.
+	 */
+	public function test_unscoped_bucketing_keeps_every_owner_title_group() {
+		$original  = (object) [
+			'ID'          => 10,
+			'post_author' => 7,
+			'post_title'  => "Smith's Team",
+		];
+		$orphan    = (object) [
+			'ID'          => 11,
+			'post_author' => 7,
+			'post_title'  => "Smith' Team",
+		];
+		$unrelated = (object) [
+			'ID'          => 12,
+			'post_author' => 7,
+			'post_title'  => 'Garden Club',
+		];
+
+		$buckets = Teams_For_Memberships_Diagnostics::bucket_teams_by_owner( [ $original, $orphan, $unrelated ] );
+
+		$this->assertCount( 2, $buckets, 'The duplicated pair and the unrelated team are separate buckets.' );
+	}
 }

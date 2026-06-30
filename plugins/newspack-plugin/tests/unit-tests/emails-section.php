@@ -11,6 +11,7 @@
  */
 
 use Newspack\Emails;
+use Newspack\Group_Subscription_Invite;
 use Newspack\Reader_Activation_Emails;
 use Newspack\Reader_Revenue_Emails;
 use Newspack\Wizards;
@@ -20,6 +21,40 @@ use Newspack\Wizards\Newspack\Emails_Section;
  * Tests the unified Emails config schema and the wizard response builder.
  */
 class Newspack_Test_Emails_Section extends WP_UnitTestCase {
+	/**
+	 * Register the group-subscription-invite email config for the duration
+	 * of each test.
+	 *
+	 * `Group_Subscription_Invite::init()` only attaches the
+	 * `newspack_email_configs` filter when the Access Control feature flag
+	 * is on, and it does so at plugin boot. The test bootstrap boots with
+	 * the flag off, so the filter is never attached and the invite config
+	 * is absent from the unified email set. These tests assert the schema
+	 * and ordering of the full provider set, which on a migrated (flag-on)
+	 * site includes the group invite, so re-attach the filter here to
+	 * exercise that state. The request-scoped config cache is reset so the
+	 * filter is picked up.
+	 *
+	 * @return void
+	 */
+	public function set_up() {
+		parent::set_up();
+		add_filter( 'newspack_email_configs', [ Group_Subscription_Invite::class, 'add_email_config' ] );
+		Emails::reset_email_configs_cache();
+	}
+
+	/**
+	 * Detach the group-subscription-invite email config filter and reset the
+	 * config cache so the registration does not leak into other test files.
+	 *
+	 * @return void
+	 */
+	public function tear_down() {
+		remove_filter( 'newspack_email_configs', [ Group_Subscription_Invite::class, 'add_email_config' ] );
+		Emails::reset_email_configs_cache();
+		parent::tear_down();
+	}
+
 	/*
 	 * ------------------------------------------------------------------
 	 * Bucket A — Schema completeness

@@ -60,6 +60,13 @@ class Group_Subscription_Invite {
 	 * Initialize hooks.
 	 */
 	public static function init() {
+		// Invite acceptance and the invite email config are part of the group
+		// management UX, gated behind the Access Control feature flag. The
+		// static invite helpers remain available regardless; only the hooks are
+		// gated.
+		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
+			return;
+		}
 		add_filter( 'newspack_email_configs', [ __CLASS__, 'add_email_config' ] );
 		add_action( 'template_redirect', [ __CLASS__, 'process_invite_request' ] );
 		add_action( 'template_redirect', [ __CLASS__, 'process_link_invite_request' ] );
