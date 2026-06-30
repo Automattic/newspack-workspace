@@ -6,8 +6,8 @@
  * date-arg validation, permission check, and response shape of
  * {@see Audience_REST_Controller}.
  *
- * Data comes from {@see Engagement_Metric}, which dispatches GA4 (v1) vs BQ
- * (v1.1, NPPD-1630) per the NEWSPACK_INSIGHTS_ENGAGEMENT_USE_GA4 constant.
+ * Data comes from {@see Engagement_Metric}, which dispatches all metrics
+ * through the BigQuery proxy (NPPD-1729). The GA4 path has been removed.
  *
  * @package Newspack
  */
@@ -119,7 +119,7 @@ class Engagement_REST_Controller extends WP_REST_Controller {
 	 */
 	public function get_engagement_data( WP_REST_Request $request ) {
 		// Dev smoke-test path: serve canned fixture data so the UI renders
-		// without a GA4 connection. Never enable in production.
+		// without a BQ connection. Never enable in production.
 		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
 			$response = rest_ensure_response(
 				[
@@ -228,7 +228,7 @@ class Engagement_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Assemble the top-level response (tab_error surfaced when GA4 is unconnected).
+	 * Assemble the top-level response (tab_error surfaced when the metric errors).
 	 *
 	 * @param DateTimeImmutable      $start         Current window start.
 	 * @param DateTimeImmutable      $end           Current window end.

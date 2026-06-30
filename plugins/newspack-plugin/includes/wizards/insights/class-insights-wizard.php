@@ -405,22 +405,23 @@ class Insights_Wizard extends Wizard {
 		$thirty_ago = $today->modify( '-29 days' );
 
 		return [
-			// Tab visibility. The audience/engagement/conversion/prompts
-			// tabs are stubbed to true until their data layers land (each
-			// needs BQ for proper feature detection, NPPD-1598).
-			// Advertising (Tab 8, NPPD-1618) has a real data layer: it shows
-			// when its feature flag is enabled AND either Google Ad Manager is
-			// the active ad provider (Advertising_Metric::is_tab_visible() ===
-			// Client::is_gam_active()) or fixture mode is on for dev testing.
-			// See is_advertising_tab_visible(). Subscribers stays all-on for now;
-			// Tab 6 visibility detection (non-donation subscription
-			// product presence) is a separate follow-up. Donors hides
-			// when there's no recent donation activity — has_donation_activity()
-			// uses the Donation_Product_Classifier to find donation
-			// products, then checks for an active donation subscription or a qualifying donation order in the
-			// trailing DONATION_ACTIVITY_WINDOW_DAYS window (cached for a day). Gates is
-			// gated to the preview constant NEWSPACK_INSIGHTS_GATES_PREVIEW
-			// while Phase 1 (placeholder data) is being validated.
+			// Tab visibility. Audience, Engagement, Conversion, and Prompts tabs
+			// are live BQ-backed tabs (data layers complete per NPPD-1729). They
+			// are always shown (true) — feature detection is handled at the metric
+			// level via the BQ proxy, not at tab-registration time. Advertising
+			// (Tab 8, NPPD-1618) has its own data layer: it shows when its feature
+			// flag is enabled AND either Google Ad Manager is the active ad provider
+			// (Advertising_Metric::is_tab_visible() === Client::is_gam_active()) or
+			// fixture mode is on for dev testing. See is_advertising_tab_visible().
+			// Subscribers stays all-on for now; Tab 6 visibility detection
+			// (non-donation subscription product presence) is a separate follow-up.
+			// Donors hides when there's no recent donation activity —
+			// has_donation_activity() uses the Donation_Product_Classifier to find
+			// donation products, then checks for an active donation subscription or
+			// a qualifying donation order in the trailing
+			// DONATION_ACTIVITY_WINDOW_DAYS window (cached for a day). Gates is
+			// gated to the preview constant NEWSPACK_INSIGHTS_GATES_PREVIEW while
+			// Phase 1 (placeholder data) is being validated.
 			'tabs'                => [
 				'audience'    => true,
 				'engagement'  => true,
@@ -460,10 +461,9 @@ class Insights_Wizard extends Wizard {
 	}
 
 	/**
-	 * Admin URL for connecting Google Analytics through Site Kit, used by the
-	 * Audience and Engagement connect banner when GA4 isn't connected
-	 * (NPPD-1731). GA4 is owned upstream by Site Kit, so the banner points
-	 * there rather than at Newspack → Connections.
+	 * Admin URL for connecting Google Analytics through Site Kit (NPPD-1731).
+	 * GA4 is owned upstream by Site Kit, so the banner points there rather than
+	 * at Newspack → Connections.
 	 *
 	 * Precedence mirrors Newspack Settings and the Dashboard:
 	 *  - Site Kit set up with the Analytics module → deep link to the GA4 service.

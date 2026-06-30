@@ -6,8 +6,9 @@
  * scroll depth, time on page, return visits. Distinct from Audience
  * (who) by focusing on behavior depth (how).
  *
- * The Tab 2 data layer (GA4-first, NPPD-1648) registers its REST route
- * from {@see self::register_hooks()} via {@see \Newspack\Insights\Engagement_REST_Controller}.
+ * The Tab 2 data layer (NPPD-1648, BQ-backed since NPPD-1729) registers its
+ * REST route from {@see self::register_hooks()} via
+ * {@see \Newspack\Insights\Engagement_REST_Controller}.
  *
  * @package Newspack
  */
