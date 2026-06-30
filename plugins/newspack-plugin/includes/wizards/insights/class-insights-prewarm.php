@@ -122,12 +122,20 @@ final class Prewarm {
 	/**
 	 * WARM_ACTION handler. Warms every registered tab × preset, prunes orphaned
 	 * windows, and records the daily marker.
+	 *
+	 * The daily marker is only stamped when at least one window warmed
+	 * successfully across all tabs. A total-failure run (e.g. a BQ-proxy outage
+	 * that throws on every window) leaves the marker unchanged so the next
+	 * admin_init can re-enqueue a retry, still de-duped by as_has_scheduled_action.
+	 * A partial success (some tabs/windows succeeded) does stamp the marker —
+	 * real work was done.
 	 */
 	public static function run_prewarm(): void {
 		if ( ! self::is_warmable() ) {
 			return;
 		}
-		$windows = Preset_Windows::all( current_datetime() );
+		$windows     = Preset_Windows::all( current_datetime() );
+		$any_success = false;
 		foreach ( self::$tabs as $tab => $warmer ) {
 			$keep = [];
 			foreach ( $windows as $w ) {
@@ -144,9 +152,15 @@ final class Prewarm {
 			// entries, removing yesterday's still-serveable cache on a transient error.
 			if ( ! empty( $keep ) ) {
 				Cache::prune_durable( $tab, $keep );
+				$any_success = true;
 			}
 		}
-		update_option( self::MARKER_OPTION, self::today(), false );
+		// Only stamp the marker when real work was done. A total-failure run
+		// must leave the marker unchanged so the next admin_init re-enqueues a
+		// retry rather than skipping until tomorrow.
+		if ( $any_success ) {
+			update_option( self::MARKER_OPTION, self::today(), false );
+		}
 	}
 
 	/**

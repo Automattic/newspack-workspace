@@ -130,6 +130,22 @@ class Test_Insights_Prewarm extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A run where every warmer throws must NOT stamp the daily marker, so the
+	 * next admin_init can retry without waiting until tomorrow.
+	 */
+	public function test_run_prewarm_skips_marker_when_all_warmers_fail() {
+		delete_option( Prewarm::MARKER_OPTION );
+		Prewarm::register_tab(
+			'gates',
+			function ( $start, $end ) {
+				throw new \RuntimeException( 'BQ down' );
+			}
+		);
+		Prewarm::run_prewarm();
+		$this->assertFalse( get_option( Prewarm::MARKER_OPTION, false ) );
+	}
+
+	/**
 	 * The run_warm_refresh method calls the registered warmer with the correct DTI range.
 	 */
 	public function test_run_warm_refresh_calls_registered_warmer() {
