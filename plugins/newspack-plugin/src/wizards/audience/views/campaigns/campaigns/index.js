@@ -198,7 +198,7 @@ const Campaigns = props => {
 	return (
 		<Fragment>
 			{ hasPublishedAboveHeader && (
-				<Notice status="warning" isDismissible={ false }>
+				<Notice className="newspack-campaigns__above-header-notice" status="warning" isDismissible={ false }>
 					{ __(
 						'This site has published above-header prompts. These appear at the very top of the page and push the rest of the content down as they load, which can lower your Cumulative Layout Shift (CLS) score. To reduce the impact, keep above-header prompts short, or use an overlay placement instead.',
 						'newspack-plugin'
