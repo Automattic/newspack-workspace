@@ -43,6 +43,12 @@ class Full_Bleed_Sections {
 	const DEFAULT_VERTICAL_PADDING = '12px';
 
 	/**
+	 * Email content width in pixels — the package `contentSize` the band content is
+	 * re-centered to so it lines up with normal blocks.
+	 */
+	const CONTENT_WIDTH = 660;
+
+	/**
 	 * Restructure top-level alignfull background groups into body-level full-width rows.
 	 *
 	 * @param string $html Rendered (CSS-inlined) email HTML from the WC renderer.
@@ -82,19 +88,42 @@ class Full_Bleed_Sections {
 			. "contains(concat(' ', normalize-space(@class), ' '), ' has-background ')]";
 
 		$root_padding = self::detect_root_padding( $xpath, $container );
+		$nodes        = iterator_to_array( $container->childNodes ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM API property.
+		$node_count   = count( $nodes );
 		$segments     = [];
 		$band_count   = 0;
-		foreach ( $container->childNodes as $child ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM API property.
-			if ( ! ( $child instanceof \DOMElement ) ) {
+		$run          = '';
+		for ( $i = 0; $i < $node_count; $i++ ) {
+			$node = $nodes[ $i ];
+
+			// Drop a band's own per-block MSO ghost-table wrapper: build_band emits a fresh
+			// one, so skip the opening comment that immediately precedes a band element.
+			if ( self::is_mso_open( $node ) && isset( $nodes[ $i + 1 ] ) && self::is_band( $nodes[ $i + 1 ], $xpath, $band_query ) ) {
 				continue;
 			}
-			$group = $xpath->query( $band_query, $child )->item( 0 );
-			if ( $group instanceof \DOMElement ) {
+
+			if ( self::is_band( $node, $xpath, $band_query ) ) {
+				if ( '' !== $run ) {
+					$segments[] = [ 'normal', $run ];
+					$run        = '';
+				}
+				$group      = $xpath->query( $band_query, $node )->item( 0 );
 				$segments[] = [ 'band', self::build_band( $group, $dom, $xpath, $root_padding ) ];
 				++$band_count;
-			} else {
-				$segments[] = [ 'normal', $dom->saveHTML( $child ) ];
+				// Skip the band's closing ghost-table comment too.
+				if ( isset( $nodes[ $i + 1 ] ) && self::is_mso_close( $nodes[ $i + 1 ] ) ) {
+					++$i;
+				}
+				continue;
 			}
+
+			// Normal node — an element block, its surrounding MSO ghost-table comments, or
+			// whitespace. Keep it verbatim so Outlook's per-block gutter and spacing (which
+			// live in those conditional comments, not the CSS) survive into the rebuilt body.
+			$run .= $dom->saveHTML( $node );
+		}
+		if ( '' !== $run ) {
+			$segments[] = [ 'normal', $run ];
 		}
 
 		// No qualifying band — leave the render untouched.
@@ -107,27 +136,13 @@ class Full_Bleed_Sections {
 			return $html;
 		}
 
-		// Assemble: a vertical stack of content-width runs and full-width band rows.
-		$out         = $shell['head'];
-		$run         = '';
-		$first_run   = true;
-		$flush_run   = static function () use ( &$run, &$out, &$first_run, $shell ) {
-			if ( '' === $run ) {
-				return;
-			}
-			$out      .= ( $first_run ? $shell['open'] : $shell['open_no_preheader'] ) . $run . $shell['close'];
-			$run       = '';
-			$first_run = false;
-		};
+		// Assemble: the preheader once at the top (so it wins the inbox preview slot even
+		// when the first block is a band), then a vertical stack of content-width runs and
+		// full-width band rows. A run is any string segment; a band is already full markup.
+		$out = $shell['head'] . $shell['preheader'];
 		foreach ( $segments as $segment ) {
-			if ( 'band' === $segment[0] ) {
-				$flush_run();
-				$out .= $segment[1];
-			} else {
-				$run .= $segment[1];
-			}
+			$out .= 'band' === $segment[0] ? $segment[1] : $shell['open'] . $segment[1] . $shell['close'];
 		}
-		$flush_run();
 		$out .= $shell['tail'];
 
 		return $out;
@@ -139,7 +154,7 @@ class Full_Bleed_Sections {
 	 * @param string $html Email HTML.
 	 * @return \DOMDocument|null Document, or null on failure.
 	 */
-	private static function load_dom( string $html ) {
+	private static function load_dom( string $html ): ?\DOMDocument {
 		$dom = new \DOMDocument();
 		$use = libxml_use_internal_errors( true );
 		$ok  = $dom->loadHTML( '<?xml encoding="utf-8" ?>' . $html, LIBXML_NOERROR | LIBXML_NOWARNING );
@@ -204,14 +219,15 @@ class Full_Bleed_Sections {
 		// border-box so the content width matches normal blocks: the content-size cap
 		// includes the horizontal gutter, leaving the same inner content width.
 		$inner_style = sprintf(
-			'box-sizing:border-box;max-width:660px;margin:0 auto;padding-left:%1$s;padding-right:%1$s;%2$s',
+			'box-sizing:border-box;max-width:%1$dpx;margin:0 auto;padding-left:%2$s;padding-right:%2$s;%3$s',
+			self::CONTENT_WIDTH,
 			$root_padding,
 			$color ? 'color:' . $color . ';' : ''
 		);
 
 		return '<table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" width="100%" bgcolor="' . esc_attr( $bg ) . '" style="' . esc_attr( 'width:100%;background-color:' . $bg . ';' ) . '">'
 			. '<tbody><tr><td align="center" style="' . esc_attr( $cell_padding ) . '">'
-			. '<!--[if mso | IE]><table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" width="660" style="width:660px"><tr><td><![endif]-->'
+			. '<!--[if mso | IE]><table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" width="' . self::CONTENT_WIDTH . '" style="width:' . self::CONTENT_WIDTH . 'px"><tr><td><![endif]-->'
 			. '<div style="' . esc_attr( $inner_style ) . '">' . $inner . '</div>'
 			. '<!--[if mso | IE]></td></tr></table><![endif]-->'
 			. '</td></tr></tbody></table>';
@@ -221,10 +237,16 @@ class Full_Bleed_Sections {
 	 * Extract the email shell fragments (from the package template canvas) used to wrap
 	 * each content-width run. Returns null when the expected markers are absent.
 	 *
+	 * Assumes the canvas places nothing of substance between the layout wrapper and
+	 * `</body>` (verified against the current `template-canvas.php`: only the MSO close
+	 * comment and whitespace; styles are parked in `<head>`). `tail` is therefore a
+	 * literal close; if a future package version emits a footer there it would be dropped
+	 * in banded emails — revisit this on package bumps.
+	 *
 	 * @param string $html Email HTML.
-	 * @return array{head:string,open:string,open_no_preheader:string,close:string,tail:string}|null
+	 * @return array{head:string,preheader:string,open:string,close:string,tail:string}|null
 	 */
-	private static function shell_fragments( string $html ) {
+	private static function shell_fragments( string $html ): ?array {
 		$body_pos = strpos( $html, '<body' );
 		$mso_pos  = strpos( $html, '<!--[if mso | IE]><table align="center"' );
 		$cw_pos   = strpos( $html, '<td class="email_content_wrapper"' );
@@ -239,17 +261,68 @@ class Full_Bleed_Sections {
 
 		$open = substr( $html, $mso_pos, $cw_open_end + 1 - $mso_pos );
 
-		// A run after the first repeats the wrapper; drop the (hidden) preheader row so
-		// it appears only once at the top.
-		$open_no_preheader = preg_replace( '#<tr>\s*<td class="email_preheader".*?</td>\s*</tr>#is', '', $open );
+		// Lift the (hidden) preheader row out of the wrapper so it is emitted once at the
+		// top of the body — before any band — and the per-run wrapper carries no preheader.
+		$preheader = '';
+		if ( preg_match( '#<tr>\s*<td class="email_preheader".*?</td>\s*</tr>#is', $open, $match ) ) {
+			$preheader = '<table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%"><tbody>' . $match[0] . '</tbody></table>';
+			$stripped  = preg_replace( '#<tr>\s*<td class="email_preheader".*?</td>\s*</tr>#is', '', $open );
+			$open      = is_string( $stripped ) ? $stripped : $open;
+		}
 
 		return [
-			'head'              => substr( $html, 0, $body_open_end + 1 ),
-			'open'              => $open,
-			'open_no_preheader' => is_string( $open_no_preheader ) ? $open_no_preheader : $open,
-			'close'             => '</td></tr></tbody></table></div><!--[if mso | IE]></td></tr></table><![endif]-->',
-			'tail'              => "\n</body></html>",
+			'head'      => substr( $html, 0, $body_open_end + 1 ),
+			'preheader' => $preheader,
+			'open'      => $open,
+			'close'     => '</td></tr></tbody></table></div><!--[if mso | IE]></td></tr></table><![endif]-->',
+			'tail'      => "\n</body></html>",
 		];
+	}
+
+	/**
+	 * Whether a node is a top-level band: an element directly wrapping an alignfull
+	 * background group table.
+	 *
+	 * @param \DOMNode  $node       Node to test.
+	 * @param \DOMXPath $xpath      XPath over the document.
+	 * @param string    $band_query Relative XPath matching the band group table.
+	 * @return bool
+	 */
+	private static function is_band( \DOMNode $node, \DOMXPath $xpath, string $band_query ): bool {
+		return $node instanceof \DOMElement && $xpath->query( $band_query, $node )->item( 0 ) instanceof \DOMElement;
+	}
+
+	/**
+	 * Whether a node is an MSO ghost-table OPENING conditional comment (contains a
+	 * `<table` open tag).
+	 *
+	 * @param \DOMNode $node Node to test.
+	 * @return bool
+	 */
+	private static function is_mso_open( \DOMNode $node ): bool {
+		return $node instanceof \DOMComment && false !== strpos( self::comment_value( $node ), '><table' );
+	}
+
+	/**
+	 * Whether a node is an MSO ghost-table CLOSING conditional comment (closes a table
+	 * but opens none).
+	 *
+	 * @param \DOMNode $node Node to test.
+	 * @return bool
+	 */
+	private static function is_mso_close( \DOMNode $node ): bool {
+		$value = self::comment_value( $node );
+		return $node instanceof \DOMComment && false !== strpos( $value, '</table>' ) && false === strpos( $value, '><table' );
+	}
+
+	/**
+	 * Read a comment node's text.
+	 *
+	 * @param \DOMNode $node Comment node.
+	 * @return string
+	 */
+	private static function comment_value( \DOMNode $node ): string {
+		return (string) $node->nodeValue; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM API property.
 	}
 
 	/**

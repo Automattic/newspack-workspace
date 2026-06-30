@@ -259,6 +259,49 @@ class Test_Renderer_Controller extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Normal blocks in a banded email keep their per-block MSO ghost-table scaffolding —
+	 * the Outlook side gutter / spacing lives in those conditional comments, not CSS, so
+	 * the rebuild must carry the comment siblings across, not just the block elements.
+	 */
+	public function test_render_wc_banded_email_preserves_normal_block_mso_scaffolding() {
+		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
+		$content = '<!-- wp:paragraph --><p>Intro</p><!-- /wp:paragraph -->'
+			. '<!-- wp:group {"align":"full","style":{"color":{"background":"#ffcc00"}}} -->'
+			. '<div class="wp-block-group alignfull has-background" style="background-color:#ffcc00">'
+			. '<!-- wp:paragraph --><p>Banded</p><!-- /wp:paragraph --></div><!-- /wp:group -->'
+			. '<!-- wp:paragraph --><p>Outro</p><!-- /wp:paragraph -->';
+
+		$html = Renderer_Controller::render_wc( get_post( $this->create_newsletter( $content ) ) );
+
+		$this->assertSame( 1, $this->count_body_level_bands( $html ), 'Sanity: the band should still bleed.' );
+		$this->assertMatchesRegularExpression(
+			'/<!--\[if mso \| IE\]>(?:(?!<!\[endif\]).)*?padding-left:\s*24px/is',
+			$html,
+			'Normal blocks must retain their MSO ghost-table side gutter in a banded email.'
+		);
+	}
+
+	/**
+	 * When the first top-level block is a band (e.g. a full-bleed site-title header), the
+	 * hidden preheader is still emitted before it so it wins the inbox preview slot.
+	 */
+	public function test_render_wc_preheader_precedes_a_leading_band() {
+		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
+		$content = '<!-- wp:group {"align":"full","style":{"color":{"background":"#ffcc00"}}} -->'
+			. '<div class="wp-block-group alignfull has-background" style="background-color:#ffcc00">'
+			. '<!-- wp:paragraph --><p>Header</p><!-- /wp:paragraph --></div><!-- /wp:group -->'
+			. '<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->';
+
+		$html      = Renderer_Controller::render_wc( get_post( $this->create_newsletter( $content ) ) );
+		$preheader = strpos( $html, 'email_preheader' );
+		$band      = strpos( $html, 'bgcolor=' );
+
+		$this->assertNotFalse( $preheader );
+		$this->assertNotFalse( $band );
+		$this->assertLessThan( $band, $preheader, 'The preheader must appear before a leading full-bleed band.' );
+	}
+
+	/**
 	 * The transform fast-bails (returns input untouched) when the markup has no
 	 * alignfull background section.
 	 */
