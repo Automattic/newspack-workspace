@@ -62,7 +62,38 @@ final class Cache {
 		}
 
 		$cooldown_until = self::SOURCE_BIGQUERY === $source ? self::bq_cooldown_until( $tab ) : null;
-		$key            = self::transient_key( $tab, $key_parts );
+
+		// Durable warm store takes precedence over the transient. Pre-warmed
+		// preset windows live here (memcached-eviction-proof). A stale entry is
+		// still served instantly; we fire an action so the pre-warm layer can
+		// schedule an async background refresh (stale-while-revalidate).
+		$durable = self::peek_durable( $tab, $source, $key_parts );
+		if ( null !== $durable ) {
+			if ( ! self::is_fresh( $durable['computed_at'] ) ) {
+				/**
+				 * Fires when a durable warm entry is served past its freshness
+				 * bound. The pre-warm layer schedules an async refresh.
+				 *
+				 * @param string $tab   Tab slug.
+				 * @param string $start Window start (Y-m-d).
+				 * @param string $end   Window end (Y-m-d).
+				 */
+				do_action(
+					'newspack_insights_durable_stale',
+					$tab,
+					(string) ( $durable['window']['start'] ?? '' ),
+					(string) ( $durable['window']['end'] ?? '' )
+				);
+			}
+			return [
+				'payload'        => $durable['payload'],
+				'computed_at'    => $durable['computed_at'],
+				'source'         => $durable['source'],
+				'cooldown_until' => $cooldown_until,
+			];
+		}
+
+		$key = self::transient_key( $tab, $key_parts );
 		$cached         = get_transient( $key );
 
 		if ( is_array( $cached ) && isset( $cached['payload'], $cached['computed_at'], $cached['source'] ) ) {
@@ -215,7 +246,10 @@ final class Cache {
 			return null;
 		}
 		if ( ! isset( $stored['window'] ) || ! is_array( $stored['window'] ) ) {
-			$stored['window'] = [ 'start' => '', 'end' => '' ];
+			$stored['window'] = [
+				'start' => '',
+				'end'   => '',
+			];
 		}
 		return $stored;
 	}

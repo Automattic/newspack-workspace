@@ -67,6 +67,82 @@ class Test_Cache_Durable extends WP_UnitTestCase {
 		$this->assertNull( Cache::peek_durable( $this->tab, $this->source, $drop ) );
 	}
 
+	/**
+	 * Durable hit short-circuits compute and transient read.
+	 *
+	 * @covers Cache::store
+	 */
+	public function test_store_serves_durable_over_transient_and_compute() {
+		Cache::store_durable( $this->tab, $this->source, $this->key, [ 'durable' => true ], $this->window );
+		$called = false;
+		$env    = Cache::store(
+			$this->tab,
+			$this->source,
+			$this->key,
+			function () use ( &$called ) {
+				$called = true;
+				return [ 'computed' => true ];
+			}
+		);
+		$this->assertSame( [ 'durable' => true ], $env['payload'] );
+		$this->assertFalse( $called, 'Durable hit must not invoke the compute closure.' );
+	}
+
+	/**
+	 * Stale durable entry fires the SWR action and is served immediately.
+	 *
+	 * @covers Cache::store
+	 */
+	public function test_store_fires_stale_action_for_stale_durable() {
+		// Seed a stale durable entry directly (computed_at 26h ago).
+		$name = 'newspack_insights_warm_' . $this->tab . '_' . md5( (string) wp_json_encode( $this->key ) );
+		update_option(
+			$name,
+			[
+				'payload'     => [ 'stale' => true ],
+				'computed_at' => gmdate( 'Y-m-d\TH:i:s\Z', time() - 26 * HOUR_IN_SECONDS ),
+				'source'      => $this->source,
+				'window'      => $this->window,
+			],
+			false
+		);
+
+		$fired = [];
+		add_action(
+			'newspack_insights_durable_stale',
+			function ( $tab, $start, $end ) use ( &$fired ) {
+				$fired = [ $tab, $start, $end ];
+			},
+			10,
+			3
+		);
+
+		$env = Cache::store( $this->tab, $this->source, $this->key, fn() => [ 'computed' => true ] );
+
+		$this->assertSame( [ 'stale' => true ], $env['payload'], 'Stale durable is served immediately.' );
+		$this->assertSame( [ $this->tab, '2026-06-01', '2026-06-30' ], $fired, 'Stale action fires with the window.' );
+	}
+
+	/**
+	 * Fresh durable entry does not trigger the stale-while-revalidate action.
+	 *
+	 * @covers Cache::store
+	 */
+	public function test_store_does_not_fire_stale_action_for_fresh_durable() {
+		Cache::store_durable( $this->tab, $this->source, $this->key, [ 'fresh' => true ], $this->window );
+		$fired = false;
+		add_action(
+			'newspack_insights_durable_stale',
+			function () use ( &$fired ) {
+				$fired = true;
+			},
+			10,
+			3
+		);
+		Cache::store( $this->tab, $this->source, $this->key, fn() => [ 'computed' => true ] );
+		$this->assertFalse( $fired );
+	}
+
 	public function test_disabled_skips_write_and_read() {
 		if ( ! defined( 'NEWSPACK_INSIGHTS_CACHE_DISABLED' ) ) {
 			define( 'NEWSPACK_INSIGHTS_CACHE_DISABLED', true );
