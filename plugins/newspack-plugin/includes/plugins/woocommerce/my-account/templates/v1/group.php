@@ -13,7 +13,6 @@
  */
 
 use Newspack\Group_Subscription;
-use Newspack\Group_Subscription_API;
 use Newspack\Group_Subscription_MyAccount;
 use Newspack\Group_Subscription_Settings;
 use Newspack\Newspack_UI_Icons;
@@ -22,7 +21,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$settings            = Group_Subscription_Settings::get_subscription_settings( $subscription );
+$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+// The raw custom-name override (empty when the displayed name is an inherited fallback), so the
+// rename input shows the editable custom name and uses the resolved fallback as its placeholder.
+$custom_name         = (string) $subscription->get_meta( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', true );
 $group_label_lower   = Group_Subscription::get_label_lower( 'singular' );
 $user_id             = get_current_user_id();
 $managed             = Group_Subscription::get_managed_subscriptions_for_user( $user_id );
@@ -148,8 +150,9 @@ if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
 						id="newspack-my-account__group--rename-input"
 						class="newspack-my-account__group--rename-input"
 						name="group_name"
-						value="<?php echo esc_attr( $settings['name'] ); ?>"
-						maxlength="<?php echo esc_attr( Group_Subscription_API::GROUP_NAME_MAX_LENGTH ); ?>"
+						value="<?php echo esc_attr( $custom_name ); ?>"
+						placeholder="<?php echo esc_attr( $settings['name'] ); ?>"
+						maxlength="<?php echo esc_attr( Group_Subscription_Settings::GROUP_NAME_MAX_LENGTH ); ?>"
 						autocomplete="off"
 					/>
 				</p>

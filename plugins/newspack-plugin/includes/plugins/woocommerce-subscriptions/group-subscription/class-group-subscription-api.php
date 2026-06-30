@@ -14,11 +14,6 @@ defined( 'ABSPATH' ) || exit;
  */
 class Group_Subscription_API {
 	const NAMESPACE = 'newspack-group-subscription/v1';
-
-	/**
-	 * Maximum length for a custom group name. Mirrors the rename input's maxlength.
-	 */
-	const GROUP_NAME_MAX_LENGTH = 100;
 	/**
 	 * Initialize hooks.
 	 */
@@ -341,7 +336,7 @@ class Group_Subscription_API {
 		}
 		// Cap the length to match the input's maxlength, so a client bypassing the field can't
 		// store an oversized name that breaks the header/picker layout.
-		$name = mb_substr( trim( (string) $request->get_param( 'name' ) ), 0, self::GROUP_NAME_MAX_LENGTH );
+		$name = mb_substr( trim( (string) $request->get_param( 'name' ) ), 0, Group_Subscription_Settings::GROUP_NAME_MAX_LENGTH );
 		Group_Subscription_Settings::update_subscription_settings( $subscription, [ 'name' => $name ] );
 		// Return the resolved name so the client can reflect the fallback when the name was cleared.
 		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );

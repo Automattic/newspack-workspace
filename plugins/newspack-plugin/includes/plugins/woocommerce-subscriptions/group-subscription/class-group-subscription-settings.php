@@ -28,6 +28,11 @@ class Group_Subscription_Settings {
 	const GROUP_SUBSCRIPTION_META_PREFIX = '_newspack_group_subscription_';
 
 	/**
+	 * Maximum length for a custom group name. Mirrored by the rename input's maxlength.
+	 */
+	const GROUP_NAME_MAX_LENGTH = 100;
+
+	/**
 	 * Initialize hooks and filters.
 	 */
 	public static function init() {

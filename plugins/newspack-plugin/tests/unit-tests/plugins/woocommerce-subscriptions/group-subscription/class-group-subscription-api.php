@@ -244,9 +244,11 @@ class Test_Group_Subscription_API extends WP_UnitTestCase {
 	}
 
 	/**
-	 * An empty name clears the override so the group name falls back to the default label.
+	 * Clearing the name drops the override. With no product on the test subscription, the
+	 * resolved name falls through the product-name step to the default singular group label
+	 * (in production a real subscription has a product, so it would land on the product name first).
 	 */
-	public function test_update_name_empty_resets_to_fallback_label() {
+	public function test_update_name_empty_resets_to_label_when_no_product() {
 		$subscription = $this->create_group_subscription( 'active' );
 		// Give it a custom name first, then clear it.
 		Group_Subscription_API::api_update_name( $this->rename_request_for( $subscription->get_id(), 'Temporary Name' ) );
@@ -256,7 +258,7 @@ class Test_Group_Subscription_API extends WP_UnitTestCase {
 		$this->assertSame(
 			\Newspack\Group_Subscription::get_label( 'singular' ),
 			$result->get_data()['name'],
-			'Clearing the name should fall back to the default singular group label.'
+			'Clearing the name with no product should fall back to the default singular group label.'
 		);
 	}
 
@@ -265,12 +267,12 @@ class Test_Group_Subscription_API extends WP_UnitTestCase {
 	 */
 	public function test_update_name_caps_length() {
 		$subscription = $this->create_group_subscription( 'active' );
-		$request      = $this->rename_request_for( $subscription->get_id(), str_repeat( 'a', Group_Subscription_API::GROUP_NAME_MAX_LENGTH + 50 ) );
+		$request      = $this->rename_request_for( $subscription->get_id(), str_repeat( 'a', Group_Subscription_Settings::GROUP_NAME_MAX_LENGTH + 50 ) );
 
 		$result = Group_Subscription_API::api_update_name( $request );
 
 		$this->assertSame(
-			Group_Subscription_API::GROUP_NAME_MAX_LENGTH,
+			Group_Subscription_Settings::GROUP_NAME_MAX_LENGTH,
 			mb_strlen( $result->get_data()['name'] ),
 			'The saved name should be capped to GROUP_NAME_MAX_LENGTH.'
 		);
@@ -288,5 +290,64 @@ class Test_Group_Subscription_API extends WP_UnitTestCase {
 
 		$this->assertNotWPError( $result, 'Renaming should be allowed regardless of subscription status.' );
 		$this->assertSame( 'Archived Team', $result->get_data()['name'], 'The name should persist even on a cancelled subscription.' );
+	}
+
+	/**
+	 * A missing/invalid subscription returns a 404 WP_Error, the contract the JS relies on.
+	 */
+	public function test_update_name_returns_404_for_invalid_subscription() {
+		$result = Group_Subscription_API::api_update_name( $this->rename_request_for( 999999, 'Nobody\'s Group' ) );
+
+		$this->assertWPError( $result, 'An unresolvable subscription should yield a WP_Error.' );
+		$this->assertSame( 404, $result->get_error_data()['status'], 'The error should carry HTTP 404.' );
+	}
+
+	/**
+	 * Dispatch through the registered route as a fresh REST server, exercising the
+	 * permission_callback and arg sanitization the direct-call tests bypass.
+	 *
+	 * @param int    $subscription_id Subscription ID.
+	 * @param string $name            Group name to set.
+	 * @return WP_REST_Response
+	 */
+	private function dispatch_rename( int $subscription_id, string $name ): WP_REST_Response {
+		global $wp_rest_server;
+		$wp_rest_server = new WP_REST_Server();
+		do_action( 'rest_api_init' );
+		$request = new WP_REST_Request( 'POST', '/newspack-group-subscription/v1/name' );
+		$request->set_param( 'subscription_id', $subscription_id );
+		$request->set_param( 'name', $name );
+		return $wp_rest_server->dispatch( $request );
+	}
+
+	/**
+	 * The /name route's permission_callback rejects a reader who isn't the group's manager.
+	 */
+	public function test_rest_route_denies_non_manager() {
+		$subscription = $this->create_group_subscription( 'active' );
+		$non_manager  = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $non_manager );
+
+		$response = $this->dispatch_rename( $subscription->get_id(), 'Hijacked' );
+
+		$this->assertSame( 403, $response->get_status(), 'A non-manager reader must not be able to rename the group.' );
+		$this->assertSame(
+			'',
+			$subscription->get_meta( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'name', true ),
+			'A rejected request must not change the stored name.'
+		);
+	}
+
+	/**
+	 * The route's sanitize_callback (sanitize_text_field) strips markup before the name is stored.
+	 */
+	public function test_rest_route_strips_markup_from_name() {
+		$subscription = $this->create_group_subscription( 'active' );
+		wp_set_current_user( $this->owner_id );
+
+		$response = $this->dispatch_rename( $subscription->get_id(), '<b>Marketing Team</b>' );
+
+		$this->assertSame( 200, $response->get_status(), 'The group manager should be allowed to rename.' );
+		$this->assertSame( 'Marketing Team', $response->get_data()['name'], 'Markup should be stripped from the saved name.' );
 	}
 }
