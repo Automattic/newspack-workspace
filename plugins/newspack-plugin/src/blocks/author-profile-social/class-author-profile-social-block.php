@@ -221,8 +221,6 @@ final class Author_Profile_Social_Block {
 
 	/**
 	 * Get wrapper attributes (class, style, etc.) for the block.
-	 * Sets block context so core includes default class, custom className, and other supports.
-	 * Color serialization is skipped via block.json so colors are applied only as CSS vars.
 	 *
 	 * @param WP_Block $block      Block instance.
 	 * @param array    $attributes Block attributes.
@@ -230,7 +228,14 @@ final class Author_Profile_Social_Block {
 	 * @return string HTML attributes for the wrapper element.
 	 */
 	private static function get_block_wrapper_attributes( WP_Block $block, array $attributes, int $icon_size ): string {
-		$previous = \WP_Block_Supports::$block_to_render ?? null;
+		// Defensive: each inner WP_Block::render() snapshots/restores
+		// $block_to_render around its own callback, so by this point it
+		// should already point at the parent's parsed_block. Re-set
+		// explicitly to guard against a third-party filter or future Core
+		// change breaking that chain — otherwise the wrapper would be built
+		// from the wrong block's supports and lose this block's className,
+		// spacing, default class, etc.
+		$previous                            = \WP_Block_Supports::$block_to_render ?? null;
 		\WP_Block_Supports::$block_to_render = $block->parsed_block;
 
 		$wrapper_attributes = get_block_wrapper_attributes(
@@ -246,33 +251,30 @@ final class Author_Profile_Social_Block {
 	}
 
 	/**
-	 * Convert a preset token (var:preset|type|slug) to a CSS variable reference.
-	 *
-	 * @param string $value Raw value, e.g. "var:preset|color|primary" or "#fff".
-	 * @return string CSS value, e.g. "var(--wp--preset--color--primary)" or "#fff".
-	 */
-	private static function preset_to_css( string $value ): string {
-		if ( preg_match( '/^var:preset\|([^|]+)\|(.+)$/', $value, $matches ) ) {
-			return sprintf( 'var(--wp--preset--%s--%s)', $matches[1], $matches[2] );
-		}
-		return $value;
-	}
-
-	/**
-	 * Resolve a color value from attributes (preset slug or custom style token).
+	 * Resolve a color value from the block's icon color attributes.
+	 * When both a preset slug and a resolved value are present, emits the
+	 * CSS variable with the value as a native fallback — so theme switches
+	 * that redefine the slug pick up the new palette value, and theme
+	 * switches that drop the slug fall back to the saved hex instead of
+	 * rendering uncoloured.
 	 *
 	 * @param array  $attributes Block attributes.
-	 * @param string $preset_key Top-level preset attribute key (e.g. "textColor").
-	 * @param string $style_key  Key under style.color (e.g. "text").
+	 * @param string $preset_key Preset slug attribute key (e.g. "iconColor").
+	 * @param string $value_key  Resolved CSS value attribute key (e.g. "iconColorValue").
 	 * @return string|null CSS color value or null.
 	 */
-	private static function resolve_color( array $attributes, string $preset_key, string $style_key ): ?string {
-		if ( ! empty( $attributes[ $preset_key ] ) && is_string( $attributes[ $preset_key ] ) ) {
-			return sprintf( 'var(--wp--preset--color--%s)', $attributes[ $preset_key ] );
+	private static function resolve_color( array $attributes, string $preset_key, string $value_key ): ?string {
+		$slug  = ! empty( $attributes[ $preset_key ] ) && is_string( $attributes[ $preset_key ] ) ? $attributes[ $preset_key ] : null;
+		$value = ! empty( $attributes[ $value_key ] ) && is_string( $attributes[ $value_key ] ) ? $attributes[ $value_key ] : null;
+
+		if ( $slug && $value ) {
+			return sprintf( 'var(--wp--preset--color--%s, %s)', $slug, $value );
 		}
-		$custom = $attributes['style']['color'][ $style_key ] ?? null;
-		if ( ! empty( $custom ) && is_string( $custom ) ) {
-			return self::preset_to_css( $custom );
+		if ( $slug ) {
+			return sprintf( 'var(--wp--preset--color--%s)', $slug );
+		}
+		if ( $value ) {
+			return $value;
 		}
 		return null;
 	}
@@ -281,7 +283,6 @@ final class Author_Profile_Social_Block {
 	 * Build wrapper inline style with CSS variables for icon sizing and color.
 	 * Margin is handled natively by get_block_wrapper_attributes().
 	 * Gap is handled by WP layout support (outputs scoped <style> tag per block).
-	 * Color classes/inline styles are skipped via __experimentalSkipSerialization in block.json.
 	 *
 	 * @param array $attributes Block attributes.
 	 * @param int   $icon_size  Icon size in pixels.
@@ -292,8 +293,8 @@ final class Author_Profile_Social_Block {
 		$is_brand = ! empty( $attributes['className'] ) && str_contains( $attributes['className'], 'is-style-brand' );
 
 		if ( ! $is_brand ) {
-			$icon_color      = self::resolve_color( $attributes, 'textColor', 'text' );
-			$icon_background = self::resolve_color( $attributes, 'backgroundColor', 'background' );
+			$icon_color      = self::resolve_color( $attributes, 'iconColor', 'iconColorValue' );
+			$icon_background = self::resolve_color( $attributes, 'iconBackgroundColor', 'iconBackgroundColorValue' );
 
 			if ( null !== $icon_color ) {
 				$parts[] = sprintf( '--icon-color: %s;', $icon_color );

@@ -30,7 +30,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GH_TOKEN }}
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v4
@@ -38,7 +38,7 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # 2.37.1
         with:
           php-version: '8.3'
           tools: composer
@@ -89,13 +89,16 @@ jobs:
       # The [skip ci] commit won't re-trigger this workflow, and post-release.sh's
       # ancestry check is unaffected by the extra commit.
       #
-      # Skipped on hotfix/* and epic/* branches: those are out-of-schedule
-      # prereleases whose bumped files are deliberately kept off the branch (the
-      # release configs drop their @semantic-release/git commit there too), so
-      # the hotfix PR diff stays clean. The prerelease zip is built from the
+      # Runs only on the `release` branch. Version/changelog stamps are authored
+      # on a single channel (see config/release-helpers.js): prerelease channels
+      # (alpha, hotfix/*, epic/*) build their zip/tag from the working-tree bump
+      # but never commit it, so only `release` ever edits the version-stamp
+      # lines. That keeps the committed CHANGELOG free of prerelease noise and
+      # stops post-release.sh's release -> alpha / default-branch sync from
+      # colliding on version headers. The prerelease zip is built from the
       # working tree regardless, so nothing downstream needs this commit.
       - name: Sync package.json versions
-        if: ${{ !startsWith( github.ref_name, 'hotfix/' ) && !startsWith( github.ref_name, 'epic/' ) }}
+        if: ${{ github.ref_name == 'release' }}
         run: |
           node .github/scripts/finalize-package-versions.cjs
           # The release is already published by this point, so the branch must not

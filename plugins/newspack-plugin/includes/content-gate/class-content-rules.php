@@ -38,7 +38,7 @@ class Content_Rules {
 		$content_rules['specific_posts'] = [
 			'name'         => __( 'Specific posts', 'newspack-plugin' ),
 			'default'      => [],
-			'description'  => __( 'Also restrict specific posts, even if not covered by other rules above.', 'newspack-plugin' ),
+			'description'  => __( 'Restrict specific posts, even if not covered by other rules above.', 'newspack-plugin' ),
 			'endpoint'     => '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-audience-access-control/posts-search',
 			'include_only' => true,
 		];
@@ -104,5 +104,29 @@ class Content_Rules {
 	 */
 	public static function update_gate_content_rules( $post_id, $rules ) {
 		\update_post_meta( $post_id, 'content_rules', $rules );
+	}
+
+	/**
+	 * Get the rule-combination mode for a gate.
+	 *
+	 * @param int $post_id Gate post ID.
+	 *
+	 * @return string 'all' (AND, default) or 'any' (OR).
+	 */
+	public static function get_gate_content_rules_match( $post_id ) {
+		$value = \get_post_meta( $post_id, 'content_rules_match', true );
+		return 'any' === $value ? 'any' : 'all';
+	}
+
+	/**
+	 * Update the rule-combination mode for a gate.
+	 *
+	 * @param int    $post_id Gate post ID.
+	 * @param string $value   'all' or 'any'.
+	 *
+	 * @return void
+	 */
+	public static function update_gate_content_rules_match( $post_id, $value ) {
+		\update_post_meta( $post_id, 'content_rules_match', 'any' === $value ? 'any' : 'all' );
 	}
 }

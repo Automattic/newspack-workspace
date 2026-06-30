@@ -14,7 +14,7 @@ import { useEffect, useRef } from '@wordpress/element';
 import { getEditorDocument, isOverlayPlacement, updateEditorColors, whenEditorReady } from './utils';
 
 const EditorAdditions = () => {
-	const meta = useSelect( select => select( 'core/editor' ).getEditedPostAttribute( 'meta' ) );
+	const meta = useSelect( select => select( 'core/editor' ).getEditedPostAttribute( 'meta' ) ) || {};
 	const { background_color, overlay_size, placement } = meta;
 
 	// Keep a ref so the mount effect always has the current background color.
