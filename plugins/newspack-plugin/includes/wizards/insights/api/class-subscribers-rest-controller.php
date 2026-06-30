@@ -154,6 +154,17 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Base-window payload (no comparison) for the pre-warm path.
+	 *
+	 * @param DateTimeImmutable $start Window start.
+	 * @param DateTimeImmutable $end   Window end.
+	 * @return array
+	 */
+	public function build_window_payload( DateTimeImmutable $start, DateTimeImmutable $end ): array {
+		return $this->build_response( new Subscribers_Metric(), $start, $end, null, null );
+	}
+
+	/**
 	 * Assemble the response payload.
 	 *
 	 * @param Subscribers_Metric     $metric        Metric orchestrator.

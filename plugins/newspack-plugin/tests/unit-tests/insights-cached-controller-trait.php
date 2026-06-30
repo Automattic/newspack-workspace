@@ -119,6 +119,17 @@ class Newspack_Test_Cached_Controller_Trait extends WP_UnitTestCase {
 			}
 
 			/**
+			 * Stub base-window payload (no-op for cooldown test).
+			 *
+			 * @param \DateTimeImmutable $start Window start.
+			 * @param \DateTimeImmutable $end   Window end.
+			 * @return array
+			 */
+			public function build_window_payload( \DateTimeImmutable $start, \DateTimeImmutable $end ): array {
+				return [];
+			}
+
+			/**
 			 * Expose refresh_response.
 			 *
 			 * @param WP_REST_Request $request Request.

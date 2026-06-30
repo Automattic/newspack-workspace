@@ -10,6 +10,7 @@
 
 namespace Newspack\Insights;
 
+use DateTimeImmutable;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -35,6 +36,43 @@ trait Cached_Controller_Trait {
 	 */
 	protected function cache_schema_version(): string {
 		return '';
+	}
+
+	/**
+	 * Base-window payload builder — same shape as a no-comparison GET. Each
+	 * controller implements it by delegating to its existing build_response()
+	 * with null comparison.
+	 *
+	 * @param DateTimeImmutable $start Window start (00:00:00, site tz).
+	 * @param DateTimeImmutable $end   Window end (23:59:59, site tz).
+	 * @return array
+	 */
+	abstract public function build_window_payload( DateTimeImmutable $start, DateTimeImmutable $end ): array;
+
+	/**
+	 * Build and durably store one pre-warmed base window. Uses the controller's
+	 * own tab/source/versioned key so the entry key-matches the GET read path.
+	 *
+	 * @param DateTimeImmutable $start Window start.
+	 * @param DateTimeImmutable $end   Window end.
+	 */
+	public function warm_window( DateTimeImmutable $start, DateTimeImmutable $end ): void {
+		$key_parts = $this->versioned_key_parts_from(
+			$start->format( 'Y-m-d' ),
+			$end->format( 'Y-m-d' ),
+			null,
+			null
+		);
+		Cache::store_durable(
+			$this->tab_slug(),
+			$this->cache_source(),
+			$key_parts,
+			$this->build_window_payload( $start, $end ),
+			[
+				'start' => $start->format( 'Y-m-d' ),
+				'end'   => $end->format( 'Y-m-d' ),
+			]
+		);
 	}
 
 	/**
@@ -77,18 +115,22 @@ trait Cached_Controller_Trait {
 	}
 
 	/**
-	 * Canonical window components used as the cache key.
+	 * Pure cache-key derivation from raw window strings, with the response-shape
+	 * version prepended when the controller sets one.
 	 *
-	 * @param WP_REST_Request $request Incoming request.
-	 * @return array{0:string,1:string,2:?string,3:?string}
+	 * @param string      $start Window start (Y-m-d).
+	 * @param string      $end   Window end (Y-m-d).
+	 * @param string|null $cs    Comparison start or null.
+	 * @param string|null $ce    Comparison end or null.
+	 * @return array
 	 */
-	private static function cache_key_parts( WP_REST_Request $request ): array {
-		return [
-			(string) $request->get_param( 'start' ),
-			(string) $request->get_param( 'end' ),
-			$request->get_param( 'compare_start' ) ? (string) $request->get_param( 'compare_start' ) : null,
-			$request->get_param( 'compare_end' ) ? (string) $request->get_param( 'compare_end' ) : null,
-		];
+	private function versioned_key_parts_from( string $start, string $end, ?string $cs, ?string $ce ): array {
+		$parts   = [ $start, $end, $cs, $ce ];
+		$version = $this->cache_schema_version();
+		if ( '' !== $version ) {
+			array_unshift( $parts, $version );
+		}
+		return $parts;
 	}
 
 	/**
@@ -100,12 +142,12 @@ trait Cached_Controller_Trait {
 	 * @return array
 	 */
 	private function versioned_cache_key_parts( WP_REST_Request $request ): array {
-		$parts   = self::cache_key_parts( $request );
-		$version = $this->cache_schema_version();
-		if ( '' !== $version ) {
-			array_unshift( $parts, $version );
-		}
-		return $parts;
+		return $this->versioned_key_parts_from(
+			(string) $request->get_param( 'start' ),
+			(string) $request->get_param( 'end' ),
+			$request->get_param( 'compare_start' ) ? (string) $request->get_param( 'compare_start' ) : null,
+			$request->get_param( 'compare_end' ) ? (string) $request->get_param( 'compare_end' ) : null
+		);
 	}
 
 	/**

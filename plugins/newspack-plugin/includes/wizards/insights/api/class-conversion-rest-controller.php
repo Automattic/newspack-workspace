@@ -193,6 +193,17 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Base-window payload (no comparison) for the pre-warm path.
+	 *
+	 * @param DateTimeImmutable $start Window start.
+	 * @param DateTimeImmutable $end   Window end.
+	 * @return array
+	 */
+	public function build_window_payload( DateTimeImmutable $start, DateTimeImmutable $end ): array {
+		return $this->build_response( new Conversion_Metric(), $start, $end, null, null );
+	}
+
+	/**
 	 * Assemble the top-level response.
 	 *
 	 * `tab_error` is true only when every **hub-backed** metric in the current

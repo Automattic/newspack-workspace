@@ -167,6 +167,22 @@ class Advertising_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Base-window payload (no comparison) for the pre-warm path.
+	 *
+	 * Note: Advertising uses SOURCE_EXTERNAL (GAM) with its own scheduled
+	 * refresh via Action Scheduler. This method satisfies the abstract contract
+	 * but the advertising controller is NOT registered for the daily pre-warm
+	 * (Task 7) — its existing GAM refresh owns its cache.
+	 *
+	 * @param DateTimeImmutable $start Window start.
+	 * @param DateTimeImmutable $end   Window end.
+	 * @return array
+	 */
+	public function build_window_payload( DateTimeImmutable $start, DateTimeImmutable $end ): array {
+		return $this->build_response( $start, $end, null, null );
+	}
+
+	/**
 	 * Assemble the top-level response.
 	 *
 	 * @param DateTimeImmutable      $start         Current window start.

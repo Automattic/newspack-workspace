@@ -166,6 +166,17 @@ class Audience_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Base-window payload (no comparison) for the pre-warm path.
+	 *
+	 * @param DateTimeImmutable $start Window start.
+	 * @param DateTimeImmutable $end   Window end.
+	 * @return array
+	 */
+	public function build_window_payload( DateTimeImmutable $start, DateTimeImmutable $end ): array {
+		return $this->build_response( $start, $end, null, null );
+	}
+
+	/**
 	 * Assemble the top-level response. When the metric returns a tab_error
 	 * payload it is surfaced as the whole response.
 	 *

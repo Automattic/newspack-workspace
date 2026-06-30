@@ -471,6 +471,17 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 			protected function tab_slug(): string {
 				return 'test';
 			}
+
+			/**
+			 * Stub base-window payload (no-op for key-derivation test).
+			 *
+			 * @param \DateTimeImmutable $start Window start.
+			 * @param \DateTimeImmutable $end   Window end.
+			 * @return array
+			 */
+			public function build_window_payload( \DateTimeImmutable $start, \DateTimeImmutable $end ): array {
+				return [];
+			}
 		};
 		$request = new WP_REST_Request( 'GET', self::ROUTE );
 		$request->set_param( 'start', '2026-01-01' );
