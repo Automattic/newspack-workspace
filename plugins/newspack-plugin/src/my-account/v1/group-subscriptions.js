@@ -264,11 +264,13 @@ domReady( function () {
 	const renameTriggers = [ ...document.querySelectorAll( '.newspack-my-account__group--rename' ) ];
 	const groupNameEls = [ ...document.querySelectorAll( '[data-group-name]' ) ];
 	if ( renameModal && renameForm && renameInput ) {
-		// The form carries its own subscription id, so rename works independently of the
-		// invite-link panel's `content` element. The input is seeded with the stored custom
-		// name (empty when the group uses an inherited fallback), tracked here so it survives
-		// a rename without a page reload; the resolved fallback shows as the input's placeholder.
-		const renameSubId = parseInt( renameForm.getAttribute( 'data-subscription-id' ), 10 ) || subId;
+		// The rename request targets the subscription id carried on the form itself (always
+		// rendered server-side), rather than reusing the invite panel's id — a missing
+		// attribute then surfaces as a failed request instead of silently renaming the wrong
+		// group. The input is seeded with the stored custom name (empty when the group uses an
+		// inherited fallback), tracked here so it survives a rename without a page reload; the
+		// resolved fallback shows as the input's placeholder.
+		const renameSubId = parseInt( renameForm.getAttribute( 'data-subscription-id' ), 10 );
 		let customName = renameInput.value;
 		renameTriggers.forEach( trigger => {
 			trigger.addEventListener( 'click', event => {
