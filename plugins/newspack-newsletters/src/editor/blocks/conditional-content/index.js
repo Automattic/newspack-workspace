@@ -11,12 +11,18 @@ import classnames from 'classnames';
 import { Fragment } from '@wordpress/element';
 import { createHigherOrderComponent } from '@wordpress/compose';
 import { InspectorControls } from '@wordpress/block-editor';
-import { PanelBody, TextControl } from '@wordpress/components';
+import {
+	ExternalLink,
+	PanelBody,
+	TextControl,
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
 import { sprintf, __ } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
+import { getServiceProvider } from '../../../service-providers';
 import './style.scss';
 
 const config = newspack_email_editor_data.conditional_tag_support;
@@ -38,44 +44,47 @@ const addConditionalContentAttributes = settings => {
 const withConditionalContentControl = createHigherOrderComponent(
 	BlockEdit => props => {
 		const { attributes, setAttributes } = props;
+		const espName = getServiceProvider().displayName;
+		const intro = espName
+			? sprintf(
+					/* translators: %s: email service provider name (e.g. Mailchimp). */
+					__( 'Use conditional tags provided by %s to control who sees what in your email.', 'newspack-newsletters' ),
+					espName
+			  )
+			: __( 'Use conditional tags provided by your email service provider to control who sees what in your email.', 'newspack-newsletters' );
 		return (
 			<Fragment>
 				<BlockEdit { ...props } />
 				<InspectorControls>
 					<PanelBody title={ __( 'Conditional Content', 'newspack-newsletters' ) }>
-						<p>
-							{ __(
-								'Use conditional tags provided by your email service provider to control who sees what in your email.',
-								'newspack-newsletters'
-							) }
-						</p>
-						<TextControl
-							label={ __( 'Opening tag', 'newspack-newsletters' ) }
-							value={ attributes.conditionalBefore }
-							onChange={ value => setAttributes( { conditionalBefore: value } ) }
-							help={ sprintf(
-								/* translators: %s: example opening tag */
-								__( 'Opening tag for conditional content. E.g.: %s', 'newspack-newsletters' ),
-								config?.example?.before
-							) }
-							__next40pxDefaultSize
-						/>
-						<TextControl
-							label={ __( 'Closing tag', 'newspack-newsletters' ) }
-							value={ attributes.conditionalAfter }
-							onChange={ value => setAttributes( { conditionalAfter: value } ) }
-							help={ sprintf(
-								/* translators: %s: example closing tag */
-								__( 'Closing tag for conditional content. E.g.: %s', 'newspack-newsletters' ),
-								config?.example?.after
-							) }
-							__next40pxDefaultSize
-						/>
-						<p>
-							<a href={ config?.support_url } target="_blank" rel="external noreferrer">
-								{ __( 'Click here to learn more.', 'newspack-newsletters' ) }
-							</a>
-						</p>
+						<p>{ intro }</p>
+						<VStack spacing={ 4 }>
+							<TextControl
+								className="newspack-newsletters__no-margin-bottom"
+								label={ __( 'Opening tag', 'newspack-newsletters' ) }
+								value={ attributes.conditionalBefore }
+								onChange={ value => setAttributes( { conditionalBefore: value } ) }
+								help={ sprintf(
+									/* translators: %s: example opening tag */
+									__( 'Opening tag for conditional content. E.g.: %s', 'newspack-newsletters' ),
+									config?.example?.before
+								) }
+								__next40pxDefaultSize
+							/>
+							<TextControl
+								className="newspack-newsletters__no-margin-bottom"
+								label={ __( 'Closing tag', 'newspack-newsletters' ) }
+								value={ attributes.conditionalAfter }
+								onChange={ value => setAttributes( { conditionalAfter: value } ) }
+								help={ sprintf(
+									/* translators: %s: example closing tag */
+									__( 'Closing tag for conditional content. E.g.: %s', 'newspack-newsletters' ),
+									config?.example?.after
+								) }
+								__next40pxDefaultSize
+							/>
+							<ExternalLink href={ config?.support_url }>{ __( 'Click here to learn more.', 'newspack-newsletters' ) }</ExternalLink>
+						</VStack>
 					</PanelBody>
 				</InspectorControls>
 			</Fragment>
@@ -106,6 +115,7 @@ const withConditionalContentNotice = createHigherOrderComponent(
 						<>
 							{ __( 'Missing opening tag for conditional content.', 'newspack-newsletters' ) }
 							<button
+								type="button"
 								onClick={ () => {
 									props.setAttributes( { conditionalAfter: '' } );
 								} }
@@ -122,6 +132,7 @@ const withConditionalContentNotice = createHigherOrderComponent(
 						<>
 							{ __( 'Missing closing tag for conditional content.', 'newspack-newsletters' ) }
 							<button
+								type="button"
 								onClick={ () => {
 									props.setAttributes( { conditionalBefore: '' } );
 								} }

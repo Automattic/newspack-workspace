@@ -682,6 +682,12 @@ function wc_string_to_bool( $string ) {
 function wc_bool_to_string( $bool ) {
 	return $bool ? 'yes' : 'no';
 }
+function wc_clean( $var ) {
+	if ( is_array( $var ) ) {
+		return array_map( 'wc_clean', $var );
+	}
+	return is_scalar( $var ) ? sanitize_text_field( $var ) : $var;
+}
 function wc_prices_include_tax() {
 	global $wcs_mock_prices_include_tax;
 	return ! empty( $wcs_mock_prices_include_tax );

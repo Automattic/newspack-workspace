@@ -468,10 +468,11 @@ class Content_Gate {
 				continue;
 			}
 			$gates_data[] = [
-				'id'            => $gate['id'],
-				'title'         => $gate['title'],
-				'edit_url'      => get_edit_post_link( $gate['id'], 'raw' ),
-				'content_rules' => $gate['content_rules'],
+				'id'                  => $gate['id'],
+				'title'               => $gate['title'],
+				'edit_url'            => get_edit_post_link( $gate['id'], 'raw' ),
+				'content_rules'       => $gate['content_rules'],
+				'content_rules_match' => $gate['content_rules_match'],
 			];
 		}
 
@@ -704,6 +705,11 @@ class Content_Gate {
 		// Update content rules.
 		if ( isset( $gate['content_rules'] ) ) {
 			Content_Rules::update_gate_content_rules( $gate_id, $gate['content_rules'] );
+		}
+
+		// Update rule-combination mode.
+		if ( isset( $gate['content_rules_match'] ) ) {
+			Content_Rules::update_gate_content_rules_match( $gate_id, $gate['content_rules_match'] );
 		}
 
 		// Create default layouts for registration and custom_access modes.
@@ -1192,13 +1198,14 @@ class Content_Gate {
 		}
 
 		return [
-			'id'            => $post->ID,
-			'status'        => $post->post_status,
-			'title'         => $post->post_title,
-			'priority'      => (int) get_post_meta( $post->ID, 'gate_priority', true ),
-			'content_rules' => Content_Rules::get_gate_content_rules( $post->ID ),
-			'registration'  => self::get_registration_settings( $post->ID ),
-			'custom_access' => self::get_custom_access_settings( $post->ID ),
+			'id'                  => $post->ID,
+			'status'              => $post->post_status,
+			'title'               => $post->post_title,
+			'priority'            => (int) get_post_meta( $post->ID, 'gate_priority', true ),
+			'content_rules'       => Content_Rules::get_gate_content_rules( $post->ID ),
+			'content_rules_match' => Content_Rules::get_gate_content_rules_match( $post->ID ),
+			'registration'        => self::get_registration_settings( $post->ID ),
+			'custom_access'       => self::get_custom_access_settings( $post->ID ),
 		];
 	}
 
@@ -1229,6 +1236,9 @@ class Content_Gate {
 			];
 		} elseif ( 'content_rules' === $key ) {
 			Content_Rules::update_gate_content_rules( $id, $value );
+			return self::get_gate( $id );
+		} elseif ( 'content_rules_match' === $key ) {
+			Content_Rules::update_gate_content_rules_match( $id, $value );
 			return self::get_gate( $id );
 		} elseif ( 'registration' === $key ) {
 			self::update_registration_settings( $id, $value );
@@ -1282,6 +1292,11 @@ class Content_Gate {
 		// Update content rules.
 		if ( isset( $gate['content_rules'] ) ) {
 			Content_Rules::update_gate_content_rules( $id, $gate['content_rules'] );
+		}
+
+		// Update rule-combination mode.
+		if ( isset( $gate['content_rules_match'] ) ) {
+			Content_Rules::update_gate_content_rules_match( $id, $gate['content_rules_match'] );
 		}
 
 		// Update registration settings.
