@@ -12,6 +12,7 @@
 namespace Newspack\Newsletters\Email_Renderers\Blocks;
 
 use Automattic\WooCommerce\EmailEditor\Engine\Renderer\ContentRenderer\Rendering_Context;
+use Automattic\WooCommerce\EmailEditor\Engine\Renderer\ContentRenderer\Preprocessors\Blocks_Width_Preprocessor;
 use Automattic\WooCommerce\EmailEditor\Integrations\Core\Renderer\Blocks\Abstract_Block_Renderer;
 
 defined( 'ABSPATH' ) || exit;
@@ -40,7 +41,10 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 		if ( ! is_array( $children ) ) {
 			return '';
 		}
-		return self::apply_email_styles( self::render_inserted_blocks( $children ) );
+		// Width the package computed for this block (the column width when nested). Pass
+		// it down so inserted images fit the column, not the full email width.
+		$content_width = $parsed_block['email_attrs']['width'] ?? null;
+		return self::apply_email_styles( self::render_inserted_blocks( $children, $content_width ) );
 	}
 
 	/**
@@ -92,10 +96,12 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	 * Rendering bare `innerHTML` would leave the outer block (e.g. `core/columns`)
 	 * as raw markup — its columns would overflow the email width.
 	 *
-	 * @param array $children The `innerBlocksToInsert` child-block array.
+	 * @param array       $children      The `innerBlocksToInsert` child-block array.
+	 * @param string|null $content_width Width to constrain inserted images/columns to
+	 *                                   (e.g. `330px`), or null for the full email width.
 	 * @return string Concatenated rendered HTML in child order.
 	 */
-	public static function render_inserted_blocks( array $children ): string {
+	public static function render_inserted_blocks( array $children, ?string $content_width = null ): string {
 		$html  = '';
 		$index = 0;
 		foreach ( $children as $child ) {
@@ -105,7 +111,7 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 			// A child without a block name is unexpected — fall back to rendering its
 			// inner HTML so content is never silently dropped.
 			if ( empty( $child['blockName'] ) ) {
-				$html .= do_blocks( (string) ( $child['innerHTML'] ?? '' ) );
+				$html .= self::render_child_markup( (string) ( $child['innerHTML'] ?? '' ), $content_width );
 				++$index;
 				continue;
 			}
@@ -115,15 +121,64 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 				if ( $index > 0 ) {
 					$child['attrs']['style']['spacing']['margin']['top'] = self::POST_GAP;
 				}
-				$html .= do_blocks( self::serialize_inserted_block( $child ) );
+				$html .= self::render_child_markup( self::serialize_inserted_block( $child ), $content_width );
 			} else {
 				// Flat layout (image on top, or no image): wrap each rendered block in
 				// a padded cell to match the editor canvas's per-block 6px padding.
-				$html .= self::wrap_flat_block( do_blocks( self::serialize_inserted_block( $child ) ) );
+				$child = self::left_align_flat_image( $child );
+				$html .= self::wrap_flat_block( self::render_child_markup( self::serialize_inserted_block( $child ), $content_width ) );
 			}
 			++$index;
 		}
 		return $html;
+	}
+
+	/**
+	 * Render inserted block markup, constraining widths to the available width.
+	 *
+	 * A plain `do_blocks()` pass has no `email_attrs`, so inserted images fall back to
+	 * the full email width and overflow a narrow column. When a width is known, run the
+	 * package's width preprocessor with it as the content size so each block's
+	 * `email_attrs.width` reaches the image renderer; otherwise fall back to `do_blocks()`.
+	 *
+	 * @param string      $markup        Block markup.
+	 * @param string|null $content_width Available width (e.g. `330px`), or null.
+	 * @return string Rendered email HTML.
+	 */
+	private static function render_child_markup( string $markup, ?string $content_width ): string {
+		if ( null === $content_width || '' === $content_width || ! class_exists( Blocks_Width_Preprocessor::class ) ) {
+			return do_blocks( $markup );
+		}
+		$blocks = ( new Blocks_Width_Preprocessor() )->preprocess(
+			parse_blocks( $markup ),
+			[ 'contentSize' => $content_width ],
+			[]
+		);
+		$html = '';
+		foreach ( $blocks as $block ) {
+			$html .= render_block( $block );
+		}
+		return $html;
+	}
+
+	/**
+	 * Left-align a flat-layout featured image.
+	 *
+	 * The posts-inserter saves the image-on-top featured image as `align: center`, which
+	 * the package renders as a centered, fixed-width cell — but it must sit flush-left to
+	 * line up with the heading and excerpt below it. Only touches `core/image`.
+	 *
+	 * @param array $child Parsed child block.
+	 * @return array Child with any centered image normalized to left alignment.
+	 */
+	private static function left_align_flat_image( array $child ): array {
+		if ( 'core/image' !== ( $child['blockName'] ?? '' ) ) {
+			return $child;
+		}
+		if ( 'center' === ( $child['attrs']['align'] ?? '' ) ) {
+			$child['attrs']['align'] = 'left';
+		}
+		return $child;
 	}
 
 	/**
