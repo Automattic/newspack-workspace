@@ -40,8 +40,9 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 	const initialAdvertiserSelections = useMemo( () => initialSelectionsForTaxonomy( item, 'newspack_nl_advertiser' ), [ item ] );
 	const initialPlacementSelections = useMemo( () => initialSelectionsForTaxonomy( item, 'newspack_nl_ad_placement' ), [ item ] );
 	const initialCategorySelections = useMemo( () => initialSelectionsForTaxonomy( item, 'category' ), [ item ] );
-	const initialStartDate = item?.meta?.start_date || '';
-	const initialExpiryDate = item?.meta?.expiry_date || '';
+	// Slice to `Y-m-d` so legacy datetime meta still fills the date input.
+	const initialStartDate = ( item?.meta?.start_date || '' ).slice( 0, 10 );
+	const initialExpiryDate = ( item?.meta?.expiry_date || '' ).slice( 0, 10 );
 	const initialPrice = ( () => {
 		const value = item?.meta?.price;
 		return value ? String( value ) : '';

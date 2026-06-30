@@ -1,3 +1,15 @@
+## @automattic/newspack-blocks [4.26.6](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.5...newspack-blocks@4.26.6) (2026-06-29)
+
+
+### Bug Fixes
+
+* **modal-checkout:** open checkout for variation_id URL triggers ([#163](https://github.com/Automattic/newspack-workspace/issues/163)) ([9d72c7e](https://github.com/Automattic/newspack-workspace/commit/9d72c7eb4c7a39b4837371b87e6bce94f6c351dc))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.4.0
+
 ## @automattic/newspack-blocks [4.26.5](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.4...newspack-blocks@4.26.5) (2026-06-15)
 
 

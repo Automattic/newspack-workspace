@@ -1,3 +1,22 @@
+# newspack-block-theme [1.29.0](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.6...newspack-block-theme@1.29.0) (2026-06-29)
+
+
+### Bug Fixes
+
+* **block-theme:** correcting comment list item styling ([#260](https://github.com/Automattic/newspack-workspace/issues/260)) ([627fc30](https://github.com/Automattic/newspack-workspace/commit/627fc30a72750ebec3a3c9ba5b9eff9f1f259b97))
+* ensure newsletter templates are treated as default CPT templates ([#168](https://github.com/Automattic/newspack-workspace/issues/168)) ([f926233](https://github.com/Automattic/newspack-workspace/commit/f92623389d20b90c689f50417fe8fd42b88fdffe))
+
+
+### Features
+
+* **block-theme:** add a responsive container block for headers/footer ([#204](https://github.com/Automattic/newspack-workspace/issues/204)) ([9db2d4d](https://github.com/Automattic/newspack-workspace/commit/9db2d4d697e9ee5ba3c22ebff8d6b100c36a0e07))
+* **block-theme:** replace template parts with new search overlay block ([#153](https://github.com/Automattic/newspack-workspace/issues/153)) ([aebe8ff](https://github.com/Automattic/newspack-workspace/commit/aebe8ff1eacfd5215bd40afe307d70920673d2af))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.4.0
+
 ## newspack-block-theme [1.28.6](https://github.com/Automattic/newspack-workspace/compare/newspack-block-theme@1.28.5...newspack-block-theme@1.28.6) (2026-06-26)
 
 
