@@ -612,23 +612,32 @@ class Newspack_Test_Card_Expiry_Warning extends WP_UnitTestCase {
 
 	/**
 	 * `clear_sent_flag` must clear ALL per-token meta entries on the
-	 * subscription, both SEEDED and SENT prefixes. The legacy single-key
-	 * shape needed only one delete; the new schema iterates `get_meta_data()`
-	 * and deletes every entry matching either prefix.
+	 * subscription — SEEDED, SENT and the in-progress PENDING claim
+	 * (NPPD-1768). The legacy single-key shape needed only one delete; the
+	 * schema iterates `get_meta_data()` and deletes every entry matching any
+	 * of the three prefixes, so a card update wipes an interrupted claim too.
 	 *
 	 * Production note: a (subscription, token) pair has at most one of
-	 * {SEEDED, SENT} at any time. The "set both for one token" state
+	 * {SEEDED, SENT, PENDING} at any time. The "set all for one token" state
 	 * the fixture constructs here is not naturally reachable, but it's
 	 * the exhaustive shape that proves the clear handles every prefix.
 	 */
 	public function test_clear_sent_flag_clears_all_per_token_meta() {
-		// Two tokens × two prefixes = four meta entries on the sub.
+		// Two tokens × three prefixes = six meta entries on the sub.
 		$sub = $this->make_subscription_stub(
 			[
-				Card_Expiry_Warning::SEEDED_META_PREFIX . 100 => '100:12/2026',
-				Card_Expiry_Warning::SENT_META_PREFIX . 100   => '100:12/2026',
-				Card_Expiry_Warning::SEEDED_META_PREFIX . 200 => '200:01/2027',
-				Card_Expiry_Warning::SENT_META_PREFIX . 200   => '200:01/2027',
+				Card_Expiry_Warning::SEEDED_META_PREFIX . 100  => '100:12/2026',
+				Card_Expiry_Warning::SENT_META_PREFIX . 100    => '100:12/2026',
+				Card_Expiry_Warning::PENDING_META_PREFIX . 100 => [
+					'value' => '100:12/2026',
+					'ts'    => 1700000000,
+				],
+				Card_Expiry_Warning::SEEDED_META_PREFIX . 200  => '200:01/2027',
+				Card_Expiry_Warning::SENT_META_PREFIX . 200    => '200:01/2027',
+				Card_Expiry_Warning::PENDING_META_PREFIX . 200 => [
+					'value' => '200:01/2027',
+					'ts'    => 1700000000,
+				],
 			]
 		);
 
@@ -636,8 +645,10 @@ class Newspack_Test_Card_Expiry_Warning extends WP_UnitTestCase {
 
 		$this->assertSame( '', $sub->get_meta( Card_Expiry_Warning::SEEDED_META_PREFIX . 100, true ) );
 		$this->assertSame( '', $sub->get_meta( Card_Expiry_Warning::SENT_META_PREFIX . 100, true ) );
+		$this->assertSame( '', $sub->get_meta( Card_Expiry_Warning::PENDING_META_PREFIX . 100, true ) );
 		$this->assertSame( '', $sub->get_meta( Card_Expiry_Warning::SEEDED_META_PREFIX . 200, true ) );
 		$this->assertSame( '', $sub->get_meta( Card_Expiry_Warning::SENT_META_PREFIX . 200, true ) );
+		$this->assertSame( '', $sub->get_meta( Card_Expiry_Warning::PENDING_META_PREFIX . 200, true ) );
 		$this->assertSame( [], $sub->get_meta_data(), 'No meta entries should remain after clear_sent_flag.' );
 	}
 
@@ -684,25 +695,68 @@ class Newspack_Test_Card_Expiry_Warning extends WP_UnitTestCase {
 		);
 	}
 
+	/**
+	 * NPPD-1768: the gate now also reflects an in-progress PENDING claim via
+	 * Idempotent_Send::is_claimed, so the cron scan and the CLI backfill's
+	 * count agree with what the helper will actually do. A RECENT claim
+	 * blocks (even under bypass — a concurrent send is in flight); a STALE
+	 * claim does NOT block (the helper re-sends it).
+	 */
+	public function test_recent_pending_claim_blocks_gate_stale_does_not() {
+		$recent = $this->make_subscription_stub(
+			[
+				Card_Expiry_Warning::PENDING_META_PREFIX . 100 => [
+					'value' => '100:12/2026',
+					'ts'    => time() - 10,
+				],
+			]
+		);
+		$this->assertTrue(
+			$this->invoke_is_already_processed( $recent, 100, '100:12/2026', false ),
+			'A recent PENDING claim must block the normal-scan path.'
+		);
+		$this->assertTrue(
+			$this->invoke_is_already_processed( $recent, 100, '100:12/2026', true ),
+			'A recent PENDING claim must block even under the CLI bypass (a send is in flight).'
+		);
+
+		$stale = $this->make_subscription_stub(
+			[
+				Card_Expiry_Warning::PENDING_META_PREFIX . 100 => [
+					'value' => '100:12/2026',
+					'ts'    => time() - ( 2 * HOUR_IN_SECONDS ),
+				],
+			]
+		);
+		$this->assertFalse(
+			$this->invoke_is_already_processed( $stale, 100, '100:12/2026', false ),
+			'A stale PENDING claim must NOT block — the helper re-sends it.'
+		);
+	}
+
 	// --------------------------------------------------------------------
-	// SENT-marker persistence retry (NPPD-1524, reopened idempotency
-	// thread). After a successful send the marker save is retried a
-	// bounded number of times to ride out a transient failure, narrowing
-	// the window where a later pass could re-send. We deliberately do NOT
-	// mark-before-send (over-send beats a missed expiry warning); the
-	// durable two-phase fix is tracked as a follow-up.
+	// Marker-persistence retry (NPPD-1524 → NPPD-1768). A marker save is
+	// retried a bounded number of times to ride out a transient failure.
+	// The durable two-phase claim (pending → send → confirm) now lives in
+	// the shared Idempotent_Send helper and is covered in full by
+	// tests/unit-tests/idempotent-send.php; these tests pin the bounded
+	// retry budget the card-expiry send path passes through to it.
 	// --------------------------------------------------------------------
 
 	/**
-	 * Helper: invoke the private `save_subscription_with_retry` helper.
+	 * Helper: run the bounded save retry card-expiry relies on. The retry
+	 * implementation moved to the shared `Idempotent_Send` helper (NPPD-1768);
+	 * card-expiry passes its own `SENT_MARKER_SAVE_ATTEMPTS` budget, so these
+	 * tests still pin the behavior the send path depends on.
 	 *
 	 * @param object $subscription Subscription stub.
 	 * @return array{saved: bool, last_error: string}
 	 */
 	private function invoke_save_with_retry( $subscription ): array {
-		$reflection = new ReflectionMethod( Card_Expiry_Warning::class, 'save_subscription_with_retry' );
-		$reflection->setAccessible( true );
-		return $reflection->invoke( null, $subscription );
+		return \Newspack\Idempotent_Send::save_with_retry(
+			$subscription,
+			Card_Expiry_Warning::SENT_MARKER_SAVE_ATTEMPTS
+		);
 	}
 
 	/**

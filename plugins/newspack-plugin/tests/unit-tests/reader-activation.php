@@ -5,6 +5,7 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Content_Gate;
 use Newspack\Reader_Activation;
 
 /**
@@ -252,6 +253,32 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The `verify_new_reader_accounts` setting must round-trip cleanly as a boolean
+	 * via update_setting/get_setting. update_setting coerces to int internally
+	 * (intval), so the read must come back as a strict boolean — false/true, not
+	 * 0/1/'' — for `show_post_registration_verification()` and the
+	 * `newspack_ras_config` JS payload to behave correctly.
+	 */
+	public function test_verify_new_reader_accounts_setting_round_trip() {
+		$original = Reader_Activation::get_setting( 'verify_new_reader_accounts' );
+
+		Reader_Activation::update_setting( 'verify_new_reader_accounts', true );
+		$this->assertTrue(
+			Reader_Activation::get_setting( 'verify_new_reader_accounts' ),
+			'Setting `verify_new_reader_accounts` to true should round-trip as boolean true.'
+		);
+
+		Reader_Activation::update_setting( 'verify_new_reader_accounts', false );
+		$this->assertFalse(
+			Reader_Activation::get_setting( 'verify_new_reader_accounts' ),
+			'Setting `verify_new_reader_accounts` to false should round-trip as boolean false.'
+		);
+
+		// Restore.
+		Reader_Activation::update_setting( 'verify_new_reader_accounts', $original );
+	}
+
+	/**
 	 * The admin bar is hidden on the front end for readers but kept for admins.
 	 */
 	public function test_hide_admin_bar_for_readers() {
@@ -347,5 +374,139 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 		);
 
 		delete_option( 'newspack_reader_revenue_platform' );
+	}
+
+	/**
+	 * Helper: create a published content gate with the given registration settings,
+	 * then flush the verification-required-gates cache so the next read picks it up.
+	 *
+	 * @param array $registration Registration settings ('active', 'require_verification', etc.).
+	 * @param array $post_args    Optional overrides for wp_insert_post (e.g. post_title, post_status).
+	 *
+	 * @return int Created post ID.
+	 */
+	private static function create_gate_post( array $registration, array $post_args = [] ): int {
+		$post_id = self::factory()->post->create(
+			array_merge(
+				[
+					'post_type'   => Content_Gate::GATE_CPT,
+					'post_status' => 'publish',
+					'post_title'  => 'Test gate',
+				],
+				$post_args
+			)
+		);
+		update_post_meta( $post_id, 'registration', $registration );
+		Reader_Activation::flush_verification_required_gates_cache();
+		return $post_id;
+	}
+
+	/**
+	 * `show_post_registration_verification()` must be forced to true whenever a
+	 * published gate uses Registered Access + Require Verification, even if the
+	 * publisher has flipped the `verify_new_reader_accounts` setting off in
+	 * Audience → Configuration. Otherwise the toggle would silently break gates
+	 * that depend on the verification flow.
+	 */
+	public function test_show_post_registration_verification_force_on_via_gate() {
+		$original = Reader_Activation::get_setting( 'verify_new_reader_accounts' );
+		Reader_Activation::update_setting( 'verify_new_reader_accounts', false );
+		Reader_Activation::flush_verification_required_gates_cache();
+
+		// No gate yet → setting wins → false.
+		$this->assertFalse(
+			Reader_Activation::show_post_registration_verification(),
+			'With no published verification-required gate, the setting controls the result.'
+		);
+
+		// Add a gate that requires verification → forced ON.
+		$gate_id = self::create_gate_post(
+			[
+				'active'               => true,
+				'require_verification' => true,
+			]
+		);
+		$this->assertTrue(
+			Reader_Activation::show_post_registration_verification(),
+			'A published Registered + Require-Verification gate must force the result to true.'
+		);
+
+		// Clean up.
+		wp_delete_post( $gate_id, true );
+		Reader_Activation::flush_verification_required_gates_cache();
+		Reader_Activation::update_setting( 'verify_new_reader_accounts', $original );
+	}
+
+	/**
+	 * `get_verification_required_gates()` must include only gates that are *both*
+	 * Registered Access active AND have Require Verification on. It must:
+	 *   - skip gates with `active = false` even if `require_verification = true`
+	 *   - skip gates with `require_verification = false` even if `active = true`
+	 *   - skip non-published gates entirely
+	 *   - return only capability-independent fields ({id, title}) so the 24h transient
+	 *     can't be poisoned by a no-caps front-end populate (H1 regression guard).
+	 */
+	public function test_get_verification_required_gates_filtering() {
+		Reader_Activation::flush_verification_required_gates_cache();
+
+		$included_id  = self::create_gate_post(
+			[
+				'active'               => true,
+				'require_verification' => true,
+			],
+			[ 'post_title' => 'Included' ]
+		);
+		$inactive_id  = self::create_gate_post(
+			[
+				'active'               => false,
+				'require_verification' => true,
+			],
+			[ 'post_title' => 'Inactive (active=false)' ]
+		);
+		$no_verify_id = self::create_gate_post(
+			[
+				'active'               => true,
+				'require_verification' => false,
+			],
+			[ 'post_title' => 'Active but verification off' ]
+		);
+		$draft_id     = self::create_gate_post(
+			[
+				'active'               => true,
+				'require_verification' => true,
+			],
+			[
+				'post_title'  => 'Draft',
+				'post_status' => 'draft',
+			]
+		);
+
+		$gates = Reader_Activation::get_verification_required_gates();
+		$ids   = array_map(
+			static function ( $g ) {
+				return $g['id'];
+			},
+			$gates
+		);
+
+		$this->assertContains( $included_id, $ids, 'Active + require_verification published gate must be included.' );
+		$this->assertNotContains( $inactive_id, $ids, 'Gates with active=false must be excluded.' );
+		$this->assertNotContains( $no_verify_id, $ids, 'Gates with require_verification=false must be excluded.' );
+		$this->assertNotContains( $draft_id, $ids, 'Non-published gates must be excluded.' );
+
+		// Cached entries must not carry capability-dependent fields (no edit_url).
+		// H1 regression guard: front-end traffic (no edit_post caps) populating the
+		// cache first would otherwise leave a null edit URL stuck for 24h.
+		foreach ( $gates as $gate ) {
+			$this->assertArrayHasKey( 'id', $gate );
+			$this->assertArrayHasKey( 'title', $gate );
+			$this->assertArrayNotHasKey( 'edit_url', $gate, 'edit_url must not be cached; it is resolved at REST call time under admin caps.' );
+		}
+
+		// Clean up.
+		foreach ( [ $included_id, $inactive_id, $no_verify_id, $draft_id ] as $id ) {
+			wp_delete_post( $id, true );
+		}
+		Reader_Activation::flush_verification_required_gates_cache();
 	}
 }

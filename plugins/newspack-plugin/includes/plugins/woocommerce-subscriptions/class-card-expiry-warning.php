@@ -108,11 +108,23 @@ class Card_Expiry_Warning {
 	const SENT_META_PREFIX = '_newspack_card_expiry_warning_sent_';
 
 	/**
-	 * How many times to attempt persisting the SENT marker after a
-	 * successful send before giving up. The mail is already accepted at
-	 * that point, so a bounded immediate retry narrows the window where
-	 * the marker is missing (which would let a later pass re-send) for
-	 * the common transient-failure case, without any new durable state.
+	 * Per-token meta prefix for the in-progress PENDING claim.
+	 *
+	 * Written by `Idempotent_Send` immediately before a send and promoted
+	 * to SENT once the send is confirmed. A claim left behind by a process
+	 * that died mid-send is reconciled on a later pass (recent = skip as a
+	 * concurrency lock; stale = re-send per the over-send policy). See
+	 * `Idempotent_Send` for the full two-phase contract.
+	 *
+	 * Full meta key = `self::PENDING_META_PREFIX . $token->get_id()`.
+	 */
+	const PENDING_META_PREFIX = '_newspack_card_expiry_warning_pending_';
+
+	/**
+	 * How many times to attempt persisting a marker (the PENDING claim or
+	 * the SENT promotion) before giving up. A bounded immediate retry rides
+	 * out a transient save() failure (a momentary lock, a DB blip) without
+	 * any new durable state. Passed through to `Idempotent_Send`.
 	 */
 	const SENT_MARKER_SAVE_ATTEMPTS = 3;
 
@@ -559,22 +571,28 @@ class Card_Expiry_Warning {
 	 * Whether this (subscription, token, expiry) tuple has already been
 	 * processed and should be skipped.
 	 *
-	 * Two-prefix schema (see SEEDED_META_PREFIX + SENT_META_PREFIX):
+	 * Schema (see SEEDED_META_PREFIX + SENT_META_PREFIX + PENDING_META_PREFIX):
 	 *
-	 *   - SENT_META always blocks. Even with `$bypass_idempotency=true`,
-	 *     a real prior send is never re-sent. This is what makes the CLI
-	 *     backfill silently idempotent across operator re-runs.
+	 *   - SENT_META always blocks, and a *recent* in-progress PENDING claim
+	 *     blocks too — both delegated to `Idempotent_Send::is_claimed()` so
+	 *     this gate, the cron scan and the CLI backfill's count all agree
+	 *     with what `Idempotent_Send::send()` will actually do (a recent
+	 *     claim is skipped, so counting it here keeps the backfill estimate
+	 *     honest and avoids building a recipient for a pair that won't send).
+	 *     SENT blocks even under `$bypass_idempotency=true`, which is what
+	 *     makes the CLI backfill silently idempotent across operator re-runs.
+	 *     A *stale* claim does NOT block — the helper re-sends it.
 	 *   - SEEDED_META blocks unless `$bypass_idempotency=true`. The seed
 	 *     pass writes it without sending; the CLI bypass is the explicit
 	 *     publisher opt-in to release the deferred warning.
 	 *
-	 * Value-match (`=== $expiry_key`) is intentional, not just key-
-	 * existence. A token's `expiry_month`/`expiry_year` meta can change
-	 * in place — e.g., a Stripe Card Account Updater webhook reissues
-	 * the same `token_id` with a new expiry — and the value-match
-	 * invalidates the stale mark so the next expiry cycle gets warned.
-	 * Replacing this with `metadata_exists()` would silently block the
-	 * new warning. Do NOT simplify to existence-only.
+	 * Value-match against `$expiry_key` (not mere key-existence) is intentional
+	 * and lives in `Idempotent_Send::is_claimed()` for SENT/PENDING and here
+	 * for SEEDED: a token's `expiry_month`/`expiry_year` meta can change in
+	 * place — e.g. a Stripe Card Account Updater webhook reissues the same
+	 * `token_id` with a new expiry — and the value-match invalidates the stale
+	 * mark so the next expiry cycle gets warned. Do NOT simplify to
+	 * existence-only.
 	 *
 	 * @internal Public so the WP-CLI backfill's --dry-run path can
 	 *           preview accurately (skip pairs that wouldn't actually
@@ -584,11 +602,18 @@ class Card_Expiry_Warning {
 	 * @param \WC_Subscription $subscription       The subscription.
 	 * @param int              $token_id           The CC token id.
 	 * @param string           $expiry_key         `token_id:MM/YYYY`.
-	 * @param bool             $bypass_idempotency When true, ignore the SEEDED gate (SENT still blocks).
+	 * @param bool             $bypass_idempotency When true, ignore the SEEDED gate (SENT + recent PENDING still block).
 	 * @return bool True if already processed (skip), false if proceed.
 	 */
 	public static function is_already_processed( $subscription, int $token_id, string $expiry_key, bool $bypass_idempotency = false ): bool {
-		if ( $subscription->get_meta( self::SENT_META_PREFIX . $token_id, true ) === $expiry_key ) {
+		if ( Idempotent_Send::is_claimed(
+			$subscription,
+			[
+				'sent_key'    => self::SENT_META_PREFIX . $token_id,
+				'pending_key' => self::PENDING_META_PREFIX . $token_id,
+				'idem_value'  => $expiry_key,
+			]
+		) ) {
 			return true;
 		}
 		if ( ! $bypass_idempotency && $subscription->get_meta( self::SEEDED_META_PREFIX . $token_id, true ) === $expiry_key ) {
@@ -624,6 +649,16 @@ class Card_Expiry_Warning {
 	public static function maybe_send_warning( $subscription, $token, bool $bypass_idempotency = false ): bool {
 		$token_id   = $token->get_id();
 		$expiry_key = $token_id . ':' . $token->get_expiry_month() . '/' . $token->get_expiry_year();
+
+		// Reload with a forced-fresh meta read before gating or sending. The
+		// cron loads every pair up front, and the CLI loads + filters before
+		// its confirmation prompt, so this object's in-memory meta can be stale
+		// by now — a marker written by a concurrent pass after discovery would
+		// otherwise be invisible to the gate and to the helper's claim check.
+		$fresh = self::reload_fresh( $subscription );
+		if ( $fresh ) {
+			$subscription = $fresh;
+		}
 
 		if ( self::is_already_processed( $subscription, $token_id, $expiry_key, $bypass_idempotency ) ) {
 			return false;
@@ -694,92 +729,70 @@ class Card_Expiry_Warning {
 			return false;
 		}
 
-		$sent = Emails::send_email(
-			self::EMAIL_TYPE,
-			$recipient,
-			$placeholders
+		// Two-phase idempotent send (NPPD-1768): claim a PENDING marker
+		// durably, send, then promote the claim to SENT. A process death
+		// between send and promote leaves a claim that a later pass
+		// reconciles — recent claims are skipped as a concurrency lock,
+		// stale claims re-send (over-send beats a missed expiry warning).
+		// On a confirmed send the helper also clears the SEEDED mark so the
+		// "at most one of {SEEDED, SENT}" invariant holds. The SENT gate is
+		// re-checked inside the helper, so it stays authoritative even under
+		// `$bypass_idempotency` (which only relaxes the SEEDED pre-check).
+		return Idempotent_Send::send(
+			$subscription,
+			[
+				'sent_key'      => self::SENT_META_PREFIX . $token_id,
+				'pending_key'   => self::PENDING_META_PREFIX . $token_id,
+				'idem_value'    => $expiry_key,
+				'send'          => function () use ( $recipient, $placeholders ) {
+					return Emails::send_email( self::EMAIL_TYPE, $recipient, $placeholders );
+				},
+				'logger_header' => 'NEWSPACK-CARD-EXPIRY',
+				'save_attempts' => self::SENT_MARKER_SAVE_ATTEMPTS,
+				'clear_on_send' => [ self::SEEDED_META_PREFIX . $token_id ],
+				// Verify each marker actually persisted via a forced-fresh read
+				// — WC_Abstract_Order::save() swallows write failures, so a
+				// non-throwing save() is not proof the meta landed.
+				'read_fresh'    => function ( $key ) use ( $subscription ) {
+					$fresh = self::reload_fresh( $subscription );
+					return $fresh ? $fresh->get_meta( $key, true ) : '';
+				},
+				'context'       => [ 'subscription_id' => $subscription->get_id() ],
+			]
 		);
-
-		if ( $sent ) {
-			// Promote SEEDED → SENT: delete the seed mark first so the
-			// invariant holds (at most one of {SEEDED, SENT} per token).
-			// `delete_meta_data` is a no-op when the key is absent, so
-			// this is safe whether the pair was previously seeded or not.
-			$subscription->delete_meta_data( self::SEEDED_META_PREFIX . $token_id );
-			$subscription->update_meta_data( self::SENT_META_PREFIX . $token_id, $expiry_key );
-
-			// Persist the SENT marker with a bounded immediate retry. The
-			// mail is already accepted by Emails::send_email() at this
-			// point. We deliberately do NOT mark-before-send: for a
-			// card-expiry warning a rare over-send is far less harmful than
-			// a silent miss (no warning → failed renewal → involuntary
-			// churn), so over-send is the correct failure direction. Most
-			// save() failures are transient (a momentary lock or DB blip),
-			// so retrying shrinks the window where the marker is missing —
-			// which would otherwise let a later pass re-send — to almost
-			// nothing, with no new durable state. The full two-phase fix
-			// (pending-claim → send → confirm, with stale claims surfaced
-			// for reconciliation) is left as a follow-up.
-			$save = self::save_subscription_with_retry( $subscription );
-			if ( ! $save['saved'] ) {
-				// Still report success so the caller counts this against the
-				// per-pass cap — otherwise a save failure would let the cap
-				// be bypassed AND re-attempt the same address. The marker
-				// not landing means a later pass could re-send; logged at
-				// error level so the rare case is diagnosable.
-				Logger::log(
-					sprintf(
-						'Card expiry warning sent for subscription %d but persisting the SENT marker failed after %d attempts: %s. The warning may re-send on a later pass.',
-						$subscription->get_id(),
-						self::SENT_MARKER_SAVE_ATTEMPTS,
-						$save['last_error']
-					),
-					'NEWSPACK-CARD-EXPIRY',
-					'error'
-				);
-			}
-		}
-		return (bool) $sent;
 	}
 
 	/**
-	 * Persist a subscription with a bounded immediate retry, swallowing
-	 * throwables. Used after a successful send to land the SENT marker:
-	 * the mail is already accepted, so a transient save() failure (a
-	 * momentary lock, a DB blip) is worth retrying immediately to narrow
-	 * the window where the marker is missing — which would otherwise let
-	 * a later pass re-send. Bounded by SENT_MARKER_SAVE_ATTEMPTS; never
-	 * throws.
+	 * Reload a subscription with its meta forced fresh from storage.
 	 *
-	 * @param \WC_Subscription|object $subscription Subscription to save.
-	 * @return array{saved: bool, last_error: string} Whether the save
-	 *               landed, and the last error message if it didn't.
+	 * `WC_Data::read_meta_data( true )` issues a direct data-store read,
+	 * bypassing the in-memory/object meta cache — so this reflects what is
+	 * actually persisted, even after a `save()` that WooCommerce reported as
+	 * successful but that did not land. Used both to refresh a possibly-stale
+	 * discovery object before acting and as the helper's `read_fresh` verifier.
+	 *
+	 * @param object $subscription The subscription (needs get_id()).
+	 * @return \WC_Subscription|null Fresh subscription, or null if unavailable.
 	 */
-	private static function save_subscription_with_retry( $subscription ): array {
-		$last_error = '';
-		for ( $attempt = 1; $attempt <= self::SENT_MARKER_SAVE_ATTEMPTS; $attempt++ ) {
-			try {
-				$subscription->save();
-				return [
-					'saved'      => true,
-					'last_error' => '',
-				];
-			} catch ( \Throwable $e ) {
-				$last_error = $e->getMessage();
-			}
+	private static function reload_fresh( $subscription ) {
+		if ( ! is_object( $subscription ) || ! method_exists( $subscription, 'get_id' ) || ! function_exists( 'wcs_get_subscription' ) ) {
+			return null;
 		}
-		return [
-			'saved'      => false,
-			'last_error' => $last_error,
-		];
+		$fresh = \wcs_get_subscription( $subscription->get_id() );
+		if ( ! $fresh ) {
+			return null;
+		}
+		$fresh->read_meta_data( true );
+		return $fresh;
 	}
 
 	/**
 	 * Clear the sent flag when the payment method is updated on a subscription.
 	 *
 	 * Hooked to 'woocommerce_subscription_payment_method_updated'. Clears
-	 * BOTH SEEDED and SENT per-token entries on the subscription via
-	 * `get_meta_data()` iteration — WC CRUD pattern, composes correctly
+	 * the SEEDED, SENT and in-progress PENDING per-token entries on the
+	 * subscription via `get_meta_data()` iteration — WC CRUD pattern,
+	 * composes correctly
 	 * with WC's meta cache and the `woocommerce_after_save_subscription_meta`
 	 * hook chain. (LIKE-query on `wp_postmeta` would be faster on huge
 	 * meta tables but skirts WC's CRUD layer.)
@@ -793,7 +806,11 @@ class Card_Expiry_Warning {
 		$changed = false;
 		foreach ( $subscription->get_meta_data() as $meta ) {
 			$key = $meta->key;
-			if ( 0 === strpos( $key, self::SEEDED_META_PREFIX ) || 0 === strpos( $key, self::SENT_META_PREFIX ) ) {
+			if (
+				0 === strpos( $key, self::SEEDED_META_PREFIX ) ||
+				0 === strpos( $key, self::SENT_META_PREFIX ) ||
+				0 === strpos( $key, self::PENDING_META_PREFIX )
+			) {
 				$subscription->delete_meta_data( $key );
 				$changed = true;
 			}

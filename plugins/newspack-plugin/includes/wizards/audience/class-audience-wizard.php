@@ -516,22 +516,73 @@ class Audience_Wizard extends Wizard {
 	/**
 	 * Get reader activation settings.
 	 *
+	 * Response shape:
+	 *   - config (array)                        Reader Activation settings keyed by option name.
+	 *                                           See Reader_Activation::get_settings_config()
+	 *                                           for the canonical field list.
+	 *   - prerequisites_status (array)          Per-prerequisite completion + plugin status.
+	 *   - memberships (array)                   Memberships integration settings.
+	 *   - can_esp_sync (array)                  Whether ESP sync is currently possible
+	 *                                           and the validation errors if not.
+	 *   - verification_required_by_gates (array<int,array{id:int,title:string,edit_url:string}>)
+	 *                                           Published content gates that force
+	 *                                           post-registration verification ON. `edit_url`
+	 *                                           is resolved here (under the wizard's edit-post
+	 *                                           capability check) rather than in the cached
+	 *                                           gate list, so a public-traffic cache populate
+	 *                                           can't poison the field with null.
+	 *                                           Returned on GET only — the UPDATE endpoint
+	 *                                           skips this field because saving an unrelated
+	 *                                           setting can't change the gate list.
+	 *
 	 * @return WP_REST_Response
 	 */
 	public function api_get_reader_activation_settings() {
 		return rest_ensure_response(
 			[
-				'config'               => Reader_Activation::get_settings(),
-				'prerequisites_status' => Reader_Activation::get_prerequisites_status(),
-				'required_plugins'     => Reader_Activation::get_reader_revenue_required_plugins(),
-				'memberships'          => self::get_memberships_settings(),
-				'can_esp_sync'         => Reader_Activation\Contact_Sync::has_one_syncable_integration( true ),
+				'config'                         => Reader_Activation::get_settings(),
+				'prerequisites_status'           => Reader_Activation::get_prerequisites_status(),
+				'required_plugins'               => Reader_Activation::get_reader_revenue_required_plugins(),
+				'memberships'                    => self::get_memberships_settings(),
+				'can_esp_sync'                   => Reader_Activation\Contact_Sync::has_one_syncable_integration( true ),
+				'verification_required_by_gates' => self::get_verification_required_gates_with_edit_urls(),
 			]
 		);
 	}
 
 	/**
+	 * Resolve edit URLs for the cached verification-required gate list.
+	 *
+	 * Reader_Activation::get_verification_required_gates() returns only
+	 * capability-independent fields ({@see id, title}) so its 24-hour cache can't
+	 * be poisoned by a no-caps front-end populate (which would otherwise yield
+	 * `null` edit URLs for ~24h). This wizard handler runs under the admin
+	 * permission check ({@see api_permissions_check()}), so `get_edit_post_link()`
+	 * returns the correct URL here.
+	 *
+	 * @return array<int,array{id:int,title:string,edit_url:string|null}>
+	 */
+	private static function get_verification_required_gates_with_edit_urls(): array {
+		$gates    = Reader_Activation::get_verification_required_gates();
+		$resolved = [];
+		foreach ( $gates as $gate ) {
+			$resolved[] = [
+				'id'       => $gate['id'],
+				'title'    => $gate['title'],
+				'edit_url' => get_edit_post_link( $gate['id'] ),
+			];
+		}
+		return $resolved;
+	}
+
+	/**
 	 * Update reader activation settings.
+	 *
+	 * Mirrors {@see api_get_reader_activation_settings()} except that
+	 * `verification_required_by_gates` is intentionally omitted — saving an
+	 * unrelated RAS setting can't change which gates are published with
+	 * Require Verification, so the client can keep the value it received on
+	 * the initial GET.
 	 *
 	 * @param WP_REST_Request $request Request object.
 	 *

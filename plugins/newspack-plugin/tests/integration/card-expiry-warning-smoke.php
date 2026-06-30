@@ -52,7 +52,7 @@ use Newspack\Reader_Activation;
 // these as global so both scopes see the same variables.
 global $passed, $total, $mails, $cleanup;
 $passed  = 0;
-$total   = 12;
+$total   = 14; // 11 single-check scenarios + 2 in scenario 12 (two-phase) + cleanup.
 $mails   = [];
 $cleanup = []; // Closures executed in reverse order during cleanup.
 
@@ -722,10 +722,90 @@ if ( count( $mails ) >= 1 ) {
 
 
 // ══════════════════════════════════════════════════════════════════════
-// SCENARIO 12: Cleanup
+// SCENARIO 12: Two-phase PENDING claim reconciliation (real subscription)
+//
+// Exercises the NPPD-1768 two-phase claim against a REAL WC_Subscription —
+// the one path the unit suite covers only with an in-memory fake. Proves
+// (a) the array-shaped PENDING marker round-trips through WC's
+// save()/get_meta() (the real-WC serialization the fake can't show), and a
+// RECENT claim blocks a resend (best-effort concurrency guard); and (b) a
+// STALE claim re-sends and is promoted to SENT with the claim cleared (the
+// over-send reconciliation policy).
 // ══════════════════════════════════════════════════════════════════════
 WP_CLI::log( '' );
-WP_CLI::log( '12. Cleanup' );
+WP_CLI::log( '12. Two-phase PENDING claim reconciliation (real subscription)' );
+
+// phpcs:disable WordPress.PHP.DevelopmentFunctions.error_log_var_export -- Diagnostic output in a manual smoke script, not production code.
+$subscription = wcs_get_subscription( $sub_id );
+Card_Expiry_Warning::clear_sent_flag( $subscription );
+
+$pending_key = Card_Expiry_Warning::PENDING_META_PREFIX . $token2->get_id();
+$sent_key    = Card_Expiry_Warning::SENT_META_PREFIX . $token2->get_id();
+$expiry_key  = $token2->get_id() . ':' . $token2->get_expiry_month() . '/' . $token2->get_expiry_year();
+
+// (a) A RECENT claim round-trips as an array and blocks a resend.
+$subscription = wcs_get_subscription( $sub_id );
+$subscription->update_meta_data(
+	$pending_key,
+	[
+		'value' => $expiry_key,
+		'ts'    => time() - 10,
+	]
+);
+$subscription->save();
+
+$reloaded = wcs_get_subscription( $sub_id );
+$stored   = $reloaded->get_meta( $pending_key, true );
+if ( ! is_array( $stored ) || ( $stored['value'] ?? null ) !== $expiry_key ) {
+	smoke_fail( 'PENDING claim did not round-trip as an array through WC meta.', 'got: ' . var_export( $stored, true ) );
+} else {
+	$mails = [];
+	$sent  = Card_Expiry_Warning::maybe_send_warning( $reloaded, $token2 );
+	if ( false === $sent && 0 === count( $mails ) ) {
+		smoke_pass( 'Recent PENDING claim round-tripped as an array and blocked a resend (0 emails).' );
+	} else {
+		smoke_fail(
+			'A recent claim should block the send.',
+			'maybe_send_warning returned ' . var_export( $sent, true ) . ', captured ' . count( $mails ) . ' email(s).'
+		);
+	}
+}
+
+// (b) A STALE claim re-sends and promotes to SENT (claim cleared).
+$subscription = wcs_get_subscription( $sub_id );
+$subscription->update_meta_data(
+	$pending_key,
+	[
+		'value' => $expiry_key,
+		'ts'    => time() - 2 * HOUR_IN_SECONDS,
+	]
+);
+$subscription->save();
+
+$subscription = wcs_get_subscription( $sub_id );
+$mails        = [];
+$sent         = Card_Expiry_Warning::maybe_send_warning( $subscription, $token2 );
+
+$after        = wcs_get_subscription( $sub_id );
+$pending_left = $after->get_meta( $pending_key, true );
+$sent_val     = $after->get_meta( $sent_key, true );
+if ( true === $sent && 1 === count( $mails ) && '' === $pending_left && $sent_val === $expiry_key ) {
+	smoke_pass( 'Stale PENDING claim re-sent (1 email) and promoted to SENT; claim cleared.' );
+} else {
+	smoke_fail(
+		'Stale-claim reconciliation produced the wrong end state.',
+		'sent=' . var_export( $sent, true ) . ' mails=' . count( $mails ) .
+		' pending_left=' . var_export( $pending_left, true ) . " sent_val='$sent_val'"
+	);
+}
+// phpcs:enable WordPress.PHP.DevelopmentFunctions.error_log_var_export
+
+
+// ══════════════════════════════════════════════════════════════════════
+// SCENARIO 13: Cleanup
+// ══════════════════════════════════════════════════════════════════════
+WP_CLI::log( '' );
+WP_CLI::log( '13. Cleanup' );
 
 $clean_ok = true;
 foreach ( array_reverse( $cleanup ) as $fn ) {

@@ -28,6 +28,13 @@ final class Reader_Activation {
 	const NEWSLETTERS_SCRIPT_HANDLE = 'newspack-newsletters-signup';
 
 	/**
+	 * Transient that caches the list of published content gates currently forcing
+	 * post-registration verification on. Recomputed lazily and invalidated whenever
+	 * a gate post is saved or deleted.
+	 */
+	const VERIFICATION_REQUIRED_GATES_TRANSIENT = 'newspack_verification_required_gates';
+
+	/**
 	 * Reader user meta keys.
 	 */
 	const READER                            = 'np_reader';
@@ -94,7 +101,16 @@ final class Reader_Activation {
 		\add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_scripts' ] );
 		\add_action( 'wp_footer', [ __CLASS__, 'render_auth_modal' ] );
 		\add_action( 'wp_footer', [ __CLASS__, 'render_verification_modal' ] );
+		\add_action( 'wp_footer', [ __CLASS__, 'render_confirmation_modal' ] );
 		\add_action( 'wp_footer', [ __CLASS__, 'render_newsletters_signup_modal' ] );
+
+		// Invalidate the verification-required-gates cache whenever a gate post changes.
+		// Hooked at class-load time (not gated by is_enabled()) so the cache stays correct
+		// for sites that toggle RAS on/off and edit gates while it's disabled.
+		if ( class_exists( 'Newspack\Content_Gate' ) ) {
+			\add_action( 'save_post_' . \Newspack\Content_Gate::GATE_CPT, [ __CLASS__, 'flush_verification_required_gates_cache' ] );
+			\add_action( 'deleted_post', [ __CLASS__, 'maybe_flush_verification_required_gates_cache' ], 10, 2 );
+		}
 		\add_action( 'wp_ajax_newspack_reader_activation_newsletters_signup', [ __CLASS__, 'newsletters_signup' ] );
 		\add_action( 'woocommerce_customer_reset_password', [ __CLASS__, 'login_after_password_reset' ] );
 
@@ -141,17 +157,18 @@ final class Reader_Activation {
 		$authenticated_email = \is_user_logged_in() && self::is_user_reader( \wp_get_current_user() ) ? \wp_get_current_user()->user_email : '';
 		$script_dependencies = [];
 		$script_data         = [
-			'auth_intention_cookie'        => self::AUTH_INTENTION_COOKIE,
-			'cid_cookie'                   => NEWSPACK_CLIENT_ID_COOKIE_NAME,
-			'is_logged_in'                 => \is_user_logged_in(),
-			'authenticated_email'          => $authenticated_email,
-			'otp_auth_action'              => Magic_Link::OTP_AUTH_ACTION,
-			'otp_rate_interval'            => Magic_Link::RATE_INTERVAL,
-			'auth_action_result'           => Magic_Link::AUTH_ACTION_RESULT,
-			'account_url'                  => My_Account::get_endpoint_url(),
-			'is_ras_enabled'               => self::is_enabled(),
-			'require_account_verification' => self::show_post_registration_verification(),
-			'verification_url'             => \admin_url( 'admin-ajax.php' ),
+			'auth_intention_cookie'      => self::AUTH_INTENTION_COOKIE,
+			'cid_cookie'                 => NEWSPACK_CLIENT_ID_COOKIE_NAME,
+			'is_logged_in'               => \is_user_logged_in(),
+			'authenticated_email'        => $authenticated_email,
+			'otp_auth_action'            => Magic_Link::OTP_AUTH_ACTION,
+			'otp_rate_interval'          => Magic_Link::RATE_INTERVAL,
+			'auth_action_result'         => Magic_Link::AUTH_ACTION_RESULT,
+			'account_url'                => My_Account::get_endpoint_url(),
+			'is_ras_enabled'             => self::is_enabled(),
+			'verify_new_reader_accounts' => self::show_post_registration_verification(),
+			'verification_url'           => \admin_url( 'admin-ajax.php' ),
+			'check_email_url'            => \rest_url( NEWSPACK_API_NAMESPACE . '/reader-activation/check-email' ),
 		];
 
 		$script_data = array_merge( $script_data, Reader_Registration::get_script_data() );
@@ -397,6 +414,7 @@ final class Reader_Activation {
 			'woocommerce_terms_confirmation_text'          => self::get_terms_confirmation_text(),
 			'woocommerce_terms_confirmation_url'           => self::get_terms_confirmation_url(),
 			'oauth_redirect_to_ras'                        => false,
+			'verify_new_reader_accounts'                   => true,
 		];
 
 		/**
@@ -1634,6 +1652,68 @@ final class Reader_Activation {
 	}
 
 	/**
+	 * Render the pre-registration confirmation modal.
+	 *
+	 * Used when post-registration verification is disabled — the reader sees this
+	 * modal *before* an account is created, so a typo doesn't silently provision
+	 * an unwanted account. Mirrors render_verification_modal()'s structure: global
+	 * markup in wp_footer, with the email <strong> rendered empty and filled by
+	 * the confirmation-modal JS helper via textContent so no untrusted string
+	 * is ever interpolated server-side.
+	 *
+	 * @return void
+	 */
+	public static function render_confirmation_modal() {
+		if ( ! self::should_render_auth_modal() || self::show_post_registration_verification() ) {
+			return;
+		}
+
+		ob_start();
+		?>
+		<div class="newspack-ui__box newspack-ui__box--text-center">
+			<span class="newspack-ui__icon newspack-ui__icon--neutral">
+				<?php Newspack_UI_Icons::print_svg( 'account' ); ?>
+			</span>
+			<p>
+				<?php
+				// The <strong> is rendered empty here; confirmation-modal.js fills it
+				// via textContent right before the modal opens (no untrusted email is
+				// ever interpolated server-side). wp_kses_post allows the <strong class>
+				// fragment and satisfies the escaping requirement without a suppression.
+				echo wp_kses_post(
+					sprintf(
+						// translators: %s is a placeholder that the JS helper replaces with the email the reader is about to register.
+						__( "We'll create a new account for %s.", 'newspack-plugin' ),
+						'<strong class="email-address"></strong>'
+					)
+				);
+				?>
+			</p>
+		</div>
+		<button type="button" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide" data-confirm-register>
+			<?php esc_html_e( 'Continue', 'newspack-plugin' ); ?>
+		</button>
+		<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close" data-cancel-register>
+			<?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?>
+		</button>
+		<?php
+		$content = ob_get_clean();
+		?>
+		<div class="newspack-ui newspack__reader-registration-confirmation">
+			<?php
+			\Newspack\Newspack_UI::generate_modal(
+				[
+					'id'      => 'newspack-reader-registration-confirmation',
+					'title'   => __( 'Register', 'newspack-plugin' ),
+					'content' => $content,
+				]
+			);
+			?>
+		</div>
+		<?php
+	}
+
+	/**
 	 * Fetch HTML for the post-checkout newsletter signup modal.
 	 *
 	 * @param WP_REST_Request $request The REST request.
@@ -2265,13 +2345,33 @@ final class Reader_Activation {
 	}
 
 	/**
-	 * Whether to show the post-registration flow for account verification.
+	 * Whether to show the post-registration verification flow for new reader accounts.
+	 *
+	 * Note on semantics: this function reflects a **site-policy** decision — "for any
+	 * newly registered reader, should we surface the verification prompt now?" — not
+	 * a per-user state ("has this specific reader verified yet?"). Per-user
+	 * verification is tracked via the {@see EMAIL_VERIFIED} user meta and queried
+	 * with {@see is_reader_verified()}. Callers needing the per-user signal should
+	 * use the latter; this method is only the global on/off switch.
+	 *
+	 * The value is sourced from the `verify_new_reader_accounts` setting (toggled in
+	 * Audience → Configuration; defaults to true), then *forced* to true if any
+	 * published content gate is configured with Registered Access + Require
+	 * Verification — those gates depend on the verification flow to function, so we
+	 * never want the toggle to silently disable them. The
+	 * `newspack_show_post_registration_verification` filter receives the result and
+	 * is the documented escape hatch for sites that need to override either way.
 	 *
 	 * @return bool Whether to show the verification flow after registering a new reader account.
 	 */
 	public static function show_post_registration_verification() {
-		$current_user = \wp_get_current_user();
-		$should_show  = ! is_user_logged_in() || ( self::is_user_reader( $current_user ) && ! self::is_reader_verified( $current_user ) );
+		$should_show = (bool) self::get_setting( 'verify_new_reader_accounts' );
+
+		// Force ON when at least one published gate requires verification — those
+		// gates would be silently broken if a publisher toggled this off in settings.
+		if ( ! $should_show && ! empty( self::get_verification_required_gates() ) ) {
+			$should_show = true;
+		}
 
 		/**
 		 * Whether to show the verification flow after registering a new reader account.
@@ -2280,6 +2380,90 @@ final class Reader_Activation {
 		 * @param bool $show_pending_verification If true, show the post-registration verification flow.
 		 */
 		return apply_filters( 'newspack_show_post_registration_verification', $should_show );
+	}
+
+	/**
+	 * Get the list of published content gates that require email verification.
+	 *
+	 * These gates have Registered Access with Require Verification enabled — the
+	 * verification setting in Audience → Configuration is forced ON whenever any
+	 * of these exist so the gates continue to function.
+	 *
+	 * Result is cached in {@see VERIFICATION_REQUIRED_GATES_TRANSIENT} for up to a
+	 * day; the cache is invalidated on `save_post_<gate cpt>` /
+	 * `deleted_post` of a gate via {@see flush_verification_required_gates_cache()}
+	 * and {@see maybe_flush_verification_required_gates_cache()}. This call runs on
+	 * the front-end Reader Activation init path, so the cache matters.
+	 *
+	 * Capability-sensitive fields are intentionally excluded from the cache —
+	 * `get_edit_post_link()` returns null for callers without `edit_post` caps, so
+	 * whichever request populates the transient first wins for 24h. With public
+	 * front-end traffic populating first, the wizard would render a dead link.
+	 * The admin/REST layer resolves edit URLs separately at call time.
+	 *
+	 * @return array<int,array{id:int,title:string}> One entry per gate; empty when none require verification.
+	 */
+	public static function get_verification_required_gates() {
+		$cached = \get_transient( self::VERIFICATION_REQUIRED_GATES_TRANSIENT );
+		if ( false !== $cached && is_array( $cached ) ) {
+			return $cached;
+		}
+
+		$gates = [];
+
+		if ( ! class_exists( 'Newspack\Content_Gate' ) ) {
+			return $gates;
+		}
+
+		$published_gates = \Newspack\Content_Gate::get_gates( \Newspack\Content_Gate::GATE_CPT, 'publish' );
+		if ( empty( $published_gates ) ) {
+			\set_transient( self::VERIFICATION_REQUIRED_GATES_TRANSIENT, $gates, DAY_IN_SECONDS );
+			return $gates;
+		}
+
+		foreach ( $published_gates as $gate ) {
+			// Both Registered Access enabled AND Require Verification must be set for the gate
+			// to depend on this flow.
+			if ( empty( $gate['registration']['active'] ) || empty( $gate['registration']['require_verification'] ) ) {
+				continue;
+			}
+			$title = isset( $gate['title'] ) && '' !== $gate['title']
+				? $gate['title']
+				// translators: fallback label when a content gate post has no title set.
+				: __( '(no title)', 'newspack-plugin' );
+			$gates[] = [
+				'id'    => (int) $gate['id'],
+				'title' => $title,
+			];
+		}
+
+		\set_transient( self::VERIFICATION_REQUIRED_GATES_TRANSIENT, $gates, DAY_IN_SECONDS );
+		return $gates;
+	}
+
+	/**
+	 * Invalidate the cached list of verification-required gates.
+	 *
+	 * Hooked to `save_post_<gate cpt>` so any edit/publish/unpublish of a gate
+	 * forces the next read to recompute from `get_gates()`.
+	 */
+	public static function flush_verification_required_gates_cache() {
+		\delete_transient( self::VERIFICATION_REQUIRED_GATES_TRANSIENT );
+	}
+
+	/**
+	 * Invalidate the cache when a content gate is permanently deleted.
+	 *
+	 * @param int      $post_id Deleted post ID.
+	 * @param \WP_Post $post    Deleted post object.
+	 */
+	public static function maybe_flush_verification_required_gates_cache( $post_id, $post = null ) {
+		if ( ! class_exists( 'Newspack\Content_Gate' ) ) {
+			return;
+		}
+		if ( $post instanceof \WP_Post && \Newspack\Content_Gate::GATE_CPT === $post->post_type ) {
+			self::flush_verification_required_gates_cache();
+		}
 	}
 
 	/**

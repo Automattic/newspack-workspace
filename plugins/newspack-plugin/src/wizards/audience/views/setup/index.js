@@ -37,6 +37,7 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 	const [ espSyncErrors, setEspSyncErrors ] = useState( [] );
 	const [ requiredPlugins, setRequiredPlugins ] = useState( {} );
 	const [ configLoaded, setConfigLoaded ] = useState( false );
+	const [ verificationRequiredByGates, setVerificationRequiredByGates ] = useState( [] );
 
 	const fetchConfig = () => {
 		setError( false );
@@ -44,11 +45,12 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 		return wizardApiFetch( {
 			path: '/newspack/v1/wizard/newspack-audience/audience-management',
 		} )
-			.then( ( { config: fetchedConfig, prerequisites_status, required_plugins, can_esp_sync } ) => {
+			.then( ( { config: fetchedConfig, prerequisites_status, required_plugins, can_esp_sync, verification_required_by_gates } ) => {
 				setPrerequisites( prerequisites_status );
 				setRequiredPlugins( required_plugins || {} );
 				setConfig( fetchedConfig );
 				setEspSyncErrors( can_esp_sync.errors );
+				setVerificationRequiredByGates( verification_required_by_gates || [] );
 				setConfigLoaded( true );
 			} )
 			.catch( setError )
@@ -66,11 +68,17 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 			quiet: true,
 			data,
 		} )
-			.then( ( { config: fetchedConfig, prerequisites_status, required_plugins, can_esp_sync } ) => {
+			.then( ( { config: fetchedConfig, prerequisites_status, required_plugins, can_esp_sync, verification_required_by_gates } ) => {
 				setPrerequisites( prerequisites_status );
 				setRequiredPlugins( required_plugins || {} );
 				setConfig( fetchedConfig );
 				setEspSyncErrors( can_esp_sync.errors );
+				// The update endpoint omits verification_required_by_gates (saving an
+				// unrelated setting can't change the gate list), so preserve whatever the
+				// initial GET fetched. Skip + activate endpoints behave the same way.
+				if ( Array.isArray( verification_required_by_gates ) ) {
+					setVerificationRequiredByGates( verification_required_by_gates );
+				}
 			} )
 			.catch( setError )
 			.finally( () => setInFlight( false ) );
@@ -173,6 +181,7 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 		requiredPlugins,
 		onChangePlatform: () => setShowChooser( true ),
 		platform,
+		verificationRequiredByGates,
 	};
 
 	return (
