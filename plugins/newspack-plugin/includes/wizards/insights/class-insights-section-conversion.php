@@ -61,18 +61,20 @@ class Insights_Section_Conversion {
 	}
 
 	/**
-	 * Register the Tab 3 REST route and cohort pre-warm hooks.
+	 * Register the Tab 3 REST route, cohort pre-warm hooks, and window pre-warm.
 	 *
 	 * @return void
 	 */
 	public static function register_hooks(): void {
+		\Newspack\Insights\Prewarm::init();
+		$controller = new Conversion_REST_Controller();
 		add_action(
 			'rest_api_init',
-			function () {
-				$controller = new Conversion_REST_Controller();
+			function () use ( $controller ) {
 				$controller->register_routes();
 			}
 		);
+		\Newspack\Insights\Prewarm::register_tab( 'conversion', [ $controller, 'warm_window' ] );
 		// Cohort pre-warm: handler runs both the one-off (cold-cache) and the
 		// weekly recurring refresh; the recurring schedule is ensured on init.
 		add_action( Conversion_Metric::COHORT_REFRESH_ACTION, [ Conversion_Metric::class, 'run_cohort_refresh' ] );

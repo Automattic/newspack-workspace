@@ -61,17 +61,21 @@ class Insights_Section_Gates {
 	}
 
 	/**
-	 * Register the Tab 4 REST route.
+	 * Register the Tab 4 REST route and warm the gates tab.
+	 *
+	 * Called only when NEWSPACK_INSIGHTS_GATES_PREVIEW is set (enforced by init()).
 	 *
 	 * @return void
 	 */
 	public static function register_hooks(): void {
+		\Newspack\Insights\Prewarm::init();
+		$controller = new Gates_REST_Controller();
 		add_action(
 			'rest_api_init',
-			function () {
-				$controller = new Gates_REST_Controller();
+			function () use ( $controller ) {
 				$controller->register_routes();
 			}
 		);
+		\Newspack\Insights\Prewarm::register_tab( 'gates', [ $controller, 'warm_window' ] );
 	}
 }
