@@ -436,4 +436,45 @@ class Test_Newspack_Block_Renderers extends WP_UnitTestCase {
 		preg_match( '/<img\b[^>]*\bwidth="(\d+)"/', $html, $matches );
 		$this->assertLessThan( 400, (int) $matches[1], 'Expected the column-nested posts-inserter image to be constrained to the column width, not the full email width.' );
 	}
+
+	/**
+	 * The image-on-top (flat) layout left-aligns the inserted image. The posts-inserter
+	 * stores the featured image with `align: center`, but in the email the image must
+	 * sit flush-left to line up with the heading and excerpt below it (which are always
+	 * left-aligned) — otherwise a sub-column-width image floats centered and looks broken.
+	 */
+	public function test_posts_inserter_flat_image_is_left_aligned() {
+		Editor_Bootstrap::init();
+
+		$attachment_id = self::factory()->attachment->create_upload_object( DIR_TESTDATA . '/images/canola.jpg' );
+		$src           = wp_get_attachment_url( $attachment_id );
+		$image_inner   = '<figure class="wp-block-image aligncenter size-full"><img class="wp-image-' . $attachment_id . '" src="' . esc_url( $src ) . '" alt=""/></figure>';
+		$content       = $this->serialize_posts_inserter(
+			[
+				[
+					'blockName'    => 'core/image',
+					'attrs'        => [
+						'id'       => $attachment_id,
+						'align'    => 'center',
+						'sizeSlug' => 'full',
+					],
+					'innerHTML'    => $image_inner,
+					'innerContent' => [ $image_inner ],
+					'innerBlocks'  => [],
+				],
+				[
+					'blockName'    => 'core/heading',
+					'attrs'        => [],
+					'innerHTML'    => '<h3>Post title</h3>',
+					'innerContent' => [ '<h3>Post title</h3>' ],
+					'innerBlocks'  => [],
+				],
+			]
+		);
+
+		$html = Renderer_Controller::render_wc( get_post( $this->create_newsletter_with_content( $content ) ) );
+
+		$this->assertMatchesRegularExpression( '/class="email-image-cell"\s+align="left"/', $html, 'Expected the flat-layout image cell to be left-aligned.' );
+		$this->assertDoesNotMatchRegularExpression( '/class="email-image-cell"\s+align="center"/', $html, 'Expected the flat-layout image not to be centered.' );
+	}
 }

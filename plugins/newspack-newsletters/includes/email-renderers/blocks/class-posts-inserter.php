@@ -127,6 +127,7 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 			} else {
 				// Flat layout (image on top, or no image): wrap each rendered block in
 				// a padded cell to match the editor canvas's per-block 6px padding.
+				$child = self::left_align_flat_image( $child );
 				$html .= self::wrap_flat_block( self::render_child_markup( self::serialize_inserted_block( $child ), $content_width ) );
 			}
 			++$index;
@@ -162,6 +163,33 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 			$html .= render_block( $block );
 		}
 		return $html;
+	}
+
+	/**
+	 * Left-align a flat-layout featured image.
+	 *
+	 * The posts-inserter saves the image-on-top featured image with `align: center`,
+	 * which the package renders into a centered, fixed-width image cell. In the email
+	 * the image must sit flush-left so it lines up with the heading and excerpt below
+	 * it (both always left-aligned) — a centered, sub-column-width image looks broken.
+	 * Only touches `core/image`; other flat children pass through unchanged.
+	 *
+	 * @param array $child Parsed child block.
+	 * @return array Child with any centered image normalized to left alignment.
+	 */
+	private static function left_align_flat_image( array $child ): array {
+		if ( 'core/image' !== ( $child['blockName'] ?? '' ) ) {
+			return $child;
+		}
+		if ( 'center' === ( $child['attrs']['align'] ?? '' ) ) {
+			$child['attrs']['align'] = 'left';
+		}
+		// Keep the inner HTML's alignment class in sync so inlined block styles
+		// don't re-center the figure.
+		if ( isset( $child['innerHTML'] ) ) {
+			$child['innerHTML'] = str_replace( 'aligncenter', 'alignleft', (string) $child['innerHTML'] );
+		}
+		return $child;
 	}
 
 	/**
