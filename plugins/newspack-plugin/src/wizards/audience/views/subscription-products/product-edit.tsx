@@ -44,20 +44,25 @@ export default function ProductEdit( { match }: { match: { params: { id?: string
 		[ context ]
 	);
 
-	if ( ! context ) {
+	const product = useMemo(
+		() => ( isNew || ! context ? undefined : context.products.find( item => String( item.id ) === id ) ),
+		[ isNew, context, id ]
+	);
+	// The edit target no longer exists — redirect to the list from an effect so render stays
+	// pure (a redirect during render warns / double-invokes under StrictMode).
+	const isMissingTarget = !! context && ! isNew && ! product;
+	useEffect( () => {
+		if ( isMissingTarget ) {
+			history.push( '/' );
+		}
+	}, [ isMissingTarget, history ] );
+
+	if ( ! context || isMissingTarget ) {
 		return (
 			<div style={ { display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '48px' } }>
 				<Spinner />
 			</div>
 		);
-	}
-
-	const product = isNew ? undefined : context.products.find( item => String( item.id ) === id );
-
-	// Edit target no longer exists — return to the list.
-	if ( ! isNew && ! product ) {
-		history.push( '/' );
-		return null;
 	}
 
 	return (
