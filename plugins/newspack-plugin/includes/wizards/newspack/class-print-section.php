@@ -84,20 +84,20 @@ class Print_Section extends Wizard_Section {
 	public function api_update_print_settings( $request ) {
 		$module_enabled_print = $request->get_param( 'module_enabled_print' );
 		if ( ! is_bool( $module_enabled_print ) ) {
-			return new \WP_Error( 'invalid_param', __( 'Invalid parameter for module_enabled_print.', 'newspack' ), [ 'status' => 400 ] );
+			return new \WP_Error( 'invalid_param', __( 'Invalid parameter for module_enabled_print.', 'newspack-plugin' ), [ 'status' => 400 ] );
 		}
 
 		$has_platform_param = $request->has_param( 'indesign_platform' );
 		$platform           = $has_platform_param ? $request->get_param( 'indesign_platform' ) : null;
 		if ( $has_platform_param && ! in_array( $platform, InDesign_Exporter::ALLOWED_PLATFORMS, true ) ) {
-			return new \WP_Error( 'invalid_param', __( 'Invalid parameter for indesign_platform.', 'newspack' ), [ 'status' => 400 ] );
+			return new \WP_Error( 'invalid_param', __( 'Invalid parameter for indesign_platform.', 'newspack-plugin' ), [ 'status' => 400 ] );
 		}
 
 		$has_post_types_param = $request->has_param( 'indesign_post_types' );
 		$post_types           = $has_post_types_param ? $request->get_param( 'indesign_post_types' ) : null;
 		if ( $has_post_types_param ) {
 			if ( ! is_array( $post_types ) ) {
-				return new \WP_Error( 'invalid_param', __( 'Invalid parameter for indesign_post_types.', 'newspack' ), [ 'status' => 400 ] );
+				return new \WP_Error( 'invalid_param', __( 'Invalid parameter for indesign_post_types.', 'newspack-plugin' ), [ 'status' => 400 ] );
 			}
 			$post_types = array_values(
 				array_unique(

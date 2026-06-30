@@ -143,6 +143,37 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that slugs hidden from the settings UI (excluded, or not public/no
+	 * admin UI) are dropped from the stored setting, even if registered. This
+	 * keeps the stored value in sync with what the admin can actually manage.
+	 */
+	public function test_post_types_setting_drops_unavailable_slugs() {
+		// `product` is registered and public but lives in EXCLUDED_POST_TYPES.
+		register_post_type(
+			'product',
+			[
+				'public'  => true,
+				'show_ui' => true,
+			]
+		);
+		// Registered but not exposed in the admin UI, so never "available".
+		register_post_type(
+			'hidden_cpt',
+			[
+				'public'  => false,
+				'show_ui' => false,
+			]
+		);
+
+		update_option( InDesign_Exporter::POST_TYPES_OPTION, [ 'post', 'product', 'hidden_cpt' ] );
+		$this->assertSame( [ 'post' ], InDesign_Exporter::get_post_types_setting() );
+
+		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
+		unregister_post_type( 'product' );
+		unregister_post_type( 'hidden_cpt' );
+	}
+
+	/**
 	 * Test that get_supported_post_types() honors the stored setting.
 	 */
 	public function test_get_supported_post_types_uses_setting() {

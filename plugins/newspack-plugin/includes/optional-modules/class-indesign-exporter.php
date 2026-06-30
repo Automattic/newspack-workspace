@@ -142,9 +142,14 @@ class InDesign_Exporter {
 	/**
 	 * Get the stored post types setting, sanitized.
 	 *
-	 * Filters out slugs whose post type is no longer registered (e.g. a CPT
-	 * plugin was deactivated). Returns the default when the option is unset
-	 * or contains a non-array value.
+	 * Constrains the stored slugs to the same "available" list the settings UI
+	 * offers (public post types with an admin UI, minus the excluded ones). This
+	 * drops slugs whose post type is no longer registered (e.g. a CPT plugin was
+	 * deactivated) as well as types intentionally hidden from the picker (lists,
+	 * feeds, products, etc.) that may have leaked in via direct option writes or
+	 * older configs — so a stored value can never expose export actions for a
+	 * type the admin can't see or uncheck. Returns the default when the option is
+	 * unset or contains a non-array value.
 	 *
 	 * @return string[] Sanitized array of post type slugs.
 	 */
@@ -154,11 +159,13 @@ class InDesign_Exporter {
 			return self::POST_TYPES_DEFAULT;
 		}
 
+		$available = array_column( self::get_available_post_types(), 'value' );
+
 		return array_values(
 			array_filter(
 				$value,
-				static function ( $slug ) {
-					return is_string( $slug ) && post_type_exists( $slug );
+				static function ( $slug ) use ( $available ) {
+					return is_string( $slug ) && in_array( $slug, $available, true );
 				}
 			)
 		);
@@ -236,7 +243,7 @@ class InDesign_Exporter {
 	 * @return array Modified bulk actions.
 	 */
 	public static function add_bulk_action( $bulk_actions ) {
-		$bulk_actions['export_indesign'] = __( 'Export as Adobe InDesign', 'newspack' );
+		$bulk_actions['export_indesign'] = __( 'Export as Adobe InDesign', 'newspack-plugin' );
 		return $bulk_actions;
 	}
 
@@ -253,10 +260,6 @@ class InDesign_Exporter {
 			return $redirect_to;
 		}
 
-		if ( ! current_user_can( 'edit_posts' ) ) {
-			return add_query_arg( 'indesign_export_error', 'capability', $redirect_to );
-		}
-
 		if ( ! isset( $_REQUEST['_wpnonce'] ) || ! wp_verify_nonce( $_REQUEST['_wpnonce'], 'bulk-posts' ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
 			return add_query_arg( 'indesign_export_error', 'nonce', $redirect_to );
 		}
@@ -268,6 +271,23 @@ class InDesign_Exporter {
 		$post_ids = array_values( array_filter( $post_ids, [ __CLASS__, 'is_post_supported' ] ) );
 		if ( empty( $post_ids ) ) {
 			return add_query_arg( 'indesign_export_error', 'unsupported_post_type', $redirect_to );
+		}
+
+		// Gate on the per-object capability rather than the generic `edit_posts`.
+		// With arbitrary post types now exportable, a user may be able to edit the
+		// selected items (e.g. a custom role scoped to a CPT) without holding the
+		// generic cap — and vice versa. This mirrors the per-post check used by the
+		// row action and single-export handler.
+		$post_ids = array_values(
+			array_filter(
+				$post_ids,
+				static function ( $post_id ) {
+					return current_user_can( 'edit_post', $post_id );
+				}
+			)
+		);
+		if ( empty( $post_ids ) ) {
+			return add_query_arg( 'indesign_export_error', 'capability', $redirect_to );
 		}
 
 		self::export_posts( $post_ids );
@@ -299,7 +319,7 @@ class InDesign_Exporter {
 					'export_indesign' => sprintf(
 						'<a href="%s">%s</a>',
 						esc_url( $export_url ),
-						__( 'Export as Adobe InDesign', 'newspack' )
+						__( 'Export as Adobe InDesign', 'newspack-plugin' )
 					),
 				]
 			);
@@ -533,22 +553,22 @@ class InDesign_Exporter {
 
 			switch ( $error ) {
 				case 'capability':
-					$message = __( 'You do not have permission to export posts.', 'newspack' );
+					$message = __( 'You do not have permission to export posts.', 'newspack-plugin' );
 					break;
 				case 'nonce':
-					$message = __( 'Security check failed. Please try again.', 'newspack' );
+					$message = __( 'Security check failed. Please try again.', 'newspack-plugin' );
 					break;
 				case 'no_posts':
-					$message = __( 'No posts were selected for export.', 'newspack' );
+					$message = __( 'No posts were selected for export.', 'newspack-plugin' );
 					break;
 				case 'unsupported_post_type':
-					$message = __( 'The selected post type is not enabled for InDesign export.', 'newspack' );
+					$message = __( 'The selected post type is not enabled for InDesign export.', 'newspack-plugin' );
 					break;
 				case 'zip_error':
-					$message = __( 'Could not create ZIP file for export.', 'newspack' );
+					$message = __( 'Could not create ZIP file for export.', 'newspack-plugin' );
 					break;
 				default:
-					$message = __( 'An error occurred during export.', 'newspack' );
+					$message = __( 'An error occurred during export.', 'newspack-plugin' );
 			}
 
 			printf(
