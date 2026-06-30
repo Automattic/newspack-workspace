@@ -1,50 +1,48 @@
 /**
  * Funnel viz — shared across Insights tabs (Gates, Prompts, Conversion Journey).
  *
- * Multi-step conversion funnel rendered as stacked SVG trapezoids. Each level's
- * width tracks its share of the top count so the silhouette narrows with
- * drop-off, but widths are clamped (min segment width + max per-segment taper)
- * so it reads as a rough relative-size viz, never a razor-thin sliver or a
- * cliff — see computeDisplayHalfWidths. The counts/percentages in the labels
- * are always exact. A single anchor color (primary-500) fades from full opacity at
- * the top to 0.6 at the bottom, so each stage carries its own weight.
+ * Self-labeling stacked funnel (NEWS-2586). Each section carries its own label,
+ * count, and — for every step after the first — the drop-off descriptors
+ * ("X% of {top}" share + "Y% drop-off") INSIDE the section. One uniform layout at
+ * every viewport and step count: no side-label/compact split, no separate legend.
  *
- * Two layouts, auto-selected from container width + step count:
- *   - Side-label (default): step name / count / labels in a fixed column to the
- *     right of each trapezoid. Used when stepCount < 5 AND width >= 480px.
- *   - Compact: the count renders inside each trapezoid and the full
- *     names/counts/labels move to a legend below. Used when stepCount >= 5 OR
- *     width < 480px.
+ * Each band is an <li> with two layers:
+ *   - a clipped trapezoid FILL (CSS clip-path, insets from computeDisplayHalfWidths)
+ *     behind the text, forming a continuous silhouette because adjacent band edges
+ *     share width; and
+ *   - a flowing TEXT layer on top that is NOT clipped, so it wraps, grows the band
+ *     height, and is never cut off — when a band's fill is narrower than its text
+ *     the text spills over the card (dark text on the faded lower bands keeps it
+ *     legible there).
+ *
+ * Width is CSS-driven (width:100%, max-width cap); the clip-path percentages scale
+ * intrinsically, so no JS measurement is needed. The single anchor color
+ * (primary-500) fades 1.0 → 0.6 down the funnel; bands above
+ * DARK_TEXT_OPACITY_THRESHOLD take white text, below it dark text.
  */
 
 /**
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
 import { formatNumber, formatPercent } from './format';
 
-const COMPACT_MIN_STEPS = 5;
-const COMPACT_MAX_WIDTH = 480; // Below this container width, force compact mode.
-const MIN_STEP_HEIGHT = 32;
-const MAX_CHART_HEIGHT = 480;
+// Coordinate basis for the half-width math and the clip-path percentages.
 const VIEWBOX_WIDTH = 320;
 const FULL_OPACITY = 1;
 const TAIL_OPACITY = 0.6;
-// Above this band opacity the fill is dark enough for white text; below it, the
-// faded band needs dark text. Only affects compact mode (count rendered inside).
+// Above this band opacity the fill is dark enough for white text; below it the
+// faded band (and any text spilling onto the white card) needs dark text.
 const DARK_TEXT_OPACITY_THRESHOLD = 0.75;
 const HALF_WIDTH = VIEWBOX_WIDTH / 2;
-// Width clamping: the funnel is a rough relative-size viz, not an exact one. No
-// segment is narrower than MIN_SEGMENT_WIDTH_RATIO of the chart width (avoids
-// razor-thin bands). The max per-segment taper is not fixed — it's computed
-// per-funnel from the step count (see computeDisplayHalfWidths) so funnels of
-// any length descend evenly across all their segments rather than cliff-diving
-// to the floor in one step.
+// The funnel is a rough relative-size viz: no segment is narrower than this share
+// of the chart width (avoids razor-thin bands and keeps the lowest band's fill
+// under its own text). The max per-segment taper is computed per-funnel from the
+// step count so funnels of any length descend evenly (see computeDisplayHalfWidths).
 const MIN_SEGMENT_WIDTH_RATIO = 0.28; // NEWS-2586: wider floor keeps the narrowest band's fill under its text.
 const MIN_HALF_WIDTH = ( MIN_SEGMENT_WIDTH_RATIO * VIEWBOX_WIDTH ) / 2;
 
@@ -58,10 +56,6 @@ export interface FunnelProps {
 	stages: FunnelStage[];
 }
 
-/** Compact when there are many steps OR the container is narrow. */
-export const isCompactMode = ( stepCount: number, containerWidth: number ): boolean =>
-	stepCount >= COMPACT_MIN_STEPS || containerWidth < COMPACT_MAX_WIDTH;
-
 /** Linear opacity from 1.0 at the first step to 0.6 at the last. */
 export const stepOpacity = ( index: number, stepCount: number ): number => {
 	if ( stepCount <= 1 ) {
@@ -72,28 +66,17 @@ export const stepOpacity = ( index: number, stepCount: number ): number => {
 
 /**
  * Drop-off from the previous step as a fraction in [0, 1]. Clamped at 0: funnel
- * stages are independent aggregates, so a later stage can occasionally exceed
- * the prior one (data drift) — a negative "drop-off" is meaningless, so show 0%.
+ * stages are independent aggregates, so a later stage can occasionally exceed the
+ * prior one (data drift) — a negative "drop-off" is meaningless, so show 0%.
  */
 export const dropFromPrevious = ( count: number, prevCount: number ): number => ( prevCount > 0 ? Math.max( 0, 1 - count / prevCount ) : 0 );
-
-/** Equal band height per step, capped so the whole chart fits ~480px. */
-const stepHeightFor = ( stepCount: number ): number => Math.max( MIN_STEP_HEIGHT, Math.floor( MAX_CHART_HEIGHT / stepCount ) );
 
 /**
  * Per-level display half-width for every stage. Raw width is proportional to the
  * stage's share of the top count, but clamped so the silhouette stays a readable
- * rough viz rather than a mathematically exact one. Walking top→bottom, each
- * level is:
- *   - at most the level above it (the funnel only ever narrows, never flares —
- *     even on anomalous data where a later stage exceeds an earlier one),
- *   - at least MIN_HALF_WIDTH (no razor-thin band), and
- *   - no more than the per-funnel max taper (HALF_WIDTH / stepCount) narrower
- *     than the level above it — so an N-step funnel descends across all N
- *     segments (≈ HALF_WIDTH / N at the bottom) instead of cliff-diving to the
- *     floor in one step. A 2-step funnel may narrow up to half the chart per
- *     step, a 3-step a third, a 5-step a fifth, etc.
- * Counts/percentages shown in the labels are unaffected — only widths are clamped.
+ * rough viz: never wider than the level above, never below MIN_HALF_WIDTH, and no
+ * more than the per-funnel max taper (HALF_WIDTH / stepCount) narrower than the
+ * level above. Counts/percentages in the labels are unaffected — only widths clamp.
  */
 export const computeDisplayHalfWidths = ( stages: FunnelStage[], topCount: number ): number[] => {
 	if ( topCount <= 0 ) {
@@ -109,189 +92,95 @@ export const computeDisplayHalfWidths = ( stages: FunnelStage[], topCount: numbe
 		}
 		const prev = halves[ index - 1 ];
 		const lower = Math.max( MIN_HALF_WIDTH, prev - maxTaperHalfWidth );
-		// Clamp raw into [lower, prev]: never wider than the level above, never
-		// below the min floor or beyond the max taper from the level above.
 		halves.push( Math.min( prev, Math.max( lower, raw ) ) );
 	} );
 	return halves;
 };
 
-/** SVG path for one trapezoid from a top half-width to a bottom half-width, centered. */
-const trapezoidPath = ( halfTop: number, halfBottom: number, yTop: number, yBottom: number ): string => {
-	const cx = VIEWBOX_WIDTH / 2;
-	return [
-		`M ${ cx - halfTop } ${ yTop }`,
-		`L ${ cx + halfTop } ${ yTop }`,
-		`L ${ cx + halfBottom } ${ yBottom }`,
-		`L ${ cx - halfBottom } ${ yBottom }`,
-		'Z',
-	].join( ' ' );
+/** Left inset (% of chart width) for a half-width; the right edge is 100 minus it. */
+const edgePercent = ( half: number ): number => ( ( HALF_WIDTH - half ) / VIEWBOX_WIDTH ) * 100;
+
+/** CSS clip-path polygon for a trapezoid from a top half-width to a bottom half-width. */
+const trapezoidClip = ( halfTop: number, halfBottom: number ): string => {
+	const lt = edgePercent( halfTop );
+	const lb = edgePercent( halfBottom );
+	return `polygon(${ lt }% 0, ${ 100 - lt }% 0, ${ 100 - lb }% 100%, ${ lb }% 100%)`;
 };
-
-interface StepView {
-	stage: FunnelStage;
-	index: number;
-	opacity: number;
-	pctOfTop: number;
-	drop: number | null;
-}
-
-/** Build the per-step view model shared by both layouts. */
-const buildSteps = ( stages: FunnelStage[], topCount: number ): StepView[] =>
-	stages.map( ( stage, index ) => {
-		const prevCount = index > 0 ? stages[ index - 1 ].count : 0;
-		return {
-			stage,
-			index,
-			opacity: stepOpacity( index, stages.length ),
-			pctOfTop: topCount > 0 ? stage.count / topCount : 0,
-			drop: index > 0 ? dropFromPrevious( stage.count, prevCount ) : null,
-		};
-	} );
 
 /**
- * The two descriptive labels shown for every step beyond the first: what share
- * of the top stage reached here, and the stage-to-stage drop-off. Both are muted
- * (not red/green) — they describe funnel progression, not a period comparison.
+ * The two descriptive lines for every step beyond the first: what share of the top
+ * stage reached here, and the stage-to-stage drop-off. Color is inherited from the
+ * band (white on dark bands, dark on faded ones) — these describe funnel
+ * progression, not a period comparison, so never red/green.
  */
-const StepLabels = ( { step, topLabel }: { step: StepView; topLabel: string } ) => {
-	if ( step.drop === null ) {
-		return null;
-	}
-	return (
-		<>
-			<span className="newspack-insights__funnel-label-pct">
-				{ sprintf(
-					/* translators: 1: percentage, 2: name of the first/top funnel stage (e.g. "Impression"). */
-					__( '%1$s of %2$s', 'newspack-plugin' ),
-					formatPercent( step.pctOfTop ),
-					topLabel
-				) }
-			</span>
-			<span className="newspack-insights__funnel-label-drop">
-				<span aria-hidden="true" className="newspack-insights__funnel-label-drop-arrow">
-					↓
-				</span>{ ' ' }
-				{ sprintf(
-					/* translators: %s: percentage drop-off from the previous stage. */
-					__( '%s drop-off', 'newspack-plugin' ),
-					formatPercent( step.drop )
-				) }
-			</span>
-		</>
-	);
-};
+const StepLabels = ( { pctOfTop, drop, topLabel }: { pctOfTop: number; drop: number; topLabel: string } ) => (
+	<>
+		<span className="newspack-insights__funnel-label-pct">
+			{ sprintf(
+				/* translators: 1: percentage, 2: name of the first/top funnel stage (e.g. "Impression"). */
+				__( '%1$s of %2$s', 'newspack-plugin' ),
+				formatPercent( pctOfTop ),
+				topLabel
+			) }
+		</span>
+		<span className="newspack-insights__funnel-label-drop">
+			<span aria-hidden="true" className="newspack-insights__funnel-label-drop-arrow">
+				↓
+			</span>{ ' ' }
+			{ sprintf(
+				/* translators: %s: percentage drop-off from the previous stage. */
+				__( '%s drop-off', 'newspack-plugin' ),
+				formatPercent( drop )
+			) }
+		</span>
+	</>
+);
 
 const Funnel = ( { stages }: FunnelProps ) => {
-	const containerRef = useRef< HTMLDivElement >( null );
-	// Default to a desktop width so the common 3-step funnel renders in
-	// side-label mode on first paint (the observer corrects narrow containers).
-	const [ width, setWidth ] = useState( COMPACT_MAX_WIDTH );
-
-	useEffect( () => {
-		const el = containerRef.current;
-		if ( ! el || typeof ResizeObserver === 'undefined' ) {
-			return;
-		}
-		setWidth( el.getBoundingClientRect().width );
-		const observer = new ResizeObserver( entries => {
-			for ( const entry of entries ) {
-				setWidth( entry.contentRect.width );
-			}
-		} );
-		observer.observe( el );
-		return () => observer.disconnect();
-	}, [] );
-
 	const topCount = stages.length > 0 ? stages[ 0 ].count : 0;
 	const topLabel = stages.length > 0 ? stages[ 0 ].label : '';
-	const steps = useMemo( () => buildSteps( stages, topCount ), [ stages, topCount ] );
-	const displayHalves = useMemo( () => computeDisplayHalfWidths( stages, topCount ), [ stages, topCount ] );
 
 	// Proportions can't be computed without a non-zero first step.
 	if ( stages.length === 0 || topCount <= 0 ) {
 		return (
-			<div ref={ containerRef } className="newspack-insights__funnel">
+			<div className="newspack-insights__funnel">
 				<p className="newspack-insights__funnel-empty">{ __( 'Not enough data to chart the funnel.', 'newspack-plugin' ) }</p>
 			</div>
 		);
 	}
 
 	const stepCount = stages.length;
-	const compact = isCompactMode( stepCount, width );
-	const stepHeight = stepHeightFor( stepCount );
-	const chartHeight = stepHeight * stepCount;
-
-	const svg = (
-		<svg
-			className="newspack-insights__funnel-svg"
-			viewBox={ `0 0 ${ VIEWBOX_WIDTH } ${ chartHeight }` }
-			preserveAspectRatio="xMidYMid meet"
-			role="img"
-			aria-label={ __( 'Conversion funnel', 'newspack-plugin' ) }
-		>
-			{ steps.map( step => {
-				const halfTop = displayHalves[ step.index ];
-				const halfBottom = step.index < stepCount - 1 ? displayHalves[ step.index + 1 ] : halfTop;
-				const yTop = step.index * stepHeight;
-				return (
-					<path
-						key={ step.index }
-						className="newspack-insights__funnel-trapezoid"
-						d={ trapezoidPath( halfTop, halfBottom, yTop, yTop + stepHeight ) }
-						fillOpacity={ step.opacity }
-					/>
-				);
-			} ) }
-			{ compact &&
-				steps.map( step => (
-					<text
-						key={ step.index }
-						className={
-							'newspack-insights__funnel-count-text ' + ( step.opacity > DARK_TEXT_OPACITY_THRESHOLD ? 'is-on-dark' : 'is-on-light' )
-						}
-						x={ VIEWBOX_WIDTH / 2 }
-						y={ step.index * stepHeight + stepHeight / 2 }
-						textAnchor="middle"
-						dominantBaseline="central"
-						style={ { '--band-opacity': step.opacity } as React.CSSProperties }
-					>
-						{ formatNumber( step.stage.count ) }
-					</text>
-				) ) }
-		</svg>
-	);
-
-	if ( compact ) {
-		return (
-			<div ref={ containerRef } className="newspack-insights__funnel newspack-insights__funnel--compact" role="figure">
-				{ svg }
-				<ol className="newspack-insights__funnel-legend">
-					{ steps.map( step => (
-						<li key={ step.index } className="newspack-insights__funnel-legend-item">
-							<span className="newspack-insights__funnel-label-name">{ step.stage.label }</span>
-							<span className="newspack-insights__funnel-label-count">{ formatNumber( step.stage.count ) }</span>
-							<StepLabels step={ step } topLabel={ topLabel } />
-						</li>
-					) ) }
-				</ol>
-			</div>
-		);
-	}
+	const halves = computeDisplayHalfWidths( stages, topCount );
 
 	return (
-		<div ref={ containerRef } className="newspack-insights__funnel newspack-insights__funnel--side" role="figure">
-			{ svg }
-			<div className="newspack-insights__funnel-labels">
-				{ steps.map( step => (
-					<div key={ step.index } className="newspack-insights__funnel-label">
-						<span className="newspack-insights__funnel-label-name">{ step.stage.label }</span>
-						<span className="newspack-insights__funnel-label-count">{ formatNumber( step.stage.count ) }</span>
-						<StepLabels step={ step } topLabel={ topLabel } />
-					</div>
-				) ) }
-			</div>
-		</div>
+		<ol className="newspack-insights__funnel" aria-label={ __( 'Conversion funnel', 'newspack-plugin' ) }>
+			{ stages.map( ( stage, index ) => {
+				const opacity = stepOpacity( index, stepCount );
+				const halfTop = halves[ index ];
+				const halfBottom = index < stepCount - 1 ? halves[ index + 1 ] : halfTop;
+				const isDark = opacity > DARK_TEXT_OPACITY_THRESHOLD;
+				const pctOfTop = topCount > 0 ? stage.count / topCount : 0;
+				const drop = index > 0 ? dropFromPrevious( stage.count, stages[ index - 1 ].count ) : null;
+				return (
+					<li
+						key={ index }
+						className={ 'newspack-insights__funnel-step ' + ( isDark ? 'is-on-dark' : 'is-on-light' ) }
+						style={ { '--band-opacity': opacity } as React.CSSProperties }
+					>
+						<span
+							className="newspack-insights__funnel-fill"
+							style={ { clipPath: trapezoidClip( halfTop, halfBottom ) } }
+							aria-hidden="true"
+						/>
+						<span className="newspack-insights__funnel-content">
+							<span className="newspack-insights__funnel-label-name">{ stage.label }</span>
+							<span className="newspack-insights__funnel-label-count">{ formatNumber( stage.count ) }</span>
+							{ drop !== null && <StepLabels pctOfTop={ pctOfTop } drop={ drop } topLabel={ topLabel } /> }
+						</span>
+					</li>
+				);
+			} ) }
+		</ol>
 	);
 };
 
