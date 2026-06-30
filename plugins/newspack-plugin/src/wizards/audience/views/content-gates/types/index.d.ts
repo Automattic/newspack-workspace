@@ -99,6 +99,7 @@ type Gate = {
 	isExpanded?: boolean;
 	collapse?: boolean;
 	content_rules: GateContentRule[];
+	content_rules_match: 'all' | 'any';
 	registration: Registration;
 	custom_access: CustomAccess;
 };
@@ -145,6 +146,7 @@ type MeteringCountdownConfig = {
 
 type AdvancedSettingsConfig = {
 	restrict_feeds: boolean;
+	newsletter_link_bypass_enabled: boolean;
 };
 
 type GateSettings = {

@@ -393,8 +393,20 @@ case $1 in
         docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/build-repos.sh $target_folder ci"
         ;;
     watch)
-        require_target_folder
-        docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/watch-repo.sh $target_folder"
+        if [[ -n "$2" ]]; then
+            target_folder=$2
+        fi
+        if [[ -z "$target_folder" ]]; then
+            # No project: watch every unit from the monorepo root, spawning each
+            # unit's own watcher lazily on its first edit. Note this also covers
+            # running `n watch` from a non-project dir (e.g. additional-sites-html/
+            # or manager-html/), where cwd detection yields no target_folder.
+            docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER sh -c "/var/scripts/watch-all.sh"
+        else
+            # Run the script directly (no `sh -c`) and quote the folder so a
+            # project name can't be word-split or injected into a shell string.
+            docker exec $DOCKER_IT $USER_COMMAND $TARGET_CONTAINER /var/scripts/watch-repo.sh "$target_folder"
+        fi
         ;;
     test-php)
         require_target_folder
@@ -493,7 +505,7 @@ case $1 in
         echo "Building & Testing:"
         echo "  build [folder]               Build the specified folder (plugin/theme) or all for every repo."
         echo "  ci-build [folder]            Build for CI environment with specific optimizations."
-        echo "  watch                        Watch for changes in the current repo and rebuild automatically."
+        echo "  watch [folder]               Watch & rebuild the given/current repo; no arg watches every unit from the root."
         echo "  test-php [args]              Run PHP tests for the current repo with optional arguments."
         echo "  test-js                      Run JavaScript tests for the current repo."
         echo "  composer [args]              Run a composer command for the current repo."

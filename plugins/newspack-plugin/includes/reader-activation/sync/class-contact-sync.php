@@ -162,7 +162,7 @@ class Contact_Sync extends Sync {
 		 * @param string $context The context of the sync.
 		 */
 		$contact = \apply_filters( 'newspack_esp_sync_contact', $contact, $context );
-		$integrations = Integrations::get_active_integrations();
+		$integrations = Integrations::get_active_configured_integrations();
 		$errors       = [];
 
 		// Resolve user ID for retry scheduling.
@@ -369,6 +369,11 @@ class Contact_Sync extends Sync {
 		$integration = Integrations::get_integration( $integration_id );
 		if ( ! $integration ) {
 			Logger::log( sprintf( 'Integration "%s" not found on retry %d.', $integration_id, $retry_count ), 'NEWSPACK-SYNC', 'error' );
+			return;
+		}
+
+		if ( ! $integration->is_set_up() ) {
+			static::log( sprintf( 'Integration "%s" no longer set up on retry %d; aborting retry chain.', $integration_id, $retry_count ) );
 			return;
 		}
 

@@ -8,22 +8,15 @@ import { createInterpolateElement } from '@wordpress/element';
 const META_KEY = 'republication-tracker-tool-hide-widget';
 
 const RepublicationTrackerPanel = () => {
-	const { postType, meta, filterHides, shareData } = useSelect(
-		( select ) => {
-			const editor = select( 'core/editor' );
-			return {
-				postType: editor.getCurrentPostType(),
-				meta: editor.getEditedPostAttribute( 'meta' ),
-				filterHides: editor.getEditedPostAttribute(
-					'republication_tracker_tool_filter_hides'
-				),
-				shareData: editor.getEditedPostAttribute(
-					'republication_tracker_tool_share_data'
-				),
-			};
-		},
-		[]
-	);
+	const { postType, meta, filterHides, shareData } = useSelect( select => {
+		const editor = select( 'core/editor' );
+		return {
+			postType: editor.getCurrentPostType(),
+			meta: editor.getEditedPostAttribute( 'meta' ),
+			filterHides: editor.getEditedPostAttribute( 'republication_tracker_tool_filter_hides' ),
+			shareData: editor.getEditedPostAttribute( 'republication_tracker_tool_share_data' ),
+		};
+	}, [] );
 
 	const { editPost } = useDispatch( 'core/editor' );
 
@@ -36,21 +29,12 @@ const RepublicationTrackerPanel = () => {
 	const entries = shareData?.entries ?? [];
 
 	return (
-		<PluginDocumentSettingPanel
-			name="republication-tracker-tool"
-			title={ __(
-				'Republication Widget Settings',
-				'republication-tracker-tool'
-			) }
-		>
+		<PluginDocumentSettingPanel name="republication-tracker-tool" title={ __( 'Republication Widget Settings', 'republication-tracker-tool' ) }>
 			<ToggleControl
-				label={ __(
-					'Hide Republication widget',
-					'republication-tracker-tool'
-				) }
+				label={ __( 'Hide Republication widget', 'republication-tracker-tool' ) }
 				checked={ filterHides ? true : hideWidget }
 				disabled={ filterHides }
-				onChange={ ( value ) =>
+				onChange={ value =>
 					editPost( {
 						meta: { ...( meta ?? {} ), [ META_KEY ]: value },
 					} )
@@ -79,33 +63,21 @@ const RepublicationTrackerPanel = () => {
 				}
 			/>
 			<p style={ { marginTop: '16px' } }>
-				{ __( 'Total number of views:', 'republication-tracker-tool' ) }{ ' ' }
-				{ total }
+				{ __( 'Total number of views:', 'republication-tracker-tool' ) } { total }
 			</p>
 			{ entries.length > 0 ? (
 				<table className="widefat striped">
 					<thead>
 						<tr>
-							<th>
-								{ __(
-									'Republished URL',
-									'republication-tracker-tool'
-								) }
-							</th>
-							<th>
-								{ __( 'Views', 'republication-tracker-tool' ) }
-							</th>
+							<th>{ __( 'Republished URL', 'republication-tracker-tool' ) }</th>
+							<th>{ __( 'Views', 'republication-tracker-tool' ) }</th>
 						</tr>
 					</thead>
 					<tbody>
-						{ entries.map( ( entry ) => (
+						{ entries.map( entry => (
 							<tr key={ entry.url }>
 								<td>
-									<a
-										href={ entry.url }
-										target="_blank"
-										rel="noopener noreferrer"
-									>
+									<a href={ entry.url } target="_blank" rel="noopener noreferrer">
 										{ entry.url }
 									</a>
 								</td>
@@ -115,12 +87,7 @@ const RepublicationTrackerPanel = () => {
 					</tbody>
 				</table>
 			) : (
-				<p>
-					{ __(
-						'There are no shares to display.',
-						'republication-tracker-tool'
-					) }
-				</p>
+				<p>{ __( 'There are no shares to display.', 'republication-tracker-tool' ) }</p>
 			) }
 		</PluginDocumentSettingPanel>
 	);

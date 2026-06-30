@@ -32,6 +32,7 @@ const CoreCard = ( {
 	headerStyle,
 	childrenStyle,
 	footerStyle,
+	disabled,
 	icon,
 	iconBackgroundColor,
 	isActive,
@@ -62,6 +63,7 @@ const CoreCard = ( {
 		icon && 'newspack-card--core__has-icon',
 		iconBackgroundColor && 'newspack-card--core__has-icon-background-color',
 		isActive && 'newspack-card--core__is-active',
+		disabled && 'newspack-card--core__is-disabled',
 		children && 'newspack-card--core__has-children',
 		noMargin && 'newspack-card--core__no-margin',
 		hasGreyHeader && 'newspack-card--core__has-grey-header'
@@ -91,7 +93,9 @@ const CoreCard = ( {
 					style={ headerStyle }
 					size={ sizeProps }
 					gap={ 4 }
-					onClick={ onHeaderClick }
+					onClick={ disabled ? undefined : onHeaderClick }
+					disabled={ onHeaderClick && disabled ? true : undefined }
+					aria-disabled={ onHeaderClick && disabled ? true : undefined }
 				>
 					{ isDraggable && (
 						<div className="newspack-card--core__header__draggable-controls">

@@ -289,7 +289,7 @@ class Contact_Sync_Connector {
 		}
 
 		$contact['metadata'] = array_merge(
-			$contact['metadata'],
+			$contact['metadata'] ?? [],
 			[
 				'account'              => $data['user_id'],
 				'newsletter_selection' => implode( ', ', $lists_names ),

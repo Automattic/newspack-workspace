@@ -1,0 +1,14 @@
+diff --git a/lib/multiSemanticRelease.js b/lib/multiSemanticRelease.js
+index 4629a92993e2b794287cfa8dd026a8ee2285c548..82e9b50acdbe3e2ea7d9ba6114a67bf408af79ae 100644
+--- a/lib/multiSemanticRelease.js
++++ b/lib/multiSemanticRelease.js
+@@ -191,7 +191,8 @@ async function releasePackage(pkg, createInlinePlugin, multiContext, flags) {
+ 	// Add the package name into tagFormat.
+ 	// Thought about doing a single release for the tag (merging several packages), but it's impossible to prevent Github releasing while allowing NPM to continue.
+ 	// It'd also be difficult to merge all the assets into one release without full editing/overriding the plugins.
+-	options.tagFormat = name + "@${version}";
++	// The npm scope is stripped so scoped packages (e.g. @automattic/newspack-blocks) tag as newspack-blocks@x.y.z, matching every other workspace package and keeping git tags / GitHub releases scope-free while the npm package name stays scoped.
++	options.tagFormat = name.replace(/^@[^/]+\//, "") + "@${version}";
+ 
+ 	// These options are needed for plugins that do not rely on `pluginOptions` and extract them independently.
+ 	options._pkgOptions = pkgOptions;

@@ -1,0 +1,97 @@
+@use "../variables-site/variables-site";
+@use "../mixins/mixins-main";
+@use "../mixins/utilities";
+@use "../variables-site/structure";
+
+// Tag labels
+.tag-labels {
+	align-items: stretch;
+	display: inline-flex;
+	position: relative;
+
+	a,
+	a:visited {
+		color: #fff;
+	}
+
+	a:hover {
+		opacity: 0.8;
+	}
+}
+
+/* stylelint-disable selector-type-no-unknown  */
+.tag-labels,
+amp-script .tag-labels {
+	// Use `.tag-label.flag` so this beats `.wpnbha .cat-links a` / `.wpnbpc .cat-links a` on specificity.
+	.tag-label.flag {
+		background: var(--newspack-theme-color-highlight);
+		color: var(--newspack-theme-color-text-main);
+		line-height: 1;
+		padding: 0.3em 0.5em;
+		text-transform: uppercase;
+	}
+	.tag-label + .tag-label {
+		margin-left: 0.3em; // Don't collapse multiple labels.
+	}
+}
+/* stylelint-enable */
+
+/* Single Posts */
+.single {
+	// When categories are visible
+	.tag-labels {
+		display: inline-flex;
+	}
+	// Labels render before categories (matching the sponsor-label convention),
+	// so space the category that follows a label — mirrors `.sponsor-label + .cat-links`.
+	.tag-labels + .cat-links {
+		display: inline-block;
+		margin-left: 0.5em;
+	}
+
+	// Workaround margin/padding override for featured images.
+	.featured-image-behind {
+		.cat-links.tag-labels {
+			a,
+			a:hover {
+				padding: 0.3em 0.5em;
+				margin-right: 0.5em;
+			}
+			.tag-label + .tag-label:hover {
+				margin-left: 0.3em; // Don't collapse multiple labels.
+			}
+		}
+	}
+}
+
+// Archives
+.search,
+.archive,
+.blog {
+	article {
+		.tag-labels {
+			display: inline-flex;
+			font-size: 65%;
+		}
+	}
+}
+
+// Re-show the category that follows a tag label on search results.
+.search article .tag-labels + .cat-links {
+	display: inline-flex;
+}
+
+// Home page.
+.home {
+	article {
+		.tag-labels,
+		.tag-labels + .cat-links {
+			display: inline-flex;
+		}
+		.tag-labels a,
+		.tag-labels a:hover {
+			padding: 0.3em 0.5em;
+			text-decoration: none;
+		}
+	}
+}

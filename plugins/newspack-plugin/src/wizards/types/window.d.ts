@@ -18,6 +18,19 @@ declare global {
 			};
 			preview_post: string;
 			preview_archive: string;
+			integrations_settings_enabled: boolean;
+			// Optional: consumers guard with `?.`/fallbacks because the
+			// payload can be absent (plugin filter strips it, non-Audience
+			// mount, HMR reseed) — keep the type honest about that.
+			emails?: {
+				dependencies: Record< string, boolean >;
+				postType: string;
+				initial?: {
+					newspack_emails: Record< string, unknown >[];
+					post_type: string;
+				};
+				isNewspackPlatform: boolean;
+			};
 		};
 		newspackAudienceCampaigns: {
 			api: string;

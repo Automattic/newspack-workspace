@@ -32,6 +32,16 @@ final class Webhooks {
 	const MAX_RETRIES = 15;
 
 	/**
+	 * Seconds of headroom added when scheduling a retry so the request stays in
+	 * 'future' status. WordPress publishes a 'future' post immediately when its
+	 * date is less than MINUTE_IN_SECONDS away; the 1-minute minimum backoff
+	 * sits exactly on that edge, so without this buffer a wall-clock second
+	 * elapsing before WordPress's own check can shave the gap to 59s and publish
+	 * the request early, burning a retry.
+	 */
+	const SCHEDULE_HEADROOM_SECONDS = 5;
+
+	/**
 	 * Time to retain finished requests.
 	 */
 	const DELETE_REQUESTS_BEFORE = '7 days ago';
@@ -719,12 +729,25 @@ final class Webhooks {
 	 * Schedule a webhook request.
 	 *
 	 * @param int $request_id Request ID.
-	 * @param int $delay      Delay in minutes. Default is 1 minute.
+	 * @param int $delay      Delay in minutes. Default and enforced minimum is 1
+	 *                        minute; values below 1 are clamped (see below).
 	 */
 	private static function schedule_request( $request_id, $delay = 1 ) {
-		$time     = strtotime( sprintf( '+%d minutes', \absint( $delay ) ) );
-		$date     = date( 'Y-m-d H:i:s', $time ); // phpcs:ignore WordPress.DateTime.RestrictedFunctions.date_date
-		$date_gmt = gmdate( 'Y-m-d H:i:s', strtotime( $date ) );
+		/*
+		 * WordPress publishes a 'future' post immediately when its date is less
+		 * than MINUTE_IN_SECONDS away (wp_insert_post(), which wp_update_post()
+		 * funnels through). The shortest backoff is 1 minute, landing exactly on
+		 * that edge, so a wall-clock second elapsing before WordPress runs its
+		 * own check can shave the gap to 59s and publish the request early,
+		 * firing an extra processing pass and consuming a retry. Clamp to that
+		 * 1-minute minimum and add SCHEDULE_HEADROOM_SECONDS so the request
+		 * reliably stays scheduled regardless of sub-second timing. WordPress
+		 * forces the PHP timezone to UTC, so a single gmdate() serves both the
+		 * local and GMT post dates.
+		 */
+		$delay    = max( 1, \absint( $delay ) );
+		$time     = time() + ( $delay * MINUTE_IN_SECONDS ) + self::SCHEDULE_HEADROOM_SECONDS;
+		$date_gmt = gmdate( 'Y-m-d H:i:s', $time );
 		\update_post_meta( $request_id, 'scheduled', $time );
 		if ( self::use_action_scheduler() ) {
 			Logger::log( "Scheduling request {$request_id} for {$date_gmt} via Action Scheduler.", self::LOGGER_HEADER );
@@ -742,7 +765,7 @@ final class Webhooks {
 				[
 					'ID'            => $request_id,
 					'post_status'   => 'future',
-					'post_date'     => $date,
+					'post_date'     => $date_gmt,
 					'post_date_gmt' => $date_gmt,
 					'edit_date'     => true,
 				]

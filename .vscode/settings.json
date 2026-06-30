@@ -1,0 +1,24 @@
+{
+	// Format with Prettier on save, using the workspace's prettier (wp-prettier,
+	// pinned via the root pnpm override) and the project's resolved .prettierrc.js.
+	"editor.formatOnSave": true,
+	"editor.defaultFormatter": "esbenp.prettier-vscode",
+
+	// Only format when a Prettier config is actually resolved. If config resolution
+	// fails, the extension does NOTHING rather than silently reformatting with
+	// Prettier's own defaults (printWidth 80, no parenSpacing) -- which is exactly
+	// the mismatch that lands unformatted code in CI. See docs/code-formatting.md.
+	"prettier.requireConfig": true,
+
+	// Prettier owns formatting; ESLint only reports/fixes lint rules. Avoids
+	// double-formatting conflicts between the two extensions.
+	"eslint.format.enable": false,
+
+	"[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+	"[javascriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+	"[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+	"[typescriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+	"[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+	"[jsonc]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+	"[scss]": { "editor.defaultFormatter": "esbenp.prettier-vscode" }
+}

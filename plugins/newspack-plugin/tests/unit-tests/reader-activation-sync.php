@@ -99,6 +99,46 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that ESP::is_set_up() reads stored configuration only — never makes
+	 * a live provider call. Protects every gate that consults is_set_up()
+	 * (Integrations::get_active_configured_integrations and the retry-time
+	 * guards in Contact_Sync / Contact_Pull) from silently dropping traffic
+	 * on transient ESP failures, which the AS retry system is meant to survive.
+	 */
+	public function test_esp_is_set_up_reads_stored_state() {
+		$esp = new Integrations\ESP();
+
+		// Master list ID not stored → setup is incomplete.
+		$esp->update_settings_field_value( 'mailchimp_audience_id', '' );
+		$this->assertFalse( $esp->is_set_up(), 'is_set_up() must be false when master list ID is not stored.' );
+
+		// Admin selects a list → setup is complete.
+		$esp->update_settings_field_value( 'mailchimp_audience_id', '123' );
+		$this->assertTrue( $esp->is_set_up(), 'is_set_up() must be true when provider + master list are stored.' );
+	}
+
+	/**
+	 * Test that ESP::is_set_up() returns false when no provider is selected —
+	 * the exact default-state scenario the hotfix targets (ESP auto-enabled on
+	 * fresh installs while `newspack_newsletters_service_provider` is unset).
+	 */
+	public function test_esp_is_set_up_returns_false_when_no_provider_selected() {
+		$esp = new Integrations\ESP();
+		$esp->update_settings_field_value( 'mailchimp_audience_id', '123' );
+
+		// Even with a master list stored, an unconfigured provider must short-circuit.
+		\Newspack_Newsletters::$is_service_provider_configured = false;
+		try {
+			$this->assertFalse(
+				$esp->is_set_up(),
+				'is_set_up() must be false when no provider is selected, even if a master list ID is stored.'
+			);
+		} finally {
+			\Newspack_Newsletters::reset_calls();
+		}
+	}
+
+	/**
 	 * Test contact data sync to ESP.
 	 */
 	public function test_sync_contact_data() {
@@ -574,6 +614,55 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$this->assertEquals( $user_id, $hook_data['user_id'] );
 		$this->assertEquals( Contact_Sync::MAX_RETRIES, $hook_data['retry_count'] );
 		$this->assertArrayHasKey( 'reason', $hook_data );
+	}
+
+	/**
+	 * Test that execute_integration_retry aborts the retry chain when the
+	 * integration becomes unconfigured between schedule and execute — drains
+	 * existing flood without scheduling further attempts.
+	 *
+	 * The initial-push gate at Contact_Sync::push_to_integrations is the
+	 * structural twin of Integrations::run_health_checks's gate (tested in
+	 * class-test-integrations.php) and Contact_Pull::pull_all's gate (also
+	 * tested there); a direct reflection-based unit test on push_to_integrations
+	 * is not feasible because the iteration also touches the live ESP
+	 * integration whose push_contact_data hits Newspack_Newsletters_Contacts
+	 * (not loaded in the unit-test env).
+	 */
+	public function test_execute_integration_retry_aborts_when_not_set_up() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		Failing_Sample_Integration::reset();
+		Failing_Sample_Integration::$should_fail     = true;
+		Failing_Sample_Integration::$is_set_up_value = false;
+		$this->register_failing_integration( 'retry_abort_mock' );
+
+		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
+
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'retry-abort@test.com' ] );
+
+		Contact_Sync::execute_integration_retry(
+			[
+				'integration_id' => 'retry_abort_mock',
+				'user_id'        => $user_id,
+				'context'        => 'Test',
+				'retry_count'    => 1,
+			]
+		);
+
+		$this->assertSame( 0, Failing_Sample_Integration::$push_count, 'push_contact_data must not be called when is_set_up() returns false at retry time.' );
+
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_HOOK,
+				'group'  => Integrations::get_action_group( 'retry_abort_mock' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+		$this->assertEmpty( $pending, 'No new retry should be scheduled when integration becomes unconfigured mid-chain.' );
 	}
 
 	/**

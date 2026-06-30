@@ -15,6 +15,7 @@
 		"build:packages": "pnpm --filter './packages/*' run --if-present build",
 		"build": "pnpm run build:packages && pnpm --filter './plugins/*' --filter './themes/*' run build",
 		"build:changed": "pnpm run build:packages && pnpm --filter '...[origin/main]' run build",
+		"watch": "node ./bin/watch-all.mjs",
 		"prepare": "pnpm run build:packages",
 		"lint": "pnpm --filter './plugins/*' --filter './themes/*' run lint:js && composer phpcs",
 		"lint:changed": "pnpm --filter '...[origin/main]' run lint:js",
@@ -28,11 +29,34 @@
 		"multi-semantic-release": "^3.0.2",
 		"@commitlint/cli": "^20.1.0",
 		"@commitlint/config-conventional": "^19.8.1",
+		"chokidar": "^3.6.0",
 		"commitizen": "^4.3.1",
 		"cz-conventional-changelog": "^3.3.0",
 		"husky": "^9.1.7",
 		"lint-staged": "^16.2.6",
-		"prettier": "^3.3.3"
+		"prettier": "npm:wp-prettier@^3.0.3",
+		"@wordpress/a11y": "^4.48.0",
+		"@wordpress/api-fetch": "^7.48.0",
+		"@wordpress/base-styles": "^6.9.0",
+		"@wordpress/block-editor": "^15.21.0",
+		"@wordpress/blocks": "^15.21.0",
+		"@wordpress/components": "^30.6.0",
+		"@wordpress/compose": "^7.33.0",
+		"@wordpress/data": "^10.48.0",
+		"@wordpress/dataviews": "^10.2.0",
+		"@wordpress/date": "^5.48.0",
+		"@wordpress/dom-ready": "^4.48.0",
+		"@wordpress/edit-post": "^8.48.0",
+		"@wordpress/element": "^6.33.0",
+		"@wordpress/escape-html": "^3.48.0",
+		"@wordpress/hooks": "^4.48.0",
+		"@wordpress/html-entities": "^4.48.0",
+		"@wordpress/i18n": "^6.21.0",
+		"@wordpress/icons": "^11.0.0",
+		"@wordpress/keycodes": "^4.48.0",
+		"@wordpress/plugins": "^7.48.0",
+		"@wordpress/primitives": "^3.0.0",
+		"@wordpress/url": "^4.48.0"
 	},
 	"config": {
 		"commitizen": {
@@ -52,7 +76,13 @@
 	"pnpm": {
 		"overrides": {
 			"basic-ftp": "5.3.1",
-			"@typescript-eslint/parser": "8.58.2"
+			"@typescript-eslint/parser": "8.61.0",
+			"prettier": "npm:wp-prettier@^3.0.3",
+			"react": "18.3.1",
+			"react-dom": "18.3.1"
+		},
+		"patchedDependencies": {
+			"multi-semantic-release": "patches/multi-semantic-release.patch"
 		}
 	}
 }

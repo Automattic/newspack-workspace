@@ -1,3 +1,31 @@
+## @automattic/newspack-blocks [4.26.6](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.5...newspack-blocks@4.26.6) (2026-06-29)
+
+
+### Bug Fixes
+
+* **modal-checkout:** open checkout for variation_id URL triggers ([#163](https://github.com/Automattic/newspack-workspace/issues/163)) ([9d72c7e](https://github.com/Automattic/newspack-workspace/commit/9d72c7eb4c7a39b4837371b87e6bce94f6c351dc))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.4.0
+
+## @automattic/newspack-blocks [4.26.5](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.4...newspack-blocks@4.26.5) (2026-06-15)
+
+
+### Bug Fixes
+
+* **blocks:** restore allow-duplicate toggle for static blocks ([#180](https://github.com/Automattic/newspack-workspace/issues/180)) ([8aaa75e](https://github.com/Automattic/newspack-workspace/commit/8aaa75e8565887e8ac5536cec74ea5f8184ebe83))
+* **newspack-blocks:** update swiper to patched release ([a33812a](https://github.com/Automattic/newspack-workspace/commit/a33812a8682966dba39af8789edd2dc26bf66a82))
+
+## @automattic/newspack-blocks [4.26.5-alpha.1](https://github.com/Automattic/newspack-workspace/compare/@automattic/newspack-blocks@4.26.4...@automattic/newspack-blocks@4.26.5-alpha.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* **blocks:** restore allow-duplicate toggle for static blocks ([#180](https://github.com/Automattic/newspack-workspace/issues/180)) ([8aaa75e](https://github.com/Automattic/newspack-workspace/commit/8aaa75e8565887e8ac5536cec74ea5f8184ebe83))
+* **newspack-blocks:** update swiper to patched release ([a33812a](https://github.com/Automattic/newspack-workspace/commit/a33812a8682966dba39af8789edd2dc26bf66a82))
+
 ## @automattic/newspack-blocks [4.26.4](https://github.com/Automattic/newspack-workspace/compare/@automattic/newspack-blocks@4.26.3...@automattic/newspack-blocks@4.26.4) (2026-06-01)
 
 

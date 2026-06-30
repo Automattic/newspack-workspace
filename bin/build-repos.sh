@@ -19,9 +19,16 @@ find_project() {
 }
 
 # Translate a container path under /newspack-{plugins,themes}/<name> to the
-# pnpm filter selector (the workspace package's directory name).
+# pnpm filter selector for a workspace package: the package's actual `name`
+# read from its package.json. We can't derive this from the folder, because a
+# package's name often differs from its directory (plugins/newspack-plugin is
+# named "newspack", plugins/newspack-blocks is "@automattic/newspack-blocks").
+# A bare `--filter <dirname>` matches no projects there, so pnpm silently builds
+# nothing and exits 0. Falls back to the basename if no name is found.
 package_filter_for_dir() {
-    basename "$1"
+    local name
+    name=$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1/package.json" 2>/dev/null | head -n1)
+    if [ -n "$name" ]; then echo "$name"; else basename "$1"; fi
 }
 
 # Build a standalone repos/ checkout with its own toolchain. These live outside

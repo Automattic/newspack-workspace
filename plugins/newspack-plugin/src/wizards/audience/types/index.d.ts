@@ -77,7 +77,6 @@ type ConfigKey = keyof Config;
 // Props for the Prequisite component.
 type PrequisiteProps = {
 	config: Config;
-	slug: string;
 	getSharedProps: (
 		configKey: string,
 		type: string
@@ -89,7 +88,6 @@ type PrequisiteProps = {
 	};
 	inFlight: boolean;
 	saveConfig: ( config: Config ) => void;
-	skipPrerequisite: ( data: { prerequisite: string; skip: boolean } ) => void;
 
 	// Schema for prequisite object is defined in PHP class Reader_Activation::get_prerequisites_status().
 	prerequisite: {
@@ -110,11 +108,6 @@ type PrequisiteProps = {
 		};
 		href?: string;
 		action_text?: string;
-		action_enabled?: boolean;
-		disabled_text?: string;
-		is_unavailable?: boolean;
-		is_skipped?: boolean;
-		skippable?: boolean;
 	};
 };
 

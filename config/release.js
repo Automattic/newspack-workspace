@@ -7,7 +7,7 @@ const { gitCommitStep } = require( './release-helpers' );
  * (branches, plugin chain, prepare steps) is identical across the monorepo.
  *
  * @param {Object}  opts
- * @param {string}  opts.name        Package directory name, used for the zip asset path and label. Git tags are namespaced by multi-semantic-release as `<pkgName>@<version>` (it overrides any tagFormat), so this name does not affect tagging.
+ * @param {string}  opts.name        Package directory name, used for the zip asset path and label. multi-semantic-release derives git tags from the package's npm name as `<npmName>@<version>` (patched to strip the npm scope, so `@automattic/newspack-blocks` tags as `newspack-blocks@<version>`); this `name` does not affect tagging.
  * @param {string}  opts.phpFile     Main PHP file to bump the version in.
  * @param {boolean} [opts.npmPublish=false] Whether to publish to npm.
  */

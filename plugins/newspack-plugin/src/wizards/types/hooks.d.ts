@@ -96,6 +96,7 @@ type AudienceDonationsWizardData = {
 	};
 	platform_data: {
 		platform: string;
+		platform_selected: boolean;
 	};
 	donation_page: {
 		editUrl: string;

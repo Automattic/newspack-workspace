@@ -2,9 +2,7 @@
 
 ( function ( $ ) {
 	$( document ).ready( function () {
-		const dataColumns = document.querySelectorAll(
-			'.newspack-network-data-column'
-		);
+		const dataColumns = document.querySelectorAll( '.newspack-network-data-column' );
 		dataColumns.forEach( function ( column ) {
 			const buttonEl = column.querySelector( 'button' );
 			const textEl = column.querySelector( 'textarea' );
@@ -19,11 +17,9 @@
 				navigator.clipboard
 					.writeText( text )
 					.then( function () {
-						buttonEl.textContent =
-							newspackNetworkEventLogLabels.copied;
+						buttonEl.textContent = newspackNetworkEventLogLabels.copied;
 						setTimeout( function () {
-							buttonEl.textContent =
-								newspackNetworkEventLogLabels.copy;
+							buttonEl.textContent = newspackNetworkEventLogLabels.copy;
 							buttonEl.disabled = false;
 						}, 1000 );
 					} )

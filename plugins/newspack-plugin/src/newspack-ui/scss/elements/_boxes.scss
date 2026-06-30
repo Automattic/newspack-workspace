@@ -43,6 +43,9 @@
 			&--x-large {
 				padding: var(--newspack-ui-spacer-7);
 			}
+			&--2x-large {
+				padding: var(--newspack-ui-spacer-11);
+			}
 
 			// Text alignments
 			&--text-center {
@@ -70,8 +73,16 @@
 				> * {
 					margin: 0 !important;
 				}
+				// Dropdown sits on the right edge of the actions column.
+				> .newspack-ui__dropdown {
+					align-self: end;
+				}
 			}
-			&:has(.newspack-ui__dropdown) {
+			// Box layout transforms to row when the box uses the `__actions`
+			// side-panel pattern (content on the left, actions/badges on the right).
+			// Triggering on `__actions` instead of `__dropdown` so a dropdown nested
+			// inside a stack/box body doesn't accidentally flip the layout.
+			&:has(> .newspack-ui__box__actions) {
 				align-items: stretch;
 				display: flex;
 				justify-content: space-between;
@@ -80,13 +91,22 @@
 					margin: 0 !important;
 				}
 			}
-			.newspack-ui__dropdown {
+			> .newspack-ui__dropdown {
 				align-self: end;
 			}
 			.newspack-ui__badge {
 				float: right;
 				margin-left: calc(var(--newspack-ui-spacer-1) / 2);
 			}
+		}
+	}
+	a.newspack-ui__box--border {
+		text-decoration: none;
+		transition: background 125ms ease-in-out, border-color 125ms ease-in-out;
+
+		&:hover {
+			background: var(--newspack-ui-color-neutral-5);
+			border-color: var(--newspack-ui-color-neutral-40);
 		}
 	}
 }

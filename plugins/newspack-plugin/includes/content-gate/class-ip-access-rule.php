@@ -15,7 +15,22 @@ use Newspack\Newspack_UI;
 class IP_Access_Rule {
 
 	/**
-	 * The name of the cookie used to bypass cache and allow server side IP checking.
+	 * Cookie used to trigger a cache-exempt render for IP-based access checking.
+	 *
+	 * The `wp` 2-char prefix causes Batcache's advanced-cache.php to skip
+	 * page cache for requests carrying this cookie (rule: any cookie whose
+	 * name starts with `wp` is exempted, except the small allowlist that
+	 * defaults to `wordpress_test_cookie`). The cookie is a cache-skip
+	 * signal only — the actual IP-match check runs server-side on the
+	 * resulting uncached request, so a forged cookie just produces an
+	 * uncached render where the check rejects the visitor.
+	 *
+	 * NOT renamed in this PR: unlike the newsletter cookies (which are new),
+	 * this cookie may already be set on production sites; renaming would
+	 * invalidate in-flight cookies for current visitors. See miguelpeixe
+	 * review on PR #136.
+	 *
+	 * See: https://github.com/Automattic/batcache/blob/master/advanced-cache.php
 	 */
 	const COOKIE_NAME = 'wp_nocache_ip';
 
@@ -157,7 +172,7 @@ class IP_Access_Rule {
 		}
 
 		if ( $valid ) {
-			setcookie( self::COOKIE_NAME, '1', time() + YEAR_IN_SECONDS, COOKIEPATH, COOKIE_DOMAIN ); // phpcs:ignore
+			self::set_cookie();
 		}
 
 		$data = [ 'valid' => $valid ];
@@ -334,7 +349,7 @@ class IP_Access_Rule {
 		$result = apply_filters( 'newspack_content_gate_check_ip', false );
 
 		if ( $result ) {
-			setcookie( self::COOKIE_NAME, '1', time() + MONTH_IN_SECONDS, COOKIEPATH, COOKIE_DOMAIN ); // phpcs:ignore
+			self::set_cookie();
 		}
 
 		$redirect_url = self::get_redirect_url();
@@ -686,19 +701,45 @@ class IP_Access_Rule {
 	}
 
 	/**
-	 * Whether the IP-access bypass cookie was sent on the current request.
+	 * Whether the IP-access bypass cookie is present on the current request.
 	 *
-	 * The cookie is set after a successful institutional-access verification
-	 * (any of an institution's rules matching — IP range, email domain, or
-	 * reader data) and signals that downstream IP-rule checks may safely
-	 * run server-side without breaking the page cache. Centralizes the
-	 * `phpcs:ignore` for the restricted `$_COOKIE` read so callers don't
-	 * each carry their own annotation.
+	 * The cookie is a cache-skip signal set after a successful institutional-access
+	 * verification. Its presence tells downstream code to run the IP check
+	 * server-side rather than serving a cached response. The actual access
+	 * decision is made by IP_Access_Rule::ip_matches_ranges(), not by this cookie.
 	 *
-	 * @return bool True if the cookie is present on this request.
+	 * @return bool True if the bypass cookie is present on this request.
 	 */
 	public static function is_cookie_set() {
-		return isset( $_COOKIE[ self::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- presence-only check; the cookie is a cache-skip signal, not an auth grant.
+		return ! empty( $_COOKIE[ self::COOKIE_NAME ] );
+	}
+
+	/**
+	 * Set the IP-access bypass cookie.
+	 *
+	 * The cookie value is a simple sentinel ('1'). It signals that the visitor
+	 * has previously passed the IP check and subsequent requests should skip
+	 * the page cache so the IP check can run server-side.
+	 */
+	private static function set_cookie() {
+		$expiry = time() + HOUR_IN_SECONDS;
+		if ( ! headers_sent() ) {
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
+			setcookie(
+				self::COOKIE_NAME,
+				'1',
+				[
+					'expires'  => $expiry,
+					'path'     => COOKIEPATH,
+					'domain'   => COOKIE_DOMAIN,
+					'secure'   => is_ssl(),
+					'httponly' => true,
+					'samesite' => 'Lax',
+				]
+			);
+		}
+		$_COOKIE[ self::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 	}
 }
 IP_Access_Rule::init();

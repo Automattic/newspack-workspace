@@ -80,7 +80,6 @@ class Newsletters_Wizard extends Wizard {
 
 		// Menu removals.
 		remove_action( 'admin_menu', [ Newspack_Newsletters_Settings::class, 'add_plugin_page' ] );
-		remove_action( 'admin_menu', [ Newspack_Newsletters_Tracking_Admin::class, 'add_settings_page' ] );
 
 		// Customize the Newsletter ads menu titles.
 		add_filter(
@@ -227,9 +226,25 @@ class Newsletters_Wizard extends Wizard {
 			},
 			[]
 		);
+
+		$labels = [];
+		if ( class_exists( 'Newspack_Newsletters' ) ) {
+			$provider = Newspack_Newsletters::get_service_provider();
+			if ( $provider && method_exists( $provider, 'label' ) ) {
+				// `label()` accepts a second `$context` arg (usually a list public id).
+				// Intentionally omitted here: this is the generic explanation copy
+				// shown above the "Add new local list" button, not a per-list label.
+				$labels = [
+					'local_list_explanation' => $provider::label( 'local_list_explanation' ),
+				];
+			}
+		}
+
 		return [
-			'configured' => $newsletters_configuration_manager->is_configured(),
-			'settings'   => $settings,
+			'configured'    => $newsletters_configuration_manager->is_configured(),
+			'esp_connected' => (bool) $newsletters_configuration_manager->is_esp_set_up(),
+			'settings'      => $settings,
+			'labels'        => $labels,
 		];
 	}
 
@@ -253,6 +268,12 @@ class Newsletters_Wizard extends Wizard {
 		$args                              = $request->get_params();
 		$newsletters_configuration_manager = Configuration_Managers::configuration_manager_class_for_plugin_slug( 'newspack-newsletters' );
 		$newsletters_configuration_manager->update_settings( $args );
+		// The provider instance is memoized on `init`, before this save runs, so
+		// refresh it before reading credential status — otherwise a provider switch
+		// reports the previously-active provider's connection state.
+		if ( method_exists( 'Newspack_Newsletters', 'memoize_service_provider' ) ) {
+			\Newspack_Newsletters::memoize_service_provider();
+		}
 		return $this->api_get_newsletters_settings();
 	}
 
@@ -321,7 +342,7 @@ class Newsletters_Wizard extends Wizard {
 			'newspack-newsletters-wizard',
 			Newspack::plugin_url() . '/dist/newsletters.js',
 			$this->get_script_dependencies(),
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'newsletters' ),
 			true
 		);
 
@@ -423,11 +444,6 @@ class Newsletters_Wizard extends Wizard {
 					'forceSelected' => ( 'newspack_nl_advertiser' === $this->get_screen_slug() ),
 				];
 			}
-
-			$tabs[] = [
-				'textContent' => esc_html__( 'Tracking', 'newspack-plugin' ),
-				'href'        => admin_url( 'edit.php?post_type=' . Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT . '&page=' . $this->slug . '#/tracking' ),
-			];
 
 			return $tabs;
 		}

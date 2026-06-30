@@ -416,17 +416,39 @@ abstract class Newspack_Newsletters_Service_Provider implements Newspack_Newslet
 	}
 
 	/**
+	 * Whether the given post is a layout-CPT post. Layouts share the
+	 * email editor surface with newsletters but must never trigger ESP
+	 * campaign sync / dispatch — every lifecycle hook in this class
+	 * (and its subclasses) gates on this.
+	 *
+	 * @param int|\WP_Post $post_or_id Post ID or post object.
+	 * @return bool
+	 */
+	protected function is_layout_post( $post_or_id ) {
+		return Newspack_Newsletters_Layouts::NEWSPACK_NEWSLETTERS_LAYOUT_CPT === get_post_type( $post_or_id );
+	}
+
+	/**
 	 * Send a newsletter.
 	 *
-	 * @param WP_Post $post The newsletter post.
+	 * @param WP_Post $post The post object — typically a newsletter, but
+	 *                      layout posts are also accepted and short-circuit
+	 *                      before reaching the provider.
 	 *
-	 * @return true|WP_Error True if successful, WP_Error if not.
+	 * @return true|WP_Error|null True if successful, WP_Error on failure, null
+	 *                            when the send is short-circuited (layout post,
+	 *                            or newsletter already marked as sent).
 	 */
 	public function send_newsletter( $post ) {
 		$post_id = $post->ID;
 
+		// Defence in depth: layouts must never dispatch a campaign, regardless of upstream guards.
+		if ( $this->is_layout_post( $post ) ) {
+			return null;
+		}
+
 		if ( Newspack_Newsletters::is_newsletter_sent( $post_id ) ) {
-			return;
+			return null;
 		}
 
 		try {
@@ -558,6 +580,31 @@ Error message(s) received:
 	public static function label( $key, $context = '' ) {
 		$labels = static::get_labels( $context );
 		return $labels[ $key ] ?? '';
+	}
+
+	/**
+	 * Get the merge-tag dictionary for this ESP.
+	 *
+	 * Override on each concrete provider to expose its merge-tag autocomplete
+	 * dictionary in the newsletter editor. The default below returns an empty
+	 * dictionary so providers without an override silently disable the
+	 * completer (no fatal, no UI noise).
+	 *
+	 * Shape:
+	 *   [
+	 *     'label'          => string  // ESP-native singular noun (e.g. "merge tag", "personalization tag").
+	 *     'trigger_prefix' => string  // Legacy 2-character ESP-native trigger preserved for existing Mailchimp muscle memory (`*|`). Leave empty for any other provider; the universal `{}` picker trigger always works and is the only trigger new providers should rely on.
+	 *     'tags'           => array[] // Each: [ 'tag' => '<inserted string>', 'label' => '<description>', 'keywords' => string[] ].
+	 *   ]
+	 *
+	 * @return array
+	 */
+	public static function get_merge_tags() {
+		return [
+			'label'          => '',
+			'trigger_prefix' => '',
+			'tags'           => [],
+		];
 	}
 
 	/**
