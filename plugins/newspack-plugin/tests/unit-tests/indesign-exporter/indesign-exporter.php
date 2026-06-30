@@ -6,6 +6,7 @@
  */
 
 use Newspack\Optional_Modules\InDesign_Export\InDesign_Converter;
+use Newspack\Optional_Modules\InDesign_Exporter;
 
 /**
  * Tests the InDesign Exporter functionality.
@@ -27,6 +28,288 @@ class Newspack_Test_InDesign_Exporter extends WP_UnitTestCase {
 		$this->assertStringContainsString( '<ASCII-WIN>', $content );
 		$this->assertStringContainsString( '<pstyle:24head>Test Post', $content );
 		$this->assertStringContainsString( '<pstyle:text>This is a test post.', $content );
+	}
+
+	/**
+	 * Test that the Mac platform option emits the <ASCII-MAC> header.
+	 *
+	 * InDesign on macOS requires the file to begin with <ASCII-MAC> for the
+	 * tagged text to be interpreted as markup rather than literal content.
+	 */
+	public function test_convert_post_mac_platform() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>This is a test post.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id, [ 'platform' => 'mac' ] );
+		$this->assertStringContainsString( '<ASCII-MAC>', $content );
+		$this->assertStringNotContainsString( '<ASCII-WIN>', $content );
+	}
+
+	/**
+	 * Test that the Win platform option emits the <ASCII-WIN> header.
+	 */
+	public function test_convert_post_win_platform() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>This is a test post.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id, [ 'platform' => 'win' ] );
+		$this->assertStringContainsString( '<ASCII-WIN>', $content );
+		$this->assertStringNotContainsString( '<ASCII-MAC>', $content );
+	}
+
+	/**
+	 * Test that the platform setting defaults to 'auto' when unset.
+	 */
+	public function test_platform_setting_default() {
+		delete_option( InDesign_Exporter::PLATFORM_OPTION );
+		$this->assertSame( 'auto', InDesign_Exporter::get_platform_setting() );
+	}
+
+	/**
+	 * Test that the platform setting returns the stored value when valid.
+	 */
+	public function test_platform_setting_valid_values() {
+		update_option( InDesign_Exporter::PLATFORM_OPTION, 'mac' );
+		$this->assertSame( 'mac', InDesign_Exporter::get_platform_setting() );
+
+		update_option( InDesign_Exporter::PLATFORM_OPTION, 'win' );
+		$this->assertSame( 'win', InDesign_Exporter::get_platform_setting() );
+
+		update_option( InDesign_Exporter::PLATFORM_OPTION, 'auto' );
+		$this->assertSame( 'auto', InDesign_Exporter::get_platform_setting() );
+
+		delete_option( InDesign_Exporter::PLATFORM_OPTION );
+	}
+
+	/**
+	 * Test that the platform setting sanitizes invalid stored values.
+	 */
+	public function test_platform_setting_rejects_invalid_value() {
+		update_option( InDesign_Exporter::PLATFORM_OPTION, 'linux' );
+		$this->assertSame( 'auto', InDesign_Exporter::get_platform_setting() );
+
+		update_option( InDesign_Exporter::PLATFORM_OPTION, '' );
+		$this->assertSame( 'auto', InDesign_Exporter::get_platform_setting() );
+
+		delete_option( InDesign_Exporter::PLATFORM_OPTION );
+	}
+
+	/**
+	 * Test that the post types setting defaults to ['post'] when unset.
+	 */
+	public function test_post_types_setting_default() {
+		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
+		$this->assertSame( [ 'post' ], InDesign_Exporter::get_post_types_setting() );
+	}
+
+	/**
+	 * Test that valid stored post types are returned.
+	 */
+	public function test_post_types_setting_valid_values() {
+		update_option( InDesign_Exporter::POST_TYPES_OPTION, [ 'post', 'page' ] );
+		$this->assertSame( [ 'post', 'page' ], InDesign_Exporter::get_post_types_setting() );
+
+		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
+	}
+
+	/**
+	 * Test that slugs whose post type is no longer registered get filtered out.
+	 */
+	public function test_post_types_setting_drops_stale_slugs() {
+		update_option( InDesign_Exporter::POST_TYPES_OPTION, [ 'post', 'no_such_cpt', 42, '' ] );
+		$this->assertSame( [ 'post' ], InDesign_Exporter::get_post_types_setting() );
+
+		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
+	}
+
+	/**
+	 * Test that a non-array stored value falls back to the default.
+	 */
+	public function test_post_types_setting_rejects_non_array() {
+		update_option( InDesign_Exporter::POST_TYPES_OPTION, 'post' );
+		$this->assertSame( [ 'post' ], InDesign_Exporter::get_post_types_setting() );
+
+		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
+	}
+
+	/**
+	 * Test that get_supported_post_types() honors the stored setting.
+	 */
+	public function test_get_supported_post_types_uses_setting() {
+		update_option( InDesign_Exporter::POST_TYPES_OPTION, [ 'page' ] );
+		$this->assertSame( [ 'page' ], InDesign_Exporter::get_supported_post_types() );
+
+		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
+	}
+
+	/**
+	 * Test that available_post_types excludes attachments, RSS feeds,
+	 * subscription lists, collections, and WooCommerce products.
+	 */
+	public function test_get_available_post_types_excludes_non_editorial_types() {
+		register_post_type(
+			'partner_rss_feed',
+			[
+				'public'  => true,
+				'show_ui' => true,
+			]
+		);
+		register_post_type(
+			'newspack_nl_list',
+			[
+				'public'  => true,
+				'show_ui' => true,
+			]
+		);
+		register_post_type(
+			'newspack_collection',
+			[
+				'public'  => true,
+				'show_ui' => true,
+			]
+		);
+		register_post_type(
+			'product',
+			[
+				'public'  => true,
+				'show_ui' => true,
+			]
+		);
+		register_post_type(
+			'event',
+			[
+				'public'  => true,
+				'show_ui' => true,
+			]
+		);
+
+		$available = InDesign_Exporter::get_available_post_types();
+		$slugs     = array_column( $available, 'value' );
+
+		$this->assertContains( 'post', $slugs );
+		$this->assertContains( 'page', $slugs );
+		$this->assertContains( 'event', $slugs, 'Editorial CPTs should remain available.' );
+		$this->assertNotContains( 'attachment', $slugs );
+		$this->assertNotContains( 'partner_rss_feed', $slugs );
+		$this->assertNotContains( 'newspack_nl_list', $slugs );
+		$this->assertNotContains( 'newspack_collection', $slugs );
+		$this->assertNotContains( 'product', $slugs );
+
+		unregister_post_type( 'partner_rss_feed' );
+		unregister_post_type( 'newspack_nl_list' );
+		unregister_post_type( 'newspack_collection' );
+		unregister_post_type( 'product' );
+		unregister_post_type( 'event' );
+	}
+
+	/**
+	 * Test that the excluded-types filter can add or remove exclusions.
+	 */
+	public function test_get_available_post_types_filter() {
+		register_post_type(
+			'flyer',
+			[
+				'public'  => true,
+				'show_ui' => true,
+			]
+		);
+
+		$callback = static function ( $excluded ) {
+			$excluded[] = 'flyer';
+			return $excluded;
+		};
+		add_filter( 'newspack_indesign_export_excluded_post_types', $callback );
+
+		$available = InDesign_Exporter::get_available_post_types();
+		$slugs     = array_column( $available, 'value' );
+
+		$this->assertNotContains( 'flyer', $slugs );
+
+		remove_filter( 'newspack_indesign_export_excluded_post_types', $callback );
+		unregister_post_type( 'flyer' );
+	}
+
+	/**
+	 * Test User-Agent → platform mapping for representative strings.
+	 */
+	public function test_sniff_user_agent_platform() {
+		// macOS Safari / Chrome.
+		$this->assertSame(
+			'mac',
+			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15' )
+		);
+		// iPad.
+		$this->assertSame(
+			'mac',
+			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15' )
+		);
+		// iPhone.
+		$this->assertSame(
+			'mac',
+			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15' )
+		);
+		// Windows Chrome.
+		$this->assertSame(
+			'win',
+			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' )
+		);
+		// Linux (treated as Windows-compatible by InDesign Tagged Text — there is no Linux variant).
+		$this->assertSame(
+			'win',
+			InDesign_Exporter::sniff_user_agent_platform( 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36' )
+		);
+		// Empty.
+		$this->assertSame( 'win', InDesign_Exporter::sniff_user_agent_platform( '' ) );
+	}
+
+	/**
+	 * Test that is_post_supported gates posts by the configured post types setting.
+	 */
+	public function test_is_post_supported() {
+		update_option( InDesign_Exporter::POST_TYPES_OPTION, [ 'post' ] );
+
+		$post_id = $this->factory->post->create();
+		$page_id = $this->factory->post->create( [ 'post_type' => 'page' ] );
+
+		$this->assertTrue( InDesign_Exporter::is_post_supported( $post_id ) );
+		$this->assertFalse( InDesign_Exporter::is_post_supported( $page_id ) );
+		$this->assertFalse( InDesign_Exporter::is_post_supported( 0 ) );
+		$this->assertFalse( InDesign_Exporter::is_post_supported( 99999999 ) );
+
+		update_option( InDesign_Exporter::POST_TYPES_OPTION, [ 'post', 'page' ] );
+		$this->assertTrue( InDesign_Exporter::is_post_supported( $page_id ) );
+
+		delete_option( InDesign_Exporter::POST_TYPES_OPTION );
+	}
+
+	/**
+	 * Test that en-dashes and em-dashes map to their own Unicode code points.
+	 *
+	 * Previously '–' (en-dash, U+2013) was incorrectly mapped to <0x2014> (em-dash).
+	 */
+	public function test_convert_dashes() {
+		$post_id = $this->factory->post->create(
+			[
+				'post_title'   => 'Test Post',
+				'post_content' => '<p>en–dash and em—dash and double--hyphen.</p>',
+			]
+		);
+
+		$converter = new InDesign_Converter();
+		$content   = $converter->convert_post( $post_id );
+		$this->assertStringContainsString( 'en<0x2013>dash', $content );
+		$this->assertStringContainsString( 'em<0x2014>dash', $content );
+		$this->assertStringContainsString( 'double<0x2014>hyphen', $content );
 	}
 
 	/**

@@ -63,8 +63,17 @@ class InDesign_Converter {
 	/**
 	 * Convert a WordPress post to InDesign Tagged Text format.
 	 *
-	 * @param int|\WP_Post $post Post ID or WP_Post object.
-	 * @param array        $options Optional conversion options.
+	 * @param int|\WP_Post $post    Post ID or WP_Post object.
+	 * @param array        $options {
+	 *     Optional. Conversion options.
+	 *
+	 *     @type bool   $include_subtitle Whether to include the post subtitle. Default true.
+	 *     @type bool   $include_byline   Whether to include the byline. Default true.
+	 *     @type string $platform         Target platform for the tagged-text header.
+	 *                                    'win' emits <ASCII-WIN>, 'mac' emits <ASCII-MAC>.
+	 *                                    InDesign requires the header to match the host OS,
+	 *                                    otherwise markup is rendered literally. Default 'win'.
+	 * }
 	 * @return string|false InDesign Tagged Text content, or false on failure.
 	 */
 	public function convert_post( $post, $options = [] ) {
@@ -76,12 +85,13 @@ class InDesign_Converter {
 		$default_options = [
 			'include_subtitle' => true,
 			'include_byline'   => true,
+			'platform'         => 'win',
 		];
 		$options = wp_parse_args( $options, $default_options );
 
 		$content_parts = [];
 
-		$content_parts[] = '<ASCII-WIN>';
+		$content_parts[] = 'mac' === $options['platform'] ? '<ASCII-MAC>' : '<ASCII-WIN>';
 		$content_parts[] = $this->styles['headline'] . $this->get_transformed_text( $post->post_title );
 
 		if ( $options['include_subtitle'] ) {
@@ -431,7 +441,7 @@ class InDesign_Converter {
 			// Dashes.
 			'--' => '<0x2014>',
 			'—'  => '<0x2014>',
-			'–'  => '<0x2014>',
+			'–'  => '<0x2013>',
 
 			// Quotes.
 			'“'  => '"',
