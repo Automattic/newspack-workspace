@@ -41,9 +41,8 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 		if ( ! is_array( $children ) ) {
 			return '';
 		}
-		// The available width the package computed for this block (the column width
-		// when the posts-inserter is nested in columns). Pass it down so the inserted
-		// images render at the column width rather than the full email width.
+		// Width the package computed for this block (the column width when nested). Pass
+		// it down so inserted images fit the column, not the full email width.
 		$content_width = $parsed_block['email_attrs']['width'] ?? null;
 		return self::apply_email_styles( self::render_inserted_blocks( $children, $content_width ) );
 	}
@@ -98,9 +97,8 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	 * as raw markup — its columns would overflow the email width.
 	 *
 	 * @param array       $children      The `innerBlocksToInsert` child-block array.
-	 * @param string|null $content_width Available width (e.g. `330px`) to constrain
-	 *                                   inserted images/columns to, or null for the
-	 *                                   full email width.
+	 * @param string|null $content_width Width to constrain inserted images/columns to
+	 *                                   (e.g. `330px`), or null for the full email width.
 	 * @return string Concatenated rendered HTML in child order.
 	 */
 	public static function render_inserted_blocks( array $children, ?string $content_width = null ): string {
@@ -138,12 +136,10 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	/**
 	 * Render inserted block markup, constraining widths to the available width.
 	 *
-	 * The block's own callback renders via `do_blocks()` in a fresh parse that has no
-	 * `email_attrs`, so inserted images fall back to the full email width — overflowing
-	 * a narrow column. When a width is known, parse the markup, run the package's
-	 * width preprocessor with that width as the content size, then render each block
-	 * so its `email_attrs.width` reaches the image renderer. Falls back to `do_blocks()`
-	 * when no width is available.
+	 * A plain `do_blocks()` pass has no `email_attrs`, so inserted images fall back to
+	 * the full email width and overflow a narrow column. When a width is known, run the
+	 * package's width preprocessor with it as the content size so each block's
+	 * `email_attrs.width` reaches the image renderer; otherwise fall back to `do_blocks()`.
 	 *
 	 * @param string      $markup        Block markup.
 	 * @param string|null $content_width Available width (e.g. `330px`), or null.
@@ -168,11 +164,9 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 	/**
 	 * Left-align a flat-layout featured image.
 	 *
-	 * The posts-inserter saves the image-on-top featured image with `align: center`,
-	 * which the package renders into a centered, fixed-width image cell. In the email
-	 * the image must sit flush-left so it lines up with the heading and excerpt below
-	 * it (both always left-aligned) — a centered, sub-column-width image looks broken.
-	 * Only touches `core/image`; other flat children pass through unchanged.
+	 * The posts-inserter saves the image-on-top featured image as `align: center`, which
+	 * the package renders as a centered, fixed-width cell — but it must sit flush-left to
+	 * line up with the heading and excerpt below it. Only touches `core/image`.
 	 *
 	 * @param array $child Parsed child block.
 	 * @return array Child with any centered image normalized to left alignment.
@@ -183,11 +177,6 @@ class Posts_Inserter extends Abstract_Block_Renderer {
 		}
 		if ( 'center' === ( $child['attrs']['align'] ?? '' ) ) {
 			$child['attrs']['align'] = 'left';
-		}
-		// Keep the inner HTML's alignment class in sync so inlined block styles
-		// don't re-center the figure.
-		if ( isset( $child['innerHTML'] ) ) {
-			$child['innerHTML'] = str_replace( 'aligncenter', 'alignleft', (string) $child['innerHTML'] );
 		}
 		return $child;
 	}
