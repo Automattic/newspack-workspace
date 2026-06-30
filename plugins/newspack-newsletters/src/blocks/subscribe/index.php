@@ -496,6 +496,9 @@ function process_form() {
 
 	$registered_user      = false;
 	$verification_payload = [];
+	// Default to "did not authenticate" so the response-side registration gate below is safe
+	// even when Reader Activation is disabled/unavailable (the branch that assigns it is skipped).
+	$authenticate         = false;
 	if ( \class_exists( '\Newspack\Reader_Activation' ) && \Newspack\Reader_Activation::is_enabled() ) {
 		$metadata = array_merge( $metadata, [ 'registration_method' => 'newsletters-subscription' ] );
 		if ( $popup_id ) {
