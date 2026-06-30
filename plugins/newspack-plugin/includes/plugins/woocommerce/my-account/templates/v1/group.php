@@ -139,7 +139,7 @@ if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
 				data-error-text="<?php echo esc_attr( __( 'Could not rename. Please try again.', 'newspack-plugin' ) ); ?>"
 			>
 				<p>
-					<label for="newspack-my-account__group--rename-input">
+					<label for="newspack-my-account__group--rename-input" class="screen-reader-text">
 						<?php
 						/* translators: %s: capitalized singular group label (e.g. "Group", "Team"). */
 						printf( esc_html__( '%s name', 'newspack-plugin' ), esc_html( Group_Subscription::get_label( 'singular' ) ) );
