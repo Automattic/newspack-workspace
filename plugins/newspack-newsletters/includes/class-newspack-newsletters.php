@@ -94,7 +94,7 @@ final class Newspack_Newsletters {
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'branding_scripts' ] );
 		add_filter( 'newspack_theme_featured_image_post_types', [ __CLASS__, 'support_featured_image_options' ] );
 		add_filter( 'gform_force_hooks_js_output', [ __CLASS__, 'suppress_gravityforms_js_on_newsletters' ] );
-		add_filter( 'render_block', [ __CLASS__, 'remove_email_only_block' ], 10, 2 );
+		add_filter( 'render_block', [ __CLASS__, 'remove_visibility_hidden_block' ], 10, 2 );
 		add_action( 'pre_get_posts', [ __CLASS__, 'display_newsletters_in_archives' ] );
 		add_action( 'the_post', [ __CLASS__, 'fix_public_status' ] );
 	}
@@ -1446,22 +1446,26 @@ final class Newspack_Newsletters {
 	}
 
 	/**
-	 * Do not display blocks that are configured to be email-only.
+	 * Hide blocks whose `newsletterVisibility` doesn't match the current render.
+	 *
+	 * On the web front-end, `email`-only blocks are hidden. During an email render
+	 * (`render_wc`, detected via the rendering-post accessor) it's the opposite:
+	 * `web`-only blocks are hidden and `email`-only blocks are kept. Without the
+	 * email branch, `render_wc` followed the web path and wrongly dropped email-only
+	 * blocks — e.g. the prebuilt layouts' "Support our newsroom" section.
 	 *
 	 * @param string $block_content The block content about to be appended.
 	 * @param array  $block         The full block, including name and attributes.
-	 *
-	 * @return string Transformed block content to be apppended.
+	 * @return string The block content, or '' when the block is hidden in this context.
 	 */
-	public static function remove_email_only_block( $block_content, $block ) {
-		if (
-			self::NEWSPACK_NEWSLETTERS_CPT === get_post_type() &&
-			isset( $block['attrs']['newsletterVisibility'] ) &&
-			'email' === $block['attrs']['newsletterVisibility']
-		) {
-			return '';
+	public static function remove_visibility_hidden_block( $block_content, $block ) {
+		if ( self::NEWSPACK_NEWSLETTERS_CPT !== get_post_type() || empty( $block['attrs']['newsletterVisibility'] ) ) {
+			return $block_content;
 		}
-		return $block_content;
+		$is_email_render   = class_exists( '\Newspack\Newsletters\Email_Renderers\Renderer_Controller' )
+			&& \Newspack\Newsletters\Email_Renderers\Renderer_Controller::get_rendering_post() instanceof \WP_Post;
+		$hidden_visibility = $is_email_render ? 'web' : 'email';
+		return $hidden_visibility === $block['attrs']['newsletterVisibility'] ? '' : $block_content;
 	}
 
 	/**

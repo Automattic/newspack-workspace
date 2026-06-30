@@ -81,6 +81,32 @@ class Test_Renderer_Controller extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The email render keeps `email`-only blocks and hides `web`-only blocks. The
+	 * prebuilt layouts' "Support our newsroom" section is email-only and was being
+	 * dropped because render_wc followed the web visibility path (NEWS-1901).
+	 */
+	public function test_render_wc_respects_newsletter_visibility() {
+		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
+		$content = '<!-- wp:paragraph --><p>ALWAYS VISIBLE</p><!-- /wp:paragraph -->'
+			. '<!-- wp:paragraph {"newsletterVisibility":"email"} --><p>EMAIL ONLY BLOCK</p><!-- /wp:paragraph -->'
+			. '<!-- wp:paragraph {"newsletterVisibility":"web"} --><p>WEB ONLY BLOCK</p><!-- /wp:paragraph -->';
+		$post_id = self::factory()->post->create(
+			[
+				'post_type'    => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_status'  => 'draft',
+				'post_title'   => 'Visibility newsletter',
+				'post_content' => $content,
+			]
+		);
+
+		$html = Renderer_Controller::render_wc( get_post( $post_id ) );
+
+		$this->assertStringContainsString( 'ALWAYS VISIBLE', $html, 'Expected an unmarked block to render in the email.' );
+		$this->assertStringContainsString( 'EMAIL ONLY BLOCK', $html, 'Expected an email-only block to render in the email.' );
+		$this->assertStringNotContainsString( 'WEB ONLY BLOCK', $html, 'Expected a web-only block to be hidden in the email.' );
+	}
+
+	/**
 	 * The active engine follows the WC renderer feature flag.
 	 */
 	public function test_active_engine_follows_flag() {
