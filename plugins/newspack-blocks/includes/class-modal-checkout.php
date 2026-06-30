@@ -1761,7 +1761,7 @@ final class Modal_Checkout {
 			// row), so the JS anchor and analytics survive a plugin hiding the cart item.
 			if ( $_product && $_product->exists() && $cart_item['quantity'] > 0 ) :
 				?>
-				<p id="modal-checkout-product-details" data-checkout='<?php echo esc_attr( wp_json_encode( Checkout_Data::get_checkout_data( $cart ) ) ); ?>' hidden></p>
+				<p id="modal-checkout-product-details" <?php Checkout_Data::print_data_checkout_attr( Checkout_Data::get_checkout_data( $cart ) ); ?> hidden></p>
 				<?php
 			endif;
 			// phpcs:enable
