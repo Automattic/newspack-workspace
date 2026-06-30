@@ -123,7 +123,7 @@ class Renderer_Controller {
 				'',
 				Editor_Bootstrap::TEMPLATE_SLUG
 			);
-			return isset( $result['html'] ) ? (string) $result['html'] : '';
+			return isset( $result['html'] ) ? Full_Bleed_Sections::transform( (string) $result['html'] ) : '';
 		} catch ( \Throwable $e ) {
 			\Newspack_Newsletters_Logger::log( 'Email editor: WC render failed — ' . $e->getMessage() );
 			return '';
