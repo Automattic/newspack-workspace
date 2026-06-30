@@ -27,10 +27,18 @@ $managed             = Group_Subscription::get_managed_subscriptions_for_user( $
 $multi_group         = count( $managed ) > 1;
 $subscription_status = $subscription->get_status();
 $is_active           = Group_Subscription_MyAccount::is_subscription_active( $subscription );
+$member_limit        = (int) $settings['limit'];
+$requested_limit     = Group_Subscription_Settings::get_requested_limit( $subscription );
+// A finite limit can be raised; an unlimited group (limit 0) has no ceiling to request beyond.
+$can_request_seats   = $is_active && $member_limit > 0;
+$has_pending_request = $requested_limit > $member_limit;
 $current_user_id     = $user_id;
 $invite_link         = \Newspack\Group_Subscription_Invite::get_link_invite( $subscription, $current_user_id );
 $members             = Group_Subscription::get_members( $subscription );
+$managers            = Group_Subscription::get_managers( $subscription );
 $all_invites         = \Newspack\Group_Subscription_Invite::get_invites( $subscription );
+// A seat is held by the owner and each accepted member; a pending invite doesn't take a seat until it's accepted.
+$seats_used          = count( array_unique( array_map( 'intval', array_merge( (array) $managers, (array) $members ) ) ) );
 $is_completely_empty = empty( $members ) && empty( $all_invites );
 
 $status_badge_classes = [ 'newspack-ui__badge' ];
@@ -91,6 +99,44 @@ if ( in_array( $subscription_status, [ 'cancelled', 'expired' ], true ) ) {
 			</div>
 		</div>
 	</header>
+	<div class="newspack-my-account__subscription--meta">
+		<span class="newspack-my-account__subscription--seat-count">
+			<?php
+			if ( $member_limit > 0 ) {
+				printf(
+					/* translators: 1: seats used, 2: total seat limit. */
+					esc_html__( '%1$d of %2$d seats', 'newspack-plugin' ),
+					(int) $seats_used,
+					(int) $member_limit
+				);
+			} else {
+				printf(
+					/* translators: %d: number of seats used. */
+					esc_html( _n( '%d seat', '%d seats', (int) $seats_used, 'newspack-plugin' ) ),
+					(int) $seats_used
+				);
+			}
+			?>
+		</span>
+		<?php if ( $can_request_seats ) : ?>
+			<span class="newspack-my-account__subscription--meta-sep" aria-hidden="true">&middot;</span>
+			<?php if ( $has_pending_request ) : ?>
+				<span class="newspack-my-account__group_subscription__seat-request-pending">
+					<?php
+					printf(
+						/* translators: %d: the requested member limit. */
+						esc_html__( 'Increase to %d requested', 'newspack-plugin' ),
+						(int) $requested_limit
+					);
+					?>
+				</span>
+			<?php else : ?>
+				<button type="button" class="newspack-my-account__subscription--meta-link newspack-my-account__group_subscription__request-seats">
+					<?php esc_html_e( 'Request more seats', 'newspack-plugin' ); ?>
+				</button>
+			<?php endif; ?>
+		<?php endif; ?>
+	</div>
 
 	<div class="newspack-my-account__group__content">
 		<?php

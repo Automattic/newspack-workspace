@@ -33,6 +33,18 @@ domReady( function () {
 		} );
 	}
 
+	// Handle request-more-seats modal.
+	const requestSeatsModal = document.getElementById( 'newspack-my-account__group_subscription--request-seats' );
+	const openRequestSeatsModal = [ ...document.querySelectorAll( '.newspack-my-account__group_subscription__request-seats' ) ];
+	if ( requestSeatsModal ) {
+		openRequestSeatsModal.forEach( open => {
+			open.addEventListener( 'click', event => {
+				event.preventDefault();
+				requestSeatsModal.setAttribute( 'data-state', 'open' );
+			} );
+		} );
+	}
+
 	// Handle remove-member confirm modal via event delegation.
 	const removeMemberModal = document.getElementById( 'newspack-my-account__group_subscription--confirm-remove-member' );
 	if ( removeMemberModal ) {

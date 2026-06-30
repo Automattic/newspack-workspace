@@ -8,17 +8,24 @@
 
 import { createInterpolateElement, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
-import { TextControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { RadioControl, TextControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { Button, Modal } from '../../../../packages/components/src';
-import { reservedSeats, isGroupActive } from '../data/mock-groups';
+import { reservedSeats, isGroupActive, applySeatIncrease, sendSeatUpgradeLink } from '../data/mock-groups';
+import { getSubscriberById } from '../data/mock-subscribers';
+import { buildSeatIncreaseOrder, buildPaymentLinkOrder } from './subscription-actions';
+import { fmtCurrency } from '../format';
 import { GROUP_LABEL_LOWER } from '../labels';
 
 export default function AdjustSeatsFlow( { group, onClose, onComplete } ) {
 	// Floor for the new limit: members plus pending invites and active link uses,
 	// so a reduction can never strand obligations the group already made.
 	const reserved = reservedSeats( group );
-	const [ value, setValue ] = useState( String( group.seatLimit ) );
+	const ownerEmail = getSubscriberById( group.ownerId )?.email;
+	const initial = group.seatRequest?.target && group.seatRequest.target > group.seatLimit ? group.seatRequest.target : group.seatLimit;
+	const [ value, setValue ] = useState( String( initial ) );
 	const [ confirming, setConfirming ] = useState( false );
+	const [ mode, setMode ] = useState( 'free' ); // 'free' | 'link'
+	const [ amountValue, setAmountValue ] = useState( '' );
 
 	// Seat increases require an active group; paused (on-hold) groups may only
 	// hold or reduce the limit, never raise it.
@@ -26,13 +33,28 @@ export default function AdjustSeatsFlow( { group, onClose, onComplete } ) {
 	const limit = parseInt( value, 10 );
 	const invalid = isNaN( limit ) || limit < reserved || ( limit > group.seatLimit && ! canIncrease );
 	const unchanged = limit === group.seatLimit;
+	const isIncrease = ! isNaN( limit ) && limit > group.seatLimit;
+	const amount = parseFloat( amountValue );
+	const amountInvalid = mode === 'link' && ( isNaN( amount ) || amount <= 0 );
+	const cannotConfirm = invalid || unchanged || ( isIncrease && amountInvalid );
 
 	const save = () => {
+		if ( isIncrease && mode === 'link' ) {
+			onComplete( {
+				type: 'success',
+				transient: true,
+				message: sprintf( __( 'Payment link sent for %d seats.', 'newspack-plugin' ), limit ),
+				mutate: g => sendSeatUpgradeLink( g, limit, amount ),
+				ownerOrder: buildPaymentLinkOrder( group ),
+			} );
+			return;
+		}
 		onComplete( {
 			type: 'success',
 			transient: true,
 			message: sprintf( __( 'Seat limit updated to %d.', 'newspack-plugin' ), limit ),
-			mutate: g => ( { ...g, seatLimit: limit } ),
+			mutate: g => applySeatIncrease( g, limit ),
+			ownerOrder: isIncrease ? buildSeatIncreaseOrder( group ) : undefined,
 		} );
 	};
 
@@ -47,6 +69,16 @@ export default function AdjustSeatsFlow( { group, onClose, onComplete } ) {
 								strong: <strong />,
 							} ) }
 						</span>
+						{ isIncrease && mode === 'link' && (
+							<span>
+								{ sprintf(
+									__( 'A payment link for %1$s will be emailed to %2$s. Seats apply once paid.', 'newspack-plugin' ),
+									fmtCurrency( amount ),
+									ownerEmail
+								) }
+							</span>
+						) }
+						{ isIncrease && mode === 'free' && <span>{ __( 'Seats are granted now at no charge.', 'newspack-plugin' ) }</span> }
 					</VStack>
 					<HStack spacing={ 2 } justify="flex-end">
 						<Button variant="tertiary" size="compact" onClick={ onClose }>
@@ -92,11 +124,33 @@ export default function AdjustSeatsFlow( { group, onClose, onComplete } ) {
 					__next40pxDefaultSize
 					__nextHasNoMarginBottom
 				/>
+				{ isIncrease && (
+					<RadioControl
+						label={ __( 'How to apply this increase', 'newspack-plugin' ) }
+						selected={ mode }
+						options={ [
+							{ label: __( 'Increase for free', 'newspack-plugin' ), value: 'free' },
+							{ label: __( 'Increase & send a payment link', 'newspack-plugin' ), value: 'link' },
+						] }
+						onChange={ setMode }
+					/>
+				) }
+				{ isIncrease && mode === 'link' && (
+					<TextControl
+						type="number"
+						label={ __( 'Upgrade charge amount', 'newspack-plugin' ) }
+						value={ amountValue }
+						min={ 0 }
+						onChange={ setAmountValue }
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+					/>
+				) }
 				<HStack spacing={ 2 } justify="flex-end">
 					<Button variant="tertiary" size="compact" onClick={ onClose }>
 						{ __( 'Cancel', 'newspack-plugin' ) }
 					</Button>
-					<Button variant="primary" size="compact" onClick={ () => setConfirming( true ) } disabled={ invalid || unchanged }>
+					<Button variant="primary" size="compact" onClick={ () => setConfirming( true ) } disabled={ cannotConfirm }>
 						{ __( 'Adjust seats', 'newspack-plugin' ) }
 					</Button>
 				</HStack>

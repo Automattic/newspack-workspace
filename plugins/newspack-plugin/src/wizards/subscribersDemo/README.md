@@ -180,7 +180,14 @@ source of truth; this is a map of it.
   menu (Add directly / Invite by email / Copy invite link, plus Regenerate /
   Disable invite link once a link exists). The Invitations DataViews
   (Pending/Expired badges, "Accept on behalf" as a per-row and bulk action) only
-  appears when there are pending invites.
+  appears when there are pending invites. When a `seatRequest` is outstanding, a
+  full-width notice shows the requested seat count and status, with admin CTAs
+  Decline (removes the request) and Mark as paid (applies the limit immediately,
+  logs a manual "Seat upgrade payment" order); when `awaiting-payment` the notice
+  also shows the amount. The owner originates such a request from the front-end My
+  Account group page (a real feature, not part of this prototype). The **GroupList**
+  shows a badge on groups with a pending or awaiting-payment request so admins can
+  spot them at a glance.
 
 **Admin superpower (divergence from owner parity).** Beyond the owner-facing My
 Account flow (#148), an admin can add members directly (Add members → Add directly) and
@@ -209,7 +216,7 @@ All mutate through the `onComplete({ message, mutate })` convention above.
 | `InviteMemberFlow` | "Add members → Invite by email" | `FormTokenField` multi-email, capacity-aware (warns at zero seats, trims over capacity, de-dupes vs. pending). | Pending email invites added. |
 | `AddMembersFlow` | "Add members → Add directly" | `FormTokenField` multi-email, capacity-aware (trims over capacity with a warning), "Send a welcome email" checkbox. Existing accounts resolve by email; unknown emails create a stub account. | Members added immediately; a matching pending invite is consumed. |
 | `AcceptInviteFlow` | Invitations "Accept on behalf" (row or bulk) | Confirms the count with a "Send a welcome email" checkbox. | Pending invite(s) converted to members; seat count unchanged. |
-| `AdjustSeatsFlow` | "Adjust seats" | Number input floored at reserved seats, raise only while active; two-step input → confirm summary. | Seat limit updated. |
+| `AdjustSeatsFlow` | "Adjust seats" | Number input floored at reserved seats, raise only while active; two-step input → confirm summary. When raising the limit, offers Increase for free or Increase & send a payment link (admin-entered amount); can be opened pre-filled from an owner seat request. | Seat limit updated (free path: immediate; payment-link path: sends link and sets `awaiting-payment` on the request). |
 | `MakeOwnerFlow` | Member kebab "Make owner" | `ConfirmFlow`. | Ownership transferred; previous owner demoted. |
 | `RemoveMemberFlow` | Member kebab / bulk "Remove member" (row or bulk) | `ConfirmFlow` (destructive); pluralizes the copy for multiple members. The owner is never eligible. | Member(s) removed; seats freed. |
 | `RegenerateLinkFlow` / `DisableLinkFlow` | "Add members" menu (when a link exists) | `ConfirmFlow` (disable is destructive). Copy invite link itself is no modal: it copies and creates the link if none exists. | Link regenerated / disabled. |
@@ -217,6 +224,14 @@ All mutate through the `onComplete({ message, mutate })` convention above.
 
 `ConfirmFlow` is the shared scaffold (title, body, Cancel + primary/destructive
 Confirm) behind the six simple confirmations above.
+
+The owner's "Request more seats" / seat-upgrade payment is **not** part of this
+prototype: it ships as a real front-end feature on the My Account group page
+(`includes/plugins/woocommerce/.../templates/v1/group.php`). The prototype only
+covers the admin-side response to such a request (the seat-request notice with
+its Decline / Mark as paid actions, and the request badge on `GroupList`). The
+real owner template lives at
+`includes/plugins/woocommerce/my-account/templates/v1/group.php`.
 
 ## Data model
 
@@ -261,6 +276,13 @@ Confirm) behind the six simple confirmations above.
     { id, type: 'email', email, status, sentAt },  // status 'pending'; expiry derived from sentAt
     { id, type: 'link', status, createdAt },        // one persistent reusable link
   ],
+  seatRequest: {            // null when no outstanding request
+    target,                 // requested total seat count (> seatLimit)
+    requestedAt,            // YYYY-MM-DD
+    status,                 // 'pending' | 'awaiting-payment'
+    amount,                 // set when admin sends a payment link
+    linkSentAt,             // set when admin sends a payment link
+  } | null,
 }
 ```
 

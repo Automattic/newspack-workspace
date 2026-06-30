@@ -316,7 +316,7 @@ class Group_Subscription {
 		// move this check ahead of the removal loop and compute the projected count there.
 		$existing_members = self::get_members( $subscription );
 		if ( $subscription_settings['limit'] > 0 && count( $existing_members ) + count( $members_to_add ) > $subscription_settings['limit'] ) {
-			return new \WP_Error( 'newspack_group_subscription_update_members', __( 'Member limit reached. Please remove some members or increase the limit.', 'newspack-plugin' ), [ 'status' => 409 ] );
+			return new \WP_Error( 'newspack_group_subscription_update_members', __( 'Seat limit reached. Please remove some members or increase the limit.', 'newspack-plugin' ), [ 'status' => 409 ] );
 		}
 
 		// Add new members.

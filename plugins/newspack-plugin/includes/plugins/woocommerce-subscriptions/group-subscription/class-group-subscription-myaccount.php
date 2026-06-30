@@ -44,6 +44,11 @@ class Group_Subscription_MyAccount {
 	const LEAVE_GROUP_NONCE_ACTION = 'newspack_group_subscription_leave_group';
 
 	/**
+	 * Nonce action for the request-more-seats form.
+	 */
+	const REQUEST_SEATS_NONCE_ACTION = 'newspack_group_subscription_request_seats';
+
+	/**
 	 * Register hooks for the My Account group subscription UI.
 	 */
 	public static function init() {
@@ -59,6 +64,7 @@ class Group_Subscription_MyAccount {
 		add_action( 'admin_post_' . self::CANCEL_INVITE_NONCE_ACTION, [ __CLASS__, 'handle_cancel_invite' ] );
 		add_action( 'admin_post_' . self::REMOVE_MEMBER_NONCE_ACTION, [ __CLASS__, 'handle_remove_member' ] );
 		add_action( 'admin_post_' . self::LEAVE_GROUP_NONCE_ACTION, [ __CLASS__, 'handle_leave_group' ] );
+		add_action( 'admin_post_' . self::REQUEST_SEATS_NONCE_ACTION, [ __CLASS__, 'handle_request_seats' ] );
 	}
 
 	/**
@@ -585,6 +591,109 @@ class Group_Subscription_MyAccount {
 				Group_Subscription::get_label_lower( 'singular' )
 			)
 		);
+	}
+
+	/**
+	 * Handle the request-more-seats form submission.
+	 *
+	 * The owner asks the publisher to raise the member limit. We record the
+	 * requested limit on the subscription and email the publisher; the publisher
+	 * fulfils it by raising the limit through the existing seat-limit setting,
+	 * which clears the pending request automatically.
+	 */
+	public static function handle_request_seats() {
+		check_admin_referer( self::REQUEST_SEATS_NONCE_ACTION );
+		[ $subscription_id, $redirect_url ] = self::get_subscription_context();
+		self::verify_permission( $subscription_id, $redirect_url, 'members' );
+		self::verify_active( $subscription_id, $redirect_url, 'members' );
+
+		$requested     = (int) filter_input( INPUT_POST, 'newspack-group-subscription-requested-limit', FILTER_VALIDATE_INT );
+		$subscription  = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
+		$current_limit = $subscription ? (int) Group_Subscription_Settings::get_subscription_settings( $subscription )['limit'] : 0;
+
+		// A request only makes sense as a finite increase beyond the current limit
+		// (an unlimited group — limit 0 — has no ceiling to raise).
+		if ( ! $subscription || $current_limit <= 0 || $requested <= $current_limit ) {
+			$invalid_message = sprintf(
+				/* translators: %s: lowercase singular group label. */
+				__( 'Enter a seat limit higher than your %s\'s current limit.', 'newspack-plugin' ),
+				Group_Subscription::get_label_lower( 'singular' )
+			);
+			self::redirect(
+				new \WP_Error( 'newspack_group_subscription_invalid_seat_request', $invalid_message ),
+				$redirect_url,
+				'members',
+				$invalid_message
+			);
+		}
+
+		Group_Subscription_Settings::set_requested_limit( $subscription, $requested );
+		self::notify_publisher_of_seat_request( $subscription, $current_limit, $requested );
+
+		self::redirect(
+			true,
+			$redirect_url,
+			'members',
+			sprintf(
+				/* translators: %d: requested number of seats. */
+				__( 'Your request to increase the number of seats to %d has been received.', 'newspack-plugin' ),
+				$requested
+			)
+		);
+	}
+
+	/**
+	 * Email the publisher that a group owner has requested more seats.
+	 *
+	 * @param \WC_Subscription $subscription    The group subscription.
+	 * @param int              $current_limit   The current member limit.
+	 * @param int              $requested_limit The requested member limit.
+	 */
+	private static function notify_publisher_of_seat_request( $subscription, $current_limit, $requested_limit ): void {
+		$settings  = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		$requester = get_user_by( 'id', $subscription->get_user_id() );
+		$requester_label = $requester ? newspack_get_user_display_label( $requester ) : __( 'A group owner', 'newspack-plugin' );
+
+		$recipient = apply_filters(
+			'newspack_group_subscription_seat_request_recipient',
+			get_option( 'admin_email' ),
+			$subscription
+		);
+
+		$subject = sprintf(
+			/* translators: %s: group name. */
+			__( 'Seat increase requested for %s', 'newspack-plugin' ),
+			$settings['name']
+		);
+
+		$lines   = [
+			sprintf(
+				/* translators: 1: requester name, 2: group name. */
+				__( '%1$s has requested more seats for the group subscription "%2$s".', 'newspack-plugin' ),
+				$requester_label,
+				$settings['name']
+			),
+			'',
+			sprintf(
+				/* translators: %d: current seat limit. */
+				__( 'Current seat limit: %d', 'newspack-plugin' ),
+				$current_limit
+			),
+			sprintf(
+				/* translators: %d: requested seat limit. */
+				__( 'Requested seat limit: %d', 'newspack-plugin' ),
+				$requested_limit
+			),
+			'',
+			sprintf(
+				/* translators: %s: subscription admin URL. */
+				__( 'Review and raise the limit here: %s', 'newspack-plugin' ),
+				$subscription->get_edit_order_url()
+			),
+		];
+		$message = implode( "\n", $lines );
+
+		wp_mail( $recipient, $subject, $message ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
 	}
 }
 Group_Subscription_MyAccount::init();

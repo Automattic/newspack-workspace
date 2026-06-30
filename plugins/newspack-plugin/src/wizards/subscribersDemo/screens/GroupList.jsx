@@ -25,7 +25,7 @@ import './style.scss';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { getSubscriberById } from '../data/mock-subscribers';
-import { getAllGroups, seatsUsed, ALL_GROUP_PLAN_NAMES, GROUP_STATUS_LABELS, GROUP_STATUS_BADGE_LEVEL } from '../data/mock-groups';
+import { getAllGroups, seatsUsed, hasSeatRequest, ALL_GROUP_PLAN_NAMES, GROUP_STATUS_LABELS, GROUP_STATUS_BADGE_LEVEL } from '../data/mock-groups';
 import { GROUP_LABEL_PLURAL, GROUP_LABEL_PLURAL_LOWER } from '../labels';
 
 const { useHistory } = Router;
@@ -78,7 +78,19 @@ export default function GroupList() {
 					const owner = getSubscriberById( item.ownerId );
 					const details = (
 						<div>
-							{ owner ? <div>{ owner.name }</div> : <span>—</span> }
+							<HStack spacing={ 2 } justify="flex-start" alignment="center" expanded={ false }>
+								{ owner ? <span>{ owner.name }</span> : <span>—</span> }
+								{ hasSeatRequest( item ) && (
+									<Badge
+										level="warning"
+										text={
+											item.seatRequest.status === 'awaiting-payment'
+												? __( 'Awaiting payment', 'newspack-plugin' )
+												: __( 'Seat increase requested', 'newspack-plugin' )
+										}
+									/>
+								) }
+							</HStack>
 							<div className="newspack-subscribers-demo__email">{ item.plan }</div>
 						</div>
 					);

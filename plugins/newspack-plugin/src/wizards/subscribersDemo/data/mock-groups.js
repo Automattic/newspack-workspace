@@ -172,6 +172,7 @@ const FIXTURES = [
 				createdAt: iso( 12 ),
 			},
 		],
+		seatRequest: { target: 25, requestedAt: '2026-06-20', status: 'pending' },
 	},
 	{
 		id: 'grp_riverside',
@@ -497,6 +498,58 @@ export function isGroupActive( group ) {
 
 export function isGroupManageable( group ) {
 	return group.status !== 'cancelled';
+}
+
+// PROTOTYPE: a single outstanding seat-increase request lives on the group as
+// `seatRequest` (null when none). These are pure transformers — callers persist
+// via setStoredGroup or the GroupDetail setGroup→useEffect seam, matching how the
+// rest of the data layer mutates groups.
+const todayStr = () => new Date().toISOString().slice( 0, 10 );
+
+export function hasSeatRequest( group ) {
+	return !! group.seatRequest;
+}
+
+// A request can only be opened on an active group with no outstanding request.
+export function canRequestSeats( group ) {
+	return isGroupActive( group ) && ! hasSeatRequest( group );
+}
+
+// Owner asks the publication for a higher seat count. Records the target only;
+// the admin decides free vs. paid.
+export function requestSeatIncrease( group, target ) {
+	return { ...group, seatRequest: { target, requestedAt: todayStr(), status: 'pending' } };
+}
+
+// Free fulfilment (or any admin-applied increase): raise the limit, clear the request.
+export function applySeatIncrease( group, target ) {
+	return { ...group, seatLimit: target, seatRequest: null };
+}
+
+// Paid path: a link is emailed to the owner. The limit holds at the current value
+// until payment; the requested target and amount ride on the request.
+export function sendSeatUpgradeLink( group, target, amount ) {
+	return {
+		...group,
+		seatRequest: {
+			...( group.seatRequest || {} ),
+			target,
+			amount,
+			status: 'awaiting-payment',
+			requestedAt: group.seatRequest?.requestedAt || todayStr(),
+			linkSentAt: todayStr(),
+		},
+	};
+}
+
+// Owner pays (or admin marks paid): apply the awaiting-payment target, clear request.
+export function paySeatUpgrade( group ) {
+	return { ...group, seatLimit: group.seatRequest.target, seatRequest: null };
+}
+
+// Decline / dismiss: drop the request, no seat change.
+export function clearSeatRequest( group ) {
+	return { ...group, seatRequest: null };
 }
 
 // PROTOTYPE ONLY: group mutations are persisted to the current admin's

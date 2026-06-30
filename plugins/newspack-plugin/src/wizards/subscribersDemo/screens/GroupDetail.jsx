@@ -15,7 +15,18 @@ import { useEffect, useMemo, useState } from '@wordpress/element';
 import { __, _n, sprintf } from '@wordpress/i18n';
 import { useDispatch } from '@wordpress/data';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
-import { Dropdown, MenuGroup, MenuItem, __experimentalHStack as HStack, Notice, Snackbar } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import {
+	Dropdown,
+	MenuGroup,
+	MenuItem,
+	Modal,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalHStack as HStack,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalVStack as VStack,
+	Notice,
+	Snackbar,
+} from '@wordpress/components';
 
 /**
  * Internal dependencies.
@@ -33,14 +44,16 @@ import {
 	isGroupManageable,
 	isInviteExpired,
 	hasActiveInviteLink,
+	clearSeatRequest,
+	paySeatUpgrade,
 	GROUP_STATUS_LABELS,
 	GROUP_STATUS_BADGE_LEVEL,
 } from '../data/mock-groups';
 import { GROUP_LABEL, GROUP_LABEL_PLURAL } from '../labels';
-import { fmtDate } from '../format';
+import { fmtCurrency, fmtDate } from '../format';
 import { useNoticesPortal } from '../use-portals';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
-import { NoticesPanel, groupOnHoldNotice } from './SubscriberNotices';
+import { NoticesPanel, groupOnHoldNotice, seatRequestNotice } from './SubscriberNotices';
 
 import AcceptInviteFlow from '../flows/AcceptInviteFlow';
 import AddMembersFlow from '../flows/AddMembersFlow';
@@ -57,7 +70,13 @@ import RefundFlow from '../flows/RefundFlow';
 import PlanChangeFlow from '../flows/PlanChangeFlow';
 import GuidedFixFlow from '../flows/GuidedFixFlow';
 import { hasUsableCard } from '../flows/free-access';
-import { buildReactivation, buildFreeReactivation, buildPaymentLinkOrder, reactivatedMessage } from '../flows/subscription-actions';
+import {
+	buildReactivation,
+	buildFreeReactivation,
+	buildPaymentLinkOrder,
+	buildSeatUpgradePaymentOrder,
+	reactivatedMessage,
+} from '../flows/subscription-actions';
 import { latestOrderDate } from '../data/orders';
 
 const { useParams, useHistory } = Router;
@@ -179,7 +198,7 @@ function GroupDetailView() {
 	// Subscription flows (refund/cancel, plan change) return the same group
 	// descriptors the person profile handles; here the group on screen is the
 	// target, so they fold straight into setGroup.
-	const completeFlow = ( { message, mutate, groupCancel, groupChange } ) => {
+	const completeFlow = ( { message, mutate, ownerOrder, groupCancel, groupChange } ) => {
 		if ( groupCancel ) {
 			setGroup( prev => ( { ...prev, status: 'cancelled', nextBillingDate: null } ) );
 		}
@@ -191,6 +210,9 @@ function GroupDetailView() {
 				amount: groupChange.amount,
 				seatLimit: groupChange.seatLimit,
 			} ) );
+		}
+		if ( ownerOrder ) {
+			addOwnerOrder( ownerOrder );
 		}
 		applyMutation( { message, mutate } );
 		setModal( null );
@@ -226,6 +248,22 @@ function GroupDetailView() {
 	const sendGroupPaymentLink = () => {
 		addOwnerOrder( buildPaymentLinkOrder( group ) );
 		setSnackbar( { message: sprintf( __( 'Payment link sent to %s.', 'newspack-plugin' ), owner?.email ) } );
+		setModal( null );
+	};
+
+	// Decline a pending seat-increase request: drop it, no seat change.
+	const declineSeatRequest = () => {
+		setGroup( prev => clearSeatRequest( prev ) );
+		setSnackbar( { message: __( 'Seat request declined.', 'newspack-plugin' ) } );
+	};
+
+	// Mark an awaiting-payment upgrade as paid offline (cheque, bank transfer):
+	// apply the increase now and log the payment with the manual flag.
+	const markSeatUpgradePaid = () => {
+		const { target, amount } = group.seatRequest;
+		addOwnerOrder( buildSeatUpgradePaymentOrder( group, amount, { manual: true } ) );
+		setGroup( prev => paySeatUpgrade( prev ) );
+		setSnackbar( { message: sprintf( __( 'Marked as paid. Seat limit raised to %d.', 'newspack-plugin' ), target ) } );
 		setModal( null );
 	};
 
@@ -460,9 +498,28 @@ function GroupDetailView() {
 	const goToOwner = () => history.push( `/profile/${ group.ownerId }?from=${ encodeURIComponent( `#/group/${ group.id }` ) }` );
 	// On-hold defers to the owner's profile, where Reactivate lives. A cancelled
 	// group shows no notice: the header badge and disabled actions already say so.
-	const groupNotices = [ group.status === 'on-hold' && groupOnHoldNotice( { plan: group.plan, lastCharged: fmtDate( ownerLastCharge ) } ) ]
+	const groupNotices = [
+		group.status === 'on-hold' && groupOnHoldNotice( { plan: group.plan, lastCharged: fmtDate( ownerLastCharge ) } ),
+		group.seatRequest &&
+			( () => {
+				const notice = seatRequestNotice( { target: group.seatRequest.target, status: group.seatRequest.status } );
+				if ( group.seatRequest.status === 'awaiting-payment' ) {
+					return {
+						...notice,
+						action: { label: __( 'Mark as paid', 'newspack-plugin' ), onClick: () => setModal( { kind: 'mark-seat-paid' } ) },
+					};
+				}
+				return {
+					...notice,
+					actions: [
+						{ label: __( 'Decline request', 'newspack-plugin' ), onClick: declineSeatRequest, variant: 'tertiary' },
+						{ label: __( 'Adjust seats', 'newspack-plugin' ), onClick: () => setModal( { kind: 'seats' } ), variant: 'secondary' },
+					],
+				};
+			} )(),
+	]
 		.filter( Boolean )
-		.map( notice => ( { ...notice, action: { label: notice.actionLabel, onClick: goToOwner } } ) );
+		.map( notice => ( notice.actions ? notice : { ...notice, action: notice.action ?? { label: notice.actionLabel, onClick: goToOwner } } ) );
 
 	return (
 		<div className="newspack-subscribers-demo__profile">
@@ -589,6 +646,27 @@ function GroupDetailView() {
 				<RemoveMemberFlow group={ group } members={ modal.members } onClose={ closeModal } onComplete={ completeFlow } />
 			) }
 			{ modal?.kind === 'seats' && <AdjustSeatsFlow group={ group } onClose={ closeModal } onComplete={ completeFlow } /> }
+			{ modal?.kind === 'mark-seat-paid' && group.seatRequest && (
+				<Modal title={ __( 'Mark seat upgrade as paid', 'newspack-plugin' ) } onRequestClose={ closeModal } size="small">
+					<VStack spacing={ 4 }>
+						<p>
+							{ sprintf(
+								__( 'Record an offline payment of %1$s and raise the seat limit to %2$d now?', 'newspack-plugin' ),
+								fmtCurrency( group.seatRequest.amount ),
+								group.seatRequest.target
+							) }
+						</p>
+						<HStack spacing={ 2 } justify="flex-end">
+							<Button variant="tertiary" size="compact" onClick={ closeModal }>
+								{ __( 'Cancel', 'newspack-plugin' ) }
+							</Button>
+							<Button variant="primary" size="compact" onClick={ markSeatUpgradePaid }>
+								{ __( 'Mark as paid', 'newspack-plugin' ) }
+							</Button>
+						</HStack>
+					</VStack>
+				</Modal>
+			) }
 			{ modal?.kind === 'make-owner' && (
 				<MakeOwnerFlow
 					group={ group }

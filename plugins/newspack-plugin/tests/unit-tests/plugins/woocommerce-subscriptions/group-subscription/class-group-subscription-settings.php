@@ -242,4 +242,89 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 
 		$this->assertSame( Group_Subscription::get_label( 'singular' ), $settings['name'], 'When neither name meta nor a product name is set, the group name should fall back to the publisher singular group label.' );
 	}
+
+	/*
+	 * --- requested member limit (owner seat requests) ---
+	 */
+
+	/**
+	 * With no request stored, the requested limit reads as 0.
+	 */
+	public function test_requested_limit_defaults_to_zero() {
+		$subscription = $this->make_subscription_with_product(
+			[
+				'enabled' => 'yes',
+				'limit'   => '5',
+			]
+		);
+
+		$this->assertSame( 0, Group_Subscription_Settings::get_requested_limit( $subscription ), 'A subscription with no pending request should report a requested limit of 0.' );
+	}
+
+	/**
+	 * A requested limit can be stored and read back.
+	 */
+	public function test_set_and_get_requested_limit() {
+		$subscription = $this->make_subscription_with_product(
+			[
+				'enabled' => 'yes',
+				'limit'   => '5',
+			]
+		);
+
+		Group_Subscription_Settings::set_requested_limit( $subscription, 10 );
+
+		$this->assertSame( 10, Group_Subscription_Settings::get_requested_limit( $subscription ), 'The stored requested limit should be returned.' );
+	}
+
+	/**
+	 * Clearing a requested limit resets it to 0.
+	 */
+	public function test_clear_requested_limit() {
+		$subscription = $this->make_subscription_with_product(
+			[
+				'enabled' => 'yes',
+				'limit'   => '5',
+			]
+		);
+
+		Group_Subscription_Settings::set_requested_limit( $subscription, 10 );
+		Group_Subscription_Settings::clear_requested_limit( $subscription );
+
+		$this->assertSame( 0, Group_Subscription_Settings::get_requested_limit( $subscription ), 'A cleared requested limit should read as 0.' );
+	}
+
+	/**
+	 * Raising the limit to meet or exceed the request clears the pending request.
+	 */
+	public function test_raising_limit_fulfils_pending_request() {
+		$subscription = $this->make_subscription_with_product(
+			[
+				'enabled' => 'yes',
+				'limit'   => '5',
+			]
+		);
+		Group_Subscription_Settings::set_requested_limit( $subscription, 10 );
+
+		Group_Subscription_Settings::update_subscription_settings( $subscription, [ 'limit' => 10 ] );
+
+		$this->assertSame( 0, Group_Subscription_Settings::get_requested_limit( $subscription ), 'Raising the limit to the requested value should clear the pending request.' );
+	}
+
+	/**
+	 * A limit bump that still falls short of the request leaves it pending.
+	 */
+	public function test_partial_limit_increase_keeps_request_pending() {
+		$subscription = $this->make_subscription_with_product(
+			[
+				'enabled' => 'yes',
+				'limit'   => '5',
+			]
+		);
+		Group_Subscription_Settings::set_requested_limit( $subscription, 10 );
+
+		Group_Subscription_Settings::update_subscription_settings( $subscription, [ 'limit' => 8 ] );
+
+		$this->assertSame( 10, Group_Subscription_Settings::get_requested_limit( $subscription ), 'A limit increase below the requested value should leave the request pending.' );
+	}
 }

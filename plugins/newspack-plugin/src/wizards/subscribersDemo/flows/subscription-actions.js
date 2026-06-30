@@ -76,3 +76,22 @@ export const buildPaymentLinkOrder = target => ( {
 	type: __( 'Payment link sent', 'newspack-plugin' ),
 	subscriptionId: target.id,
 } );
+
+// A "Seat increase" billing-history order (free grant, no amount) for the group.
+export const buildSeatIncreaseOrder = group => ( {
+	id: `ord_seat_${ Date.now() }`,
+	date: todayIso(),
+	amount: null,
+	type: __( 'Seat increase', 'newspack-plugin' ),
+	subscriptionId: group.id,
+} );
+
+// A "Seat upgrade payment" order for a paid seat increase. `manual` marks an
+// offline settlement (cheque, bank transfer) the admin recorded by hand.
+export const buildSeatUpgradePaymentOrder = ( group, amount, { manual = false } = {} ) => ( {
+	id: `ord_seatpay_${ Date.now() }`,
+	date: todayIso(),
+	amount,
+	type: manual ? __( 'Seat upgrade payment (offline)', 'newspack-plugin' ) : __( 'Seat upgrade payment', 'newspack-plugin' ),
+	subscriptionId: group.id,
+} );

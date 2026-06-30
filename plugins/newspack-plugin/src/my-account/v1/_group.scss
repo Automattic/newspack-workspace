@@ -9,6 +9,25 @@
 	}
 }
 
+// The seat-count row sits directly beneath the whole header (title, badge and
+// actions), so collapse the header's own bottom margin and carry the gap to the
+// content on the seat-count row instead. Matches the shared --header selector
+// depth (.woocommerce-account.newspack-my-account.newspack-ui) so it wins.
+.woocommerce-account.newspack-my-account.newspack-ui .newspack-my-account__group {
+	.newspack-my-account__subscription--header {
+		gap: var(--newspack-ui-spacer-1);
+		margin-bottom: var(--newspack-ui-spacer-1);
+	}
+
+	.newspack-my-account__subscription--meta {
+		margin-bottom: var(--newspack-ui-spacer-6);
+
+		@media ( min-width: 768px ) {
+			margin-bottom: var(--newspack-ui-spacer-8);
+		}
+	}
+}
+
 .newspack-my-account__group-picker {
 	> header {
 		margin-bottom: var(--newspack-ui-spacer-5);

@@ -100,6 +100,32 @@
 				white-space: nowrap;
 			}
 		}
+		&--meta {
+			align-items: center;
+			color: var(--newspack-ui-color-neutral-60);
+			display: flex;
+			flex-wrap: wrap;
+			font-size: var(--newspack-ui-font-size-s);
+			gap: var(--newspack-ui-spacer-1);
+			line-height: var(--newspack-ui-line-height-s);
+		}
+		&--meta-sep {
+			color: var(--newspack-ui-color-neutral-40);
+		}
+		&--meta-link {
+			background: none;
+			border: 0;
+			color: inherit;
+			cursor: pointer;
+			font: inherit;
+			padding: 0;
+			text-decoration: underline;
+
+			&:hover,
+			&:focus {
+				color: var(--newspack-ui-color-neutral-90);
+			}
+		}
 		&--back-link {
 			margin: 0;
 

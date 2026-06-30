@@ -290,7 +290,7 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 							echo esc_html(
 								sprintf(
 									/* translators: 1: lowercase singular group label, 2: lowercase singular group label (again). */
-									__( 'You have reached the member limit for this %1$s. Please remove some members or cancel pending invitations before inviting more %2$s members.', 'newspack-plugin' ),
+									__( 'You have reached the seat limit for this %1$s. Please remove some members or cancel pending invitations before inviting more %2$s members.', 'newspack-plugin' ),
 									$group_label_lower,
 									$group_label_lower
 								)
@@ -325,6 +325,50 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 				</section>
 			</div><!-- .newspack-ui__modal__small -->
 	</div> <!-- .newspack-ui__modal-container -->
+
+	<?php if ( $is_active && $member_limit > 0 ) : ?>
+	<!-- .newspack-ui__modal: request more seats -->
+	<div id="newspack-my-account__group_subscription--request-seats" class="newspack-ui__modal-container">
+		<div class="newspack-ui__modal-container__overlay"></div>
+		<div class="newspack-ui__modal newspack-ui__modal--small">
+				<header class="newspack-ui__modal__header">
+					<h2><?php esc_html_e( 'Request more seats', 'newspack-plugin' ); ?></h2>
+
+					<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost newspack-ui__modal__close">
+						<span class="screen-reader-text"><?php esc_html_e( 'Close', 'newspack-plugin' ); ?></span>
+						<?php Newspack_UI_Icons::print_svg( 'close' ); ?>
+					</button>
+				</header>
+
+				<section class="newspack-ui__modal__content">
+					<p>
+						<?php
+						echo esc_html(
+							sprintf(
+								/* translators: 1: lowercase singular group label, 2: current seat count. */
+								__( 'Your %1$s currently has %2$d seats. Tell the publication the new limit you need and they\'ll be in touch.', 'newspack-plugin' ),
+								$group_label_lower,
+								$member_limit
+							)
+						);
+						?>
+					</p>
+					<form name="newspack-group-subscription-request-seats" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+						<input type="hidden" name="action" value="newspack_group_subscription_request_seats">
+						<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $subscription->get_id() ); ?>">
+						<?php wp_nonce_field( Group_Subscription_MyAccount::REQUEST_SEATS_NONCE_ACTION ); ?>
+						<p>
+							<label for="newspack-group-subscription-requested-limit"><?php esc_html_e( 'New seat limit', 'newspack-plugin' ); ?></label>
+							<input type="number" id="newspack-group-subscription-requested-limit" name="newspack-group-subscription-requested-limit" min="<?php echo esc_attr( $member_limit + 1 ); ?>" value="<?php echo esc_attr( $member_limit + 1 ); ?>" required>
+						</p>
+
+						<button type="submit" class="newspack-ui__button newspack-ui__button--primary newspack-ui__button--wide"><span><?php esc_html_e( 'Send request', 'newspack-plugin' ); ?></span></button>
+						<button type="button" class="newspack-ui__button newspack-ui__button--ghost newspack-ui__button--wide newspack-ui__modal__close"><?php esc_html_e( 'Cancel', 'newspack-plugin' ); ?></button>
+					</form>
+				</section>
+			</div><!-- .newspack-ui__modal__small -->
+	</div> <!-- .newspack-ui__modal-container -->
+	<?php endif; ?>
 
 	<!-- .newspack-ui__modal: regenerate invite link -->
 	<div id="newspack-my-account__group_subscription--confirm-regenerate-link" class="newspack-ui__modal-container">
