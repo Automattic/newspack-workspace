@@ -82,6 +82,11 @@ class Wizards {
 		if ( Memberships::is_active() ) {
 			self::$wizards['audience-subscriptions'] = new Audience_Subscriptions();
 		}
+		// Pricing Rules manager, available when the dynamic-pricing engine
+		// plugin is active (it owns the rules REST API).
+		if ( class_exists( 'Automattic\\WooCommerce\\DynamicPricing\\Dynamic_Pricing' ) ) {
+			self::$wizards['audience-pricing-rules'] = new Audience_Pricing_Rules();
+		}
 	}
 
 	/**

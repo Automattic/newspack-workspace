@@ -145,6 +145,9 @@ class WC_Order_Item_Product {
 	public function get_product_id() {
 		return $this->data['product_id'] ?? 0;
 	}
+	public function get_quantity() {
+		return $this->data['quantity'] ?? 1;
+	}
 	public function get_subtotal() {
 		return $this->data['subtotal'] ?? 0;
 	}
@@ -189,8 +192,60 @@ class WC_Product {
 	public function get_children() {
 		return $this->data['children'] ?? [];
 	}
+	public function get_regular_price() {
+		return $this->data['regular_price'] ?? ( $this->meta['_regular_price'] ?? 0 );
+	}
+	public function get_price() {
+		return $this->data['price'] ?? ( $this->meta['_price'] ?? $this->get_regular_price() );
+	}
+	public function set_price( $price ) {
+		$this->data['price'] = $price;
+	}
 	public function get_meta( $key, $single = true ) {
 		return $this->meta[ $key ] ?? '';
+	}
+}
+
+class WC_Cart {
+	public $cart_contents = [];
+	public function __construct( $cart_contents = [] ) {
+		$this->cart_contents = $cart_contents;
+	}
+	public function get_cart() {
+		return $this->cart_contents;
+	}
+	public function get_cart_item( $key ) {
+		return $this->cart_contents[ $key ] ?? [];
+	}
+}
+
+if ( ! function_exists( 'WC' ) ) {
+	/**
+	 * Mock WC() global: returns whatever the test set on $GLOBALS['woocommerce'],
+	 * usually a stdClass carrying `->cart` (and optionally `->customer`). Lets
+	 * surface code that reads WC()->cart resolve under unit tests.
+	 */
+	function WC() {
+		return $GLOBALS['woocommerce'] ?? null;
+	}
+}
+
+if ( ! class_exists( 'WC_Subscriptions_Cart' ) ) {
+	/**
+	 * Minimal WCS cart shim: only the calculation-type flag the dynamic-pricing
+	 * surface reads to distinguish the main cart pass from the recurring-totals
+	 * projection pass. Deliberately omits get_recurring_cart_key — code paths
+	 * guard on method_exists and skip when absent.
+	 */
+	class WC_Subscriptions_Cart {
+		public static $calculation_type = 'none';
+		public static function get_calculation_type() {
+			return self::$calculation_type;
+		}
+		public static function set_calculation_type( $type ) {
+			self::$calculation_type = $type;
+			return $type;
+		}
 	}
 }
 
@@ -490,6 +545,34 @@ if ( ! class_exists( 'WC_Subscriptions_Product' ) ) {
 			}
 			return (float) $product->get_meta( '_subscription_price' );
 		}
+		public static function is_subscription( $product ) {
+			return is_object( $product ) && method_exists( $product, 'get_type' )
+				&& in_array( $product->get_type(), [ 'subscription', 'variable-subscription', 'subscription_variation' ], true );
+		}
+		public static function get_period( $product ) {
+			$period = is_object( $product ) && method_exists( $product, 'get_meta' ) ? $product->get_meta( '_subscription_period' ) : '';
+			return $period ? $period : 'month';
+		}
+		public static function get_interval( $product ) {
+			$interval = is_object( $product ) && method_exists( $product, 'get_meta' ) ? (int) $product->get_meta( '_subscription_period_interval' ) : 0;
+			return $interval > 0 ? $interval : 1;
+		}
+		/**
+		 * Minimal mirror of WCS's price-string builder — enough to derive a
+		 * locale-stable suffix in tests. Real WCS returns localized text via
+		 * `wcs_price_string`; we just need a placeholder-substitutable format.
+		 */
+		public static function get_price_string( $product, $include = [] ) {
+			$price    = isset( $include['price'] ) ? (string) $include['price'] : '';
+			$include_period = ! array_key_exists( 'subscription_period', $include ) || $include['subscription_period'];
+			$suffix = '';
+			if ( $include_period ) {
+				$interval = self::get_interval( $product );
+				$period   = self::get_period( $product );
+				$suffix   = 1 === $interval ? sprintf( ' / %s', $period ) : sprintf( ' every %d %ss', $interval, $period );
+			}
+			return $price . $suffix;
+		}
 	}
 }
 
@@ -681,12 +764,6 @@ function wc_string_to_bool( $string ) {
 }
 function wc_bool_to_string( $bool ) {
 	return $bool ? 'yes' : 'no';
-}
-function wc_clean( $var ) {
-	if ( is_array( $var ) ) {
-		return array_map( 'wc_clean', $var );
-	}
-	return is_scalar( $var ) ? sanitize_text_field( $var ) : $var;
 }
 function wc_prices_include_tax() {
 	global $wcs_mock_prices_include_tax;
