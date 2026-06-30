@@ -43,16 +43,17 @@ usort(
 	<div class="newspack-ui__grid">
 		<?php foreach ( $managed as $subscription ) : ?>
 			<?php
-			$settings            = Group_Subscription_Settings::get_subscription_settings( $subscription );
-			$members             = Group_Subscription::get_members( $subscription );
-			$member_count        = count( $members );
-			$limit               = $settings['limit'] > 0 ? $settings['limit'] : null;
-			$count_label         = $limit
+			$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+			// The owner counts as a member, so use the owner-inclusive count and a
+			// capacity (limit + owner) so the card matches the group's Members tab.
+			$member_count        = Group_Subscription::get_member_count( $subscription );
+			$capacity            = Group_Subscription::get_member_capacity( $subscription );
+			$count_label         = $capacity
 				? sprintf(
-					/* translators: 1: member count, 2: member limit */
+					/* translators: 1: member count, 2: member capacity */
 					_x( '%1$d of %2$d members', 'group member count', 'newspack-plugin' ),
 					$member_count,
-					$limit
+					$capacity
 				)
 				: sprintf(
 					/* translators: %d: member count */

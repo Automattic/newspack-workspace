@@ -1,3 +1,22 @@
+# newspack-popups [3.14.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.13.1...newspack-popups@3.14.0) (2026-06-29)
+
+
+### Features
+
+* **criteria:** treat utm_medium=email as newsletter subscriber (NPPM-2921, [#312](https://github.com/Automattic/newspack-workspace/issues/312)) ([f2b41c3](https://github.com/Automattic/newspack-workspace/commit/f2b41c365032e086949133704b168fcb6890ffba))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.4.0
+
+## newspack-popups [3.13.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.13.0...newspack-popups@3.13.1) (2026-06-25)
+
+
+### Bug Fixes
+
+* **popups:** prevent stale prompt settings saves ([#266](https://github.com/Automattic/newspack-workspace/issues/266)) ([#427](https://github.com/Automattic/newspack-workspace/issues/427)) ([2f5e8cf](https://github.com/Automattic/newspack-workspace/commit/2f5e8cfa81b130d72eb175b2e4961d5fe2f9d7a3))
+
 # newspack-popups [3.13.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.12.2...newspack-popups@3.13.0) (2026-06-23)
 
 

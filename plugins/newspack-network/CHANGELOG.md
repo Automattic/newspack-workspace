@@ -1,3 +1,10 @@
+## newspack-network [2.20.5](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.4...newspack-network@2.20.5) (2026-06-29)
+
+
+### Bug Fixes
+
+* **woo-memberships:** guard membership_deleted against null plan ([#323](https://github.com/Automattic/newspack-workspace/issues/323)) ([4ab4955](https://github.com/Automattic/newspack-workspace/commit/4ab495529a7371baf7deedd57d7aa0f92d82de88))
+
 ## newspack-network [2.20.4](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.3...newspack-network@2.20.4) (2026-06-15)
 
 
