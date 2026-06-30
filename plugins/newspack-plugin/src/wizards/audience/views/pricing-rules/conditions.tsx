@@ -25,7 +25,7 @@ import { AutocompleteTokenField } from '../../../../../packages/components/src';
 import { tsToLocalInput, localInputToTs } from './datetime';
 import { isConditionVisible, type PricingPath } from './recipes';
 
-type ConditionsMap = { [ id: string ]: boolean | number | number[] | null };
+export type ConditionsMap = { [ id: string ]: boolean | number | number[] | null };
 type DateMode = 'none' | 'publish' | 'custom';
 
 // A stored datetime within this many seconds of the rule's publish date reads back

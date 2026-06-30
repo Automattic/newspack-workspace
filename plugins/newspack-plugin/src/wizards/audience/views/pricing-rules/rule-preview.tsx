@@ -46,7 +46,7 @@ interface RulePreviewProps {
 export default function RulePreview( { body }: RulePreviewProps ) {
 	const [ data, setData ] = useState< RulePreviewResponse | null >( null );
 	const [ isLoading, setIsLoading ] = useState( false );
-	const timer = useRef< ReturnType< typeof setTimeout > >();
+	const timer = useRef< ReturnType< typeof setTimeout > | undefined >( undefined );
 	const bodyKey = JSON.stringify( body );
 
 	useEffect( () => {

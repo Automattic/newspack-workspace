@@ -92,7 +92,8 @@ final class Available_Deals_Bridge {
 
 	/**
 	 * Register the `has_available_deal` Campaigns criterion (per-deal, list__in).
-	 * Options are the advertisable (`publicize`) rules from the engine.
+	 * Options are the engine's active rules — any active rule, regardless of the
+	 * publicize flag (the segment selection is the targeting).
 	 *
 	 * @param array $criteria Default criteria.
 	 * @return array
@@ -100,7 +101,7 @@ final class Available_Deals_Bridge {
 	public static function register_criteria( $criteria ) {
 		$criteria['has_available_deal'] = [
 			'name'               => __( 'Has available deal', 'newspack-plugin' ),
-			'description'        => __( 'Reader qualifies for one of the selected advertisable pricing deals.', 'newspack-plugin' ),
+			'description'        => __( 'Reader qualifies for one of the selected pricing deals.', 'newspack-plugin' ),
 			'category'           => 'reader_revenue',
 			'matching_function'  => 'list__in',
 			'matching_attribute' => self::STORE_KEY,

@@ -28,7 +28,7 @@ import { trash } from '@wordpress/icons';
 import { Grid, SectionHeader, Divider } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import ScopeTargets from './scope-targets';
-import Conditions from './conditions';
+import Conditions, { type ConditionsMap } from './conditions';
 import RulePreview from './rule-preview';
 import { tsToLocalInput, localInputToTs } from './datetime';
 import { RECIPES, pathOptions, applyRecipeConditions, intentLabel, pathDescription, type PricingPath } from './recipes';
@@ -123,7 +123,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 
 	const [ activeFrom, setActiveFrom ] = useState( tsToLocalInput( rule?.active_from ?? null ) );
 	const [ activeUntil, setActiveUntil ] = useState( tsToLocalInput( rule?.active_until ?? null ) );
-	const [ conditions, setConditions ] = useState< Record< string, boolean | number | null > >( () => ( { ...( rule?.conditions ?? {} ) } ) );
+	const [ conditions, setConditions ] = useState< ConditionsMap >( () => ( { ...( rule?.conditions ?? {} ) } ) );
 	const [ isSaving, setIsSaving ] = useState( false );
 
 	const previewBody = useMemo( () => {
@@ -207,6 +207,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 					type: 'error',
 					id: 'pricing-rule-steps',
 				} );
+				setIsSaving( false );
 				return;
 			}
 			body.strategy_id = 'stepped_by_cycle';
