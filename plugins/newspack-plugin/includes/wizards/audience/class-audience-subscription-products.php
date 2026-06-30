@@ -742,24 +742,20 @@ class Audience_Subscription_Products extends Wizard {
 			$policy = self::empty_policy( $currency_code );
 		} elseif ( $product->is_type( 'variable-subscription' ) ) {
 			foreach ( $pricing['variations'] as $index => $variation ) {
-				$pricing['variations'][ $index ]['policy'] = Subscription_Policy_Resolver::resolve(
+				$pricing['variations'][ $index ]['policy'] = self::resolve_policy(
 					$variation['id'],
-					[
-						'base_price' => $variation['base_price'],
-						'cycle'      => $variation['period'],
-						'currency'   => $currency_code,
-					]
+					$variation['base_price'],
+					$variation['period'],
+					$currency_code
 				);
 			}
 			$policy = self::representative_variation_policy( $pricing['variations'], $pricing['base_price'], $currency_code );
 		} else {
-			$policy = Subscription_Policy_Resolver::resolve(
+			$policy = self::resolve_policy(
 				$product->get_id(),
-				[
-					'base_price' => $pricing['base_price'],
-					'cycle'      => $pricing['period'],
-					'currency'   => $currency_code,
-				]
+				$pricing['base_price'],
+				$pricing['period'],
+				$currency_code
 			);
 		}
 
@@ -822,6 +818,34 @@ class Audience_Subscription_Products extends Wizard {
 			'policies'        => [],
 			'schedule'        => [],
 		];
+	}
+
+	/**
+	 * Resolve a product's policy stack, guarding an unset base price.
+	 *
+	 * A null base price means "not priced" — resolving it would coerce to 0.0 and
+	 * fabricate a free price (priming the engine against it), so return an empty
+	 * resolution instead and let the UI render an em dash.
+	 *
+	 * @param int        $id            The product/variation ID (0 when none).
+	 * @param float|null $base_price    The base recurring price, or null when unset.
+	 * @param string     $cycle         Billing period slug.
+	 * @param string     $currency_code Store currency code.
+	 *
+	 * @return array A policy resolution payload.
+	 */
+	private static function resolve_policy( $id, $base_price, $cycle, $currency_code ) {
+		if ( null === $base_price ) {
+			return self::empty_policy( $currency_code );
+		}
+		return Subscription_Policy_Resolver::resolve(
+			$id,
+			[
+				'base_price' => $base_price,
+				'cycle'      => $cycle,
+				'currency'   => $currency_code,
+			]
+		);
 	}
 
 	/**
@@ -1053,15 +1077,9 @@ class Audience_Subscription_Products extends Wizard {
 		if ( isset( $variations[0]['policy'] ) ) {
 			return $variations[0]['policy'];
 		}
-		// No priced variations — return an empty (no-policy) resolution for the base price.
-		return Subscription_Policy_Resolver::resolve(
-			0,
-			[
-				'base_price' => $base_price,
-				'cycle'      => '',
-				'currency'   => $currency_code,
-			]
-		);
+		// No priced variations — resolve_policy() returns an empty resolution when the base
+		// price is unset (null), so the UI renders an em dash rather than a fabricated $0.
+		return self::resolve_policy( 0, $base_price, '', $currency_code );
 	}
 
 	/**
@@ -1213,10 +1231,15 @@ class Audience_Subscription_Products extends Wizard {
 	 * @return array { code, symbol, decimals }.
 	 */
 	private static function get_currency() {
+		global $wp_locale;
 		return [
-			'code'     => function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD',
-			'symbol'   => function_exists( 'get_woocommerce_currency_symbol' ) ? html_entity_decode( get_woocommerce_currency_symbol() ) : '$',
-			'decimals' => function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2,
+			'code'               => function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD',
+			'symbol'             => function_exists( 'get_woocommerce_currency_symbol' ) ? html_entity_decode( get_woocommerce_currency_symbol() ) : '$',
+			'decimals'           => function_exists( 'wc_get_price_decimals' ) ? wc_get_price_decimals() : 2,
+			// Separators number_format_i18n() uses, so the JS-formatted effective price matches
+			// the PHP-formatted base price_label.
+			'decimal_separator'  => isset( $wp_locale ) ? $wp_locale->number_format['decimal_point'] : '.',
+			'thousand_separator' => isset( $wp_locale ) ? $wp_locale->number_format['thousands_sep'] : ',',
 		];
 	}
 

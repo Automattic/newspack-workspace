@@ -125,6 +125,8 @@ interface SubscriptionProductsCurrency {
 	code: string;
 	symbol: string;
 	decimals: number;
+	decimal_separator: string;
+	thousand_separator: string;
 }
 
 /**

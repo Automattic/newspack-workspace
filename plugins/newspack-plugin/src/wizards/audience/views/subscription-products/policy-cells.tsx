@@ -22,7 +22,13 @@ import { Badge, Popover } from '../../../../../packages/components/src';
  * Format a number as a currency amount using the store currency.
  */
 export function formatAmount( amount: number, currency: SubscriptionProductsCurrency ): string {
-	return `${ currency.symbol }${ amount.toFixed( currency.decimals ) }`;
+	// Match the PHP base price_label (number_format_i18n): group the integer part and use the
+	// locale's decimal separator, rather than toFixed()'s fixed "." and no grouping.
+	const fixed = amount.toFixed( currency.decimals );
+	const [ whole, fraction ] = fixed.split( '.' );
+	const grouped = whole.replace( /\B(?=(\d{3})+(?!\d))/g, currency.thousand_separator );
+	const number = fraction ? `${ grouped }${ currency.decimal_separator }${ fraction }` : grouped;
+	return `${ currency.symbol }${ number }`;
 }
 
 /**
