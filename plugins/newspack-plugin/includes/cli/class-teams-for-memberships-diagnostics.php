@@ -186,21 +186,10 @@ class Teams_For_Memberships_Diagnostics {
 			$teams = self::get_all_teams();
 		}
 
-		$buckets = [];
-		foreach ( $teams as $team ) {
-			$key = $team->post_author . '|' . self::normalize_team_title( $team->post_title );
-			if ( ! isset( $buckets[ $key ] ) ) {
-				$buckets[ $key ] = [];
-			}
-			$buckets[ $key ][] = $team;
-		}
-
 		// When scoped with `--team-id`, only the requested team's bucket is relevant –
-		// widening by author can pull in the owner's other, unrelated teams, so drop them.
-		if ( self::$team_id ) {
-			$target_key = $target->post_author . '|' . self::normalize_team_title( $target->post_title );
-			$buckets    = isset( $buckets[ $target_key ] ) ? [ $target_key => $buckets[ $target_key ] ] : [];
-		}
+		// widening by author can pull in the owner's other, unrelated teams, so restrict to it.
+		$only_key       = self::$team_id ? self::team_bucket_key( $target ) : null;
+		$buckets        = self::bucket_teams_by_owner( $teams, $only_key );
 
 		$duplicate_sets = array_filter(
 			$buckets,
@@ -372,14 +361,54 @@ class Teams_For_Memberships_Diagnostics {
 	}
 
 	/**
+	 * Build the owner+title bucketing key for a team.
+	 *
+	 * The `|` separator keeps the author/title boundary unambiguous so two distinct
+	 * (author, title) pairs can never collide on a shared prefix.
+	 *
+	 * @param \WP_Post|object $team Team post (or any object exposing post_author + post_title).
+	 * @return string
+	 */
+	public static function team_bucket_key( $team ) {
+		return $team->post_author . '|' . self::normalize_team_title( $team->post_title );
+	}
+
+	/**
+	 * Group teams into duplicate buckets keyed by owner + normalized title.
+	 *
+	 * Extracted so the (otherwise hard-to-reach) `--team-id` scoping can be unit-tested:
+	 * widening the lookup to the owner can surface the owner's *other*, unrelated teams,
+	 * and `$only_key` is what guarantees a scoped run acts on the requested team's bucket
+	 * alone.
+	 *
+	 * @param array       $teams    Team posts/objects exposing post_author + post_title.
+	 * @param string|null $only_key When set, restrict the result to this bucket key (others dropped).
+	 * @return array<string,object[]> Map of bucket key => teams in that bucket.
+	 */
+	public static function bucket_teams_by_owner( array $teams, $only_key = null ) {
+		$buckets = [];
+		foreach ( $teams as $team ) {
+			$buckets[ self::team_bucket_key( $team ) ][] = $team;
+		}
+		if ( null !== $only_key ) {
+			$buckets = isset( $buckets[ $only_key ] ) ? [ $only_key => $buckets[ $only_key ] ] : [];
+		}
+		return $buckets;
+	}
+
+	/**
 	 * Normalize a team title into a duplicate-bucketing key.
 	 *
 	 * The renewal bug can regenerate a replacement team whose title differs from the
 	 * original only cosmetically – a possessive apostrophe ("Smith' Team" vs
-	 * "Smith's Team"), letter case, or surrounding whitespace. Bucketing on the raw
-	 * title files those as separate teams and the duplicate goes undetected, so collapse
-	 * those differences to a single comparison key. The result is only ever used as a
-	 * grouping key, never displayed.
+	 * "Smith's Team"), letter case, or surrounding whitespace – so collapse those
+	 * differences to a single comparison key. The collapse is intentionally aggressive:
+	 * it strips every straight or curly apostrophe plus an optional trailing 's', so even
+	 * unrelated titles that differ only by a possessive map together. That's safe because
+	 * Check 1 only ever merges subscription-less orphans of the *same owner*
+	 * (see classify_team_bucket()) – independently subscribed teams are never merged.
+	 * Case folding of non-ASCII letters depends on mbstring; without it only ASCII case is
+	 * collapsed. The result is only ever a grouping key, never displayed.
 	 *
 	 * @param string $title Raw team post_title.
 	 * @return string
@@ -387,10 +416,11 @@ class Teams_For_Memberships_Diagnostics {
 	public static function normalize_team_title( $title ) {
 		$title = function_exists( 'mb_strtolower' ) ? mb_strtolower( (string) $title ) : strtolower( (string) $title );
 		// Drop possessive markers: a straight or curly apostrophe with an optional trailing
-		// 's', so "collyns'" and "collyns's" collapse to the same stem.
-		$title = preg_replace( '/[\'\x{2019}]s?/u', '', $title );
+		// 's', so "collyns'" and "collyns's" collapse to the same stem. The `/u` modifier can
+		// return null on malformed UTF-8 – coalesce to '' so the value stays a string.
+		$title = preg_replace( '/[\'\x{2019}]s?/u', '', $title ) ?? '';
 		// Collapse internal whitespace runs and trim.
-		$title = trim( (string) preg_replace( '/\s+/u', ' ', (string) $title ) );
+		$title = trim( (string) preg_replace( '/\s+/u', ' ', $title ) );
 		return $title;
 	}
 
