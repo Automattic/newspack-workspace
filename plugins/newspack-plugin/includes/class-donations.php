@@ -231,6 +231,13 @@ class Donations {
 	 * Get the parent donation product.
 	 */
 	private static function get_parent_donation_product() {
+		// Bail when WooCommerce core is inactive: wc_get_product() is undefined
+		// and there can be no donation product. Treating this as "no parent
+		// product" lets callers (e.g. the Insights donation-activity gate)
+		// degrade gracefully instead of fataling on every admin page load.
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return false;
+		}
 		$product = \wc_get_product( get_option( self::DONATION_PRODUCT_ID_OPTION, 0 ) );
 		if ( ! $product || 'grouped' !== $product->get_type() ) {
 			return false;
