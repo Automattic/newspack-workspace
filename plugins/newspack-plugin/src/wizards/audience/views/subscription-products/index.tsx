@@ -1,8 +1,9 @@
 /**
  * Subscription Products management screen.
  *
- * A DataViews list of WooCommerce Subscriptions products using the consolidated
- * product model (name, type, price, active subscriptions, category, status).
+ * Exploratory RSM prototype: a DataViews list of WooCommerce Subscriptions products
+ * with the consolidated product model (Layer 1) and the applied-policy stack +
+ * effective price (Layer 2, behind the Subscription_Policy_Resolver seam).
  */
 
 import '../../../../shared/js/public-path';

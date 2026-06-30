@@ -11,10 +11,14 @@ Branch: `feat/rsm-subscription-products-dataviews`. Not for PR to `main`.
 
 ## What it does
 
-Lists WooCommerce Subscriptions products in a consolidated, productized model:
-name, type, base price + billing period, active subscription count, category,
-status. Table + grid, search, filters (type / status / category), client-side
-`filterSortAndPaginate`, row action → edit modal.
+**Layer 1 (live Woo data).** Lists WooCommerce Subscriptions products in a
+consolidated, productized model: name, type, base price + billing period, active
+subscription count, category, status. Table + grid, search, filters (type /
+status / category), client-side `filterSortAndPaginate`, row action → edit modal.
+
+**Layer 2 (policy stack + effective price).** Each product (and, for variable
+subscriptions, **each variation**) shows the applied pricing policies as chips —
+the winning policy distinguished — plus base → effective price.
 
 ## Grouping chip-bar: Subscriptions / Donations / All
 
@@ -75,8 +79,8 @@ field, not inferred from category strings.
 Because it's derived and mostly "Public" for most publishers, Availability ships
 **off by default** — defined as a filter and a toggleable column, but not in the default
 column set. The default columns are hard facts (price, active subs, status) plus the RSM
-differentiator (unlocks); `type`, `category`, and `availability` all live behind the
-column picker.
+differentiators (policies, effective price, unlocks); `type`, `category`, and
+`availability` all live behind the column picker.
 
 ## Creating & editing (no WooCommerce needed)
 
@@ -93,8 +97,8 @@ Add/Edit is a **full-page routed wizard section**, mirroring the institutions ed
   and the product-name link `history.push('/edit/{id}')`. It covers all three types, plus a
 category picker (`FormTokenField` over `available_categories`), an **Availability** select
 (public/private/free → maps to the convention category, since availability is derived not
-stored), group subscription, and donation. On edit it also shows the read-only Unlocks
-context.
+stored), group subscription, and donation. On edit it also shows the read-only policy /
+Unlocks context.
 
 Constraints (deliberate):
 - **Type is locked on edit** — changing a live product's WC type is unsafe.
@@ -115,8 +119,8 @@ The page covers the full Newspack subscription model, not just flat products:
   subscriptions to define a plan-**switching** set (Block Club's "Plan Options"). They're
   surfaced as a `grouped` row type; the list includes a grouped product only when it
   bundles ≥1 subscription child (`group_has_subscription_children`). A grouped product
-  isn't priced itself, so its Price cell shows the **bundled plan chips**, and
-  `active_subscriptions` **aggregates** (deduped) across the bundled children.
+  isn't priced itself, so its Price cell shows the **bundled plan chips**, its policy is
+  empty, and `active_subscriptions` **aggregates** (deduped) across the bundled children.
   Create: the Add modal's "Plan group (switching)" type offers a checkbox picker of
   existing subscriptions → `WC_Product_Grouped::set_children()`.
 - **Group subscriptions (multi-seat)** — the `_newspack_group_subscription_enabled` /
@@ -153,6 +157,25 @@ Chicago (flagship) models membership tiers.
   drafts and hidden strategy products don't clutter the default list.
 - `draft` / `private` / `pending` remain reachable behind the **Status filter**
   (their elements are derived from the loaded data).
+
+## The integration seam (Layer 2)
+
+`includes/plugins/woocommerce-subscriptions/class-subscription-policy-resolver.php`
+
+```php
+Subscription_Policy_Resolver::resolve( $product_id, [
+  'base_price' => 10.0, 'cycle' => 'month', 'currency' => 'USD',
+] );
+// → { is_mock, base_price, effective_price, currency, cycle, policies[], schedule[] }
+```
+
+Reads the **live** `woocommerce-dynamic-pricing` engine (`IS_MOCK = false`): it composes
+all active rules over the product's purchase cycle for the effective price and lists the
+matching rules with the winner flagged, resolved **per variation** for variable
+subscriptions. When the engine plugin is inactive (or the product is invalid or
+engine-excluded, e.g. donations) it reports the base price with no rules. This is the
+single boundary — route every policy read through `resolve()` (or override via the
+`newspack_subscription_policy_resolution` filter); keep the return shape stable.
 
 ## Staging seed (both production shapes)
 

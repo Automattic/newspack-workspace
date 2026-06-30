@@ -2,7 +2,9 @@
  * Subscription Products list view using DataViews.
  *
  * Layer 1 columns (name, type, price + period, active subscriptions, category, status)
- * are built from live WooCommerce Subscriptions data.
+ * are built from live WooCommerce Subscriptions data. Layer 2 columns (applied rules
+ * + effective price) come from the PHP policy-resolution seam, which reads the live
+ * pricing-rule engine; see Subscription_Policy_Resolver.
  */
 
 /**
@@ -14,17 +16,20 @@ import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Action, Field, View } from '@wordpress/dataviews';
-import { Spinner, Button } from '@wordpress/components';
+import { Spinner, Notice, Button } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
 import { DataViews, Badge, Router } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import { PolicyChips, EffectivePrice } from './policy-cells';
 
 const { useHistory } = Router;
 
 const API_PATH = '/newspack/v1/wizard/newspack-audience-subscription-products/products';
+
+const DEFAULT_CURRENCY: SubscriptionProductsCurrency = { code: 'USD', symbol: '$', decimals: 2 };
 
 type Scope = 'subscriptions' | 'donations' | 'all' | 'groups';
 
@@ -58,14 +63,14 @@ const DEFAULT_VIEW: View = {
 	perPage: 25,
 	sort: { field: 'name', direction: 'asc' },
 	search: '',
-	// Default columns = hard facts (price, active subs, status) + the RSM differentiator
-	// (unlocks). Derived/secondary attributes stay defined below — so they remain filters
-	// and toggleable columns — but are off by default:
+	// Default columns = hard facts (price, active subs, status) + the RSM differentiators
+	// (policies, effective price, unlocks). Derived/secondary attributes stay defined below
+	// — so they remain filters and toggleable columns — but are off by default:
 	//  - `type`: a raw Woo mechanic; the Price column already signals simple vs variable.
 	//  - `category`: 4 of 6 sampled publishers leave subscription products uncategorized.
 	//  - `availability`: derived heuristic (placeholder for a real entitlement field), and
 	//    mostly "Public" for most publishers — low signal density for a default slot.
-	fields: [ 'price', 'active_subscriptions', 'unlocks', 'status' ],
+	fields: [ 'price', 'active_subscriptions', 'unlocks', 'status', 'policies', 'effective_price' ],
 	// Default to published only. The REST query returns every non-trashed status, so
 	// draft/private/pending products remain reachable behind the Status filter without
 	// cluttering the default view with "(TEST COPY)" drafts and hidden strategy products.
@@ -78,6 +83,8 @@ export default function SubscriptionProductsList() {
 	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const history = useHistory();
 	const [ data, setData ] = useState< SubscriptionProduct[] >( [] );
+	const [ currency, setCurrency ] = useState< SubscriptionProductsCurrency >( DEFAULT_CURRENCY );
+	const [ policyIsMock, setPolicyIsMock ] = useState( false );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
 	const [ scope, setScope ] = useState< Scope >( 'subscriptions' );
@@ -127,6 +134,10 @@ export default function SubscriptionProductsList() {
 		apiFetch< SubscriptionProductsResponse >( { path: API_PATH } )
 			.then( response => {
 				setData( response.products || [] );
+				if ( response.currency ) {
+					setCurrency( response.currency );
+				}
+				setPolicyIsMock( Boolean( response.policy_source_is_mock ) );
 			} )
 			.catch( () => {
 				addNotice( {
@@ -306,8 +317,21 @@ export default function SubscriptionProductsList() {
 				elements: statusElements,
 				filterBy: { operators: [ 'is' ] },
 			},
+			{
+				id: 'policies',
+				label: __( 'Applied rules', 'newspack-plugin' ),
+				getValue: ( { item } ) => item.policy?.policies?.map( p => p.label ).join( ', ' ) || '',
+				render: ( { item } ) => <PolicyChips policy={ item.policy } />,
+				enableSorting: false,
+			},
+			{
+				id: 'effective_price',
+				label: __( 'Effective price', 'newspack-plugin' ),
+				getValue: ( { item } ) => item.policy?.effective_price ?? -1,
+				render: ( { item } ) => <EffectivePrice policy={ item.policy } currency={ currency } />,
+			},
 		],
-		[ statusElements, categoryElements, history ]
+		[ statusElements, categoryElements, currency, history ]
 	);
 
 	const actions: Action< SubscriptionProduct >[] = useMemo(
@@ -354,6 +378,14 @@ export default function SubscriptionProductsList() {
 					);
 				} ) }
 			</div>
+			{ policyIsMock && (
+				<Notice status="info" isDismissible={ false } className="newspack-subscription-products__mock-notice">
+					{ __(
+						'Applied policies and effective price use mock data. They swap to the live policy engine through a single read API with no UI change.',
+						'newspack-plugin'
+					) }
+				</Notice>
+			) }
 			<DataViews
 				className="newspack-subscription-products__dataviews"
 				data={ processedData }

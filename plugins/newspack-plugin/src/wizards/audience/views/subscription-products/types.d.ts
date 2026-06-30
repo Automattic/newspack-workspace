@@ -6,6 +6,44 @@
  */
 
 /**
+ * A single pricing policy applied to a product (RSM Layer 2).
+ */
+interface SubscriptionPolicy {
+	id: string;
+	slug: string;
+	label: string;
+	type: 'promo' | 'season' | 'winback' | 'loyalty' | string;
+	is_winning: boolean;
+	adjustment_label: string;
+}
+
+/**
+ * One segment of a product's per-cycle price trajectory (RSM Layer 2). Cycle 1 is
+ * the purchase; each segment runs from `from_cycle` until the next one takes over.
+ */
+interface SubscriptionPolicySegment {
+	from_cycle: number;
+	amount: number;
+	rule_id: string;
+	rule_label: string;
+}
+
+/**
+ * Resolved policy stack + effective price for a product (RSM Layer 2).
+ *
+ * Returned by the PHP integration seam ({@see Subscription_Policy_Resolver}).
+ */
+interface SubscriptionPolicyResolution {
+	is_mock: boolean;
+	base_price: number;
+	effective_price: number;
+	currency: string;
+	cycle: string;
+	policies: SubscriptionPolicy[];
+	schedule: SubscriptionPolicySegment[];
+}
+
+/**
  * One price variation of a variable subscription.
  */
 interface SubscriptionProductVariation {
@@ -15,6 +53,8 @@ interface SubscriptionProductVariation {
 	period: string;
 	interval: number;
 	price_label: string;
+	// Layer 2: each variation resolves its own policy stack + effective price.
+	policy: SubscriptionPolicyResolution;
 	// Group-subscription (multi-seat) settings for this plan.
 	group: { enabled: boolean; limit: number };
 }
@@ -40,7 +80,7 @@ interface SubscriptionProductCategory {
 }
 
 /**
- * The consolidated, productized row for a subscription product (Layer 1).
+ * The consolidated, productized row for a subscription product (Layer 1 + Layer 2).
  */
 interface SubscriptionProduct {
 	id: number;
@@ -75,6 +115,7 @@ interface SubscriptionProduct {
 	category_label: string;
 	active_subscriptions: number | null;
 	edit_url: string;
+	policy: SubscriptionPolicyResolution;
 }
 
 /**
@@ -92,6 +133,7 @@ interface SubscriptionProductsCurrency {
 interface SubscriptionProductsResponse {
 	products: SubscriptionProduct[];
 	currency: SubscriptionProductsCurrency;
+	policy_source_is_mock: boolean;
 	available_categories: { id: number; name: string }[];
 }
 
@@ -99,6 +141,7 @@ interface Window {
 	newspackAudienceSubscriptionProducts?: {
 		new_product_url: string;
 		manage_products_url: string;
+		policy_source_is_mock: boolean;
 		woocommerce_subscriptions_active: boolean;
 	};
 }

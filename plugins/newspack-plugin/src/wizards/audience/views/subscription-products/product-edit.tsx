@@ -1,7 +1,7 @@
 /**
  * Full-page Add/Edit route for a plan, mirroring the institutions editor: a routed wizard
  * section (its own URL + back-nav + header Save action). This wrapper loads the context
- * (the product to edit, available categories, bundle candidates) by reusing the
+ * (the product to edit, available categories, bundle candidates, currency) by reusing the
  * list endpoint, then renders the full-page ProductForm once ready.
  */
 
@@ -66,6 +66,7 @@ export default function ProductEdit( { match }: { match: { params: { id?: string
 			initial={ product }
 			categories={ categories }
 			bundleOptions={ bundleOptions }
+			currency={ context.currency }
 			onDone={ onDone }
 		/>
 	);

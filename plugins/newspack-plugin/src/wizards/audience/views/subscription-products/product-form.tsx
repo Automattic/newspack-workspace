@@ -32,6 +32,7 @@ import {
  */
 import { Badge, Grid, SectionHeader, Divider } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import { PolicyChips, EffectivePrice } from './policy-cells';
 
 const BASE_PATH = '/newspack/v1/wizard/newspack-audience-subscription-products/products';
 const CONVENTION_SLUGS = [ 'private-subscriptions', 'free-subscriptions' ];
@@ -53,12 +54,14 @@ export default function ProductForm( {
 	initial,
 	categories,
 	bundleOptions,
+	currency,
 	onDone,
 }: {
 	mode: 'create' | 'edit';
 	initial?: SubscriptionProduct;
 	categories: { id: number; label: string }[];
 	bundleOptions: { id: number; label: string }[];
+	currency: SubscriptionProductsCurrency;
 	onDone: () => void;
 } ) {
 	const isEdit = mode === 'edit' && !! initial;
@@ -489,23 +492,36 @@ export default function ProductForm( {
 				</VStack>
 			</Grid>
 
-			{ isEdit && initial && initial.unlocks.length > 0 && (
+			{ isEdit && initial && ( initial.unlocks.length > 0 || initial.policy.policies.length > 0 ) && (
 				<>
 					<Divider alignment="full-width" variant="tertiary" />
 					<Grid columns={ 2 } gutter={ 32 } noMargin>
 						<SectionHeader
-							title={ __( 'Access', 'newspack-plugin' ) }
-							description={ __( 'Read-only: the content this plan unlocks.', 'newspack-plugin' ) }
+							title={ __( 'Policies & access', 'newspack-plugin' ) }
+							description={ __( 'Read-only: pricing policies applied to this plan and the content it unlocks.', 'newspack-plugin' ) }
 						/>
 						<VStack spacing={ 4 }>
-							<div>
-								<span className="newspack-subscription-products__modal-label">{ __( 'Unlocks', 'newspack-plugin' ) }</span>
-								<div className="newspack-subscription-products__unlocks">
-									{ initial.unlocks.map( gate => (
-										<Badge key={ gate.id } level="default" text={ gate.title } />
-									) ) }
+							{ initial.policy.policies.length > 0 && (
+								<div>
+									<span className="newspack-subscription-products__modal-label">
+										{ __( 'Applied policies', 'newspack-plugin' ) }
+									</span>
+									<HStack alignment="center" spacing={ 3 } justify="flex-start">
+										<PolicyChips policy={ initial.policy } />
+										<EffectivePrice policy={ initial.policy } currency={ currency } />
+									</HStack>
 								</div>
-							</div>
+							) }
+							{ initial.unlocks.length > 0 && (
+								<div>
+									<span className="newspack-subscription-products__modal-label">{ __( 'Unlocks', 'newspack-plugin' ) }</span>
+									<div className="newspack-subscription-products__unlocks">
+										{ initial.unlocks.map( gate => (
+											<Badge key={ gate.id } level="default" text={ gate.title } />
+										) ) }
+									</div>
+								</div>
+							) }
 						</VStack>
 					</Grid>
 				</>
