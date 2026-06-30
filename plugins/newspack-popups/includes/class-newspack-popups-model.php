@@ -290,6 +290,14 @@ final class Newspack_Popups_Model {
 	 * @return array|null Popup object array, or null if the post id does not resolve to a post.
 	 */
 	public static function retrieve_preview_popup( $post_id ) {
+		// Previews render unsaved prompt content, so restrict them to users who can manage
+		// prompts and to the prompts CPT, mirroring the plugin's other preview entry points.
+		if ( ! Newspack_Popups::is_user_admin() ) {
+			return null;
+		}
+		if ( Newspack_Popups::NEWSPACK_POPUPS_CPT !== get_post_type( $post_id ) ) {
+			return null;
+		}
 		// Up-to-date post data is stored in an autosave.
 		$autosave    = wp_get_post_autosave( $post_id );
 		$post_object = $autosave ? $autosave : get_post( $post_id );
