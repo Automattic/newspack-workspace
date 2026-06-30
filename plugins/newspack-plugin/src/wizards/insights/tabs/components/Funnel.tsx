@@ -45,7 +45,7 @@ const HALF_WIDTH = VIEWBOX_WIDTH / 2;
 // per-funnel from the step count (see computeDisplayHalfWidths) so funnels of
 // any length descend evenly across all their segments rather than cliff-diving
 // to the floor in one step.
-const MIN_SEGMENT_WIDTH_RATIO = 0.2;
+const MIN_SEGMENT_WIDTH_RATIO = 0.28; // NEWS-2586: wider floor keeps the narrowest band's fill under its text.
 const MIN_HALF_WIDTH = ( MIN_SEGMENT_WIDTH_RATIO * VIEWBOX_WIDTH ) / 2;
 
 export interface FunnelStage {

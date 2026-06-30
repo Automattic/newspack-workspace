@@ -54,14 +54,14 @@ describe( 'Funnel helpers', () => {
 			expect( halves[ 2 ] ).toBeCloseTo( 160 - ( 2 * 160 ) / 3, 5 );
 		} );
 		it( 'floors a tiny level at the minimum segment width', () => {
-			// 5-step funnel → taper 160/5 = 32. Steep tail walks 160 → 128 → 96 → 64 → 32,
-			// bottoming out at MIN_HALF_WIDTH 32 rather than the ~0 raw widths.
+			// 5-step funnel → taper 160/5 = 32. Steep tail walks 160 → 128 → 96 → 64 → 44.8,
+			// bottoming out at MIN_HALF_WIDTH 44.8 rather than the ~0 raw widths.
 			const halves = computeDisplayHalfWidths(
 				[ stage( 'a', 1000, 1 ), stage( 'b', 100, 0.1 ), stage( 'c', 10, 0.01 ), stage( 'd', 1, 0.001 ), stage( 'e', 1, 0.001 ) ],
 				1000
 			);
-			expect( halves[ 4 ] ).toBe( 32 );
-			expect( halves.every( h => h >= 32 ) ).toBe( true );
+			expect( halves[ 4 ] ).toBeCloseTo( 44.8 );
+			expect( halves.every( h => h >= 44.8 - 0.0001 ) ).toBe( true );
 		} );
 		it( 'never flares: each level is at most the level above', () => {
 			// A later stage exceeding an earlier one (data drift) must not widen.
