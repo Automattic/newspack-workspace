@@ -254,4 +254,67 @@ domReady( function () {
 			deleteLink( e );
 		} );
 	} );
+
+	// Rename group: pencil button in the header opens a modal; saving PATCHes the name and
+	// updates the header (and any other) group-name element in place.
+	const renameModal = document.getElementById( 'newspack-my-account__group_subscription--rename' );
+	const renameForm = renameModal?.querySelector( '.newspack-my-account__group--rename-form' );
+	const renameInput = renameModal?.querySelector( '.newspack-my-account__group--rename-input' );
+	const renameTriggers = [ ...document.querySelectorAll( '.newspack-my-account__group--rename' ) ];
+	const groupNameEls = [ ...document.querySelectorAll( '[data-group-name]' ) ];
+	if ( renameModal && renameForm && renameInput ) {
+		renameTriggers.forEach( trigger => {
+			trigger.addEventListener( 'click', event => {
+				event.preventDefault();
+				// Seed the input from the current displayed name so the field reflects what's on screen.
+				renameInput.value = ( groupNameEls[ 0 ]?.textContent || '' ).trim();
+				renameModal.setAttribute( 'data-state', 'open' );
+				window.requestAnimationFrame( () => {
+					renameInput.focus();
+					renameInput.select();
+				} );
+			} );
+		} );
+
+		renameForm.addEventListener( 'submit', async event => {
+			event.preventDefault();
+			const saveButton = renameForm.querySelector( '.newspack-my-account__group--rename-save' );
+			const errorText = renameForm.getAttribute( 'data-error-text' ) || newspackMyAccountV1?.labels?.group_name_update_failed;
+			const name = renameInput.value.trim();
+			const loadingStart = now();
+			saveButton.classList.add( 'newspack-ui__button--loading' );
+			saveButton.setAttribute( 'aria-busy', 'true' );
+			saveButton.setAttribute( 'disabled', '' );
+			try {
+				const response = await fetch( `${ baseUrl }${ namespace }/name`, {
+					method: 'POST',
+					credentials: 'same-origin',
+					headers: {
+						'Content-Type': 'application/json',
+						'X-WP-Nonce': nonce,
+					},
+					body: JSON.stringify( { subscription_id: subId, name } ),
+				} );
+				const data = await response.json();
+				await waitForMinLoading( loadingStart );
+				if ( ! response.ok || ! data || typeof data.name !== 'string' ) {
+					showSnackbar( ( data && data.message ) || errorText, 'error' );
+					return;
+				}
+				// Reflect the resolved name (which may be the fallback label when cleared).
+				groupNameEls.forEach( el => {
+					el.textContent = data.name;
+				} );
+				renameModal.setAttribute( 'data-state', 'closed' );
+				showSnackbar( newspackMyAccountV1?.labels?.group_name_updated || 'Name updated.' );
+			} catch ( error ) {
+				await waitForMinLoading( loadingStart );
+				showSnackbar( errorText, 'error' );
+			} finally {
+				saveButton.classList.remove( 'newspack-ui__button--loading' );
+				saveButton.removeAttribute( 'aria-busy' );
+				saveButton.removeAttribute( 'disabled' );
+			}
+		} );
+	}
 } );
