@@ -79,4 +79,153 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		self::assertEquals( 1, count( $query->posts ), 'There is one post returned.' );
 		self::assertEquals( $post_id, $query->posts[0]->ID, 'The post returned is the one with the CAP author assigned.' );
 	}
+
+	/**
+	 * The public /articles endpoint must not return posts from non-viewable post types.
+	 */
+	public function test_articles_endpoint_excludes_non_viewable_post_types() {
+		register_post_type(
+			'newspack_secret_cpt',
+			[
+				'public'       => false,
+				'show_in_rest' => false,
+				'supports'     => [ 'title', 'editor' ],
+			]
+		);
+		$secret_id = self::factory()->post->create(
+			[
+				'post_type'    => 'newspack_secret_cpt',
+				'post_status'  => 'publish',
+				'post_title'   => 'Secret CPT title',
+				'post_content' => 'Secret CPT body.',
+			]
+		);
+		// A regular published post exists, to prove the endpoint returns nothing here
+		// rather than silently substituting a different post type.
+		self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		wp_set_current_user( 0 );
+
+		$controller = new WP_REST_Newspack_Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ 'newspack_secret_cpt' ] );
+		$request->set_param( 'postsToShow', 10 );
+		$ids = $controller->get_items( $request )->get_data()['ids'];
+
+		self::assertNotContains(
+			$secret_id,
+			$ids,
+			'A non-viewable post type must not be returned by the public articles endpoint.'
+		);
+		self::assertEmpty(
+			$ids,
+			'A request for only non-viewable post types returns no results, not substituted posts.'
+		);
+
+		unregister_post_type( 'newspack_secret_cpt' );
+	}
+
+	/**
+	 * Mixed input keeps the viewable post types and drops the non-viewable ones.
+	 */
+	public function test_articles_endpoint_filters_mixed_post_types() {
+		register_post_type(
+			'newspack_secret_cpt',
+			[
+				'public'       => false,
+				'show_in_rest' => false,
+				'supports'     => [ 'title', 'editor' ],
+			]
+		);
+		$secret_id  = self::factory()->post->create(
+			[
+				'post_type'   => 'newspack_secret_cpt',
+				'post_status' => 'publish',
+			]
+		);
+		$regular_id = self::factory()->post->create( [ 'post_status' => 'publish' ] );
+		wp_set_current_user( 0 );
+
+		$controller = new WP_REST_Newspack_Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ 'post', 'newspack_secret_cpt' ] );
+		$request->set_param( 'postsToShow', 10 );
+		$ids = $controller->get_items( $request )->get_data()['ids'];
+
+		self::assertContains( $regular_id, $ids, 'The viewable post type is kept.' );
+		self::assertNotContains( $secret_id, $ids, 'The non-viewable post type is dropped.' );
+
+		unregister_post_type( 'newspack_secret_cpt' );
+	}
+
+	/**
+	 * A publicly viewable custom post type is still returned by the endpoint.
+	 */
+	public function test_articles_endpoint_allows_viewable_post_types() {
+		register_post_type(
+			'newspack_public_cpt',
+			[
+				'public'       => true,
+				'show_in_rest' => true,
+				'supports'     => [ 'title', 'editor' ],
+			]
+		);
+		$public_id = self::factory()->post->create(
+			[
+				'post_type'   => 'newspack_public_cpt',
+				'post_status' => 'publish',
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$controller = new WP_REST_Newspack_Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ 'newspack_public_cpt' ] );
+		$request->set_param( 'postsToShow', 10 );
+		$ids = $controller->get_items( $request )->get_data()['ids'];
+
+		self::assertContains(
+			$public_id,
+			$ids,
+			'A publicly viewable post type must still be returned by the public articles endpoint.'
+		);
+
+		unregister_post_type( 'newspack_public_cpt' );
+	}
+
+	/**
+	 * The specific-posts selection mode must not surface a non-viewable post by ID.
+	 */
+	public function test_articles_endpoint_excludes_non_viewable_in_specific_posts_mode() {
+		register_post_type(
+			'newspack_secret_cpt',
+			[
+				'public'       => false,
+				'show_in_rest' => false,
+				'supports'     => [ 'title', 'editor' ],
+			]
+		);
+		$secret_id = self::factory()->post->create(
+			[
+				'post_type'   => 'newspack_secret_cpt',
+				'post_status' => 'publish',
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$controller = new WP_REST_Newspack_Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ 'newspack_secret_cpt' ] );
+		$request->set_param( 'specificMode', 1 );
+		$request->set_param( 'specificPosts', [ $secret_id ] );
+		$request->set_param( 'postsToShow', 10 );
+		$ids = $controller->get_items( $request )->get_data()['ids'];
+
+		self::assertNotContains(
+			$secret_id,
+			$ids,
+			'Specific-posts mode must not surface a non-viewable post by ID.'
+		);
+
+		unregister_post_type( 'newspack_secret_cpt' );
+	}
 }

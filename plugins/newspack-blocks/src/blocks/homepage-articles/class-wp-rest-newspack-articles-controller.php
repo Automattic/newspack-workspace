@@ -129,6 +129,21 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 			$exclude_ids = [];
 		}
 
+		// This endpoint is public, so restrict it to publicly viewable post types — matching
+		// what WordPress exposes on the front end. The editor endpoints are capability-gated.
+		$attributes['postType'] = self::filter_viewable_post_types( isset( $attributes['postType'] ) ? $attributes['postType'] : [ 'post' ] );
+		if ( empty( $attributes['postType'] ) ) {
+			// Every requested post type was non-viewable; return nothing rather than
+			// substituting a different post type.
+			return rest_ensure_response(
+				[
+					'items' => [],
+					'ids'   => [],
+					'next'  => '',
+				]
+			);
+		}
+
 		$article_query_args = Newspack_Blocks::build_articles_query( $attributes, apply_filters( 'newspack_blocks_block_name', 'newspack-blocks/homepage-articles' ) );
 
 		// If using exclude_ids, don't worry about pagination. Just get the next postsToShow number of results without the excluded posts. Otherwise, use standard WP pagination.
@@ -199,6 +214,20 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 				'next'  => $next_url,
 			]
 		);
+	}
+
+	/**
+	 * Restrict a list of post types to those that are publicly viewable.
+	 *
+	 * Used to keep the public articles endpoint from exposing post types that
+	 * WordPress would not surface on the front end. Non-viewable types are dropped;
+	 * the returned list may be empty when none qualify (the caller then returns no results).
+	 *
+	 * @param array|string $post_types Requested post type(s).
+	 * @return array Viewable post types (may be empty).
+	 */
+	private static function filter_viewable_post_types( $post_types ) {
+		return array_values( array_filter( (array) $post_types, 'is_post_type_viewable' ) );
 	}
 
 	/**
