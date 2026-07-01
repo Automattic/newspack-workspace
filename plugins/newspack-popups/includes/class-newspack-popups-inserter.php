@@ -17,11 +17,13 @@ final class Newspack_Popups_Inserter {
 	const ADMIN_SCRIPT_HANDLE = 'newspack-popups-admin-bar';
 
 	/**
-	 * The popup objects to display.
+	 * The popup objects to display, memoized per request.
+	 * Null means "not yet computed" for this request; an empty array is a
+	 * valid, cacheable result (no popups eligible for the current post).
 	 *
-	 * @var array
+	 * @var array|null
 	 */
-	protected static $popups = [];
+	protected static $popups = null;
 
 	/**
 	 * Segments for displayed popups.
@@ -154,7 +156,7 @@ final class Newspack_Popups_Inserter {
 	 * @return array Popup objects.
 	 */
 	public static function popups_for_post() {
-		if ( ! empty( self::$popups ) ) {
+		if ( null !== self::$popups ) {
 			return self::$popups;
 		}
 
