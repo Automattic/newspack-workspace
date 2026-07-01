@@ -56,17 +56,19 @@ class Insights_Section_Engagement {
 	}
 
 	/**
-	 * Register the Tab 2 REST route.
+	 * Register the Tab 2 REST route and warm the engagement tab.
 	 *
 	 * @return void
 	 */
 	public static function register_hooks(): void {
+		\Newspack\Insights\Prewarm::init();
+		$controller = new Engagement_REST_Controller();
 		add_action(
 			'rest_api_init',
-			function () {
-				$controller = new Engagement_REST_Controller();
+			function () use ( $controller ) {
 				$controller->register_routes();
 			}
 		);
+		\Newspack\Insights\Prewarm::register_tab( 'engagement', [ $controller, 'warm_window' ] );
 	}
 }

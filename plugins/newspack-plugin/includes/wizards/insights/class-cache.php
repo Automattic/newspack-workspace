@@ -22,7 +22,18 @@ final class Cache {
 
 	const SOURCE_SNAPSHOT = 'snapshot';
 
+	/**
+	 * Global envelope cache-schema version, folded into every Insights window
+	 * cache key (durable + transient) via Cached_Controller_Trait. Bump this on
+	 * ANY Insights window-payload shape change so a shape-changing deploy cannot
+	 * serve an old-shaped durable/transient payload to the new frontend. A bump
+	 * busts every tab's window cache at once (one cold pre-warm cycle).
+	 */
+	const ENVELOPE_SCHEMA_VERSION = 'v1';
+
 	const TTL_SNAPSHOT = 9 * DAY_IN_SECONDS;
+
+	const TTL_DURABLE_FRESH = 25 * HOUR_IN_SECONDS;
 
 	const TTL_BIGQUERY        = DAY_IN_SECONDS;
 	const TTL_EXTERNAL        = 10 * MINUTE_IN_SECONDS;
@@ -60,7 +71,38 @@ final class Cache {
 		}
 
 		$cooldown_until = self::SOURCE_BIGQUERY === $source ? self::bq_cooldown_until( $tab ) : null;
-		$key            = self::transient_key( $tab, $key_parts );
+
+		// Durable warm store takes precedence over the transient. Pre-warmed
+		// preset windows live here (memcached-eviction-proof). A stale entry is
+		// still served instantly; we fire an action so the pre-warm layer can
+		// schedule an async background refresh (stale-while-revalidate).
+		$durable = self::peek_durable( $tab, $source, $key_parts );
+		if ( null !== $durable ) {
+			if ( ! self::is_fresh( $durable['computed_at'] ) ) {
+				/**
+				 * Fires when a durable warm entry is served past its freshness
+				 * bound. The pre-warm layer schedules an async refresh.
+				 *
+				 * @param string $tab   Tab slug.
+				 * @param string $start Window start (Y-m-d).
+				 * @param string $end   Window end (Y-m-d).
+				 */
+				do_action(
+					'newspack_insights_durable_stale',
+					$tab,
+					(string) ( $durable['window']['start'] ?? '' ),
+					(string) ( $durable['window']['end'] ?? '' )
+				);
+			}
+			return [
+				'payload'        => $durable['payload'],
+				'computed_at'    => $durable['computed_at'],
+				'source'         => $durable['source'],
+				'cooldown_until' => $cooldown_until,
+			];
+		}
+
+		$key = self::transient_key( $tab, $key_parts );
 		$cached         = get_transient( $key );
 
 		if ( is_array( $cached ) && isset( $cached['payload'], $cached['computed_at'], $cached['source'] ) ) {
@@ -138,6 +180,161 @@ final class Cache {
 			return null;
 		}
 		return $cached;
+	}
+
+	/**
+	 * Durable option name for a warmed window. Mirrors transient_key() but in
+	 * the wp_options namespace, so pre-warmed presets survive memcached eviction.
+	 *
+	 * @param string   $tab       Tab slug.
+	 * @param string[] $key_parts Canonicalized window components.
+	 * @return string
+	 */
+	private static function durable_option( string $tab, array $key_parts ): string {
+		return 'newspack_insights_warm_' . $tab . '_' . md5( (string) wp_json_encode( $key_parts ) );
+	}
+
+	/**
+	 * Per-tab durable warm index option name.
+	 *
+	 * @param string $tab Tab slug.
+	 * @return string
+	 */
+	private static function durable_index_option( string $tab ): string {
+		return 'newspack_insights_warm_index_' . $tab;
+	}
+
+	/**
+	 * Write a pre-warmed window to durable (non-autoloaded) storage and record
+	 * its key in the per-tab warm index. No storage TTL — freshness is logical
+	 * (computed_at + is_fresh()). No-op write when caching is disabled; the
+	 * envelope is still returned so callers behave uniformly.
+	 *
+	 * @param string   $tab       Tab slug.
+	 * @param string   $source    SOURCE_* constant.
+	 * @param string[] $key_parts Canonicalized window components.
+	 * @param array    $payload   The window payload.
+	 * @param array    $window    [ 'start' => 'Y-m-d', 'end' => 'Y-m-d' ].
+	 * @return array{ payload: array, computed_at: string, source: string, cooldown_until: null }
+	 */
+	public static function store_durable( string $tab, string $source, array $key_parts, array $payload, array $window ): array {
+		$envelope = self::envelope( $payload, $source );
+		if ( self::is_disabled() ) {
+			return $envelope;
+		}
+		$store = [
+			'payload'     => $envelope['payload'],
+			'computed_at' => $envelope['computed_at'],
+			'source'      => $envelope['source'],
+			'window'      => $window,
+		];
+		update_option( self::durable_option( $tab, $key_parts ), $store, false );
+		self::durable_index_add( $tab, $key_parts );
+		return $envelope;
+	}
+
+	/**
+	 * Read a durable warm entry without computing. Returns the stored
+	 * { payload, computed_at, source, window } or null when disabled, absent,
+	 * malformed, or the stored source does not match $source.
+	 *
+	 * @param string   $tab       Tab slug.
+	 * @param string   $source    SOURCE_* constant the caller expects.
+	 * @param string[] $key_parts Canonicalized window components.
+	 * @return array{ payload: array, computed_at: string, source: string, window: array }|null
+	 */
+	public static function peek_durable( string $tab, string $source, array $key_parts ): ?array {
+		if ( self::is_disabled() ) {
+			return null;
+		}
+		$stored = get_option( self::durable_option( $tab, $key_parts ), null );
+		if ( ! is_array( $stored ) || ! isset( $stored['payload'], $stored['computed_at'], $stored['source'] ) ) {
+			return null;
+		}
+		if ( $stored['source'] !== $source ) {
+			return null;
+		}
+		// A durable entry with a missing or empty window cannot be SWR-refreshed:
+		// on_durable_stale() bails when start/end are empty, so the entry would be
+		// served forever-stale with no way to refresh. Return null to fall through
+		// to a live recompute rather than serving an unserviceable entry.
+		if (
+			! isset( $stored['window'] ) ||
+			! is_array( $stored['window'] ) ||
+			empty( $stored['window']['start'] ) ||
+			empty( $stored['window']['end'] )
+		) {
+			return null;
+		}
+		return $stored;
+	}
+
+	/**
+	 * Whether an ISO 8601 UTC timestamp is within the durable freshness window.
+	 *
+	 * @param string $computed_at ISO 8601 UTC timestamp.
+	 * @return bool
+	 */
+	public static function is_fresh( string $computed_at ): bool {
+		$ts = strtotime( $computed_at );
+		if ( false === $ts ) {
+			return false;
+		}
+		return ( time() - $ts ) <= self::TTL_DURABLE_FRESH;
+	}
+
+	/**
+	 * Add a key to the per-tab durable warm index.
+	 *
+	 * @param string   $tab       Tab slug.
+	 * @param string[] $key_parts Canonicalized window components.
+	 */
+	private static function durable_index_add( string $tab, array $key_parts ): void {
+		$option = self::durable_index_option( $tab );
+		$keys   = get_option( $option, [] );
+		if ( ! is_array( $keys ) ) {
+			$keys = [];
+		}
+		$hash = md5( (string) wp_json_encode( $key_parts ) );
+		if ( ! in_array( $hash, $keys, true ) ) {
+			$keys[] = $hash;
+			update_option( $option, $keys, false );
+		}
+	}
+
+	/**
+	 * Delete durable warm options for $tab whose key is not in $keep_key_parts,
+	 * and rewrite the index to the kept set. Bounds durable option growth as the
+	 * daily-shifting presets move (yesterday's Last-30 window becomes orphaned).
+	 * No-op when caching is disabled.
+	 *
+	 * @param string  $tab            Tab slug.
+	 * @param array[] $keep_key_parts List of key_parts arrays to retain.
+	 */
+	public static function prune_durable( string $tab, array $keep_key_parts ): void {
+		if ( self::is_disabled() ) {
+			return;
+		}
+		$keep_hashes = array_map(
+			static fn( array $parts ): string => md5( (string) wp_json_encode( $parts ) ),
+			$keep_key_parts
+		);
+		$option = self::durable_index_option( $tab );
+		$hashes = get_option( $option, [] );
+		if ( ! is_array( $hashes ) ) {
+			$hashes = [];
+		}
+		foreach ( $hashes as $hash ) {
+			if ( ! in_array( $hash, $keep_hashes, true ) ) {
+				delete_option( 'newspack_insights_warm_' . $tab . '_' . $hash );
+			}
+		}
+		// Rewrite the index as the intersection of what was already indexed and
+		// what the caller wants to keep. This is self-consistent: an entry that
+		// was never stored (e.g. a phantom versioned hash computed incorrectly)
+		// cannot survive a prune cycle.
+		$surviving = array_values( array_intersect( $hashes, $keep_hashes ) );
+		update_option( $option, $surviving, false );
 	}
 
 	/**
@@ -289,6 +486,20 @@ final class Cache {
 			set_transient( $key, $store, self::ttl_for( $source ) );
 			if ( self::SOURCE_SNAPSHOT !== $source ) {
 				self::index_add( $tab, $key );
+			}
+
+			// If a durable (pre-warmed) entry already exists for this window, overwrite
+			// it so the durable store stays in sync with the manually-refreshed data.
+			// This ensures the read-precedence path in store() (durable → transient →
+			// compute) returns fresh data on the next request rather than serving the
+			// older pre-warmed entry. Reusing $existing_durable['window'] avoids having
+			// to parse start/end from $key_parts, and store_durable() builds its own
+			// envelope with a fresh computed_at — resetting the ~25h SWR clock.
+			// We deliberately do NOT create a durable entry when none exists: durable
+			// storage must remain bounded to windows the pre-warm job created.
+			$existing_durable = self::peek_durable( $tab, $source, $key_parts );
+			if ( null !== $existing_durable ) {
+				self::store_durable( $tab, $source, $key_parts, $envelope['payload'], $existing_durable['window'] );
 			}
 		}
 

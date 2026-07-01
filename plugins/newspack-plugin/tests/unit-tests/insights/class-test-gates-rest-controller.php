@@ -202,16 +202,16 @@ class Test_Gates_REST_Controller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Gates_REST_Controller overrides cache_schema_version() with Gates_Metric::CACHE_PREFIX
-	 * (tab4_v2), so bumping the prefix on a response-shape change busts stale-shape
-	 * transients on deploy.
+	 * Gates_REST_Controller no longer overrides cache_schema_version(); it inherits
+	 * the global Cache::ENVELOPE_SCHEMA_VERSION from Cached_Controller_Trait, so
+	 * bumping that constant busts all tabs at once on a shape-changing deploy.
 	 */
-	public function test_gates_controller_cache_version_is_tab4_v2_prefix() {
+	public function test_gates_controller_cache_version_is_global_envelope_version() {
 		$controller = new Gates_REST_Controller();
 		$ref        = new \ReflectionMethod( $controller, 'cache_schema_version' );
 		$ref->setAccessible( true );
-		$this->assertSame( Gates_Metric::CACHE_PREFIX, $ref->invoke( $controller ) );
-		$this->assertStringContainsString( 'v2', Gates_Metric::CACHE_PREFIX );
+		$this->assertSame( Cache::ENVELOPE_SCHEMA_VERSION, $ref->invoke( $controller ) );
+		$this->assertNotEmpty( Cache::ENVELOPE_SCHEMA_VERSION );
 	}
 
 	/**

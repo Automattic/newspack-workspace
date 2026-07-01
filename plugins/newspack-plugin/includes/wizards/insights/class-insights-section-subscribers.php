@@ -70,19 +70,21 @@ class Insights_Section_Subscribers {
 	}
 
 	/**
-	 * Register the Tab 6 REST route + delegate donation-classifier cache
-	 * invalidation hooks.
+	 * Register the Tab 6 REST route, donation-classifier cache invalidation
+	 * hooks, and warm the subscribers tab.
 	 *
 	 * @return void
 	 */
 	public static function register_hooks(): void {
+		\Newspack\Insights\Prewarm::init();
+		$controller = new Subscribers_REST_Controller();
 		add_action(
 			'rest_api_init',
-			function () {
-				$controller = new Subscribers_REST_Controller();
+			function () use ( $controller ) {
 				$controller->register_routes();
 			}
 		);
+		\Newspack\Insights\Prewarm::register_tab( 'subscribers', [ $controller, 'warm_window' ] );
 		Donation_Product_Classifier::register_hooks();
 	}
 }

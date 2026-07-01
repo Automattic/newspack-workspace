@@ -5,6 +5,7 @@
  * @package Newspack
  */
 
+use DateTimeImmutable;
 use Newspack\Insights\Cache;
 use Newspack\Insights\Cached_Controller_Trait;
 
@@ -26,6 +27,17 @@ class Newspack_Test_Stub_Cached_Controller extends WP_REST_Controller {
 	 */
 	protected function tab_slug(): string {
 		return 'stub';
+	}
+
+	/**
+	 * Stub implementation — returns an empty base-window payload.
+	 *
+	 * @param DateTimeImmutable $start Window start.
+	 * @param DateTimeImmutable $end   Window end.
+	 * @return array
+	 */
+	public function build_window_payload( DateTimeImmutable $start, DateTimeImmutable $end ): array {
+		return [];
 	}
 
 	/**

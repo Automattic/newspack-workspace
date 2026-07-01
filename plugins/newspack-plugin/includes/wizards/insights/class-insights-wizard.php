@@ -71,6 +71,17 @@ class Insights_Wizard extends Wizard {
 	}
 
 	/**
+	 * The capability required to view the Insights wizard pages. Reused by the
+	 * pre-warm scheduler so warming is only triggered by users who can see the
+	 * dashboard.
+	 *
+	 * @return string
+	 */
+	public static function get_required_capability(): string {
+		return 'manage_options';
+	}
+
+	/**
 	 * Whether the Gates preview tab (Tab 4 / NPPD-1604) is enabled
 	 * for this environment.
 	 *

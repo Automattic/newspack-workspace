@@ -168,7 +168,10 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-newspack-dashboard.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-newspack-settings.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-cache.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-preset-windows.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-prewarm.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/api/trait-cached-controller.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/api/trait-insights-rest.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-wizard.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-audience.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-engagement.php';

@@ -10,6 +10,7 @@
 
 namespace Newspack\Insights;
 
+use DateTimeImmutable;
 use WP_REST_Request;
 use WP_REST_Response;
 
@@ -28,13 +29,58 @@ trait Cached_Controller_Trait {
 	abstract protected function tab_slug(): string;
 
 	/**
-	 * Response-shape version mixed into the cache key. Override and bump it when
-	 * a controller's payload shape changes so cached payloads from a prior shape
-	 * don't survive a deploy. Default empty: no version component, so controllers
-	 * that don't opt in keep their existing key shape (no surprise cache-bust).
+	 * Global envelope cache-schema version mixed into the cache key for every
+	 * Insights controller. Returns {@see Cache::ENVELOPE_SCHEMA_VERSION} by
+	 * default so ALL tabs are versioned uniformly — no per-tab opt-in required.
+	 * Override only when a single tab needs an independent bump that must NOT
+	 * bust the rest of the pre-warm cycle.
 	 */
 	protected function cache_schema_version(): string {
-		return '';
+		return Cache::ENVELOPE_SCHEMA_VERSION;
+	}
+
+	/**
+	 * Base-window payload builder — same shape as a no-comparison GET. Each
+	 * controller implements it by delegating to its existing build_response()
+	 * with null comparison.
+	 *
+	 * @param DateTimeImmutable $start Window start (00:00:00, site tz).
+	 * @param DateTimeImmutable $end   Window end (23:59:59, site tz).
+	 * @return array
+	 */
+	abstract public function build_window_payload( DateTimeImmutable $start, DateTimeImmutable $end ): array;
+
+	/**
+	 * Build and durably store one pre-warmed base window. Uses the controller's
+	 * own tab/source/versioned key so the entry key-matches the GET read path.
+	 *
+	 * Returns the versioned key parts the entry was stored under, so the
+	 * pre-warm caller can build the prune keep-list from the exact key written
+	 * (single source of truth — avoids re-computing key parts in a separate
+	 * code path that may diverge from cache_schema_version()).
+	 *
+	 * @param DateTimeImmutable $start Window start.
+	 * @param DateTimeImmutable $end   Window end.
+	 * @return array Versioned key parts passed to Cache::store_durable().
+	 */
+	public function warm_window( DateTimeImmutable $start, DateTimeImmutable $end ): array {
+		$key_parts = $this->versioned_key_parts_from(
+			$start->format( 'Y-m-d' ),
+			$end->format( 'Y-m-d' ),
+			null,
+			null
+		);
+		Cache::store_durable(
+			$this->tab_slug(),
+			$this->cache_source(),
+			$key_parts,
+			$this->build_window_payload( $start, $end ),
+			[
+				'start' => $start->format( 'Y-m-d' ),
+				'end'   => $end->format( 'Y-m-d' ),
+			]
+		);
+		return $key_parts;
 	}
 
 	/**
@@ -77,18 +123,22 @@ trait Cached_Controller_Trait {
 	}
 
 	/**
-	 * Canonical window components used as the cache key.
+	 * Pure cache-key derivation from raw window strings, with the response-shape
+	 * version prepended when the controller sets one.
 	 *
-	 * @param WP_REST_Request $request Incoming request.
-	 * @return array{0:string,1:string,2:?string,3:?string}
+	 * @param string      $start Window start (Y-m-d).
+	 * @param string      $end   Window end (Y-m-d).
+	 * @param string|null $cs    Comparison start or null.
+	 * @param string|null $ce    Comparison end or null.
+	 * @return array
 	 */
-	private static function cache_key_parts( WP_REST_Request $request ): array {
-		return [
-			(string) $request->get_param( 'start' ),
-			(string) $request->get_param( 'end' ),
-			$request->get_param( 'compare_start' ) ? (string) $request->get_param( 'compare_start' ) : null,
-			$request->get_param( 'compare_end' ) ? (string) $request->get_param( 'compare_end' ) : null,
-		];
+	private function versioned_key_parts_from( string $start, string $end, ?string $cs, ?string $ce ): array {
+		$parts   = [ $start, $end, $cs, $ce ];
+		$version = $this->cache_schema_version();
+		if ( '' !== $version ) {
+			array_unshift( $parts, $version );
+		}
+		return $parts;
 	}
 
 	/**
@@ -96,16 +146,23 @@ trait Cached_Controller_Trait {
 	 * the controller sets one. An empty version leaves the window parts
 	 * untouched, so a non-overriding controller's cache key is unchanged.
 	 *
+	 * NOTE — truthiness coupling: empty-string compare_start / compare_end are
+	 * treated as absent here (falsy → null) to match the behaviour of
+	 * Insights_REST_Trait::parse_window_args(), which treats a falsy param as
+	 * "no comparison window". Both sides must change together if either switches
+	 * to isset() / !== '' checks; otherwise cache keys and parsed comparison
+	 * windows will disagree on what "absent" means.
+	 *
 	 * @param WP_REST_Request $request Incoming request.
 	 * @return array
 	 */
 	private function versioned_cache_key_parts( WP_REST_Request $request ): array {
-		$parts   = self::cache_key_parts( $request );
-		$version = $this->cache_schema_version();
-		if ( '' !== $version ) {
-			array_unshift( $parts, $version );
-		}
-		return $parts;
+		return $this->versioned_key_parts_from(
+			(string) $request->get_param( 'start' ),
+			(string) $request->get_param( 'end' ),
+			$request->get_param( 'compare_start' ) ? (string) $request->get_param( 'compare_start' ) : null,
+			$request->get_param( 'compare_end' ) ? (string) $request->get_param( 'compare_end' ) : null
+		);
 	}
 
 	/**

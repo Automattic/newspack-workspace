@@ -32,8 +32,6 @@ namespace Newspack\Insights;
 defined( 'ABSPATH' ) || exit;
 
 use DateTimeImmutable;
-use DateTimeZone;
-use Exception;
 use WP_Error;
 use WP_REST_Controller;
 use WP_REST_Request;
@@ -45,6 +43,7 @@ use WP_REST_Server;
 class Conversion_REST_Controller extends WP_REST_Controller {
 
 	use Cached_Controller_Trait;
+	use Insights_REST_Trait;
 
 	/**
 	 * Shared Insights namespace.
@@ -79,17 +78,6 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Response-shape version for the conversion cache key. Bump
-	 * {@see Conversion_Metric::CACHE_PREFIX} whenever the Tab 3 response shape
-	 * changes so cached payloads from a prior shape don't survive a deploy.
-	 *
-	 * @return string
-	 */
-	protected function cache_schema_version(): string {
-		return Conversion_Metric::CACHE_PREFIX;
-	}
-
-	/**
 	 * Register the Tab 3 routes.
 	 *
 	 * @return void
@@ -119,29 +107,6 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 				],
 			]
 		);
-	}
-
-	/**
-	 * Permission check.
-	 *
-	 * This route is intentionally callable via application passwords. The
-	 * BQ-side rate limit is the 10-minute cooldown enforced in
-	 * {@see Cache::refresh()}, not a per-route rate limiter — any caller
-	 * authenticated as a user with `manage_options` (whether via cookie +
-	 * nonce or an application password) can trigger a refresh, and the
-	 * cooldown applies uniformly.
-	 *
-	 * @return bool|WP_Error
-	 */
-	public function permissions_check() {
-		if ( ! current_user_can( 'manage_options' ) ) {
-			return new WP_Error(
-				'newspack_insights_rest_forbidden',
-				__( 'You do not have permission to view Insights data.', 'newspack-plugin' ),
-				[ 'status' => rest_authorization_required_code() ]
-			);
-		}
-		return true;
 	}
 
 	/**
@@ -217,56 +182,14 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Validate and parse the window args. Returns [start, end, compare_start, compare_end] on
-	 * success; WP_Error on validation failure.
+	 * Base-window payload (no comparison) for the pre-warm path.
 	 *
-	 * @param WP_REST_Request $request Incoming request.
-	 * @return array|WP_Error
+	 * @param DateTimeImmutable $start Window start.
+	 * @param DateTimeImmutable $end   Window end.
+	 * @return array
 	 */
-	private function parse_window_args( WP_REST_Request $request ) {
-		$tz = $this->site_timezone();
-		try {
-			$start = $this->parse_date( $request->get_param( 'start' ), $tz, false );
-			$end   = $this->parse_date( $request->get_param( 'end' ), $tz, true );
-		} catch ( Exception $e ) {
-			return new WP_Error( 'newspack_insights_invalid_date', $e->getMessage(), [ 'status' => 400 ] );
-		}
-		if ( $start > $end ) {
-			return new WP_Error(
-				'newspack_insights_invalid_window',
-				__( 'Start date must be on or before end date.', 'newspack-plugin' ),
-				[ 'status' => 400 ]
-			);
-		}
-
-		$compare_start_param = $request->get_param( 'compare_start' );
-		$compare_end_param   = $request->get_param( 'compare_end' );
-		$compare_start       = null;
-		$compare_end         = null;
-		if ( $compare_start_param || $compare_end_param ) {
-			if ( ! $compare_start_param || ! $compare_end_param ) {
-				return new WP_Error(
-					'newspack_insights_invalid_comparison',
-					__( 'Both compare_start and compare_end must be provided to enable comparison mode.', 'newspack-plugin' ),
-					[ 'status' => 400 ]
-				);
-			}
-			try {
-				$compare_start = $this->parse_date( $compare_start_param, $tz, false );
-				$compare_end   = $this->parse_date( $compare_end_param, $tz, true );
-			} catch ( Exception $e ) {
-				return new WP_Error( 'newspack_insights_invalid_date', $e->getMessage(), [ 'status' => 400 ] );
-			}
-			if ( $compare_start > $compare_end ) {
-				return new WP_Error(
-					'newspack_insights_invalid_comparison_window',
-					__( 'compare_start must be on or before compare_end.', 'newspack-plugin' ),
-					[ 'status' => 400 ]
-				);
-			}
-		}
-
-		return [ $start, $end, $compare_start, $compare_end ];
+	public function build_window_payload( DateTimeImmutable $start, DateTimeImmutable $end ): array {
+		return $this->build_response( new Conversion_Metric(), $start, $end, null, null );
 	}
 
 	/**
@@ -436,104 +359,5 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 			'at_risk_subscriber_count'             => $metric->get_at_risk_subscriber_count( $start, $end ),
 			'lapsed_donor_count'                   => $metric->get_lapsed_donor_count( $start, $end ),
 		];
-	}
-
-	/**
-	 * Args spec.
-	 *
-	 * @return array
-	 */
-	public function get_collection_params() {
-		$base = [
-			'type'              => 'string',
-			'sanitize_callback' => 'sanitize_text_field',
-			'validate_callback' => [ $this, 'validate_date_string' ],
-		];
-		return [
-			'start'         => array_merge(
-				$base,
-				[
-					'description' => __( 'Inclusive window start date (YYYY-MM-DD, site timezone).', 'newspack-plugin' ),
-					'required'    => true,
-				]
-			),
-			'end'           => array_merge(
-				$base,
-				[
-					'description' => __( 'Inclusive window end date (YYYY-MM-DD, site timezone).', 'newspack-plugin' ),
-					'required'    => true,
-				]
-			),
-			'compare_start' => array_merge(
-				$base,
-				[
-					'description' => __( 'Optional comparison window start. Must pair with compare_end.', 'newspack-plugin' ),
-					'required'    => false,
-				]
-			),
-			'compare_end'   => array_merge(
-				$base,
-				[
-					'description' => __( 'Optional comparison window end. Must pair with compare_start.', 'newspack-plugin' ),
-					'required'    => false,
-				]
-			),
-		];
-	}
-
-	/**
-	 * REST validate_callback.
-	 *
-	 * @param mixed $value Value.
-	 * @return bool|WP_Error
-	 */
-	public function validate_date_string( $value ) {
-		if ( ! is_string( $value ) || '' === $value ) {
-			return new WP_Error(
-				'newspack_insights_invalid_date',
-				__( 'Date must be a non-empty YYYY-MM-DD string.', 'newspack-plugin' ),
-				[ 'status' => 400 ]
-			);
-		}
-		$parsed = DateTimeImmutable::createFromFormat( 'Y-m-d', $value, $this->site_timezone() );
-		if ( ! $parsed || $parsed->format( 'Y-m-d' ) !== $value ) {
-			return new WP_Error(
-				'newspack_insights_invalid_date',
-				/* translators: %s: the invalid date string */
-				sprintf( __( 'Invalid date "%s". Expected YYYY-MM-DD.', 'newspack-plugin' ), $value ),
-				[ 'status' => 400 ]
-			);
-		}
-		return true;
-	}
-
-	/**
-	 * Parse a Y-m-d string into a DateTimeImmutable.
-	 *
-	 * @param mixed        $value      Raw value.
-	 * @param DateTimeZone $tz         Timezone.
-	 * @param bool         $end_of_day If true, 23:59:59; else 00:00:00.
-	 * @return DateTimeImmutable
-	 * @throws Exception On parse failure.
-	 */
-	private function parse_date( $value, DateTimeZone $tz, bool $end_of_day ): DateTimeImmutable {
-		if ( ! is_string( $value ) || '' === $value ) {
-			throw new Exception( esc_html__( 'Missing date value.', 'newspack-plugin' ) );
-		}
-		$parsed = DateTimeImmutable::createFromFormat( 'Y-m-d', $value, $tz );
-		if ( ! $parsed || $parsed->format( 'Y-m-d' ) !== $value ) {
-			/* translators: %s: the invalid date string */
-			throw new Exception( esc_html( sprintf( __( 'Invalid date "%s". Expected YYYY-MM-DD.', 'newspack-plugin' ), $value ) ) );
-		}
-		return $end_of_day ? $parsed->setTime( 23, 59, 59 ) : $parsed->setTime( 0, 0, 0 );
-	}
-
-	/**
-	 * Site timezone.
-	 *
-	 * @return DateTimeZone
-	 */
-	private function site_timezone(): DateTimeZone {
-		return wp_timezone();
 	}
 }
