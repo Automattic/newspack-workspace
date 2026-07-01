@@ -48,7 +48,8 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 		const value = item?.meta?.price;
 		return value ? String( value ) : '';
 	} )();
-	const initialStatus = [ 'publish', 'private', 'future' ].includes( item?.status ) ? 'active' : 'draft';
+	// `private` ads are never served (the serving queries are publish-only), so treat them as Draft rather than Active.
+	const initialStatus = [ 'publish', 'future' ].includes( item?.status ) ? 'active' : 'draft';
 
 	const [ status, setStatus ] = useState( initialStatus );
 	const [ advertiserSelections, setAdvertiserSelections ] = useState( initialAdvertiserSelections );

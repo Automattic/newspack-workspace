@@ -103,6 +103,17 @@ describe( 'AdsQuickEditPanel status control', () => {
 		expect( postCall().data ).not.toHaveProperty( 'status' );
 	} );
 
+	it( 'selects Draft for a private ad and preserves it by omitting status when unchanged', async () => {
+		const onSaved = jest.fn();
+		renderPanel( makeItem( 'private' ), { onSaved } );
+		// `private` ads are never served, so the control reflects Draft; leaving it untouched must not rewrite the status.
+		expect( await screen.findByRole( 'radio', { name: 'Draft' } ) ).toBeChecked();
+		expect( screen.getByRole( 'radio', { name: 'Active' } ) ).not.toBeChecked();
+		fireEvent.click( screen.getByTestId( 'panel-save' ) );
+		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
+		expect( postCall().data ).not.toHaveProperty( 'status' );
+	} );
+
 	it( 'marks the panel dirty after a status-only change', async () => {
 		renderPanel( makeItem( 'publish' ) );
 		await screen.findByRole( 'radio', { name: 'Active' } );
