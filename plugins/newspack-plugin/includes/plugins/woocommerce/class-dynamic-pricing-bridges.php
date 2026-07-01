@@ -5,7 +5,7 @@
  * The engine lives in the standalone woocommerce-dynamic-pricing plugin and
  * has no Newspack imports — these filter callbacks add Newspack-specific
  * exclusions on top of its WC/WCS-native checks. Inert when that plugin is
- * not active (nothing applies the filter). See the project docs (specs 09).
+ * not active (nothing applies the filter).
  *
  * @package Newspack
  */

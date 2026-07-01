@@ -1,5 +1,5 @@
 /**
- * Pricing Rules management screen (RSM prototype). DataViews list + a common-fields
+ * Pricing Rules management screen. DataViews list + a common-fields
  * editor over the standalone plugin's rules REST.
  */
 

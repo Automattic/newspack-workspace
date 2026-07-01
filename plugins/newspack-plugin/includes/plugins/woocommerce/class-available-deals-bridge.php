@@ -4,7 +4,7 @@
  * deals via the engine's Available_Deals_Query and pushes them to the Campaigns
  * store as a read-only `available_deals` reader-data item, and registers the
  * `has_available_deal` segmentation criterion. The server→client mirror of the
- * segment snapshot (DP spec 19). Inert when the dynamic-pricing engine is absent.
+ * segment snapshot. Inert when the dynamic-pricing engine is absent.
  *
  * @package Newspack
  */

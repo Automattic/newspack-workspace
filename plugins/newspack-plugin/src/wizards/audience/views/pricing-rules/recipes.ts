@@ -1,7 +1,7 @@
 /**
  * Pricing-path recipes — the intent-first map that turns the advanced rule form
  * into a recipe. Each named path presets the lifecycle matcher + application and
- * hides them; Custom presets nothing. See DP spec 20.
+ * hides them; Custom presets nothing.
  */
 
 /**
