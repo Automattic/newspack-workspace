@@ -38,10 +38,12 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 	 *
 	 * Only the redirect is treated as expected; any other exception propagates,
 	 * and the absence of a redirect fails the test.
+	 *
+	 * @throws \RuntimeException If the request fails for a reason other than the redirect.
 	 */
 	private function run_invite_request() {
 		$redirect = function () {
-			throw new \RuntimeException( self::REDIRECTED );
+			throw new \RuntimeException( self::REDIRECTED ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
 		};
 		add_filter( 'wp_redirect', $redirect, 1 );
 		try {
