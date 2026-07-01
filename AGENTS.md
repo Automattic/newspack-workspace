@@ -397,6 +397,8 @@ Use the `newspack` plugin skills for the full PR lifecycle:
 4. `newspack:pr-merge` — Merge after approval and checks pass
 5. `newspack:pr-test` — Test a PR in an isolated environment with automated checks and code review
 
+**One Copilot pass per PR.** Request a Copilot review once, when the PR is opened. After addressing its feedback, do **not** re-request Copilot by default — one automated pass is enough, and the next review should come from a human. Re-request Copilot only when a reviewer explicitly asks for another pass.
+
 ## External Tools
 
 - **Linear**: Use MCP tools for Linear operations when available. Write operations (creating or updating issues, comments, etc.) require explicit user confirmation.

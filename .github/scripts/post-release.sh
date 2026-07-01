@@ -105,6 +105,11 @@ notify_slack() {
     -s > /dev/null
 }
 
+# Tracks whether any release -> branch sync hit a conflict. We attempt every
+# sync (so each gets its own Slack ping) but exit non-zero at the end if any
+# failed, so the job goes red instead of silently passing on an aborted merge.
+sync_failed=0
+
 git pull origin release
 git checkout alpha
 
@@ -123,6 +128,7 @@ else
     git merge --abort
     echo "[post-release] Post-release merge to alpha failed."
     notify_slack alpha
+    sync_failed=1
   fi
 fi
 
@@ -135,4 +141,10 @@ else
   git merge --abort
   echo "[post-release] Post-release merge to $DEFAULT_BRANCH failed."
   notify_slack "$DEFAULT_BRANCH"
+  sync_failed=1
+fi
+
+if [ "$sync_failed" -ne 0 ]; then
+  echo "[post-release] One or more post-release syncs hit conflicts (see above); failing the job."
+  exit 1
 fi
