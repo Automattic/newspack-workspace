@@ -105,11 +105,12 @@ describe( 'LastUpdated', () => {
 		const origRevokeObjectURL = URL.revokeObjectURL;
 		let downloadName = '';
 		let capturedBlob: Blob | null = null;
-		( global.URL as any ).createObjectURL = jest.fn( ( blob: Blob ) => {
+		const urlMock = global.URL as unknown as { createObjectURL: typeof URL.createObjectURL; revokeObjectURL: typeof URL.revokeObjectURL };
+		urlMock.createObjectURL = jest.fn( ( blob: Blob ) => {
 			capturedBlob = blob;
 			return 'blob:mock';
 		} );
-		( global.URL as any ).revokeObjectURL = jest.fn( () => undefined );
+		urlMock.revokeObjectURL = jest.fn( () => undefined );
 		const clickSpy = jest.spyOn( HTMLAnchorElement.prototype, 'click' ).mockImplementation( function ( this: HTMLAnchorElement ) {
 			downloadName = this.download;
 		} );
@@ -128,8 +129,9 @@ describe( 'LastUpdated', () => {
 		expect( downloadName ).toBe( '2026-06-10-engagement-last-30-days.json' );
 		expect( capturedBlob ).not.toBeNull();
 
-		( global.URL as any ).createObjectURL = origCreateObjectURL;
-		( global.URL as any ).revokeObjectURL = origRevokeObjectURL;
+		const urlRestoreMock = global.URL as unknown as { createObjectURL: typeof URL.createObjectURL; revokeObjectURL: typeof URL.revokeObjectURL };
+		urlRestoreMock.createObjectURL = origCreateObjectURL;
+		urlRestoreMock.revokeObjectURL = origRevokeObjectURL;
 		clickSpy.mockRestore();
 	} );
 

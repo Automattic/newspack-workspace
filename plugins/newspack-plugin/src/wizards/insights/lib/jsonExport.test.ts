@@ -59,16 +59,18 @@ describe( 'downloadJson', () => {
 			return 'blob:mock-url';
 		} );
 		revokeObjectURL = jest.fn( () => undefined );
-		( global.URL as any ).createObjectURL = createObjectURL;
-		( global.URL as any ).revokeObjectURL = revokeObjectURL;
+		const urlMock = global.URL as unknown as { createObjectURL: typeof URL.createObjectURL; revokeObjectURL: typeof URL.revokeObjectURL };
+		urlMock.createObjectURL = createObjectURL;
+		urlMock.revokeObjectURL = revokeObjectURL;
 		clickSpy = jest.spyOn( HTMLAnchorElement.prototype, 'click' ).mockImplementation( () => undefined );
 	} );
 
 	afterEach( () => {
 		clickSpy.mockRestore();
 		// Restore URL globals so later suites in the same worker are not polluted.
-		( global.URL as any ).createObjectURL = origCreateObjectURL;
-		( global.URL as any ).revokeObjectURL = origRevokeObjectURL;
+		const urlMock = global.URL as unknown as { createObjectURL: typeof URL.createObjectURL; revokeObjectURL: typeof URL.revokeObjectURL };
+		urlMock.createObjectURL = origCreateObjectURL;
+		urlMock.revokeObjectURL = origRevokeObjectURL;
 	} );
 
 	it( 'triggers a download with the given filename', () => {
