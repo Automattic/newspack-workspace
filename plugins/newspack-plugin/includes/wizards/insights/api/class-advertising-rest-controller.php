@@ -133,12 +133,7 @@ class Advertising_REST_Controller extends WP_REST_Controller {
 			return $response;
 		}
 
-		return $this->cached_response(
-			$request,
-			function () use ( $start, $end, $compare_start, $compare_end ) {
-				return $this->build_response( $start, $end, $compare_start, $compare_end );
-			}
-		);
+		return $this->cached_response( $request, $start, $end, $compare_start, $compare_end );
 	}
 
 	/**
@@ -158,12 +153,7 @@ class Advertising_REST_Controller extends WP_REST_Controller {
 		}
 		[ $start, $end, $compare_start, $compare_end ] = $parsed;
 
-		return $this->refresh_response(
-			$request,
-			function () use ( $start, $end, $compare_start, $compare_end ) {
-				return $this->build_response( $start, $end, $compare_start, $compare_end );
-			}
-		);
+		return $this->refresh_response( $request, $start, $end, $compare_start, $compare_end );
 	}
 
 	/**

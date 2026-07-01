@@ -134,14 +134,7 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 		}
 		[ $start, $end, $compare_start, $compare_end ] = $parsed;
 
-		$metric = new Subscribers_Metric();
-
-		return $this->cached_response(
-			$request,
-			function () use ( $metric, $start, $end, $compare_start, $compare_end ) {
-				return $this->build_response( $metric, $start, $end, $compare_start, $compare_end );
-			}
-		);
+		return $this->cached_response( $request, $start, $end, $compare_start, $compare_end );
 	}
 
 	/**
@@ -157,14 +150,7 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 		}
 		[ $start, $end, $compare_start, $compare_end ] = $parsed;
 
-		$metric = new Subscribers_Metric();
-
-		return $this->refresh_response(
-			$request,
-			function () use ( $metric, $start, $end, $compare_start, $compare_end ) {
-				return $this->build_response( $metric, $start, $end, $compare_start, $compare_end );
-			}
-		);
+		return $this->refresh_response( $request, $start, $end, $compare_start, $compare_end );
 	}
 
 	/**

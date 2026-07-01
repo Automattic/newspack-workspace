@@ -141,13 +141,7 @@ class Gates_REST_Controller extends WP_REST_Controller {
 		}
 		[ $start, $end, $compare_start, $compare_end ] = $parsed;
 
-		$metric = new Gates_Metric();
-		return $this->cached_response(
-			$request,
-			function () use ( $metric, $start, $end, $compare_start, $compare_end ) {
-				return $this->build_response( $metric, $start, $end, $compare_start, $compare_end );
-			}
-		);
+		return $this->cached_response( $request, $start, $end, $compare_start, $compare_end );
 	}
 
 	/**
@@ -166,13 +160,7 @@ class Gates_REST_Controller extends WP_REST_Controller {
 			return $parsed;
 		}
 		[ $start, $end, $compare_start, $compare_end ] = $parsed;
-		$metric = new Gates_Metric();
-		return $this->refresh_response(
-			$request,
-			function () use ( $metric, $start, $end, $compare_start, $compare_end ) {
-				return $this->build_response( $metric, $start, $end, $compare_start, $compare_end );
-			}
-		);
+		return $this->refresh_response( $request, $start, $end, $compare_start, $compare_end );
 	}
 
 	/**
