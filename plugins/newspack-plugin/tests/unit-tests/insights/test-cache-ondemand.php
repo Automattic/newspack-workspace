@@ -134,6 +134,22 @@ class Test_Cache_Ondemand extends WP_UnitTestCase {
 		$this->assertSame( [ 'n' => 7 ], $got['payload'] );
 	}
 
+	public function test_refresh_no_write_through_for_snapshot_source() {
+		$k   = $this->key( '2026-05-01', '2026-05-10' );
+		$win = $this->window( '2026-05-01', '2026-05-10' );
+		Cache::refresh( $this->tab, Cache::SOURCE_SNAPSHOT, $k, fn() => [ 'n' => 9 ], $win );
+		$this->assertNull( Cache::peek_ondemand( $this->tab, Cache::SOURCE_SNAPSHOT, $k ) );
+	}
+
+	public function test_refresh_no_write_through_when_durable_exists() {
+		$k   = $this->key( '2026-06-01', '2026-06-10' );
+		$win = $this->window( '2026-06-01', '2026-06-10' );
+		Cache::store_durable( $this->tab, $this->source, $k, [ 'preset' => true ], $win );
+		Cache::refresh( $this->tab, $this->source, $k, fn() => [ 'n' => 3 ], $win );
+		$this->assertNull( Cache::peek_ondemand( $this->tab, $this->source, $k ) );
+		Cache::prune_durable( $this->tab, [] );
+	}
+
 	public function test_stale_ondemand_is_recomputed_inline() {
 		$k   = $this->key( '2026-03-01', '2026-03-10' );
 		$win = $this->window( '2026-03-01', '2026-03-10' );
