@@ -1,13 +1,11 @@
-# Products (RSM prototype)
+# Plans
 
-Exploratory DataViews admin page under **Audience → Products** (the page slug stays
-`newspack-audience-subscription-products`; the directory keeps its `subscription-products`
-name). The list is subscription-centric but also pulls in **one-time donation** products.
-
-Originally **Audience → Subscription products**
-(`admin.php?page=newspack-audience-subscription-products`). Pressure-tests the
-data-views direction for Reader Subscription Management (RSM) and feeds the PRD.
-Branch: `feat/rsm-subscription-products-dataviews`. Not for PR to `main`.
+DataViews admin page under **Audience → Plans** (page slug
+`newspack-audience-subscription-products`; the directory keeps its historical
+`subscription-products` name). Gated behind the `NEWSPACK_PLANS_UI` feature flag and
+WooCommerce Subscriptions availability. Lists, creates, and edits subscription products in
+a consolidated, productized model — the list is subscription-centric but also pulls in
+**one-time donation** products. Part of the Reader Subscription Management (RSM) work.
 
 ## What it does
 

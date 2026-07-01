@@ -205,6 +205,8 @@ final class Modal_Checkout {
 		// Make the current cart price available to the JavaScript.
 		add_action( 'wp_ajax_get_cart_total', [ __CLASS__, 'get_cart_total_js' ] );
 		add_action( 'wp_ajax_nopriv_get_cart_total', [ __CLASS__, 'get_cart_total_js' ] );
+		add_action( 'wp_ajax_get_cart_product_summary', [ __CLASS__, 'get_cart_product_summary_js' ] );
+		add_action( 'wp_ajax_nopriv_get_cart_product_summary', [ __CLASS__, 'get_cart_product_summary_js' ] );
 
 		// Wrap required checkbox text in a span so it works nicely with the Newspack UI grid layout.
 		add_filter( 'woocommerce_form_field_checkbox', [ __CLASS__, 'wrap_required_checkbox_text' ], 10, 4 );
@@ -1767,6 +1769,112 @@ final class Modal_Checkout {
 	}
 
 	/**
+	 * Get validated cart item context for the modal checkout product summary.
+	 *
+	 * @param \WC_Cart $cart Cart object.
+	 *
+	 * @return array|null
+	 */
+	private static function get_cart_product_summary_context( $cart ) {
+		if ( ! $cart || 1 !== $cart->get_cart_contents_count() ) {
+			return null;
+		}
+		$cart_item_key = array_key_first( $cart->get_cart() );
+		$cart_item     = $cart->get_cart_item( $cart_item_key );
+
+		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
+		$product    = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
+		$is_visible = $product && $product->exists() && $cart_item['quantity'] > 0 && apply_filters( 'woocommerce_checkout_cart_item_visible', true, $cart_item, $cart_item_key );
+		// phpcs:enable
+
+		return [
+			'cart_item_key' => $cart_item_key,
+			'cart_item'     => $cart_item,
+			'product'       => $product,
+			'is_visible'    => $is_visible,
+		];
+	}
+
+	/**
+	 * Get the cart product summary shown at the top of modal checkout.
+	 *
+	 * @param \WC_Cart|null $cart    Cart object.
+	 * @param array|null    $context Validated cart item context.
+	 */
+	private static function get_cart_product_summary( $cart = null, $context = null ) {
+		if ( ! $cart ) {
+			if ( ! function_exists( 'WC' ) ) {
+				return '';
+			}
+			$cart = \WC()->cart;
+		}
+		$context = $context ? $context : self::get_cart_product_summary_context( $cart );
+		if ( ! $context || ! $context['is_visible'] ) {
+			return '';
+		}
+
+		$cart_item_key    = $context['cart_item_key'];
+		$cart_item        = $context['cart_item'];
+		$product          = $context['product'];
+		$allowed_html     = self::get_cart_product_summary_allowed_html();
+		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
+		$product_name     = apply_filters(
+			'woocommerce_cart_item_name',
+			$product->get_name(),
+			$cart_item,
+			$cart_item_key
+		);
+		$product_subtotal = apply_filters(
+			'woocommerce_cart_item_subtotal',
+			$cart->get_product_subtotal( $product, $cart_item['quantity'] ),
+			$cart_item,
+			$cart_item_key
+		);
+		// phpcs:enable
+
+		$summary = $product_name . ': ';
+		if ( function_exists( 'wc_get_formatted_cart_item_data' ) ) {
+			$summary .= wc_get_formatted_cart_item_data( $cart_item );
+		}
+		$summary .= $product_subtotal;
+		return wp_kses( $summary, $allowed_html );
+	}
+
+	/**
+	 * Get allowed HTML for the modal checkout product summary.
+	 *
+	 * @return array Allowed HTML tags and attributes.
+	 */
+	private static function get_cart_product_summary_allowed_html() {
+		$allowed_html = wp_kses_allowed_html( 'post' );
+
+		$allowed_html['bdi'] = [
+			'class' => true,
+			'dir'   => true,
+		];
+
+		if ( ! isset( $allowed_html['span'] ) ) {
+			$allowed_html['span'] = [];
+		}
+		$allowed_html['span']['class'] = true;
+
+		if ( ! isset( $allowed_html['small'] ) ) {
+			$allowed_html['small'] = [];
+		}
+		$allowed_html['small']['class'] = true;
+
+		return $allowed_html;
+	}
+
+	/**
+	 * Get the updated cart product summary for JavaScript.
+	 */
+	public static function get_cart_product_summary_js() {
+		echo self::get_cart_product_summary(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		wp_die();
+	}
+
+	/**
 	 * Get the updated price for updating the "Place order" button.
 	 */
 	public static function get_cart_total_js() {
@@ -1792,29 +1900,20 @@ final class Modal_Checkout {
 		if ( 1 !== $cart->get_cart_contents_count() ) {
 			return;
 		}
-		$cart_item_key = array_key_first( $cart->get_cart() );
-		$cart_item = $cart->get_cart_item( $cart_item_key );
-		$product_id = $cart_item['variation_id'] ? $cart_item['variation_id'] : $cart_item['product_id'];
-		$class_prefix = self::get_class_prefix();
+		$summary_context = self::get_cart_product_summary_context( $cart );
+		$class_prefix    = self::get_class_prefix();
 		?>
 			<div class="<?php echo esc_attr( "order-details-summary {$class_prefix}__box {$class_prefix}__box--text-center" ); ?>">
 			<?php
-			// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
-			$_product = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
-			if ( $_product && $_product->exists() && $cart_item['quantity'] > 0 && apply_filters( 'woocommerce_checkout_cart_item_visible', true, $cart_item, $cart_item_key ) ) :
+			if ( $summary_context && $summary_context['is_visible'] ) :
 				?>
 				<p id="modal-checkout-product-details" data-checkout='<?php echo wp_json_encode( Checkout_Data::get_checkout_data( $cart ) ); ?>'>
 					<strong>
-						<?php
-						echo apply_filters( 'woocommerce_cart_item_name', $_product->get_name(), $cart_item, $cart_item_key ) . ': '; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-						echo wc_get_formatted_cart_item_data( $cart_item ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-						?>
-						<?php echo apply_filters( 'woocommerce_cart_item_subtotal', $cart->get_product_subtotal( $_product, $cart_item['quantity'] ), $cart_item, $cart_item_key ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+						<?php echo self::get_cart_product_summary( $cart, $summary_context ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 					</strong>
 				</p>
 				<?php
 			endif;
-			// phpcs:enable
 			?>
 			</div>
 		<?php
@@ -1965,7 +2064,25 @@ final class Modal_Checkout {
 	 * @return false|int User ID if found by email address, false otherwise.
 	 */
 	public static function get_user_id_from_email() {
-		$billing_email = filter_input( INPUT_POST, 'billing_email', FILTER_SANITIZE_EMAIL );
+		$billing_email = '';
+		if ( isset( $_POST['billing_email'] ) && is_string( $_POST['billing_email'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+			$billing_email = sanitize_email( wp_unslash( $_POST['billing_email'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing
+		}
+
+		if ( ! $billing_email ) {
+			$post_data = '';
+			if ( isset( $_POST['post_data'] ) && is_string( $_POST['post_data'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Missing
+				$post_data = wp_unslash( $_POST['post_data'] ); // phpcs:ignore WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Parsed and sanitized below.
+			}
+
+			// WooCommerce order-review requests send checkout fields serialized in post_data.
+			if ( $post_data ) {
+				wp_parse_str( $post_data, $parsed_post_data );
+				if ( isset( $parsed_post_data['billing_email'] ) && is_string( $parsed_post_data['billing_email'] ) ) {
+					$billing_email = sanitize_email( $parsed_post_data['billing_email'] );
+				}
+			}
+		}
 		if ( $billing_email ) {
 			$customer = \get_user_by( 'email', $billing_email );
 			if ( $customer ) {
@@ -2251,6 +2368,7 @@ final class Modal_Checkout {
 		if ( $user_id !== 0 ) {
 			return $is_limited_for_user;
 		}
+		// Standard and modal checkout refreshes can both carry guest emails in serialized post_data.
 		$id_from_email = self::get_user_id_from_email();
 		if ( $id_from_email ) {
 			$is_limited_for_user = wcs_is_product_limited_for_user( $product, $id_from_email );

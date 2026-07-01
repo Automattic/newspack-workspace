@@ -1137,17 +1137,25 @@ class Audience_Subscription_Products extends Wizard {
 			}
 		}
 
+		// Per-request memo: the same product id recurs across rows (notably grouped products
+		// that aggregate children also listed individually), and each wcs_get_subscriptions()
+		// call is a query — so resolve each id at most once.
+		static $ids_by_product = [];
 		$subscription_ids = [];
 		foreach ( $product_ids as $product_id ) {
-			$subscriptions = \wcs_get_subscriptions(
-				[
-					'product_id'             => $product_id,
-					'subscription_status'    => self::ACTIVE_SUBSCRIPTION_STATUSES,
-					'subscriptions_per_page' => -1,
-				]
-			);
-			// wcs_get_subscriptions() is keyed by subscription id — dedupe across variations.
-			foreach ( array_keys( $subscriptions ) as $subscription_id ) {
+			if ( ! isset( $ids_by_product[ $product_id ] ) ) {
+				$subscriptions = \wcs_get_subscriptions(
+					[
+						'product_id'             => $product_id,
+						'subscription_status'    => self::ACTIVE_SUBSCRIPTION_STATUSES,
+						'subscriptions_per_page' => -1,
+					]
+				);
+				// wcs_get_subscriptions() is keyed by subscription id.
+				$ids_by_product[ $product_id ] = array_keys( $subscriptions );
+			}
+			// Dedupe across variations and repeated product ids.
+			foreach ( $ids_by_product[ $product_id ] as $subscription_id ) {
 				$subscription_ids[ $subscription_id ] = true;
 			}
 		}
@@ -1395,9 +1403,11 @@ class Audience_Subscription_Products extends Wizard {
 	 * @return int The term ID, or 0.
 	 */
 	private static function ensure_availability_category( $availability ) {
+		// Term names are stored in the DB as content — use locale-independent defaults so a
+		// later language switch can't fork the data. UI labels are translated separately.
 		$map = [
-			'private' => [ 'private-subscriptions', __( 'Private Subscriptions', 'newspack-plugin' ) ],
-			'free'    => [ 'free-subscriptions', __( 'Free Subscriptions', 'newspack-plugin' ) ],
+			'private' => [ 'private-subscriptions', 'Private Subscriptions' ],
+			'free'    => [ 'free-subscriptions', 'Free Subscriptions' ],
 		];
 		if ( ! isset( $map[ $availability ] ) ) {
 			return 0;
