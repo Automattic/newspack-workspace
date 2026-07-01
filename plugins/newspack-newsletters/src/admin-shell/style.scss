@@ -57,22 +57,10 @@ body.newspack-newsletters-admin-screen--bundled {
 	--wp-admin-theme-color-lighter-10: #{np-colors.$primary-000};
 	--wp-admin-theme-color-lighter-10--rgb: #{np-colors.$primary-000--rgb};
 
-	#newspack-wizards-admin-header .newspack-wizard__header {
+	.newspack-newsletters-admin__header-actions--in-newspack-header {
 		align-items: center;
 		display: flex;
-
-		.newspack-wizard__header__inner {
-			flex: 1 1 100%;
-		}
-
-		.newspack-wizard__header__actions {
-			align-items: center;
-			display: flex;
-			flex: 1 1 auto;
-			gap: wp-vars.$grid-unit-10;
-			justify-content: flex-end;
-			padding: 0 wp-vars.$grid-unit-30 0 0;
-		}
+		gap: wp-vars.$grid-unit-10;
 	}
 }
 

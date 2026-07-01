@@ -639,7 +639,7 @@ final class Newspack_Newsletters {
 			'menu_name'                => _x( 'Newsletters', 'admin menu', 'newspack-newsletters' ),
 			'name_admin_bar'           => _x( 'Newsletter', 'add new on admin bar', 'newspack-newsletters' ),
 			'add_new'                  => _x( 'Add New', 'newsletter', 'newspack-newsletters' ),
-			'add_new_item'             => __( 'Add New Newsletter', 'newspack-newsletters' ),
+			'add_new_item'             => __( 'Add Newsletter', 'newspack-newsletters' ),
 			'new_item'                 => __( 'New Newsletter', 'newspack-newsletters' ),
 			'edit_item'                => __( 'Edit Newsletter', 'newspack-newsletters' ),
 			'view_item'                => __( 'View Newsletter', 'newspack-newsletters' ),
