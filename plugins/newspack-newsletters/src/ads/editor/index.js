@@ -129,6 +129,7 @@ function AdEdit() {
 	return (
 		<Fragment>
 			<PluginDocumentSettingPanel name="newsletters-ads-settings-panel" title={ __( 'Ad settings', 'newspack-newsletters' ) }>
+				{ noticeProps ? <Notice isDismissible={ false } { ...noticeProps } /> : null }
 				<RadioControl
 					label={ __( 'Status', 'newspack-newsletters' ) }
 					selected={ statusControl }
