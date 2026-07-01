@@ -28,6 +28,9 @@ use Newspack\Insights_Wizard;
  */
 class Test_Donation_Activity_WC_Inactive extends WP_UnitTestCase {
 
+	/**
+	 * Clean up the test option on teardown.
+	 */
 	public function tear_down() {
 		delete_option( Donations::DONATION_PRODUCT_ID_OPTION );
 		parent::tear_down();
