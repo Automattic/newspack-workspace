@@ -7,6 +7,7 @@
 
 namespace Newspack;
 
+use Newspack\Content_Gate;
 use Newspack\Group_Subscription;
 use Newspack\Memberships;
 use Newspack\Reader_Activation;
@@ -134,7 +135,7 @@ class My_Account_UI_V1 {
 				'newspack-account-frontend',
 				\Newspack\Newspack::plugin_url() . '/dist/account-frontend.js',
 				[],
-				NEWSPACK_PLUGIN_VERSION,
+				\Newspack\Newspack::asset_version( 'account-frontend' ),
 				true
 			);
 			\wp_localize_script(
@@ -147,7 +148,7 @@ class My_Account_UI_V1 {
 				'newspack-my-account-v1',
 				\Newspack\Newspack::plugin_url() . '/dist/my-account-v1.js',
 				[ 'newspack-ui' ],
-				NEWSPACK_PLUGIN_VERSION,
+				\Newspack\Newspack::asset_version( 'my-account-v1' ),
 				true
 			);
 			\wp_localize_script(
@@ -162,7 +163,7 @@ class My_Account_UI_V1 {
 				'newspack-my-account-v1',
 				\Newspack\Newspack::plugin_url() . '/dist/my-account-v1.css',
 				[],
-				NEWSPACK_PLUGIN_VERSION
+				\Newspack\Newspack::asset_version( 'my-account-v1' )
 			);
 		}
 	}
@@ -287,10 +288,11 @@ class My_Account_UI_V1 {
 			unset( $items['payment-methods'] );
 		}
 
-		// Sidebar entry for native group management. Visibility gated by manager-of-at-least-one-group
-		// AND the existing `Memberships::is_active()` suppression already used by group-subscription UI.
+		// Sidebar entry for native group management. Visibility gated by the Access Control
+		// feature flag, manager-of-at-least-one-group, AND the existing `Memberships::is_active()`
+		// suppression already used by group-subscription UI.
 		// Inserted immediately after Subscriptions so the two related entries stay adjacent.
-		if ( ! Memberships::is_active() ) {
+		if ( Content_Gate::is_newspack_feature_enabled() && ! Memberships::is_active() ) {
 			$managed = Group_Subscription::get_managed_subscriptions_for_user( \get_current_user_id() );
 			$count   = count( $managed );
 			if ( $count > 0 ) {
@@ -393,7 +395,7 @@ class My_Account_UI_V1 {
 				'title'       => __( 'Subscriptions', 'newspack-plugin' ),
 				'description' => __( 'Review and cancel active subscriptions.', 'newspack-plugin' ),
 				'button'      => __( 'Manage subscriptions', 'newspack-plugin' ),
-				'href'        => \wc_get_endpoint_url( 'subscriptions', '', \wc_get_page_permalink( 'myaccount' ) ),
+				'href'        => My_Account::get_endpoint_url( 'subscriptions' ),
 			];
 		}
 		if ( ! empty( $newsletter_subscriptions ) ) {
@@ -401,7 +403,7 @@ class My_Account_UI_V1 {
 				'title'       => __( 'Newsletters', 'newspack-plugin' ),
 				'description' => __( 'Update your newsletter preferences.', 'newspack-plugin' ),
 				'button'      => __( 'Manage newsletters', 'newspack-plugin' ),
-				'href'        => \wc_get_endpoint_url( 'newsletters', '', \wc_get_page_permalink( 'myaccount' ) ),
+				'href'        => My_Account::get_endpoint_url( 'newsletters' ),
 			];
 		}
 		if ( ! empty( $alternative_rows ) ) :

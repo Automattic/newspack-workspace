@@ -117,6 +117,17 @@ class Content_Gate {
 	/**
 	 * Whether the first-party Newspack feature is enabled.
 	 *
+	 * Memoized per request — the underlying constant is immutable for the
+	 * lifetime of a request, and call sites (admin menu, REST registration,
+	 * wizard data, gated callbacks across Group_Subscription_*) consult this
+	 * many times per page. The cache keeps that footprint flat if the check
+	 * grows beyond a constant lookup in the future (license, remote call,
+	 * etc.).
+	 *
+	 * Tests under PHPUnit boot the plugin once and `define()` the constant
+	 * later in per-suite `setUp()` calls. To keep those defines effective,
+	 * skip the cache when `IS_TEST_ENV` is on.
+	 *
 	 * @return bool
 	 */
 	public static function is_newspack_feature_enabled() {
@@ -131,7 +142,14 @@ class Content_Gate {
 		 *
 		 * @example define( 'NEWSPACK_CONTENT_GATES', true );
 		 */
-		return defined( 'NEWSPACK_CONTENT_GATES' ) && NEWSPACK_CONTENT_GATES;
+		if ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV ) {
+			return defined( 'NEWSPACK_CONTENT_GATES' ) && NEWSPACK_CONTENT_GATES;
+		}
+		static $enabled = null;
+		if ( null === $enabled ) {
+			$enabled = defined( 'NEWSPACK_CONTENT_GATES' ) && NEWSPACK_CONTENT_GATES;
+		}
+		return $enabled;
 	}
 
 	/**
@@ -418,8 +436,8 @@ class Content_Gate {
 			if ( is_singular() && self::has_gate() && self::is_post_restricted() && Metering::is_frontend_metering() ) {
 				$asset['dependencies'][] = 'newspack-content-gate-metering';
 			}
-			wp_enqueue_script( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.js', $asset['dependencies'], NEWSPACK_PLUGIN_VERSION, true );
-			wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], NEWSPACK_PLUGIN_VERSION );
+			wp_enqueue_script( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.js', $asset['dependencies'], Newspack::asset_version( 'content-banner' ), true );
+			wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], Newspack::asset_version( 'content-banner' ) );
 		}
 	}
 
@@ -450,10 +468,11 @@ class Content_Gate {
 				continue;
 			}
 			$gates_data[] = [
-				'id'            => $gate['id'],
-				'title'         => $gate['title'],
-				'edit_url'      => get_edit_post_link( $gate['id'], 'raw' ),
-				'content_rules' => $gate['content_rules'],
+				'id'                  => $gate['id'],
+				'title'               => $gate['title'],
+				'edit_url'            => get_edit_post_link( $gate['id'], 'raw' ),
+				'content_rules'       => $gate['content_rules'],
+				'content_rules_match' => $gate['content_rules_match'],
 			];
 		}
 
@@ -686,6 +705,11 @@ class Content_Gate {
 		// Update content rules.
 		if ( isset( $gate['content_rules'] ) ) {
 			Content_Rules::update_gate_content_rules( $gate_id, $gate['content_rules'] );
+		}
+
+		// Update rule-combination mode.
+		if ( isset( $gate['content_rules_match'] ) ) {
+			Content_Rules::update_gate_content_rules_match( $gate_id, $gate['content_rules_match'] );
 		}
 
 		// Create default layouts for registration and custom_access modes.
@@ -1174,13 +1198,14 @@ class Content_Gate {
 		}
 
 		return [
-			'id'            => $post->ID,
-			'status'        => $post->post_status,
-			'title'         => $post->post_title,
-			'priority'      => (int) get_post_meta( $post->ID, 'gate_priority', true ),
-			'content_rules' => Content_Rules::get_gate_content_rules( $post->ID ),
-			'registration'  => self::get_registration_settings( $post->ID ),
-			'custom_access' => self::get_custom_access_settings( $post->ID ),
+			'id'                  => $post->ID,
+			'status'              => $post->post_status,
+			'title'               => $post->post_title,
+			'priority'            => (int) get_post_meta( $post->ID, 'gate_priority', true ),
+			'content_rules'       => Content_Rules::get_gate_content_rules( $post->ID ),
+			'content_rules_match' => Content_Rules::get_gate_content_rules_match( $post->ID ),
+			'registration'        => self::get_registration_settings( $post->ID ),
+			'custom_access'       => self::get_custom_access_settings( $post->ID ),
 		];
 	}
 
@@ -1211,6 +1236,9 @@ class Content_Gate {
 			];
 		} elseif ( 'content_rules' === $key ) {
 			Content_Rules::update_gate_content_rules( $id, $value );
+			return self::get_gate( $id );
+		} elseif ( 'content_rules_match' === $key ) {
+			Content_Rules::update_gate_content_rules_match( $id, $value );
 			return self::get_gate( $id );
 		} elseif ( 'registration' === $key ) {
 			self::update_registration_settings( $id, $value );
@@ -1264,6 +1292,11 @@ class Content_Gate {
 		// Update content rules.
 		if ( isset( $gate['content_rules'] ) ) {
 			Content_Rules::update_gate_content_rules( $id, $gate['content_rules'] );
+		}
+
+		// Update rule-combination mode.
+		if ( isset( $gate['content_rules_match'] ) ) {
+			Content_Rules::update_gate_content_rules_match( $id, $gate['content_rules_match'] );
 		}
 
 		// Update registration settings.

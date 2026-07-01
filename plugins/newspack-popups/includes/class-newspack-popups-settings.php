@@ -14,6 +14,14 @@ class Newspack_Popups_Settings {
 	const NEWSPACK_POPUPS_SETTINGS_PAGE = 'newspack-popups-settings-admin';
 
 	/**
+	 * Default value for the `newspack_popups_mc_donor_merge_field` option.
+	 *
+	 * Referenced both here and by Newspack_Popups_Segmentation (which reads the
+	 * option directly), so the default stays in one place.
+	 */
+	const DEFAULT_DONOR_MERGE_FIELD = 'DONAT';
+
+	/**
 	 * Set up hooks.
 	 */
 	public static function init() {
@@ -269,8 +277,8 @@ class Newspack_Popups_Settings {
 				'section'     => 'donor_settings',
 				'key'         => 'newspack_popups_mc_donor_merge_field',
 				'type'        => 'string',
-				'value'       => get_option( 'newspack_popups_mc_donor_merge_field', 'DONAT' ),
-				'default'     => 'DONAT',
+				'value'       => get_option( 'newspack_popups_mc_donor_merge_field', self::DEFAULT_DONOR_MERGE_FIELD ),
+				'default'     => self::DEFAULT_DONOR_MERGE_FIELD,
 				'description' => __( 'Mailchimp donor merge fields', 'newspack-popups' ),
 				'help'        => __(
 					'A comma-delimited list of strings to match against Mailchimp merge field names. If a Mailchimp merge field name contains one of these strings and a subscriber has a true value in this field, the subscriber will be considered a donor for segmentation purposes.',

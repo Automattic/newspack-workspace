@@ -15,8 +15,21 @@ use Newspack\Newspack_UI_Icons;
 defined( 'ABSPATH' ) || exit;
 
 \do_action( 'newspack_woocommerce_before_subscription_header', $subscription, $actions );
-$members              = Group_Subscription::get_members( $subscription );
-$managers_and_members = array_merge( Group_Subscription::get_managers( $subscription ), $members );
+// get_managers() returns ints while get_members() returns string IDs; normalize so the
+// strict in_array() and integer-keyed lookup below don't depend on PHP's key coercion.
+$members              = array_map( 'intval', Group_Subscription::get_members( $subscription ) );
+$managers             = array_map( 'intval', Group_Subscription::get_managers( $subscription ) );
+// array_unique() guards against a user appearing in both lists (e.g. the owner also carrying
+// member meta), which would otherwise render two rows for the same person.
+$managers_and_members = array_values( array_unique( array_merge( $managers, $members ) ) );
+// Batch-load every row's user once, instead of one get_user_by() per row. The non-empty
+// guard matters: get_users() with an empty 'include' would return every site user.
+$members_by_id = [];
+if ( ! empty( $managers_and_members ) ) {
+	foreach ( get_users( [ 'include' => $managers_and_members ] ) as $member_user ) {
+		$members_by_id[ $member_user->ID ] = $member_user;
+	}
+}
 $member_limit         = Group_Subscription_Settings::get_subscription_settings( $subscription )['limit'];
 $all_invites          = Group_Subscription_Invite::get_invites( $subscription );
 $pending_invites      = Group_Subscription_Invite::get_invites( $subscription, false );
@@ -124,12 +137,17 @@ $is_completely_empty = empty( $members ) && empty( $all_invites );
 		<tbody>
 		<?php
 		foreach ( $managers_and_members as $user_id ) :
-			$user = get_user_by( 'id', $user_id );
+			$user = $members_by_id[ $user_id ] ?? null;
 			if ( ! $user ) {
 				continue;
 			}
-			$is_manager  = Group_Subscription::user_is_manager( $user_id, $subscription );
-			$is_owner    = $user_id === $subscription->get_user_id();
+			// Check membership against the hoisted manager list (which depends only on the
+			// subscription) instead of calling user_is_manager() per row, which would re-resolve
+			// the managers and group settings every iteration. Apply the same
+			// newspack_group_subscription_user_is_manager filter user_is_manager() applies, so the
+			// extension point is preserved.
+			$is_manager  = (bool) apply_filters( 'newspack_group_subscription_user_is_manager', in_array( $user_id, $managers, true ), $user_id, $subscription );
+			$is_owner    = $user_id === (int) $subscription->get_user_id();
 			$member_role = $is_manager ? __( 'Manager', 'newspack-plugin' ) : __( 'Member', 'newspack-plugin' );
 			if ( $is_owner ) {
 				$member_role = __( 'Owner', 'newspack-plugin' );
