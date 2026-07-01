@@ -18,7 +18,7 @@ const stage = ( label: string, count: number, pctOfTop: number ) => ( { label, c
 
 describe( 'Funnel helpers', () => {
 	describe( 'computeDisplayHalfWidths', () => {
-		// Chart half-width 160; MIN_HALF_WIDTH 32 (20%). Max taper is per-funnel:
+		// Chart half-width 160; MIN_HALF_WIDTH 44.8 (28%). Max taper is per-funnel:
 		// HALF_WIDTH / stepCount (80 for 2 steps, ~53 for 3, 32 for 5).
 		it( 'keeps the top level at full half-width', () => {
 			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 500, 0.5 ) ], 1000 );
