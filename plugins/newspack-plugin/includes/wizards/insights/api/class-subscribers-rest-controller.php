@@ -244,6 +244,7 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 			'refund_rate'               => $metric->get_subscription_refund_rate( $start, $end ),
 			'failed_payment_retry_rate' => $metric->get_failed_payment_retry_rate( $start, $end ),
 			'subscriptions_by_product'  => $metric->get_subscriptions_by_product( $start, $end ),
+			'subscriptions_by_campaign' => $metric->get_subscriptions_by_campaign( $start, $end ),
 			'cancellation_reasons'      => $metric->get_cancellation_reasons( $start, $end ),
 			// Derived empty-state signal (NPPD-1695): true when the window saw any
 			// subscription activity. Pure derivation from values already fetched
