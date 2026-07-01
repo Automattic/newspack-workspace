@@ -199,7 +199,8 @@ class Test_Donors_Performance extends WP_UnitTestCase {
 	 * The bare-parent gift must MERGE into the variable parent's bucket — the
 	 * parent retains its summed variation totals and gains a synthetic
 	 * "(no variation)" row, instead of being overwritten down to the bare gift's
-	 * numbers. The parent's recurring billing_model survives the one-time merge.
+	 * numbers. The parent is flagged as BOTH recurring and one-time (mixed) — the
+	 * recurring signal does not clobber the one-time one.
 	 *
 	 * @dataProvider backend_provider
 	 *
@@ -214,7 +215,8 @@ class Test_Donors_Performance extends WP_UnitTestCase {
 
 		$this->assertTrue( $parent['is_parent'], 'A product with variation rows is a parent.' );
 		$this->assertSame( 'Reader Donation', $parent['name'], 'Parent keeps the canonical product title, not the bare row label.' );
-		$this->assertSame( 'recurring', $parent['billing_model'], 'Parent stays recurring (any recurring variation promotes it) despite the one-time bare gift.' );
+		$this->assertTrue( $parent['has_recurring'], 'The parent has recurring variations.' );
+		$this->assertTrue( $parent['has_one_time'], 'The parent also took a one-time bare gift, so it is mixed — the recurring flag does not clobber the one-time signal.' );
 
 		// 200 + 90 + 0 = 290 — the omission is gone.
 		$this->assertSame( 290, $parent['active_recurring_donors'], 'Active recurring donors sum all variations plus the bare-parent row.' );
@@ -269,7 +271,8 @@ class Test_Donors_Performance extends WP_UnitTestCase {
 		}
 		$this->assertNotNull( $no_variation );
 		$this->assertSame( 7, $no_variation['one_time_gifts_in_window'], 'The synthetic row holds the bare-parent one-time gifts.' );
-		$this->assertSame( 'one_time', $no_variation['billing_model'], 'The bare-parent gift has no sub period, so it is one-time.' );
+		$this->assertTrue( $no_variation['has_one_time'], 'The bare-parent gift has no sub period, so it is one-time.' );
+		$this->assertFalse( $no_variation['has_recurring'], 'A leaf variation is purely one nature — the bare gift is not recurring.' );
 	}
 
 	/**
@@ -294,7 +297,8 @@ class Test_Donors_Performance extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 810333, $indexed );
 		$parent = $indexed[810333];
 		$this->assertTrue( $parent['is_parent'], 'Bucket is a parent regardless of row order.' );
-		$this->assertSame( 'recurring', $parent['billing_model'], 'billing_model promotes to recurring even when the one-time bare row comes first.' );
+		$this->assertTrue( $parent['has_recurring'], 'has_recurring latches regardless of row order.' );
+		$this->assertTrue( $parent['has_one_time'], 'has_one_time latches even when the one-time bare row comes first.' );
 		$this->assertSame( 290, $parent['active_recurring_donors'], 'Active recurring donors merge the same way when the bare row comes first.' );
 		$this->assertCount( 3, $parent['variations'], 'All three rows survive regardless of order.' );
 	}
@@ -316,7 +320,8 @@ class Test_Donors_Performance extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 810339, $indexed );
 		$member_gift = $indexed[810339];
 		$this->assertTrue( $member_gift['is_parent'] );
-		$this->assertSame( 'recurring', $member_gift['billing_model'] );
+		$this->assertTrue( $member_gift['has_recurring'] );
+		$this->assertFalse( $member_gift['has_one_time'], 'A purely recurring product carries no one-time flag (one-time gifts render as em-dash).' );
 		$this->assertSame( 25, $member_gift['active_recurring_donors'] );
 		$this->assertCount( 1, $member_gift['variations'] );
 
@@ -324,7 +329,8 @@ class Test_Donors_Performance extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 820000, $indexed );
 		$one_time = $indexed[820000];
 		$this->assertFalse( $one_time['is_parent'] );
-		$this->assertSame( 'one_time', $one_time['billing_model'] );
+		$this->assertFalse( $one_time['has_recurring'], 'A purely one-time product carries no recurring flag.' );
+		$this->assertTrue( $one_time['has_one_time'] );
 		$this->assertSame( 15, $one_time['one_time_gifts_in_window'] );
 		$this->assertArrayNotHasKey( 'variations', $one_time, 'Standalone products carry no variations scaffold.' );
 	}

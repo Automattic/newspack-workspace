@@ -11,12 +11,17 @@
  *   Recurring revenue | Lifetime revenue
  *
  * Mixed temporal scope (current state + window + lifetime) is called
- * out in the section caption. Cells that don't apply to the row's
- * billing model — recurring donors / lapsed donors / recurring
- * revenue on a one-time product, one-time gifts on a recurring
- * product — render as em-dash ("—") rather than 0/$0.00, which
- * would read as "could be higher but isn't" instead of "doesn't
- * apply."
+ * out in the section caption. Cells that don't apply to a row —
+ * recurring donors / lapsed donors / recurring revenue on a row with
+ * no recurring nature, one-time gifts on a row with no one-time nature
+ * — render as em-dash ("—") rather than 0/$0.00, which would read as
+ * "could be higher but isn't" instead of "doesn't apply."
+ *
+ * A product's nature is two INDEPENDENT flags (`has_recurring`,
+ * `has_one_time`), not one enum, so a MIXED parent — a variable product
+ * with recurring variations that also took a one-time gift at the parent
+ * level (the "(no variation)" row) — shows BOTH its recurring columns and
+ * its one-time gifts. Leaf variation rows are purely one nature.
  */
 
 /**
@@ -28,7 +33,7 @@ import { Fragment } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import type { BillingModel, DonorsTierRow, DonorsTierVariationRow } from '../../api/donors';
+import type { DonorsTierRow, DonorsTierVariationRow } from '../../api/donors';
 import SectionEmpty from '../components/SectionEmpty';
 import SectionHeading from '../components/SectionHeading';
 import { getPostEditUrl } from '../components/adminLinks';
@@ -47,16 +52,13 @@ const NotApplicable = () => (
 const renderCount = ( applies: boolean, value: number ) => ( applies ? formatNumber( value ) : <NotApplicable /> );
 const renderCurrency = ( applies: boolean, value: number ) => ( applies ? formatCurrency( value ).display : <NotApplicable /> );
 
-const isRecurring = ( m: BillingModel ) => m === 'recurring';
-const isOneTime = ( m: BillingModel ) => m === 'one_time';
-
 const renderRowCells = ( row: DonorsTierRow | DonorsTierVariationRow ) => (
 	<>
-		<td className="newspack-insights__table-num">{ renderCount( isRecurring( row.billing_model ), row.active_recurring_donors ) }</td>
-		<td className="newspack-insights__table-num">{ renderCount( isRecurring( row.billing_model ), row.lapsed_donors_in_window ) }</td>
+		<td className="newspack-insights__table-num">{ renderCount( row.has_recurring, row.active_recurring_donors ) }</td>
+		<td className="newspack-insights__table-num">{ renderCount( row.has_recurring, row.lapsed_donors_in_window ) }</td>
 		<td className="newspack-insights__table-num">{ formatNumber( row.new_donors_in_window ) }</td>
-		<td className="newspack-insights__table-num">{ renderCount( isOneTime( row.billing_model ), row.one_time_gifts_in_window ) }</td>
-		<td className="newspack-insights__table-num">{ renderCurrency( isRecurring( row.billing_model ), row.recurring_revenue_in_window ) }</td>
+		<td className="newspack-insights__table-num">{ renderCount( row.has_one_time, row.one_time_gifts_in_window ) }</td>
+		<td className="newspack-insights__table-num">{ renderCurrency( row.has_recurring, row.recurring_revenue_in_window ) }</td>
 		<td className="newspack-insights__table-num">{ formatCurrency( row.lifetime_donation_revenue ).display }</td>
 	</>
 );

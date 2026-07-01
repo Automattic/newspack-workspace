@@ -1093,8 +1093,7 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 			$recurring_revenue         = (float) $row['recurring_revenue_in_window'];
 			$lifetime_donation_revenue = (float) $row['lifetime_donation_revenue'];
 
-			$is_recurring  = in_array( $period, [ 'day', 'week', 'month', 'year' ], true );
-			$billing_model = $is_recurring ? 'recurring' : 'one_time';
+			$is_recurring = in_array( $period, [ 'day', 'week', 'month', 'year' ], true );
 
 			// Resolve the bucket this row belongs under. Variation rows fold
 			// into their parent product; bare-parent / standalone rows fold into
@@ -1118,9 +1117,11 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 					'product_id'                  => $bucket_id,
 					'name'                        => $bucket_name,
 					'is_parent'                   => false,
-					// Bucket inherits 'recurring' if ANY constituent row is
-					// recurring; 'one_time' is the floor, upgraded below.
-					'billing_model'               => 'one_time',
+					// Two INDEPENDENT billing-nature flags, not a promoted enum, so
+					// a mixed product's recurring signal never clobbers its one-time
+					// one. See {@see HPOS_Donors_Storage::aggregate_tier_rows()}.
+					'has_recurring'               => false,
+					'has_one_time'                => false,
 					'active_recurring_donors'     => 0,
 					'lapsed_donors_in_window'     => 0,
 					'new_donors_in_window'        => 0,
@@ -1139,8 +1140,11 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 				$parents[ $bucket_id ]['name']      = $bucket_name;
 			}
 
+			// Latch the bucket's billing nature; a mixed product ends up with both.
 			if ( $is_recurring ) {
-				$parents[ $bucket_id ]['billing_model'] = 'recurring';
+				$parents[ $bucket_id ]['has_recurring'] = true;
+			} else {
+				$parents[ $bucket_id ]['has_one_time'] = true;
 			}
 
 			$parents[ $bucket_id ]['active_recurring_donors']     += $active_recurring_donors;
@@ -1152,7 +1156,9 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 			$parents[ $bucket_id ]['variations'][]                 = [
 				'variation_id'                => $variation_id,
 				'label'                       => $label,
-				'billing_model'               => $billing_model,
+				// A single variation row is purely one nature; exactly one flag set.
+				'has_recurring'               => $is_recurring,
+				'has_one_time'                => ! $is_recurring,
 				'active_recurring_donors'     => $active_recurring_donors,
 				'lapsed_donors_in_window'     => $lapsed_donors,
 				'new_donors_in_window'        => $new_donors,

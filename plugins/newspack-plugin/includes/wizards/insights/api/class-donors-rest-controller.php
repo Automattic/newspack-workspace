@@ -53,16 +53,19 @@ class Donors_REST_Controller extends WP_REST_Controller {
 	/**
 	 * Bumped when the tab payload's shape changes so a deploy doesn't keep
 	 * serving a stale tab-level envelope. v2: the `donations_by_tier` per-product
-	 * table now folds bare-parent donations into the parent bucket and emits a
-	 * synthetic "(no variation)" variation row (the Donors_Metric metric-layer
-	 * cache is invalidated in parallel by its own CACHE_PREFIX bump). Only the
-	 * donors envelope is busted — other (BigQuery-backed) tabs keep their caches.
-	 * Matches the subscribers sibling's version so the twin tabs stay in lockstep.
+	 * table folds bare-parent donations into the parent bucket and emits a
+	 * synthetic "(no variation)" variation row. v3: each row's billing nature is
+	 * now two independent flags (`has_recurring` / `has_one_time`) instead of a
+	 * single `billing_model` enum, so a stale v2 payload would lack the flags and
+	 * the renderer would dash out every applicability-gated column. The
+	 * Donors_Metric metric-layer cache is invalidated in parallel by its own
+	 * CACHE_PREFIX bump. Only the donors envelope is busted — other
+	 * (BigQuery-backed) tabs keep their caches.
 	 *
 	 * @return string
 	 */
 	protected function cache_schema_version(): string {
-		return '2';
+		return '3';
 	}
 
 	/**
