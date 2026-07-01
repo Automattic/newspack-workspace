@@ -559,17 +559,19 @@ final class Cache {
 	 * by the cooldown, returns the previously-cached envelope (or an empty one)
 	 * with `cooldown_until` populated, so the response transport stays 2xx.
 	 *
-	 * @param string   $tab       Tab slug.
-	 * @param string   $source    SOURCE_* constant.
-	 * @param string[] $key_parts Canonicalized window components.
-	 * @param callable $compute   () => array — orchestrator payload.
+	 * @param string     $tab       Tab slug.
+	 * @param string     $source    SOURCE_* constant.
+	 * @param string[]   $key_parts Canonicalized window components.
+	 * @param callable   $compute   () => array — orchestrator payload.
+	 * @param array|null $window    Optional window array with 'start' and 'end' keys.
 	 * @return array
 	 */
 	public static function refresh(
 		string $tab,
 		string $source,
 		array $key_parts,
-		callable $compute
+		callable $compute,
+		?array $window = null
 	): array {
 		if ( self::is_disabled() ) {
 			return self::envelope( (array) $compute(), $source );
@@ -638,18 +640,24 @@ final class Cache {
 				self::index_add( $tab, $key );
 			}
 
-			// If a durable (pre-warmed) entry already exists for this window, overwrite
-			// it so the durable store stays in sync with the manually-refreshed data.
-			// This ensures the read-precedence path in store() (durable → transient →
-			// compute) returns fresh data on the next request rather than serving the
-			// older pre-warmed entry. Reusing $existing_durable['window'] avoids having
-			// to parse start/end from $key_parts, and store_durable() builds its own
-			// envelope with a fresh computed_at — resetting the ~25h SWR clock.
-			// We deliberately do NOT create a durable entry when none exists: durable
-			// storage must remain bounded to windows the pre-warm job created.
+			// Keep the durable pools in sync with the manually-refreshed data so
+			// the read-precedence path (preset → on-demand → transient → compute)
+			// returns fresh data on the next request. Preset entries are synced in
+			// place; on-demand entries are synced or (for a windowed source with a
+			// supplied window) created — a refreshed custom range becomes durable.
 			$existing_durable = self::peek_durable( $tab, $source, $key_parts );
 			if ( null !== $existing_durable ) {
 				self::store_durable( $tab, $source, $key_parts, $envelope['payload'], $existing_durable['window'] );
+			}
+			$existing_ondemand = self::peek_ondemand( $tab, $source, $key_parts );
+			if ( null !== $existing_ondemand ) {
+				self::store_ondemand( $tab, $source, $key_parts, $envelope['payload'], $existing_ondemand['window'] );
+			} elseif (
+				null === $existing_durable &&
+				null !== $window &&
+				( self::SOURCE_EXTERNAL === $source || self::SOURCE_BIGQUERY === $source )
+			) {
+				self::store_ondemand( $tab, $source, $key_parts, $envelope['payload'], $window );
 			}
 		}
 
