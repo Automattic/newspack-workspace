@@ -393,4 +393,23 @@ interface Donors_Storage_Interface {
 	 * @return array<string, array{conversions:int, revenue:float}> popup_id => { conversions, revenue }.
 	 */
 	public function get_prompt_attributed_donation_conversions( DateTimeInterface $start, DateTimeInterface $end ): array;
+
+	/**
+	 * Donation campaign attribution rows for the window (NEWS-2580).
+	 *
+	 * One row per completed/processing donation order in [$start, $end]. utm_campaign
+	 * is read from the donation order meta via the same read path as
+	 * get_prompt_attributed_donation_conversions() (_newspack_popup_id). Per store:
+	 * HPOS reads wc_orders_meta via a MIN() subquery (utm_campaign is written
+	 * non-unique, so a JOIN would inflate), legacy reads postmeta. Every donation
+	 * order is emitted; untagged orders carry '' so the grouping layer can surface a
+	 * "(no campaign)" bucket. Renewals excluded.
+	 *
+	 * revenue = donation order total (one-time gift amount).
+	 *
+	 * @param DateTimeInterface $start Inclusive window start.
+	 * @param DateTimeInterface $end   Inclusive window end.
+	 * @return array<int, array{utm_campaign: string, revenue: float}>
+	 */
+	public function get_donation_campaign_rows( DateTimeInterface $start, DateTimeInterface $end ): array;
 }

@@ -96,6 +96,22 @@ export interface DonorsTierRow extends BillingNature {
 	variations?: DonorsTierVariationRow[];
 }
 
+/**
+ * One "Donations by campaign" row (NEWS-2580). Shape emitted by the shared
+ * Metric_Grouping fold: campaign value, donation count, attributed revenue, and
+ * the untagged flag for the trailing "(no campaign)" denominator row.
+ */
+export interface DonorsCampaignRow {
+	/** Campaign name, or the localized "(no campaign)" untagged label. */
+	value: string;
+	/** Donations attributed to this campaign in the window. */
+	count: number;
+	/** Attributed donation-order revenue for this campaign in the window. */
+	amount: number;
+	/** True for the trailing untagged "(no campaign)" denominator row. */
+	is_untagged: boolean;
+}
+
 export interface DonorsWindow {
 	window: { start: string; end: string };
 	new_donors: number;
@@ -119,6 +135,12 @@ export interface DonorsWindow {
 	 */
 	recurring_donor_retention: DonorsRateValue;
 	donations_by_tier: DonorsTierRow[];
+	/**
+	 * Donations grouped by `utm_campaign` (NEWS-2580). Ranked count desc; the
+	 * trailing `is_untagged` "(no campaign)" row is the untagged denominator.
+	 * Coverage is the UTM-tagged subset — see formulas/tab-7-donors.md.
+	 */
+	donations_by_campaign: DonorsCampaignRow[];
 	/**
 	 * Derived empty-state signal (NPPD-1696): true when the window saw
 	 * any donation activity (revenue, a new donor, or a lapse). Drives

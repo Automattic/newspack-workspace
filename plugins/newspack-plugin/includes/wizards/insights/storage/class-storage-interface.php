@@ -414,6 +414,25 @@ interface Storage_Interface {
 	public function get_attributed_subscription_orders( DateTimeInterface $start, DateTimeInterface $end ): array;
 
 	/**
+	 * New-subscription campaign attribution rows for the window (NEWS-2591).
+	 *
+	 * One row per INITIAL (non-renewal) completed/processing order containing a
+	 * non-donation subscription product in [$start, $end]. utm_campaign is read off
+	 * that initial order (same initial-order scope as get_attributed_subscription_orders(),
+	 * minus its gate/popup requirement). Per store: HPOS reads wc_orders_meta via a
+	 * MIN() subquery (utm_campaign is written non-unique, so a JOIN would inflate),
+	 * legacy reads postmeta. Every subscription order is emitted; untagged orders
+	 * carry '' so the grouping layer can surface a "(no campaign)" bucket.
+	 *
+	 * revenue = initial subscription order total (not recurring / MRR).
+	 *
+	 * @param DateTimeInterface $start Inclusive window start.
+	 * @param DateTimeInterface $end   Inclusive window end.
+	 * @return array<int, array{utm_campaign: string, revenue: float}>
+	 */
+	public function get_new_subscription_campaign_rows( DateTimeInterface $start, DateTimeInterface $end ): array;
+
+	/**
 	 * Subscription schedule intervals for the trailing-365-day new-subscriber
 	 * cohort (5.2 retention input). One row per (customer, non-donation
 	 * subscription) for every customer whose EARLIEST non-donation subscription

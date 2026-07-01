@@ -27,6 +27,7 @@ import ScorecardSection from './donors/ScorecardSection';
 import WindowedSection from './donors/WindowedSection';
 import RetentionSection from './donors/RetentionSection';
 import PerformanceSection from './donors/PerformanceSection';
+import CampaignSection from './donors/CampaignSection';
 import './donors/donors.scss';
 
 export interface DonorsTabProps {
@@ -60,6 +61,7 @@ const DonorsTab = ( { range, previousRange }: DonorsTabProps ) => {
 					/>
 					<RetentionSection current={ data.current } previous={ data.previous } />
 					<PerformanceSection rows={ data.current.donations_by_tier } />
+					<CampaignSection rows={ data.current.donations_by_campaign } />
 				</>
 			) }
 		</TabStateView>

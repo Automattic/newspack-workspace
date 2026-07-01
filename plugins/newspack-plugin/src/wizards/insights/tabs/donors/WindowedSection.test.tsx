@@ -32,6 +32,7 @@ const makeWindow = ( over: Partial< DonorsWindow > = {} ): DonorsWindow => ( {
 	lapsed_donor_recovery_rate: { value: 0.1, computable: true, denominator: 30 },
 	recurring_donor_retention: { value: 0.8, computable: true, denominator: 50 },
 	donations_by_tier: [],
+	donations_by_campaign: [],
 	has_window_activity: true,
 	...over,
 } );

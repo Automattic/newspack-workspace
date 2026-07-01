@@ -475,6 +475,38 @@ class Donors_Metric {
 	}
 
 	/**
+	 * Donations in the window grouped by `utm_campaign` (NEWS-2580).
+	 *
+	 * Anonymous-inclusive, Woo-only (no GA4 / hub). Reads one row per donation order
+	 * from the storage layer (per store: HPOS `wc_orders_meta`, legacy `postmeta`),
+	 * then folds by campaign via {@see Metric_Grouping::group_records_by_key()}.
+	 * Untagged orders collapse into a single trailing "(no campaign)" row. Coverage
+	 * is the UTM-tagged subset — see formulas/tab-7-donors.md.
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array<int, array{value: string, count: int, amount: float, is_untagged: bool}>
+	 */
+	public function get_donations_by_campaign( DateTimeInterface $start, DateTimeInterface $end ): array {
+		return (array) $this->cached(
+			'donations_by_campaign',
+			$this->window_key( $start, $end ),
+			self::TTL_DEFAULT, // Grouping an already-fetched record set, not a heavy join.
+			function () use ( $start, $end ) {
+				return Metric_Grouping::group_records_by_key(
+					$this->storage->get_donation_campaign_rows( $start, $end ),
+					'utm_campaign',
+					'revenue',
+					// Locale-stable sentinel, NOT __()'d: this output is cached under a
+					// locale-agnostic key, so the display label is localized at render
+					// time from the is_untagged flag (see CampaignSection.tsx).
+					[ 'untagged_label' => '(no campaign)' ]
+				);
+			}
+		);
+	}
+
+	/**
 	 * Flush all Tab 7 metric caches. Hook point for NPPD-1605.
 	 *
 	 * @return void

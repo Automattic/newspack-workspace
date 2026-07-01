@@ -1591,6 +1591,67 @@ class HPOS_Storage implements Storage_Interface {
 	}
 
 	/**
+	 * New-subscription campaign attribution rows for the window (NEWS-2591).
+	 *
+	 * The subscription twin of get_donation_campaign_rows(): one row per INITIAL
+	 * (non-renewal) completed/processing order containing a non-donation
+	 * subscription product in [$start, $end], keyed on `utm_campaign` read off that
+	 * initial order. Mirrors get_attributed_subscription_orders() exactly — same
+	 * initial-order scope, renewal + donation-product exclusion, and correlated
+	 * MIN() (the meta is written non-unique, so a JOIN would inflate) — but WITHOUT
+	 * its gate/popup-attribution requirement, so every subscription order is emitted
+	 * (untagged → '') for the "(no campaign)" bucket. HPOS reads `wc_orders_meta`.
+	 *
+	 * revenue = initial subscription order total (not recurring / MRR).
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array<int, array{utm_campaign: string, revenue: float}>
+	 */
+	public function get_new_subscription_campaign_rows( DateTimeInterface $start, DateTimeInterface $end ): array {
+		global $wpdb;
+		$prefix        = $wpdb->prefix;
+		$donations     = $this->id_list( $this->donation_product_ids );
+		$subscriptions = $this->subscription_product_ids_sql();
+
+		$sql = $wpdb->prepare(
+			"SELECT
+				(
+					SELECT MIN(c.meta_value)
+					FROM {$prefix}wc_orders_meta c
+					WHERE c.order_id = ord.id AND c.meta_key = 'utm_campaign' AND c.meta_value <> ''
+				) AS utm_campaign,
+				ord.total_amount AS revenue
+			FROM {$prefix}wc_orders ord
+			WHERE ord.type = 'shop_order'
+			  AND ord.status IN ('wc-completed', 'wc-processing')
+			  AND ord.date_created_gmt BETWEEN %s AND %s
+			  AND NOT EXISTS (
+			      SELECT 1 FROM {$prefix}wc_orders_meta rn
+			      WHERE rn.order_id = ord.id AND rn.meta_key = '_subscription_renewal'
+			        AND rn.meta_value NOT IN ('', '0')
+			  )
+			  AND EXISTS (
+			      SELECT 1 FROM {$prefix}wc_order_product_lookup opl
+			      WHERE opl.order_id = ord.id
+			        AND opl.product_id IN ($subscriptions)
+			        AND opl.product_id NOT IN ($donations)
+			  )",
+			$this->fmt( $start ),
+			$this->fmt( $end )
+		);
+
+		$out = [];
+		foreach ( (array) $wpdb->get_results( $sql, ARRAY_A ) as $row ) {
+			$out[] = [
+				'utm_campaign' => (string) ( $row['utm_campaign'] ?? '' ),
+				'revenue'      => (float) ( $row['revenue'] ?? 0 ),
+			];
+		}
+		return $out;
+	}
+
+	/**
 	 * Normalize raw attributed-subscription-order rows to the typed per-order shape.
 	 * A null gate/popup id (no such meta on the order) stays null so the orchestrator
 	 * can apply gate precedence; `order_total` is coerced to float. Shared row shape

@@ -91,6 +91,22 @@ export interface CancellationReasonRow {
 	count: number;
 }
 
+/**
+ * One "Subscriptions by campaign" row (NEWS-2591). Shape emitted by the shared
+ * Metric_Grouping fold: campaign value, new-subscription count, attributed
+ * revenue, and the untagged flag for the trailing "(no campaign)" denominator row.
+ */
+export interface SubscribersCampaignRow {
+	/** Campaign name, or the localized "(no campaign)" untagged label. */
+	value: string;
+	/** New subscriptions attributed to this campaign in the window. */
+	count: number;
+	/** Attributed initial-order revenue for this campaign in the window. */
+	amount: number;
+	/** True for the trailing untagged "(no campaign)" denominator row. */
+	is_untagged: boolean;
+}
+
 export interface SubscribersWindow {
 	window: { start: string; end: string };
 	new_subscribers: number;
@@ -110,6 +126,12 @@ export interface SubscribersWindow {
 	 */
 	failed_payment_retry_rate: SubscribersRateValue;
 	subscriptions_by_product: PerformanceRow[];
+	/**
+	 * New subscriptions grouped by `utm_campaign` (NEWS-2591). Ranked count desc;
+	 * the trailing `is_untagged` "(no campaign)" row is the untagged denominator.
+	 * Coverage is the UTM-tagged subset — see formulas/tab-6-subscribers.md.
+	 */
+	subscriptions_by_campaign: SubscribersCampaignRow[];
 	cancellation_reasons: CancellationReasonRow[];
 	/**
 	 * Derived empty-state signal (NPPD-1695): true when the window saw
