@@ -1,0 +1,16 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+[role="region"].newspack-page {
+	background-color: wp-colors.$white;
+}
+
+.newspack-page [class*="header-visual"] svg path {
+	transform: scale(1.1111);
+	transform-box: view-box;
+	transform-origin: center;
+}
+
+.newspack-page__breadcrumbs {
+	min-height: wp-vars.$button-size;
+}
