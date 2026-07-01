@@ -5,7 +5,7 @@
 /**
  * Internal dependencies
  */
-import { buildJsonFilename } from './jsonExport';
+import { buildJsonFilename, downloadJson } from './jsonExport';
 
 describe( 'buildJsonFilename', () => {
 	const computedAt = '2026-07-01T09:30:00Z';
@@ -34,5 +34,75 @@ describe( 'buildJsonFilename', () => {
 
 	it( 'renders the date in site time (UTC in tests) from the computedAt timestamp', () => {
 		expect( buildJsonFilename( 'donors', 'last-30', '2026-12-31T23:59:59Z' ) ).toBe( '2026-12-31-donors-last-30-days.json' );
+	} );
+} );
+
+describe( 'downloadJson', () => {
+	let createObjectURL: jest.Mock;
+	let revokeObjectURL: jest.Mock;
+	let clickSpy: jest.SpyInstance;
+	let capturedBlob: Blob | null;
+
+	// jsdom does not implement URL.createObjectURL / URL.revokeObjectURL, so
+	// jest.spyOn would throw (can't spy on undefined). We assign them directly
+	// and save/restore around each test to prevent cross-suite pollution.
+	let origCreateObjectURL: typeof URL.createObjectURL;
+	let origRevokeObjectURL: typeof URL.revokeObjectURL;
+
+	beforeEach( () => {
+		capturedBlob = null;
+		origCreateObjectURL = URL.createObjectURL;
+		origRevokeObjectURL = URL.revokeObjectURL;
+
+		createObjectURL = jest.fn( ( blob: Blob ) => {
+			capturedBlob = blob;
+			return 'blob:mock-url';
+		} );
+		revokeObjectURL = jest.fn( () => undefined );
+		( global.URL as any ).createObjectURL = createObjectURL;
+		( global.URL as any ).revokeObjectURL = revokeObjectURL;
+		clickSpy = jest.spyOn( HTMLAnchorElement.prototype, 'click' ).mockImplementation( () => undefined );
+	} );
+
+	afterEach( () => {
+		clickSpy.mockRestore();
+		// Restore URL globals so later suites in the same worker are not polluted.
+		( global.URL as any ).createObjectURL = origCreateObjectURL;
+		( global.URL as any ).revokeObjectURL = origRevokeObjectURL;
+	} );
+
+	it( 'triggers a download with the given filename', () => {
+		let downloadName = '';
+		clickSpy.mockImplementation( function ( this: HTMLAnchorElement ) {
+			downloadName = this.download;
+		} );
+
+		downloadJson( 'audience-export.json', { a: 1 } );
+
+		expect( clickSpy ).toHaveBeenCalledTimes( 1 );
+		expect( downloadName ).toBe( 'audience-export.json' );
+	} );
+
+	it( 'writes pretty-printed JSON of the data into an application/json blob', async () => {
+		const data = { current: { views: 10 }, previous: null };
+		downloadJson( 'x.json', data );
+
+		expect( capturedBlob ).not.toBeNull();
+		expect( capturedBlob!.type ).toBe( 'application/json' );
+
+		// jsdom does not implement Blob.prototype.text(), so read via FileReader.
+		const text = await new Promise< string >( ( resolve, reject ) => {
+			const reader = new FileReader();
+			reader.onload = () => resolve( reader.result as string );
+			reader.onerror = () => reject( reader.error );
+			reader.readAsText( capturedBlob! );
+		} );
+		expect( text ).toBe( JSON.stringify( data, null, 2 ) );
+	} );
+
+	it( 'revokes the object URL it created', () => {
+		downloadJson( 'x.json', { a: 1 } );
+		expect( createObjectURL ).toHaveBeenCalledTimes( 1 );
+		expect( revokeObjectURL ).toHaveBeenCalledWith( 'blob:mock-url' );
 	} );
 } );

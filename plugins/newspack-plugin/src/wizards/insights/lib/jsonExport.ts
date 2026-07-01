@@ -39,3 +39,24 @@ const PRESET_SLUG: Record< DateRangePreset, string > = {
  */
 export const buildJsonFilename = ( tab: string, preset: DateRangePreset, computedAt: string ): string =>
 	`${ dateI18n( 'Y-m-d', computedAt ) }-${ tab }-${ PRESET_SLUG[ preset ] }.json`;
+
+/**
+ * Serialize `data` as pretty-printed JSON and trigger a browser download
+ * under `filename`. Uses a Blob object URL + a transient `<a download>`
+ * click (no dependency, works across supported browsers). No-ops in
+ * non-DOM environments (SSR / unit tests without a document).
+ */
+export const downloadJson = ( filename: string, data: unknown ): void => {
+	if ( typeof window === 'undefined' || typeof document === 'undefined' ) {
+		return;
+	}
+	const blob = new Blob( [ JSON.stringify( data, null, 2 ) ], { type: 'application/json' } );
+	const url = URL.createObjectURL( blob );
+	const anchor = document.createElement( 'a' );
+	anchor.href = url;
+	anchor.download = filename;
+	document.body.appendChild( anchor );
+	anchor.click();
+	document.body.removeChild( anchor );
+	URL.revokeObjectURL( url );
+};
