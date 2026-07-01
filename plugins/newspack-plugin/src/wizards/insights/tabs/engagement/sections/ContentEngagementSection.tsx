@@ -39,7 +39,7 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 					emptyMessage={ __( 'No article engagement data in this timeframe.', 'newspack-plugin' ) }
 					columns={ [
 						ARTICLE_COL,
-						{ key: 'unique_readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
+						{ key: 'unique_readers', label: __( 'Engaged readers', 'newspack-plugin' ), format: 'number', align: 'right' },
 						{ key: 'avg_engagement_seconds', label: __( 'Avg time', 'newspack-plugin' ), format: 'duration', align: 'right' },
 					] }
 				/>
@@ -63,7 +63,7 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 					emptyMessage={ __( 'No author engagement data in this timeframe.', 'newspack-plugin' ) }
 					columns={ [
 						{ key: 'author', label: __( 'Author', 'newspack-plugin' ) },
-						{ key: 'unique_readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
+						{ key: 'unique_readers', label: __( 'Engaged readers', 'newspack-plugin' ), format: 'number', align: 'right' },
 						{ key: 'avg_engagement_seconds', label: __( 'Avg time', 'newspack-plugin' ), format: 'duration', align: 'right' },
 					] }
 				/>
