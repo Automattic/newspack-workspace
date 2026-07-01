@@ -1,12 +1,14 @@
-import { render, Fragment } from '@wordpress/element';
-import { NewspackIcon } from '../../../packages/components/src';
+import { render } from '@wordpress/element';
+import { Page } from '../../../packages/components/src';
 import './style.scss';
 
+type Crumb = { label: string; url?: string };
+
 export function WizardsAdminHeader( {
-	title,
+	breadcrumbs,
 	tabs,
 }: {
-	title: string;
+	breadcrumbs: Crumb[];
 	tabs: Array< {
 		textContent: string;
 		href: string;
@@ -14,17 +16,7 @@ export function WizardsAdminHeader( {
 	} >;
 } ) {
 	return (
-		<Fragment>
-			<div className="newspack-wizard__header">
-				<div className="newspack-wizard__header__inner">
-					<div className="newspack-wizard__title">
-						<NewspackIcon size={ 36 } />
-						<div>
-							<h2>{ title }</h2>
-						</div>
-					</div>
-				</div>
-			</div>
+		<Page breadcrumbItems={ breadcrumbs } actions={ <div id="newspack-wizards-admin-header-actions" /> }>
 			{ tabs.length > 0 && (
 				<div className="newspack-tabbed-navigation">
 					<ul>
@@ -41,11 +33,11 @@ export function WizardsAdminHeader( {
 					</ul>
 				</div>
 			) }
-		</Fragment>
+		</Page>
 	);
 }
 
 render(
-	<WizardsAdminHeader title={ window.newspackWizardsAdminHeader.title } tabs={ window.newspackWizardsAdminHeader.tabs } />,
+	<WizardsAdminHeader breadcrumbs={ window.newspackWizardsAdminHeader.breadcrumbs } tabs={ window.newspackWizardsAdminHeader.tabs } />,
 	document.getElementById( 'newspack-wizards-admin-header' )
 );
