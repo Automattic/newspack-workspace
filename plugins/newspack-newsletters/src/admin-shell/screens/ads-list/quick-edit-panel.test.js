@@ -55,16 +55,16 @@ describe( 'AdsQuickEditPanel status control', () => {
 	it( 'selects Active when the raw post_status is publish', async () => {
 		renderPanel( makeItem( 'publish' ) );
 		expect( await screen.findByRole( 'radio', { name: 'Active' } ) ).toBeChecked();
-		expect( screen.getByRole( 'radio', { name: 'Draft' } ) ).not.toBeChecked();
+		expect( screen.getByRole( 'radio', { name: 'Inactive' } ) ).not.toBeChecked();
 	} );
 
-	it( 'selects Draft when the raw post_status is draft', async () => {
+	it( 'selects Inactive when the raw post_status is draft', async () => {
 		renderPanel( makeItem( 'draft' ) );
-		expect( await screen.findByRole( 'radio', { name: 'Draft' } ) ).toBeChecked();
+		expect( await screen.findByRole( 'radio', { name: 'Inactive' } ) ).toBeChecked();
 		expect( screen.getByRole( 'radio', { name: 'Active' } ) ).not.toBeChecked();
 	} );
 
-	it( 'POSTs status: publish when toggled Draft → Active', async () => {
+	it( 'POSTs status: publish when toggled Inactive → Active', async () => {
 		const onSaved = jest.fn();
 		renderPanel( makeItem( 'draft' ), { onSaved } );
 		fireEvent.click( await screen.findByRole( 'radio', { name: 'Active' } ) );
@@ -75,10 +75,10 @@ describe( 'AdsQuickEditPanel status control', () => {
 		expect( postCall().data.status ).toBe( 'publish' );
 	} );
 
-	it( 'POSTs status: draft when toggled Active → Draft', async () => {
+	it( 'POSTs status: draft when toggled Active → Inactive', async () => {
 		const onSaved = jest.fn();
 		renderPanel( makeItem( 'publish' ), { onSaved } );
-		fireEvent.click( await screen.findByRole( 'radio', { name: 'Draft' } ) );
+		fireEvent.click( await screen.findByRole( 'radio', { name: 'Inactive' } ) );
 		fireEvent.click( screen.getByTestId( 'panel-save' ) );
 		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
 		expect( postCall().data.status ).toBe( 'draft' );
@@ -103,11 +103,11 @@ describe( 'AdsQuickEditPanel status control', () => {
 		expect( postCall().data ).not.toHaveProperty( 'status' );
 	} );
 
-	it( 'selects Draft for a private ad and preserves it by omitting status when unchanged', async () => {
+	it( 'selects Inactive for a private ad and preserves it by omitting status when unchanged', async () => {
 		const onSaved = jest.fn();
 		renderPanel( makeItem( 'private' ), { onSaved } );
-		// `private` ads are never served, so the control reflects Draft; leaving it untouched must not rewrite the status.
-		expect( await screen.findByRole( 'radio', { name: 'Draft' } ) ).toBeChecked();
+		// `private` ads are never served, so the control reflects Inactive; leaving it untouched must not rewrite the status.
+		expect( await screen.findByRole( 'radio', { name: 'Inactive' } ) ).toBeChecked();
 		expect( screen.getByRole( 'radio', { name: 'Active' } ) ).not.toBeChecked();
 		fireEvent.click( screen.getByTestId( 'panel-save' ) );
 		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
@@ -118,7 +118,7 @@ describe( 'AdsQuickEditPanel status control', () => {
 		renderPanel( makeItem( 'publish' ) );
 		await screen.findByRole( 'radio', { name: 'Active' } );
 		expect( screen.getByTestId( 'panel-dirty' ) ).toHaveTextContent( 'false' );
-		fireEvent.click( screen.getByRole( 'radio', { name: 'Draft' } ) );
+		fireEvent.click( screen.getByRole( 'radio', { name: 'Inactive' } ) );
 		expect( screen.getByTestId( 'panel-dirty' ) ).toHaveTextContent( 'true' );
 	} );
 } );

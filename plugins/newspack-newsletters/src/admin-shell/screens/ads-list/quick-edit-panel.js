@@ -48,8 +48,8 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 		const value = item?.meta?.price;
 		return value ? String( value ) : '';
 	} )();
-	// `private` ads are never served (the serving queries are publish-only), so treat them as Draft rather than Active.
-	const initialStatus = [ 'publish', 'future' ].includes( item?.status ) ? 'active' : 'draft';
+	// `private` ads are never served (the serving queries are publish-only), so they are Inactive alongside drafts.
+	const initialStatus = [ 'publish', 'future' ].includes( item?.status ) ? 'active' : 'inactive';
 
 	const [ status, setStatus ] = useState( initialStatus );
 	const [ advertiserSelections, setAdvertiserSelections ] = useState( initialAdvertiserSelections );
@@ -133,11 +133,11 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 				label={ __( 'Status', 'newspack-newsletters' ) }
 				selected={ status }
 				options={ [
-					{ label: __( 'Draft', 'newspack-newsletters' ), value: 'draft' },
 					{ label: __( 'Active', 'newspack-newsletters' ), value: 'active' },
+					{ label: __( 'Inactive', 'newspack-newsletters' ), value: 'inactive' },
 				] }
 				onChange={ setStatus }
-				help={ __( 'Active ads run according to their start and expiration dates. Draft ads are never shown.', 'newspack-newsletters' ) }
+				help={ __( 'Active ads run according to their start and expiration dates. Inactive ads are never shown.', 'newspack-newsletters' ) }
 			/>
 			<FormTokenField
 				label={ __( 'Advertiser', 'newspack-newsletters' ) }
