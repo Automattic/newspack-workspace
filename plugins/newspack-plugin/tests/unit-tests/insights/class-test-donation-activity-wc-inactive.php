@@ -24,6 +24,7 @@ use Newspack\Insights_Wizard;
  * Boot-config degradation with WooCommerce inactive.
  *
  * @group insights
+ * @group donations
  */
 class Test_Donation_Activity_WC_Inactive extends WP_UnitTestCase {
 
