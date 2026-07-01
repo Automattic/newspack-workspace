@@ -110,4 +110,39 @@ class Newspack_Test_Salesforce extends WP_UnitTestCase {
 			'A request signed with the wrong secret must be rejected.'
 		);
 	}
+
+	/**
+	 * A newly created sync webhook is given a signing secret.
+	 */
+	public function test_platform_check_creates_webhook_with_secret() {
+		delete_option( 'newspack_salesforce_webhook_id' );
+
+		// is_platform_wc() defaults to true, so this creates the sync webhook.
+		Salesforce::platform_check();
+
+		$webhook_id = (int) get_option( 'newspack_salesforce_webhook_id' );
+		self::assertNotEmpty( $webhook_id, 'A sync webhook is created.' );
+		self::assertNotEmpty(
+			wc_get_webhook( $webhook_id )->get_secret(),
+			'The created webhook has a signing secret.'
+		);
+	}
+
+	/**
+	 * An existing webhook without a secret is backfilled with one.
+	 */
+	public function test_platform_check_backfills_missing_secret() {
+		$webhook = new WC_Webhook();
+		$webhook->set_status( 'active' );
+		$webhook->save();
+		update_option( 'newspack_salesforce_webhook_id', $webhook->get_id() );
+		self::assertSame( '', $webhook->get_secret(), 'Precondition: the webhook has no secret.' );
+
+		Salesforce::platform_check();
+
+		self::assertNotEmpty(
+			wc_get_webhook( $webhook->get_id() )->get_secret(),
+			'An existing webhook without a secret is backfilled with one.'
+		);
+	}
 }

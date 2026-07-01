@@ -791,8 +791,12 @@ class WC_Webhook {
 	public function set_topic( $value ) {}
 	public function set_status( $value ) {}
 	public function set_delivery_url( $value ) {}
+	public function set_user_id( $value ) {}
 	public function set_secret( $value ) {
 		$this->secret = $value;
+	}
+	public function delete( $force = false ) {
+		unset( self::$registry[ $this->id ] );
 	}
 	public function get_id() {
 		return $this->id;

@@ -67,6 +67,24 @@ class Salesforce {
 
 		if ( $is_newspack && ! $webhook_id ) {
 			self::create_webhook();
+		} elseif ( $is_newspack && $webhook_id ) {
+			self::ensure_webhook_secret( $webhook_id );
+		}
+	}
+
+	/**
+	 * Ensure an existing webhook has a signing secret.
+	 *
+	 * Webhooks created before signature verification was added were saved without a
+	 * secret; without one, delivery signatures cannot be verified meaningfully.
+	 *
+	 * @param int $webhook_id Webhook id.
+	 */
+	private static function ensure_webhook_secret( $webhook_id ) {
+		$webhook = \wc_get_webhook( $webhook_id );
+		if ( $webhook && '' === $webhook->get_secret() ) {
+			$webhook->set_secret( wp_generate_password( 50, true, true ) );
+			$webhook->save();
 		}
 	}
 
@@ -885,6 +903,8 @@ class Salesforce {
 		$webhook->set_delivery_url( get_rest_url( null, '/' . self::SALESFORCE_API_NAMESPACE . '/sync' ) );
 		$webhook->set_status( 'active' );
 		$webhook->set_user_id( get_current_user_id() );
+		// A secret is required to sign and verify deliveries; WooCommerce does not set one here.
+		$webhook->set_secret( wp_generate_password( 50, true, true ) );
 		$webhook->save();
 		$webhook_id = $webhook->get_id();
 
