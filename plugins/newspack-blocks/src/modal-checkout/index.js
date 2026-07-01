@@ -209,6 +209,80 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				} );
 
 				/**
+				 * Keep the static product summary aligned with recalculated order-review totals.
+				 */
+				function setProductSummary( productDetails, allowHtml = true ) {
+					const $productDetails = $( '#modal-checkout-product-details strong' );
+					if ( ! $productDetails.length || ! productDetails ) {
+						return false;
+					}
+					if ( allowHtml && $productDetails.html() !== productDetails ) {
+						$productDetails.html( productDetails );
+					} else if ( ! allowHtml && $productDetails.text() !== productDetails ) {
+						$productDetails.text( productDetails );
+					}
+					return true;
+				}
+				let productSummaryRequest = false;
+				function getCheckoutPostData() {
+					const $checkoutForm = $( 'form.checkout' );
+					// Repeat-trial checks can only resolve once the checkout form includes a billing email.
+					return $checkoutForm.length ? $checkoutForm.serialize() : '';
+				}
+				function requestUpdatedProductSummary() {
+					if ( productSummaryRequest ) {
+						productSummaryRequest.abort();
+					}
+					const request = $.ajax( {
+						url: newspackBlocksModalCheckout.ajax_url,
+						method: 'POST',
+						data: {
+							action: 'get_cart_product_summary',
+							modal_checkout: 1,
+							post_data: getCheckoutPostData(),
+						},
+						success: response => {
+							if ( productSummaryRequest === request ) {
+								setProductSummary( response );
+							}
+						},
+						complete: () => {
+							if ( productSummaryRequest === request ) {
+								productSummaryRequest = false;
+							}
+						},
+					} );
+					productSummaryRequest = request;
+				}
+				function updateProductSummaryFromOrderReview() {
+					const $cartItem = $( '.order-review-wrapper .woocommerce-checkout-review-order-table tr.cart_item' ).first();
+					if ( ! $cartItem.length ) {
+						return false;
+					}
+
+					const $productName = $cartItem.find( '.product-name' ).clone();
+					$productName.find( '.product-quantity' ).remove();
+					// Keep the DOM path text-only; the AJAX fallback is the HTML path because PHP runs it through wp_kses.
+					const productName = $productName.text().replace( /\s+/g, ' ' ).trim();
+					const productTotal = $cartItem.find( '.product-total' ).text().replace( /\s+/g, ' ' ).trim();
+					if ( productName && productTotal ) {
+						return setProductSummary( `${ productName }: ${ productTotal }`, false );
+					}
+					return false;
+				}
+				function syncProductSummary() {
+					if ( updateProductSummaryFromOrderReview() ) {
+						if ( productSummaryRequest ) {
+							productSummaryRequest.abort();
+							productSummaryRequest = false;
+						}
+						return;
+					}
+					requestUpdatedProductSummary();
+				}
+				$( document ).on( 'updated_checkout', syncProductSummary );
+
+				/**
 				 * Toggle Transaction Details
 				 */
 				$( document ).on( 'click', '#order_review_heading', function () {
@@ -223,44 +297,60 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				/**
 				 * Get updated cart total to update the "Place Order" button.
 				 */
-				function getUpdatedCartTotal() {
-					let cartTotal;
-					$.ajax( {
+				function getOrderReviewCartTotal() {
+					return $( '.order-review-wrapper tr.order-total:not(.recurring-total) .amount' ).first().text().replace( /\s+/g, ' ' ).trim();
+				}
+				let cartTotalRequest = false;
+				function requestUpdatedCartTotal( cb ) {
+					if ( cartTotalRequest ) {
+						cartTotalRequest.abort();
+					}
+					const request = $.ajax( {
 						url: newspackBlocksModalCheckout.ajax_url,
 						method: 'POST',
-						async: false,
 						data: {
 							action: 'get_cart_total',
+							modal_checkout: 1,
+							post_data: getCheckoutPostData(),
 						},
 						success: response => {
-							cartTotal = response;
+							if ( response && cartTotalRequest === request ) {
+								cb( response );
+							}
+						},
+						complete: () => {
+							if ( cartTotalRequest === request ) {
+								cartTotalRequest = false;
+							}
 						},
 					} );
-					if ( cartTotal ) {
-						return cartTotal;
-					}
+					cartTotalRequest = request;
 				}
 
 				/**
 				 * Update Place Order button text.
 				 */
-				$( document ).on( 'updated_checkout', function () {
+				function syncPlaceOrderButton( cartTotal = getOrderReviewCartTotal() ) {
 					// Update "Place Order" button to include current price.
 					let processOrderText = newspackBlocksModalCheckout.labels.complete_button;
 					if ( ! processOrderText ) {
 						return;
 					}
-					if ( $( '#place_order' ).has( $( 'span.cart-price' ) ) ) {
+					if ( cartTotal && $( '#place_order' ).has( $( 'span.cart-price' ) ) ) {
 						// Modify button text to include updated price.
 						const tree = $( '<div>' + processOrderText + '</div>' );
 						// Update the HTML in the .cart-price span with the new price, and return.
-						tree.find( '.cart-price' ).html( getUpdatedCartTotal, function () {
-							return this.childNodes;
-						} );
+						tree.find( '.cart-price' ).html( cartTotal );
 						processOrderText = tree.html();
 					}
 					$( '#place_order' ).html( processOrderText );
 					$( '#place_order_clone' ).html( processOrderText );
+					if ( ! cartTotal ) {
+						requestUpdatedCartTotal( syncPlaceOrderButton );
+					}
+				}
+				$( document ).on( 'updated_checkout', function () {
+					syncPlaceOrderButton();
 				} );
 
 				/**
@@ -558,6 +648,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 
 						// Disable 'Place Order' button if Subscription Confirmation is required.
 						handleSubscriptionConfirmation();
+						$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
 					}
 					$form.triggerHandler( 'editing_details', [ isEditingDetails ] );
 					// Scroll to top.
