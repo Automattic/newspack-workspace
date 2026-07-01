@@ -13,6 +13,7 @@ import { __ } from '@wordpress/i18n';
 import type { InsightsWindow } from '../../../api/audience';
 import MetricTable from '../../components/MetricTable';
 import SectionHeading from '../../components/SectionHeading';
+import { SHOW_COMPLETION_METRICS } from '../constants';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -28,9 +29,10 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 			title={ __( 'Content engagement', 'newspack-plugin' ) }
 			description={ __( 'What holds reader attention.', 'newspack-plugin' ) }
 		/>
-		{ /* 2-col grid: Most-Read + Completion Rate share row 1; Top Authors wraps
-		     to row 2, occupying one column (~50%, left-aligned) so 10-row tables
-		     have width and the third doesn't stretch full-width. */ }
+		{ /* 2-col grid. With completion shown: Most-Engaged + Completion share row 1
+		     and Top Authors wraps to row 2 (one column, ~50%, left-aligned). With
+		     completion hidden (SHOW_COMPLETION_METRICS=false) the two remaining
+		     tables fill row 1 as a clean 2-up — no full-width stretch. */ }
 		<div className="newspack-insights__table-grid newspack-insights__table-grid--cols-2">
 			<div>
 				<h3 className="newspack-insights__chart-card-title">{ __( 'Most-Engaged Articles', 'newspack-plugin' ) }</h3>
@@ -44,18 +46,21 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 					] }
 				/>
 			</div>
-			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Articles by Completion Rate', 'newspack-plugin' ) }</h3>
-				<MetricTable
-					payload={ current.articles_by_completion_rate }
-					emptyMessage={ __( 'No scroll-completion data in this timeframe.', 'newspack-plugin' ) }
-					columns={ [
-						ARTICLE_COL,
-						{ key: 'readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
-						{ key: 'completion_rate', label: __( 'Read to end', 'newspack-plugin' ), format: 'percent', align: 'right' },
-					] }
-				/>
-			</div>
+			{ /* Completion is GA4-scroll-derived; hidden until scroll data flows. See ../constants. */ }
+			{ SHOW_COMPLETION_METRICS && (
+				<div>
+					<h3 className="newspack-insights__chart-card-title">{ __( 'Articles by Completion Rate', 'newspack-plugin' ) }</h3>
+					<MetricTable
+						payload={ current.articles_by_completion_rate }
+						emptyMessage={ __( 'No scroll-completion data in this timeframe.', 'newspack-plugin' ) }
+						columns={ [
+							ARTICLE_COL,
+							{ key: 'readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
+							{ key: 'completion_rate', label: __( 'Read to end', 'newspack-plugin' ), format: 'percent', align: 'right' },
+						] }
+					/>
+				</div>
+			) }
 			<div>
 				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Authors by Avg Engagement Time', 'newspack-plugin' ) }</h3>
 				<MetricTable
