@@ -105,6 +105,7 @@ class Private_Tags {
 		 * @constant NEWSPACK_PRIVATE_TAGS_DISABLED
 		 * @type     bool
 		 * @default  Private tags feature enabled
+		 * @status   draft
 		 *
 		 * @example define( 'NEWSPACK_PRIVATE_TAGS_DISABLED', true );
 		 */
