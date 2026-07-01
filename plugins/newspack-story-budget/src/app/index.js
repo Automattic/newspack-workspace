@@ -79,24 +79,20 @@ const StoryBudget = () => {
 
 	const currentNavItem = navigationItems.find( item => location.pathname.indexOf( item.path ) === 0 );
 
-	const getHeaderText = () => {
-		const parts = [ __( 'Story Budget', 'newspack-story-budget' ) ];
+	const breadcrumbItems = [ { label: __( 'Story Budget', 'newspack-story-budget' ) } ];
 
-		const siteName = getCurrentSiteName();
-		if ( siteName ) {
-			parts.push( siteName );
-		}
+	const siteName = getCurrentSiteName();
+	if ( siteName ) {
+		breadcrumbItems.push( { label: siteName } );
+	}
 
-		if ( currentNavItem ) {
-			parts.push( currentNavItem.label );
-		}
+	if ( currentNavItem ) {
+		breadcrumbItems.push( { label: currentNavItem.label } );
+	}
 
-		if ( isBudgetStories() && budgetStoryMeta?.name ) {
-			parts.push( budgetStoryMeta.name );
-		}
-
-		return parts.join( ' / ' );
-	};
+	if ( isBudgetStories() && budgetStoryMeta?.name ) {
+		breadcrumbItems.push( { label: budgetStoryMeta.name } );
+	}
 
 	if ( isAuthorizingSite() ) {
 		return <AuthorizingSite />;
@@ -104,7 +100,7 @@ const StoryBudget = () => {
 
 	return (
 		<div className="wrap">
-			<AppHeader headerText={ getHeaderText() } />
+			<AppHeader breadcrumbItems={ breadcrumbItems } />
 			<TabbedNavigation items={ navigationItems } />
 			<div className="newspack-story-budget__content">
 				<Switch>
@@ -112,7 +108,7 @@ const StoryBudget = () => {
 						<AppHeaderActions>
 							{ canManage && (
 								<Button variant="primary" href="#/stories/new">
-									{ __( 'Add New Story', 'newspack-story-budget' ) }
+									{ __( 'Add Story', 'newspack-story-budget' ) }
 								</Button>
 							) }
 							<SitesNav />
@@ -130,7 +126,7 @@ const StoryBudget = () => {
 								</ModalPage>
 							</Route>
 							<Route path="/stories/new" exact>
-								<ModalPage title={ __( 'Add New Story', 'newspack-story-budget' ) } closeHref="#/stories" name={ 'create-new-story' }>
+								<ModalPage title={ __( 'Add Story', 'newspack-story-budget' ) } closeHref="#/stories" name={ 'create-new-story' }>
 									<CreateNewStory onClose={ () => ( window.location.href = '#/stories' ) } />
 								</ModalPage>
 							</Route>
@@ -142,14 +138,14 @@ const StoryBudget = () => {
 					<Route path="/budgets">
 						<AppHeaderActions>
 							<Button variant="primary" href="#/budgets/new">
-								{ __( 'Add New Budget', 'newspack-story-budget' ) }
+								{ __( 'Add Budget', 'newspack-story-budget' ) }
 							</Button>
 							<SitesNav />
 						</AppHeaderActions>
 						<Budgets />
 						<Switch>
 							<Route path="/budgets/new">
-								<ModalPage title={ __( 'Add New Budget', 'newspack-story-budget' ) } closeHref="#/budgets" name={ 'create-budget' }>
+								<ModalPage title={ __( 'Add Budget', 'newspack-story-budget' ) } closeHref="#/budgets" name={ 'create-budget' }>
 									<CreateBudgetModal onClose={ () => ( window.location.href = '#/budgets' ) } />
 								</ModalPage>
 							</Route>
