@@ -911,13 +911,6 @@ add_filter( 'jetpack_photon_override_image_downsize', 'newspack_override_avatar_
  * - Show share buttons (pages)
  */
 function newspack_register_meta() {
-	// These fields are edited through dedicated editor panels via the REST API.
-	// An explicit auth_callback keeps them REST-editable even though
-	// newspack_protect_editor_meta() marks them protected (see that function).
-	$auth_callback = function ( $allowed, $meta_key, $object_id ) {
-		return current_user_can( 'edit_post', $object_id );
-	};
-
 	$featured_image_post_types = newspack_get_featured_image_post_types();
 
 	foreach ( $featured_image_post_types as $post_type ) {
@@ -925,10 +918,9 @@ function newspack_register_meta() {
 			$post_type,
 			'newspack_featured_image_position',
 			array(
-				'show_in_rest'  => true,
-				'single'        => true,
-				'type'          => 'string',
-				'auth_callback' => $auth_callback,
+				'show_in_rest' => true,
+				'single'       => true,
+				'type'         => 'string',
 			)
 		);
 	}
@@ -937,10 +929,9 @@ function newspack_register_meta() {
 		'post',
 		'newspack_post_subtitle',
 		array(
-			'show_in_rest'  => true,
-			'single'        => true,
-			'type'          => 'string',
-			'auth_callback' => $auth_callback,
+			'show_in_rest' => true,
+			'single'       => true,
+			'type'         => 'string',
 		)
 	);
 
@@ -948,11 +939,10 @@ function newspack_register_meta() {
 		'post',
 		'newspack_article_summary_title',
 		array(
-			'default'       => esc_html__( 'Overview:', 'newspack-theme' ),
-			'show_in_rest'  => true,
-			'single'        => true,
-			'type'          => 'string',
-			'auth_callback' => $auth_callback,
+			'default'      => esc_html__( 'Overview:', 'newspack-theme' ),
+			'show_in_rest' => true,
+			'single'       => true,
+			'type'         => 'string',
 		)
 	);
 
@@ -960,10 +950,9 @@ function newspack_register_meta() {
 		'post',
 		'newspack_article_summary',
 		array(
-			'show_in_rest'  => true,
-			'single'        => true,
-			'type'          => 'string',
-			'auth_callback' => $auth_callback,
+			'show_in_rest' => true,
+			'single'       => true,
+			'type'         => 'string',
 		)
 	);
 
@@ -971,10 +960,9 @@ function newspack_register_meta() {
 		'page',
 		'newspack_hide_page_title',
 		array(
-			'show_in_rest'  => true,
-			'single'        => true,
-			'type'          => 'boolean',
-			'auth_callback' => $auth_callback,
+			'show_in_rest' => true,
+			'single'       => true,
+			'type'         => 'boolean',
 		)
 	);
 
@@ -982,38 +970,25 @@ function newspack_register_meta() {
 		'page',
 		'newspack_show_share_buttons',
 		array(
-			'show_in_rest'  => true,
-			'single'        => true,
-			'type'          => 'boolean',
-			'default'       => false,
-			'auth_callback' => $auth_callback,
+			'show_in_rest' => true,
+			'single'       => true,
+			'type'         => 'boolean',
+			'default'      => false,
 		)
 	);
 }
 add_action( 'init', 'newspack_register_meta' );
 
 /**
- * Mark the theme's editor-managed post meta as protected.
+ * Editor-managed post meta keys the classic "Custom Fields" box must not write.
  *
- * These fields are managed by dedicated block-editor panels (saved via the REST
- * API), not by the classic "Custom Fields" box. When that box is enabled, it
- * renders a row for each non-protected meta key and resubmits its page-load
- * value on save; if a classic meta box triggers the block editor's separate
- * meta-box save, that stale value silently overwrites the value the REST save
- * just wrote. Marking these keys protected removes them from the Custom Fields
- * box so they can't be clobbered. REST editing is preserved by the explicit
- * auth_callback set on each registration in newspack_register_meta().
+ * These keys are edited through dedicated block-editor panels and saved via the
+ * REST API. See newspack_prevent_classic_metabox_meta_clobber().
  *
- * @param bool   $protected Whether the meta key is considered protected.
- * @param string $meta_key  The meta key.
- * @param string $meta_type The type of object the meta belongs to (post, term, user, etc.).
- * @return bool Whether the meta key is protected.
+ * @return string[] Meta keys.
  */
-function newspack_protect_editor_meta( $protected, $meta_key, $meta_type ) {
-	if ( 'post' !== $meta_type ) {
-		return $protected;
-	}
-	$editor_meta = array(
+function newspack_get_editor_managed_meta_keys() {
+	return array(
 		'newspack_featured_image_position',
 		'newspack_post_subtitle',
 		'newspack_article_summary_title',
@@ -1021,9 +996,54 @@ function newspack_protect_editor_meta( $protected, $meta_key, $meta_type ) {
 		'newspack_hide_page_title',
 		'newspack_show_share_buttons',
 	);
-	return in_array( $meta_key, $editor_meta, true ) ? true : $protected;
 }
-add_filter( 'is_protected_meta', 'newspack_protect_editor_meta', 10, 3 );
+
+/**
+ * Stop the classic "Custom Fields" box from clobbering editor-managed meta.
+ *
+ * The block editor saves these keys via the REST API. When the "Custom Fields"
+ * panel is enabled, the editor also fires a separate classic meta-box save (the
+ * `meta-box-loader` request) that resubmits the box's page-load value for every
+ * existing meta row and writes it through edit_post(). That stale write lands a
+ * moment after the REST save and silently overwrites it.
+ *
+ * Rather than protecting these keys (which would remove them from the Custom
+ * Fields box entirely and block publishers who manage subtitles there, e.g. on
+ * custom post types that have no dedicated panel), we drop our managed keys from
+ * the meta-box-loader payload only. Intentional edits made with the box's own
+ * Add/Update buttons save through a separate admin-ajax request and are
+ * unaffected.
+ *
+ * @return void
+ */
+function newspack_prevent_classic_metabox_meta_clobber() {
+	// Only the block editor's auxiliary meta-box save carries this flag; a genuine
+	// classic-editor save does not, and must keep writing Custom Fields normally.
+	if ( ! isset( $_REQUEST['meta-box-loader'], $_POST['post_ID'], $_POST['_wpnonce'], $_POST['meta'] ) ) {
+		return;
+	}
+
+	// edit_post() processes $_POST['meta'] only after core verifies this nonce for
+	// the 'editpost' action (wp-admin/post.php). This runs earlier (admin_init), so
+	// verify the same nonce here before touching the payload.
+	$post_id = (int) $_POST['post_ID'];
+	$nonce   = sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) );
+	if ( ! $post_id || ! wp_verify_nonce( $nonce, 'update-post_' . $post_id ) ) {
+		return;
+	}
+
+	$managed = newspack_get_editor_managed_meta_keys();
+	// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- only the meta-row key is read and sanitized below; the row value is never used, and the nonce is verified above.
+	foreach ( array_keys( (array) $_POST['meta'] ) as $mid ) {
+		$key = isset( $_POST['meta'][ $mid ]['key'] )
+			? sanitize_text_field( wp_unslash( $_POST['meta'][ $mid ]['key'] ) )
+			: '';
+		if ( in_array( $key, $managed, true ) ) {
+			unset( $_POST['meta'][ $mid ] );
+		}
+	}
+}
+add_action( 'admin_init', 'newspack_prevent_classic_metabox_meta_clobber' );
 
 
 /**

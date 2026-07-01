@@ -271,6 +271,64 @@ class Group_Subscription {
 	}
 
 	/**
+	 * Get the combined, de-duplicated list of a group's people: the manager(s)/owner
+	 * and the members. The owner is part of the group, so they count as a member for
+	 * display purposes (see get_member_count()).
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return int[] De-duplicated user IDs of managers and members.
+	 */
+	public static function get_all_members( $subscription ) {
+		$members  = array_map( 'intval', self::get_members( $subscription ) );
+		$managers = array_map( 'intval', self::get_managers( $subscription ) );
+		// array_filter drops empty IDs (e.g. a subscription with no owner); array_unique
+		// guards against a user who is both a manager and a member being counted twice.
+		return array_values( array_unique( array_filter( array_merge( $managers, $members ) ) ) );
+	}
+
+	/**
+	 * Get the total member count for a group, including the manager(s)/owner.
+	 *
+	 * A group is never empty as long as it has an owner, so the owner is always
+	 * included in this count.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return int The number of people in the group (managers + members).
+	 */
+	public static function get_member_count( $subscription ) {
+		return count( self::get_all_members( $subscription ) );
+	}
+
+	/**
+	 * Get the total member capacity for a group, or null when there is no limit.
+	 *
+	 * The configured member limit is the number of members allowed *in addition to*
+	 * the manager(s)/owner, so the total capacity is the limit plus the number of
+	 * managers. The manager count is filtered the same way get_all_members() filters
+	 * empty IDs, so the capacity (denominator) and get_member_count() (numerator) always
+	 * agree about the owner — including the edge case of an ownerless subscription, where
+	 * neither counts a phantom owner.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return int|null The total capacity, or null when unlimited.
+	 */
+	public static function get_member_capacity( $subscription ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return null;
+		}
+		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		$limit    = isset( $settings['limit'] ) ? (int) $settings['limit'] : 0;
+		if ( $limit <= 0 ) {
+			return null;
+		}
+		return $limit + count( array_filter( array_map( 'intval', self::get_managers( $subscription ) ) ) );
+	}
+
+	/**
 	 * Update the member IDs for a group subscription.
 	 *
 	 * @param \WC_Subscription|int $subscription The subscription object or ID.
