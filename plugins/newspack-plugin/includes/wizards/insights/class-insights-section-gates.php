@@ -76,6 +76,6 @@ class Insights_Section_Gates {
 				$controller->register_routes();
 			}
 		);
-		\Newspack\Insights\Prewarm::register_tab( 'gates', [ $controller, 'warm_window' ] );
+		\Newspack\Insights\Prewarm::register_tab( 'gates', [ $controller, 'warm_window' ], [ $controller, 'durable_key_for' ] );
 	}
 }

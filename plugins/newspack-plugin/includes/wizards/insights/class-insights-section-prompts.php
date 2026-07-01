@@ -73,6 +73,6 @@ class Insights_Section_Prompts {
 				$controller->register_routes();
 			}
 		);
-		\Newspack\Insights\Prewarm::register_tab( 'prompts', [ $controller, 'warm_window' ] );
+		\Newspack\Insights\Prewarm::register_tab( 'prompts', [ $controller, 'warm_window' ], [ $controller, 'durable_key_for' ] );
 	}
 }

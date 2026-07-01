@@ -69,6 +69,6 @@ class Insights_Section_Audience {
 				$controller->register_routes();
 			}
 		);
-		\Newspack\Insights\Prewarm::register_tab( 'audience', [ $controller, 'warm_window' ] );
+		\Newspack\Insights\Prewarm::register_tab( 'audience', [ $controller, 'warm_window' ], [ $controller, 'durable_key_for' ] );
 	}
 }
