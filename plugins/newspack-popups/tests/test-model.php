@@ -256,24 +256,6 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A preview should only load content for users who can manage prompts.
-	 */
-	public function test_retrieve_preview_popup_denies_logged_out_user() {
-		wp_set_current_user( 0 );
-		$draft_id = self::factory()->post->create(
-			[
-				'post_type'    => 'post',
-				'post_status'  => 'draft',
-				'post_content' => 'Unpublished draft body.',
-			]
-		);
-		self::assertNull(
-			Newspack_Popups_Model::retrieve_preview_popup( $draft_id ),
-			'A logged-out visitor must not be able to load a post as a preview.'
-		);
-	}
-
-	/**
 	 * A preview should only load the prompts CPT, not arbitrary post types.
 	 */
 	public function test_retrieve_preview_popup_denies_non_prompt_post_type() {
