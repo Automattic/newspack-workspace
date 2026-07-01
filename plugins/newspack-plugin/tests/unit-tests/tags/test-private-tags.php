@@ -54,13 +54,30 @@ class Test_Private_Tags extends WP_UnitTestCase {
 	/**
 	 * The newspack_private_tags_enabled filter can disable the feature.
 	 *
-	 * The NEWSPACK_PRIVATE_TAGS_DISABLED constant is the other opt-out path, but a
-	 * constant cannot be undefined mid-process, so only the filter is testable here.
+	 * The NEWSPACK_PRIVATE_TAGS_DISABLED constant is the other opt-out path; because a
+	 * constant cannot be undefined mid-process, its precedence over the filter is
+	 * exercised separately in test_disable_constant_takes_precedence_over_filter().
 	 */
 	public function test_is_enabled_can_be_disabled_via_filter() {
 		// No explicit remove_filter — WP_UnitTestCase::tear_down() restores $wp_filter
 		// after every test, so the filter cannot leak even if the assertion fails.
 		add_filter( 'newspack_private_tags_enabled', '__return_false' );
+		$this->assertFalse( Private_Tags::is_enabled() );
+	}
+
+	/**
+	 * The NEWSPACK_PRIVATE_TAGS_DISABLED constant takes final precedence: a filter
+	 * returning true cannot re-enable the feature once the constant disables it.
+	 *
+	 * Runs in a separate process because a constant cannot be undefined mid-process —
+	 * defining it inline would leak into (and neutralize) every later test in the run.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_disable_constant_takes_precedence_over_filter() {
+		define( 'NEWSPACK_PRIVATE_TAGS_DISABLED', true );
+		add_filter( 'newspack_private_tags_enabled', '__return_true' );
 		$this->assertFalse( Private_Tags::is_enabled() );
 	}
 

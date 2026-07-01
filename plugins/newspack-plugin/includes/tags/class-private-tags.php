@@ -93,6 +93,9 @@ class Private_Tags {
 	 * - defining the NEWSPACK_PRIVATE_TAGS_DISABLED constant as true, or
 	 * - returning false from the `newspack_private_tags_enabled` filter.
 	 *
+	 * The constant takes final precedence: when it disables the feature, the filter
+	 * cannot re-enable it — an opt-out kill switch should not be defeatable by a filter.
+	 *
 	 * Evaluated when the feature initializes on `after_setup_theme`, so the filter
 	 * can be registered from a plugin or theme (e.g. functions.php) before this runs.
 	 *
@@ -102,6 +105,9 @@ class Private_Tags {
 		/**
 		 * Disables the Private Tags feature for a single site.
 		 *
+		 * Takes final precedence — when true, the `newspack_private_tags_enabled`
+		 * filter cannot re-enable the feature.
+		 *
 		 * @constant NEWSPACK_PRIVATE_TAGS_DISABLED
 		 * @type     bool
 		 * @default  Private tags feature enabled
@@ -109,14 +115,16 @@ class Private_Tags {
 		 *
 		 * @example define( 'NEWSPACK_PRIVATE_TAGS_DISABLED', true );
 		 */
-		$enabled = ! ( defined( 'NEWSPACK_PRIVATE_TAGS_DISABLED' ) && NEWSPACK_PRIVATE_TAGS_DISABLED );
+		if ( defined( 'NEWSPACK_PRIVATE_TAGS_DISABLED' ) && NEWSPACK_PRIVATE_TAGS_DISABLED ) {
+			return false;
+		}
 
 		/**
 		 * Filters whether the Private Tags feature is enabled.
 		 *
 		 * @param bool $enabled Whether the feature is enabled.
 		 */
-		return (bool) apply_filters( 'newspack_private_tags_enabled', $enabled );
+		return (bool) apply_filters( 'newspack_private_tags_enabled', true );
 	}
 
 	/**
