@@ -30,6 +30,7 @@ const makeWindow = ( over: Partial< SubscribersWindow > = {} ): SubscribersWindo
 	refund_rate: { value: 0.02, computable: true, denominator: 120 },
 	failed_payment_retry_rate: { value: 0.8, computable: true, denominator: 10 },
 	subscriptions_by_product: [],
+	subscriptions_by_campaign: [],
 	cancellation_reasons: [],
 	has_window_activity: true,
 	...over,

@@ -31,6 +31,7 @@ import ScorecardSection from './subscribers/ScorecardSection';
 import WindowedSection from './subscribers/WindowedSection';
 import TenureSection from './subscribers/TenureSection';
 import PerformanceSection from './subscribers/PerformanceSection';
+import CampaignSection from './subscribers/CampaignSection';
 import './subscribers/subscribers.scss';
 
 export interface SubscribersTabProps {
@@ -64,6 +65,7 @@ const SubscribersTab = ( { range, previousRange }: SubscribersTabProps ) => {
 					/>
 					<TenureSection rows={ data.snapshot.tenure_distribution } />
 					<PerformanceSection rows={ data.current.subscriptions_by_product } />
+					<CampaignSection rows={ data.current.subscriptions_by_campaign } />
 				</>
 			) }
 		</TabStateView>
