@@ -497,7 +497,10 @@ class Donors_Metric {
 					$this->storage->get_donation_campaign_rows( $start, $end ),
 					'utm_campaign',
 					'revenue',
-					[ 'untagged_label' => __( '(no campaign)', 'newspack-plugin' ) ]
+					// Locale-stable sentinel, NOT __()'d: this output is cached under a
+					// locale-agnostic key, so the display label is localized at render
+					// time from the is_untagged flag (see CampaignSection.tsx).
+					[ 'untagged_label' => '(no campaign)' ]
 				);
 			}
 		);

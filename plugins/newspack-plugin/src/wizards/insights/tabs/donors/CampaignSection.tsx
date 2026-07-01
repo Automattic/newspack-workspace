@@ -72,12 +72,12 @@ const CampaignSection = ( { rows }: CampaignSectionProps ) => {
 						</tr>
 					</thead>
 					<tbody>
-						{ rows.map( ( row, index ) => (
+						{ rows.map( row => (
 							<tr
-								key={ row.is_untagged ? '__untagged__' : `${ index }-${ row.value }` }
+								key={ row.is_untagged ? '__untagged__' : `campaign:${ row.value }` }
 								className={ row.is_untagged ? 'newspack-insights__table-row--untagged' : undefined }
 							>
-								<td>{ row.value }</td>
+								<td>{ row.is_untagged ? __( '(no campaign)', 'newspack-plugin' ) : row.value }</td>
 								<td className="newspack-insights__table-num">{ formatNumber( row.count ) }</td>
 								<td className="newspack-insights__table-num">{ formatCurrency( row.amount ).display }</td>
 							</tr>
