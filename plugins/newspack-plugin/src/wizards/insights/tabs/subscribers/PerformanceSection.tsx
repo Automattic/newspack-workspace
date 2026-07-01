@@ -129,7 +129,7 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 			</p>
 			<p className="newspack-insights__table-footnote">
 				{ __(
-					'This table counts subscriptions (gross). The scorecards above count people: New subscribers is first-time distinct customers, and Churned is distinct customers net of those who still hold an active subscription — so per-product totals here will run higher than the scorecards.',
+					'This table counts subscriptions. The scorecards above count people: New subscribers is each reader’s first subscription, and Churned is readers who left with no active subscription remaining. Therefore, per-product totals here may run higher than the scorecards.',
 					'newspack-plugin'
 				) }
 			</p>
