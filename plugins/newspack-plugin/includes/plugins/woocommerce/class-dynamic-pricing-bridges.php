@@ -39,6 +39,28 @@ final class Dynamic_Pricing_Bridges {
 		add_filter( 'newspack_modal_checkout_price_summary', [ __CLASS__, 'annotate_modal_checkout_summary' ], 20, 2 );
 		add_action( 'woocommerce_dynamic_pricing_register', [ __CLASS__, 'register_conditions' ] );
 		add_filter( 'woocommerce_dynamic_pricing_preview_segment_groups', [ __CLASS__, 'preview_segment_groups' ], 10, 2 );
+		add_filter( 'register_post_type_args', [ __CLASS__, 'hide_native_pricing_rule_ui' ], 10, 2 );
+	}
+
+	/**
+	 * Hide the engine's native Pricing Rule CPT admin UI (menu + edit screens).
+	 *
+	 * Pricing rules are managed exclusively through the Newspack Audience Pricing
+	 * Rules wizard, which drives the engine's REST API. Suppressing the standalone
+	 * plugin's CPT screens keeps a single management surface; the REST API, the CPT
+	 * itself, and the stored rules are untouched.
+	 *
+	 * @param array  $args      Post type registration args.
+	 * @param string $post_type Post type key.
+	 *
+	 * @return array
+	 */
+	public static function hide_native_pricing_rule_ui( $args, $post_type ) {
+		if ( 'shop_pricing_rule' === $post_type ) {
+			$args['show_ui']      = false;
+			$args['show_in_menu'] = false;
+		}
+		return $args;
 	}
 
 	/**
