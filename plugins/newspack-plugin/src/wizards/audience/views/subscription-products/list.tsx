@@ -28,16 +28,6 @@ const API_PATH = '/newspack/v1/wizard/newspack-audience-subscription-products/pr
 
 type Scope = 'subscriptions' | 'donations' | 'all' | 'groups';
 
-// Top-level scope chips. The first three are *individual* products (by purpose); "Plan
-// bundles" is a separate structural lens for grouped containers, so a bundle never appears
-// inline among the products it bundles. Defaults to non-donation subscriptions.
-const SCOPES: { value: Scope; label: string; separated?: boolean }[] = [
-	{ value: 'subscriptions', label: __( 'Subscriptions', 'newspack-plugin' ) },
-	{ value: 'donations', label: __( 'Donations', 'newspack-plugin' ) },
-	{ value: 'all', label: __( 'All', 'newspack-plugin' ) },
-	{ value: 'groups', label: __( 'Plan bundles', 'newspack-plugin' ), separated: true },
-];
-
 const inScope = ( item: SubscriptionProduct, scope: Scope ): boolean => {
 	if ( scope === 'groups' ) {
 		return item.type === 'grouped';
@@ -74,33 +64,14 @@ const DEFAULT_VIEW: View = {
 	titleField: 'name',
 };
 
-export default function SubscriptionProductsList() {
+export default function SubscriptionProductsList( { scope = 'subscriptions' }: { scope?: Scope } ) {
 	const { setHeaderData, addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const history = useHistory();
 	const [ data, setData ] = useState< SubscriptionProduct[] >( [] );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
-	const [ scope, setScope ] = useState< Scope >( 'subscriptions' );
 
 	const globals = window.newspackAudienceSubscriptionProducts;
-
-	// Row counts per scope, for the chip labels. The purpose scopes count individual
-	// products only; "Plan bundles" counts grouped containers.
-	const scopeCounts = useMemo( () => {
-		const individual = data.filter( item => item.type !== 'grouped' );
-		return {
-			subscriptions: individual.filter( item => ! item.is_donation ).length,
-			donations: individual.filter( item => item.is_donation ).length,
-			all: individual.length,
-			groups: data.filter( item => item.type === 'grouped' ).length,
-		};
-	}, [ data ] );
-
-	// Switching scope resets pagination so we never land on an out-of-range page.
-	const selectScope = useCallback( ( next: Scope ) => {
-		setScope( next );
-		setView( current => ( { ...current, page: 1 } ) );
-	}, [] );
 
 	// Rows in the active scope, before the DataViews filters/sort/pagination run.
 	const scopedData = useMemo( () => data.filter( item => inScope( item, scope ) ), [ data, scope ] );
@@ -334,26 +305,6 @@ export default function SubscriptionProductsList() {
 
 	return (
 		<div className="newspack-subscription-products">
-			<div
-				className="newspack-subscription-products__scope-chips"
-				role="group"
-				aria-label={ __( 'Filter products by group', 'newspack-plugin' ) }
-			>
-				{ SCOPES.map( ( { value, label, separated } ) => {
-					const isActive = scope === value;
-					return (
-						<Button
-							key={ value }
-							variant={ isActive ? 'primary' : 'secondary' }
-							aria-pressed={ isActive }
-							onClick={ () => selectScope( value ) }
-							className={ `newspack-subscription-products__scope-chip${ separated ? ' is-separated' : '' }` }
-						>
-							{ label } ({ scopeCounts[ value ] })
-						</Button>
-					);
-				} ) }
-			</div>
 			<DataViews
 				className="newspack-subscription-products__dataviews"
 				data={ processedData }
