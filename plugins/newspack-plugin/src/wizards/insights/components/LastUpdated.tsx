@@ -2,9 +2,9 @@
  * LastUpdated
  *
  * Renders the active tab's cache freshness ("Last updated: …") plus a
- * kebab DropdownMenu with Refresh now, Print / Save as PDF…, and Export JSON… items. Reads the active tab's
- * cache slot via insightsCache; fires the registered refresh callback
- * via RefreshRegistry.
+ * kebab DropdownMenu with Refresh now, Print / Save as PDF…, and
+ * Export JSON… items. Reads the active tab's cache slot via
+ * insightsCache; fires the registered refresh callback via RefreshRegistry.
  */
 
 /**
