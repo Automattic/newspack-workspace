@@ -71,16 +71,19 @@ function cycleLabel( fromCycle: number ): string {
  */
 function ScheduleList( { schedule, currency }: { schedule: SubscriptionPolicySegment[]; currency: SubscriptionProductsCurrency } ) {
 	return (
-		<ul className="newspack-subscription-products__schedule">
-			{ schedule.map( seg => (
-				<li key={ seg.from_cycle } className="newspack-subscription-products__schedule-row">
-					<span className="newspack-subscription-products__schedule-when">{ cycleLabel( seg.from_cycle ) }</span>
-					<span className="newspack-subscription-products__schedule-price">
-						<strong>{ formatAmount( seg.amount, currency ) }</strong>
-					</span>
-				</li>
-			) ) }
-		</ul>
+		<div className="newspack-subscription-products__schedule">
+			<div className="newspack-subscription-products__schedule-title">{ __( 'Price by cycle', 'newspack-plugin' ) }</div>
+			<ul className="newspack-subscription-products__schedule-list">
+				{ schedule.map( seg => (
+					<li key={ seg.from_cycle } className="newspack-subscription-products__schedule-row">
+						<span className="newspack-subscription-products__schedule-when">{ cycleLabel( seg.from_cycle ) }</span>
+						<span className="newspack-subscription-products__schedule-price">
+							<strong>{ formatAmount( seg.amount, currency ) }</strong>
+						</span>
+					</li>
+				) ) }
+			</ul>
+		</div>
 	);
 }
 
