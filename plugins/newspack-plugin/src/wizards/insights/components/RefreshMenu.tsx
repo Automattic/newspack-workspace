@@ -1,6 +1,6 @@
 /**
  * RefreshMenu — the "Insights options" header kebab dropdown. Holds
- * "Refresh now" and "Print / Save as PDF…" (NPPD-1661).
+ * "Refresh now", "Print / Save as PDF…" (NPPD-1661), and "Export JSON…".
  */
 
 /**
@@ -17,9 +17,13 @@ export interface RefreshMenuProps {
 	onDownloadPdf: () => void;
 	/** Disable the export while the tab is still loading its data. */
 	downloadDisabled: boolean;
+	/** Trigger the per-tab JSON export (Blob download). */
+	onDownloadJson: () => void;
+	/** Disable the JSON export while the tab is loading or has no data. */
+	jsonDisabled: boolean;
 }
 
-const RefreshMenu = ( { onRefresh, disabled, onDownloadPdf, downloadDisabled }: RefreshMenuProps ) => (
+const RefreshMenu = ( { onRefresh, disabled, onDownloadPdf, downloadDisabled, onDownloadJson, jsonDisabled }: RefreshMenuProps ) => (
 	<DropdownMenu
 		icon={ moreVertical }
 		label={ __( 'Insights options', 'newspack-plugin' ) }
@@ -34,6 +38,11 @@ const RefreshMenu = ( { onRefresh, disabled, onDownloadPdf, downloadDisabled }: 
 				title: __( 'Print / Save as PDF…', 'newspack-plugin' ),
 				onClick: onDownloadPdf,
 				isDisabled: downloadDisabled,
+			},
+			{
+				title: __( 'Export JSON…', 'newspack-plugin' ),
+				onClick: onDownloadJson,
+				isDisabled: jsonDisabled,
 			},
 		] }
 	/>

@@ -23,6 +23,7 @@ import { insightsCache, makeSlotKey, type CacheSlot } from '../state/insightsCac
 import { useInvokeRefresh } from '../state/refreshRegistry';
 import useCountdown from '../hooks/useCountdown';
 import { buildPdfFilename, printCurrentTab } from '../lib/pdfExport';
+import { buildJsonFilename, downloadJson } from '../lib/jsonExport';
 
 export interface LastUpdatedProps {
 	tab: string | null;
@@ -55,7 +56,9 @@ const LastUpdated = ( { tab, range, previousRange }: LastUpdatedProps ) => {
 	// expires — even if the slot itself hasn't mutated since.
 	const cooldownActive = useCountdown( slot.cooldownUntil ) !== null;
 
-	if ( ! tab || ! slot.computedAt ) {
+	const { computedAt } = slot;
+
+	if ( ! tab || ! computedAt ) {
 		return null;
 	}
 
@@ -65,7 +68,7 @@ const LastUpdated = ( { tab, range, previousRange }: LastUpdatedProps ) => {
 				{ sprintf(
 					/* translators: %s is a formatted timestamp */
 					__( 'Last updated: %s', 'newspack-plugin' ),
-					dateI18n( 'M j, Y H:i:s', slot.computedAt )
+					dateI18n( 'M j, Y H:i:s', computedAt )
 				) }
 			</span>
 			<RefreshMenu
@@ -73,6 +76,8 @@ const LastUpdated = ( { tab, range, previousRange }: LastUpdatedProps ) => {
 				disabled={ slot.status === 'loading' || cooldownActive }
 				onDownloadPdf={ () => printCurrentTab( buildPdfFilename( tab, range ) ) }
 				downloadDisabled={ slot.status === 'loading' }
+				onDownloadJson={ () => downloadJson( buildJsonFilename( tab, range.preset, computedAt ), slot.data ) }
+				jsonDisabled={ slot.status === 'loading' || ! slot.data }
 			/>
 		</div>
 	);
