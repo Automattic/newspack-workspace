@@ -23,6 +23,7 @@ const RANGE: DateRange = { preset: 'last-30', start: '2026-05-19', end: '2026-06
 const makeWindow = ( over: Partial< SubscribersWindow > = {} ): SubscribersWindow => ( {
 	window: { start: '2026-05-19', end: '2026-06-17' },
 	new_subscribers: 14,
+	winback_subscribers: 2,
 	churned_subscribers: 3,
 	revenue_gross: 5000,
 	revenue_net: 4800,

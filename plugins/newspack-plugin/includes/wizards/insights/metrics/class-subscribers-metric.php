@@ -192,6 +192,24 @@ class Subscribers_Metric {
 	}
 
 	/**
+	 * Win-back subscribers in window. See storage contract for semantics.
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return int
+	 */
+	public function get_winback_subscribers_in_window( DateTimeInterface $start, DateTimeInterface $end ): int {
+		return (int) $this->cached(
+			'winback_subscribers_in_window',
+			$this->window_key( $start, $end ),
+			self::TTL_DEFAULT,
+			function () use ( $start, $end ) {
+				return $this->storage->get_winback_subscribers_in_window( $start, $end );
+			}
+		);
+	}
+
+	/**
 	 * Monthly Recurring Revenue (snapshot).
 	 *
 	 * @return float

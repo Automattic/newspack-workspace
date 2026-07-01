@@ -218,6 +218,68 @@ class HPOS_Storage implements Storage_Interface {
 
 	/**
 	 * {@inheritDoc}
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return int
+	 */
+	public function get_winback_subscribers_in_window( DateTimeInterface $start, DateTimeInterface $end ): int {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// Distinct customers who started a non-donation subscription in the window
+		// (the "return") AND previously churned — i.e. they hold an earlier-started
+		// non-donation subscription that is cancelled or expired. Regardless of
+		// product. Disjoint from first-time subscribers by construction: a
+		// first-timer has no prior subscription, so no earlier churned one.
+		//
+		// The churned side is pre-aggregated to one row per customer (their earliest
+		// churned-sub start) and INNER-JOINed to the returns, rather than a
+		// correlated EXISTS per return row — same result, far cheaper on large
+		// publishers. The `min_churn_start < ret.start_val` string comparison is
+		// chronological because _schedule_start is stored zero-padded 'Y-m-d H:i:s'.
+		$sql = $wpdb->prepare(
+			"SELECT COUNT(DISTINCT ret.customer_id) FROM (
+				SELECT o.customer_id, om.meta_value AS start_val
+				FROM {$prefix}wc_orders o
+				JOIN {$prefix}wc_orders_meta om
+					ON om.order_id = o.id AND om.meta_key = '_schedule_start'
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = o.id AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE o.type = 'shop_subscription'
+				  AND oim.meta_value NOT IN ($donations)
+				  AND om.meta_value BETWEEN %s AND %s
+				  AND om.meta_value != ''
+			) AS ret
+			JOIN (
+				SELECT o2.customer_id, MIN(om2.meta_value) AS min_churn_start
+				FROM {$prefix}wc_orders o2
+				JOIN {$prefix}wc_orders_meta om2
+					ON om2.order_id = o2.id AND om2.meta_key = '_schedule_start'
+				JOIN {$prefix}woocommerce_order_items oi2
+					ON oi2.order_id = o2.id AND oi2.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim2
+					ON oim2.order_item_id = oi2.order_item_id AND oim2.meta_key = '_product_id'
+				WHERE o2.type = 'shop_subscription'
+				  AND o2.status IN ('wc-cancelled', 'wc-expired')
+				  AND oim2.meta_value NOT IN ($donations)
+				  AND om2.meta_value != ''
+				GROUP BY o2.customer_id
+			) AS churned
+				ON churned.customer_id = ret.customer_id
+				AND churned.min_churn_start < ret.start_val",
+			$this->fmt( $start ),
+			$this->fmt( $end )
+		);
+
+		return (int) $wpdb->get_var( $sql );
+	}
+
+	/**
+	 * {@inheritDoc}
 	 */
 	public function get_mrr(): float {
 		global $wpdb;
