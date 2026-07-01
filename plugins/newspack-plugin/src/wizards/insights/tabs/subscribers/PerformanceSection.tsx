@@ -121,6 +121,18 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 					</tbody>
 				</table>
 			</div>
+			<p className="newspack-insights__table-footnote">
+				{ __(
+					'“(no variation)”: Subscriptions purchased at the product level without a specific variation — e.g. gift or name-your-price purchases of this product.',
+					'newspack-plugin'
+				) }
+			</p>
+			<p className="newspack-insights__table-footnote">
+				{ __(
+					'This table counts subscriptions (gross). The scorecards above count people: New subscribers is first-time distinct customers, and Churned is distinct customers net of those who still hold an active subscription — so per-product totals here will run higher than the scorecards.',
+					'newspack-plugin'
+				) }
+			</p>
 		</section>
 	);
 };

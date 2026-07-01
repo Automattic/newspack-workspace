@@ -795,8 +795,16 @@ class HPOS_Storage implements Storage_Interface {
 	 *   - If parent_id > 0 (variation), attach to its parent's bucket
 	 *     and accumulate the parent's aggregates from the variation's
 	 *     numbers.
-	 *   - If parent_id == 0 (standalone simple/subscription product),
-	 *     emit as a single non-parent entry.
+	 *   - If parent_id == 0, the row is either a standalone
+	 *     simple/subscription product OR a bare-parent line item on a
+	 *     VARIABLE product (a subscription that recorded the parent
+	 *     product with _variation_id = 0 — e.g. a name-your-price / gift
+	 *     parent-level purchase). It resolves to the product's own id and
+	 *     MERGES into that bucket: when the bucket also owns variation
+	 *     rows it folds in as a synthetic "(no variation)" variation
+	 *     instead of overwriting the bucket and discarding the variations
+	 *     (NPPD-1616 regression). A bucket that only ever sees this branch
+	 *     stays a single non-parent entry.
 	 *
 	 * Variation labels come from the _subscription_period meta when
 	 * present (month→Monthly, year→Annual, week→Weekly, day→Daily),
@@ -825,60 +833,77 @@ class HPOS_Storage implements Storage_Interface {
 			$active_value     = (float) $row['active_value'];
 			$lifetime_revenue = (float) $row['lifetime_revenue'];
 
+			// Resolve the bucket this row belongs under. Variation rows fold
+			// into their parent product; bare-parent / standalone rows fold into
+			// the product's own id. Keying both into the SAME map by the effective
+			// product id and accumulating (rather than the parent branch creating
+			// and the standalone branch overwriting) is what stops a bare-parent
+			// row from clobbering a variable product's accumulated variations.
 			if ( $parent_id > 0 ) {
-				// Variation under a parent product.
-				if ( ! isset( $parents[ $parent_id ] ) ) {
-					$parents[ $parent_id ] = [
-						'product_id'       => $parent_id,
-						'name'             => '' !== $parent_name ? $parent_name : __( '(unnamed product)', 'newspack-plugin' ),
-						'is_parent'        => true,
-						'active_subs'      => 0,
-						'new_subs'         => 0,
-						'churned_subs'     => 0,
-						'active_value'     => 0.0,
-						'lifetime_revenue' => 0.0,
-						'variations'       => [],
-					];
-				}
-				$parents[ $parent_id ]['active_subs']      += $active_subs;
-				$parents[ $parent_id ]['new_subs']         += $new_subs;
-				$parents[ $parent_id ]['churned_subs']     += $churned_subs;
-				$parents[ $parent_id ]['active_value']     += $active_value;
-				$parents[ $parent_id ]['lifetime_revenue'] += $lifetime_revenue;
-				$parents[ $parent_id ]['variations'][]     = [
-					'variation_id'     => $variation_id,
-					'label'            => $this->variation_label( $period, $variation_name, $parent_name ),
-					'active_subs'      => $active_subs,
-					'new_subs'         => $new_subs,
-					'churned_subs'     => $churned_subs,
-					'active_value'     => $active_value,
-					'lifetime_revenue' => $lifetime_revenue,
-				];
+				$bucket_id   = $parent_id;
+				$bucket_name = '' !== $parent_name ? $parent_name : __( '(unnamed product)', 'newspack-plugin' );
+				$label       = $this->variation_label( $period, $variation_name, $parent_name );
 			} else {
-				// Standalone simple/subscription product.
-				$parents[ $variation_id ] = [
-					'product_id'       => $variation_id,
-					'name'             => '' !== $variation_name ? $variation_name : __( '(unnamed product)', 'newspack-plugin' ),
+				$bucket_id   = $variation_id;
+				$bucket_name = '' !== $variation_name ? $variation_name : __( '(unnamed product)', 'newspack-plugin' );
+				$label       = __( '(no variation)', 'newspack-plugin' );
+			}
+
+			if ( ! isset( $parents[ $bucket_id ] ) ) {
+				$parents[ $bucket_id ] = [
+					'product_id'       => $bucket_id,
+					'name'             => $bucket_name,
 					'is_parent'        => false,
-					'active_subs'      => $active_subs,
-					'new_subs'         => $new_subs,
-					'churned_subs'     => $churned_subs,
-					'active_value'     => $active_value,
-					'lifetime_revenue' => $lifetime_revenue,
+					'active_subs'      => 0,
+					'new_subs'         => 0,
+					'churned_subs'     => 0,
+					'active_value'     => 0.0,
+					'lifetime_revenue' => 0.0,
+					'variations'       => [],
 				];
 			}
+			$bucket = &$parents[ $bucket_id ];
+
+			// A real variation row promotes the bucket to a parent and supplies
+			// the canonical parent display name. Idempotent: a bare-parent row may
+			// have seeded the bucket first under the same product's title.
+			if ( $parent_id > 0 ) {
+				$bucket['is_parent'] = true;
+				$bucket['name']      = $bucket_name;
+			}
+
+			$bucket['active_subs']      += $active_subs;
+			$bucket['new_subs']         += $new_subs;
+			$bucket['churned_subs']     += $churned_subs;
+			$bucket['active_value']     += $active_value;
+			$bucket['lifetime_revenue'] += $lifetime_revenue;
+			$bucket['variations'][]      = [
+				'variation_id'     => $variation_id,
+				'label'            => $label,
+				'active_subs'      => $active_subs,
+				'new_subs'         => $new_subs,
+				'churned_subs'     => $churned_subs,
+				'active_value'     => $active_value,
+				'lifetime_revenue' => $lifetime_revenue,
+			];
+			unset( $bucket );
 		}
 
-		// Sort each parent's variations by active_subs DESC.
+		// Sort each parent's variations by active_subs DESC. Standalone (non-parent)
+		// buckets render as a single row, so drop the internal single-element
+		// variations scaffold to keep their payload shape on the renderer's
+		// is_parent contract (no variations key for simple products).
 		foreach ( $parents as &$entry ) {
-			if ( isset( $entry['variations'] ) ) {
-				usort(
-					$entry['variations'],
-					static function ( $a, $b ) {
-						return $b['active_subs'] <=> $a['active_subs'];
-					}
-				);
+			if ( ! $entry['is_parent'] ) {
+				unset( $entry['variations'] );
+				continue;
 			}
+			usort(
+				$entry['variations'],
+				static function ( $a, $b ) {
+					return $b['active_subs'] <=> $a['active_subs'];
+				}
+			);
 		}
 		unset( $entry );
 
