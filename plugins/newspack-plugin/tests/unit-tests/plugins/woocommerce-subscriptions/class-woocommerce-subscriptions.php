@@ -9,6 +9,7 @@ use Newspack\WooCommerce_Subscriptions;
 use Newspack\Reader_Activation;
 
 require_once __DIR__ . '/../../../mocks/wc-mocks.php';
+require_once __DIR__ . '/class-newspack-test-modal-checkout.php';
 
 /**
  * Test WooCommerce Subscriptions integration functionality.
@@ -30,6 +31,8 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 		$wcs_mock_items_sign_up_fee               = 0;
 		$wcs_mock_prices_include_tax              = false;
 		$wcs_mock_last_items_sign_up_fee_tax      = null;
+		wp_set_current_user( 0 );
+		unset( $_POST['billing_email'], $_POST['post_data'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'] );
 	}
 
 	/**
@@ -45,7 +48,28 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 		$wcs_mock_prices_include_tax              = false;
 		$wcs_mock_last_items_sign_up_fee_tax      = null;
 		remove_all_filters( 'newspack_wc_subs_switch_include_signup_fee' );
+		wp_set_current_user( 0 );
+		unset( $_POST['billing_email'], $_POST['post_data'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'] );
 		parent::tear_down();
+	}
+
+	/**
+	 * Set serialized checkout data in the request.
+	 *
+	 * @param string $post_data Serialized checkout data.
+	 */
+	private function set_serialized_post_data( $post_data ) {
+		$_POST['post_data']    = $post_data;
+		$_REQUEST['post_data'] = $post_data;
+	}
+
+	/**
+	 * Ensure a modal checkout implementation is available to the integration under test.
+	 */
+	private function ensure_modal_checkout_available() {
+		if ( ! class_exists( 'Newspack_Blocks\Modal_Checkout' ) ) {
+			class_alias( 'Newspack_Test_Modal_Checkout', 'Newspack_Blocks\Modal_Checkout' );
+		}
 	}
 
 	/**
@@ -62,6 +86,64 @@ class Newspack_Test_WooCommerce_Subscriptions extends WP_UnitTestCase {
 	public function test_is_enabled() {
 		$is_enabled = WooCommerce_Subscriptions::is_enabled();
 		$this->assertFalse( $is_enabled, 'WooCommerce Subscriptions integration should not be active if the main WooCommerce plugin is not available.' );
+	}
+
+	/**
+	 * Trial limiting resolves serialized checkout emails outside modal checkout.
+	 */
+	public function test_limit_free_trials_resolves_serialized_email_outside_modal_checkout() {
+		$this->ensure_modal_checkout_available();
+
+		$user_id = $this->factory->user->create(
+			[
+				'user_email' => 'repeat@example.com',
+			]
+		);
+		$product = wc_create_mock_product(
+			[
+				'id'   => 900,
+				'type' => 'subscription',
+			]
+		);
+		wcs_create_subscription(
+			[
+				'customer_id' => $user_id,
+				'status'      => 'cancelled',
+				'products'    => [ 900 ],
+			]
+		);
+		$this->set_serialized_post_data( 'billing_first_name=Repeat&billing_email=repeat%40example.com' );
+
+		$this->assertSame( 0, WooCommerce_Subscriptions::limit_free_trials_to_one_per_user( 14, $product ) );
+	}
+
+	/**
+	 * Trial limiting still resolves serialized checkout emails in modal checkout.
+	 */
+	public function test_limit_free_trials_resolves_serialized_email_in_modal_checkout() {
+		$this->ensure_modal_checkout_available();
+
+		$user_id = $this->factory->user->create(
+			[
+				'user_email' => 'repeat@example.com',
+			]
+		);
+		$product = wc_create_mock_product(
+			[
+				'id'   => 901,
+				'type' => 'subscription',
+			]
+		);
+		wcs_create_subscription(
+			[
+				'customer_id' => $user_id,
+				'status'      => 'cancelled',
+				'products'    => [ 901 ],
+			]
+		);
+		$this->set_serialized_post_data( 'billing_first_name=Repeat&billing_email=repeat%40example.com&modal_checkout=1' );
+
+		$this->assertSame( 0, WooCommerce_Subscriptions::limit_free_trials_to_one_per_user( 14, $product ) );
 	}
 
 	/**
