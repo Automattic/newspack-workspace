@@ -202,17 +202,31 @@ class Salesforce {
 	 * @return bool|WP_Error
 	 */
 	public static function api_validate_webhook( $request ) {
-		$is_valid   = false;
-		$webhook_id = $request->get_header( 'X-WC-Webhook-ID' );
-
-		if ( $webhook_id ) {
-			$is_valid = self::get_webhook() === (int) $webhook_id;
+		$webhook_id = (int) $request->get_header( 'X-WC-Webhook-ID' );
+		if ( ! $webhook_id || self::get_webhook() !== $webhook_id ) {
+			return self::webhook_forbidden_error();
 		}
 
-		if ( $is_valid ) {
-			return true;
+		// Verify the WooCommerce webhook signature over the raw request body, so only
+		// WooCommerce (which holds the shared secret) can invoke the sync handler.
+		$webhook   = function_exists( 'wc_get_webhook' ) ? \wc_get_webhook( $webhook_id ) : null;
+		$signature = $request->get_header( 'X-WC-Webhook-Signature' );
+		if ( ! $webhook || empty( $signature ) ) {
+			return self::webhook_forbidden_error();
+		}
+		if ( ! hash_equals( $webhook->generate_signature( $request->get_body() ), $signature ) ) {
+			return self::webhook_forbidden_error();
 		}
 
+		return true;
+	}
+
+	/**
+	 * The standard error returned for an invalid webhook request.
+	 *
+	 * @return \WP_Error
+	 */
+	private static function webhook_forbidden_error() {
 		return new \WP_Error(
 			'newspack_rest_forbidden',
 			esc_html__( 'Invalid webhook request.', 'newspack' ),
