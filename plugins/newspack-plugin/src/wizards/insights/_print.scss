@@ -181,18 +181,13 @@
 		break-inside: avoid;
 	}
 
-	// --- Watch item: Funnel (JS-driven layout) -------------------------------
-	// Funnel's side/compact layout is chosen in JS from the on-screen container
-	// width (ResizeObserver), so whatever the screen showed is what prints. Pin
-	// a deterministic max width and let the viewBox'd SVG scale within it, so
-	// the chosen layout lays out predictably on the narrower print page rather
-	// than overflowing.
+	// --- Watch item: Funnel (in-band HTML layout) ----------------------------
+	// The funnel renders as stacked HTML bands (clip-path trapezoid fills behind
+	// flowing label/count/descriptor text), sized by CSS. Pin a deterministic max
+	// width so it lays out predictably on the narrower print page rather than
+	// overflowing.
 	.newspack-insights__funnel {
 		max-width: 17cm;
-	}
-
-	.newspack-insights__funnel-svg {
-		max-height: 11cm;
 	}
 
 	// --- Watch item: BarChart (percentage-height flexbox) --------------------

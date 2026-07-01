@@ -481,143 +481,78 @@
 	}
 
 	// Funnel viz — shared across Gates, Prompts, and Conversion Journey tabs.
-	// Stacked SVG trapezoids in a single anchor color (primary-500) fading to
-	// 0.6 opacity at the tail. Side-label mode puts the step name/count/deltas
-	// in a fixed column beside the equal-height bands; compact mode renders the
-	// count inside each band and moves labels to a legend below.
+	// Self-labeling stacked trapezoids (NEWS-2586): each band carries its label,
+	// count, and (for every step after the first) the drop-off descriptors INSIDE
+	// it. One uniform layout at every width/step-count — no side column, no legend.
+	// Each band is an <li> with a clipped trapezoid FILL behind a flowing TEXT
+	// layer that wraps, grows the band, and overflows a narrow fill without clipping.
 	&__funnel {
+		width: 100%;
+		max-width: 500px; // NEWS-2586 container cap; grid cells render narrower (fluid).
+		margin: 0 auto;
 		padding: 20px;
+		box-sizing: border-box;
+		list-style: none;
 		background-color: #fff;
 		border: 1px solid wp-colors.$gray-200;
 		border-radius: 4px;
 
-		&--side {
-			display: flex;
-			align-items: stretch;
-			gap: 16px;
-		}
-
-		&--compact {
+		&-step {
+			position: relative;
 			display: flex;
 			flex-direction: column;
-			gap: 16px;
-		}
-
-		&-svg {
-			min-width: 0;
-			width: 100%;
-			height: auto;
-			display: block;
-		}
-
-		// Side mode: cap the SVG WIDTH (not height) so it keeps its exact viewBox
-		// aspect ratio — no letterboxing — and the equal-height trapezoid bands
-		// stay aligned with the equal-flex label column beside them.
-		&--side &-svg {
-			flex: 0 1 auto;
-			max-width: 320px;
-		}
-
-		// Compact mode: fill the width; the count sits inside each band, so there's
-		// no side column to align against and a height cap is fine.
-		&--compact &-svg {
-			max-height: 480px;
-		}
-
-		// Single anchor color; the 1.0 → 0.6 opacity interpolation gives each band
-		// its own weight while staying within one hue.
-		&-trapezoid {
-			fill: colors.$primary-500;
-		}
-
-		// In-band count (compact mode): white on the darker top bands, dark on the
-		// faded tail bands — see DARK_TEXT_OPACITY_THRESHOLD in Funnel.tsx. The
-		// stroke "halo" (painted under the fill) is the band's *apparent* color:
-		// primary-500 flattened over the white card at the band's own opacity
-		// (passed in as the inline --band-opacity). Because it's opaque and equal
-		// to what the band shows, it disappears inside the segment and only
-		// appears — as the band's color against the white page — where the number
-		// overflows a segment narrower than itself. (A translucent same-color halo
-		// can't do this: painted over the band, its alpha stacks and every halo
-		// drifts toward the full-opacity top color.)
-		&-count-text {
-			font-size: 16px;
-			font-weight: 600;
-			font-variant-numeric: tabular-nums;
-			paint-order: stroke;
-			stroke-width: 3px;
-			stroke-linejoin: round;
-			stroke: color-mix( in srgb, colors.$primary-500 calc( var( --band-opacity ) * 100% ), #fff );
-
-			&.is-on-dark {
-				fill: #fff;
-			}
-
-			&.is-on-light {
-				fill: wp-colors.$gray-900;
-			}
-		}
-
-		// Side-label column: equal-flex blocks align to the equal-height bands.
-		&-labels {
-			flex: 0 0 200px;
-			display: flex;
-			flex-direction: column;
-		}
-
-		&-label {
-			flex: 1 1 0;
-			display: flex;
-			flex-direction: column;
+			align-items: center;
 			justify-content: center;
+			min-height: 72px; // baseline; grows with wrapped content.
+			padding: 12px 8px;
+			box-sizing: border-box;
+			text-align: center;
 		}
 
-		&-legend {
-			list-style: none;
-			margin: 0;
-			padding: 0;
-			display: flex;
-			flex-direction: column;
-			gap: 12px;
+		// Fill: the single anchor color clipped to the per-band trapezoid (clip-path
+		// set inline). Opacity fades 1.0 → 0.6 via the inline --band-opacity. Sits
+		// BEHIND the text so the text is never clipped by the band edge.
+		&-fill {
+			position: absolute;
+			inset: 0;
+			z-index: 0;
+			background-color: colors.$primary-500;
+			opacity: var( --band-opacity, 1 );
 		}
 
-		&-legend-item {
+		&-content {
+			position: relative;
+			z-index: 1;
 			display: flex;
 			flex-direction: column;
+			align-items: center;
+			max-width: 160px; // wrap width for the descriptor lines.
 		}
 
 		&-label-name {
-			font-size: 13px;
+			font-size: 14px;
 			font-weight: 600;
-			color: wp-colors.$gray-900;
+			line-height: 1.2;
 		}
 
 		&-label-count {
-			font-size: 20px;
-			font-weight: 600;
+			font-size: 22px;
+			font-weight: 700;
 			font-variant-numeric: tabular-nums;
-			line-height: 1.2;
-			color: wp-colors.$gray-900;
+			line-height: 1.15;
 		}
 
-		// Stage descriptors: both muted gray. The drop-off is funnel context, not
-		// an alarm, and deliberately NOT red/green — red/green is reserved for the
-		// period-over-period scorecard deltas elsewhere on the page.
+		// Stage descriptors inherit the band's text color (white/dark); muted weight.
 		&-label-pct {
-			font-size: 13px;
-			font-weight: 400;
-			color: wp-colors.$gray-600;
+			margin-top: 4px;
+			font-size: 12px;
+			line-height: 1.35;
 		}
 
 		&-label-drop {
-			font-size: 13px;
-			font-weight: 400;
+			font-size: 12px;
+			line-height: 1.35;
 			font-variant-numeric: tabular-nums;
-			color: wp-colors.$gray-600;
-
-			&-arrow {
-				color: wp-colors.$gray-600;
-			}
 		}
 
 		&-empty {
@@ -627,6 +562,18 @@
 			font-size: 13px;
 			color: wp-colors.$gray-600;
 		}
+	}
+
+	// Contrast follows band opacity: white text on the dark upper bands (with a
+	// soft halo so any spill over the white card stays legible), dark text on the
+	// faded lower bands (reads on both the light fill and the card).
+	&__funnel-step.is-on-dark &__funnel-content {
+		color: #fff;
+		text-shadow: 0 1px 2px rgba( 13, 53, 102, 0.45 );
+	}
+
+	&__funnel-step.is-on-light &__funnel-content {
+		color: wp-colors.$gray-900;
 	}
 
 	// Sortable table affordances — shared across all tabs that embed SortableTable

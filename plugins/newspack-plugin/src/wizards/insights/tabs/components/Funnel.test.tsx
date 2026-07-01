@@ -12,26 +12,13 @@ import { render, screen } from '@testing-library/react';
 /**
  * Internal dependencies
  */
-import Funnel, { isCompactMode, stepOpacity, dropFromPrevious, computeDisplayHalfWidths } from './Funnel';
+import Funnel, { stepOpacity, dropFromPrevious, computeDisplayHalfWidths, type FunnelStage } from './Funnel';
 
 const stage = ( label: string, count: number, pctOfTop: number ) => ( { label, count, pct_of_top: pctOfTop } );
 
 describe( 'Funnel helpers', () => {
-	describe( 'isCompactMode', () => {
-		it( 'is side-label (false) for a small step count on a wide container', () => {
-			expect( isCompactMode( 3, 800 ) ).toBe( false );
-			expect( isCompactMode( 4, 480 ) ).toBe( false );
-		} );
-		it( 'is compact when there are 5+ steps regardless of width', () => {
-			expect( isCompactMode( 5, 1200 ) ).toBe( true );
-		} );
-		it( 'is compact when the container is narrower than 480px', () => {
-			expect( isCompactMode( 3, 479 ) ).toBe( true );
-		} );
-	} );
-
 	describe( 'computeDisplayHalfWidths', () => {
-		// Chart half-width 160; MIN_HALF_WIDTH 32 (20%). Max taper is per-funnel:
+		// Chart half-width 160; MIN_HALF_WIDTH 44.8 (28%). Max taper is per-funnel:
 		// HALF_WIDTH / stepCount (80 for 2 steps, ~53 for 3, 32 for 5).
 		it( 'keeps the top level at full half-width', () => {
 			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 500, 0.5 ) ], 1000 );
@@ -54,14 +41,14 @@ describe( 'Funnel helpers', () => {
 			expect( halves[ 2 ] ).toBeCloseTo( 160 - ( 2 * 160 ) / 3, 5 );
 		} );
 		it( 'floors a tiny level at the minimum segment width', () => {
-			// 5-step funnel → taper 160/5 = 32. Steep tail walks 160 → 128 → 96 → 64 → 32,
-			// bottoming out at MIN_HALF_WIDTH 32 rather than the ~0 raw widths.
+			// 5-step funnel → taper 160/5 = 32. Steep tail walks 160 → 128 → 96 → 64 → 44.8,
+			// bottoming out at MIN_HALF_WIDTH 44.8 rather than the ~0 raw widths.
 			const halves = computeDisplayHalfWidths(
 				[ stage( 'a', 1000, 1 ), stage( 'b', 100, 0.1 ), stage( 'c', 10, 0.01 ), stage( 'd', 1, 0.001 ), stage( 'e', 1, 0.001 ) ],
 				1000
 			);
-			expect( halves[ 4 ] ).toBe( 32 );
-			expect( halves.every( h => h >= 32 ) ).toBe( true );
+			expect( halves[ 4 ] ).toBeCloseTo( 44.8 );
+			expect( halves.every( h => h >= 44.8 - 0.0001 ) ).toBe( true );
 		} );
 		it( 'never flares: each level is at most the level above', () => {
 			// A later stage exceeding an earlier one (data drift) must not widen.
@@ -105,27 +92,46 @@ describe( 'Funnel helpers', () => {
 } );
 
 describe( 'Funnel render', () => {
-	it( 'renders step labels and the descriptive % / drop-off lines naming the top stage', () => {
-		render( <Funnel stages={ [ stage( 'Impression', 1000, 1 ), stage( 'Engagement', 200, 0.2 ), stage( 'Conversion', 50, 0.05 ) ] } /> );
-		expect( screen.getByText( 'Impression' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Engagement' ) ).toBeInTheDocument();
-		// "% of top" names the actual first stage.
-		expect( screen.getByText( '20% of Impression' ) ).toBeInTheDocument();
-		// Drop-off uses the word "drop-off" (the ↓ glyph is a sibling node).
-		expect( screen.getByText( /80% drop-off/ ) ).toBeInTheDocument();
-		expect( screen.getByText( /75% drop-off/ ) ).toBeInTheDocument();
-		// Drop-off labels are descriptive gray, never the error-red treatment.
-		expect( document.querySelector( '.is-high-drop' ) ).toBeNull();
+	const stages = ( ...defs: Array< [ string, number ] > ): FunnelStage[] => {
+		const top = defs[ 0 ]?.[ 1 ] ?? 0;
+		return defs.map( ( [ label, count ] ) => ( { label, count, pct_of_top: top > 0 ? count / top : 0 } ) );
+	};
+
+	it( 'shows the label and count inside every stage', () => {
+		render( <Funnel stages={ stages( [ 'Impressions', 25000 ], [ 'Engaged', 2000 ], [ 'Converted', 400 ] ) } /> );
+		expect( screen.getByText( 'Impressions' ) ).toBeInTheDocument();
+		expect( screen.getByText( '25,000' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Converted' ) ).toBeInTheDocument();
+		expect( screen.getByText( '400' ) ).toBeInTheDocument();
 	} );
 
-	it( 'renders the empty state when the first step is 0', () => {
-		render( <Funnel stages={ [ stage( 'Impression', 0, 0 ), stage( 'Conversion', 0, 0 ) ] } /> );
+	it( 'shows drop-off descriptors for stages after the first only', () => {
+		render( <Funnel stages={ stages( [ 'Impressions', 25000 ], [ 'Engaged', 2000 ] ) } /> );
+		expect( screen.getByText( /of Impressions/ ) ).toBeInTheDocument();
+		// Exactly one drop-off line: the first stage has none.
+		expect( screen.getAllByText( /drop-off/ ) ).toHaveLength( 1 );
+	} );
+
+	it( 'renders a single-stage funnel without descriptors', () => {
+		render( <Funnel stages={ stages( [ 'Only', 100 ] ) } /> );
+		expect( screen.getByText( 'Only' ) ).toBeInTheDocument();
+		expect( screen.queryByText( /drop-off/ ) ).toBeNull();
+	} );
+
+	it( 'shows the empty message with no stages', () => {
+		render( <Funnel stages={ [] } /> );
 		expect( screen.getByText( 'Not enough data to chart the funnel.' ) ).toBeInTheDocument();
 	} );
 
-	it( 'renders a single stage with no drop-off lines', () => {
-		render( <Funnel stages={ [ stage( 'Impression', 1000, 1 ) ] } /> );
-		expect( screen.getByText( 'Impression' ) ).toBeInTheDocument();
-		expect( screen.queryByText( /drop-off/ ) ).not.toBeInTheDocument();
+	it( 'shows the empty message when the top count is zero', () => {
+		render( <Funnel stages={ stages( [ 'Impressions', 0 ], [ 'Engaged', 0 ] ) } /> );
+		expect( screen.getByText( 'Not enough data to chart the funnel.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'no longer renders a separate legend or side-label column', () => {
+		const { container } = render( <Funnel stages={ stages( [ 'A', 100 ], [ 'B', 50 ] ) } /> );
+		expect( container.querySelector( '.newspack-insights__funnel-legend' ) ).toBeNull();
+		expect( container.querySelector( '.newspack-insights__funnel-labels' ) ).toBeNull();
+		expect( container.querySelector( '.newspack-insights__funnel-svg' ) ).toBeNull();
 	} );
 } );
