@@ -460,13 +460,15 @@ final class Cache {
 		if ( ! is_array( $hashes ) ) {
 			$hashes = [];
 		}
-		$hash   = md5( (string) wp_json_encode( $key_parts ) );
+		$hash = md5( (string) wp_json_encode( $key_parts ) );
 		// Move-to-newest: drop any existing occurrence, then append.
 		$hashes   = array_values( array_filter( $hashes, static fn( $h ) => $h !== $hash ) );
 		$hashes[] = $hash;
-		while ( count( $hashes ) > self::ONDEMAND_MAX_ENTRIES ) {
+		$count    = count( $hashes );
+		while ( $count > self::ONDEMAND_MAX_ENTRIES ) {
 			$evicted = array_shift( $hashes );
 			delete_option( 'newspack_insights_ondemand_' . $tab . '_' . $evicted );
+			--$count;
 		}
 		update_option( $option, $hashes, false );
 	}
