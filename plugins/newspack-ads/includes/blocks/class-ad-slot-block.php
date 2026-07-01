@@ -56,7 +56,8 @@ final class Ad_Slot_Block {
 	 * Providers::render_placement_ad_code() pipeline. Returns empty string when no
 	 * placement is selected, no listener is subscribed for that placement (e.g.,
 	 * classic-theme context, or unknown key), or the hook produces no output
-	 * (no ad unit bound, suppressed, provider not active).
+	 * (no ad unit bound, suppressed, provider not active). Any captured output is
+	 * passed through apply_spacing() to merge the block's padding/margin styles.
 	 *
 	 * @param array $attrs Block attributes.
 	 *
