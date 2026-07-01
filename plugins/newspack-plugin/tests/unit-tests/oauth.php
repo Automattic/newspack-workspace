@@ -404,4 +404,50 @@ class Newspack_Test_OAuth extends WP_UnitTestCase {
 			'The client id from the /start response should be stored.'
 		);
 	}
+
+	/**
+	 * When a client id is expected but the token carries neither audience nor
+	 * issued_to, the token is rejected (closed by default).
+	 */
+	public function test_rejects_token_without_audience_or_issued_to() {
+		$this->set_expected_client_id( 'site-client-id.apps.googleusercontent.com' );
+		$this->stub_tokeninfo(
+			[
+				'scope'          => 'https://www.googleapis.com/auth/userinfo.email',
+				'email'          => 'reader@example.com',
+				'verified_email' => true,
+			]
+		);
+
+		$result = Google_OAuth::validate_token_and_get_email_address( 'some-access-token', Google_Login::REQUIRED_SCOPES );
+
+		self::assertTrue(
+			is_wp_error( $result ),
+			'A token carrying neither audience nor issued_to must be rejected when a client id is expected.'
+		);
+	}
+
+	/**
+	 * Admin-scoped tokens (Ad Manager / Analytics) with a mismatched audience are
+	 * rejected too — the shared validator protects the admin connection flow.
+	 */
+	public function test_rejects_admin_scoped_token_with_mismatched_audience() {
+		$this->set_expected_client_id( 'site-client-id.apps.googleusercontent.com' );
+		$this->stub_tokeninfo(
+			[
+				'issued_to'      => 'other-client-id.apps.googleusercontent.com',
+				'audience'       => 'other-client-id.apps.googleusercontent.com',
+				'scope'          => implode( ' ', Google_OAuth::REQUIRED_SCOPES ),
+				'email'          => 'admin@example.com',
+				'verified_email' => true,
+			]
+		);
+
+		$result = Google_OAuth::validate_token_and_get_email_address( 'some-access-token', Google_OAuth::REQUIRED_SCOPES );
+
+		self::assertTrue(
+			is_wp_error( $result ),
+			'An admin-scoped token with a mismatched audience must be rejected.'
+		);
+	}
 }

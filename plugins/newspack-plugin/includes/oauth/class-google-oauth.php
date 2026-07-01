@@ -366,9 +366,21 @@ class Google_OAuth {
 				// Confirm the token was issued to this site's own OAuth client, when that is known.
 				$expected_client_id = self::get_expected_client_id();
 				if ( '' !== $expected_client_id ) {
-					$token_client_id = $token_info->audience ?? $token_info->issued_to ?? '';
+					// Prefer a non-empty audience, falling back to issued_to; treat an empty
+					// audience as unset so a valid issued_to is not ignored.
+					$token_client_id = '' !== ( $token_info->audience ?? '' )
+						? $token_info->audience
+						: ( $token_info->issued_to ?? '' );
 					if ( (string) $expected_client_id !== (string) $token_client_id ) {
 						Logger::error( 'OAuth token was issued to a different client id than expected.' );
+						// Surface via the always-on log so a rejection (an attack attempt, or a
+						// legitimate login broken by a client-id skew) is auditable fleet-wide.
+						Logger::newspack_log(
+							'newspack_google_oauth',
+							'Google sign-in rejected: token was issued to a different OAuth client id than expected.',
+							[ 'file' => 'newspack_google_oauth' ],
+							'error'
+						);
 						return new \WP_Error( 'newspack_google_oauth', __( 'Invalid Google credentials. Please reconnect.', 'newspack' ) );
 					}
 				} else {
@@ -377,7 +389,7 @@ class Google_OAuth {
 					Logger::newspack_log(
 						'newspack_google_oauth',
 						'Google sign-in proceeded without OAuth client id verification: no expected client id is known yet.',
-						[ 'file' => 'newspack_google_login' ],
+						[ 'file' => 'newspack_google_oauth' ],
 						'warning'
 					);
 				}
@@ -386,6 +398,12 @@ class Google_OAuth {
 				// as either a boolean or a string, so normalize before checking.
 				if ( ! filter_var( $token_info->verified_email ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
 					Logger::error( 'Google account email address is not verified.' );
+					Logger::newspack_log(
+						'newspack_google_oauth',
+						'Google sign-in rejected: account email address is not verified.',
+						[ 'file' => 'newspack_google_oauth' ],
+						'error'
+					);
 					return new \WP_Error( 'newspack_google_oauth', __( 'Invalid Google credentials. Please reconnect.', 'newspack' ) );
 				}
 
