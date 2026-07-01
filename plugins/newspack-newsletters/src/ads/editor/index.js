@@ -58,7 +58,7 @@ function AdEdit() {
 	const [ isSavingPlacement, setIsSavingPlacement ] = useState( false );
 	const [ isManagingPlacements, setIsManagingPlacements ] = useState( false );
 
-	const { editPost } = useDispatch( 'core/editor' );
+	const { editPost, savePost } = useDispatch( 'core/editor' );
 	const { saveEntityRecord } = useDispatch( 'core' );
 	const { removeEditorPanel } = useDispatch( editPostStore );
 	const messages = [];
@@ -117,6 +117,15 @@ function AdEdit() {
 	// to Inactive, and only write `publish`/`draft` back on an actual change.
 	const statusControl = [ 'publish', 'future' ].includes( status ) ? 'active' : 'inactive';
 
+	// Toggle acts as an on/off switch: apply and persist the new status in one
+	// step. Saving directly avoids sending the publisher through the native
+	// Publish button, whose pre-publish panel exposes WP's "Visibility /
+	// Publish" vocabulary that this control is meant to hide.
+	const setStatus = value => {
+		editPost( { status: value === 'active' ? 'publish' : 'draft' } );
+		savePost();
+	};
+
 	return (
 		<Fragment>
 			<PluginDocumentSettingPanel name="newsletters-ads-settings-panel" title={ __( 'Ad settings', 'newspack-newsletters' ) }>
@@ -127,7 +136,7 @@ function AdEdit() {
 						{ label: __( 'Active', 'newspack-newsletters' ), value: 'active' },
 						{ label: __( 'Inactive', 'newspack-newsletters' ), value: 'inactive' },
 					] }
-					onChange={ value => editPost( { status: value === 'active' ? 'publish' : 'draft' } ) }
+					onChange={ setStatus }
 					help={ __(
 						'Active ads run according to their start and expiration dates. Inactive ads are never shown.',
 						'newspack-newsletters'
