@@ -17,13 +17,30 @@ final class Newspack_Popups_Inserter {
 	const ADMIN_SCRIPT_HANDLE = 'newspack-popups-admin-bar';
 
 	/**
-	 * The popup objects to display, memoized per request.
-	 * Null means "not yet computed" for this request; an empty array is a
-	 * valid, cacheable result (no popups eligible for the current post).
+	 * Prompts eligible for display in the current request, before the
+	 * per-post should_display() filter is applied. This doesn't depend on
+	 * the current post, so — unlike self::$popups below — it's safe to
+	 * memoize once for the whole request. Null means "not yet computed";
+	 * an empty array is a valid, cacheable result.
 	 *
 	 * @var array|null
 	 */
-	protected static $popups = null;
+	protected static $eligible_popups = null;
+
+	/**
+	 * The popup objects to display, keyed by post ID and memoized per post
+	 * within the current request. should_display() and
+	 * assess_has_disabled_popups() both depend on the current post (post
+	 * meta, post type, taxonomy terms), so a single request-wide cache can
+	 * return the wrong result for a post other than the one it was computed
+	 * for — e.g. on an archive page looping over posts with different
+	 * categories. An empty array value for a given post ID is a valid,
+	 * cacheable "no popups eligible for this post" result, distinct from
+	 * the key being absent, which means "not yet computed for this post".
+	 *
+	 * @var array<int, array>
+	 */
+	protected static $popups = [];
 
 	/**
 	 * Segments for displayed popups.
@@ -156,10 +173,6 @@ final class Newspack_Popups_Inserter {
 	 * @return array Popup objects.
 	 */
 	public static function popups_for_post() {
-		if ( null !== self::$popups ) {
-			return self::$popups;
-		}
-
 		// Get the previewed popup and return early.
 		if ( Newspack_Popups::previewed_popup_id() ) {
 			$preview_popup = Newspack_Popups_Model::retrieve_preview_popup( Newspack_Popups::previewed_popup_id() );
@@ -170,27 +183,51 @@ final class Newspack_Popups_Inserter {
 			return [ $preset_popup ];
 		}
 
-		// Popups disabled for this page.
+		// Popups disabled for this page. The default filter checks post meta
+		// via get_the_ID(), so this must be evaluated on every call, not just
+		// the first one for the request.
 		if ( self::assess_has_disabled_popups() ) {
 			return [];
 		}
 
-		$view_as_spec        = Newspack_Popups_View_As::parse_view_as();
-		$campaign_id         = isset( $view_as_spec['campaign'] ) ? $view_as_spec['campaign'] : false;
-		$include_unpublished = isset( $view_as_spec['show_unpublished'] ) && 'true' === $view_as_spec['show_unpublished'] ? true : false;
+		// should_display() checks the current post's type and taxonomy terms,
+		// so the final eligible-popups list can legitimately differ per post
+		// within the same request (e.g. an archive page looping over posts
+		// with different categories). Memoize per post ID rather than once
+		// for the whole request.
+		$post_id = get_the_ID() ?: 0;
+		if ( array_key_exists( $post_id, self::$popups ) ) {
+			return self::$popups[ $post_id ];
+		}
 
-		// Retrieve all prompts eligible for display.
-		$popups_to_maybe_display = Newspack_Popups_Model::retrieve_eligible_popups( $include_unpublished, $campaign_id );
-		$popups_to_display       = array_filter(
-			$popups_to_maybe_display,
+		// The eligibility query itself doesn't depend on the current post, so
+		// — unlike should_display() above — it's safe, and worth it since
+		// it's the expensive part, to memoize once for the whole request.
+		if ( null !== self::$eligible_popups ) {
+			$eligible_popups = self::$eligible_popups;
+		} else {
+			$view_as_spec        = Newspack_Popups_View_As::parse_view_as();
+			$campaign_id         = isset( $view_as_spec['campaign'] ) ? $view_as_spec['campaign'] : false;
+			$include_unpublished = isset( $view_as_spec['show_unpublished'] ) && 'true' === $view_as_spec['show_unpublished'] ? true : false;
+
+			$eligible_popups = Newspack_Popups_Model::retrieve_eligible_popups( $include_unpublished, $campaign_id );
+
+			if ( ! defined( 'IS_TEST_ENV' ) || ! IS_TEST_ENV ) {
+				self::$eligible_popups = $eligible_popups;
+			}
+		}
+
+		$popups_to_display = array_filter(
+			$eligible_popups,
 			function( $popup ) {
 				return self::should_display( $popup, true );
 			}
 		);
 
-		// Cache results so we don't have to query again.
+		// Cache results so we don't have to re-run should_display() for this
+		// post again.
 		if ( ! defined( 'IS_TEST_ENV' ) || ! IS_TEST_ENV ) {
-			self::$popups = $popups_to_display;
+			self::$popups[ $post_id ] = $popups_to_display;
 		}
 
 		return $popups_to_display;
