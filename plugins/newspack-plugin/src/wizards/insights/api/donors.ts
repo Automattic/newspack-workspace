@@ -45,12 +45,19 @@ export interface DonorsSnapshot {
 }
 
 /**
- * Whether a product is sold as recurring or one-time. Derived
- * server-side from the product's `_subscription_period` meta. The
- * UI uses this to render cells that don't apply to the product's
- * billing model as em-dashes instead of misleading zeros.
+ * A product's billing nature, tracked as two INDEPENDENT flags rather
+ * than one enum. Derived server-side from each contributing row's
+ * `_subscription_period` meta. A leaf variation is purely one nature
+ * (exactly one flag set); a variable parent latches EACH flag as its
+ * variation rows land, so a product that is recurring AND took a
+ * one-time (bare-parent) gift carries both. The UI shows a column iff
+ * its flag is set, rendering the rest as em-dashes instead of
+ * misleading zeros.
  */
-export type BillingModel = 'recurring' | 'one_time';
+export interface BillingNature {
+	has_recurring: boolean;
+	has_one_time: boolean;
+}
 
 /**
  * A rate metric whose denominator may legitimately be zero. The UI
@@ -64,10 +71,9 @@ export interface DonorsRateValue {
 	denominator: number;
 }
 
-export interface DonorsTierVariationRow {
+export interface DonorsTierVariationRow extends BillingNature {
 	variation_id: number;
 	label: string;
-	billing_model: BillingModel;
 	active_recurring_donors: number;
 	lapsed_donors_in_window: number;
 	new_donors_in_window: number;
@@ -76,15 +82,10 @@ export interface DonorsTierVariationRow {
 	lifetime_donation_revenue: number;
 }
 
-export interface DonorsTierRow {
+export interface DonorsTierRow extends BillingNature {
 	product_id: number;
 	name: string;
 	is_parent: boolean;
-	/**
-	 * For variable subscription parents, this is `recurring` if ANY
-	 * variation is recurring (the canonical Newspack donation shape).
-	 */
-	billing_model: BillingModel;
 	active_recurring_donors: number;
 	lapsed_donors_in_window: number;
 	new_donors_in_window: number;

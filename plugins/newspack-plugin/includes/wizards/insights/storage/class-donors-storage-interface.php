@@ -264,7 +264,8 @@ interface Donors_Storage_Interface {
 	 *     'product_id'              => int,
 	 *     'name'                    => string,
 	 *     'is_parent'               => bool,
-	 *     'billing_model'           => 'recurring' | 'one_time',
+	 *     'has_recurring'           => bool,
+	 *     'has_one_time'            => bool,
 	 *     'active_recurring_donors' => int,
 	 *     'lapsed_donors_in_window' => int,
 	 *     'new_donors_in_window'    => int,
@@ -275,7 +276,8 @@ interface Donors_Storage_Interface {
 	 *       [
 	 *         'variation_id'              => int,
 	 *         'label'                     => string,  // 'Monthly' / 'Annual' / etc
-	 *         'billing_model'             => 'recurring' | 'one_time',
+	 *         'has_recurring'             => bool,
+	 *         'has_one_time'              => bool,
 	 *         'active_recurring_donors'   => int,
 	 *         'lapsed_donors_in_window'   => int,
 	 *         'new_donors_in_window'      => int,
@@ -287,15 +289,18 @@ interface Donors_Storage_Interface {
 	 *     ],
 	 *   ]
 	 *
-	 * `billing_model` is derived from the product's `_subscription_period`
-	 * meta: `recurring` when the period meta is in (day, week, month,
-	 * year), else `one_time`. Parent rows inherit `recurring` if ANY
-	 * variation is recurring (the canonical Newspack donation shape),
-	 * else `one_time`. The UI uses this to render cells that don't
-	 * apply to the product's billing model as em-dashes ("—") instead
-	 * of misleading zeros: a one-time product can't have recurring
-	 * donors, recurring revenue, or lapsed donors; a recurring
-	 * product can't have one-time gifts.
+	 * `has_recurring` / `has_one_time` are two INDEPENDENT flags derived
+	 * from each contributing row's `_subscription_period` meta (recurring
+	 * when the period is in day/week/month/year, else one-time). A leaf
+	 * variation is purely one nature, so exactly one flag is set. A parent
+	 * latches EACH flag true as matching variation rows land, so a variable
+	 * product that has recurring variations AND a one-time (bare-parent)
+	 * gift carries BOTH — the recurring signal never clobbers the one-time
+	 * one. The UI shows a column iff its flag is set, rendering the rest as
+	 * em-dashes ("—") instead of misleading zeros: a purely one-time product
+	 * can't have recurring donors, recurring revenue, or lapsed donors; a
+	 * purely recurring product can't have one-time gifts; a mixed product
+	 * shows both.
 	 *
 	 * `lapsed_donors_in_window` is bucketed-per-product using the same
 	 * cohort definition as {@see get_lapsed_donors_in_window()}
