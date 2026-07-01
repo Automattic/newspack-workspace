@@ -28,6 +28,12 @@ use Newspack\Insights_Wizard;
  */
 class Test_Donation_Activity_WC_Inactive extends WP_UnitTestCase {
 
+	public function tear_down() {
+		delete_option( Donations::DONATION_PRODUCT_ID_OPTION );
+		parent::tear_down();
+	}
+
+
 	/**
 	 * The donation-product child lookup degrades to the safe all-false
 	 * default — rather than fataling — when WooCommerce is inactive.
