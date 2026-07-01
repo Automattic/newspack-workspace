@@ -227,6 +227,7 @@ class Donors_REST_Controller extends WP_REST_Controller {
 			'lapsed_donor_recovery_rate' => $metric->get_lapsed_donor_recovery_rate( $start, $end ),
 			'recurring_donor_retention'  => $metric->get_recurring_donor_retention( $start, $end ),
 			'donations_by_tier'          => $metric->get_donations_by_tier( $start, $end ),
+			'donations_by_campaign'      => $metric->get_donations_by_campaign( $start, $end ),
 			// Derived empty-state signal (NPPD-1696): true when the window saw any
 			// donation activity at all. Pure derivation from values already fetched
 			// above — no extra query — kept in the metric class alongside the other

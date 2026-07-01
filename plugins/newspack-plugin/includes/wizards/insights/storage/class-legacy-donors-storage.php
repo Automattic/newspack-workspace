@@ -1405,4 +1405,65 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 		}
 		return $out;
 	}
+
+	/**
+	 * Donation campaign attribution rows for the window (NEWS-2580).
+	 *
+	 * Legacy CPT equivalent of the HPOS get_donation_campaign_rows(): one row per
+	 * completed/processing donation order in [$start, $end], keyed on `utm_campaign`
+	 * read from {prefix}postmeta via a correlated MIN() subquery (the meta is written
+	 * non-unique, so a JOIN would inflate). No popup filter and no GROUP BY — every
+	 * donation order is emitted (untagged → ''), so the Metric_Grouping fold can
+	 * surface a "(no campaign)" bucket. Renewals excluded via NOT EXISTS
+	 * `_subscription_renewal`.
+	 *
+	 * revenue = donation order total (`_order_total`, one-time gift amount).
+	 *
+	 * @param DateTimeInterface $start Inclusive window start.
+	 * @param DateTimeInterface $end   Inclusive window end.
+	 * @return array<int, array{utm_campaign: string, revenue: float}>
+	 */
+	public function get_donation_campaign_rows( DateTimeInterface $start, DateTimeInterface $end ): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		$sql = $wpdb->prepare(
+			"SELECT
+				(
+					SELECT MIN(c.meta_value)
+					FROM {$prefix}postmeta c
+					WHERE c.post_id = p.ID AND c.meta_key = 'utm_campaign' AND c.meta_value <> ''
+				) AS utm_campaign,
+				(
+					SELECT MAX(CAST(tot.meta_value AS DECIMAL(15,2)))
+					FROM {$prefix}postmeta tot
+					WHERE tot.post_id = p.ID AND tot.meta_key = '_order_total'
+				) AS revenue
+			FROM {$prefix}posts p
+			WHERE p.post_type = 'shop_order'
+			  AND p.post_status IN ('wc-completed', 'wc-processing')
+			  AND p.post_date_gmt BETWEEN %s AND %s
+			  AND NOT EXISTS (
+			      SELECT 1 FROM {$prefix}postmeta rn
+			      WHERE rn.post_id = p.ID AND rn.meta_key = '_subscription_renewal'
+			        AND rn.meta_value NOT IN ('', '0')
+			  )
+			  AND EXISTS (
+			      SELECT 1 FROM {$prefix}wc_order_product_lookup opl
+			      WHERE opl.order_id = p.ID AND opl.product_id IN ($donations)
+			  )",
+			$this->fmt( $start ),
+			$this->fmt( $end )
+		);
+
+		$out = [];
+		foreach ( (array) $wpdb->get_results( $sql, ARRAY_A ) as $row ) {
+			$out[] = [
+				'utm_campaign' => (string) ( $row['utm_campaign'] ?? '' ),
+				'revenue'      => (float) ( $row['revenue'] ?? 0 ),
+			];
+		}
+		return $out;
+	}
 }
