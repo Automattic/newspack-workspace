@@ -38,6 +38,31 @@ export const DATE_RANGE_PRESETS: DateRangePresetDef[] = [
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
+ * Returns "today" anchored to the site timezone so preset windows
+ * computed here match the server-side Preset_Windows (PHP current_datetime()
+ * in site TZ). Parity between these two is what makes pre-warmed durable
+ * cache keys hit — a day mismatch causes a silent cache miss.
+ * Falls back to browser-local Date if no site timezone is configured.
+ */
+const getSiteToday = (): Date => {
+	const tz = ( typeof window !== 'undefined' && window.newspackInsights?.timezone ) || undefined;
+	if ( ! tz ) {
+		return new Date(); // graceful fallback: browser-local (pre-fix behavior)
+	}
+	// en-CA formats as YYYY-MM-DD; extract the site-TZ civil date, then build a
+	// local-midnight Date carrying those civil fields so the existing day-arithmetic
+	// (setDate(-6), getMonth(), etc.) operates on the correct calendar date.
+	const parts = new Intl.DateTimeFormat( 'en-CA', {
+		timeZone: tz,
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+	} ).format( new Date() );
+	const [ y, m, d ] = parts.split( '-' ).map( Number );
+	return new Date( y, m - 1, d );
+};
+
+/**
  * Validate a YYYY-MM-DD string. Checks both the shape AND that the parsed
  * date round-trips back to the same string — otherwise inputs like
  * '2026-99-99' would pass the regex and silently roll over to a future
@@ -67,7 +92,7 @@ const toISO = ( d: Date ): string => `${ d.getFullYear() }-${ pad2( d.getMonth()
  *
  * Returns null for 'custom' — the caller supplies start/end directly.
  */
-export const computeRangeForPreset = ( preset: DateRangePreset, today: Date = new Date() ): { start: string; end: string } | null => {
+export const computeRangeForPreset = ( preset: DateRangePreset, today: Date = getSiteToday() ): { start: string; end: string } | null => {
 	if ( preset === 'custom' ) {
 		return null;
 	}
