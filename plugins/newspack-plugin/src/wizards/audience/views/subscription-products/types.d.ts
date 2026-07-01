@@ -6,7 +6,7 @@
  */
 
 /**
- * A single pricing policy applied to a product (RSM Layer 2).
+ * A single pricing rule applied to a product.
  */
 interface SubscriptionPolicy {
 	id: string;
@@ -18,7 +18,7 @@ interface SubscriptionPolicy {
 }
 
 /**
- * One segment of a product's per-cycle price trajectory (RSM Layer 2). Cycle 1 is
+ * One segment of a product's per-cycle price trajectory. Cycle 1 is
  * the purchase; each segment runs from `from_cycle` until the next one takes over.
  */
 interface SubscriptionPolicySegment {
@@ -29,7 +29,7 @@ interface SubscriptionPolicySegment {
 }
 
 /**
- * Resolved policy stack + effective price for a product (RSM Layer 2).
+ * Resolved applied-rule stack + effective price for a product.
  *
  * Returned by the PHP integration seam ({@see Subscription_Policy_Resolver}).
  */
@@ -53,7 +53,7 @@ interface SubscriptionProductVariation {
 	period: string;
 	interval: number;
 	price_label: string;
-	// Layer 2: each variation resolves its own policy stack + effective price.
+	// Each variation resolves its own applied-rule stack + effective price.
 	policy: SubscriptionPolicyResolution;
 	// Group-subscription (multi-seat) settings for this plan.
 	group: { enabled: boolean; limit: number };
@@ -80,7 +80,7 @@ interface SubscriptionProductCategory {
 }
 
 /**
- * The consolidated, productized row for a subscription product (Layer 1 + Layer 2).
+ * The consolidated, productized row for a subscription product.
  */
 interface SubscriptionProduct {
 	id: number;

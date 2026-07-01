@@ -2,9 +2,9 @@
 /**
  * Audience Subscription Products Wizard.
  *
- * Exploratory DataViews management page that lists Woo Subscriptions products with
- * a productized, consolidated model (price + period, active subscriber counts,
- * category, status) plus the RSM Layer 2 policy stack + effective price.
+ * DataViews management page that lists WooCommerce Subscriptions products with a
+ * productized, consolidated model (price + period, active subscriber counts,
+ * category, status) plus the applied-rule stack + effective price.
  *
  * @package Newspack
  */
@@ -734,10 +734,10 @@ class Audience_Subscription_Products extends Wizard {
 
 		$is_grouped = $product->is_type( 'grouped' );
 
-		// Layer 2: resolve the policy stack + effective price through the integration seam.
+		// Resolve the applied-rule stack + effective price through the integration seam.
 		// Variable subscriptions resolve PER VARIATION — each plan (monthly/annual/…) can
-		// carry a different policy and effective price. Grouped products and one-time (simple)
-		// products aren't recurring, so they get an empty (no-policy) resolution.
+		// carry a different rule and effective price. Grouped products and one-time (simple)
+		// products aren't recurring, so they get an empty (no-rule) resolution.
 		if ( $is_grouped || $product->is_type( 'simple' ) ) {
 			$policy = self::empty_policy( $currency_code );
 		} elseif ( $product->is_type( 'variable-subscription' ) ) {
@@ -1270,8 +1270,8 @@ class Audience_Subscription_Products extends Wizard {
 	 *
 	 * NOTE: we deliberately do NOT infer "private" from catalog_visibility=hidden —
 	 * Newspack hides donation/RAS products from the catalog for unrelated reasons, so that
-	 * signal is too noisy. This is the signal publishers explicitly reach for; the real
-	 * RSM/entitlement layer should own it as a typed field rather than inferring it.
+	 * signal is too noisy. This is the signal publishers explicitly reach for; a
+	 * first-class entitlement field should own it as a typed value rather than inferring it.
 	 *
 	 * @param float|null $base_price The representative base price.
 	 * @param array      $categories Category terms ({ id, name, slug }).

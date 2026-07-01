@@ -1,6 +1,6 @@
 <?php
 /**
- * Subscription Policy Resolver — RSM Layer 2 integration seam.
+ * Subscription Policy Resolver — the pricing-rule integration seam.
  *
  * @package Newspack
  */
@@ -10,10 +10,10 @@ namespace Newspack;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Resolves the pricing-policy stack and effective price for a subscription product.
+ * Resolves the pricing-rule stack and effective price for a subscription product.
  *
  * ============================================================================
- * INTEGRATION SEAM (RSM Layer 2)
+ * INTEGRATION SEAM
  * ============================================================================
  * This class is the SINGLE boundary between the Subscription Products UI and the
  * standalone pricing-rule engine (woocommerce-dynamic-pricing). get_resolution()

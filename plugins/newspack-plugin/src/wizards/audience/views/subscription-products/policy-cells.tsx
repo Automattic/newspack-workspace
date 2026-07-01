@@ -1,5 +1,5 @@
 /**
- * RSM Layer 2 cell renderers: applied-policy chips and base → effective price.
+ * Cell renderers for the applied-rule chips and base → effective price columns.
  *
  * These read only the `policy` field of a product row, which comes from the PHP
  * integration seam (Subscription_Policy_Resolver) — now backed by the live
