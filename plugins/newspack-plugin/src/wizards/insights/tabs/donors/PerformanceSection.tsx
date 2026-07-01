@@ -133,6 +133,12 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 					</tbody>
 				</table>
 			</div>
+			<p className="newspack-insights__table-footnote">
+				{ __(
+					'“(no variation)”: Donations recorded at the product level without a specific variation — e.g. one-time or name-your-price gifts made against this product.',
+					'newspack-plugin'
+				) }
+			</p>
 		</section>
 	);
 };

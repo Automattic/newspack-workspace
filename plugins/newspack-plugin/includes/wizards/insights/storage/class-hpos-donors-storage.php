@@ -1104,6 +1104,21 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 	 * variations shape. Mirrors the Tab 6 pattern but with Tab 7's
 	 * five-metric column set.
 	 *
+	 *   - If parent_id > 0 (variation), attach to its parent's bucket
+	 *     and accumulate the parent's aggregates from the variation's
+	 *     numbers.
+	 *   - If parent_id == 0, the row is either a standalone
+	 *     simple/subscription donation product OR a bare-parent line item
+	 *     on a VARIABLE donation product (a donation that recorded the
+	 *     parent product with _variation_id = 0 — common because Newspack
+	 *     donations are name-your-price variable products bought at the
+	 *     parent level via Modal_Checkout). It resolves to the product's
+	 *     own id and MERGES into that bucket: when the bucket also owns
+	 *     variation rows it folds in as a synthetic "(no variation)"
+	 *     variation instead of overwriting the bucket and discarding the
+	 *     variations. A bucket that only ever sees this branch stays a
+	 *     single non-parent entry.
+	 *
 	 * Each parent's variations are sorted by lifetime_donation_revenue
 	 * DESC. The outer list is sorted by aggregated
 	 * lifetime_donation_revenue DESC and truncated to top 50 — same
@@ -1131,72 +1146,89 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 			$is_recurring   = in_array( $period, [ 'day', 'week', 'month', 'year' ], true );
 			$billing_model  = $is_recurring ? 'recurring' : 'one_time';
 
+			// Resolve the bucket this row belongs under. Variation rows fold
+			// into their parent product; bare-parent / standalone rows fold into
+			// the product's own id. Keying both into the SAME map by the effective
+			// product id and accumulating (rather than the parent branch creating
+			// and the standalone branch overwriting) is what stops a bare-parent
+			// donation from clobbering a variable product's accumulated variations.
 			if ( $parent_id > 0 ) {
-				if ( ! isset( $parents[ $parent_id ] ) ) {
-					$parents[ $parent_id ] = [
-						'product_id'                  => $parent_id,
-						'name'                        => '' !== $parent_name ? $parent_name : __( '(unnamed product)', 'newspack-plugin' ),
-						'is_parent'                   => true,
-						// Parent inherits 'recurring' if any variation is
-						// recurring (the canonical Newspack donation
-						// shape: a variable subscription with Monthly +
-						// Yearly variations). Set to 'one_time' here as
-						// the floor; upgraded below per variation.
-						'billing_model'               => 'one_time',
-						'active_recurring_donors'     => 0,
-						'lapsed_donors_in_window'     => 0,
-						'new_donors_in_window'        => 0,
-						'one_time_gifts_in_window'    => 0,
-						'recurring_revenue_in_window' => 0.0,
-						'lifetime_donation_revenue'   => 0.0,
-						'variations'                  => [],
-					];
-				}
-				if ( $is_recurring ) {
-					$parents[ $parent_id ]['billing_model'] = 'recurring';
-				}
-				$parents[ $parent_id ]['active_recurring_donors']     += $active_recurring_donors;
-				$parents[ $parent_id ]['lapsed_donors_in_window']     += $lapsed_donors;
-				$parents[ $parent_id ]['new_donors_in_window']        += $new_donors;
-				$parents[ $parent_id ]['one_time_gifts_in_window']    += $one_time_gifts;
-				$parents[ $parent_id ]['recurring_revenue_in_window'] += $recurring_revenue;
-				$parents[ $parent_id ]['lifetime_donation_revenue']   += $lifetime_donation_revenue;
-				$parents[ $parent_id ]['variations'][]                 = [
-					'variation_id'                => $variation_id,
-					'label'                       => $this->variation_label( $period, $variation_name, $parent_name ),
-					'billing_model'               => $billing_model,
-					'active_recurring_donors'     => $active_recurring_donors,
-					'lapsed_donors_in_window'     => $lapsed_donors,
-					'new_donors_in_window'        => $new_donors,
-					'one_time_gifts_in_window'    => $one_time_gifts,
-					'recurring_revenue_in_window' => $recurring_revenue,
-					'lifetime_donation_revenue'   => $lifetime_donation_revenue,
-				];
+				$bucket_id   = $parent_id;
+				$bucket_name = '' !== $parent_name ? $parent_name : __( '(unnamed product)', 'newspack-plugin' );
+				$label       = $this->variation_label( $period, $variation_name, $parent_name );
 			} else {
-				$parents[ $variation_id ] = [
-					'product_id'                  => $variation_id,
-					'name'                        => '' !== $variation_name ? $variation_name : __( '(unnamed product)', 'newspack-plugin' ),
+				$bucket_id   = $variation_id;
+				$bucket_name = '' !== $variation_name ? $variation_name : __( '(unnamed product)', 'newspack-plugin' );
+				$label       = __( '(no variation)', 'newspack-plugin' );
+			}
+
+			if ( ! isset( $parents[ $bucket_id ] ) ) {
+				$parents[ $bucket_id ] = [
+					'product_id'                  => $bucket_id,
+					'name'                        => $bucket_name,
 					'is_parent'                   => false,
-					'billing_model'               => $billing_model,
-					'active_recurring_donors'     => $active_recurring_donors,
-					'lapsed_donors_in_window'     => $lapsed_donors,
-					'new_donors_in_window'        => $new_donors,
-					'one_time_gifts_in_window'    => $one_time_gifts,
-					'recurring_revenue_in_window' => $recurring_revenue,
-					'lifetime_donation_revenue'   => $lifetime_donation_revenue,
+					// Bucket inherits 'recurring' if ANY constituent row is
+					// recurring (the canonical Newspack donation shape: a variable
+					// product with Monthly + Yearly variations). 'one_time' is the
+					// floor; upgraded below whenever a recurring row lands here.
+					'billing_model'               => 'one_time',
+					'active_recurring_donors'     => 0,
+					'lapsed_donors_in_window'     => 0,
+					'new_donors_in_window'        => 0,
+					'one_time_gifts_in_window'    => 0,
+					'recurring_revenue_in_window' => 0.0,
+					'lifetime_donation_revenue'   => 0.0,
+					'variations'                  => [],
 				];
 			}
+
+			// A real variation row promotes the bucket to a parent and supplies
+			// the canonical parent display name. Idempotent: a bare-parent row may
+			// have seeded the bucket first under the same product's title.
+			if ( $parent_id > 0 ) {
+				$parents[ $bucket_id ]['is_parent'] = true;
+				$parents[ $bucket_id ]['name']      = $bucket_name;
+			}
+
+			if ( $is_recurring ) {
+				$parents[ $bucket_id ]['billing_model'] = 'recurring';
+			}
+
+			$parents[ $bucket_id ]['active_recurring_donors']     += $active_recurring_donors;
+			$parents[ $bucket_id ]['lapsed_donors_in_window']     += $lapsed_donors;
+			$parents[ $bucket_id ]['new_donors_in_window']        += $new_donors;
+			$parents[ $bucket_id ]['one_time_gifts_in_window']    += $one_time_gifts;
+			$parents[ $bucket_id ]['recurring_revenue_in_window'] += $recurring_revenue;
+			$parents[ $bucket_id ]['lifetime_donation_revenue']   += $lifetime_donation_revenue;
+			$parents[ $bucket_id ]['variations'][]                 = [
+				'variation_id'                => $variation_id,
+				'label'                       => $label,
+				'billing_model'               => $billing_model,
+				'active_recurring_donors'     => $active_recurring_donors,
+				'lapsed_donors_in_window'     => $lapsed_donors,
+				'new_donors_in_window'        => $new_donors,
+				'one_time_gifts_in_window'    => $one_time_gifts,
+				'recurring_revenue_in_window' => $recurring_revenue,
+				'lifetime_donation_revenue'   => $lifetime_donation_revenue,
+			];
 		}
 
+		// Sort each parent's variations by lifetime_donation_revenue DESC.
+		// Standalone (non-parent) buckets render as a single row, so drop the
+		// internal single-element variations scaffold to keep their payload shape
+		// on the renderer's is_parent contract (no variations key for simple
+		// products).
 		foreach ( $parents as &$entry ) {
-			if ( isset( $entry['variations'] ) ) {
-				usort(
-					$entry['variations'],
-					static function ( $a, $b ) {
-						return $b['lifetime_donation_revenue'] <=> $a['lifetime_donation_revenue'];
-					}
-				);
+			if ( ! $entry['is_parent'] ) {
+				unset( $entry['variations'] );
+				continue;
 			}
+			usort(
+				$entry['variations'],
+				static function ( $a, $b ) {
+					return $b['lifetime_donation_revenue'] <=> $a['lifetime_donation_revenue'];
+				}
+			);
 		}
 		unset( $entry );
 
