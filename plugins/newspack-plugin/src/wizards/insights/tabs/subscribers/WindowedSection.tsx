@@ -184,6 +184,13 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 					description={ __( 'First-time subscribers', 'newspack-plugin' ) }
 				/>
 				<MetricCard
+					label={ __( 'Win-backs', 'newspack-plugin' ) }
+					value={ current.winback_subscribers }
+					format="number"
+					previousValue={ previous?.winback_subscribers }
+					description={ __( 'Previously churned subscribers who resubscribed', 'newspack-plugin' ) }
+				/>
+				<MetricCard
 					label={ __( 'Churned subscribers', 'newspack-plugin' ) }
 					value={ current.churned_subscribers }
 					format="number"

@@ -94,6 +94,7 @@ export interface CancellationReasonRow {
 export interface SubscribersWindow {
 	window: { start: string; end: string };
 	new_subscribers: number;
+	winback_subscribers: number;
 	churned_subscribers: number;
 	revenue_gross: number;
 	revenue_net: number;

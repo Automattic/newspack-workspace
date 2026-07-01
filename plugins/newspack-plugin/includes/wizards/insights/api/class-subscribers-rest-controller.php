@@ -68,17 +68,16 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 
 	/**
 	 * Bumped when the tab payload's shape changes so a deploy doesn't keep
-	 * serving a stale tab-level envelope. v2: the `subscriptions_by_product`
-	 * per-product table now folds bare-parent subscriptions into the parent
-	 * bucket and emits a synthetic "(no variation)" variation row (the
-	 * Subscribers_Metric metric-layer cache is invalidated in parallel by its
-	 * own CACHE_PREFIX bump). Only the subscribers envelope is busted — other
-	 * (BigQuery-backed) tabs keep their caches.
+	 * serving a stale tab-level envelope. Overrides the global default so only
+	 * the subscribers envelope is busted — other (BigQuery-backed) tabs keep
+	 * their caches. History: v2 reshaped `subscriptions_by_product` (bare-parent
+	 * merge + synthetic "(no variation)" row); v3 adds `winback_subscribers` to
+	 * each window payload.
 	 *
 	 * @return string
 	 */
 	protected function cache_schema_version(): string {
-		return '2';
+		return '3';
 	}
 
 	/**
@@ -227,6 +226,7 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 	 */
 	private function build_window( Subscribers_Metric $metric, DateTimeImmutable $start, DateTimeImmutable $end ): array {
 		$new_subscribers     = $metric->get_new_subscribers_in_window( $start, $end );
+		$winback_subscribers = $metric->get_winback_subscribers_in_window( $start, $end );
 		$churned_subscribers = $metric->get_churned_subscribers_in_window( $start, $end );
 		$revenue_gross       = $metric->get_subscription_revenue_gross( $start, $end );
 		$revenue_net         = $metric->get_subscription_revenue_net( $start, $end );
@@ -237,6 +237,7 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 				'end'   => $end->format( 'Y-m-d' ),
 			],
 			'new_subscribers'           => $new_subscribers,
+			'winback_subscribers'       => $winback_subscribers,
 			'churned_subscribers'       => $churned_subscribers,
 			'revenue_gross'             => $revenue_gross,
 			'revenue_net'               => $revenue_net,

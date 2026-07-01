@@ -237,6 +237,31 @@ class Test_Conversion_Journey_Storage extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Subscribers_Metric::get_winback_subscribers_in_window() delegates to storage
+	 * and caches per window — a repeat call for the same window is served from the
+	 * transient; a distinct window is a cache miss that hits storage again.
+	 */
+	public function test_subscribers_metric_get_winback_subscribers_delegates(): void {
+		$start = $this->make_date( '2026-06-01' );
+		$end   = $this->make_date( '2026-06-30' );
+
+		$mock = $this->createMock( Storage_Interface::class );
+		$mock->expects( $this->exactly( 2 ) ) // once per distinct window; the repeat is cached.
+			->method( 'get_winback_subscribers_in_window' )
+			->willReturn( 18 );
+
+		$metric = $this->make_subscribers_metric( $mock );
+
+		$first  = $metric->get_winback_subscribers_in_window( $start, $end );
+		$second = $metric->get_winback_subscribers_in_window( $start, $end ); // cached — no storage call.
+		$other  = $metric->get_winback_subscribers_in_window( $start, $this->make_date( '2026-07-31' ) ); // distinct window → storage call.
+
+		$this->assertSame( 18, $first );
+		$this->assertSame( 18, $second );
+		$this->assertSame( 18, $other );
+	}
+
+	/**
 	 * Subscribers_Metric::get_active_non_donation_subscriber_customer_ids() delegates.
 	 */
 	public function test_subscribers_metric_get_customer_ids_delegates(): void {

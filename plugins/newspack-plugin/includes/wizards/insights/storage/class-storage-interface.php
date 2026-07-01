@@ -63,6 +63,18 @@ interface Storage_Interface {
 	public function get_churned_subscribers_in_window( DateTimeInterface $start, DateTimeInterface $end ): int;
 
 	/**
+	 * Distinct customers who started a non-donation subscription in the window and
+	 * had previously churned — i.e. they hold an earlier-started non-donation
+	 * subscription that is cancelled or expired, regardless of product. Disjoint
+	 * from first-time subscribers (a first-timer has no prior subscription).
+	 *
+	 * @param DateTimeInterface $start Inclusive window start.
+	 * @param DateTimeInterface $end   Inclusive window end.
+	 * @return int
+	 */
+	public function get_winback_subscribers_in_window( DateTimeInterface $start, DateTimeInterface $end ): int;
+
+	/**
 	 * Monthly Recurring Revenue across all active non-donation subscriptions
 	 * right now. Yearly subs contribute `total / 12`; quarterly `total / 3`;
 	 * monthly contribute their total. Conservative fallback for unrecognized
