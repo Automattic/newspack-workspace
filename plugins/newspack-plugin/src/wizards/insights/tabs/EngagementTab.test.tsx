@@ -66,6 +66,43 @@ describe( 'EngagementTab', () => {
 		expect( screen.getByText( '3.2' ) ).toBeInTheDocument();
 	} );
 
+	it( 'hides the completion-rate card and table while keeping the other metrics (SHOW_COMPLETION_METRICS=false)', () => {
+		// Populate every quality metric so each Scorecard would render if not hidden
+		// (Scorecard returns null when its field is absent).
+		const metric = { value: 1, computable: true, type: 'decimal' };
+		mockHook.mockReturnValue( {
+			status: 'success',
+			error: null,
+			refetch: () => {},
+			data: {
+				current: {
+					avg_pages_per_session: metric,
+					avg_engaged_session_duration: metric,
+					bounce_rate: metric,
+					article_completion_rate: metric,
+				},
+				previous: null,
+			},
+			computedAt: '2026-06-10T18:42:13Z',
+			source: 'external',
+			cooldownUntil: null,
+		} );
+
+		render( <EngagementTab range={ range } previousRange={ null } /> );
+
+		// The three non-completion quality cards still render.
+		expect( screen.getByText( 'Avg Pages per Session' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Avg Engaged Session Duration' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Bounce Rate' ) ).toBeInTheDocument();
+		// The two remaining content tables still render.
+		expect( screen.getByText( 'Most-Engaged Articles' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top Authors by Avg Engagement Time' ) ).toBeInTheDocument();
+
+		// The completion-rate card and table are hidden.
+		expect( screen.queryByText( 'Completion Rate' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Articles by Completion Rate' ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'suppresses comparison deltas when the toggle is off (no previousRange)', () => {
 		mockHook.mockReturnValue( {
 			status: 'success',

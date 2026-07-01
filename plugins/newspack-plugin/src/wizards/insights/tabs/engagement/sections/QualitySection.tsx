@@ -18,6 +18,7 @@ import { __ } from '@wordpress/i18n';
 import type { InsightsWindow } from '../../../api/audience';
 import Scorecard from '../../components/Scorecard';
 import SectionHeading from '../../components/SectionHeading';
+import { SHOW_COMPLETION_METRICS } from '../constants';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -33,7 +34,9 @@ const QualitySection = ( { current, previous, lastUpdated }: SectionProps ) => (
 			description={ __( 'How deeply readers engage.', 'newspack-plugin' ) }
 			actions={ lastUpdated }
 		/>
-		<div className="newspack-insights__metric-grid">
+		{ /* Drop to 3 even columns when the completion card is hidden so the row
+		     doesn't leave a trailing gap under the base auto-fill grid. */ }
+		<div className={ `newspack-insights__metric-grid${ SHOW_COMPLETION_METRICS ? '' : ' newspack-insights__metric-grid--cols-3' }` }>
 			<Scorecard
 				label={ __( 'Avg Pages per Session', 'newspack-plugin' ) }
 				description={ __( 'Pages viewed per visit', 'newspack-plugin' ) }
@@ -53,16 +56,19 @@ const QualitySection = ( { current, previous, lastUpdated }: SectionProps ) => (
 				previous={ previous?.bounce_rate }
 				lowerIsBetter
 			/>
-			<Scorecard
-				label={ __( 'Completion Rate', 'newspack-plugin' ) }
-				description={
-					// "% of page views read to the end" is literal copy; the "%" is a percent sign, not a format placeholder.
-					// eslint-disable-next-line @wordpress/i18n-translator-comments
-					__( '% of page views read to the end', 'newspack-plugin' )
-				}
-				current={ current.article_completion_rate }
-				previous={ previous?.article_completion_rate }
-			/>
+			{ /* Completion rate is GA4-scroll-derived; hidden until scroll data flows. See ../constants. */ }
+			{ SHOW_COMPLETION_METRICS && (
+				<Scorecard
+					label={ __( 'Completion Rate', 'newspack-plugin' ) }
+					description={
+						// "% of page views read to the end" is literal copy; the "%" is a percent sign, not a format placeholder.
+						// eslint-disable-next-line @wordpress/i18n-translator-comments
+						__( '% of page views read to the end', 'newspack-plugin' )
+					}
+					current={ current.article_completion_rate }
+					previous={ previous?.article_completion_rate }
+				/>
+			) }
 		</div>
 	</section>
 );
