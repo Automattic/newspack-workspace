@@ -13,6 +13,8 @@ use Newspack\Group_Subscription_Invite;
  */
 class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 
+	const REDIRECTED = 'group-invite-test-redirected'; // phpcs:ignore Squiz.Commenting.VariableComment.Missing
+
 	public static function set_up_before_class() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 		parent::set_up_before_class();
 		require_once dirname( __DIR__, 4 ) . '/mocks/wc-mocks.php';
@@ -31,21 +33,27 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Run process_invite_request(), swallowing its terminal redirect.
+	 * Run process_invite_request(), converting its terminal redirect into a
+	 * catchable signal so the test can continue.
+	 *
+	 * Only the redirect is treated as expected; any other exception propagates,
+	 * and the absence of a redirect fails the test.
 	 */
 	private function run_invite_request() {
 		$redirect = function () {
-			throw new \Exception( 'redirect' );
+			throw new \RuntimeException( self::REDIRECTED );
 		};
 		add_filter( 'wp_redirect', $redirect, 1 );
 		try {
 			Group_Subscription_Invite::process_invite_request();
-		} catch ( \Exception $e ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch
-			// The handler ends in a redirect + exit; the filter above turns that into
-			// a catchable exception so the test can continue.
-			unset( $e );
+			$this->fail( 'Expected the invite request to end in a redirect.' );
+		} catch ( \RuntimeException $e ) {
+			if ( self::REDIRECTED !== $e->getMessage() ) {
+				throw $e;
+			}
+		} finally {
+			remove_filter( 'wp_redirect', $redirect, 1 );
 		}
-		remove_filter( 'wp_redirect', $redirect, 1 );
 	}
 
 	/**
