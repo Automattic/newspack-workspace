@@ -47,6 +47,13 @@ final class Cache {
 	 */
 	const INDEX_MAX_ENTRIES = 200;
 
+	/**
+	 * Max on-demand durable entries retained per tab. Non-preset windows (custom
+	 * ranges) are cached here lazily on a compute-miss so they survive memcached
+	 * eviction; FIFO eviction (move-to-newest on rewrite) bounds wp_options growth.
+	 */
+	const ONDEMAND_MAX_ENTRIES = 10;
+
 	const LOGGER_HEADER = 'NEWSPACK-INSIGHTS-CACHE';
 
 	/**
@@ -335,6 +342,127 @@ final class Cache {
 		// cannot survive a prune cycle.
 		$surviving = array_values( array_intersect( $hashes, $keep_hashes ) );
 		update_option( $option, $surviving, false );
+	}
+
+	/**
+	 * On-demand durable option name for a lazily-cached window.
+	 *
+	 * @param string   $tab       Tab slug.
+	 * @param string[] $key_parts Canonicalized window components.
+	 * @return string
+	 */
+	private static function ondemand_option( string $tab, array $key_parts ): string {
+		return 'newspack_insights_ondemand_' . $tab . '_' . md5( (string) wp_json_encode( $key_parts ) );
+	}
+
+	/**
+	 * Per-tab on-demand index option name.
+	 *
+	 * @param string $tab Tab slug.
+	 * @return string
+	 */
+	private static function ondemand_index_option( string $tab ): string {
+		return 'newspack_insights_ondemand_index_' . $tab;
+	}
+
+	/**
+	 * Write a window to the on-demand (non-autoloaded) durable pool and record its
+	 * key in the per-tab FIFO index. No storage TTL — freshness is logical
+	 * (computed_at + is_fresh()). No-op write when caching is disabled; the
+	 * envelope is still returned so callers behave uniformly.
+	 *
+	 * @param string   $tab       Tab slug.
+	 * @param string   $source    SOURCE_* constant.
+	 * @param string[] $key_parts Canonicalized window components.
+	 * @param array    $payload   The window payload.
+	 * @param array    $window    [ 'start' => 'Y-m-d', 'end' => 'Y-m-d' ].
+	 * @return array{ payload: array, computed_at: string, source: string, cooldown_until: null }
+	 */
+	public static function store_ondemand( string $tab, string $source, array $key_parts, array $payload, array $window ): array {
+		$envelope = self::envelope( $payload, $source );
+		if ( self::is_disabled() ) {
+			return $envelope;
+		}
+		$store = [
+			'payload'     => $envelope['payload'],
+			'computed_at' => $envelope['computed_at'],
+			'source'      => $envelope['source'],
+			'window'      => $window,
+		];
+		update_option( self::ondemand_option( $tab, $key_parts ), $store, false );
+		self::ondemand_index_add( $tab, $key_parts );
+		return $envelope;
+	}
+
+	/**
+	 * Read an on-demand entry without computing. Same contract as peek_durable():
+	 * null when disabled, absent, malformed, source-mismatched, or window-empty.
+	 *
+	 * @param string   $tab       Tab slug.
+	 * @param string   $source    SOURCE_* constant the caller expects.
+	 * @param string[] $key_parts Canonicalized window components.
+	 * @return array{ payload: array, computed_at: string, source: string, window: array }|null
+	 */
+	public static function peek_ondemand( string $tab, string $source, array $key_parts ): ?array {
+		if ( self::is_disabled() ) {
+			return null;
+		}
+		$stored = get_option( self::ondemand_option( $tab, $key_parts ), null );
+		if ( ! is_array( $stored ) || ! isset( $stored['payload'], $stored['computed_at'], $stored['source'] ) ) {
+			return null;
+		}
+		if ( $stored['source'] !== $source ) {
+			return null;
+		}
+		if (
+			! isset( $stored['window'] ) ||
+			! is_array( $stored['window'] ) ||
+			empty( $stored['window']['start'] ) ||
+			empty( $stored['window']['end'] )
+		) {
+			return null;
+		}
+		return $stored;
+	}
+
+	/**
+	 * Add a key to the per-tab on-demand FIFO index (move-to-newest on rewrite),
+	 * evicting the oldest option(s) when the cap is exceeded.
+	 *
+	 * @param string   $tab       Tab slug.
+	 * @param string[] $key_parts Canonicalized window components.
+	 */
+	private static function ondemand_index_add( string $tab, array $key_parts ): void {
+		$option = self::ondemand_index_option( $tab );
+		$hashes = get_option( $option, [] );
+		if ( ! is_array( $hashes ) ) {
+			$hashes = [];
+		}
+		$hash   = md5( (string) wp_json_encode( $key_parts ) );
+		// Move-to-newest: drop any existing occurrence, then append.
+		$hashes   = array_values( array_filter( $hashes, static fn( $h ) => $h !== $hash ) );
+		$hashes[] = $hash;
+		while ( count( $hashes ) > self::ONDEMAND_MAX_ENTRIES ) {
+			$evicted = array_shift( $hashes );
+			delete_option( 'newspack_insights_ondemand_' . $tab . '_' . $evicted );
+		}
+		update_option( $option, $hashes, false );
+	}
+
+	/**
+	 * Delete every on-demand option for a tab and reset its index.
+	 *
+	 * @param string $tab Tab slug.
+	 */
+	public static function purge_ondemand( string $tab ): void {
+		$option = self::ondemand_index_option( $tab );
+		$hashes = get_option( $option, [] );
+		if ( is_array( $hashes ) ) {
+			foreach ( $hashes as $hash ) {
+				delete_option( 'newspack_insights_ondemand_' . $tab . '_' . $hash );
+			}
+		}
+		delete_option( $option );
 	}
 
 	/**
