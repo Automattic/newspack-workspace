@@ -377,4 +377,18 @@
 			}
 		}
 	}
+
+	// Explanatory note(s) rendered beneath a table — e.g. defining a synthetic
+	// "(no variation)" row, or how the per-product (subscription-grain) totals
+	// differ from the page scorecards. Muted and small so it reads as a caption.
+	&__table-footnote {
+		margin: 8px 0 0;
+		font-size: 12px;
+		line-height: 1.5;
+		color: wp-colors.$gray-600;
+
+		& + & {
+			margin-top: 4px;
+		}
+	}
 }

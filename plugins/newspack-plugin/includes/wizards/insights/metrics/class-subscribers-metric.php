@@ -42,7 +42,7 @@ class Subscribers_Metric {
 	 *
 	 * @var string
 	 */
-	const CACHE_PREFIX = 'newspack_insights_tab6_v5:';
+	const CACHE_PREFIX = 'newspack_insights_tab6_v6:';
 
 	/**
 	 * Cache TTL for windowed and snapshot metrics (30 min).

@@ -68,6 +68,21 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Bumped when the tab payload's shape changes so a deploy doesn't keep
+	 * serving a stale tab-level envelope. v2: the `subscriptions_by_product`
+	 * per-product table now folds bare-parent subscriptions into the parent
+	 * bucket and emits a synthetic "(no variation)" variation row (the
+	 * Subscribers_Metric metric-layer cache is invalidated in parallel by its
+	 * own CACHE_PREFIX bump). Only the subscribers envelope is busted — other
+	 * (BigQuery-backed) tabs keep their caches.
+	 *
+	 * @return string
+	 */
+	protected function cache_schema_version(): string {
+		return '2';
+	}
+
+	/**
 	 * Tab slug used as the cache namespace.
 	 *
 	 * @return string
