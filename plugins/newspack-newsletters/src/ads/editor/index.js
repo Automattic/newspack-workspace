@@ -5,7 +5,7 @@ import { __, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { useSelect, useDispatch } from '@wordpress/data';
 import { Fragment, useState } from '@wordpress/element';
-import { PluginDocumentSettingPanel, PluginPrePublishPanel, store as editPostStore } from '@wordpress/edit-post';
+import { PluginDocumentSettingPanel, PluginPrePublishPanel } from '@wordpress/edit-post';
 import { registerPlugin } from '@wordpress/plugins';
 import { ToggleControl, TextControl, DatePicker, Notice, RangeControl, Button, Modal } from '@wordpress/components';
 import { date as wpDate, format, isInTheFuture } from '@wordpress/date';
@@ -59,7 +59,6 @@ function AdEdit() {
 
 	const { editPost } = useDispatch( 'core/editor' );
 	const { saveEntityRecord } = useDispatch( 'core' );
-	const { removeEditorPanel } = useDispatch( editPostStore );
 	const messages = [];
 	// Site-timezone "today" so this advisory agrees with the server.
 	if ( expiryDate && expiryDate < wpDate( 'Y-m-d' ) ) {
@@ -103,9 +102,6 @@ function AdEdit() {
 			status: messages.length ? 'warning' : 'info',
 		};
 	}
-
-	// Remove the "post-status" (Summary) panel.
-	removeEditorPanel( 'post-status' );
 
 	return (
 		<Fragment>
