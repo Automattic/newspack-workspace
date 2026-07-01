@@ -30,6 +30,19 @@ final class Prewarm {
 	const MARKER_OPTION      = 'newspack_insights_last_prewarm_date';
 
 	/**
+	 * Max attempts for a single per-window warm before giving up. Action Scheduler
+	 * does not auto-retry a single (non-recurring) async action, so run_warm_window()
+	 * re-enqueues a failed window itself up to this many times.
+	 */
+	const WARM_MAX_ATTEMPTS = 3;
+
+	/**
+	 * Base backoff in seconds between per-window warm retries; multiplied by the
+	 * attempt number for a simple linear backoff.
+	 */
+	const WARM_RETRY_BACKOFF = 15 * MINUTE_IN_SECONDS;
+
+	/**
 	 * Registry: tab slug => [ 'warmer' => callable, 'key_for' => callable ].
 	 *
 	 * @var array<string, array{warmer: callable, key_for: callable}>
@@ -104,10 +117,12 @@ final class Prewarm {
 	 * Schedule an async warm at most once per day on admin_init. Never computes
 	 * inline. Guards on environment, capability, and the daily marker.
 	 *
-	 * Marker semantics: the marker now means "fan-out was scheduled today", not
-	 * "warming completed successfully." Individual window failures are retried
-	 * automatically by Action Scheduler on each per-window job; a re-fan-out on
-	 * the same day is never needed.
+	 * Marker semantics: the marker means "fan-out was scheduled today", not
+	 * "warming completed successfully." A re-fan-out on the same day is not needed
+	 * because each window is its own job: a window that fails is re-enqueued with a
+	 * bounded backoff by run_warm_window() (Action Scheduler does NOT auto-retry a
+	 * single async action), and once retries are exhausted the action is marked
+	 * failed so the outage is visible.
 	 */
 	public static function maybe_schedule(): void {
 		if ( ! self::is_warmable() ) {
@@ -126,9 +141,9 @@ final class Prewarm {
 			return;
 		}
 		as_enqueue_async_action( self::WARM_ACTION, [], self::WARM_GROUP );
-		// Stamp the marker immediately: "fan-out scheduled today." Retry of
-		// individual failed windows is handled by Action Scheduler per-job
-		// retries, not by re-fanning-out the same day.
+		// Stamp the marker immediately: "fan-out scheduled today." A failed window
+		// is recovered by run_warm_window()'s bounded self-re-enqueue, not by
+		// re-fanning-out the whole set the same day.
 		update_option( self::MARKER_OPTION, self::today(), false );
 	}
 
@@ -176,14 +191,19 @@ final class Prewarm {
 	}
 
 	/**
-	 * WARM_WINDOW_ACTION handler. Warms one (tab, window) and prunes orphaned
+	 * WARM_WINDOW_ACTION handler. Warms one (tab, window) then prunes orphaned
 	 * durable entries for that tab.
 	 *
-	 * Pruning always runs (even when the warm throws) — it only removes
-	 * orphaned/shifted-day options; the five current-preset keys are always in
-	 * the keep-list, so a not-yet-warmed window is never wrongly deleted.
+	 * On a warm failure the window is re-enqueued with a bounded backoff (up to
+	 * WARM_MAX_ATTEMPTS), since Action Scheduler does not auto-retry a single
+	 * async action; once attempts are exhausted the exception is re-thrown so the
+	 * action is marked failed and visible in the AS admin. Pruning runs only after
+	 * a successful warm, and the just-warmed key is always kept, so a job never
+	 * deletes the entry it just wrote (e.g. across a midnight roll, or an SWR
+	 * re-warm of a now-shifted preset).
 	 *
-	 * @param array $args [ 'tab' => string, 'start' => 'Y-m-d', 'end' => 'Y-m-d' ].
+	 * @param array $args [ 'tab' => string, 'start' => 'Y-m-d', 'end' => 'Y-m-d', 'attempt' => int ].
+	 * @throws \Throwable Re-thrown when retry attempts are exhausted.
 	 */
 	public static function run_warm_window( array $args ): void {
 		if ( ! self::is_warmable() ) {
@@ -191,30 +211,54 @@ final class Prewarm {
 		}
 		$tab = $args['tab'] ?? '';
 		if ( ! isset( self::$tabs[ $tab ] ) ) {
+			self::log_skip( $tab, $args, 'unregistered tab' );
 			return;
 		}
 		$tz    = wp_timezone();
 		$start = DateTimeImmutable::createFromFormat( 'Y-m-d', (string) ( $args['start'] ?? '' ), $tz );
 		$end   = DateTimeImmutable::createFromFormat( 'Y-m-d', (string) ( $args['end'] ?? '' ), $tz );
-		if ( ! $start || $start->format( 'Y-m-d' ) !== (string) ( $args['start'] ?? '' ) ) {
+		if ( ! $start || $start->format( 'Y-m-d' ) !== (string) ( $args['start'] ?? '' )
+			|| ! $end || $end->format( 'Y-m-d' ) !== (string) ( $args['end'] ?? '' ) ) {
+			self::log_skip( $tab, $args, 'invalid date argument' );
 			return;
 		}
-		if ( ! $end || $end->format( 'Y-m-d' ) !== (string) ( $args['end'] ?? '' ) ) {
-			return;
-		}
+
 		try {
-			( self::$tabs[ $tab ]['warmer'] )( $start->setTime( 0, 0, 0 ), $end->setTime( 23, 59, 59 ) );
+			$warmed_key = ( self::$tabs[ $tab ]['warmer'] )( $start->setTime( 0, 0, 0 ), $end->setTime( 23, 59, 59 ) );
 		} catch ( \Throwable $e ) {
 			self::log_failure( $tab, $args['start'] . '..' . $args['end'], $e );
+			$attempt = (int) ( $args['attempt'] ?? 1 );
+			if ( $attempt < self::WARM_MAX_ATTEMPTS && function_exists( 'as_schedule_single_action' ) ) {
+				as_schedule_single_action(
+					time() + ( $attempt * self::WARM_RETRY_BACKOFF ),
+					self::WARM_WINDOW_ACTION,
+					[
+						[
+							'tab'     => $tab,
+							'start'   => $args['start'],
+							'end'     => $args['end'],
+							'attempt' => $attempt + 1,
+						],
+					],
+					self::WARM_GROUP
+				);
+				return;
+			}
+			// Retries exhausted: re-throw so Action Scheduler records this action as
+			// failed (visible/monitorable) rather than silently complete.
+			throw $e;
 		}
-		// Prune orphaned durable entries for this tab regardless of warm result.
-		// The five current-preset keys are always included so no valid entry is removed.
+
+		// Prune orphaned durable entries for this tab. The five current-preset keys
+		// PLUS the key just warmed are kept, so a job never prunes what it just
+		// wrote even when its window is no longer one of today's presets.
 		$keep = array_map(
 			function ( $w ) use ( $tab ) {
 				return ( self::$tabs[ $tab ]['key_for'] )( $w['start'], $w['end'] );
 			},
 			Preset_Windows::all( current_datetime() )
 		);
+		$keep[] = $warmed_key;
 		Cache::prune_durable( $tab, $keep );
 	}
 
@@ -255,6 +299,31 @@ final class Prewarm {
 	 */
 	private static function today(): string {
 		return current_datetime()->format( 'Y-m-d' );
+	}
+
+	/**
+	 * Log a skipped per-window warm (unregistered tab or invalid date args), so a
+	 * fan-out/registry desync is diagnosable from logs rather than vanishing.
+	 *
+	 * @param string $tab    Tab slug (may be empty/unknown).
+	 * @param array  $args   The raw action args.
+	 * @param string $reason Why the window was skipped.
+	 */
+	private static function log_skip( string $tab, array $args, string $reason ): void {
+		if ( ! class_exists( '\Newspack\Logger' ) ) {
+			return;
+		}
+		\Newspack\Logger::newspack_log(
+			'newspack_insights_prewarm_skipped',
+			sprintf( '[%s] per-window warm skipped: %s', $tab, $reason ),
+			[
+				'tab'    => $tab,
+				'args'   => $args,
+				'reason' => $reason,
+				'header' => Cache::LOGGER_HEADER,
+			],
+			'warning'
+		);
 	}
 
 	/**
