@@ -125,7 +125,7 @@ class Listings_Wizard extends Wizard {
 			$this->slug,
 			'',
 			$icon,
-			'6.7'
+			6
 		);
 
 		if ( is_callable( [ Newspack_Listings_Settings::class, 'create_admin_page' ] ) ) {
