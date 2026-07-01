@@ -26,7 +26,7 @@ const { useHistory } = Router;
 
 const API_PATH = '/newspack/v1/wizard/newspack-audience-subscription-products/products';
 
-type Scope = 'subscriptions' | 'donations' | 'all' | 'groups';
+type Scope = 'subscriptions' | 'donations' | 'groups';
 
 const inScope = ( item: SubscriptionProduct, scope: Scope ): boolean => {
 	if ( scope === 'groups' ) {
@@ -35,9 +35,6 @@ const inScope = ( item: SubscriptionProduct, scope: Scope ): boolean => {
 	// Individual products only — plan bundles live in their own scope.
 	if ( item.type === 'grouped' ) {
 		return false;
-	}
-	if ( scope === 'all' ) {
-		return true;
 	}
 	return scope === 'donations' ? item.is_donation : ! item.is_donation;
 };

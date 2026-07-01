@@ -30,7 +30,7 @@ const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivEle
 			fixedHeader
 			sections={ [
 				// Scope tabs. Each renders the same list, filtered to its scope (passed via
-				// `props`). The first three are *individual* products by purpose; "Plan bundles"
+				// `props`). The first two are *individual* products by purpose; "Plan bundles"
 				// is a separate structural lens for grouped containers, so a bundle never appears
 				// inline among the products it bundles. Default (`/`) is non-donation subscriptions.
 				{
@@ -46,14 +46,6 @@ const AudienceSubscriptionProducts = ( props: object, ref: React.Ref< HTMLDivEle
 					label: __( 'Donations', 'newspack-plugin' ),
 					render: SubscriptionProductsList,
 					props: { scope: 'donations' },
-					exact: true,
-					fullWidth: true,
-				},
-				{
-					path: '/all',
-					label: __( 'All', 'newspack-plugin' ),
-					render: SubscriptionProductsList,
-					props: { scope: 'all' },
 					exact: true,
 					fullWidth: true,
 				},
