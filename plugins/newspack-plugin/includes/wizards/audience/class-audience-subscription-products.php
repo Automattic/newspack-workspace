@@ -1163,8 +1163,8 @@ class Audience_Subscription_Products extends Wizard {
 	 *
 	 * NOTE: we deliberately do NOT infer "private" from catalog_visibility=hidden —
 	 * Newspack hides donation/RAS products from the catalog for unrelated reasons, so that
-	 * signal is too noisy. This is the signal publishers explicitly reach for; the real
-	 * RSM/entitlement layer should own it as a typed field rather than inferring it.
+	 * signal is too noisy. This is the signal publishers explicitly reach for; a
+	 * first-class entitlement field should own it as a typed value rather than inferring it.
 	 *
 	 * @param float|null $base_price The representative base price.
 	 * @param array      $categories Category terms ({ id, name, slug }).

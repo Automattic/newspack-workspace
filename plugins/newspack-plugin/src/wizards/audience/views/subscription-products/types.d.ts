@@ -40,7 +40,7 @@ interface SubscriptionProductCategory {
 }
 
 /**
- * The consolidated, productized row for a subscription product (Layer 1).
+ * The consolidated, productized row for a subscription product.
  */
 interface SubscriptionProduct {
 	id: number;

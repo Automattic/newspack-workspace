@@ -1,7 +1,7 @@
 /**
  * Subscription Products list view using DataViews.
  *
- * Layer 1 columns (name, type, price + period, active subscriptions, category, status)
+ * Columns (name, type, price + period, active subscriptions, category, status)
  * are built from live WooCommerce Subscriptions data.
  */
 
@@ -45,8 +45,8 @@ const DEFAULT_VIEW: View = {
 	perPage: 25,
 	sort: { field: 'name', direction: 'asc' },
 	search: '',
-	// Default columns = hard facts (price, active subs, status) + the RSM differentiator
-	// (unlocks). Derived/secondary attributes stay defined below — so they remain filters
+	// Default columns = hard facts (price, active subs, status) + what the product
+	// unlocks. Derived/secondary attributes stay defined below — so they remain filters
 	// and toggleable columns — but are off by default:
 	//  - `type`: a raw Woo mechanic; the Price column already signals simple vs variable.
 	//  - `category`: 4 of 6 sampled publishers leave subscription products uncategorized.
