@@ -73,4 +73,63 @@ class Test_Cache_Ondemand extends WP_UnitTestCase {
 		$this->assertNotNull( Cache::peek_ondemand( $this->tab, $this->source, $this->key( '2026-06-01', '2026-06-01' ) ) );
 		$this->assertNull( Cache::peek_ondemand( $this->tab, $this->source, $this->key( '2026-06-02', '2026-06-02' ) ) );
 	}
+
+	public function test_store_writes_through_to_ondemand_on_windowed_compute_miss() {
+		$k   = $this->key( '2026-05-01', '2026-05-10' );
+		$win = $this->window( '2026-05-01', '2026-05-10' );
+		$calls = 0;
+		$compute = function () use ( &$calls ) {
+			$calls++;
+			return [ 'n' => 42 ];
+		};
+		$first  = Cache::store( $this->tab, $this->source, $k, $compute, $win );
+		$this->assertSame( [ 'n' => 42 ], $first['payload'] );
+		$this->assertSame( 1, $calls );
+		// The window is now durable; a second store serves it without recomputing.
+		$second = Cache::store( $this->tab, $this->source, $k, $compute, $win );
+		$this->assertSame( [ 'n' => 42 ], $second['payload'] );
+		$this->assertSame( 1, $calls, 'On-demand hit must not recompute.' );
+		$this->assertNotNull( Cache::peek_ondemand( $this->tab, $this->source, $k ) );
+	}
+
+	public function test_store_does_not_write_ondemand_without_window() {
+		$k = $this->key( '2026-05-11', '2026-05-20' );
+		Cache::store( $this->tab, $this->source, $k, fn() => [ 'n' => 1 ] ); // no $window
+		$this->assertNull( Cache::peek_ondemand( $this->tab, $this->source, $k ) );
+	}
+
+	public function test_store_does_not_write_ondemand_for_local_source() {
+		$k   = $this->key( '2026-05-21', '2026-05-30' );
+		$win = $this->window( '2026-05-21', '2026-05-30' );
+		Cache::store( $this->tab, Cache::SOURCE_LOCAL, $k, fn() => [ 'n' => 1 ], $win );
+		$this->assertNull( Cache::peek_ondemand( $this->tab, Cache::SOURCE_LOCAL, $k ) );
+	}
+
+	public function test_preset_durable_takes_precedence_over_ondemand() {
+		$k   = $this->key( '2026-04-01', '2026-04-10' );
+		$win = $this->window( '2026-04-01', '2026-04-10' );
+		Cache::store_ondemand( $this->tab, $this->source, $k, [ 'from' => 'ondemand' ], $win );
+		Cache::store_durable( $this->tab, $this->source, $k, [ 'from' => 'preset' ], $win );
+		$got = Cache::store( $this->tab, $this->source, $k, fn() => [ 'from' => 'compute' ], $win );
+		$this->assertSame( [ 'from' => 'preset' ], $got['payload'] );
+		// Clean up the preset entry written here (ondemand handled by tearDown).
+		Cache::prune_durable( $this->tab, [] );
+	}
+
+	public function test_stale_ondemand_is_recomputed_inline() {
+		$k   = $this->key( '2026-03-01', '2026-03-10' );
+		$win = $this->window( '2026-03-01', '2026-03-10' );
+		// Seed a stale on-demand entry by hand (computed_at well beyond the freshness bound).
+		$stale_ts = gmdate( 'Y-m-d\TH:i:s\Z', time() - ( Cache::TTL_DURABLE_FRESH + HOUR_IN_SECONDS ) );
+		update_option(
+			'newspack_insights_ondemand_' . $this->tab . '_' . md5( (string) wp_json_encode( $k ) ),
+			[ 'payload' => [ 'n' => 1 ], 'computed_at' => $stale_ts, 'source' => $this->source, 'window' => $win ],
+			false
+		);
+		$got = Cache::store( $this->tab, $this->source, $k, fn() => [ 'n' => 2 ], $win );
+		$this->assertSame( [ 'n' => 2 ], $got['payload'], 'Stale on-demand entry must be recomputed inline.' );
+		$refreshed = Cache::peek_ondemand( $this->tab, $this->source, $k );
+		$this->assertSame( [ 'n' => 2 ], $refreshed['payload'] );
+		$this->assertTrue( Cache::is_fresh( $refreshed['computed_at'] ) );
+	}
 }

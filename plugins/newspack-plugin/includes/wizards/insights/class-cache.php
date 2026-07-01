@@ -64,36 +64,34 @@ final class Cache {
 	}
 
 	/**
-	 * Store-or-compute. For SOURCE_LOCAL this is a pure pass-through.
+	 * Store-or-compute for one window. For SOURCE_LOCAL this is a pure
+	 * pass-through. Read precedence: preset durable → on-demand durable (fresh)
+	 * → envelope transient → live compute. A live compute for a windowed
+	 * BigQuery-proxy source (when $window is supplied) write-throughs to the
+	 * on-demand pool so the window survives memcached eviction; a stale
+	 * on-demand entry is recomputed inline and overwritten.
 	 *
-	 * @param string   $tab       Tab slug.
-	 * @param string   $source    SOURCE_* constant.
-	 * @param string[] $key_parts Canonicalized window components.
-	 * @param callable $compute   () => array — orchestrator payload.
+	 * @param string     $tab       Tab slug.
+	 * @param string     $source    SOURCE_* constant.
+	 * @param string[]   $key_parts Canonicalized window components.
+	 * @param callable   $compute   () => array — orchestrator payload.
+	 * @param array|null $window    [ 'start' => 'Y-m-d', 'end' => 'Y-m-d' ] to
+	 *                              enable on-demand caching of this window; null
+	 *                              disables it (non-windowed callers).
 	 * @return array{ payload: array, computed_at: string, source: string, cooldown_until: ?string }
 	 */
-	public static function store( string $tab, string $source, array $key_parts, callable $compute ): array {
+	public static function store( string $tab, string $source, array $key_parts, callable $compute, ?array $window = null ): array {
 		if ( self::SOURCE_LOCAL === $source || self::is_disabled() ) {
 			return self::envelope( (array) $compute(), $source );
 		}
 
 		$cooldown_until = self::SOURCE_BIGQUERY === $source ? self::bq_cooldown_until( $tab ) : null;
 
-		// Durable warm store takes precedence over the transient. Pre-warmed
-		// preset windows live here (memcached-eviction-proof). A stale entry is
-		// still served instantly; we fire an action so the pre-warm layer can
-		// schedule an async background refresh (stale-while-revalidate).
+		// Preset durable pool (pre-warm owned). Stale entries still serve
+		// instantly; the SWR action schedules an async background refresh.
 		$durable = self::peek_durable( $tab, $source, $key_parts );
 		if ( null !== $durable ) {
 			if ( ! self::is_fresh( $durable['computed_at'] ) ) {
-				/**
-				 * Fires when a durable warm entry is served past its freshness
-				 * bound. The pre-warm layer schedules an async refresh.
-				 *
-				 * @param string $tab   Tab slug.
-				 * @param string $start Window start (Y-m-d).
-				 * @param string $end   Window end (Y-m-d).
-				 */
 				do_action(
 					'newspack_insights_durable_stale',
 					$tab,
@@ -109,16 +107,32 @@ final class Cache {
 			];
 		}
 
-		$key = self::transient_key( $tab, $key_parts );
-		$cached         = get_transient( $key );
-
-		if ( is_array( $cached ) && isset( $cached['payload'], $cached['computed_at'], $cached['source'] ) ) {
+		// On-demand durable pool (lazily populated). A fresh entry serves
+		// instantly; a stale one is recomputed inline below and overwritten.
+		$ondemand      = self::peek_ondemand( $tab, $source, $key_parts );
+		$ondemand_stale = null !== $ondemand && ! self::is_fresh( $ondemand['computed_at'] );
+		if ( null !== $ondemand && ! $ondemand_stale ) {
 			return [
-				'payload'        => $cached['payload'],
-				'computed_at'    => $cached['computed_at'],
-				'source'         => $cached['source'],
+				'payload'        => $ondemand['payload'],
+				'computed_at'    => $ondemand['computed_at'],
+				'source'         => $ondemand['source'],
 				'cooldown_until' => $cooldown_until,
 			];
+		}
+
+		// Envelope transient — consulted only on a true miss (not when refreshing
+		// a stale on-demand entry, which must recompute).
+		if ( null === $ondemand ) {
+			$key    = self::transient_key( $tab, $key_parts );
+			$cached = get_transient( $key );
+			if ( is_array( $cached ) && isset( $cached['payload'], $cached['computed_at'], $cached['source'] ) ) {
+				return [
+					'payload'        => $cached['payload'],
+					'computed_at'    => $cached['computed_at'],
+					'source'         => $cached['source'],
+					'cooldown_until' => $cooldown_until,
+				];
+			}
 		}
 
 		$payload  = (array) $compute();
@@ -129,9 +143,17 @@ final class Cache {
 			'computed_at' => $envelope['computed_at'],
 			'source'      => $envelope['source'],
 		];
-		set_transient( $key, $store, self::ttl_for( $source ) );
+		set_transient( self::transient_key( $tab, $key_parts ), $store, self::ttl_for( $source ) );
 		if ( self::SOURCE_SNAPSHOT !== $source ) {
-			self::index_add( $tab, $key );
+			self::index_add( $tab, self::transient_key( $tab, $key_parts ) );
+		}
+
+		// Write-through / refresh the on-demand pool for windowed BQ-proxy sources.
+		if (
+			null !== $window &&
+			( self::SOURCE_EXTERNAL === $source || self::SOURCE_BIGQUERY === $source )
+		) {
+			self::store_ondemand( $tab, $source, $key_parts, $envelope['payload'], $window );
 		}
 
 		$envelope['cooldown_until'] = $cooldown_until;
