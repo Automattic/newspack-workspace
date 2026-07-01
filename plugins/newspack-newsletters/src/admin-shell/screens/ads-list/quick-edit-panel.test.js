@@ -103,6 +103,16 @@ describe( 'AdsQuickEditPanel status control', () => {
 		expect( postCall().data ).not.toHaveProperty( 'status' );
 	} );
 
+	it( 'flattens a scheduled (future) ad to draft when toggled to Inactive', async () => {
+		const onSaved = jest.fn();
+		renderPanel( makeItem( 'future' ), { onSaved } );
+		// Toggling a scheduled ad off is a manual override: it POSTs `draft`, discarding the scheduled post_date.
+		fireEvent.click( await screen.findByRole( 'radio', { name: 'Inactive' } ) );
+		fireEvent.click( screen.getByTestId( 'panel-save' ) );
+		await waitFor( () => expect( onSaved ).toHaveBeenCalled() );
+		expect( postCall().data.status ).toBe( 'draft' );
+	} );
+
 	it( 'selects Inactive for a private ad and preserves it by omitting status when unchanged', async () => {
 		const onSaved = jest.fn();
 		renderPanel( makeItem( 'private' ), { onSaved } );
