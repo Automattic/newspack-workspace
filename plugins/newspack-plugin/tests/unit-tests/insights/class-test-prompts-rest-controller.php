@@ -549,16 +549,16 @@ class Test_Prompts_REST_Controller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Prompts_REST_Controller overrides cache_schema_version() with Prompts_Metric::CACHE_PREFIX
-	 * (tab5_v2), so bumping the prefix on a response-shape change busts stale-shape
-	 * transients on deploy.
+	 * Prompts_REST_Controller no longer overrides cache_schema_version(); it inherits
+	 * the global Cache::ENVELOPE_SCHEMA_VERSION from Cached_Controller_Trait, so
+	 * bumping that constant busts all tabs at once on a shape-changing deploy.
 	 */
-	public function test_prompts_controller_cache_version_is_tab5_v2_prefix() {
+	public function test_prompts_controller_cache_version_is_global_envelope_version() {
 		$controller = new Prompts_REST_Controller();
 		$ref        = new \ReflectionMethod( $controller, 'cache_schema_version' );
 		$ref->setAccessible( true );
-		$this->assertSame( Prompts_Metric::CACHE_PREFIX, $ref->invoke( $controller ) );
-		$this->assertStringContainsString( 'v2', Prompts_Metric::CACHE_PREFIX );
+		$this->assertSame( Cache::ENVELOPE_SCHEMA_VERSION, $ref->invoke( $controller ) );
+		$this->assertNotEmpty( Cache::ENVELOPE_SCHEMA_VERSION );
 	}
 
 	/**

@@ -14,6 +14,7 @@
 namespace Newspack\Tests\Insights;
 
 use Newspack\Insights\Cache;
+use Newspack\Insights\Audience_REST_Controller;
 use Newspack\Insights\Conversion_Metric;
 use Newspack\Insights\Conversion_REST_Controller;
 use Newspack\Insights\Cached_Controller_Trait;
@@ -446,11 +447,12 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Default: a controller that doesn't override cache_schema_version() keeps
-	 * the canonical four-part window key — no version component, so unrelated
-	 * tabs aren't cache-busted by this mechanism.
+	 * Global versioning: every controller (including a plain trait consumer that
+	 * does not override cache_schema_version()) now produces a five-part key with
+	 * Cache::ENVELOPE_SCHEMA_VERSION as the first component. The consolidation
+	 * ensures all tabs are versioned uniformly — no per-tab opt-in required.
 	 */
-	public function test_cache_key_has_no_version_prefix_by_default() {
+	public function test_cache_key_has_global_version_prefix_by_default() {
 		$controller = new class() {
 			use Cached_Controller_Trait;
 
@@ -491,14 +493,16 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 		$method->setAccessible( true );
 		$parts = $method->invoke( $controller, $request );
 
-		$this->assertCount( 4, $parts );
-		$this->assertSame( '2026-01-01', $parts[0] );
+		$this->assertCount( 5, $parts );
+		$this->assertSame( Cache::ENVELOPE_SCHEMA_VERSION, $parts[0] );
+		$this->assertSame( '2026-01-01', $parts[1] );
 	}
 
 	/**
-	 * Conversion overrides cache_schema_version() with its CACHE_PREFIX, so the
-	 * version is the first cache-key component — bumping CACHE_PREFIX on a
-	 * response-shape change busts stale-shape transients on deploy.
+	 * Conversion no longer overrides cache_schema_version(); it inherits the
+	 * global Cache::ENVELOPE_SCHEMA_VERSION so the version is the first
+	 * cache-key component — bumping the global constant on any shape change
+	 * busts all tabs' stale-shape transients on deploy.
 	 */
 	public function test_conversion_cache_key_includes_schema_version() {
 		$controller = new Conversion_REST_Controller();
@@ -511,8 +515,31 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 		$parts = $method->invoke( $controller, $request );
 
 		$this->assertCount( 5, $parts );
-		$this->assertSame( Conversion_Metric::CACHE_PREFIX, $parts[0] );
+		$this->assertSame( Cache::ENVELOPE_SCHEMA_VERSION, $parts[0] );
 		$this->assertContains( '2026-01-01', $parts );
+	}
+
+	/**
+	 * Global-version consolidation: a previously-unversioned tab (Audience, Tab 1)
+	 * now inherits Cache::ENVELOPE_SCHEMA_VERSION from the trait default, confirming
+	 * that the consolidation applies to ALL tabs — not just the three that formerly
+	 * opted in via per-tab CACHE_PREFIX overrides.
+	 */
+	public function test_global_version_applies_to_previously_unversioned_tab() {
+		$controller = new Audience_REST_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-insights/v1/audience' );
+		$request->set_param( 'start', '2026-01-01' );
+		$request->set_param( 'end', '2026-01-31' );
+
+		$method = new ReflectionMethod( Audience_REST_Controller::class, 'versioned_cache_key_parts' );
+		$method->setAccessible( true );
+		$parts = $method->invoke( $controller, $request );
+
+		// Five parts: global version + start + end + null + null.
+		$this->assertCount( 5, $parts );
+		$this->assertSame( Cache::ENVELOPE_SCHEMA_VERSION, $parts[0] );
+		$this->assertSame( '2026-01-01', $parts[1] );
+		$this->assertSame( '2026-01-31', $parts[2] );
 	}
 
 	/**

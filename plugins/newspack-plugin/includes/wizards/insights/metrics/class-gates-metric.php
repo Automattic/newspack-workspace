@@ -43,14 +43,6 @@ use Newspack\Insights\Subscribers_Metric;
 final class Gates_Metric {
 
 	/**
-	 * Cache key prefix. Bumped when the response shape changes so
-	 * cached payloads from a prior shape don't break a deploy.
-	 *
-	 * @var string
-	 */
-	const CACHE_PREFIX = 'newspack_insights_tab4_v2:';
-
-	/**
 	 * Data-source classification per metric key (NPPD-1746), the Gates-tab twin of
 	 * {@see Prompts_Metric::METRIC_SOURCES}:
 	 *

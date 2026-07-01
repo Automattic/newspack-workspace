@@ -173,13 +173,14 @@ class Test_Insights_Prewarm extends WP_UnitTestCase {
 	/**
 	 * REGRESSION — versioned-key prune correctness (FIX 1 / blocker).
 	 *
-	 * Uses the real Gates_REST_Controller (which overrides cache_schema_version()
-	 * with Gates_Metric::CACHE_PREFIX) to prove that after run_prewarm() the
-	 * durable entry SURVIVES the prune call under the versioned key.
+	 * Uses the real Gates_REST_Controller (now versioned via the global
+	 * Cache::ENVELOPE_SCHEMA_VERSION instead of the per-tab Gates_Metric::CACHE_PREFIX)
+	 * to prove that after run_prewarm() the durable entry SURVIVES the prune call
+	 * under the versioned key.
 	 *
 	 * The bug: run_prewarm() previously built its keep-list from unversioned key
 	 * parts [ $start, $end, null, null ], but warm_window() stored entries under
-	 * versioned parts [ CACHE_PREFIX, $start, $end, null, null ]. The keep hash
+	 * versioned parts [ version, $start, $end, null, null ]. The keep hash
 	 * never matched the stored hash, so prune_durable() deleted the entry the run
 	 * had just warmed, giving zero durable benefit on any tab with a non-empty
 	 * cache_schema_version(). This test FAILS against the pre-fix code and PASSES
@@ -221,9 +222,10 @@ class Test_Insights_Prewarm extends WP_UnitTestCase {
 		$start_str = $last30['start']->format( 'Y-m-d' );
 		$end_str   = $last30['end']->format( 'Y-m-d' );
 
-		// The durable entry must exist under the VERSIONED key (CACHE_PREFIX + window).
+		// The durable entry must exist under the GLOBAL-VERSIONED key
+		// (Cache::ENVELOPE_SCHEMA_VERSION + window), not the old per-tab CACHE_PREFIX.
 		$versioned_key = array_merge(
-			[ \Newspack\Insights\Gates_Metric::CACHE_PREFIX ],
+			[ Cache::ENVELOPE_SCHEMA_VERSION ],
 			[ $start_str, $end_str, null, null ]
 		);
 		$durable = Cache::peek_durable( 'gates', Cache::SOURCE_BIGQUERY, $versioned_key );

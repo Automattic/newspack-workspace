@@ -29,13 +29,14 @@ trait Cached_Controller_Trait {
 	abstract protected function tab_slug(): string;
 
 	/**
-	 * Response-shape version mixed into the cache key. Override and bump it when
-	 * a controller's payload shape changes so cached payloads from a prior shape
-	 * don't survive a deploy. Default empty: no version component, so controllers
-	 * that don't opt in keep their existing key shape (no surprise cache-bust).
+	 * Global envelope cache-schema version mixed into the cache key for every
+	 * Insights controller. Returns {@see Cache::ENVELOPE_SCHEMA_VERSION} by
+	 * default so ALL tabs are versioned uniformly — no per-tab opt-in required.
+	 * Override only when a single tab needs an independent bump that must NOT
+	 * bust the rest of the pre-warm cycle.
 	 */
 	protected function cache_schema_version(): string {
-		return '';
+		return Cache::ENVELOPE_SCHEMA_VERSION;
 	}
 
 	/**

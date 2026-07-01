@@ -57,14 +57,6 @@ use Newspack\Insights\Subscribers_Metric;
 final class Prompts_Metric {
 
 	/**
-	 * Cache key prefix. Bumped when the response shape changes so
-	 * cached payloads from a prior shape don't break a deploy.
-	 *
-	 * @var string
-	 */
-	const CACHE_PREFIX = 'newspack_insights_tab5_v2:';
-
-	/**
 	 * Display labels for each `action_type` (intent) value. Spec §7.2 prescribes
 	 * title-cased labels with `newsletters_subscription` rendered as the more
 	 * publisher-friendly "Newsletter signup" (the auto-ucwords result —

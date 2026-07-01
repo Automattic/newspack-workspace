@@ -22,6 +22,15 @@ final class Cache {
 
 	const SOURCE_SNAPSHOT = 'snapshot';
 
+	/**
+	 * Global envelope cache-schema version, folded into every Insights window
+	 * cache key (durable + transient) via Cached_Controller_Trait. Bump this on
+	 * ANY Insights window-payload shape change so a shape-changing deploy cannot
+	 * serve an old-shaped durable/transient payload to the new frontend. A bump
+	 * busts every tab's window cache at once (one cold pre-warm cycle).
+	 */
+	const ENVELOPE_SCHEMA_VERSION = 'v1';
+
 	const TTL_SNAPSHOT = 9 * DAY_IN_SECONDS;
 
 	const TTL_DURABLE_FRESH = 25 * HOUR_IN_SECONDS;

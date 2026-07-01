@@ -78,17 +78,6 @@ class Conversion_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Response-shape version for the conversion cache key. Bump
-	 * {@see Conversion_Metric::CACHE_PREFIX} whenever the Tab 3 response shape
-	 * changes so cached payloads from a prior shape don't survive a deploy.
-	 *
-	 * @return string
-	 */
-	protected function cache_schema_version(): string {
-		return Conversion_Metric::CACHE_PREFIX;
-	}
-
-	/**
 	 * Register the Tab 3 routes.
 	 *
 	 * @return void
