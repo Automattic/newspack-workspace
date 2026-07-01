@@ -1438,12 +1438,21 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that the flush-change-detection option is updated only when the
-	 * set of endpoint slugs actually changes.
+	 * The Integrations flush-detection option is a WooCommerce-only concern.
+	 *
+	 * When WooCommerce is absent (as in the test env), the native My_Account
+	 * shell owns rewrite registration and flush detection for the whole endpoint
+	 * set, so `register_my_account_endpoints()` must not write the Integrations
+	 * option or register rewrite endpoints — it only populates the slug =>
+	 * integration map that the native shell consumes for labels and dispatch.
 	 */
-	public function test_my_account_endpoints_option_tracks_changes() {
+	public function test_my_account_endpoints_flush_option_is_woo_only() {
 		delete_option( Integrations::MY_ACCOUNT_ENDPOINTS_OPTION );
 		$this->reset_my_account_endpoints();
+
+		$reflection = new \ReflectionClass( Integrations::class );
+		$property   = $reflection->getProperty( 'my_account_endpoints' );
+		$property->setAccessible( true );
 
 		$this->register_active_integration_with_menu(
 			'one',
@@ -1454,13 +1463,18 @@ class Test_Integrations extends \WP_UnitTestCase {
 		);
 
 		Integrations::register_my_account_endpoints();
-		$this->assertSame( [ 'one-page' ], get_option( Integrations::MY_ACCOUNT_ENDPOINTS_OPTION ) );
+		$this->assertFalse(
+			get_option( Integrations::MY_ACCOUNT_ENDPOINTS_OPTION ),
+			'The Woo-only flush option must not be written when WooCommerce is absent.'
+		);
+		$this->assertSame( [ 'one-page' => 'one' ], $property->getValue() );
 
-		// No change: running again must keep the option stable.
-		Integrations::register_my_account_endpoints();
-		$this->assertSame( [ 'one-page' ], get_option( Integrations::MY_ACCOUNT_ENDPOINTS_OPTION ) );
+		// The slug is still contributed to the native shell with its label.
+		$endpoints = Integrations::filter_native_my_account_endpoints( [] );
+		$this->assertArrayHasKey( 'one-page', $endpoints );
+		$this->assertSame( 'One', $endpoints['one-page'] );
 
-		// Add a second integration: option must now include both, sorted.
+		// Add a second integration: the map grows; the option stays unwritten.
 		$this->register_active_integration_with_menu(
 			'two',
 			[
@@ -1469,12 +1483,16 @@ class Test_Integrations extends \WP_UnitTestCase {
 			]
 		);
 		Integrations::register_my_account_endpoints();
-		$this->assertSame( [ 'one-page', 'two-page' ], get_option( Integrations::MY_ACCOUNT_ENDPOINTS_OPTION ) );
+		$this->assertFalse( get_option( Integrations::MY_ACCOUNT_ENDPOINTS_OPTION ) );
+		$map = $property->getValue();
+		$this->assertCount( 2, $map );
+		$this->assertArrayHasKey( 'one-page', $map );
+		$this->assertArrayHasKey( 'two-page', $map );
 
-		// Disable 'one': option must shrink back to just 'two-page'.
+		// Disable 'one': the map shrinks back to just 'two-page'.
 		Integrations::disable( 'one' );
 		Integrations::register_my_account_endpoints();
-		$this->assertSame( [ 'two-page' ], get_option( Integrations::MY_ACCOUNT_ENDPOINTS_OPTION ) );
+		$this->assertSame( [ 'two-page' => 'two' ], $property->getValue() );
 	}
 
 	/**

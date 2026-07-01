@@ -229,7 +229,13 @@ export function useWizardApiFetch( slug: string ) {
 				.catch( catchCallback )
 				.finally( finallyCallback );
 
-			return promiseCache[ slug ];
+			// Return the promise we just stored, keyed by `cacheKeyPath` —
+			// the same key it was written under. Returning `promiseCache[ slug ]`
+			// (the hook's slug, a different key) handed callers `undefined`,
+			// so a `.catch()` at the call site attached to the resolved async
+			// wrapper instead of the real request and never saw the rejection
+			// `catchCallback` re-throws.
+			return promiseCache[ cacheKeyPath ];
 		},
 		[ wizardApiFetch, wizardData, updateWizardSettings, isFetching, slug ]
 	);

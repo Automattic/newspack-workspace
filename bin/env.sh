@@ -153,8 +153,18 @@ case $1 in
                         wt_container_path="/newspack-plugins/$wt_repo"
                     fi
                     worktree_dir="./worktrees/$safe_branch/$wt_host_path"
-                    worktree_volumes="$worktree_volumes      - $worktree_dir:$wt_container_path
-"
+                    # Mount the worktree subdir at BOTH container roots:
+                    #   - the site-serving path (/newspack-plugins|themes/<repo>), and
+                    #   - the pnpm-workspace path (/newspack-monorepo/<host_path>).
+                    # The site reads the first; the JS toolchain (n build / n test-js /
+                    # jest, all resolved under /newspack-monorepo) reads the second. Without
+                    # the workspace mount the toolchain builds/tests the *main* checkout's
+                    # source, never the worktree's, and the worktree's own node_modules has
+                    # relative pnpm symlinks (../../../packages/*) that only resolve when the
+                    # plugin sits at its real workspace location. Mounting here makes both
+                    # work, so builds land in the worktree's dist and are served immediately.
+                    worktree_volumes+="      - $worktree_dir:$wt_container_path"$'\n'
+                    worktree_volumes+="      - $worktree_dir:/newspack-monorepo/$wt_host_path"$'\n'
                     shift 2
                     ;;
                 --domain)
@@ -200,6 +210,7 @@ services:
       - .:/newspack-monorepo
       - ./plugins:/newspack-plugins
       - ./themes:/newspack-themes
+      - ./repos:/newspack-repos
 ${worktree_volumes}      - ./envs/${env_name}/html:/var/www/html
       - ./manager-html:/var/www/manager-html
       - ./additional-sites-html:/var/www/additional-sites-html

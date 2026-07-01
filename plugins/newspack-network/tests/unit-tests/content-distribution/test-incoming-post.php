@@ -387,6 +387,102 @@ class TestIncomingPost extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPM-2871: An origin `publish` re-sync must not unschedule a node post
+	 * that has been locally rescheduled to `future`. Content still flows.
+	 */
+	public function test_origin_publish_preserves_node_future_schedule() {
+		// Linked post arrives and is created (sample payload is post_status=publish, status_on_publish=draft → draft).
+		$post_id = $this->incoming_post->insert();
+		$this->assertSame( 'draft', get_post_status( $post_id ) );
+
+		// Node editor reschedules locally to a future date.
+		$future_gmt = '2099-12-31 10:16:00';
+		wp_update_post(
+			[
+				'ID'            => $post_id,
+				'post_status'   => 'future',
+				'post_date'     => $future_gmt,
+				'post_date_gmt' => $future_gmt,
+			]
+		);
+		$this->assertSame( 'future', get_post_status( $post_id ) );
+
+		// Origin edits and re-syncs as `publish` with its own (past) date_gmt.
+		$payload = $this->get_sample_payload();
+		$payload['post_data']['post_status'] = 'publish';
+		$payload['post_data']['title']       = 'Edited By Origin';
+		$payload['post_data']['date_gmt']    = '2021-01-01 00:00:00';
+		$this->incoming_post->insert( $payload );
+
+		// Node schedule must be preserved (status + both date fields coherent).
+		$this->assertSame( 'future', get_post_status( $post_id ), 'Node post must stay scheduled.' );
+		$this->assertSame( $future_gmt, get_post_field( 'post_date_gmt', $post_id ), 'Node GMT date must be preserved.' );
+		$this->assertSame( $future_gmt, get_post_field( 'post_date', $post_id ), 'Node local date must be preserved.' );
+
+		// Content still flows through.
+		$this->assertSame( 'Edited By Origin', get_the_title( $post_id ) );
+	}
+
+	/**
+	 * NPPM-2871: The future-schedule guard is scoped to incoming `publish`.
+	 * An origin-side removal (`trash`) must still propagate to a locally
+	 * scheduled node post — a retracted story must not stay scheduled.
+	 */
+	public function test_origin_trash_still_propagates_to_scheduled_node() {
+		$post_id = $this->incoming_post->insert();
+
+		// Node editor reschedules locally to a future date.
+		$future_gmt = '2099-12-31 10:16:00';
+		wp_update_post(
+			[
+				'ID'            => $post_id,
+				'post_status'   => 'future',
+				'post_date'     => $future_gmt,
+				'post_date_gmt' => $future_gmt,
+			]
+		);
+		$this->assertSame( 'future', get_post_status( $post_id ) );
+
+		// Origin trashes the story.
+		$payload = $this->get_sample_payload();
+		$payload['post_data']['post_status'] = 'trash';
+		$this->incoming_post->insert( $payload );
+
+		// Removal propagates despite the local schedule.
+		$this->assertSame( 'trash', get_post_status( $post_id ) );
+	}
+
+	/**
+	 * NPPM-2871: An origin-side unpublish to `draft` must also reach a locally
+	 * scheduled node post. `draft` takes a different WP path than `trash`
+	 * (a `future`→`draft` transition through `wp_update_post`), so cover it
+	 * explicitly to lock the guard's `publish`-only scope.
+	 */
+	public function test_origin_draft_unpublish_propagates_to_scheduled_node() {
+		$post_id = $this->incoming_post->insert();
+
+		// Node editor reschedules locally to a future date.
+		$future_gmt = '2099-12-31 10:16:00';
+		wp_update_post(
+			[
+				'ID'            => $post_id,
+				'post_status'   => 'future',
+				'post_date'     => $future_gmt,
+				'post_date_gmt' => $future_gmt,
+			]
+		);
+		$this->assertSame( 'future', get_post_status( $post_id ) );
+
+		// Origin unpublishes the story back to draft.
+		$payload = $this->get_sample_payload();
+		$payload['post_data']['post_status'] = 'draft';
+		$this->incoming_post->insert( $payload );
+
+		// Unpublish propagates despite the local schedule.
+		$this->assertSame( 'draft', get_post_status( $post_id ) );
+	}
+
+	/**
 	 * Test delete.
 	 */
 	public function test_delete() {

@@ -511,9 +511,17 @@ class Newsletters_Access {
 			return [ 'action' => 'skipped' ];
 		}
 
-		$list_id = sanitize_text_field( wp_unslash( $_GET['utm_source'] ?? '' ) );
 		// phpcs:enable
-		if ( empty( $list_id ) || ! self::is_valid_send_list_id( $list_id ) ) {
+		// A URL can carry multiple `utm_source` values when more than one
+		// system decorates the link (e.g. Newspack Newsletters writes one
+		// at send time and Mailchimp's audience-level Google Analytics
+		// option appends another on top). PHP's $_GET keeps only the last
+		// occurrence per key, so reading $_GET['utm_source'] discards the
+		// Newspack-issued list ID whenever a second utm_source follows.
+		// Walk the raw query string and accept the first value that
+		// resolves to a known send list.
+		$list_id = self::resolve_utm_source_list_id();
+		if ( '' === $list_id ) {
 			return [ 'action' => 'invalid' ];
 		}
 
@@ -547,6 +555,66 @@ class Newsletters_Access {
 	public static function is_verification_enabled() {
 		$settings = \Newspack\Content_Gate_Advanced_Settings::get_settings();
 		return ! empty( $settings['newsletter_link_bypass_enabled'] );
+	}
+
+	/**
+	 * Walk the raw query string and return the first `utm_source` value
+	 * that `is_valid_send_list_id()` accepts. Returns an empty string when
+	 * no candidate matches.
+	 *
+	 * Necessary because $_GET only retains the last occurrence per key:
+	 * URLs like `?utm_source=51fd819e60&utm_source=Brand.example` (which
+	 * appear in the wild whenever Mailchimp's audience-level UTM tagging
+	 * is enabled on top of Newspack Newsletters' own link decoration)
+	 * would otherwise hand the wrong value to the registry check and
+	 * the bypass would silently fail.
+	 *
+	 * @return string Empty string when no utm_source value resolves to a
+	 *                known send list.
+	 */
+	private static function resolve_utm_source_list_id() {
+		// Read the request URI rather than QUERY_STRING directly: WP's
+		// WP_UnitTestCase::go_to() populates REQUEST_URI but not
+		// QUERY_STRING, so QUERY_STRING-based parsing breaks the existing
+		// UTM-fallback test suite. Real requests have both. wp_parse_url
+		// then gives the raw query untouched by PHP's $_GET de-duplication.
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- each candidate value is sanitize_text_field()'d below before any use.
+		$request_uri = isset( $_SERVER['REQUEST_URI'] ) ? wp_unslash( $_SERVER['REQUEST_URI'] ) : '';
+		if ( ! is_string( $request_uri ) || '' === $request_uri ) {
+			return '';
+		}
+		$raw = (string) wp_parse_url( $request_uri, PHP_URL_QUERY );
+		if ( '' === $raw ) {
+			return '';
+		}
+		// Hard cap on the candidate count so a query string stuffed with
+		// `?utm_source=&utm_source=&...` can't drive thousands of registry
+		// lookups. 32 is generous — real URLs have 1 or 2.
+		$max_candidates = 32;
+		$seen           = [];
+		$count          = 0;
+		foreach ( explode( '&', $raw ) as $pair ) {
+			if ( $count >= $max_candidates ) {
+				break;
+			}
+			$parts = explode( '=', $pair, 2 );
+			if ( 2 !== count( $parts ) ) {
+				continue;
+			}
+			if ( 'utm_source' !== rawurldecode( $parts[0] ) ) {
+				continue;
+			}
+			++$count;
+			$candidate = sanitize_text_field( rawurldecode( $parts[1] ) );
+			if ( '' === $candidate || isset( $seen[ $candidate ] ) ) {
+				continue;
+			}
+			$seen[ $candidate ] = true;
+			if ( self::is_valid_send_list_id( $candidate ) ) {
+				return $candidate;
+			}
+		}
+		return '';
 	}
 
 	/**

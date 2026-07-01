@@ -436,11 +436,13 @@ class WooCommerce_Subscriptions {
 		include_once __DIR__ . '/class-subscriptions-meta.php';
 		include_once __DIR__ . '/class-subscriptions-confirmation.php';
 		include_once __DIR__ . '/class-subscriptions-tiers.php';
+		include_once __DIR__ . '/class-card-expiry-warning.php';
 
 		On_Hold_Duration::init();
 		Renewal::init();
 		Subscriptions_Meta::init();
 		Subscriptions_Confirmation::init();
+		Card_Expiry_Warning::init();
 	}
 
 
@@ -636,8 +638,11 @@ class WooCommerce_Subscriptions {
 
 		$user_id = get_current_user_id();
 
-		// If not logged in, try to get the user ID from the billing email.
-		if ( ! $user_id && method_exists( 'Newspack_Blocks\Modal_Checkout', 'get_user_id_from_email' ) ) {
+		// Standard and modal checkout refreshes can both carry guest emails in serialized post_data.
+		if (
+			! $user_id &&
+			method_exists( 'Newspack_Blocks\Modal_Checkout', 'get_user_id_from_email' )
+		) {
 			$user_id = \Newspack_Blocks\Modal_Checkout::get_user_id_from_email();
 		}
 		if ( $trial_length && $user_id && $product && $product->is_type( [ 'subscription', 'subscription_variation', 'variable-subscription' ] ) ) {

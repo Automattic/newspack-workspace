@@ -1,12 +1,13 @@
 /**
- * Quick Edit panel for the ads list — advertiser, placement,
+ * Quick Edit panel for the ads list — status, advertiser, placement,
  * category, start/expiry dates, price.
  *
- * Status / insertion strategy / position stay in the full editor.
+ * Insertion strategy / position stay in the full editor; status is
+ * editable here.
  */
 
 import apiFetch from '@wordpress/api-fetch';
-import { FormTokenField, TextControl } from '@wordpress/components';
+import { FormTokenField, RadioControl, TextControl } from '@wordpress/components';
 import { useEffect, useMemo, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { emailAd } from 'newspack-icons';
@@ -40,13 +41,17 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 	const initialAdvertiserSelections = useMemo( () => initialSelectionsForTaxonomy( item, 'newspack_nl_advertiser' ), [ item ] );
 	const initialPlacementSelections = useMemo( () => initialSelectionsForTaxonomy( item, 'newspack_nl_ad_placement' ), [ item ] );
 	const initialCategorySelections = useMemo( () => initialSelectionsForTaxonomy( item, 'category' ), [ item ] );
-	const initialStartDate = item?.meta?.start_date || '';
-	const initialExpiryDate = item?.meta?.expiry_date || '';
+	// Slice to `Y-m-d` so legacy datetime meta still fills the date input.
+	const initialStartDate = ( item?.meta?.start_date || '' ).slice( 0, 10 );
+	const initialExpiryDate = ( item?.meta?.expiry_date || '' ).slice( 0, 10 );
 	const initialPrice = ( () => {
 		const value = item?.meta?.price;
 		return value ? String( value ) : '';
 	} )();
+	// `private` ads are never served (the serving queries are publish-only), so they are Inactive alongside drafts.
+	const initialStatus = [ 'publish', 'future' ].includes( item?.status ) ? 'active' : 'inactive';
 
+	const [ status, setStatus ] = useState( initialStatus );
 	const [ advertiserSelections, setAdvertiserSelections ] = useState( initialAdvertiserSelections );
 	const [ placementSelections, setPlacementSelections ] = useState( initialPlacementSelections );
 	const [ categorySelections, setCategorySelections ] = useState( initialCategorySelections );
@@ -56,6 +61,7 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 	const [ isBusy, setIsBusy ] = useState( false );
 
 	const isDirty =
+		status !== initialStatus ||
 		startDate !== initialStartDate ||
 		expiryDate !== initialExpiryDate ||
 		price !== initialPrice ||
@@ -96,6 +102,9 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 			categories: categorySelections.map( s => s.id ),
 			meta,
 		};
+		if ( status !== initialStatus ) {
+			data.status = status === 'active' ? 'publish' : 'draft';
+		}
 		try {
 			await apiFetch( { path: `${ POSTS_PATH }/${ item.id }`, method: 'POST', data } );
 			notifySuccess( __( 'Ad updated.', 'newspack-newsletters' ) );
@@ -120,6 +129,16 @@ export default function AdsQuickEditPanel( { item, advertisers, placements, onCl
 			canSave={ canSave }
 			saveLabel={ __( 'Save', 'newspack-newsletters' ) }
 		>
+			<RadioControl
+				label={ __( 'Status', 'newspack-newsletters' ) }
+				selected={ status }
+				options={ [
+					{ label: __( 'Active', 'newspack-newsletters' ), value: 'active' },
+					{ label: __( 'Inactive', 'newspack-newsletters' ), value: 'inactive' },
+				] }
+				onChange={ setStatus }
+				help={ __( 'Active ads run according to their start and expiration dates. Inactive ads are never shown.', 'newspack-newsletters' ) }
+			/>
 			<FormTokenField
 				label={ __( 'Advertiser', 'newspack-newsletters' ) }
 				value={ advertiserTokens }

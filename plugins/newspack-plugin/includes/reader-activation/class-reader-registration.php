@@ -36,6 +36,22 @@ final class Reader_Registration {
 	public static function register_routes() {
 		\register_rest_route(
 			NEWSPACK_API_NAMESPACE,
+			'/reader-activation/check-email',
+			[
+				'methods'             => \WP_REST_Server::CREATABLE,
+				'callback'            => [ __CLASS__, 'api_check_email_exists' ],
+				'permission_callback' => '__return_true',
+				'args'                => [
+					'email' => [
+						'type'              => 'string',
+						'sanitize_callback' => 'sanitize_email',
+						'default'           => '',
+					],
+				],
+			]
+		);
+		\register_rest_route(
+			NEWSPACK_API_NAMESPACE,
 			'/reader-activation/register',
 			[
 				'methods'             => \WP_REST_Server::CREATABLE,
@@ -185,25 +201,42 @@ final class Reader_Registration {
 	}
 
 	/**
-	 * Check and increment the per-IP rate limit for frontend registration.
+	 * Check and increment a per-IP rate-limit bucket for frontend registration traffic.
+	 *
+	 * Each bucket has its own per-IP counter at 10/hour. The /register endpoint and
+	 * the /check-email preflight use separate buckets so that:
+	 *   - A legitimate user submission (one preflight + one register) still buys 10
+	 *     full registrations per hour — neither endpoint can double-charge the other.
+	 *   - An attacker probing /check-email for email enumeration is rate-limited at
+	 *     10 requests/hour regardless of registration traffic, and vice versa.
+	 *
+	 * @param string $bucket Bucket key. 'registration' for /register (default, preserves
+	 *                       the existing cache key), 'check_email' for the preflight.
 	 *
 	 * @return bool|\WP_Error True if under limit, WP_Error if exceeded.
 	 */
-	private static function check_registration_rate_limit(): bool|\WP_Error {
+	private static function check_registration_rate_limit( string $bucket = 'registration' ): bool|\WP_Error {
 		// @todo REMOTE_ADDR may be a proxy/load-balancer IP in some environments.
 		// On WordPress VIP/Atomic this is the real client IP. For other hosts,
 		// consider parsing forwarded headers or providing a filter to override IP resolution.
 		// See WooCommerce_Connection::get_client_ip() for a forwarded-header approach.
-		$ip        = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '127.0.0.1'; // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders,WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
-		$cache_key = 'newspack_reg_ip_' . md5( $ip );
+		$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '127.0.0.1'; // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders,WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
+
+		// Bucket → cache-key prefix. Keep 'newspack_reg_ip_' for registration so any
+		// in-flight counters from prior releases continue to apply.
+		$prefix    = 'check_email' === $bucket ? 'newspack_check_email_ip_' : 'newspack_reg_ip_';
+		$cache_key = $prefix . md5( $ip );
 
 		/**
 		 * Filters the maximum number of frontend registration attempts per IP per hour.
 		 *
-		 * @param int    $limit Maximum attempts. Default 10.
-		 * @param string $ip    The client IP address.
+		 * Applies independently to each bucket: 10/hr for /register, 10/hr for /check-email.
+		 *
+		 * @param int    $limit  Maximum attempts. Default 10.
+		 * @param string $ip     The client IP address.
+		 * @param string $bucket Bucket name ('registration' or 'check_email').
 		 */
-		$limit = \apply_filters( 'newspack_frontend_registration_rate_limit', 10, $ip );
+		$limit = \apply_filters( 'newspack_frontend_registration_rate_limit', 10, $ip, $bucket );
 
 		if ( \wp_using_ext_object_cache() ) {
 			$cache_group = 'newspack_rate_limit';
@@ -216,7 +249,7 @@ final class Reader_Registration {
 		}
 
 		if ( $attempts > $limit ) {
-			Logger::log( 'Frontend registration rate limit exceeded for IP ' . $ip );
+			Logger::log( sprintf( 'Frontend registration rate limit exceeded for IP %1$s (bucket: %2$s)', $ip, $bucket ) );
 			return new \WP_Error(
 				'rate_limit_exceeded',
 				__( 'Too many registration attempts. Please try again later.', 'newspack-plugin' ),
@@ -442,6 +475,59 @@ final class Reader_Registration {
 		$response_data = array_merge( $response_data, Reader_Activation::get_verification_payload( $result ) );
 
 		return new \WP_REST_Response( $response_data, 201 );
+	}
+
+	/**
+	 * REST handler for checking whether an email maps to an existing reader.
+	 *
+	 * Used by registration entry points when the post-registration verification flow is
+	 * disabled — those flows need to ask the reader to confirm "You're about to create an
+	 * account for X" *before* the account is actually created, which requires knowing
+	 * up front whether the email is new or already registered.
+	 *
+	 * Privacy notes:
+	 *   - The /register and process_auth_form endpoints already disclose the same
+	 *     "this email is a reader" signal via their response shapes, so this isn't a
+	 *     net-new oracle.
+	 *   - Responses are filtered to readers only — staff/admin/editor accounts that share
+	 *     the email surface as "exists: false" so this endpoint can't be used to enumerate
+	 *     non-reader logins.
+	 *   - Rate-limited at 10 requests/hour per IP in its own bucket (separate from
+	 *     /register, so neither endpoint can starve the other and an enumeration
+	 *     attempt is independently bounded).
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public static function api_check_email_exists( \WP_REST_Request $request ) {
+		// Enforce a per-IP 10/hr budget in a bucket separate from /register so that
+		// hammering this endpoint can't enumerate emails without tripping the limit.
+		$rate_check = self::check_registration_rate_limit( 'check_email' );
+		if ( \is_wp_error( $rate_check ) ) {
+			return $rate_check;
+		}
+
+		$email = $request->get_param( 'email' );
+		if ( empty( $email ) || ! \is_email( $email ) ) {
+			return new \WP_Error(
+				'invalid_email',
+				__( 'A valid email address is required.', 'newspack-plugin' ),
+				[ 'status' => 400 ]
+			);
+		}
+
+		// Only disclose existence for reader accounts. Staff/admin/editor logins that
+		// happen to share the email return false so this endpoint can't be turned into
+		// a non-reader account enumerator.
+		$user   = \get_user_by( 'email', $email );
+		$exists = $user && Reader_Activation::is_user_reader( $user );
+
+		return new \WP_REST_Response(
+			[
+				'exists' => $exists,
+			],
+			200
+		);
 	}
 }
 Reader_Registration::init();
