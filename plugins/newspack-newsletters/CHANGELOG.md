@@ -1,3 +1,10 @@
+## newspack-newsletters [3.35.1](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.35.0...newspack-newsletters@3.35.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* **newsletters:** limit ad editor status to active/inactive ([d7c741c](https://github.com/Automattic/newspack-workspace/commit/d7c741cd0d56abfc2e962f5d0f0df22dc840bf2d))
+
 # newspack-newsletters [3.35.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.34.4...newspack-newsletters@3.35.0) (2026-06-29)
 
 
