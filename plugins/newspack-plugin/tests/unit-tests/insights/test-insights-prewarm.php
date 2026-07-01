@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests for Insights Prewarm.
+ * Tests for Insights Prewarm (per-window fan-out model).
  *
  * @package Newspack
  */
@@ -28,48 +28,160 @@ class Test_Insights_Prewarm extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Reset prewarm registry and marker option after each test.
+	 * Reset prewarm registry, marker option, and durable entries after each test.
 	 */
 	public function tearDown(): void {
 		delete_option( Prewarm::MARKER_OPTION );
+		Cache::prune_durable( 'gates', [] );
 		Prewarm::reset_registry_for_tests();
 		parent::tearDown();
 	}
 
 	/**
-	 * The run_prewarm method warms all five presets and records today's marker.
+	 * The versioned key a warmer/key_for closure returns for a window, matching
+	 * the shape Cached_Controller_Trait produces (global version prefix).
+	 *
+	 * @param DateTimeImmutable $start Window start.
+	 * @param DateTimeImmutable $end   Window end.
+	 * @return array
 	 */
-	public function test_run_prewarm_writes_durable_for_each_preset_and_sets_marker() {
-		$calls = [];
-		Prewarm::register_tab(
-			'gates',
-			function ( $start, $end ) use ( &$calls ) {
-				$calls[] = $start->format( 'Y-m-d' ) . '..' . $end->format( 'Y-m-d' );
-				$key     = [
-					$start->format( 'Y-m-d' ),
-					$end->format( 'Y-m-d' ),
-					null,
-					null,
-				];
-				Cache::store_durable(
-					'gates',
-					Cache::SOURCE_BIGQUERY,
-					$key,
-					[ 'ok' => true ],
-					[
-						'start' => $start->format( 'Y-m-d' ),
-						'end'   => $end->format( 'Y-m-d' ),
-					]
-				);
-				return $key;
-			}
-		);
+	private function versioned_key( $start, $end ): array {
+		return [
+			Cache::ENVELOPE_SCHEMA_VERSION,
+			$start->format( 'Y-m-d' ),
+			$end->format( 'Y-m-d' ),
+			null,
+			null,
+		];
+	}
+
+	/**
+	 * Register a fake 'gates' tab whose warmer stores a durable entry and returns
+	 * its key, paired with a matching key_for resolver.
+	 *
+	 * @param array $warmed Reference collecting warmed window labels.
+	 * @return void
+	 */
+	private function register_fake_gates( array &$warmed ): void {
+		$key_for = function ( $start, $end ) {
+			return $this->versioned_key( $start, $end );
+		};
+		$warmer  = function ( $start, $end ) use ( &$warmed, $key_for ) {
+			$warmed[] = $start->format( 'Y-m-d' ) . '..' . $end->format( 'Y-m-d' );
+			$key      = $key_for( $start, $end );
+			Cache::store_durable(
+				'gates',
+				Cache::SOURCE_BIGQUERY,
+				$key,
+				[ 'ok' => true ],
+				[
+					'start' => $start->format( 'Y-m-d' ),
+					'end'   => $end->format( 'Y-m-d' ),
+				]
+			);
+			return $key;
+		};
+		Prewarm::register_tab( 'gates', $warmer, $key_for );
+	}
+
+	/**
+	 * The dispatcher (run_prewarm) fans out one per-window action per preset and
+	 * warms NOTHING inline — this is the fix for the 300s monolithic-action timeout.
+	 */
+	public function test_run_prewarm_fans_out_per_window_and_warms_nothing_inline() {
+		$warmed = [];
+		$this->register_fake_gates( $warmed );
 
 		Prewarm::run_prewarm();
 
-		$this->assertCount( 5, $calls, 'All five presets warmed.' );
-		$today = current_datetime()->format( 'Y-m-d' );
-		$this->assertSame( $today, get_option( Prewarm::MARKER_OPTION ) );
+		$this->assertSame( [], $warmed, 'Dispatcher must not invoke warmers inline.' );
+
+		$windows = Preset_Windows::all( current_datetime() );
+		$this->assertCount( 5, $windows, 'Five preset windows.' );
+		foreach ( $windows as $w ) {
+			$args = [
+				[
+					'tab'   => 'gates',
+					'start' => $w['start']->format( 'Y-m-d' ),
+					'end'   => $w['end']->format( 'Y-m-d' ),
+				],
+			];
+			$this->assertTrue(
+				as_has_scheduled_action( Prewarm::WARM_WINDOW_ACTION, $args, Prewarm::WARM_GROUP ),
+				'A per-window warm action is enqueued for each preset.'
+			);
+		}
+	}
+
+	/**
+	 * The run_warm_window handler warms exactly the one requested window and prunes
+	 * orphaned (non-current-preset) durable entries for the tab.
+	 */
+	public function test_run_warm_window_warms_one_and_prunes_orphan() {
+		$warmed = [];
+		$this->register_fake_gates( $warmed );
+
+		// Seed an orphaned (old-date) durable entry that is not a current preset window.
+		$orphan_key = [ Cache::ENVELOPE_SCHEMA_VERSION, '2000-01-01', '2000-01-30', null, null ];
+		Cache::store_durable(
+			'gates',
+			Cache::SOURCE_BIGQUERY,
+			$orphan_key,
+			[ 'old' => true ],
+			[
+				'start' => '2000-01-01',
+				'end'   => '2000-01-30',
+			]
+		);
+
+		$windows = Preset_Windows::all( current_datetime() );
+		$w       = $windows[1]; // last-30.
+		Prewarm::run_warm_window(
+			[
+				'tab'   => 'gates',
+				'start' => $w['start']->format( 'Y-m-d' ),
+				'end'   => $w['end']->format( 'Y-m-d' ),
+			]
+		);
+
+		$this->assertSame( 1, count( $warmed ), 'Exactly one window warmed.' );
+		$this->assertNotNull(
+			Cache::peek_durable( 'gates', Cache::SOURCE_BIGQUERY, $this->versioned_key( $w['start'], $w['end'] ) ),
+			'The warmed window is stored durably.'
+		);
+		$this->assertNull(
+			Cache::peek_durable( 'gates', Cache::SOURCE_BIGQUERY, $orphan_key ),
+			'The orphaned (non-current-preset) entry is pruned.'
+		);
+	}
+
+	/**
+	 * The run_warm_window handler rejects an Action Scheduler date arg that does
+	 * not round-trip (e.g. a rolled-over 2026-02-30) before warming.
+	 */
+	public function test_run_warm_window_rejects_rolled_over_date() {
+		$called  = false;
+		$key_for = function ( $start, $end ) {
+			return $this->versioned_key( $start, $end );
+		};
+		Prewarm::register_tab(
+			'gates',
+			function ( $start, $end ) use ( &$called ) {
+				$called = true;
+				return [];
+			},
+			$key_for
+		);
+
+		Prewarm::run_warm_window(
+			[
+				'tab'   => 'gates',
+				'start' => '2026-02-30',
+				'end'   => '2026-03-01',
+			]
+		);
+
+		$this->assertFalse( $called, 'A rolled-over date must be rejected before warming.' );
 	}
 
 	/**
@@ -92,19 +204,23 @@ class Test_Insights_Prewarm extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The maybe_schedule method enqueues an async action for a capable user with no marker.
+	 * The maybe_schedule method enqueues the dispatcher AND stamps the daily marker
+	 * for a capable user with no marker set.
 	 */
-	public function test_maybe_schedule_enqueues_for_capable_user_without_marker() {
+	public function test_maybe_schedule_enqueues_dispatcher_and_sets_marker() {
 		wp_set_current_user( $this->factory->user->create( [ 'role' => 'administrator' ] ) );
 		Prewarm::maybe_schedule();
 		$this->assertTrue( as_has_scheduled_action( Prewarm::WARM_ACTION, [], Prewarm::WARM_GROUP ) );
+		$this->assertSame( current_datetime()->format( 'Y-m-d' ), get_option( Prewarm::MARKER_OPTION ) );
 	}
 
 	/**
-	 * The on_durable_stale method schedules a WARM_REFRESH_ACTION for a registered tab.
+	 * The on_durable_stale method schedules a WARM_WINDOW_ACTION (unified with the
+	 * fan-out path) for a registered tab.
 	 */
-	public function test_on_durable_stale_schedules_refresh() {
-		Prewarm::register_tab( 'gates', function ( $start, $end ) {} );
+	public function test_on_durable_stale_schedules_warm_window() {
+		$warmed = [];
+		$this->register_fake_gates( $warmed );
 		Prewarm::on_durable_stale( 'gates', '2026-06-01', '2026-06-30' );
 		$args = [
 			[
@@ -113,11 +229,11 @@ class Test_Insights_Prewarm extends WP_UnitTestCase {
 				'end'   => '2026-06-30',
 			],
 		];
-		$this->assertTrue( as_has_scheduled_action( Prewarm::WARM_REFRESH_ACTION, $args, Prewarm::WARM_GROUP ) );
+		$this->assertTrue( as_has_scheduled_action( Prewarm::WARM_WINDOW_ACTION, $args, Prewarm::WARM_GROUP ) );
 	}
 
 	/**
-	 * Maybe_schedule() must not enqueue a warm when the cache is disabled.
+	 * The maybe_schedule method must not enqueue a warm when the cache is disabled.
 	 *
 	 * Runs in a separate process so the define() does not leak into the parent
 	 * and poison other tests (PHP constants cannot be unset).
@@ -133,65 +249,14 @@ class Test_Insights_Prewarm extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A run where every warmer throws must NOT stamp the daily marker, so the
-	 * next admin_init can retry without waiting until tomorrow.
-	 */
-	public function test_run_prewarm_skips_marker_when_all_warmers_fail() {
-		delete_option( Prewarm::MARKER_OPTION );
-		Prewarm::register_tab(
-			'gates',
-			function ( $start, $end ) {
-				throw new \RuntimeException( 'BQ down' );
-			}
-		);
-		Prewarm::run_prewarm();
-		$this->assertFalse( get_option( Prewarm::MARKER_OPTION, false ) );
-	}
-
-	/**
-	 * The run_warm_refresh method calls the registered warmer with the correct DTI range.
-	 */
-	public function test_run_warm_refresh_calls_registered_warmer() {
-		$got = null;
-		Prewarm::register_tab(
-			'gates',
-			function ( $start, $end ) use ( &$got ) {
-				$got = $start->format( 'Y-m-d' ) . '..' . $end->format( 'Y-m-d' );
-				return [ $start->format( 'Y-m-d' ), $end->format( 'Y-m-d' ), null, null ];
-			}
-		);
-		Prewarm::run_warm_refresh(
-			[
-				'tab'   => 'gates',
-				'start' => '2026-06-01',
-				'end'   => '2026-06-30',
-			]
-		);
-		$this->assertSame( '2026-06-01..2026-06-30', $got );
-	}
-
-	/**
-	 * REGRESSION — versioned-key prune correctness (FIX 1 / blocker).
+	 * Regression — the durable entry for a versioned tab survives the prune.
 	 *
-	 * Uses the real Gates_REST_Controller (now versioned via the global
-	 * Cache::ENVELOPE_SCHEMA_VERSION instead of the per-tab Gates_Metric::CACHE_PREFIX)
-	 * to prove that after run_prewarm() the durable entry SURVIVES the prune call
-	 * under the versioned key.
-	 *
-	 * The bug: run_prewarm() previously built its keep-list from unversioned key
-	 * parts [ $start, $end, null, null ], but warm_window() stored entries under
-	 * versioned parts [ version, $start, $end, null, null ]. The keep hash
-	 * never matched the stored hash, so prune_durable() deleted the entry the run
-	 * had just warmed, giving zero durable benefit on any tab with a non-empty
-	 * cache_schema_version(). This test FAILS against the pre-fix code and PASSES
-	 * after the fix.
-	 *
-	 * @group insights
+	 * Drives the real Gates_REST_Controller (versioned via the global
+	 * Cache::ENVELOPE_SCHEMA_VERSION) through run_warm_window() and asserts the
+	 * durable entry survives the prune under the versioned key — proving the
+	 * warm-write key and the prune keep-list agree for a versioned tab.
 	 */
 	public function test_versioned_tab_durable_entry_survives_prune() {
-		// Ensure the Gates controller and metric are loaded (they live in the gates
-		// section file which is only included when NEWSPACK_INSIGHTS_GATES_PREVIEW is
-		// set; in the unit harness we load them directly).
 		$base = NEWSPACK_ABSPATH . 'includes/wizards/insights/';
 		if ( ! class_exists( 'Newspack\Insights\Gates_Metric' ) ) {
 			include_once $base . 'metrics/class-gates-metric.php';
@@ -201,13 +266,8 @@ class Test_Insights_Prewarm extends WP_UnitTestCase {
 		}
 
 		$controller = new \Newspack\Insights\Gates_REST_Controller();
+		Prewarm::register_tab( 'gates', [ $controller, 'warm_window' ], [ $controller, 'durable_key_for' ] );
 
-		Prewarm::register_tab( 'gates', [ $controller, 'warm_window' ] );
-
-		// Run the full prewarm (warms + prunes) against today's preset windows.
-		Prewarm::run_prewarm();
-
-		// Find the last-30 preset to check a concrete window.
 		$today   = current_datetime();
 		$windows = Preset_Windows::all( $today );
 		$last30  = null;
@@ -222,18 +282,20 @@ class Test_Insights_Prewarm extends WP_UnitTestCase {
 		$start_str = $last30['start']->format( 'Y-m-d' );
 		$end_str   = $last30['end']->format( 'Y-m-d' );
 
-		// The durable entry must exist under the GLOBAL-VERSIONED key
-		// (Cache::ENVELOPE_SCHEMA_VERSION + window), not the old per-tab CACHE_PREFIX.
-		$versioned_key = array_merge(
-			[ Cache::ENVELOPE_SCHEMA_VERSION ],
-			[ $start_str, $end_str, null, null ]
+		Prewarm::run_warm_window(
+			[
+				'tab'   => 'gates',
+				'start' => $start_str,
+				'end'   => $end_str,
+			]
 		);
-		$durable = Cache::peek_durable( 'gates', Cache::SOURCE_BIGQUERY, $versioned_key );
+
+		$versioned_key = [ Cache::ENVELOPE_SCHEMA_VERSION, $start_str, $end_str, null, null ];
+		$durable       = Cache::peek_durable( 'gates', Cache::SOURCE_BIGQUERY, $versioned_key );
 
 		$this->assertNotNull(
 			$durable,
-			'Durable entry must survive prune under the versioned key. ' .
-			'If null, prune deleted the entry because the keep-list used unversioned keys (pre-fix bug).'
+			'Durable entry must survive prune under the versioned key.'
 		);
 	}
 }

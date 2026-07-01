@@ -74,7 +74,7 @@ class Insights_Section_Conversion {
 				$controller->register_routes();
 			}
 		);
-		\Newspack\Insights\Prewarm::register_tab( 'conversion', [ $controller, 'warm_window' ] );
+		\Newspack\Insights\Prewarm::register_tab( 'conversion', [ $controller, 'warm_window' ], [ $controller, 'durable_key_for' ] );
 		// Cohort pre-warm: handler runs both the one-off (cold-cache) and the
 		// weekly recurring refresh; the recurring schedule is ensured on init.
 		add_action( Conversion_Metric::COHORT_REFRESH_ACTION, [ Conversion_Metric::class, 'run_cohort_refresh' ] );

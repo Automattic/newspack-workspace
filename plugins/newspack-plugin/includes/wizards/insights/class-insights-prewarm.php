@@ -4,9 +4,10 @@
  *
  * Warms the five fixed timeframe presets for every registered windowed tab into
  * the durable cache, so opening Insights renders from cache. Scheduling is
- * triggered on admin_init (once/day, guarded) and the actual work runs in an
- * async Action Scheduler job — never inline on a request. Stale durable entries
- * trigger a background refresh (stale-while-revalidate). NEWS-2581 Phase 1.
+ * triggered on admin_init (once/day, guarded) and fans out into one small async
+ * Action Scheduler job per (tab, window) — so no single job times out.
+ * Stale durable entries trigger a background refresh (stale-while-revalidate).
+ * NEWS-2581 Phase 1.
  *
  * @package Newspack
  */
@@ -23,15 +24,15 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Prewarm {
 
-	const WARM_ACTION         = 'newspack_insights_prewarm';
-	const WARM_REFRESH_ACTION = 'newspack_insights_warm_refresh';
-	const WARM_GROUP          = 'newspack-insights';
-	const MARKER_OPTION       = 'newspack_insights_last_prewarm_date';
+	const WARM_ACTION        = 'newspack_insights_prewarm';
+	const WARM_WINDOW_ACTION = 'newspack_insights_warm_window';
+	const WARM_GROUP         = 'newspack-insights';
+	const MARKER_OPTION      = 'newspack_insights_last_prewarm_date';
 
 	/**
-	 * Registry: tab slug => warmer callable( DateTimeImmutable, DateTimeImmutable ): void.
+	 * Registry: tab slug => [ 'warmer' => callable, 'key_for' => callable ].
 	 *
-	 * @var array<string, callable>
+	 * @var array<string, array{warmer: callable, key_for: callable}>
 	 */
 	private static $tabs = [];
 
@@ -55,26 +56,26 @@ final class Prewarm {
 		self::$hooks_registered = true;
 		add_action( 'admin_init', [ __CLASS__, 'maybe_schedule' ] );
 		add_action( self::WARM_ACTION, [ __CLASS__, 'run_prewarm' ] );
-		add_action( self::WARM_REFRESH_ACTION, [ __CLASS__, 'run_warm_refresh' ] );
+		add_action( self::WARM_WINDOW_ACTION, [ __CLASS__, 'run_warm_window' ] );
 		add_action( 'newspack_insights_durable_stale', [ __CLASS__, 'on_durable_stale' ], 10, 3 );
 	}
 
 	/**
-	 * Register a tab's warmer. The warmer builds + durably stores one base
-	 * window and RETURNS the versioned key parts it stored under. Typically
-	 * [ $controller, 'warm_window' ] — the Cached_Controller_Trait implementation
-	 * returns the key array from warm_window() so the prune keep-list is derived
-	 * from the actual stored key rather than a re-derived approximation.
+	 * Register a tab's warmer and key resolver.
 	 *
-	 * @param string   $tab    Tab slug.
-	 * @param callable $warmer fn( DateTimeImmutable $start, DateTimeImmutable $end ): array.
+	 * @param string   $tab     Tab slug.
+	 * @param callable $warmer  fn( DateTimeImmutable $start, DateTimeImmutable $end ): array — warms + stores a window and returns the versioned key parts.
+	 * @param callable $key_for fn( DateTimeImmutable $start, DateTimeImmutable $end ): array — returns the versioned key parts WITHOUT warming.
 	 */
-	public static function register_tab( string $tab, callable $warmer ): void {
-		self::$tabs[ $tab ] = $warmer;
+	public static function register_tab( string $tab, callable $warmer, callable $key_for ): void {
+		self::$tabs[ $tab ] = [
+			'warmer'  => $warmer,
+			'key_for' => $key_for,
+		];
 	}
 
 	/**
-	 * Test-only: clear the in-memory registry.
+	 * Test-only: clear the in-memory registry and hooks flag.
 	 */
 	public static function reset_registry_for_tests(): void {
 		self::$tabs             = [];
@@ -102,6 +103,11 @@ final class Prewarm {
 	/**
 	 * Schedule an async warm at most once per day on admin_init. Never computes
 	 * inline. Guards on environment, capability, and the daily marker.
+	 *
+	 * Marker semantics: the marker now means "fan-out was scheduled today", not
+	 * "warming completed successfully." Individual window failures are retried
+	 * automatically by Action Scheduler on each per-window job; a re-fan-out on
+	 * the same day is never needed.
 	 */
 	public static function maybe_schedule(): void {
 		if ( ! self::is_warmable() ) {
@@ -120,18 +126,18 @@ final class Prewarm {
 			return;
 		}
 		as_enqueue_async_action( self::WARM_ACTION, [], self::WARM_GROUP );
+		// Stamp the marker immediately: "fan-out scheduled today." Retry of
+		// individual failed windows is handled by Action Scheduler per-job
+		// retries, not by re-fanning-out the same day.
+		update_option( self::MARKER_OPTION, self::today(), false );
 	}
 
 	/**
-	 * WARM_ACTION handler. Warms every registered tab × preset, prunes orphaned
-	 * windows, and records the daily marker.
+	 * WARM_ACTION handler. Fans out one WARM_WINDOW_ACTION per (tab, window).
 	 *
-	 * The daily marker is only stamped when at least one window warmed
-	 * successfully across all tabs. A total-failure run (e.g. a BQ-proxy outage
-	 * that throws on every window) leaves the marker unchanged so the next
-	 * admin_init can re-enqueue a retry, still de-duped by as_has_scheduled_action.
-	 * A partial success (some tabs/windows succeeded) does stamp the marker —
-	 * real work was done.
+	 * This dispatcher does NO warming, pruning, or BQ calls — it cannot time
+	 * out. Each per-window job is retried independently by Action Scheduler if
+	 * it fails.
 	 */
 	public static function run_prewarm(): void {
 		if ( ! self::is_warmable() ) {
@@ -148,33 +154,68 @@ final class Prewarm {
 			}
 			return;
 		}
-		$windows     = Preset_Windows::all( current_datetime() );
-		$any_success = false;
-		foreach ( self::$tabs as $tab => $warmer ) {
-			$keep = [];
+		if ( ! function_exists( 'as_enqueue_async_action' ) || ! function_exists( 'as_has_scheduled_action' ) ) {
+			return;
+		}
+		$windows = Preset_Windows::all( current_datetime() );
+		foreach ( self::$tabs as $tab => $entry ) {
 			foreach ( $windows as $w ) {
-				try {
-					$key_parts = $warmer( $w['start'], $w['end'] );
-				} catch ( \Throwable $e ) {
-					self::log_failure( $tab, $w['preset'], $e );
+				$args = [
+					[
+						'tab'   => $tab,
+						'start' => $w['start']->format( 'Y-m-d' ),
+						'end'   => $w['end']->format( 'Y-m-d' ),
+					],
+				];
+				if ( as_has_scheduled_action( self::WARM_WINDOW_ACTION, $args, self::WARM_GROUP ) ) {
 					continue;
 				}
-				$keep[] = $key_parts; // the actual (versioned) key the warmer wrote.
-			}
-			// Only prune when at least one window warmed successfully. An empty
-			// $keep (total-failure run, e.g. BQ outage) would wipe all durable
-			// entries, removing yesterday's still-serveable cache on a transient error.
-			if ( ! empty( $keep ) ) {
-				Cache::prune_durable( $tab, $keep );
-				$any_success = true;
+				as_enqueue_async_action( self::WARM_WINDOW_ACTION, $args, self::WARM_GROUP );
 			}
 		}
-		// Only stamp the marker when real work was done. A total-failure run
-		// must leave the marker unchanged so the next admin_init re-enqueues a
-		// retry rather than skipping until tomorrow.
-		if ( $any_success ) {
-			update_option( self::MARKER_OPTION, self::today(), false );
+	}
+
+	/**
+	 * WARM_WINDOW_ACTION handler. Warms one (tab, window) and prunes orphaned
+	 * durable entries for that tab.
+	 *
+	 * Pruning always runs (even when the warm throws) — it only removes
+	 * orphaned/shifted-day options; the five current-preset keys are always in
+	 * the keep-list, so a not-yet-warmed window is never wrongly deleted.
+	 *
+	 * @param array $args [ 'tab' => string, 'start' => 'Y-m-d', 'end' => 'Y-m-d' ].
+	 */
+	public static function run_warm_window( array $args ): void {
+		if ( ! self::is_warmable() ) {
+			return;
 		}
+		$tab = $args['tab'] ?? '';
+		if ( ! isset( self::$tabs[ $tab ] ) ) {
+			return;
+		}
+		$tz    = wp_timezone();
+		$start = DateTimeImmutable::createFromFormat( 'Y-m-d', (string) ( $args['start'] ?? '' ), $tz );
+		$end   = DateTimeImmutable::createFromFormat( 'Y-m-d', (string) ( $args['end'] ?? '' ), $tz );
+		if ( ! $start || $start->format( 'Y-m-d' ) !== (string) ( $args['start'] ?? '' ) ) {
+			return;
+		}
+		if ( ! $end || $end->format( 'Y-m-d' ) !== (string) ( $args['end'] ?? '' ) ) {
+			return;
+		}
+		try {
+			( self::$tabs[ $tab ]['warmer'] )( $start->setTime( 0, 0, 0 ), $end->setTime( 23, 59, 59 ) );
+		} catch ( \Throwable $e ) {
+			self::log_failure( $tab, $args['start'] . '..' . $args['end'], $e );
+		}
+		// Prune orphaned durable entries for this tab regardless of warm result.
+		// The five current-preset keys are always included so no valid entry is removed.
+		$keep = array_map(
+			function ( $w ) use ( $tab ) {
+				return ( self::$tabs[ $tab ]['key_for'] )( $w['start'], $w['end'] );
+			},
+			Preset_Windows::all( current_datetime() )
+		);
+		Cache::prune_durable( $tab, $keep );
 	}
 
 	/**
@@ -201,39 +242,10 @@ final class Prewarm {
 				'end'   => $end,
 			],
 		];
-		if ( as_has_scheduled_action( self::WARM_REFRESH_ACTION, $args, self::WARM_GROUP ) ) {
+		if ( as_has_scheduled_action( self::WARM_WINDOW_ACTION, $args, self::WARM_GROUP ) ) {
 			return;
 		}
-		as_enqueue_async_action( self::WARM_REFRESH_ACTION, $args, self::WARM_GROUP );
-	}
-
-	/**
-	 * WARM_REFRESH_ACTION handler. Re-warms a single (tab, window).
-	 *
-	 * @param array $args [ 'tab' => string, 'start' => 'Y-m-d', 'end' => 'Y-m-d' ].
-	 */
-	public static function run_warm_refresh( array $args ): void {
-		if ( ! self::is_warmable() ) {
-			return;
-		}
-		$tab = $args['tab'] ?? '';
-		if ( ! isset( self::$tabs[ $tab ] ) ) {
-			return;
-		}
-		$tz    = wp_timezone();
-		$start = DateTimeImmutable::createFromFormat( 'Y-m-d', (string) ( $args['start'] ?? '' ), $tz );
-		$end   = DateTimeImmutable::createFromFormat( 'Y-m-d', (string) ( $args['end'] ?? '' ), $tz );
-		if ( ! $start || $start->format( 'Y-m-d' ) !== (string) ( $args['start'] ?? '' ) ) {
-			return;
-		}
-		if ( ! $end || $end->format( 'Y-m-d' ) !== (string) ( $args['end'] ?? '' ) ) {
-			return;
-		}
-		try {
-			( self::$tabs[ $tab ] )( $start->setTime( 0, 0, 0 ), $end->setTime( 23, 59, 59 ) );
-		} catch ( \Throwable $e ) {
-			self::log_failure( $tab, 'swr-refresh', $e );
-		}
+		as_enqueue_async_action( self::WARM_WINDOW_ACTION, $args, self::WARM_GROUP );
 	}
 
 	/**
@@ -249,7 +261,7 @@ final class Prewarm {
 	 * Log a warm failure without aborting the run.
 	 *
 	 * @param string     $tab    Tab slug.
-	 * @param string     $window Preset/window label.
+	 * @param string     $window Window label or date range.
 	 * @param \Throwable $e      Error.
 	 */
 	private static function log_failure( string $tab, string $window, \Throwable $e ): void {

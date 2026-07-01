@@ -84,6 +84,26 @@ trait Cached_Controller_Trait {
 	}
 
 	/**
+	 * Compute the versioned durable key parts for a window WITHOUT warming.
+	 *
+	 * The no-warm sibling of warm_window(): returns the same key array that
+	 * warm_window() stores under, so the pre-warm prune step can build the
+	 * current-preset keep-list without issuing any BigQuery query.
+	 *
+	 * @param DateTimeImmutable $start Window start.
+	 * @param DateTimeImmutable $end   Window end.
+	 * @return array Versioned key parts (same shape as warm_window() return).
+	 */
+	public function durable_key_for( DateTimeImmutable $start, DateTimeImmutable $end ): array {
+		return $this->versioned_key_parts_from(
+			$start->format( 'Y-m-d' ),
+			$end->format( 'Y-m-d' ),
+			null,
+			null
+		);
+	}
+
+	/**
 	 * Cache-aware GET wrapper.
 	 *
 	 * @param WP_REST_Request $request       Incoming request.
