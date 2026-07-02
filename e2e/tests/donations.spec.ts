@@ -25,9 +25,10 @@ test("Donations",  {
   await page.goto("/support-our-publication/");
   await page.getByRole("button", { name: "Donate Now" }).click();
   await expect(
-    getPageInIframe(page).locator(
-      'strong:has-text("Donate: $15.00 / month")'
-    )
+    // Match just the amount and cadence: the summary's label prefix has varied
+    // across Newspack versions (e.g. "Donate:" then "Donate: Monthly:"), but the
+    // "$15.00 / month" part is stable and is the bit worth asserting.
+    getPageInIframe(page).locator('strong:has-text("$15.00 / month")')
   ).toBeVisible();
   await getPageInIframe(page).getByLabel("Email address *").fill(emailAddress);
   await getPageInIframe(page).getByLabel("First name *").fill("John");
