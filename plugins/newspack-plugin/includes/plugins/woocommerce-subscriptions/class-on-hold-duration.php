@@ -167,31 +167,23 @@ class On_Hold_Duration {
 	}
 
 	/**
-	 * Re-arm the on-hold expiration when a payment retry ends without a
-	 * replacement retry being scheduled.
+	 * Re-arm the on-hold expiration when a payment retry ends with no replacement.
 	 *
-	 * The primary scheduler ({@see maybe_schedule_expiration}) only runs on the
-	 * transition into the on-hold status. When a pending retry is cancelled —
-	 * e.g. by the Stripe gateway after Stripe Radar blocks a renewal payment —
-	 * the subscription is already on-hold, so that hook never fires again. Both
-	 * expiration paths (the retry-rule progression and the scheduled action) are
-	 * then lost, leaving the subscription on-hold indefinitely.
-	 *
-	 * This listens for a retry reaching a terminal status and, when the related
-	 * subscription is left on-hold with no pending retry, schedules the
-	 * expiration so the On-Hold Duration is still honored.
+	 * The main scheduler only fires on the transition into on-hold. When a retry is
+	 * cancelled (e.g. by the Stripe gateway on a Radar block) the sub is already
+	 * on-hold, so that hook never re-fires and the sub would otherwise never expire.
 	 *
 	 * @param \WCS_Retry $retry      The retry whose status changed.
 	 * @param string     $new_status The new retry status.
 	 */
 	public static function maybe_reschedule_expiration_on_retry_end( $retry, $new_status ) {
-		// Pending/processing retries still drive their own progression; only act once the retry has stopped.
+		// Pending/processing retries still progress on their own.
 		if ( in_array( $new_status, [ 'pending', 'processing' ], true ) ) {
 			return;
 		}
 
 		foreach ( wcs_get_subscriptions_for_renewal_order( $retry->get_order_id() ) as $subscription ) {
-			// A subscription is only stranded when it is left on-hold with no further retry queued.
+			// Stranded = on-hold with no retry queued.
 			if ( 'on-hold' === $subscription->get_status() && 0 === $subscription->get_date( 'payment_retry' ) ) {
 				self::maybe_schedule_expiration( $subscription );
 			}

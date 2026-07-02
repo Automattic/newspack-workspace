@@ -40,36 +40,20 @@ class Newspack_Test_On_Hold_Duration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * A minimal WCS_Retry test double; the handler only reads get_order_id().
+	 * A minimal WCS_Retry double. The handler only reads get_order_id(), and the
+	 * mocked wcs_get_subscriptions_for_renewal_order() ignores the id, so it's fixed.
 	 *
-	 * @param int $order_id Renewal order ID.
 	 * @return object
 	 */
-	private function mock_retry( $order_id ) {
-		return new class( $order_id ) {
+	private function mock_retry() {
+		return new class() {
 			/**
-			 * Renewal order ID.
-			 *
-			 * @var int
-			 */
-			private $order_id;
-
-			/**
-			 * Constructor.
-			 *
-			 * @param int $order_id Renewal order ID.
-			 */
-			public function __construct( $order_id ) {
-				$this->order_id = $order_id;
-			}
-
-			/**
-			 * Get the renewal order ID.
+			 * Stubbed renewal order ID.
 			 *
 			 * @return int
 			 */
 			public function get_order_id() {
-				return $this->order_id;
+				return 1;
 			}
 		};
 	}
@@ -112,7 +96,7 @@ class Newspack_Test_On_Hold_Duration extends WP_UnitTestCase {
 		$sub_id                              = 90001;
 		$GLOBALS['teams_mock_subscriptions'] = [ $this->make_subscription( $sub_id, 'on-hold', 0 ) ];
 
-		On_Hold_Duration::maybe_reschedule_expiration_on_retry_end( $this->mock_retry( 1 ), 'cancelled' );
+		On_Hold_Duration::maybe_reschedule_expiration_on_retry_end( $this->mock_retry(), 'cancelled' );
 
 		$this->assertTrue( $this->expiration_is_scheduled( $sub_id ) );
 	}
@@ -128,7 +112,7 @@ class Newspack_Test_On_Hold_Duration extends WP_UnitTestCase {
 		$sub_id                              = 90002;
 		$GLOBALS['teams_mock_subscriptions'] = [ $this->make_subscription( $sub_id, 'on-hold', 0 ) ];
 
-		On_Hold_Duration::maybe_reschedule_expiration_on_retry_end( $this->mock_retry( 1 ), $status );
+		On_Hold_Duration::maybe_reschedule_expiration_on_retry_end( $this->mock_retry(), $status );
 
 		$this->assertFalse( $this->expiration_is_scheduled( $sub_id ) );
 	}
@@ -153,7 +137,7 @@ class Newspack_Test_On_Hold_Duration extends WP_UnitTestCase {
 		$sub_id                              = 90003;
 		$GLOBALS['teams_mock_subscriptions'] = [ $this->make_subscription( $sub_id, 'active', 0 ) ];
 
-		On_Hold_Duration::maybe_reschedule_expiration_on_retry_end( $this->mock_retry( 1 ), 'cancelled' );
+		On_Hold_Duration::maybe_reschedule_expiration_on_retry_end( $this->mock_retry(), 'cancelled' );
 
 		$this->assertFalse( $this->expiration_is_scheduled( $sub_id ) );
 	}
@@ -166,7 +150,7 @@ class Newspack_Test_On_Hold_Duration extends WP_UnitTestCase {
 		$sub_id                              = 90004;
 		$GLOBALS['teams_mock_subscriptions'] = [ $this->make_subscription( $sub_id, 'on-hold', time() + DAY_IN_SECONDS ) ];
 
-		On_Hold_Duration::maybe_reschedule_expiration_on_retry_end( $this->mock_retry( 1 ), 'failed' );
+		On_Hold_Duration::maybe_reschedule_expiration_on_retry_end( $this->mock_retry(), 'failed' );
 
 		$this->assertFalse( $this->expiration_is_scheduled( $sub_id ) );
 	}
