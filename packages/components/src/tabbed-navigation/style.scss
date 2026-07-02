@@ -29,7 +29,7 @@
 			box-shadow: none;
 		}
 
-		&[data-disabled] {
+		&[aria-disabled="true"] {
 			pointer-events: none;
 		}
 	}
