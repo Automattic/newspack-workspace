@@ -552,7 +552,7 @@ final class Conversion_Metric {
 			'step_1_anonymous',
 			'step_2_engaged',
 			'step_3_registered',
-			'step_4_subscriber',
+			'step_4_newsletter_subscriber',
 			'step_5_supporter',
 		];
 		$stages = [];

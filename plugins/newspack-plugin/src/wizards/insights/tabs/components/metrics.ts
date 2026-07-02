@@ -9,6 +9,11 @@
  */
 
 /**
+ * WordPress dependencies
+ */
+import { __ } from '@wordpress/i18n';
+
+/**
  * Internal dependencies
  */
 import type { MetricCardProps, MetricFormat, MetricCardOverlay } from './MetricCard';
@@ -92,6 +97,13 @@ export interface PayloadToCardArgs {
 	current?: MetricPayload;
 	previous?: MetricPayload | null;
 	lowerIsBetter?: boolean;
+	/**
+	 * "No population to calculate from" copy (NEWS-2593). Routed to MetricCard's
+	 * em-dash treatment when a rate metric is populated but incalculable
+	 * (`computable === false`). Falls back to a generic message when omitted.
+	 * Ignored for non-rate payloads.
+	 */
+	notComputableMessage?: string;
 }
 
 /**
@@ -99,7 +111,7 @@ export interface PayloadToCardArgs {
  * is hidden in v1 (caller skips rendering the card entirely).
  */
 export const payloadToCard = ( args: PayloadToCardArgs ): MetricCardProps | null => {
-	const { label, description, current, previous, lowerIsBetter } = args;
+	const { label, description, current, previous, lowerIsBetter, notComputableMessage } = args;
 
 	if ( ! current || current.hidden_in_v1 ) {
 		return null;
@@ -112,6 +124,20 @@ export const payloadToCard = ( args: PayloadToCardArgs ): MetricCardProps | null
 	}
 	if ( current.not_configured ) {
 		return { label, description, notConfigured: true };
+	}
+	// Incalculable percentage (NEWS-2593): a populated rate with no population to
+	// divide from (`computable === false`, e.g. Completion Rate on a site that
+	// emits no scroll events) carries no signal. Render MetricCard's em-dash hero +
+	// explanatory line rather than a misleading `0%`. Scoped to rate format so
+	// count/currency/decimal good-zeros keep their real `0`. A generic fallback
+	// guarantees the em-dash even if a call site omits its per-metric copy.
+	if ( current.computable === false && current.type === 'rate' ) {
+		return {
+			label,
+			description,
+			lowerIsBetter,
+			notComputableMessage: notComputableMessage ?? __( 'Not enough data to calculate.', 'newspack-plugin' ),
+		};
 	}
 
 	const previousValue = previous && previous.computable && typeof previous.value === 'number' ? previous.value : null;
