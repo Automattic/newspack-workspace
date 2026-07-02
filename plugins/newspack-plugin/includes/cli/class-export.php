@@ -160,6 +160,12 @@ class Export {
 				break;
 			}
 			$page++;
+			// The object cache accumulates every loaded subscription/user in a
+			// long-running CLI process; without this, large exports exhaust
+			// memory (the admin AJAX flow is immune — one page per request).
+			if ( function_exists( '\WP_CLI\Utils\wp_clear_object_cache' ) ) {
+				\WP_CLI\Utils\wp_clear_object_cache();
+			}
 		} while ( $percent < 100 );
 
 		if ( ! $exporter->save_to( $output ) ) {
