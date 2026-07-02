@@ -80,10 +80,10 @@ const CoreCard = ( {
 	if ( noBorder ) {
 		otherProps.isBorderless = true;
 	}
-	// A button header would nest its interactive children (toggle, header action, or actions menu)
-	// inside a <button>, which is invalid. Only render the header as a button when a real click
-	// handler is supplied and the header has no interactive children of its own.
-	const hasInteractiveHeaderChildren = actionType === 'toggle' || !! headerAction || actions?.length > 0;
+	// A button header would nest its interactive children (toggle, header action, actions menu, or
+	// drag controls) inside a <button>, which is invalid. Only render the header as a button when a
+	// real click handler is supplied and the header has no interactive children of its own.
+	const hasInteractiveHeaderChildren = actionType === 'toggle' || !! headerAction || actions?.length > 0 || isDraggable;
 	const headerIsButton = !! onHeaderClick && ! hasInteractiveHeaderChildren;
 	return (
 		<CardWrapper as={ as } className={ classes } { ...otherProps }>
