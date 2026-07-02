@@ -22,6 +22,16 @@ final class Newspack_Popups_Data_Api {
 	protected static $popups = [];
 
 	/**
+	 * Memoized site conversion URLs for block-less CTA classification.
+	 *
+	 * See get_site_conversion_urls(). A class property (rather than a
+	 * function-local static) so it can be reset between tests.
+	 *
+	 * @var array|null
+	 */
+	private static $conversion_urls_cache = null;
+
+	/**
 	 * Registers the hooks.
 	 */
 	public static function init() {
@@ -181,7 +191,304 @@ final class Newspack_Popups_Data_Api {
 			}
 		}
 
+		// NPPD-1837: block-less CTA classification (display-only).
+		// Runs only when no recognized conversion block was found, i.e. the exact
+		// population that would otherwise collapse to action_type='undefined'. The
+		// inferred intent lives on its own params and is NEVER written to a
+		// prompt_has_* flag or action_type, so it can never enter a conversion
+		// denominator (block-less prompts have no Newspack-tracked conversion).
+		if ( empty( $data['prompt_blocks'] ) ) {
+			$inferred = self::classify_blockless_cta( $popup['content'] );
+			if ( $inferred ) {
+				$data['inferred_cta_intent'] = $inferred['intent']; // One of donation, newsletter, subscription, event, sponsor, editorial.
+				$data['inferred_cta_source'] = $inferred['source']; // One of site_config, processor, pattern.
+			}
+		}
+
 		return $data;
+	}
+
+	/**
+	 * Classify a block-less prompt by its button link target(s).
+	 *
+	 * Only conversion-legible or clearly non-conversion targets return a value;
+	 * anything ambiguous returns null and the prompt stays 'undefined' (precision
+	 * over recall — a false conversion label is worse than an honest blank).
+	 *
+	 * @param string $content The prompt post_content.
+	 * @return array|null ['intent' => string, 'source' => string] or null to abstain.
+	 */
+	public static function classify_blockless_cta( $content ) {
+		$hrefs = self::extract_button_hrefs( $content );
+		if ( empty( $hrefs ) ) {
+			return null;
+		}
+
+		$config = self::get_site_conversion_urls();
+
+		// Classify every button; a prompt can hold more than one.
+		$hits = [];
+		foreach ( $hrefs as $href ) {
+			$hit = self::classify_href( $href, $config );
+			if ( $hit ) {
+				$hits[] = $hit;
+			}
+		}
+		if ( empty( $hits ) ) {
+			return null;
+		}
+
+		// Resolution when buttons disagree: a conversion intent wins over a
+		// non-conversion one; if two DIFFERENT conversion intents appear, abstain
+		// (don't guess). Precedence within conversion: donation, newsletter, subscription.
+		$precedence     = [
+			'donation'     => 1,
+			'newsletter'   => 2,
+			'subscription' => 3,
+		];
+		$conversion     = [];
+		$non_conversion = [];
+		foreach ( $hits as $hit ) {
+			if ( isset( $precedence[ $hit['intent'] ] ) ) {
+				$conversion[] = $hit;
+			} else {
+				$non_conversion[] = $hit;
+			}
+		}
+
+		if ( ! empty( $conversion ) ) {
+			$distinct = array_unique( array_column( $conversion, 'intent' ) );
+			if ( 1 < count( $distinct ) ) {
+				return null; // Conflicting conversion signals -> abstain.
+			}
+			usort(
+				$conversion,
+				function ( $a, $b ) use ( $precedence ) {
+					return $precedence[ $a['intent'] ] <=> $precedence[ $b['intent'] ];
+				}
+			);
+			return $conversion[0];
+		}
+
+		// Only non-conversion signals: report the first (sponsor/editorial/event) so
+		// the dashboard can show a non-conversion label instead of a bare "undefined".
+		return $non_conversion[0];
+	}
+
+	/**
+	 * Pull hrefs from core/button blocks in the prompt content.
+	 *
+	 * Scope is intentionally limited to button blocks (not every <a> in body copy)
+	 * to keep precision high. Reuses the recursive get_block_data() helper, so
+	 * buttons nested inside core/buttons wrappers are covered.
+	 *
+	 * @param string $content The prompt post_content.
+	 * @return string[] Lowercased hrefs.
+	 */
+	public static function extract_button_hrefs( $content ) {
+		$blocks  = \parse_blocks( $content );
+		$buttons = self::get_block_data( 'core/button', $blocks );
+		$hrefs   = [];
+		foreach ( $buttons as $button ) {
+			$url = $button['attrs']['url'] ?? '';
+			if ( empty( $url ) && ! empty( $button['innerHTML'] ) ) {
+				// Older button blocks store the href only in the saved markup.
+				if ( preg_match( '/href="([^"]+)"/i', $button['innerHTML'], $matches ) ) {
+					$url = $matches[1];
+				}
+			}
+			if ( ! empty( $url ) ) {
+				$hrefs[] = strtolower( $url );
+			}
+		}
+		return $hrefs;
+	}
+
+	/**
+	 * Classify a single href. Precedence:
+	 *   1) site-configured conversion URLs (highest confidence; catches the
+	 *      unguessable cases like a bespoke on-site donation page),
+	 *   2) known third-party processor domains,
+	 *   3) path / substring patterns,
+	 *   4) non-conversion tells (event, sponsor, editorial),
+	 *   else null (abstain).
+	 *
+	 * @param string $href   Lowercased href.
+	 * @param array  $config Output of get_site_conversion_urls().
+	 * @return array|null ['intent' => string, 'source' => string] or null.
+	 */
+	public static function classify_href( $href, $config ) {
+		// 1) Site config (substring match against this site's own configured URLs).
+		foreach ( [ 'donation', 'newsletter', 'subscription' ] as $intent ) {
+			foreach ( $config[ $intent ] as $configured ) {
+				if ( $configured && str_contains( $href, $configured ) ) {
+					return [
+						'intent' => $intent,
+						'source' => 'site_config',
+					];
+				}
+			}
+		}
+
+		// 2) Processor domains (empirically ranked in NPPD-1836; fundjournalism dominant).
+		$donation_processors = [ 'fundjournalism', 'donorbox', 'actblue', 'fundraiseup', 'classy.org', 'givebutter' ];
+		foreach ( $donation_processors as $needle ) {
+			if ( str_contains( $href, $needle ) ) {
+				return [
+					'intent' => 'donation',
+					'source' => 'processor',
+				];
+			}
+		}
+		// giving.<institution>.edu (e.g. giving.umich.edu) — institutional donation.
+		if ( preg_match( '#://giving\.[^/]+\.edu#', $href ) ) {
+			return [
+				'intent' => 'donation',
+				'source' => 'processor',
+			];
+		}
+
+		// 3) Path / substring patterns. Substring (not slash-anchored) on purpose, so
+		// membership fragments and newslettersignup slugs are caught (NPPD-1836).
+		// Order matters: donation, then newsletter, then subscription.
+		if ( preg_match( '/donate|donation|\/give|contribute|donor|membership|member\b|\/support\b/', $href ) ) {
+			return [
+				'intent' => 'donation',
+				'source' => 'pattern',
+			];
+		}
+		if ( str_contains( $href, 'newsletter' ) ) {
+			return [
+				'intent' => 'newsletter',
+				'source' => 'pattern',
+			];
+		}
+		if ( preg_match( '#://(account|app|subscribe|checkout|my-?account)\.#', $href )
+			|| preg_match( '/subscribe|subscription|\/checkout|my-?account|\/offer|\/join\b|\/digital|\/plans|\/pricing/', $href ) ) {
+			return [
+				'intent' => 'subscription',
+				'source' => 'pattern',
+			];
+		}
+
+		// 4) Non-conversion tells.
+		// Sponsor/ad: outbound link tagged utm_medium=referral.
+		// TODO(confirm): compare utm_source to the site slug/home host rather than
+		// matching the medium literally.
+		if ( str_contains( $href, 'utm_medium=referral' ) && self::is_external_host( $href ) ) {
+			return [
+				'intent' => 'sponsor',
+				'source' => 'pattern',
+			];
+		}
+		// Event / ticketing.
+		if ( preg_match( '#/events?(/|$)|eventbrite|tribfest|/fest\b#', $href ) ) {
+			return [
+				'intent' => 'event',
+				'source' => 'pattern',
+			];
+		}
+		// Editorial / navigation on this site's own domain (article slugs, author pages).
+		if ( ! self::is_external_host( $href )
+			&& preg_match( '#/[0-9]{4}/[0-9]{2}/|/author/|/[a-z0-9]+(?:-[a-z0-9]+){2,}(/[a-z]+)?/?($|\?)#', $href ) ) {
+			return [
+				'intent' => 'editorial',
+				'source' => 'pattern',
+			];
+		}
+
+		// Abstain: query-param forms (?form=), bare homepages, unrecognized externals.
+		return null;
+	}
+
+	/**
+	 * This site's configured conversion URLs, normalized to lowercase host+path
+	 * fragments suitable for str_contains() matching. Memoized per request.
+	 *
+	 * Side-effect-free by design: the donation page URL is read from the
+	 * newspack_donation_page_id option, NOT \Newspack\Donations::get_donation_page_info(),
+	 * which creates the page via wp_insert_post when none exists — unsafe on this
+	 * per-render path.
+	 *
+	 * Coverage ceiling: covers WooCommerce publishers whose button links to their own
+	 * donation page, checkout, or my-account. External processor URLs (fundjournalism
+	 * etc.) and bespoke campaign landing pages are not stored by Newspack — those are
+	 * handled by the processor dictionary and patterns in classify_href(), or not at all.
+	 *
+	 * @return array{donation:string[],newsletter:string[],subscription:string[]}
+	 */
+	public static function get_site_conversion_urls() {
+		if ( null !== self::$conversion_urls_cache ) {
+			return self::$conversion_urls_cache;
+		}
+
+		$urls = [
+			'donation'     => [],
+			'newsletter'   => [],
+			'subscription' => [],
+		];
+
+		// Donation: on-site donation page, read from the option (no side effects).
+		if ( class_exists( '\Newspack\Donations' ) ) {
+			$page_id = \get_option( \Newspack\Donations::DONATION_PAGE_ID_OPTION, 0 );
+			if ( $page_id && 'page' === \get_post_type( $page_id ) ) {
+				$urls['donation'][] = self::normalize_url( \get_permalink( $page_id ) );
+			}
+		}
+
+		// Subscription / checkout.
+		if ( function_exists( 'wc_get_checkout_url' ) ) {
+			$urls['subscription'][] = self::normalize_url( wc_get_checkout_url() );
+		}
+		if ( function_exists( 'wc_get_page_permalink' ) ) {
+			$urls['subscription'][] = self::normalize_url( wc_get_page_permalink( 'myaccount' ) );
+		}
+
+		// Newsletter: nothing to wire — Newspack has no configured newsletter page
+		// (signup is the inline subscribe block). Newsletter recovery is pattern-only.
+
+		// Drop empties.
+		foreach ( $urls as $key => $list ) {
+			$urls[ $key ] = array_values( array_filter( $list ) );
+		}
+
+		self::$conversion_urls_cache = $urls;
+		return self::$conversion_urls_cache;
+	}
+
+	/**
+	 * Normalize a full URL to a lowercased host+path fragment for matching.
+	 *
+	 * @param string $url URL.
+	 * @return string
+	 */
+	private static function normalize_url( $url ) {
+		if ( empty( $url ) ) {
+			return '';
+		}
+		$parts = \wp_parse_url( strtolower( $url ) );
+		if ( empty( $parts['host'] ) ) {
+			return '';
+		}
+		$host = preg_replace( '/^www\./', '', $parts['host'] );
+		return $host . ( $parts['path'] ?? '' );
+	}
+
+	/**
+	 * Is this href pointing off the current site's host?
+	 *
+	 * @param string $href Lowercased href.
+	 * @return bool
+	 */
+	private static function is_external_host( $href ) {
+		$href_host = \wp_parse_url( $href, PHP_URL_HOST );
+		$home_host = \wp_parse_url( strtolower( \home_url() ), PHP_URL_HOST );
+		if ( empty( $href_host ) || empty( $home_host ) ) {
+			return false;
+		}
+		$href_host = preg_replace( '/^www\./', '', $href_host );
+		$home_host = preg_replace( '/^www\./', '', $home_host );
+		return $href_host !== $home_host;
 	}
 
 	/**
@@ -227,6 +534,8 @@ final class Newspack_Popups_Data_Api {
 		}
 
 		// @TODO: How to handle prompts with more than one block?
+		// Note: block-less prompts stay 'undefined' here but may carry a display-only
+		// inferred_cta_intent (NPPD-1837), which passes through as a top-level param.
 		$action_type = 'undefined';
 		if ( 1 === count( $popup_params['prompt_blocks'] ) ) {
 			$action_type = $popup_params['prompt_blocks'][0];
