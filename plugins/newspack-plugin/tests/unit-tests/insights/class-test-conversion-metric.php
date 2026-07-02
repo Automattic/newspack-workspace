@@ -686,8 +686,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * nested/typed hub cell) must not trigger a PHP "Array to string
 	 * conversion" warning. The non-scalar coerces to an empty `week` string
 	 * while the sibling scalar columns are still read. Regression test for the
-	 * production warning at class-conversion-metric.php:1669.
-	 */
+	 * production warning in Conversion_Metric::get_weekly_conversion_rates().
 	public function test_weekly_conversion_rates_coerces_non_scalar_week_start() {
 		$rows            = [
 			[
