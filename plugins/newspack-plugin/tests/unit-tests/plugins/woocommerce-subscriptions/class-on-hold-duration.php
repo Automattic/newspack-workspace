@@ -61,19 +61,20 @@ class Newspack_Test_On_Hold_Duration extends WP_UnitTestCase {
 	/**
 	 * Build a mock subscription with the given id/status/payment_retry.
 	 *
-	 * @param int    $id            Subscription ID.
-	 * @param string $status        Subscription status.
-	 * @param int    $payment_retry payment_retry date (0 = none).
+	 * @param int      $id            Subscription ID.
+	 * @param string   $status        Subscription status.
+	 * @param int      $payment_retry payment_retry date (0 = none).
+	 * @param int|null $next_payment  next_payment time (defaults to one month out).
 	 * @return WC_Subscription
 	 */
-	private function make_subscription( $id, $status, $payment_retry = 0 ) {
+	private function make_subscription( $id, $status, $payment_retry = 0, $next_payment = null ) {
 		return new WC_Subscription(
 			[
 				'id'        => $id,
 				'status'    => $status,
 				'is_manual' => false,
 				'dates'     => [ 'payment_retry' => $payment_retry ],
-				'times'     => [ 'next_payment' => time() + MONTH_IN_SECONDS ],
+				'times'     => [ 'next_payment' => $next_payment ?? time() + MONTH_IN_SECONDS ],
 			]
 		);
 	}
@@ -94,11 +95,16 @@ class Newspack_Test_On_Hold_Duration extends WP_UnitTestCase {
 	 */
 	public function test_schedules_expiration_when_retry_ends_and_subscription_stuck_on_hold() {
 		$sub_id                              = 90001;
-		$GLOBALS['teams_mock_subscriptions'] = [ $this->make_subscription( $sub_id, 'on-hold', 0 ) ];
+		$next_payment                        = time() + MONTH_IN_SECONDS;
+		$GLOBALS['teams_mock_subscriptions'] = [ $this->make_subscription( $sub_id, 'on-hold', 0, $next_payment ) ];
 
 		On_Hold_Duration::maybe_reschedule_expiration_on_retry_end( $this->mock_retry(), 'cancelled' );
 
-		$this->assertTrue( $this->expiration_is_scheduled( $sub_id ) );
+		$scheduled = as_next_scheduled_action( On_Hold_Duration::AS_HOOK, [ $sub_id ], self::AS_GROUP );
+		$this->assertNotFalse( $scheduled );
+		// Automatic subscription: expiry lands at next_payment + on-hold duration (no manual grace).
+		$expected = $next_payment + ( On_Hold_Duration::get_on_hold_duration() * DAY_IN_SECONDS );
+		$this->assertEqualsWithDelta( $expected, $scheduled, 2 );
 	}
 
 	/**

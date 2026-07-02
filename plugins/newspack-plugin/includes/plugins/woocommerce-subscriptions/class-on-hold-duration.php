@@ -183,7 +183,9 @@ class On_Hold_Duration {
 		}
 
 		foreach ( wcs_get_subscriptions_for_renewal_order( $retry->get_order_id() ) as $subscription ) {
-			// Stranded = on-hold with no retry queued.
+			// Stranded = on-hold with no retry queued. WCS clears payment_retry at priority 0
+			// on this hook (only for the last retry), so a still-pending newer retry keeps the
+			// date set and is skipped by this priority-10 callback.
 			if ( 'on-hold' === $subscription->get_status() && 0 === $subscription->get_date( 'payment_retry' ) ) {
 				self::maybe_schedule_expiration( $subscription );
 			}
