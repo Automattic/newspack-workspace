@@ -65,8 +65,13 @@ final class CSV_Exports {
 		\add_action( 'wp_ajax_' . self::AJAX_ACTION, [ __CLASS__, 'ajax_export' ] );
 		\add_action( 'admin_init', [ __CLASS__, 'download_export_file' ] );
 
-		\add_action( 'init', [ __CLASS__, 'schedule_cleanup' ] );
+		// The cleanup sweep is armed lazily by the first export (see
+		// schedule_cleanup()); sites that never export keep a clean cron array.
 		\add_action( self::CLEANUP_CRON_HOOK, [ __CLASS__, 'cleanup_stale_files' ] );
+		\register_deactivation_hook( NEWSPACK_PLUGIN_FILE, [ __CLASS__, 'cron_deactivate' ] );
+		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::CLEANUP_CRON_HOOK, NEWSPACK_CRON_DISABLE, true ) ) {
+			\add_action( 'init', [ __CLASS__, 'cron_deactivate' ] );
+		}
 	}
 
 	/**
@@ -79,14 +84,44 @@ final class CSV_Exports {
 	 * @param string $type Export type: 'subscriptions' or 'users'.
 	 * @return bool
 	 */
-	private static function current_user_can_export( $type ) {
+	private static function current_user_can_export( string $type ): bool {
 		if ( 'subscriptions' === $type ) {
 			return \current_user_can( 'manage_woocommerce' ) && function_exists( 'wcs_get_subscriptions' );
 		}
 		if ( 'users' === $type ) {
-			return \current_user_can( 'list_users' ) && \current_user_can( 'manage_woocommerce' );
+			// The WooCommerce check matters beyond loading the exporter framework:
+			// manage_woocommerce persists on the administrator role after WC is
+			// deactivated, which would otherwise render a dead button.
+			return class_exists( 'WooCommerce' ) && \current_user_can( 'list_users' ) && \current_user_can( 'manage_woocommerce' );
 		}
 		return false;
+	}
+
+	/**
+	 * Generate a temp filename for an export run. The random suffix makes the
+	 * in-progress file path unguessable; the type prefix binds the filename to
+	 * its export type (see validate_export_filename()).
+	 *
+	 * @param string $type Export type: 'subscriptions' or 'users'.
+	 * @return string
+	 */
+	public static function generate_export_filename( string $type ): string {
+		return sprintf( 'newspack-%s-export-%s-%s.csv', $type, gmdate( 'Y-m-d' ), \wp_generate_password( 12, false, false ) );
+	}
+
+	/**
+	 * Whether a client-supplied filename belongs to the given export type.
+	 *
+	 * Capability checks are per-type, so a filename must not be allowed to
+	 * cross types (e.g. a subscriptions-capable user replaying a users-export
+	 * filename through the subscriptions download path).
+	 *
+	 * @param string $filename Sanitized filename.
+	 * @param string $type     Export type: 'subscriptions' or 'users'.
+	 * @return bool
+	 */
+	public static function validate_export_filename( string $filename, string $type ): bool {
+		return 0 === strpos( $filename, "newspack-{$type}-export-" );
 	}
 
 	/**
@@ -184,12 +219,12 @@ final class CSV_Exports {
 	 *
 	 * @param string $type Export type: 'subscriptions' or 'users'.
 	 */
-	private static function render_export_button( $type ) {
+	private static function render_export_button( string $type ) {
 		printf(
-			'<div class="alignleft actions newspack-csv-export-wrap"><button type="button" class="button newspack-csv-export" data-export="%s" title="%s">%s</button> <span class="newspack-csv-export__status" role="status" aria-live="polite" hidden></span></div>',
+			'<div class="alignleft actions newspack-csv-export-wrap"><button type="button" class="button newspack-csv-export" data-export="%1$s" aria-describedby="newspack-csv-export-desc-%1$s">%2$s</button> <span id="newspack-csv-export-desc-%1$s" class="screen-reader-text">%3$s</span><span class="newspack-csv-export__status" hidden></span><span class="newspack-csv-export__announce screen-reader-text" role="status"></span></div>',
 			\esc_attr( $type ),
-			\esc_attr__( 'Exports the current filtered view as CSV. Sorting is not applied; rows are ordered by date created.', 'newspack-plugin' ),
-			\esc_html__( 'Export CSV', 'newspack-plugin' )
+			\esc_html__( 'Export CSV', 'newspack-plugin' ),
+			\esc_html__( 'Exports the current filtered view as CSV. List sorting is not applied to the export.', 'newspack-plugin' )
 		);
 	}
 
@@ -256,26 +291,29 @@ final class CSV_Exports {
 		$step = isset( $_POST['step'] ) ? absint( $_POST['step'] ) : 1;
 
 		// The server names the file on step 1 (random suffix = unguessable
-		// path); subsequent steps echo it back.
-		if ( $step > 1 && ! empty( $_POST['filename'] ) ) {
-			$filename = \sanitize_file_name( \wp_unslash( $_POST['filename'] ) );
+		// path); subsequent steps echo it back. is_string() guards keep
+		// array-shaped params (filename[]=x) on the graceful-error path, and
+		// the type-prefix check keeps a filename bound to its export type.
+		$posted_filename = isset( $_POST['filename'] ) && is_string( $_POST['filename'] )
+			? \sanitize_file_name( \wp_unslash( $_POST['filename'] ) )
+			: '';
+		if ( $step > 1 && '' !== $posted_filename && self::validate_export_filename( $posted_filename, $type ) ) {
+			$filename = $posted_filename;
 		} else {
 			$step     = 1;
-			$filename = sprintf(
-				'newspack-%s-export-%s-%s.csv',
-				$type,
-				gmdate( 'Y-m-d' ),
-				\wp_generate_password( 12, false, false )
-			);
+			$filename = self::generate_export_filename( $type );
 		}
 		$exporter->set_filename( $filename );
 
 		$list_params = [];
-		if ( ! empty( $_POST['list_args'] ) ) {
+		if ( ! empty( $_POST['list_args'] ) && is_string( $_POST['list_args'] ) ) {
 			\wp_parse_str( ltrim( \wp_unslash( $_POST['list_args'] ), '?' ), $list_params ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 			$list_params = \wc_clean( $list_params );
 		}
 		$exporter->set_list_params( $list_params );
+
+		// First export on the site arms the daily stale-file sweep.
+		self::schedule_cleanup();
 
 		$exporter->set_page( $step );
 		$exporter->generate_file();
@@ -335,21 +373,38 @@ final class CSV_Exports {
 		}
 
 		$exporter = self::get_exporter( $type );
-		if ( ! $exporter || empty( $_GET['filename'] ) ) {
+		if ( ! $exporter || empty( $_GET['filename'] ) || ! is_string( $_GET['filename'] ) ) {
 			return;
 		}
-		// set_filename() runs sanitize_file_name(), killing any path traversal.
-		$exporter->set_filename( \wp_unslash( $_GET['filename'] ) ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		// set_filename() runs sanitize_file_name(), killing any path traversal;
+		// the prefix check binds the filename to the capability-checked type.
+		$filename = \sanitize_file_name( \wp_unslash( $_GET['filename'] ) );
+		if ( ! self::validate_export_filename( $filename, $type ) ) {
+			\wp_die( \esc_html__( 'Invalid download link.', 'newspack-plugin' ), '', 403 );
+		}
+		$exporter->set_filename( $filename );
 		$exporter->export();
 	}
 
 	/**
-	 * Schedule the daily sweep of abandoned export files.
+	 * Schedule the daily sweep of abandoned export files. Called from the
+	 * export entry points (not boot), so only sites that actually export
+	 * carry the recurring event.
 	 */
 	public static function schedule_cleanup() {
+		if ( defined( 'NEWSPACK_CRON_DISABLE' ) && is_array( NEWSPACK_CRON_DISABLE ) && in_array( self::CLEANUP_CRON_HOOK, NEWSPACK_CRON_DISABLE, true ) ) {
+			return;
+		}
 		if ( ! \wp_next_scheduled( self::CLEANUP_CRON_HOOK ) ) {
 			\wp_schedule_event( time(), 'daily', self::CLEANUP_CRON_HOOK );
 		}
+	}
+
+	/**
+	 * Unschedule the cleanup sweep (plugin deactivation / NEWSPACK_CRON_DISABLE).
+	 */
+	public static function cron_deactivate() {
+		\wp_clear_scheduled_hook( self::CLEANUP_CRON_HOOK );
 	}
 
 	/**

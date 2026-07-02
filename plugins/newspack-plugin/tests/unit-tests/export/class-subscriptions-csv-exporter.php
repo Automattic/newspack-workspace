@@ -197,14 +197,14 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 	/**
 	 * With no list params, the query defaults to all subscription statuses
 	 * (matching the admin list default), shop_subscription type, and a fixed
-	 * date_created DESC order.
+	 * insert-stable ID ASC order.
 	 */
 	public function test_build_query_args_defaults() {
 		$args = Subscriptions_CSV_Exporter::build_query_args( [] );
 		$this->assertSame( array_keys( wcs_get_subscription_statuses() ), $args['status'] );
 		$this->assertSame( 'shop_subscription', $args['type'] );
-		$this->assertSame( 'date_created', $args['orderby'] );
-		$this->assertSame( 'DESC', $args['order'] );
+		$this->assertSame( 'ID', $args['orderby'] );
+		$this->assertSame( 'ASC', $args['order'] );
 		$this->assertArrayNotHasKey( 'post__in', $args );
 	}
 
@@ -326,17 +326,67 @@ class Newspack_Test_Subscriptions_CSV_Exporter extends WP_UnitTestCase {
 
 	/**
 	 * List-table sorting params are intentionally not honored: the export
-	 * order is always date_created DESC.
+	 * order is always the insert-stable ID ASC.
 	 */
 	public function test_build_query_args_ignores_orderby() {
 		$args = Subscriptions_CSV_Exporter::build_query_args(
 			[
 				'orderby' => 'status',
-				'order'   => 'asc',
+				'order'   => 'desc',
 			]
 		);
-		$this->assertSame( 'date_created', $args['orderby'] );
-		$this->assertSame( 'DESC', $args['order'] );
+		$this->assertSame( 'ID', $args['orderby'] );
+		$this->assertSame( 'ASC', $args['order'] );
+	}
+
+	/**
+	 * Array-shaped params (a mangled ?m[]=... URL) are dropped instead of
+	 * fataling in the string handling.
+	 */
+	public function test_build_query_args_drops_array_params() {
+		$args = Subscriptions_CSV_Exporter::build_query_args(
+			[
+				'm'           => [ '202605' ],
+				's'           => [ 'jane' ],
+				'post_status' => 'wc-active',
+			]
+		);
+		$this->assertArrayNotHasKey( 'date_created', $args );
+		$this->assertArrayNotHasKey( 's', $args );
+		$this->assertSame( [ 'wc-active' ], $args['status'] );
+	}
+
+	/**
+	 * The WC batch exporter's exported-row counter accumulates per instance —
+	 * the documented reason both the AJAX flow and the CLI loop use a fresh
+	 * exporter instance per page. This pins that behavior so a future
+	 * "simplification" back to a reused instance fails loudly.
+	 */
+	public function test_exported_row_counter_accumulates_per_instance() {
+		for ( $i = 1; $i <= 4; $i++ ) {
+			$this->create_full_subscription(
+				[
+					'id'          => $i,
+					'customer_id' => 0,
+				]
+			);
+		}
+
+		$reused = new Subscriptions_CSV_Exporter();
+		$reused->set_limit( 2 );
+		$reused->set_page( 1 );
+		$reused->generate_file();
+		$reused->set_page( 2 );
+		$reused->generate_file();
+		// 4 rows written, but the counter double-counts on the reused
+		// instance: (page-1)*limit + accumulated rows = 2 + 4.
+		$this->assertSame( 6, $reused->get_total_exported() );
+
+		$fresh = new Subscriptions_CSV_Exporter();
+		$fresh->set_limit( 2 );
+		$fresh->set_page( 2 );
+		$fresh->generate_file();
+		$this->assertSame( 4, $fresh->get_total_exported(), 'A fresh instance per page reports the true progress.' );
 	}
 
 	/**

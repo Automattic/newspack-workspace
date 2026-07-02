@@ -30,8 +30,8 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 	 *
 	 * @param array $params Parsed query-string params from the admin list.
 	 */
-	public function set_list_params( $params ) {
-		$this->list_params = (array) $params;
+	public function set_list_params( array $params ): void {
+		$this->list_params = $params;
 	}
 
 	/**
@@ -40,7 +40,7 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 	 *
 	 * @return array Column id => translated label.
 	 */
-	public static function get_address_column_labels() {
+	public static function get_address_column_labels(): array {
 		return [
 			'billing_first_name'  => __( 'Billing First Name', 'newspack-plugin' ),
 			'billing_last_name'   => __( 'Billing Last Name', 'newspack-plugin' ),
@@ -74,7 +74,7 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 	 *
 	 * @return string Directory path, no trailing slash.
 	 */
-	public static function get_exports_dir() {
+	public static function get_exports_dir(): string {
 		$upload_dir = \wp_upload_dir();
 		$dir        = \trailingslashit( $upload_dir['basedir'] ) . CSV_Exports::EXPORTS_DIR;
 		if ( ! is_dir( $dir ) ) {
@@ -97,7 +97,7 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 	 *
 	 * @return string
 	 */
-	protected function get_file_path() {
+	protected function get_file_path(): string {
 		return \trailingslashit( self::get_exports_dir() ) . $this->get_filename();
 	}
 
@@ -106,7 +106,7 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 	 *
 	 * @return string
 	 */
-	public function get_export_file_path() {
+	public function get_export_file_path(): string {
 		return $this->get_file_path();
 	}
 
@@ -115,15 +115,43 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 	 * the temp files. Used by the WP-CLI commands; the admin flow streams
 	 * via export() instead.
 	 *
+	 * Streams the data file instead of concatenating in memory (a large
+	 * export would otherwise peak at ~2x file size), and keeps the temp
+	 * files when the write fails so a failed --output path doesn't destroy
+	 * the completed multi-batch export.
+	 *
 	 * @param string $path Destination file path.
 	 * @return bool Whether the file was written.
 	 */
-	public function save_to( $path ) {
-		// phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink, Generic.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.NoSilencedErrors.Discouraged
-		$saved = file_put_contents( $path, $this->get_headers_row_file() . $this->get_file() );
-		@unlink( $this->get_file_path() );
-		@unlink( $this->get_headers_row_file_path() );
+	public function save_to( string $path ): bool {
+		$destination_dir = dirname( $path );
+		if ( ! is_dir( $destination_dir ) || ! is_writable( $destination_dir ) ) { // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_is_writable
+			return false;
+		}
+		// The destination is admin-chosen (WP-CLI --output); direct file ops are intended here.
+		// phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_fopen, WordPress.WP.AlternativeFunctions.file_system_operations_fwrite, WordPress.WP.AlternativeFunctions.file_system_operations_fclose, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_fwrite
+		$destination = fopen( $path, 'w' );
+		if ( ! $destination ) {
+			return false;
+		}
+		// The headers row is small (get_headers_row_file() also regenerates it
+		// when the temp file is missing); the data file is streamed.
+		$saved = false !== fwrite( $destination, $this->get_headers_row_file() );
+		$data  = fopen( $this->get_file_path(), 'r' );
+		if ( $data ) {
+			$saved = $saved && false !== stream_copy_to_stream( $data, $destination );
+			fclose( $data );
+		}
+		fclose( $destination );
+
+		if ( $saved ) {
+			foreach ( [ $this->get_file_path(), $this->get_headers_row_file_path() ] as $temp_file ) {
+				if ( file_exists( $temp_file ) ) {
+					unlink( $temp_file );
+				}
+			}
+		}
 		// phpcs:enable
-		return false !== $saved;
+		return $saved;
 	}
 }

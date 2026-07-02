@@ -94,18 +94,21 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	 * CPT list-table param shapes.
 	 *
 	 * List-table sorting params are intentionally ignored: the export order is
-	 * always date_created DESC (CSV consumers re-sort; honoring meta orderby
-	 * across two datastores risks unstable pagination).
+	 * always ID ascending (CSV consumers re-sort; a deterministic, insert-
+	 * stable key keeps offset pagination consistent when subscriptions are
+	 * created mid-export — both order datastores map 'ID' to the primary key).
 	 *
 	 * @param array $params Parsed query-string params from the admin list.
 	 * @return array Query args.
 	 */
-	public static function build_query_args( $params ) {
-		$params = \wc_clean( (array) $params );
+	public static function build_query_args( array $params ): array {
+		// Array-shaped params (a mangled ?m[]=... URL) would TypeError in the
+		// string handling below; degrade to "filter ignored" instead.
+		$params = array_filter( \wc_clean( $params ), 'is_scalar' );
 		$args   = [
 			'type'    => 'shop_subscription',
-			'orderby' => 'date_created',
-			'order'   => 'DESC',
+			'orderby' => 'ID',
+			'order'   => 'ASC',
 		];
 
 		// Status: CPT lists send post_status, HPOS lists send status. Default
@@ -191,7 +194,7 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 	/**
 	 * Prepare one page of subscription rows.
 	 */
-	public function prepare_data_to_export() {
+	public function prepare_data_to_export(): void {
 		$args             = self::build_query_args( $this->list_params );
 		$args['limit']    = $this->get_limit();
 		$args['offset']   = ( $this->get_page() - 1 ) * $this->get_limit();
@@ -204,14 +207,23 @@ class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 		$results = \wcs_get_orders_with_meta_query( $args );
 
 		$this->total_rows = (int) $results->total;
-		$this->row_data   = [];
+
+		// Hydrate the page first (one wcs_get_subscription() per ID is
+		// unavoidable), then prime the user cache in one query so the
+		// customer_* columns don't cost a lookup per row.
+		$subscriptions = [];
 		foreach ( $results->orders as $subscription_id ) {
 			$subscription = \wcs_get_subscription( $subscription_id );
-			if ( ! $subscription ) {
-				continue;
+			if ( $subscription ) {
+				$subscriptions[] = $subscription;
 			}
-			$this->row_data[] = $this->get_row_data( $subscription );
 		}
+		$customer_ids = array_filter( array_map( fn( $subscription ) => (int) $subscription->get_customer_id(), $subscriptions ) );
+		if ( ! empty( $customer_ids ) && function_exists( 'cache_users' ) ) {
+			\cache_users( array_unique( $customer_ids ) );
+		}
+
+		$this->row_data = array_map( [ $this, 'get_row_data' ], $subscriptions );
 	}
 
 	/**

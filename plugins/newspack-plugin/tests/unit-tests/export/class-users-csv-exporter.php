@@ -99,7 +99,9 @@ class Newspack_Test_Users_CSV_Exporter extends WP_UnitTestCase {
 		$search = Users_CSV_Exporter::build_query_args( [ 's' => 'jane' ] );
 		$this->assertSame( '*jane*', $search['search'] );
 
-		// The core list-table filter is replayed with $_GET populated.
+		// The core list-table filter is replayed with $_GET populated — but
+		// only in admin context (the filter's callbacks may assume admin-only
+		// APIs, which would fatal under WP-CLI).
 		$seen_get = null;
 		$replay   = function ( $args ) use ( &$seen_get ) {
 			$seen_get        = $_GET; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -107,13 +109,34 @@ class Newspack_Test_Users_CSV_Exporter extends WP_UnitTestCase {
 			return $args;
 		};
 		add_filter( 'users_list_table_query_args', $replay );
+
+		$non_admin = Users_CSV_Exporter::build_query_args( [ 'role' => 'author' ] );
+		$this->assertArrayNotHasKey( 'include', $non_admin, 'The list-table filter must not be replayed outside admin context.' );
+
+		set_current_screen( 'users' );
 		$_GET     = [ 'original' => '1' ];
 		$filtered = Users_CSV_Exporter::build_query_args( [ 'role' => 'author' ] );
+		set_current_screen( 'front' );
 		remove_filter( 'users_list_table_query_args', $replay );
 
 		$this->assertSame( [ 123 ], $filtered['include'] );
 		$this->assertSame( 'author', $seen_get['role'] ?? null, 'Replayed callbacks must see the captured list params in $_GET.' );
 		$this->assertSame( [ 'original' => '1' ], $_GET, '$_GET must be restored after the replay.' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	}
+
+	/**
+	 * Array-shaped params (a mangled ?s[]=... URL) are dropped instead of
+	 * fataling in the string handling.
+	 */
+	public function test_users_build_query_args_drops_array_params() {
+		$args = Users_CSV_Exporter::build_query_args(
+			[
+				's'    => [ 'jane' ],
+				'role' => 'subscriber',
+			]
+		);
+		$this->assertArrayNotHasKey( 'search', $args );
+		$this->assertSame( 'subscriber', $args['role'] );
 	}
 
 	/**

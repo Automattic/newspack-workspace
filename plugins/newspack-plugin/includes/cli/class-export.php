@@ -57,7 +57,7 @@ class Export {
 	 * @param array $args       Positional args.
 	 * @param array $assoc_args Associative args.
 	 */
-	public static function export_subscriptions( $args, $assoc_args ) {
+	public static function export_subscriptions( array $args, array $assoc_args ) {
 		if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
 			WP_CLI::error( 'WooCommerce Subscriptions must be active.' );
 		}
@@ -105,7 +105,7 @@ class Export {
 	 * @param array $args       Positional args.
 	 * @param array $assoc_args Associative args.
 	 */
-	public static function export_users( $args, $assoc_args ) {
+	public static function export_users( array $args, array $assoc_args ) {
 		$params = [];
 		if ( ! empty( $assoc_args['role'] ) ) {
 			$params['role'] = $assoc_args['role'];
@@ -123,9 +123,11 @@ class Export {
 	 * @param array  $params     Admin-list-shaped query params.
 	 * @param array  $assoc_args CLI associative args (output, per-page).
 	 */
-	private static function run_export( $type, $params, $assoc_args ) {
-		$filename = sprintf( 'newspack-%s-export-%s-%s.csv', $type, gmdate( 'Y-m-d' ), \wp_generate_password( 12, false, false ) );
-		$output   = ! empty( $assoc_args['output'] )
+	private static function run_export( string $type, array $params, array $assoc_args ) {
+		$filename = CSV_Exports::generate_export_filename( $type );
+		// Arm the stale-file sweep in case this run is killed mid-export.
+		CSV_Exports::schedule_cleanup();
+		$output = ! empty( $assoc_args['output'] )
 			? $assoc_args['output']
 			: \trailingslashit( getcwd() ) . sprintf( 'newspack-%s-export-%s.csv', $type, gmdate( 'Y-m-d-His' ) );
 

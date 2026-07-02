@@ -1,6 +1,4 @@
 /* globals newspackCsvExport */
-import '../shared/js/public-path';
-
 /**
  * Drives the batched CSV export from the admin list tables: one AJAX request
  * per page (WooCommerce product-exporter style), then a nonce-protected
@@ -9,12 +7,19 @@ import '../shared/js/public-path';
 document.addEventListener( 'DOMContentLoaded', () => {
 	document.querySelectorAll( '.newspack-csv-export' ).forEach( button => {
 		const status = button.parentElement.querySelector( '.newspack-csv-export__status' );
-		const setStatus = text => {
+		const announcer = button.parentElement.querySelector( '.newspack-csv-export__announce' );
+		// The visible status updates every step; the live region announces
+		// only start/completion/errors so screen readers aren't flooded with
+		// per-step percentages.
+		const setStatus = ( text, announce = false ) => {
 			status.hidden = false;
 			status.textContent = text;
+			if ( announce && announcer ) {
+				announcer.textContent = text;
+			}
 		};
 		const fail = message => {
-			setStatus( message || newspackCsvExport.labels.error );
+			setStatus( message || newspackCsvExport.labels.error, true );
 			button.disabled = false;
 		};
 		const processStep = ( step, filename ) => {
@@ -36,7 +41,7 @@ document.addEventListener( 'DOMContentLoaded', () => {
 						return;
 					}
 					if ( 'done' === response.data.step ) {
-						setStatus( newspackCsvExport.labels.done );
+						setStatus( newspackCsvExport.labels.done, true );
 						button.disabled = false;
 						window.location = response.data.url;
 					} else {
@@ -48,7 +53,7 @@ document.addEventListener( 'DOMContentLoaded', () => {
 		};
 		button.addEventListener( 'click', () => {
 			button.disabled = true;
-			setStatus( `${ newspackCsvExport.labels.exporting } 0%` );
+			setStatus( `${ newspackCsvExport.labels.exporting } 0%`, true );
 			processStep( 1 );
 		} );
 	} );

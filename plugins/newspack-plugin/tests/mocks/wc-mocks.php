@@ -982,6 +982,19 @@ if ( ! class_exists( 'WC_CSV_Batch_Exporter' ) ) {
 			$this->prepare_data_to_export();
 			$this->export_rows();
 		}
+		public function get_headers_row_file() {
+			$file = chr( 239 ) . chr( 187 ) . chr( 191 ) . $this->export_column_headers();
+			if ( file_exists( $this->get_headers_row_file_path() ) ) {
+				$file = file_get_contents( $this->get_headers_row_file_path() ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown
+			}
+			return $file;
+		}
+		protected function get_headers_row_file_path() {
+			return $this->get_file_path() . '.headers';
+		}
+		protected function get_file_path() {
+			return trailingslashit( sys_get_temp_dir() ) . $this->get_filename();
+		}
 	}
 }
 

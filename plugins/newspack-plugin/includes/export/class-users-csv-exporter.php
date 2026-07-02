@@ -86,13 +86,20 @@ class Users_CSV_Exporter extends CSV_Batch_Exporter {
 	 *
 	 * Third-party list filters are honored by replaying the core
 	 * `users_list_table_query_args` filter with the captured params exposed
-	 * as $_GET (its callbacks conventionally read the superglobal).
+	 * as $_GET (its callbacks conventionally read the superglobal). The
+	 * replay only runs in the admin context the filter is contracted to:
+	 * core fires it exclusively on the users list-table screen, so its
+	 * callbacks may assume admin-only APIs (get_current_screen() is not even
+	 * defined under WP-CLI). Outside admin the filter is skipped, degrading
+	 * to "third-party filters not honored" rather than a fatal.
 	 *
 	 * @param array $params Parsed query-string params from the users list.
 	 * @return array WP_User_Query args.
 	 */
-	public static function build_query_args( $params ) {
-		$params = map_deep( (array) $params, 'sanitize_text_field' );
+	public static function build_query_args( array $params ): array {
+		// Array-shaped params (a mangled ?s[]=... URL) would TypeError in the
+		// string handling below; degrade to "filter ignored" instead.
+		$params = array_filter( map_deep( $params, 'sanitize_text_field' ), 'is_scalar' );
 		$args   = [];
 
 		if ( ! empty( $params['role'] ) ) {
@@ -103,16 +110,18 @@ class Users_CSV_Exporter extends CSV_Batch_Exporter {
 			$args['search'] = '*' . $params['s'] . '*';
 		}
 
-		// phpcs:disable WordPress.Security.NonceVerification.Recommended
-		$original_get = $_GET;
-		$_GET         = $params; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___GET
-		try {
-			/** This filter is documented in wp-admin/includes/class-wp-users-list-table.php */
-			$args = apply_filters( 'users_list_table_query_args', $args );
-		} finally {
-			$_GET = $original_get; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___GET
+		if ( \is_admin() ) {
+			// phpcs:disable WordPress.Security.NonceVerification.Recommended
+			$original_get = $_GET;
+			$_GET         = $params; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___GET
+			try {
+				/** This filter is documented in wp-admin/includes/class-wp-users-list-table.php */
+				$args = apply_filters( 'users_list_table_query_args', $args );
+			} finally {
+				$_GET = $original_get; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___GET
+			}
+			// phpcs:enable WordPress.Security.NonceVerification.Recommended
 		}
-		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 		/**
 		 * Filters the users export query args.
@@ -126,7 +135,7 @@ class Users_CSV_Exporter extends CSV_Batch_Exporter {
 	/**
 	 * Prepare one page of user rows.
 	 */
-	public function prepare_data_to_export() {
+	public function prepare_data_to_export(): void {
 		$args                = self::build_query_args( $this->list_params );
 		$args['number']      = $this->get_limit();
 		$args['paged']       = $this->get_page();
@@ -140,7 +149,13 @@ class Users_CSV_Exporter extends CSV_Batch_Exporter {
 
 		$this->total_rows = (int) $query->get_total();
 		$this->row_data   = [];
-		foreach ( $query->get_results() as $user ) {
+		$users            = $query->get_results();
+		// WP_User_Query doesn't prime user meta; batch it to one query
+		// instead of one meta-cache load per exported row.
+		if ( ! empty( $users ) ) {
+			\update_meta_cache( 'user', \wp_list_pluck( $users, 'ID' ) );
+		}
+		foreach ( $users as $user ) {
 			$this->row_data[] = $this->get_row_data( $user );
 		}
 	}
