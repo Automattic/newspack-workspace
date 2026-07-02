@@ -547,11 +547,11 @@ final class Newspack_Newsletters_Editor {
 			 * Whether to allow the experimental audio/video blocks. They have no
 			 * inline playback in email — the WC engine renders them as static
 			 * fallbacks (audio: a "Listen" link; video: a play-poster link), so
-			 * they ship on by default but behind their own switch.
+			 * they ship off by default and can be opted into via this filter.
 			 *
 			 * @param bool $enabled Whether experimental blocks are allowed.
 			 */
-			if ( apply_filters( 'newspack_newsletters_wc_experimental_blocks', true ) ) {
+			if ( apply_filters( 'newspack_newsletters_wc_experimental_blocks', false ) ) {
 				$allowed_block_types[] = 'core/audio';
 				$allowed_block_types[] = 'core/video';
 			}

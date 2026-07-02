@@ -233,33 +233,32 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 
 	/**
 	 * Audio and video render as static link/poster fallbacks in email (no inline
-	 * playback), so they ship as a labeled experiment — on by default when the WC
-	 * flag is on.
+	 * playback), so they ship as a labeled experiment — off by default, even with
+	 * the WC flag on.
 	 */
-	public function test_allowed_block_types_includes_experimental_media_when_flag_on() {
+	public function test_allowed_block_types_excludes_experimental_media_by_default() {
 		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
 		$result = $this->resolve_allowed_blocks( $this->create_newsletter_post() );
 
-		$this->assertContains( 'core/audio', $result, 'Experimental audio block should be allowed by default with the WC flag on.' );
-		$this->assertContains( 'core/video', $result, 'Experimental video block should be allowed by default with the WC flag on.' );
+		$this->assertNotContains( 'core/audio', $result, 'Experimental audio block must be off by default.' );
+		$this->assertNotContains( 'core/video', $result, 'Experimental video block must be off by default.' );
+		$this->assertContains( 'core/table', $result, 'Solid WC-native blocks must still be allowed by default.' );
 	}
 
 	/**
-	 * The experimental audio/video blocks can be turned off independently via the
-	 * newspack_newsletters_wc_experimental_blocks filter without affecting the
-	 * solid WC-native blocks.
+	 * The experimental audio/video blocks can be opted into via the
+	 * newspack_newsletters_wc_experimental_blocks filter.
 	 */
-	public function test_experimental_blocks_filter_disables_audio_video_only() {
+	public function test_experimental_blocks_filter_enables_audio_video() {
 		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
-		add_filter( 'newspack_newsletters_wc_experimental_blocks', '__return_false' );
+		add_filter( 'newspack_newsletters_wc_experimental_blocks', '__return_true' );
 
 		$result = $this->resolve_allowed_blocks( $this->create_newsletter_post() );
 
-		remove_filter( 'newspack_newsletters_wc_experimental_blocks', '__return_false' );
+		remove_filter( 'newspack_newsletters_wc_experimental_blocks', '__return_true' );
 
-		$this->assertNotContains( 'core/audio', $result, 'Audio must drop out when experimental blocks are filtered off.' );
-		$this->assertNotContains( 'core/video', $result, 'Video must drop out when experimental blocks are filtered off.' );
-		$this->assertContains( 'core/table', $result, 'Solid WC-native blocks must remain when only experimental blocks are filtered off.' );
+		$this->assertContains( 'core/audio', $result, 'Audio must be allowed when experimental blocks are enabled.' );
+		$this->assertContains( 'core/video', $result, 'Video must be allowed when experimental blocks are enabled.' );
 	}
 
 	/**
