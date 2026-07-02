@@ -220,11 +220,11 @@ class ComponentsDemo extends Component {
 							<Waiting />
 							<HStack justify="flex-start" alignment="center" spacing={ 2 } expanded={ false }>
 								<Waiting isLeft />
-								{ __( 'Spinner on the left', 'newspack-plugin' ) }
+								<span>{ __( 'Spinner on the left', 'newspack-plugin' ) }</span>
 							</HStack>
 							<HStack justify="flex-start" alignment="center" spacing={ 2 } expanded={ false }>
 								<Waiting isRight />
-								{ __( 'Spinner on the right', 'newspack-plugin' ) }
+								<span>{ __( 'Spinner on the right', 'newspack-plugin' ) }</span>
 							</HStack>
 							<Waiting isCenter />
 						</Grid>
