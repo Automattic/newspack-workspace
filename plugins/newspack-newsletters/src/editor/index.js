@@ -70,16 +70,21 @@ addFilter( 'blocks.registerBlockType', 'newspack-newsletters/core-blocks', ( set
 	 * render at content width anyway. */
 	if ( [ 'core/table', 'core/gallery', 'core/media-text', 'core/audio', 'core/video' ].includes( name ) ) {
 		const align = settings.supports?.align;
-		let current = [];
+		let current;
 		if ( true === align ) {
 			current = [ 'left', 'center', 'right', 'wide', 'full' ];
 		} else if ( Array.isArray( align ) ) {
 			current = align;
 		}
-		settings.supports = {
-			...settings.supports,
-			align: current.filter( alignment => 'wide' !== alignment && 'full' !== alignment ),
-		};
+		// Only rewrite blocks that already opt into alignment support; writing
+		// `align: []` to a block with no align support would opt it in with zero
+		// options rather than leave it untouched.
+		if ( current ) {
+			settings.supports = {
+				...settings.supports,
+				align: current.filter( alignment => 'wide' !== alignment && 'full' !== alignment ),
+			};
+		}
 	}
 
 	/* This bundle is only enqueued in the email editor (see
