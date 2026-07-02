@@ -2505,6 +2505,48 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A status-only REST update payload must not clobber the gate's stored
+	 * title or priority.
+	 */
+	public function test_update_gate_status_only_preserves_title_and_priority() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Original Title' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate as published with a distinct title and priority.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'    => 'Original Title',
+				'priority' => 5,
+				'status'   => 'publish',
+			]
+		);
+		$this->assertSame( 'Original Title', get_post( $gate_id )->post_title, 'Pre-condition: gate has the expected title' );
+		$this->assertSame( '5', get_post_meta( $gate_id, 'gate_priority', true ), 'Pre-condition: gate has the expected priority' );
+
+		// Simulate a REST update that only sends status.
+		$sanitized = Content_Gate_API::sanitize_gate( [ 'status' => 'draft' ] );
+		$this->assertSame( [ 'status' => 'draft' ], $sanitized, 'Sanitized output must contain only the explicitly provided status field' );
+
+		Content_Gate::update_gate_settings( $gate_id, $sanitized );
+
+		$this->assertSame( 'Original Title', get_post( $gate_id )->post_title, 'Stored title must not be reset when the field is absent from the update payload' );
+		$this->assertSame( '5', get_post_meta( $gate_id, 'gate_priority', true ), 'Stored priority must not be reset when the field is absent from the update payload' );
+		$this->assertSame( 'draft', get_post_status( $gate_id ), 'Status must be updated to the explicitly provided value' );
+	}
+
+	/**
+	 * Creating a gate must fall back to a default title when the payload
+	 * omits one, since sanitize_gate() no longer guarantees a title.
+	 */
+	public function test_create_gate_without_title_uses_default_title() {
+		$gate_id          = Content_Gate::create_gate( [] );
+		$this->gate_ids[] = $gate_id;
+
+		$this->assertSame( 'Untitled Content Gate', get_post( $gate_id )->post_title );
+	}
+
+	/**
 	 * The site-wide default-status option is applied to new-gate payloads that omit
 	 * status, without overriding an explicit status, and without affecting direct
 	 * PHP callers of create_gate() (e.g. WooCommerce Memberships), which rely on

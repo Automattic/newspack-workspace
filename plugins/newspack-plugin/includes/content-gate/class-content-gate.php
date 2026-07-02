@@ -682,7 +682,7 @@ class Content_Gate {
 	public static function create_gate( $gate, $post_type = self::GATE_CPT, $is_newsletter = false ) {
 		$all_gates = self::get_gates();
 		$args      = [
-			'post_title'   => $gate['title'],
+			'post_title'   => $gate['title'] ?? __( 'Untitled Content Gate', 'newspack-plugin' ),
 			'post_type'    => $post_type,
 			'post_status'  => isset( $gate['status'] ) && in_array( $gate['status'], self::get_post_statuses(), true ) ? $gate['status'] : 'publish',
 			'post_content' => '',
@@ -1278,16 +1278,19 @@ class Content_Gate {
 		}
 
 		// Update title, priority, and status.
-		wp_update_post(
-			[
-				'ID'          => $id,
-				'post_title'  => $gate['title'],
-				'post_status' => isset( $gate['status'] ) ? $gate['status'] : $post->post_status,
-				'meta_input'  => [
-					'gate_priority' => $gate['priority'],
-				],
-			]
-		);
+		$update_args = [
+			'ID'          => $id,
+			'post_status' => isset( $gate['status'] ) ? $gate['status'] : $post->post_status,
+		];
+		if ( isset( $gate['title'] ) ) {
+			$update_args['post_title'] = $gate['title'];
+		}
+		if ( isset( $gate['priority'] ) ) {
+			$update_args['meta_input'] = [
+				'gate_priority' => $gate['priority'],
+			];
+		}
+		wp_update_post( $update_args );
 
 		// Update content rules.
 		if ( isset( $gate['content_rules'] ) ) {

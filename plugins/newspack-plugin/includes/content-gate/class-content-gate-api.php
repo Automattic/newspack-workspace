@@ -109,14 +109,16 @@ class Content_Gate_API {
 	 * @return array The sanitized gate.
 	 */
 	public static function sanitize_gate( $gate ) {
-		$sanitized = [
-			'title'    => isset( $gate['title'] ) ? sanitize_text_field( $gate['title'] ) : __( 'Untitled Content Gate', 'newspack-plugin' ),
-			'priority' => isset( $gate['priority'] ) ? intval( $gate['priority'] ) : 0,
-		];
-		// Only include status, content rules, registration, custom access, and the
-		// rule-combination mode when the request explicitly provided them, so an
-		// omitted field does not clobber an existing gate's stored value on update
+		$sanitized = [];
+		// Only include fields the request explicitly provided, so an omitted
+		// field does not clobber an existing gate's stored value on update
 		// (a published gate silently reset to draft, or with its rules wiped, stops enforcing).
+		if ( isset( $gate['title'] ) ) {
+			$sanitized['title'] = sanitize_text_field( $gate['title'] );
+		}
+		if ( isset( $gate['priority'] ) ) {
+			$sanitized['priority'] = intval( $gate['priority'] );
+		}
 		if ( isset( $gate['status'] ) ) {
 			$sanitized['status'] = self::sanitize_status( $gate['status'], $gate['id'] ?? 0 );
 		}
