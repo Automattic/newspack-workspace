@@ -55,8 +55,12 @@ class Full_Bleed_Sections {
 	 * @return string Transformed HTML, or the input unchanged when not applicable.
 	 */
 	public static function transform( string $html ): string {
-		// Fast bail: nothing to bleed without an alignfull background group.
-		if ( false === strpos( $html, 'alignfull' ) || false === strpos( $html, 'has-background' ) ) {
+		// Fast bail: nothing to bleed without an alignfull block. The bleeders are
+		// background groups (`has-background`) and cover blocks (`email-block-cover`).
+		if ( false === strpos( $html, 'alignfull' ) ) {
+			return $html;
+		}
+		if ( false === strpos( $html, 'has-background' ) && false === strpos( $html, 'email-block-cover' ) ) {
 			return $html;
 		}
 
@@ -87,6 +91,13 @@ class Full_Bleed_Sections {
 			. "contains(concat(' ', normalize-space(@class), ' '), ' alignfull ') and "
 			. "contains(concat(' ', normalize-space(@class), ' '), ' has-background ')]";
 
+		// A top-level alignfull cover renders as a bare `email-block-layout` wrapper whose
+		// own child is the cover table; it carries its background image at width:100%, so
+		// hoisting the table to body level lets that background bleed.
+		$cover_query = './table['
+			. "contains(concat(' ', normalize-space(@class), ' '), ' email-block-cover ') and "
+			. "contains(concat(' ', normalize-space(@class), ' '), ' alignfull ')]";
+
 		$root_padding = self::detect_root_padding( $xpath, $container );
 		$nodes        = iterator_to_array( $container->childNodes ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM API property.
 		$node_count   = count( $nodes );
@@ -96,13 +107,14 @@ class Full_Bleed_Sections {
 		for ( $i = 0; $i < $node_count; $i++ ) {
 			$node = $nodes[ $i ];
 
-			// Drop a band's own per-block MSO ghost-table wrapper: build_band emits a fresh
-			// one, so skip the opening comment that immediately precedes a band element.
-			if ( self::is_mso_open( $node ) && isset( $nodes[ $i + 1 ] ) && self::is_band( $nodes[ $i + 1 ], $xpath, $band_query ) ) {
+			// Drop a hoisted section's own per-block MSO ghost-table wrapper (band or cover):
+			// each emits its own body-level markup, so skip the opening comment before it.
+			if ( self::is_mso_open( $node ) && isset( $nodes[ $i + 1 ] )
+				&& ( self::is_hoistable( $nodes[ $i + 1 ], $xpath, $band_query ) || self::is_hoistable( $nodes[ $i + 1 ], $xpath, $cover_query ) ) ) {
 				continue;
 			}
 
-			if ( self::is_band( $node, $xpath, $band_query ) ) {
+			if ( self::is_hoistable( $node, $xpath, $band_query ) ) {
 				if ( '' !== $run ) {
 					$segments[] = [ 'normal', $run ];
 					$run        = '';
@@ -111,6 +123,20 @@ class Full_Bleed_Sections {
 				$segments[] = [ 'band', self::build_band( $group, $dom, $xpath, $root_padding ) ];
 				++$band_count;
 				// Skip the band's closing ghost-table comment too.
+				if ( isset( $nodes[ $i + 1 ] ) && self::is_mso_close( $nodes[ $i + 1 ] ) ) {
+					++$i;
+				}
+				continue;
+			}
+
+			if ( self::is_hoistable( $node, $xpath, $cover_query ) ) {
+				if ( '' !== $run ) {
+					$segments[] = [ 'normal', $run ];
+					$run        = '';
+				}
+				$cover      = $xpath->query( $cover_query, $node )->item( 0 );
+				$segments[] = [ 'band', self::build_cover_band( $cover, $dom, $xpath, $root_padding ) ];
+				++$band_count;
 				if ( isset( $nodes[ $i + 1 ] ) && self::is_mso_close( $nodes[ $i + 1 ] ) ) {
 					++$i;
 				}
@@ -280,16 +306,67 @@ class Full_Bleed_Sections {
 	}
 
 	/**
-	 * Whether a node is a top-level band: an element directly wrapping an alignfull
-	 * background group table.
+	 * Whether a node is a top-level hoistable section: an element directly wrapping a
+	 * table matched by the given relative query (an alignfull background group, or an
+	 * alignfull cover).
 	 *
-	 * @param \DOMNode  $node       Node to test.
-	 * @param \DOMXPath $xpath      XPath over the document.
-	 * @param string    $band_query Relative XPath matching the band group table.
+	 * @param \DOMNode  $node  Node to test.
+	 * @param \DOMXPath $xpath XPath over the document.
+	 * @param string    $query Relative XPath matching the hoistable table.
 	 * @return bool
 	 */
-	private static function is_band( \DOMNode $node, \DOMXPath $xpath, string $band_query ): bool {
-		return $node instanceof \DOMElement && $xpath->query( $band_query, $node )->item( 0 ) instanceof \DOMElement;
+	private static function is_hoistable( \DOMNode $node, \DOMXPath $xpath, string $query ): bool {
+		return $node instanceof \DOMElement && $xpath->query( $query, $node )->item( 0 ) instanceof \DOMElement;
+	}
+
+	/**
+	 * Build a body-level full-width band from an alignfull cover.
+	 *
+	 * The cover table already carries its background image at `width:100%`, so emitting
+	 * it at body level (outside the content-width wrapper) is enough to bleed it. Its
+	 * inner content is then capped to the content width and re-centered so it lines up
+	 * with normal blocks: `border-box` + the same horizontal gutter (`root padding`)
+	 * `build_band()` uses, so the inner content column matches paragraphs/tables exactly
+	 * rather than overhanging by the gutter. Outlook ignores `max-width`, so the inner
+	 * container is also wrapped in an MSO ghost table pinned to the content width — the
+	 * same technique `build_band()` relies on.
+	 *
+	 * @param \DOMElement  $cover        The alignfull cover table.
+	 * @param \DOMDocument $dom          Owner document (for serializing).
+	 * @param \DOMXPath    $xpath        XPath over the document.
+	 * @param string       $root_padding Horizontal gutter to inset the inner content by.
+	 * @return string Full-width cover band HTML.
+	 */
+	private static function build_cover_band( \DOMElement $cover, \DOMDocument $dom, \DOMXPath $xpath, string $root_padding ): string {
+		$inner = $xpath->query( ".//div[contains(concat(' ', normalize-space(@class), ' '), ' wp-block-cover__inner-container ')]", $cover )->item( 0 );
+		if ( $inner instanceof \DOMElement ) {
+			// border-box + gutter so the inner content width equals normal blocks
+			// (content-size cap includes the gutter). The later padding-left/right win
+			// over any left/right in the cover's own padding shorthand.
+			$style = rtrim( trim( $inner->getAttribute( 'style' ) ), ';' );
+			$style = ( '' === $style ? '' : $style . ';' )
+				. sprintf(
+					'box-sizing:border-box;max-width:%1$dpx;margin-left:auto;margin-right:auto;padding-left:%2$s;padding-right:%2$s;',
+					self::CONTENT_WIDTH,
+					$root_padding
+				);
+			$inner->setAttribute( 'style', $style );
+
+			// Outlook/Word ignore max-width; pin the inner content to the content width
+			// with an MSO ghost table wrapped around the inner container.
+			$parent = $inner->parentNode; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM API property.
+			if ( $parent instanceof \DOMNode ) {
+				$open  = $dom->createComment( '[if mso | IE]><table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" width="' . self::CONTENT_WIDTH . '" style="width:' . self::CONTENT_WIDTH . 'px"><tr><td><![endif]' );
+				$close = $dom->createComment( '[if mso | IE]></td></tr></table><![endif]' );
+				$parent->insertBefore( $open, $inner );
+				if ( $inner->nextSibling ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM API property.
+					$parent->insertBefore( $close, $inner->nextSibling ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM API property.
+				} else {
+					$parent->appendChild( $close );
+				}
+			}
+		}
+		return $dom->saveHTML( $cover );
 	}
 
 	/**

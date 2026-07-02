@@ -182,6 +182,89 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Call newsletters_allowed_block_types() with the global $post primed to a
+	 * newsletter so is_editing_email() resolves true.
+	 *
+	 * @param \WP_Post $newsletter Newsletter post.
+	 * @return array The resolved allow-list.
+	 */
+	private function resolve_allowed_blocks( \WP_Post $newsletter ): array {
+		global $post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$previous_post = $post;
+		$post          = $newsletter;
+		setup_postdata( $newsletter );
+		$result = \Newspack_Newsletters_Editor::newsletters_allowed_block_types( true, $newsletter );
+		wp_reset_postdata();
+		// Restore the prior global $post — wp_reset_postdata() alone can leave it
+		// mutated (backupGlobals is off), making tests order-dependent.
+		$post = $previous_post;
+		return (array) $result;
+	}
+
+	/**
+	 * The WC engine can render table/gallery/media-text/cover, so they join the
+	 * allow-list when the WC renderer flag is on.
+	 */
+	public function test_allowed_block_types_adds_wc_native_blocks_when_flag_on() {
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+		$result = $this->resolve_allowed_blocks( $this->create_newsletter_post() );
+
+		foreach ( [ 'core/table', 'core/gallery', 'core/media-text', 'core/cover' ] as $block ) {
+			$this->assertContains(
+				$block,
+				$result,
+				"WC-native block '$block' must be allowed when the WC renderer flag is on."
+			);
+		}
+	}
+
+	/**
+	 * The legacy MJML renderer cannot render these blocks, so they must be absent
+	 * from the allow-list when the WC renderer flag is off.
+	 */
+	public function test_allowed_block_types_excludes_wc_native_blocks_when_flag_off() {
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
+		$result = $this->resolve_allowed_blocks( $this->create_newsletter_post() );
+
+		foreach ( [ 'core/table', 'core/gallery', 'core/media-text', 'core/cover', 'core/audio', 'core/video' ] as $block ) {
+			$this->assertNotContains(
+				$block,
+				$result,
+				"Block '$block' must not be allowed under the legacy MJML renderer."
+			);
+		}
+	}
+
+	/**
+	 * Audio and video render as static link/poster fallbacks in email (no inline
+	 * playback), so they ship as a labeled experiment — off by default, even with
+	 * the WC flag on.
+	 */
+	public function test_allowed_block_types_excludes_experimental_media_by_default() {
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+		$result = $this->resolve_allowed_blocks( $this->create_newsletter_post() );
+
+		$this->assertNotContains( 'core/audio', $result, 'Experimental audio block must be off by default.' );
+		$this->assertNotContains( 'core/video', $result, 'Experimental video block must be off by default.' );
+		$this->assertContains( 'core/table', $result, 'Solid WC-native blocks must still be allowed by default.' );
+	}
+
+	/**
+	 * The experimental audio/video blocks can be opted into via the
+	 * newspack_newsletters_wc_experimental_blocks filter.
+	 */
+	public function test_experimental_blocks_filter_enables_audio_video() {
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+		add_filter( 'newspack_newsletters_wc_experimental_blocks', '__return_true' );
+
+		$result = $this->resolve_allowed_blocks( $this->create_newsletter_post() );
+
+		// Both filters are removed in tear_down().
+		$this->assertContains( 'core/audio', $result, 'Audio must be allowed when experimental blocks are enabled.' );
+		$this->assertContains( 'core/video', $result, 'Video must be allowed when experimental blocks are enabled.' );
+	}
+
+	/**
 	 * Passes the incoming value through unchanged for non-newsletter
 	 * posts, leaving standard post editors access to all registered blocks.
 	 */
@@ -233,8 +316,12 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	public function tear_down() {
 		// Remove only the flag callbacks these tests add — not every callback on the
 		// hook — so we don't strip production/other-test filters (order-independence).
+		// Cleaning up here (rather than inline) guarantees removal even if a test
+		// assertion fails or an exception is thrown mid-test.
 		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
 		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
+		remove_filter( 'newspack_newsletters_wc_experimental_blocks', '__return_true' );
+		remove_filter( 'newspack_newsletters_wc_experimental_blocks', '__return_false' );
 
 		if ( null === $this->strip_globals_backup['pagenow'] ) {
 			unset( $GLOBALS['pagenow'] );
