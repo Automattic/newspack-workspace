@@ -145,4 +145,61 @@ class Newspack_Test_Salesforce extends WP_UnitTestCase {
 			'An existing webhook without a secret is backfilled with one.'
 		);
 	}
+
+	/**
+	 * A webhook whose stored secret is empty must be rejected, even with a signature
+	 * that matches the empty key — such a signature is reproducible by anyone.
+	 */
+	public function test_webhook_rejects_empty_secret_webhook() {
+		$webhook = new WC_Webhook();
+		$webhook->set_status( 'active' );
+		$webhook->save();
+		update_option( 'newspack_salesforce_webhook_id', $webhook->get_id() );
+		self::assertSame( '', $webhook->get_secret(), 'Precondition: the webhook has no secret.' );
+
+		$body    = wp_json_encode( [ 'id' => 1 ] );
+		$request = $this->build_sync_request( $webhook->get_id(), $body );
+		// The empty-key signature is computable by anyone; the guard must reject regardless.
+		$request->set_header( 'X-WC-Webhook-Signature', $webhook->generate_signature( $body ) );
+
+		self::assertTrue(
+			is_wp_error( Salesforce::api_validate_webhook( $request ) ),
+			'A webhook with no signing secret must be rejected even with a matching empty-key signature.'
+		);
+	}
+
+	/**
+	 * A request whose webhook id does not match the configured one is rejected, even
+	 * when the signature is otherwise valid.
+	 */
+	public function test_webhook_rejects_mismatched_webhook_id() {
+		$webhook = $this->register_sync_webhook();
+		$body    = wp_json_encode( [ 'id' => 1 ] );
+
+		$request = $this->build_sync_request( $webhook->get_id() + 1, $body );
+		$request->set_header( 'X-WC-Webhook-Signature', $webhook->generate_signature( $body ) );
+
+		self::assertTrue(
+			is_wp_error( Salesforce::api_validate_webhook( $request ) ),
+			'A request whose webhook id does not match the configured one must be rejected.'
+		);
+	}
+
+	/**
+	 * The signature is verified over the raw request body: signing one body and sending
+	 * a different one is rejected.
+	 */
+	public function test_webhook_rejects_tampered_body() {
+		$webhook = $this->register_sync_webhook();
+
+		$signed_body = wp_json_encode( [ 'id' => 1 ] );
+		$sent_body   = wp_json_encode( [ 'id' => 999 ] );
+		$request     = $this->build_sync_request( $webhook->get_id(), $sent_body );
+		$request->set_header( 'X-WC-Webhook-Signature', $webhook->generate_signature( $signed_body ) );
+
+		self::assertTrue(
+			is_wp_error( Salesforce::api_validate_webhook( $request ) ),
+			'A request whose body differs from the signed body must be rejected.'
+		);
+	}
 }

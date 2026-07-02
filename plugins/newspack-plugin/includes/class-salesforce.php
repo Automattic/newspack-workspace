@@ -30,6 +30,12 @@ class Salesforce {
 	];
 
 	/**
+	 * Autoloaded one-shot flag, set once the sync webhook is confirmed to have a
+	 * signing secret, so platform_check() stops re-loading the webhook on every init.
+	 */
+	const WEBHOOK_SECRET_BACKFILLED = 'newspack_salesforce_webhook_secret_backfilled';
+
+	/**
 	 * If this site is a duplicate (staging or dev clone) site,
 	 * don't handle webhooks which communicate with external services.
 	 *
@@ -67,7 +73,7 @@ class Salesforce {
 
 		if ( $is_newspack && ! $webhook_id ) {
 			self::create_webhook();
-		} elseif ( $is_newspack && $webhook_id ) {
+		} elseif ( $is_newspack && $webhook_id && ! get_option( self::WEBHOOK_SECRET_BACKFILLED ) ) {
 			self::ensure_webhook_secret( $webhook_id );
 		}
 	}
@@ -82,9 +88,21 @@ class Salesforce {
 	 */
 	private static function ensure_webhook_secret( $webhook_id ) {
 		$webhook = \wc_get_webhook( $webhook_id );
-		if ( $webhook && '' === $webhook->get_secret() ) {
+		if ( ! $webhook ) {
+			return;
+		}
+		if ( '' === $webhook->get_secret() ) {
+			// Deploy-window note: backfilling changes the secret, so any delivery WooCommerce
+			// already queued and signed with the old (empty) secret will 403 on arrival, and
+			// WooCommerce does not auto-retry. The window is the first init after deploy and
+			// self-heals immediately.
 			$webhook->set_secret( wp_generate_password( 50, true, true ) );
 			$webhook->save();
+		}
+		if ( '' !== $webhook->get_secret() ) {
+			// One-shot: once a secret is present, record it (autoloaded) so platform_check()
+			// stops re-loading the webhook on every init.
+			update_option( self::WEBHOOK_SECRET_BACKFILLED, true, true );
 		}
 	}
 
@@ -222,18 +240,28 @@ class Salesforce {
 	public static function api_validate_webhook( $request ) {
 		$webhook_id = (int) $request->get_header( 'X-WC-Webhook-ID' );
 		if ( ! $webhook_id || self::get_webhook() !== $webhook_id ) {
-			return self::webhook_forbidden_error();
+			return self::webhook_forbidden_error( 'missing or unrecognized webhook id' );
 		}
 
 		// Verify the WooCommerce webhook signature over the raw request body, so only
 		// WooCommerce (which holds the shared secret) can invoke the sync handler.
 		$webhook   = function_exists( 'wc_get_webhook' ) ? \wc_get_webhook( $webhook_id ) : null;
 		$signature = $request->get_header( 'X-WC-Webhook-Signature' );
-		if ( ! $webhook || empty( $signature ) ) {
-			return self::webhook_forbidden_error();
+		if ( ! $webhook ) {
+			return self::webhook_forbidden_error( 'webhook not found' );
+		}
+		if ( empty( $signature ) ) {
+			return self::webhook_forbidden_error( 'missing signature header' );
+		}
+		// Fail closed when the webhook has no signing secret: an empty-key signature over the
+		// body is reproducible by anyone, so the check would provide no protection. In practice
+		// ensure_webhook_secret() backfills a secret on init before this runs, so this guard
+		// only matters if that ordering ever changes.
+		if ( '' === $webhook->get_secret() ) {
+			return self::webhook_forbidden_error( 'webhook has no signing secret' );
 		}
 		if ( ! hash_equals( $webhook->generate_signature( $request->get_body() ), $signature ) ) {
-			return self::webhook_forbidden_error();
+			return self::webhook_forbidden_error( 'signature mismatch' );
 		}
 
 		return true;
@@ -242,9 +270,17 @@ class Salesforce {
 	/**
 	 * The standard error returned for an invalid webhook request.
 	 *
+	 * The public response is intentionally generic; the reason is only written to the
+	 * server log (gated by NEWSPACK_LOG_LEVEL) to help distinguish the failure modes
+	 * ("my Salesforce sync stopped") without disclosing them to the caller.
+	 *
+	 * @param string $reason Internal reason for the rejection, for the server log only.
 	 * @return \WP_Error
 	 */
-	private static function webhook_forbidden_error() {
+	private static function webhook_forbidden_error( $reason = '' ) {
+		if ( '' !== $reason ) {
+			Logger::log( 'Salesforce sync webhook rejected: ' . $reason . '.' );
+		}
 		return new \WP_Error(
 			'newspack_rest_forbidden',
 			esc_html__( 'Invalid webhook request.', 'newspack' ),
