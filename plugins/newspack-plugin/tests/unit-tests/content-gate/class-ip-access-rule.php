@@ -89,6 +89,26 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test the bypass cookie lifetime is long enough to keep institutional
+	 * access persistent.
+	 *
+	 * The cookie's lifetime is the effective re-validation interval for
+	 * anonymous institutional visitors: when it lapses, gated pages are served
+	 * from the page cache again (where the IP check cannot run) and the
+	 * visitor is walled out until they re-visit /institutional-access.
+	 * Publishers and their institutional partners rely on validation
+	 * persisting for at least 30 days.
+	 */
+	public function test_bypass_cookie_lifetime_is_at_least_thirty_days() {
+		$thirty_days_in_seconds = 30 * DAY_IN_SECONDS;
+		$this->assertGreaterThanOrEqual(
+			$thirty_days_in_seconds,
+			IP_Access_Rule::COOKIE_EXPIRATION,
+			'The IP-access bypass cookie must persist for at least 30 days — anonymous institutional readers are forced back to the /institutional-access validation page whenever it expires.'
+		);
+	}
+
+	/**
 	 * Test that the REST route is registered.
 	 */
 	public function test_rest_route_registered() {
