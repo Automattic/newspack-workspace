@@ -190,10 +190,14 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	 */
 	private function resolve_allowed_blocks( \WP_Post $newsletter ): array {
 		global $post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-		$post = $newsletter;
+		$previous_post = $post;
+		$post          = $newsletter;
 		setup_postdata( $newsletter );
 		$result = \Newspack_Newsletters_Editor::newsletters_allowed_block_types( true, $newsletter );
 		wp_reset_postdata();
+		// Restore the prior global $post — wp_reset_postdata() alone can leave it
+		// mutated (backupGlobals is off), making tests order-dependent.
+		$post = $previous_post;
 		return (array) $result;
 	}
 
@@ -255,8 +259,7 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 
 		$result = $this->resolve_allowed_blocks( $this->create_newsletter_post() );
 
-		remove_filter( 'newspack_newsletters_wc_experimental_blocks', '__return_true' );
-
+		// Both filters are removed in tear_down().
 		$this->assertContains( 'core/audio', $result, 'Audio must be allowed when experimental blocks are enabled.' );
 		$this->assertContains( 'core/video', $result, 'Video must be allowed when experimental blocks are enabled.' );
 	}
@@ -313,8 +316,12 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	public function tear_down() {
 		// Remove only the flag callbacks these tests add — not every callback on the
 		// hook — so we don't strip production/other-test filters (order-independence).
+		// Cleaning up here (rather than inline) guarantees removal even if a test
+		// assertion fails or an exception is thrown mid-test.
 		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
 		remove_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
+		remove_filter( 'newspack_newsletters_wc_experimental_blocks', '__return_true' );
+		remove_filter( 'newspack_newsletters_wc_experimental_blocks', '__return_false' );
 
 		if ( null === $this->strip_globals_backup['pagenow'] ) {
 			unset( $GLOBALS['pagenow'] );
