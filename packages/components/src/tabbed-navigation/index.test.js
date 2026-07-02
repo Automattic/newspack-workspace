@@ -43,8 +43,14 @@ describe( 'isItemActive', () => {
 		} );
 
 		it( 'matches a path prefix when exact is false', () => {
+			expect( isItemActive( { path: '/segments', exact: false }, '/segments' ) ).toBe( true );
 			expect( isItemActive( { path: '/segments', exact: false }, '/segments/123' ) ).toBe( true );
 			expect( isItemActive( { path: '/segments', exact: false }, '/donations' ) ).toBe( false );
+		} );
+
+		it( 'does not match a prefix-colliding sibling when exact is false', () => {
+			expect( isItemActive( { path: '/segments', exact: false }, '/segments-old' ) ).toBe( false );
+			expect( isItemActive( { path: '/segments', exact: false }, '/segmentsnew' ) ).toBe( false );
 		} );
 
 		it( 'matches an activeTabPaths entry exactly', () => {
@@ -54,7 +60,9 @@ describe( 'isItemActive', () => {
 		} );
 
 		it( 'matches an activeTabPaths wildcard as a prefix', () => {
-			const item = { path: '/segments', activeTabPaths: [ '/segments/*' ] };
+			// Distinct path so the exact-path check does not short-circuit and the
+			// wildcard branch is what is exercised.
+			const item = { path: '/other', activeTabPaths: [ '/segments/*' ] };
 			expect( isItemActive( item, '/segments/123' ) ).toBe( true );
 			expect( isItemActive( item, '/segments' ) ).toBe( false );
 			expect( isItemActive( item, '/donations' ) ).toBe( false );

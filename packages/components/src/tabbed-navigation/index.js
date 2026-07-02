@@ -46,7 +46,9 @@ export const isItemActive = ( item, pathname ) => {
 		return item.activeTabPaths.some( path => ( path.endsWith( '*' ) ? pathname.startsWith( path.slice( 0, -1 ) ) : path === pathname ) );
 	}
 	if ( false === item.exact && item.path ) {
-		return pathname.startsWith( item.path );
+		// Segment-aware prefix match (mirrors react-router's matchPath): `/segments`
+		// matches `/segments/123` but not a prefix-colliding sibling like `/segments-old`.
+		return pathname === item.path || pathname.startsWith( item.path + '/' );
 	}
 	return false;
 };
