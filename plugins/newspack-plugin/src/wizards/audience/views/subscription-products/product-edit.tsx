@@ -72,6 +72,7 @@ export default function ProductEdit( { match }: { match: { params: { id?: string
 			categories={ categories }
 			bundleOptions={ bundleOptions }
 			currency={ context.currency }
+			groupSubscriptionsEnabled={ context.group_subscriptions_enabled ?? false }
 			onDone={ onDone }
 		/>
 	);

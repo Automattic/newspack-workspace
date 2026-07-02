@@ -21,6 +21,11 @@ class Google_OAuth {
 	const AUTH_CALLBACK        = 'newspack_google_oauth_callback';
 	const CSRF_TOKEN_NAMESPACE = 'google';
 
+	/**
+	 * Option storing the Google OAuth client id the proxy issues tokens for.
+	 */
+	const CLIENT_ID_OPTION_NAME = 'newspack_google_oauth_client_id';
+
 	const REQUIRED_SCOPES = [
 		'https://www.googleapis.com/auth/userinfo.email', // User's email address.
 		'https://www.googleapis.com/auth/admanager',
@@ -180,6 +185,11 @@ class Google_OAuth {
 				);
 			}
 			$response_body = json_decode( $result['body'] );
+			// Remember the client id the proxy issues tokens for, so received tokens can be
+			// confirmed to have been issued to this app.
+			if ( isset( $response_body->client_id ) ) {
+				update_option( self::CLIENT_ID_OPTION_NAME, sanitize_text_field( $response_body->client_id ), false );
+			}
 			return $response_body->url;
 		} catch ( \Exception $e ) {
 			return new WP_Error(
@@ -353,6 +363,50 @@ class Google_OAuth {
 			// We always request the email scope. Otherwise, the https://www.googleapis.com/oauth2/v2/userinfo endpoint can be used
 			// to retrieve the user email.
 			if ( isset( $token_info->email ) ) {
+				// Confirm the token was issued to this site's own OAuth client, when that is known.
+				$expected_client_id = self::get_expected_client_id();
+				if ( '' !== $expected_client_id ) {
+					// Prefer a non-empty audience, falling back to issued_to; treat an empty
+					// audience as unset so a valid issued_to is not ignored.
+					$token_client_id = '' !== ( $token_info->audience ?? '' )
+						? $token_info->audience
+						: ( $token_info->issued_to ?? '' );
+					if ( (string) $expected_client_id !== (string) $token_client_id ) {
+						Logger::error( 'OAuth token was issued to a different client id than expected.' );
+						// Surface via the always-on log so a rejection (an attack attempt, or a
+						// legitimate login broken by a client-id skew) is auditable fleet-wide.
+						Logger::newspack_log(
+							'newspack_google_oauth',
+							'Google sign-in rejected: token was issued to a different OAuth client id than expected.',
+							[ 'file' => 'newspack_google_oauth' ],
+							'error'
+						);
+						return new \WP_Error( 'newspack_google_oauth', __( 'Invalid Google credentials. Please reconnect.', 'newspack' ) );
+					}
+				} else {
+					// Surface via newspack_log (not just the level-gated logger) so sites still
+					// running without a known client id can be audited across the fleet.
+					Logger::newspack_log(
+						'newspack_google_oauth',
+						'Google sign-in proceeded without OAuth client id verification: no expected client id is known yet.',
+						[ 'file' => 'newspack_google_oauth' ],
+						'warning'
+					);
+				}
+
+				// Only trust a verified email address. The tokeninfo endpoint has returned this
+				// as either a boolean or a string, so normalize before checking.
+				if ( ! filter_var( $token_info->verified_email ?? false, FILTER_VALIDATE_BOOLEAN ) ) {
+					Logger::error( 'Google account email address is not verified.' );
+					Logger::newspack_log(
+						'newspack_google_oauth',
+						'Google sign-in rejected: account email address is not verified.',
+						[ 'file' => 'newspack_google_oauth' ],
+						'error'
+					);
+					return new \WP_Error( 'newspack_google_oauth', __( 'Invalid Google credentials. Please reconnect.', 'newspack' ) );
+				}
+
 				return $token_info->email;
 			} else {
 				Logger::error( 'User email missing in the response.' );
@@ -365,6 +419,23 @@ class Google_OAuth {
 			Logger::error( 'Failed retrieving user info – invalid credentials.' );
 			return new \WP_Error( 'newspack_google_oauth', __( 'Invalid Google credentials. Please reconnect.', 'newspack' ) );
 		}
+	}
+
+	/**
+	 * The Google OAuth client id that access tokens are expected to be issued to.
+	 *
+	 * Defaults to the value most recently reported by the OAuth proxy and stored
+	 * locally. Returns an empty string when none is known yet.
+	 *
+	 * @return string
+	 */
+	public static function get_expected_client_id() {
+		/**
+		 * Filters the Google OAuth client id that access tokens are expected to be issued to.
+		 *
+		 * @param string $client_id The stored client id, or empty string if none is known.
+		 */
+		return (string) apply_filters( 'newspack_google_oauth_expected_client_id', (string) get_option( self::CLIENT_ID_OPTION_NAME, '' ) );
 	}
 
 	/**

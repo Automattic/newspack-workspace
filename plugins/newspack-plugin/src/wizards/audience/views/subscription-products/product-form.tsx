@@ -49,12 +49,17 @@ type PlanDraft = { id?: number; label: string; price: string; period: string; in
 
 const newPlan = ( label = '', period = 'month' ): PlanDraft => ( { label, price: '', period, interval: '1', existing: false } );
 
+// A price must be an explicit, non-negative number. Guards against an empty field coercing to 0
+// ( Number( '' ) === 0 ) and silently publishing a paid plan as free.
+const isValidPrice = ( value: string ): boolean => value.trim() !== '' && Number.isFinite( Number( value ) ) && Number( value ) >= 0;
+
 export default function ProductForm( {
 	mode,
 	initial,
 	categories,
 	bundleOptions,
 	currency,
+	groupSubscriptionsEnabled,
 	onDone,
 }: {
 	mode: 'create' | 'edit';
@@ -62,6 +67,7 @@ export default function ProductForm( {
 	categories: { id: number; label: string }[];
 	bundleOptions: { id: number; label: string }[];
 	currency: SubscriptionProductsCurrency;
+	groupSubscriptionsEnabled: boolean;
 	onDone: () => void;
 } ) {
 	const isEdit = mode === 'edit' && !! initial;
@@ -145,8 +151,8 @@ export default function ProductForm( {
 			}
 			payload.bundled_product_ids = bundled;
 		} else if ( type === 'variable-subscription' ) {
-			if ( plans.some( plan => ( ! plan.existing && ! plan.label.trim() ) || plan.price === '' ) ) {
-				setError( __( 'Each plan needs a label and a price.', 'newspack-plugin' ) );
+			if ( plans.some( plan => ( ! plan.existing && ! plan.label.trim() ) || ! isValidPrice( plan.price ) ) ) {
+				setError( __( 'Each plan needs a label and a valid price.', 'newspack-plugin' ) );
 				return;
 			}
 			payload.variations = plans.map( plan => ( {
@@ -158,14 +164,14 @@ export default function ProductForm( {
 				...groupFields,
 			} ) );
 		} else if ( type === 'simple' ) {
-			if ( price === '' ) {
-				setError( __( 'A price is required.', 'newspack-plugin' ) );
+			if ( ! isValidPrice( price ) ) {
+				setError( __( 'A valid price is required.', 'newspack-plugin' ) );
 				return;
 			}
 			payload.price = Number( price );
 		} else {
-			if ( price === '' ) {
-				setError( __( 'A price is required.', 'newspack-plugin' ) );
+			if ( ! isValidPrice( price ) ) {
+				setError( __( 'A valid price is required.', 'newspack-plugin' ) );
 				return;
 			}
 			payload.price = Number( price );
@@ -468,7 +474,7 @@ export default function ProductForm( {
 					description={ __( 'Multi-seat access and donation handling.', 'newspack-plugin' ) }
 				/>
 				<VStack spacing={ 4 }>
-					{ ( type === 'subscription' || type === 'variable-subscription' ) && (
+					{ groupSubscriptionsEnabled && ( type === 'subscription' || type === 'variable-subscription' ) && (
 						<VStack spacing={ 2 }>
 							<CheckboxControl
 								label={ __( 'Group subscription (multi-seat)', 'newspack-plugin' ) }
