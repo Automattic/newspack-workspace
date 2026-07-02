@@ -75,4 +75,21 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 	public function get_export_file_path() {
 		return $this->get_file_path();
 	}
+
+	/**
+	 * Save the assembled export (headers row + data) to a path and remove
+	 * the temp files. Used by the WP-CLI commands; the admin flow streams
+	 * via export() instead.
+	 *
+	 * @param string $path Destination file path.
+	 * @return bool Whether the file was written.
+	 */
+	public function save_to( $path ) {
+		// phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink, Generic.PHP.NoSilencedErrors.Discouraged, WordPress.PHP.NoSilencedErrors.Discouraged
+		$saved = file_put_contents( $path, $this->get_headers_row_file() . $this->get_file() );
+		@unlink( $this->get_file_path() );
+		@unlink( $this->get_headers_row_file_path() );
+		// phpcs:enable
+		return false !== $saved;
+	}
 }
