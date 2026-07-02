@@ -1,4 +1,3 @@
-@use "../../node_modules/tachyons/css/tachyons.min.css";
 @use "~@wordpress/base-styles/colors" as wp-colors;
 
 :root {
@@ -262,19 +261,13 @@ h1 {
 	}
 }
 
-// Notice spacing inside wizard layouts (replaces tachyons ma0/mt2/mb2).
+// Notice spacing inside wizard layouts.
 .newspack-notice--flush {
 	margin: 0;
 }
 
 .newspack-notice--spaced {
 	margin: 8px 0;
-}
-
-// tachyons overrides
-table.fixed {
-	position: static;
-	table-layout: fixed;
 }
 
 // Overrides
