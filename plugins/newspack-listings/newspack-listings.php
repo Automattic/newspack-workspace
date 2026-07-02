@@ -14,6 +14,8 @@
 
 defined( 'ABSPATH' ) || exit;
 
+// CI: trigger branch-zip bundling smoke test (NPPM-2918, throwaway branch).
+
 // Define plugin constants.
 if ( ! defined( 'NEWSPACK_LISTINGS_PLUGIN_FILE' ) ) {
 	define( 'NEWSPACK_LISTINGS_FILE', __FILE__ );

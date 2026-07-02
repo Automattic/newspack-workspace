@@ -16,6 +16,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+// CI: trigger branch-zip bundling smoke test (NPPM-2918, throwaway branch).
+
 // Define plugin constants.
 function_exists( 'get_plugin_data' ) || require_once ABSPATH . 'wp-admin/includes/plugin.php';
 $plugin_data = get_plugin_data( __FILE__, false, false );
