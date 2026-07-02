@@ -115,24 +115,32 @@ describe( 'LastUpdated', () => {
 			downloadName = this.download;
 		} );
 
-		seedSlot( 'engagement', {
-			status: 'success',
-			computedAt: '2026-06-10T18:42:13Z',
-			data: { current: { views: 5 } },
-		} );
+		// try/finally so a failed assertion still restores the mutated URL
+		// globals and the click spy — otherwise a throw here would leak them
+		// into later tests in the same worker.
+		try {
+			seedSlot( 'engagement', {
+				status: 'success',
+				computedAt: '2026-06-10T18:42:13Z',
+				data: { current: { views: 5 } },
+			} );
 
-		render( <LastUpdated tab="engagement" range={ range } previousRange={ null } /> );
-		fireEvent.click( screen.getByRole( 'button', { name: /options/i } ) );
-		fireEvent.click( screen.getByRole( 'menuitem', { name: /export json/i } ) );
+			render( <LastUpdated tab="engagement" range={ range } previousRange={ null } /> );
+			fireEvent.click( screen.getByRole( 'button', { name: /options/i } ) );
+			fireEvent.click( screen.getByRole( 'menuitem', { name: /export json/i } ) );
 
-		expect( clickSpy ).toHaveBeenCalledTimes( 1 );
-		expect( downloadName ).toBe( '2026-06-10-engagement-last-30-days.json' );
-		expect( capturedBlob ).not.toBeNull();
-
-		const urlRestoreMock = global.URL as unknown as { createObjectURL: typeof URL.createObjectURL; revokeObjectURL: typeof URL.revokeObjectURL };
-		urlRestoreMock.createObjectURL = origCreateObjectURL;
-		urlRestoreMock.revokeObjectURL = origRevokeObjectURL;
-		clickSpy.mockRestore();
+			expect( clickSpy ).toHaveBeenCalledTimes( 1 );
+			expect( downloadName ).toBe( '2026-06-10-engagement-last-30-days.json' );
+			expect( capturedBlob ).not.toBeNull();
+		} finally {
+			const urlRestoreMock = global.URL as unknown as {
+				createObjectURL: typeof URL.createObjectURL;
+				revokeObjectURL: typeof URL.revokeObjectURL;
+			};
+			urlRestoreMock.createObjectURL = origCreateObjectURL;
+			urlRestoreMock.revokeObjectURL = origRevokeObjectURL;
+			clickSpy.mockRestore();
+		}
 	} );
 
 	it( 'disables Export JSON while the slot is loading', () => {

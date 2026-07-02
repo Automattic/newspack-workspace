@@ -56,7 +56,13 @@ export const downloadJson = ( filename: string, data: unknown ): void => {
 	anchor.href = url;
 	anchor.download = filename;
 	document.body.appendChild( anchor );
-	anchor.click();
-	document.body.removeChild( anchor );
-	URL.revokeObjectURL( url );
+	// Guarantee the anchor is detached and the object URL is revoked even if
+	// click() throws (e.g. a patched click in an embedded webview), so we
+	// never strand a DOM node or leak the object URL.
+	try {
+		anchor.click();
+	} finally {
+		document.body.removeChild( anchor );
+		URL.revokeObjectURL( url );
+	}
 };
