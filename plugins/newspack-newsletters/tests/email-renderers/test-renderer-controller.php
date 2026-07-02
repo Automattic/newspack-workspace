@@ -195,10 +195,11 @@ class Test_Renderer_Controller extends WP_UnitTestCase {
 	 * @return int Number of body-level cover tables.
 	 */
 	private function count_body_level_covers( $html ) {
-		$dom = new DOMDocument();
-		libxml_use_internal_errors( true );
+		$dom  = new DOMDocument();
+		$prev = libxml_use_internal_errors( true );
 		$dom->loadHTML( '<?xml encoding="utf-8" ?>' . $html, LIBXML_NOERROR | LIBXML_NOWARNING );
 		libxml_clear_errors();
+		libxml_use_internal_errors( $prev );
 		$xpath  = new DOMXPath( $dom );
 		$covers = $xpath->query( "//table[contains(concat(' ', normalize-space(@class), ' '), ' email-block-cover ')]" );
 		$count  = 0;
@@ -208,6 +209,28 @@ class Test_Renderer_Controller extends WP_UnitTestCase {
 			}
 		}
 		return $count;
+	}
+
+	/**
+	 * Read the inline style of the inner container inside a body-level (bled) cover,
+	 * so tests can assert its content is capped to the content width.
+	 *
+	 * @param string $html Email HTML.
+	 * @return string The inner-container style, or '' if no body-level cover.
+	 */
+	private function bled_cover_inner_style( $html ) {
+		$dom  = new DOMDocument();
+		$prev = libxml_use_internal_errors( true );
+		$dom->loadHTML( '<?xml encoding="utf-8" ?>' . $html, LIBXML_NOERROR | LIBXML_NOWARNING );
+		libxml_clear_errors();
+		libxml_use_internal_errors( $prev );
+		$xpath = new DOMXPath( $dom );
+		$inner = $xpath->query(
+			"//table[contains(concat(' ', normalize-space(@class), ' '), ' email-block-cover ')]"
+			. "[not(ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' email_layout_wrapper ')])]"
+			. "//div[contains(concat(' ', normalize-space(@class), ' '), ' wp-block-cover__inner-container ')]"
+		)->item( 0 );
+		return $inner instanceof DOMElement ? $inner->getAttribute( 'style' ) : '';
 	}
 
 	/**
@@ -282,6 +305,36 @@ class Test_Renderer_Controller extends WP_UnitTestCase {
 		$this->assertStringContainsString( 'Hero heading', $html, 'Cover content must survive the transform.' );
 		$this->assertStringContainsString( 'Intro', $html, 'Surrounding content must survive.' );
 		$this->assertStringContainsString( 'Outro', $html );
+
+		// The bled cover's content must be capped to the content width with the same
+		// border-box + gutter as normal blocks, so the overlay text lines up with them.
+		$inner_style = $this->bled_cover_inner_style( $html );
+		$this->assertStringContainsString( 'box-sizing:border-box', $inner_style, 'Bled cover content must use border-box so its width matches normal blocks.' );
+		$this->assertStringContainsString( 'max-width:' . \Newspack\Newsletters\Email_Renderers\Full_Bleed_Sections::CONTENT_WIDTH . 'px', $inner_style, 'Bled cover content must cap at the content width.' );
+		$this->assertMatchesRegularExpression( '/padding-left:\s*\d+px/', $inner_style, 'Bled cover content must carry the horizontal gutter.' );
+		// Outlook ignores max-width, so the inner content is pinned via an MSO ghost table.
+		$this->assertStringContainsString( 'width="' . \Newspack\Newsletters\Email_Renderers\Full_Bleed_Sections::CONTENT_WIDTH . '"', $html, 'Bled cover must pin its inner content for Outlook via an MSO ghost table.' );
+	}
+
+	/**
+	 * A cover nested inside another block (Group/Columns) must NOT be hoisted — only
+	 * top-level covers bleed. Mirrors the nested-background-group guard.
+	 */
+	public function test_render_wc_does_not_bleed_nested_cover() {
+		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
+		$content = '<!-- wp:group --><div class="wp-block-group">'
+			. '<!-- wp:cover {"url":"https://example.com/bg.jpg","align":"full","minHeight":200} -->'
+			. '<div class="wp-block-cover alignfull" style="min-height:200px">'
+			. '<span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span>'
+			. '<img class="wp-block-cover__image-background" src="https://example.com/bg.jpg"/>'
+			. '<div class="wp-block-cover__inner-container"><!-- wp:paragraph --><p>Nested cover</p><!-- /wp:paragraph --></div></div>'
+			. '<!-- /wp:cover -->'
+			. '</div><!-- /wp:group -->';
+
+		$html = Renderer_Controller::render_wc( get_post( $this->create_newsletter( $content ) ) );
+
+		$this->assertSame( 0, $this->count_body_level_covers( $html ), 'A cover nested inside a group must not be hoisted wholesale.' );
+		$this->assertStringContainsString( 'Nested cover', $html );
 	}
 
 	/**

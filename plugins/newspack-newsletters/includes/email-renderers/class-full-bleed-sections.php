@@ -135,7 +135,7 @@ class Full_Bleed_Sections {
 					$run        = '';
 				}
 				$cover      = $xpath->query( $cover_query, $node )->item( 0 );
-				$segments[] = [ 'band', self::build_cover_band( $cover, $dom, $xpath ) ];
+				$segments[] = [ 'band', self::build_cover_band( $cover, $dom, $xpath, $root_padding ) ];
 				++$band_count;
 				if ( isset( $nodes[ $i + 1 ] ) && self::is_mso_close( $nodes[ $i + 1 ] ) ) {
 					++$i;
@@ -324,21 +324,47 @@ class Full_Bleed_Sections {
 	 *
 	 * The cover table already carries its background image at `width:100%`, so emitting
 	 * it at body level (outside the content-width wrapper) is enough to bleed it. Its
-	 * inner content is capped to the content width and re-centered so it lines up with
-	 * normal blocks rather than sprawling to the email edge.
+	 * inner content is then capped to the content width and re-centered so it lines up
+	 * with normal blocks: `border-box` + the same horizontal gutter (`root padding`)
+	 * `build_band()` uses, so the inner content column matches paragraphs/tables exactly
+	 * rather than overhanging by the gutter. Outlook ignores `max-width`, so the inner
+	 * container is also wrapped in an MSO ghost table pinned to the content width — the
+	 * same technique `build_band()` relies on.
 	 *
-	 * @param \DOMElement  $cover The alignfull cover table.
-	 * @param \DOMDocument $dom   Owner document (for serializing).
-	 * @param \DOMXPath    $xpath XPath over the document.
+	 * @param \DOMElement  $cover        The alignfull cover table.
+	 * @param \DOMDocument $dom          Owner document (for serializing).
+	 * @param \DOMXPath    $xpath        XPath over the document.
+	 * @param string       $root_padding Horizontal gutter to inset the inner content by.
 	 * @return string Full-width cover band HTML.
 	 */
-	private static function build_cover_band( \DOMElement $cover, \DOMDocument $dom, \DOMXPath $xpath ): string {
+	private static function build_cover_band( \DOMElement $cover, \DOMDocument $dom, \DOMXPath $xpath, string $root_padding ): string {
 		$inner = $xpath->query( ".//div[contains(concat(' ', normalize-space(@class), ' '), ' wp-block-cover__inner-container ')]", $cover )->item( 0 );
 		if ( $inner instanceof \DOMElement ) {
+			// border-box + gutter so the inner content width equals normal blocks
+			// (content-size cap includes the gutter). The later padding-left/right win
+			// over any left/right in the cover's own padding shorthand.
 			$style = rtrim( trim( $inner->getAttribute( 'style' ) ), ';' );
 			$style = ( '' === $style ? '' : $style . ';' )
-				. sprintf( 'max-width:%dpx;margin-left:auto;margin-right:auto;', self::CONTENT_WIDTH );
+				. sprintf(
+					'box-sizing:border-box;max-width:%1$dpx;margin-left:auto;margin-right:auto;padding-left:%2$s;padding-right:%2$s;',
+					self::CONTENT_WIDTH,
+					$root_padding
+				);
 			$inner->setAttribute( 'style', $style );
+
+			// Outlook/Word ignore max-width; pin the inner content to the content width
+			// with an MSO ghost table wrapped around the inner container.
+			$parent = $inner->parentNode; // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM API property.
+			if ( $parent instanceof \DOMNode ) {
+				$open  = $dom->createComment( '[if mso | IE]><table align="center" border="0" cellpadding="0" cellspacing="0" role="presentation" width="' . self::CONTENT_WIDTH . '" style="width:' . self::CONTENT_WIDTH . 'px"><tr><td><![endif]' );
+				$close = $dom->createComment( '[if mso | IE]></td></tr></table><![endif]' );
+				$parent->insertBefore( $open, $inner );
+				if ( $inner->nextSibling ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM API property.
+					$parent->insertBefore( $close, $inner->nextSibling ); // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOM API property.
+				} else {
+					$parent->appendChild( $close );
+				}
+			}
 		}
 		return $dom->saveHTML( $cover );
 	}
