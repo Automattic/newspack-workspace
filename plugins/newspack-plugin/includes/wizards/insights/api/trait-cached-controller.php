@@ -104,40 +104,136 @@ trait Cached_Controller_Trait {
 	}
 
 	/**
-	 * Cache-aware GET wrapper.
+	 * Compare-stripped versioned key for a single window — the key the pre-warm
+	 * and durable/on-demand pools store under.
 	 *
-	 * @param WP_REST_Request $request       Incoming request.
-	 * @param callable        $build_payload () => array.
+	 * @param DateTimeImmutable $start Window start.
+	 * @param DateTimeImmutable $end   Window end.
+	 * @return array
 	 */
-	protected function cached_response( WP_REST_Request $request, callable $build_payload ): WP_REST_Response {
-		$envelope = Cache::store(
+	private function base_key_parts( DateTimeImmutable $start, DateTimeImmutable $end ): array {
+		return $this->versioned_key_parts_from( $start->format( 'Y-m-d' ), $end->format( 'Y-m-d' ), null, null );
+	}
+
+	/**
+	 * Per-window map: [ 'start' => 'Y-m-d', 'end' => 'Y-m-d' ] for the on-demand pool.
+	 *
+	 * @param DateTimeImmutable $start Window start.
+	 * @param DateTimeImmutable $end   Window end.
+	 * @return array
+	 */
+	private function window_map( DateTimeImmutable $start, DateTimeImmutable $end ): array {
+		return [
+			'start' => $start->format( 'Y-m-d' ),
+			'end'   => $end->format( 'Y-m-d' ),
+		];
+	}
+
+	/**
+	 * Graft the previous window's payload into the current-window envelope as the
+	 * comparison data. Default: expose the previous window's metrics at top-level
+	 * `previous`. Controllers whose response embeds comparison data in additional
+	 * (non-top-level) slots override this to fill those too.
+	 *
+	 * @param array $current  Current-window base payload (its `previous` is null).
+	 * @param array $previous Previous-window base payload (its `current` holds the prior metrics).
+	 * @return array The current payload with comparison data grafted in.
+	 */
+	protected function graft_previous( array $current, array $previous ): array {
+		$current['previous'] = $previous['current'] ?? null;
+		return $current;
+	}
+
+	/**
+	 * Cache-aware GET. The CURRENT window is resolved through the durable/on-demand
+	 * pools under a comparison-stripped base key (so it hits the pre-warmed preset
+	 * entry, or a lazily-cached custom window). When comparison is on, the PREVIOUS
+	 * window is computed live via build_window_payload() (sharing the metric-layer
+	 * transient) and grafted in. Comparison parameters never enter a cache key.
+	 *
+	 * @param WP_REST_Request        $request       Incoming request.
+	 * @param DateTimeImmutable      $start         Current window start.
+	 * @param DateTimeImmutable      $end           Current window end.
+	 * @param DateTimeImmutable|null $compare_start Previous window start, or null.
+	 * @param DateTimeImmutable|null $compare_end   Previous window end, or null.
+	 */
+	protected function cached_response(
+		WP_REST_Request $request,
+		DateTimeImmutable $start,
+		DateTimeImmutable $end,
+		?DateTimeImmutable $compare_start,
+		?DateTimeImmutable $compare_end
+	): WP_REST_Response {
+		$current_env = Cache::store(
 			$this->tab_slug(),
 			$this->cache_source(),
-			$this->versioned_cache_key_parts( $request ),
-			$build_payload
+			$this->base_key_parts( $start, $end ),
+			fn() => $this->build_window_payload( $start, $end ),
+			$this->window_map( $start, $end )
 		);
-		$response = rest_ensure_response( self::wrap_envelope( $envelope ) );
+
+		$payload = $current_env['payload'];
+		if ( null !== $compare_start && null !== $compare_end ) {
+			$previous = $this->build_window_payload( $compare_start, $compare_end );
+			$payload  = $this->graft_previous( $payload, $previous );
+		}
+
+		$response = rest_ensure_response(
+			self::wrap_envelope(
+				[
+					'source'         => $current_env['source'],
+					'computed_at'    => $current_env['computed_at'],
+					'cooldown_until' => $current_env['cooldown_until'],
+					'payload'        => $payload,
+				]
+			)
+		);
 		$response->header( 'Cache-Control', 'no-store, private' );
 		return $response;
 	}
 
 	/**
-	 * POST /{tab}/refresh wrapper. Always returns a 200 envelope — when the
-	 * BQ cooldown blocks a refresh, `cache.cooldown_until` is populated in
-	 * the envelope so the client can render the throttle UI without relying
-	 * on a 4xx response (Atomic's edge mutates 4xx bodies).
+	 * POST /{tab}/refresh. Force-recomputes the CURRENT window (consuming the
+	 * per-tab BQ cooldown and syncing its durable/on-demand entry); the PREVIOUS
+	 * window is served via cache-or-compute. Always returns a 200 envelope.
 	 *
-	 * @param WP_REST_Request $request       Incoming request.
-	 * @param callable        $build_payload () => array.
+	 * @param WP_REST_Request        $request       Incoming request.
+	 * @param DateTimeImmutable      $start         Current window start.
+	 * @param DateTimeImmutable      $end           Current window end.
+	 * @param DateTimeImmutable|null $compare_start Previous window start, or null.
+	 * @param DateTimeImmutable|null $compare_end   Previous window end, or null.
 	 */
-	protected function refresh_response( WP_REST_Request $request, callable $build_payload ): WP_REST_Response {
-		$envelope = Cache::refresh(
+	protected function refresh_response(
+		WP_REST_Request $request,
+		DateTimeImmutable $start,
+		DateTimeImmutable $end,
+		?DateTimeImmutable $compare_start,
+		?DateTimeImmutable $compare_end
+	): WP_REST_Response {
+		$current_env = Cache::refresh(
 			$this->tab_slug(),
 			$this->cache_source(),
-			$this->versioned_cache_key_parts( $request ),
-			$build_payload
+			$this->base_key_parts( $start, $end ),
+			fn() => $this->build_window_payload( $start, $end ),
+			$this->window_map( $start, $end )
 		);
-		$response = rest_ensure_response( self::wrap_envelope( $envelope ) );
+
+		$payload = $current_env['payload'];
+		if ( null !== $current_env['payload'] && null !== $compare_start && null !== $compare_end ) {
+			$previous = $this->build_window_payload( $compare_start, $compare_end );
+			$payload  = $this->graft_previous( $payload, $previous );
+		}
+
+		$response = rest_ensure_response(
+			self::wrap_envelope(
+				[
+					'source'         => $current_env['source'],
+					'computed_at'    => $current_env['computed_at'],
+					'cooldown_until' => $current_env['cooldown_until'],
+					'payload'        => $payload,
+				]
+			)
+		);
 		$response->header( 'Cache-Control', 'no-store, private' );
 		return $response;
 	}

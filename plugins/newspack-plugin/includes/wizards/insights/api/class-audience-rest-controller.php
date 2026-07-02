@@ -132,12 +132,7 @@ class Audience_REST_Controller extends WP_REST_Controller {
 		}
 		[ $start, $end, $compare_start, $compare_end ] = $parsed;
 
-		return $this->cached_response(
-			$request,
-			function () use ( $start, $end, $compare_start, $compare_end ) {
-				return $this->build_response( $start, $end, $compare_start, $compare_end );
-			}
-		);
+		return $this->cached_response( $request, $start, $end, $compare_start, $compare_end );
 	}
 
 	/**
@@ -157,12 +152,7 @@ class Audience_REST_Controller extends WP_REST_Controller {
 		}
 		[ $start, $end, $compare_start, $compare_end ] = $parsed;
 
-		return $this->refresh_response(
-			$request,
-			function () use ( $start, $end, $compare_start, $compare_end ) {
-				return $this->build_response( $start, $end, $compare_start, $compare_end );
-			}
-		);
+		return $this->refresh_response( $request, $start, $end, $compare_start, $compare_end );
 	}
 
 	/**
@@ -174,6 +164,24 @@ class Audience_REST_Controller extends WP_REST_Controller {
 	 */
 	public function build_window_payload( DateTimeImmutable $start, DateTimeImmutable $end ): array {
 		return $this->build_response( $start, $end, null, null );
+	}
+
+	/**
+	 * Audience also carries a per-metric comparison in `registered_readers.new`
+	 * (a top-level sibling of `current`/`previous`, computed from wp_users, not
+	 * BigQuery). Fill its `previous` from the previous window's `new.current` so
+	 * the registered-readers delta survives per-window assembly.
+	 *
+	 * @param array $current  Current-window base payload.
+	 * @param array $previous Previous-window base payload.
+	 * @return array
+	 */
+	protected function graft_previous( array $current, array $previous ): array {
+		$current['previous'] = $previous['current'] ?? null;
+		if ( isset( $current['registered_readers']['new'] ) && is_array( $current['registered_readers']['new'] ) ) {
+			$current['registered_readers']['new']['previous'] = $previous['registered_readers']['new']['current'] ?? null;
+		}
+		return $current;
 	}
 
 	/**

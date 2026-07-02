@@ -47,6 +47,13 @@ final class Cache {
 	 */
 	const INDEX_MAX_ENTRIES = 200;
 
+	/**
+	 * Max on-demand durable entries retained per tab. Non-preset windows (custom
+	 * ranges) are cached here lazily on a compute-miss so they survive memcached
+	 * eviction; FIFO eviction (move-to-newest on rewrite) bounds wp_options growth.
+	 */
+	const ONDEMAND_MAX_ENTRIES = 10;
+
 	const LOGGER_HEADER = 'NEWSPACK-INSIGHTS-CACHE';
 
 	/**
@@ -57,36 +64,37 @@ final class Cache {
 	}
 
 	/**
-	 * Store-or-compute. For SOURCE_LOCAL this is a pure pass-through.
+	 * Store-or-compute for one window. For SOURCE_LOCAL this is a pure
+	 * pass-through. Read precedence: preset durable → on-demand durable (fresh)
+	 * → envelope transient → live compute. A live compute for a windowed
+	 * BigQuery-proxy source (when $window is supplied) write-throughs to the
+	 * on-demand pool so the window survives memcached eviction; a stale
+	 * on-demand entry is recomputed inline and overwritten.
 	 *
-	 * @param string   $tab       Tab slug.
-	 * @param string   $source    SOURCE_* constant.
-	 * @param string[] $key_parts Canonicalized window components.
-	 * @param callable $compute   () => array — orchestrator payload.
+	 * @param string     $tab       Tab slug.
+	 * @param string     $source    SOURCE_* constant.
+	 * @param string[]   $key_parts Canonicalized window components.
+	 * @param callable   $compute   () => array — orchestrator payload.
+	 * @param array|null $window    [ 'start' => 'Y-m-d', 'end' => 'Y-m-d' ]. When
+	 *                              supplied for a BigQuery-proxy source, this window
+	 *                              participates in the on-demand pool — consulted on
+	 *                              read and written through on a live compute. Null
+	 *                              (non-windowed callers) skips the on-demand pool
+	 *                              entirely (neither read nor written).
 	 * @return array{ payload: array, computed_at: string, source: string, cooldown_until: ?string }
 	 */
-	public static function store( string $tab, string $source, array $key_parts, callable $compute ): array {
+	public static function store( string $tab, string $source, array $key_parts, callable $compute, ?array $window = null ): array {
 		if ( self::SOURCE_LOCAL === $source || self::is_disabled() ) {
 			return self::envelope( (array) $compute(), $source );
 		}
 
 		$cooldown_until = self::SOURCE_BIGQUERY === $source ? self::bq_cooldown_until( $tab ) : null;
 
-		// Durable warm store takes precedence over the transient. Pre-warmed
-		// preset windows live here (memcached-eviction-proof). A stale entry is
-		// still served instantly; we fire an action so the pre-warm layer can
-		// schedule an async background refresh (stale-while-revalidate).
+		// Preset durable pool (pre-warm owned). Stale entries still serve
+		// instantly; the SWR action schedules an async background refresh.
 		$durable = self::peek_durable( $tab, $source, $key_parts );
 		if ( null !== $durable ) {
 			if ( ! self::is_fresh( $durable['computed_at'] ) ) {
-				/**
-				 * Fires when a durable warm entry is served past its freshness
-				 * bound. The pre-warm layer schedules an async refresh.
-				 *
-				 * @param string $tab   Tab slug.
-				 * @param string $start Window start (Y-m-d).
-				 * @param string $end   Window end (Y-m-d).
-				 */
 				do_action(
 					'newspack_insights_durable_stale',
 					$tab,
@@ -102,16 +110,37 @@ final class Cache {
 			];
 		}
 
-		$key = self::transient_key( $tab, $key_parts );
-		$cached         = get_transient( $key );
-
-		if ( is_array( $cached ) && isset( $cached['payload'], $cached['computed_at'], $cached['source'] ) ) {
+		// On-demand durable pool (windowed BigQuery-proxy sources only). A fresh
+		// entry serves instantly; a stale one is recomputed inline below and
+		// overwritten. When the caller passes no window (or a non-windowed source),
+		// the pool is neither read nor written — symmetric with the write-through
+		// gate below, so $window = null truly opts out of on-demand caching.
+		$ondemand_eligible = null !== $window
+			&& ( self::SOURCE_EXTERNAL === $source || self::SOURCE_BIGQUERY === $source );
+		$ondemand       = $ondemand_eligible ? self::peek_ondemand( $tab, $source, $key_parts ) : null;
+		$ondemand_stale = null !== $ondemand && ! self::is_fresh( $ondemand['computed_at'] );
+		if ( null !== $ondemand && ! $ondemand_stale ) {
 			return [
-				'payload'        => $cached['payload'],
-				'computed_at'    => $cached['computed_at'],
-				'source'         => $cached['source'],
+				'payload'        => $ondemand['payload'],
+				'computed_at'    => $ondemand['computed_at'],
+				'source'         => $ondemand['source'],
 				'cooldown_until' => $cooldown_until,
 			];
+		}
+
+		// Envelope transient — consulted only on a true miss (not when refreshing
+		// a stale on-demand entry, which must recompute).
+		if ( null === $ondemand ) {
+			$key    = self::transient_key( $tab, $key_parts );
+			$cached = get_transient( $key );
+			if ( is_array( $cached ) && isset( $cached['payload'], $cached['computed_at'], $cached['source'] ) ) {
+				return [
+					'payload'        => $cached['payload'],
+					'computed_at'    => $cached['computed_at'],
+					'source'         => $cached['source'],
+					'cooldown_until' => $cooldown_until,
+				];
+			}
 		}
 
 		$payload  = (array) $compute();
@@ -122,9 +151,14 @@ final class Cache {
 			'computed_at' => $envelope['computed_at'],
 			'source'      => $envelope['source'],
 		];
-		set_transient( $key, $store, self::ttl_for( $source ) );
+		set_transient( self::transient_key( $tab, $key_parts ), $store, self::ttl_for( $source ) );
 		if ( self::SOURCE_SNAPSHOT !== $source ) {
-			self::index_add( $tab, $key );
+			self::index_add( $tab, self::transient_key( $tab, $key_parts ) );
+		}
+
+		// Write-through / refresh the on-demand pool (same eligibility as the read).
+		if ( $ondemand_eligible ) {
+			self::store_ondemand( $tab, $source, $key_parts, $envelope['payload'], $window );
 		}
 
 		$envelope['cooldown_until'] = $cooldown_until;
@@ -338,6 +372,129 @@ final class Cache {
 	}
 
 	/**
+	 * On-demand durable option name for a lazily-cached window.
+	 *
+	 * @param string   $tab       Tab slug.
+	 * @param string[] $key_parts Canonicalized window components.
+	 * @return string
+	 */
+	private static function ondemand_option( string $tab, array $key_parts ): string {
+		return 'newspack_insights_ondemand_' . $tab . '_' . md5( (string) wp_json_encode( $key_parts ) );
+	}
+
+	/**
+	 * Per-tab on-demand index option name.
+	 *
+	 * @param string $tab Tab slug.
+	 * @return string
+	 */
+	private static function ondemand_index_option( string $tab ): string {
+		return 'newspack_insights_ondemand_index_' . $tab;
+	}
+
+	/**
+	 * Write a window to the on-demand (non-autoloaded) durable pool and record its
+	 * key in the per-tab FIFO index. No storage TTL — freshness is logical
+	 * (computed_at + is_fresh()). No-op write when caching is disabled; the
+	 * envelope is still returned so callers behave uniformly.
+	 *
+	 * @param string   $tab       Tab slug.
+	 * @param string   $source    SOURCE_* constant.
+	 * @param string[] $key_parts Canonicalized window components.
+	 * @param array    $payload   The window payload.
+	 * @param array    $window    [ 'start' => 'Y-m-d', 'end' => 'Y-m-d' ].
+	 * @return array{ payload: array, computed_at: string, source: string, cooldown_until: null }
+	 */
+	public static function store_ondemand( string $tab, string $source, array $key_parts, array $payload, array $window ): array {
+		$envelope = self::envelope( $payload, $source );
+		if ( self::is_disabled() ) {
+			return $envelope;
+		}
+		$store = [
+			'payload'     => $envelope['payload'],
+			'computed_at' => $envelope['computed_at'],
+			'source'      => $envelope['source'],
+			'window'      => $window,
+		];
+		update_option( self::ondemand_option( $tab, $key_parts ), $store, false );
+		self::ondemand_index_add( $tab, $key_parts );
+		return $envelope;
+	}
+
+	/**
+	 * Read an on-demand entry without computing. Same contract as peek_durable():
+	 * null when disabled, absent, malformed, source-mismatched, or window-empty.
+	 *
+	 * @param string   $tab       Tab slug.
+	 * @param string   $source    SOURCE_* constant the caller expects.
+	 * @param string[] $key_parts Canonicalized window components.
+	 * @return array{ payload: array, computed_at: string, source: string, window: array }|null
+	 */
+	public static function peek_ondemand( string $tab, string $source, array $key_parts ): ?array {
+		if ( self::is_disabled() ) {
+			return null;
+		}
+		$stored = get_option( self::ondemand_option( $tab, $key_parts ), null );
+		if ( ! is_array( $stored ) || ! isset( $stored['payload'], $stored['computed_at'], $stored['source'] ) ) {
+			return null;
+		}
+		if ( $stored['source'] !== $source ) {
+			return null;
+		}
+		if (
+			! isset( $stored['window'] ) ||
+			! is_array( $stored['window'] ) ||
+			empty( $stored['window']['start'] ) ||
+			empty( $stored['window']['end'] )
+		) {
+			return null;
+		}
+		return $stored;
+	}
+
+	/**
+	 * Add a key to the per-tab on-demand FIFO index (move-to-newest on rewrite),
+	 * evicting the oldest option(s) when the cap is exceeded.
+	 *
+	 * @param string   $tab       Tab slug.
+	 * @param string[] $key_parts Canonicalized window components.
+	 */
+	private static function ondemand_index_add( string $tab, array $key_parts ): void {
+		$option = self::ondemand_index_option( $tab );
+		$hashes = get_option( $option, [] );
+		if ( ! is_array( $hashes ) ) {
+			$hashes = [];
+		}
+		$hash = md5( (string) wp_json_encode( $key_parts ) );
+		// Move-to-newest: drop any existing occurrence, then append.
+		$hashes   = array_values( array_filter( $hashes, static fn( $h ) => $h !== $hash ) );
+		$hashes[] = $hash;
+		$count    = count( $hashes );
+		while ( $count > self::ONDEMAND_MAX_ENTRIES ) {
+			$evicted = array_shift( $hashes );
+			delete_option( 'newspack_insights_ondemand_' . $tab . '_' . $evicted );
+			--$count;
+		}
+		update_option( $option, $hashes, false );
+	}
+
+	/**
+	 * Delete every on-demand option for a tab and reset its index.
+	 *
+	 * @param string $tab Tab slug.
+	 */
+	public static function purge_ondemand( string $tab ): void {
+		$option = self::ondemand_index_option( $tab );
+		$hashes = get_option( $option, [] );
+		if ( is_array( $hashes ) ) {
+			foreach ( $hashes as $hash ) {
+				delete_option( 'newspack_insights_ondemand_' . $tab . '_' . $hash );
+			}
+		}
+		delete_option( $option );
+	}
+
+	/**
 	 * Get the TTL for a given source.
 	 *
 	 * @param string $source SOURCE_* constant.
@@ -409,17 +566,19 @@ final class Cache {
 	 * by the cooldown, returns the previously-cached envelope (or an empty one)
 	 * with `cooldown_until` populated, so the response transport stays 2xx.
 	 *
-	 * @param string   $tab       Tab slug.
-	 * @param string   $source    SOURCE_* constant.
-	 * @param string[] $key_parts Canonicalized window components.
-	 * @param callable $compute   () => array — orchestrator payload.
+	 * @param string     $tab       Tab slug.
+	 * @param string     $source    SOURCE_* constant.
+	 * @param string[]   $key_parts Canonicalized window components.
+	 * @param callable   $compute   () => array — orchestrator payload.
+	 * @param array|null $window    Optional window array with 'start' and 'end' keys.
 	 * @return array
 	 */
 	public static function refresh(
 		string $tab,
 		string $source,
 		array $key_parts,
-		callable $compute
+		callable $compute,
+		?array $window = null
 	): array {
 		if ( self::is_disabled() ) {
 			return self::envelope( (array) $compute(), $source );
@@ -488,18 +647,24 @@ final class Cache {
 				self::index_add( $tab, $key );
 			}
 
-			// If a durable (pre-warmed) entry already exists for this window, overwrite
-			// it so the durable store stays in sync with the manually-refreshed data.
-			// This ensures the read-precedence path in store() (durable → transient →
-			// compute) returns fresh data on the next request rather than serving the
-			// older pre-warmed entry. Reusing $existing_durable['window'] avoids having
-			// to parse start/end from $key_parts, and store_durable() builds its own
-			// envelope with a fresh computed_at — resetting the ~25h SWR clock.
-			// We deliberately do NOT create a durable entry when none exists: durable
-			// storage must remain bounded to windows the pre-warm job created.
+			// Keep the durable pools in sync with the manually-refreshed data so
+			// the read-precedence path (preset → on-demand → transient → compute)
+			// returns fresh data on the next request. Preset entries are synced in
+			// place; on-demand entries are synced or (for a windowed source with a
+			// supplied window) created — a refreshed custom range becomes durable.
 			$existing_durable = self::peek_durable( $tab, $source, $key_parts );
 			if ( null !== $existing_durable ) {
 				self::store_durable( $tab, $source, $key_parts, $envelope['payload'], $existing_durable['window'] );
+			}
+			$existing_ondemand = self::peek_ondemand( $tab, $source, $key_parts );
+			if ( null !== $existing_ondemand ) {
+				self::store_ondemand( $tab, $source, $key_parts, $envelope['payload'], $existing_ondemand['window'] );
+			} elseif (
+				null === $existing_durable &&
+				null !== $window &&
+				( self::SOURCE_EXTERNAL === $source || self::SOURCE_BIGQUERY === $source )
+			) {
+				self::store_ondemand( $tab, $source, $key_parts, $envelope['payload'], $window );
 			}
 		}
 
