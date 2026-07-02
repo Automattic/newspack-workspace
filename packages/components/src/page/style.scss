@@ -1,4 +1,5 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
 @use "~@wordpress/base-styles/variables" as wp-vars;
 
 [role="region"].newspack-page {
@@ -6,9 +7,11 @@
 }
 
 .newspack-page__header-region {
-	position: sticky;
-	top: var(--wp-admin--admin-bar--height);
-	z-index: 3;
+	@include wp-mixins.break-medium {
+		position: sticky;
+		top: var(--wp-admin--admin-bar--height);
+		z-index: 3;
+	}
 }
 
 .newspack-page__header {
