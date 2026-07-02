@@ -492,7 +492,10 @@ class Insights_Wizard extends Wizard {
 	 * @return array<string, array<int, array{label: string, url: string}>> Map of tab key => ordered list of { label, url }.
 	 */
 	protected static function get_next_steps_links() {
-		$base = 'https://help.newspack.com/playbooks/';
+		// TEMPORARY: the Playbooks pages currently live only on the STAGING help
+		// site. Flip this base to https://help.newspack.com/playbooks/ once they
+		// are published to production help (NPPD-1843/1844/1845).
+		$base = 'https://help.newspackstaging.com/playbooks/';
 
 		$grow_newsletter_signups = [
 			'label' => __( 'Grow newsletter signups', 'newspack-plugin' ),
