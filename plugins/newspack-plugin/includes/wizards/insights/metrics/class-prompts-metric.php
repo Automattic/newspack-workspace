@@ -77,6 +77,27 @@ final class Prompts_Metric {
 	];
 
 	/**
+	 * Display labels for NPPD-1837's inferred (block-less) CTA intents. Separate
+	 * from INTENT_LABELS because the classifier's tokens differ from the block
+	 * action_type keys ('newsletter' vs 'newsletters_subscription', 'subscription'
+	 * vs 'checkout') and because the three conversion intents carry an "(inferred)"
+	 * marker so they read as visibly distinct from block-tracked conversions. The
+	 * three conversion base strings intentionally match INTENT_LABELS
+	 * ('Donation' / 'Newsletter signup' / 'Subscription'); the non-conversion three
+	 * have no block-based equivalent.
+	 *
+	 * @var array<string, string>
+	 */
+	private const INFERRED_INTENT_LABELS = [
+		'donation'     => 'Donation (inferred)',
+		'newsletter'   => 'Newsletter signup (inferred)',
+		'subscription' => 'Subscription (inferred)',
+		'sponsor'      => 'Sponsored',
+		'event'        => 'Event',
+		'editorial'    => 'Editorial link',
+	];
+
+	/**
 	 * Conversion blocks scanned by the per-intent capability gate (NPPD-1720),
 	 * keyed by capability. A prompt is "capable" of an intent when any active
 	 * prompt contains the matching block. Mirrors the three blocks newspack-popups
@@ -1600,6 +1621,24 @@ final class Prompts_Metric {
 				? implode( ' + ', $capability_label_parts )
 				: ( self::INTENT_LABELS[ $intent ] ?? null );
 
+			// NPPD-1840: block-less CTA fallback (display-only). When the prompt carried no
+			// recognized conversion block, the block-based label above is null. If NPPD-1837's
+			// classifier inferred an intent from the button target, surface it as a display
+			// label. Block-based and inferred intents are mutually exclusive at the source
+			// (the emit-side classifier runs ONLY when the prompt has no block), so this can
+			// never override a real block label; the null guard is defense in depth.
+			$inferred_intent = (string) ( $row['inferred_cta_intent'] ?? '' );
+			$inferred_source = (string) ( $row['inferred_cta_source'] ?? '' );
+			$is_inferred     = null === $intent_label && '' !== $inferred_intent;
+			if ( $is_inferred ) {
+				$intent_label = self::INFERRED_INTENT_LABELS[ $inferred_intent ] ?? null;
+				// Unrecognized token (shouldn't happen — the classifier emits a fixed set):
+				// leave the label null for the frontend humanizer and don't mark the row.
+				if ( null === $intent_label ) {
+					$is_inferred = false;
+				}
+			}
+
 			// Both rates share the coherence guard + em-dash semantics via rate_value() (null =
 			// not computable: no impressions, or a >100% cross-surface ratio; a float incl. 0.0
 			// = a real rate, e.g. a donation-capable prompt that converted nobody). null = N/A
@@ -1613,6 +1652,11 @@ final class Prompts_Metric {
 				// when a single-intent prompt has no friendly override, so the frontend falls
 				// back to its humanizer (preserving title-casing).
 				'intent_label'                 => $intent_label,
+				// NPPD-1840: structured passthrough for the deferred frontend tooltip/styling
+				// slice. Display-only — never feeds a conversion denominator, rate, or count.
+				'is_inferred'                  => $is_inferred,
+				'inferred_cta_intent'          => '' !== $inferred_intent ? $inferred_intent : null,
+				'inferred_cta_source'          => '' !== $inferred_source ? $inferred_source : null,
 				'placement'                    => (string) ( $row['placement'] ?? '' ),
 				'impressions'                  => $impressions,
 				'unique_viewers'               => (int) ( $row['unique_viewers'] ?? 0 ),

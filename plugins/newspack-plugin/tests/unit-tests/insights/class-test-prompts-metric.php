@@ -2009,6 +2009,9 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 				'prompt_title',
 				'intent',
 				'intent_label',
+				'is_inferred',
+				'inferred_cta_intent',
+				'inferred_cta_source',
 				'placement',
 				'impressions',
 				'unique_viewers',
@@ -2105,6 +2108,72 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 		// 0 capabilities + unmapped intent → unchanged null label (frontend humanizes).
 		$this->assertNull( $rows[4]['intent_label'] );
 		$this->assertSame( 'undefined', $rows[4]['intent'] );
+	}
+
+	/**
+	 * NPPD-1840: a block-less prompt (no recognized conversion block, so the block-based
+	 * label is null) gets its display label from NPPD-1837's inferred CTA intent, marked
+	 * with `is_inferred` for the deferred frontend tooltip. Block-based labels always win;
+	 * an unmapped/absent inferred token leaves the label null and the row unmarked.
+	 */
+	public function test_performance_by_prompt_labels_inferred_cta() {
+		$perf_rows = [
+			// Block-less, classifier inferred a donation from the button target.
+			array_merge(
+				$this->performance_row( 1, 'Support us', 'undefined', 100 ),
+				[
+					'inferred_cta_intent' => 'donation',
+					'inferred_cta_source' => 'processor',
+				]
+			),
+			// Block-less, non-conversion inferred intent.
+			array_merge(
+				$this->performance_row( 2, 'Read more', 'undefined', 80 ),
+				[
+					'inferred_cta_intent' => 'editorial',
+					'inferred_cta_source' => 'pattern',
+				]
+			),
+			// Real single donation block that ALSO carries an inferred field: block wins.
+			// The emit-side classifier never emits both; this locks the guard anyway.
+			array_merge(
+				$this->performance_row_with_capabilities( 3, 'Donate now', 'donation', 90, [ 'donation_impressions' => 12 ] ),
+				[
+					'inferred_cta_intent' => 'donation',
+					'inferred_cta_source' => 'processor',
+				]
+			),
+			// Neither a recognized block nor an inferred intent → unchanged null label.
+			$this->performance_row( 4, 'Informational', 'undefined', 30 ),
+		];
+		$proxy  = $this->make_performance_proxy( $perf_rows, [], [], 1 ); // Non-WC env: perf query only.
+		$metric = new Prompts_Metric( $proxy );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$rows = $result['rows'];
+
+		// Inferred conversion intent → "(inferred)" label + marked, source passed through.
+		$this->assertSame( 'Donation (inferred)', $rows[0]['intent_label'] );
+		$this->assertTrue( $rows[0]['is_inferred'] );
+		$this->assertSame( 'donation', $rows[0]['inferred_cta_intent'] );
+		$this->assertSame( 'processor', $rows[0]['inferred_cta_source'] );
+		$this->assertSame( 'undefined', $rows[0]['intent'], 'raw intent is never rewritten' );
+
+		// Inferred non-conversion intent → its label + marked.
+		$this->assertSame( 'Editorial link', $rows[1]['intent_label'] );
+		$this->assertTrue( $rows[1]['is_inferred'] );
+
+		// Block label wins; the row is NOT marked inferred even though it carries the field.
+		$this->assertSame( 'Donation', $rows[2]['intent_label'] );
+		$this->assertFalse( $rows[2]['is_inferred'] );
+		$this->assertSame( 'donation', $rows[2]['intent'] );
+
+		// Neither → unchanged null label, unmarked, null passthrough.
+		$this->assertNull( $rows[3]['intent_label'] );
+		$this->assertFalse( $rows[3]['is_inferred'] );
+		$this->assertNull( $rows[3]['inferred_cta_intent'] );
+		$this->assertNull( $rows[3]['inferred_cta_source'] );
 	}
 
 	/**
