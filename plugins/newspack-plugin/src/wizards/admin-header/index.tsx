@@ -1,5 +1,5 @@
 import { render } from '@wordpress/element';
-import { Page } from '../../../packages/components/src';
+import { Page, TabbedNavigation } from '../../../packages/components/src';
 import './style.scss';
 
 type Crumb = { label: string; url?: string };
@@ -24,20 +24,13 @@ export function WizardsAdminHeader( {
 		// a static, empty div; do not give this component state that could re-render.
 		<Page breadcrumbItems={ breadcrumbs } actions={ <div id="newspack-wizards-admin-header-actions" /> }>
 			{ tabs.length > 0 && (
-				<div className="newspack-tabbed-navigation">
-					<ul>
-						{ tabs.map( ( tab, i ) => {
-							const selected = tab.forceSelected ? true : window.location.href === tab.href;
-							return (
-								<li key={ `${ tab.textContent }:${ i }` }>
-									<a href={ tab.href } className={ selected ? 'selected' : '' }>
-										{ tab.textContent }
-									</a>
-								</li>
-							);
-						} ) }
-					</ul>
-				</div>
+				<TabbedNavigation
+					items={ tabs.map( tab => ( {
+						label: tab.textContent,
+						href: tab.href,
+						selected: tab.forceSelected,
+					} ) ) }
+				/>
 			) }
 		</Page>
 	);
