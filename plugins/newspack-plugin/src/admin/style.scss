@@ -146,15 +146,17 @@ h1 {
 	background: #{wp-colors.$white};
 }
 
-// Only apply styles if there are sections and is immediate descendent.
+.newspack-wizard,
+.newspack-wizard *,
+.newspack-wizard__content,
+.newspack-wizard__content * {
+	box-sizing: border-box;
+}
+
 .newspack-wizard__content:has(> .newspack-wizard__sections) {
 	margin: 0;
 	max-width: 100%;
 	padding: 0 0 32px;
-
-	* {
-		box-sizing: border-box;
-	}
 }
 .newspack-wizard-page:not(.newspack-admin-header) {
 	#screen-meta-links {
