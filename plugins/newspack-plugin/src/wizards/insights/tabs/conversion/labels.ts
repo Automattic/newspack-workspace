@@ -34,7 +34,7 @@ export const sourceLabel = ( source: ConversionSource ): string => {
 
 /** X-axis point label for day-indexed cumulative curves (Section 4): "42" -> "Day 42". */
 export const dayLabel = ( day: string ): string =>
-	// translators: %s is a day number since the reader's first visit.
+	// translators: %s is a day number.
 	sprintf( __( 'Day %s', 'newspack-plugin' ), day );
 
 /** X-axis point label for month-indexed cohort curves (Section 5): "6" -> "Month 6". */
