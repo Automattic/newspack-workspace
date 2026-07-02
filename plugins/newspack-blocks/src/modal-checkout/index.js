@@ -199,46 +199,71 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 				} );
 
 				/**
+				 * Serialize the checkout form for cart-recalculation AJAX requests.
+				 */
+				function getCheckoutPostData() {
+					const $checkoutForm = $( 'form.checkout' );
+					// Repeat-trial checks can only resolve once the checkout form includes a billing email.
+					return $checkoutForm.length ? $checkoutForm.serialize() : '';
+				}
+
+				/**
 				 * Get updated cart total to update the "Place Order" button.
 				 */
-				function getUpdatedCartTotal() {
-					let cartTotal;
-					$.ajax( {
+				function getOrderReviewCartTotal() {
+					return $( '.order-review-wrapper tr.order-total:not(.recurring-total) .amount' ).first().text().replace( /\s+/g, ' ' ).trim();
+				}
+				let cartTotalRequest = false;
+				function requestUpdatedCartTotal( cb ) {
+					if ( cartTotalRequest ) {
+						cartTotalRequest.abort();
+					}
+					const request = $.ajax( {
 						url: newspackBlocksModalCheckout.ajax_url,
 						method: 'POST',
-						async: false,
 						data: {
 							action: 'get_cart_total',
+							modal_checkout: 1,
+							post_data: getCheckoutPostData(),
 						},
 						success: response => {
-							cartTotal = response;
+							if ( response && cartTotalRequest === request ) {
+								cb( response );
+							}
+						},
+						complete: () => {
+							if ( cartTotalRequest === request ) {
+								cartTotalRequest = false;
+							}
 						},
 					} );
-					if ( cartTotal ) {
-						return cartTotal;
-					}
+					cartTotalRequest = request;
 				}
 
 				/**
 				 * Update Place Order button text.
 				 */
-				$( document ).on( 'updated_checkout', function () {
+				function syncPlaceOrderButton( cartTotal = getOrderReviewCartTotal() ) {
 					// Update "Place Order" button to include current price.
 					let processOrderText = newspackBlocksModalCheckout.labels.complete_button;
 					if ( ! processOrderText ) {
 						return;
 					}
-					if ( $( '#place_order' ).has( $( 'span.cart-price' ) ) ) {
+					if ( cartTotal && $( '#place_order' ).has( $( 'span.cart-price' ) ) ) {
 						// Modify button text to include updated price.
 						const tree = $( '<div>' + processOrderText + '</div>' );
 						// Update the HTML in the .cart-price span with the new price, and return.
-						tree.find( '.cart-price' ).html( getUpdatedCartTotal, function () {
-							return this.childNodes;
-						} );
+						tree.find( '.cart-price' ).html( cartTotal );
 						processOrderText = tree.html();
 					}
 					$( '#place_order' ).html( processOrderText );
 					$( '#place_order_clone' ).html( processOrderText );
+					if ( ! cartTotal ) {
+						requestUpdatedCartTotal( syncPlaceOrderButton );
+					}
+				}
+				$( document ).on( 'updated_checkout', function () {
+					syncPlaceOrderButton();
 				} );
 
 				/**
@@ -536,6 +561,7 @@ import { domReady, onCheckoutPlaceOrderProcessing } from './utils';
 
 						// Disable 'Place Order' button if Subscription Confirmation is required.
 						handleSubscriptionConfirmation();
+						$( document.body ).trigger( 'update_checkout', { update_shipping_method: false } );
 					}
 					$form.triggerHandler( 'editing_details', [ isEditingDetails ] );
 					// Scroll to top.
