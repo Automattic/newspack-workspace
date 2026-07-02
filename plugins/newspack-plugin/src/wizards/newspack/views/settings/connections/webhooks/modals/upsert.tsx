@@ -121,7 +121,7 @@ const Upsert = ( {
 					<Notice isError noticeText={ __( 'Request Error: ', 'newspack-plugin' ) + editing.disabled_error } />
 				) }
 				{ testResponse.success && <Notice isSuccess noticeText={ `${ testResponse.message }: ${ testResponse.code }` } /> }
-				<Grid columns={ 1 } gutter={ 16 }>
+				<Grid columns={ 1 } gutter={ 16 } noMargin>
 					<TextControl
 						label={ __( 'URL', 'newspack-plugin' ) }
 						help={ __(
