@@ -214,8 +214,9 @@ class Test_Audience_REST_Controller extends WP_UnitTestCase {
 
 	/**
 	 * Per-window assembly parity: registered_readers.new.previous in compare mode
-	 * matches the legacy build_response() oracle, and the comparison value is not
-	 * null (proving graft_previous() actually wired it up).
+	 * matches the legacy build_response() oracle, and the comparison value reflects
+	 * the PREVIOUS window (not the current one), proving graft_previous() pulled the
+	 * right per-window payload.
 	 *
 	 * The legacy oracle is build_response() invoked directly via reflection with
 	 * both current and previous windows — that path computes registered_readers
@@ -223,8 +224,31 @@ class Test_Audience_REST_Controller extends WP_UnitTestCase {
 	 * The assembled path caches each window independently (base payload has null
 	 * comparison) and then grafts the previous window in via graft_previous().
 	 * Both paths see the same wp_users state, so the counts must match.
+	 *
+	 * A subscriber seeded inside the compare window (2025-12-15, inside Dec 2025)
+	 * but outside the current window (Jan 2026) gives the test discriminating teeth:
+	 * a missing graft would yield null vs the legacy array (equality fails), and a
+	 * wrong-window graft (current instead of previous) would yield 0 vs 1 (value
+	 * assertions fail).
 	 */
 	public function test_graft_previous_preserves_registered_readers_new_previous() {
+		// Seed a reader-role user registered inside the compare window (2025-12-15)
+		// but outside the current window (Jan 2026). This ensures registered_readers
+		// is non-zero in the previous window and zero in the current window, making
+		// the test sensitive to both a missing graft and a wrong-window graft.
+		$uid = wp_insert_user(
+			[
+				'user_login'      => 'reader_dec2025',
+				'user_pass'       => 'x',
+				'user_email'      => 'reader_dec2025@example.com',
+				'role'            => 'subscriber',
+				'user_registered' => '2025-12-15 10:00:00',
+			]
+		);
+		if ( is_wp_error( $uid ) ) {
+			$this->fail( 'Failed to create seeded reader: ' . $uid->get_error_message() );
+		}
+
 		$controller = new Audience_REST_Controller();
 
 		$start  = new DateTimeImmutable( '2026-01-01' );
@@ -251,6 +275,8 @@ class Test_Audience_REST_Controller extends WP_UnitTestCase {
 		$assembled = $response->get_data()['data'];
 
 		// The assembled registered_readers.new.previous must equal the legacy value.
+		// A missing graft yields null (assembled) vs a non-null array (legacy), so
+		// this assertion catches both a missing graft and any value mismatch.
 		$this->assertSame(
 			$legacy['registered_readers']['new']['previous'],
 			$assembled['registered_readers']['new']['previous']
@@ -259,10 +285,13 @@ class Test_Audience_REST_Controller extends WP_UnitTestCase {
 		// Top-level current must also match.
 		$this->assertSame( $legacy['current'], $assembled['current'] );
 
-		// Without the fix, the assembled value is always null; assert it equals the
-		// legacy value regardless of count (both see the same wp_users state).
-		// If users happened to register in the compare window the value is non-null;
-		// if not, both sides are null and they still match — equality is the key invariant.
+		// The seeded subscriber is in the compare window (Dec 2025) so Reader
+		// Activation counts exactly 1 there. Pin the value on both paths to prove
+		// the graft pulled the previous-window payload, not the current-window one
+		// (which would yield 0 because no readers were registered in Jan 2026).
+		$this->assertSame( 1, $legacy['registered_readers']['new']['previous']['value'] );
+		$this->assertSame( 1, $assembled['registered_readers']['new']['previous']['value'] );
+		$this->assertSame( 0, $assembled['registered_readers']['new']['current']['value'] );
 
 		Cache::purge_ondemand( 'audience' );
 	}
