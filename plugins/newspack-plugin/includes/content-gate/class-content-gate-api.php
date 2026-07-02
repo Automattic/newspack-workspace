@@ -110,17 +110,24 @@ class Content_Gate_API {
 	 */
 	public static function sanitize_gate( $gate ) {
 		$sanitized = [
-			'title'         => isset( $gate['title'] ) ? sanitize_text_field( $gate['title'] ) : __( 'Untitled Content Gate', 'newspack-plugin' ),
-			'priority'      => isset( $gate['priority'] ) ? intval( $gate['priority'] ) : 0,
-			'content_rules' => isset( $gate['content_rules'] ) ? self::sanitize_rules( $gate['content_rules'], 'content' ) : [],
-			'registration'  => isset( $gate['registration'] ) ? self::sanitize_registration( $gate['registration'] ) : [],
-			'custom_access' => isset( $gate['custom_access'] ) ? self::sanitize_custom_access( $gate['custom_access'] ) : [],
+			'title'    => isset( $gate['title'] ) ? sanitize_text_field( $gate['title'] ) : __( 'Untitled Content Gate', 'newspack-plugin' ),
+			'priority' => isset( $gate['priority'] ) ? intval( $gate['priority'] ) : 0,
 		];
-		// Only include status and the rule-combination mode when the request explicitly
-		// provided them, so an omitted field does not clobber an existing gate's stored
-		// value on update (a published gate silently reset to draft stops enforcing).
+		// Only include status, content rules, registration, custom access, and the
+		// rule-combination mode when the request explicitly provided them, so an
+		// omitted field does not clobber an existing gate's stored value on update
+		// (a published gate silently reset to draft, or with its rules wiped, stops enforcing).
 		if ( isset( $gate['status'] ) ) {
 			$sanitized['status'] = self::sanitize_status( $gate['status'], $gate['id'] ?? 0 );
+		}
+		if ( isset( $gate['content_rules'] ) ) {
+			$sanitized['content_rules'] = self::sanitize_rules( $gate['content_rules'], 'content' );
+		}
+		if ( isset( $gate['registration'] ) ) {
+			$sanitized['registration'] = self::sanitize_registration( $gate['registration'] );
+		}
+		if ( isset( $gate['custom_access'] ) ) {
+			$sanitized['custom_access'] = self::sanitize_custom_access( $gate['custom_access'] );
 		}
 		if ( isset( $gate['content_rules_match'] ) ) {
 			$sanitized['content_rules_match'] = in_array( $gate['content_rules_match'], [ 'all', 'any' ], true ) ? $gate['content_rules_match'] : 'all';

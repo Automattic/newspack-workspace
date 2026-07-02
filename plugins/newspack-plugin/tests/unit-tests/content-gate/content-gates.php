@@ -2460,6 +2460,51 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A partial REST update (e.g. title/priority only) must not wipe a published
+	 * gate's content rules, registration, or custom access settings (an empty
+	 * content_rules set stops the gate from enforcing).
+	 */
+	public function test_update_gate_without_rules_preserves_stored_rules_and_status() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Rules Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate as published with content rules.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Rules Gate',
+				'priority'      => 0,
+				'status'        => 'publish',
+				'content_rules' => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+				],
+			]
+		);
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Pre-condition: gate is published' );
+		$this->assertNotEmpty( Content_Rules::get_gate_content_rules( $gate_id ), 'Pre-condition: gate has content rules' );
+
+		// Simulate a REST update that only sends title and priority.
+		$sanitized = Content_Gate_API::sanitize_gate(
+			[
+				'title'    => 'Rules Gate',
+				'priority' => 1,
+			]
+		);
+		$this->assertArrayNotHasKey( 'content_rules', $sanitized, 'Missing content_rules must not be injected into the sanitized output' );
+		$this->assertArrayNotHasKey( 'registration', $sanitized, 'Missing registration must not be injected into the sanitized output' );
+		$this->assertArrayNotHasKey( 'custom_access', $sanitized, 'Missing custom_access must not be injected into the sanitized output' );
+		$this->assertArrayNotHasKey( 'status', $sanitized, 'Missing status must not be injected into the sanitized output' );
+
+		Content_Gate::update_gate_settings( $gate_id, $sanitized );
+
+		$this->assertNotEmpty( Content_Rules::get_gate_content_rules( $gate_id ), 'Stored content rules must not be wiped when the field is absent from the update payload' );
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Stored status must not be reset when the field is absent from the update payload' );
+	}
+
+	/**
 	 * The site-wide default-status option is applied to new-gate payloads that omit
 	 * status, without overriding an explicit status, and without affecting direct
 	 * PHP callers of create_gate() (e.g. WooCommerce Memberships), which rely on
