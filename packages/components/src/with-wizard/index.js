@@ -5,11 +5,12 @@ import { Component, createRef, Fragment } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
 import { category } from '@wordpress/icons';
+import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies.
  */
-import { Button, Card, Modal, NewspackIcon, Notice, PluginInstaller } from '../';
+import { Button, Modal, NewspackIcon, Notice, PluginInstaller } from '../';
 import Router from '../proxied-imports/router';
 import Footer from '../footer';
 import './style.scss';
@@ -99,11 +100,11 @@ export default function withWizard( WrappedComponent, requiredPlugins ) {
 			return (
 				<Modal title={ __( 'Unrecoverable error' ) } onRequestClose={ () => ( window.location = fallbackURL ) }>
 					<Notice noticeText={ message } isError rawHTML />
-					<Card buttonsCard noBorder className="justify-end">
+					<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 						<Button isPrimary href={ fallbackURL }>
 							{ __( 'Return to Dashboard', 'newspack-plugin' ) }
 						</Button>
-					</Card>
+					</HStack>
 				</Modal>
 			);
 		};
@@ -281,7 +282,7 @@ export default function withWizard( WrappedComponent, requiredPlugins ) {
 				callback && (
 					<Modal size="small" hideTitle={ ! title } title={ title } onRequestClose={ () => this.setState( { confirmation: null } ) }>
 						<p>{ message }</p>
-						<Card buttonsCard noBorder className="justify-end">
+						<HStack justify="flex-end" spacing={ 4 } wrap className="newspack-modal__footer">
 							<Button variant="secondary" onClick={ () => this.setState( { confirmation: null } ) }>
 								{ cancelText }
 							</Button>
@@ -294,7 +295,7 @@ export default function withWizard( WrappedComponent, requiredPlugins ) {
 							>
 								{ confirmText }
 							</Button>
-						</Card>
+						</HStack>
 					</Modal>
 				)
 			);
