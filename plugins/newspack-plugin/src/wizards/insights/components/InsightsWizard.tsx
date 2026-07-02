@@ -220,11 +220,11 @@ const TabSection = ( {
 		<PrintDocumentMeta tabLabel={ tabLabel } publisherName={ publisherName } range={ range } previousRange={ previousRange } />
 		<CooldownNotice tab={ tabKey } range={ range } previousRange={ previousRange } />
 		<FeedbackShipCallback context={ tabKey } />
+		<NextSteps links={ nextStepsLinks } />
 		<TabErrorBoundary key={ tabKey }>
 			<Suspense fallback={ <Fallback /> }>{ renderTabComponent( tabKey, { range, previousRange } ) }</Suspense>
 		</TabErrorBoundary>
 		<footer className="newspack-insights__tab-footer">
-			<NextSteps links={ nextStepsLinks } />
 			<TabFeedback context={ tabKey } beaconUrl={ feedbackBeaconUrl } beaconNonce={ feedbackBeaconNonce } />
 		</footer>
 	</>

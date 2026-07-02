@@ -1,10 +1,11 @@
 /**
  * NextSteps (NPPD-1842)
  *
- * Static, outcome-framed "next steps" strip pinned in each Insights tab
- * footer, below the metrics (Option B placement). Holds 1–2 links to the
- * matching help-site "Playbooks" goal flow. Renders nothing when the tab has
- * no mapped links (Gates, Campaigns, and Advertising in v1). The link label
+ * Static, outcome-framed "next steps" affordance for each Insights tab: a small
+ * floating card pinned to the bottom-right corner of the viewport (styled in
+ * _next-steps.scss), holding 1–2 links to the matching help-site "Playbooks"
+ * goal flow. Renders nothing when the tab has no mapped links (Gates, Campaigns,
+ * and Advertising in v1). The link label
  * IS the outcome ("Grow reader revenue") — never a generic "Help" / "Learn
  * more"; the wording is the whole point of the affordance. The mapping is
  * product-owned and arrives via the boot config (see get_next_steps_links()

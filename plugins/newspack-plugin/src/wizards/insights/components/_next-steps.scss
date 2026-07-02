@@ -1,26 +1,34 @@
 /**
- * Newspack Insights — per-tab "next steps" strip (NPPD-1842).
+ * Newspack Insights — per-tab "next steps" affordance (NPPD-1842).
  *
- * Outcome-worded links to the matching help-site Playbooks flow, rendered by
- * `NextSteps` in the tab footer, above the feedback affordance. Reads as a
- * light, native guidance row: the outcome labels take the admin accent so
- * they're clearly actionable, but the strip stays quiet chrome rather than a
- * loud CTA card. Loaded by `src/wizards/insights/style.scss`.
+ * A small floating card pinned to the bottom-right corner of the viewport,
+ * holding outcome-worded links to the matching help-site Playbooks flow. It
+ * stays put as the tab scrolls, so the next action is always one glance away
+ * without living in the tab body. Rendered by `NextSteps`; hidden when the tab
+ * has no mapped links. Loaded by `src/wizards/insights/style.scss`.
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
 
 .newspack-insights {
 
-	// Sits inside the footer band (above the feedback row). The footer owns the
-	// top border + spacing; the strip only needs to separate itself from the
-	// feedback prompt below it.
+	// Floating corner card, fixed to the viewport so it rides along on scroll.
+	// Sits above tab content but below the WP admin bar and any modals.
 	&__next-steps {
+		position: fixed;
+		right: 24px;
+		bottom: 24px;
+		z-index: 100;
 		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		gap: 4px 16px;
-		margin-bottom: 20px;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 6px;
+		max-width: 260px;
+		padding: 12px 16px;
+		background: #fff;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: 6px;
+		box-shadow: 0 2px 8px rgba( 0, 0, 0, 0.15 );
 
 		@media print {
 			display: none;
@@ -28,15 +36,15 @@
 	}
 
 	&__next-steps-label {
-		font-size: 13px;
+		font-size: 12px;
 		font-weight: 600;
 		color: wp-colors.$gray-700;
 	}
 
 	&__next-steps-list {
 		display: flex;
-		flex-wrap: wrap;
-		gap: 8px 20px;
+		flex-direction: column;
+		gap: 6px;
 		margin: 0;
 		padding: 0;
 		list-style: none;
