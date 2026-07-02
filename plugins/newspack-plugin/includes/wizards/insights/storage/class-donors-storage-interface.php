@@ -242,16 +242,6 @@ interface Donors_Storage_Interface {
 	public function get_subscriber_donors_in_window( array $subscriber_ids, DateTimeInterface $start, DateTimeInterface $end ): int;
 
 	/**
-	 * COUNT(DISTINCT customer_id) among $customer_ids who have at least one
-	 * completed donation order at any time (status wc-completed/wc-processing,
-	 * product IN donation IDs). Empty input returns 0 immediately.
-	 *
-	 * @param int[] $customer_ids Customer IDs to check.
-	 * @return int
-	 */
-	public function count_completed_donation_order_customers_by_customer_ids( array $customer_ids ): int;
-
-	/**
 	 * Per-product donor performance breakdown. One entry per parent
 	 * donation product (or standalone product), sorted by lifetime
 	 * revenue descending, top 50. Parent entries carry a `variations`

@@ -8,10 +8,9 @@
  *   CONTRACT / INTERFACE CHECKS — verify the four storage classes implement
  *   the expected Storage_Interface and Donors_Storage_Interface method sets.
  *
- *   EMPTY-LIST SHORT-CIRCUIT GUARDS — verify the PHP early-return guards
- *   (before any SQL is issued) in count_* / get_subscriber_donors_in_window /
- *   count_completed_donation_order_customers_by_customer_ids return 0 for an
- *   empty input list. These exercise real PHP logic, not the database.
+ *   EMPTY-LIST SHORT-CIRCUIT GUARDS — verify the PHP early-return guard
+ *   (before any SQL is issued) in get_subscriber_donors_in_window() returns 0
+ *   for an empty input list. This exercises real PHP logic, not the database.
  *
  *   METRIC-WRAPPER DELEGATION + CACHING — verify Subscribers_Metric and
  *   Donors_Metric delegate to storage, cache results in transients, and pass
@@ -22,8 +21,7 @@
  *
  *   The SQL bodies of get_at_risk_subscribers(), get_active_non_donation_
  *   subscriber_customer_ids(), get_stale_registered_users(),
- *   get_subscriber_donors_in_window() (non-empty list),
- *   count_completed_donation_order_customers_by_customer_ids() (non-empty list)
+ *   get_subscriber_donors_in_window() (non-empty list)
  *   and every other method that queries wc_orders / posts / wc_order_product_
  *   lookup cannot be behaviorally unit-tested here: the test bootstrap does not
  *   install WooCommerce DB tables (consistent with how the existing Subscribers
@@ -119,68 +117,48 @@ class Test_Conversion_Journey_Storage extends WP_UnitTestCase {
 	// =========================================================================
 
 	/**
-	 * HPOS_Storage implements the three new Storage_Interface methods.
+	 * HPOS_Storage implements the subscriber Storage_Interface methods.
 	 */
 	public function test_hpos_storage_implements_new_subscriber_interface_methods(): void {
 		$storage = new HPOS_Storage( [] );
 		$this->assertInstanceOf( Storage_Interface::class, $storage );
 		$this->assertTrue( method_exists( $storage, 'get_at_risk_subscribers' ) );
 		$this->assertTrue( method_exists( $storage, 'get_active_non_donation_subscriber_customer_ids' ) );
-		$this->assertTrue( method_exists( $storage, 'count_active_non_donation_subscribers_by_customer_ids' ) );
 		$this->assertTrue( method_exists( $storage, 'get_stale_registered_users' ) );
 	}
 
 	/**
-	 * Legacy_Storage implements the three new Storage_Interface methods.
+	 * Legacy_Storage implements the subscriber Storage_Interface methods.
 	 */
 	public function test_legacy_storage_implements_new_subscriber_interface_methods(): void {
 		$storage = new Legacy_Storage( [] );
 		$this->assertInstanceOf( Storage_Interface::class, $storage );
 		$this->assertTrue( method_exists( $storage, 'get_at_risk_subscribers' ) );
 		$this->assertTrue( method_exists( $storage, 'get_active_non_donation_subscriber_customer_ids' ) );
-		$this->assertTrue( method_exists( $storage, 'count_active_non_donation_subscribers_by_customer_ids' ) );
 		$this->assertTrue( method_exists( $storage, 'get_stale_registered_users' ) );
 	}
 
 	/**
-	 * HPOS_Donors_Storage implements the two new Donors_Storage_Interface methods.
+	 * HPOS_Donors_Storage implements the donor Donors_Storage_Interface method.
 	 */
 	public function test_hpos_donors_storage_implements_new_donor_interface_methods(): void {
 		$storage = new HPOS_Donors_Storage( [] );
 		$this->assertInstanceOf( Donors_Storage_Interface::class, $storage );
 		$this->assertTrue( method_exists( $storage, 'get_subscriber_donors_in_window' ) );
-		$this->assertTrue( method_exists( $storage, 'count_completed_donation_order_customers_by_customer_ids' ) );
 	}
 
 	/**
-	 * Legacy_Donors_Storage implements the two new Donors_Storage_Interface methods.
+	 * Legacy_Donors_Storage implements the donor Donors_Storage_Interface method.
 	 */
 	public function test_legacy_donors_storage_implements_new_donor_interface_methods(): void {
 		$storage = new Legacy_Donors_Storage( [] );
 		$this->assertInstanceOf( Donors_Storage_Interface::class, $storage );
 		$this->assertTrue( method_exists( $storage, 'get_subscriber_donors_in_window' ) );
-		$this->assertTrue( method_exists( $storage, 'count_completed_donation_order_customers_by_customer_ids' ) );
 	}
 
 	// =========================================================================
 	// Empty-list short-circuit — storage layer (no DB needed).
 	// =========================================================================
-
-	/**
-	 * HPOS: count_active_non_donation_subscribers_by_customer_ids([]) → 0.
-	 */
-	public function test_hpos_count_active_non_donation_empty_list_returns_zero(): void {
-		$storage = new HPOS_Storage( [] );
-		$this->assertSame( 0, $storage->count_active_non_donation_subscribers_by_customer_ids( [] ) );
-	}
-
-	/**
-	 * Legacy: count_active_non_donation_subscribers_by_customer_ids([]) → 0.
-	 */
-	public function test_legacy_count_active_non_donation_empty_list_returns_zero(): void {
-		$storage = new Legacy_Storage( [] );
-		$this->assertSame( 0, $storage->count_active_non_donation_subscribers_by_customer_ids( [] ) );
-	}
 
 	/**
 	 * HPOS: get_subscriber_donors_in_window([], ...) → 0.
@@ -196,22 +174,6 @@ class Test_Conversion_Journey_Storage extends WP_UnitTestCase {
 	public function test_legacy_get_subscriber_donors_in_window_empty_list_returns_zero(): void {
 		$storage = new Legacy_Donors_Storage( [] );
 		$this->assertSame( 0, $storage->get_subscriber_donors_in_window( [], $this->make_date( '2026-01-01' ), $this->make_date( '2026-01-31' ) ) );
-	}
-
-	/**
-	 * HPOS: count_completed_donation_order_customers_by_customer_ids([]) → 0.
-	 */
-	public function test_hpos_count_completed_donation_empty_list_returns_zero(): void {
-		$storage = new HPOS_Donors_Storage( [] );
-		$this->assertSame( 0, $storage->count_completed_donation_order_customers_by_customer_ids( [] ) );
-	}
-
-	/**
-	 * Legacy: count_completed_donation_order_customers_by_customer_ids([]) → 0.
-	 */
-	public function test_legacy_count_completed_donation_empty_list_returns_zero(): void {
-		$storage = new Legacy_Donors_Storage( [] );
-		$this->assertSame( 0, $storage->count_completed_donation_order_customers_by_customer_ids( [] ) );
 	}
 
 	// =========================================================================
@@ -277,34 +239,6 @@ class Test_Conversion_Journey_Storage extends WP_UnitTestCase {
 	}
 
 	/**
-	 * List-param count method delegates directly (no caching — list varies per call).
-	 */
-	public function test_subscribers_metric_count_by_ids_delegates_directly(): void {
-		$mock = $this->createMock( Storage_Interface::class );
-		// Two separate calls with different lists → storage is called twice.
-		$mock->expects( $this->exactly( 2 ) )
-			->method( 'count_active_non_donation_subscribers_by_customer_ids' )
-			->willReturnOnConsecutiveCalls( 3, 1 );
-
-		$metric = $this->make_subscribers_metric( $mock );
-
-		$this->assertSame( 3, $metric->count_active_non_donation_subscribers_by_customer_ids( [ 1, 2, 3 ] ) );
-		$this->assertSame( 1, $metric->count_active_non_donation_subscribers_by_customer_ids( [ 99 ] ) );
-	}
-
-	/**
-	 * Empty list short-circuits to 0 via storage's own guard.
-	 */
-	public function test_subscribers_metric_count_by_ids_empty_list(): void {
-		$mock = $this->createMock( Storage_Interface::class );
-		$mock->method( 'count_active_non_donation_subscribers_by_customer_ids' )
-			->willReturn( 0 );
-
-		$metric = $this->make_subscribers_metric( $mock );
-		$this->assertSame( 0, $metric->count_active_non_donation_subscribers_by_customer_ids( [] ) );
-	}
-
-	/**
 	 * Stale-registered count delegates to storage and is cached.
 	 */
 	public function test_subscribers_metric_get_stale_registered_users_delegates(): void {
@@ -356,21 +290,6 @@ class Test_Conversion_Journey_Storage extends WP_UnitTestCase {
 		$end    = $this->make_date( '2026-03-31' );
 
 		$this->assertSame( 0, $metric->get_subscriber_donors_in_window( [], $start, $end ) );
-	}
-
-	/**
-	 * Completed-donation count delegates directly (no caching — list varies).
-	 */
-	public function test_donors_metric_count_completed_donation_delegates(): void {
-		$mock = $this->createMock( Donors_Storage_Interface::class );
-		$mock->expects( $this->exactly( 2 ) )
-			->method( 'count_completed_donation_order_customers_by_customer_ids' )
-			->willReturnOnConsecutiveCalls( 4, 0 );
-
-		$metric = $this->make_donors_metric( $mock );
-
-		$this->assertSame( 4, $metric->count_completed_donation_order_customers_by_customer_ids( [ 1, 2, 3, 4 ] ) );
-		$this->assertSame( 0, $metric->count_completed_donation_order_customers_by_customer_ids( [] ) );
 	}
 
 	/**

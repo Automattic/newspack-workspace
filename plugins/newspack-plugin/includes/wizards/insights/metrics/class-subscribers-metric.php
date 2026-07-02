@@ -455,17 +455,6 @@ class Subscribers_Metric {
 	}
 
 	/**
-	 * COUNT(DISTINCT customer_id) among the given list who have an active
-	 * non-donation subscription. List-param — NOT cached (result varies per call).
-	 *
-	 * @param int[] $customer_ids Customer IDs to check.
-	 * @return int
-	 */
-	public function count_active_non_donation_subscribers_by_customer_ids( array $customer_ids ): int {
-		return $this->storage->count_active_non_donation_subscribers_by_customer_ids( $customer_ids );
-	}
-
-	/**
 	 * Count of registered readers with no active non-donation subscription and
 	 * no completed donation in the trailing 365 days. Phase-A approximation.
 	 * Point-in-time snapshot; cached TTL_DEFAULT (30 min).
