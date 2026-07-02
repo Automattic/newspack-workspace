@@ -619,6 +619,97 @@ class Newsletters_Renderer_Test extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Rendering a reusable block nested inside a group block.
+	 */
+	public function test_reusable_block_in_group() {
+		$reusable_block_post_id = self::factory()->post->create(
+			[
+				'post_type'    => 'wp_block',
+				'post_title'   => 'Reusable block in group.',
+				'post_content' => "<!-- wp:paragraph -->\n<p>Nested Hello</p>\n<!-- /wp:paragraph -->",
+			]
+		);
+		$newsletter_post        = self::factory()->post->create(
+			[
+				'post_type'    => Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_title'   => 'A newsletter with a reusable block inside a group.',
+				'post_content' => '<!-- wp:group --><div class="wp-block-group"><!-- wp:block {"ref":' . $reusable_block_post_id . '} /--></div><!-- /wp:group -->',
+			]
+		);
+		$result = Newspack_Newsletters_Renderer::post_to_mjml_components(
+			get_post( $newsletter_post )
+		);
+		$this->assertStringContainsString(
+			'Nested Hello',
+			$result,
+			'Reusable block content inside a group block is rendered'
+		);
+	}
+
+	/**
+	 * A stale reusable block reference (deleted post) should not emit empty markup.
+	 */
+	public function test_stale_reusable_block_ref() {
+		$newsletter_post = self::factory()->post->create(
+			[
+				'post_type'    => Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_title'   => 'A newsletter with a stale reusable block ref.',
+				'post_content' => '<!-- wp:block {"ref":999999} /-->',
+			]
+		);
+		$result = Newspack_Newsletters_Renderer::post_to_mjml_components(
+			get_post( $newsletter_post )
+		);
+		$this->assertEmpty(
+			$result,
+			'Stale reusable block reference produces no output'
+		);
+	}
+
+	/**
+	 * Circular reusable block references should not cause infinite recursion.
+	 */
+	public function test_circular_reusable_block_ref() {
+		// Create two wp_block posts that reference each other.
+		$block_a_id = self::factory()->post->create(
+			[
+				'post_type'    => 'wp_block',
+				'post_title'   => 'Block A',
+				'post_content' => '<!-- wp:paragraph --><p>A</p><!-- /wp:paragraph -->',
+			]
+		);
+		$block_b_id = self::factory()->post->create(
+			[
+				'post_type'    => 'wp_block',
+				'post_title'   => 'Block B',
+				'post_content' => '<!-- wp:block {"ref":' . $block_a_id . '} /-->',
+			]
+		);
+		// Update Block A to reference Block B, creating a cycle.
+		wp_update_post(
+			[
+				'ID'           => $block_a_id,
+				'post_content' => '<!-- wp:block {"ref":' . $block_b_id . '} /-->',
+			]
+		);
+
+		$newsletter_post = self::factory()->post->create(
+			[
+				'post_type'    => Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_title'   => 'A newsletter with circular reusable blocks.',
+				'post_content' => '<!-- wp:block {"ref":' . $block_a_id . '} /-->',
+			]
+		);
+		// Should not fatal — the circular ref is silently dropped.
+		$result = Newspack_Newsletters_Renderer::post_to_mjml_components(
+			get_post( $newsletter_post )
+		);
+		$this->assertIsString( $result, 'Circular reusable block references do not cause fatal errors' );
+		// The cycle is broken: output contains only empty wrapper shells, not unbounded content.
+		$this->assertLessThan( 200, strlen( $result ), 'Circular reusable block output is bounded' );
+	}
+
+	/**
 	 * Rendering with custom CSS.
 	 */
 	public function test_custom_css() {

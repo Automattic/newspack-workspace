@@ -11,6 +11,7 @@ use Newspack\Reader_Activation;
 use Newspack\Access_Rules;
 use Newspack\Content_Rules;
 use Newspack\Content_Gate;
+use Newspack\Content_Gate_API;
 use Newspack\Content_Restriction_Control;
 use Newspack\Content_Gate\IP_Access_Rule;
 use Newspack\Institution;
@@ -259,6 +260,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				],
 			]
 		);
+		$this->reset_restriction_cache();
 
 		$gates = Content_Restriction_Control::get_post_gates( $post1 );
 		$this->assertCount( 1, $gates, 'One gate for the post in category 1' );
@@ -285,6 +287,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				],
 			]
 		);
+		$this->reset_restriction_cache();
 		$gates = Content_Restriction_Control::get_post_gates( $post1 );
 		$this->assertCount( 1, $gates, 'One gate for the post in category 1' );
 		$this->assertEquals( $this->gate_ids[2], $gates[0]['id'], 'Rule with an empty array-like value is ignored; category rule still matches' );
@@ -300,6 +303,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				],
 			]
 		);
+		$this->reset_restriction_cache();
 
 		$gates = Content_Restriction_Control::get_post_gates( $post1 );
 		$this->assertCount( 0, $gates, 'No gates for the post in category 1' );
@@ -311,6 +315,156 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$gates = Content_Restriction_Control::get_post_gates( $post3 );
 		$this->assertCount( 1, $gates, 'One gate for the post with no categories' );
 		$this->assertEquals( $this->gate_ids[2], $gates[0]['id'], 'Gate with publish status and matching rules configuration is included' );
+	}
+
+	/**
+	 * Test that a content rule targeting a parent term in a hierarchical
+	 * taxonomy cascades to descendant terms, matching WooCommerce Memberships.
+	 */
+	public function test_content_rules_hierarchical_child_terms() {
+		// Build a category tree: parent > child > grandchild.
+		$parent_cat = $this->factory->term->create(
+			[
+				'taxonomy' => 'category',
+				'name'     => 'Parent Category',
+			]
+		);
+		$child_cat = $this->factory->term->create(
+			[
+				'taxonomy' => 'category',
+				'name'     => 'Child Category',
+				'parent'   => $parent_cat,
+			]
+		);
+		$grandchild_cat = $this->factory->term->create(
+			[
+				'taxonomy' => 'category',
+				'name'     => 'Grandchild Category',
+				'parent'   => $child_cat,
+			]
+		);
+		// An unrelated category outside the parent's subtree.
+		$other_cat = $this->factory->term->create(
+			[
+				'taxonomy' => 'category',
+				'name'     => 'Other Category',
+			]
+		);
+
+		// Posts assigned only to a descendant term, never directly to the parent.
+		$parent_post     = $this->factory->post->create( [ 'post_category' => [ $parent_cat ] ] );
+		$child_post      = $this->factory->post->create( [ 'post_category' => [ $child_cat ] ] );
+		$grandchild_post = $this->factory->post->create( [ 'post_category' => [ $grandchild_cat ] ] );
+		$other_post      = $this->factory->post->create( [ 'post_category' => [ $other_cat ] ] );
+		$this->post_ids  = array_merge( $this->post_ids, [ $parent_post, $child_post, $grandchild_post, $other_post ] );
+
+		// Inclusion rule targeting only the parent term.
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'  => 'category',
+					'value' => [ $parent_cat ],
+				],
+			]
+		);
+		$this->reset_restriction_cache();
+
+		$gates = Content_Restriction_Control::get_post_gates( $child_post );
+		$this->assertCount( 1, $gates, 'Post in a child of the targeted parent category is gated' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $grandchild_post );
+		$this->assertCount( 1, $gates, 'Post in a grandchild of the targeted parent category is gated' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $other_post );
+		$this->assertCount( 0, $gates, 'Post outside the targeted subtree is not gated' );
+
+		// Exclusion rule targeting the parent term: descendants are excluded too.
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'      => 'category',
+					'value'     => [ $parent_cat ],
+					'exclusion' => true,
+				],
+			]
+		);
+		$this->reset_restriction_cache();
+
+		$gates = Content_Restriction_Control::get_post_gates( $child_post );
+		$this->assertCount( 0, $gates, 'Post in a child of an excluded parent category is not gated' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $grandchild_post );
+		$this->assertCount( 0, $gates, 'Post in a grandchild of an excluded parent category is not gated' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $other_post );
+		$this->assertCount( 1, $gates, 'Post outside the excluded subtree is still gated' );
+
+		// The cascade is one-directional: a rule targeting a child term does NOT
+		// pull in posts that only carry the parent term.
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'  => 'category',
+					'value' => [ $child_cat ],
+				],
+			]
+		);
+		$this->reset_restriction_cache();
+
+		$gates = Content_Restriction_Control::get_post_gates( $parent_post );
+		$this->assertCount( 0, $gates, 'Post in the parent term is not gated by a rule targeting a child term' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $child_post );
+		$this->assertCount( 1, $gates, 'Post in the targeted child term is gated' );
+
+		// Stored rule values may be strings; the cascade must still match because the
+		// helper normalizes term IDs to integers before intersecting.
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'  => 'category',
+					'value' => [ (string) $parent_cat ],
+				],
+			]
+		);
+		$this->reset_restriction_cache();
+
+		$gates = Content_Restriction_Control::get_post_gates( $child_post );
+		$this->assertCount( 1, $gates, 'Stringified parent term ID still cascades to gate a child-category post' );
+	}
+
+	/**
+	 * Test that a content rule on a non-hierarchical taxonomy (tags) matches
+	 * only the targeted term, with no descendant expansion.
+	 */
+	public function test_content_rules_non_hierarchical_terms() {
+		$tag         = $this->factory->term->create( [ 'taxonomy' => 'post_tag' ] );
+		$other_tag   = $this->factory->term->create( [ 'taxonomy' => 'post_tag' ] );
+		$tagged_post = $this->factory->post->create();
+		$other_post  = $this->factory->post->create();
+		wp_set_post_terms( $tagged_post, [ $tag ], 'post_tag' );
+		wp_set_post_terms( $other_post, [ $other_tag ], 'post_tag' );
+		$this->post_ids = array_merge( $this->post_ids, [ $tagged_post, $other_post ] );
+
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'  => 'post_tag',
+					'value' => [ $tag ],
+				],
+			]
+		);
+
+		$gates = Content_Restriction_Control::get_post_gates( $tagged_post );
+		$this->assertCount( 1, $gates, 'Post with the targeted tag is gated' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $other_post );
+		$this->assertCount( 0, $gates, 'Post with a different tag is not gated' );
 	}
 
 	/**
@@ -882,7 +1036,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	 * tests to prevent cross-test contamination.
 	 */
 	private function reset_restriction_cache() {
-		foreach ( [ 'post_gate_id_map', 'post_gate_layout_id_map' ] as $prop ) {
+		foreach ( [ 'post_gate_id_map', 'post_gate_layout_id_map', 'post_gates_map', 'term_descendants_map' ] as $prop ) {
 			$reflection = new \ReflectionProperty( Content_Restriction_Control::class, $prop );
 			$reflection->setAccessible( true );
 			$reflection->setValue( null, [] );
@@ -1075,7 +1229,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$this->assertSame( [], $rule['default'] );
 		$this->assertTrue( $rule['include_only'], 'specific_posts is include-only (no exclusion mode)' );
 		$this->assertSame( '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-audience-access-control/posts-search', $rule['endpoint'], 'endpoint matches the registered REST route' );
-		$this->assertStringContainsString( 'restrict specific posts', $rule['description'], 'description signals override behavior' );
+		$this->assertStringContainsStringIgnoringCase( 'restrict specific posts', $rule['description'], 'description signals override behavior' );
 	}
 
 	/**
@@ -1492,7 +1646,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		// phpcs:disable WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$_SERVER['REMOTE_ADDR'] = $ip;
 		if ( $with_cookie ) {
-			$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = '1';
+			$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		} else {
 			unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] );
 		}
@@ -2052,5 +2206,229 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		wp_delete_user( $queue_user );
 		wp_delete_user( $page_user );
 		$this->reset_visitor_state();
+	}
+
+	/**
+	 * The sanitize_gate() method passes content_rules_match through and defaults invalid values to 'all'.
+	 */
+	public function test_sanitize_gate_preserves_content_rules_match() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Sanitize Test Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		$sanitized = Content_Gate_API::sanitize_gate(
+			[
+				'id'                  => $gate_id,
+				'title'               => 'Sanitize Test Gate',
+				'status'              => 'draft',
+				'content_rules_match' => 'any',
+			]
+		);
+		$this->assertArrayHasKey( 'content_rules_match', $sanitized, 'sanitize_gate() must include content_rules_match in output' );
+		$this->assertSame( 'any', $sanitized['content_rules_match'], 'Valid value "any" must be preserved' );
+
+		$sanitized_invalid = Content_Gate_API::sanitize_gate(
+			[
+				'id'                  => $gate_id,
+				'title'               => 'Sanitize Test Gate',
+				'status'              => 'draft',
+				'content_rules_match' => 'garbage',
+			]
+		);
+		$this->assertSame( 'all', $sanitized_invalid['content_rules_match'], 'Invalid value must fall back to "all"' );
+
+		$sanitized_missing = Content_Gate_API::sanitize_gate(
+			[
+				'id'    => $gate_id,
+				'title' => 'Sanitize Test Gate',
+			]
+		);
+		$this->assertArrayNotHasKey( 'content_rules_match', $sanitized_missing, 'Missing field must not be injected into the sanitized output' );
+	}
+
+	/**
+	 * 'any' mode restricts a post matching only one of several rule types;
+	 * 'all' mode does not. Reproduces the The Assembly leak.
+	 */
+	public function test_content_rules_match_any() {
+		$cat_id  = self::factory()->category->create( [ 'name' => 'All Access' ] );
+		$post_id = self::factory()->post->create();
+		wp_set_post_terms( $post_id, [ $cat_id ], 'category' );
+		$this->post_ids[] = $post_id;
+
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'AND/OR Gate' ] );
+		$this->gate_ids[] = $gate_id;
+		$rules   = [
+			[
+				'slug'  => 'category',
+				'value' => [ $cat_id ],
+			],
+			[
+				'slug'  => 'newsletters',
+				'value' => [ 999999 ],
+			], // A list this post can never belong to.
+		];
+
+		// AND (default): post fails the newsletters rule -> gate does NOT apply.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'               => 'AND/OR Gate',
+				'priority'            => 0,
+				'content_rules'       => $rules,
+				'content_rules_match' => 'all',
+				'registration'        => [ 'active' => true ],
+			]
+		);
+		$this->reset_restriction_cache();
+		$gate_ids = wp_list_pluck( Content_Restriction_Control::get_post_gates( $post_id ), 'id' );
+		$this->assertNotContains( $gate_id, $gate_ids, 'AND should not gate a category-only post' );
+
+		// OR: post matches the category rule -> gate applies.
+		Content_Gate::update_gate_setting( $gate_id, 'content_rules_match', 'any' );
+		$this->reset_restriction_cache();
+		$gate_ids = wp_list_pluck( Content_Restriction_Control::get_post_gates( $post_id ), 'id' );
+		$this->assertContains( $gate_id, $gate_ids, 'OR should gate a post matching any one rule' );
+	}
+
+	/**
+	 * Exclusion rules are always-applied carve-outs: in 'any' (OR) mode a post that
+	 * matches an inclusion rule is still NOT gated when an exclusion rule covers it.
+	 * Without this, OR mode would gate the very content the publisher excluded.
+	 */
+	public function test_exclusion_rule_carves_out_under_or() {
+		$free_cat = self::factory()->category->create( [ 'name' => 'Free' ] );
+
+		// A post that matches the inclusion rule (post_types) and is not excluded.
+		$gated_post = self::factory()->post->create();
+		$this->post_ids[] = $gated_post;
+
+		// A post that matches the inclusion rule but is carved out by the exclusion.
+		$carved_post = self::factory()->post->create();
+		wp_set_post_terms( $carved_post, [ $free_cat ], 'category' );
+		$this->post_ids[] = $carved_post;
+
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Carve-out Gate' ] );
+		$this->gate_ids[] = $gate_id;
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'               => 'Carve-out Gate',
+				'priority'            => 0,
+				'content_rules'       => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+					[
+						'slug'      => 'category',
+						'value'     => [ $free_cat ],
+						'exclusion' => true,
+					],
+				],
+				'content_rules_match' => 'any',
+				'registration'        => [ 'active' => true ],
+			]
+		);
+
+		$this->reset_restriction_cache();
+		$gated = wp_list_pluck( Content_Restriction_Control::get_post_gates( $gated_post ), 'id' );
+		$this->assertContains( $gate_id, $gated, 'OR should gate a post matching the inclusion rule' );
+
+		$this->reset_restriction_cache();
+		$carved = wp_list_pluck( Content_Restriction_Control::get_post_gates( $carved_post ), 'id' );
+		$this->assertNotContains( $gate_id, $carved, 'An excluded post is carved out under OR even though it matches the inclusion rule' );
+
+		// "Match all" is unchanged: the exclusion still carves the post out, and a
+		// non-excluded post matching the inclusion is still gated.
+		Content_Gate::update_gate_setting( $gate_id, 'content_rules_match', 'all' );
+		$this->reset_restriction_cache();
+		$gated_all = wp_list_pluck( Content_Restriction_Control::get_post_gates( $gated_post ), 'id' );
+		$this->assertContains( $gate_id, $gated_all, 'AND should gate a post matching the inclusion rule and not excluded' );
+		$this->reset_restriction_cache();
+		$carved_all = wp_list_pluck( Content_Restriction_Control::get_post_gates( $carved_post ), 'id' );
+		$this->assertNotContains( $gate_id, $carved_all, 'An excluded post is carved out under AND too' );
+	}
+
+	/**
+	 * A gate's match mode persists and defaults to 'all'.
+	 */
+	public function test_content_rules_match_persistence() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Match Mode Gate' ] );
+
+		// Defaults to 'all' when never set.
+		$gate = Content_Gate::get_gate( $gate_id );
+		$this->assertSame( 'all', $gate['content_rules_match'] );
+
+		// Persists via update_gate_settings.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'               => 'Match Mode Gate',
+				'priority'            => 0,
+				'content_rules'       => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+				],
+				'content_rules_match' => 'any',
+			]
+		);
+		$this->assertSame( 'any', Content_Gate::get_gate( $gate_id )['content_rules_match'] );
+
+		// Persists via single-setting update.
+		Content_Gate::update_gate_setting( $gate_id, 'content_rules_match', 'all' );
+		$this->assertSame( 'all', Content_Gate::get_gate( $gate_id )['content_rules_match'] );
+	}
+
+	/**
+	 * A gate created with a match mode persists it immediately.
+	 */
+	public function test_create_gate_persists_content_rules_match() {
+		$gate_id = Content_Gate::create_gate(
+			[
+				'title'               => 'Created Match Mode Gate',
+				'content_rules_match' => 'any',
+			]
+		);
+		$this->gate_ids[] = $gate_id;
+
+		$this->assertSame( 'any', Content_Gate::get_gate( $gate_id )['content_rules_match'] );
+	}
+
+	/**
+	 * Updating a gate via a payload that omits content_rules_match must not reset
+	 * an existing 'any' (OR) gate back to the 'all' (AND) default.
+	 */
+	public function test_update_gate_without_match_field_preserves_stored_mode() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'OR Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate with OR mode.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'               => 'OR Gate',
+				'priority'            => 0,
+				'content_rules'       => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+				],
+				'content_rules_match' => 'any',
+			]
+		);
+		$this->assertSame( 'any', Content_Rules::get_gate_content_rules_match( $gate_id ), 'Pre-condition: stored mode is any' );
+
+		// Simulate a REST update that omits the content_rules_match field.
+		$raw_payload  = [
+			'title'    => 'OR Gate',
+			'priority' => 1,
+		];
+		$sanitized    = Content_Gate_API::sanitize_gate( $raw_payload );
+		Content_Gate::update_gate_settings( $gate_id, $sanitized );
+
+		$this->assertSame( 'any', Content_Rules::get_gate_content_rules_match( $gate_id ), 'Stored match mode must not be reset when the field is absent from the update payload' );
 	}
 }

@@ -7,7 +7,7 @@
  * Author URI:      https://newspack.com
  * Text Domain:     newspack-listings
  * Domain Path:     /languages
- * Version:         3.6.1
+ * Version:         3.6.2
  *
  * @package         Newspack_Listings
  */
@@ -19,7 +19,7 @@ if ( ! defined( 'NEWSPACK_LISTINGS_PLUGIN_FILE' ) ) {
 	define( 'NEWSPACK_LISTINGS_FILE', __FILE__ );
 	define( 'NEWSPACK_LISTINGS_PLUGIN_FILE', plugin_dir_path( NEWSPACK_LISTINGS_FILE ) );
 	define( 'NEWSPACK_LISTINGS_URL', plugin_dir_url( NEWSPACK_LISTINGS_FILE ) );
-	define( 'NEWSPACK_LISTINGS_VERSION', '3.6.1' );
+	define( 'NEWSPACK_LISTINGS_VERSION', '3.6.2' );
 }
 
 // Include plugin resources.

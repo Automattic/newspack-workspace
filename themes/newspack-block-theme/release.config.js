@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
+const { gitCommitStep } = require( '../../config/release-helpers' );
+
 module.exports = {
 	branches: [
 		'release',
@@ -15,17 +17,15 @@ module.exports = {
 		[
 			'semantic-release-version-bump',
 			{
-				// build script is run before semantic-release, so the version in *.css files
-				// have to be updated explicitly
-				files: [ 'src/scss/_theme-description.scss', 'functions.php' ],
+				// build script is run before semantic-release, so the version in the
+				// built (gitignored) *.css files has to be bumped explicitly here, before
+				// release:archive zips them — otherwise the theme's style.css Version
+				// header ships stale.
+				files: [ 'src/scss/_theme-description.scss', 'functions.php', 'style.css', 'style-rtl.css' ],
 				callback: 'npm run release:archive',
 			},
 		],
-		{
-			path: '@semantic-release/git',
-			assets: [ 'package.json', 'package-lock.json', 'CHANGELOG.md', 'src/scss/_theme-description.scss', 'functions.php' ],
-			message: 'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
-		},
+		...gitCommitStep( [ 'CHANGELOG.md', 'src/scss/_theme-description.scss', 'functions.php' ] ),
 	],
 	plugins: [
 		'@semantic-release/commit-analyzer',

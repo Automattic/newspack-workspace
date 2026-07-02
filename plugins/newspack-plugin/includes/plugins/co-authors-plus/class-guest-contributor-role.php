@@ -383,7 +383,7 @@ class Guest_Contributor_Role {
 			'newspack-co-authors-plus',
 			Newspack::plugin_url() . '/dist/other-scripts/co-authors-plus.js',
 			[ 'jquery' ],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'other-scripts/co-authors-plus' ),
 			true
 		);
 

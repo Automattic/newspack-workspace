@@ -18,7 +18,11 @@ defined( 'ABSPATH' ) || exit;
 $actions      = $args['actions'];
 $subscription = $args['subscription'];
 
-$is_group_subscription = Group_Subscription::is_group_subscription( $subscription );
+$is_group_subscription        = Group_Subscription::is_group_subscription( $subscription );
+$is_group_member_subscription = $is_group_subscription
+	&& Group_Subscription::user_is_member( get_current_user_id(), $subscription );
+$is_group_owner_subscription  = $is_group_subscription
+	&& Group_Subscription::user_is_manager( get_current_user_id(), $subscription );
 
 // Ensure the cancel action is shown last.
 if ( ! empty( $actions['cancel'] ) ) {
@@ -57,24 +61,24 @@ if ( ! empty( $actions['change_payment_method']['name'] ) ) {
 			if ( $is_group_subscription ) :
 				?>
 					<span class="newspack-ui__badge newspack-ui__badge--secondary">
-					<?php esc_html_e( 'Group', 'newspack-plugin' ); ?>
+					<?php echo esc_html( Group_Subscription::get_label( 'singular' ) ); ?>
 					</span>
 				<?php
 				endif;
-			if ( ! $subscription->has_status( 'active' ) ) :
-				$classes = [ 'newspack-ui__badge' ];
-				if ( $subscription->has_status( [ 'cancelled', 'expired' ] ) ) {
-					$classes[] = 'newspack-ui__badge--error';
-				} elseif ( $subscription->has_status( [ 'on-hold', 'pending', 'processing' ] ) ) {
-					$classes[] = 'newspack-ui__badge--warning';
-				} else {
-					$classes[] = 'newspack-ui__badge--secondary';
-				}
-				?>
-				<span class="<?php echo \esc_attr( implode( ' ', $classes ) ); ?>">
-					<?php echo esc_html( \wcs_get_subscription_status_name( $status ) ); ?>
-				</span>
-			<?php endif; ?>
+			$classes = [ 'newspack-ui__badge' ];
+			if ( $subscription->has_status( 'active' ) ) {
+				$classes[] = 'newspack-ui__badge--success';
+			} elseif ( $subscription->has_status( [ 'cancelled', 'expired' ] ) ) {
+				$classes[] = 'newspack-ui__badge--error';
+			} elseif ( $subscription->has_status( [ 'pending-cancel', 'on-hold', 'pending', 'processing' ] ) ) {
+				$classes[] = 'newspack-ui__badge--warning';
+			} else {
+				$classes[] = 'newspack-ui__badge--secondary';
+			}
+			?>
+			<span class="<?php echo \esc_attr( implode( ' ', $classes ) ); ?>">
+				<?php echo esc_html( \wcs_get_subscription_status_name( $status ) ); ?>
+			</span>
 		</div>
 			<?php
 			endif;
@@ -82,8 +86,20 @@ if ( ! empty( $actions['change_payment_method']['name'] ) ) {
 	?>
 	<div class="newspack-my-account__subscription--actions">
 		<div class="newspack-my-account__subscription--actions-container">
+		<?php if ( $is_group_owner_subscription ) : ?>
+			<a href="<?php echo esc_url( Group_Subscription_MyAccount::get_group_url( $subscription ) ); ?>" class="newspack-ui__button newspack-ui__button--secondary">
+				<?php
+				printf(
+					/* translators: %s is the singular group label (e.g. "Group", "Team", or a publisher override). */
+					esc_html__( 'View %s', 'newspack-plugin' ),
+					esc_html( Group_Subscription::get_label_lower( 'singular' ) )
+				);
+				?>
+			</a>
+		<?php endif; ?>
 		<?php
-		$items = $subscription->get_items();
+		// Members get a view-only experience: no owner-only management controls.
+		$items = $is_group_member_subscription ? [] : $subscription->get_items();
 		if ( 1 < count( $items ) ) {
 			\add_filter(
 				'woocommerce_subscriptions_switch_link_classes',
@@ -141,9 +157,24 @@ if ( ! empty( $actions['change_payment_method']['name'] ) ) {
 			<?php
 		}
 		$parent_order = array_values( $subscription->get_related_orders( 'all', 'parent' ) );
-		if ( $subscription->has_status( [ 'expired', 'cancelled' ] ) && ! empty( $parent_order ) && empty( $actions['resubscribe'] ) ) {
+		if ( ! $is_group_member_subscription && $subscription->has_status( [ 'expired', 'cancelled' ] ) && ! empty( $parent_order ) && empty( $actions['resubscribe'] ) ) {
 			\woocommerce_order_again_button( $parent_order[0] );
 		}
+		?>
+		<?php
+		if ( $is_group_member_subscription ) :
+			$group_label_lower  = Group_Subscription::get_label_lower( 'singular' );
+			$leave_button_label = sprintf(
+				/* translators: %s: lowercase singular group label. */
+				__( 'Leave %s', 'newspack-plugin' ),
+				$group_label_lower
+			);
+			?>
+			<button type="button" class="newspack-ui__button newspack-ui__button--outline newspack-ui__button--destructive newspack-my-account__subscription--leave-group">
+				<?php echo esc_html( $leave_button_label ); ?>
+			</button>
+			<?php
+		endif;
 		?>
 		<?php if ( ! empty( $actions ) ) : ?>
 			<?php foreach ( $actions as $key => $action_link ) : ?>
@@ -193,28 +224,40 @@ if ( ! empty( $actions['change_payment_method']['name'] ) ) {
 	</div>
 </header>
 <?php
-$is_group_member_subscription = $is_group_subscription && Group_Subscription::user_is_member( get_current_user_id(), $subscription );
-
 if ( $is_group_member_subscription ) :
-	$owner = get_user_by( 'id', $subscription->get_user_id() );
-	if ( $owner ) :
-		?>
-		<div class="newspack-ui__notice">
-			<div>
-				<p>
-					<?php
-						echo wp_kses_post(
-							sprintf(
-							// translators: %s is the email link to the display name of the subscription owner.
-								__( 'You are a member of this group subscription. It is managed by %s.', 'newspack-plugin' ),
-								'<a href="mailto:' . esc_attr( sanitize_email( $owner->user_email ) ) . '">' . esc_html( $owner->display_name ? $owner->display_name : $owner->user_email ) . '</a>'
-							)
-						);
-					?>
-				</p>
-			</div>
-		</div>
-		<?php
-	endif;
+	ob_start();
+	?>
+	<h2 class="font-size newspack-ui__font--l">
+		<?php esc_html_e( 'Are you sure?', 'newspack-plugin' ); ?>
+	</h2>
+	<p>
+		<?php esc_html_e( "You'll lose access right away. To get back in, you'll need to be invited again — or start your own subscription.", 'newspack-plugin' ); ?>
+	</p>
+	<input type="hidden" name="action" value="<?php echo esc_attr( Group_Subscription_MyAccount::LEAVE_GROUP_NONCE_ACTION ); ?>">
+	<input type="hidden" name="subscription_id" value="<?php echo esc_attr( $subscription->get_id() ); ?>">
+	<?php wp_nonce_field( Group_Subscription_MyAccount::LEAVE_GROUP_NONCE_ACTION ); ?>
+	<?php
+	Newspack_UI::generate_modal(
+		[
+			'id'          => 'confirm-leave-group',
+			'title'       => $leave_button_label,
+			'content'     => ob_get_clean(),
+			'form'        => 'post',
+			'form_action' => admin_url( 'admin-post.php' ),
+			'actions'     => [
+				'confirm' => [
+					'label' => $leave_button_label,
+					'type'  => 'destructive',
+				],
+				'cancel'  => [
+					'label'  => __( 'Cancel', 'newspack-plugin' ),
+					'type'   => 'ghost',
+					'action' => 'close',
+					'url'    => '#',
+				],
+			],
+		]
+	);
 endif;
+
 \do_action( 'newspack_woocommerce_after_subscription_header', $subscription, $actions );

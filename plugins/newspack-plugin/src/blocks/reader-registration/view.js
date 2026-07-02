@@ -1,10 +1,13 @@
-/* globals reader_registration_block_config */
+/* globals reader_registration_block_config, newspack_ras_config */
 /**
  * Internal dependencies
  */
 import './style.scss';
 import { domReady } from '../../utils';
 import { openAuthModal } from '../../reader-activation-auth/auth-modal';
+import { openVerificationModal } from '../../reader-activation-auth/verification-modal';
+import { maybeConfirmRegistration } from '../../reader-activation-auth/confirmation-modal';
+import { openNewslettersSignupModal } from '../../reader-activation-newsletters/newsletters-modal';
 
 window.newspackRAS = window.newspackRAS || [];
 
@@ -31,7 +34,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 		} );
 	};
 
-	const openAuth = ( initialState = 'otp' ) => {
+	const openAuth = ( initialState = 'otp', overrides = {} ) => {
 		openAuthModal( {
 			skipAuthenticatedCheck: true,
 			skipNewslettersSignup: true,
@@ -40,53 +43,63 @@ window.newspackRAS.push( function ( readerActivation ) {
 			closeOnSuccess: true,
 			skipSuccess: false,
 			onClose: () => window.location.reload(),
+			...overrides,
+		} );
+	};
+
+	/**
+	 * Show the post-checkout newsletters signup modal (if available) before reloading the page.
+	 * Falls back to an immediate reload when the modal isn't on the page.
+	 */
+	const reloadAfterNewslettersSignup = () => {
+		openNewslettersSignupModal( {
+			onSuccess: () => window.location.reload(),
+			onDismiss: () => window.location.reload(),
+			closeOnSuccess: true,
+			signupMethod: 'reader-registration',
+		} );
+	};
+
+	/**
+	 * Open the auth modal in OTP state to finish the post-registration verification flow.
+	 * Whether the reader submits the OTP form or dismisses it, the newsletters signup modal
+	 * is offered (if configured) before the page reload.
+	 */
+	const openAuthForVerification = () => {
+		openAuth( 'otp', {
+			onClose: null,
+			onSuccess: reloadAfterNewslettersSignup,
+			onDismiss: reloadAfterNewslettersSignup,
 		} );
 	};
 
 	domReady( function () {
-		const verificationModal = document.getElementById( 'newspack-my-account__newspack-reader-verification' );
-		const verificationBox = document.querySelectorAll( '.newspack__reader-verification' );
-		if ( [ ...verificationBox ].length ) {
-			verificationBox.forEach( box => {
-				const sendOtpButton = box.querySelector( '[data-send-otp]' );
-
-				// Find parent modal
-				const modal = sendOtpButton.closest( '.newspack-ui__modal-container' );
-
-				let otpSent = false;
-
-				if ( sendOtpButton ) {
-					sendOtpButton.addEventListener( 'click', () => {
-						sendOtpButton.disabled = true;
-						sendVerificationOTP()
-							.then( () => {
-								otpSent = true;
-								if ( modal ) {
-									modal.setAttribute( 'data-state', 'closed' );
-								}
-								openAuth( 'otp' );
-							} )
-							.catch( () => {
-								sendOtpButton.disabled = false;
-								sendOtpButton.textContent = sendOtpButton.textContent.trim();
-								const errorP = box.querySelector( 'p:not(:has(button))' );
-								if ( errorP ) {
-									errorP.textContent = 'Something went wrong. Please try again.';
-								}
-							} );
-					} );
-				}
-
-				// Reload when the verification modal is dismissed.
-				if ( modal ) {
-					modal.addEventListener( 'closeModal', () => {
-						if ( ! otpSent ) {
-							window.location.reload();
+		// Wire up inline verification boxes (rendered by the block when the reader is logged in but unverified).
+		// The global verification modal is handled by openVerificationModal() instead.
+		const inlineVerificationBoxes = [ ...document.querySelectorAll( '.newspack__reader-verification' ) ].filter(
+			box => ! box.querySelector( '.newspack-ui__modal-container' )
+		);
+		inlineVerificationBoxes.forEach( box => {
+			const sendOtpButton = box.querySelector( '[data-send-otp]' );
+			if ( ! sendOtpButton ) {
+				return;
+			}
+			sendOtpButton.addEventListener( 'click', () => {
+				sendOtpButton.disabled = true;
+				sendVerificationOTP()
+					.then( () => {
+						openAuth( 'otp' );
+					} )
+					.catch( () => {
+						sendOtpButton.disabled = false;
+						sendOtpButton.textContent = sendOtpButton.textContent.trim();
+						const errorP = box.querySelector( 'p:not(:has(button))' );
+						if ( errorP ) {
+							errorP.textContent = 'Something went wrong. Please try again.';
 						}
 					} );
-				}
 			} );
-		}
+		} );
 
 		document.querySelectorAll( '.newspack-registration' ).forEach( container => {
 			const form = container.querySelector( 'form' );
@@ -169,8 +182,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 
 				// Check if this is a new registration that needs email verification
 				// Note: verified can be false, null, or undefined - we need verification if it's not true
-				const needsVerification =
-					! data?.existing_user && reader_registration_block_config.require_account_verification && data?.verified !== true;
+				const needsVerification = ! data?.existing_user && newspack_ras_config.verify_new_reader_accounts && data?.verified !== true;
 
 				// Hide success element first to ensure clean state
 				const successElement = container.querySelector( '.newspack-registration__registration-success' );
@@ -205,12 +217,13 @@ window.newspackRAS.push( function ( readerActivation ) {
 							if ( data.verification_nonce ) {
 								reader_registration_block_config.verification_nonce = data.verification_nonce;
 							}
-							// Update %EMAIL% placeholder in verification modal
-							const emailNode = verificationModal.querySelector( '.email-address' );
-							if ( emailNode ) {
-								emailNode.textContent = data.email;
-							}
-							verificationModal.setAttribute( 'data-state', 'open' );
+							openVerificationModal( {
+								email: data.email,
+								verificationNonce: reader_registration_block_config.verification_nonce,
+								setOTPTimer: readerActivation.setOTPTimer,
+								onSendCode: openAuthForVerification,
+								onDismiss: reloadAfterNewslettersSignup,
+							} );
 						}
 						if ( data.authenticated && ! needsVerification ) {
 							const baseActivity = { email: data.email };
@@ -267,19 +280,38 @@ window.newspackRAS.push( function ( readerActivation ) {
 				if ( ! body.has( 'npe' ) || ! body.get( 'npe' ) ) {
 					return form.endLoginFlow( 'Please enter a valid email address.', 400 );
 				}
-				fetch( form.getAttribute( 'action' ) || window.location.pathname, {
-					method: 'POST',
-					headers: { Accept: 'application/json' },
-					body,
-				} )
-					.then( res => {
-						res.json()
-							.then( ( { message, data } ) => form.endLoginFlow( message, res.status, data ) )
-							.catch( () => form.endLoginFlow( 'An error occurred.', res.status || 400 ) );
+
+				const submitForm = () => {
+					fetch( form.getAttribute( 'action' ) || window.location.pathname, {
+						method: 'POST',
+						headers: { Accept: 'application/json' },
+						body,
 					} )
-					.catch( e => {
-						form.endLoginFlow( e?.message || 'An error occurred.', 400 );
-					} );
+						.then( res => {
+							res.json()
+								.then( ( { message, data } ) => form.endLoginFlow( message, res.status, data ) )
+								.catch( () => form.endLoginFlow( 'An error occurred.', res.status || 400 ) );
+						} )
+						.catch( e => {
+							form.endLoginFlow( e?.message || 'An error occurred.', 400 );
+						} );
+				};
+
+				// When post-registration verification is OFF, intercept new-email submissions with a
+				// "You're about to create an account for X" confirmation step. Cancel reverts the
+				// in-progress UI state so the reader can edit the email and try again.
+				maybeConfirmRegistration( {
+					email: body.get( 'npe' ),
+					onProceed: submitForm,
+					onCancel: () => {
+						flowCompleted = false;
+						if ( submitElement.contains( spinner ) ) {
+							submitElement.removeChild( spinner );
+						}
+						submitElement.disabled = false;
+						container.classList.remove( 'newspack-registration--in-progress' );
+					},
+				} );
 			} );
 
 			readerActivation.on( 'reader', ( { detail } ) => {

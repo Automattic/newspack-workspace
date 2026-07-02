@@ -18,6 +18,22 @@ class WooCommerce_Update_Payment_Notice {
 	const NOTICE_INTERVAL = 60 * 60 * 24; // 24 hours.
 
 	/**
+	 * Subscription statuses for which the "needs payment" notice is actionable.
+	 * Only states where paying actually restores the subscription. Terminal
+	 * statuses (expired, cancelled, switched) and states where the reader still
+	 * has access (active, pending-cancel) are intentionally excluded. NPPM-2926.
+	 *
+	 * Closed set of core WCS statuses. A publisher's custom "recoverable but
+	 * unpaid" status would not match, so readers in it would silently miss the
+	 * notice; both callers fail closed, so the only effect is a missed nudge,
+	 * never a wrong action. Extend this constant (or add a filter) only if such
+	 * a status is found in the field.
+	 *
+	 * @var string[]
+	 */
+	const NOTICE_RECOVERABLE_STATUSES = [ 'on-hold', 'pending' ];
+
+	/**
 	 * Initialize the class.
 	 */
 	public static function init() {
@@ -137,7 +153,9 @@ class WooCommerce_Update_Payment_Notice {
 		$notices = [];
 
 		foreach ( $subscriptions as $subscription ) {
-			if ( 'cancelled' === $subscription->get_status() ) {
+			// Only nag for statuses where paying can restore the subscription (NPPM-2926);
+			// see NOTICE_RECOVERABLE_STATUSES for why terminal/has-access statuses are excluded.
+			if ( ! $subscription->has_status( self::NOTICE_RECOVERABLE_STATUSES ) ) {
 				continue;
 			}
 			if ( ! $subscription->needs_payment() ) {

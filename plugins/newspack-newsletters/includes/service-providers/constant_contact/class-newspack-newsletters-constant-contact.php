@@ -114,6 +114,24 @@ final class Newspack_Newsletters_Constant_Contact extends \Newspack_Newsletters_
 	}
 
 	/**
+	 * Build the OAuth authorisation URL without calling the live API.
+	 * Decoupled from `verify_token()` so admin surfaces can render the
+	 * "Authorize" button (which requires a session-current
+	 * `wp_create_nonce`) without paying for a `validate_token` round trip.
+	 *
+	 * @return string
+	 */
+	public function get_oauth_auth_url() {
+		try {
+			$redirect_uri = $this->get_oauth_redirect_uri();
+			$cc           = $this->get_sdk();
+			return $cc->get_auth_code_url( wp_create_nonce( 'constant_contact_oauth2' ), $redirect_uri );
+		} catch ( Exception $e ) {
+			return '';
+		}
+	}
+
+	/**
 	 * Verify service provider connection.
 	 *
 	 * @param boolean $refresh Whether to attempt connection refresh.
@@ -121,14 +139,16 @@ final class Newspack_Newsletters_Constant_Contact extends \Newspack_Newsletters_
 	 * @return array
 	 */
 	public function verify_token( $refresh = true ) {
+		// Initialise outside the try so the catch has a safe shape if SDK setup throws.
+		$response = [
+			'error'    => null,
+			'valid'    => false,
+			'auth_url' => '',
+		];
 		try {
-			$redirect_uri = $this->get_oauth_redirect_uri();
-			$cc           = $this->get_sdk();
-			$response     = [
-				'error'    => null,
-				'valid'    => false,
-				'auth_url' => $cc->get_auth_code_url( wp_create_nonce( 'constant_contact_oauth2' ), $redirect_uri ),
-			];
+			$redirect_uri         = $this->get_oauth_redirect_uri();
+			$cc                   = $this->get_sdk();
+			$response['auth_url'] = $cc->get_auth_code_url( wp_create_nonce( 'constant_contact_oauth2' ), $redirect_uri );
 			// If we have a valid access token, we're connected.
 			if ( $cc->validate_token() ) {
 				$response['valid'] = true;
@@ -315,6 +335,15 @@ final class Newspack_Newsletters_Constant_Contact extends \Newspack_Newsletters_
 		}
 		$update_access_token  = update_option( 'newspack_newsletters_constant_contact_api_access_token', $access_token );
 		$update_refresh_token = update_option( 'newspack_newsletters_constant_contact_api_refresh_token', $refresh_token );
+
+		/**
+		 * Provider credentials persisted — listeners (e.g. Settings_REST's
+		 * OAuth cache) bust their caches so the next read reflects the change.
+		 *
+		 * @param string $provider_slug The provider whose credentials changed.
+		 */
+		do_action( 'newspack_newsletters_provider_credentials_changed', 'constant_contact' );
+
 		return $update_access_token;
 	}
 
@@ -938,6 +967,12 @@ final class Newspack_Newsletters_Constant_Contact extends \Newspack_Newsletters_
 			return;
 		}
 		if ( Newspack_Newsletters::EMAIL_HTML_META !== $meta_key ) {
+			return;
+		}
+		// Layouts share the email editor (so the bundle, MJML refresh, and
+		// editor chrome all load) but must never create or update an ESP
+		// campaign — the post type is the boundary.
+		if ( $this->is_layout_post( $post_id ) ) {
 			return;
 		}
 		if ( ! Newspack_Newsletters_Editor::is_editing_email( $post_id ) ) {

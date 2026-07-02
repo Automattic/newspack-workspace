@@ -3,9 +3,7 @@ const { exec } = require( 'child_process' );
 const { version } = require( '../../package.json' );
 
 const log = ( content, type ) => {
-	console.log(
-		`[newspack-scripts@${ version }]${ type ? `[${ type }]` : '' } ${ content }`
-	);
+	console.log( `[newspack-scripts@${ version }]${ type ? `[${ type }]` : '' } ${ content }` );
 };
 
 const getGitBranch = () =>

@@ -16,6 +16,14 @@ final class Click {
 	const QUERY_VAR = 'np_newsletters_click';
 
 	/**
+	 * Query parameter forwarded by the click proxy in addition to UTMs.
+	 * Mirrors `Newspack\Newsletters_Access::QUERY_PARAM` in
+	 * the foundation plugin — must stay in sync. We can't import the
+	 * foundation constant directly without coupling the two plugins.
+	 */
+	const FORWARDED_NPNL_PARAM = 'npnl';
+
+	/**
 	 * Initialize hooks.
 	 *
 	 * @codeCoverageIgnore
@@ -174,12 +182,15 @@ final class Click {
 
 		/**
 		 * The ESP tracking functionality may add UTM parameters to our proxied URL,
-		 * let's pass them along to the destination URL.
+		 * let's pass them along to the destination URL. The 'npnl' param is the
+		 * Newspack content-gate newsletter pass signature added by the foundation
+		 * plugin's Newsletters_Access class and must survive the proxy redirect
+		 * so the destination site can verify it.
 		 */
-		$utm_params = [ 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term' ];
-		foreach ( $utm_params as $utm_param ) {
-			if ( isset( $_GET[ $utm_param ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-				$url = \add_query_arg( $utm_param, \sanitize_text_field( \wp_unslash( $_GET[ $utm_param ] ) ), $url ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$forwarded_params = [ 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', self::FORWARDED_NPNL_PARAM ];
+		foreach ( $forwarded_params as $param ) {
+			if ( isset( $_GET[ $param ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				$url = \add_query_arg( $param, \sanitize_text_field( \wp_unslash( $_GET[ $param ] ) ), $url ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			}
 		}
 

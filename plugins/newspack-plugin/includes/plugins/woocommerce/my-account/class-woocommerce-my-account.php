@@ -56,6 +56,7 @@ class WooCommerce_My_Account {
 		\add_filter( 'wc_stripe_update_subs_payment_method_card_statuses', [ __CLASS__, 'update_payment_methods_for_all_subs' ] );
 		\add_filter( 'wc_subscriptions_allow_subscription_token_deletion', [ __CLASS__, 'allow_braintree_token_deletion' ], 10, 2 );
 		\add_filter( 'woocommerce_payment_methods_list_item', [ __CLASS__, 'remove_braintree_edit_actions' ], 20, 2 );
+		\add_filter( 'woocommerce_order_button_text', [ __CLASS__, 'change_payment_method_button_text' ], 25 );
 
 		// Reader Activation mods.
 		if ( Reader_Activation::is_enabled() ) {
@@ -322,7 +323,7 @@ class WooCommerce_My_Account {
 				'newspack-my-account',
 				\Newspack\Newspack::plugin_url() . '/dist/my-account.js',
 				[],
-				NEWSPACK_PLUGIN_VERSION,
+				\Newspack\Newspack::asset_version( 'my-account' ),
 				true
 			);
 			\wp_localize_script(
@@ -432,9 +433,12 @@ class WooCommerce_My_Account {
 				}
 			}
 
-			// Move "Account Details" and "Subscriptions" to the top of the menu.
+			// Move "Account settings", "Newsletters", and "Subscriptions" to the top of the menu (in that order).
 			if ( isset( $items['subscriptions'] ) ) {
 				$items = [ 'subscriptions' => $items['subscriptions'] ] + $items;
+			}
+			if ( isset( $items['newsletters'] ) ) {
+				$items = [ 'newsletters' => $items['newsletters'] ] + $items;
 			}
 			if ( isset( $items['edit-account'] ) ) {
 				$items = [ 'edit-account' => $items['edit-account'] ] + $items;
@@ -521,7 +525,7 @@ class WooCommerce_My_Account {
 				self::DELETE_ACCOUNT_FORM => $form_nonce,
 				'token'                   => $token,
 			],
-			\wc_get_account_endpoint_url( 'edit-account' )
+			My_Account::get_endpoint_url( My_Account::ENDPOINT_EDIT_ACCOUNT )
 		);
 		\set_transient( 'np_reader_account_delete_' . $user_id, $token, DAY_IN_SECONDS );
 
@@ -895,12 +899,14 @@ class WooCommerce_My_Account {
 	 * @return string The filtered destination URL.
 	 */
 	public static function redirect_to_home_after_logout( $redirect_to ) {
-		if ( ! function_exists( 'wc_get_page_permalink' ) ) {
-			return;
-		}
-
-		if ( \wc_get_page_permalink( 'myaccount' ) === $redirect_to ) {
-			$redirect_to = \get_home_url();
+		// Compare without a trailing slash: on the WooCommerce path
+		// My_Account::get_endpoint_url() resolves to the dashboard endpoint URL,
+		// which can differ from $redirect_to by a trailing slash even though both
+		// point at the account page. Normalizing keeps the redirect-home behavior
+		// equivalent to the previous wc_get_page_permalink( 'myaccount' ) check.
+		$account_url = My_Account::get_endpoint_url();
+		if ( $account_url && \untrailingslashit( $account_url ) === \untrailingslashit( $redirect_to ) ) {
+			return \get_home_url();
 		}
 
 		return $redirect_to;
@@ -1053,6 +1059,19 @@ class WooCommerce_My_Account {
 			}
 		}
 		return $item;
+	}
+
+	/**
+	 * Override the order button text on the change-payment-method checkout page.
+	 *
+	 * @param string $text The button text.
+	 * @return string
+	 */
+	public static function change_payment_method_button_text( $text ) {
+		if ( self::is_payment_method_change_page() ) {
+			return __( 'Update payment method', 'newspack-plugin' );
+		}
+		return $text;
 	}
 
 	/**

@@ -1,3 +1,10 @@
+## republication-tracker-tool [2.8.3](https://github.com/Automattic/newspack-workspace/compare/republication-tracker-tool@2.8.2...republication-tracker-tool@2.8.3) (2026-06-01)
+
+
+### Bug Fixes
+
+* make hide-widget meta box compatible with RTC ([#336](https://github.com/Automattic/newspack-workspace/issues/336)) ([16e03ed](https://github.com/Automattic/newspack-workspace/commit/16e03ed975dd70bb8ca4039d41db7e853974bf4e))
+
 ## [2.8.2](https://github.com/Automattic/republication-tracker-tool/compare/v2.8.1...v2.8.2) (2026-05-04)
 
 

@@ -1097,6 +1097,17 @@ hr {
 	}
 }
 
+// Default-width separators need a short max-width. Historically WordPress core
+// pinned this with `.wp-block-separator { width: 100px }` (the separator block's
+// theme.css). WordPress 7.0 stopped enqueuing that rule in separate-block-assets
+// mode, exposing that inside post content `.entry .entry-content > *` (0,2,0)
+// out-specifies the base `.wp-block-separator` (0,1,0) max-width above, so a
+// Default separator stretched to full width. Re-assert the short width for the
+// default style with a higher-specificity selector (0,3,0). See NPPM-2930.
+.wp-block-separator:not(.is-style-wide):not(.is-style-dots) {
+	max-width: #{5 * structure.$size__spacing-unit};
+}
+
 .entry .entry-content,
 [id="pico"] {
 	> .wp-block-separator,
@@ -1691,6 +1702,11 @@ $colors: (
 .page-template-single-feature,
 .page-template-no-header-footer {
 	.entry .entry-content > *,
+	// Some plugins (e.g. Everlit) wrap the_content in a span/div at render
+	// time, which interposes a parent between .entry-content and the aligned
+	// block and breaks the direct-child match above. Allow one level of such
+	// wrapping so wide/full alignment continues to work.
+	.entry .entry-content > .everlit-audio > *,
 	.newspack-content-gate__inline-gate > *,
 	[id="pico"] > * {
 		&.alignwide {

@@ -3,12 +3,7 @@
 /**
  * WordPress dependencies
  */
-import {
-	Button,
-	Dropdown,
-	__experimentalVStack as VStack,
-	RadioControl,
-} from '@wordpress/components';
+import { Button, Dropdown, __experimentalVStack as VStack, RadioControl } from '@wordpress/components';
 import { __, sprintf } from '@wordpress/i18n';
 import { useState, useMemo } from '@wordpress/element';
 import { __experimentalInspectorPopoverHeader as InspectorPopoverHeader } from '@wordpress/block-editor';
@@ -43,13 +38,7 @@ const STATUS_OPTIONS = [
 	},
 ];
 
-export default function PostStatus( {
-	label,
-	description,
-	status,
-	onChange,
-	disabled,
-} ) {
+export default function PostStatus( { label, description, status, onChange, disabled } ) {
 	const [ popoverAnchor, setPopoverAnchor ] = useState( null );
 	// Memoize popoverProps to avoid returning a new object every time.
 	const popoverProps = useMemo(
@@ -67,11 +56,7 @@ export default function PostStatus( {
 	);
 
 	return (
-		<PostPanelRow
-			label={ __( 'Status' ) }
-			description={ description }
-			ref={ setPopoverAnchor }
-		>
+		<PostPanelRow label={ __( 'Status' ) } description={ description } ref={ setPopoverAnchor }>
 			<Dropdown
 				className="editor-post-status"
 				contentClassName="editor-change-status__content"
@@ -97,12 +82,7 @@ export default function PostStatus( {
 				) }
 				renderContent={ ( { onClose } ) => (
 					<>
-						<InspectorPopoverHeader
-							title={
-								label ? label : __( 'Status & visibility' )
-							}
-							onClose={ onClose }
-						/>
+						<InspectorPopoverHeader title={ label ? label : __( 'Status & visibility' ) } onClose={ onClose } />
 						{ description && <p>{ description }</p> }
 						<form>
 							<VStack spacing={ 4 }>

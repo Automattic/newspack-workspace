@@ -9,7 +9,7 @@ import { every, some } from 'lodash';
 import { __ } from '@wordpress/i18n';
 import { addFilter } from '@wordpress/hooks';
 import { createHigherOrderComponent } from '@wordpress/compose';
-import { select } from '@wordpress/data';
+import { select, useSelect } from '@wordpress/data';
 
 const handleSideAlignment = ( warnings, props ) => {
 	if ( props.attributes.align === 'left' || props.attributes.align === 'right' ) {
@@ -75,9 +75,34 @@ const getWarnings = props => {
 	return warnings;
 };
 
+/**
+ * Reactive check for `core/block` (synced pattern) references whose target
+ * `wp_block` post is not published. The server-side MJML renderer omits these
+ * from the preview and sent email, so surface a warning in the editor to match.
+ */
+const useUnpublishedReusableBlockWarning = ( name, attributes ) => {
+	return useSelect(
+		selectData => {
+			if ( 'core/block' !== name || ! attributes?.ref ) {
+				return null;
+			}
+			const post = selectData( 'core' ).getEntityRecord( 'postType', 'wp_block', attributes.ref );
+			if ( post && 'publish' !== post.status ) {
+				return __( 'Unpublished synced pattern', 'newspack-newsletters' );
+			}
+			return null;
+		},
+		[ name, attributes?.ref ]
+	);
+};
+
 const withUnsupportedFeaturesNotices = createHigherOrderComponent( BlockListBlock => {
 	return props => {
 		const warnings = getWarnings( props );
+		const unpublishedRefWarning = useUnpublishedReusableBlockWarning( props.name, props.attributes );
+		if ( unpublishedRefWarning ) {
+			warnings.push( unpublishedRefWarning );
+		}
 		return warnings.length ? (
 			<div className="newspack-newsletters__editor-block">
 				<div className="newspack-newsletters__editor-block__warning components-notice is-error">
@@ -95,7 +120,7 @@ const withUnsupportedFeaturesNotices = createHigherOrderComponent( BlockListBloc
 			<BlockListBlock { ...props } />
 		);
 	};
-}, 'withInspectorControl' );
+}, 'withUnsupportedFeaturesNotices' );
 
 export const addBlocksValidationFilter = () => {
 	addFilter( 'editor.BlockListBlock', 'newspack-newsletters/unsupported-features-notices', withUnsupportedFeaturesNotices );

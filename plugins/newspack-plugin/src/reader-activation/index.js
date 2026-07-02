@@ -17,8 +17,15 @@ import { getApiNonce, hydrateSession } from './session.js';
 
 /**
  * Reader Activation Library.
+ *
+ * Store() returns [ publicStore, internalClear ]. Only `store` (the public
+ * object) is exported and assigned to window.newspackReaderActivation.store;
+ * `clearReaderStore` is kept module-private so the destructive namespace wipe
+ * is not reachable by third-party code as readerActivation.store.clear()
+ * (NPPM-2721).
  */
-export const store = Store();
+const [ store, clearReaderStore ] = Store();
+export { store };
 
 /**
  * Dispatch reader activity.
@@ -632,6 +639,11 @@ const readerActivation = {
 	refreshAuthentication,
 	getReader,
 	openNewslettersSignupModal,
+	// openVerificationModal and maybeConfirmRegistration are attached at runtime by
+	// the reader-activation-auth bundle (see reader-activation-auth/index.js). They
+	// aren't included in this literal because they depend on auth-modal markup that
+	// only ships when the auth modal is rendered. Cross-plugin consumers gate access
+	// with `typeof ras?.openVerificationModal === 'function'`.
 	hasAuthLink,
 	getOTPHash,
 	setOTPTimer,
@@ -667,17 +679,124 @@ function handlePush( ...args ) {
 }
 
 /**
+ * Whether init() must clear the local reader namespace because the persisted
+ * reader identity no longer matches the current session. Pure — no storage/IO,
+ * no globals; all inputs are passed in so it can be unit-tested as a truth table.
+ *
+ * Three independent triggers:
+ *   - account switch (NPPM-2899): a previously-AUTHENTICATED reader is replaced by a
+ *     server-confirmed DIFFERENT reader. Gated on storedReader.authenticated === true
+ *     so an unauthenticated stored email (e.g. a newsletter lead) logging in under a
+ *     different email keeps its anonymous carryover. Keys on authenticated_email
+ *     (server-confirmed), never the intention cookie.
+ *   - logout (NPPM-2721): server anonymous AND a prior session was authenticated.
+ *   - orphaned (NPPM-2721): server anonymous AND a stale stored email != intention.
+ *
+ * Exported only so the truth table above can be unit-tested directly; it is not part
+ * of the public readerActivation API and is not attached to window.newspackReaderActivation.
+ * Do not depend on it from other bundles.
+ *
+ * @access private
+ *
+ * @param {Object}  args
+ * @param {string}  args.authenticatedEmail  newspack_ras_config.authenticated_email ('' when anonymous).
+ * @param {string}  args.initialEmail        authenticated_email || np_auth_intention cookie (the intention cookie = identity).
+ * @param {Object}  args.storedReader        Persisted reader ({ email, authenticated }).
+ * @param {boolean} args.hasAuthReaderCookie Whether the np_auth_reader cookie is present (the reader cookie = cache guard).
+ * @return {boolean} Whether to clear the namespace.
+ */
+export function shouldClearReaderData( { authenticatedEmail, initialEmail, storedReader, hasAuthReaderCookie } ) {
+	const norm = email => ( email || '' ).trim().toLowerCase();
+	const authed = norm( authenticatedEmail );
+	const stored = norm( storedReader?.email );
+
+	// Account switch: a previously-authenticated reader is replaced by a different
+	// server-confirmed reader. The authenticated gate preserves carryover for an
+	// unauthenticated stored email logging in under a different address.
+	//
+	// Unlike the anonymous triggers below, this does NOT consult np_auth_reader.
+	// The cookie guard exists because *anonymous* full-page-cached responses
+	// (Batcache/Varnish/CDN) can be served to a logged-in browser (NPPM-2721); but
+	// authenticated configs (non-empty authenticated_email) are not page-cached —
+	// logged-in requests bypass the full-page cache — so that concern doesn't apply
+	// here. The receiving browser's own auth cookie also can't distinguish a real
+	// switch from such a (non-occurring) cached-authenticated response, so gating on
+	// it would only risk suppressing legitimate A→B clears.
+	if ( storedReader?.authenticated === true && authed && stored && authed !== stored ) {
+		return true;
+	}
+
+	// Remaining triggers require the server to report anonymous. A present
+	// np_auth_reader cookie means "not anonymous" (NPPM-2721 cached-page guard).
+	// Use the normalized `authed` so a whitespace-only email is handled consistently.
+	// Behavioral delta vs NPPM-2721: deriving this from `authed` (not the raw
+	// authenticated_email) makes a degenerate whitespace-only value ('   ') normalize
+	// to anonymous, which could newly trigger the logout/orphaned clear. The server
+	// only ever sends '' or a real email, so this input is non-occurring; the
+	// normalization is intentional and keeps the comparison consistent.
+	const serverSaysAnonymous = ! authed && ! hasAuthReaderCookie;
+	if ( ! serverSaysAnonymous ) {
+		return false;
+	}
+	const storedClaimsAuth = storedReader?.authenticated === true;
+	const storedEmailIsOrphaned = !! stored && stored !== norm( initialEmail );
+	return storedClaimsAuth || storedEmailIsOrphaned;
+}
+
+/**
  * Initialize.
  */
 function init() {
 	const data = newspack_ras_config;
+	// np_auth_intention = identity (who the in-progress auth flow is for); distinct
+	// from np_auth_reader below, which is the cached-page guard, not an identity.
 	const initialEmail = data?.authenticated_email || getCookie( 'np_auth_intention' );
 	const authenticated = !! data?.authenticated_email;
-	const currentReader = getReader();
+	let currentReader = getReader();
+
+	// Clear the local reader namespace when the persisted identity no longer matches
+	// the current session — logout, an orphaned leftover, or an authenticated account
+	// switch (A→B). See shouldClearReaderData() for the full trigger set (NPPM-2721 +
+	// NPPM-2899).
+	if (
+		shouldClearReaderData( {
+			authenticatedEmail: data?.authenticated_email,
+			initialEmail,
+			storedReader: currentReader,
+			// np_auth_reader = cache guard (present ⇒ "not anonymous"), NOT an identity.
+			hasAuthReaderCookie: !! getCookie( 'np_auth_reader' ),
+		} )
+	) {
+		// Capture the current reader's server-localized snapshot before the wipe.
+		// clearReaderStore() empties newspack_reader_data.items, which would make the
+		// trailing store.rehydrate() a no-op. The reference survives the wipe because
+		// clear() reassigns the property rather than mutating the object (NPPM-2899).
+		const serverReaderItems = newspack_reader_data?.items;
+		clearReaderStore();
+		// Re-read so currentReader reflects the post-clear reseed ({ authenticated:
+		// false }, no email); otherwise the reader object built below would pick the
+		// stale email back up via `initialEmail || currentReader?.email`.
+		currentReader = getReader();
+		// On an authenticated account switch (A→B), restore the new reader's own
+		// server snapshot the clear just dropped so reader B isn't briefly missing its
+		// OWN read-only state (e.g. reading as a non-donor for prompt segmentation)
+		// until its next navigation. The trailing store.rehydrate() consumes it. This
+		// is scoped to the switch case: logout/orphaned clears are anonymous
+		// (authenticated === false) and intentionally leave the namespace empty.
+		if ( authenticated && serverReaderItems ) {
+			newspack_reader_data.items = serverReaderItems;
+		}
+	}
+
 	const reader = { email: initialEmail || currentReader?.email, authenticated };
 	if ( currentReader?.email !== reader?.email || currentReader?.authenticated !== reader?.authenticated ) {
 		store.set( 'reader', reader, false );
 	}
+	// On an account switch (A→B) this fires once with the final identity (B); the
+	// intermediate anonymous reseed clear() performs is surfaced only on EVENTS.data
+	// (per wiped key), never as a separate EVENTS.reader. Consumers here react to the
+	// current reader state, not to a reset transition, so this is intentional — any
+	// per-reader cache invalidation should key off the EVENTS.data wipe events.
 	emit( EVENTS.reader, reader );
 	initAnalytics( readerActivation );
 	initSubscriptionTiersForm( readerActivation );

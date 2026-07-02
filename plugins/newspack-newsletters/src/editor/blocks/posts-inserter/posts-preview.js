@@ -1,10 +1,12 @@
 /**
  * WordPress dependencies.
  */
+import { __ } from '@wordpress/i18n';
 import { useMergeRefs, useRefEffect } from '@wordpress/compose';
 import { BlockPreview } from '@wordpress/block-editor';
-import { Spinner } from '@wordpress/components';
+import { Placeholder, Spinner } from '@wordpress/components';
 import { forwardRef } from '@wordpress/element';
+import { pages } from '@wordpress/icons';
 import { useCustomFontsInIframe } from '../../../newsletter-editor/styling';
 
 /**
@@ -37,41 +39,20 @@ const PostsPreview = ( { isReady, blocks, className, viewportWidth }, ref ) => {
 		};
 	}, [] );
 
-	// Append layout style if viewing layout preview.
-	const useLayoutStyle = useRefEffect( node => {
-		const style = document.getElementById( 'newspack-newsletters__layout-css' );
-		if ( ! style ) {
-			return;
-		}
-		const clonedStyle = style.cloneNode( true );
-		const observerCallback = () => {
-			const iframe = node.querySelector( 'iframe[title="Editor canvas"]' );
-			if ( iframe ) {
-				const doc = iframe.contentDocument;
-				const appendStyle = () => {
-					doc.body.id = style.dataset.previewid;
-					if ( ! doc.contains( clonedStyle ) ) {
-						doc.head.appendChild( clonedStyle );
-					}
-					observer.disconnect();
-				};
-				appendStyle();
-				iframe.addEventListener( 'load', appendStyle );
-			}
-		};
-		const observer = new MutationObserver( observerCallback );
-		observer.observe( node, { childList: true } );
-		return () => {
-			observer.disconnect();
-		};
-	}, [] );
-
 	return (
 		<div
 			className={ classnames( 'newspack-posts-inserter__preview', className ) }
-			ref={ useMergeRefs( [ ref, useIframeBorderFix, useLayoutStyle, useCustomFontsInIframe() ] ) }
+			ref={ useMergeRefs( [ ref, useIframeBorderFix, useCustomFontsInIframe() ] ) }
 		>
-			{ isReady ? <BlockPreview blocks={ blocks } viewportWidth={ viewportWidth } /> : <Spinner /> }
+			{ ! isReady && <Spinner /> }
+			{ isReady && blocks?.length > 0 && <BlockPreview blocks={ blocks } viewportWidth={ viewportWidth } /> }
+			{ isReady && ! blocks?.length && (
+				<Placeholder
+					icon={ pages }
+					label={ __( 'No posts found', 'newspack-newsletters' ) }
+					instructions={ __( 'Verify filter settings.', 'newspack-newsletters' ) }
+				/>
+			) }
 		</div>
 	);
 };

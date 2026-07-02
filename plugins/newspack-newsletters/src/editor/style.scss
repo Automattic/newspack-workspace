@@ -1,3 +1,5 @@
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
 :root {
 	--newspack-newsletters-header-font: arial, sans-serif;
 	--newspack-newsletters-body-font: georgia, serif;
@@ -15,6 +17,16 @@
 	margin-right: auto;
 	max-width: var(--newspack-newsletters-max-width);
 	padding: 12px;
+}
+
+// Layout thumbnails (marker class set by `NewsletterPreview`) drop the
+// email-width cap and per-block padding so they match the layouts list.
+.newspack-newsletters-layout-preview.editor-styles-wrapper .block-editor-block-list__layout.is-preview-mode .wp-block {
+	max-width: none;
+	padding-inline: 0;
+}
+.newspack-newsletters-layout-preview.editor-styles-wrapper .block-editor-block-list__layout.is-preview-mode.is-root-container > :where(:not([data-align="left"]):not([data-align="right"]):not([data-align="full"])) {
+	max-width: none;
 }
 
 // Override block theme layout constraints — all newsletter blocks
@@ -39,6 +51,12 @@
 	.editor-post-title {
 		font-family: var(--newspack-newsletters-header-font);
 		line-height: 1.5;
+		max-width: var(--newspack-newsletters-max-width);
+		margin-left: auto;
+		margin-right: auto;
+		margin-bottom: wp-vars.$grid-unit-40;
+		// Match the 12px horizontal inset of `.wp-block` so title and body align.
+		padding: 0 12px;
 	}
 
 	.block-editor-block-list__layout {

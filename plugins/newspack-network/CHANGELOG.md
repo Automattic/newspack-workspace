@@ -1,3 +1,45 @@
+## newspack-network [2.20.5](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.4...newspack-network@2.20.5) (2026-06-29)
+
+
+### Bug Fixes
+
+* **woo-memberships:** guard membership_deleted against null plan ([#323](https://github.com/Automattic/newspack-workspace/issues/323)) ([4ab4955](https://github.com/Automattic/newspack-workspace/commit/4ab495529a7371baf7deedd57d7aa0f92d82de88))
+
+## newspack-network [2.20.4](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.3...newspack-network@2.20.4) (2026-06-15)
+
+
+### Bug Fixes
+
+* update paragraph markup to fix failing tests ([2fbadaa](https://github.com/Automattic/newspack-workspace/commit/2fbadaaece75644ff3d40e54bfabede2bd406f7f))
+
+## newspack-network [2.20.4-alpha.1](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.3...newspack-network@2.20.4-alpha.1) (2026-06-15)
+
+
+### Bug Fixes
+
+* update paragraph markup to fix failing tests ([2fbadaa](https://github.com/Automattic/newspack-workspace/commit/2fbadaaece75644ff3d40e54bfabede2bd406f7f))
+
+## newspack-network [2.20.3](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.2...newspack-network@2.20.3) (2026-06-11)
+
+
+### Bug Fixes
+
+* **network:** preserve node future schedule on origin publish re-sync ([#222](https://github.com/Automattic/newspack-workspace/issues/222)) ([888b5d8](https://github.com/Automattic/newspack-workspace/commit/888b5d82f2dd2fdf9a989d0017fdc9be69208f61))
+
+## newspack-network [2.20.3-alpha.1](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.2...newspack-network@2.20.3-alpha.1) (2026-06-05)
+
+
+### Bug Fixes
+
+* update paragraph markup to fix failing tests ([2fbadaa](https://github.com/Automattic/newspack-workspace/commit/2fbadaaece75644ff3d40e54bfabede2bd406f7f))
+
+## newspack-network [2.20.2](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.1...newspack-network@2.20.2) (2026-06-01)
+
+
+### Bug Fixes
+
+* **network:** harden the user-sync receive side and sign the Hub pull response ([#319](https://github.com/Automattic/newspack-workspace/issues/319)) ([0997396](https://github.com/Automattic/newspack-workspace/commit/0997396c7cdd9a69e62d9dfd29066dfb35a6fe8e))
+
 ## [2.20.1](https://github.com/Automattic/newspack-network/compare/v2.20.0...v2.20.1) (2026-05-18)
 
 

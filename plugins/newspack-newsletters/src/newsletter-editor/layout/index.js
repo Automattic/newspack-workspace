@@ -79,9 +79,11 @@ export default compose( [
 	withDispatch( dispatch => {
 		const { editPost, savePost } = dispatch( 'core/editor' );
 		const { saveEntityRecord } = dispatch( 'core' );
+		const { createErrorNotice } = dispatch( 'core/notices' );
 		return {
 			editPost,
 			savePost,
+			createErrorNotice,
 			saveLayout: payload =>
 				saveEntityRecord( 'postType', LAYOUT_CPT_SLUG, {
 					status: 'publish',
@@ -89,15 +91,22 @@ export default compose( [
 				} ),
 		};
 	} ),
-] )( ( { editPost, savePost, layoutId, saveLayout, postBlocks, postTitle, isEditedPostEmpty, layoutMeta, postStatus } ) => {
+] )( ( { editPost, savePost, layoutId, saveLayout, createErrorNotice, postBlocks, postTitle, isEditedPostEmpty, layoutMeta, postStatus } ) => {
 	const [ warningModalVisible, setWarningModalVisible ] = useState( false );
+	const [ updateModalVisible, setUpdateModalVisible ] = useState( false );
 	const { layouts, isFetchingLayouts } = useLayoutsState();
 
 	const [ usedLayout, setUsedLayout ] = useState( {} );
 
 	useEffect( () => {
-		setUsedLayout( find( layouts, { ID: layoutId } ) || {} );
-	}, [ layouts.length ] );
+		const match = find( layouts, { ID: layoutId } );
+		if ( match ) {
+			setUsedLayout( match );
+			return;
+		}
+		// Preserve a just-saved layout the cache hasn't picked up yet.
+		setUsedLayout( prev => ( prev?.ID === layoutId ? prev : {} ) );
+	}, [ layouts, layoutId ] );
 
 	const blockPreview = useMemo( () => {
 		return usedLayout.post_content ? parse( usedLayout.post_content ) : null;
@@ -130,30 +139,28 @@ export default compose( [
 
 	const handleSaveAsLayout = () => {
 		setIsSavingLayout( true );
-		const updatePayload = {
-			title: newLayoutName,
-			content: postContent,
-			meta: layoutMeta,
-		};
-		saveLayout( updatePayload ).then( newLayout => {
-			setIsManageModalVisible( false );
-			handleLayoutUpdate( newLayout );
-		} );
+		saveLayout( { title: newLayoutName, content: postContent, meta: layoutMeta } )
+			.then( newLayout => {
+				setIsManageModalVisible( false );
+				handleLayoutUpdate( newLayout );
+			} )
+			.catch( () => {
+				setIsSavingLayout( false );
+				createErrorNotice( __( 'Failed to save layout. Please try again.', 'newspack-newsletters' ), { type: 'snackbar' } );
+			} );
 	};
 
 	const handleLayoutOverwrite = () => {
-		if (
-			// eslint-disable-next-line no-alert
-			confirm( __( 'Are you sure you want to overwrite this layout?', 'newspack-newsletters' ) )
-		) {
-			setIsSavingLayout( true );
-			const updatePayload = {
-				id: usedLayout.ID,
-				content: postContent,
-				meta: layoutMeta,
-			};
-			saveLayout( updatePayload ).then( handleLayoutUpdate );
-		}
+		setIsSavingLayout( true );
+		saveLayout( { id: usedLayout.ID, content: postContent, meta: layoutMeta } )
+			.then( layout => {
+				setUpdateModalVisible( false );
+				handleLayoutUpdate( layout );
+			} )
+			.catch( () => {
+				setIsSavingLayout( false );
+				createErrorNotice( __( 'Failed to update layout. Please try again.', 'newspack-newsletters' ), { type: 'snackbar' } );
+			} );
 	};
 
 	const isUsingCustomLayout = isUserDefinedLayout( usedLayout );
@@ -164,7 +171,7 @@ export default compose( [
 			help={ postStatus === 'future' && __( 'Unschedule this newsletter to edit layout.', 'newspack-newsletters' ) }
 			__nextHasNoMarginBottom
 		>
-			<VStack spacing={ 2 }>
+			<VStack spacing={ 4 }>
 				{ Boolean( layoutId && isFetchingLayouts ) && (
 					<div className="newspack-newsletters-layouts__spinner">
 						<Spinner />
@@ -181,7 +188,9 @@ export default compose( [
 									viewportWidth={ 848 }
 								/>
 							</div>
-							<div className="newspack-newsletters-layouts__item-label">{ usedLayout.post_title }</div>
+							<div className="newspack-newsletters-layouts__item-label">
+								<strong>{ usedLayout.post_title }</strong>
+							</div>
 						</div>
 					</div>
 				) }
@@ -198,9 +207,8 @@ export default compose( [
 					{ isUsingCustomLayout && (
 						<Button
 							variant="secondary"
-							disabled={ isPostContentSameAsLayout || ( isSavingLayout && isManageModalVisible ) }
-							isBusy={ isSavingLayout && ! isManageModalVisible }
-							onClick={ handleLayoutOverwrite }
+							disabled={ isPostContentSameAsLayout || isSavingLayout }
+							onClick={ () => setUpdateModalVisible( true ) }
 							__next40pxDefaultSize
 						>
 							{ __( 'Update layout', 'newspack-newsletters' ) }
@@ -237,6 +245,30 @@ export default compose( [
 							{ __( 'Save', 'newspack-newsletters' ) }
 						</Button>
 						<Button variant="tertiary" onClick={ () => setIsManageModalVisible( null ) }>
+							{ __( 'Cancel', 'newspack-newsletters' ) }
+						</Button>
+					</div>
+				</Modal>
+			) }
+
+			{ updateModalVisible && (
+				<Modal
+					className="newspack-newsletters__modal"
+					title={ __( 'Update layout?', 'newspack-newsletters' ) }
+					onRequestClose={ () => setUpdateModalVisible( false ) }
+					size="small"
+				>
+					<p>
+						{ __(
+							'This will overwrite the saved layout with the current newsletter content. Newsletters already using this layout keep their content.',
+							'newspack-newsletters'
+						) }
+					</p>
+					<div className="newspack-newsletters__modal-buttons">
+						<Button variant="primary" isBusy={ isSavingLayout } disabled={ isSavingLayout } onClick={ handleLayoutOverwrite }>
+							{ __( 'Update', 'newspack-newsletters' ) }
+						</Button>
+						<Button variant="tertiary" onClick={ () => setUpdateModalVisible( false ) }>
 							{ __( 'Cancel', 'newspack-newsletters' ) }
 						</Button>
 					</div>

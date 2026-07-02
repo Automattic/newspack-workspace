@@ -13,6 +13,9 @@ if ( function_exists( 'newspack_get_all_sponsors' ) ) {
 	$display_sponsors_and_authors    = newspack_display_sponsors_and_authors( $native_sponsors );
 }
 
+// Get tag labels for this post (null when the Newspack plugin isn't loaded).
+$tag_labels = function_exists( 'newspack_get_tag_labels' ) ? newspack_get_tag_labels( get_the_ID() ) : null;
+
 // Get page title visibility.
 $page_hide_title = get_post_meta( $post->ID, 'newspack_hide_page_title', true );
 
@@ -29,10 +32,16 @@ if ( true === get_theme_mod( 'post_excerpt_instead_of_subtitle', false ) ) {
 	if ( ! is_page() ) :
 		if ( ! empty( $native_sponsors ) ) {
 			newspack_sponsor_label( $native_sponsors, null, true );
+			if ( $tag_labels ) {
+				newspack_display_tag_labels( $tag_labels );
+			}
 			if ( $display_sponsors_and_categories ) {
 				newspack_categories();
 			}
 		} else {
+			if ( $tag_labels ) {
+				newspack_display_tag_labels( $tag_labels );
+			}
 			newspack_categories();
 		}
 	endif;

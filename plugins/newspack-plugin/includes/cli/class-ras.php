@@ -46,6 +46,9 @@ class RAS {
 			exit;
 		}
 
+		// Enabling is no longer implied by configured prerequisites, so set it explicitly here.
+		Reader_Activation::update_setting( 'enabled', true );
+
 		WP_CLI::success( __( 'RAS enabled with default prompts.', 'newspack-plugin' ) );
 	}
 

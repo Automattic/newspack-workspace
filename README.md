@@ -315,7 +315,9 @@ Run the one-time setup script to allow these specific operations without a passw
 ./bin/setup-networking.sh
 ```
 
-This installs a locked-down wrapper script (`newspack-manage-host`) that only allows adding/removing `127.0.0.*` loopback aliases and `*.local` hosts entries, and creates a sudoers rule so your user can run it without a password. After this, `n start`, `n env create`, `n env up`, and `n env destroy` will manage networking automatically -- no password prompts, even from non-interactive terminals.
+This installs a locked-down wrapper script (`newspack-manage-host`) that only allows adding/removing `127.0.0.*` loopback aliases and `*.test` (and legacy `*.local`) hosts entries, and creates a sudoers rule so your user can run it without a password. After this, `n start`, `n env create`, `n env up`, and `n env destroy` will manage networking automatically -- no password prompts, even from non-interactive terminals.
+
+> **Already ran this before the `.test` migration?** Re-run `./bin/setup-networking.sh` to install the updated wrapper -- the previous version only accepts `.local` domains and will reject newly-created `.test` environments.
 
 To undo: `sudo rm /etc/sudoers.d/newspack-manage-host /usr/local/bin/newspack-manage-host`
 
@@ -341,7 +343,7 @@ It's safe to re-run: an existing environment is reused, and only worktrees missi
 # Options:
 n env e2e-setup <name> \
   --branch <branch>   # branch to check out per plugin (default: release)
-  --domain <domain>   # site domain (default: <name>.local)
+  --domain <domain>   # site domain (default: <name>.test)
   --e2e-repo <path>   # path to the newspack-e2e-tests checkout
                       #   (default: a sibling of this workspace)
 ```
@@ -420,7 +422,7 @@ define( 'NEWSPACK_DOCKER_SITE_URL_CLI_OVERRIDE', 'https://my-domain.my-tunnel.co
 
 If you need to run a couple of additional sites, we got you covered.
 
-You can have a number of additional sites running under `you-name-it.local`. They will live in their own local domain, such as `site1.local` and `another-site.local`.
+You can have a number of additional sites running under `you-name-it.test`. They will live in their own local domain, such as `site1.test` and `another-site.test`.
 
 `n sites-add $site_name` will launch a new site. The site will come with Newpack already initialized and all the plugins linked. Your secrets will also be copied. It's basically the same result as running `n reset-site` for your main site.
 

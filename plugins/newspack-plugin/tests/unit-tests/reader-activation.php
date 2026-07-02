@@ -5,6 +5,7 @@
  * @package Newspack\Tests
  */
 
+use Newspack\Content_Gate;
 use Newspack\Reader_Activation;
 
 /**
@@ -45,6 +46,91 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 		$this->assertTrue( is_user_logged_in() );
 		$this->assertEquals( $user_id, get_current_user_id() );
 		wp_delete_user( $user_id ); // Clean up.
+	}
+
+	/**
+	 * A reader already authenticated in the browser (e.g. a returning reader, or a
+	 * shared/public device still carrying a prior reader's remember-me cookie) must
+	 * still get a WordPress account created when subscribing with a DIFFERENT email,
+	 * without hijacking the current session.
+	 *
+	 * Reproduces NPPM-2936: the Newsletter Subscription block authenticates the reader
+	 * on the first signup (register_reader -> set_current_reader -> remember-me cookie),
+	 * so a second back-to-back signup from the same browser was treated as logged-in and
+	 * silently skipped account creation — while the email was still pushed to the ESP
+	 * list, leaving a list subscription with no account.
+	 */
+	public function test_register_reader_while_logged_in_creates_account_without_hijacking_session() {
+		// First signup from a clean session creates and authenticates the reader.
+		$first_reader_id = Reader_Activation::register_reader( 'first-signup@test.com', 'First Signup', true );
+		$this->assertIsInt( $first_reader_id );
+		$this->assertSame( $first_reader_id, get_current_user_id(), 'First signup should authenticate the reader.' );
+		$this->assertTrue( is_user_logged_in() );
+
+		// A different email is then submitted from the same (now authenticated) browser,
+		// exactly as the subscription block does for a logged-in visitor: register without
+		// re-authenticating.
+		$second_reader_id = Reader_Activation::register_reader(
+			'second-signup@test.com',
+			'Second Signup',
+			false, // Do not authenticate: preserve the current session.
+			[ 'registration_method' => 'newsletters-subscription' ]
+		);
+
+		// The second email must get its own real reader account...
+		$this->assertIsInt( $second_reader_id, 'A logged-in browser submitting a different email must still create an account.' );
+		$second_reader = get_user_by( 'email', 'second-signup@test.com' );
+		$this->assertInstanceOf( 'WP_User', $second_reader );
+		$this->assertTrue( (bool) get_user_meta( $second_reader->ID, Reader_Activation::READER, true ), 'The second account must be a real reader account, not a bare WP user.' );
+
+		// ...without changing who is logged in.
+		$this->assertSame( $first_reader_id, get_current_user_id(), 'Creating the second account must not hijack the current session.' );
+
+		wp_delete_user( $first_reader_id );  // Clean up.
+		wp_delete_user( $second_reader_id ); // Clean up.
+	}
+
+	/**
+	 * The dominant real-world path: a returning reader who is still logged in re-subscribes
+	 * via the block with their OWN email. This must be a no-op — reuse the existing account,
+	 * create no duplicate, preserve the session, and send no email. The "no email" guard is
+	 * load-bearing: the magic-link/OTP for a passwordless reader is suppressed only because
+	 * the registration method contains `newsletters-subscription`; a regression there would
+	 * silently email returning readers on every signup.
+	 */
+	public function test_register_reader_while_logged_in_with_own_email_is_noop() {
+		// A returning reader is already authenticated in this browser (passwordless, as RAS
+		// readers are — so the magic-link branch is genuinely exercised).
+		$reader_id = Reader_Activation::register_reader( 'returning@test.com', 'Returning Reader', true );
+		$this->assertIsInt( $reader_id );
+		$this->assertSame( $reader_id, get_current_user_id() );
+		$this->assertTrue( Reader_Activation::is_reader_without_password( $reader_id ), 'Test precondition: the reader must be passwordless to exercise the OTP-suppression path.' );
+
+		// Capture any outgoing email to prove the re-subscribe is side-effect-free.
+		$sent_emails = 0;
+		$email_counter = function ( $args ) use ( &$sent_emails ) {
+			$sent_emails++;
+			return $args;
+		};
+		add_filter( 'wp_mail', $email_counter );
+
+		// The reader re-subscribes via the block with their OWN (current) email.
+		$result = Reader_Activation::register_reader(
+			'returning@test.com',
+			'Returning Reader',
+			false, // Logged in: do not authenticate.
+			[ 'registration_method' => 'newsletters-subscription' ]
+		);
+
+		remove_filter( 'wp_mail', $email_counter );
+
+		// Existing account reused (false), no duplicate, no email, session preserved.
+		$this->assertFalse( $result, 'Re-subscribing with the current reader\'s own email must not create a second account.' );
+		$this->assertSame( $reader_id, get_user_by( 'email', 'returning@test.com' )->ID, 'The existing reader account must be reused, not duplicated.' );
+		$this->assertSame( 0, $sent_emails, 'Re-subscribing via the block must not send a magic link or login reminder.' );
+		$this->assertSame( $reader_id, get_current_user_id(), 'Session must be preserved.' );
+
+		wp_delete_user( $reader_id ); // Clean up.
 	}
 
 	/**
@@ -170,5 +256,342 @@ class Newspack_Test_Reader_Activation extends WP_UnitTestCase {
 			Reader_Activation::is_oauth_redirect( 'https://example.com/custom-oauth/?param=value' ),
 			'Custom OAuth route should be detected after adding via filter.'
 		);
+	}
+
+	/**
+	 * Test that get_verification_payload() returns the stable shape (both keys
+	 * always present) and that the verification_nonce is bound to the just-
+	 * registered user's session, so a subsequent OTP send from that session
+	 * verifies the nonce successfully.
+	 *
+	 * Reproduces the scenario flagged in pr-test review (S10): when entry points
+	 * like the Newsletter Subscription block call register_reader(..., true, ...)
+	 * and then immediately compute the verification payload, the nonce must work
+	 * for the new user — not be silently bound to user 0.
+	 */
+	public function test_get_verification_payload_nonce_binds_to_new_user() {
+		// Simulate logged-out request.
+		wp_set_current_user( 0 );
+		$this->assertFalse( is_user_logged_in() );
+
+		// Register a new reader. Third arg `true` authenticates the user in this request.
+		$user_id = Reader_Activation::register_reader( self::$reader_email, self::$reader_name, true );
+		$this->assertIsInt( $user_id );
+		$this->assertEquals( $user_id, get_current_user_id(), 'register_reader should set the current user.' );
+
+		// The payload must contain both keys (stable shape contract).
+		$payload = Reader_Activation::get_verification_payload( $user_id );
+		$this->assertArrayHasKey( 'verified', $payload );
+		$this->assertArrayHasKey( 'verification_nonce', $payload );
+		$this->assertFalse( $payload['verified'], 'New reader should be unverified.' );
+		$this->assertNotEmpty( $payload['verification_nonce'], 'Unverified new reader should receive a nonce.' );
+
+		// The nonce must verify in the just-registered session.
+		$this->assertEquals(
+			1,
+			wp_verify_nonce( $payload['verification_nonce'], 'newspack_reader_registration_verification' ),
+			'Verification nonce must verify in the just-registered user session.'
+		);
+
+		wp_delete_user( $user_id ); // Clean up.
+	}
+
+	/**
+	 * Test that get_verification_payload() returns the empty-sentinel shape
+	 * for invalid input — both keys present, `verified` null, `verification_nonce`
+	 * an empty string — so cross-plugin callers can pattern-match without
+	 * `isset()` ladders.
+	 */
+	public function test_get_verification_payload_shape_for_invalid_user() {
+		$payload = Reader_Activation::get_verification_payload( 0 );
+		$this->assertSame(
+			[
+				'verified'           => null,
+				'verification_nonce' => '',
+			],
+			$payload
+		);
+
+		$payload = Reader_Activation::get_verification_payload( 999999999 );
+		$this->assertSame(
+			[
+				'verified'           => null,
+				'verification_nonce' => '',
+			],
+			$payload
+		);
+	}
+
+	/**
+	 * Test that an already-verified reader receives `verified => true` and an
+	 * empty nonce (no verification flow to trigger).
+	 */
+	public function test_get_verification_payload_for_verified_reader() {
+		$user_id = self::register_sample_reader();
+		Reader_Activation::set_reader_verified( get_user_by( 'id', $user_id ) );
+
+		$payload = Reader_Activation::get_verification_payload( $user_id );
+		$this->assertTrue( $payload['verified'] );
+		$this->assertSame( '', $payload['verification_nonce'], 'Verified reader should receive an empty nonce.' );
+
+		wp_delete_user( $user_id ); // Clean up.
+	}
+
+	/**
+	 * The `verify_new_reader_accounts` setting must round-trip cleanly as a boolean
+	 * via update_setting/get_setting. update_setting coerces to int internally
+	 * (intval), so the read must come back as a strict boolean — false/true, not
+	 * 0/1/'' — for `show_post_registration_verification()` and the
+	 * `newspack_ras_config` JS payload to behave correctly.
+	 */
+	public function test_verify_new_reader_accounts_setting_round_trip() {
+		$original = Reader_Activation::get_setting( 'verify_new_reader_accounts' );
+
+		Reader_Activation::update_setting( 'verify_new_reader_accounts', true );
+		$this->assertTrue(
+			Reader_Activation::get_setting( 'verify_new_reader_accounts' ),
+			'Setting `verify_new_reader_accounts` to true should round-trip as boolean true.'
+		);
+
+		Reader_Activation::update_setting( 'verify_new_reader_accounts', false );
+		$this->assertFalse(
+			Reader_Activation::get_setting( 'verify_new_reader_accounts' ),
+			'Setting `verify_new_reader_accounts` to false should round-trip as boolean false.'
+		);
+
+		// Restore.
+		Reader_Activation::update_setting( 'verify_new_reader_accounts', $original );
+	}
+
+	/**
+	 * The admin bar is hidden on the front end for readers but kept for admins.
+	 */
+	public function test_hide_admin_bar_for_readers() {
+		$reader_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $reader_id );
+		$this->assertFalse( Reader_Activation::hide_admin_bar_for_readers( true ) );
+
+		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin_id );
+		$this->assertTrue( Reader_Activation::hide_admin_bar_for_readers( true ) );
+
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * The account link renders for logged-out visitors without WooCommerce.
+	 */
+	public function test_account_link_without_woocommerce() {
+		if ( function_exists( 'wc_get_account_endpoint_url' ) ) {
+			$this->markTestSkipped( 'WooCommerce active; native fallback not exercised.' );
+		}
+		wp_set_current_user( 0 );
+		$method = new ReflectionMethod( 'Newspack\Reader_Activation', 'get_account_link' );
+		$method->setAccessible( true );
+		$link = $method->invoke( null );
+		$this->assertStringContainsString( 'data-newspack-reader-account-link', $link );
+	}
+
+	/**
+	 * Test that the prerequisites status no longer exposes skip-related keys.
+	 */
+	public function test_prerequisites_status_has_no_skip_keys() {
+		$prerequisites = Reader_Activation::get_prerequisites_status();
+		$this->assertNotEmpty( $prerequisites );
+		foreach ( $prerequisites as $slug => $prerequisite ) {
+			$this->assertArrayNotHasKey( 'skippable', $prerequisite, "Prerequisite '$slug' should not expose 'skippable'." );
+			$this->assertArrayNotHasKey( 'is_skipped', $prerequisite, "Prerequisite '$slug' should not expose 'is_skipped'." );
+			$this->assertArrayNotHasKey( 'action_enabled', $prerequisite, "Prerequisite '$slug' should not expose 'action_enabled'." );
+			$this->assertArrayNotHasKey( 'disabled_text', $prerequisite, "Prerequisite '$slug' should not expose 'disabled_text'." );
+		}
+	}
+
+	/**
+	 * Test that the auto-enable and skip helpers have been removed.
+	 */
+	public function test_auto_enable_and_skip_helpers_removed() {
+		$this->assertFalse( method_exists( Reader_Activation::class, 'is_ras_ready_to_configure' ), 'is_ras_ready_to_configure() should be removed.' );
+		$this->assertFalse( method_exists( Reader_Activation::class, 'skip' ), 'skip() should be removed.' );
+		$this->assertFalse( method_exists( Reader_Activation::class, 'is_skipped' ), 'is_skipped() should be removed.' );
+	}
+
+	/**
+	 * Test that removed prerequisites are gone and ordering is correct.
+	 */
+	public function test_prerequisites_status_cleanup() {
+		$prerequisites = Reader_Activation::get_prerequisites_status();
+
+		$this->assertArrayNotHasKey( 'reader_revenue', $prerequisites, 'Reader Revenue prerequisite should be removed.' );
+		$this->assertArrayNotHasKey( 'ras_campaign', $prerequisites, 'Campaign defaults prerequisite should be removed.' );
+		// NPPD-1566: the Transactional Emails prerequisite was removed — its
+		// settings moved to the Emails screen with valid derived defaults, so
+		// they no longer gate Reader Activation.
+		$this->assertArrayNotHasKey( 'emails', $prerequisites, 'Transactional Emails prerequisite should be removed (NPPD-1566).' );
+
+		// First two are always present and ordered.
+		$keys = array_keys( $prerequisites );
+		$this->assertSame( 'terms_conditions', $keys[0], 'Legal Pages should be first.' );
+		$this->assertSame( 'recaptcha', $keys[1], 'reCAPTCHA should be second.' );
+
+		// ESP is gated on Newspack Newsletters; in the test env it is absent.
+		if ( class_exists( '\Newspack_Newsletters' ) ) {
+			$this->assertArrayHasKey( 'esp', $prerequisites, 'ESP should be present when Newsletters exists.' );
+			$this->assertSame( 'esp', $keys[2], 'ESP should be third when present.' );
+		} else {
+			$this->assertArrayNotHasKey( 'esp', $prerequisites, 'ESP should be absent without Newsletters.' );
+		}
+	}
+
+	/**
+	 * Test the reader-revenue platform first-run signal.
+	 */
+	public function test_is_platform_selected() {
+		delete_option( 'newspack_reader_revenue_platform' );
+		$this->assertFalse(
+			\Newspack\Donations::is_platform_selected(),
+			'Platform should report not selected when the option was never saved.'
+		);
+
+		\Newspack\Donations::set_platform_slug( 'wc' );
+		$this->assertTrue(
+			\Newspack\Donations::is_platform_selected(),
+			'Platform should report selected after an explicit save.'
+		);
+
+		delete_option( 'newspack_reader_revenue_platform' );
+	}
+
+	/**
+	 * Helper: create a published content gate with the given registration settings,
+	 * then flush the verification-required-gates cache so the next read picks it up.
+	 *
+	 * @param array $registration Registration settings ('active', 'require_verification', etc.).
+	 * @param array $post_args    Optional overrides for wp_insert_post (e.g. post_title, post_status).
+	 *
+	 * @return int Created post ID.
+	 */
+	private static function create_gate_post( array $registration, array $post_args = [] ): int {
+		$post_id = self::factory()->post->create(
+			array_merge(
+				[
+					'post_type'   => Content_Gate::GATE_CPT,
+					'post_status' => 'publish',
+					'post_title'  => 'Test gate',
+				],
+				$post_args
+			)
+		);
+		update_post_meta( $post_id, 'registration', $registration );
+		Reader_Activation::flush_verification_required_gates_cache();
+		return $post_id;
+	}
+
+	/**
+	 * `show_post_registration_verification()` must be forced to true whenever a
+	 * published gate uses Registered Access + Require Verification, even if the
+	 * publisher has flipped the `verify_new_reader_accounts` setting off in
+	 * Audience → Configuration. Otherwise the toggle would silently break gates
+	 * that depend on the verification flow.
+	 */
+	public function test_show_post_registration_verification_force_on_via_gate() {
+		$original = Reader_Activation::get_setting( 'verify_new_reader_accounts' );
+		Reader_Activation::update_setting( 'verify_new_reader_accounts', false );
+		Reader_Activation::flush_verification_required_gates_cache();
+
+		// No gate yet → setting wins → false.
+		$this->assertFalse(
+			Reader_Activation::show_post_registration_verification(),
+			'With no published verification-required gate, the setting controls the result.'
+		);
+
+		// Add a gate that requires verification → forced ON.
+		$gate_id = self::create_gate_post(
+			[
+				'active'               => true,
+				'require_verification' => true,
+			]
+		);
+		$this->assertTrue(
+			Reader_Activation::show_post_registration_verification(),
+			'A published Registered + Require-Verification gate must force the result to true.'
+		);
+
+		// Clean up.
+		wp_delete_post( $gate_id, true );
+		Reader_Activation::flush_verification_required_gates_cache();
+		Reader_Activation::update_setting( 'verify_new_reader_accounts', $original );
+	}
+
+	/**
+	 * `get_verification_required_gates()` must include only gates that are *both*
+	 * Registered Access active AND have Require Verification on. It must:
+	 *   - skip gates with `active = false` even if `require_verification = true`
+	 *   - skip gates with `require_verification = false` even if `active = true`
+	 *   - skip non-published gates entirely
+	 *   - return only capability-independent fields ({id, title}) so the 24h transient
+	 *     can't be poisoned by a no-caps front-end populate (H1 regression guard).
+	 */
+	public function test_get_verification_required_gates_filtering() {
+		Reader_Activation::flush_verification_required_gates_cache();
+
+		$included_id  = self::create_gate_post(
+			[
+				'active'               => true,
+				'require_verification' => true,
+			],
+			[ 'post_title' => 'Included' ]
+		);
+		$inactive_id  = self::create_gate_post(
+			[
+				'active'               => false,
+				'require_verification' => true,
+			],
+			[ 'post_title' => 'Inactive (active=false)' ]
+		);
+		$no_verify_id = self::create_gate_post(
+			[
+				'active'               => true,
+				'require_verification' => false,
+			],
+			[ 'post_title' => 'Active but verification off' ]
+		);
+		$draft_id     = self::create_gate_post(
+			[
+				'active'               => true,
+				'require_verification' => true,
+			],
+			[
+				'post_title'  => 'Draft',
+				'post_status' => 'draft',
+			]
+		);
+
+		$gates = Reader_Activation::get_verification_required_gates();
+		$ids   = array_map(
+			static function ( $g ) {
+				return $g['id'];
+			},
+			$gates
+		);
+
+		$this->assertContains( $included_id, $ids, 'Active + require_verification published gate must be included.' );
+		$this->assertNotContains( $inactive_id, $ids, 'Gates with active=false must be excluded.' );
+		$this->assertNotContains( $no_verify_id, $ids, 'Gates with require_verification=false must be excluded.' );
+		$this->assertNotContains( $draft_id, $ids, 'Non-published gates must be excluded.' );
+
+		// Cached entries must not carry capability-dependent fields (no edit_url).
+		// H1 regression guard: front-end traffic (no edit_post caps) populating the
+		// cache first would otherwise leave a null edit URL stuck for 24h.
+		foreach ( $gates as $gate ) {
+			$this->assertArrayHasKey( 'id', $gate );
+			$this->assertArrayHasKey( 'title', $gate );
+			$this->assertArrayNotHasKey( 'edit_url', $gate, 'edit_url must not be cached; it is resolved at REST call time under admin caps.' );
+		}
+
+		// Clean up.
+		foreach ( [ $included_id, $inactive_id, $no_verify_id, $draft_id ] as $id ) {
+			wp_delete_post( $id, true );
+		}
+		Reader_Activation::flush_verification_required_gates_cache();
 	}
 }

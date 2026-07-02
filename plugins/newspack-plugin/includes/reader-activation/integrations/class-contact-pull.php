@@ -121,7 +121,7 @@ class Contact_Pull {
 	 */
 	public static function pull_sync( $integrations = [] ) {
 		if ( empty( $integrations ) ) {
-			$integrations = Integrations::get_active_integrations();
+			$integrations = Integrations::get_active_configured_integrations();
 		}
 
 		Logger::log( 'Synchronous pull started for user "' . get_current_user_id() . '".', self::LOGGER_HEADER );
@@ -158,7 +158,7 @@ class Contact_Pull {
 	 * @return true|\WP_Error True if all succeeded, WP_Error with combined messages.
 	 */
 	public static function pull_all( $user_id ) {
-		$active_integrations = Integrations::get_active_integrations();
+		$active_integrations = Integrations::get_active_configured_integrations();
 		$errors              = [];
 
 		foreach ( $active_integrations as $integration ) {
@@ -223,6 +223,14 @@ class Contact_Pull {
 		$integration = Integrations::get_integration( $integration_id );
 		if ( ! $integration || ! Integrations::is_enabled( $integration_id ) ) {
 			wp_send_json_error( 'Integration not found or not enabled.', 404 );
+		}
+
+		// Defense-in-depth: pull_sync already filters to set-up integrations,
+		// but a direct AJAX call could still arrive here for an unconfigured
+		// integration. Skip silently with success — "not set up" is a no-op,
+		// not an error worth surfacing to the loopback caller.
+		if ( ! $integration->is_set_up() ) {
+			wp_send_json_success();
 		}
 
 		$user_id = get_current_user_id();
@@ -415,6 +423,11 @@ class Contact_Pull {
 		$integration = Integrations::get_integration( $integration_id );
 		if ( ! $integration || ! Integrations::is_enabled( $integration_id ) ) {
 			Logger::log( sprintf( 'Integration "%s" not found or not enabled on pull retry %d.', $integration_id, $retry_count ), self::LOGGER_HEADER, 'error' );
+			return;
+		}
+
+		if ( ! $integration->is_set_up() ) {
+			Logger::log( sprintf( 'Integration "%s" no longer set up on pull retry %d; aborting retry chain.', $integration_id, $retry_count ), self::LOGGER_HEADER );
 			return;
 		}
 

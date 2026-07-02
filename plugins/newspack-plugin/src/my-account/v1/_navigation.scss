@@ -83,6 +83,10 @@
 			place-items: center;
 			width: var(--newspack-ui-spacer-11);
 
+			.newspack-ui__button--ghost {
+				color: currentcolor;
+			}
+
 			svg + svg {
 				display: none;
 			}

@@ -123,16 +123,6 @@ class Audience_Donations extends Wizard {
 				],
 			]
 		);
-
-		register_rest_route(
-			NEWSPACK_API_NAMESPACE,
-			'/wizard/' . $this->slug . '/emails/(?P<id>\d+)',
-			[
-				'methods'             => \WP_REST_Server::DELETABLE,
-				'callback'            => [ $this, 'api_reset_donation_email' ],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
-			]
-		);
 	}
 
 	/**
@@ -214,46 +204,6 @@ class Audience_Donations extends Wizard {
 		}
 
 		return rest_ensure_response( $this->fetch_all_data() );
-	}
-
-	/**
-	 * Reset donation email template.
-	 * We acheive this by trashing the email template post.
-	 *
-	 * @param WP_REST_Request $request Request object.
-	 *
-	 * @return WP_Error|WP_REST_Response
-	 */
-	public function api_reset_donation_email( $request ) {
-		$params = $request->get_params();
-		$id     = $params['id'];
-		$email  = get_post( $id );
-
-		if ( $email === null || $email->post_type !== Emails::POST_TYPE ) {
-			return new WP_Error(
-				'newspack_reset_donation_email_invalid_arg',
-				esc_html__( 'Invalid argument: no email template matches the provided id.', 'newspack-plugin' ),
-				[
-					'status' => 400,
-					'level'  => 'notice',
-				]
-			);
-		}
-
-		if ( ! wp_trash_post( $id ) ) {
-			return new WP_Error(
-				'newspack_reset_donation_email_reset_failed',
-				esc_html__( 'Reset failed: unable to reset email template.', 'newspack-plugin' ),
-				[
-					'status' => 400,
-					'level'  => 'notice',
-				]
-			);
-		}
-
-		return rest_ensure_response(
-			Emails::get_emails( Reader_Activation::is_enabled() ? [] : array_values( Reader_Revenue_Emails::EMAIL_TYPES ), false )
-		);
 	}
 
 	/**

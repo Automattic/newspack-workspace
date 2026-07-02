@@ -114,7 +114,7 @@ class Audience_Content_Gates extends Wizard {
 		);
 
 		// Enqueue content banner CSS for previews.
-		wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], NEWSPACK_PLUGIN_VERSION );
+		wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], Newspack::asset_version( 'content-banner' ) );
 	}
 
 	/**
@@ -174,6 +174,7 @@ class Audience_Content_Gates extends Wizard {
 						'type'       => 'object',
 						'properties' => [
 							'restrict_feeds' => [ 'type' => 'boolean' ],
+							'newsletter_link_bypass_enabled' => [ 'type' => 'boolean' ],
 						],
 					],
 				],
@@ -365,12 +366,20 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response
 	 */
 	public function get_config() {
+		$advanced = Content_Gate_Advanced_Settings::get_settings();
+		// Cast to bool at the REST boundary so the TS type (boolean) is satisfied.
+		// Internal storage remains as 0/1 integers — only the REST response payload is cast.
+		$advanced_settings_response = [
+			'restrict_feeds'                 => (bool) ( $advanced['restrict_feeds'] ?? false ),
+			'newsletter_link_bypass_enabled' => (bool) ( $advanced['newsletter_link_bypass_enabled'] ?? false ),
+		];
 		$config = [
 			'gates'  => Content_Gate::get_gates(),
 			'config' => [
 				'countdown_banner'  => Metering_Countdown::get_settings(),
 				'content_gifting'   => Content_Gifting::get_settings(),
-				'advanced_settings' => Content_Gate_Advanced_Settings::get_settings(),
+				'advanced_settings' => $advanced_settings_response,
+				'has_newsletters'   => Reader_Activation::is_esp_configured(),
 			],
 		];
 		return rest_ensure_response( $config );

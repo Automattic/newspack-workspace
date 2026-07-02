@@ -70,24 +70,34 @@ const ReaderRevenueEmailSidebar = compose( [
 
 	const sendTestEmail = async () => {
 		setInFlight( true );
-		await savePost();
-		apiFetch( {
-			path: `/newspack/v1/newspack-emails/test`,
-			method: 'POST',
-			data: {
-				recipient: settings.testRecipient,
-				post_id: postId,
-			},
-		} )
-			.then( () => {
-				createNotice( 'success', __( 'Test email sent!', 'newspack-plugin' ) );
-			} )
-			.catch( () => {
-				createNotice( 'error', __( 'Test email was not sent.', 'newspack-plugin' ) );
-			} )
-			.finally( () => {
-				setInFlight( false );
+		// Single try/catch around BOTH savePost() and apiFetch() with a
+		// shared finally cleanup. Previously only the apiFetch().finally()
+		// cleared the in-flight state, so a rejected savePost() (a failed
+		// draft save) left the sidebar stuck in "Sending…" with no notice —
+		// the apiFetch chain never ran. Now either failure surfaces a notice
+		// and always resets inFlight.
+		try {
+			await savePost();
+			await apiFetch( {
+				path: `/newspack/v1/newspack-emails/test`,
+				method: 'POST',
+				data: {
+					recipient: settings.testRecipient,
+					post_id: postId,
+				},
 			} );
+			createNotice( 'success', __( 'Test email sent!', 'newspack-plugin' ) );
+		} catch ( error ) {
+			// Surface the server's specific message when present (NPPD-1547
+			// added structured error codes / messages for each prerequisite
+			// failure: invalid recipient, missing HTML payload, trashed post,
+			// etc.). The generic is the fallback for unstructured errors
+			// (a savePost failure, network failures, CORS) with no `.message`.
+			const message = ( error && error.message ) || __( 'Test email was not sent.', 'newspack-plugin' );
+			createNotice( 'error', message );
+		} finally {
+			setInFlight( false );
+		}
 	};
 	return (
 		<>

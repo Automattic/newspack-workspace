@@ -6,8 +6,8 @@
 	display: none;
 }
 
-.components-base-control {
-	margin-bottom: 16px;
+.newspack-content-gate-panel .components-base-control {
+	margin-bottom: wp-vars.$grid-unit-20;
 	&:last-child {
 		margin-bottom: 0;
 	}
@@ -58,28 +58,3 @@
 	display: none;
 }
 
-/**
- * Access control block visibility panel.
- */
-.newspack-access-control-block-visibility-panel {
-	.components-base-control,
-	.components-form-token-field {
-		width: 100%;
-	}
-	// Gutenberg's `.block-editor-block-inspector p:not(.components-base-control__help)` rule
-	// strips the emotion margin-top on FormTokenField's help text. Nested here to bump
-	// specificity above Gutenberg's and restore the gap.
-	.components-form-token-field .components-form-token-field__help {
-		margin-top: wp-vars.$grid-unit-10;
-	}
-	.components-toggle-control {
-		margin-top: wp-vars.$grid-unit-10;
-		width: 100%;
-		.components-base-control__field {
-			margin-bottom: wp-vars.$grid-unit-05;
-		}
-		.components-base-control__help {
-			margin-top: 0;
-		}
-	}
-}

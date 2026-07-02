@@ -35,12 +35,13 @@ rcopy( inputDir, outputDirCommon, copyOptions )
 	.catch( err => {
 		console.error( err );
 	} );
-rcopy( path.join( dir, '../../src', 'shared' ), path.join( dir, 'shared' ) )
+rcopy( path.join( dir, '../../plugins/newspack-plugin/src', 'shared' ), path.join( dir, 'shared' ) )
 	.then( () => {
 		console.log( 'Copied shared lib' );
 	} )
 	.catch( err => {
-		console.error( err );
+		console.error( 'Failed to copy shared lib:', err );
+		process.exit( 1 );
 	} );
 rcopy( path.join( dir, '../colors' ), path.join( dir, 'colors' ), copyOptions )
 	.then( () => {

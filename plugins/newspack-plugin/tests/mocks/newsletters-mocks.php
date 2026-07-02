@@ -67,6 +67,19 @@ if ( ! class_exists( 'Newspack_Newsletters' ) ) {
 	class Newspack_Newsletters {
 		const EMAIL_HTML_META = 'newspack_email_html';
 
+		/**
+		 * Default return value of is_service_provider_configured(). Tests that
+		 * exercise the "provider not selected" branch can flip this to false
+		 * via reset_calls() / direct assignment, then restore it.
+		 *
+		 * @var bool
+		 */
+		public static $is_service_provider_configured = true;
+
+		public static function reset_calls() {
+			self::$is_service_provider_configured = true;
+		}
+
 		public static function service_provider() {
 			return get_option( 'newspack_newsletters_service_provider', false );
 		}
@@ -76,7 +89,7 @@ if ( ! class_exists( 'Newspack_Newsletters' ) ) {
 		}
 
 		public static function is_service_provider_configured() {
-			return true;
+			return self::$is_service_provider_configured;
 		}
 	}
 }
