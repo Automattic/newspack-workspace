@@ -525,7 +525,35 @@ class Insights_Wizard extends Wizard {
 		 *
 		 * @param array<string, array<int, array{label: string, url: string}>> $links Map of tab key => list of { label, url }.
 		 */
-		return apply_filters( 'newspack_insights_next_steps_links', $links );
+		$filtered = apply_filters( 'newspack_insights_next_steps_links', $links );
+
+		// Harden: the filtered value is fed to the client and rendered into an
+		// href, so a malformed or malicious filter must not reach React. Keep only
+		// well-formed entries with a safe http(s) URL — esc_url_raw() strips
+		// disallowed schemes (e.g. javascript:), returning '' for them.
+		$sanitized = [];
+		if ( is_array( $filtered ) ) {
+			foreach ( $filtered as $tab => $tab_links ) {
+				if ( ! is_array( $tab_links ) ) {
+					continue;
+				}
+				foreach ( $tab_links as $link ) {
+					if ( ! is_array( $link ) || empty( $link['label'] ) || empty( $link['url'] ) ) {
+						continue;
+					}
+					$url = esc_url_raw( (string) $link['url'], [ 'http', 'https' ] );
+					if ( '' === $url ) {
+						continue;
+					}
+					$sanitized[ $tab ][] = [
+						'label' => (string) $link['label'],
+						'url'   => $url,
+					];
+				}
+			}
+		}
+
+		return $sanitized;
 	}
 
 	/**

@@ -25,15 +25,25 @@ export interface NextStepsProps {
 	links: NextStepLink[];
 }
 
+/**
+ * Defense in depth: the links originate from a PHP filter
+ * (`newspack_insights_next_steps_links`) and land in an `href`, so only render
+ * absolute http(s) URLs. The server already sanitizes with esc_url_raw(); this
+ * guards the client too, so a bad filter can never put a `javascript:` (or other
+ * unsafe-scheme) URL into the DOM.
+ */
+const isSafeUrl = ( url: string ): boolean => /^https?:\/\//i.test( url );
+
 const NextSteps = ( { links }: NextStepsProps ) => {
-	if ( ! links.length ) {
+	const safeLinks = links.filter( link => isSafeUrl( link.url ) );
+	if ( ! safeLinks.length ) {
 		return null;
 	}
 	return (
 		<nav className="newspack-insights__next-steps" aria-label={ __( 'Next steps', 'newspack-plugin' ) }>
 			<span className="newspack-insights__next-steps-label">{ __( 'Next steps', 'newspack-plugin' ) }</span>
 			<ul className="newspack-insights__next-steps-list">
-				{ links.map( link => (
+				{ safeLinks.map( link => (
 					<li key={ link.url }>
 						<a className="newspack-insights__next-steps-link" href={ link.url } target="_blank" rel="noreferrer">
 							{ link.label }

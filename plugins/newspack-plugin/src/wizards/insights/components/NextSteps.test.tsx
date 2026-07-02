@@ -35,4 +35,25 @@ describe( 'NextSteps', () => {
 		expect( screen.getByRole( 'link', { name: 'Recover lapsed donors' } ) ).toBeInTheDocument();
 		expect( screen.getAllByRole( 'link' ) ).toHaveLength( 2 );
 	} );
+
+	it( 'drops links with an unsafe (non-http(s)) URL', () => {
+		const { container } = render(
+			<NextSteps
+				links={ [
+					// eslint-disable-next-line no-script-url
+					{ label: 'Bad', url: 'javascript:alert(1)' },
+					{ label: 'Grow reader revenue', url: 'https://help.newspack.com/playbooks/grow-reader-revenue/' },
+				] }
+			/>
+		);
+		expect( screen.getAllByRole( 'link' ) ).toHaveLength( 1 );
+		expect( screen.getByRole( 'link', { name: 'Grow reader revenue' } ) ).toBeInTheDocument();
+		expect( container.textContent ).not.toContain( 'Bad' );
+	} );
+
+	it( 'renders nothing when every link is unsafe', () => {
+		// eslint-disable-next-line no-script-url
+		const { container } = render( <NextSteps links={ [ { label: 'Bad', url: 'javascript:alert(1)' } ] } /> );
+		expect( container.firstChild ).toBeNull();
+	} );
 } );
