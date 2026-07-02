@@ -227,11 +227,11 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 */
 	public function test_lifecycle_funnel_returns_populated_stages_on_success() {
 		$row    = [
-			'step_1_anonymous'  => 1000,
-			'step_2_engaged'    => 600,
-			'step_3_registered' => 300,
-			'step_4_subscriber' => 120,
-			'step_5_supporter'  => 60,
+			'step_1_anonymous'             => 1000,
+			'step_2_engaged'               => 600,
+			'step_3_registered'            => 300,
+			'step_4_newsletter_subscriber' => 120,
+			'step_5_supporter'             => 60,
 		];
 		$metric = new Conversion_Metric( $this->proxy_returning( [ $row ] ) );
 		[ $start, $end ] = $this->window();
@@ -244,6 +244,13 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		// Stage 1: top of funnel → pct_of_top must be 1.0.
 		$this->assertSame( 1000, $result['stages'][0]['count'] );
 		$this->assertSame( 1.0, $result['stages'][0]['pct_of_top'] );
+
+		// Stage 4: Newsletter subscriber must read the hub's
+		// `step_4_newsletter_subscriber` alias (regression: NEWS-2593 — the
+		// consumer previously read `step_4_subscriber`, which the hub never
+		// emits, so this stage always rendered 0).
+		$this->assertSame( __( 'Newsletter subscriber', 'newspack-plugin' ), $result['stages'][3]['label'] );
+		$this->assertSame( 120, $result['stages'][3]['count'] );
 
 		// Stage 5: 60 / 1000 = 0.06.
 		$this->assertSame( 60, $result['stages'][4]['count'] );
@@ -261,11 +268,11 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 */
 	public function test_lifecycle_funnel_guards_zero_top_stage() {
 		$row    = [
-			'step_1_anonymous'  => 0,
-			'step_2_engaged'    => 0,
-			'step_3_registered' => 0,
-			'step_4_subscriber' => 0,
-			'step_5_supporter'  => 0,
+			'step_1_anonymous'             => 0,
+			'step_2_engaged'               => 0,
+			'step_3_registered'            => 0,
+			'step_4_newsletter_subscriber' => 0,
+			'step_5_supporter'             => 0,
 		];
 		$metric = new Conversion_Metric( $this->proxy_returning( [ $row ] ) );
 		[ $start, $end ] = $this->window();
