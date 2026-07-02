@@ -23,19 +23,25 @@ Then, follow the "Setting up a test site" instructions from this doc.
 
 ### CI testing
 
-Will need a publicly accessible (or at least accessible for the CI server) test site, running on a platform which accepts password-only SSH authentication.
+The suite runs nightly (~07:00 UTC) on TeamCity, build configuration
+`Newspack_E2eTests` (project `Newspack_E2ETests`), against the Atomic staging
+site `https://e2e.newspackstaging.com`. The build definition lives in TeamCity
+settings, not in this repo; its steps are: install dependencies, write a `.env`,
+reset the site over SSH, then run `USE_SNAPSHOTS=true npm run test:snapshots`.
 
-[The credentials for the Atomic site currently used for the e2e testing.](https://mc.a8c.com/secret-store/?secret_id=12168)
+[Credentials for the Atomic site used for the e2e testing.](https://mc.a8c.com/secret-store/?secret_id=12168)
 
-1. Define all variables listed in `.env-sample` in the CircleCI project settings
-2. Also define the following:
-   1. `SSH_USER` - simply a username string, e.g. `newspack-user`
-   2. `SSH_HOST` - hostname of the platform, e.g. `ssh.myplatform.net`
-   3. `SSH_USER_PASS` - SSH password
-   4. `SSH_KNOWN_HOST` - this you can get by connecting to the platform and copying the line added to the `/root/.ssh/known_hosts` file
-   5. `GITHUB_COMMITER_EMAIL`, `GIT_COMMITTER_NAME`, `GITHUB_TOKEN` – for GH pages deployment
-   6. `SLACK_AUTH_TOKEN`, `SLACK_CHANNEL_ID` – for Slack notifications
-3. Set up payments - see "Payments" section below
+The build is parameterised by these variables (set in TeamCity, not committed):
+
+1. `E2E_SITE_URL`, `E2E_WP_USERNAME`, `E2E_WP_PASSWORD` – the target site and its
+   admin login. These are written into `.env` as `SITE_URL`, `ADMIN_USER` and
+   `ADMIN_PASSWORD` (the variables listed in `.env-sample`). The admin password
+   must match the one baked into the site's snapshots – loading a snapshot
+   restores that password (see "Snapshot switching").
+2. `E2E_SSH_HOST` (`ssh.atomicsites.net`), `E2E_SSH_USER`, `E2E_SSH_USER_PASS`
+   and `E2E_SSH_KNOWN_HOST` – password SSH authentication to the site, used by
+   the "reset the site" step.
+3. Set up payments – see the "Payments" section below.
 
 ### Payments
 
