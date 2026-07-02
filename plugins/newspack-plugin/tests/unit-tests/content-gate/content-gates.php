@@ -1158,6 +1158,10 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		remove_filter( 'newspack_content_gate_restrict_post', '__return_false' );
 
 		$this->assertSame( 'open', $post->comment_status, 'Metered post must not have its comment status force-closed' );
+		// Assert the gate filter directly (not only via comments_open()) so the
+		// pass/fail hinge is explicit and does not depend on the filter being
+		// registered through init() at runtime.
+		$this->assertTrue( Content_Gate::filter_comments_open( true, $post_id ), 'Gate filter must not close comments on a metered post' );
 		$this->assertTrue( comments_open( $post_id ), 'Logged-out reader must be able to comment on a metered post when Discussion Settings allow it' );
 	}
 
