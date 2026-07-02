@@ -45,6 +45,11 @@ class Audience_Subscription_Products extends Wizard {
 	const GROUP_LIMIT_META   = '_newspack_group_subscription_limit';
 
 	/**
+	 * Transient caching the product → content-gates reverse map across requests.
+	 */
+	const GATE_MAP_TRANSIENT = 'newspack_plans_product_gate_map';
+
+	/**
 	 * Subscription statuses counted as "active" subscribers.
 	 *
 	 * Mirrors the active statuses used by the WooCommerce connection
@@ -142,9 +147,10 @@ class Audience_Subscription_Products extends Wizard {
 	 */
 	public function api_get_products() {
 		$response = [
-			'products'             => [],
-			'currency'             => self::get_currency(),
-			'available_categories' => self::get_all_product_categories(),
+			'products'                    => [],
+			'currency'                    => self::get_currency(),
+			'available_categories'        => self::get_all_product_categories(),
+			'group_subscriptions_enabled' => self::group_subscription_available(),
 		];
 
 		if ( ! function_exists( 'wc_get_products' ) ) {
@@ -251,6 +257,41 @@ class Audience_Subscription_Products extends Wizard {
 	const VALID_PERIODS = [ 'day', 'week', 'month', 'year' ];
 
 	/**
+	 * Whether the group-subscription (multi-seat) feature is available.
+	 *
+	 * The canonical product editor only exposes the group-subscription fields when this
+	 * content-gate feature is enabled ({@see Group_Subscription_Settings}), while the
+	 * enforcement layer honors the meta regardless — so this wizard must not write the
+	 * group meta unless the feature is on.
+	 *
+	 * @return bool
+	 */
+	private static function group_subscription_available() {
+		return class_exists( 'Newspack\Content_Gate' ) && Content_Gate::is_newspack_feature_enabled();
+	}
+
+	/**
+	 * Whether a product or variation ID still has active (or pending-cancel) subscriptions.
+	 *
+	 * @param int $product_id The product or variation ID.
+	 *
+	 * @return bool
+	 */
+	private static function product_has_active_subscriptions( $product_id ) {
+		if ( ! function_exists( 'wcs_get_subscriptions' ) ) {
+			return false;
+		}
+		$subscriptions = \wcs_get_subscriptions(
+			[
+				'product_id'             => $product_id,
+				'subscription_status'    => self::ACTIVE_SUBSCRIPTION_STATUSES,
+				'subscriptions_per_page' => 1,
+			]
+		);
+		return ! empty( $subscriptions );
+	}
+
+	/**
 	 * POST: create a subscription product from the consolidated form.
 	 *
 	 * Accepts a productized payload (no WooCommerce knowledge required from the caller) and
@@ -312,7 +353,7 @@ class Audience_Subscription_Products extends Wizard {
 		return rest_ensure_response(
 			[
 				'id'   => (int) $result,
-				'name' => get_the_title( $result ),
+				'name' => $name,
 			]
 		);
 	}
@@ -324,7 +365,7 @@ class Audience_Subscription_Products extends Wizard {
 	 * @param string $status       Post status.
 	 * @param int[]  $category_ids  Category term IDs.
 	 * @param bool   $is_donation  Whether to flag as a donation.
-	 * @param array  $params       The request params (price/period/interval/sign_up_fee/trial_*).
+	 * @param array  $params       The request params (price/period/interval).
 	 *
 	 * @return int|\WP_Error The new product ID, or an error.
 	 */
@@ -337,10 +378,7 @@ class Audience_Subscription_Products extends Wizard {
 		if ( ! in_array( $period, self::VALID_PERIODS, true ) ) {
 			return new \WP_Error( 'invalid_period', __( 'Invalid billing period.', 'newspack-plugin' ), [ 'status' => 400 ] );
 		}
-		$interval     = isset( $params['interval'] ) ? max( 1, min( 6, (int) $params['interval'] ) ) : 1;
-		$sign_up_fee  = isset( $params['sign_up_fee'] ) ? max( 0, (float) $params['sign_up_fee'] ) : 0;
-		$trial_length = isset( $params['trial_length'] ) ? max( 0, (int) $params['trial_length'] ) : 0;
-		$trial_period = ( isset( $params['trial_period'] ) && in_array( $params['trial_period'], self::VALID_PERIODS, true ) ) ? $params['trial_period'] : 'month';
+		$interval = isset( $params['interval'] ) ? max( 1, min( 6, (int) $params['interval'] ) ) : 1;
 
 		$product = new \WC_Product_Subscription();
 		$product->set_name( $name );
@@ -352,17 +390,14 @@ class Audience_Subscription_Products extends Wizard {
 		if ( $category_ids ) {
 			$product->set_category_ids( $category_ids );
 		}
-		$product->update_meta_data( '_subscription_price', $price );
+		$product->update_meta_data( '_subscription_price', wc_format_decimal( $price ) );
 		$product->update_meta_data( '_subscription_period', $period );
 		$product->update_meta_data( '_subscription_period_interval', $interval );
 		$product->update_meta_data( '_subscription_length', 0 );
-		$product->update_meta_data( '_subscription_sign_up_fee', $sign_up_fee );
-		$product->update_meta_data( '_subscription_trial_length', $trial_length );
-		$product->update_meta_data( '_subscription_trial_period', $trial_period );
 		if ( $is_donation ) {
 			$product->update_meta_data( WooCommerce_Products::DONATION_FLAG_META_KEY, wc_bool_to_string( true ) );
 		}
-		if ( ! empty( $params['is_group_subscription'] ) ) {
+		if ( self::group_subscription_available() && ! empty( $params['is_group_subscription'] ) ) {
 			$product->update_meta_data( self::GROUP_ENABLED_META, wc_bool_to_string( true ) );
 			$product->update_meta_data( self::GROUP_LIMIT_META, isset( $params['group_member_limit'] ) ? max( 0, (int) $params['group_member_limit'] ) : 0 );
 		}
@@ -445,11 +480,11 @@ class Audience_Subscription_Products extends Wizard {
 			$variation->set_attributes( [ 'billing-period' => $plan['label'] ] );
 			$variation->set_status( 'publish' );
 			$variation->set_regular_price( (string) $plan['price'] );
-			$variation->update_meta_data( '_subscription_price', $plan['price'] );
+			$variation->update_meta_data( '_subscription_price', wc_format_decimal( $plan['price'] ) );
 			$variation->update_meta_data( '_subscription_period', $plan['period'] );
 			$variation->update_meta_data( '_subscription_period_interval', $plan['interval'] );
 			$variation->update_meta_data( '_subscription_length', 0 );
-			if ( $plan['group_enabled'] ) {
+			if ( self::group_subscription_available() && $plan['group_enabled'] ) {
 				$variation->update_meta_data( self::GROUP_ENABLED_META, wc_bool_to_string( true ) );
 				$variation->update_meta_data( self::GROUP_LIMIT_META, $plan['group_limit'] );
 			}
@@ -595,12 +630,14 @@ class Audience_Subscription_Products extends Wizard {
 			$interval = isset( $params['interval'] ) ? max( 1, min( 6, (int) $params['interval'] ) ) : 1;
 			$product->set_regular_price( (string) $price );
 			$product->set_price( (string) $price );
-			$product->update_meta_data( '_subscription_price', $price );
+			$product->update_meta_data( '_subscription_price', wc_format_decimal( $price ) );
 			$product->update_meta_data( '_subscription_period', $period );
 			$product->update_meta_data( '_subscription_period_interval', $interval );
-			$product->update_meta_data( self::GROUP_ENABLED_META, wc_bool_to_string( ! empty( $params['is_group_subscription'] ) ) );
-			if ( ! empty( $params['is_group_subscription'] ) ) {
-				$product->update_meta_data( self::GROUP_LIMIT_META, isset( $params['group_member_limit'] ) ? max( 0, (int) $params['group_member_limit'] ) : 0 );
+			if ( self::group_subscription_available() ) {
+				$product->update_meta_data( self::GROUP_ENABLED_META, wc_bool_to_string( ! empty( $params['is_group_subscription'] ) ) );
+				if ( ! empty( $params['is_group_subscription'] ) ) {
+					$product->update_meta_data( self::GROUP_LIMIT_META, isset( $params['group_member_limit'] ) ? max( 0, (int) $params['group_member_limit'] ) : 0 );
+				}
 			}
 			$product->save();
 		}
@@ -615,7 +652,7 @@ class Audience_Subscription_Products extends Wizard {
 		return rest_ensure_response(
 			[
 				'id'   => $product_id,
-				'name' => get_the_title( $product_id ),
+				'name' => $name,
 			]
 		);
 	}
@@ -695,20 +732,28 @@ class Audience_Subscription_Products extends Wizard {
 			$variation->set_attributes( [ 'billing-period' => $plan['label'] ] );
 			$variation->set_status( 'publish' );
 			$variation->set_regular_price( (string) $plan['price'] );
-			$variation->update_meta_data( '_subscription_price', $plan['price'] );
+			$variation->update_meta_data( '_subscription_price', wc_format_decimal( $plan['price'] ) );
 			$variation->update_meta_data( '_subscription_period', $plan['period'] );
 			$variation->update_meta_data( '_subscription_period_interval', $plan['interval'] );
 			$variation->update_meta_data( '_subscription_length', 0 );
-			$variation->update_meta_data( self::GROUP_ENABLED_META, wc_bool_to_string( $plan['group_enabled'] ) );
-			if ( $plan['group_enabled'] ) {
-				$variation->update_meta_data( self::GROUP_LIMIT_META, $plan['group_limit'] );
+			if ( self::group_subscription_available() ) {
+				$variation->update_meta_data( self::GROUP_ENABLED_META, wc_bool_to_string( $plan['group_enabled'] ) );
+				if ( $plan['group_enabled'] ) {
+					$variation->update_meta_data( self::GROUP_LIMIT_META, $plan['group_limit'] );
+				}
 			}
 			$keep_ids[] = (int) $variation->save();
 		}
 
-		// Delete variations that were removed.
+		// Remove variations dropped from the plan set. Never destroy a variation that still has
+		// active subscribers — renewals resolve the subscription's product by this ID, so deleting
+		// it would orphan live subscriptions. For the rest, trash (not force-delete) so a removed
+		// plan can be recovered.
 		foreach ( array_diff( $existing_ids, $keep_ids ) as $removed_id ) {
-			wp_delete_post( $removed_id, true );
+			if ( self::product_has_active_subscriptions( (int) $removed_id ) ) {
+				continue;
+			}
+			wp_delete_post( $removed_id, false );
 		}
 
 		if ( method_exists( '\WC_Product_Variable_Subscription', 'sync' ) ) {
@@ -1157,8 +1202,8 @@ class Audience_Subscription_Products extends Wizard {
 	 * encode this via product structure today — e.g. Lookout and Richland Source both use a
 	 * "Private subscriptions" / "Free subscriptions" product_cat. This normalizes those
 	 * conventions plus zero-price into one facet:
-	 *   - free    : base price is 0, OR a category name contains "free".
-	 *   - private : a category name contains "private" (the explicit publisher convention).
+	 *   - free    : base price is 0, OR the product carries the "free-subscriptions" convention category.
+	 *   - private : the product carries the "private-subscriptions" convention category.
 	 *   - public  : everything else (a normally purchasable paid subscription).
 	 *
 	 * NOTE: we deliberately do NOT infer "private" from catalog_visibility=hidden —
@@ -1172,13 +1217,15 @@ class Audience_Subscription_Products extends Wizard {
 	 * @return string One of 'public', 'private', 'free'.
 	 */
 	private static function derive_availability( $base_price, $categories ) {
-		$category_names = strtolower( implode( ' ', wp_list_pluck( $categories, 'name' ) ) );
+		// Match the exact convention slugs (set by apply_availability_to_categories()) rather than a
+		// substring of display names, so a category like "Freelance" or "Private Beta" isn't misread.
+		$slugs = wp_list_pluck( $categories, 'slug' );
 
-		if ( ( null !== $base_price && 0.0 === (float) $base_price ) || false !== strpos( $category_names, 'free' ) ) {
+		if ( ( null !== $base_price && 0.0 === (float) $base_price ) || in_array( 'free-subscriptions', $slugs, true ) ) {
 			return 'free';
 		}
 
-		if ( false !== strpos( $category_names, 'private' ) ) {
+		if ( in_array( 'private-subscriptions', $slugs, true ) ) {
 			return 'private';
 		}
 
@@ -1230,6 +1277,14 @@ class Audience_Subscription_Products extends Wizard {
 			return $map;
 		}
 
+		// Cache the gate scan across requests: it walks every published gate, and this only feeds an
+		// informational "unlocks" column, so short-lived staleness is acceptable.
+		$cached = get_transient( self::GATE_MAP_TRANSIENT );
+		if ( is_array( $cached ) ) {
+			self::$product_gate_map = $cached;
+			return $cached;
+		}
+
 		$gates = get_posts(
 			[
 				'post_type'      => Content_Gate::get_gate_post_types(),
@@ -1272,6 +1327,7 @@ class Audience_Subscription_Products extends Wizard {
 			$map[ $product_id ] = array_values( $product_gates );
 		}
 
+		set_transient( self::GATE_MAP_TRANSIENT, $map, 5 * MINUTE_IN_SECONDS );
 		self::$product_gate_map = $map;
 		return $map;
 	}

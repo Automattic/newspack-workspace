@@ -93,6 +93,8 @@ interface SubscriptionProductsResponse {
 	products: SubscriptionProduct[];
 	currency: SubscriptionProductsCurrency;
 	available_categories: { id: number; name: string }[];
+	// Whether the group-subscription (multi-seat) content-gate feature is enabled.
+	group_subscriptions_enabled: boolean;
 }
 
 interface Window {

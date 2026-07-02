@@ -71,6 +71,7 @@ export default function ProductEdit( { match }: { match: { params: { id?: string
 			initial={ product }
 			categories={ categories }
 			bundleOptions={ bundleOptions }
+			groupSubscriptionsEnabled={ context.group_subscriptions_enabled ?? false }
 			onDone={ onDone }
 		/>
 	);
