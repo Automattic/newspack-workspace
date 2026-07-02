@@ -188,6 +188,52 @@ class Test_Renderer_Controller extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Count `email-block-cover` tables that sit at body level — i.e. outside the
+	 * content-width `email_layout_wrapper` — the signature of a bled full-width cover.
+	 *
+	 * @param string $html Email HTML.
+	 * @return int Number of body-level cover tables.
+	 */
+	private function count_body_level_covers( $html ) {
+		$dom  = new DOMDocument();
+		$prev = libxml_use_internal_errors( true );
+		$dom->loadHTML( '<?xml encoding="utf-8" ?>' . $html, LIBXML_NOERROR | LIBXML_NOWARNING );
+		libxml_clear_errors();
+		libxml_use_internal_errors( $prev );
+		$xpath  = new DOMXPath( $dom );
+		$covers = $xpath->query( "//table[contains(concat(' ', normalize-space(@class), ' '), ' email-block-cover ')]" );
+		$count  = 0;
+		foreach ( $covers as $cover ) {
+			if ( 0 === $xpath->query( "ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' email_layout_wrapper ')]", $cover )->length ) {
+				++$count;
+			}
+		}
+		return $count;
+	}
+
+	/**
+	 * Read the inline style of the inner container inside a body-level (bled) cover,
+	 * so tests can assert its content is capped to the content width.
+	 *
+	 * @param string $html Email HTML.
+	 * @return string The inner-container style, or '' if no body-level cover.
+	 */
+	private function bled_cover_inner_style( $html ) {
+		$dom  = new DOMDocument();
+		$prev = libxml_use_internal_errors( true );
+		$dom->loadHTML( '<?xml encoding="utf-8" ?>' . $html, LIBXML_NOERROR | LIBXML_NOWARNING );
+		libxml_clear_errors();
+		libxml_use_internal_errors( $prev );
+		$xpath = new DOMXPath( $dom );
+		$inner = $xpath->query(
+			"//table[contains(concat(' ', normalize-space(@class), ' '), ' email-block-cover ')]"
+			. "[not(ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' email_layout_wrapper ')])]"
+			. "//div[contains(concat(' ', normalize-space(@class), ' '), ' wp-block-cover__inner-container ')]"
+		)->item( 0 );
+		return $inner instanceof DOMElement ? $inner->getAttribute( 'style' ) : '';
+	}
+
+	/**
 	 * A top-level alignfull group with a background bleeds to a body-level full-width
 	 * band, while its content survives (NEWS-1901 default-layout full-bleed).
 	 */
@@ -234,6 +280,80 @@ class Test_Renderer_Controller extends WP_UnitTestCase {
 
 		$this->assertSame( 0, $this->count_body_level_bands( $html ) );
 		$this->assertStringContainsString( 'Just a paragraph', $html );
+	}
+
+	/**
+	 * A top-level alignfull cover bleeds to a body-level full-width section (its
+	 * background image spans the email), while its content survives.
+	 */
+	public function test_render_wc_bleeds_alignfull_cover() {
+		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
+		$content = '<!-- wp:paragraph --><p>Intro</p><!-- /wp:paragraph -->'
+			. '<!-- wp:cover {"url":"https://example.com/bg.jpg","align":"full","minHeight":240} -->'
+			. '<div class="wp-block-cover alignfull" style="min-height:240px">'
+			. '<span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span>'
+			. '<img class="wp-block-cover__image-background" src="https://example.com/bg.jpg" data-object-fit="cover"/>'
+			. '<div class="wp-block-cover__inner-container">'
+			. '<!-- wp:heading {"textAlign":"center"} --><h2 class="wp-block-heading has-text-align-center">Hero heading</h2><!-- /wp:heading -->'
+			. '</div></div>'
+			. '<!-- /wp:cover -->'
+			. '<!-- wp:paragraph --><p>Outro</p><!-- /wp:paragraph -->';
+
+		$html = Renderer_Controller::render_wc( get_post( $this->create_newsletter( $content ) ) );
+
+		$this->assertSame( 1, $this->count_body_level_covers( $html ), 'An alignfull cover must bleed to a body-level full-width section.' );
+		$this->assertStringContainsString( 'Hero heading', $html, 'Cover content must survive the transform.' );
+		$this->assertStringContainsString( 'Intro', $html, 'Surrounding content must survive.' );
+		$this->assertStringContainsString( 'Outro', $html );
+
+		// The bled cover's content must be capped to the content width with the same
+		// border-box + gutter as normal blocks, so the overlay text lines up with them.
+		$inner_style = $this->bled_cover_inner_style( $html );
+		$this->assertStringContainsString( 'box-sizing:border-box', $inner_style, 'Bled cover content must use border-box so its width matches normal blocks.' );
+		$this->assertStringContainsString( 'max-width:' . \Newspack\Newsletters\Email_Renderers\Full_Bleed_Sections::CONTENT_WIDTH . 'px', $inner_style, 'Bled cover content must cap at the content width.' );
+		$this->assertMatchesRegularExpression( '/padding-left:\s*\d+px/', $inner_style, 'Bled cover content must carry the horizontal gutter.' );
+		// Outlook ignores max-width, so the inner content is pinned via an MSO ghost table.
+		$this->assertStringContainsString( 'width="' . \Newspack\Newsletters\Email_Renderers\Full_Bleed_Sections::CONTENT_WIDTH . '"', $html, 'Bled cover must pin its inner content for Outlook via an MSO ghost table.' );
+	}
+
+	/**
+	 * A cover nested inside another block (Group/Columns) must NOT be hoisted — only
+	 * top-level covers bleed. Mirrors the nested-background-group guard.
+	 */
+	public function test_render_wc_does_not_bleed_nested_cover() {
+		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
+		$content = '<!-- wp:group --><div class="wp-block-group">'
+			. '<!-- wp:cover {"url":"https://example.com/bg.jpg","align":"full","minHeight":200} -->'
+			. '<div class="wp-block-cover alignfull" style="min-height:200px">'
+			. '<span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span>'
+			. '<img class="wp-block-cover__image-background" src="https://example.com/bg.jpg"/>'
+			. '<div class="wp-block-cover__inner-container"><!-- wp:paragraph --><p>Nested cover</p><!-- /wp:paragraph --></div></div>'
+			. '<!-- /wp:cover -->'
+			. '</div><!-- /wp:group -->';
+
+		$html = Renderer_Controller::render_wc( get_post( $this->create_newsletter( $content ) ) );
+
+		$this->assertSame( 0, $this->count_body_level_covers( $html ), 'A cover nested inside a group must not be hoisted wholesale.' );
+		$this->assertStringContainsString( 'Nested cover', $html );
+	}
+
+	/**
+	 * A cover without full alignment stays inside the content-width wrapper — only
+	 * alignfull covers bleed.
+	 */
+	public function test_render_wc_does_not_bleed_default_cover() {
+		\Newspack\Newsletters\Email_Renderers\Editor_Bootstrap::init();
+		$content = '<!-- wp:cover {"url":"https://example.com/bg.jpg","minHeight":240} -->'
+			. '<div class="wp-block-cover" style="min-height:240px">'
+			. '<span aria-hidden="true" class="wp-block-cover__background has-background-dim"></span>'
+			. '<img class="wp-block-cover__image-background" src="https://example.com/bg.jpg"/>'
+			. '<div class="wp-block-cover__inner-container"><!-- wp:paragraph --><p>Constrained cover</p><!-- /wp:paragraph --></div></div>'
+			. '<!-- /wp:cover -->';
+
+		$html = Renderer_Controller::render_wc( get_post( $this->create_newsletter( $content ) ) );
+
+		$this->assertSame( 0, $this->count_body_level_covers( $html ), 'A non-aligned cover must stay inside the content-width wrapper.' );
+		$this->assertStringContainsString( 'Constrained cover', $html );
 	}
 
 	/**
