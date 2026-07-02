@@ -35,6 +35,37 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 	}
 
 	/**
+	 * The billing/shipping address columns shared by the exporters
+	 * (subscriptions read them from the subscription, users from user meta).
+	 *
+	 * @return array Column id => translated label.
+	 */
+	public static function get_address_column_labels() {
+		return [
+			'billing_first_name'  => __( 'Billing First Name', 'newspack-plugin' ),
+			'billing_last_name'   => __( 'Billing Last Name', 'newspack-plugin' ),
+			'billing_company'     => __( 'Billing Company', 'newspack-plugin' ),
+			'billing_address_1'   => __( 'Billing Address 1', 'newspack-plugin' ),
+			'billing_address_2'   => __( 'Billing Address 2', 'newspack-plugin' ),
+			'billing_city'        => __( 'Billing City', 'newspack-plugin' ),
+			'billing_state'       => __( 'Billing State', 'newspack-plugin' ),
+			'billing_postcode'    => __( 'Billing Postcode', 'newspack-plugin' ),
+			'billing_country'     => __( 'Billing Country', 'newspack-plugin' ),
+			'billing_email'       => __( 'Billing Email', 'newspack-plugin' ),
+			'billing_phone'       => __( 'Billing Phone', 'newspack-plugin' ),
+			'shipping_first_name' => __( 'Shipping First Name', 'newspack-plugin' ),
+			'shipping_last_name'  => __( 'Shipping Last Name', 'newspack-plugin' ),
+			'shipping_company'    => __( 'Shipping Company', 'newspack-plugin' ),
+			'shipping_address_1'  => __( 'Shipping Address 1', 'newspack-plugin' ),
+			'shipping_address_2'  => __( 'Shipping Address 2', 'newspack-plugin' ),
+			'shipping_city'       => __( 'Shipping City', 'newspack-plugin' ),
+			'shipping_state'      => __( 'Shipping State', 'newspack-plugin' ),
+			'shipping_postcode'   => __( 'Shipping Postcode', 'newspack-plugin' ),
+			'shipping_country'    => __( 'Shipping Country', 'newspack-plugin' ),
+		];
+	}
+
+	/**
 	 * Get (and create on first use) the exports directory under uploads.
 	 *
 	 * The directory ships an empty index.html and a deny-all .htaccess; on
@@ -47,7 +78,10 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 		$upload_dir = \wp_upload_dir();
 		$dir        = \trailingslashit( $upload_dir['basedir'] ) . CSV_Exports::EXPORTS_DIR;
 		if ( ! is_dir( $dir ) ) {
-			\wp_mkdir_p( $dir );
+			if ( ! \wp_mkdir_p( $dir ) ) {
+				// Downstream file writes will fail and surface their own errors.
+				return $dir;
+			}
 			// Direct file ops are fine here: the dir is under uploads.
 			// phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents
 			file_put_contents( \trailingslashit( $dir ) . 'index.html', '' );

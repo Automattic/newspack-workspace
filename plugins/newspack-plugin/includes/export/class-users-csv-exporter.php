@@ -42,33 +42,13 @@ class Users_CSV_Exporter extends CSV_Batch_Exporter {
 	}
 
 	/**
-	 * The WooCommerce address user-meta keys exported as columns.
+	 * The WooCommerce address user-meta keys exported as columns (the shared
+	 * address column ids double as the meta keys).
 	 *
 	 * @return string[]
 	 */
 	public static function get_address_meta_keys() {
-		return [
-			'billing_first_name',
-			'billing_last_name',
-			'billing_company',
-			'billing_address_1',
-			'billing_address_2',
-			'billing_city',
-			'billing_state',
-			'billing_postcode',
-			'billing_country',
-			'billing_email',
-			'billing_phone',
-			'shipping_first_name',
-			'shipping_last_name',
-			'shipping_company',
-			'shipping_address_1',
-			'shipping_address_2',
-			'shipping_city',
-			'shipping_state',
-			'shipping_postcode',
-			'shipping_country',
-		];
+		return array_keys( self::get_address_column_labels() );
 	}
 
 	/**
@@ -77,19 +57,19 @@ class Users_CSV_Exporter extends CSV_Batch_Exporter {
 	 * @return array
 	 */
 	public function get_default_column_names() {
-		$columns = [
-			'ID'              => __( 'User ID', 'newspack-plugin' ),
-			'user_login'      => __( 'Username', 'newspack-plugin' ),
-			'user_email'      => __( 'Email', 'newspack-plugin' ),
-			'display_name'    => __( 'Display Name', 'newspack-plugin' ),
-			'first_name'      => __( 'First Name', 'newspack-plugin' ),
-			'last_name'       => __( 'Last Name', 'newspack-plugin' ),
-			'roles'           => __( 'Roles', 'newspack-plugin' ),
-			'user_registered' => __( 'Registered Date', 'newspack-plugin' ),
-		];
-		foreach ( self::get_address_meta_keys() as $meta_key ) {
-			$columns[ $meta_key ] = ucwords( str_replace( '_', ' ', $meta_key ) );
-		}
+		$columns = array_merge(
+			[
+				'ID'              => __( 'User ID', 'newspack-plugin' ),
+				'user_login'      => __( 'Username', 'newspack-plugin' ),
+				'user_email'      => __( 'Email', 'newspack-plugin' ),
+				'display_name'    => __( 'Display Name', 'newspack-plugin' ),
+				'first_name'      => __( 'First Name', 'newspack-plugin' ),
+				'last_name'       => __( 'Last Name', 'newspack-plugin' ),
+				'roles'           => __( 'Roles', 'newspack-plugin' ),
+				'user_registered' => __( 'Registered Date', 'newspack-plugin' ),
+			],
+			self::get_address_column_labels()
+		);
 
 		/**
 		 * Filters the users export columns.
