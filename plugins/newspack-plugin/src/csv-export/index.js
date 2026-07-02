@@ -42,8 +42,12 @@ document.addEventListener( 'DOMContentLoaded', () => {
 					}
 					if ( 'done' === response.data.step ) {
 						setStatus( newspackCsvExport.labels.done, true );
-						button.disabled = false;
 						window.location = response.data.url;
+						// Keep the button disabled while the download is served;
+						// an immediate second click would restart the whole export.
+						setTimeout( () => {
+							button.disabled = false;
+						}, 5000 );
 					} else {
 						setStatus( `${ newspackCsvExport.labels.exporting } ${ response.data.percentage }%` );
 						processStep( response.data.step, response.data.filename );

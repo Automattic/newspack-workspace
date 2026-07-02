@@ -74,20 +74,40 @@ class Newspack_Test_CSV_Exports extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A missing data temp file means the export data is gone; save_to() must
+	 * fail rather than deliver a headers-only CSV reported as success.
+	 */
+	public function test_save_to_fails_without_data_file() {
+		$exporter = new Users_CSV_Exporter();
+		$exporter->set_filename( CSV_Exports::generate_export_filename( 'users' ) );
+		$destination = trailingslashit( sys_get_temp_dir() ) . 'csv-exports-test-' . wp_rand() . '.csv';
+
+		$this->assertFalse( $exporter->save_to( $destination ) );
+
+		if ( file_exists( $destination ) ) {
+			unlink( $destination ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
+		}
+	}
+
+	/**
 	 * The cleanup sweep removes only export files older than a day.
 	 */
 	public function test_cleanup_stale_files() {
-		$dir   = trailingslashit( CSV_Batch_Exporter::get_exports_dir() );
-		$stale = $dir . 'stale-test.csv';
-		$fresh = $dir . 'fresh-test.csv';
+		$dir           = trailingslashit( CSV_Batch_Exporter::get_exports_dir() );
+		$stale         = $dir . 'stale-test.csv';
+		$stale_headers = $dir . 'stale-test.csv.headers';
+		$fresh         = $dir . 'fresh-test.csv';
 		// phpcs:disable WordPress.WP.AlternativeFunctions.file_system_operations_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_file_put_contents, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_touch, WordPressVIPMinimum.Functions.RestrictedFunctions.file_ops_unlink
 		file_put_contents( $stale, 'x' );
 		touch( $stale, time() - 2 * DAY_IN_SECONDS );
+		file_put_contents( $stale_headers, 'x' );
+		touch( $stale_headers, time() - 2 * DAY_IN_SECONDS );
 		file_put_contents( $fresh, 'x' );
 
 		CSV_Exports::cleanup_stale_files();
 
 		$this->assertFileDoesNotExist( $stale );
+		$this->assertFileDoesNotExist( $stale_headers, 'The sweep must also cover the .csv.headers companion files.' );
 		$this->assertFileExists( $fresh );
 		unlink( $fresh );
 		// phpcs:enable

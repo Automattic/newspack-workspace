@@ -86,12 +86,14 @@ class Users_CSV_Exporter extends CSV_Batch_Exporter {
 	 *
 	 * Third-party list filters are honored by replaying the core
 	 * `users_list_table_query_args` filter with the captured params exposed
-	 * as $_GET (its callbacks conventionally read the superglobal). The
-	 * replay only runs in the admin context the filter is contracted to:
-	 * core fires it exclusively on the users list-table screen, so its
-	 * callbacks may assume admin-only APIs (get_current_screen() is not even
-	 * defined under WP-CLI). Outside admin the filter is skipped, degrading
-	 * to "third-party filters not honored" rather than a fatal.
+	 * as $_GET (its callbacks conventionally read the superglobal, so the
+	 * values are handed over slashed, superglobal-shaped). Core fires this
+	 * filter exclusively on the users list-table screen, so callbacks may
+	 * assume admin-only context: under WP-CLI get_current_screen() is not
+	 * even defined (the replay is skipped entirely outside admin), and in
+	 * the admin-ajax steps it exists but returns null, so a callback
+	 * dereferencing the screen would throw — such failures are caught and
+	 * degrade to "third-party filters not honored" rather than a fatal.
 	 *
 	 * @param array $params Parsed query-string params from the users list.
 	 * @return array WP_User_Query args.
@@ -113,10 +115,14 @@ class Users_CSV_Exporter extends CSV_Batch_Exporter {
 		if ( \is_admin() ) {
 			// phpcs:disable WordPress.Security.NonceVerification.Recommended
 			$original_get = $_GET;
-			$_GET         = $params; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___GET
+			$_GET         = \wp_slash( $params ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___GET
 			try {
 				/** This filter is documented in wp-admin/includes/class-wp-users-list-table.php */
 				$args = apply_filters( 'users_list_table_query_args', $args );
+			} catch ( \Throwable $e ) {
+				// A callback assumed list-table context that admin-ajax can't
+				// provide (e.g. a null get_current_screen()); skip the filter.
+				unset( $e );
 			} finally {
 				$_GET = $original_get; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___GET
 			}

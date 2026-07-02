@@ -125,6 +125,25 @@ class Newspack_Test_Users_CSV_Exporter extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A replayed list-table callback that assumes screen context admin-ajax
+	 * cannot provide (a throwing callback) degrades to "filter not honored"
+	 * instead of fataling the export step.
+	 */
+	public function test_users_build_query_args_survives_throwing_callback() {
+		$throwing = function ( $args ) {
+			throw new Error( 'Call to a member function id() on null' );
+		};
+		add_filter( 'users_list_table_query_args', $throwing );
+		set_current_screen( 'users' );
+		$_GET = [];
+		$args = Users_CSV_Exporter::build_query_args( [ 'role' => 'subscriber' ] );
+		set_current_screen( 'front' );
+		remove_filter( 'users_list_table_query_args', $throwing );
+
+		$this->assertSame( 'subscriber', $args['role'], 'The unfiltered args must survive a throwing callback.' );
+	}
+
+	/**
 	 * Array-shaped params (a mangled ?s[]=... URL) are dropped instead of
 	 * fataling in the string handling.
 	 */

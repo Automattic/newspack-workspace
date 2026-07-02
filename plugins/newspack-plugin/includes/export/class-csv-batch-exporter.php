@@ -136,11 +136,18 @@ abstract class CSV_Batch_Exporter extends \WC_CSV_Batch_Exporter {
 		}
 		// The headers row is small (get_headers_row_file() also regenerates it
 		// when the temp file is missing); the data file is streamed.
-		$saved = false !== fwrite( $destination, $this->get_headers_row_file() );
-		$data  = fopen( $this->get_file_path(), 'r' );
+		$saved     = false !== fwrite( $destination, $this->get_headers_row_file() );
+		$data_file = $this->get_file_path();
+		$data      = file_exists( $data_file ) ? fopen( $data_file, 'r' ) : false;
 		if ( $data ) {
 			$saved = $saved && false !== stream_copy_to_stream( $data, $destination );
 			fclose( $data );
+		} else {
+			// The WC exporter always creates the data temp file (even for a
+			// zero-row export), so a missing/unopenable file means the export
+			// data is gone (permissions, cleanup race) — fail rather than
+			// silently deliver a headers-only CSV.
+			$saved = false;
 		}
 		fclose( $destination );
 

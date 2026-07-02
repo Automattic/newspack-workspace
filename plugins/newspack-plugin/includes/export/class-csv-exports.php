@@ -131,7 +131,7 @@ final class CSV_Exports {
 	 *
 	 * @return bool False when WooCommerce (or its export framework) is unavailable.
 	 */
-	public static function load_exporter_dependencies() {
+	public static function load_exporter_dependencies(): bool {
 		if ( ! defined( 'WC_ABSPATH' ) ) {
 			return false;
 		}
@@ -155,7 +155,7 @@ final class CSV_Exports {
 	 * @param string $type Export type: 'subscriptions' or 'users'.
 	 * @return \WC_CSV_Batch_Exporter|null
 	 */
-	public static function get_exporter( $type ) {
+	public static function get_exporter( string $type ): ?\WC_CSV_Batch_Exporter {
 		if ( ! self::load_exporter_dependencies() ) {
 			return null;
 		}
@@ -214,8 +214,8 @@ final class CSV_Exports {
 	/**
 	 * Render an export button with its status element.
 	 *
-	 * The export follows the list's current filters but always orders by
-	 * date created; list sorting is not carried over.
+	 * The export follows the list's current filters; list sorting is not
+	 * carried over (rows are ordered by ID for stable pagination).
 	 *
 	 * @param string $type Export type: 'subscriptions' or 'users'.
 	 */
@@ -236,8 +236,12 @@ final class CSV_Exports {
 		if ( ! $screen ) {
 			return;
 		}
-		$screen_ids = [ 'users' ];
-		if ( function_exists( 'wcs_get_page_screen_id' ) ) {
+		// Enqueue only where the matching export button actually renders.
+		$screen_ids = [];
+		if ( self::current_user_can_export( 'users' ) ) {
+			$screen_ids[] = 'users';
+		}
+		if ( self::current_user_can_export( 'subscriptions' ) && function_exists( 'wcs_get_page_screen_id' ) ) {
 			$screen_ids[] = 'edit-shop_subscription';
 			$screen_ids[] = \wcs_get_page_screen_id( 'shop_subscription' );
 		}
@@ -373,8 +377,11 @@ final class CSV_Exports {
 		}
 
 		$exporter = self::get_exporter( $type );
-		if ( ! $exporter || empty( $_GET['filename'] ) || ! is_string( $_GET['filename'] ) ) {
-			return;
+		if ( ! $exporter ) {
+			\wp_die( \esc_html__( 'CSV export requires WooCommerce with its export framework available.', 'newspack-plugin' ), '', 500 );
+		}
+		if ( empty( $_GET['filename'] ) || ! is_string( $_GET['filename'] ) ) {
+			\wp_die( \esc_html__( 'Invalid download link.', 'newspack-plugin' ), '', 403 );
 		}
 		// set_filename() runs sanitize_file_name(), killing any path traversal;
 		// the prefix check binds the filename to the capability-checked type.
@@ -383,6 +390,11 @@ final class CSV_Exports {
 			\wp_die( \esc_html__( 'Invalid download link.', 'newspack-plugin' ), '', 403 );
 		}
 		$exporter->set_filename( $filename );
+		// A served export is deleted on send; a replayed link would otherwise
+		// quietly download a headers-only CSV.
+		if ( ! file_exists( $exporter->get_export_file_path() ) ) {
+			\wp_die( \esc_html__( 'This download link has expired. Please run the export again.', 'newspack-plugin' ), '', 410 );
+		}
 		$exporter->export();
 	}
 
