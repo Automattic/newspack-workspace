@@ -1,3 +1,24 @@
+## newspack [6.44.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.2...newspack@6.44.3) (2026-07-01)
+
+
+### Bug Fixes
+
+* **oauth:** verify Google token audience on sign-in ([9aa30b9](https://github.com/Automattic/newspack-workspace/commit/9aa30b98495db08d968b2dc2ae0e4bb96fb28aef))
+
+## newspack [6.44.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.1...newspack@6.44.2) (2026-06-30)
+
+
+### Bug Fixes
+
+* **checkout:** sync repeat trial pricing in modal checkout ([#264](https://github.com/Automattic/newspack-workspace/issues/264)) ([#468](https://github.com/Automattic/newspack-workspace/issues/468)) ([d7d2356](https://github.com/Automattic/newspack-workspace/commit/d7d23564a1d350266fb9016caeee398eb211fe71))
+
+## newspack [6.44.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.0...newspack@6.44.1) (2026-06-30)
+
+
+### Bug Fixes
+
+* **collections:** preserve inner blocks in card indicator ([#407](https://github.com/Automattic/newspack-workspace/issues/407)) ([96f5e6e](https://github.com/Automattic/newspack-workspace/commit/96f5e6e664467ffa1d885ca8e819b68552b3bab3))
+
 # newspack [6.44.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.43.9...newspack@6.44.0) (2026-06-29)
 
 
