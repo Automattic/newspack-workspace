@@ -145,6 +145,12 @@ class WC_Order_Item_Product {
 	public function get_product_id() {
 		return $this->data['product_id'] ?? 0;
 	}
+	public function get_variation_id() {
+		return $this->data['variation_id'] ?? 0;
+	}
+	public function get_quantity() {
+		return $this->data['quantity'] ?? 1;
+	}
 	public function get_subtotal() {
 		return $this->data['subtotal'] ?? 0;
 	}
@@ -435,6 +441,24 @@ class WC_Subscription {
 	public function needs_payment() {
 		return ! empty( $this->data['needs_payment'] );
 	}
+	public function get_parent_id() {
+		return $this->data['parent_id'] ?? 0;
+	}
+	public function get_payment_method_title() {
+		return $this->data['payment_method_title'] ?? '';
+	}
+	public function is_manual() {
+		return ! empty( $this->data['requires_manual_renewal'] );
+	}
+	public function __call( $name, $arguments ) {
+		// Address getters: get_billing_first_name(), get_shipping_city(), etc.
+		// resolve to flat data keys ('billing_first_name'), matching how the
+		// fixtures stage address data.
+		if ( 0 === strpos( $name, 'get_billing_' ) || 0 === strpos( $name, 'get_shipping_' ) ) {
+			return $this->data[ substr( $name, 4 ) ] ?? '';
+		}
+		throw new BadMethodCallException( sprintf( 'Call to undefined method %s::%s()', __CLASS__, $name ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped
+	}
 	public function get_view_order_url() {
 		return $this->data['view_order_url'] ?? 'https://example.test/my-account/view-order/' . $this->get_id();
 	}
@@ -664,6 +688,10 @@ function wcs_get_subscriptions( $args = [] ) {
 }
 function wcs_get_canonical_product_id( $item ) {
 	if ( is_object( $item ) && method_exists( $item, 'get_product_id' ) ) {
+		// Real WCS: the variation ID is the canonical ID when present.
+		if ( method_exists( $item, 'get_variation_id' ) && $item->get_variation_id() ) {
+			return $item->get_variation_id();
+		}
 		return $item->get_product_id();
 	}
 	return null;
@@ -768,6 +796,282 @@ function wcs_get_subscription_status_name( $status ) {
 function wcs_get_all_user_actions_for_subscription( $subscription, $user_id ) {
 	return apply_filters( 'wcs_view_subscription_actions', [], $subscription, $user_id );
 }
+if ( ! class_exists( 'WC_CSV_Exporter' ) ) {
+	/**
+	 * Mock of WooCommerce's WC_CSV_Exporter abstract (includes/export/abstract-wc-csv-exporter.php).
+	 *
+	 * Replicates the column handling, escaping, and row-formatting semantics of the
+	 * real class so Newspack exporter subclasses can be unit-tested without WC.
+	 * File-writing and header-sending surfaces are intentionally omitted; the
+	 * mock_export_rows() / get_prepared_row_data() / get_mock_total_rows() helpers
+	 * are test-only accessors that do not exist on the real class.
+	 */
+	abstract class WC_CSV_Exporter {
+		protected $export_type       = '';
+		protected $filename          = 'wc-export.csv';
+		protected $limit             = 50;
+		protected $exported_row_count = 0;
+		protected $row_data          = [];
+		protected $total_rows        = 0;
+		protected $column_names      = [];
+		protected $columns_to_export = [];
+		protected $delimiter         = ',';
+
+		abstract public function prepare_data_to_export();
+
+		public function get_column_names() {
+			return apply_filters( "woocommerce_{$this->export_type}_export_column_names", $this->column_names, $this );
+		}
+		public function set_column_names( $column_names ) {
+			$this->column_names = [];
+			foreach ( $column_names as $column_id => $column_name ) {
+				$this->column_names[ wc_clean( $column_id ) ] = wc_clean( $column_name );
+			}
+		}
+		public function get_columns_to_export() {
+			return $this->columns_to_export;
+		}
+		public function get_delimiter() {
+			return apply_filters( "woocommerce_{$this->export_type}_export_delimiter", $this->delimiter );
+		}
+		public function set_columns_to_export( $columns ) {
+			$this->columns_to_export = array_map( 'wc_clean', $columns );
+		}
+		public function is_column_exporting( $column_id ) {
+			$column_id         = strstr( $column_id, ':' ) ? current( explode( ':', $column_id ) ) : $column_id;
+			$columns_to_export = $this->get_columns_to_export();
+			if ( empty( $columns_to_export ) ) {
+				return true;
+			}
+			return in_array( $column_id, $columns_to_export, true ) || 'meta' === $column_id;
+		}
+		public function get_default_column_names() {
+			return [];
+		}
+		public function set_filename( $filename ) {
+			$this->filename = sanitize_file_name( str_replace( '.csv', '', $filename ) . '.csv' );
+		}
+		public function get_filename() {
+			return sanitize_file_name( apply_filters( "woocommerce_{$this->export_type}_export_get_filename", $this->filename ) );
+		}
+		protected function get_csv_data() {
+			return $this->export_rows();
+		}
+		protected function export_column_headers() {
+			$columns    = $this->get_column_names();
+			$export_row = [];
+			$buffer     = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
+			ob_start();
+			foreach ( $columns as $column_id => $column_name ) {
+				if ( ! $this->is_column_exporting( $column_id ) ) {
+					continue;
+				}
+				$export_row[] = $this->format_data( $column_name );
+			}
+			$this->fputcsv( $buffer, $export_row );
+			return ob_get_clean();
+		}
+		protected function get_data_to_export() {
+			return $this->row_data;
+		}
+		protected function export_rows() {
+			$data   = $this->get_data_to_export();
+			$buffer = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_read_fopen
+			ob_start();
+			array_walk( $data, [ $this, 'export_row' ], $buffer );
+			return apply_filters( "woocommerce_{$this->export_type}_export_rows", ob_get_clean(), $this );
+		}
+		protected function export_row( $row_data, $key, $buffer ) {
+			$columns    = $this->get_column_names();
+			$export_row = [];
+			foreach ( $columns as $column_id => $column_name ) {
+				if ( ! $this->is_column_exporting( $column_id ) ) {
+					continue;
+				}
+				if ( isset( $row_data[ $column_id ] ) ) {
+					$export_row[] = $this->format_data( $row_data[ $column_id ] );
+				} else {
+					$export_row[] = '';
+				}
+			}
+			$this->fputcsv( $buffer, $export_row );
+			++$this->exported_row_count;
+		}
+		public function get_limit() {
+			return apply_filters( "woocommerce_{$this->export_type}_export_batch_limit", $this->limit, $this );
+		}
+		public function set_limit( $limit ) {
+			$this->limit = absint( $limit );
+		}
+		public function get_total_exported() {
+			return $this->exported_row_count;
+		}
+		public function escape_data( $data ) {
+			$active_content_triggers = [ '=', '+', '-', '@', chr( 0x09 ), chr( 0x0d ) ];
+			if ( is_int( $data ) || is_float( $data ) ) {
+				return $data;
+			}
+			if ( in_array( mb_substr( $data, 0, 1 ), $active_content_triggers, true ) ) {
+				$data = "'" . $data;
+			}
+			return $data;
+		}
+		public function format_data( $data ) {
+			if ( ! is_scalar( $data ) ) {
+				if ( is_a( $data, 'WC_Datetime' ) ) {
+					$data = $data->date( 'Y-m-d G:i:s' );
+				} else {
+					$data = '';
+				}
+			} elseif ( is_bool( $data ) ) {
+				$data = $data ? 1 : 0;
+			}
+			return $this->escape_data( $data );
+		}
+		protected function implode_values( $values ) {
+			$values_to_implode = [];
+			foreach ( $values as $value ) {
+				$value               = (string) is_scalar( $value ) ? html_entity_decode( $value, ENT_QUOTES ) : '';
+				$values_to_implode[] = str_replace( ',', '\\,', $value );
+			}
+			return implode( ', ', $values_to_implode );
+		}
+		protected function fputcsv( $buffer, $export_row ) {
+			fputcsv( $buffer, $export_row, $this->get_delimiter(), '"', "\0" ); // phpcs:ignore
+		}
+
+		/** Test-only accessors below (not present on the real WC_CSV_Exporter). */
+		public function mock_export_rows() {
+			return $this->export_rows();
+		}
+		public function test_set_row_data( $rows ) {
+			$this->row_data = $rows;
+		}
+		public function get_prepared_row_data() {
+			return $this->row_data;
+		}
+		public function get_mock_total_rows() {
+			return $this->total_rows;
+		}
+	}
+}
+
+if ( ! class_exists( 'WC_CSV_Batch_Exporter' ) ) {
+	/**
+	 * Mock of WC_CSV_Batch_Exporter (includes/export/abstract-wc-csv-batch-exporter.php).
+	 * Paging/percent semantics match the real class; file operations are omitted.
+	 */
+	abstract class WC_CSV_Batch_Exporter extends WC_CSV_Exporter {
+		protected $page = 1;
+		public function __construct() {
+			$this->column_names = $this->get_default_column_names();
+		}
+		public function get_page() {
+			return $this->page;
+		}
+		public function set_page( $page ) {
+			$this->page = absint( $page );
+		}
+		public function get_total_exported() {
+			return ( ( $this->get_page() - 1 ) * $this->get_limit() ) + $this->exported_row_count;
+		}
+		public function get_percent_complete() {
+			return $this->total_rows ? (int) floor( ( $this->get_total_exported() / $this->total_rows ) * 100 ) : 100;
+		}
+		public function generate_file() {
+			$this->prepare_data_to_export();
+			$this->export_rows();
+		}
+	}
+}
+
+if ( ! class_exists( 'WCS_Customer_Store' ) ) {
+	/**
+	 * Mock of WCS_Customer_Store. Drive get_users_subscription_ids() via the
+	 * static $mock_user_subscription_ids fixture map ( user_id => int[] ).
+	 */
+	class WCS_Customer_Store {
+		public static $mock_user_subscription_ids = [];
+		public static function instance() {
+			return new self();
+		}
+		public function get_users_subscription_ids( $user_id ) {
+			return self::$mock_user_subscription_ids[ $user_id ] ?? [];
+		}
+	}
+}
+
+if ( ! class_exists( 'WCS_Admin_Post_Types' ) ) {
+	/**
+	 * Mock of WCS_Admin_Post_Types exposing set_post__in_query_var() with the
+	 * real class's intersect/none semantics ($post__in_none = [ 0 ]).
+	 */
+	class WCS_Admin_Post_Types {
+		public static function set_post__in_query_var( $query_vars, $post_ids ) {
+			$post__in_none = [ 0 ];
+			if ( empty( $post_ids ) ) {
+				$query_vars['post__in'] = $post__in_none;
+			} elseif ( ! isset( $query_vars['post__in'] ) ) {
+				$query_vars['post__in'] = $post_ids;
+			} elseif ( $post__in_none !== $query_vars['post__in'] ) {
+				$intersecting_post_ids  = array_intersect( $query_vars['post__in'], $post_ids );
+				$query_vars['post__in'] = empty( $intersecting_post_ids ) ? $post__in_none : $intersecting_post_ids;
+			}
+			return $query_vars;
+		}
+	}
+}
+
+function wcs_get_subscription_statuses() {
+	return [
+		'wc-pending'        => 'Pending',
+		'wc-active'         => 'Active',
+		'wc-on-hold'        => 'On hold',
+		'wc-cancelled'      => 'Cancelled',
+		'wc-switched'       => 'Switched',
+		'wc-expired'        => 'Expired',
+		'wc-pending-cancel' => 'Pending Cancellation',
+	];
+}
+function wcs_sanitize_subscription_status_key( $status_key ) {
+	$status_key = sanitize_key( $status_key );
+	return 'wc-' === substr( $status_key, 0, 3 ) ? $status_key : 'wc-' . $status_key;
+}
+function wcs_get_subscriptions_for_product( $product_id ) {
+	global $wcs_mock_subscriptions_for_product;
+	return $wcs_mock_subscriptions_for_product[ $product_id ] ?? [];
+}
+function wcs_subscription_search( $term ) {
+	global $wcs_mock_subscription_search_results;
+	return $wcs_mock_subscription_search_results[ $term ] ?? [];
+}
+function wcs_is_custom_order_tables_usage_enabled() {
+	global $wcs_mock_hpos_enabled;
+	return ! empty( $wcs_mock_hpos_enabled );
+}
+function wcs_get_orders_with_meta_query( $args ) {
+	global $wcs_mock_orders_with_meta_query_args, $wcs_mock_orders_with_meta_query_result, $subscriptions_database;
+	$wcs_mock_orders_with_meta_query_args = $args;
+	if ( isset( $wcs_mock_orders_with_meta_query_result ) ) {
+		return $wcs_mock_orders_with_meta_query_result;
+	}
+	// Default: page the mock subscriptions database honoring limit/offset,
+	// mirroring wc_get_orders' paginate => true return shape.
+	$ids    = array_keys( $subscriptions_database );
+	$total  = count( $ids );
+	$offset = isset( $args['offset'] ) ? (int) $args['offset'] : 0;
+	$limit  = isset( $args['limit'] ) && (int) $args['limit'] > 0 ? (int) $args['limit'] : $total;
+	$ids    = array_slice( $ids, $offset, $limit );
+	if ( ! empty( $args['paginate'] ) ) {
+		return (object) [
+			'orders'        => $ids,
+			'total'         => $total,
+			'max_num_pages' => $limit > 0 ? (int) ceil( $total / $limit ) : 1,
+		];
+	}
+	return $ids;
+}
+
 function wc_get_template( $template_name, $args = [] ) {
 	$plugin_dir   = dirname( __DIR__, 2 );
 	$templates_dir = $plugin_dir . '/includes/plugins/woocommerce/my-account/templates/v1/';
