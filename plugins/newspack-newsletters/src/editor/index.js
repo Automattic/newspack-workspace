@@ -69,12 +69,13 @@ addFilter( 'blocks.registerBlockType', 'newspack-newsletters/core-blocks', ( set
 	 * wider-than-content alignments (wide/full) rather than offer options that
 	 * render at content width anyway. */
 	if ( [ 'core/table', 'core/gallery', 'core/media-text', 'core/audio', 'core/video' ].includes( name ) ) {
-		const current =
-			true === settings.supports?.align
-				? [ 'left', 'center', 'right', 'wide', 'full' ]
-				: Array.isArray( settings.supports?.align )
-				? settings.supports.align
-				: [];
+		const align = settings.supports?.align;
+		let current = [];
+		if ( true === align ) {
+			current = [ 'left', 'center', 'right', 'wide', 'full' ];
+		} else if ( Array.isArray( align ) ) {
+			current = align;
+		}
 		settings.supports = {
 			...settings.supports,
 			align: current.filter( alignment => 'wide' !== alignment && 'full' !== alignment ),
