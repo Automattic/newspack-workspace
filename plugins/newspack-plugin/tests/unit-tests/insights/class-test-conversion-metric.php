@@ -681,6 +681,33 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( [ 'registration_rate', 'subscription_attempt_rate' ], $result['series'] );
 	}
 
+	/**
+	 * C6 defensive: a row whose `week_start` is an array (schema drift or a
+	 * nested/typed hub cell) must not trigger a PHP "Array to string
+	 * conversion" warning. The non-scalar coerces to an empty `week` string
+	 * while the sibling scalar columns are still read. Regression test for the
+	 * production warning in Conversion_Metric::get_weekly_conversion_rates().
+	public function test_weekly_conversion_rates_coerces_non_scalar_week_start() {
+		$rows            = [
+			[
+				'week_start'                   => [ 'value' => '2026-03-22' ],
+				'registration_conversion_rate' => 0.12,
+				'subscription_attempt_rate'    => 0.08,
+			],
+		];
+		$metric          = new Conversion_Metric( $this->proxy_returning( $rows ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_weekly_conversion_rates( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertCount( 1, $result['weeks'] );
+		// Non-scalar week_start coerces to '' rather than the literal "Array".
+		$this->assertSame( '', $result['weeks'][0]['week'] );
+		// Sibling scalar columns are still read.
+		$this->assertEqualsWithDelta( 0.12, $result['weeks'][0]['registration_conversion_rate'], 1e-9 );
+		$this->assertEqualsWithDelta( 0.08, $result['weeks'][0]['subscription_attempt_rate'], 1e-9 );
+	}
+
 	// --- C7: get_influenced_registration_rate_7d ---------------------------
 
 	/**
