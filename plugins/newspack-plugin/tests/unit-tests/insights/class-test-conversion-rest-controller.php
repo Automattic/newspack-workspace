@@ -670,4 +670,60 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 			'every state-bearing build_window/build_snapshot metric must be classified in Conversion_Metric::METRIC_SOURCES'
 		);
 	}
+
+	/**
+	 * Dispatched conversion compare GET matches legacy on current + previous windowed fields.
+	 *
+	 * Proves that the per-window cache assembly (Task 4) produces a `current` window
+	 * byte-identical to the legacy build_response() oracle and that `previous` windowed
+	 * fields also match. Snapshot fields in `previous` legitimately differ (they are
+	 * computed from the previous window's dates, not the current window's dates) and are
+	 * excluded from the comparison — the frontend never reads them from `previous`.
+	 */
+	public function test_compare_get_matches_legacy_windowed_fields() {
+		$controller = new Conversion_REST_Controller();
+		$metric     = new Conversion_Metric();
+
+		$start  = new \DateTimeImmutable( '2026-06-08 00:00:00' );
+		$end    = new \DateTimeImmutable( '2026-06-14 23:59:59' );
+		$cstart = new \DateTimeImmutable( '2026-06-01 00:00:00' );
+		$cend   = new \DateTimeImmutable( '2026-06-07 23:59:59' );
+
+		$m = new ReflectionMethod( $controller, 'build_response' );
+		$m->setAccessible( true );
+		$legacy = $m->invoke( $controller, $metric, $start, $end, $cstart, $cend );
+
+		$request = new WP_REST_Request( 'GET', self::ROUTE );
+		$request->set_query_params(
+			[
+				'start'         => '2026-06-08',
+				'end'           => '2026-06-14',
+				'compare_start' => '2026-06-01',
+				'compare_end'   => '2026-06-07',
+			]
+		);
+		$assembled = $this->server->dispatch( $request )->get_data()['data'];
+
+		// current is byte-identical (same window, same snapshot dates).
+		$this->assertEquals( $legacy['current'], $assembled['current'] );
+		$this->assertEquals( $legacy['tab_error'], $assembled['tab_error'] );
+
+		// previous: windowed fields must match; snapshot fields differ (computed from
+		// the previous window's dates) but the frontend never reads them from previous.
+		$snapshot_fields = [
+			'time_to_subscribe_distribution',
+			'time_to_donate_distribution',
+			'subscriber_to_donor_lag_distribution',
+			'registration_to_conversion_cohort',
+			'subscriber_retention_cohort',
+			'stale_registered_count',
+			'at_risk_subscriber_count',
+			'lapsed_donor_count',
+		];
+		$legacy_prev    = array_diff_key( $legacy['previous'], array_flip( $snapshot_fields ) );
+		$assembled_prev = array_diff_key( $assembled['previous'], array_flip( $snapshot_fields ) );
+		$this->assertEquals( $legacy_prev, $assembled_prev );
+
+		Cache::purge_ondemand( 'conversion' );
+	}
 }

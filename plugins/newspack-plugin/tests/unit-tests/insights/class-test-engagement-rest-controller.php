@@ -19,6 +19,7 @@ use Newspack\Insights\Engagement_REST_Controller;
 use WP_REST_Request;
 use WP_REST_Server;
 use WP_UnitTestCase;
+use ReflectionMethod;
 
 /**
  * Engagement_REST_Controller test class.
@@ -202,6 +203,44 @@ class Test_Engagement_REST_Controller extends WP_UnitTestCase {
 			]
 		);
 		$this->assertSame( 400, $response->get_status() );
+	}
+
+	/**
+	 * Dispatched compare GET equals legacy build_response for engagement.
+	 *
+	 * Proves that the per-window cache assembly (Task 4) produces a response
+	 * byte-identical to the legacy build_response() oracle. In the unit env the
+	 * BQ proxy is unconfigured, so both paths return deterministic error-shaped
+	 * payloads and the comparison is meaningful.
+	 */
+	public function test_compare_get_matches_legacy_build_response() {
+		$controller = new Engagement_REST_Controller();
+
+		$start  = new \DateTimeImmutable( '2026-06-08 00:00:00' );
+		$end    = new \DateTimeImmutable( '2026-06-14 23:59:59' );
+		$cstart = new \DateTimeImmutable( '2026-06-01 00:00:00' );
+		$cend   = new \DateTimeImmutable( '2026-06-07 23:59:59' );
+
+		// Legacy oracle via reflection (also primes the metric-layer transients).
+		$m = new ReflectionMethod( $controller, 'build_response' );
+		$m->setAccessible( true );
+		$legacy = $m->invoke( $controller, $start, $end, $cstart, $cend );
+
+		$request = new WP_REST_Request( 'GET', self::ROUTE );
+		$request->set_query_params(
+			[
+				'start'         => '2026-06-08',
+				'end'           => '2026-06-14',
+				'compare_start' => '2026-06-01',
+				'compare_end'   => '2026-06-07',
+			]
+		);
+		$assembled = $this->server->dispatch( $request )->get_data()['data'];
+
+		$this->assertEquals( $legacy['current'], $assembled['current'] );
+		$this->assertEquals( $legacy['previous'], $assembled['previous'] );
+
+		Cache::purge_ondemand( 'engagement' );
 	}
 
 	/**
