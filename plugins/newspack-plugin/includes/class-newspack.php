@@ -93,6 +93,7 @@ final class Newspack {
 
 		include_once NEWSPACK_ABSPATH . 'includes/util.php';
 		include_once NEWSPACK_ABSPATH . 'includes/emails/class-emails.php';
+		include_once NEWSPACK_ABSPATH . 'includes/emails/class-idempotent-send.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-plugin-manager.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-theme-manager.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-admin-plugins-screen.php';
@@ -277,6 +278,9 @@ final class Newspack {
 
 		// Filter by authors in the Posts page.
 		include_once NEWSPACK_ABSPATH . 'includes/author-filter/class-author-filter.php';
+
+		// Display tags as labels.
+		include_once NEWSPACK_ABSPATH . 'includes/tag-labels/class-tag-labels.php';
 
 		// Load the general Newspack UI front-end styles.
 		include_once NEWSPACK_ABSPATH . 'includes/class-newspack-ui.php';
@@ -465,6 +469,101 @@ final class Newspack {
 	}
 
 	/**
+	 * Per-request memoization for self::asset_version().
+	 *
+	 * @var array<string, string>
+	 */
+	private static $asset_version_cache = [];
+
+	/**
+	 * Resolve the cache-busting version for a built dist asset.
+	 *
+	 * Reads the content-hashed `version` emitted by
+	 * the WordPress dependency-extraction webpack plugin into
+	 * `dist/<name>.asset.php`. The hash changes only when the bundle's bytes
+	 * change, which makes it a tighter cache-busting key than the manually
+	 * bumped NEWSPACK_PLUGIN_VERSION constant.
+	 *
+	 * Results are memoized per request to avoid redundant file-system reads.
+	 * Long-running processes (CLI workers, integration tests) that rebuild
+	 * dist/ mid-run can call self::asset_version_reset_cache() to drop
+	 * stale entries.
+	 *
+	 * @param string $name Asset basename relative to `dist/`, without the
+	 *                     `.asset.php` suffix. Examples: 'wizards',
+	 *                     'other-scripts/relative-time'.
+	 * @return string Version string suitable as the 4th arg of
+	 *                wp_register_script() / wp_enqueue_script() /
+	 *                wp_register_style() / wp_enqueue_style(). Falls back to
+	 *                NEWSPACK_PLUGIN_VERSION when the asset file is missing
+	 *                or malformed.
+	 */
+	public static function asset_version( string $name ): string {
+		if ( isset( self::$asset_version_cache[ $name ] ) ) {
+			return self::$asset_version_cache[ $name ];
+		}
+		$version = NEWSPACK_PLUGIN_VERSION;
+		// Defense in depth: every current call site passes a literal, but this
+		// helper is publicly callable, so reject anything that isn't a webpack
+		// entry-shaped basename. The first pattern restricts the character set
+		// (alphanumerics, hyphens, underscores, dots) to single-level or nested
+		// segments. The second explicitly rejects `..` segments — without it the
+		// dot in the character class above would let `../wp-config` through.
+		if (
+			! preg_match( '#^[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*$#', $name )
+			|| preg_match( '#(^|/)\.\.(/|$)#', $name )
+		) {
+			Logger::log( "asset_version() rejected unsafe name: \"{$name}\", using NEWSPACK_PLUGIN_VERSION", 'NEWSPACK-ASSETS' );
+			self::$asset_version_cache[ $name ] = $version;
+			return $version;
+		}
+		/**
+		 * Filter the directory `asset_version()` reads `.asset.php` files from.
+		 * Defaults to the plugin's `dist/`. Tests redirect this to a temp dir
+		 * to avoid writing fixtures into the production-served path.
+		 *
+		 * @param string $dir  Absolute path with trailing slash.
+		 * @param string $name Asset basename being resolved.
+		 */
+		$dist_dir = apply_filters( 'newspack_asset_dist_dir', NEWSPACK_ABSPATH . 'dist/', $name );
+		$path     = $dist_dir . $name . '.asset.php';
+		// file_exists() is load-bearing for the silent missing-file fallback;
+		// without it the include below would emit an E_WARNING instead of
+		// reaching NEWSPACK_PLUGIN_VERSION.
+		if ( file_exists( $path ) ) {
+			$asset = include $path;
+			if (
+				is_array( $asset )
+				&& ! empty( $asset['version'] )
+				&& is_string( $asset['version'] )
+			) {
+				$version = $asset['version'];
+			}
+		} else {
+			// Surface a missing .asset.php so a misbuilt deploy is visible to
+			// anyone tailing the debug log. Gated by NEWSPACK_LOG_LEVEL so
+			// production stays quiet; legitimate non-webpack enqueues (e.g.
+			// dist/revisions-control.css) will log too, which is the intended
+			// signal for "this enqueue is not content-hash-busted".
+			Logger::log( "asset_version() fallback: {$path} not found, using NEWSPACK_PLUGIN_VERSION", 'NEWSPACK-ASSETS' );
+		}
+		self::$asset_version_cache[ $name ] = $version;
+		return $version;
+	}
+
+	/**
+	 * Clear the per-request asset_version() memoization.
+	 *
+	 * Useful from long-running processes (CLI workers, integration tests) that
+	 * rebuild `dist/` mid-run and need subsequent resolves to re-read the file.
+	 *
+	 * @return void
+	 */
+	public static function asset_version_reset_cache(): void {
+		self::$asset_version_cache = [];
+	}
+
+	/**
 	 * Load the common assets.
 	 */
 	public static function load_common_assets() {
@@ -472,7 +571,7 @@ final class Newspack {
 			'newspack_commons',
 			self::plugin_url() . '/dist/commons.js',
 			[],
-			NEWSPACK_PLUGIN_VERSION,
+			self::asset_version( 'commons' ),
 			true
 		);
 		wp_enqueue_script( 'newspack_commons' );
@@ -481,7 +580,7 @@ final class Newspack {
 			'newspack-commons',
 			self::plugin_url() . '/dist/commons.css',
 			[ 'wp-components' ],
-			NEWSPACK_PLUGIN_VERSION
+			self::asset_version( 'commons' )
 		);
 		wp_style_add_data( 'newspack-commons', 'rtl', 'replace' );
 		wp_enqueue_style( 'newspack-commons' );
@@ -491,7 +590,7 @@ final class Newspack {
 				'newspack-admin',
 				self::plugin_url() . '/dist/admin.css',
 				[],
-				NEWSPACK_PLUGIN_VERSION
+				self::asset_version( 'admin' )
 			);
 		}
 	}

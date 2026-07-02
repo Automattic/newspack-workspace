@@ -638,8 +638,11 @@ class WooCommerce_Subscriptions {
 
 		$user_id = get_current_user_id();
 
-		// If not logged in, try to get the user ID from the billing email.
-		if ( ! $user_id && method_exists( 'Newspack_Blocks\Modal_Checkout', 'get_user_id_from_email' ) ) {
+		// Standard and modal checkout refreshes can both carry guest emails in serialized post_data.
+		if (
+			! $user_id &&
+			method_exists( 'Newspack_Blocks\Modal_Checkout', 'get_user_id_from_email' )
+		) {
 			$user_id = \Newspack_Blocks\Modal_Checkout::get_user_id_from_email();
 		}
 		if ( $trial_length && $user_id && $product && $product->is_type( [ 'subscription', 'subscription_variation', 'variable-subscription' ] ) ) {

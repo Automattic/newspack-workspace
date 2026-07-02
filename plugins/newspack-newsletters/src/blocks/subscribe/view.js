@@ -105,52 +105,83 @@ domReady( function () {
 			emailInput.setAttribute( 'disabled', 'true' );
 			submit.setAttribute( 'disabled', 'true' );
 
-			fetch( form.getAttribute( 'action' ) || window.location.pathname, {
-				method: 'POST',
-				headers: {
-					Accept: 'application/json',
-				},
-				body,
-			} ).then( res => {
-				res.json().then( data => {
-					const { message, newspack_newsletters_subscribed: wasSubscribed, newspack_newsletters_subscribe, metadata } = data;
-					nonce = newspack_newsletters_subscribe;
-					form.endFlow( message, res.status, wasSubscribed, metadata );
+			const submitSubscribe = () => {
+				fetch( form.getAttribute( 'action' ) || window.location.pathname, {
+					method: 'POST',
+					headers: {
+						Accept: 'application/json',
+					},
+					body,
+				} ).then( res => {
+					res.json().then( data => {
+						const { message, newspack_newsletters_subscribed: wasSubscribed, newspack_newsletters_subscribe, metadata } = data;
+						nonce = newspack_newsletters_subscribe;
+						form.endFlow( message, res.status, wasSubscribed, metadata );
 
-					// Post-registration email verification. When newspack-plugin signals that the
-					// freshly registered reader needs to verify, hand off to the verification modal
-					// exposed on window.newspackReaderActivation. The flow:
-					//   1. Verification prompt → reader clicks "Send code" or dismisses.
-					//   2. On Send code: auth modal opens in OTP state (newsletters signup is skipped
-					//      because the reader just subscribed via this form).
-					// Degrades gracefully when running against an older newspack-plugin that doesn't
-					// expose the helpers.
-					if ( res.status === 200 && data?.registered && data?.verified !== true && data?.verification_nonce ) {
-						window.newspackRAS = window.newspackRAS || [];
-						window.newspackRAS.push( ras => {
-							if ( typeof ras?.openVerificationModal !== 'function' ) {
-								return;
-							}
-							ras.openVerificationModal( {
-								email: data.email,
-								verificationNonce: data.verification_nonce,
-								onSendCode: () => {
-									if ( typeof ras?.openAuthModal !== 'function' ) {
-										return;
-									}
-									ras.openAuthModal( {
-										skipAuthenticatedCheck: true,
-										skipNewslettersSignup: true,
-										backButtonClosesModal: true,
-										initialState: 'otp',
-										closeOnSuccess: true,
-										onClose: null,
-									} );
-								},
+						// Post-registration email verification. When newspack-plugin signals that the
+						// freshly registered reader needs to verify, hand off to the verification modal
+						// exposed on window.newspackReaderActivation. The flow:
+						//   1. Verification prompt → reader clicks "Send code" or dismisses.
+						//   2. On Send code: auth modal opens in OTP state (newsletters signup is skipped
+						//      because the reader just subscribed via this form).
+						// Degrades gracefully when running against an older newspack-plugin that doesn't
+						// expose the helpers.
+						if ( res.status === 200 && data?.registered && data?.verified !== true && data?.verification_nonce ) {
+							window.newspackRAS = window.newspackRAS || [];
+							window.newspackRAS.push( ras => {
+								if ( typeof ras?.openVerificationModal !== 'function' ) {
+									return;
+								}
+								ras.openVerificationModal( {
+									email: data.email,
+									verificationNonce: data.verification_nonce,
+									onSendCode: () => {
+										if ( typeof ras?.openAuthModal !== 'function' ) {
+											return;
+										}
+										ras.openAuthModal( {
+											skipAuthenticatedCheck: true,
+											skipNewslettersSignup: true,
+											backButtonClosesModal: true,
+											initialState: 'otp',
+											closeOnSuccess: true,
+											onClose: null,
+										} );
+									},
+								} );
 							} );
-						} );
-					}
+						}
+					} );
 				} );
+			};
+
+			// When post-registration verification is OFF in Audience → Configuration, intercept
+			// new-email subscriptions with a "You're about to create an account for X" confirmation
+			// step before any account is provisioned. Verification ON → fall through to subscribe
+			// immediately; the verification modal still runs after registration. Degrades to
+			// immediate subscribe when running against a newspack-plugin that doesn't expose the
+			// helper.
+			//
+			// Look the helper up synchronously instead of going through window.newspackRAS.push():
+			// the push queue is drained on domReady, so if RAS never initialises (older plugin,
+			// runtime error in the RAS bundle) the callback never fires and the form gets stuck
+			// "in progress" forever. A direct global check fails open to immediate submit.
+			const ras = window.newspackReaderActivation;
+			if ( typeof ras?.maybeConfirmRegistration !== 'function' ) {
+				submitSubscribe();
+				return;
+			}
+			ras.maybeConfirmRegistration( {
+				email: body.get( 'npe' ),
+				onProceed: submitSubscribe,
+				onCancel: () => {
+					emailInput.removeAttribute( 'disabled' );
+					submit.removeAttribute( 'disabled' );
+					if ( submit.contains( spinner ) ) {
+						submit.removeChild( spinner );
+					}
+					form.classList.remove( 'in-progress' );
+				},
 			} );
 		} );
 	} );

@@ -68,7 +68,7 @@ final class My_Account_Button_Block {
 			'newspack-blocks-frontend',
 			Newspack::plugin_url() . '/dist/blocks.css',
 			[],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'blocks' )
 		);
 
 		$default_attrs = [
