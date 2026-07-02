@@ -193,19 +193,17 @@ class Content_Gate_API {
 	 * @return array The sanitized metering.
 	 */
 	public static function sanitize_metering( $metering ) {
-		$metering = wp_parse_args(
-			$metering,
-			[
-				'enabled' => false,
-				'count'   => 0,
-				'period'  => 'month',
-			]
-		);
-		return [
-			'enabled' => boolval( $metering['enabled'] ),
-			'count'   => intval( $metering['count'] ),
-			'period'  => sanitize_text_field( $metering['period'] ),
-		];
+		$sanitized = [];
+		if ( isset( $metering['enabled'] ) ) {
+			$sanitized['enabled'] = boolval( $metering['enabled'] );
+		}
+		if ( isset( $metering['count'] ) ) {
+			$sanitized['count'] = intval( $metering['count'] );
+		}
+		if ( isset( $metering['period'] ) ) {
+			$sanitized['period'] = sanitize_text_field( $metering['period'] );
+		}
+		return $sanitized;
 	}
 
 	/**

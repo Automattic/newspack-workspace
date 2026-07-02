@@ -1096,7 +1096,7 @@ class Content_Gate {
 
 		return [
 			'active'               => isset( $registration['active'] ) ? (bool) $registration['active'] : false,
-			'metering'             => isset( $registration['metering'] ) ? $registration['metering'] : $default_metering,
+			'metering'             => isset( $registration['metering'] ) && is_array( $registration['metering'] ) ? wp_parse_args( $registration['metering'], $default_metering ) : $default_metering,
 			'require_verification' => isset( $registration['require_verification'] ) ? (bool) $registration['require_verification'] : false,
 			'gate_layout_id'       => isset( $registration['gate_layout_id'] ) ? (int) $registration['gate_layout_id'] : 0,
 		];
@@ -1131,6 +1131,9 @@ class Content_Gate {
 	public static function update_registration_settings( $gate_id, $settings ) {
 		$registration = get_post_meta( $gate_id, 'registration', true );
 		if ( $registration ) {
+			if ( isset( $settings['metering'], $registration['metering'] ) && is_array( $settings['metering'] ) && is_array( $registration['metering'] ) ) {
+				$settings['metering'] = wp_parse_args( $settings['metering'], $registration['metering'] );
+			}
 			$settings = wp_parse_args( $settings, $registration );
 		}
 		\update_post_meta( $gate_id, 'registration', $settings );
@@ -1162,7 +1165,7 @@ class Content_Gate {
 
 		return [
 			'active'         => isset( $custom_access['active'] ) ? (bool) $custom_access['active'] : false,
-			'metering'       => isset( $custom_access['metering'] ) ? $custom_access['metering'] : $default_metering,
+			'metering'       => isset( $custom_access['metering'] ) && is_array( $custom_access['metering'] ) ? wp_parse_args( $custom_access['metering'], $default_metering ) : $default_metering,
 			'access_rules'   => $access_rules,
 			'gate_layout_id' => isset( $custom_access['gate_layout_id'] ) ? (int) $custom_access['gate_layout_id'] : 0,
 		];
@@ -1179,6 +1182,9 @@ class Content_Gate {
 	public static function update_custom_access_settings( $gate_id, $settings ) {
 		$custom_access = get_post_meta( $gate_id, 'custom_access', true );
 		if ( $custom_access ) {
+			if ( isset( $settings['metering'], $custom_access['metering'] ) && is_array( $settings['metering'] ) && is_array( $custom_access['metering'] ) ) {
+				$settings['metering'] = wp_parse_args( $settings['metering'], $custom_access['metering'] );
+			}
 			$settings = wp_parse_args( $settings, $custom_access );
 		}
 		\update_post_meta( $gate_id, 'custom_access', $settings );

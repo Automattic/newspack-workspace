@@ -2595,6 +2595,63 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A sparse metering update (e.g. only toggling `enabled`) must not wipe
+	 * the stored `count`/`period`, since the storage layer's shallow merge
+	 * would otherwise replace the whole metering array wholesale.
+	 */
+	public function test_update_gate_sparse_metering_preserve_stored_values() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Sparse Metering Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate with full registration and custom_access metering.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Sparse Metering Gate',
+				'priority'      => 0,
+				'registration'  => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'week',
+					],
+				],
+				'custom_access' => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'week',
+					],
+				],
+			]
+		);
+
+		// Sparse update: only toggle registration.metering.enabled.
+		$sanitized_registration = Content_Gate_API::sanitize_registration( [ 'metering' => [ 'enabled' => false ] ] );
+		$this->assertSame( [ 'metering' => [ 'enabled' => false ] ], $sanitized_registration, 'Sanitized registration metering must contain only the explicitly provided field' );
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'registration' => $sanitized_registration ] );
+
+		$registration = Content_Gate::get_registration_settings( $gate_id );
+		$this->assertFalse( $registration['metering']['enabled'], 'Registration metering enabled must be updated to the explicitly provided value' );
+		$this->assertSame( 3, $registration['metering']['count'], 'Stored registration metering count must not be wiped by a sparse update' );
+		$this->assertSame( 'week', $registration['metering']['period'], 'Stored registration metering period must not be wiped by a sparse update' );
+
+		// Sparse update: only toggle custom_access.metering.enabled.
+		$sanitized_custom_access = Content_Gate_API::sanitize_custom_access( [ 'metering' => [ 'enabled' => false ] ] );
+		$this->assertSame( [ 'metering' => [ 'enabled' => false ] ], $sanitized_custom_access, 'Sanitized custom_access metering must contain only the explicitly provided field' );
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'custom_access' => $sanitized_custom_access ] );
+
+		$custom_access = Content_Gate::get_custom_access_settings( $gate_id );
+		$this->assertFalse( $custom_access['metering']['enabled'], 'Custom access metering enabled must be updated to the explicitly provided value' );
+		$this->assertSame( 3, $custom_access['metering']['count'], 'Stored custom_access metering count must not be wiped by a sparse update' );
+		$this->assertSame( 'week', $custom_access['metering']['period'], 'Stored custom_access metering period must not be wiped by a sparse update' );
+	}
+
+	/**
 	 * Creating a gate must fall back to a default title when the payload
 	 * omits one, since sanitize_gate() no longer guarantees a title.
 	 */
