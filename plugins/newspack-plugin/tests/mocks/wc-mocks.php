@@ -457,6 +457,11 @@ if ( ! class_exists( 'WC_Subscriptions_Switcher' ) ) {
 	 * caller passed the expected sign-up-fee mode and orders_to_include list.
 	 */
 	class WC_Subscriptions_Switcher {
+		public static function cart_contains_switches( $item_action = 'any' ) {
+			unset( $item_action );
+			return false;
+		}
+
 		public static function calculate_total_paid_since_last_order( $subscription, $subscription_item, $include_sign_up_fees = 'include_sign_up_fees', $orders_to_include = [] ) {
 			global $wcs_mock_total_paid_including_signup_fee, $wcs_mock_last_calculate_total_paid_args;
 			$wcs_mock_last_calculate_total_paid_args = [

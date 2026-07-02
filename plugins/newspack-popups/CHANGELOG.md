@@ -1,3 +1,10 @@
+## newspack-popups [3.14.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.14.0...newspack-popups@3.14.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* **popups:** restrict prompt preview to prompt managers ([c763c38](https://github.com/Automattic/newspack-workspace/commit/c763c38eda03c99159a764995a44c9136ce9aa23))
+
 # newspack-popups [3.14.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.13.1...newspack-popups@3.14.0) (2026-06-29)
 
 

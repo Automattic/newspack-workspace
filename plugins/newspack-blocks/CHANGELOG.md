@@ -1,3 +1,17 @@
+## @automattic/newspack-blocks [4.26.8](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.7...newspack-blocks@4.26.8) (2026-07-02)
+
+
+### Bug Fixes
+
+* **blocks:** restrict articles endpoint to viewable post types ([cde3e84](https://github.com/Automattic/newspack-workspace/commit/cde3e84ebf2c8e653f085560799f32c69bd75a36))
+
+## @automattic/newspack-blocks [4.26.7](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.6...newspack-blocks@4.26.7) (2026-06-30)
+
+
+### Bug Fixes
+
+* **checkout:** sync repeat trial pricing in modal checkout ([#264](https://github.com/Automattic/newspack-workspace/issues/264)) ([#468](https://github.com/Automattic/newspack-workspace/issues/468)) ([d7d2356](https://github.com/Automattic/newspack-workspace/commit/d7d23564a1d350266fb9016caeee398eb211fe71))
+
 ## @automattic/newspack-blocks [4.26.6](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.5...newspack-blocks@4.26.6) (2026-06-29)
 
 
