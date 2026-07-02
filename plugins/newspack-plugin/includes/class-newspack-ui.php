@@ -49,14 +49,14 @@ class Newspack_UI {
 			'newspack-ui',
 			Newspack::plugin_url() . '/dist/newspack-ui.css',
 			[],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'newspack-ui' )
 		);
 
 		wp_enqueue_script(
 			'newspack-ui',
 			Newspack::plugin_url() . '/dist/newspack-ui.js',
 			[ 'wp-util' ],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'newspack-ui' ),
 			true
 		);
 	}

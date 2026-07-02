@@ -45,9 +45,16 @@ class Audience_Wizard extends Wizard {
 
 	/**
 	 * Audience Configuration Constructor.
+	 *
+	 * @param array $args Optional. Wizard arguments — forwarded to the
+	 *                    parent so `sections` can be loaded via
+	 *                    `Wizard::load_wizard_sections()`. Used by the
+	 *                    Emails section, which hosts under Audience now
+	 *                    (NPPD-1538) but keeps its REST_BASE pinned to
+	 *                    `newspack-settings` for API stability.
 	 */
-	public function __construct() {
-		parent::__construct();
+	public function __construct( $args = [] ) {
+		parent::__construct( $args );
 		add_action( 'rest_api_init', [ $this, 'register_api_endpoints' ] );
 
 		// Determine active menu items.
@@ -108,6 +115,28 @@ class Audience_Wizard extends Wizard {
 
 		$data['is_newspack_feature_enabled'] = Content_Gate::is_newspack_feature_enabled();
 
+		// Bootstrap only the cheap inputs the Emails tab needs to decide
+		// visibility + render its chip bar. Deliberately NOT seeding the
+		// email list: api_get_email_settings() -> Emails::get_emails()
+		// lazily wp_insert_post()s the Newspack email posts on first read,
+		// so seeding it here would create those posts on EVERY Audience page
+		// load even for publishers who never open the Emails tab. The Emails
+		// view fetches the list on mount instead, deferring creation until
+		// the tab is actually opened.
+		//
+		// `isNewspackPlatform` reflects whether Newspack is the reader-revenue
+		// platform (WooCommerce orders drive the commerce emails; RevEngine/NRH
+		// redirects checkout off-site and sends its own receipts; "Other" sends
+		// nothing through Newspack). It drives the chip bar + the email-list
+		// scoping; auth/account emails still surface on any platform with RA on.
+		$data['emails'] = [
+			'dependencies'       => [
+				'newspackNewsletters' => is_plugin_active( 'newspack-newsletters/newspack-newsletters.php' ),
+			],
+			'postType'           => Emails::POST_TYPE,
+			'isNewspackPlatform' => Donations::is_platform_wc(),
+		];
+
 		wp_enqueue_script( 'newspack-wizards' );
 
 		wp_localize_script(
@@ -117,7 +146,7 @@ class Audience_Wizard extends Wizard {
 		);
 
 		// Enqueue content banner CSS for previews.
-		wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], NEWSPACK_PLUGIN_VERSION );
+		wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], Newspack::asset_version( 'content-banner' ) );
 	}
 
 	/**
@@ -487,22 +516,73 @@ class Audience_Wizard extends Wizard {
 	/**
 	 * Get reader activation settings.
 	 *
+	 * Response shape:
+	 *   - config (array)                        Reader Activation settings keyed by option name.
+	 *                                           See Reader_Activation::get_settings_config()
+	 *                                           for the canonical field list.
+	 *   - prerequisites_status (array)          Per-prerequisite completion + plugin status.
+	 *   - memberships (array)                   Memberships integration settings.
+	 *   - can_esp_sync (array)                  Whether ESP sync is currently possible
+	 *                                           and the validation errors if not.
+	 *   - verification_required_by_gates (array<int,array{id:int,title:string,edit_url:string}>)
+	 *                                           Published content gates that force
+	 *                                           post-registration verification ON. `edit_url`
+	 *                                           is resolved here (under the wizard's edit-post
+	 *                                           capability check) rather than in the cached
+	 *                                           gate list, so a public-traffic cache populate
+	 *                                           can't poison the field with null.
+	 *                                           Returned on GET only — the UPDATE endpoint
+	 *                                           skips this field because saving an unrelated
+	 *                                           setting can't change the gate list.
+	 *
 	 * @return WP_REST_Response
 	 */
 	public function api_get_reader_activation_settings() {
 		return rest_ensure_response(
 			[
-				'config'               => Reader_Activation::get_settings(),
-				'prerequisites_status' => Reader_Activation::get_prerequisites_status(),
-				'required_plugins'     => Reader_Activation::get_reader_revenue_required_plugins(),
-				'memberships'          => self::get_memberships_settings(),
-				'can_esp_sync'         => Reader_Activation\Contact_Sync::has_one_syncable_integration( true ),
+				'config'                         => Reader_Activation::get_settings(),
+				'prerequisites_status'           => Reader_Activation::get_prerequisites_status(),
+				'required_plugins'               => Reader_Activation::get_reader_revenue_required_plugins(),
+				'memberships'                    => self::get_memberships_settings(),
+				'can_esp_sync'                   => Reader_Activation\Contact_Sync::has_one_syncable_integration( true ),
+				'verification_required_by_gates' => self::get_verification_required_gates_with_edit_urls(),
 			]
 		);
 	}
 
 	/**
+	 * Resolve edit URLs for the cached verification-required gate list.
+	 *
+	 * Reader_Activation::get_verification_required_gates() returns only
+	 * capability-independent fields ({@see id, title}) so its 24-hour cache can't
+	 * be poisoned by a no-caps front-end populate (which would otherwise yield
+	 * `null` edit URLs for ~24h). This wizard handler runs under the admin
+	 * permission check ({@see api_permissions_check()}), so `get_edit_post_link()`
+	 * returns the correct URL here.
+	 *
+	 * @return array<int,array{id:int,title:string,edit_url:string|null}>
+	 */
+	private static function get_verification_required_gates_with_edit_urls(): array {
+		$gates    = Reader_Activation::get_verification_required_gates();
+		$resolved = [];
+		foreach ( $gates as $gate ) {
+			$resolved[] = [
+				'id'       => $gate['id'],
+				'title'    => $gate['title'],
+				'edit_url' => get_edit_post_link( $gate['id'] ),
+			];
+		}
+		return $resolved;
+	}
+
+	/**
 	 * Update reader activation settings.
+	 *
+	 * Mirrors {@see api_get_reader_activation_settings()} except that
+	 * `verification_required_by_gates` is intentionally omitted — saving an
+	 * unrelated RAS setting can't change which gates are published with
+	 * Require Verification, so the client can keep the value it received on
+	 * the initial GET.
 	 *
 	 * @param WP_REST_Request $request Request object.
 	 *

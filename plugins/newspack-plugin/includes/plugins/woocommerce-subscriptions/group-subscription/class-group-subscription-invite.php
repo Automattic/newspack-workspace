@@ -60,6 +60,13 @@ class Group_Subscription_Invite {
 	 * Initialize hooks.
 	 */
 	public static function init() {
+		// Invite acceptance and the invite email config are part of the group
+		// management UX, gated behind the Access Control feature flag. The
+		// static invite helpers remain available regardless; only the hooks are
+		// gated.
+		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
+			return;
+		}
 		add_filter( 'newspack_email_configs', [ __CLASS__, 'add_email_config' ] );
 		add_action( 'template_redirect', [ __CLASS__, 'process_invite_request' ] );
 		add_action( 'template_redirect', [ __CLASS__, 'process_link_invite_request' ] );
@@ -75,11 +82,16 @@ class Group_Subscription_Invite {
 	public static function add_email_config( $configs ) {
 		$configs[ self::EMAIL_TYPE ] = [
 			'name'                   => self::EMAIL_TYPE,
-			'category'               => 'reader-activation',
+			// Reader-revenue category: this is a paid-product email, not
+			// an auth/account flow. The chip is derived from category in
+			// Emails::apply_config_defaults(), and `recipient` defaults to
+			// 'reader' there, so neither needs to be declared here.
+			'category'               => 'reader-revenue',
 			'label'                  => __( 'Group Subscription Invitation', 'newspack-plugin' ),
 			'description'            => __( 'Email sent to invite a reader to join a group subscription.', 'newspack-plugin' ),
 			'template'               => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-activation-emails/group-subscription-invite.php',
 			'editor_notice'          => __( 'This email will be sent when a reader is invited to join a group subscription.', 'newspack-plugin' ),
+			'trigger_description'    => __( 'Sent to invite a reader to join a group subscription.', 'newspack-plugin' ),
 			'available_placeholders' => [
 				[
 					'label'    => __( 'the site title', 'newspack-plugin' ),

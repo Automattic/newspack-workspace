@@ -47,6 +47,15 @@ class Group_Subscription_MyAccount {
 	 * Register hooks for the My Account group subscription UI.
 	 */
 	public static function init() {
+		// Gate the entire reader-facing group management surface behind the
+		// Access Control feature flag. None of these hooks need to run on sites
+		// that haven't been migrated, and the `group` endpoint / management
+		// flows should not exist there. The flag composes with the
+		// `Memberships::is_active()` redirect in `resolve_group_landing()`: the
+		// flag is the outer gate, the Memberships check the inner redirect.
+		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
+			return;
+		}
 		add_action( 'init', [ __CLASS__, 'flush_rewrite_rules' ] );
 		add_filter( 'woocommerce_get_query_vars', [ __CLASS__, 'add_manage_members_endpoint' ] );
 		add_filter( 'woocommerce_get_query_vars', [ __CLASS__, 'add_group_endpoint' ] );
@@ -63,9 +72,16 @@ class Group_Subscription_MyAccount {
 
 	/**
 	 * Flush rewrite rules for My Account endpoints for group subscriptions.
+	 *
+	 * The `group` endpoint is now only registered (via `add_group_endpoint()`)
+	 * when the Access Control feature flag is on. The option version is bumped
+	 * so the first request after the flag turns on re-flushes and regenerates
+	 * the endpoint's rewrite rule, regardless of any rules persisted by an
+	 * earlier ungated release. On flag-off sites this never runs (the hook is
+	 * not registered), so the option stays unset and a later flag flip flushes.
 	 */
 	public static function flush_rewrite_rules() {
-		$rewrite_rules_updated_option_name = 'newspack_group_subscription_rewrite_rules_updated_v2';
+		$rewrite_rules_updated_option_name = 'newspack_group_subscription_rewrite_rules_updated_v3';
 		if ( false === get_option( $rewrite_rules_updated_option_name ) ) {
 			flush_rewrite_rules(); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.flush_rewrite_rules_flush_rewrite_rules
 			update_option( $rewrite_rules_updated_option_name, true );
