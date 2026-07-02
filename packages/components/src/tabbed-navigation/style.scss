@@ -10,16 +10,6 @@
 	border-bottom: var( --wpds-border-width-xs ) solid var( --wpds-color-stroke-surface-neutral-weak );
 	width: 100%;
 
-	@media only screen and ( min-width: 600px ) {
-		position: sticky;
-		top: 46px;
-		z-index: 3;
-	}
-
-	@media only screen and ( min-width: 783px ) {
-		top: 32px;
-	}
-
 	.newspack-tabbed-navigation__tabs {
 		/* stylelint-disable-next-line plugin-wpds/no-setting-wpds-custom-properties -- deliberate Newspack brand override of the indicator token. */
 		--wpds-color-stroke-interactive-neutral-strong: #{colors.$primary-600};

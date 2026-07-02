@@ -72,15 +72,15 @@ export default function withWizardScreen( WrappedComponent, { hidePrimaryButton,
 					{ ...overridingProps }
 				/>
 			);
+		const tabbedNavigationRegion = tabbedNavigation && (
+			<TabbedNavigation
+				disableUpcoming={ disableUpcomingInTabbedNavigation }
+				items={ tabbedNavigation.filter( item => ! item.isHiddenInNav ) }
+			/>
+		);
+
 		const content = (
 			<>
-				{ tabbedNavigation && (
-					<TabbedNavigation
-						disableUpcoming={ disableUpcomingInTabbedNavigation }
-						items={ tabbedNavigation.filter( item => ! item.isHiddenInNav ) }
-					/>
-				) }
-
 				<HandoffMessage />
 
 				<div className={ classnames( 'newspack-wizard newspack-wizard__content', className ) }>
@@ -109,9 +109,17 @@ export default function withWizardScreen( WrappedComponent, { hidePrimaryButton,
 				<>
 					{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
 					{ hideHeader ? (
-						content
+						<>
+							{ tabbedNavigationRegion }
+							{ content }
+						</>
 					) : (
-						<Page breadcrumbItems={ pageBreadcrumbs } subTitle={ subHeaderText } actions={ headerActions }>
+						<Page
+							breadcrumbItems={ pageBreadcrumbs }
+							subTitle={ subHeaderText }
+							actions={ headerActions }
+							tabbedNavigation={ tabbedNavigationRegion }
+						>
 							{ content }
 						</Page>
 					) }

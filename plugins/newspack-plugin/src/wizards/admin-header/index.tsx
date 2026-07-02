@@ -22,17 +22,21 @@ export function WizardsAdminHeader( {
 		// node is rendered once and never re-rendered or unmounted here — React
 		// reconciliation on a re-render would wipe the portalled children. Keep it
 		// a static, empty div; do not give this component state that could re-render.
-		<Page breadcrumbItems={ breadcrumbs } actions={ <div id="newspack-wizards-admin-header-actions" /> }>
-			{ tabs.length > 0 && (
-				<TabbedNavigation
-					items={ tabs.map( tab => ( {
-						label: tab.textContent,
-						href: tab.href,
-						selected: tab.forceSelected,
-					} ) ) }
-				/>
-			) }
-		</Page>
+		<Page
+			breadcrumbItems={ breadcrumbs }
+			actions={ <div id="newspack-wizards-admin-header-actions" /> }
+			tabbedNavigation={
+				tabs.length > 0 && (
+					<TabbedNavigation
+						items={ tabs.map( tab => ( {
+							label: tab.textContent,
+							href: tab.href,
+							selected: tab.forceSelected,
+						} ) ) }
+					/>
+				)
+			}
+		/>
 	);
 }
 
