@@ -50,8 +50,7 @@ const newPlan = ( label = '', period = 'month' ): PlanDraft => ( { label, price:
 
 // A price must be an explicit, non-negative number. Guards against an empty field coercing to 0
 // ( Number( '' ) === 0 ) and silently publishing a paid plan as free.
-const isValidPrice = ( value: string ): boolean =>
-	value.trim() !== '' && Number.isFinite( Number( value ) ) && Number( value ) >= 0;
+const isValidPrice = ( value: string ): boolean => value.trim() !== '' && Number.isFinite( Number( value ) ) && Number( value ) >= 0;
 
 export default function ProductForm( {
 	mode,
