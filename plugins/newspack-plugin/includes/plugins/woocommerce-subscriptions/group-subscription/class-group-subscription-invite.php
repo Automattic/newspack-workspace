@@ -560,6 +560,29 @@ class Group_Subscription_Invite {
 	}
 
 	/**
+	 * Whether an invite key is valid for the given subscription and email.
+	 *
+	 * Mirrors the invite checks in accept_invite(), for use as a gate before an
+	 * account is created for a new invitee.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 * @param string               $key          The invite key.
+	 * @param string               $email        The invited email address.
+	 * @return bool
+	 */
+	private static function is_valid_invite( $subscription, $key, $email ) {
+		$subscription_obj = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription_obj || ! $subscription_obj->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
+			return false;
+		}
+		$invite = self::get_invite_by_key( $subscription_obj, $key );
+		if ( ! $invite || $invite['email'] !== $email || self::is_invite_expired( $invite ) ) {
+			return false;
+		}
+		return true;
+	}
+
+	/**
 	 * Get the invite URL for a group subscription invitation.
 	 *
 	 * @param int    $subscription_id The subscription ID.
@@ -673,6 +696,12 @@ class Group_Subscription_Invite {
 		}
 
 		// Case 3: New user — auto-create account, verify email, and accept.
+		// Validate the invite first, so an invalid key cannot force account
+		// creation, email verification, and login for an arbitrary address.
+		if ( ! self::is_valid_invite( $subscription_id, $key, $email ) ) {
+			self::redirect_with_result( 'error_invite_invalid' );
+			return;
+		}
 		$user_id = Reader_Activation::register_reader( $email, false );
 		if ( is_wp_error( $user_id ) || ! $user_id ) {
 			do_action(
