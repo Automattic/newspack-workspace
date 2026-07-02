@@ -1665,8 +1665,9 @@ final class Conversion_Metric {
 					[ 'series' => [ 'registration_rate', 'subscription_attempt_rate' ] ]
 				);
 			}
-			$weeks[] = [
-				'week'                         => (string) ( $row['week_start'] ?? '' ),
+			$week_start = $row['week_start'] ?? '';
+			$weeks[]    = [
+				'week'                         => is_scalar( $week_start ) ? (string) $week_start : '',
 				'registration_conversion_rate' => (float) ( $row['registration_conversion_rate'] ?? 0.0 ),
 				'subscription_attempt_rate'    => (float) ( $row['subscription_attempt_rate'] ?? 0.0 ),
 			];
