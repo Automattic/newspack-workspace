@@ -52,6 +52,16 @@ export interface LineChartProps {
 	series?: LineSeries[];
 	/** Humanize an x-axis label for tooltips and the meta row. Defaults to identity. */
 	formatLabel?: ( label: string ) => string;
+	/**
+	 * Format a y-value for the tooltip and the single-series peak readout.
+	 * Defaults to `formatNumber`. Percentage curves pass `formatPercent` so a
+	 * cumulative share of `1` reads as "100%" rather than a bare "1".
+	 */
+	formatValue?: ( value: number ) => string;
+	/** Axis title rendered under the plot (e.g. "Days since first visit"). */
+	xAxisLabel?: string;
+	/** Axis title rendered above the plot (e.g. "% of readers converted"). */
+	yAxisLabel?: string;
 	/** Optional horizontal target line (value in the same units as the y-axis). */
 	referenceLine?: LineReferenceLine;
 	/**
@@ -69,7 +79,17 @@ const W = 600;
 const H = 160;
 const PAD = 8;
 
-const LineChart = ( { points, series, formatLabel = ( l: string ) => l, referenceLine, yMax, emptyMessage }: LineChartProps ) => {
+const LineChart = ( {
+	points,
+	series,
+	formatLabel = ( l: string ) => l,
+	formatValue = formatNumber,
+	xAxisLabel,
+	yAxisLabel,
+	referenceLine,
+	yMax,
+	emptyMessage,
+}: LineChartProps ) => {
 	const [ active, setActive ] = useState< number | null >( null );
 
 	const allSeries: LineSeries[] = series && series.length ? series : [ { name: '', points: points ?? [] } ];
@@ -103,10 +123,18 @@ const LineChart = ( { points, series, formatLabel = ( l: string ) => l, referenc
 	const xAt = ( i: number ) => PAD + i * stepX;
 	const yAt = ( v: number ) => H - PAD - ( ( ( v || 0 ) - min ) / span ) * ( H - PAD * 2 );
 
+	// Evenly-spaced horizontal gridlines across the value domain give the
+	// plotted line a floor to sit on instead of floating in the plot box. The
+	// lowest line (k === 0, at the domain minimum) is drawn as a stronger
+	// baseline; the rest are recessive hairlines behind the series.
+	const GRID_STEPS = 4;
+	const gridValues = Array.from( { length: GRID_STEPS + 1 }, ( _g, k ) => min + ( span * k ) / GRID_STEPS );
+
 	const tooltipTop = active === null ? 0 : Math.min( ...allSeries.map( s => yAt( s.points[ active ]?.value ?? 0 ) ) );
 
 	return (
 		<div className="newspack-insights__line" onMouseLeave={ () => setActive( null ) }>
+			{ yAxisLabel && <span className="newspack-insights__line-axis newspack-insights__line-axis--y">{ yAxisLabel }</span> }
 			<div className="newspack-insights__line-plot">
 				<svg
 					viewBox={ `0 0 ${ W } ${ H }` }
@@ -115,6 +143,16 @@ const LineChart = ( { points, series, formatLabel = ( l: string ) => l, referenc
 					aria-label={ __( 'Time-series chart', 'newspack-plugin' ) }
 					preserveAspectRatio="none"
 				>
+					{ gridValues.map( ( v, k ) => (
+						<line
+							key={ `grid-${ k }` }
+							className={ k === 0 ? 'newspack-insights__line-baseline' : 'newspack-insights__line-grid' }
+							x1={ PAD }
+							x2={ W - PAD }
+							y1={ yAt( v ) }
+							y2={ yAt( v ) }
+						/>
+					) ) }
 					{ referenceLine && (
 						<line
 							className="newspack-insights__line-reference"
@@ -168,7 +206,7 @@ const LineChart = ( { points, series, formatLabel = ( l: string ) => l, referenc
 							<span key={ `tt-${ si }` } className="newspack-insights__chart-tooltip-row">
 								{ isMulti && <span className={ `newspack-insights__chart-tooltip-swatch is-series-${ si }` } aria-hidden="true" /> }
 								{ isMulti && <span className="newspack-insights__chart-tooltip-name">{ s.name }</span> }
-								<span className="newspack-insights__chart-tooltip-value">{ formatNumber( s.points[ active ]?.value ?? 0 ) }</span>
+								<span className="newspack-insights__chart-tooltip-value">{ formatValue( s.points[ active ]?.value ?? 0 ) }</span>
 							</span>
 						) ) }
 					</div>
@@ -187,11 +225,12 @@ const LineChart = ( { points, series, formatLabel = ( l: string ) => l, referenc
 				<div className="newspack-insights__line-meta">
 					<span>{ formatLabel( base[ 0 ].label ) }</span>
 					<span>
-						{ __( 'peak', 'newspack-plugin' ) }: { formatNumber( dataMax ) }
+						{ __( 'peak', 'newspack-plugin' ) }: { formatValue( dataMax ) }
 					</span>
 					<span>{ formatLabel( base[ n - 1 ].label ) }</span>
 				</div>
 			) }
+			{ xAxisLabel && <span className="newspack-insights__line-axis newspack-insights__line-axis--x">{ xAxisLabel }</span> }
 		</div>
 	);
 };

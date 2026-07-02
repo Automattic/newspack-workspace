@@ -21,6 +21,8 @@ import { __ } from '@wordpress/i18n';
 import type { ConversionCohortData } from '../../api/conversion';
 import SectionHeading from '../components/SectionHeading';
 import LineChart, { type LineSeries, type LineReferenceLine } from '../components/LineChart';
+import { formatPercent } from '../components/format';
+import { monthLabel } from './labels';
 import SectionState from './SectionState';
 
 export interface CohortRetentionSectionProps {
@@ -40,11 +42,12 @@ const toCohortSeries = ( data: ConversionCohortData ): LineSeries[] =>
 interface CohortChartProps {
 	title: string;
 	data: ConversionCohortData;
+	yAxisLabel: string;
 	yMax?: number;
 	referenceLine?: LineReferenceLine;
 }
 
-const CohortChart = ( { title, data, yMax, referenceLine }: CohortChartProps ) => (
+const CohortChart = ( { title, data, yAxisLabel, yMax, referenceLine }: CohortChartProps ) => (
 	<div className="newspack-insights__conversion-cohort-cell">
 		<h3 className="newspack-insights__conversion-subheading">{ title }</h3>
 		<SectionState
@@ -59,6 +62,10 @@ const CohortChart = ( { title, data, yMax, referenceLine }: CohortChartProps ) =
 				series={ toCohortSeries( data ) }
 				referenceLine={ referenceLine }
 				yMax={ yMax }
+				formatLabel={ monthLabel }
+				formatValue={ formatPercent }
+				xAxisLabel={ __( 'Months', 'newspack-plugin' ) }
+				yAxisLabel={ yAxisLabel }
 				emptyMessage={ __( 'No cohort data available yet.', 'newspack-plugin' ) }
 			/>
 		</SectionState>
@@ -90,11 +97,13 @@ const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => (
 				 */
 				title={ __( 'Registration → conversion', 'newspack-plugin' ) }
 				data={ current.registration_to_conversion_cohort }
+				yAxisLabel={ __( 'Percent converted', 'newspack-plugin' ) }
 			/>
 			<CohortChart
 				title={ __( 'Subscriber retention', 'newspack-plugin' ) }
 				data={ current.subscriber_retention_cohort }
 				yMax={ 1 }
+				yAxisLabel={ __( 'Percent retained', 'newspack-plugin' ) }
 				referenceLine={ current.subscriber_retention_cohort.reference_line ?? undefined }
 			/>
 		</div>

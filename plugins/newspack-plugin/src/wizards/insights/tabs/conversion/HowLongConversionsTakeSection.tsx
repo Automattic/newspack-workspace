@@ -22,7 +22,8 @@ import { __ } from '@wordpress/i18n';
  */
 import type { ConversionCumulativeMulti, ConversionCumulativePoint, ConversionWindow } from '../../api/conversion';
 import SectionHeading from '../components/SectionHeading';
-import { sourceLabel } from './labels';
+import { sourceLabel, dayLabel } from './labels';
+import { formatPercent } from '../components/format';
 import LineChart, { type LinePoint, type LineSeries } from '../components/LineChart';
 import SectionState from './SectionState';
 
@@ -78,6 +79,10 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 						<LineChart
 							points={ toLinePoints( current.time_to_register_distribution.points ) }
 							yMax={ 1 }
+							formatLabel={ dayLabel }
+							formatValue={ formatPercent }
+							xAxisLabel={ __( 'Days', 'newspack-plugin' ) }
+							yAxisLabel={ __( 'Percent registered', 'newspack-plugin' ) }
 							emptyMessage={ __( 'Time-to-register data will appear once registrations occur in this timeframe.', 'newspack-plugin' ) }
 						/>
 					</SectionState>
@@ -91,6 +96,10 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 						<LineChart
 							series={ toLineSeries( current.time_to_subscribe_distribution ) }
 							yMax={ 1 }
+							formatLabel={ dayLabel }
+							formatValue={ formatPercent }
+							xAxisLabel={ __( 'Days', 'newspack-plugin' ) }
+							yAxisLabel={ __( 'Percent subscribed', 'newspack-plugin' ) }
 							emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this timeframe.', 'newspack-plugin' ) }
 						/>
 					</SectionState>
@@ -104,6 +113,10 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 						<LineChart
 							series={ toLineSeries( current.time_to_donate_distribution ) }
 							yMax={ 1 }
+							formatLabel={ dayLabel }
+							formatValue={ formatPercent }
+							xAxisLabel={ __( 'Days', 'newspack-plugin' ) }
+							yAxisLabel={ __( 'Percent donated', 'newspack-plugin' ) }
 							emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this timeframe.', 'newspack-plugin' ) }
 						/>
 					</SectionState>
@@ -122,6 +135,10 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 							<LineChart
 								points={ toLinePoints( lag.points ) }
 								yMax={ 1 }
+								formatLabel={ dayLabel }
+								formatValue={ formatPercent }
+								xAxisLabel={ __( 'Days', 'newspack-plugin' ) }
+								yAxisLabel={ __( 'Percent who donated', 'newspack-plugin' ) }
 								emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this timeframe.', 'newspack-plugin' ) }
 							/>
 						</SectionState>

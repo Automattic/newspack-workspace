@@ -344,6 +344,21 @@
 		opacity: 0.12;
 	}
 
+	// Recessive horizontal gridlines behind the series — a light reference grid
+	// so the plotted line reads as sitting in a chart, not floating.
+	&__line-grid {
+		stroke: wp-colors.$gray-100;
+		stroke-width: 1;
+		vector-effect: non-scaling-stroke;
+	}
+
+	// The domain-minimum gridline, drawn stronger so the chart has a clear floor.
+	&__line-baseline {
+		stroke: wp-colors.$gray-300;
+		stroke-width: 1;
+		vector-effect: non-scaling-stroke;
+	}
+
 	&__line-stroke {
 		stroke: var( --series-color );
 		stroke-width: 2;
@@ -366,6 +381,25 @@
 		font-size: 11px;
 		color: wp-colors.$gray-600;
 		margin-top: 4px;
+	}
+
+	// Axis titles naming what each axis represents (e.g. "Days since first
+	// visit" under the x-axis, "% of readers converted" above the plot). The
+	// SVG uses non-uniform scaling, so axis titles live in HTML — not as SVG
+	// text that would stretch.
+	&__line-axis {
+		display: block;
+		font-size: 11px;
+		color: wp-colors.$gray-600;
+
+		&--y {
+			margin-bottom: 6px;
+		}
+
+		&--x {
+			margin-top: 6px;
+			text-align: center;
+		}
 	}
 
 	// Dark hover panel shared by the line + bar charts (NPPD-1649 fix #5).
