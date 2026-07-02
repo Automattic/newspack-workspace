@@ -2431,4 +2431,63 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 
 		$this->assertSame( 'any', Content_Rules::get_gate_content_rules_match( $gate_id ), 'Stored match mode must not be reset when the field is absent from the update payload' );
 	}
+
+	/**
+	 * Updating a gate via a payload that omits status must not reset a published
+	 * gate to draft (a draft gate stops enforcing).
+	 */
+	public function test_update_gate_without_status_preserves_stored_status() {
+		$gate_id          = Content_Gate::create_gate(
+			[
+				'title'  => 'Published Gate',
+				'status' => 'publish',
+			]
+		);
+		$this->gate_ids[] = $gate_id;
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Pre-condition: gate is published' );
+
+		// Simulate a REST update that omits the status field.
+		$sanitized = Content_Gate_API::sanitize_gate(
+			[
+				'title'    => 'Published Gate',
+				'priority' => 1,
+			]
+		);
+		$this->assertArrayNotHasKey( 'status', $sanitized, 'Missing status must not be injected into the sanitized output' );
+
+		Content_Gate::update_gate_settings( $gate_id, $sanitized );
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Stored status must not be reset when the field is absent from the update payload' );
+	}
+
+	/**
+	 * The site-wide default-status option is applied to new-gate payloads that omit
+	 * status, without overriding an explicit status, and without affecting direct
+	 * PHP callers of create_gate() (e.g. WooCommerce Memberships), which rely on
+	 * the 'publish' fallback.
+	 */
+	public function test_with_default_new_gate_status() {
+		Content_Gate::set_default_new_gate_status( 'publish' );
+
+		$defaulted = Content_Gate::with_default_new_gate_status( [ 'title' => 'New Gate' ] );
+		$this->assertSame( 'publish', $defaulted['status'], 'Omitted status must be filled from the site-wide default' );
+
+		$explicit = Content_Gate::with_default_new_gate_status(
+			[
+				'title'  => 'New Gate',
+				'status' => 'draft',
+			]
+		);
+		$this->assertSame( 'draft', $explicit['status'], 'Explicit status must not be overridden by the default' );
+
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Direct PHP Gate' ] );
+		$this->gate_ids[] = $gate_id;
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Direct create_gate() callers keep the publish fallback regardless of the option' );
+
+		Content_Gate::set_default_new_gate_status( 'draft' );
+		$gate_id_2        = Content_Gate::create_gate( [ 'title' => 'Direct PHP Gate 2' ] );
+		$this->gate_ids[] = $gate_id_2;
+		$this->assertSame( 'publish', get_post_status( $gate_id_2 ), 'Memberships-style callers must not be affected by a draft default' );
+
+		delete_option( Content_Gate::DEFAULT_STATUS_OPTION );
+	}
 }

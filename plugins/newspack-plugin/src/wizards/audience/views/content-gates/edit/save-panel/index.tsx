@@ -68,6 +68,7 @@ const SavePanel = ( { initialStatus, presaveChecksEnabled, summary, isSaving, on
 	return (
 		<Modal
 			__experimentalHideHeader
+			aria={ { labelledby: 'newspack-content-gate-save-panel-title' } }
 			className="newspack-content-gate-save-panel"
 			overlayClassName={ classnames( 'newspack-content-gate-save-panel__overlay', { 'is-animating-out': isClosing } ) }
 			onRequestClose={ onCancel }
@@ -86,7 +87,7 @@ const SavePanel = ( { initialStatus, presaveChecksEnabled, summary, isSaving, on
 				<div className="newspack-content-gate-save-panel__content">
 					<VStack className="newspack-content-gate-save-panel__body" spacing={ 4 }>
 						<VStack className="newspack-content-gate-save-panel__intro" spacing={ 2 }>
-							<span>
+							<span id="newspack-content-gate-save-panel-title">
 								<strong>{ __( 'Are you ready to save?', 'newspack-plugin' ) }</strong>
 							</span>
 							<span>{ __( 'Double-check your settings before saving.', 'newspack-plugin' ) }</span>

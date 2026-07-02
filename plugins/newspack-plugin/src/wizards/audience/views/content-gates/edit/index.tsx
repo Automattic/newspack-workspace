@@ -72,9 +72,7 @@ const getContentTypeFromRules = ( rules: GateContentRule[] ): 'all' | 'custom' |
 };
 
 const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SLUG, isNewsletter = false }: ContentGateEditProps ) => {
-	const [ defaultGateStatus, setDefaultGateStatus ] = useState< GateStatus >(
-		( ( window as any ).newspackAudienceContentGates?.default_gate_status as GateStatus ) || 'draft' // eslint-disable-line @typescript-eslint/no-explicit-any
-	);
+	const [ defaultGateStatus, setDefaultGateStatus ] = useState< GateStatus >( window.newspackAudienceContentGates?.default_gate_status || 'draft' );
 	const DEFAULT_GATE: Gate = {
 		id: 0,
 		title: '',
@@ -106,7 +104,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	const [ showPreferences, setShowPreferences ] = useState< boolean >( false );
 	const [ presaveChecksEnabled, setPresaveChecksEnabled ] = useState< boolean >(
 		// wp_localize_script stringifies booleans ('1'/''), so coerce to a real boolean.
-		Boolean( ( window as any ).newspackAudienceContentGates?.presave_checks_enabled ?? true ) // eslint-disable-line @typescript-eslint/no-explicit-any
+		Boolean( window.newspackAudienceContentGates?.presave_checks_enabled ?? true )
 	);
 	const isNew = _id === 'new' || ! id;
 	const isSaving = useRef( false );
@@ -146,7 +144,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 
 	const handleCreate = useCallback(
 		( redirectToLayout: '' | 'registration' | 'custom_access' = '', statusOverride?: GateStatus ) => {
-			if ( isFetching ) {
+			// Guard via the ref, not isFetching: the memoized closure would hold a stale isFetching.
+			if ( isSaving.current ) {
 				return;
 			}
 			isSaving.current = true;
@@ -194,7 +193,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 
 	const handleSave = useCallback(
 		( statusOverride?: GateStatus ) => {
-			if ( isFetching ) {
+			// Guard via the ref, not isFetching: the memoized closure would hold a stale isFetching.
+			if ( isSaving.current ) {
 				return;
 			}
 			isSaving.current = true;
@@ -264,12 +264,21 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		setShowSavePanel( false );
 		if ( keepChecks !== presaveChecksEnabled ) {
 			setPresaveChecksEnabled( keepChecks );
-			( window as any ).newspackAudienceContentGates.presave_checks_enabled = keepChecks; // eslint-disable-line @typescript-eslint/no-explicit-any
+			window.newspackAudienceContentGates.presave_checks_enabled = keepChecks;
 			apiFetch( {
 				path: `/newspack/v1/wizard/${ slug }/preferences`,
 				method: 'POST',
 				data: { presave_checks_enabled: keepChecks },
-			} ).catch( () => {} );
+			} ).catch( () => {
+				// Roll back the optimistic update so the UI reflects the persisted value.
+				setPresaveChecksEnabled( presaveChecksEnabled );
+				window.newspackAudienceContentGates.presave_checks_enabled = presaveChecksEnabled;
+				addNotice( {
+					message: __( 'The pre-save checks preference could not be saved.', 'newspack-plugin' ),
+					type: 'error',
+					id: 'content-gate-preferences-error',
+				} );
+			} );
 		}
 		if ( isNew ) {
 			handleCreate( '', chosenStatus );
@@ -531,8 +540,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 					onSaved={ ( { presaveChecksEnabled: nextChecks, defaultGateStatus: nextStatus } ) => {
 						setPresaveChecksEnabled( nextChecks );
 						setDefaultGateStatus( nextStatus );
-						( window as any ).newspackAudienceContentGates.presave_checks_enabled = nextChecks; // eslint-disable-line @typescript-eslint/no-explicit-any
-						( window as any ).newspackAudienceContentGates.default_gate_status = nextStatus; // eslint-disable-line @typescript-eslint/no-explicit-any
+						window.newspackAudienceContentGates.presave_checks_enabled = nextChecks;
+						window.newspackAudienceContentGates.default_gate_status = nextStatus;
 						addNotice( {
 							message: __( 'Preferences saved.', 'newspack-plugin' ),
 							type: 'success',

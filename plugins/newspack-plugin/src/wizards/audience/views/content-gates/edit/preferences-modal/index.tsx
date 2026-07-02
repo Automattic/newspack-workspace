@@ -10,6 +10,7 @@ import apiFetch from '@wordpress/api-fetch';
 import {
 	Modal,
 	Button,
+	Notice,
 	ToggleControl,
 	RadioControl,
 	__experimentalHStack as HStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -30,11 +31,13 @@ const PreferencesModal = ( { slug, presaveChecksEnabled, defaultGateStatus, onCl
 	const [ checksEnabled, setChecksEnabled ] = useState< boolean >( presaveChecksEnabled );
 	const [ status, setStatus ] = useState< GateStatus >( initialStatus );
 	const [ isSaving, setIsSaving ] = useState< boolean >( false );
+	const [ errorMessage, setErrorMessage ] = useState< string | null >( null );
 
 	const isDirty = checksEnabled !== presaveChecksEnabled || status !== initialStatus;
 
 	const handleSave = () => {
 		setIsSaving( true );
+		setErrorMessage( null );
 		apiFetch( {
 			path: `/newspack/v1/wizard/${ slug }/preferences`,
 			method: 'POST',
@@ -44,12 +47,20 @@ const PreferencesModal = ( { slug, presaveChecksEnabled, defaultGateStatus, onCl
 				onSaved( { presaveChecksEnabled: checksEnabled, defaultGateStatus: status } );
 				onClose();
 			} )
+			.catch( ( error: { message?: string } ) => {
+				setErrorMessage( error?.message || __( 'Preferences could not be saved. Please try again.', 'newspack-plugin' ) );
+			} )
 			.finally( () => setIsSaving( false ) );
 	};
 
 	return (
 		<Modal title={ __( 'Preferences', 'newspack-plugin' ) } size="medium" onRequestClose={ isSaving ? () => {} : onClose }>
 			<VStack spacing={ 6 }>
+				{ errorMessage && (
+					<Notice status="error" isDismissible={ false }>
+						{ errorMessage }
+					</Notice>
+				) }
 				<RadioControl
 					label={ __( 'Default status for new gates', 'newspack-plugin' ) }
 					help={ __(

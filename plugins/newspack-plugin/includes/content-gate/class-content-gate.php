@@ -1354,8 +1354,26 @@ class Content_Gate {
 	 */
 	public static function set_default_new_gate_status( $status ) {
 		$status = in_array( $status, [ 'publish', 'draft' ], true ) ? $status : 'draft';
-		update_option( self::DEFAULT_STATUS_OPTION, $status );
+		update_option( self::DEFAULT_STATUS_OPTION, $status, false );
 		return $status;
+	}
+
+	/**
+	 * Fill in the site-wide default status on a new-gate payload when none was provided.
+	 *
+	 * For REST create endpoints only. Direct PHP callers of create_gate() (e.g. the
+	 * WooCommerce Memberships auto-gate creators) rely on its 'publish' fallback,
+	 * which must not be routed through this option.
+	 *
+	 * @param array $gate Gate payload.
+	 *
+	 * @return array The gate payload with a status.
+	 */
+	public static function with_default_new_gate_status( $gate ) {
+		if ( is_array( $gate ) && ! isset( $gate['status'] ) ) {
+			$gate['status'] = self::get_default_new_gate_status();
+		}
+		return $gate;
 	}
 
 	/**
