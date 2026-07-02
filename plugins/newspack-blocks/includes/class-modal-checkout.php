@@ -205,8 +205,6 @@ final class Modal_Checkout {
 		// Make the current cart price available to the JavaScript.
 		add_action( 'wp_ajax_get_cart_total', [ __CLASS__, 'get_cart_total_js' ] );
 		add_action( 'wp_ajax_nopriv_get_cart_total', [ __CLASS__, 'get_cart_total_js' ] );
-		add_action( 'wp_ajax_get_cart_product_summary', [ __CLASS__, 'get_cart_product_summary_js' ] );
-		add_action( 'wp_ajax_nopriv_get_cart_product_summary', [ __CLASS__, 'get_cart_product_summary_js' ] );
 
 		// Wrap required checkbox text in a span so it works nicely with the Newspack UI grid layout.
 		add_filter( 'woocommerce_form_field_checkbox', [ __CLASS__, 'wrap_required_checkbox_text' ], 10, 4 );
@@ -1722,112 +1720,6 @@ final class Modal_Checkout {
 			self::get_modal_checkout_labels( 'checkout_confirm' ),
 			'<span class="cart-price">' . html_entity_decode( $total, ENT_COMPAT ) . '</span>'
 		);
-	}
-
-	/**
-	 * Get validated cart item context for the modal checkout product summary.
-	 *
-	 * @param \WC_Cart $cart Cart object.
-	 *
-	 * @return array|null
-	 */
-	private static function get_cart_product_summary_context( $cart ) {
-		if ( ! $cart || 1 !== $cart->get_cart_contents_count() ) {
-			return null;
-		}
-		$cart_item_key = array_key_first( $cart->get_cart() );
-		$cart_item     = $cart->get_cart_item( $cart_item_key );
-
-		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
-		$product    = apply_filters( 'woocommerce_cart_item_product', $cart_item['data'], $cart_item, $cart_item_key );
-		$is_visible = $product && $product->exists() && $cart_item['quantity'] > 0 && apply_filters( 'woocommerce_checkout_cart_item_visible', true, $cart_item, $cart_item_key );
-		// phpcs:enable
-
-		return [
-			'cart_item_key' => $cart_item_key,
-			'cart_item'     => $cart_item,
-			'product'       => $product,
-			'is_visible'    => $is_visible,
-		];
-	}
-
-	/**
-	 * Get the cart product summary shown at the top of modal checkout.
-	 *
-	 * @param \WC_Cart|null $cart    Cart object.
-	 * @param array|null    $context Validated cart item context.
-	 */
-	private static function get_cart_product_summary( $cart = null, $context = null ) {
-		if ( ! $cart ) {
-			if ( ! function_exists( 'WC' ) ) {
-				return '';
-			}
-			$cart = \WC()->cart;
-		}
-		$context = $context ? $context : self::get_cart_product_summary_context( $cart );
-		if ( ! $context || ! $context['is_visible'] ) {
-			return '';
-		}
-
-		$cart_item_key    = $context['cart_item_key'];
-		$cart_item        = $context['cart_item'];
-		$product          = $context['product'];
-		$allowed_html     = self::get_cart_product_summary_allowed_html();
-		// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- WooCommerce hooks.
-		$product_name     = apply_filters(
-			'woocommerce_cart_item_name',
-			$product->get_name(),
-			$cart_item,
-			$cart_item_key
-		);
-		$product_subtotal = apply_filters(
-			'woocommerce_cart_item_subtotal',
-			$cart->get_product_subtotal( $product, $cart_item['quantity'] ),
-			$cart_item,
-			$cart_item_key
-		);
-		// phpcs:enable
-
-		$summary = $product_name . ': ';
-		if ( function_exists( 'wc_get_formatted_cart_item_data' ) ) {
-			$summary .= wc_get_formatted_cart_item_data( $cart_item );
-		}
-		$summary .= $product_subtotal;
-		return wp_kses( $summary, $allowed_html );
-	}
-
-	/**
-	 * Get allowed HTML for the modal checkout product summary.
-	 *
-	 * @return array Allowed HTML tags and attributes.
-	 */
-	private static function get_cart_product_summary_allowed_html() {
-		$allowed_html = wp_kses_allowed_html( 'post' );
-
-		$allowed_html['bdi'] = [
-			'class' => true,
-			'dir'   => true,
-		];
-
-		if ( ! isset( $allowed_html['span'] ) ) {
-			$allowed_html['span'] = [];
-		}
-		$allowed_html['span']['class'] = true;
-
-		if ( ! isset( $allowed_html['small'] ) ) {
-			$allowed_html['small'] = [];
-		}
-		$allowed_html['small']['class'] = true;
-
-		return $allowed_html;
-	}
-
-	/**
-	 * Get the updated cart product summary for JavaScript.
-	 */
-	public static function get_cart_product_summary_js() {
-		echo self::get_cart_product_summary(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
-		wp_die();
 	}
 
 	/**
