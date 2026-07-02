@@ -1,3 +1,10 @@
+## newspack [6.44.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.6...newspack@6.44.7) (2026-07-02)
+
+
+### Bug Fixes
+
+* **access-control:** restore long-lived institutional IP access cookie ([14b3aad](https://github.com/Automattic/newspack-workspace/commit/14b3aadc02463132b8b251aa412a649529205f13)), closes [#136](https://github.com/Automattic/newspack-workspace/issues/136) [#4749](https://github.com/Automattic/newspack-workspace/issues/4749) [#4749](https://github.com/Automattic/newspack-workspace/issues/4749)
+
 ## newspack [6.44.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.5...newspack@6.44.6) (2026-07-02)
 
 
