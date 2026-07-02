@@ -172,4 +172,62 @@ class ProductsUiTest extends WP_UnitTestCase {
 			$this->products_ui->user_can_delete_premium_listing( $listing_id )
 		);
 	}
+
+	/**
+	 * A subscription with no listings yet has its full included allowance.
+	 */
+	public function test_remaining_included_listings_full_when_none_used() {
+		$this->assertSame( 10, $this->products_ui->get_remaining_included_listings( 500 ) );
+	}
+
+	/**
+	 * Each premium listing attributed to the subscription decrements the allowance.
+	 */
+	public function test_remaining_included_listings_decrements_with_usage() {
+		$owner = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		for ( $i = 0; $i < 3; $i++ ) {
+			$this->create_premium_listing( $owner, 'event', true, 501 );
+		}
+
+		$this->assertSame( 7, $this->products_ui->get_remaining_included_listings( 501 ) );
+	}
+
+	/**
+	 * The allowance bottoms out at zero once fully used (quota exhausted).
+	 */
+	public function test_remaining_included_listings_zero_when_exhausted() {
+		$owner = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		for ( $i = 0; $i < 10; $i++ ) {
+			$this->create_premium_listing( $owner, 'event', true, 502 );
+		}
+
+		$this->assertSame( 0, $this->products_ui->get_remaining_included_listings( 502 ) );
+	}
+
+	/**
+	 * Listings belonging to other subscriptions do not count against the allowance.
+	 */
+	public function test_remaining_included_listings_ignores_other_subscriptions() {
+		$owner = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		$this->create_premium_listing( $owner, 'event', true, 601 );
+		$this->create_premium_listing( $owner, 'event', true, 602 );
+
+		$this->assertSame( 9, $this->products_ui->get_remaining_included_listings( 601 ) );
+	}
+
+	/**
+	 * An invalid subscription id yields no allowance.
+	 */
+	public function test_remaining_included_listings_zero_for_invalid_subscription() {
+		$this->assertSame( 0, $this->products_ui->get_remaining_included_listings( 0 ) );
+	}
+
+	/**
+	 * Create authorization fails closed when WooCommerce Subscriptions is
+	 * unavailable (as in this test harness) — no subscription can be verified.
+	 */
+	public function test_cannot_create_premium_listing_without_woocommerce() {
+		$this->assertFalse( function_exists( 'wcs_get_subscription' ), 'WooCommerce Subscriptions should be absent in the listings test harness.' );
+		$this->assertFalse( $this->products_ui->user_can_create_premium_listing( 500, 20 ) );
+	}
 }

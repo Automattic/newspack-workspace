@@ -630,6 +630,24 @@ final class Products_Ui extends Products {
 		}
 
 		// Must have included listings remaining.
+		return $this->get_remaining_included_listings( $subscription_id ) > 0;
+	}
+
+	/**
+	 * Count the self-serve premium listings still available on a subscription.
+	 *
+	 * A premium subscription grants up to `$this->total_included_listings`
+	 * Event/Marketplace listings; this returns how many remain unused.
+	 *
+	 * @param int $subscription_id Subscription ID.
+	 * @return int Remaining included listings (never negative).
+	 */
+	public function get_remaining_included_listings( $subscription_id ) {
+		$subscription_id = (int) $subscription_id;
+		if ( ! $subscription_id ) {
+			return 0;
+		}
+
 		$existing_listings = get_posts(
 			[
 				'meta_key'       => self::POST_META_KEYS['listing_subscription'],
@@ -644,7 +662,7 @@ final class Products_Ui extends Products {
 			]
 		);
 
-		return count( $existing_listings ) < $this->total_included_listings;
+		return max( 0, $this->total_included_listings - count( $existing_listings ) );
 	}
 
 	/**
@@ -689,6 +707,10 @@ final class Products_Ui extends Products {
 		if ( ! wp_verify_nonce( $nonce, $this->create_nonce ) ) {
 			return;
 		}
+
+		// Normalize the subscription id once so the ownership/quota checks and the
+		// stored listing meta all use the same value (NPPM-2965).
+		$subscription_id = (int) $subscription_id;
 
 		// Verify the current user owns the subscription and has quota remaining
 		// before creating a listing; the nonce alone is not authorization (NPPM-2965).
