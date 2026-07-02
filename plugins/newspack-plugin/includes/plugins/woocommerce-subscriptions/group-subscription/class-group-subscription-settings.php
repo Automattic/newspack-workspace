@@ -891,7 +891,8 @@ class Group_Subscription_Settings {
 
 	/**
 	 * Apply the group subscription filter to a set of query args by mutating
-	 * post__in / post__not_in. Shared by the HPOS and CPT filter callbacks.
+	 * post__in / post__not_in. Shared by the HPOS and CPT filter callbacks,
+	 * and by the subscriptions CSV exporter (Subscriptions_CSV_Exporter).
 	 *
 	 * @param array  $args      The query args (HPOS) or query vars (CPT).
 	 * @param string $filter    Either 'group' or 'non-group'.
@@ -899,7 +900,7 @@ class Group_Subscription_Settings {
 	 *
 	 * @return array The mutated args.
 	 */
-	private static function apply_group_filter( $args, $filter, $group_ids ) {
+	public static function apply_group_filter( $args, $filter, $group_ids ) {
 		if ( 'group' === $filter ) {
 			if ( empty( $group_ids ) ) {
 				$args['post__in'] = [ 0 ];
