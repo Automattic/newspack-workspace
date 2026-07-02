@@ -113,4 +113,76 @@ class Test_Group_Subscription_Invite extends WP_UnitTestCase {
 			'A valid invite creates a reader account for a new invitee.'
 		);
 	}
+
+	/**
+	 * A wrong key against a real active subscription is rejected at the invite-key
+	 * lookup (past the subscription check) and creates no account.
+	 */
+	public function test_wrong_key_with_active_subscription_does_not_create_account() {
+		$email        = 'nppm2966-wrongkey@example.test';
+		$subscription = wcs_create_subscription(
+			[
+				'id'     => 20,
+				'status' => 'active',
+				'meta'   => [
+					'newspack_group_subscription_invites' => [
+						'the-real-key' => [
+							'email'      => $email,
+							'expiration' => time() + HOUR_IN_SECONDS,
+						],
+					],
+				],
+			]
+		);
+		self::assertFalse( get_user_by( 'email', $email ), 'Precondition: no account for the email.' );
+
+		$_GET['action']       = Group_Subscription_Invite::QUERY_ARG;
+		$_GET['key']          = 'not-the-real-key';
+		$_GET['email']        = $email;
+		$_GET['subscription'] = (string) $subscription->get_id();
+
+		$this->run_invite_request();
+
+		self::assertFalse(
+			get_user_by( 'email', $email ),
+			'A wrong key against an active subscription must not create an account.'
+		);
+	}
+
+	/**
+	 * A valid key whose invite is for a different email is rejected at the email-match
+	 * check and creates no account for the requesting address.
+	 */
+	public function test_mismatched_email_with_valid_key_does_not_create_account() {
+		$invited_email  = 'nppm2966-invited@example.test';
+		$attacker_email = 'nppm2966-attacker@example.test';
+		$key            = 'the-real-key';
+		$subscription   = wcs_create_subscription(
+			[
+				'id'     => 21,
+				'status' => 'active',
+				'meta'   => [
+					'newspack_group_subscription_invites' => [
+						$key => [
+							'email'      => $invited_email,
+							'expiration' => time() + HOUR_IN_SECONDS,
+						],
+					],
+				],
+			]
+		);
+		self::assertFalse( get_user_by( 'email', $attacker_email ), 'Precondition: no account for the email.' );
+
+		$_GET['action']       = Group_Subscription_Invite::QUERY_ARG;
+		$_GET['key']          = $key;
+		$_GET['email']        = $attacker_email;
+		$_GET['subscription'] = (string) $subscription->get_id();
+
+		$this->run_invite_request();
+
+		self::assertFalse(
+			get_user_by( 'email', $attacker_email ),
+			'A valid key with a mismatched email must not create an account for the requesting address.'
+		);
+	}
 }
