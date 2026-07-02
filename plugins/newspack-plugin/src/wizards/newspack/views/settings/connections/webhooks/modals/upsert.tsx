@@ -110,6 +110,7 @@ const Upsert = ( {
 		<Fragment>
 			<Modal
 				ref={ modalRef }
+				size="full"
 				title={ __( 'Webhook Endpoint', 'newspack-plugin' ) }
 				onRequestClose={ () => {
 					setAction( null, endpoint.id );
