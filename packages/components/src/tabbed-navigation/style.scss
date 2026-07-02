@@ -2,10 +2,12 @@
  * Tabbed Navigation
  */
 
+@use "../../../colors/colors.module" as colors;
 @use "~@wordpress/base-styles/colors" as wp-colors;
 
 .newspack-tabbed-navigation {
 	background: white;
+	box-shadow: 0 -1px 0 inset wp-colors.$gray-300;
 	width: 100%;
 
 	@media only screen and ( min-width: 600px ) {
@@ -18,65 +20,32 @@
 		top: 32px;
 	}
 
-	ul {
-		box-shadow: 0 -1px 0 inset wp-colors.$gray-300;
-		display: flex;
-		flex-wrap: wrap;
-		margin: 0;
+	// Newspack accent for the active-tab indicator. Scoped inside the
+	// ThemeProvider subtree, whose inline token values would otherwise win.
+	.newspack-tabbed-navigation__tabs {
+		/* stylelint-disable-next-line plugin-wpds/no-setting-wpds-custom-properties -- deliberate Newspack brand override of the indicator token. */
+		--wpds-color-stroke-interactive-neutral-strong: #{colors.$primary-600};
 	}
 
-	li {
-		margin-bottom: 0;
-		width: 100%;
+	// @wordpress/ui's tab styles live in the `wp-ui` cascade layer, so
+	// wp-admin's unlayered link rules would otherwise win these properties.
+	// Values mirror the design-system foreground-interactive-neutral tokens.
+	a[role="tab"] {
+		color: wp-colors.$gray-900;
+		text-decoration: none;
 
-		@media screen and ( min-width: 600px ) {
-			width: auto;
+		&:hover,
+		&:active,
+		&[aria-selected="true"] {
+			color: wp-colors.$gray-900;
 		}
 
-		a {
-			align-items: center;
-			color: wp-colors.$gray-900;
-			display: flex;
-			font-weight: bold;
-			height: 48px;
-			outline: none;
-			padding: 12px 15px;
-			text-decoration: none;
+		&:focus {
+			box-shadow: none;
+		}
 
-			@media screen and ( min-width: 600px ) {
-				border-bottom: 4px solid transparent;
-				padding-bottom: 8px;
-			}
-
-			&:active,
-			&:focus,
-			&:hover {
-				color: var(--wp-admin-theme-color);
-			}
-
-			&:focus-visible {
-				outline: 2px solid var(--wp-admin-theme-color);
-				outline-offset: -2px;
-			}
-
-			&.selected {
-				box-shadow: inset 0 0 0 2px white, inset 0 0 0 4px var(--wp-admin-theme-color);
-
-				@media screen and ( min-width: 600px ) {
-					border-color: var(--wp-admin-theme-color);
-					box-shadow: none;
-				}
-			}
-
-			&.disabled {
-				cursor: not-allowed;
-				opacity: 0.3;
-				pointer-events: none;
-
-				&:hover {
-					color: inherit;
-				}
-			}
+		&[data-disabled] {
+			pointer-events: none;
 		}
 	}
 }
