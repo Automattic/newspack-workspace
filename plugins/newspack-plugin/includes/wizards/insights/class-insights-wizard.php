@@ -468,7 +468,95 @@ class Insights_Wizard extends Wizard {
 			// the client explicitly here.
 			'feedbackBeaconUrl'   => rest_url( 'newspack-insights/v1/feedback' ),
 			'feedbackBeaconNonce' => wp_create_nonce( 'wp_rest' ),
+			// Per-tab "next steps" links (NPPD-1842) — outcome-worded entry points
+			// to the matching help-site Playbooks flow, rendered as a strip in the
+			// tab footer. Product-owned mapping; see get_next_steps_links().
+			'nextStepsLinks'      => self::get_next_steps_links(),
 		];
+	}
+
+	/**
+	 * Per-tab "next steps" links (NPPD-1842).
+	 *
+	 * The in-product half of NPPD-1723: a static, outcome-framed strip pinned
+	 * below the metrics on each relevant tab, linking to the matching help-site
+	 * "Playbooks" goal flow. The whole bet is the copy — a link is worded as the
+	 * outcome ("Grow reader revenue"), never a generic "Help" or "Learn more".
+	 *
+	 * Product-owned mapping, held to 1–2 links per tab. A tab only gets a link
+	 * when the outcome squarely matches it, so tabs with no strong match (Gates,
+	 * Campaigns, Advertising in v1) are intentionally absent and render no strip.
+	 * The whole map is filterable so the mapping and copy can be tuned without a
+	 * code change.
+	 *
+	 * @return array<string, array<int, array{label: string, url: string}>> Map of tab key => ordered list of { label, url }.
+	 */
+	protected static function get_next_steps_links() {
+		// TEMPORARY: the Playbooks pages currently live only on the STAGING help
+		// site. Flip this base to https://help.newspack.com/playbooks/ once they
+		// are published to production help (NPPD-1843/1844/1845).
+		$base = 'https://help.newspackstaging.com/playbooks/';
+
+		$grow_newsletter_signups = [
+			'label' => __( 'Grow newsletter signups', 'newspack-plugin' ),
+			'url'   => $base . 'grow-newsletter-signups/',
+		];
+		$grow_reader_revenue = [
+			'label' => __( 'Grow reader revenue', 'newspack-plugin' ),
+			'url'   => $base . 'grow-reader-revenue/',
+		];
+		$recover_lapsed_donors = [
+			'label' => __( 'Recover lapsed donors', 'newspack-plugin' ),
+			'url'   => $base . 'recover-lapsed-donors/',
+		];
+
+		$links = [
+			'audience'    => [ $grow_newsletter_signups ],
+			'engagement'  => [ $grow_newsletter_signups ],
+			'conversion'  => [ $grow_newsletter_signups, $grow_reader_revenue ],
+			'subscribers' => [ $grow_reader_revenue ],
+			'donors'      => [ $grow_reader_revenue, $recover_lapsed_donors ],
+		];
+
+		/**
+		 * Filters the per-tab Insights "next steps" links (NPPD-1842).
+		 *
+		 * Keys are Insights tab slugs (audience, engagement, conversion, gates,
+		 * prompts, subscribers, donors, advertising); each value is an ordered
+		 * list of `[ 'label' => string, 'url' => string ]`. Return an empty list
+		 * (or omit the key) to hide the strip on that tab.
+		 *
+		 * @param array<string, array<int, array{label: string, url: string}>> $links Map of tab key => list of { label, url }.
+		 */
+		$filtered = apply_filters( 'newspack_insights_next_steps_links', $links );
+
+		// Harden: the filtered value is fed to the client and rendered into an
+		// href, so a malformed or malicious filter must not reach React. Keep only
+		// well-formed entries with a safe http(s) URL — esc_url_raw() strips
+		// disallowed schemes (e.g. javascript:), returning '' for them.
+		$sanitized = [];
+		if ( is_array( $filtered ) ) {
+			foreach ( $filtered as $tab => $tab_links ) {
+				if ( ! is_array( $tab_links ) ) {
+					continue;
+				}
+				foreach ( $tab_links as $link ) {
+					if ( ! is_array( $link ) || empty( $link['label'] ) || empty( $link['url'] ) ) {
+						continue;
+					}
+					$url = esc_url_raw( (string) $link['url'], [ 'http', 'https' ] );
+					if ( '' === $url ) {
+						continue;
+					}
+					$sanitized[ $tab ][] = [
+						'label' => (string) $link['label'],
+						'url'   => $url,
+					];
+				}
+			}
+		}
+
+		return $sanitized;
 	}
 
 	/**

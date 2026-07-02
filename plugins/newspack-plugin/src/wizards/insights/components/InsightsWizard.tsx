@@ -30,6 +30,7 @@ import DateRangePicker from './DateRangePicker';
 import CooldownNotice from './CooldownNotice';
 import PrintDocumentMeta from './PrintDocumentMeta';
 import TabFeedback from './TabFeedback';
+import NextSteps from './NextSteps';
 import FeedbackShipCallback from './FeedbackShipCallback';
 import TabSpinner from '../tabs/components/TabSpinner';
 import useComparisonMode from '../state/useComparisonMode';
@@ -41,6 +42,14 @@ export type TabKey = 'audience' | 'engagement' | 'conversion' | 'gates' | 'promp
 export interface TabDef {
 	key: TabKey;
 	label: string;
+}
+
+/** A single outcome-worded "next steps" link (NPPD-1842). */
+export interface NextStepLink {
+	/** Outcome-worded label, e.g. "Grow reader revenue" — never a generic "Help". */
+	label: string;
+	/** Absolute help-site URL. */
+	url: string;
 }
 
 export const ALL_TABS: TabDef[] = [
@@ -71,6 +80,14 @@ export interface InsightsBootConfig {
 	feedbackBeaconUrl: string;
 	/** `wp_rest` nonce for the abandon beacon (rides as a `_wpnonce` query param). */
 	feedbackBeaconNonce: string;
+	/**
+	 * Per-tab outcome-worded "next steps" links, rendered as a strip in the tab
+	 * footer below the metrics (NPPD-1842). Product-owned mapping supplied by
+	 * `get_next_steps_links()` in class-insights-wizard.php. Tabs with no strong
+	 * outcome match (Gates, Campaigns, Advertising in v1) are simply absent from
+	 * the map and render no strip. Optional so config fixtures need not set it.
+	 */
+	nextStepsLinks?: Partial< Record< TabKey, NextStepLink[] > >;
 }
 
 export interface InsightsWizardProps {
@@ -173,6 +190,7 @@ interface TabSectionRenderProps extends TabSectionProps {
 	tabKey: TabKey;
 	tabLabel: string;
 	publisherName: string;
+	nextStepsLinks: NextStepLink[];
 	feedbackBeaconUrl: string;
 	feedbackBeaconNonce: string;
 }
@@ -188,11 +206,21 @@ interface TabSectionRenderProps extends TabSectionProps {
  * `context` — even when a tab chunk fails to load (feedback about a broken tab
  * is still signal).
  */
-const TabSection = ( { tabKey, tabLabel, publisherName, range, previousRange, feedbackBeaconUrl, feedbackBeaconNonce }: TabSectionRenderProps ) => (
+const TabSection = ( {
+	tabKey,
+	tabLabel,
+	publisherName,
+	range,
+	previousRange,
+	nextStepsLinks,
+	feedbackBeaconUrl,
+	feedbackBeaconNonce,
+}: TabSectionRenderProps ) => (
 	<>
 		<PrintDocumentMeta tabLabel={ tabLabel } publisherName={ publisherName } range={ range } previousRange={ previousRange } />
 		<CooldownNotice tab={ tabKey } range={ range } previousRange={ previousRange } />
 		<FeedbackShipCallback context={ tabKey } />
+		<NextSteps links={ nextStepsLinks } />
 		<TabErrorBoundary key={ tabKey }>
 			<Suspense fallback={ <Fallback /> }>{ renderTabComponent( tabKey, { range, previousRange } ) }</Suspense>
 		</TabErrorBoundary>
@@ -267,6 +295,7 @@ const InsightsWizard = ( { config }: InsightsWizardProps ) => {
 			range,
 			previousRange,
 			publisherName: config.publisherName,
+			nextStepsLinks: config.nextStepsLinks?.[ t.key ] ?? [],
 			feedbackBeaconUrl: config.feedbackBeaconUrl,
 			feedbackBeaconNonce: config.feedbackBeaconNonce,
 		},
