@@ -32,7 +32,7 @@ const getItemValue = item => item.path || item.href;
  * @param {string|null} pathname Current router pathname, or null when rendered outside a router.
  * @return {boolean} Whether the item is active.
  */
-const isItemActive = ( item, pathname ) => {
+export const isItemActive = ( item, pathname ) => {
 	if ( item.selected ) {
 		return true;
 	}
@@ -106,7 +106,10 @@ const TabbedNavigationView = ( { items, className, disableUpcoming, history = nu
 									nativeButton={ false }
 									render={
 										// eslint-disable-next-line jsx-a11y/anchor-has-content, jsx-a11y/anchor-is-valid -- content is supplied via the Tab children through @wordpress/ui's render prop, and disabled tabs intentionally drop the href.
-										<a href={ isDisabled ? undefined : href } onClick={ event => onTabClick( event, item ) } />
+										<a
+											href={ isDisabled ? undefined : href }
+											onClick={ isDisabled ? undefined : event => onTabClick( event, item ) }
+										/>
 									}
 								>
 									{ item.label }
