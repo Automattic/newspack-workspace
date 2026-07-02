@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
-import { ExternalLink } from '@wordpress/components';
+import { ExternalLink, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { arrowLeft } from '@wordpress/icons';
 
 /**
@@ -132,11 +132,11 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 						/>
 					) }
 					<Card headerActions noBorder className="mt16">
-						<div className="flex justify-end w-100">
+						<HStack justify="flex-end">
 							<Button variant="primary" onClick={ updateGAMConfiguration }>
 								{ __( 'Save', 'newspack-plugin' ) }
 							</Button>
-						</div>
+						</HStack>
 					</Card>
 					<hr />
 				</>
@@ -178,19 +178,17 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 			{ isLegacy && serviceData.enabled && (
 				<>
 					<Notice noticeText={ __( 'Currently operating in legacy mode.', 'newspack-plugin' ) } isWarning />
-					<div className="flex items-end">
+					<HStack alignment="bottom" justify="flex-start" spacing={ 4 }>
 						<TextControl
 							label={ __( 'Network Code', 'newspack-plugin' ) }
 							value={ networkCode }
 							onChange={ setNetworkCode }
 							withMargin={ false }
 						/>
-						<span className="pl3">
-							<Button onClick={ updateLegacyNetworkCode } isPrimary>
-								{ __( 'Save', 'newspack-plugin' ) }
-							</Button>
-						</span>
-					</div>
+						<Button onClick={ updateLegacyNetworkCode } isPrimary>
+							{ __( 'Save', 'newspack-plugin' ) }
+						</Button>
+					</HStack>
 				</>
 			) }
 			<p>
