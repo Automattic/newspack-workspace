@@ -31,6 +31,7 @@ class On_Hold_Duration {
 		add_action( 'woocommerce_subscription_status_on-hold', [ __CLASS__, 'maybe_schedule_expiration' ], 10, 1 );
 		add_action( 'woocommerce_subscription_status_active', [ __CLASS__, 'maybe_unschedule_expiration' ], 10, 1 );
 		add_action( 'woocommerce_subscriptions_after_apply_retry_rule', [ __CLASS__, 'maybe_unschedule_expiration_on_retry' ], 10, 3 );
+		add_action( 'woocommerce_subscriptions_retry_status_updated', [ __CLASS__, 'maybe_reschedule_expiration_on_retry_end' ], 10, 2 );
 		add_action( 'woocommerce_subscription_payment_failed', [ __CLASS__, 'trash_subscription_on_failed_payment' ], 10, 2 );
 		add_action( self::AS_HOOK, [ __CLASS__, 'handle_scheduled_action' ] );
 	}
@@ -162,6 +163,38 @@ class On_Hold_Duration {
 	public static function maybe_unschedule_expiration_on_retry( $retry_rule, $last_order, $subscription ) {
 		if ( $subscription->get_date( 'payment_retry' ) > 0 ) {
 			self::maybe_unschedule_expiration( $subscription );
+		}
+	}
+
+	/**
+	 * Re-arm the on-hold expiration when a payment retry ends without a
+	 * replacement retry being scheduled.
+	 *
+	 * The primary scheduler ({@see maybe_schedule_expiration}) only runs on the
+	 * transition into the on-hold status. When a pending retry is cancelled —
+	 * e.g. by the Stripe gateway after Stripe Radar blocks a renewal payment —
+	 * the subscription is already on-hold, so that hook never fires again. Both
+	 * expiration paths (the retry-rule progression and the scheduled action) are
+	 * then lost, leaving the subscription on-hold indefinitely.
+	 *
+	 * This listens for a retry reaching a terminal status and, when the related
+	 * subscription is left on-hold with no pending retry, schedules the
+	 * expiration so the On-Hold Duration is still honored.
+	 *
+	 * @param \WCS_Retry $retry      The retry whose status changed.
+	 * @param string     $new_status The new retry status.
+	 */
+	public static function maybe_reschedule_expiration_on_retry_end( $retry, $new_status ) {
+		// Pending/processing retries still drive their own progression; only act once the retry has stopped.
+		if ( in_array( $new_status, [ 'pending', 'processing' ], true ) ) {
+			return;
+		}
+
+		foreach ( wcs_get_subscriptions_for_renewal_order( $retry->get_order_id() ) as $subscription ) {
+			// A subscription is only stranded when it is left on-hold with no further retry queued.
+			if ( 'on-hold' === $subscription->get_status() && 0 === $subscription->get_date( 'payment_retry' ) ) {
+				self::maybe_schedule_expiration( $subscription );
+			}
 		}
 	}
 
