@@ -40,9 +40,11 @@ class DataApiTest extends WP_UnitTestCase {
 	 * @return string Prompt post_content.
 	 */
 	private function button_prompt( $href ) {
+		// Embed the raw URL, matching how Gutenberg serializes core/button attrs.
+		// esc_url() would entity-encode characters like "&" and skew classification.
 		return sprintf(
 			'<!-- wp:buttons --><div class="wp-block-buttons"><!-- wp:button {"url":"%1$s"} --><div class="wp-block-button"><a class="wp-block-button__link" href="%1$s">Act now</a></div><!-- /wp:button --></div><!-- /wp:buttons -->',
-			esc_url( $href )
+			$href
 		);
 	}
 
@@ -260,6 +262,23 @@ class DataApiTest extends WP_UnitTestCase {
 		$content .= $this->button_prompt( 'https://fundjournalism.org/donate/' );
 		$hit      = Newspack_Popups_Data_Api::classify_blockless_cta( $content );
 		$this->assertEquals( 'donation', $hit['intent'] );
+	}
+
+	/**
+	 * Same intent from different sources resolves deterministically to the
+	 * highest-confidence source (processor beats pattern).
+	 */
+	public function test_same_intent_prefers_higher_confidence_source() {
+		$content  = $this->button_prompt( 'https://example.org/donate/' ); // Donation via pattern.
+		$content .= $this->button_prompt( 'https://fundjournalism.org/give/' ); // Donation via processor.
+		$hit      = Newspack_Popups_Data_Api::classify_blockless_cta( $content );
+		$this->assertEquals(
+			[
+				'intent' => 'donation',
+				'source' => 'processor',
+			],
+			$hit
+		);
 	}
 
 	/**

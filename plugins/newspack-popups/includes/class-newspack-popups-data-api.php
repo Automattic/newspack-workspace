@@ -261,10 +261,17 @@ final class Newspack_Popups_Data_Api {
 			if ( 1 < count( $distinct ) ) {
 				return null; // Conflicting conversion signals -> abstain.
 			}
+			// All remaining hits share one intent, so break ties on source confidence
+			// (site_config > processor > pattern) for a deterministic, best-available source.
+			$source_rank = [
+				'site_config' => 1,
+				'processor'   => 2,
+				'pattern'     => 3,
+			];
 			usort(
 				$conversion,
-				function ( $a, $b ) use ( $precedence ) {
-					return $precedence[ $a['intent'] ] <=> $precedence[ $b['intent'] ];
+				function ( $a, $b ) use ( $source_rank ) {
+					return ( $source_rank[ $a['source'] ] ?? PHP_INT_MAX ) <=> ( $source_rank[ $b['source'] ] ?? PHP_INT_MAX );
 				}
 			);
 			return $conversion[0];
