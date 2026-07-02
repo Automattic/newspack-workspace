@@ -17,6 +17,21 @@
 @use "../../../../../packages/colors/colors.module" as colors;
 @use "../components/insights-charts";
 
+// Shared card chrome for this tab's chart cells (pie / curve / cohort / rate
+// trends). Matches the funnel + scorecard + Audience-tab chart-card treatment
+// (white fill, gray-200 hairline, 4px radius, 16px padding) so every section
+// reads as the same bounded card instead of a chart floating on the page.
+// `height: 100%` lets cards in a row stretch to the tallest, keeping row edges
+// aligned.
+@mixin conversion-chart-card {
+	min-width: 0;
+	height: 100%;
+	padding: 16px;
+	background-color: #fff;
+	border: 1px solid wp-colors.$gray-200;
+	border-radius: 4px;
+}
+
 .newspack-insights {
 	&__conversion-tab {
 		display: flex;
@@ -93,11 +108,11 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 		gap: 24px;
-		align-items: start;
+		align-items: stretch;
 	}
 
 	&__conversion-pie-cell {
-		min-width: 0;
+		@include conversion-chart-card;
 	}
 
 	// Section 4 — 2×2 grid of cumulative-distribution curves.
@@ -105,11 +120,11 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 		gap: 24px;
-		align-items: start;
+		align-items: stretch;
 	}
 
 	&__conversion-curve-cell {
-		min-width: 0;
+		@include conversion-chart-card;
 	}
 
 	// Section 5 — two cohort curves stacked vertically.
@@ -120,7 +135,12 @@
 	}
 
 	&__conversion-cohort-cell {
-		min-width: 0;
+		@include conversion-chart-card;
+	}
+
+	// Section 6 — single full-width weekly rate-trends curve.
+	&__conversion-rate-trends-cell {
+		@include conversion-chart-card;
 	}
 
 	// Section 8.4 — top-pages table block.

@@ -67,4 +67,23 @@ describe( 'LineChart render', () => {
 		render( <LineChart points={ [] } /> );
 		expect( screen.getByText( 'No data in this timeframe.' ) ).toBeInTheDocument();
 	} );
+
+	it( 'renders x- and y-axis titles when provided', () => {
+		render( <LineChart points={ [ pt( '0', 0.1 ), pt( '30', 0.5 ) ] } xAxisLabel="Days" yAxisLabel="Percent registered" /> );
+		expect( screen.getByText( 'Days' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Percent registered' ) ).toBeInTheDocument();
+	} );
+
+	it( 'formats the single-series peak readout with formatValue', () => {
+		// A cumulative share of 1 must read as "100%", not a bare "1".
+		const asPercent = ( v: number ) => `${ Math.round( v * 100 ) }%`;
+		render( <LineChart points={ [ pt( '0', 0.25 ), pt( '30', 1 ) ] } formatValue={ asPercent } /> );
+		expect( screen.getByText( 'peak: 100%' ) ).toBeInTheDocument();
+	} );
+
+	it( 'humanizes x-axis point labels through formatLabel in the meta row', () => {
+		render( <LineChart points={ [ pt( '0', 0.1 ), pt( '90', 0.9 ) ] } formatLabel={ d => `Day ${ d }` } /> );
+		expect( screen.getByText( 'Day 0' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Day 90' ) ).toBeInTheDocument();
+	} );
 } );

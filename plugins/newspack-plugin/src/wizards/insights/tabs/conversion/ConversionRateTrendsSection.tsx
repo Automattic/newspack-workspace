@@ -19,6 +19,8 @@ import { __ } from '@wordpress/i18n';
 import type { ConversionWeekPoint, ConversionWeeklyTrendsData } from '../../api/conversion';
 import SectionHeading from '../components/SectionHeading';
 import LineChart, { type LineSeries } from '../components/LineChart';
+import { formatPercent } from '../components/format';
+import { weekLabel } from './labels';
 import SectionState from './SectionState';
 
 export interface ConversionRateTrendsSectionProps {
@@ -66,15 +68,21 @@ const ConversionRateTrendsSection = ( { current }: ConversionRateTrendsSectionPr
 				'newspack-plugin'
 			) }
 		/>
-		<SectionState
-			state={ current.weekly_conversion_rates.state }
-			emptyMessage={ __( 'Weekly trends will appear once the timeframe contains at least 4 weeks of data.', 'newspack-plugin' ) }
-		>
-			<LineChart
-				series={ toTrendSeries( current.weekly_conversion_rates ) }
+		<div className="newspack-insights__conversion-rate-trends-cell">
+			<SectionState
+				state={ current.weekly_conversion_rates.state }
 				emptyMessage={ __( 'Weekly trends will appear once the timeframe contains at least 4 weeks of data.', 'newspack-plugin' ) }
-			/>
-		</SectionState>
+			>
+				<LineChart
+					series={ toTrendSeries( current.weekly_conversion_rates ) }
+					formatLabel={ weekLabel }
+					formatValue={ formatPercent }
+					xAxisLabel={ __( 'Week', 'newspack-plugin' ) }
+					yAxisLabel={ __( 'Conversion rate', 'newspack-plugin' ) }
+					emptyMessage={ __( 'Weekly trends will appear once the timeframe contains at least 4 weeks of data.', 'newspack-plugin' ) }
+				/>
+			</SectionState>
+		</div>
 	</section>
 );
 
