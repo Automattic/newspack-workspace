@@ -7,7 +7,7 @@
  */
 import { useDispatch, useSelect } from '@wordpress/data';
 import { decodeEntities } from '@wordpress/html-entities';
-import { useState, useCallback, useEffect, useRef } from '@wordpress/element';
+import { useState, useCallback, useRef } from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -88,23 +88,15 @@ export function useWizardApiFetch( slug: string ) {
 		( select: ( namespace: string ) => WizardSelector ) => select( WIZARD_STORE_NAMESPACE ).getWizardData( slug ),
 		[ slug ]
 	);
-	const [ error, setError ] = useState< WizardApiError | null >( wizardData.error ?? null );
+	const [ error, setError ] = useState< WizardApiError | null >( null );
 
 	const requests = useRef< string[] >( [] );
 
-	useEffect( () => {
-		if ( wizardData?.error !== error ) {
-			setError( wizardData?.error ?? null );
-		}
-	}, [ wizardData?.error, error ] );
-
-	useEffect( () => {
-		updateWizardSettings( {
-			slug,
-			path: [ 'error' ],
-			value: error,
-		} );
-	}, [ error, updateWizardSettings, slug ] );
+	// Errors live in local component state only. Two effects used to sync `error`
+	// to and from the wizard store; because the store deep-clones on every write
+	// (breaking reference equality), that store->local / local->store pair raced
+	// into a flickering render loop on any fetch failure (NPPM-2733). The shared
+	// store holds serializable response data, never errors.
 
 	function resetError() {
 		setError( null );
@@ -153,7 +145,7 @@ export function useWizardApiFetch( slug: string ) {
 			const cacheKeyPath = removeQueryArgs( path ?? '' );
 			const { isCached = method === 'GET', updateCacheKey = null, updateCacheMethods = [], ...options } = opts;
 
-			const { error: cachedError, [ cacheKeyPath ]: { [ method ]: cachedMethod = null } = {} }: WizardData = wizardData;
+			const { [ cacheKeyPath ]: { [ method ]: cachedMethod = null } = {} }: WizardData = wizardData;
 
 			function thenCallback( response: T ) {
 				if ( isCached ) {
@@ -210,8 +202,8 @@ export function useWizardApiFetch( slug: string ) {
 			}
 
 			// Cache exists and is not empty, return it.
-			if ( isCached && ( cachedError || cachedMethod ) ) {
-				setError( cachedError );
+			if ( isCached && cachedMethod ) {
+				setError( null );
 				on( 'onSuccess', cachedMethod );
 				return cachedMethod;
 			}
