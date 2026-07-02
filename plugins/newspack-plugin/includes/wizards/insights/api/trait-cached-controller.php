@@ -130,6 +130,21 @@ trait Cached_Controller_Trait {
 	}
 
 	/**
+	 * Graft the previous window's payload into the current-window envelope as the
+	 * comparison data. Default: expose the previous window's metrics at top-level
+	 * `previous`. Controllers whose response embeds comparison data in additional
+	 * (non-top-level) slots override this to fill those too.
+	 *
+	 * @param array $current  Current-window base payload (its `previous` is null).
+	 * @param array $previous Previous-window base payload (its `current` holds the prior metrics).
+	 * @return array The current payload with comparison data grafted in.
+	 */
+	protected function graft_previous( array $current, array $previous ): array {
+		$current['previous'] = $previous['current'] ?? null;
+		return $current;
+	}
+
+	/**
 	 * Cache-aware GET. The CURRENT window is resolved through the durable/on-demand
 	 * pools under a comparison-stripped base key (so it hits the pre-warmed preset
 	 * entry, or a lazily-cached custom window). When comparison is on, the PREVIOUS
@@ -159,8 +174,8 @@ trait Cached_Controller_Trait {
 
 		$payload = $current_env['payload'];
 		if ( null !== $compare_start && null !== $compare_end ) {
-			$previous            = $this->build_window_payload( $compare_start, $compare_end );
-			$payload['previous'] = $previous['current'] ?? null;
+			$previous = $this->build_window_payload( $compare_start, $compare_end );
+			$payload  = $this->graft_previous( $payload, $previous );
 		}
 
 		$response = rest_ensure_response(
@@ -205,8 +220,8 @@ trait Cached_Controller_Trait {
 
 		$payload = $current_env['payload'];
 		if ( null !== $current_env['payload'] && null !== $compare_start && null !== $compare_end ) {
-			$previous            = $this->build_window_payload( $compare_start, $compare_end );
-			$payload['previous'] = $previous['current'] ?? null;
+			$previous = $this->build_window_payload( $compare_start, $compare_end );
+			$payload  = $this->graft_previous( $payload, $previous );
 		}
 
 		$response = rest_ensure_response(
