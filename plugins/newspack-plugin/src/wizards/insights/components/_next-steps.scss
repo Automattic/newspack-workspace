@@ -1,0 +1,65 @@
+/**
+ * Newspack Insights — per-tab "next steps" strip (NPPD-1842).
+ *
+ * Outcome-worded links to the matching help-site Playbooks flow, rendered by
+ * `NextSteps` in the tab footer, above the feedback affordance. Reads as a
+ * light, native guidance row: the outcome labels take the admin accent so
+ * they're clearly actionable, but the strip stays quiet chrome rather than a
+ * loud CTA card. Loaded by `src/wizards/insights/style.scss`.
+ */
+
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-insights {
+
+	// Sits inside the footer band (above the feedback row). The footer owns the
+	// top border + spacing; the strip only needs to separate itself from the
+	// feedback prompt below it.
+	&__next-steps {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 4px 16px;
+		margin-bottom: 20px;
+
+		@media print {
+			display: none;
+		}
+	}
+
+	&__next-steps-label {
+		font-size: 13px;
+		font-weight: 600;
+		color: wp-colors.$gray-700;
+	}
+
+	&__next-steps-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px 20px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	&__next-steps-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 13px;
+		font-weight: 500;
+		text-decoration: none;
+		color: var( --wp-admin-theme-color );
+
+		// Small external-link cue, since these open the help site in a new tab.
+		&::after {
+			content: "\2197";
+			font-size: 14px;
+		}
+
+		&:hover,
+		&:focus {
+			text-decoration: underline;
+		}
+	}
+}
