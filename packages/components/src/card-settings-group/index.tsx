@@ -24,7 +24,7 @@ const CardSettingsGroup = ( {
 	description = '',
 	isActive = false,
 	onEnable = () => {},
-	onHeaderClick = () => {},
+	onHeaderClick,
 }: {
 	actionType?: 'chevron' | 'toggle' | 'button' | 'link' | 'none';
 	children?: React.ReactNode;
