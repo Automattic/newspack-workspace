@@ -2,6 +2,7 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
+import { __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies.
@@ -28,11 +29,11 @@ const PopupAnalytics = () => (
 					{ __( ' to see how Campaign data is being recorded in GA.', 'newspack-plugin' ) },
 				</>
 			</p>
-			<Card buttonsCard noBorder>
+			<HStack justify="flex-start" spacing={ 4 } wrap>
 				<Button target="_blank" rel="noopener noreferrer" href="https://help.newspack.com/analytics/" isPrimary>
 					{ __( 'View the help page', 'newspack-plugin' ) }
 				</Button>
-			</Card>
+			</HStack>
 		</Card>
 	</div>
 );
