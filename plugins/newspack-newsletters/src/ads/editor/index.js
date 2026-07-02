@@ -7,7 +7,7 @@ import { useSelect, useDispatch } from '@wordpress/data';
 import { Fragment, useState } from '@wordpress/element';
 import { PluginDocumentSettingPanel, PluginPrePublishPanel, store as editPostStore } from '@wordpress/edit-post';
 import { registerPlugin } from '@wordpress/plugins';
-import { ToggleControl, TextControl, DatePicker, Notice, RangeControl, Button, Modal } from '@wordpress/components';
+import { ToggleControl, TextControl, DatePicker, Notice, RadioControl, RangeControl, Button, Modal } from '@wordpress/components';
 import { date as wpDate, format, isInTheFuture } from '@wordpress/date';
 import { SelectControl } from 'newspack-components';
 import AdPlacements from '../../components/ad-placements';
@@ -28,10 +28,11 @@ apiFetch.use( ( options, next ) => {
 } );
 
 function AdEdit() {
-	const { price, startDate, expiryDate, insertionStrategy, positionInContent, positionBlockCount } = useSelect( select => {
+	const { status, price, startDate, expiryDate, insertionStrategy, positionInContent, positionBlockCount } = useSelect( select => {
 		const { getEditedPostAttribute } = select( 'core/editor' );
 		const meta = getEditedPostAttribute( 'meta' );
 		return {
+			status: getEditedPostAttribute( 'status' ),
 			price: meta.price,
 			// Normalize to Y-m-d on read so all client-side date comparisons are
 			// plain string compares regardless of any legacy ISO-datetime value.
@@ -104,12 +105,35 @@ function AdEdit() {
 		};
 	}
 
-	// Remove the "post-status" (Summary) panel.
+	// Ads only need an on/off state: whether they run (`publish`) or not
+	// (`draft`). Scheduling is driven by the start/expiry date meta, and
+	// private/pending/password statuses never serve. Remove the native
+	// "Summary" panel (which offers all of those) and expose a single
+	// Active/Inactive control instead, matching the ads list Quick Edit.
 	removeEditorPanel( 'post-status' );
+
+	// `future`/`private`/etc. are edge statuses a publisher can't set from
+	// this control; map any publish-equivalent to Active and everything else
+	// to Inactive, and only write `publish`/`draft` back on an actual change.
+	const statusControl = [ 'publish', 'future' ].includes( status ) ? 'active' : 'inactive';
 
 	return (
 		<Fragment>
 			<PluginDocumentSettingPanel name="newsletters-ads-settings-panel" title={ __( 'Ad settings', 'newspack-newsletters' ) }>
+				<RadioControl
+					label={ __( 'Status', 'newspack-newsletters' ) }
+					selected={ statusControl }
+					options={ [
+						{ label: __( 'Active', 'newspack-newsletters' ), value: 'active' },
+						{ label: __( 'Inactive', 'newspack-newsletters' ), value: 'inactive' },
+					] }
+					onChange={ value => editPost( { status: value === 'active' ? 'publish' : 'draft' } ) }
+					help={ __(
+						'Active ads run according to their start and expiration dates. Inactive ads are never shown.',
+						'newspack-newsletters'
+					) }
+				/>
+				<hr />
 				<TextControl
 					type="number"
 					label={ __( 'Price', 'newspack-newsletters' ) }

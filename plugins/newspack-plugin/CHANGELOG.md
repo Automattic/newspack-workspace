@@ -1,3 +1,24 @@
+## newspack [6.44.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.3...newspack@6.44.4) (2026-07-02)
+
+
+### Bug Fixes
+
+* **content-gate:** keep commenting per Discussion Settings on metered posts (NPPD-1829, [#459](https://github.com/Automattic/newspack-workspace/issues/459)) ([43d4fc6](https://github.com/Automattic/newspack-workspace/commit/43d4fc64543b8e8be5ba21529ac6eb1194fbe0af))
+
+## newspack [6.44.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.2...newspack@6.44.3) (2026-07-01)
+
+
+### Bug Fixes
+
+* **oauth:** verify Google token audience on sign-in ([9aa30b9](https://github.com/Automattic/newspack-workspace/commit/9aa30b98495db08d968b2dc2ae0e4bb96fb28aef))
+
+## newspack [6.44.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.1...newspack@6.44.2) (2026-06-30)
+
+
+### Bug Fixes
+
+* **checkout:** sync repeat trial pricing in modal checkout ([#264](https://github.com/Automattic/newspack-workspace/issues/264)) ([#468](https://github.com/Automattic/newspack-workspace/issues/468)) ([d7d2356](https://github.com/Automattic/newspack-workspace/commit/d7d23564a1d350266fb9016caeee398eb211fe71))
+
 ## newspack [6.44.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.0...newspack@6.44.1) (2026-06-30)
 
 

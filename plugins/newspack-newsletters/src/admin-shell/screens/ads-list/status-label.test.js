@@ -10,14 +10,14 @@ describe( 'ads status-label', () => {
 		expect( labels.active ).toBe( 'Active' );
 		expect( labels.scheduled ).toBe( 'Scheduled' );
 		expect( labels.expired ).toBe( 'Expired' );
-		expect( labels.draft ).toBe( 'Draft' );
+		expect( labels.draft ).toBe( 'Inactive' );
 		expect( labels.trash ).toBe( 'Trash' );
 	} );
 
-	it( 'statusKindLabel returns the matching label or falls back to draft', () => {
+	it( 'statusKindLabel returns the matching label or falls back to the draft (Inactive) kind', () => {
 		expect( statusKindLabel( 'active' ) ).toBe( 'Active' );
 		expect( statusKindLabel( 'expired' ) ).toBe( 'Expired' );
-		expect( statusKindLabel( 'unknown' ) ).toBe( 'Draft' );
-		expect( statusKindLabel( '' ) ).toBe( 'Draft' );
+		expect( statusKindLabel( 'unknown' ) ).toBe( 'Inactive' );
+		expect( statusKindLabel( '' ) ).toBe( 'Inactive' );
 	} );
 } );
