@@ -1313,14 +1313,17 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	// --- C10: get_registered_to_subscriber_funnel --------------------------
 
 	/**
-	 * Build a mock Subscribers_Metric that stubs count_active_non_donation_subscribers_by_customer_ids.
+	 * Build a mock Subscribers_Metric whose subscription leg reads as configured.
 	 *
-	 * @param int $return Value to return for the stub.
+	 * NEWS-2598: step 3 of the Registered → Subscriber funnel is now computed
+	 * inside BigQuery (the hub emits a per-uid `became_subscriber` flag), so the
+	 * metric no longer resolves step 3 via a Woo customer_id join. This mock only
+	 * needs to mark the leg configured so the compute path runs.
+	 *
 	 * @return Subscribers_Metric
 	 */
-	private function subscribers_metric_returning_count( int $return ): Subscribers_Metric {
+	private function subscribers_metric_configured(): Subscribers_Metric {
 		$mock = $this->createMock( Subscribers_Metric::class );
-		$mock->method( 'count_active_non_donation_subscribers_by_customer_ids' )->willReturn( $return );
 		// NPPD-1742: a non-empty active-subscriber set marks the subscription leg
 		// configured, so the funnel logic runs instead of returning the hidden leg.
 		$mock->method( 'get_active_non_donation_subscriber_customer_ids' )->willReturn( [ 101 ] );
@@ -1328,14 +1331,17 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Build a mock Donors_Metric that stubs count_completed_donation_order_customers_by_customer_ids.
+	 * Build a mock Donors_Metric whose donation leg reads as configured.
 	 *
-	 * @param int $return Value to return for the stub.
+	 * NEWS-2598: step 3 of the Registered → Donor funnel is now computed inside
+	 * BigQuery (the hub emits a per-uid `became_donor` flag), so the metric no
+	 * longer resolves step 3 via a Woo customer_id join. This mock only needs to
+	 * mark the leg configured so the compute path runs.
+	 *
 	 * @return Donors_Metric
 	 */
-	private function donors_metric_returning_count( int $return ): Donors_Metric {
+	private function donors_metric_configured(): Donors_Metric {
 		$mock = $this->createMock( Donors_Metric::class );
-		$mock->method( 'count_completed_donation_order_customers_by_customer_ids' )->willReturn( $return );
 		// NPPD-1742: active donors > 0 marks the donation leg configured, so the
 		// funnel logic runs instead of returning the hidden leg.
 		$mock->method( 'get_active_donors' )->willReturn( 1 );
@@ -1343,31 +1349,38 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * C10 populated: proxy returns rows with uid + saw_subscription_surface →
-	 * three stages built with correct counts and labels.
+	 * C10 populated: proxy returns rows with uid + saw_subscription_surface +
+	 * became_subscriber → three stages built with correct counts and labels.
+	 *
+	 * NEWS-2598: step 3 (Became subscriber) is the SUM of the hub-provided
+	 * per-uid `became_subscriber` flag, not a downstream Woo customer_id join.
 	 */
 	public function test_registered_to_subscriber_funnel_returns_populated_stages_on_success() {
 		$rows = [
 			[
 				'uid'                      => 1,
 				'saw_subscription_surface' => 1,
+				'became_subscriber'        => 1,
 			],
 			[
 				'uid'                      => 2,
 				'saw_subscription_surface' => 1,
+				'became_subscriber'        => 0,
 			],
 			[
 				'uid'                      => 3,
 				'saw_subscription_surface' => 0,
+				'became_subscriber'        => 0,
 			],
 			[
 				'uid'                      => 4,
 				'saw_subscription_surface' => 0,
+				'became_subscriber'        => 0,
 			],
 		];
 
 		$proxy = $this->proxy_returning( $rows );
-		$subs  = $this->subscribers_metric_returning_count( 1 );
+		$subs  = $this->subscribers_metric_configured();
 
 		$metric          = new Conversion_Metric( $proxy, $subs );
 		[ $start, $end ] = $this->window();
@@ -1386,7 +1399,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 2, $result['stages'][1]['count'] );
 		$this->assertEqualsWithDelta( 0.5, $result['stages'][1]['pct_of_top'], 1e-9 );
 
-		// step_3: from mock = 1; pct = 1/4 = 0.25.
+		// step_3: sum of became_subscriber = 1; pct = 1/4 = 0.25.
 		$this->assertSame( 1, $result['stages'][2]['count'] );
 		$this->assertEqualsWithDelta( 0.25, $result['stages'][2]['pct_of_top'], 1e-9 );
 
@@ -1400,7 +1413,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * C10 empty: proxy returns [] → state 'empty', empty stages.
 	 */
 	public function test_registered_to_subscriber_funnel_returns_empty_state_on_no_rows() {
-		$metric          = new Conversion_Metric( $this->proxy_returning( [] ), $this->subscribers_metric_returning_count( 0 ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ), $this->subscribers_metric_configured() );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
 
@@ -1415,7 +1428,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 */
 	public function test_registered_to_subscriber_funnel_returns_error_on_proxy_error() {
 		$wp_error        = new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 500' );
-		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ), $this->subscribers_metric_returning_count( 0 ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ), $this->subscribers_metric_configured() );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
 
@@ -1428,7 +1441,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * C10 malformed: proxy returns non-array first row → state 'error' (malformed).
 	 */
 	public function test_registered_to_subscriber_funnel_returns_error_on_malformed_rows() {
-		$metric          = new Conversion_Metric( $this->proxy_returning( [ 'not-an-array' ] ), $this->subscribers_metric_returning_count( 0 ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ 'not-an-array' ] ), $this->subscribers_metric_configured() );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
 
@@ -1446,7 +1459,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 			'uid'                      => 1,
 			'saw_subscription_surface' => 1,
 		];
-		$metric          = new Conversion_Metric( $this->proxy_returning( [ $valid_row, 'not-an-array' ] ), $this->subscribers_metric_returning_count( 0 ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ $valid_row, 'not-an-array' ] ), $this->subscribers_metric_configured() );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
 
@@ -1458,31 +1471,38 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	// --- C11: get_registered_to_donor_funnel --------------------------------
 
 	/**
-	 * C11 populated: proxy returns rows with uid + saw_donation_surface →
-	 * three stages built with correct counts.
+	 * C11 populated: proxy returns rows with uid + saw_donation_surface +
+	 * became_donor → three stages built with correct counts.
+	 *
+	 * NEWS-2598: step 3 (Became donor) is the SUM of the hub-provided per-uid
+	 * `became_donor` flag, not a downstream Woo customer_id join.
 	 */
 	public function test_registered_to_donor_funnel_returns_populated_stages_on_success() {
 		$rows = [
 			[
 				'uid'                  => 1,
 				'saw_donation_surface' => 1,
+				'became_donor'         => 1,
 			],
 			[
 				'uid'                  => 2,
 				'saw_donation_surface' => 1,
+				'became_donor'         => 1,
 			],
 			[
 				'uid'                  => 3,
 				'saw_donation_surface' => 1,
+				'became_donor'         => 0,
 			],
 			[
 				'uid'                  => 4,
 				'saw_donation_surface' => 0,
+				'became_donor'         => 0,
 			],
 		];
 
 		$proxy  = $this->proxy_returning( $rows );
-		$donors = $this->donors_metric_returning_count( 2 );
+		$donors = $this->donors_metric_configured();
 
 		$metric          = new Conversion_Metric( $proxy, null, $donors );
 		[ $start, $end ] = $this->window();
@@ -1501,7 +1521,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 3, $result['stages'][1]['count'] );
 		$this->assertEqualsWithDelta( 0.75, $result['stages'][1]['pct_of_top'], 1e-9 );
 
-		// step_3: from mock = 2; pct = 2/4 = 0.5.
+		// step_3: sum of became_donor = 2; pct = 2/4 = 0.5.
 		$this->assertSame( 2, $result['stages'][2]['count'] );
 		$this->assertEqualsWithDelta( 0.5, $result['stages'][2]['pct_of_top'], 1e-9 );
 
@@ -1514,7 +1534,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * C11 empty: proxy returns [] → state 'empty', empty stages.
 	 */
 	public function test_registered_to_donor_funnel_returns_empty_state_on_no_rows() {
-		$metric          = new Conversion_Metric( $this->proxy_returning( [] ), null, $this->donors_metric_returning_count( 0 ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ), null, $this->donors_metric_configured() );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
 
@@ -1528,7 +1548,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 */
 	public function test_registered_to_donor_funnel_returns_error_on_proxy_error() {
 		$wp_error        = new \WP_Error( 'bigquery_proxy_http_error', 'HTTP 502' );
-		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ), null, $this->donors_metric_returning_count( 0 ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $wp_error ), null, $this->donors_metric_configured() );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
 
@@ -1541,7 +1561,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * C11 malformed: proxy returns non-array first row → state 'error' (malformed).
 	 */
 	public function test_registered_to_donor_funnel_returns_error_on_malformed_rows() {
-		$metric          = new Conversion_Metric( $this->proxy_returning( [ 'not-an-array' ] ), null, $this->donors_metric_returning_count( 0 ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ 'not-an-array' ] ), null, $this->donors_metric_configured() );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
 
@@ -1559,7 +1579,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 			'uid'                  => 1,
 			'saw_donation_surface' => 1,
 		];
-		$metric          = new Conversion_Metric( $this->proxy_returning( [ $valid_row, 'not-an-array' ] ), null, $this->donors_metric_returning_count( 0 ) );
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ $valid_row, 'not-an-array' ] ), null, $this->donors_metric_configured() );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
 

@@ -282,16 +282,6 @@ interface Storage_Interface {
 	public function get_active_non_donation_subscriber_customer_ids(): array;
 
 	/**
-	 * Given an explicit customer-ID list, COUNT(DISTINCT customer_id) who have
-	 * at least one active non-donation subscription right now. Empty input
-	 * returns 0 immediately (no DB round-trip).
-	 *
-	 * @param int[] $customer_ids Customer IDs to check.
-	 * @return int
-	 */
-	public function count_active_non_donation_subscribers_by_customer_ids( array $customer_ids ): int;
-
-	/**
 	 * Count of REGISTERED READERS who have no active non-donation subscription
 	 * AND no completed donation order in the trailing 365 days.
 	 *

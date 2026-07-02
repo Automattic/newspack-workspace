@@ -706,9 +706,12 @@ final class Conversion_Metric {
 	 * Registered → Subscriber funnel (C10 / 2.2) — three stages, non-donation
 	 * subscriptions only. Dispatches
 	 * `conversion_journey_funnel_registered_to_subscriber`; the hub returns
-	 * rows `{ uid, saw_subscription_surface }`. Step 3 count is the number of
-	 * those UIDs who currently hold an active non-donation subscription,
-	 * resolved via {@see Subscribers_Metric::count_active_non_donation_subscribers_by_customer_ids()}.
+	 * rows `{ uid, saw_subscription_surface, became_subscriber }`. Step 3 count
+	 * is the SUM of the per-uid `became_subscriber` flag — the number of
+	 * registered-in-window uids who ALSO fired a subscription conversion event in
+	 * the same window, computed inside BigQuery (NEWS-2598). This replaces the
+	 * former Woo customer_id join, which always returned 0 because the BQ uid is a
+	 * GA4 pseudo-id, never a WooCommerce customer_id.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
@@ -748,16 +751,15 @@ final class Conversion_Metric {
 		}
 		$step_1 = count( $rows );
 		$step_2 = 0;
-		$uids   = [];
+		$step_3 = 0;
 		foreach ( $rows as $row ) {
 			if ( ! is_array( $row ) ) {
 				return $this->malformed_collection( 'stages' );
 			}
 			$step_2 += (int) ( $row['saw_subscription_surface'] ?? 0 );
-			$uids[]  = (int) ( $row['uid'] ?? 0 );
+			$step_3 += (int) ( $row['became_subscriber'] ?? 0 );
 		}
-		$step_3 = $this->subscribers_metric->count_active_non_donation_subscribers_by_customer_ids( $uids );
-		$safe   = $step_1 > 0 ? $step_1 : 1;
+		$safe = $step_1 > 0 ? $step_1 : 1;
 		return [
 			'state'  => 'populated',
 			'stages' => [
@@ -783,9 +785,12 @@ final class Conversion_Metric {
 	/**
 	 * Registered → Donor funnel (C11 / 2.3) — three stages. Dispatches
 	 * `conversion_journey_funnel_registered_to_donor`; the hub returns rows
-	 * `{ uid, saw_donation_surface }`. Step 3 count is the number of those
-	 * UIDs who have at least one completed donation order, resolved via
-	 * {@see Donors_Metric::count_completed_donation_order_customers_by_customer_ids()}.
+	 * `{ uid, saw_donation_surface, became_donor }`. Step 3 count is the SUM of
+	 * the per-uid `became_donor` flag — the number of registered-in-window uids
+	 * who ALSO fired a donation conversion event in the same window, computed
+	 * inside BigQuery (NEWS-2598). This replaces the former Woo customer_id join,
+	 * which always returned 0 because the BQ uid is a GA4 pseudo-id, never a
+	 * WooCommerce customer_id.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
@@ -827,16 +832,15 @@ final class Conversion_Metric {
 		}
 		$step_1 = count( $rows );
 		$step_2 = 0;
-		$uids   = [];
+		$step_3 = 0;
 		foreach ( $rows as $row ) {
 			if ( ! is_array( $row ) ) {
 				return $this->malformed_collection( 'stages' );
 			}
 			$step_2 += (int) ( $row['saw_donation_surface'] ?? 0 );
-			$uids[]  = (int) ( $row['uid'] ?? 0 );
+			$step_3 += (int) ( $row['became_donor'] ?? 0 );
 		}
-		$step_3 = $this->donors_metric->count_completed_donation_order_customers_by_customer_ids( $uids );
-		$safe   = $step_1 > 0 ? $step_1 : 1;
+		$safe = $step_1 > 0 ? $step_1 : 1;
 		return [
 			'state'  => 'populated',
 			'stages' => [

@@ -665,35 +665,6 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @param int[] $customer_ids Customer IDs to check.
-	 * @return int
-	 */
-	public function count_completed_donation_order_customers_by_customer_ids( array $customer_ids ): int {
-		if ( empty( $customer_ids ) ) {
-			return 0;
-		}
-
-		global $wpdb;
-		$prefix    = $wpdb->prefix;
-		$donations = $this->id_list( $this->donation_product_ids );
-		$ids       = $this->id_list( $customer_ids );
-
-		$sql = "SELECT COUNT(DISTINCT CAST(cust.meta_value AS UNSIGNED))
-			FROM {$prefix}posts p
-			JOIN {$prefix}postmeta cust
-				ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
-			JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
-			WHERE p.post_type = 'shop_order'
-			  AND p.post_status IN ('wc-completed', 'wc-processing')
-			  AND opl.product_id IN ($donations)
-			  AND CAST(cust.meta_value AS UNSIGNED) IN ($ids)";
-
-		return (int) $wpdb->get_var( $sql );
-	}
-
-	/**
-	 * {@inheritDoc}
-	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array

@@ -395,17 +395,6 @@ class Donors_Metric {
 	}
 
 	/**
-	 * COUNT(DISTINCT customer_id) among $customer_ids who have at least one
-	 * completed donation order (any time). List-param — NOT cached.
-	 *
-	 * @param int[] $customer_ids Customer IDs to check.
-	 * @return int
-	 */
-	public function count_completed_donation_order_customers_by_customer_ids( array $customer_ids ): int {
-		return $this->storage->count_completed_donation_order_customers_by_customer_ids( $customer_ids );
-	}
-
-	/**
 	 * Earliest completed/processing donation order date per customer for the
 	 * given set. List-param — NOT cached (result varies per call). Keyed by
 	 * customer_id.

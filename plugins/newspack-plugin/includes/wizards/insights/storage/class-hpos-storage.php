@@ -1069,36 +1069,6 @@ class HPOS_Storage implements Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @param int[] $customer_ids Customer IDs to check.
-	 * @return int
-	 */
-	public function count_active_non_donation_subscribers_by_customer_ids( array $customer_ids ): int {
-		if ( empty( $customer_ids ) ) {
-			return 0;
-		}
-
-		global $wpdb;
-		$prefix    = $wpdb->prefix;
-		$donations = $this->id_list( $this->donation_product_ids );
-		$ids       = $this->id_list( $customer_ids );
-
-		$sql = "SELECT COUNT(DISTINCT o.customer_id)
-			FROM {$prefix}wc_orders o
-			JOIN {$prefix}woocommerce_order_items oi
-				ON oi.order_id = o.id AND oi.order_item_type = 'line_item'
-			JOIN {$prefix}woocommerce_order_itemmeta oim
-				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
-			WHERE o.type = 'shop_subscription'
-			  AND o.status = 'wc-active'
-			  AND oim.meta_value NOT IN ($donations)
-			  AND o.customer_id IN ($ids)";
-
-		return (int) $wpdb->get_var( $sql );
-	}
-
-	/**
-	 * {@inheritDoc}
-	 *
 	 * @return int
 	 */
 	public function get_stale_registered_users(): int {
