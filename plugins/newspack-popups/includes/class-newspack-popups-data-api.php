@@ -351,7 +351,12 @@ final class Newspack_Popups_Data_Api {
 		// 3) Path / substring patterns. Substring (not slash-anchored) on purpose, so
 		// membership fragments and newslettersignup slugs are caught (NPPD-1836).
 		// Order matters: donation, then newsletter, then subscription.
-		if ( preg_match( '/donate|donation|\/give|contribute|donor|membership|member\b|\/support\b/', $href ) ) {
+		// (?<![a-z]) applies only to the keyword branch so mid-word matches (e.g. "member"
+		// inside "remember") don't false-positive; the href is already lowercased. Digits,
+		// "-", "/", "#" and start-of-string are all valid boundaries, so "/donate",
+		// "-membership" and "#...-membership" still match. /give and /support stay
+		// slash-anchored exactly as before.
+		if ( preg_match( '/(?<![a-z])(?:donate|donation|contribute|donor|member|membership)|\/give\b|\/support\b/', $href ) ) {
 			return [
 				'intent' => 'donation',
 				'source' => 'pattern',
@@ -447,9 +452,18 @@ final class Newspack_Popups_Data_Api {
 		// Newsletter: nothing to wire — Newspack has no configured newsletter page
 		// (signup is the inline subscribe block). Newsletter recovery is pattern-only.
 
-		// Drop empties.
+		// Drop empties and any URL that normalized to a bare host with no meaningful
+		// path (e.g. a non-pretty permalink collapsing to "host/"), which would
+		// otherwise substring-match every same-host link.
 		foreach ( $urls as $key => $list ) {
-			$urls[ $key ] = array_values( array_filter( $list ) );
+			$urls[ $key ] = array_values(
+				array_filter(
+					$list,
+					static function ( $normalized ) {
+						return '' !== $normalized && 1 === preg_match( '#/[^/]#', $normalized );
+					}
+				)
+			);
 		}
 
 		self::$conversion_urls_cache = $urls;

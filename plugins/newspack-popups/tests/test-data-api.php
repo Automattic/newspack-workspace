@@ -20,7 +20,14 @@ class DataApiTest extends WP_UnitTestCase {
 
 	public function set_up() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 		parent::set_up();
-		// Reset the memoized conversion-URL cache between tests.
+		$this->reset_conversion_cache();
+	}
+
+	/**
+	 * Reset the memoized conversion-URL cache (it is per-request; tests that change
+	 * options or permalinks after a prior call must reset before re-reading).
+	 */
+	private function reset_conversion_cache() {
 		$property = new \ReflectionProperty( 'Newspack_Popups_Data_Api', 'conversion_urls_cache' );
 		$property->setAccessible( true );
 		$property->setValue( null, null );
@@ -82,18 +89,25 @@ class DataApiTest extends WP_UnitTestCase {
 	 * A button to the site's configured donation page (read via the option) is site_config.
 	 */
 	public function test_configured_donation_page_is_site_config() {
+		// Pretty permalinks so get_permalink() yields a real path (not a bare host).
+		$this->set_permalink_structure( '/%postname%/' );
 		$page_id = self::factory()->post->create(
 			[
 				'post_type'  => 'page',
+				'post_name'  => 'support-us',
 				'post_title' => 'Support us',
 			]
 		);
 		update_option( \Newspack\Donations::DONATION_PAGE_ID_OPTION, $page_id );
+		$this->reset_conversion_cache();
 
-		$hit = Newspack_Popups_Data_Api::classify_href(
-			strtolower( get_permalink( $page_id ) ),
-			Newspack_Popups_Data_Api::get_site_conversion_urls()
-		);
+		$config = Newspack_Popups_Data_Api::get_site_conversion_urls();
+
+		// The donation config entry carries the page's path, not a bare host.
+		$this->assertNotEmpty( $config['donation'] );
+		$this->assertStringContainsString( 'support-us', $config['donation'][0] );
+
+		$hit = Newspack_Popups_Data_Api::classify_href( strtolower( get_permalink( $page_id ) ), $config );
 		$this->assertEquals(
 			[
 				'intent' => 'donation',
@@ -101,6 +115,37 @@ class DataApiTest extends WP_UnitTestCase {
 			],
 			$hit
 		);
+
+		// An unrelated own-domain URL does NOT match the configured donation URL.
+		$other = Newspack_Popups_Data_Api::classify_href( 'https://example.org/some-other-page/', $config );
+		$this->assertNotEquals( 'site_config', $other['source'] ?? null );
+
+		delete_option( \Newspack\Donations::DONATION_PAGE_ID_OPTION );
+		$this->set_permalink_structure( '' );
+	}
+
+	/**
+	 * Fix 2: a configured page whose permalink normalizes to a bare host (plain
+	 * permalinks) is filtered out, so it can't substring-match every same-host link.
+	 */
+	public function test_bare_host_config_url_is_filtered_out() {
+		// Plain permalinks: get_permalink() is "host/?page_id=N", normalizing to bare "host/".
+		$this->set_permalink_structure( '' );
+		$page_id = self::factory()->post->create(
+			[
+				'post_type'  => 'page',
+				'post_title' => 'Support us',
+			]
+		);
+		update_option( \Newspack\Donations::DONATION_PAGE_ID_OPTION, $page_id );
+		$this->reset_conversion_cache();
+
+		$config = Newspack_Popups_Data_Api::get_site_conversion_urls();
+		$this->assertEmpty( $config['donation'], 'Bare-host donation URL should be filtered out.' );
+
+		// With no usable config entry, an arbitrary own-domain URL does not classify as site_config.
+		$hit = Newspack_Popups_Data_Api::classify_href( 'https://example.org/anything/', $config );
+		$this->assertNotEquals( 'site_config', $hit['source'] ?? null );
 
 		delete_option( \Newspack\Donations::DONATION_PAGE_ID_OPTION );
 	}
@@ -127,6 +172,32 @@ class DataApiTest extends WP_UnitTestCase {
 		$config = Newspack_Popups_Data_Api::get_site_conversion_urls();
 		$hit    = Newspack_Popups_Data_Api::classify_href( 'https://example.org/2026/06/12/some-long-slug/story', $config );
 		$this->assertEquals( 'editorial', $hit['intent'] );
+	}
+
+	/**
+	 * Fix 1: a donation keyword inside a longer word (e.g. "member" in "remember")
+	 * must not false-positive as donation; the article falls through to editorial.
+	 */
+	public function test_donation_keyword_midword_does_not_false_positive() {
+		$config = Newspack_Popups_Data_Api::get_site_conversion_urls();
+		$hit    = Newspack_Popups_Data_Api::classify_href( 'https://example.org/2026/06/12/things-to-remember-this-summer/', $config );
+		$this->assertEquals( 'editorial', $hit['intent'] );
+	}
+
+	/**
+	 * Fix 1 keep-alive: a hyphen/fragment-preceded membership token still matches
+	 * donation (the boundary is a non-letter, so the lookbehind allows it).
+	 */
+	public function test_hyphen_preceded_membership_still_donation() {
+		$config = Newspack_Popups_Data_Api::get_site_conversion_urls();
+		$hit    = Newspack_Popups_Data_Api::classify_href( 'https://example.org/about/#example-membership', $config );
+		$this->assertEquals(
+			[
+				'intent' => 'donation',
+				'source' => 'pattern',
+			],
+			$hit
+		);
 	}
 
 	/**
