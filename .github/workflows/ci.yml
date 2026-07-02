@@ -118,7 +118,7 @@ jobs:
   js:
     name: JS / ${{ matrix.package }}
     needs: [changed-packages, install]
-    if: needs.changed-packages.outputs.any == 'true'
+    if: needs.changed-packages.outputs.any == 'true' && needs.changed-packages.outputs.js-matrix != '{"include":[]}'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -296,7 +296,7 @@ jobs:
   build-zips:
     name: Build ZIP / ${{ matrix.package }}
     needs: [changed-packages, install]
-    if: needs.changed-packages.outputs.any == 'true'
+    if: needs.changed-packages.outputs.any == 'true' && needs.changed-packages.outputs.js-matrix != '{"include":[]}'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
