@@ -21,10 +21,9 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/w
 import CatalogImpact from './catalog-impact';
 import { intentLabel } from './recipes';
 import { pricingModelSentence } from './model-sentence';
+import { RULES_API_PATH as API_PATH } from './constants';
 
 const { useHistory } = Router;
-
-const API_PATH = '/wc-dynamic-pricing/v1/rules';
 
 const DEFAULT_VIEW: View = {
 	type: 'table',
@@ -39,6 +38,12 @@ const DEFAULT_VIEW: View = {
 };
 
 const ACTIVE_STATE_LEVEL = { active: 'success', scheduled: 'info', ended: 'default' } as const;
+
+const ACTIVE_STATE_LABEL: Record< PricingRuleRow[ 'active_state' ], string > = {
+	active: __( 'Active', 'newspack-plugin' ),
+	scheduled: __( 'Scheduled', 'newspack-plugin' ),
+	ended: __( 'Ended', 'newspack-plugin' ),
+};
 
 /** Map a rule's reader_segment condition (segment ids) to names via the vocab id→label map. */
 function readerSegmentNames( conditions: PricingRuleRow[ 'conditions' ], map: Record< number, string > ): string[] {
@@ -165,7 +170,9 @@ export default function PricingRulesList() {
 				id: 'active_window',
 				label: __( 'Active window', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.active_state,
-				render: ( { item } ) => <Badge level={ ACTIVE_STATE_LEVEL[ item.active_state ] } text={ item.active_state } />,
+				render: ( { item } ) => (
+					<Badge level={ ACTIVE_STATE_LEVEL[ item.active_state ] } text={ ACTIVE_STATE_LABEL[ item.active_state ] ?? item.active_state } />
+				),
 				enableSorting: false,
 			},
 			{

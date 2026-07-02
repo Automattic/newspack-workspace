@@ -249,7 +249,7 @@ final class Reader_Data {
 	 *
 	 * @return string[] Matching segment IDs, or [] when unknown/malformed.
 	 */
-	public static function get_matched_segments( $user_id ) {
+	public static function get_matched_segments( int $user_id ): array {
 		$raw = self::get_data( $user_id, 'matched_segments' );
 		$ids = is_string( $raw ) ? json_decode( $raw, true ) : ( is_array( $raw ) ? $raw : [] );
 		return is_array( $ids ) ? array_values( array_map( 'strval', $ids ) ) : [];

@@ -84,7 +84,7 @@ class Wizards {
 		}
 		// Pricing Rules manager, available when the dynamic-pricing engine
 		// plugin is active (it owns the rules REST API).
-		if ( class_exists( 'Automattic\\WooCommerce\\DynamicPricing\\Dynamic_Pricing' ) ) {
+		if ( Dynamic_Pricing_Bridges::is_engine_active() ) {
 			self::$wizards['audience-pricing-rules'] = new Audience_Pricing_Rules();
 		}
 	}

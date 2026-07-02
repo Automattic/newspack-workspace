@@ -16,8 +16,7 @@ import { Spinner } from '@wordpress/components';
  * Internal dependencies
  */
 import ImpactTable from './impact-table';
-
-const API_PATH = '/wc-dynamic-pricing/v1/impact-preview';
+import { IMPACT_PREVIEW_API_PATH as API_PATH } from './constants';
 
 export default function CatalogImpact() {
 	const [ data, setData ] = useState< CatalogImpactResponse | null >( null );
@@ -25,10 +24,26 @@ export default function CatalogImpact() {
 	const [ hasError, setHasError ] = useState( false );
 
 	useEffect( () => {
+		let cancelled = false;
 		apiFetch< CatalogImpactResponse >( { path: API_PATH } )
-			.then( setData )
-			.catch( () => setHasError( true ) )
-			.finally( () => setIsLoading( false ) );
+			.then( res => {
+				if ( ! cancelled ) {
+					setData( res );
+				}
+			} )
+			.catch( () => {
+				if ( ! cancelled ) {
+					setHasError( true );
+				}
+			} )
+			.finally( () => {
+				if ( ! cancelled ) {
+					setIsLoading( false );
+				}
+			} );
+		return () => {
+			cancelled = true;
+		};
 	}, [] );
 
 	if ( isLoading ) {

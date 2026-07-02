@@ -70,4 +70,43 @@ class Newspack_Test_Dynamic_Pricing_Bridges extends WP_UnitTestCase {
 		$excluded = apply_filters( 'woocommerce_dynamic_pricing_is_excluded', true, $product, null );
 		$this->assertTrue( $excluded );
 	}
+
+	/**
+	 * Group subscriptions (per-subscription enabled meta) are excluded from
+	 * dynamic pricing.
+	 */
+	public function test_excludes_group_subscriptions() {
+		$product      = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->getMock();
+		$subscription = new \WC_Subscription(
+			[
+				'id'   => 123,
+				'meta' => [ '_newspack_group_subscription_enabled' => 'yes' ],
+			]
+		);
+
+		$excluded = apply_filters( 'woocommerce_dynamic_pricing_is_excluded', false, $product, $subscription );
+		$this->assertTrue( $excluded, 'Group subscriptions must be excluded.' );
+	}
+
+	/**
+	 * Regular (non-group) subscriptions are not excluded from dynamic pricing.
+	 */
+	public function test_does_not_exclude_regular_subscriptions() {
+		$product      = $this->getMockBuilder( \WC_Product::class )->disableOriginalConstructor()->getMock();
+		$subscription = new \WC_Subscription( [ 'id' => 124 ] );
+
+		$excluded = apply_filters( 'woocommerce_dynamic_pricing_is_excluded', false, $product, $subscription );
+		$this->assertFalse( $excluded );
+	}
+
+	/**
+	 * Off-contract filter input (truthy non-bool, null product) is normalized to
+	 * a boolean instead of raising a TypeError inside the pricing path.
+	 */
+	public function test_tolerates_off_contract_filter_input() {
+		$this->assertTrue( Dynamic_Pricing_Bridges::exclude_donations( 'yes', null, null ) );
+		$this->assertFalse( Dynamic_Pricing_Bridges::exclude_donations( 0, null, null ) );
+		$this->assertTrue( Dynamic_Pricing_Bridges::exclude_group_subscriptions( 1, null, null ) );
+		$this->assertFalse( Dynamic_Pricing_Bridges::exclude_group_subscriptions( false, null, 'not-a-subscription' ) );
+	}
 }

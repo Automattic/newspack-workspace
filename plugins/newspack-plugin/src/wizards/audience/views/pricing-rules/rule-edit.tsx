@@ -16,9 +16,9 @@ import { Spinner } from '@wordpress/components';
  */
 import { Router } from '../../../../../packages/components/src';
 import RuleForm from './rule-form';
+import { RULES_API_PATH as API_PATH } from './constants';
 
 const { useHistory } = Router;
-const API_PATH = '/wc-dynamic-pricing/v1/rules';
 
 export default function RuleEdit( { match }: { match: { params: { id?: string } } } ) {
 	const history = useHistory();
@@ -29,17 +29,31 @@ export default function RuleEdit( { match }: { match: { params: { id?: string } 
 	const [ isLoading, setIsLoading ] = useState( true );
 
 	useEffect( () => {
+		let cancelled = false;
 		// The list endpoint also returns the vocab (strategies/scopes/calc_types/currency).
 		Promise.all< any >( [
 			apiFetch< PricingRulesResponse >( { path: API_PATH } ),
 			isNew ? Promise.resolve( null ) : apiFetch< PricingRuleRow >( { path: `${ API_PATH }/${ id }` } ),
 		] )
 			.then( ( [ vocabResp, ruleResp ] ) => {
-				setVocab( vocabResp );
-				setRule( ruleResp );
+				if ( ! cancelled ) {
+					setVocab( vocabResp );
+					setRule( ruleResp );
+				}
 			} )
-			.catch( () => history.push( '/' ) )
-			.finally( () => setIsLoading( false ) );
+			.catch( () => {
+				if ( ! cancelled ) {
+					history.push( '/' );
+				}
+			} )
+			.finally( () => {
+				if ( ! cancelled ) {
+					setIsLoading( false );
+				}
+			} );
+		return () => {
+			cancelled = true;
+		};
 	}, [ id, isNew, history ] );
 
 	// Memoized so it keeps a stable identity across the wizard's re-renders —

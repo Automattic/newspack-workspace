@@ -16,8 +16,8 @@ import apiFetch from '@wordpress/api-fetch';
  * Internal dependencies
  */
 import ImpactTable from './impact-table';
+import { RULE_PREVIEW_API_PATH as PREVIEW_PATH } from './constants';
 
-const PREVIEW_PATH = '/wc-dynamic-pricing/v1/rules/preview';
 const DEBOUNCE_MS = 500;
 
 function AudienceLine( { audience }: { audience: RuleAudienceData } ) {

@@ -77,13 +77,6 @@ interface PricingRulesResponse {
 	conditions: PricingRuleConditionVocab[];
 }
 
-interface Window {
-	newspackAudiencePricingRules?: {
-		rules_rest_path: string;
-		engine_active: boolean;
-	};
-}
-
 interface ImpactSegment {
 	from_cycle: number;
 	amount: number;

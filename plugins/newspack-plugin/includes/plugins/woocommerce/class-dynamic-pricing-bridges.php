@@ -31,6 +31,18 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Dynamic_Pricing_Bridges {
 	/**
+	 * Whether the standalone dynamic-pricing engine plugin is active.
+	 *
+	 * The single place that knows the engine's root FQCN — use this instead of
+	 * repeating the class_exists check wherever engine-gated surfaces register.
+	 *
+	 * @return bool
+	 */
+	public static function is_engine_active(): bool {
+		return class_exists( 'Automattic\\WooCommerce\\DynamicPricing\\Dynamic_Pricing' );
+	}
+
+	/**
 	 * Register all bridge filter callbacks.
 	 */
 	public static function init(): void {
@@ -81,28 +93,38 @@ final class Dynamic_Pricing_Bridges {
 	/**
 	 * Exclude donation products from dynamic pricing.
 	 *
-	 * @param bool        $excluded Whether the engine has already excluded this context.
-	 * @param \WC_Product $product  Product being priced.
-	 * @param mixed       $target   Optional target (e.g. a WC_Subscription).
-	 */
-	public static function exclude_donations( bool $excluded, \WC_Product $product, mixed $target ): bool {
-		if ( $excluded ) {
-			return true;
-		}
-		if ( class_exists( '\Newspack\Donations' ) && Donations::is_donation_product( $product->get_id() ) ) {
-			return true;
-		}
-		return $excluded;
-	}
-
-	/**
-	 * Exclude group subscriptions from dynamic pricing.
+	 * Params are intentionally untyped: this runs on the engine's filter, so the
+	 * argument shapes are another plugin's call-time contract — coerce and guard
+	 * rather than fatal the cart/checkout pricing path on an off-contract value.
 	 *
 	 * @param bool        $excluded Whether the engine has already excluded this context.
 	 * @param \WC_Product $product  Product being priced.
 	 * @param mixed       $target   Optional target (e.g. a WC_Subscription).
 	 */
-	public static function exclude_group_subscriptions( bool $excluded, \WC_Product $product, mixed $target ): bool {
+	public static function exclude_donations( $excluded, $product = null, $target = null ): bool {
+		if ( $excluded ) {
+			return true;
+		}
+		if (
+			$product instanceof \WC_Product
+			&& class_exists( '\Newspack\Donations' )
+			&& Donations::is_donation_product( $product->get_id() )
+		) {
+			return true;
+		}
+		return (bool) $excluded;
+	}
+
+	/**
+	 * Exclude group subscriptions from dynamic pricing.
+	 *
+	 * Params are intentionally untyped — see exclude_donations().
+	 *
+	 * @param bool        $excluded Whether the engine has already excluded this context.
+	 * @param \WC_Product $product  Product being priced.
+	 * @param mixed       $target   Optional target (e.g. a WC_Subscription).
+	 */
+	public static function exclude_group_subscriptions( $excluded, $product = null, $target = null ): bool {
 		if ( $excluded ) {
 			return true;
 		}
@@ -114,7 +136,7 @@ final class Dynamic_Pricing_Bridges {
 		) {
 			return true;
 		}
-		return $excluded;
+		return (bool) $excluded;
 	}
 
 	/**
@@ -144,8 +166,14 @@ final class Dynamic_Pricing_Bridges {
 			if ( $item_pid !== $pid ) {
 				continue;
 			}
+			// The annotation payload is the engine's contract — verify the shape
+			// before reading keys so a drift degrades to the unannotated summary.
 			$annotation = $surface::get_annotation_for( (string) $cart_item_key );
-			if ( ! $annotation || abs( $annotation['original'] - $annotation['amount'] ) < 0.01 ) {
+			if (
+				! is_array( $annotation )
+				|| ! isset( $annotation['original'], $annotation['amount'] )
+				|| abs( (float) $annotation['original'] - (float) $annotation['amount'] ) < 0.01
+			) {
 				return $summary;
 			}
 			// Match the cart/product surfaces: keep the WCS period suffix on the
@@ -154,8 +182,9 @@ final class Dynamic_Pricing_Bridges {
 			// summary line stays focused on what's charged with its native suffix.
 			$original = wp_strip_all_tags( html_entity_decode( wc_price( (float) $annotation['original'] ), ENT_QUOTES ) );
 			$parts    = [];
-			if ( '' !== (string) $annotation['label'] ) {
-				$parts[] = $annotation['label'];
+			$label    = (string) ( $annotation['label'] ?? '' );
+			if ( '' !== $label ) {
+				$parts[] = $label;
 			}
 			/* translators: %s: regular price */
 			$parts[] = sprintf( __( 'regularly %s', 'newspack-plugin' ), $original );

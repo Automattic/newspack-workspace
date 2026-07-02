@@ -74,12 +74,15 @@ export default function ImpactTable( { baseline, segmentGroups, currency }: Impa
 
 	return (
 		<table className="newspack-pricing-rules__impact-table">
+			<caption className="screen-reader-text">{ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }</caption>
 			<thead>
 				<tr>
-					<th>{ __( 'Product', 'newspack-plugin' ) }</th>
-					<th>{ __( 'Regular', 'newspack-plugin' ) }</th>
+					<th scope="col">{ __( 'Product', 'newspack-plugin' ) }</th>
+					<th scope="col">{ __( 'Regular', 'newspack-plugin' ) }</th>
 					{ columns.map( col => (
-						<th key={ col.key }>{ col.label }</th>
+						<th scope="col" key={ col.key }>
+							{ col.label }
+						</th>
 					) ) }
 				</tr>
 			</thead>

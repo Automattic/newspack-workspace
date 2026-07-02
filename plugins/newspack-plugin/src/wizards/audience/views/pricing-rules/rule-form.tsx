@@ -32,8 +32,7 @@ import Conditions, { type ConditionsMap } from './conditions';
 import RulePreview from './rule-preview';
 import { tsToLocalInput, localInputToTs } from './datetime';
 import { RECIPES, pathOptions, applyRecipeConditions, intentLabel, pathDescription, type PricingPath } from './recipes';
-
-const API_PATH = '/wc-dynamic-pricing/v1/rules';
+import { RULES_API_PATH as API_PATH } from './constants';
 
 interface RuleFormProps {
 	isNew: boolean;
@@ -558,7 +557,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 							) }
 							<TextControl
 								label={ __( 'Starts', 'newspack-plugin' ) }
-								help={ __( 'Optional. Site timezone. Empty = active immediately.', 'newspack-plugin' ) }
+								help={ __( 'Optional. Times are in your local timezone. Empty = active immediately.', 'newspack-plugin' ) }
 								type="datetime-local"
 								value={ activeFrom }
 								onChange={ setActiveFrom }
@@ -566,7 +565,7 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 							/>
 							<TextControl
 								label={ __( 'Ends', 'newspack-plugin' ) }
-								help={ __( 'Optional. Site timezone. Empty = no end date.', 'newspack-plugin' ) }
+								help={ __( 'Optional. Times are in your local timezone. Empty = no end date.', 'newspack-plugin' ) }
 								type="datetime-local"
 								value={ activeUntil }
 								onChange={ setActiveUntil }

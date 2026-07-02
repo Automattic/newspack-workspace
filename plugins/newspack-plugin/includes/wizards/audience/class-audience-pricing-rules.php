@@ -65,8 +65,9 @@ class Audience_Pricing_Rules extends Wizard {
 	}
 
 	/**
-	 * Enqueue scripts and styles. Currency + vocab come from the rules REST, so
-	 * the only page config is whether the engine plugin is active.
+	 * Enqueue scripts and styles. The app needs no page config: currency + vocab
+	 * come from the rules REST (paths in src/wizards/audience/views/pricing-rules/constants.ts),
+	 * and the page only registers when the engine is active.
 	 */
 	public function enqueue_scripts_and_styles() {
 		if ( ! $this->is_wizard_page() ) {
@@ -74,13 +75,5 @@ class Audience_Pricing_Rules extends Wizard {
 		}
 		parent::enqueue_scripts_and_styles();
 		wp_enqueue_script( 'newspack-wizards' );
-		wp_localize_script(
-			'newspack-wizards',
-			'newspackAudiencePricingRules',
-			[
-				'rules_rest_path' => 'wc-dynamic-pricing/v1/rules',
-				'engine_active'   => class_exists( 'Automattic\\WooCommerce\\DynamicPricing\\Dynamic_Pricing' ),
-			]
-		);
 	}
 }

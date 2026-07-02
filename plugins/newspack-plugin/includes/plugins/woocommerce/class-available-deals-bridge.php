@@ -42,7 +42,7 @@ final class Available_Deals_Bridge {
 	 * @param string[] $keys Read-only keys.
 	 * @return string[]
 	 */
-	public static function register_read_only_key( $keys ) {
+	public static function register_read_only_key( array $keys ): array {
 		$keys[] = self::STORE_KEY;
 		return $keys;
 	}
@@ -65,7 +65,7 @@ final class Available_Deals_Bridge {
 	 * @param int   $timestamp Event timestamp.
 	 * @param array $data      Event data (carries user_id).
 	 */
-	public static function refresh_on_event( $timestamp, $data ): void {
+	public static function refresh_on_event( int $timestamp, array $data ): void {
 		$user_id = (int) ( $data['user_id'] ?? 0 );
 		if ( $user_id > 0 ) {
 			self::refresh( $user_id );
@@ -95,17 +95,22 @@ final class Available_Deals_Bridge {
 	 * Options are the engine's active rules — any active rule, regardless of the
 	 * publicize flag (the segment selection is the targeting).
 	 *
+	 * Options are only computed in admin: their sole consumer is the segments
+	 * editor (Audience_Campaigns localizes get_registered_criteria() on its admin
+	 * page), while the front-end criteria config drops them — so reader-facing
+	 * requests skip the engine's active-rules query entirely.
+	 *
 	 * @param array $criteria Default criteria.
 	 * @return array
 	 */
-	public static function register_criteria( $criteria ) {
+	public static function register_criteria( array $criteria ): array {
 		$criteria['has_available_deal'] = [
 			'name'               => __( 'Has available deal', 'newspack-plugin' ),
 			'description'        => __( 'Reader qualifies for one of the selected pricing deals.', 'newspack-plugin' ),
 			'category'           => 'reader_revenue',
 			'matching_function'  => 'list__in',
 			'matching_attribute' => self::STORE_KEY,
-			'options'            => self::deal_options(),
+			'options'            => is_admin() ? self::deal_options() : [],
 		];
 		return $criteria;
 	}
