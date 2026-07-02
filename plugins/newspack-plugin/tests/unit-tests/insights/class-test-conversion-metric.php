@@ -1468,6 +1468,29 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( [], $result['stages'] );
 	}
 
+	/**
+	 * C10 schema drift (NEWS-2598): rows arrive without the hub-provided
+	 * `became_subscriber` key — e.g. a pre-NEWS-2598 hub that still emits the old
+	 * `{ uid, saw_subscription_surface }` shape. Because that flag is now the sole
+	 * source of step 3, treat the absent key as malformed rather than silently
+	 * reporting a populated funnel with 0 conversions (a plausible-but-false result).
+	 */
+	public function test_registered_to_subscriber_funnel_errors_on_missing_conversion_flag() {
+		$rows = [
+			[
+				'uid'                      => 1,
+				'saw_subscription_surface' => 1,
+			],
+		];
+		$metric          = new Conversion_Metric( $this->proxy_returning( $rows ), $this->subscribers_metric_configured() );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_registered_to_subscriber_funnel( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
 	// --- C11: get_registered_to_donor_funnel --------------------------------
 
 	/**
@@ -1580,6 +1603,29 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 			'saw_donation_surface' => 1,
 		];
 		$metric          = new Conversion_Metric( $this->proxy_returning( [ $valid_row, 'not-an-array' ] ), null, $this->donors_metric_configured() );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
+
+		$this->assertSame( 'error', $result['state'] );
+		$this->assertSame( 'bigquery_proxy_malformed_rows', $result['error_code'] );
+		$this->assertSame( [], $result['stages'] );
+	}
+
+	/**
+	 * C11 schema drift (NEWS-2598): rows arrive without the hub-provided
+	 * `became_donor` key — e.g. a pre-NEWS-2598 hub still emitting the old
+	 * `{ uid, saw_donation_surface }` shape. Because that flag is now the sole
+	 * source of step 3, treat the absent key as malformed rather than silently
+	 * reporting a populated funnel with 0 conversions.
+	 */
+	public function test_registered_to_donor_funnel_errors_on_missing_conversion_flag() {
+		$rows = [
+			[
+				'uid'                  => 1,
+				'saw_donation_surface' => 1,
+			],
+		];
+		$metric          = new Conversion_Metric( $this->proxy_returning( $rows ), null, $this->donors_metric_configured() );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_registered_to_donor_funnel( $start, $end );
 

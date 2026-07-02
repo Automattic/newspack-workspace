@@ -749,6 +749,14 @@ final class Conversion_Metric {
 				'stages' => [],
 			];
 		}
+		// NEWS-2598: `became_subscriber` is the sole source of step 3. A hub on the
+		// pre-NEWS-2598 schema emits `{ uid, saw_subscription_surface }` without it;
+		// treat that as malformed rather than silently reporting a populated funnel
+		// with 0 conversions. BigQuery returns the column for all rows or none, so the
+		// first row (already guaranteed an array by the guard above) is representative.
+		if ( ! array_key_exists( 'became_subscriber', $rows[0] ) ) {
+			return $this->malformed_collection( 'stages' );
+		}
 		$step_1 = count( $rows );
 		$step_2 = 0;
 		$step_3 = 0;
@@ -829,6 +837,14 @@ final class Conversion_Metric {
 				'state'  => 'empty',
 				'stages' => [],
 			];
+		}
+		// NEWS-2598: `became_donor` is the sole source of step 3. A hub on the
+		// pre-NEWS-2598 schema emits `{ uid, saw_donation_surface }` without it; treat
+		// that as malformed rather than silently reporting a populated funnel with 0
+		// conversions. BigQuery returns the column for all rows or none, so the first
+		// row (already guaranteed an array by the guard above) is representative.
+		if ( ! array_key_exists( 'became_donor', $rows[0] ) ) {
+			return $this->malformed_collection( 'stages' );
 		}
 		$step_1 = count( $rows );
 		$step_2 = 0;
