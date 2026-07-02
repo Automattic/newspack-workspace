@@ -145,15 +145,20 @@ class Content_Gate_API {
 	 * @return array The sanitized registration.
 	 */
 	public static function sanitize_registration( $registration ) {
-		$registration = [
-			'active'               => boolval( $registration['active'] ),
-			'metering'             => self::sanitize_metering( $registration['metering'] ),
-			'require_verification' => boolval( $registration['require_verification'] ),
-		];
-		if ( isset( $registration['gate_layout_id'] ) ) {
-			$registration['gate_layout_id'] = absint( $registration['gate_layout_id'] );
+		$sanitized = [];
+		if ( isset( $registration['active'] ) ) {
+			$sanitized['active'] = boolval( $registration['active'] );
 		}
-		return $registration;
+		if ( isset( $registration['metering'] ) ) {
+			$sanitized['metering'] = self::sanitize_metering( $registration['metering'] );
+		}
+		if ( isset( $registration['require_verification'] ) ) {
+			$sanitized['require_verification'] = boolval( $registration['require_verification'] );
+		}
+		if ( isset( $registration['gate_layout_id'] ) ) {
+			$sanitized['gate_layout_id'] = absint( $registration['gate_layout_id'] );
+		}
+		return $sanitized;
 	}
 
 	/**
@@ -164,15 +169,20 @@ class Content_Gate_API {
 	 * @return array The sanitized custom access.
 	 */
 	public static function sanitize_custom_access( $custom_access ) {
-		$custom_access = [
-			'active'       => boolval( $custom_access['active'] ),
-			'metering'     => self::sanitize_metering( $custom_access['metering'] ),
-			'access_rules' => self::sanitize_rules( $custom_access['access_rules'], 'access' ),
-		];
-		if ( isset( $custom_access['gate_layout_id'] ) ) {
-			$custom_access['gate_layout_id'] = absint( $custom_access['gate_layout_id'] );
+		$sanitized = [];
+		if ( isset( $custom_access['active'] ) ) {
+			$sanitized['active'] = boolval( $custom_access['active'] );
 		}
-		return $custom_access;
+		if ( isset( $custom_access['metering'] ) ) {
+			$sanitized['metering'] = self::sanitize_metering( $custom_access['metering'] );
+		}
+		if ( isset( $custom_access['access_rules'] ) ) {
+			$sanitized['access_rules'] = self::sanitize_rules( $custom_access['access_rules'], 'access' );
+		}
+		if ( isset( $custom_access['gate_layout_id'] ) ) {
+			$sanitized['gate_layout_id'] = absint( $custom_access['gate_layout_id'] );
+		}
+		return $sanitized;
 	}
 
 	/**

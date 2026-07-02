@@ -2536,6 +2536,65 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A sparse nested registration/custom_access update payload (e.g. only
+	 * toggling `active`) must not wipe the stored metering, verification, or
+	 * access rules for that mode.
+	 */
+	public function test_update_gate_sparse_nested_settings_preserve_stored_values() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Sparse Nested Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate with full registration and custom_access settings.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Sparse Nested Gate',
+				'priority'      => 0,
+				'registration'  => [
+					'active'               => true,
+					'metering'             => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+					'require_verification' => true,
+				],
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							'slug'  => 'email_domain',
+							'value' => 'example.com',
+						],
+					],
+				],
+			]
+		);
+
+		// Sparse update: only toggle registration.active.
+		$sanitized_registration = Content_Gate_API::sanitize_registration( [ 'active' => false ] );
+		$this->assertSame( [ 'active' => false ], $sanitized_registration, 'Sanitized registration must contain only the explicitly provided field' );
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'registration' => $sanitized_registration ] );
+
+		$registration = Content_Gate::get_registration_settings( $gate_id );
+		$this->assertFalse( $registration['active'], 'Registration active must be updated to the explicitly provided value' );
+		$this->assertTrue( $registration['metering']['enabled'], 'Stored registration metering must not be wiped by a sparse update' );
+		$this->assertSame( 3, $registration['metering']['count'], 'Stored registration metering count must not be wiped by a sparse update' );
+		$this->assertTrue( $registration['require_verification'], 'Stored require_verification must not be wiped by a sparse update' );
+
+		// Sparse update: only toggle custom_access.active.
+		$sanitized_custom_access = Content_Gate_API::sanitize_custom_access( [ 'active' => false ] );
+		$this->assertSame( [ 'active' => false ], $sanitized_custom_access, 'Sanitized custom_access must contain only the explicitly provided field' );
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'custom_access' => $sanitized_custom_access ] );
+
+		$custom_access = Content_Gate::get_custom_access_settings( $gate_id );
+		$this->assertFalse( $custom_access['active'], 'Custom access active must be updated to the explicitly provided value' );
+		$this->assertSame( 'email_domain', $custom_access['access_rules'][0][0]['slug'], 'Stored access_rules must not be wiped by a sparse update' );
+	}
+
+	/**
 	 * Creating a gate must fall back to a default title when the payload
 	 * omits one, since sanitize_gate() no longer guarantees a title.
 	 */
