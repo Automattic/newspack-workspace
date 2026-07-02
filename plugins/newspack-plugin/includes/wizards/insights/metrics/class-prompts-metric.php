@@ -1578,6 +1578,28 @@ final class Prompts_Metric {
 				: 'donation' === $intent;
 			$donation_conversions = $donation_capable ? (int) ( $donation_map[ $popup_id ]['conversions'] ?? 0 ) : 0;
 
+			// NPPD-1832: compound intent label for multi-block prompts. Recognized conversion
+			// capabilities are derived from the hub's per-popup prompt_has_* seen-impression
+			// counts (registration/donation/newsletter/checkout). When 2+ are present the raw
+			// action_type collapses to 'undefined', so compose a deterministic "A + B" label from
+			// the present capabilities in a fixed order; otherwise keep the single-intent label.
+			$capability_label_parts = [];
+			foreach (
+				[
+					'registration'             => (int) ( $row['registration_impressions'] ?? 0 ),
+					'donation'                 => (int) ( $row['donation_impressions'] ?? 0 ),
+					'newsletters_subscription' => (int) ( $row['newsletter_impressions'] ?? 0 ),
+					'checkout'                 => (int) ( $row['checkout_impressions'] ?? 0 ),
+				] as $capability_key => $capability_count
+			) {
+				if ( $capability_count > 0 ) {
+					$capability_label_parts[] = self::INTENT_LABELS[ $capability_key ];
+				}
+			}
+			$intent_label = count( $capability_label_parts ) >= 2
+				? implode( ' + ', $capability_label_parts )
+				: ( self::INTENT_LABELS[ $intent ] ?? null );
+
 			// Both rates share the coherence guard + em-dash semantics via rate_value() (null =
 			// not computable: no impressions, or a >100% cross-surface ratio; a float incl. 0.0
 			// = a real rate, e.g. a donation-capable prompt that converted nobody). null = N/A
@@ -1586,10 +1608,11 @@ final class Prompts_Metric {
 				'popup_id'                     => $popup_id,
 				'prompt_title'                 => (string) ( $row['prompt_title'] ?? '' ),
 				'intent'                       => $intent,
-				// Friendly display label (NPPD-1758), single source of truth shared with
-				// the per-intent table. Null when the intent has no friendly override, so
-				// the frontend falls back to its humanizer (preserving title-casing).
-				'intent_label'                 => self::INTENT_LABELS[ $intent ] ?? null,
+				// Friendly display label (NPPD-1758) or compound multi-block label (NPPD-1832),
+				// computed above. Single source of truth shared with the per-intent table. Null
+				// when a single-intent prompt has no friendly override, so the frontend falls
+				// back to its humanizer (preserving title-casing).
+				'intent_label'                 => $intent_label,
 				'placement'                    => (string) ( $row['placement'] ?? '' ),
 				'impressions'                  => $impressions,
 				'unique_viewers'               => (int) ( $row['unique_viewers'] ?? 0 ),
