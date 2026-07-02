@@ -1,3 +1,10 @@
 .newspack-wizards-admin-header {
 	margin-left: -20px;
+	position: sticky;
+	top: var(--wp-admin--admin-bar--height);
+	z-index: 3;
+
+	.newspack-tabbed-navigation {
+		position: static;
+	}
 }
