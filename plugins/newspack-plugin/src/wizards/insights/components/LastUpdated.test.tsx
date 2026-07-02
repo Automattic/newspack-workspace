@@ -96,4 +96,68 @@ describe( 'LastUpdated', () => {
 		const item = screen.getByRole( 'menuitem', { name: /save as pdf/i } );
 		expect( item ).toHaveAttribute( 'aria-disabled', 'true' );
 	} );
+
+	it( 'exports JSON with a computedAt+tab+preset filename on Export JSON', () => {
+		// jsdom does not implement URL.createObjectURL / URL.revokeObjectURL, so
+		// jest.spyOn would throw (can't spy on undefined). Assign directly and
+		// save/restore to prevent cross-suite pollution.
+		const origCreateObjectURL = URL.createObjectURL;
+		const origRevokeObjectURL = URL.revokeObjectURL;
+		let downloadName = '';
+		let capturedBlob: Blob | null = null;
+		const urlMock = global.URL as unknown as { createObjectURL: typeof URL.createObjectURL; revokeObjectURL: typeof URL.revokeObjectURL };
+		urlMock.createObjectURL = jest.fn( ( blob: Blob ) => {
+			capturedBlob = blob;
+			return 'blob:mock';
+		} );
+		urlMock.revokeObjectURL = jest.fn( () => undefined );
+		const clickSpy = jest.spyOn( HTMLAnchorElement.prototype, 'click' ).mockImplementation( function ( this: HTMLAnchorElement ) {
+			downloadName = this.download;
+		} );
+
+		// try/finally so a failed assertion still restores the mutated URL
+		// globals and the click spy — otherwise a throw here would leak them
+		// into later tests in the same worker.
+		try {
+			seedSlot( 'engagement', {
+				status: 'success',
+				computedAt: '2026-06-10T18:42:13Z',
+				data: { current: { views: 5 } },
+			} );
+
+			render( <LastUpdated tab="engagement" range={ range } previousRange={ null } /> );
+			fireEvent.click( screen.getByRole( 'button', { name: /options/i } ) );
+			fireEvent.click( screen.getByRole( 'menuitem', { name: /export json/i } ) );
+
+			expect( clickSpy ).toHaveBeenCalledTimes( 1 );
+			expect( downloadName ).toBe( '2026-06-10-engagement-last-30-days.json' );
+			expect( capturedBlob ).not.toBeNull();
+		} finally {
+			const urlRestoreMock = global.URL as unknown as {
+				createObjectURL: typeof URL.createObjectURL;
+				revokeObjectURL: typeof URL.revokeObjectURL;
+			};
+			urlRestoreMock.createObjectURL = origCreateObjectURL;
+			urlRestoreMock.revokeObjectURL = origRevokeObjectURL;
+			clickSpy.mockRestore();
+		}
+	} );
+
+	it( 'disables Export JSON while the slot is loading', () => {
+		seedSlot( 'engagement', { status: 'loading', computedAt: '2026-06-10T18:42:13Z', data: { a: 1 } } );
+
+		render( <LastUpdated tab="engagement" range={ range } previousRange={ null } /> );
+		fireEvent.click( screen.getByRole( 'button', { name: /options/i } ) );
+		const item = screen.getByRole( 'menuitem', { name: /export json/i } );
+		expect( item ).toHaveAttribute( 'aria-disabled', 'true' );
+	} );
+
+	it( 'disables Export JSON when the slot has no data', () => {
+		seedSlot( 'engagement', { status: 'success', computedAt: '2026-06-10T18:42:13Z', data: null } );
+
+		render( <LastUpdated tab="engagement" range={ range } previousRange={ null } /> );
+		fireEvent.click( screen.getByRole( 'button', { name: /options/i } ) );
+		const item = screen.getByRole( 'menuitem', { name: /export json/i } );
+		expect( item ).toHaveAttribute( 'aria-disabled', 'true' );
+	} );
 } );
