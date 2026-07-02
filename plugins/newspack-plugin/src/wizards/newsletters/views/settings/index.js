@@ -361,9 +361,9 @@ export const Settings = ( {
 
 	if ( ! error && isEmpty( config ) ) {
 		return (
-			<div className="flex justify-around mt4">
+			<HStack justify="center" className="newspack-newsletters-settings__loading">
 				<Waiting />
-			</div>
+			</HStack>
 		);
 	}
 
@@ -676,9 +676,9 @@ export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {
 						</WpNotice>
 					) }
 					{ inFlight && ! lists?.length && ! error && (
-						<div className="flex justify-around mt4">
+						<HStack justify="center" className="newspack-newsletters-settings__loading">
 							<Waiting />
-						</div>
+						</HStack>
 					) }
 					{ ! lockedLists &&
 						! error &&
