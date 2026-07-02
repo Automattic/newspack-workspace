@@ -528,6 +528,34 @@ final class Newspack_Newsletters_Editor {
 			'remote-data-blocks/foundation-movie',
 			'remote-data-blocks/foundation-movies',
 		);
+
+		// Blocks the WC email-editor engine can render but the legacy MJML
+		// renderer cannot. Only offer them when the WC engine is active, so a
+		// site still on MJML can't insert a block that renders empty at send.
+		if ( \Newspack\Newsletters\Email_Renderers\Feature_Flag::is_enabled() ) {
+			$allowed_block_types = array_merge(
+				$allowed_block_types,
+				array(
+					'core/table',
+					'core/gallery',
+					'core/media-text',
+					'core/cover',
+				)
+			);
+
+			/**
+			 * Whether to allow the experimental audio/video blocks. They have no
+			 * inline playback in email — the WC engine renders them as static
+			 * fallbacks (audio: a "Listen" link; video: a play-poster link), so
+			 * they ship on by default but behind their own switch.
+			 *
+			 * @param bool $enabled Whether experimental blocks are allowed.
+			 */
+			if ( apply_filters( 'newspack_newsletters_wc_experimental_blocks', true ) ) {
+				$allowed_block_types[] = 'core/audio';
+				$allowed_block_types[] = 'core/video';
+			}
+		}
 		/**
 		 * Filters the allowed block types for the Newsletter CPT.
 		 *

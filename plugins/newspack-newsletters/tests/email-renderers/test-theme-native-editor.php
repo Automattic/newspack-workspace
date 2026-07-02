@@ -182,6 +182,87 @@ class Test_Theme_Native_Editor extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Call newsletters_allowed_block_types() with the global $post primed to a
+	 * newsletter so is_editing_email() resolves true.
+	 *
+	 * @param \WP_Post $newsletter Newsletter post.
+	 * @return array The resolved allow-list.
+	 */
+	private function resolve_allowed_blocks( \WP_Post $newsletter ): array {
+		global $post; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		$post = $newsletter;
+		setup_postdata( $newsletter );
+		$result = \Newspack_Newsletters_Editor::newsletters_allowed_block_types( true, $newsletter );
+		wp_reset_postdata();
+		return (array) $result;
+	}
+
+	/**
+	 * The WC engine can render table/gallery/media-text/cover, so they join the
+	 * allow-list when the WC renderer flag is on.
+	 */
+	public function test_allowed_block_types_adds_wc_native_blocks_when_flag_on() {
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+		$result = $this->resolve_allowed_blocks( $this->create_newsletter_post() );
+
+		foreach ( [ 'core/table', 'core/gallery', 'core/media-text', 'core/cover' ] as $block ) {
+			$this->assertContains(
+				$block,
+				$result,
+				"WC-native block '$block' must be allowed when the WC renderer flag is on."
+			);
+		}
+	}
+
+	/**
+	 * The legacy MJML renderer cannot render these blocks, so they must be absent
+	 * from the allow-list when the WC renderer flag is off.
+	 */
+	public function test_allowed_block_types_excludes_wc_native_blocks_when_flag_off() {
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_false' );
+		$result = $this->resolve_allowed_blocks( $this->create_newsletter_post() );
+
+		foreach ( [ 'core/table', 'core/gallery', 'core/media-text', 'core/cover', 'core/audio', 'core/video' ] as $block ) {
+			$this->assertNotContains(
+				$block,
+				$result,
+				"Block '$block' must not be allowed under the legacy MJML renderer."
+			);
+		}
+	}
+
+	/**
+	 * Audio and video render as static link/poster fallbacks in email (no inline
+	 * playback), so they ship as a labeled experiment — on by default when the WC
+	 * flag is on.
+	 */
+	public function test_allowed_block_types_includes_experimental_media_when_flag_on() {
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+		$result = $this->resolve_allowed_blocks( $this->create_newsletter_post() );
+
+		$this->assertContains( 'core/audio', $result, 'Experimental audio block should be allowed by default with the WC flag on.' );
+		$this->assertContains( 'core/video', $result, 'Experimental video block should be allowed by default with the WC flag on.' );
+	}
+
+	/**
+	 * The experimental audio/video blocks can be turned off independently via the
+	 * newspack_newsletters_wc_experimental_blocks filter without affecting the
+	 * solid WC-native blocks.
+	 */
+	public function test_experimental_blocks_filter_disables_audio_video_only() {
+		add_filter( 'newspack_newsletters_use_woo_renderer', '__return_true' );
+		add_filter( 'newspack_newsletters_wc_experimental_blocks', '__return_false' );
+
+		$result = $this->resolve_allowed_blocks( $this->create_newsletter_post() );
+
+		remove_filter( 'newspack_newsletters_wc_experimental_blocks', '__return_false' );
+
+		$this->assertNotContains( 'core/audio', $result, 'Audio must drop out when experimental blocks are filtered off.' );
+		$this->assertNotContains( 'core/video', $result, 'Video must drop out when experimental blocks are filtered off.' );
+		$this->assertContains( 'core/table', $result, 'Solid WC-native blocks must remain when only experimental blocks are filtered off.' );
+	}
+
+	/**
 	 * Passes the incoming value through unchanged for non-newsletter
 	 * posts, leaving standard post editors access to all registered blocks.
 	 */
