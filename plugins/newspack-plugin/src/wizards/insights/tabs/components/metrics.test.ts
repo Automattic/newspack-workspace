@@ -67,6 +67,34 @@ describe( 'payloadToCard', () => {
 		} );
 		expect( card?.previousValue ).toBeNull();
 	} );
+
+	it( 'renders an incalculable rate (0/0) as the em-dash not-computable treatment (NEWS-2593)', () => {
+		const card = payloadToCard( {
+			label: 'Completion Rate',
+			current: { value: 0, computable: false, type: 'rate', denominator: 0 },
+		} );
+		expect( card?.notComputableMessage ).toBe( 'Not enough data to calculate.' );
+		// No bare 0% hero.
+		expect( card ).not.toHaveProperty( 'value' );
+	} );
+
+	it( 'lets the caller override the not-computable copy', () => {
+		const card = payloadToCard( {
+			label: 'Completion Rate',
+			current: { value: 0, computable: false, type: 'rate' },
+			notComputableMessage: 'No scroll data in this timeframe.',
+		} );
+		expect( card?.notComputableMessage ).toBe( 'No scroll data in this timeframe.' );
+	} );
+
+	it( 'keeps a non-computable count as a real value, not an em-dash (scope is percentages)', () => {
+		const card = payloadToCard( {
+			label: 'x',
+			current: { value: 0, computable: false, type: 'count' },
+		} );
+		expect( card ).not.toHaveProperty( 'notComputableMessage' );
+		expect( card?.value ).toBe( 0 );
+	} );
 } );
 
 describe( 'toSeries', () => {

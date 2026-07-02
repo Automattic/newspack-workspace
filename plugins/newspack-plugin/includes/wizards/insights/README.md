@@ -222,7 +222,7 @@ Lead with the count where it's a standing population (active donors / subscriber
 A "good zero" is a metric whose zero is the desired outcome. Rule, split by format:
 
 - **Rate-format good-zeros** get explicit positive/neutral copy via the em-dash treatment — e.g. Subscribers' *"No refund requests in this timeframe."* (orders but no refunds) and *"No failed payments in this timeframe."* (no retries to recover).
-- **Count-format good-zeros** rely on the native `lowerIsBetter` visual (the green down-delta) and render the real `0` with no editorial copy — e.g. Churned subscribers, Lapsed donors.
+- **Count-format good-zeros** rely on the native `lowerIsBetter` visual (the green down-delta) and render the real `0` with no editorial copy — e.g. Churned subscribers, Lapsed donors. This holds even when there is no underlying population at all (e.g. a site with zero donors): a *count* of zero **is** the observation, so it renders `0`, not an em-dash — unlike an incalculable *rate* over an empty population (§7). (NEWS-2593.)
 
 A computable zero that is *not* good (e.g. a 0% recovery rate when retries did happen) renders as the real value, not a reframe.
 
@@ -236,8 +236,9 @@ A computable zero that is *not* good (e.g. a 0% recovery rate when retries did h
 - Render the **em-dash (`—`)** hero when the value carries no signal: no opportunity count (`zeroFallback` denominator 0), not capable, not computable, or a good-zero reframe.
 - Render the **real value** when the zero itself is the observation — the per-card `no_conversions` states (New donors `0`, Total Revenue `$0.00`) keep their real hero plus a secondary line.
 - Render a **text fallback** (`0 of 17`, `0 conversions`) when a zero needs companion context to read honestly.
+- **Incalculable rates render the em-dash automatically (NEWS-2593).** A populated *rate* whose population is empty — `computable === false`, i.e. a `0/0` (e.g. Influenced Donation Rate on a site with no donations, or Completion Rate on a property emitting no `scroll` events) — is routed to the em-dash treatment by the scalar mappers themselves (`tabs/components/metrics.ts` `payloadToCard`, `tabs/conversion/scalarToCard.ts`), with a generic *"Not enough data to calculate."* line that a section can override. This is **scoped to rate format**: `count`/`currency`/`decimal` metrics with an empty population keep their real `0` (§5) — a count of zero is the observation, a rate over zero is not.
 
-This is the existing convention — codified, not changed.
+The em-dash-for-incalculable-*rates* rule is enforced in the scalar mappers (NEWS-2593); the rest is the existing convention, codified.
 
 ### 8. Period-delta suppression
 
