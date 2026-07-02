@@ -1,5 +1,5 @@
 {
-	"*.{js,jsx,ts,tsx}": "eslint",
-	"*.scss": "stylelint --customSyntax postcss-scss",
+	"*.{js,jsx,ts,tsx}": "bin/precommit-eslint.sh",
+	"*.scss": "bin/precommit-stylelint.sh",
 	"*.php": "bin/precommit-phpcs.sh"
 }
