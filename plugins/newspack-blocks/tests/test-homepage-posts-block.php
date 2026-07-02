@@ -9,6 +9,63 @@
  * Homepage Posts Block test case.
  */
 class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
+
+	/**
+	 * Post types registered during a test, unregistered in tear_down() so the
+	 * suite stays order-independent even if a test fails mid-way.
+	 *
+	 * @var string[]
+	 */
+	private $registered_post_types = [];
+
+	public function tear_down() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
+		foreach ( $this->registered_post_types as $post_type ) {
+			if ( post_type_exists( $post_type ) ) {
+				unregister_post_type( $post_type );
+			}
+		}
+		$this->registered_post_types = [];
+		parent::tear_down();
+	}
+
+	/**
+	 * Register a non-viewable (private, not in REST) CPT for the duration of a test.
+	 *
+	 * @param string $name Post type name.
+	 * @return string The registered post type name.
+	 */
+	private function register_non_viewable_cpt( $name = 'newspack_secret_cpt' ) {
+		register_post_type(
+			$name,
+			[
+				'public'       => false,
+				'show_in_rest' => false,
+				'supports'     => [ 'title', 'editor' ],
+			]
+		);
+		$this->registered_post_types[] = $name;
+		return $name;
+	}
+
+	/**
+	 * Register a publicly viewable CPT for the duration of a test.
+	 *
+	 * @param string $name Post type name.
+	 * @return string The registered post type name.
+	 */
+	private function register_viewable_cpt( $name = 'newspack_public_cpt' ) {
+		register_post_type(
+			$name,
+			[
+				'public'       => true,
+				'show_in_rest' => true,
+				'supports'     => [ 'title', 'editor' ],
+			]
+		);
+		$this->registered_post_types[] = $name;
+		return $name;
+	}
+
 	/**
 	 * HPB query from attributes.
 	 */
@@ -84,17 +141,10 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * The public /articles endpoint must not return posts from non-viewable post types.
 	 */
 	public function test_articles_endpoint_excludes_non_viewable_post_types() {
-		register_post_type(
-			'newspack_secret_cpt',
-			[
-				'public'       => false,
-				'show_in_rest' => false,
-				'supports'     => [ 'title', 'editor' ],
-			]
-		);
+		$secret    = $this->register_non_viewable_cpt();
 		$secret_id = self::factory()->post->create(
 			[
-				'post_type'    => 'newspack_secret_cpt',
+				'post_type'    => $secret,
 				'post_status'  => 'publish',
 				'post_title'   => 'Secret CPT title',
 				'post_content' => 'Secret CPT body.',
@@ -107,7 +157,7 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 		$controller = new WP_REST_Newspack_Articles_Controller();
 		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
-		$request->set_param( 'postType', [ 'newspack_secret_cpt' ] );
+		$request->set_param( 'postType', [ $secret ] );
 		$request->set_param( 'postsToShow', 10 );
 		$ids = $controller->get_items( $request )->get_data()['ids'];
 
@@ -120,25 +170,16 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			$ids,
 			'A request for only non-viewable post types returns no results, not substituted posts.'
 		);
-
-		unregister_post_type( 'newspack_secret_cpt' );
 	}
 
 	/**
 	 * Mixed input keeps the viewable post types and drops the non-viewable ones.
 	 */
 	public function test_articles_endpoint_filters_mixed_post_types() {
-		register_post_type(
-			'newspack_secret_cpt',
-			[
-				'public'       => false,
-				'show_in_rest' => false,
-				'supports'     => [ 'title', 'editor' ],
-			]
-		);
+		$secret     = $this->register_non_viewable_cpt();
 		$secret_id  = self::factory()->post->create(
 			[
-				'post_type'   => 'newspack_secret_cpt',
+				'post_type'   => $secret,
 				'post_status' => 'publish',
 			]
 		);
@@ -147,31 +188,22 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 		$controller = new WP_REST_Newspack_Articles_Controller();
 		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
-		$request->set_param( 'postType', [ 'post', 'newspack_secret_cpt' ] );
+		$request->set_param( 'postType', [ 'post', $secret ] );
 		$request->set_param( 'postsToShow', 10 );
 		$ids = $controller->get_items( $request )->get_data()['ids'];
 
 		self::assertContains( $regular_id, $ids, 'The viewable post type is kept.' );
 		self::assertNotContains( $secret_id, $ids, 'The non-viewable post type is dropped.' );
-
-		unregister_post_type( 'newspack_secret_cpt' );
 	}
 
 	/**
 	 * A publicly viewable custom post type is still returned by the endpoint.
 	 */
 	public function test_articles_endpoint_allows_viewable_post_types() {
-		register_post_type(
-			'newspack_public_cpt',
-			[
-				'public'       => true,
-				'show_in_rest' => true,
-				'supports'     => [ 'title', 'editor' ],
-			]
-		);
+		$public    = $this->register_viewable_cpt();
 		$public_id = self::factory()->post->create(
 			[
-				'post_type'   => 'newspack_public_cpt',
+				'post_type'   => $public,
 				'post_status' => 'publish',
 			]
 		);
@@ -179,7 +211,7 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 		$controller = new WP_REST_Newspack_Articles_Controller();
 		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
-		$request->set_param( 'postType', [ 'newspack_public_cpt' ] );
+		$request->set_param( 'postType', [ $public ] );
 		$request->set_param( 'postsToShow', 10 );
 		$ids = $controller->get_items( $request )->get_data()['ids'];
 
@@ -188,25 +220,17 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			$ids,
 			'A publicly viewable post type must still be returned by the public articles endpoint.'
 		);
-
-		unregister_post_type( 'newspack_public_cpt' );
 	}
 
 	/**
-	 * The specific-posts selection mode must not surface a non-viewable post by ID.
+	 * The specific-posts selection mode must not surface a non-viewable post by ID
+	 * (requested post type is itself non-viewable — the empty-guard path).
 	 */
 	public function test_articles_endpoint_excludes_non_viewable_in_specific_posts_mode() {
-		register_post_type(
-			'newspack_secret_cpt',
-			[
-				'public'       => false,
-				'show_in_rest' => false,
-				'supports'     => [ 'title', 'editor' ],
-			]
-		);
+		$secret    = $this->register_non_viewable_cpt();
 		$secret_id = self::factory()->post->create(
 			[
-				'post_type'   => 'newspack_secret_cpt',
+				'post_type'   => $secret,
 				'post_status' => 'publish',
 			]
 		);
@@ -214,7 +238,7 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 
 		$controller = new WP_REST_Newspack_Articles_Controller();
 		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
-		$request->set_param( 'postType', [ 'newspack_secret_cpt' ] );
+		$request->set_param( 'postType', [ $secret ] );
 		$request->set_param( 'specificMode', 1 );
 		$request->set_param( 'specificPosts', [ $secret_id ] );
 		$request->set_param( 'postsToShow', 10 );
@@ -225,7 +249,35 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			$ids,
 			'Specific-posts mode must not surface a non-viewable post by ID.'
 		);
+	}
 
-		unregister_post_type( 'newspack_secret_cpt' );
+	/**
+	 * Specific-posts mode must not surface a non-viewable post by ID even when the
+	 * requested postType is viewable. This reaches the WP_Query post_type + post__in
+	 * intersection (the realistic attack), not the empty-guard short-circuit.
+	 */
+	public function test_articles_endpoint_excludes_non_viewable_specific_post_under_viewable_type() {
+		$secret    = $this->register_non_viewable_cpt();
+		$secret_id = self::factory()->post->create(
+			[
+				'post_type'   => $secret,
+				'post_status' => 'publish',
+			]
+		);
+		wp_set_current_user( 0 );
+
+		$controller = new WP_REST_Newspack_Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ 'post' ] ); // Viewable — survives the filter.
+		$request->set_param( 'specificMode', 1 );
+		$request->set_param( 'specificPosts', [ $secret_id ] );
+		$request->set_param( 'postsToShow', 10 );
+		$ids = $controller->get_items( $request )->get_data()['ids'];
+
+		self::assertNotContains(
+			$secret_id,
+			$ids,
+			'A non-viewable post requested by ID must not surface even under a viewable postType.'
+		);
 	}
 }

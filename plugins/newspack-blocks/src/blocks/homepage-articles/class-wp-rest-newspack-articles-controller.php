@@ -131,17 +131,11 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 
 		// This endpoint is public, so restrict it to publicly viewable post types — matching
 		// what WordPress exposes on the front end. The editor endpoints are capability-gated.
-		$attributes['postType'] = self::filter_viewable_post_types( isset( $attributes['postType'] ) ? $attributes['postType'] : [ 'post' ] );
+		$attributes['postType'] = self::filter_viewable_post_types( $attributes['postType'] );
 		if ( empty( $attributes['postType'] ) ) {
 			// Every requested post type was non-viewable; return nothing rather than
 			// substituting a different post type.
-			return rest_ensure_response(
-				[
-					'items' => [],
-					'ids'   => [],
-					'next'  => '',
-				]
-			);
+			return self::articles_response();
 		}
 
 		$article_query_args = Newspack_Blocks::build_articles_query( $attributes, apply_filters( 'newspack_blocks_block_name', 'newspack-blocks/homepage-articles' ) );
@@ -207,11 +201,23 @@ class WP_REST_Newspack_Articles_Controller extends WP_REST_Controller {
 			);
 		}
 
+		return self::articles_response( $items, $ids, $next_url );
+	}
+
+	/**
+	 * Build the articles endpoint response.
+	 *
+	 * @param array  $items Rendered article items.
+	 * @param array  $ids   Post ids in the response.
+	 * @param string $next  URL for the next page, or empty string when there is none.
+	 * @return WP_REST_Response
+	 */
+	private static function articles_response( $items = [], $ids = [], $next = '' ) {
 		return rest_ensure_response(
 			[
 				'items' => $items,
 				'ids'   => $ids,
-				'next'  => $next_url,
+				'next'  => $next,
 			]
 		);
 	}
