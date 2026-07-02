@@ -1632,6 +1632,23 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Performance-by-prompt row with explicit per-popup capability impression counts
+	 * (registration/donation/newsletter/checkout), for the NPPD-1832 compound-label tests.
+	 * Only the capability columns passed in are set, mirroring a hub row where a prompt
+	 * carries some conversion blocks but not others.
+	 *
+	 * @param int    $popup_id     Popup ID.
+	 * @param string $title        Prompt title.
+	 * @param string $intent       Raw action_type intent.
+	 * @param int    $impressions  Total impressions.
+	 * @param array  $capabilities Capability columns to set (others omitted).
+	 * @return array
+	 */
+	protected function performance_row_with_capabilities( int $popup_id, string $title, string $intent, int $impressions, array $capabilities ): array {
+		return array_merge( $this->performance_row( $popup_id, $title, $intent, $impressions ), $capabilities );
+	}
+
+	/**
 	 * Build a proxy mock that returns the performance-by-prompt rows on the
 	 * main query call and the given donation/subscription rows on the
 	 * augmentation queries (in dispatch order).
@@ -2007,6 +2024,87 @@ class Test_Prompts_Metric extends WP_UnitTestCase {
 			],
 			array_keys( $result['rows'][0] )
 		);
+	}
+
+	/**
+	 * NPPD-1832: a prompt carrying 2+ recognized conversion blocks gets a deterministic
+	 * compound `intent_label` ("A + B") composed from the per-popup capability impression
+	 * counts in a FIXED order (registration, donation, newsletter, subscription). The raw
+	 * `intent` field is never rewritten. Prompts with fewer than 2 capabilities keep the
+	 * existing single-intent label behavior (INTENT_LABELS lookup, else null).
+	 */
+	public function test_performance_by_prompt_composes_compound_intent_label() {
+		$perf_rows = [
+			// registration + checkout → "Registration + Subscription"; raw intent stays 'undefined'.
+			$this->performance_row_with_capabilities(
+				1,
+				'Reg plus checkout',
+				'undefined',
+				100,
+				[
+					'registration_impressions' => 40,
+					'checkout_impressions'     => 25,
+				]
+			),
+			// All four present → full compound in fixed order.
+			$this->performance_row_with_capabilities(
+				2,
+				'Everything',
+				'undefined',
+				200,
+				[
+					'registration_impressions' => 5,
+					'donation_impressions'     => 5,
+					'newsletter_impressions'   => 5,
+					'checkout_impressions'     => 5,
+				]
+			),
+			// donation + newsletter (registration/checkout absent) → order skips the gaps.
+			$this->performance_row_with_capabilities(
+				3,
+				'Donate plus news',
+				'undefined',
+				150,
+				[
+					'donation_impressions'   => 10,
+					'newsletter_impressions' => 3,
+				]
+			),
+			// Exactly one capability, intent carries it → unchanged single-intent label.
+			$this->performance_row_with_capabilities(
+				4,
+				'Donate only',
+				'donation',
+				90,
+				[ 'donation_impressions' => 12 ]
+			),
+			// Zero recognized capabilities + unmapped intent → unchanged null label.
+			$this->performance_row_with_capabilities( 5, 'Informational', 'undefined', 30, [] ),
+		];
+		$proxy  = $this->make_performance_proxy( $perf_rows, [], [], 1 ); // Non-WC env: perf query only.
+		$metric = new Prompts_Metric( $proxy );
+		$result = $metric->get_performance_by_prompt( $this->start(), $this->end() );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$rows = $result['rows'];
+
+		// 2+ capabilities → compound label in fixed order; raw intent untouched.
+		$this->assertSame( 'Registration + Subscription', $rows[0]['intent_label'] );
+		$this->assertSame( 'undefined', $rows[0]['intent'] );
+
+		$this->assertSame( 'Registration + Donation + Newsletter signup + Subscription', $rows[1]['intent_label'] );
+		$this->assertSame( 'undefined', $rows[1]['intent'] );
+
+		$this->assertSame( 'Donation + Newsletter signup', $rows[2]['intent_label'] );
+		$this->assertSame( 'undefined', $rows[2]['intent'] );
+
+		// Exactly 1 capability → unchanged single-intent label; raw intent untouched.
+		$this->assertSame( 'Donation', $rows[3]['intent_label'] );
+		$this->assertSame( 'donation', $rows[3]['intent'] );
+
+		// 0 capabilities + unmapped intent → unchanged null label (frontend humanizes).
+		$this->assertNull( $rows[4]['intent_label'] );
+		$this->assertSame( 'undefined', $rows[4]['intent'] );
 	}
 
 	/**
