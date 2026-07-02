@@ -5,6 +5,14 @@
 	background-color: wp-colors.$white;
 }
 
+.newspack-page > [class*="__header"] {
+	top: var(--wp-admin--admin-bar--height);
+}
+
+.newspack-page > .newspack-tabbed-navigation {
+	position: static;
+}
+
 .newspack-page [class*="header-visual"] svg path {
 	transform: scale(1.1111);
 	transform-box: view-box;
