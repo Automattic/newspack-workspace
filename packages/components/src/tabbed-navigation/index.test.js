@@ -60,8 +60,6 @@ describe( 'isItemActive', () => {
 		} );
 
 		it( 'matches an activeTabPaths wildcard as a prefix', () => {
-			// Distinct path so the exact-path check does not short-circuit and the
-			// wildcard branch is what is exercised.
 			const item = { path: '/other', activeTabPaths: [ '/segments/*' ] };
 			expect( isItemActive( item, '/segments/123' ) ).toBe( true );
 			expect( isItemActive( item, '/segments' ) ).toBe( false );

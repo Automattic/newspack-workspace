@@ -1,7 +1,7 @@
 @use "../../node_modules/tachyons/css/tachyons.min.css";
 @use "~@wordpress/base-styles/colors" as wp-colors;
 
-/* stylelint-disable-next-line no-invalid-position-at-import-rule -- @use must precede it; postcss-import inlines it and needs the physical path (exports map is not honored). */
+/* stylelint-disable-next-line no-invalid-position-at-import-rule -- sass @use must precede the CSS @import. */
 @import "@wordpress/theme/src/prebuilt/css/design-tokens.css";
 
 :root {

@@ -7,7 +7,7 @@
 
 .newspack-tabbed-navigation {
 	background: white;
-	border-bottom: var( --wpds-border-width-xs, 1px ) solid var( --wpds-color-stroke-surface-neutral-weak, #{ wp-colors.$gray-200 } );
+	border-bottom: var( --wpds-border-width-xs ) solid var( --wpds-color-stroke-surface-neutral-weak );
 	width: 100%;
 
 	@media only screen and ( min-width: 600px ) {
@@ -20,16 +20,11 @@
 		top: 32px;
 	}
 
-	// Newspack accent for the active-tab indicator. Scoped inside the
-	// ThemeProvider subtree, whose inline token values would otherwise win.
 	.newspack-tabbed-navigation__tabs {
 		/* stylelint-disable-next-line plugin-wpds/no-setting-wpds-custom-properties -- deliberate Newspack brand override of the indicator token. */
 		--wpds-color-stroke-interactive-neutral-strong: #{colors.$primary-600};
 	}
 
-	// @wordpress/ui's tab styles live in the `wp-ui` cascade layer, so
-	// wp-admin's unlayered link rules would otherwise win these properties.
-	// Values mirror the design-system foreground-interactive-neutral tokens.
 	a[role="tab"] {
 		color: wp-colors.$gray-900;
 		text-decoration: none;
