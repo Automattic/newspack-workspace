@@ -77,6 +77,7 @@ const entry = {
 	'collections-admin': path.join( __dirname, 'src', 'collections', 'admin', 'index.js' ),
 	'collections-frontend': path.join( __dirname, 'src', 'collections', 'frontend', 'index.js' ),
 	'group-subscription-admin': path.join( __dirname, 'src', 'group-subscription', 'admin.js' ),
+	'csv-export': path.join( __dirname, 'src', 'csv-export', 'index.js' ),
 };
 
 // Get files for other scripts.

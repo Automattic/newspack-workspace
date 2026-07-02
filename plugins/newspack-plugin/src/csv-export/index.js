@@ -1,0 +1,53 @@
+/* globals newspackCsvExport */
+/**
+ * Drives the batched CSV export from the admin list tables: one AJAX request
+ * per page (WooCommerce product-exporter style), then a nonce-protected
+ * download of the assembled file.
+ */
+document.addEventListener( 'DOMContentLoaded', () => {
+	document.querySelectorAll( '.newspack-csv-export' ).forEach( button => {
+		const status = button.parentElement.querySelector( '.newspack-csv-export__status' );
+		const setStatus = text => {
+			status.hidden = false;
+			status.textContent = text;
+		};
+		const fail = message => {
+			setStatus( message || newspackCsvExport.labels.error );
+			button.disabled = false;
+		};
+		const processStep = ( step, filename ) => {
+			const body = new URLSearchParams( {
+				action: newspackCsvExport.action,
+				security: newspackCsvExport.nonce,
+				export: button.dataset.export,
+				step,
+				list_args: window.location.search.replace( /^\?/, '' ),
+			} );
+			if ( filename ) {
+				body.set( 'filename', filename );
+			}
+			fetch( newspackCsvExport.ajaxUrl, { method: 'POST', credentials: 'same-origin', body } )
+				.then( response => response.json() )
+				.then( response => {
+					if ( ! response.success ) {
+						fail( response.data && response.data.message );
+						return;
+					}
+					if ( 'done' === response.data.step ) {
+						setStatus( newspackCsvExport.labels.done );
+						button.disabled = false;
+						window.location = response.data.url;
+					} else {
+						setStatus( `${ newspackCsvExport.labels.exporting } ${ response.data.percentage }%` );
+						processStep( response.data.step, response.data.filename );
+					}
+				} )
+				.catch( () => fail() );
+		};
+		button.addEventListener( 'click', () => {
+			button.disabled = true;
+			setStatus( `${ newspackCsvExport.labels.exporting } 0%` );
+			processStep( 1 );
+		} );
+	} );
+} );

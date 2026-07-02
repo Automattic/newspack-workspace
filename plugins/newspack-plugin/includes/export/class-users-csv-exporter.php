@@ -9,6 +9,8 @@ namespace Newspack;
 
 defined( 'ABSPATH' ) || exit;
 
+require_once __DIR__ . '/class-csv-batch-exporter.php';
+
 /**
  * Exports WP users to CSV in pages, honoring the users admin list filters
  * (role, search), with WooCommerce billing/shipping meta columns.
@@ -22,7 +24,7 @@ defined( 'ABSPATH' ) || exit;
  * This class must only be loaded after WooCommerce's WC_CSV_Batch_Exporter
  * abstract (see CSV_Exports::load_exporter_dependencies()).
  */
-class Users_CSV_Exporter extends \WC_CSV_Batch_Exporter {
+class Users_CSV_Exporter extends CSV_Batch_Exporter {
 
 	/**
 	 * Type of export, used in WC filter names.
@@ -32,27 +34,11 @@ class Users_CSV_Exporter extends \WC_CSV_Batch_Exporter {
 	protected $export_type = 'newspack_users';
 
 	/**
-	 * Captured admin list query params (parsed query string).
-	 *
-	 * @var array
-	 */
-	protected $list_params = [];
-
-	/**
 	 * Constructor.
 	 */
 	public function __construct() {
 		$this->filename = 'newspack-users-export.csv';
 		parent::__construct();
-	}
-
-	/**
-	 * Set the captured list-table query params driving this export.
-	 *
-	 * @param array $params Parsed query-string params from the admin list.
-	 */
-	public function set_list_params( $params ) {
-		$this->list_params = (array) $params;
 	}
 
 	/**

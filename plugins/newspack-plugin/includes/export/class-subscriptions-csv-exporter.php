@@ -9,6 +9,8 @@ namespace Newspack;
 
 defined( 'ABSPATH' ) || exit;
 
+require_once __DIR__ . '/class-csv-batch-exporter.php';
+
 /**
  * Exports WooCommerce Subscriptions to CSV in pages, honoring the
  * subscriptions admin list filters (status, product, customer, payment
@@ -24,7 +26,7 @@ defined( 'ABSPATH' ) || exit;
  * This class must only be loaded after WooCommerce's WC_CSV_Batch_Exporter
  * abstract (see CSV_Exports::load_exporter_dependencies()).
  */
-class Subscriptions_CSV_Exporter extends \WC_CSV_Batch_Exporter {
+class Subscriptions_CSV_Exporter extends CSV_Batch_Exporter {
 
 	/**
 	 * Type of export, used in WC filter names.
@@ -34,27 +36,11 @@ class Subscriptions_CSV_Exporter extends \WC_CSV_Batch_Exporter {
 	protected $export_type = 'newspack_subscriptions';
 
 	/**
-	 * Captured admin list query params (parsed query string).
-	 *
-	 * @var array
-	 */
-	protected $list_params = [];
-
-	/**
 	 * Constructor.
 	 */
 	public function __construct() {
 		$this->filename = 'newspack-subscriptions-export.csv';
 		parent::__construct();
-	}
-
-	/**
-	 * Set the captured list-table query params driving this export.
-	 *
-	 * @param array $params Parsed query-string params from the admin list.
-	 */
-	public function set_list_params( $params ) {
-		$this->list_params = (array) $params;
 	}
 
 	/**
