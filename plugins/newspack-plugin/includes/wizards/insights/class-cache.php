@@ -75,9 +75,12 @@ final class Cache {
 	 * @param string     $source    SOURCE_* constant.
 	 * @param string[]   $key_parts Canonicalized window components.
 	 * @param callable   $compute   () => array — orchestrator payload.
-	 * @param array|null $window    [ 'start' => 'Y-m-d', 'end' => 'Y-m-d' ] to
-	 *                              enable on-demand caching of this window; null
-	 *                              disables it (non-windowed callers).
+	 * @param array|null $window    [ 'start' => 'Y-m-d', 'end' => 'Y-m-d' ]. When
+	 *                              supplied for a BigQuery-proxy source, this window
+	 *                              participates in the on-demand pool — consulted on
+	 *                              read and written through on a live compute. Null
+	 *                              (non-windowed callers) skips the on-demand pool
+	 *                              entirely (neither read nor written).
 	 * @return array{ payload: array, computed_at: string, source: string, cooldown_until: ?string }
 	 */
 	public static function store( string $tab, string $source, array $key_parts, callable $compute, ?array $window = null ): array {
@@ -107,9 +110,14 @@ final class Cache {
 			];
 		}
 
-		// On-demand durable pool (lazily populated). A fresh entry serves
-		// instantly; a stale one is recomputed inline below and overwritten.
-		$ondemand      = self::peek_ondemand( $tab, $source, $key_parts );
+		// On-demand durable pool (windowed BigQuery-proxy sources only). A fresh
+		// entry serves instantly; a stale one is recomputed inline below and
+		// overwritten. When the caller passes no window (or a non-windowed source),
+		// the pool is neither read nor written — symmetric with the write-through
+		// gate below, so $window = null truly opts out of on-demand caching.
+		$ondemand_eligible = null !== $window
+			&& ( self::SOURCE_EXTERNAL === $source || self::SOURCE_BIGQUERY === $source );
+		$ondemand       = $ondemand_eligible ? self::peek_ondemand( $tab, $source, $key_parts ) : null;
 		$ondemand_stale = null !== $ondemand && ! self::is_fresh( $ondemand['computed_at'] );
 		if ( null !== $ondemand && ! $ondemand_stale ) {
 			return [
@@ -148,11 +156,8 @@ final class Cache {
 			self::index_add( $tab, self::transient_key( $tab, $key_parts ) );
 		}
 
-		// Write-through / refresh the on-demand pool for windowed BQ-proxy sources.
-		if (
-			null !== $window &&
-			( self::SOURCE_EXTERNAL === $source || self::SOURCE_BIGQUERY === $source )
-		) {
+		// Write-through / refresh the on-demand pool (same eligibility as the read).
+		if ( $ondemand_eligible ) {
 			self::store_ondemand( $tab, $source, $key_parts, $envelope['payload'], $window );
 		}
 
