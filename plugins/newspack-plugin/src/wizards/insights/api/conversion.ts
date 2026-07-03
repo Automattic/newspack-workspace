@@ -180,7 +180,7 @@ export interface ConversionCohortData extends ConversionErrorFields {
 export interface ConversionWeekPoint {
 	week: string;
 	registration_conversion_rate: number;
-	subscription_attempt_rate: number;
+	subscription_conversion_rate: number;
 }
 
 export interface ConversionWeeklyTrendsData extends ConversionErrorFields {

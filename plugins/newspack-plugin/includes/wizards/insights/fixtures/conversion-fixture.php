@@ -264,7 +264,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 								'value'  => 0.0,
 							],
 							[
-								'period' => 2,
+								'period' => 3,
 								'value'  => 0.009,
 							],
 						],
@@ -347,7 +347,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 								'value'  => 1.0,
 							],
 							[
-								'period' => 2,
+								'period' => 3,
 								'value'  => 0.94,
 							],
 						],
@@ -429,7 +429,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 					$error,
 					[
 						'weeks'  => [],
-						'series' => [ 'registration_rate', 'subscription_attempt_rate' ],
+						'series' => [ 'registration_rate', 'subscription_conversion_rate' ],
 					]
 				),
 				// Section 7 — influenced scalars.
@@ -551,7 +551,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 				'weekly_conversion_rates'          => [
 					'state'  => 'empty',
 					'weeks'  => [],
-					'series' => [ 'registration_rate', 'subscription_attempt_rate' ],
+					'series' => [ 'registration_rate', 'subscription_conversion_rate' ],
 				],
 				// Section 7 — influenced scalars (non-computable zeros).
 				'influenced_registration_rate_7d'  => $scalar_zero( 'rate' ),
@@ -788,7 +788,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 			$weeks[]    = [
 				'week'                         => $week_start->format( 'Y-m-d' ),
 				'registration_conversion_rate' => $reg_rate,
-				'subscription_attempt_rate'    => $sub_rate,
+				'subscription_conversion_rate' => $sub_rate,
 			];
 		}
 
@@ -890,7 +890,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 				'weekly_conversion_rates'          => [
 					'state'  => 'populated',
 					'weeks'  => $weeks,
-					'series' => [ 'registration_rate', 'subscription_attempt_rate' ],
+					'series' => [ 'registration_rate', 'subscription_conversion_rate' ],
 				],
 				// Section 7.
 				'influenced_registration_rate_7d'  => $influenced_reg,

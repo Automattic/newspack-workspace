@@ -127,11 +127,14 @@
 		@include conversion-chart-card;
 	}
 
-	// Section 5 — two cohort curves stacked vertically.
+	// Section 5 — two cohort heatmaps side by side (wrapping to one column when
+	// the container is narrow). The heatmaps are compact, so stacking them left a
+	// lot of empty space to the right.
 	&__conversion-cohort-stack {
-		display: flex;
-		flex-direction: column;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
 		gap: 24px;
+		align-items: stretch;
 	}
 
 	&__conversion-cohort-cell {

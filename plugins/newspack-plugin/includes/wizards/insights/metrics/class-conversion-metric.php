@@ -1648,54 +1648,64 @@ final class Conversion_Metric {
 	/**
 	 * Weekly conversion rates (6) — multi-series LineChart. Dispatches
 	 * `conversion_journey_weekly_rates`; the hub returns per-week rows with
-	 * { week_start, registration_conversion_rate, subscription_attempt_rate }.
-	 * The `series` keys name the two tracked rates and are preserved in every
-	 * state so React can always build its legend without guarding for absence.
+	 * { week_start, registration_conversion_rate, new_registrations }. The
+	 * subscription series is computed HERE: real completed subscriptions per week
+	 * (local Woo, via Subscribers_Metric::get_new_subscribers_by_week) divided by the
+	 * hub's per-week `new_registrations`, so both series share the hub's registration
+	 * definition. The `series` keys (registration_rate, subscription_conversion_rate)
+	 * are preserved in every state so React can always build its legend.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array{state: string, weeks: array, series: string[]}
 	 */
 	public function get_weekly_conversion_rates( DateTimeInterface $start, DateTimeInterface $end ): array {
-		$rows = $this->proxy->query( 'conversion_journey_weekly_rates', $start, $end );
+		$series = [ 'registration_rate', 'subscription_conversion_rate' ];
+		$rows   = $this->proxy->query( 'conversion_journey_weekly_rates', $start, $end );
 		if ( is_wp_error( $rows ) ) {
-			return array_merge(
-				$this->error_collection( 'weeks', $rows ),
-				[ 'series' => [ 'registration_rate', 'subscription_attempt_rate' ] ]
-			);
+			return array_merge( $this->error_collection( 'weeks', $rows ), [ 'series' => $series ] );
 		}
-		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
-			return array_merge(
-				$this->malformed_collection( 'weeks' ),
-				[ 'series' => [ 'registration_rate', 'subscription_attempt_rate' ] ]
-			);
+		if ( ! is_array( $rows ) ) {
+			return array_merge( $this->malformed_collection( 'weeks' ), [ 'series' => $series ] );
 		}
 		if ( empty( $rows ) ) {
 			return [
 				'state'  => 'empty',
 				'weeks'  => [],
-				'series' => [ 'registration_rate', 'subscription_attempt_rate' ],
+				'series' => $series,
 			];
 		}
-		$weeks = [];
+		// Validate the full payload before the local Woo query below, so a malformed
+		// row short-circuits without an unnecessary database hit.
 		foreach ( $rows as $row ) {
 			if ( ! is_array( $row ) ) {
-				return array_merge(
-					$this->malformed_collection( 'weeks' ),
-					[ 'series' => [ 'registration_rate', 'subscription_attempt_rate' ] ]
-				);
+				return array_merge( $this->malformed_collection( 'weeks' ), [ 'series' => $series ] );
 			}
-			$week_start = $row['week_start'] ?? '';
-			$weeks[]    = [
-				'week'                         => is_scalar( $week_start ) ? (string) $week_start : '',
+		}
+
+		// Real completed subscriptions per week come from the local Woo store (the
+		// Subscribers-tab mechanism), keyed on the same Sunday-starting week_start the
+		// hub uses for registrations. Dividing here keeps "registration" defined as the
+		// hub's np_reader_registered count on both series. Mirrors the unconditional
+		// Subscribers_Metric use in get_source_mix_subscribers().
+		$subs_by_week = $this->subscribers_metric->get_new_subscribers_by_week( $start, $end );
+
+		$weeks = [];
+		foreach ( $rows as $row ) {
+			$week_start        = $row['week_start'] ?? '';
+			$week_key          = is_scalar( $week_start ) ? (string) $week_start : '';
+			$new_registrations = (int) ( $row['new_registrations'] ?? 0 );
+			$subscriptions     = (int) ( $subs_by_week[ $week_key ] ?? 0 );
+			$weeks[]           = [
+				'week'                         => $week_key,
 				'registration_conversion_rate' => (float) ( $row['registration_conversion_rate'] ?? 0.0 ),
-				'subscription_attempt_rate'    => (float) ( $row['subscription_attempt_rate'] ?? 0.0 ),
+				'subscription_conversion_rate' => $new_registrations > 0 ? $subscriptions / $new_registrations : 0.0,
 			];
 		}
 		return [
 			'state'  => 'populated',
 			'weeks'  => $weeks,
-			'series' => [ 'registration_rate', 'subscription_attempt_rate' ],
+			'series' => $series,
 		];
 	}
 
