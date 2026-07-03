@@ -52,8 +52,6 @@ const revenueBreakdownText = ( container: HTMLElement ): string => {
 	return card?.querySelector( '.newspack-insights__metric-card-secondary' )?.textContent ?? '';
 };
 
-const NLC = { value: 0.05, computable: true, denominator: 100 };
-
 describe( 'WindowedSection empty states', () => {
 	it( 'collapses to a no_opportunity EmptyMetricSection when the window saw no activity', () => {
 		const current = makeWindow( {
@@ -65,9 +63,7 @@ describe( 'WindowedSection empty states', () => {
 			total_revenue: 0,
 			average_gift: 0,
 		} );
-		const { container } = render(
-			<WindowedSection range={ RANGE } current={ current } previous={ null } activeDonors={ 0 } newsletterConversion={ NLC } />
-		);
+		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeDonors={ 0 } /> );
 
 		expect( container.querySelector( '[data-empty-state="no_opportunity"]' ) ).toBeInTheDocument();
 		// Assert body on the container — the Notice's speak() duplicates copy into a
@@ -82,9 +78,7 @@ describe( 'WindowedSection empty states', () => {
 		// Section has revenue and a lapse but no first-time donors: the New donors card
 		// gets the existing-donor context line, while the real revenue cards still render.
 		const current = makeWindow( { new_donors: 0, lapsed_donors: 2, total_revenue: 1500 } );
-		const { container } = render(
-			<WindowedSection range={ RANGE } current={ current } previous={ makeWindow() } activeDonors={ 42 } newsletterConversion={ NLC } />
-		);
+		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ makeWindow() } activeDonors={ 42 } /> );
 
 		// No whole-section empty state — the section is NOT collapsed.
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
@@ -99,20 +93,17 @@ describe( 'WindowedSection empty states', () => {
 		// the card renders a plain zero, not the "existing donors active" line. (In practice
 		// has_window_activity would usually be false here, but guard the per-card branch.)
 		const current = makeWindow( { new_donors: 0, lapsed_donors: 1, total_revenue: 500 } );
-		render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeDonors={ 0 } newsletterConversion={ NLC } /> );
+		render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeDonors={ 0 } /> );
 
 		expect( screen.queryByText( /existing donors active/ ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'renders every card (incl. the newsletter conversion card) with the full one-time + recurring breakdown when populated', () => {
+	it( 'renders every card with the full one-time + recurring breakdown when populated', () => {
 		const current = makeWindow();
-		const { container } = render(
-			<WindowedSection range={ RANGE } current={ current } previous={ null } activeDonors={ 200 } newsletterConversion={ NLC } />
-		);
+		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeDonors={ 200 } /> );
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
 		expect( screen.getByText( 'New donors' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Newsletter → donation' ) ).toBeInTheDocument();
 
 		const breakdown = revenueBreakdownText( container );
 		expect( breakdown ).toMatch( /one-time/ );
@@ -120,26 +111,9 @@ describe( 'WindowedSection empty states', () => {
 		expect( breakdown ).toContain( '+' );
 	} );
 
-	it( 'renders the newsletter conversion card as an em-dash when the cohort is not yet mature', () => {
-		render(
-			<WindowedSection
-				range={ RANGE }
-				current={ makeWindow() }
-				previous={ null }
-				activeDonors={ 200 }
-				newsletterConversion={ { value: 0, computable: false, denominator: 0 } }
-			/>
-		);
-
-		expect( screen.getByText( 'Newsletter → donation' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Not enough newsletter signups with 12 months of history yet.' ) ).toBeInTheDocument();
-	} );
-
 	it( 'suppresses the empty mode in the revenue breakdown — recurring-only window', () => {
 		const current = makeWindow( { one_time_revenue: 0, recurring_revenue: 1200, total_revenue: 1200, average_gift: 0 } );
-		const { container } = render(
-			<WindowedSection range={ RANGE } current={ current } previous={ null } activeDonors={ 50 } newsletterConversion={ NLC } />
-		);
+		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeDonors={ 50 } /> );
 
 		// The breakdown line shows recurring only — no "one-time" half, no "$0 one-time", no "+".
 		const breakdown = revenueBreakdownText( container );
@@ -152,9 +126,7 @@ describe( 'WindowedSection empty states', () => {
 
 	it( 'suppresses the empty mode in the revenue breakdown — one-time-only window', () => {
 		const current = makeWindow( { one_time_revenue: 800, recurring_revenue: 0, total_revenue: 800, average_gift: 40 } );
-		const { container } = render(
-			<WindowedSection range={ RANGE } current={ current } previous={ null } activeDonors={ 50 } newsletterConversion={ NLC } />
-		);
+		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeDonors={ 50 } /> );
 
 		const breakdown = revenueBreakdownText( container );
 		expect( breakdown ).toMatch( /one-time/ );
@@ -173,7 +145,7 @@ describe( 'WindowedSection empty states', () => {
 			total_revenue: 0,
 			average_gift: 0,
 		} );
-		render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeDonors={ 30 } newsletterConversion={ NLC } /> );
+		render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeDonors={ 30 } /> );
 
 		expect( screen.getByText( 'No donations in this timeframe' ) ).toBeInTheDocument();
 	} );

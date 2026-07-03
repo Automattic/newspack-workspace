@@ -65,6 +65,7 @@ class Insights_Section_Subscribers {
 		include_once $base . 'storage/class-hpos-storage.php';
 		include_once $base . 'storage/class-legacy-storage.php';
 		include_once $base . 'classifiers/class-donation-product-classifier.php';
+		include_once $base . 'metrics/class-clv-model.php';
 		include_once $base . 'metrics/class-subscribers-metric.php';
 		include_once $base . 'api/class-subscribers-rest-controller.php';
 	}

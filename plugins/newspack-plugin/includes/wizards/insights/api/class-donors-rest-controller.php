@@ -60,12 +60,14 @@ class Donors_REST_Controller extends WP_REST_Controller {
 	 * the renderer would dash out every applicability-gated column. The
 	 * Donors_Metric metric-layer cache is invalidated in parallel by its own
 	 * CACHE_PREFIX bump. Only the donors envelope is busted — other
-	 * (BigQuery-backed) tabs keep their caches.
+	 * (BigQuery-backed) tabs keep their caches. v4 adds the NEWS-2603 snapshot
+	 * fields `newsletter_conversion` and `supporter_clv_3yr` (a stale v3 envelope
+	 * would lack them and the cards would dereference `undefined`).
 	 *
 	 * @return string
 	 */
 	protected function cache_schema_version(): string {
-		return '3';
+		return '4';
 	}
 
 	/**
@@ -181,6 +183,9 @@ class Donors_REST_Controller extends WP_REST_Controller {
 				// NEWS-2603: newsletter -> donation conversion (hub, mature-cohort
 				// snapshot). Anchored on the report end date; window-independent.
 				'newsletter_conversion'               => ( new Conversion_Metric() )->get_newsletter_to_donation_conversion( $start, $end ),
+				// NEWS-2603: modeled 3-year supporter CLV (local Woo). Snapshot anchored
+				// on the report end date; window-independent.
+				'supporter_clv_3yr'                   => $metric->get_supporter_clv_3yr( $end ),
 			],
 			'current'        => $this->build_window( $metric, $start, $end ),
 			'previous'       => null,

@@ -182,6 +182,57 @@ class Donors_Metric {
 	}
 
 	/**
+	 * Modeled 3-year supporter lifetime value for recurring donors (NEWS-2603).
+	 * Same Reader Revenue Development CLV model as the subscribers sibling
+	 * ({@see Subscribers_Metric::get_supporter_clv_3yr()}):
+	 * 0.95 * ARPU * (r + r^2 + r^3) — three years of ARPU scaled by cumulative
+	 * survival, less a flat 5% maintenance cost, no intro discount.
+	 *
+	 *   ARPU = donation ARR / active recurring donors (recurring revenue per head).
+	 *   r    = 12-month recurring-donor retention (cohort: donors active 12 months
+	 *          before the report end date still active), clamped to [0, 1]. When that
+	 *          cohort can't be measured the whole card is non-computable (em-dash),
+	 *          not a misleading $0.00.
+	 *
+	 * Snapshot anchored on the report end date. A modeled estimate — labeled as
+	 * such in the UI.
+	 *
+	 * @param DateTimeInterface $end Report end date (the "now" anchor).
+	 * @return array{value: float, computable: bool, denominator: int}
+	 */
+	public function get_supporter_clv_3yr( DateTimeInterface $end ): array {
+		$active = $this->get_active_recurring_donors();
+		$arr    = $this->get_donation_arr();
+		if ( $active <= 0 || $arr <= 0.0 ) {
+			return [
+				'value'       => 0.0,
+				'computable'  => false,
+				'denominator' => $active,
+			];
+		}
+		$arpu = $arr / $active;
+
+		$year_ago  = \DateTimeImmutable::createFromInterface( $end )->sub( new \DateInterval( 'P365D' ) );
+		$retention = $this->get_recurring_donor_retention( $year_ago, $end );
+		if ( empty( $retention['computable'] ) || ! isset( $retention['value'] ) ) {
+			// No 12-month cohort to measure retention against (e.g. every recurring
+			// donor is newer than a year): render the em-dash, not a modeled $0.00.
+			return [
+				'value'       => 0.0,
+				'computable'  => false,
+				'denominator' => $active,
+			];
+		}
+		$r = (float) $retention['value'];
+
+		return [
+			'value'       => Clv_Model::three_year( $arpu, $r ),
+			'computable'  => true,
+			'denominator' => $active,
+		];
+	}
+
+	/**
 	 * Upcoming donation renewals in the next 30 days.
 	 *
 	 * @return array{count: int, total_value: float}
