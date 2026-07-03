@@ -73,6 +73,8 @@ export interface DonorsRateValue {
 	value: number;
 	computable: boolean;
 	denominator: number;
+	/** `'error'` when the hub proxy failed — distinct from a genuine non-computable (insufficient-data) result. */
+	state?: string;
 }
 
 export interface DonorsTierVariationRow extends BillingNature {
