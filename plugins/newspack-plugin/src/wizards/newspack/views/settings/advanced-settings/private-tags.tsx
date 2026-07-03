@@ -23,6 +23,7 @@ const INTEGRATION_TOGGLES = [
 	{ key: 'gam_targeting', label: __( 'Exclude private tags from Google Ad Manager targeting', 'newspack-plugin' ) },
 	{ key: 'yoast_metadata', label: __( 'Exclude private tags from Yoast SEO metadata', 'newspack-plugin' ) },
 	{ key: 'yoast_sitemap', label: __( 'Exclude private tags from Yoast XML sitemaps', 'newspack-plugin' ) },
+	{ key: 'reader_data', label: __( 'Remove private tags from audience management data', 'newspack-plugin' ) },
 ];
 
 export default function PrivateTags( { data, isFetching, update }: ThemeModComponentProps< AdvancedSettings > ) {
@@ -71,7 +72,7 @@ export default function PrivateTags( { data, isFetching, update }: ThemeModCompo
 						</Grid>
 					</fieldset>
 					<fieldset style={ { border: 0, margin: 0, padding: 0 } }>
-						<legend className="components-base-control__label">{ __( 'SEO and integrations', 'newspack-plugin' ) }</legend>
+						<legend className="components-base-control__label">{ __( 'Data and integrations', 'newspack-plugin' ) }</legend>
 						<Grid columns={ 1 } rowGap={ 16 }>
 							{ INTEGRATION_TOGGLES.map( ( { key, label } ) => (
 								<CheckboxControl
