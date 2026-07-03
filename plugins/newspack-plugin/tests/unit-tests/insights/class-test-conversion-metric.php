@@ -618,37 +618,49 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	// --- C6: get_weekly_conversion_rates -----------------------------------
 
 	/**
-	 * C6 populated: proxy returns rows of {week_start,
-	 * registration_conversion_rate, subscription_attempt_rate} → state
-	 * 'populated', `weeks` carries each row keyed by the three columns.
+	 * C6 populated: proxy returns rows of {week_start, registration_conversion_rate,
+	 * new_registrations}; the subscription series is computed here from real Woo
+	 * completions (Subscribers_Metric::get_new_subscribers_by_week) divided by the
+	 * hub's per-week new_registrations, keyed on the shared week_start.
 	 */
 	public function test_weekly_conversion_rates_returns_populated_weeks_on_success() {
-		$rows   = [
+		$rows = [
 			[
 				'week_start'                   => '2026-03-22',
 				'registration_conversion_rate' => 0.12,
-				'subscription_attempt_rate'    => 0.08,
+				'new_registrations'            => 200,
 			],
 			[
 				'week_start'                   => '2026-03-29',
 				'registration_conversion_rate' => 0.15,
-				'subscription_attempt_rate'    => 0.09,
+				'new_registrations'            => 300,
 			],
 		];
-		$metric = new Conversion_Metric( $this->proxy_returning( $rows ) );
+		// Real completed subscriptions per week (local Woo), keyed on the same week_start.
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscribers_by_week' )->willReturn(
+			[
+				'2026-03-22' => 16, // 16 / 200 = 0.08.
+				'2026-03-29' => 27, // 27 / 300 = 0.09.
+			]
+		);
+		$metric          = new Conversion_Metric( $this->proxy_returning( $rows ), $subs );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_weekly_conversion_rates( $start, $end );
 
 		$this->assertSame( 'populated', $result['state'] );
 		$this->assertArrayNotHasKey( 'pending', $result );
-		$this->assertSame( [ 'registration_rate', 'subscription_attempt_rate' ], $result['series'] );
+		$this->assertSame( [ 'registration_rate', 'subscription_conversion_rate' ], $result['series'] );
 		$this->assertCount( 2, $result['weeks'] );
 
-		// First week row: keys and cast values.
+		// First week: registration rate passes through; subscription rate = subs ÷ new_registrations.
 		$week0 = $result['weeks'][0];
 		$this->assertSame( '2026-03-22', $week0['week'] );
 		$this->assertEqualsWithDelta( 0.12, $week0['registration_conversion_rate'], 1e-9 );
-		$this->assertEqualsWithDelta( 0.08, $week0['subscription_attempt_rate'], 1e-9 );
+		$this->assertEqualsWithDelta( 0.08, $week0['subscription_conversion_rate'], 1e-9 );
+
+		// Second week likewise: 27 ÷ 300 = 0.09.
+		$this->assertEqualsWithDelta( 0.09, $result['weeks'][1]['subscription_conversion_rate'], 1e-9 );
 	}
 
 	/**
@@ -661,7 +673,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 
 		$this->assertSame( 'empty', $result['state'] );
 		$this->assertSame( [], $result['weeks'] );
-		$this->assertSame( [ 'registration_rate', 'subscription_attempt_rate' ], $result['series'] );
+		$this->assertSame( [ 'registration_rate', 'subscription_conversion_rate' ], $result['series'] );
 	}
 
 	/**
@@ -678,7 +690,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'bigquery_proxy_http_error', $result['error_code'] );
 		$this->assertSame( 'HTTP 502', $result['error_message'] );
 		$this->assertSame( [], $result['weeks'] );
-		$this->assertSame( [ 'registration_rate', 'subscription_attempt_rate' ], $result['series'] );
+		$this->assertSame( [ 'registration_rate', 'subscription_conversion_rate' ], $result['series'] );
 	}
 
 	/**
@@ -687,15 +699,18 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	 * conversion" warning. The non-scalar coerces to an empty `week` string
 	 * while the sibling scalar columns are still read. Regression test for the
 	 * production warning in Conversion_Metric::get_weekly_conversion_rates().
+	 */
 	public function test_weekly_conversion_rates_coerces_non_scalar_week_start() {
-		$rows            = [
+		$rows = [
 			[
 				'week_start'                   => [ 'value' => '2026-03-22' ],
 				'registration_conversion_rate' => 0.12,
-				'subscription_attempt_rate'    => 0.08,
+				'new_registrations'            => 100,
 			],
 		];
-		$metric          = new Conversion_Metric( $this->proxy_returning( $rows ) );
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscribers_by_week' )->willReturn( [] );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $rows ), $subs );
 		[ $start, $end ] = $this->window();
 		$result          = $metric->get_weekly_conversion_rates( $start, $end );
 
@@ -703,9 +718,31 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertCount( 1, $result['weeks'] );
 		// Non-scalar week_start coerces to '' rather than the literal "Array".
 		$this->assertSame( '', $result['weeks'][0]['week'] );
-		// Sibling scalar columns are still read.
+		// The sibling registration rate is still read.
 		$this->assertEqualsWithDelta( 0.12, $result['weeks'][0]['registration_conversion_rate'], 1e-9 );
-		$this->assertEqualsWithDelta( 0.08, $result['weeks'][0]['subscription_attempt_rate'], 1e-9 );
+		// No matching Woo week → subscription conversion rate 0.0.
+		$this->assertEqualsWithDelta( 0.0, $result['weeks'][0]['subscription_conversion_rate'], 1e-9 );
+	}
+
+	/**
+	 * C6 div-by-zero: a week with zero new_registrations yields a 0.0 subscription
+	 * conversion rate (no division), even if Woo reports subscriptions that week.
+	 */
+	public function test_weekly_conversion_rates_zero_registrations_yields_zero_rate() {
+		$rows = [
+			[
+				'week_start'                   => '2026-03-22',
+				'registration_conversion_rate' => 0.0,
+				'new_registrations'            => 0,
+			],
+		];
+		$subs = $this->createMock( Subscribers_Metric::class );
+		$subs->method( 'get_new_subscribers_by_week' )->willReturn( [ '2026-03-22' => 5 ] );
+		$metric          = new Conversion_Metric( $this->proxy_returning( $rows ), $subs );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_weekly_conversion_rates( $start, $end );
+
+		$this->assertEqualsWithDelta( 0.0, $result['weeks'][0]['subscription_conversion_rate'], 1e-9 );
 	}
 
 	// --- C7: get_influenced_registration_rate_7d ---------------------------
@@ -1981,7 +2018,7 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		// Section 6 — weekly rates: weeks array + series keys.
 		$this->assertSame( 'populated', $current['weekly_conversion_rates']['state'] );
 		$this->assertNotEmpty( $current['weekly_conversion_rates']['weeks'] );
-		$this->assertSame( [ 'registration_rate', 'subscription_attempt_rate' ], $current['weekly_conversion_rates']['series'] );
+		$this->assertSame( [ 'registration_rate', 'subscription_conversion_rate' ], $current['weekly_conversion_rates']['series'] );
 
 		// Section 7 — influenced scalars.
 		$this->assertSame( 'populated', $current['influenced_registration_rate_7d']['state'] );

@@ -196,6 +196,55 @@ class Legacy_Storage implements Storage_Interface {
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
+	 * @return array<string,int>
+	 */
+	public function get_new_subscribers_by_week( DateTimeInterface $start, DateTimeInterface $end ): array {
+		global $wpdb;
+		$prefix    = $wpdb->prefix;
+		$donations = $this->id_list( $this->donation_product_ids );
+
+		// Legacy (CPT) mirror of the HPOS by-week query: same first-subscription
+		// cohort, bucketed by the Sunday-starting week of _schedule_start to align
+		// with the hub's BigQuery DATE_TRUNC(date, WEEK) registration series.
+		$sql = $wpdb->prepare(
+			"SELECT
+				DATE(DATE_SUB(first_subs.first_start, INTERVAL (DAYOFWEEK(first_subs.first_start) - 1) DAY)) AS week_start,
+				COUNT(*) AS new_subscribers
+			FROM (
+				SELECT cust.meta_value AS customer_id, MIN(start.meta_value) AS first_start
+				FROM {$prefix}posts p
+				JOIN {$prefix}postmeta cust
+					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+				JOIN {$prefix}postmeta start
+					ON start.post_id = p.ID AND start.meta_key = '_schedule_start'
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE p.post_type = 'shop_subscription'
+				  AND oim.meta_value NOT IN ($donations)
+				  AND start.meta_value != ''
+				GROUP BY cust.meta_value
+			) AS first_subs
+			WHERE first_subs.first_start BETWEEN %s AND %s
+			GROUP BY week_start
+			ORDER BY week_start",
+			$this->fmt( $start ),
+			$this->fmt( $end )
+		);
+
+		$result = [];
+		foreach ( (array) $wpdb->get_results( $sql, ARRAY_A ) as $row ) {
+			$result[ (string) $row['week_start'] ] = (int) $row['new_subscribers'];
+		}
+		return $result;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
 	 * @return int
 	 */
 	public function get_churned_subscribers_in_window( DateTimeInterface $start, DateTimeInterface $end ): int {

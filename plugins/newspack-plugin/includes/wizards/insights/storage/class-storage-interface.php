@@ -52,6 +52,17 @@ interface Storage_Interface {
 	public function get_new_subscribers_in_window( DateTimeInterface $start, DateTimeInterface $end ): int;
 
 	/**
+	 * The same new-subscriber cohort as get_new_subscribers_in_window(), bucketed by
+	 * the Sunday-starting week of each customer's first non-donation subscription
+	 * start — for the Conversion tab's weekly subscription-conversion trend.
+	 *
+	 * @param DateTimeInterface $start Inclusive window start.
+	 * @param DateTimeInterface $end   Inclusive window end.
+	 * @return array<string,int> Map of week_start ('Y-m-d', Sunday) to new-subscriber count.
+	 */
+	public function get_new_subscribers_by_week( DateTimeInterface $start, DateTimeInterface $end ): array;
+
+	/**
 	 * Distinct customers whose ALL non-donation subscriptions ended in the
 	 * window (cancelled or expired) AND who have no other active non-donation
 	 * subscriptions. Losing one product while keeping another doesn't count.

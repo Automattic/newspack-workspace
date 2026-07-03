@@ -138,7 +138,7 @@ const cohort = ( referenceLine: ConversionReferenceLine | null, state: Conversio
 const weekly = ( state: ConversionMetricState = 'coming_soon' ): ConversionWeeklyTrendsData => ( {
 	state,
 	weeks: [],
-	series: [ 'registration_rate', 'subscription_attempt_rate' ],
+	series: [ 'registration_rate', 'subscription_conversion_rate' ],
 } );
 
 const topPages = ( state: ConversionMetricState = 'coming_soon' ): ConversionTopPagesTable => ( { state, rows: [], threshold_pageviews: 100 } );

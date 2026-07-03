@@ -37,12 +37,12 @@ export interface ConversionRateTrendsSectionProps {
  */
 const SERIES_BY_KEY: Record< string, { label: string; value: ( w: ConversionWeekPoint ) => number } > = {
 	registration_rate: {
-		label: __( 'Registration rate', 'newspack-plugin' ),
+		label: __( 'Registrations (per active reader)', 'newspack-plugin' ),
 		value: w => w.registration_conversion_rate,
 	},
-	subscription_attempt_rate: {
-		label: __( 'Subscription attempt rate', 'newspack-plugin' ),
-		value: w => w.subscription_attempt_rate,
+	subscription_conversion_rate: {
+		label: __( 'Subscriptions (per registered reader)', 'newspack-plugin' ),
+		value: w => w.subscription_conversion_rate,
 	},
 };
 

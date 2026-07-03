@@ -174,6 +174,25 @@ class Subscribers_Metric {
 	}
 
 	/**
+	 * New subscribers bucketed by the Sunday-starting week of their first subscription,
+	 * for the Conversion tab's weekly subscription-conversion trend.
+	 *
+	 * @param DateTimeInterface $start Window start.
+	 * @param DateTimeInterface $end   Window end.
+	 * @return array<string,int> Map of week_start ('Y-m-d') to new-subscriber count.
+	 */
+	public function get_new_subscribers_by_week( DateTimeInterface $start, DateTimeInterface $end ): array {
+		return (array) $this->cached(
+			'new_subscribers_by_week',
+			$this->window_key( $start, $end ),
+			self::TTL_DEFAULT,
+			function () use ( $start, $end ) {
+				return $this->storage->get_new_subscribers_by_week( $start, $end );
+			}
+		);
+	}
+
+	/**
 	 * Churned subscribers in window. See storage contract for semantics.
 	 *
 	 * @param DateTimeInterface $start Window start.
