@@ -36,5 +36,6 @@ plugins/*/package-lock.json
 themes/*/package-lock.json
 packages/*/package-lock.json
 .cursorignore
-# Per-clone personal hooks run by .husky/pre-commit (see AGENTS.md).
-.husky/*.local
+# Per-checkout personal hooks run by .husky/pre-commit (see AGENTS.md).
+# `*.local*` also covers editor backups like pre-commit.local~ / .local.bak.
+.husky/*.local*
