@@ -56,6 +56,7 @@ class Insights_Section_Donors {
 		include_once $base . 'storage/class-donors-storage-interface.php';
 		include_once $base . 'storage/class-hpos-donors-storage.php';
 		include_once $base . 'storage/class-legacy-donors-storage.php';
+		include_once $base . 'metrics/class-clv-model.php';
 		include_once $base . 'metrics/class-donors-metric.php';
 		include_once $base . 'api/class-donors-rest-controller.php';
 	}

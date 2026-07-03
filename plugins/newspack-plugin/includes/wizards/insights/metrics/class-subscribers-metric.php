@@ -272,13 +272,12 @@ class Subscribers_Metric {
 	 * instead; the intended, uniform subtraction is used here.
 	 *
 	 *   ARPU = ARR / active subscribers (annualized recurring revenue per head).
-	 *   r    = 12-month retention. Subscriptions carry no cohort-retention series,
-	 *          so r is annualized from churn over the trailing 12 months before
+	 *   r    = 12-month retention. Subscriptions carry no cohort-retention series, so
+	 *          r is annualized from churn over the trailing 12 months before the report
+	 *          end date: r = 1 - churned / active, clamped to [0, 1].
 	 *
-	 *          @end: r = 1 - churned / active, clamped to [0, 1].
-	 *
-	 * Snapshot anchored on @end, independent of the picker start. A modeled
-	 * estimate — labeled as such in the UI.
+	 * Snapshot anchored on the report end date, independent of the picker start.
+	 * A modeled estimate — labeled as such in the UI.
 	 *
 	 * @param DateTimeInterface $end Report end date (the "now" anchor).
 	 * @return array{value: float, computable: bool, denominator: int}
