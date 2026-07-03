@@ -330,4 +330,34 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		\Newspack\Tag_Labels::$stub_labels = null;
 		self::assertFalse( Newspack_Blocks_API::newspack_blocks_get_tag_labels( [ 'id' => $post_id ] ) );
 	}
+
+	/**
+	 * A non-viewable post type explicitly opted in via the
+	 * newspack_blocks_articles_allowed_post_types filter is served by the endpoint,
+	 * without loosening the gate for other non-viewable types.
+	 */
+	public function test_articles_endpoint_allows_filter_allowlisted_post_type() {
+		$allowed  = $this->register_non_viewable_cpt( 'newspack_allowed_cpt' );
+		$excluded = $this->register_non_viewable_cpt( 'newspack_secret_cpt' );
+		$allowed_id  = self::factory()->post->create( [ 'post_type' => $allowed, 'post_status' => 'publish' ] );
+		$excluded_id = self::factory()->post->create( [ 'post_type' => $excluded, 'post_status' => 'publish' ] );
+
+		$filter = function ( $types ) use ( $allowed ) {
+			$types[] = $allowed;
+			return $types;
+		};
+		add_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		wp_set_current_user( 0 );
+
+		$controller = new WP_REST_Newspack_Articles_Controller();
+		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
+		$request->set_param( 'postType', [ $allowed, $excluded ] );
+		$request->set_param( 'postsToShow', 10 );
+		$ids = $controller->get_items( $request )->get_data()['ids'];
+
+		remove_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+
+		self::assertContains( $allowed_id, $ids, 'An allow-listed non-viewable post type is served.' );
+		self::assertNotContains( $excluded_id, $ids, 'A non-viewable post type not on the allow-list is still dropped.' );
+	}
 }
