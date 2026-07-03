@@ -264,7 +264,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 								'value'  => 0.0,
 							],
 							[
-								'period' => 2,
+								'period' => 3,
 								'value'  => 0.009,
 							],
 						],
@@ -347,7 +347,7 @@ return function ( string $variant = 'populated', bool $compare = false ): array 
 								'value'  => 1.0,
 							],
 							[
-								'period' => 2,
+								'period' => 3,
 								'value'  => 0.94,
 							],
 						],

@@ -402,6 +402,86 @@
 		}
 	}
 
+	// Cohort heatmap (Section 5) — cohort-matrix grid replacing the many-series
+	// cohort LineChart. Cell background/text colors are computed inline (scaled to
+	// the value range); these rules own only structure. Horizontal scroll keeps a
+	// wide period axis from overflowing the card.
+	&__cohort-heatmap {
+		overflow-x: auto;
+	}
+
+	&__cohort-heatmap-table {
+		border-collapse: separate;
+		border-spacing: 3px;
+		font-size: 12px;
+		font-variant-numeric: tabular-nums;
+
+		caption {
+			caption-side: top;
+			margin-bottom: 6px;
+			text-align: left;
+			font-size: 11px;
+			color: wp-colors.$gray-600;
+		}
+	}
+
+	&__cohort-heatmap-corner,
+	&__cohort-heatmap-colhead {
+		padding: 0 6px 4px;
+		font-weight: 500;
+		color: wp-colors.$gray-700;
+		text-align: center;
+	}
+
+	&__cohort-heatmap-corner {
+		padding-left: 0;
+		text-align: left;
+	}
+
+	&__cohort-heatmap-rowhead {
+		padding-right: 10px;
+		font-weight: 400;
+		color: wp-colors.$gray-900;
+		text-align: left;
+		white-space: nowrap;
+	}
+
+	&__cohort-heatmap-cell {
+		min-width: 40px;
+		padding: 6px 10px;
+		border-radius: 4px;
+		text-align: center;
+		font-variant-numeric: tabular-nums;
+
+		&.is-empty {
+			background: transparent;
+		}
+	}
+
+	&__cohort-heatmap-footer {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+		margin-top: 10px;
+		font-size: 11px;
+		color: wp-colors.$gray-600;
+	}
+
+	&__cohort-heatmap-scale {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	&__cohort-heatmap-swatches {
+		display: inline-flex;
+
+		span {
+			width: 18px;
+			height: 12px;
+		}
+	}
+
 	// Dark hover panel shared by the line + bar charts (NPPD-1649 fix #5).
 	// Base = the line variant, positioned absolutely at a data point's
 	// coordinates (inline left/top) and floated above it.
