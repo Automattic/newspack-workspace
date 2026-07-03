@@ -35,6 +35,19 @@ class IP_Access_Rule {
 	const COOKIE_NAME = 'wp_nocache_ip';
 
 	/**
+	 * Lifetime of the IP-access bypass cookie.
+	 *
+	 * This is the effective re-validation interval for anonymous institutional
+	 * visitors: without the cookie, gated pages are served from the page cache
+	 * and the per-request IP check cannot run, so once it expires the visitor
+	 * is walled out until they re-visit /institutional-access. Keep it
+	 * long-lived — the cookie grants nothing by itself (the visitor's IP is
+	 * re-checked server-side on every uncached request), so a long lifetime
+	 * carries no access risk.
+	 */
+	const COOKIE_EXPIRATION = YEAR_IN_SECONDS;
+
+	/**
 	 * The endpoint for institutional access.
 	 */
 	const ENDPOINT = 'institutional-access';
@@ -723,7 +736,7 @@ class IP_Access_Rule {
 	 * the page cache so the IP check can run server-side.
 	 */
 	private static function set_cookie() {
-		$expiry = time() + HOUR_IN_SECONDS;
+		$expiry = time() + self::COOKIE_EXPIRATION;
 		if ( ! headers_sent() ) {
 			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.cookies_setcookie
 			setcookie(
