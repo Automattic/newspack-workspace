@@ -25,4 +25,10 @@ describe( 'Audience NewsletterValueSection', () => {
 		expect( screen.getByText( 'Value per newsletter subscriber' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Not enough newsletter or supporter history to model yet.' ) ).toBeInTheDocument();
 	} );
+
+	it( 'suppresses the insufficient-history copy when the payload carries an error', () => {
+		render( <NewsletterValueSection value={ { value: 0, computable: false, error: 'Hub unavailable' } } /> );
+		expect( screen.getByText( 'Value per newsletter subscriber' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Not enough newsletter or supporter history to model yet.' ) ).not.toBeInTheDocument();
+	} );
 } );
