@@ -53,6 +53,8 @@ describe( 'Donors ScorecardSection — at-a-glance snapshot cards', () => {
 			/>
 		);
 		expect( screen.getByText( 'Newsletter → donation' ) ).toBeInTheDocument();
+		// The card enters MetricCard's shared error-note state, not the em-dash/value path.
+		expect( screen.getByText( 'Data temporarily unavailable.' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Not enough newsletter signups with a full year of history yet.' ) ).not.toBeInTheDocument();
 	} );
 } );

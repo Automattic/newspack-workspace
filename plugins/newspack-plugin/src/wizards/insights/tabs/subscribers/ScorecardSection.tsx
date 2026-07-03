@@ -79,11 +79,10 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 				format="percent"
 				// A hub proxy failure is an error state, not "insufficient history" —
 				// surface it distinctly so a transient/hub issue doesn't read as "no data yet".
-				error={
-					snapshot.newsletter_conversion.state === 'error'
-						? __( 'Newsletter conversion data is unavailable right now.', 'newspack-plugin' )
-						: undefined
-				}
+				// MetricCard only needs a truthy `error` to switch to its shared
+				// "Data temporarily unavailable." note; the string isn't shown, so pass the
+				// state sentinel rather than a translatable string that never renders.
+				error={ snapshot.newsletter_conversion.state === 'error' ? snapshot.newsletter_conversion.state : undefined }
 				notComputableMessage={
 					! snapshot.newsletter_conversion.computable && snapshot.newsletter_conversion.state !== 'error'
 						? __( 'Not enough newsletter signups with a full year of history yet.', 'newspack-plugin' )
