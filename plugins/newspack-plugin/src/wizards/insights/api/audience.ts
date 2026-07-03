@@ -45,6 +45,8 @@ export interface AudienceResponse {
 	current?: InsightsWindow;
 	previous?: InsightsWindow | null;
 	registered_readers?: RegisteredReaders;
+	/** Modeled 3-year value of a newsletter subscriber (NEWS-2603): expected reader revenue per newsletter signup. */
+	newsletter_subscriber_value?: MetricPayload;
 }
 
 export interface InsightsQuery {

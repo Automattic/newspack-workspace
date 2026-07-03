@@ -471,13 +471,13 @@ $build = function ( float $f ) use ( $scalar, $breakdown, $table, $series, $star
 };
 
 return [
-	'current'            => $build( 1.0 ),
-	'previous'           => $build( 0.88 ),
+	'current'                     => $build( 1.0 ),
+	'previous'                    => $build( 0.88 ),
 	// Registered readers (local wp_users, NPPD-1733): a window-independent total
 	// snapshot plus a windowed "new" count with its prior-window companion for the
 	// period delta. Lives at top level — not inside the windows — because it is
 	// GA4-independent and present even when the tab is a connect banner.
-	'registered_readers' => [
+	'registered_readers'          => [
 		'total' => [
 			'value'      => 24680,
 			'computable' => true,
@@ -495,5 +495,13 @@ return [
 				'type'       => 'count',
 			],
 		],
+	],
+	// Modeled 3-year value of a newsletter subscriber (NEWS-2603): expected reader
+	// revenue per newsletter signup across the subscription + donation paths. Local
+	// Woo + hub conversion rates, GA4-independent — top level, like registered_readers.
+	'newsletter_subscriber_value' => [
+		'value'       => 27.3,
+		'computable'  => true,
+		'denominator' => 1200,
 	],
 ];
