@@ -89,6 +89,15 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test the bypass cookie lifetime is long enough to keep institutional
+	 * access persistent (see the COOKIE_EXPIRATION docblock).
+	 */
+	public function test_bypass_cookie_lifetime_is_at_least_thirty_days() {
+		$thirty_days_in_seconds = 30 * DAY_IN_SECONDS;
+		$this->assertGreaterThanOrEqual( $thirty_days_in_seconds, IP_Access_Rule::COOKIE_EXPIRATION );
+	}
+
+	/**
 	 * Test that the REST route is registered.
 	 */
 	public function test_rest_route_registered() {
