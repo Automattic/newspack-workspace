@@ -190,6 +190,9 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 				'tenure_distribution'        => $metric->get_subscription_tenure_distribution(),
 				'upcoming_renewals_30d'      => $metric->get_upcoming_renewals_30d(),
 				'upcoming_cancellations_30d' => $metric->get_upcoming_cancellations_30d(),
+				// NEWS-2603: newsletter -> subscription conversion (hub, mature-cohort
+				// snapshot). Anchored on the report end date; window-independent.
+				'newsletter_conversion'      => ( new Conversion_Metric() )->get_newsletter_to_subscription_conversion( $start, $end ),
 			],
 			'current'        => $this->build_window( $metric, $start, $end ),
 			'previous'       => null,

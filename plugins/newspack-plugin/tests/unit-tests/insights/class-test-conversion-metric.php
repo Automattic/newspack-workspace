@@ -369,6 +369,42 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NEWS-2603: newsletter -> subscription conversion scalar passes the hub row's
+	 * rate + newsletter-signups denominator straight through.
+	 */
+	public function test_newsletter_to_subscription_conversion_returns_scalar() {
+		$row             = [
+			'newsletter_conversion_rate' => 0.05,
+			'newsletter_signups'         => 200,
+		];
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ $row ] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_newsletter_to_subscription_conversion( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertEqualsWithDelta( 0.05, $result['value'], 1e-9 );
+		$this->assertTrue( $result['computable'] );
+		$this->assertSame( 200, $result['denominator'] );
+	}
+
+	/**
+	 * NEWS-2603: newsletter -> donation conversion scalar — same shape, donor query.
+	 */
+	public function test_newsletter_to_donation_conversion_returns_scalar() {
+		$row             = [
+			'newsletter_conversion_rate' => 0.02,
+			'newsletter_signups'         => 150,
+		];
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ $row ] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_newsletter_to_donation_conversion( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertEqualsWithDelta( 0.02, $result['value'], 1e-9 );
+		$this->assertSame( 150, $result['denominator'] );
+	}
+
+	/**
 	 * C3 empty: proxy returns [] → state 'empty', empty stages array.
 	 */
 	public function test_anon_to_registered_funnel_returns_empty_state_on_no_rows() {

@@ -178,6 +178,9 @@ class Donors_REST_Controller extends WP_REST_Controller {
 				'donation_arr'                        => $metric->get_donation_arr(),
 				'upcoming_donation_renewals_30d'      => $metric->get_upcoming_donation_renewals_30d(),
 				'upcoming_donation_cancellations_30d' => $metric->get_upcoming_donation_cancellations_30d(),
+				// NEWS-2603: newsletter -> donation conversion (hub, mature-cohort
+				// snapshot). Anchored on the report end date; window-independent.
+				'newsletter_conversion'               => ( new Conversion_Metric() )->get_newsletter_to_donation_conversion( $start, $end ),
 			],
 			'current'        => $this->build_window( $metric, $start, $end ),
 			'previous'       => null,

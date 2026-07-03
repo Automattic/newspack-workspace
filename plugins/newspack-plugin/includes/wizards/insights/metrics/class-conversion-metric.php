@@ -1793,6 +1793,57 @@ final class Conversion_Metric {
 		);
 	}
 
+	/**
+	 * Newsletter -> subscription conversion (NEWS-2603): of the mature newsletter-signup
+	 * cohort, the share who made a first confirmed subscription checkout within 12 months
+	 * of signing up. Snapshot (window-independent) — the hub anchors on the report date;
+	 * consumed by the Subscribers tab. Dispatches
+	 * `conversion_journey_newsletter_to_subscription`; the hub returns one row with
+	 * `newsletter_conversion_rate` and the `newsletter_signups` denominator.
+	 *
+	 * @param DateTimeInterface $start Window start (unused by the snapshot query).
+	 * @param DateTimeInterface $end   Report date anchor.
+	 * @return array
+	 */
+	public function get_newsletter_to_subscription_conversion( DateTimeInterface $start, DateTimeInterface $end ): array {
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			// Fixture-mode dev sites have no live hub — demo value: ~7% of newsletter
+			// signups became subscribers within 12 months (84 of 1,200).
+			return $this->populated_scalar( 0.07, true, 1200, 'rate' );
+		}
+		return $this->compute_influenced_rate_from_proxy(
+			'conversion_journey_newsletter_to_subscription',
+			'newsletter_conversion_rate',
+			'newsletter_signups',
+			$start,
+			$end
+		);
+	}
+
+	/**
+	 * Newsletter -> donation conversion (NEWS-2603): donor sibling of
+	 * get_newsletter_to_subscription_conversion, consumed by the Donors tab. Dispatches
+	 * `conversion_journey_newsletter_to_donation`; same one-row shape.
+	 *
+	 * @param DateTimeInterface $start Window start (unused by the snapshot query).
+	 * @param DateTimeInterface $end   Report date anchor.
+	 * @return array
+	 */
+	public function get_newsletter_to_donation_conversion( DateTimeInterface $start, DateTimeInterface $end ): array {
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			// Fixture-mode dev sites have no live hub — demo value: ~4% of newsletter
+			// signups became donors within 12 months (48 of 1,200).
+			return $this->populated_scalar( 0.04, true, 1200, 'rate' );
+		}
+		return $this->compute_influenced_rate_from_proxy(
+			'conversion_journey_newsletter_to_donation',
+			'newsletter_conversion_rate',
+			'newsletter_signups',
+			$start,
+			$end
+		);
+	}
+
 	// --- Section 8: Opportunity buckets ---------------------------------
 	// 8.1–8.3 are current-state snapshot counts: accept the window for
 	// signature parity, ignore it. All three are local-only (Woo-only, or

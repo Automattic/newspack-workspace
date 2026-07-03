@@ -56,6 +56,12 @@ export interface WindowedSectionProps {
 	 * subscribers, just none new in this timeframe.
 	 */
 	activeSubscribers: number;
+	/**
+	 * Newsletter → subscription conversion (NEWS-2603): a mature-cohort snapshot rate
+	 * from the hub. Window-independent — it sits in this windowed section for grouping,
+	 * but the value doesn't change with the date range.
+	 */
+	newsletterConversion: SubscribersRateValue;
 }
 
 const parseISO = ( s: string ): Date => {
@@ -110,7 +116,7 @@ const retriesCohortSubtitle = ( denominator: number ): string =>
 		)
 	);
 
-const WindowedSection = ( { range, current, previous, activeSubscribers }: WindowedSectionProps ) => {
+const WindowedSection = ( { range, current, previous, activeSubscribers, newsletterConversion }: WindowedSectionProps ) => {
 	// Whole-section empty: nothing happened this window. Collapse the grid to a
 	// single callout (NPPD-1694 `EmptyMetricSection`). Checked first so the
 	// per-card states below only fire inside a section that has real data.
@@ -160,6 +166,11 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 	const retryEmptyMessage = ! retry.computable ? __( 'No failed payments in this timeframe.', 'newspack-plugin' ) : undefined;
 	const refundPrevious = previous?.refund_rate?.computable ? previous.refund_rate.value : null;
 	const retryPrevious = previous?.failed_payment_retry_rate?.computable ? previous.failed_payment_retry_rate.value : null;
+	// Snapshot rate: an em-dash (not a misleading 0%) until a mature cohort of
+	// newsletter signups with a full 12 months of history exists.
+	const newsletterConversionEmptyMessage = ! newsletterConversion.computable
+		? __( 'Not enough newsletter signups with 12 months of history yet.', 'newspack-plugin' )
+		: undefined;
 
 	return (
 		<section className="newspack-insights__section newspack-insights__section--windowed" aria-labelledby="newspack-insights-windowed-heading">
@@ -189,6 +200,16 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 					format="number"
 					previousValue={ previous?.winback_subscribers }
 					description={ __( 'Previously churned subscribers who resubscribed', 'newspack-plugin' ) }
+				/>
+				<MetricCard
+					label={ __( 'Newsletter → subscription', 'newspack-plugin' ) }
+					value={ newsletterConversion.value }
+					format="percent"
+					notComputableMessage={ newsletterConversionEmptyMessage }
+					description={ __(
+						'Of newsletter signups with a full 12 months of history, the share who became a paid subscriber within 12 months of signing up. A snapshot — not affected by the selected timeframe.',
+						'newspack-plugin'
+					) }
 				/>
 				<MetricCard
 					label={ __( 'Churned subscribers', 'newspack-plugin' ) }

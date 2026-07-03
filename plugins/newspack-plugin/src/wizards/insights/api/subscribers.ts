@@ -59,6 +59,8 @@ export interface SubscribersSnapshot {
 	tenure_distribution: TenureDistributionRow[];
 	upcoming_renewals_30d: UpcomingRenewals;
 	upcoming_cancellations_30d: UpcomingCancellations;
+	/** Newsletter → subscription conversion (NEWS-2603): mature-cohort snapshot rate. */
+	newsletter_conversion: SubscribersRateValue;
 }
 
 export interface PerformanceVariationRow {

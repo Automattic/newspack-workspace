@@ -42,6 +42,8 @@ export interface DonorsSnapshot {
 	donation_arr: number;
 	upcoming_donation_renewals_30d: UpcomingDonationRenewals;
 	upcoming_donation_cancellations_30d: UpcomingDonationCancellations;
+	/** Newsletter → donation conversion (NEWS-2603): mature-cohort snapshot rate. */
+	newsletter_conversion: DonorsRateValue;
 }
 
 /**
