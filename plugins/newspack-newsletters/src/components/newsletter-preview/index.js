@@ -1,20 +1,42 @@
 /**
  * WordPress dependencies
  */
-import { BlockPreview } from '@wordpress/block-editor';
+import { BlockPreview, store as blockEditorStore } from '@wordpress/block-editor';
 import { Spinner } from '@wordpress/components';
-import { useInstanceId } from '@wordpress/compose';
-import { Fragment, useEffect, useMemo, useRef, useState } from '@wordpress/element';
+import { useDispatch, useSelect } from '@wordpress/data';
+import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
 import './style.scss';
-import { getScopedCss } from '../../newsletter-editor/styling';
 import { getSamplePosts } from '../../editor/blocks/posts-inserter/sample-posts';
 import { getTemplateBlocks } from '../../editor/blocks/posts-inserter/utils';
 
 const POSTS_INSERTER = 'newspack-newsletters/posts-inserter';
+
+const CORE_STYLESHEET_IDS = [ 'wp-block-library-css', 'wp-block-library-theme-css', 'wp-edit-blocks-css', 'wp-components-css' ];
+
+const DEFAULT_FONTS_CSS =
+	'body *:not(code) { font-family: georgia, serif; } body h1, body h2, body h3, body h4, body h5, body h6 { font-family: arial, sans-serif; }';
+
+const buildResolvedStyles = () => {
+	const sources = CORE_STYLESHEET_IDS.map( id => [ id, document.getElementById( id ) ] );
+	if ( process.env.NODE_ENV !== 'production' ) {
+		const missing = sources.filter( ( [ , node ] ) => ! node ).map( ( [ id ] ) => id );
+		if ( missing.length ) {
+			// eslint-disable-next-line no-console
+			console.warn(
+				`[newspack-newsletters] NewsletterPreview: core stylesheet(s) not enqueued, preview may render unstyled: ${ missing.join( ', ' ) }`
+			);
+		}
+	}
+	return sources
+		.map( ( [ , node ] ) => node )
+		.filter( Boolean )
+		.map( source => source.outerHTML )
+		.join( '\n' );
+};
 
 const withSamplePostsInserter = blocks => {
 	if ( ! Array.isArray( blocks ) ) {
@@ -43,24 +65,50 @@ const withSamplePostsInserter = blocks => {
 
 const NewsletterPreview = ( { layoutId = null, meta = {}, blocks, ...props } ) => {
 	const previewBlocks = useMemo( () => withSamplePostsInserter( blocks ), [ blocks ] );
-	const instanceId = useInstanceId( NewsletterPreview );
-	const elementId = `preview-${ instanceId }`;
-	const [ css, setCss ] = useState( '' );
 	const [ isReady, setIsReady ] = useState( false );
 
+	// Admin-shell previews lack the editor-provided assets, so seed them; skip
+	// the live editor (populated string) so its canvas isn't reloaded. Environment
+	// is inferred from the private `__unstableResolvedAssets.styles` field: the live
+	// editor populates it before any preview mounts, the admin shell leaves it
+	// undefined. If a future WP populates it everywhere, admin-shell previews would
+	// stop seeding and an explicit mount-site flag would be needed instead.
+	const { updateSettings } = useDispatch( blockEditorStore );
+	const resolvedAssets = useSelect( select => select( blockEditorStore ).getSettings().__unstableResolvedAssets, [] );
 	useEffect( () => {
-		const cssRules = [];
+		if ( typeof resolvedAssets?.styles === 'string' ) {
+			return;
+		}
+		updateSettings( {
+			__unstableResolvedAssets: { styles: buildResolvedStyles(), scripts: '' },
+			styles: [
+				...( window.newspackNewslettersGlobalStyles ? [ { css: window.newspackNewslettersGlobalStyles } ] : [] ),
+				{ css: DEFAULT_FONTS_CSS },
+			],
+		} );
+	}, [ resolvedAssets, updateSettings ] );
+
+	const additionalStyles = useMemo( () => {
+		const rules = [];
+		// `!important` so layout fonts/colors beat the seeded defaults and the
+		// editor's own var-based font rules (higher specificity) in editor previews.
 		if ( meta.font_body ) {
-			cssRules.push( `*:not( code ) { font-family: ${ meta.font_body }; }` );
+			rules.push( `body *:not( code ) { font-family: ${ meta.font_body } !important; }` );
 		}
 		if ( meta.font_header ) {
-			cssRules.push( `h1, h2, h3, h4, h5, h6 { font-family: ${ meta.font_header }; }` );
+			rules.push( `body h1, body h2, body h3, body h4, body h5, body h6 { font-family: ${ meta.font_header } !important; }` );
+		}
+		if ( meta.background_color ) {
+			rules.push( `body { background-color: ${ meta.background_color } !important; }` );
+		}
+		if ( meta.text_color ) {
+			rules.push( `body { color: ${ meta.text_color } !important; }` );
 		}
 		if ( meta.custom_css ) {
-			cssRules.push( meta.custom_css );
+			rules.push( meta.custom_css );
 		}
-		setCss( cssRules.length ? getScopedCss( `#${ elementId }`, cssRules.join( '\n' ) ) : '' );
-	}, [ elementId, layoutId, meta.font_body, meta.font_header, meta.custom_css ] );
+		return rules.length ? [ { css: rules.join( '\n' ) } ] : [];
+	}, [ meta.font_body, meta.font_header, meta.background_color, meta.text_color, meta.custom_css ] );
 
 	// Apply the styles to the iframe editor.
 	const useInlineStyles = () => {
@@ -106,52 +154,8 @@ const NewsletterPreview = ( { layoutId = null, meta = {}, blocks, ...props } ) =
 					if ( ! iframe.contentDocument?.body ) {
 						return;
 					}
-					// `wp-edit-blocks-css` is the editor variant — Gutenberg skips it but BlockPreview renders edit-mode markup (e.g. social-link buttons) that needs it.
-					[ 'wp-block-library-css', 'wp-block-library-theme-css', 'wp-edit-blocks-css', 'wp-components-css' ].forEach( id => {
-						const source = document.getElementById( id );
-						if ( ! source || iframe.contentDocument.getElementById( id ) ) {
-							return;
-						}
-						const clone = iframe.contentDocument.createElement( source.tagName );
-						clone.id = id;
-						if ( 'LINK' === source.tagName ) {
-							clone.rel = 'stylesheet';
-							clone.href = source.href;
-						} else {
-							clone.textContent = source.textContent;
-						}
-						iframe.contentDocument.head.appendChild( clone );
-					} );
-					const globalStylesId = 'newspack-newsletters-global-styles';
-					if ( window.newspackNewslettersGlobalStyles && ! iframe.contentDocument.getElementById( globalStylesId ) ) {
-						const globalStyles = iframe.contentDocument.createElement( 'style' );
-						globalStyles.id = globalStylesId;
-						globalStyles.textContent = window.newspackNewslettersGlobalStyles;
-						iframe.contentDocument.head.appendChild( globalStyles );
-					}
-					// Newsletter-editor font defaults for surfaces that don't
-					// enqueue `editor.css` (e.g. admin-shell layouts list).
-					const defaultFontsId = 'newspack-newsletters-default-fonts';
-					if ( ! iframe.contentDocument.getElementById( defaultFontsId ) ) {
-						const defaultFonts = iframe.contentDocument.createElement( 'style' );
-						defaultFonts.id = defaultFontsId;
-						defaultFonts.textContent =
-							'body *:not(code) { font-family: georgia, serif; } body h1, body h2, body h3, body h4, body h5, body h6 { font-family: arial, sans-serif; }';
-						iframe.contentDocument.head.appendChild( defaultFonts );
-					}
-					iframe.contentDocument.body.id = elementId;
 					// Scopes `editor.scss` overrides to layout thumbnails.
 					iframe.contentDocument.body.classList.add( 'newspack-newsletters-layout-preview' );
-					iframe.contentDocument.body.style.backgroundColor = meta.background_color || '';
-					iframe.contentDocument.body.style.color = meta.text_color || '';
-					const styleId = `newspack-newsletters__layout-preview-${ layoutId }`;
-					let style = iframe.contentDocument.getElementById( styleId );
-					if ( ! style ) {
-						style = iframe.contentDocument.createElement( 'style' );
-						style.id = styleId;
-						iframe.contentDocument.head.appendChild( style );
-					}
-					style.textContent = css;
 					markReady( iframe );
 				};
 				if ( 'complete' === iframe.contentDocument?.readyState ) {
@@ -183,29 +187,23 @@ const NewsletterPreview = ( { layoutId = null, meta = {}, blocks, ...props } ) =
 				observer.disconnect();
 				cleanup();
 			};
-		}, [ layoutId, css, meta.background_color, meta.text_color, previewBlocks ] );
+		}, [ layoutId, previewBlocks ] );
 		return ref;
 	};
 
 	return (
-		<Fragment>
-			<style id="newspack-newsletters__layout-css" data-previewid={ elementId }>
-				{ css }
-			</style>
-			<div
-				ref={ useInlineStyles() }
-				id={ elementId }
-				className={ `newspack-newsletters__layout-preview${ isReady ? ' is-ready' : '' }` }
-				style={ { backgroundColor: meta.background_color } }
-			>
-				{ ! isReady && (
-					<div className="newspack-newsletters__layout-preview-spinner">
-						<Spinner />
-					</div>
-				) }
-				<BlockPreview { ...props } blocks={ previewBlocks } />
-			</div>
-		</Fragment>
+		<div
+			ref={ useInlineStyles() }
+			className={ `newspack-newsletters__layout-preview${ isReady ? ' is-ready' : '' }` }
+			style={ { backgroundColor: meta.background_color } }
+		>
+			{ ! isReady && (
+				<div className="newspack-newsletters__layout-preview-spinner">
+					<Spinner />
+				</div>
+			) }
+			<BlockPreview { ...props } blocks={ previewBlocks } additionalStyles={ additionalStyles } />
+		</div>
 	);
 };
 

@@ -60,6 +60,13 @@ class Group_Subscription_Invite {
 	 * Initialize hooks.
 	 */
 	public static function init() {
+		// Invite acceptance and the invite email config are part of the group
+		// management UX, gated behind the Access Control feature flag. The
+		// static invite helpers remain available regardless; only the hooks are
+		// gated.
+		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
+			return;
+		}
 		add_filter( 'newspack_email_configs', [ __CLASS__, 'add_email_config' ] );
 		add_action( 'template_redirect', [ __CLASS__, 'process_invite_request' ] );
 		add_action( 'template_redirect', [ __CLASS__, 'process_link_invite_request' ] );
@@ -75,11 +82,16 @@ class Group_Subscription_Invite {
 	public static function add_email_config( $configs ) {
 		$configs[ self::EMAIL_TYPE ] = [
 			'name'                   => self::EMAIL_TYPE,
-			'category'               => 'reader-activation',
+			// Reader-revenue category: this is a paid-product email, not
+			// an auth/account flow. The chip is derived from category in
+			// Emails::apply_config_defaults(), and `recipient` defaults to
+			// 'reader' there, so neither needs to be declared here.
+			'category'               => 'reader-revenue',
 			'label'                  => __( 'Group Subscription Invitation', 'newspack-plugin' ),
 			'description'            => __( 'Email sent to invite a reader to join a group subscription.', 'newspack-plugin' ),
 			'template'               => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-activation-emails/group-subscription-invite.php',
 			'editor_notice'          => __( 'This email will be sent when a reader is invited to join a group subscription.', 'newspack-plugin' ),
+			'trigger_description'    => __( 'Sent to invite a reader to join a group subscription.', 'newspack-plugin' ),
 			'available_placeholders' => [
 				[
 					'label'    => __( 'the site title', 'newspack-plugin' ),
@@ -548,6 +560,29 @@ class Group_Subscription_Invite {
 	}
 
 	/**
+	 * Whether an invite key is valid for the given subscription and email.
+	 *
+	 * Mirrors the invite checks in accept_invite(), for use as a gate before an
+	 * account is created for a new invitee.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 * @param string               $key          The invite key.
+	 * @param string               $email        The invited email address.
+	 * @return bool
+	 */
+	private static function is_valid_invite( $subscription, $key, $email ) {
+		$subscription_obj = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription_obj || ! $subscription_obj->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
+			return false;
+		}
+		$invite = self::get_invite_by_key( $subscription_obj, $key );
+		if ( ! $invite || $invite['email'] !== $email || self::is_invite_expired( $invite ) ) {
+			return false;
+		}
+		return true;
+	}
+
+	/**
 	 * Get the invite URL for a group subscription invitation.
 	 *
 	 * @param int    $subscription_id The subscription ID.
@@ -661,6 +696,12 @@ class Group_Subscription_Invite {
 		}
 
 		// Case 3: New user — auto-create account, verify email, and accept.
+		// Validate the invite first, so an invalid key cannot force account
+		// creation, email verification, and login for an arbitrary address.
+		if ( ! self::is_valid_invite( $subscription_id, $key, $email ) ) {
+			self::redirect_with_result( 'error_invite_invalid' );
+			return;
+		}
 		$user_id = Reader_Activation::register_reader( $email, false );
 		if ( is_wp_error( $user_id ) || ! $user_id ) {
 			do_action(

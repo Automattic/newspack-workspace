@@ -64,6 +64,8 @@ The first time you set up your environment you might want to build all the proje
 n ci-build all
 ```
 
+This also provisions the workspace-root lint tooling — ESLint, Stylelint, and PHP_CodeSniffer with the WP coding standards (`./vendor`) — used by the pre-commit hook. See [AGENTS.md](AGENTS.md) for how the hook behaves and how to bypass it.
+
 ## The N script
 
 The `n` script will help you perform actions inside the containers. Some examples:

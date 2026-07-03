@@ -98,6 +98,13 @@ class Content_Inserter {
 		if ( self::$the_content_has_rendered || ! in_the_loop() || empty( trim( $content ) ) ) {
 			return $content;
 		}
+
+		// Set the guard before rendering blocks: the card path calls render_block(), and
+		// dynamic blocks (core/post-content, core/template-part, Query Loop, etc.) re-apply
+		// the_content as they render. Setting this first makes any re-entry short-circuit
+		// above, so the indicator is not injected into nested/queried post content.
+		self::$the_content_has_rendered = true;
+
 		$post_style = Settings::get_setting( 'post_indicator_style', 'default' );
 
 		switch ( $post_style ) {
@@ -114,8 +121,6 @@ class Content_Inserter {
 				$content_with_indicators = $content . self::build_default_indicator_html( self::$post_collections );
 				break;
 		}
-
-		self::$the_content_has_rendered = true;
 
 		/**
 		 * Filters the content with collection indicators inserted.
@@ -264,7 +269,8 @@ class Content_Inserter {
 		// Insert after the nth block.
 		$rendered_content = '';
 		foreach ( $parsed_blocks as $index => $block ) {
-			$rendered_content .= $block['innerHTML'];
+			// Use render_block() so inner blocks (e.g. core/list-item children of core/list) and dynamic blocks are emitted.
+			$rendered_content .= render_block( $block );
 
 			// Insert after the nth block (index is 0-based).
 			if ( $index === $nth_block - 1 ) {
