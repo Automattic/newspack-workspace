@@ -67,6 +67,18 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 				description={ __( 'Active recurring donations normalized to a monthly rate', 'newspack-plugin' ) }
 			/>
 			<MetricCard
+				label={ __( '3-year supporter value', 'newspack-plugin' ) }
+				value={ snapshot.supporter_clv_3yr.value }
+				format="currency"
+				notComputableMessage={
+					snapshot.supporter_clv_3yr.computable ? undefined : __( 'Not enough recurring-donor history to model yet.', 'newspack-plugin' )
+				}
+				description={ __(
+					'Modeled lifetime value of an average recurring donor over 3 years, from current ARPU and retention. An estimate.',
+					'newspack-plugin'
+				) }
+			/>
+			<MetricCard
 				label={ __( 'Upcoming renewals (30d)', 'newspack-plugin' ) }
 				value={ snapshot.upcoming_donation_renewals_30d.count }
 				format="number"

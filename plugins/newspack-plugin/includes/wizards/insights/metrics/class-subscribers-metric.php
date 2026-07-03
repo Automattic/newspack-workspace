@@ -261,6 +261,53 @@ class Subscribers_Metric {
 	}
 
 	/**
+	 * Modeled 3-year supporter lifetime value (NEWS-2603), per the Reader
+	 * Revenue Development CLV worksheet.
+	 *
+	 * Per-supporter CLV = 0.95 * ARPU * (r + r^2 + r^3): each of three years
+	 * earns ARPU scaled by cumulative survival to that year (r, r^2, r^3), less
+	 * a flat 5% maintenance cost (payment fees / servicing). No intro discount is
+	 * modeled (worksheet default 0). We apply the 5% subtraction to all three
+	 * years — the worksheet's Year 1 cell has a sign slip that adds the cost
+	 * instead; the intended, uniform subtraction is used here.
+	 *
+	 *   ARPU = ARR / active subscribers (annualized recurring revenue per head).
+	 *   r    = 12-month retention. Subscriptions carry no cohort-retention series,
+	 *          so r is annualized from churn over the trailing 12 months before
+	 *
+	 *          @end: r = 1 - churned / active, clamped to [0, 1].
+	 *
+	 * Snapshot anchored on @end, independent of the picker start. A modeled
+	 * estimate — labeled as such in the UI.
+	 *
+	 * @param DateTimeInterface $end Report end date (the "now" anchor).
+	 * @return array{value: float, computable: bool, denominator: int}
+	 */
+	public function get_supporter_clv_3yr( DateTimeInterface $end ): array {
+		$active = $this->get_active_non_donation_subscribers();
+		$arr    = $this->get_arr();
+		if ( $active <= 0 || $arr <= 0.0 ) {
+			return [
+				'value'       => 0.0,
+				'computable'  => false,
+				'denominator' => $active,
+			];
+		}
+		$arpu = $arr / $active;
+
+		// 12-month retention annualized from churn (no subscriber cohort series).
+		$year_ago = \DateTimeImmutable::createFromInterface( $end )->sub( new \DateInterval( 'P365D' ) );
+		$churned  = $this->get_churned_subscribers_in_window( $year_ago, $end );
+		$r        = 1.0 - ( $churned / $active );
+
+		return [
+			'value'       => Clv_Model::three_year( $arpu, $r ),
+			'computable'  => true,
+			'denominator' => $active,
+		];
+	}
+
+	/**
 	 * Gross subscription revenue in window.
 	 *
 	 * @param DateTimeInterface $start Window start.

@@ -61,6 +61,8 @@ export interface SubscribersSnapshot {
 	upcoming_cancellations_30d: UpcomingCancellations;
 	/** Newsletter → subscription conversion (NEWS-2603): mature-cohort snapshot rate. */
 	newsletter_conversion: SubscribersRateValue;
+	/** Modeled 3-year supporter CLV (NEWS-2603): snapshot currency value ({value, computable, denominator}). */
+	supporter_clv_3yr: SubscribersRateValue;
 }
 
 export interface PerformanceVariationRow {

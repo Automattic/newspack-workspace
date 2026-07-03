@@ -182,6 +182,47 @@ class Donors_Metric {
 	}
 
 	/**
+	 * Modeled 3-year supporter lifetime value for recurring donors (NEWS-2603).
+	 * Same Reader Revenue Development CLV model as the subscribers sibling
+	 * ({@see Subscribers_Metric::get_supporter_clv_3yr()}):
+	 * 0.95 * ARPU * (r + r^2 + r^3) — three years of ARPU scaled by cumulative
+	 * survival, less a flat 5% maintenance cost, no intro discount.
+	 *
+	 *   ARPU = donation ARR / active recurring donors (recurring revenue per head).
+	 *   r    = 12-month recurring-donor retention (cohort: donors active 12 months
+	 *          before @end still active), clamped to [0, 1].
+	 *
+	 * Snapshot anchored on @end. A modeled estimate — labeled as such in the UI.
+	 *
+	 * @param DateTimeInterface $end Report end date (the "now" anchor).
+	 * @return array{value: float, computable: bool, denominator: int}
+	 */
+	public function get_supporter_clv_3yr( DateTimeInterface $end ): array {
+		$active = $this->get_active_recurring_donors();
+		$arr    = $this->get_donation_arr();
+		if ( $active <= 0 || $arr <= 0.0 ) {
+			return [
+				'value'       => 0.0,
+				'computable'  => false,
+				'denominator' => $active,
+			];
+		}
+		$arpu = $arr / $active;
+
+		$year_ago  = \DateTimeImmutable::createFromInterface( $end )->sub( new \DateInterval( 'P365D' ) );
+		$retention = $this->get_recurring_donor_retention( $year_ago, $end );
+		$r         = ( ! empty( $retention['computable'] ) && isset( $retention['value'] ) )
+			? (float) $retention['value']
+			: 0.0;
+
+		return [
+			'value'       => Clv_Model::three_year( $arpu, $r ),
+			'computable'  => true,
+			'denominator' => $active,
+		];
+	}
+
+	/**
 	 * Upcoming donation renewals in the next 30 days.
 	 *
 	 * @return array{count: int, total_value: float}

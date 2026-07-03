@@ -62,6 +62,18 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 				description={ __( 'Normalized across billing periods', 'newspack-plugin' ) }
 			/>
 			<MetricCard
+				label={ __( '3-year supporter value', 'newspack-plugin' ) }
+				value={ snapshot.supporter_clv_3yr.value }
+				format="currency"
+				notComputableMessage={
+					snapshot.supporter_clv_3yr.computable ? undefined : __( 'Not enough subscription history to model yet.', 'newspack-plugin' )
+				}
+				description={ __(
+					'Modeled lifetime value of an average subscriber over 3 years, from current ARPU and retention. An estimate.',
+					'newspack-plugin'
+				) }
+			/>
+			<MetricCard
 				label={ __( 'Upcoming renewals (30d)', 'newspack-plugin' ) }
 				value={ snapshot.upcoming_renewals_30d.count }
 				format="number"

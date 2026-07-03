@@ -44,6 +44,8 @@ export interface DonorsSnapshot {
 	upcoming_donation_cancellations_30d: UpcomingDonationCancellations;
 	/** Newsletter → donation conversion (NEWS-2603): mature-cohort snapshot rate. */
 	newsletter_conversion: DonorsRateValue;
+	/** Modeled 3-year supporter CLV (NEWS-2603): snapshot currency value ({value, computable, denominator}). */
+	supporter_clv_3yr: DonorsRateValue;
 }
 
 /**
