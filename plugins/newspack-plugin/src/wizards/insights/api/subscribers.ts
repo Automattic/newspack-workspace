@@ -29,6 +29,8 @@ export interface SubscribersRateValue {
 	value: number;
 	computable: boolean;
 	denominator: number;
+	/** `'error'` when the hub proxy failed — distinct from `'populated'` (a real result, computable or not). */
+	state?: 'error' | 'populated';
 }
 
 export interface SubscribersClassification {

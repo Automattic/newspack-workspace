@@ -45,4 +45,16 @@ describe( 'Subscribers ScorecardSection — at-a-glance snapshot cards', () => {
 		expect( screen.getByText( 'Newsletter → subscription' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Not enough newsletter signups with a full year of history yet.' ) ).toBeInTheDocument();
 	} );
+
+	it( 'shows an error state (not the insufficient-history copy) when the hub proxy failed', () => {
+		render(
+			<ScorecardSection
+				snapshot={ makeSnapshot( { newsletter_conversion: { value: 0, computable: false, denominator: 0, state: 'error' } } ) }
+			/>
+		);
+		expect( screen.getByText( 'Newsletter → subscription' ) ).toBeInTheDocument();
+		// The card enters MetricCard's shared error-note state, not the em-dash/value path.
+		expect( screen.getByText( 'Data temporarily unavailable.' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Not enough newsletter signups with a full year of history yet.' ) ).not.toBeInTheDocument();
+	} );
 } );
