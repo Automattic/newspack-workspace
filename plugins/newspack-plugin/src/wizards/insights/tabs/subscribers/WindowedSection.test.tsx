@@ -172,15 +172,31 @@ describe( 'Subscribers WindowedSection empty states', () => {
 		expect( screen.getAllByText( 'No subscription orders in this timeframe' ).length ).toBeGreaterThanOrEqual( 2 );
 	} );
 
-	it( 'renders all six cards when fully populated', () => {
+	it( 'renders every card when fully populated, including the newsletter conversion card', () => {
 		const { container } = render(
 			<WindowedSection range={ RANGE } current={ makeWindow() } previous={ null } activeSubscribers={ 200 } newsletterConversion={ NLC } />
 		);
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
 		expect( screen.getByText( 'New subscribers' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Newsletter → subscription' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Churned subscribers' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Refund rate' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Failed payment recovery' ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders the newsletter conversion card as an em-dash when the cohort is not yet mature', () => {
+		render(
+			<WindowedSection
+				range={ RANGE }
+				current={ makeWindow() }
+				previous={ null }
+				activeSubscribers={ 200 }
+				newsletterConversion={ { value: 0, computable: false, denominator: 0 } }
+			/>
+		);
+
+		expect( screen.getByText( 'Newsletter → subscription' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Not enough newsletter signups with 12 months of history yet.' ) ).toBeInTheDocument();
 	} );
 } );

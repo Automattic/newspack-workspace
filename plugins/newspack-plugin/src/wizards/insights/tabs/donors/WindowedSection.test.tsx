@@ -104,7 +104,7 @@ describe( 'WindowedSection empty states', () => {
 		expect( screen.queryByText( /existing donors active/ ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'renders all four cards with the full one-time + recurring breakdown when populated', () => {
+	it( 'renders every card (incl. the newsletter conversion card) with the full one-time + recurring breakdown when populated', () => {
 		const current = makeWindow();
 		const { container } = render(
 			<WindowedSection range={ RANGE } current={ current } previous={ null } activeDonors={ 200 } newsletterConversion={ NLC } />
@@ -112,11 +112,27 @@ describe( 'WindowedSection empty states', () => {
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
 		expect( screen.getByText( 'New donors' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Newsletter → donation' ) ).toBeInTheDocument();
 
 		const breakdown = revenueBreakdownText( container );
 		expect( breakdown ).toMatch( /one-time/ );
 		expect( breakdown ).toMatch( /recurring/ );
 		expect( breakdown ).toContain( '+' );
+	} );
+
+	it( 'renders the newsletter conversion card as an em-dash when the cohort is not yet mature', () => {
+		render(
+			<WindowedSection
+				range={ RANGE }
+				current={ makeWindow() }
+				previous={ null }
+				activeDonors={ 200 }
+				newsletterConversion={ { value: 0, computable: false, denominator: 0 } }
+			/>
+		);
+
+		expect( screen.getByText( 'Newsletter → donation' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Not enough newsletter signups with 12 months of history yet.' ) ).toBeInTheDocument();
 	} );
 
 	it( 'suppresses the empty mode in the revenue breakdown — recurring-only window', () => {

@@ -147,6 +147,11 @@ const WindowedSection = ( { range, current, previous, activeDonors, newsletterCo
 
 	const donationsLabel = __( 'donations', 'newspack-plugin' );
 	const oneTimeGiftsLabel = __( 'one-time gifts', 'newspack-plugin' );
+	// Snapshot rate: an em-dash (not a misleading 0%) until a mature cohort of
+	// newsletter signups with a full 12 months of history exists.
+	const newsletterConversionEmptyMessage = ! newsletterConversion.computable
+		? __( 'Not enough newsletter signups with 12 months of history yet.', 'newspack-plugin' )
+		: undefined;
 
 	return (
 		<section
@@ -178,6 +183,7 @@ const WindowedSection = ( { range, current, previous, activeDonors, newsletterCo
 					label={ __( 'Newsletter → donation', 'newspack-plugin' ) }
 					value={ newsletterConversion.value }
 					format="percent"
+					notComputableMessage={ newsletterConversionEmptyMessage }
 					description={ __(
 						'Of newsletter signups with a full 12 months of history, the share who became a donor within 12 months of signing up. A snapshot — not affected by the selected timeframe.',
 						'newspack-plugin'

@@ -166,6 +166,11 @@ const WindowedSection = ( { range, current, previous, activeSubscribers, newslet
 	const retryEmptyMessage = ! retry.computable ? __( 'No failed payments in this timeframe.', 'newspack-plugin' ) : undefined;
 	const refundPrevious = previous?.refund_rate?.computable ? previous.refund_rate.value : null;
 	const retryPrevious = previous?.failed_payment_retry_rate?.computable ? previous.failed_payment_retry_rate.value : null;
+	// Snapshot rate: an em-dash (not a misleading 0%) until a mature cohort of
+	// newsletter signups with a full 12 months of history exists.
+	const newsletterConversionEmptyMessage = ! newsletterConversion.computable
+		? __( 'Not enough newsletter signups with 12 months of history yet.', 'newspack-plugin' )
+		: undefined;
 
 	return (
 		<section className="newspack-insights__section newspack-insights__section--windowed" aria-labelledby="newspack-insights-windowed-heading">
@@ -200,6 +205,7 @@ const WindowedSection = ( { range, current, previous, activeSubscribers, newslet
 					label={ __( 'Newsletter → subscription', 'newspack-plugin' ) }
 					value={ newsletterConversion.value }
 					format="percent"
+					notComputableMessage={ newsletterConversionEmptyMessage }
 					description={ __(
 						'Of newsletter signups with a full 12 months of history, the share who became a paid subscriber within 12 months of signing up. A snapshot — not affected by the selected timeframe.',
 						'newspack-plugin'

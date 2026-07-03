@@ -1806,6 +1806,11 @@ final class Conversion_Metric {
 	 * @return array
 	 */
 	public function get_newsletter_to_subscription_conversion( DateTimeInterface $start, DateTimeInterface $end ): array {
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			// Fixture-mode dev sites have no live hub — demo value: ~7% of newsletter
+			// signups became subscribers within 12 months (84 of 1,200).
+			return $this->populated_scalar( 0.07, true, 1200, 'rate' );
+		}
 		return $this->compute_influenced_rate_from_proxy(
 			'conversion_journey_newsletter_to_subscription',
 			'newsletter_conversion_rate',
@@ -1825,6 +1830,11 @@ final class Conversion_Metric {
 	 * @return array
 	 */
 	public function get_newsletter_to_donation_conversion( DateTimeInterface $start, DateTimeInterface $end ): array {
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			// Fixture-mode dev sites have no live hub — demo value: ~4% of newsletter
+			// signups became donors within 12 months (48 of 1,200).
+			return $this->populated_scalar( 0.04, true, 1200, 'rate' );
+		}
 		return $this->compute_influenced_rate_from_proxy(
 			'conversion_journey_newsletter_to_donation',
 			'newsletter_conversion_rate',
