@@ -77,7 +77,7 @@
 			"@typescript-eslint/parser": "8.61.0",
 			"prettier": "npm:wp-prettier@^3.0.3",
 			"react": "18.3.1",
-			"react-dom": "18.3.1"
+			"react-dom": "19.2.7"
 		},
 		"patchedDependencies": {
 			"multi-semantic-release": "patches/multi-semantic-release.patch"
