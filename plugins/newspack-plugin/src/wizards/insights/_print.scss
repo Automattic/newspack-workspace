@@ -65,6 +65,11 @@
 	// is useful provenance in a printed report.
 	.newspack-insights__header-controls,
 	.newspack-insights__refresh-menu,
+	// The open kebab menu renders in a Popover portaled to <body>, outside
+	// .newspack-insights, so the __refresh-menu selector above only hides the
+	// toggle. Hide the portaled popover too, or invoking Print from the open
+	// menu captures the menu list in the export.
+	.components-dropdown-menu__popover,
 	.newspack-insights__cooldown-notice,
 	.newspack-insights__tab-refreshing,
 	.newspack-insights__sortable-table-more {
