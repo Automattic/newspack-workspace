@@ -23,6 +23,7 @@ import TabStateView from './components/TabStateView';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import ReachSection from './audience/sections/ReachSection';
 import RegisteredReadersSection from './audience/sections/RegisteredReadersSection';
+import NewsletterValueSection from './audience/sections/NewsletterValueSection';
 import CompositionSection from './audience/sections/CompositionSection';
 import TimeTrendsSection from './audience/sections/TimeTrendsSection';
 import TrafficSourcesSection from './audience/sections/TrafficSourcesSection';
@@ -46,6 +47,9 @@ const AudienceTab = ( { range, previousRange }: AudienceTabProps ) => {
 	// Registered readers (NPPD-1733) come from local wp_users, so they render even
 	// when GA4 isn't connected — present in both the banner and the normal branch.
 	const registeredReaders = data?.registered_readers ?? null;
+	// Modeled newsletter-subscriber value (NEWS-2603): GA4-independent, like
+	// registered readers — rendered in both branches.
+	const newsletterSubscriberValue = data?.newsletter_subscriber_value ?? null;
 	const showComparison = !! previousRange;
 
 	return (
@@ -64,6 +68,7 @@ const AudienceTab = ( { range, previousRange }: AudienceTabProps ) => {
 						{ registeredReaders && (
 							<RegisteredReadersSection registeredReaders={ registeredReaders } showComparison={ showComparison } />
 						) }
+						{ newsletterSubscriberValue && <NewsletterValueSection value={ newsletterSubscriberValue } /> }
 					</>
 				) : (
 					<>
@@ -75,6 +80,7 @@ const AudienceTab = ( { range, previousRange }: AudienceTabProps ) => {
 						{ registeredReaders && (
 							<RegisteredReadersSection registeredReaders={ registeredReaders } showComparison={ showComparison } />
 						) }
+						{ newsletterSubscriberValue && <NewsletterValueSection value={ newsletterSubscriberValue } /> }
 						<CompositionSection current={ current } previous={ previous } />
 						<TrafficSourcesSection current={ current } previous={ previous } />
 						<GeographicSection current={ current } previous={ previous } />

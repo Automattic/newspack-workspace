@@ -1844,6 +1844,66 @@ final class Conversion_Metric {
 		);
 	}
 
+	/**
+	 * Modeled 3-year value of a newsletter subscriber (NEWS-2603 Phase 3), per the
+	 * Reader Revenue Development "Newsletter CLV" worksheet: the expected reader
+	 * revenue a newsletter signup delivers over three years =
+	 *   Σ over paths [ P(convert to path within 12mo of signup) × 3-year supporter CLV ].
+	 *
+	 * Combines the two newsletter->paid conversion rates (this class) with the two
+	 * modeled supporter CLVs (Subscribers_Metric / Donors_Metric). Expected value is
+	 * additive across the subscription and donation paths by linearity of expectation,
+	 * even where a reader takes both. A path contributes only when BOTH its conversion
+	 * rate and its CLV are computable; the result is computable if either path
+	 * contributed, else an em-dash. Snapshot anchored on @end. Surfaced as an
+	 * at-a-glance card on the Audience tab.
+	 *
+	 * @param DateTimeInterface $start Picker start (passed through to the rate queries).
+	 * @param DateTimeInterface $end   Report end date (the "now" anchor).
+	 * @return array{value: float, computable: bool, denominator: int}
+	 */
+	public function get_newsletter_subscriber_value_3yr( DateTimeInterface $start, DateTimeInterface $end ): array {
+		$empty = [
+			'value'       => 0.0,
+			'computable'  => false,
+			'denominator' => 0,
+		];
+		// Both revenue paths need local Woo; no WooCommerce means no supporter CLV,
+		// so short-circuit before the hub calls.
+		if ( ! $this->woocommerce_active() ) {
+			return $empty;
+		}
+
+		$sub_rate = $this->get_newsletter_to_subscription_conversion( $start, $end );
+		$don_rate = $this->get_newsletter_to_donation_conversion( $start, $end );
+		$sub_clv  = $this->subscribers_metric->get_supporter_clv_3yr( $end );
+		$don_clv  = $this->donors_metric->get_supporter_clv_3yr( $end );
+
+		$value      = 0.0;
+		$computable = false;
+		$signups    = 0;
+
+		if ( ! empty( $sub_rate['computable'] ) && ! empty( $sub_clv['computable'] ) ) {
+			$value     += (float) $sub_rate['value'] * (float) $sub_clv['value'];
+			$computable = true;
+			$signups    = max( $signups, (int) ( $sub_rate['denominator'] ?? 0 ) );
+		}
+		if ( ! empty( $don_rate['computable'] ) && ! empty( $don_clv['computable'] ) ) {
+			$value     += (float) $don_rate['value'] * (float) $don_clv['value'];
+			$computable = true;
+			$signups    = max( $signups, (int) ( $don_rate['denominator'] ?? 0 ) );
+		}
+
+		if ( ! $computable ) {
+			return $empty;
+		}
+		return [
+			'value'       => round( $value, 2 ),
+			'computable'  => true,
+			'denominator' => $signups,
+		];
+	}
+
 	// --- Section 8: Opportunity buckets ---------------------------------
 	// 8.1–8.3 are current-state snapshot counts: accept the window for
 	// signature parity, ignore it. All three are local-only (Woo-only, or

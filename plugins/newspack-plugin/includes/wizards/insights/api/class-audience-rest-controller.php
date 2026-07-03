@@ -214,16 +214,23 @@ class Audience_REST_Controller extends WP_REST_Controller {
 			],
 		];
 
+		// Modeled 3-year value of a newsletter subscriber (NEWS-2603): local Woo +
+		// hub conversion rates, GA4-independent, so it's attached at top level next to
+		// registered_readers and renders even when the tab is a connect banner.
+		$newsletter_subscriber_value = ( new Conversion_Metric() )->get_newsletter_subscriber_value_3yr( $start, $end );
+
 		$current = Audience_Metric::get_all( $start->format( 'Y-m-d' ), $end->format( 'Y-m-d' ), false );
 		if ( isset( $current['tab_error'] ) ) {
-			$current['registered_readers'] = $registered_readers;
+			$current['registered_readers']          = $registered_readers;
+			$current['newsletter_subscriber_value'] = $newsletter_subscriber_value;
 			return $current;
 		}
 
 		$response = [
-			'current'            => $current,
-			'previous'           => null,
-			'registered_readers' => $registered_readers,
+			'current'                     => $current,
+			'previous'                    => null,
+			'registered_readers'          => $registered_readers,
+			'newsletter_subscriber_value' => $newsletter_subscriber_value,
 		];
 		if ( $compare_start && $compare_end ) {
 			$previous             = Audience_Metric::get_all( $compare_start->format( 'Y-m-d' ), $compare_end->format( 'Y-m-d' ), false );
