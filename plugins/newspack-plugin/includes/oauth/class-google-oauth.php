@@ -185,9 +185,9 @@ class Google_OAuth {
 				);
 			}
 			$response_body = json_decode( $result['body'] );
-			// Guard against an unparseable proxy response so we return a clean error rather
-			// than dereferencing null (a PHP warning that then propagates null downstream).
-			if ( ! is_object( $response_body ) || ! isset( $response_body->url ) ) {
+			// Guard against an unparseable or malformed proxy response so we return a clean
+			// error rather than dereferencing null or returning a non-string url downstream.
+			if ( ! is_object( $response_body ) || empty( $response_body->url ) || ! is_string( $response_body->url ) ) {
 				return new WP_Error(
 					'newspack_google_oauth',
 					__( 'Could not parse the authentication response.', 'newspack' )

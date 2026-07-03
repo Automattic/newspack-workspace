@@ -511,4 +511,22 @@ class Newspack_Test_OAuth extends WP_UnitTestCase {
 
 		self::assertTrue( is_wp_error( $result ), 'A /start response without a url must return a WP_Error.' );
 	}
+
+	/**
+	 * A /start response whose url is present but empty (or otherwise not a usable
+	 * string) yields a WP_Error rather than returning that value.
+	 */
+	public function test_start_response_empty_url_yields_error() {
+		$this->stub_start_response( wp_json_encode( [ 'url' => '' ] ) );
+
+		$result = Google_OAuth::google_auth_get_url(
+			[
+				'csrf_token'     => 'csrf-token-123',
+				'scope'          => 'https://www.googleapis.com/auth/userinfo.email',
+				'redirect_after' => 'https://example.org/',
+			]
+		);
+
+		self::assertTrue( is_wp_error( $result ), 'A /start response with an empty url must return a WP_Error.' );
+	}
 }
