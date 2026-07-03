@@ -353,9 +353,12 @@ class HomepagePostsBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$request    = new WP_REST_Request( 'GET', '/newspack-blocks/v1/articles' );
 		$request->set_param( 'postType', [ $allowed, $excluded ] );
 		$request->set_param( 'postsToShow', 10 );
-		$ids = $controller->get_items( $request )->get_data()['ids'];
-
-		remove_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		try {
+			$ids = $controller->get_items( $request )->get_data()['ids'];
+		} finally {
+			// Always drop the global filter so a failure here can't leak into later tests.
+			remove_filter( 'newspack_blocks_articles_allowed_post_types', $filter );
+		}
 
 		self::assertContains( $allowed_id, $ids, 'An allow-listed non-viewable post type is served.' );
 		self::assertNotContains( $excluded_id, $ids, 'A non-viewable post type not on the allow-list is still dropped.' );
