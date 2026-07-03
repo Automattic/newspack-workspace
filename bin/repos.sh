@@ -47,5 +47,22 @@ get_repo_host_path() {
 			return
 		fi
 	done
+	# Tier 2: standalone/separate-repo checkouts, autodiscovered by path under
+	# repos/{plugins,themes}/<name>. This has no canonical registry — upstream
+	# dropped the registration tier in favor of auto-discovery, but only
+	# resolve-project-path.sh (cwd detection) and worktree.sh gained it; this
+	# resolver, used by `n env create --worktree`, was left registry-only. A
+	# checkout is matched by the presence of its .git (a dir for a plain clone,
+	# a file for a linked worktree). Monorepo names are matched above first, so a
+	# tracked plugin/theme always wins over a repos/ duplicate.
+	local root="${NABSPATH:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+	if [[ -e "$root/repos/plugins/$name/.git" ]]; then
+		echo "repos/plugins/$name"
+		return
+	fi
+	if [[ -e "$root/repos/themes/$name/.git" ]]; then
+		echo "repos/themes/$name"
+		return
+	fi
 	echo ""
 }
