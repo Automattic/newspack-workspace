@@ -74,6 +74,17 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 				) }
 			/>
 			<MetricCard
+				label={ __( 'Newsletter → subscription', 'newspack-plugin' ) }
+				value={ snapshot.newsletter_conversion.value }
+				format="percent"
+				notComputableMessage={
+					snapshot.newsletter_conversion.computable
+						? undefined
+						: __( 'Not enough newsletter signups with a full year of history yet.', 'newspack-plugin' )
+				}
+				description={ __( 'Share of newsletter signups who became a paid subscriber within 12 months.', 'newspack-plugin' ) }
+			/>
+			<MetricCard
 				label={ __( 'Upcoming renewals (30d)', 'newspack-plugin' ) }
 				value={ snapshot.upcoming_renewals_30d.count }
 				format="number"

@@ -26,16 +26,23 @@ const makeSnapshot = ( over: Partial< SubscribersSnapshot > = {} ): SubscribersS
 	...over,
 } );
 
-describe( 'Subscribers ScorecardSection — 3-year supporter value card', () => {
-	it( 'renders the modeled CLV card when computable', () => {
+describe( 'Subscribers ScorecardSection — at-a-glance snapshot cards', () => {
+	it( 'renders the modeled CLV and newsletter-conversion cards when computable', () => {
 		render( <ScorecardSection snapshot={ makeSnapshot() } /> );
 		expect( screen.getByText( '3-year supporter value' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Newsletter → subscription' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Not enough subscription history to model yet.' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'renders an em-dash with explanatory copy when not computable', () => {
+	it( 'renders the CLV card as an em-dash with explanatory copy when not computable', () => {
 		render( <ScorecardSection snapshot={ makeSnapshot( { supporter_clv_3yr: { value: 0, computable: false, denominator: 0 } } ) } /> );
 		expect( screen.getByText( '3-year supporter value' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Not enough subscription history to model yet.' ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders the newsletter-conversion card as an em-dash when the cohort is not yet mature', () => {
+		render( <ScorecardSection snapshot={ makeSnapshot( { newsletter_conversion: { value: 0, computable: false, denominator: 0 } } ) } /> );
+		expect( screen.getByText( 'Newsletter → subscription' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Not enough newsletter signups with a full year of history yet.' ) ).toBeInTheDocument();
 	} );
 } );
