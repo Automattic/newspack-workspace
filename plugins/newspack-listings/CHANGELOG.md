@@ -1,3 +1,10 @@
+## newspack-listings [3.6.3](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.6.2...newspack-listings@3.6.3) (2026-07-02)
+
+
+### Bug Fixes
+
+* **listings:** authorize self-serve premium listing create/delete ([#507](https://github.com/Automattic/newspack-workspace/issues/507)) ([60efb47](https://github.com/Automattic/newspack-workspace/commit/60efb475797b0a16d331396f3cd2d0bcad10b31e))
+
 ## newspack-listings [3.6.2](https://github.com/Automattic/newspack-workspace/compare/newspack-listings@3.6.1...newspack-listings@3.6.2) (2026-06-29)
 
 
