@@ -1665,7 +1665,7 @@ final class Conversion_Metric {
 		if ( is_wp_error( $rows ) ) {
 			return array_merge( $this->error_collection( 'weeks', $rows ), [ 'series' => $series ] );
 		}
-		if ( ! is_array( $rows ) || ( ! empty( $rows ) && ! is_array( $rows[0] ) ) ) {
+		if ( ! is_array( $rows ) ) {
 			return array_merge( $this->malformed_collection( 'weeks' ), [ 'series' => $series ] );
 		}
 		if ( empty( $rows ) ) {
@@ -1674,6 +1674,13 @@ final class Conversion_Metric {
 				'weeks'  => [],
 				'series' => $series,
 			];
+		}
+		// Validate the full payload before the local Woo query below, so a malformed
+		// row short-circuits without an unnecessary database hit.
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				return array_merge( $this->malformed_collection( 'weeks' ), [ 'series' => $series ] );
+			}
 		}
 
 		// Real completed subscriptions per week come from the local Woo store (the
@@ -1685,9 +1692,6 @@ final class Conversion_Metric {
 
 		$weeks = [];
 		foreach ( $rows as $row ) {
-			if ( ! is_array( $row ) ) {
-				return array_merge( $this->malformed_collection( 'weeks' ), [ 'series' => $series ] );
-			}
 			$week_start        = $row['week_start'] ?? '';
 			$week_key          = is_scalar( $week_start ) ? (string) $week_start : '';
 			$new_registrations = (int) ( $row['new_registrations'] ?? 0 );
