@@ -176,7 +176,7 @@ class Google_OAuth {
 			if ( 200 !== $result['response']['code'] ) {
 				$error_text  = __( 'Request failed.', 'newspack' );
 				$parsed_data = json_decode( $result['body'] );
-				if ( property_exists( $parsed_data, 'message' ) ) {
+				if ( is_object( $parsed_data ) && property_exists( $parsed_data, 'message' ) ) {
 					$error_text = $parsed_data->message;
 				}
 				return new WP_Error(
@@ -185,6 +185,14 @@ class Google_OAuth {
 				);
 			}
 			$response_body = json_decode( $result['body'] );
+			// Guard against an unparseable proxy response so we return a clean error rather
+			// than dereferencing null (a PHP warning that then propagates null downstream).
+			if ( ! is_object( $response_body ) || ! isset( $response_body->url ) ) {
+				return new WP_Error(
+					'newspack_google_oauth',
+					__( 'Could not parse the authentication response.', 'newspack' )
+				);
+			}
 			// Remember the client id the proxy issues tokens for, so received tokens can be
 			// confirmed to have been issued to this app.
 			if ( isset( $response_body->client_id ) ) {

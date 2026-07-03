@@ -450,4 +450,65 @@ class Newspack_Test_OAuth extends WP_UnitTestCase {
 			'An admin-scoped token with a mismatched audience must be rejected.'
 		);
 	}
+
+	/**
+	 * Stub the proxy /start endpoint with a canned 200 response body.
+	 *
+	 * @param string $body Raw response body.
+	 */
+	private function stub_start_response( $body ) {
+		self::set_api_key();
+		if ( ! defined( 'NEWSPACK_GOOGLE_OAUTH_PROXY' ) ) {
+			define( 'NEWSPACK_GOOGLE_OAUTH_PROXY', 'http://dummy.proxy' );
+		}
+		add_filter(
+			'pre_http_request',
+			function ( $pre, $args, $url ) use ( $body ) {
+				if ( false !== strpos( $url, 'newspack-oauth-proxy/v1/start' ) ) {
+					return [
+						'response' => [ 'code' => 200 ],
+						'body'     => $body,
+					];
+				}
+				return $pre;
+			},
+			10,
+			3
+		);
+	}
+
+	/**
+	 * An unparseable proxy /start response yields a WP_Error rather than dereferencing
+	 * null and propagating null downstream.
+	 */
+	public function test_start_response_unparseable_yields_error() {
+		$this->stub_start_response( 'not-json' );
+
+		$result = Google_OAuth::google_auth_get_url(
+			[
+				'csrf_token'     => 'csrf-token-123',
+				'scope'          => 'https://www.googleapis.com/auth/userinfo.email',
+				'redirect_after' => 'https://example.org/',
+			]
+		);
+
+		self::assertTrue( is_wp_error( $result ), 'An unparseable /start response must return a WP_Error, not null.' );
+	}
+
+	/**
+	 * A parseable /start response that is missing the url still yields a WP_Error.
+	 */
+	public function test_start_response_missing_url_yields_error() {
+		$this->stub_start_response( wp_json_encode( [ 'client_id' => 'site-client-id.apps.googleusercontent.com' ] ) );
+
+		$result = Google_OAuth::google_auth_get_url(
+			[
+				'csrf_token'     => 'csrf-token-123',
+				'scope'          => 'https://www.googleapis.com/auth/userinfo.email',
+				'redirect_after' => 'https://example.org/',
+			]
+		);
+
+		self::assertTrue( is_wp_error( $result ), 'A /start response without a url must return a WP_Error.' );
+	}
 }
