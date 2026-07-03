@@ -32,7 +32,7 @@ import { __, sprintf } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import type { DonorsWindow } from '../../api/donors';
+import type { DonorsRateValue, DonorsWindow } from '../../api/donors';
 import type { DateRange } from '../../state/useDateRange';
 import EmptyMetricSection from '../components/EmptyMetricSection';
 import MetricCard from '../components/MetricCard';
@@ -50,6 +50,12 @@ export interface WindowedSectionProps {
 	 * donors, just none new in this timeframe.
 	 */
 	activeDonors: number;
+	/**
+	 * Newsletter → donation conversion (NEWS-2603): a mature-cohort snapshot rate from
+	 * the hub. Window-independent — it sits in this windowed section for grouping, but
+	 * the value doesn't change with the date range.
+	 */
+	newsletterConversion: DonorsRateValue;
 }
 
 const parseISO = ( s: string ): Date => {
@@ -113,7 +119,7 @@ const revenueBreakdown = ( current: DonorsWindow ): string | undefined => {
 	return undefined;
 };
 
-const WindowedSection = ( { range, current, previous, activeDonors }: WindowedSectionProps ) => {
+const WindowedSection = ( { range, current, previous, activeDonors, newsletterConversion }: WindowedSectionProps ) => {
 	// Whole-section empty: nothing happened this window. Collapse the grid to a
 	// single callout (NPPD-1694 `EmptyMetricSection`). Checked first so the
 	// per-card states below only fire inside a section that has real data —
@@ -167,6 +173,15 @@ const WindowedSection = ( { range, current, previous, activeDonors }: WindowedSe
 							: undefined
 					}
 					description={ __( 'First-time donors in selected timeframe', 'newspack-plugin' ) }
+				/>
+				<MetricCard
+					label={ __( 'Newsletter → donation', 'newspack-plugin' ) }
+					value={ newsletterConversion.value }
+					format="percent"
+					description={ __(
+						'Of newsletter signups with a full 12 months of history, the share who became a donor within 12 months of signing up. A snapshot — not affected by the selected timeframe.',
+						'newspack-plugin'
+					) }
 				/>
 				<MetricCard
 					label={ __( 'Lapsed donors', 'newspack-plugin' ) }

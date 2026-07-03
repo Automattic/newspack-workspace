@@ -43,6 +43,8 @@ const cardValueByLabel = ( container: HTMLElement, label: string ): string => {
 	return card?.querySelector( '.newspack-insights__metric-card-value' )?.textContent ?? '';
 };
 
+const NLC = { value: 0.05, computable: true, denominator: 100 };
+
 describe( 'Subscribers WindowedSection empty states', () => {
 	it( 'collapses to a no_opportunity EmptyMetricSection when the window saw no activity', () => {
 		const current = makeWindow( {
@@ -54,7 +56,9 @@ describe( 'Subscribers WindowedSection empty states', () => {
 			refund_rate: { value: 0, computable: false, denominator: 0 },
 			failed_payment_retry_rate: { value: 0, computable: false, denominator: 0 },
 		} );
-		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 0 } /> );
+		const { container } = render(
+			<WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 0 } newsletterConversion={ NLC } />
+		);
 
 		expect( container.querySelector( '[data-empty-state="no_opportunity"]' ) ).toBeInTheDocument();
 		// Assert on the container — the Notice's speak() duplicates copy into a live-region.
@@ -65,7 +69,9 @@ describe( 'Subscribers WindowedSection empty states', () => {
 
 	it( 'renders the per-card no-acquisition state on New subscribers without collapsing the section', () => {
 		const current = makeWindow( { new_subscribers: 0, churned_subscribers: 2 } );
-		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ makeWindow() } activeSubscribers={ 128 } /> );
+		const { container } = render(
+			<WindowedSection range={ RANGE } current={ current } previous={ makeWindow() } activeSubscribers={ 128 } newsletterConversion={ NLC } />
+		);
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
 		expect( screen.getByText( '128 active subscribers, but none new this timeframe' ) ).toBeInTheDocument();
@@ -82,7 +88,7 @@ describe( 'Subscribers WindowedSection empty states', () => {
 
 	it( 'does NOT show the no-acquisition line when there are no active subscribers either', () => {
 		const current = makeWindow( { new_subscribers: 0, churned_subscribers: 1 } );
-		render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 0 } /> );
+		render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 0 } newsletterConversion={ NLC } /> );
 
 		expect( screen.queryByText( /existing subscribers are active/ ) ).not.toBeInTheDocument();
 	} );
@@ -90,7 +96,9 @@ describe( 'Subscribers WindowedSection empty states', () => {
 	it( 'GOOD ZERO: zero churn renders the card normally, NOT an empty state', () => {
 		// Activity present (new subscribers + revenue), but zero churn this window.
 		const current = makeWindow( { new_subscribers: 9, churned_subscribers: 0 } );
-		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ makeWindow() } activeSubscribers={ 200 } /> );
+		const { container } = render(
+			<WindowedSection range={ RANGE } current={ current } previous={ makeWindow() } activeSubscribers={ 200 } newsletterConversion={ NLC } />
+		);
 
 		// Section is NOT collapsed and the churn card is a real card showing 0.
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
@@ -100,7 +108,9 @@ describe( 'Subscribers WindowedSection empty states', () => {
 
 	it( 'GOOD ZERO: zero failed payments reframes positively (NPPD-1726), section intact', () => {
 		const current = makeWindow( { failed_payment_retry_rate: { value: 0, computable: false, denominator: 0 } } );
-		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 200 } /> );
+		const { container } = render(
+			<WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 200 } newsletterConversion={ NLC } />
+		);
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
 		expect( screen.getByText( 'No failed payments in this timeframe.' ) ).toBeInTheDocument();
@@ -112,7 +122,9 @@ describe( 'Subscribers WindowedSection empty states', () => {
 		// Orders exist (gross > 0) but no refunds → refund rate is a computable 0%,
 		// a good zero. Renders the em-dash + positive line, not a literal "0%".
 		const current = makeWindow( { refund_rate: { value: 0, computable: true, denominator: 120 } } );
-		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 200 } /> );
+		const { container } = render(
+			<WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 200 } newsletterConversion={ NLC } />
+		);
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
 		expect( screen.getByText( 'No refund requests in this timeframe.' ) ).toBeInTheDocument();
@@ -133,7 +145,9 @@ describe( 'Subscribers WindowedSection empty states', () => {
 			refund_rate: { value: 0, computable: false, denominator: 0 },
 			failed_payment_retry_rate: { value: 0, computable: false, denominator: 0 },
 		} );
-		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 200 } /> );
+		const { container } = render(
+			<WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 200 } newsletterConversion={ NLC } />
+		);
 
 		expect( cardValueByLabel( container, 'Refund rate' ) ).toBe( '—' );
 		expect( cardValueByLabel( container, 'Failed payment recovery' ) ).toBe( '—' );
@@ -152,14 +166,16 @@ describe( 'Subscribers WindowedSection empty states', () => {
 			revenue_net: 0,
 			refund_rate: { value: 0, computable: false, denominator: 0 },
 		} );
-		render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 50 } /> );
+		render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 50 } newsletterConversion={ NLC } /> );
 
 		// Gross + Net both fall back (shared MetricCard helper renders "…in this timeframe").
 		expect( screen.getAllByText( 'No subscription orders in this timeframe' ).length ).toBeGreaterThanOrEqual( 2 );
 	} );
 
 	it( 'renders all six cards when fully populated', () => {
-		const { container } = render( <WindowedSection range={ RANGE } current={ makeWindow() } previous={ null } activeSubscribers={ 200 } /> );
+		const { container } = render(
+			<WindowedSection range={ RANGE } current={ makeWindow() } previous={ null } activeSubscribers={ 200 } newsletterConversion={ NLC } />
+		);
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
 		expect( screen.getByText( 'New subscribers' ) ).toBeInTheDocument();
