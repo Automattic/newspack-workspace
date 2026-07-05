@@ -9,20 +9,30 @@ import { useSelect } from '@wordpress/data';
  */
 import { Sidebar } from '../sidebar';
 
+import type { ComponentType, ReactElement } from 'react';
+
+interface PostTaxonomiesProps {
+	slug: string;
+	[ key: string ]: unknown;
+}
+
 /**
  * Filters the PostTaxonomies component to add explanations unique to Newspack Sponsor posts.
  *
- * @param {Function} PostTaxonomies The original PostTaxonomies component to filter.
- *                                  https://github.com/WordPress/gutenberg/tree/trunk/packages/editor/src/components/post-taxonomies
- * @return {Function} The filtered component.
+ * @param PostTaxonomies The original PostTaxonomies component to filter.
+ *                       https://github.com/WordPress/gutenberg/tree/trunk/packages/editor/src/components/post-taxonomies
+ * @return The filtered component.
  */
-export const TaxonomyPanel = PostTaxonomies => {
-	const OriginalComponent = props => {
+export const TaxonomyPanel = ( PostTaxonomies: ComponentType< PostTaxonomiesProps > ) => {
+	const OriginalComponent = ( props: PostTaxonomiesProps ): ReactElement => {
 		const { post_type: postType, cpt, tax } = window.newspack_sponsors_data;
 		const { slug } = props;
 		const isSponsorsTax = tax === slug;
 		const hasAssignedSponsors = useSelect( select => {
-			const sponsors = select( 'core/editor' ).getEditedPostAttribute( tax );
+			const { getEditedPostAttribute } = select( 'core/editor' ) as {
+				getEditedPostAttribute: ( attribute: string ) => unknown;
+			};
+			const sponsors = getEditedPostAttribute( tax );
 			return Array.isArray( sponsors ) && 0 < sponsors.length;
 		} );
 

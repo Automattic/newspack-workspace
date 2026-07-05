@@ -11,7 +11,34 @@ import { withDispatch, withSelect } from '@wordpress/data';
  */
 import './style.scss';
 
-const SidebarComponent = props => {
+import type { ComponentType, ReactElement } from 'react';
+
+interface SelectOption {
+	value: string;
+	label: string;
+}
+
+interface SponsorMeta {
+	newspack_sponsor_url?: string;
+	newspack_sponsor_flag_override?: string;
+	newspack_sponsor_byline_prefix?: string;
+	newspack_sponsor_sponsorship_scope?: string;
+	newspack_sponsor_native_byline_display?: string;
+	newspack_sponsor_native_category_display?: string;
+	newspack_sponsor_underwriter_style?: string;
+	newspack_sponsor_underwriter_placement?: string;
+	newspack_sponsor_only_direct?: boolean;
+	newspack_sponsor_disclaimer_override?: string;
+	[ key: string ]: unknown;
+}
+
+interface SidebarComponentProps {
+	meta: SponsorMeta;
+	title: string;
+	updateMetaValue: ( key: string, value: unknown ) => void;
+}
+
+const SidebarComponent = ( props: SidebarComponentProps ): ReactElement => {
 	const { meta, title, updateMetaValue } = props;
 	const {
 		newspack_sponsor_url,
@@ -30,27 +57,27 @@ const SidebarComponent = props => {
 
 	// If the post is not a sponsor but a post that can be sponsored, add default options to inherit values from the sponsor.
 	const scopeDefault = isSponsor ? 'native' : '';
-	const scopeOptions = [
+	const scopeOptions: SelectOption[] = [
 		{ value: 'native', label: __( 'Native content', 'newspack-sponsors' ) },
 		{ value: 'underwritten', label: __( 'Underwritten content', 'newspack-sponsors' ) },
 	];
 	const bylineDefault = isSponsor ? 'sponsor' : 'inherit';
-	const bylineOptions = [
+	const bylineOptions: SelectOption[] = [
 		{ value: 'sponsor', label: __( 'Sponsor only', 'newspack-sponsors' ) },
 		{ value: 'author', label: __( 'Both sponsor and author byline', 'newspack-sponsors' ) },
 	];
 	const categoryDefault = isSponsor ? 'sponsor' : 'inherit';
-	const categoryOptions = [
+	const categoryOptions: SelectOption[] = [
 		{ value: 'sponsor', label: __( 'Sponsor only', 'newspack-sponsors' ) },
 		{ value: 'category', label: __( 'Sponsor and categories', 'newspack-sponsors' ) },
 	];
 	const underwriterStyleDefault = isSponsor ? 'standard' : 'inherit';
-	const underwriterStyleOptions = [
+	const underwriterStyleOptions: SelectOption[] = [
 		{ value: 'standard', label: __( 'Standard', 'newspack-sponsors' ) },
 		{ value: 'simple', label: __( 'Simple', 'newspack-sponsors' ) },
 	];
 	const underwriterPlacementDefault = isSponsor ? 'top' : 'inherit';
-	const underwriterPlacementOptions = [
+	const underwriterPlacementOptions: SelectOption[] = [
 		{ value: 'top', label: __( 'Top', 'newspack-sponsors' ) },
 		{ value: 'bottom', label: __( 'Bottom', 'newspack-sponsors' ) },
 	];
@@ -135,7 +162,7 @@ const SidebarComponent = props => {
 						placeholder={ __( 'URL to link to for this sponsor', 'newspack-sponsors' ) }
 						help={ __( 'Required if you want to show a link to an external URL.', 'newspack-sponsors' ) }
 						type="url"
-						value={ newspack_sponsor_url }
+						value={ newspack_sponsor_url as string }
 						onChange={ value => updateMetaValue( 'newspack_sponsor_url', value ) }
 					/>
 					<TextControl
@@ -147,7 +174,7 @@ const SidebarComponent = props => {
 							'newspack-sponsors'
 						) }
 						type="url"
-						value={ newspack_sponsor_flag_override }
+						value={ newspack_sponsor_flag_override as string }
 						onChange={ value => updateMetaValue( 'newspack_sponsor_flag_override', value ) }
 					/>
 					<TextareaControl
@@ -158,7 +185,7 @@ const SidebarComponent = props => {
 							'Text shown to explain sponsorship by this sponsor. If not empty, this field will override the site-wide setting.',
 							'newspack-sponsors'
 						) }
-						value={ newspack_sponsor_disclaimer_override }
+						value={ newspack_sponsor_disclaimer_override as string }
 						onChange={ value => updateMetaValue( 'newspack_sponsor_disclaimer_override', value ) }
 					/>
 					<TextControl
@@ -170,7 +197,7 @@ const SidebarComponent = props => {
 						) }
 						placeholder={ settings.byline || defaults.byline }
 						type="url"
-						value={ newspack_sponsor_byline_prefix }
+						value={ newspack_sponsor_byline_prefix as string }
 						onChange={ value => updateMetaValue( 'newspack_sponsor_byline_prefix', value ) }
 					/>
 					<ToggleControl
@@ -188,21 +215,23 @@ const SidebarComponent = props => {
 	);
 };
 
-const mapStateToProps = select => {
-	const { getEditedPostAttribute } = select( 'core/editor' );
+const mapStateToProps = ( select: ( store: string ) => unknown ) => {
+	const { getEditedPostAttribute } = select( 'core/editor' ) as {
+		getEditedPostAttribute: ( attribute: string ) => unknown;
+	};
 
 	return {
-		meta: getEditedPostAttribute( 'meta' ),
-		title: getEditedPostAttribute( 'title' ),
+		meta: getEditedPostAttribute( 'meta' ) as SponsorMeta,
+		title: getEditedPostAttribute( 'title' ) as string,
 	};
 };
 
-const mapDispatchToProps = dispatch => {
-	const { editPost } = dispatch( 'core/editor' );
+const mapDispatchToProps = ( dispatch: ( store: string ) => unknown ) => {
+	const { editPost } = dispatch( 'core/editor' ) as { editPost: ( edits: Record< string, unknown > ) => void };
 
 	return {
-		updateMetaValue: ( key, value ) => editPost( { meta: { [ key ]: value } } ),
-	};
+		updateMetaValue: ( key: string, value: unknown ) => editPost( { meta: { [ key ]: value } } ),
+	} as Record< string, ( ...args: unknown[] ) => unknown >;
 };
 
-export const Sidebar = compose( [ withSelect( mapStateToProps ), withDispatch( mapDispatchToProps ) ] )( SidebarComponent );
+export const Sidebar = compose( withSelect( mapStateToProps ), withDispatch( mapDispatchToProps ) )( SidebarComponent ) as ComponentType;

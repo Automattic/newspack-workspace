@@ -35,6 +35,6 @@ if ( cpt === postType ) {
 				<Sidebar />
 			</PluginDocumentSettingPanel>
 		),
-		icon: null,
+		icon: undefined,
 	} );
 }
