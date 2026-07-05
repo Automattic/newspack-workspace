@@ -9,20 +9,40 @@ import { __, sprintf } from '@wordpress/i18n';
 import { formatCurrency } from '../utils/helpers';
 
 /**
+ * Props for the linear meter component.
+ */
+type LinearMeterProps = {
+	/** Amount raised. */
+	amountRaised: number;
+	/** Goal amount. */
+	goal: number;
+	/** Percentage completed (0-100). */
+	percentage: number;
+	/** Whether to show goal amount. */
+	showGoal: boolean;
+	/** Whether to show amount raised. */
+	showAmountRaised: boolean;
+	/** Whether to show percentage. */
+	showPercentage: boolean;
+	/** Custom progress bar color. */
+	progressBarColor?: string;
+};
+
+/**
  * Linear progress bar meter component.
  *
- * @param {Object}  props                  Component props.
- * @param {number}  props.amountRaised     Amount raised.
- * @param {number}  props.goal             Goal amount.
- * @param {number}  props.percentage       Percentage completed (0-100).
- * @param {boolean} props.showGoal         Whether to show goal amount.
- * @param {boolean} props.showAmountRaised Whether to show amount raised.
- * @param {boolean} props.showPercentage   Whether to show percentage.
- * @param {string}  props.progressBarColor Custom progress bar color.
- * @return {Element} LinearMeter component.
+ * @param props                  Component props.
+ * @param props.amountRaised     Amount raised.
+ * @param props.goal             Goal amount.
+ * @param props.percentage       Percentage completed (0-100).
+ * @param props.showGoal         Whether to show goal amount.
+ * @param props.showAmountRaised Whether to show amount raised.
+ * @param props.showPercentage   Whether to show percentage.
+ * @param props.progressBarColor Custom progress bar color.
+ * @return LinearMeter component.
  */
-const LinearMeter = ( { amountRaised, goal, percentage, showGoal, showAmountRaised, showPercentage, progressBarColor } ) => {
-	const barStyle = {};
+const LinearMeter = ( { amountRaised, goal, percentage, showGoal, showAmountRaised, showPercentage, progressBarColor }: LinearMeterProps ) => {
+	const barStyle: { color?: string } = {};
 	if ( progressBarColor ) {
 		barStyle.color = progressBarColor;
 	}

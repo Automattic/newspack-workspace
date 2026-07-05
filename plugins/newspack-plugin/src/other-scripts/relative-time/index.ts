@@ -16,18 +16,21 @@
 
 	const { cutoff, locale } = config;
 
+	type RelativeUnit = 'second' | 'minute' | 'hour' | 'day' | 'month' | 'year';
+
 	/**
 	 * Determine the best unit and value for Intl.RelativeTimeFormat.
 	 *
-	 * @param {number} diffSeconds Difference in seconds (positive = past).
-	 * @return {{ value: number, unit: string }|null} Value and unit, or null if beyond cutoff.
+	 * @param diffSeconds Difference in seconds (positive = past).
+	 * @return Value and unit, or null if beyond cutoff.
 	 */
-	function getRelativeUnit( diffSeconds ) {
-		if ( diffSeconds >= cutoff ) {
+	function getRelativeUnit( diffSeconds: number ): { value: number; unit: RelativeUnit } | null {
+		// Number() replicates the ToNumber coercion `>=` applies when cutoff is a string.
+		if ( diffSeconds >= Number( cutoff ) ) {
 			return null;
 		}
 
-		const units = [
+		const units: { unit: RelativeUnit; threshold: number }[] = [
 			{ unit: 'second', threshold: 60 },
 			{ unit: 'minute', threshold: 3600 },
 			{ unit: 'hour', threshold: 86400 },
@@ -38,7 +41,7 @@
 
 		for ( const { unit, threshold } of units ) {
 			if ( diffSeconds < threshold ) {
-				const divisors = { second: 1, minute: 60, hour: 3600, day: 86400, month: 2592000, year: 31536000 };
+				const divisors: Record< RelativeUnit, number > = { second: 1, minute: 60, hour: 3600, day: 86400, month: 2592000, year: 31536000 };
 				return { value: -Math.round( diffSeconds / divisors[ unit ] ), unit };
 			}
 		}
@@ -51,7 +54,7 @@
 	function updateDates() {
 		const localeTag = locale.replaceAll( '_', '-' );
 
-		let formatter;
+		let formatter: Intl.RelativeTimeFormat;
 		try {
 			formatter = new Intl.RelativeTimeFormat( localeTag, { numeric: 'auto' } );
 		} catch {

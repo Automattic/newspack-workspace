@@ -13,35 +13,50 @@ import { trash } from '@wordpress/icons';
  * Internal dependencies.
  */
 import { Button, Card, Grid, Notice, TextControl, withWizardScreen } from '../../../../../packages/components/src';
+import type { RenderPrimaryButton } from '../../../../../packages/components/src/with-wizard-screen';
 import AdUnitSizeControl, { getSizes } from '../../components/ad-unit-size-control';
+import type { AdUnit as AdUnitData, AdUnitSizeOption, AdsWizardApiFetch, GoogleAdManagerServiceData } from '../../types';
+
+export type AdUnitViewProps = {
+	adUnit: AdUnitData;
+	service: string;
+	serviceData?: GoogleAdManagerServiceData;
+	wizardApiFetch?: AdsWizardApiFetch;
+	onChange: ( adUnit: AdUnitData ) => void;
+	onSave: ( id: AdUnitData[ 'id' ] ) => void;
+	onCancel: () => void;
+};
 
 /**
  * New/Edit Ad Unit Screen.
  */
-class AdUnit extends Component {
+class AdUnit extends Component< AdUnitViewProps & { renderPrimaryButton: RenderPrimaryButton } > {
 	/**
 	 * Handle an update to an ad unit field.
 	 *
-	 * @param {string|Object} adUnitChangesOrKey Ad Unit field name or object containing changes.
-	 * @param {any}           value              New value for field.
+	 * @param adUnitChangesOrKey Ad Unit field name or object containing changes.
+	 * @param value              New value for field.
 	 */
-	handleOnChange( adUnitChangesOrKey, value ) {
+	handleOnChange( adUnitChangesOrKey: keyof AdUnitData | Partial< AdUnitData >, value?: AdUnitData[ keyof AdUnitData ] ) {
 		const { adUnit, onChange, service } = this.props;
-		const adUnitChanges = typeof adUnitChangesOrKey === 'string' ? { [ adUnitChangesOrKey ]: value } : adUnitChangesOrKey;
-		onChange( { ...adUnit, ad_service: service, ...adUnitChanges } );
+		if ( typeof adUnitChangesOrKey === 'string' ) {
+			onChange( { ...adUnit, ad_service: service, [ adUnitChangesOrKey ]: value } );
+		} else {
+			onChange( { ...adUnit, ad_service: service, ...adUnitChangesOrKey } );
+		}
 	}
 
-	getSizeOptions() {
+	getSizeOptions(): AdUnitSizeOption[] {
 		const { adUnit } = this.props;
 		const sizes = adUnit.sizes && Array.isArray( adUnit.sizes ) ? adUnit.sizes : [];
-		let sizeOptions = [ ...sizes ];
+		let sizeOptions: AdUnitSizeOption[] = [ ...sizes ];
 		if ( adUnit.fluid ) {
 			sizeOptions = [ ...sizeOptions, 'fluid' ];
 		}
 		return sizeOptions;
 	}
 
-	getNextAvailableSize() {
+	getNextAvailableSize(): AdUnitSizeOption {
 		const sizes = getSizes();
 		const options = this.getSizeOptions().map( size => size.toString() );
 		const index = sizes.map( size => size.toString() ).findIndex( size => ! options.includes( size ) );
@@ -78,7 +93,7 @@ class AdUnit extends Component {
 					<TextControl
 						label={ __( 'Name', 'newspack-plugin' ) }
 						value={ name || '' }
-						onChange={ value => this.handleOnChange( 'name', value ) }
+						onChange={ ( value: string ) => this.handleOnChange( 'name', value ) }
 					/>
 					{ ( isExistingAdUnit || isLegacy ) && (
 						<TextControl
@@ -94,7 +109,7 @@ class AdUnit extends Component {
 									  )
 							}
 							disabled={ ! isLegacy }
-							onChange={ value => this.handleOnChange( 'code', value ) }
+							onChange={ ( value: string ) => this.handleOnChange( 'code', value ) }
 						/>
 					) }
 				</Grid>
@@ -126,7 +141,7 @@ class AdUnit extends Component {
 							selectedOptions={ sizeOptions }
 							value={ size }
 							onChange={ value => {
-								const adUnitChanges = {};
+								const adUnitChanges: Partial< AdUnitData > = {};
 								const prevValue = sizeOptions[ index ];
 								if ( prevValue === 'fluid' ) {
 									adUnitChanges.fluid = false;
@@ -175,4 +190,4 @@ class AdUnit extends Component {
 	}
 }
 
-export default withWizardScreen( AdUnit );
+export default withWizardScreen< AdUnitViewProps >( AdUnit );

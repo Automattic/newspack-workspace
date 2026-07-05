@@ -4,14 +4,14 @@ import { onOverlaysClose, queuePageReload } from '../../reader-activation/utils'
 
 window.newspackRAS = window.newspackRAS || [];
 
-let modalCheckoutRedirectUrl = null;
+let modalCheckoutRedirectUrl: string | null = null;
 
 /**
  * Handle the checkout complete event.
  *
- * @param {Object} data The order details object.
+ * @param data The order details object.
  */
-function handleCheckoutComplete( data ) {
+function handleCheckoutComplete( data: NewspackModalCheckoutOrderDetails ) {
 	const { subscription_renewal, subscription_ids, order_id } = data;
 	if ( subscription_ids?.length ) {
 		modalCheckoutRedirectUrl = `${ newspackMyAccountV1.myAccountUrl }/view-subscription/${ subscription_ids[ 0 ] }`;
@@ -44,25 +44,32 @@ function handleClose() {
  * Must receive a link element with a `href` attribute that points to a cart
  * generation URL.
  *
- * @param {HTMLElement} element               The element to register.
- * @param {string}      title                 The modal title.
- * @param {string}      actionType            The action type.
- * @param {Function}    onCheckoutComplete    The function to call when the checkout is complete.
- * @param {Function}    onClose               The function to call when the modal is closed. Default is `handleClose`.
- * @param {boolean}     redirectToResponseUrl Whether to redirect to the response URL. Default is `true`.
+ * @param element               The element to register.
+ * @param title                 The modal title.
+ * @param actionType            The action type.
+ * @param onCheckoutComplete    The function to call when the checkout is complete.
+ * @param onClose               The function to call when the modal is closed. Default is `handleClose`.
+ * @param redirectToResponseUrl Whether to redirect to the response URL. Default is `true`.
  */
-export function registerModalCheckoutButton( element, title, actionType, onCheckoutComplete, onClose, redirectToResponseUrl = true ) {
+export function registerModalCheckoutButton(
+	element: Element,
+	title: string | null,
+	actionType: string,
+	onCheckoutComplete?: ( data: NewspackModalCheckoutOrderDetails ) => void,
+	onClose?: ( () => void ) | null,
+	redirectToResponseUrl = true
+) {
 	const spinner = document.createElement( 'div' );
 	spinner.classList.add( 'newspack-ui' );
 	spinner.innerHTML = '<div class="newspack-ui__spinner"><span></span></div>';
 
-	const openCheckout = async url => {
+	const openCheckout = async ( url: string ) => {
 		const response = await fetch( url );
 		window.newspackOpenModalCheckout( {
 			url: redirectToResponseUrl ? response.url : null,
 			title,
 			actionType,
-			onCheckoutComplete: data => {
+			onCheckoutComplete: ( data: NewspackModalCheckoutOrderDetails ) => {
 				handleCheckoutComplete( data );
 				if ( onCheckoutComplete ) {
 					onCheckoutComplete( data );

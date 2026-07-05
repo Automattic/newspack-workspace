@@ -31,7 +31,7 @@ function GoogleOAuth( {
 }: {
 	onInit?: ( str: Error | null ) => void;
 	onSuccess?: ( arg: OAuthData ) => void;
-	isOnboarding?: ( str: string ) => void;
+	isOnboarding?: boolean;
 } ) {
 	const [ authState, setAuthState ] = useState< OAuthData >( {} );
 

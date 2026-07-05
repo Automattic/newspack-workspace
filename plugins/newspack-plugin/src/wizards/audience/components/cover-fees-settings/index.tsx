@@ -11,14 +11,25 @@ import { useDispatch, useSelect } from '@wordpress/data';
 import { Button, Grid, TextControl } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import type { WizardsStoreSelectors } from '../../../../../packages/components/src/wizard/store';
 import WizardsSection from '../../../wizards-section';
 
 export const CoverFeesSettings = () => {
-	const settings = useWizardData( 'newspack-audience/cover-fees' );
+	const settings = useWizardData< {
+		allow_covering_fees?: boolean;
+		fee_multiplier?: string | number;
+		fee_static?: string | number;
+		allow_covering_fees_label?: string;
+		allow_covering_fees_default?: boolean;
+		allow_covering_fees_donations_only?: boolean;
+	} >( 'newspack-audience/cover-fees' );
 	const { updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
-	const isQuietLoading = useSelect( select => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() ?? false, [] );
+	const isQuietLoading = useSelect(
+		( select: ( store: string ) => WizardsStoreSelectors ) => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() ?? false,
+		[]
+	);
 
-	const changeHandler = ( key, value ) =>
+	const changeHandler = ( key: string, value: unknown ) =>
 		updateWizardSettings( {
 			slug: 'newspack-audience/cover-fees',
 			path: [ key ],
@@ -56,7 +67,7 @@ export const CoverFeesSettings = () => {
 						step="0.1"
 						value={ settings.fee_multiplier }
 						label={ __( 'Fee multiplier', 'newspack-plugin' ) }
-						onChange={ value => changeHandler( 'fee_multiplier', value ) }
+						onChange={ ( value: string ) => changeHandler( 'fee_multiplier', value ) }
 						disabled={ isQuietLoading }
 					/>
 					<TextControl
@@ -64,14 +75,14 @@ export const CoverFeesSettings = () => {
 						step="0.1"
 						value={ settings.fee_static }
 						label={ __( 'Fee static portion', 'newspack-plugin' ) }
-						onChange={ value => changeHandler( 'fee_static', value ) }
+						onChange={ ( value: string ) => changeHandler( 'fee_static', value ) }
 						disabled={ isQuietLoading }
 					/>
 					<TextControl
 						value={ settings.allow_covering_fees_label }
 						label={ __( 'Custom message', 'newspack-plugin' ) }
 						placeholder={ __( 'A message to explain the transaction fee option (optional).', 'newspack-plugin' ) }
-						onChange={ value => changeHandler( 'allow_covering_fees_label', value ) }
+						onChange={ ( value: string ) => changeHandler( 'allow_covering_fees_label', value ) }
 						disabled={ isQuietLoading }
 					/>
 				</Grid>

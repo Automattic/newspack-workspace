@@ -48,9 +48,9 @@ describe( 'segments', () => {
 		segments.register( sampleSegments );
 		segments.setMatch( '42' );
 		const match = segments.getMatch();
-		expect( match.id ).toBe( '42' );
-		expect( match.name ).toBe( 'Loyal Readers' );
-		expect( match.priority ).toBe( 0 );
+		expect( match!.id ).toBe( '42' );
+		expect( match!.name ).toBe( 'Loyal Readers' );
+		expect( match!.priority ).toBe( 0 );
 	} );
 	it( 'should clear match and emit event', () => {
 		const callback = jest.fn();
@@ -75,7 +75,7 @@ describe( 'segments', () => {
 		const detail = callback.mock.calls[ 0 ][ 0 ].detail;
 		expect( detail.segmentId ).toBe( '42' );
 		expect( detail.segment.name ).toBe( 'Loyal Readers' );
-		expect( segments.getMatch().id ).toBe( '42' );
+		expect( segments.getMatch()!.id ).toBe( '42' );
 		off( 'segment', callback );
 	} );
 } );

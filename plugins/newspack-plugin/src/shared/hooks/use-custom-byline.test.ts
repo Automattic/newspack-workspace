@@ -4,14 +4,10 @@
 import { renderHook } from '@testing-library/react';
 
 /**
- * WordPress dependencies
- */
-import { useSelect } from '@wordpress/data';
-
-/**
  * Internal dependencies
  */
 import { useCustomByline, extractAuthorIdsFromByline } from './use-custom-byline';
+import { mockUseSelectWith } from '../test-utils/mock-use-select';
 
 jest.mock( '@wordpress/data', () => ( {
 	useSelect: jest.fn(),
@@ -27,11 +23,9 @@ describe( 'useCustomByline', () => {
 	} );
 
 	it( 'should return inactive byline when meta is not set', () => {
-		useSelect.mockImplementation( callback =>
-			callback( () => ( {
-				getEditedEntityRecord: () => ( {} ),
-			} ) )
-		);
+		mockUseSelectWith( () => ( {
+			getEditedEntityRecord: () => ( {} ),
+		} ) );
 
 		const { result } = renderHook( () => useCustomByline( 123, 'post' ) );
 
@@ -40,16 +34,14 @@ describe( 'useCustomByline', () => {
 	} );
 
 	it( 'should return inactive byline when meta exists but byline is inactive', () => {
-		useSelect.mockImplementation( callback =>
-			callback( () => ( {
-				getEditedEntityRecord: () => ( {
-					meta: {
-						_newspack_byline_active: false,
-						_newspack_byline: 'Some content',
-					},
-				} ),
-			} ) )
-		);
+		mockUseSelectWith( () => ( {
+			getEditedEntityRecord: () => ( {
+				meta: {
+					_newspack_byline_active: false,
+					_newspack_byline: 'Some content',
+				},
+			} ),
+		} ) );
 
 		const { result } = renderHook( () => useCustomByline( 123, 'post' ) );
 
@@ -60,16 +52,14 @@ describe( 'useCustomByline', () => {
 	it( 'should return active byline with content', () => {
 		const bylineContent = 'By [Author id=5]Jane Doe[/Author]';
 
-		useSelect.mockImplementation( callback =>
-			callback( () => ( {
-				getEditedEntityRecord: () => ( {
-					meta: {
-						_newspack_byline_active: true,
-						_newspack_byline: bylineContent,
-					},
-				} ),
-			} ) )
-		);
+		mockUseSelectWith( () => ( {
+			getEditedEntityRecord: () => ( {
+				meta: {
+					_newspack_byline_active: true,
+					_newspack_byline: bylineContent,
+				},
+			} ),
+		} ) );
 
 		const { result } = renderHook( () => useCustomByline( 123, 'post' ) );
 
@@ -78,11 +68,9 @@ describe( 'useCustomByline', () => {
 	} );
 
 	it( 'should handle null post record gracefully', () => {
-		useSelect.mockImplementation( callback =>
-			callback( () => ( {
-				getEditedEntityRecord: () => null,
-			} ) )
-		);
+		mockUseSelectWith( () => ( {
+			getEditedEntityRecord: () => null,
+		} ) );
 
 		const { result } = renderHook( () => useCustomByline( 123, 'post' ) );
 

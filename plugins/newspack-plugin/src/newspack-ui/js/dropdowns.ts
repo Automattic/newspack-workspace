@@ -5,7 +5,7 @@
  * that the tabs controller restores on switch) still respond.
  */
 
-const positionContent = ( content, toggle ) => {
+const positionContent = ( content: HTMLElement, toggle: Element ) => {
 	const rect = content.getBoundingClientRect();
 
 	// If content would overflow the right edge of the viewport.
@@ -33,13 +33,13 @@ const positionContent = ( content, toggle ) => {
 };
 
 document.addEventListener( 'click', e => {
-	const toggle = e.target.closest( '.newspack-ui__dropdown__toggle' );
+	const toggle = ( e.target as Element ).closest( '.newspack-ui__dropdown__toggle' );
 	if ( toggle ) {
 		const dropdown = toggle.closest( '.newspack-ui__dropdown' );
 		if ( ! dropdown ) {
 			return;
 		}
-		const content = dropdown.querySelector( '.newspack-ui__dropdown__content' );
+		const content = dropdown.querySelector< HTMLElement >( '.newspack-ui__dropdown__content' );
 		if ( ! content ) {
 			return;
 		}
@@ -58,7 +58,7 @@ document.addEventListener( 'click', e => {
 
 	// Outside click — close any open dropdowns.
 	document.querySelectorAll( '.newspack-ui__dropdown.active' ).forEach( dropdown => {
-		if ( ! dropdown.contains( e.target ) ) {
+		if ( ! dropdown.contains( e.target as Node ) ) {
 			dropdown.classList.remove( 'active' );
 		}
 	} );

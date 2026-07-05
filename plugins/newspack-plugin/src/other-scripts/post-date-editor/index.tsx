@@ -8,8 +8,12 @@ import { __ } from '@wordpress/i18n';
 import { registerPlugin } from '@wordpress/plugins';
 
 const PostDateSettingsPanel = () => {
-	const { postType, meta } = useSelect( select => {
-		const editor = select( 'core/editor' );
+	const { postType, meta } = useSelect( ( select ): { postType: string; meta: Record< string, unknown > } => {
+		// The editor selectors are untyped for string-keyed stores; assert at the store boundary.
+		const editor = select( 'core/editor' ) as {
+			getCurrentPostType: () => string;
+			getEditedPostAttribute: ( attribute: string ) => Record< string, unknown > | undefined;
+		};
 		return {
 			postType: editor.getCurrentPostType(),
 			meta: editor.getEditedPostAttribute( 'meta' ) || {},
@@ -29,7 +33,7 @@ const PostDateSettingsPanel = () => {
 		return null;
 	}
 
-	const updateMeta = ( key, value ) => {
+	const updateMeta = ( key: string, value: boolean ) => {
 		editPost( { meta: { [ key ]: value } } );
 	};
 
@@ -60,5 +64,6 @@ const PostDateSettingsPanel = () => {
 
 registerPlugin( 'newspack-post-date', {
 	render: PostDateSettingsPanel,
-	icon: null,
+	// An explicit falsy icon overrides registerPlugin's default plugins icon via object spread.
+	icon: undefined,
 } );

@@ -1,18 +1,27 @@
-/* globals newspack_reader_data */
 window.newspack_reader_data = window.newspack_reader_data || {};
 
 import { EVENTS, emit, on } from './events';
 import { getApiNonce } from './session';
 
 /**
- * Store configuration.
- *
- * @type {Object}
- * @property {string}  storePrefix          Prefix for store items.
- * @property {Storage} storage              Storage object.
- * @property {Object}  collections          Configuration of collections that are created through store.add().
- * @property {number}  collections.maxItems Maximum number of items in a collection.
- * @property {number}  collections.maxAge   Maximum age of a collection item if 'timestamp' is set.
+ * The public reader data store (readerActivation.store).
+ */
+export type ReaderActivationStore = NewspackReaderActivationStore;
+
+/**
+ * The internal, destructive clear() kept off the public store object.
+ */
+export type ReaderActivationStoreClear = () => void;
+
+/**
+ * A merge strategy used to reconcile server and client values on rehydration.
+ */
+type MergeStrategy = ( serverValue: unknown, clientValue: unknown ) => unknown;
+
+/**
+ * Store configuration: the store-key prefix, the backing Storage object, and
+ * the collection caps applied by store.add() — the maximum number of items and
+ * the maximum age of a collection item when a 'timestamp' is set.
  */
 const config = {
 	storePrefix: newspack_reader_data?.store_prefix || 'np_reader_',
@@ -25,10 +34,8 @@ const config = {
 
 /**
  * Registry of merge strategies for rehydration.
- *
- * @type {Map<string, Function>}
  */
-const mergeStrategies = new Map();
+const mergeStrategies = new Map< string, MergeStrategy >();
 
 /**
  * Key under which each store's internal clear() is stashed on the public store
@@ -37,8 +44,6 @@ const mergeStrategies = new Map();
  * module, so a fresh module instance that hits the singleton guard still finds
  * the live store's clear() — without exposing it on the enumerable public API
  * as readerActivation.store.clear(). See NPPM-2721.
- *
- * @type {symbol}
  */
 const INTERNAL_CLEAR = Symbol.for( 'newspack.reader_activation.store.internal_clear' );
 
@@ -46,10 +51,10 @@ const INTERNAL_CLEAR = Symbol.for( 'newspack.reader_activation.store.internal_cl
  * Rehydrate a single item from server data, using the registered merge
  * strategy if one exists. Falls back to a direct overwrite.
  *
- * @param {string} key         Store key.
- * @param {any}    serverValue Decoded value from the server.
+ * @param key         Store key.
+ * @param serverValue Decoded value from the server.
  */
-function rehydrateItem( key, serverValue ) {
+function rehydrateItem( key: string, serverValue: unknown ): void {
 	const merge = mergeStrategies.get( key );
 	try {
 		if ( merge ) {
@@ -70,17 +75,18 @@ function rehydrateItem( key, serverValue ) {
 /**
  * Initialize sync interval.
  *
- * @param {string[]} queue Store items keys to sync.
- *
- * @return {void}
+ * @param queue Store items keys to sync.
  */
-function initializeSyncInterval( queue ) {
+function initializeSyncInterval( queue: string[] ): void {
 	setInterval( () => {
 		// Bail if there are no items to sync or if it's a temporary session.
 		if ( ! queue.length || newspack_reader_data?.is_temporary ) {
 			return;
 		}
 		const key = queue.shift();
+		if ( key === undefined ) {
+			return;
+		}
 		syncItem( key )
 			.then( () => clearPendingSync( key ) )
 			.catch( () => setPendingSync( key ) );
@@ -90,11 +96,11 @@ function initializeSyncInterval( queue ) {
 /**
  * Get store item key
  *
- * @param {boolean} internal Whether it's an internal (bookkeeping) prefix.
+ * @param internal Whether it's an internal (bookkeeping) prefix.
  *
- * @return {string} Store prefix string.
+ * @return Store prefix string.
  */
-function getStorePrefix( internal = false ) {
+function getStorePrefix( internal = false ): string {
 	const parts = [ config.storePrefix ];
 	if ( internal ) {
 		parts.push( '_' );
@@ -105,12 +111,12 @@ function getStorePrefix( internal = false ) {
 /**
  * Get store item key
  *
- * @param {string}  key      Key to get.
- * @param {boolean} internal Whether it's an internal value.
+ * @param key      Key to get.
+ * @param internal Whether it's an internal value.
  *
- * @return {string} Store item key.
+ * @return Store item key.
  */
-export function getStoreItemKey( key, internal = false ) {
+export function getStoreItemKey( key: string, internal = false ): string {
 	if ( ! key ) {
 		throw new Error( 'Key is required.' );
 	}
@@ -118,12 +124,21 @@ export function getStoreItemKey( key, internal = false ) {
 }
 
 /**
+ * Read the persisted unsynced-keys queue. The value is JSON round-tripped
+ * through storage, so it is narrowed at this single boundary.
+ */
+function getUnsyncedKeys(): string[] {
+	const value = _get( 'unsynced', true );
+	return Array.isArray( value ) ? ( value as string[] ) : [];
+}
+
+/**
  * Set a key as pending sync.
  *
- * @param {string} key
+ * @param key Key to flag.
  */
-function setPendingSync( key ) {
-	const unsynced = _get( 'unsynced', true ) || [];
+function setPendingSync( key: string ): void {
+	const unsynced = getUnsyncedKeys();
 	if ( unsynced.includes( key ) ) {
 		return;
 	}
@@ -134,10 +149,10 @@ function setPendingSync( key ) {
 /**
  * Clear a key from pending sync.
  *
- * @param {string} key
+ * @param key Key to clear.
  */
-function clearPendingSync( key ) {
-	const unsynced = _get( 'unsynced', true ) || [];
+function clearPendingSync( key: string ): void {
+	const unsynced = getUnsyncedKeys();
 	if ( ! unsynced.includes( key ) ) {
 		return;
 	}
@@ -148,11 +163,11 @@ function clearPendingSync( key ) {
 /**
  * Send a data item to the server.
  *
- * @param {string} key Data key.
+ * @param key Data key.
  *
- * @return {Promise} Promise that resolves when the request is complete.
+ * @return Promise that resolves when the request is complete.
  */
-function syncItem( key ) {
+function syncItem( key: string ): Promise< XMLHttpRequest | void > {
 	if ( ! key ) {
 		return Promise.reject( 'Key is required.' );
 	}
@@ -162,7 +177,7 @@ function syncItem( key ) {
 	}
 
 	const value = _get( key );
-	const payload = { key };
+	const payload: { key: string; value?: string } = { key };
 	if ( value ) {
 		payload.value = JSON.stringify( value );
 	}
@@ -188,8 +203,10 @@ function syncItem( key ) {
 			if ( 200 !== req.status ) {
 				return reject( req );
 			}
-			// Update the known server value.
-			newspack_reader_data.items[ key ] = payload.value;
+			// Update the known server value. The items cache is asserted present —
+			// it is seeded at module load and this mirrors the pre-TS behavior of
+			// failing loudly if it were ever removed.
+			( newspack_reader_data.items as Record< string, unknown > )[ key ] = payload.value;
 			return resolve( req );
 		};
 	} );
@@ -198,22 +215,22 @@ function syncItem( key ) {
 /**
  * Encode object to be stored.
  *
- * @param {Object} object Object to encode.
+ * @param object Object to encode.
  *
- * @return {string} Encoded object.
+ * @return Encoded object.
  */
-function encode( object ) {
+function encode( object: unknown ): string {
 	return JSON.stringify( object );
 }
 
 /**
  * Decode object to be read.
  *
- * @param {string} str String to decode.
+ * @param str String to decode.
  *
- * @return {Object} Decoded string.
+ * @return Decoded string.
  */
-function decode( str ) {
+function decode( str: unknown ): unknown {
 	if ( ! str || 'string' !== typeof str ) {
 		return str;
 	}
@@ -223,10 +240,10 @@ function decode( str ) {
 /**
  * Assert that a key is not read-only.
  *
- * @param {string} key Key to check.
+ * @param  key Key to check.
  * @throws {Error} If the key is read-only.
  */
-function assertNotReadOnly( key ) {
+function assertNotReadOnly( key: string ): void {
 	if ( ( newspack_reader_data?.read_only_keys || [] ).includes( key ) ) {
 		throw new Error( `Key '${ key }' is read-only.` );
 	}
@@ -235,12 +252,12 @@ function assertNotReadOnly( key ) {
 /**
  * Internal get function to fetch data from storage.
  *
- * @param {string}  key      Key to get.
- * @param {boolean} internal Whether it's an internal value.
+ * @param key      Key to get.
+ * @param internal Whether it's an internal value.
  *
- * @return {any|null} Value. Null if not set.
+ * @return Value. Null if not set.
  */
-function _get( key, internal = false ) {
+function _get( key: string, internal = false ): unknown {
 	if ( ! key ) {
 		throw new Error( 'Key is required.' );
 	}
@@ -250,11 +267,11 @@ function _get( key, internal = false ) {
 /**
  * Internal set function to set data in storage.
  *
- * @param {string}  key      Key to set.
- * @param {any}     value    Value to set.
- * @param {boolean} internal Whether it's an internal value.
+ * @param key      Key to set.
+ * @param value    Value to set.
+ * @param internal Whether it's an internal value.
  */
-function _set( key, value, internal = false ) {
+function _set( key: string, value: unknown, internal = false ): void {
 	if ( ! key ) {
 		throw new Error( 'Key is required.' );
 	}
@@ -279,29 +296,30 @@ function _set( key, value, internal = false ) {
  * wipes the whole reader namespace and bypasses read-only-key protections, so
  * only init()'s post-logout handler should call it. See NPPM-2721.
  *
- * @return {[Object, Function]} `[ publicStore, internalClear ]`.
+ * @return `[ publicStore, internalClear ]`.
  */
-export default function Store() {
+export default function Store(): [ ReaderActivationStore, ReaderActivationStoreClear ] {
 	/**
 	 * There should only be one store instance.
 	 */
 	if ( window.newspackRASInitialized && window.newspackReaderActivation?.store ) {
 		const existingStore = window.newspackReaderActivation.store;
-		return [ existingStore, existingStore[ INTERNAL_CLEAR ] ];
+		// The live store carries its internal clear() under the global-registry
+		// Symbol (see INTERNAL_CLEAR); recover it through that opaque boundary.
+		const existingClear = ( existingStore as ReaderActivationStore & Record< symbol, ReaderActivationStoreClear > )[ INTERNAL_CLEAR ];
+		return [ existingStore, existingClear ];
 	}
 
 	/**
 	 * Queue of keys to sync with the server every second.
-	 *
-	 * @type {string[]} Array of keys.
 	 */
-	const syncQueue = [];
+	const syncQueue: string[] = [];
 	initializeSyncInterval( syncQueue );
 
 	// Push unsynced items to the sync queue, pruning existing read-only
 	// keys in order to address the upgrade case.
 	const readOnlyKeys = newspack_reader_data?.read_only_keys || [];
-	const unsynced = ( _get( 'unsynced', true ) || [] ).filter( key => ! readOnlyKeys.includes( key ) );
+	const unsynced = getUnsyncedKeys().filter( key => ! readOnlyKeys.includes( key ) );
 	_set( 'unsynced', unsynced, true );
 	for ( const key of unsynced ) {
 		if ( ! syncQueue.includes( key ) ) {
@@ -316,7 +334,7 @@ export default function Store() {
 		newspack_reader_data.items = items;
 		rehydrate( items );
 		// Re-queue unsynced items.
-		const unsyncedKeys = _get( 'unsynced', true ) || [];
+		const unsyncedKeys = getUnsyncedKeys();
 		for ( const key of unsyncedKeys ) {
 			if ( ! syncQueue.includes( key ) ) {
 				syncQueue.push( key );
@@ -331,13 +349,13 @@ export default function Store() {
 	 * Merge strategies must be registered synchronously before this
 	 * method runs — async registration is not supported.
 	 *
-	 * @param {Object} items Items to rehydrate. Defaults to newspack_reader_data.items.
+	 * @param items Items to rehydrate. Defaults to newspack_reader_data.items.
 	 */
-	function rehydrate( items = newspack_reader_data?.items ) {
+	function rehydrate( items: Record< string, unknown > | undefined = newspack_reader_data?.items ): void {
 		if ( ! items || newspack_reader_data?.is_temporary ) {
 			return;
 		}
-		const unsyncedKeys = _get( 'unsynced', true ) || [];
+		const unsyncedKeys = getUnsyncedKeys();
 		for ( const key of Object.keys( items ) ) {
 			// Skip unsynced items unless they have a merge strategy,
 			// which is the authority on how to reconcile values.
@@ -353,7 +371,7 @@ export default function Store() {
 	 * write fires on a subsequent sync tick. Module-internal — called by
 	 * clear() but not exposed on the public store API.
 	 */
-	function drainSyncQueue() {
+	function drainSyncQueue(): void {
 		syncQueue.length = 0;
 		_set( 'unsynced', [], true );
 	}
@@ -365,7 +383,7 @@ export default function Store() {
 	 * and would silently destroy reader state if called by third-party code.
 	 * Only init()'s post-logout divergence handler should call it (NPPM-2721).
 	 */
-	function clear() {
+	function clear(): void {
 		const prefix = getStorePrefix( false );
 		// Guard against an empty prefix: newspack_reader_data.store_prefix is
 		// PHP-filterable, and an accidental '' would make startsWith('') match
@@ -375,7 +393,7 @@ export default function Store() {
 			return;
 		}
 		const internalPrefix = getStorePrefix( true );
-		const keysToRemove = [];
+		const keysToRemove: string[] = [];
 		for ( let i = 0; i < config.storage.length; i++ ) {
 			const storageKey = config.storage.key( i );
 			if ( storageKey && storageKey.startsWith( prefix ) ) {
@@ -406,7 +424,7 @@ export default function Store() {
 		// after the wipe to rehydrate the switched-in reader's own server data. That
 		// relies on the captured reference staying intact — switching to in-place key
 		// deletion (e.g. `delete items[k]`) would silently empty it and break the restore.
-		window.newspack_reader_data.items = {};
+		newspack_reader_data.items = {};
 		// Reseed via _set (not public set) so the reseed itself doesn't enqueue a
 		// server write — and so init()'s trailing equality check skips its own
 		// store.set('reader', ...) call. _set emits EVENTS.data for 'reader';
@@ -415,15 +433,15 @@ export default function Store() {
 		_set( 'reader', { authenticated: false } );
 	}
 
-	const publicStore = {
+	const publicStore: ReaderActivationStore = {
 		/**
 		 * Get a value from the store.
 		 *
-		 * @param {string} key Key to get.
+		 * @param key Key to get.
 		 *
-		 * @return {any} Value. Undefined if not set.
+		 * @return Value. Null if not set.
 		 */
-		get: key => {
+		get: ( key: string ): unknown => {
 			if ( ! key ) {
 				throw new Error( 'Key is required.' );
 			}
@@ -435,10 +453,10 @@ export default function Store() {
 		 * Iterates over keys in storage, filtering by our
 		 * store prefix to ensure only relevant items are included.
 		 *
-		 * @return {Object} Plain object with all key-value pairs.
+		 * @return Plain object with all key-value pairs.
 		 */
-		getAll: () => {
-			const data = {};
+		getAll: (): Record< string, unknown > => {
+			const data: Record< string, unknown > = {};
 			const prefix = getStorePrefix( false );
 			const internalPrefix = getStorePrefix( true );
 			for ( let i = 0; i < config.storage.length; i++ ) {
@@ -456,11 +474,11 @@ export default function Store() {
 		/**
 		 * Set a value in the store.
 		 *
-		 * @param {string}  key   Key to set.
-		 * @param {any}     value Value to set.
-		 * @param {boolean} sync  Whether to sync the value with the server. Default true.
+		 * @param key   Key to set.
+		 * @param value Value to set.
+		 * @param sync  Whether to sync the value with the server. Default true.
 		 */
-		set: ( key, value, sync = true ) => {
+		set: ( key: string, value: unknown, sync = true ): void => {
 			assertNotReadOnly( key );
 			_set( key, value, false );
 			if ( sync ) {
@@ -471,9 +489,9 @@ export default function Store() {
 		/**
 		 * Delete a value from the store.
 		 *
-		 * @param {string} key Key to delete.
+		 * @param key Key to delete.
 		 */
-		delete: key => {
+		delete: ( key: string ): void => {
 			if ( ! key ) {
 				throw new Error( 'Key is required.' );
 			}
@@ -486,11 +504,10 @@ export default function Store() {
 		/**
 		 * Add a value to a collection.
 		 *
-		 * @param {string} key             Collection key to add to.
-		 * @param {any}    value           Value to add.
-		 * @param {number} value.timestamp Optional timestamp to use for max age.
+		 * @param key   Collection key to add to.
+		 * @param value Value to add. An optional `timestamp` member is used for max age.
 		 */
-		add: ( key, value ) => {
+		add: ( key: string, value: unknown ): void => {
 			if ( ! key ) {
 				throw new Error( 'Key cannot be empty.' );
 			}
@@ -498,15 +515,19 @@ export default function Store() {
 			if ( ! value ) {
 				throw new Error( 'Value cannot be empty.' );
 			}
-			let collection = _get( key ) || [];
-			if ( ! Array.isArray( collection ) ) {
+			const storedCollection = _get( key ) || [];
+			if ( ! Array.isArray( storedCollection ) ) {
 				throw new Error( `Store key '${ key }' is not an array.` );
 			}
+			let collection: unknown[] = storedCollection;
 
 			// Remove items older than max age if `timestamp` is set.
 			if ( config.collections.maxAge ) {
 				const now = Date.now();
-				collection = collection.filter( item => ! item.timestamp || now - item.timestamp < config.collections.maxAge );
+				collection = collection.filter( item => {
+					const timestamp = ( item as { timestamp?: unknown } )?.timestamp;
+					return ! timestamp || now - Number( timestamp ) < config.collections.maxAge;
+				} );
 			}
 
 			collection.push( value );
@@ -520,11 +541,11 @@ export default function Store() {
 		 * Register a merge strategy for a store key. The merge function is
 		 * called during rehydration to reconcile server and client values.
 		 *
-		 * @param {string}   key           Store key.
-		 * @param {Object}   options       Options.
-		 * @param {Function} options.merge Merge function: (serverValue, clientValue) => resolvedValue.
+		 * @param key           Store key.
+		 * @param options       Options containing the merge function.
+		 * @param options.merge Merge callback: (serverValue, clientValue) => resolvedValue.
 		 */
-		register: ( key, { merge } = {} ) => {
+		register: ( key: string, { merge }: { merge?: MergeStrategy } = {} ): void => {
 			if ( typeof merge !== 'function' ) {
 				throw new Error( `Store key '${ key }' requires a merge function.` );
 			}

@@ -9,17 +9,25 @@ import { ExternalLink } from '@wordpress/components';
 import { Fragment, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
+import type { APIFetchOptions } from '@wordpress/api-fetch';
 
 /**
  * Internal dependencies
  */
 import { PluginToggle, ActionCard, Modal, Card, Button, withWizardScreen } from '../../../../../packages/components/src';
 import GAMOnboarding from '../../components/onboarding';
+import type { AdvertisingServices, FetchAdvertisingData, ToggleService } from '../../types';
+
+export type ProvidersViewProps = {
+	services: AdvertisingServices;
+	fetchAdvertisingData: FetchAdvertisingData;
+	toggleService: ToggleService;
+};
 
 /**
  * Advertising management screen.
  */
-const Providers = ( { services, fetchAdvertisingData, toggleService } ) => {
+const Providers = ( { services, fetchAdvertisingData, toggleService }: ProvidersViewProps ) => {
 	const { google_ad_manager } = services;
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ networkCode, setNetworkCode ] = useState( '' );
@@ -27,23 +35,26 @@ const Providers = ( { services, fetchAdvertisingData, toggleService } ) => {
 
 	const updateGAMNetworkCode = () => {
 		setInFlight( true );
-		apiFetch( {
+		// This request goes through raw apiFetch, which has no `quiet` handling
+		// (that is a wizardApiFetch extension) \u2013 the flag is inert here.
+		const requestOptions: APIFetchOptions< true > & { quiet: boolean } = {
 			path: '/newspack/v1/wizard/billboard/network_code/',
 			method: 'POST',
 			data: { network_code: networkCode, is_gam: false },
 			quiet: true,
-		} ).finally( () => {
+		};
+		apiFetch( requestOptions ).finally( () => {
 			fetchAdvertisingData();
 			setInFlight( false );
 			setIsOnboarding( false );
 		} );
 	};
 
-	let notifications = [];
+	let notifications: React.ReactNode[] = [];
 
 	if ( google_ad_manager.enabled && google_ad_manager.status.error ) {
 		notifications = notifications.concat( [ google_ad_manager.status.error, '\u00A0' ] );
-	} else if ( google_ad_manager?.created_targeting_keys?.length > 0 ) {
+	} else if ( google_ad_manager?.created_targeting_keys && google_ad_manager.created_targeting_keys.length > 0 ) {
 		notifications = notifications.concat( [
 			__( 'Created custom targeting keys:', 'newspack-plugin' ) + '\u00A0',
 			google_ad_manager.created_targeting_keys.join( ', ' ) + '. \u00A0',
@@ -72,7 +83,6 @@ const Providers = ( { services, fetchAdvertisingData, toggleService } ) => {
 				title={ __( 'Google Ad Manager', 'newspack-plugin' ) }
 				description={ __( 'Manage Google Ad Manager ad units and placements directly from the Newspack dashboard.', 'newspack-plugin' ) }
 				actionText={ google_ad_manager && google_ad_manager.enabled && __( 'Configure', 'newspack-plugin' ) }
-				toggle
 				toggleChecked={ google_ad_manager && google_ad_manager.enabled }
 				toggleOnChange={ value => {
 					toggleService( 'google_ad_manager', value ).then( () => {
@@ -82,7 +92,7 @@ const Providers = ( { services, fetchAdvertisingData, toggleService } ) => {
 					} );
 				} }
 				titleLink={ google_ad_manager?.enabled ? '#/google_ad_manager' : null }
-				href={ google_ad_manager?.enabled && '#/google_ad_manager' }
+				href={ google_ad_manager?.enabled ? '#/google_ad_manager' : null }
 				notification={ notifications.length ? notifications : null }
 				notificationLevel={ google_ad_manager.created_targeting_keys?.length ? 'success' : 'error' }
 			/>
@@ -97,7 +107,7 @@ const Providers = ( { services, fetchAdvertisingData, toggleService } ) => {
 			{ isOnboarding && (
 				<Modal title={ __( 'Google Ad Manager Setup', 'newspack-plugin' ) } onRequestClose={ () => setIsOnboarding( false ) }>
 					<GAMOnboarding
-						onUpdate={ data => setNetworkCode( data.networkCode ) }
+						onUpdate={ ( data: { networkCode: string } ) => setNetworkCode( data.networkCode ) }
 						onSuccess={ () => {
 							fetchAdvertisingData();
 							setIsOnboarding( false );
@@ -117,4 +127,4 @@ const Providers = ( { services, fetchAdvertisingData, toggleService } ) => {
 	);
 };
 
-export default withWizardScreen( Providers );
+export default withWizardScreen< ProvidersViewProps >( Providers );

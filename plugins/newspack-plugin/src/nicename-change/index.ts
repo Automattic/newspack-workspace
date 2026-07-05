@@ -7,7 +7,13 @@
  */
 import './style.scss';
 
-( function ( $ ) {
+/** Response shape of the `newspack_change_nicename(_check)` AJAX actions. */
+type NicenameChangeResponse = {
+	success: boolean;
+	message: string;
+};
+
+( function ( $: NewspackJQueryStatic ) {
 	function newspack_change_nicename_set_loading_state() {
 		$( '#newspack_change_nicename_check' ).prop( 'disabled', true );
 		$( '#newspack_change_nicename_submit' ).prop( 'disabled', true );
@@ -22,7 +28,7 @@ import './style.scss';
 		$( '#newspack_change_nicename' ).prop( 'disabled', false );
 	}
 
-	function newspack_change_nicename_process_response( response ) {
+	function newspack_change_nicename_process_response( response: NicenameChangeResponse ) {
 		if ( response.success ) {
 			$( '#newspack_change_nicename_message_success' ).html( response.message ).show();
 		} else {
@@ -30,7 +36,10 @@ import './style.scss';
 		}
 	}
 
-	$( '#newspack_change_nicename_check' ).on( 'click', function () {
+	// The original handlers took no parameter and read the deprecated `window.event`
+	// global; naming the jQuery-passed event `event` preserves those reads verbatim
+	// (it is the same underlying event being dispatched).
+	$( '#newspack_change_nicename_check' ).on( 'click', function ( event ) {
 		event.preventDefault();
 		const new_nicename = $( '#newspack_change_nicename' ).val();
 		if ( ! new_nicename ) {
@@ -39,7 +48,7 @@ import './style.scss';
 		}
 		newspack_change_nicename_set_loading_state();
 		const nonce = $( '#newspack_change_nicename_nonce' ).val();
-		$.ajax( {
+		$.ajax< NicenameChangeResponse >( {
 			type: 'POST',
 			url: newspack_change_nicename_params.ajax_url,
 			data: {
@@ -54,7 +63,7 @@ import './style.scss';
 		} );
 	} );
 
-	$( '#newspack_change_nicename_submit' ).on( 'click', function () {
+	$( '#newspack_change_nicename_submit' ).on( 'click', function ( event ) {
 		event.preventDefault();
 		const new_nicename = $( '#newspack_change_nicename' ).val();
 		if ( ! new_nicename ) {
@@ -64,7 +73,7 @@ import './style.scss';
 		newspack_change_nicename_set_loading_state();
 		const user_id = $( this ).data( 'user-id' );
 		const nonce = $( '#newspack_change_nicename_nonce' ).val();
-		$.ajax( {
+		$.ajax< NicenameChangeResponse >( {
 			type: 'POST',
 			url: newspack_change_nicename_params.ajax_url,
 			data: {

@@ -30,53 +30,81 @@ import {
 	withWizardScreen,
 } from '../../../../../packages/components/src';
 import Router from '../../../../../packages/components/src/proxied-imports/router';
+import type { SetupScreenComponentProps, SetupScreenProps } from '../../types';
 import '../../style.scss';
 
 const { useHistory } = Router;
 const POST_COUNT = newspack_aux_data.is_e2e ? 12 : 40;
 const STARTER_CONTENT_REQUEST_COUNT = POST_COUNT + 3;
 
-const ERROR_TYPES = {
+const ERROR_TYPES: Record< string, { message: string } > = {
 	plugin_configuration: { message: __( 'Installation', 'newspack' ) },
 	starter_content: { message: __( 'Starter content', 'newspack' ) },
 };
 
-const starterContentInit = ( approach, site = '' ) =>
+/**
+ * How the site is set up: generated starter content, or content imported from
+ * an existing site.
+ */
+type SetupApproach = 'generated' | 'import';
+
+/**
+ * A managed plugin/theme, as returned by the initial-check endpoint.
+ */
+type SoftwareItem = {
+	Name: string;
+	Slug: string;
+	Status: string;
+};
+
+/**
+ * An error collected during installation, rendered as a retry/skip card.
+ */
+type InstallationError = {
+	info: { message: string };
+	item: string;
+	error: unknown;
+};
+
+const starterContentInit = ( approach?: SetupApproach, site = '' ) =>
 	apiFetch( {
 		path: `/newspack/v1/wizard/newspack-setup-wizard/starter-content/init`,
 		method: 'post',
 		data: { type: approach, site },
 	} );
 
-const starterContentFetch = endpoint =>
+const starterContentFetch = ( endpoint: string ) =>
 	apiFetch( {
 		path: `/newspack/v1/wizard/newspack-setup-wizard/starter-content/${ endpoint }`,
 		method: 'post',
 	} );
 
-const Welcome = ( { buttonAction } ) => {
+const Welcome = ( { buttonAction }: SetupScreenComponentProps ) => {
 	const [ installationProgress, setInstallationProgress ] = useState( 0 );
-	const [ softwareInfo, setSoftwareInfo ] = useState( [] );
-	const [ isSSL, setIsSSL ] = useState( null );
+	const [ softwareInfo, setSoftwareInfo ] = useState< SoftwareItem[] >( [] );
+	const [ isSSL, setIsSSL ] = useState< boolean | null >( null );
 	const [ shouldInstallStarterContent, setShouldInstallStarterContent ] = useState( true );
-	const [ errors, setErrors ] = useState( [] );
+	const [ errors, setErrors ] = useState< InstallationError[] >( [] );
 	const [ existingSiteURL, setExistingSiteURL ] = useState( '' );
-	const [ setupApproach, setSetupApproach ] = useState();
+	const [ setupApproach, setSetupApproach ] = useState< SetupApproach >();
 
 	const isSetupApproachNew = setupApproach === 'generated';
 	const isSetupApproachMigrate = setupApproach === 'import';
 
-	const addError = errorInfo => error => setErrors( _errors => [ ..._errors, { ...errorInfo, error } ] );
+	const addError = ( errorInfo: Omit< InstallationError, 'error' > ) => ( error: unknown ) =>
+		setErrors( _errors => [ ..._errors, { ...errorInfo, error } ] );
 
 	const total = ( shouldInstallStarterContent ? STARTER_CONTENT_REQUEST_COUNT : 0 ) + softwareInfo.length;
 
 	useEffect( () => {
 		document.body.classList.add( 'newspack-wizard__welcome' );
 
-		apiFetch( { path: '/newspack/v1/wizard/newspack-setup-wizard/initial-check/' } ).then( res => {
-			setSoftwareInfo( res.plugins );
-			setIsSSL( res.is_ssl );
-		} );
+		apiFetch< { plugins: SoftwareItem[]; is_ssl: boolean } >( { path: '/newspack/v1/wizard/newspack-setup-wizard/initial-check/' } ).then(
+			res => {
+				setSoftwareInfo( res.plugins );
+				setIsSSL( res.is_ssl );
+			}
+		);
 
 		return () => document.body.classList.remove( 'newspack-wizard__welcome' );
 	}, [] );
@@ -116,7 +144,9 @@ const Welcome = ( { buttonAction } ) => {
 			await starterContentInit( setupApproach, existingSiteURL )
 				.then( increment )
 				.catch( err => {
-					window.location = '/wp-admin/admin.php?page=newspack-setup-wizard&newspack-notice=_error_' + err.message;
+					// Assigning a string to `window.location` navigates; the lib.dom
+					// setter is typed as the intersection, hence the assertion.
+					window.location = ( '/wp-admin/admin.php?page=newspack-setup-wizard&newspack-notice=_error_' + err.message ) as string & Location;
 				} );
 
 			// Generate posts.
@@ -160,14 +190,16 @@ const Welcome = ( { buttonAction } ) => {
 	const hasErrors = errors.length > 0;
 	const isInit = installationProgress === 0;
 	const isDone = installationProgress === total && ! hasErrors;
-	const redirectCounterRef = useRef();
+	const redirectCounterRef = useRef< ReturnType< typeof setInterval > >();
 
 	const REDIRECT_COUNTER_DURATION = 5;
 	const [ redirectCounter, setRedirectCounter ] = useState( REDIRECT_COUNTER_DURATION );
 	useEffect( () => {
 		if ( redirectCounter === 0 ) {
 			clearInterval( redirectCounterRef.current );
-			history.push( nextRouteAddress.replace( '#', '' ) );
+			// The welcome route is always followed by another route, so the
+			// button action always carries an href.
+			history.push( nextRouteAddress!.replace( '#', '' ) );
 		}
 	}, [ redirectCounter ] );
 
@@ -228,7 +260,7 @@ const Welcome = ( { buttonAction } ) => {
 		}
 	};
 
-	const renderErrorBox = ( error, i ) => (
+	const renderErrorBox = ( error: InstallationError, i: number ) => (
 		<ActionCard
 			isSmall
 			key={ i }
@@ -242,8 +274,8 @@ const Welcome = ( { buttonAction } ) => {
 		/>
 	);
 
-	const skipError = i => {
-		const updatedErrors = [];
+	const skipError = ( i: number ) => {
+		const updatedErrors: InstallationError[] = [];
 		for ( let j = 0; j < errors.length; ++j ) {
 			if ( i !== j ) {
 				updatedErrors.push( errors[ j ] );
@@ -262,7 +294,7 @@ const Welcome = ( { buttonAction } ) => {
 				</HStack>
 			) }
 
-			<Card isNarrow noBorder className={ errors.length === 0 && installationProgress > 0 && ! isDone ? 'loading' : null }>
+			<Card isNarrow noBorder className={ errors.length === 0 && installationProgress > 0 && ! isDone ? 'loading' : undefined }>
 				<Grid columns={ 1 }>
 					{ ! isInit && (
 						<h1>
@@ -341,7 +373,7 @@ const Welcome = ( { buttonAction } ) => {
 												'We will import the last 50 articles from your existing site to help you with the set up and customization.',
 												'newspack'
 											) }
-											onChange={ val => setExistingSiteURL( val ) }
+											onChange={ ( val: string ) => setExistingSiteURL( val ) }
 										/>
 									) }
 								</>
@@ -364,7 +396,7 @@ const Welcome = ( { buttonAction } ) => {
 									</Button>
 								) }
 								{ ! isInit && (
-									<Button disabled={ ! isSSL } isPrimary href={ isDone ? nextRouteAddress : null }>
+									<Button disabled={ ! isSSL } isPrimary href={ isDone ? nextRouteAddress : undefined }>
 										{ __( 'Continue', 'newspack' ) }
 									</Button>
 								) }
@@ -377,6 +409,10 @@ const Welcome = ( { buttonAction } ) => {
 	);
 };
 
-const WelcomeWizardScreen = withWizardScreen( Welcome );
+const WelcomeWizardScreen = withWizardScreen< SetupScreenProps >( Welcome );
+// `routes` is declared (though never passed by the setup wizard) so the `omit`
+// list below satisfies lodash's keyof-constrained overload.
 // eslint-disable-next-line react/display-name
-export default props => <WelcomeWizardScreen { ...omit( props, [ 'routes', 'headerText', 'buttonText' ] ) } />;
+export default ( props: SetupScreenProps & { routes?: unknown } ) => (
+	<WelcomeWizardScreen { ...omit( props, [ 'routes', 'headerText', 'buttonText' ] ) } />
+);

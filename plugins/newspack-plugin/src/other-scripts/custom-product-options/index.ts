@@ -15,7 +15,7 @@
 		$( '.woocommerce_variation' ).on( 'click', 'h3', init );
 	}
 
-	function showOrHidePricingOptions( e ) {
+	function showOrHidePricingOptions( e: NewspackJQueryEvent ) {
 		// Group subscription checkbox.
 		const $fields = $( e.currentTarget )
 			.closest( '.woocommerce_variation,#woocommerce-product-data' )
@@ -28,11 +28,13 @@
 		}
 	}
 
-	function showOrHideAllOptions( e ) {
+	function showOrHideAllOptions( e: NewspackJQueryEvent ) {
 		const $checkbox = $( '.show_if_subscription' );
 		const $fields = $( '.show_if_newspack_group_subscription_enabled' );
 
-		if ( e.currentTarget.value === 'subscription' || e.currentTarget.value === 'variable-subscription' ) {
+		// Bound to `select#product-type`, so currentTarget is the product-type select.
+		const productType = ( e.currentTarget as HTMLSelectElement ).value;
+		if ( productType === 'subscription' || productType === 'variable-subscription' ) {
 			$checkbox.show();
 			if ( $checkbox.is( ':checked' ) ) {
 				$fields.show();

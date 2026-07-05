@@ -6,14 +6,29 @@ import { __ } from '@wordpress/i18n';
 import { PanelBody, RangeControl, ToggleControl } from '@wordpress/components';
 
 /**
+ * Internal dependencies
+ */
+import type { AvatarAttributes } from './utils';
+
+/**
+ * Props for the Avatar block inspector controls.
+ */
+type AvatarInspectorControlsProps = {
+	/** Block attributes. */
+	attributes: AvatarAttributes;
+	/** Function to update block attributes. */
+	setAttributes: ( attributes: Partial< AvatarAttributes > ) => void;
+};
+
+/**
  * Inspector controls for the Avatar block.
  *
- * @param {Object}   props               Component props.
- * @param {Function} props.setAttributes Function to update block attributes.
- * @param {Object}   props.attributes    Block attributes.
- * @return {JSX.Element} The inspector controls panel.
+ * @param props               Component props.
+ * @param props.setAttributes Function to update block attributes.
+ * @param props.attributes    Block attributes.
+ * @return The inspector controls panel.
  */
-const AvatarInspectorControls = ( { setAttributes, attributes } ) => (
+const AvatarInspectorControls = ( { setAttributes, attributes }: AvatarInspectorControlsProps ) => (
 	<InspectorControls>
 		<PanelBody title={ __( 'Settings', 'newspack-plugin' ) }>
 			<RangeControl

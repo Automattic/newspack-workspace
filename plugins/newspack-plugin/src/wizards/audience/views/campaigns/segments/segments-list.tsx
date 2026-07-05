@@ -19,16 +19,23 @@ const AddNewSegmentLink = () => (
 	</NavLink>
 );
 
-const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) => {
+type SegmentsListProps = {
+	wizardApiFetch: CampaignsWizardSharedProps[ 'wizardApiFetch' ];
+	segments: CampaignsSegment[];
+	setSegments: ( segments: CampaignsSegment[] ) => void;
+	isLoading: number;
+};
+
+const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading }: SegmentsListProps ) => {
 	const [ inFlight, setInFlight ] = useState( false );
-	const [ error, setError ] = useState( null );
+	const [ error, setError ] = useState< string | null >( null );
 	const history = useHistory();
 	useEffect( () => {
 		window.scrollTo( 0, 0 );
 	}, [] );
 
 	const toggleSegmentStatus = useCallback(
-		segment => {
+		( segment: CampaignsSegment ) => {
 			setInFlight( true );
 			setError( null );
 			wizardApiFetch( {
@@ -46,7 +53,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 			} )
 				.then( _segments => {
 					setInFlight( false );
-					setSegments( _segments );
+					setSegments( _segments as CampaignsSegment[] );
 				} )
 				.catch( () => {
 					setInFlight( false );
@@ -56,7 +63,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 	);
 
 	const deleteSegment = useCallback(
-		segment => {
+		( segment: CampaignsSegment ) => {
 			setInFlight( true );
 			setError( null );
 			wizardApiFetch( {
@@ -66,7 +73,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 			} )
 				.then( _segments => {
 					setInFlight( false );
-					setSegments( _segments );
+					setSegments( _segments as CampaignsSegment[] );
 				} )
 				.catch( () => {
 					setInFlight( false );
@@ -75,7 +82,7 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 		[ wizardApiFetch ]
 	);
 
-	const sortSegments = ( fromIndex, targetIndex ) => {
+	const sortSegments = ( fromIndex: number, targetIndex: number ) => {
 		setError( null );
 		const sortedSegments = [ ...segments ];
 		const [ moved ] = sortedSegments.splice( fromIndex, 1 );
@@ -91,9 +98,9 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 		} )
 			.then( _segments => {
 				setInFlight( false );
-				setSegments( _segments );
+				setSegments( _segments as CampaignsSegment[] );
 			} )
-			.catch( e => {
+			.catch( ( e: { message?: string } ) => {
 				setInFlight( false );
 				setError( e.message || __( 'There was an error sorting segments. Please try again.', 'newspack-plugin' ) );
 				setSegments( [ ...segments ] );
@@ -105,8 +112,8 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 				id: segment.id,
 				title: segment.name,
 				description: segmentDescription( segment ),
-				badgeLevel: segment.is_criteria_duplicated ? 'warning' : 'default',
-				badgeText: segment.is_criteria_duplicated ? __( 'Duplicate', 'newspack-plugin' ) : undefined,
+				badgeLevel: segment.is_criteria_duplicated ? ( 'warning' as const ) : ( 'default' as const ),
+				badgeText: ( segment.is_criteria_duplicated ? __( 'Duplicate', 'newspack-plugin' ) : undefined ) as string,
 				toggleChecked: ! segment.configuration.is_disabled,
 				onToggleChange: () => toggleSegmentStatus( segment ),
 				actions: [
@@ -124,7 +131,8 @@ const SegmentsList = ( { wizardApiFetch, segments, setSegments, isLoading } ) =>
 		[ segments, toggleSegmentStatus, deleteSegment, history ]
 	);
 
-	if ( segments === null ) {
+	// Defensive check predating the typed props (widening assertion keeps it type-legal).
+	if ( ( segments as CampaignsSegment[] | null ) === null ) {
 		return null;
 	}
 

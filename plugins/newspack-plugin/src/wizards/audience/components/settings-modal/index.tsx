@@ -12,13 +12,46 @@ import { frequenciesForPopup, isOverlay, placementsForPopups, overlaySizesForPop
 
 const { SettingsCard } = Settings;
 
-const PromptSettingsModal = ( { prompt, disabled, onClose, updatePopup } ) => {
-	const [ promptConfig, setPromptConfig ] = hooks.useObjectState( prompt );
-	const { excluded_categories: excludedCategories = [], excluded_tags: excludedTags = [] } = promptConfig.options || {};
+/**
+ * A term as provided by CategoryAutocomplete's onChange: REST terms carry
+ * id/name, terms saved by the Campaigns API carry term_id/name.
+ */
+type AutocompleteTerm = {
+	id?: number;
+	term_id?: number;
+	name?: string;
+	value?: string;
+};
+
+/**
+ * The edited prompt: like CampaignsPrompt, but with the term arrays widened
+ * to the shapes CategoryAutocomplete emits.
+ */
+type PromptConfig = Omit< CampaignsPrompt, 'campaign_groups' | 'categories' | 'tags' | 'segments' > & {
+	campaign_groups: AutocompleteTerm[] | null;
+	categories: AutocompleteTerm[];
+	tags: AutocompleteTerm[];
+	segments: AutocompleteTerm[];
+};
+
+type PromptSettingsModalProps = {
+	prompt: CampaignsPrompt;
+	disabled?: boolean;
+	onClose: () => void;
+	/** Accepted for prop-parity with the caller; unused. */
+	segments?: CampaignsSegment[];
+	updatePopup: CampaignsPopupManagement[ 'updatePopup' ];
+};
+
+const PromptSettingsModal = ( { prompt, disabled, onClose, updatePopup }: PromptSettingsModalProps ) => {
+	const [ promptConfig, setPromptConfig ] = hooks.useObjectState< PromptConfig >( prompt );
+	const { excluded_categories: excludedCategories = [], excluded_tags: excludedTags = [] }: Partial< CampaignsPrompt[ 'options' ] > =
+		promptConfig.options || {};
 	const [ showAdvanced, setShowAdvanced ] = useState( 0 < excludedCategories.length || 0 < excludedTags.length || false );
 
 	const handleSave = () => {
-		updatePopup( promptConfig ).then( onClose );
+		// The widened term arrays are what the Campaigns API accepts for an update.
+		updatePopup( promptConfig as CampaignsPrompt ).then( onClose );
 	};
 
 	return (
@@ -55,16 +88,16 @@ const PromptSettingsModal = ( { prompt, disabled, onClose, updatePopup } ) => {
 					<SelectControl
 						label={ __( 'Frequency', 'newspack-plugin' ) }
 						disabled={ disabled }
-						onChange={ value => {
+						onChange={ ( value: string ) => {
 							setPromptConfig( { options: { frequency: value } } );
 						} }
-						options={ frequenciesForPopup( prompt ) }
+						options={ frequenciesForPopup() }
 						value={ promptConfig.options.frequency }
 					/>
 					<SelectControl
 						label={ isOverlay( prompt ) ? __( 'Position', 'newspack-plugin' ) : __( 'Placement', 'newspack-plugin' ) }
 						disabled={ disabled }
-						onChange={ value => {
+						onChange={ ( value: string ) => {
 							setPromptConfig( { options: { placement: value } } );
 						} }
 						options={ placementsForPopups( prompt ) }
@@ -74,10 +107,10 @@ const PromptSettingsModal = ( { prompt, disabled, onClose, updatePopup } ) => {
 						<SelectControl
 							label={ __( 'Size', 'newspack-plugin' ) }
 							disabled={ disabled }
-							onChange={ value => {
+							onChange={ ( value: string ) => {
 								setPromptConfig( { options: { overlay_size: value } } );
 							} }
-							options={ overlaySizesForPopups( prompt ) }
+							options={ overlaySizesForPopups() }
 							value={ promptConfig.options.overlay_size }
 						/>
 					) }
@@ -145,7 +178,8 @@ const PromptSettingsModal = ( { prompt, disabled, onClose, updatePopup } ) => {
 								onChange={ tokens =>
 									setPromptConfig( {
 										options: {
-											excluded_categories: tokens.map( token => token.id ),
+											// Terms come from the categories REST endpoint, which always returns ids.
+											excluded_categories: tokens.map( token => token.id! ),
 										},
 									} )
 								}
@@ -160,7 +194,8 @@ const PromptSettingsModal = ( { prompt, disabled, onClose, updatePopup } ) => {
 								onChange={ tokens =>
 									setPromptConfig( {
 										options: {
-											excluded_tags: tokens.map( token => token.id ),
+											// Terms come from the tags REST endpoint, which always returns ids.
+											excluded_tags: tokens.map( token => token.id! ),
 										},
 									} )
 								}

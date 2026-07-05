@@ -8,6 +8,7 @@ import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import { Spinner } from '@wordpress/components';
 import { DataViews as WPDataViews } from '@wordpress/dataviews';
+import type { Action, Field, View } from '@wordpress/dataviews';
 
 /**
  * Internal dependencies
@@ -15,10 +16,17 @@ import { DataViews as WPDataViews } from '@wordpress/dataviews';
 import { Badge, DataViews } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { API_BASE, STATUS_MAP, formatTimestamp } from './constants';
+import type {
+	IntegrationActionStatusBadge,
+	IntegrationLogItem,
+	IntegrationLogsResponse,
+	IntegrationRunActionResponse,
+	IntegrationsSettings,
+} from './constants';
 import { LogDetailsModal } from './log-details-modal';
 import './style.scss';
 
-const DEFAULT_VIEW = {
+const DEFAULT_VIEW: View = {
 	type: 'table',
 	page: 1,
 	perPage: 25,
@@ -36,17 +44,22 @@ const DEFAULT_VIEW = {
 	},
 };
 
-export const LogsView = ( { integrations, match } ) => {
+type LogsViewProps = {
+	integrations: IntegrationsSettings;
+	match: { params: { integrationId: string } };
+};
+
+export const LogsView = ( { integrations, match }: LogsViewProps ) => {
 	const integrationId = match?.params?.integrationId;
 	const integration = integrationId ? integrations[ integrationId ] : null;
 	const { addNotice, removeNotice, setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
-	const [ data, setData ] = useState( [] );
+	const [ data, setData ] = useState< IntegrationLogItem[] >( [] );
 	const [ total, setTotal ] = useState( 0 );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ hasLoadedOnce, setHasLoadedOnce ] = useState( false );
-	const [ view, setView ] = useState( DEFAULT_VIEW );
-	const [ runningActionIds, setRunningActionIds ] = useState( () => new Set() );
+	const [ view, setView ] = useState< View >( DEFAULT_VIEW );
+	const [ runningActionIds, setRunningActionIds ] = useState( () => new Set< string >() );
 
 	useEffect( () => {
 		if ( integration ) {
@@ -64,7 +77,7 @@ export const LogsView = ( { integrations, match } ) => {
 		}
 	}, [ integration, setHeaderData ] );
 
-	const statusFilter = view.filters?.find( f => f.field === 'status' )?.value;
+	const statusFilter: string | undefined = view.filters?.find( f => f.field === 'status' )?.value;
 
 	const fetchLogs = useCallback( () => {
 		if ( ! integrationId ) {
@@ -72,7 +85,7 @@ export const LogsView = ( { integrations, match } ) => {
 		}
 		setIsLoading( true );
 
-		const orderbyMap = {
+		const orderbyMap: Record< string, string | undefined > = {
 			timestamp: 'scheduled_date_gmt',
 			status: 'status',
 		};
@@ -86,7 +99,7 @@ export const LogsView = ( { integrations, match } ) => {
 			status: statusFilter || undefined,
 		} );
 
-		apiFetch( { path } )
+		apiFetch< IntegrationLogsResponse >( { path } )
 			.then( response => {
 				setData( response.items );
 				setTotal( response.total );
@@ -108,7 +121,7 @@ export const LogsView = ( { integrations, match } ) => {
 		fetchLogs();
 	}, [ fetchLogs ] );
 
-	const fields = useMemo(
+	const fields: Field< IntegrationLogItem >[] = useMemo(
 		() => [
 			{
 				id: 'timestamp',
@@ -132,7 +145,7 @@ export const LogsView = ( { integrations, match } ) => {
 				id: 'status',
 				label: __( 'Status', 'newspack-plugin' ),
 				render: ( { item } ) => {
-					const mapped = STATUS_MAP[ item.status ] || { label: item.status, level: 'default' };
+					const mapped: IntegrationActionStatusBadge = STATUS_MAP[ item.status ] || { label: item.status, level: 'default' };
 					return <Badge text={ mapped.label } level={ mapped.level } />;
 				},
 				enableSorting: true,
@@ -152,7 +165,7 @@ export const LogsView = ( { integrations, match } ) => {
 	);
 
 	const runAction = useCallback(
-		actionId => {
+		( actionId: string ) => {
 			setRunningActionIds( prev => {
 				const next = new Set( prev );
 				next.add( actionId );
@@ -167,7 +180,7 @@ export const LogsView = ( { integrations, match } ) => {
 				type: 'info',
 				id: noticeId,
 			} );
-			apiFetch( {
+			apiFetch< IntegrationRunActionResponse >( {
 				path: `${ API_BASE }/${ integrationId }/logs/${ actionId }/run`,
 				method: 'POST',
 			} )
@@ -187,7 +200,7 @@ export const LogsView = ( { integrations, match } ) => {
 						id: noticeId,
 					} );
 				} )
-				.catch( err => {
+				.catch( ( err: WpFetchError ) => {
 					const message = err && err.message ? err.message : __( 'Could not run action.', 'newspack-plugin' );
 					removeNotice( noticeId );
 					addNotice( {
@@ -208,7 +221,7 @@ export const LogsView = ( { integrations, match } ) => {
 		[ integrationId, addNotice, removeNotice, fetchLogs ]
 	);
 
-	const actions = useMemo(
+	const actions: Action< IntegrationLogItem >[] = useMemo(
 		() => [
 			{
 				id: 'view-details',

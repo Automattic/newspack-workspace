@@ -19,6 +19,10 @@ jest.mock( '@wordpress/api-fetch', () => ( {
 	default: jest.fn(),
 } ) );
 
+// apiFetch is typed as `ApiFetch`, not a jest mock — narrow the opaque
+// module boundary so the mock control methods are visible.
+const mockedApiFetch = jest.mocked( apiFetch );
+
 // Store observer instances so tests can trigger intersection.
 let observerInstances = [];
 
@@ -32,29 +36,41 @@ const originalResizeObserver = global.ResizeObserver;
 // Default IntersectionObserver mock: triggers immediately.
 function createObserverMock( triggerImmediately = true ) {
 	observerInstances = [];
-	global.IntersectionObserver = class {
-		constructor( callback ) {
+	global.IntersectionObserver = class MockIntersectionObserver implements IntersectionObserver {
+		callback: IntersectionObserverCallback;
+		root: Document | Element | null = null;
+		readonly rootMargin: string = '';
+		readonly thresholds: ReadonlyArray< number > = [];
+		constructor( callback: IntersectionObserverCallback ) {
 			this.callback = callback;
 			observerInstances.push( this );
 		}
 		observe() {
 			if ( triggerImmediately ) {
-				this.callback( [ { isIntersecting: true } ] );
+				// Invoke with the minimal entry shape the component reads.
+				( this.callback as ( entries: Array< { isIntersecting: boolean } > ) => void )( [ { isIntersecting: true } ] );
 			}
 		}
+		unobserve() {}
 		disconnect() {}
+		takeRecords(): IntersectionObserverEntry[] {
+			return [];
+		}
 	};
 }
 
 // ResizeObserver mock: immediately reports a 300px-wide container.
 function createResizeObserverMock() {
-	global.ResizeObserver = class {
-		constructor( callback ) {
+	global.ResizeObserver = class MockResizeObserver implements ResizeObserver {
+		callback: ResizeObserverCallback;
+		constructor( callback: ResizeObserverCallback ) {
 			this.callback = callback;
 		}
 		observe() {
-			this.callback( [ { contentRect: { width: 300 } } ] );
+			// Invoke with the minimal entry shape the component reads.
+			( this.callback as ( entries: Array< { contentRect: { width: number } } > ) => void )( [ { contentRect: { width: 300 } } ] );
 		}
+		unobserve() {}
 		disconnect() {}
 	};
 }
@@ -63,7 +79,7 @@ function createResizeObserverMock() {
  * Helper: simulate iframe onLoad and stub contentDocument so
  * handleIframeLoad resolves immediately (no pending assets).
  */
-function simulateIframeLoad( iframe ) {
+function simulateIframeLoad( iframe: Element ) {
 	Object.defineProperty( iframe, 'contentDocument', {
 		value: {
 			querySelectorAll: () => [],
@@ -76,7 +92,7 @@ function simulateIframeLoad( iframe ) {
 
 describe( 'EmailPreview', () => {
 	beforeEach( () => {
-		apiFetch.mockReset();
+		mockedApiFetch.mockReset();
 		createObserverMock( true );
 		createResizeObserverMock();
 	} );
@@ -85,12 +101,12 @@ describe( 'EmailPreview', () => {
 		// Restore (or delete) the observer globals so they don't leak
 		// into whatever suite Jest runs next in the same worker.
 		if ( undefined === originalIntersectionObserver ) {
-			delete global.IntersectionObserver;
+			Reflect.deleteProperty( global, 'IntersectionObserver' );
 		} else {
 			global.IntersectionObserver = originalIntersectionObserver;
 		}
 		if ( undefined === originalResizeObserver ) {
-			delete global.ResizeObserver;
+			Reflect.deleteProperty( global, 'ResizeObserver' );
 		} else {
 			global.ResizeObserver = originalResizeObserver;
 		}
@@ -98,7 +114,7 @@ describe( 'EmailPreview', () => {
 
 	it( 'renders loading state while fetching', async () => {
 		// Keep the promise pending so we can observe the loading state.
-		apiFetch.mockReturnValue( new Promise( () => {} ) );
+		mockedApiFetch.mockReturnValue( new Promise( () => {} ) );
 
 		render( <EmailPreview postId={ 123 } /> );
 
@@ -106,7 +122,7 @@ describe( 'EmailPreview', () => {
 	} );
 
 	it( 'renders iframe on successful fetch and gains is-ready after load', async () => {
-		apiFetch.mockResolvedValue( {
+		mockedApiFetch.mockResolvedValue( {
 			html: '<html><body><p>Hello Sample Reader</p></body></html>',
 			id: 123,
 		} );
@@ -116,22 +132,22 @@ describe( 'EmailPreview', () => {
 		await waitFor( () => {
 			const iframe = document.querySelector( '.newspack-email-preview__iframe' );
 			expect( iframe ).toBeTruthy();
-			expect( iframe.getAttribute( 'srcdoc' ) ).toContain( 'Sample Reader' );
+			expect( iframe!.getAttribute( 'srcdoc' ) ).toContain( 'Sample Reader' );
 		} );
 
 		// Simulate iframe load (also fires automatically in jsdom, but explicit
 		// call ensures the contentDocument stub is in place for assertion).
 		const iframe = document.querySelector( '.newspack-email-preview__iframe' );
-		simulateIframeLoad( iframe );
+		simulateIframeLoad( iframe! );
 
 		const container = document.querySelector( '.newspack-email-preview' );
 		await waitFor( () => {
-			expect( container.classList.contains( 'is-ready' ) ).toBe( true );
+			expect( container!.classList.contains( 'is-ready' ) ).toBe( true );
 		} );
 	} );
 
 	it( 'renders fallback placeholder on fetch error', async () => {
-		apiFetch.mockRejectedValue( new Error( 'Server error' ) );
+		mockedApiFetch.mockRejectedValue( new Error( 'Server error' ) );
 
 		render( <EmailPreview postId={ 456 } /> );
 
@@ -153,7 +169,7 @@ describe( 'EmailPreview', () => {
 	} );
 
 	it( 'fetches the correct endpoint path', async () => {
-		apiFetch.mockResolvedValue( { html: '<p>Test</p>', id: 42 } );
+		mockedApiFetch.mockResolvedValue( { html: '<p>Test</p>', id: 42 } );
 
 		render( <EmailPreview postId={ 42 } /> );
 
@@ -165,7 +181,7 @@ describe( 'EmailPreview', () => {
 	} );
 
 	it( 'resets state when postId changes', async () => {
-		apiFetch.mockResolvedValue( {
+		mockedApiFetch.mockResolvedValue( {
 			html: '<html><body><p>First email</p></body></html>',
 			id: 1,
 		} );
@@ -179,13 +195,13 @@ describe( 'EmailPreview', () => {
 		} );
 
 		// Simulate onLoad for first email.
-		simulateIframeLoad( document.querySelector( '.newspack-email-preview__iframe' ) );
+		simulateIframeLoad( document.querySelector( '.newspack-email-preview__iframe' )! );
 		await waitFor( () => {
-			expect( document.querySelector( '.newspack-email-preview' ).classList.contains( 'is-ready' ) ).toBe( true );
+			expect( document.querySelector( '.newspack-email-preview' )!.classList.contains( 'is-ready' ) ).toBe( true );
 		} );
 
 		// Change postId — should reset and re-fetch.
-		apiFetch.mockResolvedValue( {
+		mockedApiFetch.mockResolvedValue( {
 			html: '<html><body><p>Second email</p></body></html>',
 			id: 2,
 		} );
@@ -196,22 +212,22 @@ describe( 'EmailPreview', () => {
 		await waitFor( () => {
 			const iframe = document.querySelector( '.newspack-email-preview__iframe' );
 			expect( iframe ).toBeTruthy();
-			expect( iframe.getAttribute( 'srcdoc' ) ).toContain( 'Second email' );
+			expect( iframe!.getAttribute( 'srcdoc' ) ).toContain( 'Second email' );
 		} );
 	} );
 
 	it( 'cancelled fetch does not update state when postId changes mid-flight', async () => {
 		// First fetch: controlled promise that resolves AFTER the second.
-		let resolveFirst;
+		let resolveFirst: ( ( value?: unknown ) => void ) | undefined;
 		const firstPromise = new Promise( resolve => {
 			resolveFirst = resolve;
 		} );
-		apiFetch.mockReturnValueOnce( firstPromise );
+		mockedApiFetch.mockReturnValueOnce( firstPromise );
 
 		const { rerender } = render( <EmailPreview postId={ 1 } /> );
 
 		// Change postId before first fetch resolves.
-		apiFetch.mockResolvedValueOnce( {
+		mockedApiFetch.mockResolvedValueOnce( {
 			html: '<html><body><p>Second email</p></body></html>',
 			id: 2,
 		} );
@@ -222,12 +238,12 @@ describe( 'EmailPreview', () => {
 		await waitFor( () => {
 			const iframe = document.querySelector( '.newspack-email-preview__iframe' );
 			expect( iframe ).toBeTruthy();
-			expect( iframe.getAttribute( 'srcdoc' ) ).toContain( 'Second email' );
+			expect( iframe!.getAttribute( 'srcdoc' ) ).toContain( 'Second email' );
 		} );
 
 		// Now resolve the first (stale) fetch — it should NOT overwrite the iframe.
 		await act( async () => {
-			resolveFirst( {
+			resolveFirst!( {
 				html: '<html><body><p>First email (stale)</p></body></html>',
 				id: 1,
 			} );
@@ -235,8 +251,8 @@ describe( 'EmailPreview', () => {
 
 		// The iframe should still show the second email, not the stale first.
 		const iframe = document.querySelector( '.newspack-email-preview__iframe' );
-		expect( iframe.getAttribute( 'srcdoc' ) ).toContain( 'Second email' );
-		expect( iframe.getAttribute( 'srcdoc' ) ).not.toContain( 'First email' );
+		expect( iframe!.getAttribute( 'srcdoc' ) ).toContain( 'Second email' );
+		expect( iframe!.getAttribute( 'srcdoc' ) ).not.toContain( 'First email' );
 	} );
 
 	// Slice 2b.2 widened the prop type from `number` to `number | string`
@@ -246,7 +262,7 @@ describe( 'EmailPreview', () => {
 	// just like numeric ones.
 
 	it( 'fetches the correct endpoint path for a wc: string postId', async () => {
-		apiFetch.mockResolvedValue( {
+		mockedApiFetch.mockResolvedValue( {
 			html: '<p>WC Preview</p>',
 			id: 'wc:customer_payment_retry',
 		} );
@@ -261,7 +277,7 @@ describe( 'EmailPreview', () => {
 	} );
 
 	it( 'renders iframe for a wc: string postId', async () => {
-		apiFetch.mockResolvedValue( {
+		mockedApiFetch.mockResolvedValue( {
 			html: '<html><body><p>Classic WC email</p></body></html>',
 			id: 'wc:expired_subscription',
 		} );
@@ -271,7 +287,7 @@ describe( 'EmailPreview', () => {
 		await waitFor( () => {
 			const iframe = document.querySelector( '.newspack-email-preview__iframe' );
 			expect( iframe ).toBeTruthy();
-			expect( iframe.getAttribute( 'srcdoc' ) ).toContain( 'Classic WC email' );
+			expect( iframe!.getAttribute( 'srcdoc' ) ).toContain( 'Classic WC email' );
 		} );
 	} );
 

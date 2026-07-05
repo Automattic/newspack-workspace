@@ -20,10 +20,10 @@ const allCriteria = window.newspackAudienceCampaigns?.criteria || [];
 /**
  * Check whether the given popup is an overlay.
  *
- * @param {Object} popup Popup object to check.
- * @return {boolean} True if the popup is an overlay, otherwise false.
+ * @param popup Popup object to check.
+ * @return True if the popup is an overlay, otherwise false.
  */
-export const isOverlay = popup => {
+export const isOverlay = ( popup: CampaignsPrompt ) => {
 	const overlayPlacements = window.newspackAudienceCampaigns?.overlay_placements || [];
 	return -1 < overlayPlacements.indexOf( popup.options.placement );
 };
@@ -31,12 +31,12 @@ export const isOverlay = popup => {
 /**
  * Check whether the given popup is above-header.
  *
- * @param {Object} popup Popup object to check.
- * @return {boolean} True if the popup is a above-header, otherwise false.
+ * @param popup Popup object to check.
+ * @return True if the popup is a above-header, otherwise false.
  */
-export const isAboveHeader = popup => 'above_header' === popup.options.placement;
+export const isAboveHeader = ( popup: CampaignsPrompt ) => 'above_header' === popup.options.placement;
 
-export const isCustomPlacement = popup => {
+export const isCustomPlacement = ( popup: CampaignsPrompt ) => {
 	const customPlacements = window.newspackAudienceCampaigns?.custom_placements || {};
 
 	return -1 < Object.keys( customPlacements ).indexOf( popup.options.placement );
@@ -45,12 +45,12 @@ export const isCustomPlacement = popup => {
 /**
  * Check whether the given prompt is inline.
  *
- * @param {Object} prompt Prompt object to check.
- * @return {boolean} True if the prompt is inline, otherwise false.
+ * @param prompt Prompt object to check.
+ * @return True if the prompt is inline, otherwise false.
  */
-export const isInline = prompt => ! isOverlay( prompt );
+export const isInline = ( prompt: CampaignsPrompt ) => ! isOverlay( prompt );
 
-const placementMap = {
+const placementMap: Record< string, string > = {
 	top: __( 'Top Overlay', 'newspack-plugin' ),
 	top_left: __( 'Top Left Overlay', 'newspack-plugin' ),
 	top_right: __( 'Top Right Overlay', 'newspack-plugin' ),
@@ -66,7 +66,7 @@ const placementMap = {
 	manual: __( 'Manual Only', 'newspack-plugin' ),
 };
 
-export const placementForPopup = ( { options: { frequency, placement } } ) => {
+export const placementForPopup = ( { options: { frequency, placement } }: CampaignsPrompt ) => {
 	const customPlacements = window.newspackAudienceCampaigns?.custom_placements || {};
 	if ( 'manual' === frequency || customPlacements.hasOwnProperty( placement ) ) {
 		return __( 'Custom Placement', 'newspack-plugin' );
@@ -74,7 +74,7 @@ export const placementForPopup = ( { options: { frequency, placement } } ) => {
 	return placementMap[ placement ];
 };
 
-export const placementsForPopups = prompt => {
+export const placementsForPopups = ( prompt: CampaignsPrompt ) => {
 	const customPlacements = window.newspackAudienceCampaigns?.custom_placements;
 	const overlayPlacements = window.newspackAudienceCampaigns?.overlay_placements;
 	const options = Object.keys( placementMap )
@@ -93,7 +93,7 @@ export const placementsForPopups = prompt => {
 	return options;
 };
 
-const frequencyMap = {
+const frequencyMap: Record< string, string > = {
 	once: __( 'Once a month', 'newspack-plugin' ),
 	weekly: __( 'Once a week', 'newspack-plugin' ),
 	daily: __( 'Once a day', 'newspack-plugin' ),
@@ -109,17 +109,17 @@ export const overlaySizesForPopups = () => {
 	return window.newspackAudienceCampaigns?.overlay_sizes;
 };
 
-export const getCardClassName = ( status, forceDisabled = false ) => {
+export const getCardClassName = ( status: string, forceDisabled = false ) => {
 	if ( 'publish' !== status || forceDisabled ) {
 		return 'newspack-card__is-disabled';
 	}
 	return 'newspack-card__is-supported';
 };
 
-export const promptDescription = prompt => {
+export const promptDescription = ( prompt: CampaignsPrompt ) => {
 	const { categories, tags, campaign_groups: campaigns, status } = prompt;
 	const descriptionMessages = [];
-	if ( campaigns.length > 0 ) {
+	if ( campaigns && campaigns.length > 0 ) {
 		const campaignsList = campaigns.map( ( { name } ) => name ).join( ', ' );
 		descriptionMessages.push(
 			( campaigns.length === 1 ? __( 'Campaign: ', 'newspack-plugin' ) : __( 'Campaigns: ', 'newspack-plugin' ) ) + campaignsList
@@ -141,8 +141,8 @@ export const promptDescription = prompt => {
 	return descriptionMessages.length ? descriptionMessages.join( ' | ' ) : null;
 };
 
-export const segmentDescription = segment => {
-	const descriptionMessages = [];
+export const segmentDescription = ( segment: CampaignsSegment | CampaignsSegmentGroup ) => {
+	const descriptionMessages: unknown[] = [];
 
 	// If the segment is disabled.
 	if ( segment.configuration.is_disabled ) {
@@ -153,7 +153,7 @@ export const segmentDescription = segment => {
 		for ( const config of allCriteria ) {
 			const item = segment.criteria.find( ( { criteria_id } ) => criteria_id === config.id );
 			if ( item?.value ) {
-				let value = item.value;
+				let value: CampaignsSegmentCriteriaValue = item.value;
 				if ( config.options ) {
 					const option = config.options.find( ( { value: optionValue } ) => optionValue === item.value );
 					if ( option ) {
@@ -163,17 +163,18 @@ export const segmentDescription = segment => {
 				if ( Array.isArray( value ) ) {
 					value = value.join( ', ' );
 				} else if ( typeof value === 'object' ) {
+					const range: Record< string, unknown > = value;
 					const values = [];
-					for ( const key in value ) {
-						if ( value[ key ] ) {
-							values.push( `${ key }: ${ value[ key ] }` );
+					for ( const key in range ) {
+						if ( range[ key ] ) {
+							values.push( `${ key }: ${ range[ key ] }` );
 						}
 					}
 					value = values.join( ', ' );
 				}
 				const message = applyFilters(
 					'newspack.wizards.campaigns.segmentDescription.criteriaMessage',
-					sprintf( '%1$s: %2$s', config.name, value ),
+					sprintf( '%1$s: %2$s', config.name, value as string ),
 					value,
 					config,
 					item
@@ -188,15 +189,15 @@ export const segmentDescription = segment => {
 	return descriptionMessages.join( ' | ' );
 };
 
-const getFavoriteCategoryNamesFn = async favoriteCategories => {
+const getFavoriteCategoryNamesFn = async ( favoriteCategories: Array< string | number > ) => {
 	const favoriteCategoryNames = await Promise.all(
 		favoriteCategories.map( async categoryId => {
 			try {
-				const category = await apiFetch( {
+				const category = ( await apiFetch( {
 					path: addQueryArgs( '/wp/v2/categories/' + categoryId, {
 						_fields: 'name',
 					} ),
-				} );
+				} ) ) as { name: string };
 				return category.name;
 			} catch ( e ) {
 				return '';
@@ -207,8 +208,8 @@ const getFavoriteCategoryNamesFn = async favoriteCategories => {
 };
 const getFavoriteCategoryNames = memoize( getFavoriteCategoryNamesFn );
 
-const FavoriteCategoriesNames = ( { ids } ) => {
-	const [ favoriteCategoryNames, setFavoriteCategoryNames ] = useState( [] );
+const FavoriteCategoriesNames = ( { ids }: { ids: Array< string | number > } ) => {
+	const [ favoriteCategoryNames, setFavoriteCategoryNames ] = useState< string[] >( [] );
 	useEffect( () => {
 		getFavoriteCategoryNames( ids ).then( setFavoriteCategoryNames );
 	}, [ ids ] );
@@ -222,24 +223,32 @@ const FavoriteCategoriesNames = ( { ids } ) => {
 	);
 };
 
-addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'newspack.favoriteCategories', ( message, value, config, item ) => {
+/**
+ * Arguments of the `newspack.wizards.campaigns.segmentDescription.criteriaMessage`
+ * filter, as applied in segmentDescription above.
+ */
+type CriteriaMessageFilterCallback = ( message: unknown, value: unknown, config: CampaignsCriteriaConfig, item: CampaignsSegmentCriteria ) => unknown;
+
+addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'newspack.favoriteCategories', ( ( message, value, config, item ) => {
 	if ( 'favorite_categories' === config.id ) {
-		if ( ! item.value?.length ) {
+		if ( ! Array.isArray( item.value ) || ! item.value?.length ) {
 			return null;
 		}
 		return <FavoriteCategoriesNames ids={ item.value } />;
 	}
 	return message;
-} );
+} ) as CriteriaMessageFilterCallback );
 
-const getItems = memoize( async path => {
+type ListedItem = { id: string | number; title?: string; name?: string };
+
+const getItems = memoize( async ( path: string ) => {
 	try {
-		const items = await apiFetch( {
+		const items = ( await apiFetch( {
 			path,
-		} );
+		} ) ) as ListedItem[] | Record< string, ListedItem >;
 		const values = Array.isArray( items ) ? items : Object.values( items );
 		return values.map( item => ( {
-			id: isNaN( parseInt( item.id ) ) ? item.id.toString() : parseInt( item.id ),
+			id: isNaN( parseInt( String( item.id ) ) ) ? item.id.toString() : parseInt( String( item.id ) ),
 			label: item.title || item.name,
 		} ) );
 	} catch ( e ) {
@@ -247,8 +256,15 @@ const getItems = memoize( async path => {
 	}
 } );
 
-const ItemNames = ( { label, ids, path, deletedItemLabel } ) => {
-	const [ items, setItems ] = useState( [] );
+type ItemNamesProps = {
+	label: string;
+	ids: Array< string | number >;
+	path: string;
+	deletedItemLabel: string;
+};
+
+const ItemNames = ( { label, ids, path, deletedItemLabel }: ItemNamesProps ) => {
+	const [ items, setItems ] = useState< Awaited< ReturnType< typeof getItems > > >( [] );
 	useEffect( () => {
 		getItems( path ).then( setItems );
 	}, [ ids ] );
@@ -266,32 +282,31 @@ const ItemNames = ( { label, ids, path, deletedItemLabel } ) => {
 	);
 };
 
-addFilter(
-	'newspack.wizards.campaigns.segmentDescription.criteriaMessage',
-	'newspack.newsletterSubscribedLists',
-	( message, value, config, item ) => {
-		if ( [ 'subscribed_lists', 'not_subscribed_lists' ].includes( config.id ) ) {
-			if ( ! item.value?.length ) {
-				return null;
-			}
-			return (
-				<ItemNames
-					label={
-						config.id === 'subscribed_lists' ? __( 'Subscribed to:', 'newspack-plugin' ) : __( 'Not subscribed to:', 'newspack-plugin' )
-					}
-					ids={ item.value }
-					path="/newspack-newsletters/v1/lists_config"
-					deletedItemLabel={ __( 'Deleted list', 'newspack-plugin' ) }
-				/>
-			);
+addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'newspack.newsletterSubscribedLists', ( (
+	message,
+	value,
+	config,
+	item
+) => {
+	if ( [ 'subscribed_lists', 'not_subscribed_lists' ].includes( config.id ) ) {
+		if ( ! Array.isArray( item.value ) || ! item.value?.length ) {
+			return null;
 		}
-		return message;
+		return (
+			<ItemNames
+				label={ config.id === 'subscribed_lists' ? __( 'Subscribed to:', 'newspack-plugin' ) : __( 'Not subscribed to:', 'newspack-plugin' ) }
+				ids={ item.value }
+				path="/newspack-newsletters/v1/lists_config"
+				deletedItemLabel={ __( 'Deleted list', 'newspack-plugin' ) }
+			/>
+		);
 	}
-);
+	return message;
+} ) as CriteriaMessageFilterCallback );
 
-addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'newspack.activeSubscriptions', ( message, value, config, item ) => {
+addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'newspack.activeSubscriptions', ( ( message, value, config, item ) => {
 	if ( [ 'active_subscriptions', 'not_active_subscriptions' ].includes( config.id ) ) {
-		if ( ! item.value?.length ) {
+		if ( ! Array.isArray( item.value ) || ! item.value?.length ) {
 			return null;
 		}
 		return (
@@ -308,11 +323,11 @@ addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'new
 		);
 	}
 	return message;
-} );
+} ) as CriteriaMessageFilterCallback );
 
-addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'newspack.activeMemberships', ( message, value, config, item ) => {
+addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'newspack.activeMemberships', ( ( message, value, config, item ) => {
 	if ( [ 'active_memberships', 'not_active_memberships' ].includes( config.id ) ) {
-		if ( ! item.value?.length ) {
+		if ( ! Array.isArray( item.value ) || ! item.value?.length ) {
 			return null;
 		}
 		return (
@@ -329,19 +344,19 @@ addFilter( 'newspack.wizards.campaigns.segmentDescription.criteriaMessage', 'new
 		);
 	}
 	return message;
-} );
+} ) as CriteriaMessageFilterCallback );
 
-export const isSameType = ( campaignA, campaignB ) => {
+export const isSameType = ( campaignA: CampaignsPrompt, campaignB: CampaignsPrompt ) => {
 	return campaignA.options.placement === campaignB.options.placement;
 };
 
-const sharesSegments = ( segmentsA, segmentsB ) => {
+const sharesSegments = ( segmentsA: CampaignsTermRef[], segmentsB: CampaignsTermRef[] ) => {
 	const segmentsArrayA = segmentsA.map( segment => segment.term_id );
 	const segmentsArrayB = segmentsB.map( segment => segment.term_id );
 	return ( ! segmentsArrayA.length && ! segmentsArrayB.length ) || segmentsArrayA.some( segment => -1 < segmentsArrayB.indexOf( segment ) );
 };
 
-export const buildWarning = prompt => {
+export const buildWarning = ( prompt: CampaignsPrompt ) => {
 	if ( isOverlay( prompt ) || isAboveHeader( prompt ) ) {
 		return sprintf(
 			// Translators: %s is prompt type (above-header or overlay).
@@ -357,8 +372,8 @@ export const buildWarning = prompt => {
 	return '';
 };
 
-export const warningForPopup = ( prompts, prompt ) => {
-	const warningMessages = [];
+export const warningForPopup = ( prompts: CampaignsPrompt[], prompt: CampaignsPrompt ) => {
+	const warningMessages: string[] = [];
 
 	if ( 'publish' === prompt.status && ( isAboveHeader( prompt ) || isOverlay( prompt ) || isCustomPlacement( prompt ) ) ) {
 		const promptCategories = prompt.categories;
@@ -379,7 +394,12 @@ export const warningForPopup = ( prompts, prompt ) => {
 			);
 		} );
 
-		const filteredConflictingPrompts = applyFilters( 'newspack.wizards.campaigns.conflictingPrompts', conflictingPrompts, prompt, prompts );
+		const filteredConflictingPrompts = applyFilters(
+			'newspack.wizards.campaigns.conflictingPrompts',
+			conflictingPrompts,
+			prompt,
+			prompts
+		) as CampaignsPrompt[];
 
 		if ( 0 < filteredConflictingPrompts.length ) {
 			return (
@@ -402,7 +422,7 @@ export const warningForPopup = ( prompts, prompt ) => {
 											decodeEntities( conflictingPrompt.title )
 										) }{ ' ' }
 									</strong>
-									<span>{ buildWarning( prompt, promptCategories ) }</span>
+									<span>{ buildWarning( prompt ) }</span>
 								</p>
 							</li>
 						) ) }
@@ -417,6 +437,7 @@ export const warningForPopup = ( prompts, prompt ) => {
 	return warningMessages.length ? warningMessages.join( ' ' ) : null;
 };
 
-export const frequencyForPopup = ( { options: { frequency } } ) => frequencyMap[ frequency ];
+export const frequencyForPopup = ( { options: { frequency } }: CampaignsPrompt ) => frequencyMap[ frequency ];
 
-export const dataForCampaignId = ( id, campaigns ) => campaigns.reduce( ( acc, group ) => ( +id > 0 && +id === +group.term_id ? group : acc ), null );
+export const dataForCampaignId = ( id: number | string | undefined, campaigns: CampaignGroup[] ) =>
+	campaigns.reduce( ( acc: CampaignGroup | null, group ) => ( Number( id ) > 0 && Number( id ) === +group.term_id ? group : acc ), null );

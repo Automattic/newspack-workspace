@@ -2,6 +2,7 @@
  * External dependencies
  */
 import { render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 
 /**
  * Internal dependencies
@@ -22,24 +23,24 @@ jest.mock( '../../shared/hooks/use-custom-byline', () => ( {
 } ) );
 
 jest.mock( '@wordpress/block-editor', () => ( {
-	InspectorControls: ( { children } ) => <div data-testid="inspector">{ children }</div>,
+	InspectorControls: ( { children }: { children?: ReactNode } ) => <div data-testid="inspector">{ children }</div>,
 	useBlockProps: () => ( {} ),
 	__experimentalUseBorderProps: () => ( { className: '', style: {} } ),
 } ) );
 
 jest.mock( '@wordpress/components', () => ( {
-	PanelBody: ( { children } ) => <div>{ children }</div>,
+	PanelBody: ( { children }: { children?: ReactNode } ) => <div>{ children }</div>,
 	RangeControl: () => null,
 	ToggleControl: () => null,
 } ) );
 
 jest.mock( '@wordpress/i18n', () => ( {
-	__: str => str,
+	__: ( str: string ) => str,
 } ) );
 
 jest.mock( '@wordpress/url', () => ( {
-	addQueryArgs: ( url, args ) => `${ url }?s=${ args.s }`,
-	removeQueryArgs: url => url,
+	addQueryArgs: ( url: string, args: { s: number } ) => `${ url }?s=${ args.s }`,
+	removeQueryArgs: ( url: string ) => url,
 } ) );
 
 const defaultProps = {
@@ -55,15 +56,19 @@ const mockSingleAuthorAvatar = {
 	maxSize: 128,
 };
 
+const usePostAuthorsMock = jest.mocked( usePostAuthors );
+const useUserAvatarMock = jest.mocked( useUserAvatar );
+const useCustomBylineMock = jest.mocked( useCustomByline );
+
 describe( 'Avatar Edit', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
 	} );
 
 	it( 'should show placeholder when custom byline is text-only (no author shortcodes)', () => {
-		usePostAuthors.mockReturnValue( [] );
-		useUserAvatar.mockReturnValue( mockSingleAuthorAvatar );
-		useCustomByline.mockReturnValue( {
+		usePostAuthorsMock.mockReturnValue( [] );
+		useUserAvatarMock.mockReturnValue( mockSingleAuthorAvatar );
+		useCustomBylineMock.mockReturnValue( {
 			bylineActive: true,
 			bylineContent: 'By Staff Reporter',
 		} );
@@ -75,9 +80,9 @@ describe( 'Avatar Edit', () => {
 	} );
 
 	it( 'should render the single author avatar when no custom byline and no coauthors', () => {
-		usePostAuthors.mockReturnValue( [] );
-		useUserAvatar.mockReturnValue( mockSingleAuthorAvatar );
-		useCustomByline.mockReturnValue( {
+		usePostAuthorsMock.mockReturnValue( [] );
+		useUserAvatarMock.mockReturnValue( mockSingleAuthorAvatar );
+		useCustomBylineMock.mockReturnValue( {
 			bylineActive: false,
 			bylineContent: '',
 		} );
@@ -89,9 +94,9 @@ describe( 'Avatar Edit', () => {
 
 	it( 'should render avatars when custom byline has author shortcodes', () => {
 		const mockAuthors = [ { id: 1, name: 'Jane Doe', avatarSrc: 'https://example.com/jane.jpg' } ];
-		usePostAuthors.mockReturnValue( mockAuthors );
-		useUserAvatar.mockReturnValue( mockSingleAuthorAvatar );
-		useCustomByline.mockReturnValue( {
+		usePostAuthorsMock.mockReturnValue( mockAuthors );
+		useUserAvatarMock.mockReturnValue( mockSingleAuthorAvatar );
+		useCustomBylineMock.mockReturnValue( {
 			bylineActive: true,
 			bylineContent: 'By [Author id=1]Jane Doe[/Author]',
 		} );

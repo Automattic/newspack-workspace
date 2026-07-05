@@ -4,7 +4,7 @@ import setupEngagement from './engagement';
 import { createMockRAS } from './mocks/ras';
 
 describe( 'setupEngagement', () => {
-	let mock;
+	let mock: ReturnType< typeof createMockRAS >;
 
 	beforeEach( () => {
 		mock = createMockRAS();

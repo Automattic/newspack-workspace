@@ -12,7 +12,19 @@ import { getBlockDefaultClassName } from '@wordpress/blocks';
 
 jest.mock( '@wordpress/block-editor', () => ( {
 	useBlockProps: () => ( { 'data-testid': 'block-wrapper' } ),
-	RichText: ( { value, className, placeholder, tagName: Tag = 'span', allowedFormats } ) => (
+	RichText: ( {
+		value,
+		className,
+		placeholder,
+		tagName: Tag = 'span',
+		allowedFormats,
+	}: {
+		value?: string;
+		className?: string;
+		placeholder?: string;
+		tagName?: 'span';
+		allowedFormats?: string[];
+	} ) => (
 		<Tag className={ className } data-placeholder={ placeholder } data-allowed-formats={ JSON.stringify( allowedFormats ) }>
 			{ value }
 		</Tag>
@@ -20,11 +32,11 @@ jest.mock( '@wordpress/block-editor', () => ( {
 } ) );
 
 jest.mock( '@wordpress/blocks', () => ( {
-	getBlockDefaultClassName: name => 'wp-block-' + name.replace( '/', '-' ),
+	getBlockDefaultClassName: ( name: string ) => 'wp-block-' + name.replace( '/', '-' ),
 } ) );
 
 jest.mock( '@wordpress/i18n', () => ( {
-	__: str => str,
+	__: ( str: string ) => str,
 } ) );
 
 jest.mock( '@wordpress/date', () => ( {

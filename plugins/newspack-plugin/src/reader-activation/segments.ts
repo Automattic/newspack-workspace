@@ -1,20 +1,20 @@
 import { EVENTS, emit } from './events';
 
-let allSegments = {};
-let matchedSegment = null;
+let allSegments: Record< string, NewspackRasSegment > = {};
+let matchedSegment: string | null = null;
 
 /**
  * Register segment definitions.
  *
- * @param {Object} segments Segments keyed by ID with { name, criteria, priority } values.
+ * @param segments Segments keyed by ID with { name, criteria, priority } values.
  */
-function register( segments ) {
+function register( segments: Record< string, NewspackRasSegment > ): void {
 	if ( ! segments || typeof segments !== 'object' ) {
 		return;
 	}
 	const hadMatch = matchedSegment && ! allSegments[ matchedSegment ];
 	allSegments = { ...allSegments, ...segments };
-	if ( hadMatch && allSegments[ matchedSegment ] ) {
+	if ( hadMatch && matchedSegment && allSegments[ matchedSegment ] ) {
 		emit( EVENTS.segment, { segmentId: matchedSegment, segment: allSegments[ matchedSegment ], all: { ...allSegments } } );
 	}
 }
@@ -22,11 +22,11 @@ function register( segments ) {
 /**
  * Set the matched segment for the current reader.
  *
- * @param {string|null} segmentId Segment ID or null to clear.
+ * @param segmentId Segment ID or null to clear.
  *
- * @return {Object|null} Matched segment object or null.
+ * @return Matched segment object or null.
  */
-function setMatch( segmentId = null ) {
+function setMatch( segmentId: string | number | null = null ): ( NewspackRasSegment & { id: string } ) | null {
 	const normalizedId = segmentId !== null && segmentId !== undefined ? String( segmentId ) : null;
 	if ( normalizedId === matchedSegment ) {
 		return getMatch();
@@ -40,9 +40,9 @@ function setMatch( segmentId = null ) {
 /**
  * Get the matched segment.
  *
- * @return {Object|null} Matched segment object with id, or null.
+ * @return Matched segment object with id, or null.
  */
-function getMatch() {
+function getMatch(): ( NewspackRasSegment & { id: string } ) | null {
 	if ( ! matchedSegment || ! allSegments[ matchedSegment ] ) {
 		return null;
 	}
@@ -52,16 +52,16 @@ function getMatch() {
 /**
  * Get all registered segments.
  *
- * @return {Object} Segments keyed by ID.
+ * @return Segments keyed by ID.
  */
-function getAll() {
+function getAll(): Record< string, NewspackRasSegment > {
 	return { ...allSegments };
 }
 
 /**
  * Reset module state. For testing only.
  */
-export function reset() {
+export function reset(): void {
 	allSegments = {};
 	matchedSegment = null;
 }

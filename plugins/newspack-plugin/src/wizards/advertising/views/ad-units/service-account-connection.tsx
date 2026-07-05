@@ -9,12 +9,18 @@ import { __ } from '@wordpress/i18n';
  */
 import { Card, Grid, Notice, SectionHeader } from '../../../../../packages/components/src';
 import { handleJSONFile } from '../../components/utils';
+import type { UpdateWithAPI } from '../../types';
 
-const ServiceAccountConnection = ( { updateWithAPI, isConnected } ) => {
-	const credentialsInputFile = useRef( null );
+type ServiceAccountConnectionProps = {
+	updateWithAPI: UpdateWithAPI;
+	isConnected?: boolean;
+};
+
+const ServiceAccountConnection = ( { updateWithAPI, isConnected }: ServiceAccountConnectionProps ) => {
+	const credentialsInputFile = useRef< HTMLInputElement >( null );
 	const [ fileError, setFileError ] = useState( '' );
 
-	const updateGAMCredentials = credentials =>
+	const updateGAMCredentials = ( credentials: unknown ) =>
 		updateWithAPI( {
 			path: '/newspack/v1/wizard/billboard/credentials',
 			method: 'post',
@@ -28,8 +34,8 @@ const ServiceAccountConnection = ( { updateWithAPI, isConnected } ) => {
 			quiet: true,
 		} );
 
-	const handleCredentialsFile = event => {
-		if ( event.target.files.length && event.target.files[ 0 ] ) {
+	const handleCredentialsFile = ( event: React.ChangeEvent< HTMLInputElement > ) => {
+		if ( event.target.files?.length && event.target.files[ 0 ] ) {
 			handleJSONFile( event.target.files[ 0 ] )
 				.then( credentials => updateGAMCredentials( credentials ) )
 				.catch( err => setFileError( err ) );
@@ -47,7 +53,7 @@ const ServiceAccountConnection = ( { updateWithAPI, isConnected } ) => {
 						__experimentalCoreProps={ {
 							header: <h3>{ __( 'Update Service Account credentials', 'newspack' ) }</h3>,
 							actionType: 'chevron',
-							onHeaderClick: () => credentialsInputFile.current.click(),
+							onHeaderClick: () => credentialsInputFile.current?.click(),
 						} }
 					/>
 					<Card
@@ -78,7 +84,7 @@ const ServiceAccountConnection = ( { updateWithAPI, isConnected } ) => {
 							</>
 						),
 						actionType: 'chevron',
-						onHeaderClick: () => credentialsInputFile.current.click(),
+						onHeaderClick: () => credentialsInputFile.current?.click(),
 					} }
 				/>
 			) }

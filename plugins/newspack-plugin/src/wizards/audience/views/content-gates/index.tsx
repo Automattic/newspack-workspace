@@ -15,6 +15,7 @@ import { forwardRef } from '@wordpress/element';
  * Internal dependencies.
  */
 import { Wizard, withWizard } from '../../../../../packages/components/src';
+import type { WithWizardInjectedProps } from '../../../../../packages/components/src/with-wizard';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import ContentGates from './content-gates';
 import Edit from './edit';
@@ -24,9 +25,9 @@ import Institutions from './institutions';
 import InstitutionEdit from './institutions/edit';
 import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG, BASE_HEADER_TEXT } from './consts';
 
-const AudienceContentGates = ( props, ref ) => {
+const AudienceContentGates = ( _props: WithWizardInjectedProps, ref: import('react').ForwardedRef< HTMLDivElement > ) => {
 	const { updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
-	const updateGatesData = gates => {
+	const updateGatesData = ( gates: Gate[] ) => {
 		updateWizardSettings( {
 			slug: AUDIENCE_CONTENT_GATES_WIZARD_SLUG,
 			path: [ 'gates' ],
@@ -37,7 +38,6 @@ const AudienceContentGates = ( props, ref ) => {
 	return (
 		<Wizard
 			apiSlug={ AUDIENCE_CONTENT_GATES_WIZARD_SLUG }
-			title={ __( 'Access control', 'newspack-plugin' ) }
 			headerText={ BASE_HEADER_TEXT }
 			ref={ ref }
 			sharedProps={ { updateGatesData } }

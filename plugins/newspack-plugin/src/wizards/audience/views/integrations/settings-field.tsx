@@ -8,16 +8,21 @@ import { CheckboxControl, ExternalLink, TextareaControl } from '@wordpress/compo
  * Internal dependencies.
  */
 import { Button, Grid, SelectControl, TextControl } from '../../../../../packages/components/src';
+import type { IntegrationFieldOption, IntegrationFieldValue, IntegrationSettingsField } from './constants';
+
+type SettingsFieldProps = {
+	/** Field declaration. */
+	field: IntegrationSettingsField;
+	/** Current value. */
+	value?: IntegrationFieldValue;
+	/** Change handler. */
+	onChange: ( value: IntegrationFieldValue ) => void;
+};
 
 /**
  * Render a single settings field.
- *
- * @param {Object}   props          Component props.
- * @param {Object}   props.field    Field declaration.
- * @param {*}        props.value    Current value.
- * @param {Function} props.onChange Change handler.
  */
-export const SettingsField = ( { field, value, onChange } ) => {
+export const SettingsField = ( { field, value, onChange }: SettingsFieldProps ) => {
 	const { key, type, label, description, placeholder, options, help_url: helpUrl } = field;
 	const help = (
 		<>
@@ -94,16 +99,31 @@ export const SettingsField = ( { field, value, onChange } ) => {
 					label={ label }
 					help={ help }
 					value={ value }
-					options={ ( options || [] ).map( opt => ( {
-						label: opt.label,
-						value: opt.value,
-					} ) ) }
+					options={
+						// Select-field options are always { value, label } objects (the
+						// bare-string form is metadata-only back-compat), but the shared
+						// field type can't express that — assert at the REST boundary.
+						( ( options || [] ) as IntegrationFieldOption[] ).map( opt => ( {
+							label: opt.label,
+							value: opt.value,
+						} ) )
+					}
 					onChange={ onChange }
 				/>
 			);
 		case 'textarea':
 			return (
-				<TextareaControl key={ key } label={ label } help={ help } value={ value || '' } placeholder={ placeholder } onChange={ onChange } />
+				<TextareaControl
+					key={ key }
+					label={ label }
+					help={ help }
+					// Textarea-field values are strings in the settings payload; the
+					// shared field-value union can't express that — assert at the
+					// REST boundary.
+					value={ ( value || '' ) as string }
+					placeholder={ placeholder }
+					onChange={ onChange }
+				/>
 			);
 		case 'number':
 			return (

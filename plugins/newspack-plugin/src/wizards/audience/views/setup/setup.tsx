@@ -31,7 +31,7 @@ import { HANDOFF_KEY } from '../../../../../packages/components/src/consts';
 import SortableNewsletterListControl from '../../../../../packages/components/src/sortable-newsletter-list-control';
 import Salesforce from '../../components/salesforce';
 
-export default withWizardScreen(
+export default withWizardScreen< AudienceSetupSharedProps >(
 	( {
 		config,
 		fetchConfig,
@@ -46,9 +46,9 @@ export default withWizardScreen(
 		platform,
 		onChangePlatform,
 		verificationRequiredByGates = [],
-	} ) => {
+	}: AudienceSetupSharedProps ) => {
 		const [ allReady, setAllReady ] = useState( false );
-		const [ missingPlugins, setMissingPlugins ] = useState( [] );
+		const [ missingPlugins, setMissingPlugins ] = useState< string[] >( [] );
 		const [ esp, setEsp ] = useState( '' );
 
 		// Verification gets force-enabled (toggle disabled, value pinned ON) when any
@@ -64,7 +64,7 @@ export default withWizardScreen(
 		}, [] );
 
 		useEffect( () => {
-			apiFetch( {
+			apiFetch< { settings?: { newspack_newsletters_service_provider?: { value?: string } } } >( {
 				path: '/newspack/v1/wizard/newspack-newsletters/settings',
 			} )
 				.then( data => {
@@ -76,7 +76,7 @@ export default withWizardScreen(
 
 		useEffect( () => {
 			const missing = prerequisites
-				? Object.keys( prerequisites ).reduce( ( acc, slug ) => {
+				? Object.keys( prerequisites ).reduce< string[] >( ( acc, slug ) => {
 						const prerequisite = prerequisites[ slug ];
 						if ( prerequisite.plugins ) {
 							for ( const pluginSlug in prerequisite.plugins ) {
@@ -99,7 +99,7 @@ export default withWizardScreen(
 
 			setMissingPlugins( missing );
 			// Derive readiness from the freshly-computed list, not the (stale) missingPlugins state.
-			setAllReady( ! missing.length && prerequisites && Object.keys( prerequisites ).every( key => prerequisites[ key ]?.active ) );
+			setAllReady( Boolean( ! missing.length && prerequisites && Object.keys( prerequisites ).every( key => prerequisites[ key ]?.active ) ) );
 		}, [ prerequisites, requiredPlugins ] );
 
 		const hasNewsletters = Boolean( prerequisites?.esp?.plugins?.[ 'newspack-newsletters' ] );
@@ -130,7 +130,7 @@ export default withWizardScreen(
 								nrh: __( 'RevEngine', 'newspack-plugin' ),
 								other: __( 'Other', 'newspack-plugin' ),
 							};
-							return labels[ platform ] || __( 'Not set', 'newspack-plugin' );
+							return labels[ platform as keyof typeof labels ] || __( 'Not set', 'newspack-plugin' );
 						} )() }
 						actionText={ __( 'Change', 'newspack-plugin' ) }
 						onClick={ onChangePlatform }
@@ -162,7 +162,6 @@ export default withWizardScreen(
 							getSharedProps={ getSharedProps }
 							inFlight={ inFlight }
 							prerequisite={ prerequisites[ key ] }
-							fetchConfig={ fetchConfig }
 							saveConfig={ saveConfig }
 						/>
 					) ) }
@@ -225,8 +224,8 @@ export default withWizardScreen(
 												'Number of newsletters initially visible during signup. Additional newsletters will be hidden behind a "See all" button.',
 												'newspack-plugin'
 											) }
-											value={ config.newsletter_list_initial_size || '' }
-											onChange={ value => updateConfig( 'newsletter_list_initial_size', parseInt( value ) ) }
+											value={ ( config.newsletter_list_initial_size || '' ) as number }
+											onChange={ value => updateConfig( 'newsletter_list_initial_size', parseInt( String( value ) ) ) }
 										/>
 									</Grid>
 								) }
@@ -327,7 +326,7 @@ export default withWizardScreen(
 												/>
 												<MetadataFields
 													availableFields={ newspackAudience.esp_metadata_fields || [] }
-													selectedFields={ config.metadata_fields }
+													selectedFields={ config.metadata_fields || [] }
 													updateConfig={ updateConfig }
 													getSharedProps={ getSharedProps }
 												/>

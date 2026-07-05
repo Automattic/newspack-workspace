@@ -5,12 +5,17 @@ import { getCookie } from './utils';
 import { EVENTS, emit } from './events';
 
 /**
+ * Session data returned by the hydration endpoint.
+ */
+type SessionData = NewspackReaderActivationEventMap[ 'session' ];
+
+/**
  * Shared nonce storage. Uses newspack_reader_data as the shared state so that
  * all webpack entry points read and write the same value.
  */
 window.newspack_reader_data = window.newspack_reader_data || {};
 
-let pending = null;
+let pending: Promise< string | null > | null = null;
 
 /**
  * Hydrate the current session by fetching a fresh wp_rest nonce.
@@ -19,13 +24,14 @@ let pending = null;
  * without a full page refresh. Concurrent calls share the same in-flight request.
  * If hydration fails, the promise is reset so future calls can retry.
  *
- * @return {Promise<string|null>} The nonce string, or null if hydration failed.
+ * @return The nonce string, or null if hydration failed.
  */
-export function hydrateSession() {
+export function hydrateSession(): Promise< string | null > {
 	if ( ! pending ) {
 		pending = fetchSession()
 			.then( data => {
 				if ( data?.nonce ) {
+					window.newspack_reader_data = window.newspack_reader_data || {};
 					window.newspack_reader_data.nonce = data.nonce;
 					emit( EVENTS.session, data );
 				} else {
@@ -44,18 +50,18 @@ export function hydrateSession() {
 /**
  * Get the cached API nonce from a previous hydrateSession call.
  *
- * @return {string|null} The nonce string, or null if not yet hydrated.
+ * @return The nonce string, or null if not yet hydrated.
  */
-export function getApiNonce() {
+export function getApiNonce(): string | null {
 	return window.newspack_reader_data?.nonce || null;
 }
 
 /**
  * Fetch session data from the hydration endpoint.
  *
- * @return {Promise<Object|null>} The response data, or null on failure.
+ * @return The response data, or null on failure.
  */
-async function fetchSession() {
+async function fetchSession(): Promise< SessionData | null > {
 	const cid = getCookie( 'newspack-cid' );
 	if ( ! cid ) {
 		return null;

@@ -13,34 +13,34 @@
  * a React state setter here. Multiple blocks can subscribe to the same panel.
  */
 
-/** @type {Map<string, function(): void>} */
-export const panelToggles = new Map();
+export const panelToggles = new Map< string, () => void >();
 
-/** @type {Map<string, Set<function(boolean): void>>} */
-const subscribers = new Map();
+const subscribers = new Map< string, Set< ( isOpen: boolean ) => void > >();
 
 /**
  * Subscribe a React state setter to open-state changes for a panel.
  * Returns an unsubscribe function suitable for useEffect cleanup.
  *
- * @param {string}                  parentClientId Parent overlay-menu block clientId.
- * @param {function(boolean): void} setter         React state setter.
- * @return {function(): void} Unsubscribe function.
+ * @param parentClientId Parent overlay-menu block clientId.
+ * @param setter         React state setter.
+ * @return Unsubscribe function.
  */
-export function subscribeToPanel( parentClientId, setter ) {
-	if ( ! subscribers.has( parentClientId ) ) {
-		subscribers.set( parentClientId, new Set() );
+export function subscribeToPanel( parentClientId: string, setter: ( isOpen: boolean ) => void ): () => void {
+	let setters = subscribers.get( parentClientId );
+	if ( ! setters ) {
+		setters = new Set();
+		subscribers.set( parentClientId, setters );
 	}
-	subscribers.get( parentClientId ).add( setter );
+	setters.add( setter );
 	return () => subscribers.get( parentClientId )?.delete( setter );
 }
 
 /**
  * Notify all subscribers of a new open state.
  *
- * @param {string}  parentClientId Parent overlay-menu block clientId.
- * @param {boolean} isOpen         New open state.
+ * @param parentClientId Parent overlay-menu block clientId.
+ * @param isOpen         New open state.
  */
-export function notifySubscribers( parentClientId, isOpen ) {
+export function notifySubscribers( parentClientId: string, isOpen: boolean ) {
 	subscribers.get( parentClientId )?.forEach( fn => fn( isOpen ) );
 }

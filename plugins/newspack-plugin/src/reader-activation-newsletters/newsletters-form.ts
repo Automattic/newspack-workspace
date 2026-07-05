@@ -10,19 +10,19 @@ import './style.scss';
 window.newspackRAS = window.newspackRAS || [];
 window.newspackRAS.push( function ( readerActivation ) {
 	domReady( function () {
-		const containers = [ ...document.querySelectorAll( '.newspack-newsletters-signup' ) ];
+		const containers = [ ...document.querySelectorAll< NewspackNewslettersSignupContainer >( '.newspack-newsletters-signup' ) ];
 		if ( ! containers?.length ) {
 			return;
 		}
 
-		const setupReveal = container => {
+		const setupReveal = ( container: Element ) => {
 			const seeAllButton = container.querySelector( '.see-all-button' );
-			const newsletterContainer = container.querySelector( '.newsletter-list-container' );
+			const newsletterContainer = container.querySelector< HTMLElement >( '.newsletter-list-container' );
 			if ( ! seeAllButton || ! newsletterContainer ) {
 				return;
 			}
-			const divider = newsletterContainer.querySelector( '.newspack-ui__gradient-divider' );
-			const peekItem = newsletterContainer.querySelector( '.newspack-ui__input-card[inert]:not(.hidden)' );
+			const divider = newsletterContainer.querySelector< HTMLElement >( '.newspack-ui__gradient-divider' );
+			const peekItem = newsletterContainer.querySelector< HTMLElement >( '.newspack-ui__input-card[inert]:not(.hidden)' );
 
 			seeAllButton.addEventListener( 'click', () => {
 				const firstRevealed = newsletterContainer.querySelector( '.newspack-ui__input-card[inert]' );
@@ -45,14 +45,14 @@ window.newspackRAS.push( function ( readerActivation ) {
 		};
 
 		containers.forEach( container => {
-			let form = container.querySelector( 'form' );
+			let form = container.querySelector( 'form' )!;
 			if ( ! form ) {
 				return;
 			}
 
 			setupReveal( container );
 
-			const handleSubmit = ev => {
+			const handleSubmit = ( ev: Event ) => {
 				ev.preventDefault();
 
 				if ( form.classList.contains( 'processing' ) ) {
@@ -60,10 +60,10 @@ window.newspackRAS.push( function ( readerActivation ) {
 				}
 
 				form.classList.add( 'processing' );
-				form.querySelector( 'button' ).setAttribute( 'disabled', 'disabled' );
+				form.querySelector( 'button' )!.setAttribute( 'disabled', 'disabled' );
 
 				// Populate email if not already set.
-				const emailInput = form.querySelector( 'input[name="email_address"]' );
+				const emailInput = form.querySelector< HTMLInputElement >( 'input[name="email_address"]' );
 				if ( emailInput && ! emailInput.value ) {
 					const reader = readerActivation?.getReader();
 					emailInput.value = reader?.email || '';
@@ -83,7 +83,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 						if ( lists.length ) {
 							const signupMethod = form.getAttribute( 'data-signup-method' ) || 'post-checkout';
 							readerActivation.dispatchActivity( 'newsletter_signup', {
-								email: emailInput.value,
+								email: emailInput!.value,
 								lists,
 								newsletters_subscription_method: signupMethod,
 							} );
@@ -94,7 +94,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 							container.newslettersSignupCallback();
 						}
 						form.classList.remove( 'processing' );
-						form.querySelector( 'button' ).removeAttribute( 'disabled' );
+						form.querySelector( 'button' )!.removeAttribute( 'disabled' );
 					} );
 			};
 
@@ -107,7 +107,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 			 * Handle container refresh.
 			 */
 			container.addEventListener( 'newspack:refresh', () => {
-				form = container.querySelector( 'form' );
+				form = container.querySelector( 'form' )!;
 				if ( ! form ) {
 					return;
 				}

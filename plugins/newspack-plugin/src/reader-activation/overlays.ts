@@ -1,25 +1,25 @@
 import { EVENTS, emit } from './events';
 import { generateID } from './utils';
 
-const overlays = [];
+const overlays: string[] = [];
 
 /**
  * Get all overlays.
  *
- * @return {Array} Overlays.
+ * @return Overlays.
  */
-function get() {
+function get(): string[] {
 	return overlays || [];
 }
 
 /**
  * Add an overlay.
  *
- * @param {string} overlayId Overlay ID.
+ * @param overlayId Overlay ID.
  *
- * @return {string} Overlay ID.
+ * @return Overlay ID.
  */
-function add( overlayId = '' ) {
+function add( overlayId = '' ): string {
 	if ( ! overlayId ) {
 		overlayId = generateID();
 	}
@@ -31,11 +31,11 @@ function add( overlayId = '' ) {
 /**
  * Remove an overlay.
  *
- * @param {string} overlayId Overlay ID.
+ * @param overlayId Overlay ID.
  *
- * @return {Array} Overlays.
+ * @return Overlays.
  */
-function remove( overlayId ) {
+function remove( overlayId?: string ): string[] {
 	if ( ! overlayId ) {
 		return overlays;
 	}

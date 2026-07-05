@@ -1,8 +1,14 @@
-/* globals newspack_metering_settings */
+// `newspack_metering_settings` is localized on this bundle's handle and is always
+// present when the script runs; read it via the typed Window member.
+const settings = window.newspack_metering_settings as NewspackMeteringSettings;
 
-const settings = newspack_metering_settings;
+const storeKey = ( 'metering-' + settings.gate_id || 0 ) as string;
 
-const storeKey = 'metering-' + settings.gate_id || 0;
+/** The metering usage record persisted in the reader store under `storeKey`. */
+type MeteringData = {
+	content: Array< number | string >;
+	expiration: number;
+};
 
 function getCurrentExpiration() {
 	const date = new Date();
@@ -25,16 +31,16 @@ function getCurrentExpiration() {
 			date.setDate( 1 );
 			break;
 	}
-	return parseInt( date.getTime() / 1000, 10 );
+	return parseInt( String( date.getTime() / 1000 ), 10 );
 }
 
-function getUserData( store ) {
+function getUserData( store: NewspackReaderActivationStore ): MeteringData {
 	const currentExpiration = getCurrentExpiration();
-	const data = store.get( storeKey ) || {
+	const data = ( store.get( storeKey ) as MeteringData ) || {
 		content: [],
 		expiration: currentExpiration,
 	};
-	data.expiration = parseInt( data.expiration, 10 ) || 0;
+	data.expiration = parseInt( String( data.expiration ), 10 ) || 0;
 	if ( data.expiration !== currentExpiration ) {
 		// Clear content if expired.
 		if ( data.expiration < currentExpiration ) {
@@ -47,7 +53,7 @@ function getUserData( store ) {
 	return data;
 }
 
-function lockContent( ras ) {
+function lockContent( ras: NewspackReaderActivation ) {
 	const content = document.querySelector( '.entry-content' );
 	if ( ! content ) {
 		return;
@@ -58,7 +64,7 @@ function lockContent( ras ) {
 	const prompts = document.querySelectorAll( '.newspack-popup' );
 	const overlays = ras?.overlays?.get() || [];
 	prompts.forEach( prompt => {
-		prompt.parentNode.removeChild( prompt );
+		( prompt.parentNode as ParentNode ).removeChild( prompt );
 		if ( overlays.length ) {
 			overlays.forEach( overlay => {
 				if ( 0 === overlay.indexOf( 'prompt_' ) ) {
@@ -87,18 +93,18 @@ function lockContent( ras ) {
 	}
 }
 
-function meter( ras ) {
+function meter( ras: NewspackReaderActivation ) {
 	const data = getUserData( ras.store );
 	let locked = false;
 	// Lock content if reached limit, remove gate content if not.
-	if ( settings.count <= data.content.length && ! data.content.includes( settings.post_id ) ) {
+	if ( Number( settings.count ) <= data.content.length && ! data.content.includes( settings.post_id ) ) {
 		lockContent( ras );
 		ras.dispatchActivity( 'metering_restricted', { post_id: settings.post_id, metering: data } );
 		locked = true;
 	} else {
 		const gates = document.querySelectorAll( '.newspack-content-gate__gate' );
 		gates.forEach( gate => {
-			gate.parentNode.removeChild( gate );
+			( gate.parentNode as ParentNode ).removeChild( gate );
 		} );
 	}
 	if ( ! locked ) {

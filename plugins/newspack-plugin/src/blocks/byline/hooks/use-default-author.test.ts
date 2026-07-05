@@ -21,19 +21,28 @@ jest.mock( '@wordpress/core-data', () => ( {
 	store: 'core',
 } ) );
 
+/** The mapSelect callback shape used by the hook under test. */
+type MapSelectCallback = ( select: ( store: unknown ) => unknown ) => unknown;
+
+const useSelectMock = jest.mocked( useSelect );
+
+/**
+ * Point useSelect at a single fake store selector object.
+ */
+const mockUseSelectStore = ( getStore: () => unknown ) =>
+	useSelectMock.mockImplementation( mapSelect => ( mapSelect as MapSelectCallback )( getStore ) );
+
 describe( 'useDefaultAuthor', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
 	} );
 
 	it( 'should return null author when post has no author ID', () => {
-		useSelect.mockImplementation( callback =>
-			callback( () => ( {
-				getEditedEntityRecord: () => ( { author: null } ),
-				getUser: jest.fn(),
-				hasFinishedResolution: jest.fn(),
-			} ) )
-		);
+		mockUseSelectStore( () => ( {
+			getEditedEntityRecord: () => ( { author: null } ),
+			getUser: jest.fn(),
+			hasFinishedResolution: jest.fn(),
+		} ) );
 
 		const { result } = renderHook( () => useDefaultAuthor( 123, 'post' ) );
 
@@ -42,13 +51,11 @@ describe( 'useDefaultAuthor', () => {
 	} );
 
 	it( 'should return loading true while fetching user', () => {
-		useSelect.mockImplementation( callback =>
-			callback( () => ( {
-				getEditedEntityRecord: () => ( { author: 5 } ),
-				getUser: () => null,
-				hasFinishedResolution: () => false,
-			} ) )
-		);
+		mockUseSelectStore( () => ( {
+			getEditedEntityRecord: () => ( { author: 5 } ),
+			getUser: () => null,
+			hasFinishedResolution: () => false,
+		} ) );
 
 		const { result } = renderHook( () => useDefaultAuthor( 123, 'post' ) );
 
@@ -59,13 +66,11 @@ describe( 'useDefaultAuthor', () => {
 	it( 'should return author details when resolved', () => {
 		const mockUser = { id: 5, name: 'Jane Doe', slug: 'jane-doe' };
 
-		useSelect.mockImplementation( callback =>
-			callback( () => ( {
-				getEditedEntityRecord: () => ( { author: 5 } ),
-				getUser: () => mockUser,
-				hasFinishedResolution: () => true,
-			} ) )
-		);
+		mockUseSelectStore( () => ( {
+			getEditedEntityRecord: () => ( { author: 5 } ),
+			getUser: () => mockUser,
+			hasFinishedResolution: () => true,
+		} ) );
 
 		const { result } = renderHook( () => useDefaultAuthor( 123, 'post' ) );
 
@@ -76,13 +81,11 @@ describe( 'useDefaultAuthor', () => {
 	it( 'should pass postType and postId to getEditedEntityRecord', () => {
 		const getEditedEntityRecord = jest.fn( () => ( { author: 10 } ) );
 
-		useSelect.mockImplementation( callback =>
-			callback( () => ( {
-				getEditedEntityRecord,
-				getUser: () => ( { id: 10, name: 'Author' } ),
-				hasFinishedResolution: () => true,
-			} ) )
-		);
+		mockUseSelectStore( () => ( {
+			getEditedEntityRecord,
+			getUser: () => ( { id: 10, name: 'Author' } ),
+			hasFinishedResolution: () => true,
+		} ) );
 
 		renderHook( () => useDefaultAuthor( 456, 'page' ) );
 
@@ -93,13 +96,11 @@ describe( 'useDefaultAuthor', () => {
 		const getUser = jest.fn();
 		const hasFinishedResolution = jest.fn();
 
-		useSelect.mockImplementation( callback =>
-			callback( () => ( {
-				getEditedEntityRecord: () => null,
-				getUser,
-				hasFinishedResolution,
-			} ) )
-		);
+		mockUseSelectStore( () => ( {
+			getEditedEntityRecord: () => null,
+			getUser,
+			hasFinishedResolution,
+		} ) );
 
 		const { result } = renderHook( () => useDefaultAuthor( 123, 'post' ) );
 
@@ -113,13 +114,11 @@ describe( 'useDefaultAuthor', () => {
 		const getUser = jest.fn();
 		const hasFinishedResolution = jest.fn();
 
-		useSelect.mockImplementation( callback =>
-			callback( () => ( {
-				getEditedEntityRecord: () => undefined,
-				getUser,
-				hasFinishedResolution,
-			} ) )
-		);
+		mockUseSelectStore( () => ( {
+			getEditedEntityRecord: () => undefined,
+			getUser,
+			hasFinishedResolution,
+		} ) );
 
 		const { result } = renderHook( () => useDefaultAuthor( 123, 'post' ) );
 

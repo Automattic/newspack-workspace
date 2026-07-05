@@ -14,24 +14,34 @@ import { ToolbarGroup, ToolbarButton, PanelBody, PanelRow, SelectControl } from 
  */
 import meta from './block.json';
 
+type CorrectionBoxAttributes = {
+	priority: 'high' | 'low' | 'all';
+};
+
 /**
  * Edit function for the Correction Box block.
  *
- * @param {Object}   props               The block properties.
- * @param {Object}   props.attributes    The block attributes.
- * @param {Function} props.setAttributes The block attributes setter.
+ * @param props               The block properties.
+ * @param props.attributes    The block attributes.
+ * @param props.setAttributes The block attributes setter.
  *
- * @return {JSX.Element} The Correction Box block.
+ * @return The Correction Box block.
  */
-export default function Edit( { attributes, setAttributes } ) {
+export default function Edit( {
+	attributes,
+	setAttributes,
+}: {
+	attributes: CorrectionBoxAttributes;
+	setAttributes: ( attributes: Partial< CorrectionBoxAttributes > ) => void;
+} ) {
 	const [ isRefreshing, setIsRefreshing ] = useState( false );
-	const postType = useSelect( select => select( 'core/editor' ).getCurrentPostType(), [] );
+	const postType = useSelect( select => ( select( 'core/editor' ) as { getCurrentPostType: () => string } ).getCurrentPostType(), [] );
 	const blockProps = useBlockProps();
 
 	/**
 	 * Placeholder when no Corrections are available.
 	 *
-	 * @return {JSX.Element} The Empty Placeholder JSX.
+	 * @return The Empty Placeholder JSX.
 	 */
 	function EmptyPlaceholder() {
 		return (
@@ -52,7 +62,7 @@ export default function Edit( { attributes, setAttributes } ) {
 	/**
 	 * Correction Settings Panel.
 	 *
-	 * @return {JSX.Element} The Correction Settings Panel JSX.
+	 * @return The Correction Settings Panel JSX.
 	 */
 	function CorrectionSettings() {
 		return (

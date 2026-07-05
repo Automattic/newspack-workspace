@@ -19,9 +19,9 @@ class CollectionArchiveFilters {
 	/**
 	 * Handle filtering interactions on the collections archive page.
 	 *
-	 * @param {Event} event The event object.
+	 * @param event The event object.
 	 */
-	handleFiltersChange( event ) {
+	handleFiltersChange( event: Event ) {
 		event.preventDefault();
 
 		const url = new URL( window.location.href );
@@ -31,8 +31,8 @@ class CollectionArchiveFilters {
 
 		// Build new query parameters.
 		const params = new URLSearchParams();
-		const yearField = document.getElementById( 'year' );
-		const categoryField = document.getElementById( 'category' );
+		const yearField = document.getElementById( 'year' ) as HTMLSelectElement | null;
+		const categoryField = document.getElementById( 'category' ) as HTMLSelectElement | null;
 
 		if ( yearField?.value ) {
 			params.set( 'np_collections_year', yearField.value );

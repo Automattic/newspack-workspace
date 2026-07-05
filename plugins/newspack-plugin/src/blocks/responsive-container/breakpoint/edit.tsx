@@ -8,7 +8,12 @@ import { useSelect, useDispatch } from '@wordpress/data';
  * Internal dependencies
  */
 import ViewToggle from '../view-toggle';
-import { useView } from '../view-state';
+import { useView, type View } from '../view-state';
+
+type SiblingBlock = {
+	clientId: string;
+	attributes?: Record< string, unknown >;
+};
 
 /**
  * Edit component for a Responsive Container breakpoint.
@@ -23,18 +28,23 @@ import { useView } from '../view-state';
  * — the hidden breakpoint uses `display: none`, and a selected-but-hidden block
  * has no position for its toolbar to anchor to, so selection must follow the view.
  *
- * @param {Object} props            Block props.
- * @param {Object} props.attributes Block attributes.
- * @param {string} props.clientId   Block client ID.
+ * @param props                 Block props.
+ * @param props.attributes      Block attributes.
+ * @param props.attributes.view The breakpoint this container renders for.
+ * @param props.clientId        Block client ID.
  *
- * @return {JSX.Element} The block editor UI.
+ * @return The block editor UI.
  */
-export default function ResponsiveContainerBreakpointEdit( { attributes, clientId } ) {
+export default function ResponsiveContainerBreakpointEdit( { attributes, clientId }: { attributes: { view: View }; clientId: string } ) {
 	const { view } = attributes;
 
 	const { parentClientId, siblings, isEmpty } = useSelect(
-		select => {
-			const { getBlockRootClientId, getBlocks, getBlockOrder } = select( 'core/block-editor' );
+		( select ): { parentClientId: string | null; siblings: SiblingBlock[]; isEmpty: boolean } => {
+			const { getBlockRootClientId, getBlocks, getBlockOrder } = select( 'core/block-editor' ) as {
+				getBlockRootClientId: ( id: string ) => string | null;
+				getBlocks: ( id: string ) => SiblingBlock[];
+				getBlockOrder: ( id: string ) => string[];
+			};
 			const root = getBlockRootClientId( clientId );
 			return {
 				parentClientId: root,
@@ -54,7 +64,7 @@ export default function ResponsiveContainerBreakpointEdit( { attributes, clientI
 
 	const { selectBlock } = useDispatch( 'core/block-editor' );
 
-	const switchView = newView => {
+	const switchView = ( newView: View ) => {
 		setView( newView );
 		// Move selection onto the breakpoint that is becoming visible (falling
 		// back to the container) so the toolbar always anchors to a visible block.

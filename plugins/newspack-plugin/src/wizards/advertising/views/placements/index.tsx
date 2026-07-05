@@ -12,6 +12,7 @@ import isEqual from 'lodash/isEqual';
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
+import type { APIFetchOptions } from '@wordpress/api-fetch';
 import { Fragment, useState, useEffect, createPortal } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 import { __experimentalHStack as HStack, __experimentalVStack as VStack, Snackbar, ToggleControl } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
@@ -21,6 +22,15 @@ import { __experimentalHStack as HStack, __experimentalVStack as VStack, Snackba
  */
 import { Button, CardForm, Grid, Notice, withWizardScreen } from '../../../../../packages/components/src';
 import PlacementControl from '../../components/placement-control';
+import type { AdsApiError, Bidder, Placement, PlacementData, Provider } from '../../types';
+
+/**
+ * Treat an apiFetch rejection as a REST API error shape.
+ *
+ * @param err The apiFetch rejection reason.
+ * @return The error, as an API error shape.
+ */
+const asApiError = ( err: unknown ) => err as AdsApiError;
 
 /**
  * Advertising Placements management screen.
@@ -28,30 +38,30 @@ import PlacementControl from '../../components/placement-control';
 const Placements = () => {
 	const [ initialized, setInitialized ] = useState( false );
 	const [ inFlight, setInFlight ] = useState( false );
-	const [ error, setError ] = useState( null );
-	const [ providers, setProviders ] = useState( [] );
-	const [ editingPlacement, setEditingPlacement ] = useState( null );
+	const [ error, setError ] = useState< AdsApiError | null >( null );
+	const [ providers, setProviders ] = useState< Provider[] >( [] );
+	const [ editingPlacement, setEditingPlacement ] = useState< string | null >( null );
 	const [ isEnabling, setIsEnabling ] = useState( false );
-	const [ originalData, setOriginalData ] = useState( null );
-	const [ placements, setPlacements ] = useState( {} );
-	const [ bidders, setBidders ] = useState( {} );
-	const [ biddersError, setBiddersError ] = useState( null );
-	const [ notice, setNotice ] = useState( null );
+	const [ originalData, setOriginalData ] = useState< PlacementData | null >( null );
+	const [ placements, setPlacements ] = useState< Record< string, Placement > >( {} );
+	const [ bidders, setBidders ] = useState< Record< string, Bidder > >( {} );
+	const [ biddersError, setBiddersError ] = useState< AdsApiError | null >( null );
+	const [ notice, setNotice ] = useState< { id: number; content: string } | null >( null );
 
-	const placementsApiFetch = async options => {
+	const placementsApiFetch = async ( options: APIFetchOptions< true > ) => {
 		try {
-			const data = await apiFetch( options );
+			const data = await apiFetch< Record< string, Placement > >( options );
 			setPlacements( data );
 			setError( null );
 		} catch ( err ) {
-			setError( err );
+			setError( asApiError( err ) );
 		}
 	};
-	const handlePlacementToggle = placement => async value => {
+	const handlePlacementToggle = ( placement: string ) => async ( value: boolean ) => {
 		setInFlight( true );
 		let success = false;
 		try {
-			const data = await apiFetch( {
+			const data = await apiFetch< Record< string, Placement > >( {
 				path: `/newspack-ads/v1/placements/${ placement }`,
 				method: value ? 'POST' : 'DELETE',
 			} );
@@ -59,7 +69,7 @@ const Placements = () => {
 			setError( null );
 			success = true;
 		} catch ( err ) {
-			setError( err );
+			setError( asApiError( err ) );
 		}
 		setInFlight( false );
 		if ( success && value ) {
@@ -68,7 +78,7 @@ const Placements = () => {
 		}
 		return success;
 	};
-	const handlePlacementChange = ( placementKey, hookKey ) => value => {
+	const handlePlacementChange = ( placementKey: string, hookKey?: string ) => ( value: PlacementData ) => {
 		const placementData = placements[ placementKey ]?.data;
 		let data = {
 			...placementData,
@@ -78,7 +88,7 @@ const Placements = () => {
 			data = {
 				...placementData,
 				hooks: {
-					...placementData.hooks,
+					...placementData?.hooks,
 					[ hookKey ]: value,
 				},
 			};
@@ -91,7 +101,7 @@ const Placements = () => {
 			},
 		} );
 	};
-	const updatePlacement = async placementKey => {
+	const updatePlacement = async ( placementKey: string ) => {
 		setInFlight( true );
 		let success = false;
 		try {
@@ -103,12 +113,12 @@ const Placements = () => {
 			success = true;
 			setError( null );
 		} catch ( err ) {
-			setError( err );
+			setError( asApiError( err ) );
 		}
 		setInFlight( false );
 		return success;
 	};
-	const isEnabled = placementKey => {
+	const isEnabled = ( placementKey: string ) => {
 		return placements[ placementKey ].data?.enabled;
 	};
 
@@ -118,16 +128,16 @@ const Placements = () => {
 			setInFlight( true );
 			await placementsApiFetch( { path: '/newspack-ads/v1/placements' } );
 			try {
-				const data = await apiFetch( { path: '/newspack-ads/v1/providers' } );
+				const data = await apiFetch< Provider[] >( { path: '/newspack-ads/v1/providers' } );
 				setProviders( data );
 			} catch ( err ) {
-				setError( err );
+				setError( asApiError( err ) );
 			}
 			try {
-				const data = await apiFetch( { path: '/newspack-ads/v1/bidders' } );
+				const data = await apiFetch< Record< string, Bidder > >( { path: '/newspack-ads/v1/bidders' } );
 				setBidders( data );
 			} catch ( err ) {
-				setBiddersError( err );
+				setBiddersError( asApiError( err ) );
 			}
 			setInitialized( true );
 			setInFlight( false );
@@ -179,6 +189,8 @@ const Placements = () => {
 				>
 					{ Object.keys( placements ).map( key => {
 						const placement = placements[ key ];
+						// Const alias, so the narrowing survives into the hooks render callback below.
+						const placementHooks = placement.hooks;
 						const enabled = isEnabled( key );
 						const isEditing = editingPlacement === key;
 						const hasChanges = isEditing && ! isEqual( placement.data, originalData );
@@ -263,11 +275,11 @@ const Placements = () => {
 											onChange={ handlePlacementChange( key ) }
 										/>
 									) }
-									{ placement.hooks &&
-										Object.keys( placement.hooks ).map( hookKey => {
+									{ placementHooks &&
+										Object.keys( placementHooks ).map( hookKey => {
 											const hook = {
 												hookKey,
-												...placement.hooks[ hookKey ],
+												...placementHooks[ hookKey ],
 											};
 											return (
 												<PlacementControl

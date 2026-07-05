@@ -71,7 +71,7 @@ domReady( () => {
 	/**
 	 * Order pay.
 	 */
-	const orderPay = document.querySelectorAll( '.pay' );
+	const orderPay = document.querySelectorAll< HTMLElement >( '.pay' );
 	orderPay.forEach( button => {
 		const subscriptionId = button.dataset?.subscriptionId;
 		const action = button.dataset?.action || 'pay_order';

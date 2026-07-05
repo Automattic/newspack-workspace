@@ -20,14 +20,14 @@ import { useWizardData } from '../../../../../packages/components/src/wizard/sto
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 
 const Salesforce = () => {
-	const { salesforce_redirect_url: redirectUrl } = window?.newspackAudience || {};
-	const salesforceData = useWizardData( 'newspack-audience/salesforce' );
-	const [ isConnected, setIsConnected ] = useState( salesforceData.refresh_token );
-	const [ error, setError ] = useState( null );
+	const redirectUrl = window?.newspackAudience?.salesforce_redirect_url;
+	const salesforceData = useWizardData< { refresh_token?: string } >( 'newspack-audience/salesforce' );
+	const [ isConnected, setIsConnected ] = useState< boolean | string | undefined >( salesforceData.refresh_token );
+	const [ error, setError ] = useState< string | null >( null );
 	const [ hasCopied, setHasCopied ] = useState( false );
 
 	const { saveWizardSettings, wizardApiFetch } = useDispatch( WIZARD_STORE_NAMESPACE );
-	const saveAllSettings = value =>
+	const saveAllSettings = ( value: Record< string, unknown > ) =>
 		saveWizardSettings( {
 			slug: 'newspack-audience/salesforce',
 			payloadPath: [ 'salesforce_settings' ],
@@ -45,7 +45,7 @@ const Salesforce = () => {
 	 * @param {string} authorizationCode Auth code fetched from Salesforce.
 	 * @return {void}
 	 */
-	const getTokens = async authorizationCode => {
+	const getTokens = async ( authorizationCode: string ) => {
 		try {
 			// Get the tokens.
 			const response = await wizardApiFetch( {
@@ -101,7 +101,7 @@ const Salesforce = () => {
 		if ( authorizationCode ) {
 			// Remove `code` param from URL without adding history.
 			window.history.replaceState( {}, '', redirectUrl );
-			getTokens( authorizationCode, redirectUrl );
+			getTokens( authorizationCode as string );
 		}
 	}, [] );
 
@@ -155,7 +155,7 @@ const Salesforce = () => {
 						) }
 
 						<ClipboardButton
-							text={ redirectUrl }
+							text={ redirectUrl as string }
 							onCopy={ () => setHasCopied( true ) }
 							onFinishCopy={ () => setHasCopied( false ) }
 							className="newspack-button is-link"

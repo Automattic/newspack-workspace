@@ -14,17 +14,40 @@ import { useCustomByline, extractAuthorIdsFromByline } from '../../shared/hooks/
 import { getOverlapMaskStyle } from './utils';
 import AvatarWrapper from './avatar-wrapper';
 import AvatarInspectorControls from './inspector';
+import type { AvatarData } from './hooks';
+import type { AvatarAttributes } from './utils';
+
+/**
+ * Block context consumed by the Avatar block.
+ */
+type AvatarBlockContext = {
+	postId?: number;
+	postType?: string;
+	'newspack-blocks/author'?: NewspackAuthorProfileData | null;
+};
+
+/**
+ * Props for the Avatar block edit component.
+ */
+type AvatarEditProps = {
+	/** Block attributes. */
+	attributes: AvatarAttributes;
+	/** Block context. */
+	context: AvatarBlockContext;
+	/** Function to update block attributes. */
+	setAttributes: ( attributes: Partial< AvatarAttributes > ) => void;
+};
 
 /**
  * Edit component for the Avatar block.
  *
- * @param {Object}   props               Block props.
- * @param {Object}   props.attributes    Block attributes.
- * @param {Object}   props.context       Block context.
- * @param {Function} props.setAttributes Function to update block attributes.
- * @return {JSX.Element} The edit component.
+ * @param props               Block props.
+ * @param props.attributes    Block attributes.
+ * @param props.context       Block context.
+ * @param props.setAttributes Function to update block attributes.
+ * @return The edit component.
  */
-const Edit = ( { attributes, context, setAttributes } ) => {
+const Edit = ( { attributes, context, setAttributes }: AvatarEditProps ) => {
 	const overlapMaskStyle = useMemo(
 		() => getOverlapMaskStyle( attributes ),
 		[ attributes.className, attributes?.style?.border?.radius, attributes.size ]
@@ -35,7 +58,7 @@ const Edit = ( { attributes, context, setAttributes } ) => {
 	const authorFromBlockContext = context[ 'newspack-blocks/author' ];
 	const ResolvedAuthorContext = getSharedAuthorContext();
 	const authorFromReactContext = useContext( ResolvedAuthorContext );
-	const authorFromParent = authorFromBlockContext || authorFromReactContext;
+	const authorFromParent: NewspackAuthorProfileData | null | undefined = authorFromBlockContext || authorFromReactContext;
 
 	// Hooks must be called unconditionally per React rules.
 	const defaultAvatarUrl = useDefaultAvatar();
@@ -45,9 +68,9 @@ const Edit = ( { attributes, context, setAttributes } ) => {
 	const { bylineActive, bylineContent } = useCustomByline( postId, postType );
 
 	// Memoize author ID extraction to avoid running regex on every render.
-	const authorIds = useMemo( () => extractAuthorIdsFromByline( bylineContent ), [ bylineContent ] );
+	const authorIds: number[] = useMemo( () => extractAuthorIdsFromByline( bylineContent ), [ bylineContent ] );
 
-	const renderAvatar = ( currentAvatar, key ) => (
+	const renderAvatar = ( currentAvatar: AvatarData, key: string | number ) => (
 		<AvatarWrapper
 			key={ key }
 			avatar={ currentAvatar }

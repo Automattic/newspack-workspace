@@ -5,6 +5,7 @@
 /**
  * WordPress dependencies.
  */
+import type { ComponentProps } from 'react';
 import { __ } from '@wordpress/i18n';
 import { decodeEntities } from '@wordpress/html-entities';
 import { MenuItem } from '@wordpress/components';
@@ -16,6 +17,17 @@ import { ESCAPE } from '@wordpress/keycodes';
 import { Popover } from '../../../../../packages/components/src';
 import './style.scss';
 
+type PrimaryPromptPopoverProps = Pick<
+	CampaignsPopupManagement,
+	'deletePopup' | 'restorePopup' | 'previewPopup' | 'publishPopup' | 'unpublishPopup'
+> & {
+	/** Closes the popover. */
+	onFocusOutside: () => void;
+	/** The prompt the popover actions apply to. */
+	prompt: CampaignsPrompt;
+	setIsDuplicatePromptModalVisible: ( isVisible: boolean ) => void;
+};
+
 const PrimaryPromptPopover = ( {
 	deletePopup,
 	restorePopup,
@@ -25,7 +37,7 @@ const PrimaryPromptPopover = ( {
 	publishPopup,
 	setIsDuplicatePromptModalVisible,
 	unpublishPopup,
-} ) => {
+}: PrimaryPromptPopoverProps ) => {
 	const { id, edit_link: editLink, status } = prompt;
 	const isPublished = 'publish' === status;
 	const isTrash = status === 'trash';
@@ -60,7 +72,11 @@ const PrimaryPromptPopover = ( {
 					>
 						{ __( 'Preview', 'newspack-plugin' ) }
 					</MenuItem>
-					<MenuItem href={ decodeEntities( editLink ) } className="newspack-button" isLink>
+					{ /* Prompts returned by the Campaigns API always carry an edit link. `href` is
+					     honored at runtime by the underlying Button (rendering an anchor) but is
+					     absent from the button-only MenuItem prop type, so it is applied via a
+					     typed spread. */ }
+					<MenuItem { ...( { href: decodeEntities( editLink! ), className: 'newspack-button' } as ComponentProps< typeof MenuItem > ) }>
 						{ __( 'Edit', 'newspack-plugin' ) }
 					</MenuItem>
 					<MenuItem onClick={ () => setIsDuplicatePromptModalVisible( true ) } className="newspack-button">

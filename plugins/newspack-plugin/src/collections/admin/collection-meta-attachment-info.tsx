@@ -5,12 +5,33 @@
 import { __ } from '@wordpress/i18n';
 import { Button, Spinner, ExternalLink, Dashicon } from '@wordpress/components';
 import { useState, useEffect } from '@wordpress/element';
+import apiFetch from '@wordpress/api-fetch';
 import PropTypes from 'prop-types';
 
-const attachmentCache = new Map();
+/** Resolved attachment display info. */
+export type AttachmentInfo = {
+	url: string;
+	title: string;
+};
 
-const CollectionMetaAttachmentInfo = ( { attachmentId, onRemove } ) => {
-	const [ attachmentInfo, setAttachmentInfo ] = useState( () => attachmentCache.get( attachmentId ) || null );
+/** Subset of the REST API media object consumed here. */
+type MediaResponse = {
+	source_url?: string;
+	url?: string;
+	title?: {
+		rendered?: string;
+	};
+};
+
+const attachmentCache = new Map< number | string, AttachmentInfo >();
+
+type CollectionMetaAttachmentInfoProps = {
+	attachmentId: number | string;
+	onRemove?: () => void;
+};
+
+const CollectionMetaAttachmentInfo = ( { attachmentId, onRemove }: CollectionMetaAttachmentInfoProps ) => {
+	const [ attachmentInfo, setAttachmentInfo ] = useState< AttachmentInfo | null >( () => attachmentCache.get( attachmentId ) || null );
 	const [ loading, setLoading ] = useState( false );
 
 	useEffect( () => {
@@ -19,7 +40,7 @@ const CollectionMetaAttachmentInfo = ( { attachmentId, onRemove } ) => {
 		}
 
 		setLoading( true );
-		wp.apiFetch( { path: `/wp/v2/media/${ attachmentId }` } )
+		apiFetch< MediaResponse >( { path: `/wp/v2/media/${ attachmentId }` } )
 			.then( media => {
 				const info = {
 					url: media.source_url || media.url || '',

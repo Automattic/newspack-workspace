@@ -2,6 +2,8 @@
  * Collection Meta CTAs Field component for handling Call-to-Action buttons.
  */
 
+import type { DragEvent } from 'react';
+
 import { __ } from '@wordpress/i18n';
 import { TextControl, Button, BaseControl, useBaseControlProps, SelectControl, Draggable } from '@wordpress/components';
 import { useState, useCallback, useMemo } from '@wordpress/element';
@@ -12,20 +14,45 @@ import PropTypes from 'prop-types';
 import CollectionMetaAttachmentInfo, { attachmentCache } from './collection-meta-attachment-info';
 import { isValidUrl } from './utils';
 
-const CollectionMetaCtasField = ( { metaKey, meta, updateMeta, ...baseProps } ) => {
+/** A single CTA entry as stored in the `ctas` meta. */
+type Cta = {
+	type?: 'link' | 'attachment';
+	label?: string;
+	url?: string;
+	id?: number | null;
+};
+
+/** Subset of the WP media modal selection consumed here. */
+type SelectedMedia = {
+	id: number;
+	mime?: string;
+	url?: string;
+	source_url?: string;
+	title?: string;
+};
+
+type CollectionMetaCtasFieldProps = {
+	metaKey: string;
+	meta: Record< string, unknown >;
+	updateMeta: ( key: string, value: Cta[] | null ) => void;
+	label?: string;
+	help?: string;
+};
+
+const CollectionMetaCtasField = ( { metaKey, meta, updateMeta, ...baseProps }: CollectionMetaCtasFieldProps ) => {
 	const { baseControlProps, controlProps } = useBaseControlProps( baseProps );
-	const [ fieldErrors, setFieldErrors ] = useState( {} );
-	const [ draggedIndex, setDraggedIndex ] = useState( null );
-	const [ dragOverIndex, setDragOverIndex ] = useState( null );
-	const currentCtas = meta[ metaKey ] || [];
+	const [ fieldErrors, setFieldErrors ] = useState< Record< string, string > >( {} );
+	const [ draggedIndex, setDraggedIndex ] = useState< number | null >( null );
+	const [ dragOverIndex, setDragOverIndex ] = useState< number | null >( null );
+	const currentCtas = ( meta[ metaKey ] as Cta[] | undefined ) || [];
 
 	const addCta = useCallback( () => {
-		const newCtas = [ ...currentCtas, { type: 'link', label: '', url: '' } ];
+		const newCtas: Cta[] = [ ...currentCtas, { type: 'link', label: '', url: '' } ];
 		updateMeta( metaKey, newCtas );
 	}, [ currentCtas, updateMeta, metaKey ] );
 
 	const removeCta = useCallback(
-		index => {
+		( index: number ) => {
 			const newCtas = currentCtas.filter( ( _, i ) => i !== index );
 			updateMeta( metaKey, newCtas.length > 0 ? newCtas : null );
 			setFieldErrors( prev => {
@@ -38,16 +65,16 @@ const CollectionMetaCtasField = ( { metaKey, meta, updateMeta, ...baseProps } ) 
 	);
 
 	const updateCta = useCallback(
-		( index, field, value ) => {
+		( index: number, field: string, value: string | number | null ) => {
 			const newCtas = [ ...currentCtas ];
-			newCtas[ index ] = { ...newCtas[ index ], [ field ]: value };
+			newCtas[ index ] = { ...newCtas[ index ], [ field ]: value } as Cta;
 			updateMeta( metaKey, newCtas );
 		},
 		[ currentCtas, updateMeta, metaKey ]
 	);
 
 	const validateUrl = useCallback(
-		( index, value ) => {
+		( index: number, value: string ) => {
 			setFieldErrors( prev => {
 				const fieldKey = `${ metaKey }_${ index }`;
 				if ( ! value || isValidUrl( value ) ) {
@@ -65,7 +92,7 @@ const CollectionMetaCtasField = ( { metaKey, meta, updateMeta, ...baseProps } ) 
 	);
 
 	const handleAttachmentSelect = useCallback(
-		( index, media ) => {
+		( index: number, media: SelectedMedia | null ) => {
 			if ( media && media.mime === 'application/pdf' ) {
 				const attachmentInfo = {
 					url: media.source_url || media.url || '',
@@ -98,17 +125,17 @@ const CollectionMetaCtasField = ( { metaKey, meta, updateMeta, ...baseProps } ) 
 	);
 
 	const attachmentSelectHandlers = useMemo( () => {
-		return currentCtas.map( ( _, index ) => media => handleAttachmentSelect( index, media ) );
+		return currentCtas.map( ( _, index ) => ( media: SelectedMedia | null ) => handleAttachmentSelect( index, media ) );
 	}, [ handleAttachmentSelect, currentCtas.length ] );
 
 	// Drag and drop handlers.
-	const handleDragStart = useCallback( index => {
+	const handleDragStart = useCallback( ( index: number ) => {
 		setDraggedIndex( index );
 	}, [] );
 
 	const handleDragEnd = useCallback(
-		event => {
-			const dropTarget = event.target.closest( '.cta-input-row' );
+		( event: DragEvent ) => {
+			const dropTarget = ( event.target as HTMLElement ).closest( '.cta-input-row' );
 			if ( ! dropTarget ) {
 				setDraggedIndex( null );
 				setDragOverIndex( null );
@@ -124,7 +151,7 @@ const CollectionMetaCtasField = ( { metaKey, meta, updateMeta, ...baseProps } ) 
 
 				// Remap field errors to new indices.
 				setFieldErrors( prev => {
-					const newErrors = {};
+					const newErrors: Record< string, string > = {};
 					Object.entries( prev ).forEach( ( [ key, error ] ) => {
 						const match = key.match( new RegExp( `^${ metaKey }_(\\d+)$` ) );
 						if ( match ) {
@@ -156,7 +183,7 @@ const CollectionMetaCtasField = ( { metaKey, meta, updateMeta, ...baseProps } ) 
 		[ currentCtas, draggedIndex, updateMeta, metaKey ]
 	);
 
-	const handleDragOver = useCallback( index => {
+	const handleDragOver = useCallback( ( index: number ) => {
 		setDragOverIndex( index );
 	}, [] );
 
@@ -237,7 +264,7 @@ const CollectionMetaCtasField = ( { metaKey, meta, updateMeta, ...baseProps } ) 
 											<MediaUpload
 												onSelect={ attachmentSelectHandlers[ index ] }
 												allowedTypes={ [ 'application/pdf' ] }
-												render={ ( { open } ) => (
+												render={ ( { open }: { open: () => void } ) => (
 													<Button isSecondary isSmall onClick={ open } className="upload-button">
 														{ __( 'Upload PDF', 'newspack-plugin' ) }
 													</Button>

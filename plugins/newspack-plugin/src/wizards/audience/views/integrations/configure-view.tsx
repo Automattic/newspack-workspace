@@ -13,10 +13,21 @@ import { Accordion, Divider, Grid, SectionHeader } from '../../../../../packages
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
 import { SettingsField } from './settings-field';
+import type { IntegrationFieldValue, IntegrationPendingChanges, IntegrationSettingsField, IntegrationsSettings } from './constants';
 
 import './configure-view.scss';
 
-export const ConfigureView = ( { integrations, loading, pendingChanges, saving, onFieldChange, onSave, match } ) => {
+type ConfigureViewProps = {
+	integrations: IntegrationsSettings;
+	loading: boolean;
+	pendingChanges: IntegrationPendingChanges;
+	saving: Record< string, boolean >;
+	onFieldChange: ( integrationId: string, fieldKey: string, value: IntegrationFieldValue ) => void;
+	onSave: ( integrationId: string ) => void;
+	match: { params: { integrationId: string } };
+};
+
+export const ConfigureView = ( { integrations, loading, pendingChanges, saving, onFieldChange, onSave, match }: ConfigureViewProps ) => {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	const integrationId = match?.params?.integrationId;
@@ -29,9 +40,9 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 		if ( ! integration?.settings ) {
 			return { settingsFields: [], inboundField: null, outboundField: null };
 		}
-		const settings = [];
-		let inbound = null;
-		let outbound = null;
+		const settings: IntegrationSettingsField[] = [];
+		let inbound: IntegrationSettingsField | null = null;
+		let outbound: IntegrationSettingsField | null = null;
 		for ( const field of integration.settings ) {
 			if ( field.key === 'incoming_metadata_fields' ) {
 				inbound = field;
@@ -101,17 +112,17 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 	}
 
 	if ( ! integration ) {
-		return <WizardsTab isFetching={ loading } />;
+		return <WizardsTab isFetching={ loading }>{ null }</WizardsTab>;
 	}
 
-	const getFieldValue = field => {
+	const getFieldValue = ( field: IntegrationSettingsField ): IntegrationFieldValue | undefined => {
 		if ( pendingChanges[ integrationId ] && field.key in pendingChanges[ integrationId ] ) {
 			return pendingChanges[ integrationId ][ field.key ];
 		}
 		return field.value;
 	};
 
-	const handleCheckboxListChange = ( fieldKey, currentValue, optionName, checked ) => {
+	const handleCheckboxListChange = ( fieldKey: string, currentValue: IntegrationFieldValue | undefined, optionName: string, checked: boolean ) => {
 		const selected = Array.isArray( currentValue ) ? currentValue : [];
 		const newValue = checked ? [ ...selected, optionName ] : selected.filter( f => f !== optionName );
 		onFieldChange( integrationId, fieldKey, newValue );

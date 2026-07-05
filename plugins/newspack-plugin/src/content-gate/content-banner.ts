@@ -4,13 +4,13 @@ import { queuePageReload } from '../reader-activation/utils';
 
 import './content-banner.scss';
 
-const settings = window.newspack_metering_settings || {};
-const storeKey = 'metering-' + settings.gate_id || 0;
+const settings: Partial< NewspackMeteringSettings > = window.newspack_metering_settings || {};
+const storeKey = ( 'metering-' + settings.gate_id || 0 ) as string;
 
 window.newspackRAS = window.newspackRAS || [];
 
 domReady( () => {
-	const cta = document.querySelector( '.newspack-content-gifting__cta,.newspack-countdown-banner__cta' );
+	const cta = document.querySelector< HTMLElement >( '.newspack-content-gifting__cta,.newspack-countdown-banner__cta' );
 	const setBodyOffset = () => {
 		if (
 			! cta ||
@@ -30,7 +30,8 @@ domReady( () => {
 			const resizeObserver = new ResizeObserver( updateOffset );
 			resizeObserver.observe( cta );
 		} else {
-			window.addEventListener( 'resize', updateOffset );
+			// `'ResizeObserver' in window` narrows `window` to `never` in this branch; re-widen to call it.
+			( window as Window ).addEventListener( 'resize', updateOffset );
 		}
 	};
 
@@ -39,19 +40,19 @@ domReady( () => {
 	// Countdown banner.
 	window.newspackRAS?.push( ras => {
 		const views = document.querySelector( '.newspack-countdown-banner__views' );
-		if ( ! views || 0 < parseInt( views.textContent ) ) {
+		if ( ! views || 0 < parseInt( String( views.textContent ) ) ) {
 			return;
 		}
-		const data = ras?.store?.get( storeKey ) || {
+		const data = ( ras?.store?.get( storeKey ) as { content: Array< unknown > } ) || {
 			content: [],
 		};
-		const total = parseInt( document.querySelector( '.newspack-countdown-banner__total_views' )?.textContent || 0 );
+		const total = parseInt( String( document.querySelector( '.newspack-countdown-banner__total_views' )?.textContent || 0 ) );
 		if ( ! total || 0 >= total ) {
 			return;
 		}
 		if ( data.content.length > 0 ) {
-			views.textContent = Math.min( data.content.length, total );
-			cta.classList.remove( 'newspack-countdown-banner__cta--hidden' );
+			views.textContent = String( Math.min( data.content.length, total ) );
+			( cta as HTMLElement ).classList.remove( 'newspack-countdown-banner__cta--hidden' );
 		}
 	} );
 
@@ -60,23 +61,24 @@ domReady( () => {
 	if ( ! modal ) {
 		return;
 	}
-	const spinner = modal.querySelector( '.newspack-ui__spinner' );
-	const info = modal.querySelector( '.newspack-content-gifting__info' );
-	const errorMessage = modal.querySelector( '.newspack-ui__notice--error' );
-	const linkContainer = modal.querySelector( '.newspack-content-gifting__link-container' );
-	const urlInput = modal.querySelector( '#content-gifting-url' );
-	const copyButton = modal.querySelector( '[data-copy-button]' );
+	// These modal elements are guaranteed present in the gifting markup; assert type and non-null at the DOM boundary.
+	const spinner = modal.querySelector( '.newspack-ui__spinner' ) as HTMLElement;
+	const info = modal.querySelector( '.newspack-content-gifting__info' ) as HTMLElement;
+	const errorMessage = modal.querySelector( '.newspack-ui__notice--error' ) as HTMLElement;
+	const linkContainer = modal.querySelector( '.newspack-content-gifting__link-container' ) as HTMLElement;
+	const urlInput = modal.querySelector( '#content-gifting-url' ) as HTMLInputElement;
+	const copyButton = modal.querySelector( '[data-copy-button]' ) as HTMLButtonElement;
 
 	spinner.style.display = 'none';
 	linkContainer.style.display = 'none';
 	info.style.display = 'none';
 
-	const copy = ev => {
+	const copy = ( ev: Event ) => {
 		ev.preventDefault();
 		urlInput.select();
 		document.execCommand( 'copy' );
 		const originalText = copyButton.textContent;
-		copyButton.setAttribute( 'disabled', true );
+		copyButton.setAttribute( 'disabled', 'true' );
 		copyButton.textContent = newspack_content_gifting.copied_label;
 		setTimeout( () => {
 			copyButton.textContent = originalText;
@@ -114,7 +116,8 @@ domReady( () => {
 						copyButton.disabled = true;
 					} else {
 						urlInput.disabled = false;
-						delete urlInput.style.pointerEvents;
+						// `delete` needs an optional operand; the inline-style property is declared required.
+						delete ( urlInput.style as { pointerEvents?: string } ).pointerEvents;
 						copyButton.disabled = false;
 					}
 				} )

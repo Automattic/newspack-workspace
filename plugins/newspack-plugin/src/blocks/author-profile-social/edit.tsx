@@ -27,11 +27,62 @@ import { getAvailableServices, getIconSizeOptions, roundIconSize } from './utils
 
 const ALLOWED_BLOCKS = [ 'newspack/author-social-link' ];
 
+/**
+ * Attributes of the Author Social Links block.
+ */
+type AuthorProfileSocialAttributes = {
+	showEmail: boolean;
+	iconSize: number | string;
+	iconColor?: string;
+	customIconColor?: string;
+	iconColorValue?: string;
+	iconBackgroundColor?: string;
+	customIconBackgroundColor?: string;
+	iconBackgroundColorValue?: string;
+	className?: string;
+};
+
+/**
+ * A resolved color object provided by the withColors HOC.
+ */
+type WithColorsColor = {
+	color?: string;
+};
+
+/**
+ * Props for the Author Social Links edit component.
+ */
+type AuthorProfileSocialEditProps = {
+	/** Block attributes. */
+	attributes: AuthorProfileSocialAttributes;
+	/** Function to update attributes. */
+	setAttributes: ( attributes: Partial< AuthorProfileSocialAttributes > ) => void;
+	/** Block client ID. */
+	clientId: string;
+	/** Resolved icon color (from withColors). */
+	iconColor?: WithColorsColor;
+	/** Setter for icon color (from withColors). */
+	setIconColor: ( value?: string ) => void;
+	/** Resolved icon background color (from withColors). */
+	iconBackgroundColor?: WithColorsColor;
+	/** Setter for icon background color (from withColors). */
+	setIconBackgroundColor: ( value?: string ) => void;
+};
+
+/**
+ * An inner social link block, as read from the block editor store.
+ */
+type SocialLinkInnerBlock = {
+	attributes: {
+		service?: string;
+	};
+};
+
 // Module-level cache so multiple block instances share one fetch.
-let allServiceKeysCache = null;
-const fetchAllServiceKeys = () => {
+let allServiceKeysCache: Promise< string[] > | null = null;
+const fetchAllServiceKeys = (): Promise< string[] > => {
 	if ( ! allServiceKeysCache ) {
-		allServiceKeysCache = apiFetch( { path: '/newspack/v1/social-icons' } )
+		allServiceKeysCache = apiFetch< Record< string, string > >( { path: '/newspack/v1/social-icons' } )
 			.then( svgs => Object.keys( svgs ) )
 			.catch( () => [] );
 	}
@@ -41,25 +92,33 @@ const fetchAllServiceKeys = () => {
 /**
  * Edit component for the Author Social Links inner block.
  *
- * @param {Object}   props                        Block props.
- * @param {Object}   props.attributes             Block attributes.
- * @param {Function} props.setAttributes          Function to update attributes.
- * @param {string}   props.clientId               Block client ID.
- * @param {Object}   props.iconColor              Resolved icon color (from withColors).
- * @param {Function} props.setIconColor           Setter for icon color (from withColors).
- * @param {Object}   props.iconBackgroundColor    Resolved icon background color (from withColors).
- * @param {Function} props.setIconBackgroundColor Setter for icon background color (from withColors).
- * @return {JSX.Element} The edit component.
+ * @param props                        Block props.
+ * @param props.attributes             Block attributes.
+ * @param props.setAttributes          Function to update attributes.
+ * @param props.clientId               Block client ID.
+ * @param props.iconColor              Resolved icon color (from withColors).
+ * @param props.setIconColor           Setter for icon color (from withColors).
+ * @param props.iconBackgroundColor    Resolved icon background color (from withColors).
+ * @param props.setIconBackgroundColor Setter for icon background color (from withColors).
+ * @return The edit component.
  */
-function Edit( { attributes, setAttributes, clientId, iconColor, setIconColor, iconBackgroundColor, setIconBackgroundColor } ) {
+function Edit( {
+	attributes,
+	setAttributes,
+	clientId,
+	iconColor,
+	setIconColor,
+	iconBackgroundColor,
+	setIconBackgroundColor,
+}: AuthorProfileSocialEditProps ) {
 	const AuthorContext = getSharedAuthorContext();
-	const author = useContext( AuthorContext );
+	const author: NewspackAuthorProfileData | null = useContext( AuthorContext );
 	const { iconSize, iconColorValue, iconBackgroundColorValue, className } = attributes;
 	const hasPopulated = useRef( false );
-	const [ allServiceKeys, setAllServiceKeys ] = useState( null ); // null = loading
+	const [ allServiceKeys, setAllServiceKeys ] = useState< string[] | null >( null ); // null = loading
 
 	const isBrand = ( className || '' ).split( ' ' ).includes( 'is-style-brand' );
-	const iconSizeValue = typeof iconSize === 'number' ? iconSize : parseInt( iconSize ?? 24, 10 ) || 24;
+	const iconSizeValue = typeof iconSize === 'number' ? iconSize : parseInt( String( iconSize ?? 24 ), 10 ) || 24;
 
 	const resolvedIconColor = ! isBrand ? iconColor?.color || iconColorValue : undefined;
 	const resolvedIconBackground = ! isBrand ? iconBackgroundColor?.color || iconBackgroundColorValue : undefined;
@@ -73,7 +132,7 @@ function Edit( { attributes, setAttributes, clientId, iconColor, setIconColor, i
 	const colorSettings = [
 		{
 			colorValue: iconColor?.color || iconColorValue,
-			onColorChange: value => {
+			onColorChange: ( value?: string ) => {
 				setIconColor( value );
 				setAttributes( { iconColorValue: value } );
 			},
@@ -81,7 +140,7 @@ function Edit( { attributes, setAttributes, clientId, iconColor, setIconColor, i
 		},
 		{
 			colorValue: iconBackgroundColor?.color || iconBackgroundColorValue,
-			onColorChange: value => {
+			onColorChange: ( value?: string ) => {
 				setIconBackgroundColor( value );
 				setAttributes( { iconBackgroundColorValue: value } );
 			},
@@ -99,9 +158,15 @@ function Edit( { attributes, setAttributes, clientId, iconColor, setIconColor, i
 	} );
 
 	// Get inner blocks (stable reference from the store).
-	const innerBlocks = useSelect( select => select( 'core/block-editor' ).getBlocks( clientId ), [ clientId ] );
+	const innerBlocks: SocialLinkInnerBlock[] = useSelect(
+		select => ( select( 'core/block-editor' ) as { getBlocks: ( rootClientId: string ) => SocialLinkInnerBlock[] } ).getBlocks( clientId ),
+		[ clientId ]
+	);
 	const innerBlockCount = innerBlocks.length;
-	const currentServices = useMemo( () => innerBlocks.map( b => b.attributes.service ).filter( Boolean ), [ innerBlocks ] );
+	const currentServices = useMemo(
+		() => innerBlocks.map( b => b.attributes.service ).filter( ( service ): service is string => Boolean( service ) ),
+		[ innerBlocks ]
+	);
 
 	const { replaceInnerBlocks } = useDispatch( 'core/block-editor' );
 
@@ -132,7 +197,7 @@ function Edit( { attributes, setAttributes, clientId, iconColor, setIconColor, i
 	const missingServices = services.filter( s => ! currentServices.includes( s ) );
 
 	const resetLinks = () => {
-		const resetWith = allServiceKeys?.length > 0 ? allServiceKeys : services;
+		const resetWith = allServiceKeys && allServiceKeys.length > 0 ? allServiceKeys : services;
 		const blocks = resetWith.map( service => createBlock( 'newspack/author-social-link', { service } ) );
 		replaceInnerBlocks( clientId, blocks, false );
 	};
@@ -171,7 +236,7 @@ function Edit( { attributes, setAttributes, clientId, iconColor, setIconColor, i
 				<PanelBody title={ __( 'Settings', 'newspack-plugin' ) }>
 					<SelectControl
 						label={ __( 'Icon size', 'newspack-plugin' ) }
-						value={ iconSizeValue }
+						value={ String( iconSizeValue ) }
 						options={ getIconSizeOptions() }
 						onChange={ value => setAttributes( { iconSize: Number( value ) || 24 } ) }
 						__next40pxDefaultSize

@@ -12,7 +12,19 @@ import { ESCAPE } from '@wordpress/keycodes';
  */
 import { Button, Popover } from '../../../../../packages/components/src';
 
-const OptionsPopover = props => {
+type OptionsPopoverProps = {
+	/** Callback archiving the ad unit. */
+	deleteLink: () => void;
+	/** URL of the ad unit's edit screen. */
+	editLink: string;
+};
+
+// WP boundary: MenuItem's typings accept only button-element props, but at
+// runtime it forwards all props to Button, which renders an anchor (with
+// link styling via `isLink`) when `href` is set.
+const MenuItemLink = MenuItem as React.ComponentType< React.ComponentProps< typeof MenuItem > & { href?: string; isLink?: boolean } >;
+
+const OptionsPopover = ( props: OptionsPopoverProps ) => {
 	const [ isVisible, setIsVisible ] = useState( false );
 	const toggleVisible = () => {
 		setIsVisible( state => ! state );
@@ -22,7 +34,7 @@ const OptionsPopover = props => {
 	return (
 		<>
 			<Button
-				className={ isVisible && 'popover-active' }
+				className={ isVisible ? 'popover-active' : undefined }
 				onClick={ toggleVisible }
 				icon={ moreVertical }
 				label={ __( 'More options', 'newspack-plugin' ) }
@@ -33,9 +45,9 @@ const OptionsPopover = props => {
 					<MenuItem onClick={ toggleVisible } className="screen-reader-text">
 						{ __( 'Close Popover', 'newspack-plugin' ) }
 					</MenuItem>
-					<MenuItem href={ editLink } className="newspack-button" isLink>
+					<MenuItemLink href={ editLink } className="newspack-button" isLink>
 						{ __( 'Edit', 'newspack-plugin' ) }
-					</MenuItem>
+					</MenuItemLink>
 					<MenuItem onClick={ deleteLink } className="newspack-button">
 						{ __( 'Archive', 'newspack-plugin' ) }
 					</MenuItem>

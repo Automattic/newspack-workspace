@@ -25,12 +25,12 @@ const BLOCKS_TEMPLATE = [
  * rendered by each breakpoint so it can be switched without reselecting the
  * container.
  *
- * @param {Object} props          Block props.
- * @param {string} props.clientId Block client ID.
+ * @param props          Block props.
+ * @param props.clientId Block client ID.
  *
- * @return {JSX.Element} The block editor UI.
+ * @return The block editor UI.
  */
-export default function ResponsiveContainerEdit( { clientId } ) {
+export default function ResponsiveContainerEdit( { clientId }: { clientId: string } ) {
 	const [ view, setView ] = useView( clientId );
 
 	const blockProps = useBlockProps( {

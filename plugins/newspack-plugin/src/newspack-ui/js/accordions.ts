@@ -7,10 +7,11 @@ import { domReady } from '../../utils';
 domReady( function () {
 	const accordions = [ ...document.querySelectorAll( '.newspack-ui__accordion' ) ];
 	accordions.forEach( accordion => {
-		const toggles = [ ...accordion.querySelectorAll( 'li > input[type="radio"]' ) ];
+		const toggles = [ ...accordion.querySelectorAll< HTMLInputElement >( 'li > input[type="radio"]' ) ];
 		const toggleOpen = () => {
 			toggles.forEach( t => {
-				const parent = t.closest( 'li' );
+				// The selector guarantees an `li` ancestor for every toggle.
+				const parent = t.closest( 'li' )!;
 				if ( t.checked ) {
 					parent.classList.add( 'active' );
 				} else {

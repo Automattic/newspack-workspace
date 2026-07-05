@@ -17,27 +17,61 @@ import CircularMeter from './components/CircularMeter';
 import { getDefaultStartDate } from './utils/helpers';
 
 /**
+ * Attributes of the Contribution Meter block. All attributes have block.json
+ * defaults, so they are always present.
+ */
+export type ContributionMeterAttributes = {
+	goalAmount: number;
+	startDate: string;
+	endDate: string;
+	progressBarColor?: string;
+	showGoal: boolean;
+	showAmountRaised: boolean;
+	showPercentage: boolean;
+	thickness: string;
+	previewMode?: boolean;
+	className?: string;
+};
+
+/**
+ * Contribution data returned by the contribution-meter REST endpoint.
+ */
+type ContributionData = {
+	amountRaised?: number;
+};
+
+/**
+ * Props for the Contribution Meter edit component.
+ */
+type ContributionMeterEditProps = {
+	/** Component props. */
+	attributes: ContributionMeterAttributes;
+	/** Function to update attributes. */
+	setAttributes: ( attributes: Partial< ContributionMeterAttributes > ) => void;
+};
+
+/**
  * Build CSS class names for the block wrapper.
  *
- * @param {string} style     Meter style.
- * @param {string} thickness Thickness size.
- * @return {string} Combined class names.
+ * @param style     Meter style.
+ * @param thickness Thickness size.
+ * @return Combined class names.
  */
-const buildClassNames = ( style, thickness ) => {
+const buildClassNames = ( style: string, thickness: string ): string => {
 	return [ `contribution-meter--${ style }`, `contribution-meter--thickness-${ thickness }`, 'newspack-ui', 'newspack-ui__font--s' ].join( ' ' );
 };
+
+const PREVIEW_AMOUNT_RAISED = 1500;
 
 /**
  * Edit component for the Contribution Meter block.
  *
- * @param {Object}   props               Component props.
- * @param {Object}   props.attributes    Block attributes.
- * @param {Function} props.setAttributes Function to update attributes.
- * @return {Element} Edit component.
+ * @param props               Component props.
+ * @param props.attributes    Block attributes.
+ * @param props.setAttributes Function to update attributes.
+ * @return Edit component.
  */
-const PREVIEW_AMOUNT_RAISED = 1500;
-
-const Edit = ( { attributes, setAttributes } ) => {
+const Edit = ( { attributes, setAttributes }: ContributionMeterEditProps ) => {
 	const {
 		className,
 		goalAmount,
@@ -54,9 +88,11 @@ const Edit = ( { attributes, setAttributes } ) => {
 	// Extract meter style from className attribute (is-style-circular or default to linear).
 	const meterStyle = className && className.includes( 'is-style-circular' ) ? 'circular' : 'linear';
 
-	const [ contributionData, setContributionData ] = useState( previewMode ? { amountRaised: PREVIEW_AMOUNT_RAISED } : null );
+	const [ contributionData, setContributionData ] = useState< ContributionData | null >(
+		previewMode ? { amountRaised: PREVIEW_AMOUNT_RAISED } : null
+	);
 	const [ isLoading, setIsLoading ] = useState( previewMode ? false : true );
-	const [ error, setError ] = useState( null );
+	const [ error, setError ] = useState< string | null >( null );
 
 	// Set default start date if not set.
 	useEffect( () => {
@@ -79,7 +115,7 @@ const Edit = ( { attributes, setAttributes } ) => {
 		setIsLoading( true );
 		setError( null );
 
-		apiFetch( {
+		apiFetch< ContributionData >( {
 			path: '/newspack/v1/contribution-meter',
 			method: 'POST',
 			data: {

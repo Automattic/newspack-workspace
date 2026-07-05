@@ -22,7 +22,21 @@ import {
 } from '@wordpress/block-editor';
 import { Icon } from '@wordpress/components';
 
-export default function OverlaySearchEdit( { attributes, setAttributes, clientId } ) {
+type OverlaySearchAttributes = {
+	triggerText: string;
+	overlayColor: string;
+	className?: string;
+};
+
+export default function OverlaySearchEdit( {
+	attributes,
+	setAttributes,
+	clientId,
+}: {
+	attributes: OverlaySearchAttributes;
+	setAttributes: ( attributes: Partial< OverlaySearchAttributes > ) => void;
+	clientId: string;
+} ) {
 	const { triggerText, className: blockClassName, overlayColor } = attributes;
 
 	const spacingProps = useSpacingProps( attributes );
@@ -49,7 +63,7 @@ export default function OverlaySearchEdit( { attributes, setAttributes, clientId
 						{
 							colorValue: overlayColor,
 							label: __( 'Overlay', 'newspack-plugin' ),
-							onColorChange: value => setAttributes( { overlayColor: value || '' } ),
+							onColorChange: ( value?: string ) => setAttributes( { overlayColor: value || '' } ),
 							hasValue: () => !! overlayColor,
 							onDeselect: () => setAttributes( { overlayColor: '' } ),
 							isShownByDefault: true,
@@ -78,7 +92,7 @@ export default function OverlaySearchEdit( { attributes, setAttributes, clientId
 							aria-label={ __( 'Button text', 'newspack-plugin' ) }
 							placeholder={ __( 'Search', 'newspack-plugin' ) }
 							value={ triggerText || '' }
-							onChange={ val => setAttributes( { triggerText: stripHTML( val ) } ) }
+							onChange={ ( val: string ) => setAttributes( { triggerText: stripHTML( val ) } ) }
 							withoutInteractiveFormatting
 						/>
 					</button>

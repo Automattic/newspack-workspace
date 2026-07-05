@@ -12,20 +12,21 @@ import { Wizard, withWizard } from '../../../../../packages/components/src';
 import { SettingsSection } from './settings-section';
 import { ConfigureView } from './configure-view';
 import { LogsView } from './logs-view';
+import type { IntegrationFieldValue, IntegrationPendingChanges, IntegrationsSettings } from './constants';
 
 const API_PATH = '/newspack/v1/wizard/newspack-audience-integrations/settings';
 
-const AudienceIntegrations = ( props, ref ) => {
-	const [ integrations, setIntegrations ] = useState( {} );
-	const [ pendingChanges, setPendingChanges ] = useState( {} );
-	const [ saving, setSaving ] = useState( {} );
-	const [ toggling, setToggling ] = useState( {} );
-	const [ activating, setActivating ] = useState( {} );
+const AudienceIntegrations = ( props: object, ref: React.ForwardedRef< HTMLDivElement > ) => {
+	const [ integrations, setIntegrations ] = useState< IntegrationsSettings >( {} );
+	const [ pendingChanges, setPendingChanges ] = useState< IntegrationPendingChanges >( {} );
+	const [ saving, setSaving ] = useState< Record< string, boolean > >( {} );
+	const [ toggling, setToggling ] = useState< Record< string, boolean > >( {} );
+	const [ activating, setActivating ] = useState< Record< string, boolean > >( {} );
 	const [ loading, setLoading ] = useState( true );
 
 	const fetchSettings = useCallback( () => {
 		setLoading( true );
-		apiFetch( { path: API_PATH } )
+		apiFetch< IntegrationsSettings >( { path: API_PATH } )
 			.then( data => {
 				setIntegrations( data );
 				setPendingChanges( {} );
@@ -37,7 +38,7 @@ const AudienceIntegrations = ( props, ref ) => {
 		fetchSettings();
 	}, [ fetchSettings ] );
 
-	const handleFieldChange = useCallback( ( integrationId, fieldKey, value ) => {
+	const handleFieldChange = useCallback( ( integrationId: string, fieldKey: string, value: IntegrationFieldValue ) => {
 		setPendingChanges( prev => ( {
 			...prev,
 			[ integrationId ]: {
@@ -47,14 +48,14 @@ const AudienceIntegrations = ( props, ref ) => {
 		} ) );
 	}, [] );
 
-	const handleSave = useCallback( integrationId => {
+	const handleSave = useCallback( ( integrationId: string ) => {
 		setPendingChanges( currentPendingChanges => {
 			const changes = currentPendingChanges[ integrationId ];
 			if ( ! changes || Object.keys( changes ).length === 0 ) {
 				return currentPendingChanges;
 			}
 			setSaving( prev => ( { ...prev, [ integrationId ]: true } ) );
-			apiFetch( {
+			apiFetch< IntegrationsSettings >( {
 				path: `${ API_PATH }/${ integrationId }`,
 				method: 'POST',
 				data: { settings: changes },
@@ -74,9 +75,9 @@ const AudienceIntegrations = ( props, ref ) => {
 		} );
 	}, [] );
 
-	const handleToggleEnabled = useCallback( ( integrationId, enabled ) => {
+	const handleToggleEnabled = useCallback( ( integrationId: string, enabled: boolean ) => {
 		setToggling( prev => ( { ...prev, [ integrationId ]: true } ) );
-		apiFetch( {
+		apiFetch< IntegrationsSettings >( {
 			path: `${ API_PATH }/${ integrationId }/enabled`,
 			method: 'POST',
 			data: { enabled },
@@ -90,7 +91,7 @@ const AudienceIntegrations = ( props, ref ) => {
 	}, [] );
 
 	const handleActivatePlugin = useCallback(
-		pluginSlugs => {
+		( pluginSlugs: string | string[] ) => {
 			const slugs = ( Array.isArray( pluginSlugs ) ? pluginSlugs : [ pluginSlugs ] ).filter( Boolean );
 			if ( ! slugs.length ) {
 				return;

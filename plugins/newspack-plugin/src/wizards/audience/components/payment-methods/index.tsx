@@ -8,11 +8,24 @@ import { ExternalLink } from '@wordpress/components';
  * Internal dependencies
  */
 import { Stripe } from './stripe';
+import type { StripeGatewayData } from './stripe';
 import { Notice } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import WizardsSection from '../../../wizards-section';
 import { PaymentGateway } from './payment-gateway';
+import type { PaymentGatewayData } from './payment-gateway';
 import './style.scss';
+
+/**
+ * The payment wizard data consumed by this component.
+ */
+type PaymentWizardData = {
+	payment_gateways?: Record< string, PaymentGatewayData & StripeGatewayData >;
+	is_ssl?: boolean;
+	errors?: Array< { message?: string } >;
+	plugin_status?: boolean;
+	platform_data?: { platform?: string };
+};
 
 const PaymentGateways = () => {
 	const {
@@ -21,7 +34,7 @@ const PaymentGateways = () => {
 		errors = [],
 		plugin_status,
 		platform_data = {},
-	} = useWizardData( 'newspack-audience/payment' );
+	} = useWizardData< PaymentWizardData >( 'newspack-audience/payment' );
 	if ( false === plugin_status || 'wc' !== platform_data?.platform ) {
 		return null;
 	}
@@ -59,7 +72,7 @@ const PaymentGateways = () => {
 			{ Object.keys( paymentGateways ).map( gateway => {
 				// Stripe has unique connection status and badge level logic.
 				if ( 'stripe' === gateway ) {
-					return <Stripe key={ paymentGateways[ gateway ] } stripe={ paymentGateways[ gateway ] } />;
+					return <Stripe key={ gateway } stripe={ paymentGateways[ gateway ] } />;
 				}
 				return <PaymentGateway key={ gateway } gateway={ paymentGateways[ gateway ] } />;
 			} ) }

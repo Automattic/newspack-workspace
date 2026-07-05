@@ -4,15 +4,34 @@
 
 import { domReady } from '../../utils';
 
+/**
+ * A modal container element, with the RAS overlay ID stashed on it as an expando
+ * so the overlay can be removed when the modal closes.
+ */
+interface ModalContainerElement extends HTMLElement {
+	_overlayId?: string | null;
+}
+
+/**
+ * Payload of a `[data-fetch]` button inside a modal.
+ */
+type ModalFetchPayload = {
+	url?: string;
+	nonce?: string;
+	method?: string;
+	body?: Record< string, unknown >;
+	next?: string;
+};
+
 window.newspackRAS = window.newspackRAS || [];
 
 /**
  * Handle overlays for a modal based on its state.
  *
- * @param {HTMLElement} modal The modal element.
- * @param {string}      state The current state ('open' or 'closed').
+ * @param modal The modal element.
+ * @param state The current state ('open' or 'closed').
  */
-function handleModalOverlay( modal, state ) {
+function handleModalOverlay( modal: ModalContainerElement, state: string | undefined ) {
 	window.newspackRAS.push( ras => {
 		if ( state === 'open' ) {
 			// Remove any existing overlays first (in case of state toggle)
@@ -32,9 +51,9 @@ function handleModalOverlay( modal, state ) {
 /**
  * Set up mutation observer for a modal to watch for state changes.
  *
- * @param {HTMLElement} modal The modal element.
+ * @param modal The modal element.
  */
-function setupModalObserver( modal ) {
+function setupModalObserver( modal: ModalContainerElement ) {
 	// Handle initial state
 	const initialState = modal.dataset.state;
 	if ( initialState === 'open' ) {
@@ -61,10 +80,11 @@ function setupModalObserver( modal ) {
 }
 
 domReady( function () {
-	const modals = [ ...document.querySelectorAll( '.newspack-ui__modal-container' ) ];
+	const modals = [ ...document.querySelectorAll< ModalContainerElement >( '.newspack-ui__modal-container' ) ];
 
 	modals.forEach( modal => {
-		const content = modal.querySelector( '.newspack-ui__modal__content' );
+		// Assumed present in every modal container; fetch-button handlers below rely on it.
+		const content = modal.querySelector( '.newspack-ui__modal__content' ) as Element;
 		const closeButtons = [ ...modal.querySelectorAll( '.newspack-ui__modal__close' ) ];
 
 		// Set up mutation observer for automatic overlay management
@@ -94,14 +114,16 @@ domReady( function () {
 		const fetchButtons = [ ...modal.querySelectorAll( '[data-fetch]' ) ];
 		fetchButtons.forEach( fetchButton => {
 			fetchButton.addEventListener( 'click', e => {
-				const fetchData = JSON.parse( fetchButton.getAttribute( 'data-fetch' ) );
+				// `String()` keeps JSON.parse's behavior identical for a (practically
+				// impossible) missing attribute: JSON.parse coerces null to 'null' anyway.
+				const fetchData: ModalFetchPayload = JSON.parse( String( fetchButton.getAttribute( 'data-fetch' ) ) );
 				if ( fetchData.url && fetchData.nonce ) {
 					const errors = content.querySelector( '.newspack-ui__notice--error' );
 					if ( errors ) {
-						errors.parentElement.removeChild( errors );
+						errors.parentElement!.removeChild( errors );
 					}
 					e.preventDefault();
-					fetchButton.setAttribute( 'disabled', true );
+					fetchButton.setAttribute( 'disabled', 'true' );
 					fetchButton.classList.add( 'newspack-ui__button--loading' );
 					fetch( fetchData.url, {
 						method: fetchData.method,
@@ -111,7 +133,7 @@ domReady( function () {
 						},
 					} )
 						.then( async response => {
-							const json = await response.json();
+							const json: { error?: string; message?: string } = await response.json();
 							if ( ! response.ok || json.error ) {
 								throw new Error( json.message || json.error || 'An error occurred. Please try again.' );
 							}
@@ -126,9 +148,11 @@ domReady( function () {
 								}
 							}
 						} )
-						.catch( error => {
+						.catch( ( error: Error ) => {
 							const errorsDiv = document.createElement( 'div' );
-							errorsDiv.textContent = error || 'An error occurred.';
+							// `String()` reproduces the coercion the textContent setter applies
+							// to a non-string value, e.g. 'Error: <message>'.
+							errorsDiv.textContent = String( error || 'An error occurred.' );
 							errorsDiv.classList.add( 'newspack-ui__notice', 'newspack-ui__notice--error' );
 							content.insertBefore( errorsDiv, content.firstChild );
 						} )

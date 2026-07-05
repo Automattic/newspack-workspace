@@ -1,7 +1,6 @@
 /**
  * External dependencies
  */
-/* globals newspack_blocks */
 import classnames from 'classnames';
 import { account as icon } from '../../../packages/icons';
 
@@ -24,7 +23,21 @@ import {
 } from '@wordpress/block-editor';
 import { ToolbarButton, ToolbarGroup } from '@wordpress/components';
 
-function MyAccountButtonEdit( { attributes, setAttributes } ) {
+type MyAccountButtonAttributes = {
+	signedInLabel: string;
+	signedOutLabel: string;
+	className?: string;
+	/** Block-supports style object; only the border radius is inspected here. */
+	style?: { border?: { radius?: number | string } };
+};
+
+function MyAccountButtonEdit( {
+	attributes,
+	setAttributes,
+}: {
+	attributes: MyAccountButtonAttributes;
+	setAttributes: ( attributes: Partial< MyAccountButtonAttributes > ) => void;
+} ) {
 	const { signedInLabel, signedOutLabel, style, className: blockClassName } = attributes;
 	const borderProps = useBorderProps( attributes );
 	const colorProps = useColorProps( attributes );
@@ -62,7 +75,7 @@ function MyAccountButtonEdit( { attributes, setAttributes } ) {
 	const activeLabel = isSignedOutPreview ? signedOutLabel : signedInLabel;
 	const placeholderText = isSignedOutPreview ? __( 'Sign in', 'newspack-plugin' ) : __( 'My Account', 'newspack-plugin' );
 
-	function setButtonText( newText ) {
+	function setButtonText( newText: string ) {
 		setAttributes( isSignedOutPreview ? { signedOutLabel: stripHTML( newText ) } : { signedInLabel: stripHTML( newText ) } );
 	}
 
@@ -76,7 +89,7 @@ function MyAccountButtonEdit( { attributes, setAttributes } ) {
 				<BlockControls>
 					<ToolbarGroup>
 						<ToolbarButton
-							icon={ false }
+							icon={ null }
 							isPressed={ isSignedOutPreview }
 							label={ __( 'Signed out', 'newspack-plugin' ) }
 							onClick={ () => setPreviewState( 'signedout' ) }
@@ -85,7 +98,7 @@ function MyAccountButtonEdit( { attributes, setAttributes } ) {
 							{ __( 'Signed out', 'newspack-plugin' ) }
 						</ToolbarButton>
 						<ToolbarButton
-							icon={ false }
+							icon={ null }
 							isPressed={ ! isSignedOutPreview }
 							label={ __( 'Signed in', 'newspack-plugin' ) }
 							onClick={ () => setPreviewState( 'signedin' ) }

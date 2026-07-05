@@ -16,8 +16,8 @@ import CheckoutConfiguration from '../../components/checkout-configuration';
 import { CoverFeesSettings } from '../../components/cover-fees-settings';
 import SubscriptionSettings from '../../components/subscription-settings';
 
-export default withWizardScreen( function ( { wizardApiFetch } ) {
-	const data = useWizardData( 'newspack-audience/payment' );
+export default withWizardScreen< AudienceSetupSharedProps >( function () {
+	const data = useWizardData< AudienceDonationsWizardData >( 'newspack-audience/payment' );
 
 	return (
 		<WizardsTab
@@ -28,7 +28,7 @@ export default withWizardScreen( function ( { wizardApiFetch } ) {
 			{ data?.platform_data?.platform === 'wc' && <BillingFields /> }
 			{ data?.platform_data?.platform === 'nrh' && <NRHSettings /> }
 			<CheckoutConfiguration />
-			{ data?.platform_data?.platform === 'wc' && <CoverFeesSettings wizardApiFetch={ wizardApiFetch } /> }
+			{ data?.platform_data?.platform === 'wc' && <CoverFeesSettings /> }
 			{ data?.platform_data?.platform === 'wc' && <SubscriptionSettings /> }
 		</WizardsTab>
 	);

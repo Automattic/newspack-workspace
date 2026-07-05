@@ -6,13 +6,28 @@
 import { domReady } from '../../utils';
 
 class SectionTaxonomyQuickEdit {
+	metaDefinitions: Record< string, CollectionMetaDefinition >;
+	orderColumnName: string;
+	inlineEditTax: WPInlineEditTax;
+	originalEdit: WPInlineEditTax[ 'edit' ];
+	originalSave: WPInlineEditTax[ 'save' ];
+	isSortedByOrder: boolean | undefined;
+
 	/**
-	 * @param {Object} config                 Configuration object.
-	 * @param {Object} config.metaDefinitions Meta definitions for the taxonomy.
-	 * @param {string} config.orderColumnName Column name for the order field.
-	 * @param {Object} config.inlineEditTax   WordPress inline edit tax object.
+	 * @param config                 Configuration object.
+	 * @param config.metaDefinitions Meta definitions for the taxonomy.
+	 * @param config.orderColumnName Column name for the order field.
+	 * @param config.inlineEditTax   WordPress inline edit tax object.
 	 */
-	constructor( { metaDefinitions, orderColumnName, inlineEditTax } ) {
+	constructor( {
+		metaDefinitions,
+		orderColumnName,
+		inlineEditTax,
+	}: {
+		metaDefinitions: Record< string, CollectionMetaDefinition >;
+		orderColumnName: string;
+		inlineEditTax: WPInlineEditTax;
+	} ) {
 		this.metaDefinitions = metaDefinitions;
 		this.orderColumnName = orderColumnName;
 		this.inlineEditTax = inlineEditTax;
@@ -34,11 +49,12 @@ class SectionTaxonomyQuickEdit {
 	/**
 	 * Handle the edit action.
 	 *
-	 * @param {string|Object} id Term ID or object.
+	 * @param args Arguments forwarded to the original handler; the first is the term ID or a node within the term row.
 	 */
-	handleEdit( id ) {
-		this.originalEdit.apply( this.inlineEditTax, arguments );
+	handleEdit( ...args: Parameters< WPInlineEditTax[ 'edit' ] > ) {
+		this.originalEdit.apply( this.inlineEditTax, args );
 
+		const [ id ] = args;
 		const termId = parseInt( typeof id === 'object' ? this.inlineEditTax.getId( id ) : id, 10 );
 
 		if ( ! termId ) {
@@ -52,16 +68,18 @@ class SectionTaxonomyQuickEdit {
 		}
 
 		const orderColumn = row.querySelector( `.column-${ this.orderColumnName }` );
-		const orderInput = editForm.querySelector( `input[name="${ this.metaDefinitions.section_order.key }"]` );
-		if ( orderColumn && orderInput ) {
+		const orderInput = editForm.querySelector< HTMLInputElement >( `input[name="${ this.metaDefinitions.section_order.key }"]` );
+		if ( orderColumn && orderInput && orderColumn.textContent !== null ) {
 			orderInput.value = orderColumn.textContent.trim();
 		}
 	}
 
 	/**
 	 * Handle the save action.
+	 *
+	 * @param args Arguments forwarded to the original handler.
 	 */
-	handleSave() {
+	handleSave( ...args: unknown[] ) {
 		if ( this.isSortedByOrder ) {
 			jQuery( document ).one( 'ajaxSuccess', ( event, xhr, settings ) => {
 				if ( settings?.data?.includes( 'action=inline-save-tax' ) ) {
@@ -69,7 +87,7 @@ class SectionTaxonomyQuickEdit {
 				}
 			} );
 		}
-		return this.originalSave.apply( this.inlineEditTax, arguments );
+		return this.originalSave.apply( this.inlineEditTax, args );
 	}
 }
 

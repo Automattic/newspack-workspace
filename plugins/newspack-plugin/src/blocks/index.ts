@@ -4,6 +4,7 @@
  * WordPress dependencies
  */
 import { registerBlockType } from '@wordpress/blocks';
+import type { BlockConfiguration } from '@wordpress/blocks';
 
 /**
  * Internal dependencies
@@ -33,7 +34,18 @@ import * as responsiveContainerBreakpoint from './responsive-container/breakpoin
  */
 import './core-image';
 
-export const blocks = [
+/**
+ * The shape of a block module as exported by each block directory: the
+ * block.json metadata (when exported separately from the settings), the block
+ * name, and the settings passed to registerBlockType().
+ */
+interface BlockModule {
+	metadata?: Record< string, unknown >;
+	name: string;
+	settings: Record< string, unknown >;
+}
+
+export const blocks: BlockModule[] = [
 	readerRegistration,
 	myAccountButton,
 	correctionBox,
@@ -79,9 +91,9 @@ const siteEditorOnlyBlocks = [ 'newspack/responsive-container', 'newspack/respon
 /**
  * Function to register an individual block.
  *
- * @param {Object} block The block to be registered.
+ * @param block The block to be registered.
  */
-const registerBlock = block => {
+const registerBlock = ( block: BlockModule ) => {
 	if ( ! block ) {
 		return;
 	}
@@ -114,7 +126,7 @@ const registerBlock = block => {
 		return;
 	}
 
-	registerBlockType( blockMetadata, settings );
+	registerBlockType( blockMetadata as BlockConfiguration, settings as Partial< BlockConfiguration > );
 };
 
 for ( const block of blocks ) {

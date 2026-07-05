@@ -5,10 +5,10 @@
 /**
  * Format currency value using WordPress settings.
  *
- * @param {number} amount Amount to format.
- * @return {string} Formatted currency string.
+ * @param amount Amount to format.
+ * @return Formatted currency string.
  */
-export const formatCurrency = amount => {
+export const formatCurrency = ( amount: number ): string => {
 	// Get currency settings from WordPress/WooCommerce if available.
 	const currencySymbol = window.newspack_contribution_meter_data?.currencySymbol || '$';
 	const currencyPosition = window.newspack_contribution_meter_data?.currencyPosition || 'left';
@@ -37,7 +37,8 @@ export const formatCurrency = amount => {
 /**
  * Get default start date (today in YYYY-MM-DD format).
  *
- * @return {string} Today's date in YYYY-MM-DD format.
+ * @param d Date to format (defaults to today).
+ * @return Today's date in YYYY-MM-DD format.
  */
-export const getDefaultStartDate = ( d = new Date() ) =>
+export const getDefaultStartDate = ( d: Date = new Date() ): string =>
 	`${ d.getFullYear() }-${ String( d.getMonth() + 1 ).padStart( 2, '0' ) }-${ String( d.getDate() ).padStart( 2, '0' ) }`;

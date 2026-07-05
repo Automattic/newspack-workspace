@@ -7,18 +7,24 @@ export const EVENTS = {
 	overlay: 'overlay',
 	segment: 'segment',
 	session: 'session',
-};
+} as const;
 
-const eventList = Object.values( EVENTS );
+/**
+ * Local names of the reader-activation events. Detail payloads are declared
+ * in NewspackReaderActivationEventMap (newspack-scripts/types/newspack-globals.d.ts).
+ */
+export type ReaderActivationEvent = keyof NewspackReaderActivationEventMap;
+
+const eventList: string[] = Object.values( EVENTS );
 
 /**
  * Get the full event name given its local name.
  *
- * @param {string} localEventName Local event name.
+ * @param localEventName Local event name.
  *
- * @return {string} Full event name or empty string if event name is not valid.
+ * @return Full event name or empty string if event name is not valid.
  */
-function getEventName( localEventName ) {
+function getEventName( localEventName: string ): string {
 	if ( ! eventList.includes( localEventName ) ) {
 		return '';
 	}
@@ -28,41 +34,47 @@ function getEventName( localEventName ) {
 /**
  * Emit a reader activation event.
  *
- * @param {string} event Local event name.
- * @param {*}      data  Data to be emitted.
+ * @param event Local event name.
+ * @param data  Data to be emitted.
  */
-export function emit( event, data ) {
-	event = getEventName( event );
-	if ( ! event ) {
+export function emit< K extends ReaderActivationEvent >( event: K, data: NewspackReaderActivationEventMap[ K ] ): void {
+	const eventName = getEventName( event );
+	if ( ! eventName ) {
 		throw new Error( 'Invalid event' );
 	}
-	window.dispatchEvent( new CustomEvent( event, { detail: data } ) );
+	window.dispatchEvent( new CustomEvent( eventName, { detail: data } ) );
 }
 
 /**
  * Attach an event listener given a local event name.
  *
- * @param {string}   event    Local event name.
- * @param {Function} callback Callback.
+ * @param event    Local event name.
+ * @param callback Callback.
  */
-export function on( event, callback ) {
-	event = getEventName( event );
-	if ( ! event ) {
+export function on< K extends ReaderActivationEvent >(
+	event: K,
+	callback: ( event: CustomEvent< NewspackReaderActivationEventMap[ K ] > ) => void
+): void {
+	const eventName = getEventName( event );
+	if ( ! eventName ) {
 		throw new Error( 'Invalid event' );
 	}
-	window.addEventListener( event, callback );
+	window.addEventListener( eventName, callback as EventListener );
 }
 
 /**
  * Detach an event listener given a local event name.
  *
- * @param {string}   event    Local event name.
- * @param {Function} callback Callback.
+ * @param event    Local event name.
+ * @param callback Callback.
  */
-export function off( event, callback ) {
-	event = getEventName( event );
-	if ( ! event ) {
+export function off< K extends ReaderActivationEvent >(
+	event: K,
+	callback: ( event: CustomEvent< NewspackReaderActivationEventMap[ K ] > ) => void
+): void {
+	const eventName = getEventName( event );
+	if ( ! eventName ) {
 		throw new Error( 'Invalid event' );
 	}
-	window.removeEventListener( event, callback );
+	window.removeEventListener( eventName, callback as EventListener );
 }

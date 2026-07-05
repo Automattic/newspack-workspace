@@ -20,11 +20,11 @@ const FOCUSABLE_SELECTOR =
 /**
  * Returns all visible, focusable elements within a container.
  *
- * @param {HTMLElement} container
- * @return {HTMLElement[]} Visible, focusable elements within the container.
+ * @param container
+ * @return Visible, focusable elements within the container.
  */
-const getVisibleFocusable = container =>
-	Array.from( container.querySelectorAll( FOCUSABLE_SELECTOR ) ).filter( el => {
+const getVisibleFocusable = ( container: HTMLElement ): HTMLElement[] =>
+	Array.from( container.querySelectorAll< HTMLElement >( FOCUSABLE_SELECTOR ) ).filter( el => {
 		try {
 			const rect = el.getBoundingClientRect();
 			const style = window.getComputedStyle( el );
@@ -37,44 +37,45 @@ const getVisibleFocusable = container =>
 /**
  * Creates a self-contained overlay menu controller for one block instance.
  *
- * @param {HTMLElement} wrapper The block's root element (.wp-block-newspack-overlay-menu).
+ * @param wrapper The block's root element (.wp-block-newspack-overlay-menu).
  */
-const createFlyoutInstance = wrapper => {
+const createFlyoutInstance = ( wrapper: HTMLElement ) => {
 	const overlayId = wrapper.dataset.overlayId;
-	const trigger = wrapper.querySelector( '.overlay-menu__trigger' );
-	const panel = wrapper.querySelector( `#newspack-overlay-panel-${ overlayId }` );
+	const trigger = wrapper.querySelector< HTMLElement >( '.overlay-menu__trigger' );
+	const panel = wrapper.querySelector< HTMLElement >( `#newspack-overlay-panel-${ overlayId }` );
 
 	if ( ! trigger || ! panel ) {
 		return;
 	}
 
-	const closeBtn = wrapper.querySelector( '.overlay-menu__close' );
+	const closeBtn = wrapper.querySelector< HTMLElement >( '.overlay-menu__close' );
 
 	let isOpen = false;
-	let lastFocused = null;
-	let overlay = null;
-	let focusTrapCleanup = null;
-	let escCleanup = null;
+	let lastFocused: HTMLElement | null = null;
+	let overlay: HTMLDivElement | null = null;
+	let focusTrapCleanup: ( () => void ) | null = null;
+	let escCleanup: ( () => void ) | null = null;
 
 	// Move the panel to document.body once so position:fixed works without
 	// stacking context issues regardless of the wrapper's CSS transforms.
 	document.body.appendChild( panel );
 
 	// Overlay
-	const showOverlay = color => {
-		overlay = document.createElement( 'div' );
-		overlay.className = 'overlay-menu__scrim alignfull';
-		overlay.setAttribute( 'aria-hidden', 'true' );
-		overlay.style.opacity = '0';
+	const showOverlay = ( color: string ) => {
+		const scrim = document.createElement( 'div' );
+		overlay = scrim;
+		scrim.className = 'overlay-menu__scrim alignfull';
+		scrim.setAttribute( 'aria-hidden', 'true' );
+		scrim.style.opacity = '0';
 		if ( color ) {
-			overlay.style.background = color;
+			scrim.style.background = color;
 		}
-		overlay.addEventListener( 'click', closeMenu );
-		document.body.appendChild( overlay );
+		scrim.addEventListener( 'click', closeMenu );
+		document.body.appendChild( scrim );
 		// Force reflow so the CSS transition fires on the opacity change.
-		void overlay.offsetHeight;
+		void scrim.offsetHeight;
 		requestAnimationFrame( () => {
-			overlay.style.opacity = '1';
+			scrim.style.opacity = '1';
 		} );
 	};
 
@@ -105,7 +106,7 @@ const createFlyoutInstance = wrapper => {
 
 	// Trap focus within the menu panel when it's open.
 	const trapFocus = () => {
-		const handleKeyDown = e => {
+		const handleKeyDown = ( e: KeyboardEvent ) => {
 			if ( e.key !== 'Tab' ) {
 				return;
 			}
@@ -135,7 +136,7 @@ const createFlyoutInstance = wrapper => {
 			return;
 		}
 		isOpen = true;
-		lastFocused = trigger.ownerDocument.activeElement;
+		lastFocused = trigger.ownerDocument.activeElement as HTMLElement | null;
 
 		slideIn();
 
@@ -153,7 +154,7 @@ const createFlyoutInstance = wrapper => {
 		focusTrapCleanup = trapFocus();
 
 		// ESC key.
-		const onEsc = e => {
+		const onEsc = ( e: KeyboardEvent ) => {
 			if ( e.key === 'Escape' ) {
 				closeMenu();
 			}
@@ -215,5 +216,5 @@ const createFlyoutInstance = wrapper => {
 
 // Initialization.
 domReady( () => {
-	document.querySelectorAll( '.wp-block-newspack-overlay-menu[data-overlay-id]' ).forEach( createFlyoutInstance );
+	document.querySelectorAll< HTMLElement >( '.wp-block-newspack-overlay-menu[data-overlay-id]' ).forEach( createFlyoutInstance );
 } );

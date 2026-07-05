@@ -1,14 +1,15 @@
 /**
  * External dependencies
  */
+import '@testing-library/jest-dom';
 import { render, screen, fireEvent } from '@testing-library/react';
 
 /**
  * Internal dependencies
  */
-import DefaultTemplates from './default-templates';
+import DefaultTemplates, { TemplateOptions } from './default-templates';
 
-const options = {
+const options: TemplateOptions = {
 	post: [
 		{ label: 'Default', value: 'default' },
 		{ label: 'Large Image', value: 'single/large-image' },
@@ -19,10 +20,12 @@ const options = {
 	],
 };
 
+// The component only reads the two template fields, so the fixture carries
+// just those and is cast to the full theme-mods shape.
 const baseData = {
 	post_template_default: 'default',
 	page_template_default: 'default',
-};
+} as AdvancedSettings;
 
 describe( 'DefaultTemplates', () => {
 	it( 'renders the post and page template options', () => {

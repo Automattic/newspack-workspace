@@ -1,19 +1,31 @@
 import { RawHTML, useMemo } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
 import { __ } from '@wordpress/i18n';
+import type { ReactElement } from 'react';
 import usePreventNav from '../hooks/usePreventNav';
+import type { Collection, CollectionsAttributes } from '../types';
 
 /* eslint-disable jsx-a11y/anchor-is-valid */
 
 /**
+ * Props for the collection item component.
+ */
+type CollectionItemProps = {
+	/** Collection post object. */
+	collection: Collection;
+	/** Block attributes. */
+	attributes: CollectionsAttributes;
+};
+
+/**
  * Individual collection item component.
  *
- * @param {Object} props            Component props.
- * @param {Object} props.collection Collection post object.
- * @param {Object} props.attributes Block attributes.
- * @return {JSX.Element} Collection item component.
+ * @param props            Component props.
+ * @param props.collection Collection post object.
+ * @param props.attributes Block attributes.
+ * @return Collection item component.
  */
-const CollectionItem = ( { collection, attributes } ) => {
+const CollectionItem = ( { collection, attributes }: CollectionItemProps ) => {
 	const {
 		showFeaturedImage,
 		showCategory,
@@ -76,7 +88,7 @@ const CollectionItem = ( { collection, attributes } ) => {
 
 	// Build meta elements, memoized.
 	const metaElements = useMemo( () => {
-		const elements = [];
+		const elements: ReactElement[] = [];
 
 		// Add period first.
 		if ( showPeriod && period ) {
@@ -175,7 +187,7 @@ const CollectionItem = ( { collection, attributes } ) => {
 
 				{ showExcerpt && ( collection.excerpt?.rendered || collection.content?.rendered ) && (
 					<div className="wp-block-newspack-collections__excerpt">
-						<RawHTML>{ collection.excerpt?.rendered || collection.content?.rendered }</RawHTML>
+						<RawHTML>{ collection.excerpt?.rendered || collection.content?.rendered || '' }</RawHTML>
 					</div>
 				) }
 

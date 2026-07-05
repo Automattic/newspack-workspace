@@ -5,17 +5,33 @@ import { useSelect } from '@wordpress/data';
 import { store as coreStore } from '@wordpress/core-data';
 
 /**
+ * Details of the default WordPress author, as resolved from the core store.
+ * `undefined` when the user record has not been fetched yet.
+ */
+type DefaultAuthorDetails =
+	| {
+			id?: number;
+			name?: string;
+			slug?: string;
+	  }
+	| null
+	| undefined;
+
+/**
  * Hook to get default WordPress author.
  *
- * @param {number} postId   Post ID.
- * @param {string} postType Post type.
- * @return {Object} Author details and loading state.
+ * @param postId   Post ID.
+ * @param postType Post type.
+ * @return Author details and loading state.
  */
-export function useDefaultAuthor( postId, postType ) {
-	const { authorDetails, isLoading } = useSelect(
+export function useDefaultAuthor( postId: number | undefined, postType: string | undefined ) {
+	const { authorDetails, isLoading }: { authorDetails: DefaultAuthorDetails; isLoading: boolean } = useSelect(
 		select => {
 			const { getEditedEntityRecord, getUser, hasFinishedResolution } = select( coreStore );
-			const authorId = getEditedEntityRecord( 'postType', postType, postId )?.author;
+			// Outside a post context there is no record to read; the entity record's
+			// `author` field is asserted at the store boundary.
+			const postRecord = postId && postType ? ( getEditedEntityRecord( 'postType', postType, postId ) as { author?: number } | null ) : null;
+			const authorId = postRecord?.author;
 
 			if ( ! authorId ) {
 				return { authorDetails: null, isLoading: false };

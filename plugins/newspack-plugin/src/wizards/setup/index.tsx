@@ -12,11 +12,21 @@ import { __ } from '@wordpress/i18n';
 import { Welcome, Settings, Services, Design, Completed } from './views/';
 import { withWizard, withWizardScreen, Notice } from '../../../packages/components/src';
 import Router from '../../../packages/components/src/proxied-imports/router';
+import type { SetupScreenProps, SetupWizardInjectedProps } from './types';
 import './style.scss';
 
 const { HashRouter, Route } = Router;
 
-const ROUTES = [
+type SetupRoute = {
+	path: string;
+	label: string;
+	render: ( props: SetupScreenProps ) => JSX.Element;
+	isHiddenInNav?: boolean;
+	subHeaderText?: string;
+	buttonText?: string;
+};
+
+const ROUTES: SetupRoute[] = [
 	{
 		path: '/',
 		label: __( 'Welcome', 'newspack' ),
@@ -49,7 +59,7 @@ const ROUTES = [
 	},
 ];
 
-const SetupWizard = ( { wizardApiFetch, setError }, ref ) => {
+const SetupWizard = ( { wizardApiFetch, setError }: SetupWizardInjectedProps, ref: React.ForwardedRef< HTMLDivElement > ) => {
 	return (
 		<div ref={ ref }>
 			{ newspack_aux_data.has_completed_setup && (
@@ -91,4 +101,8 @@ const SetupWizard = ( { wizardApiFetch, setError }, ref ) => {
 	);
 };
 
-render( createElement( withWizard( forwardRef( SetupWizard ), [] ), { simpleFooter: true } ), document.getElementById( 'newspack-setup-wizard' ) );
+render(
+	// The cast reflects the `withWizard` HOC contract: the injected props are supplied by the HOC at render time, not by the caller.
+	createElement( withWizard( forwardRef( SetupWizard ) as React.FC< Partial< SetupWizardInjectedProps > >, [] ), { simpleFooter: true } ),
+	document.getElementById( 'newspack-setup-wizard' )
+);

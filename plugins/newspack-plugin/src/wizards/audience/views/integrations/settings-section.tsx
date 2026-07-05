@@ -11,13 +11,24 @@ import { Card, CardFeature, Grid } from '../../../../../packages/components/src'
 import colors from '../../../../../packages/colors/colors.module.scss';
 import WizardsTab from '../../../wizards-tab';
 import WizardSection from '../../../wizards-section';
+import type { IntegrationConfig, IntegrationsSettings } from './constants';
+
+/**
+ * Icon configuration for a CardFeature, per integration ID.
+ */
+type IntegrationIcon = {
+	node: React.ReactNode;
+	fill?: string;
+	backgroundColor?: string;
+	radius?: 'small' | 'full';
+};
 
 /**
  * Icon configuration per integration ID.
  * Only ESP exists today. When new integrations are added (DSGNEWS-157),
  * this moves to the PHP API response.
  */
-const INTEGRATION_ICONS = {
+const INTEGRATION_ICONS: Record< string, IntegrationIcon | undefined > = {
 	esp: {
 		node: <Icon icon={ envelope } />,
 		fill: colors[ 'primary-600' ],
@@ -26,15 +37,24 @@ const INTEGRATION_ICONS = {
 	},
 };
 
-const DEFAULT_ICON = {
+const DEFAULT_ICON: IntegrationIcon = {
 	node: <Icon icon={ envelope } />,
 	fill: colors[ 'neutral-600' ],
 	backgroundColor: colors[ 'neutral-100' ],
 };
 
-const getMissingPlugins = integration => ( integration.required_plugins || [] ).filter( plugin => ! plugin.is_active );
+const getMissingPlugins = ( integration: IntegrationConfig ) => ( integration.required_plugins || [] ).filter( plugin => ! plugin.is_active );
 
-export const SettingsSection = ( { integrations, loading, activating = {}, onToggleEnabled, onActivatePlugin, history } ) => {
+type SettingsSectionProps = {
+	integrations: IntegrationsSettings;
+	loading: boolean;
+	activating?: Record< string, boolean >;
+	onToggleEnabled: ( integrationId: string, enabled: boolean ) => void;
+	onActivatePlugin: ( pluginSlugs: string[] ) => void;
+	history?: { push: ( path: string ) => void };
+};
+
+export const SettingsSection = ( { integrations, loading, activating = {}, onToggleEnabled, onActivatePlugin, history }: SettingsSectionProps ) => {
 	const integrationIds = Object.keys( integrations );
 
 	return (
@@ -78,7 +98,7 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 							const goToSetup = () => {
 								window.location.href = setup_url;
 							};
-							let enableLabel = isSetUp ? __( 'Enable', 'newspack-plugin' ) : __( 'Connect', 'newspack-plugin' );
+							let enableLabel: string = isSetUp ? __( 'Enable', 'newspack-plugin' ) : __( 'Connect', 'newspack-plugin' );
 							let onEnable = needsSetup ? goToSetup : () => onToggleEnabled( id, true );
 							if ( canActivate ) {
 								enableLabel = isActivating ? __( 'Activating…', 'newspack-plugin' ) : __( 'Activate', 'newspack-plugin' );

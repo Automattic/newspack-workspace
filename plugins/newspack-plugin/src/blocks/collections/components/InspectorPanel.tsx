@@ -13,14 +13,26 @@ import {
 import { useCallback } from '@wordpress/element';
 
 import { AutocompleteTokenField } from '../../../../packages/components/src';
+import type { TokenValue } from '../../../../packages/components/src/autocomplete-tokenfield';
 import {
 	fetchCategorySuggestions as fetchCategorySuggestionsRaw,
 	fetchSavedCategories as fetchSavedCategoriesRaw,
 	fetchCollectionSuggestions as fetchCollectionSuggestionsRaw,
 	fetchSavedCollections as fetchSavedCollectionsRaw,
 } from '../utils/api';
+import type { CollectionsAttributes } from '../types';
 
-const InspectorPanel = ( { attributes, setAttributes } ) => {
+/**
+ * Props for the Collections block inspector panel.
+ */
+type InspectorPanelProps = {
+	/** Block attributes. */
+	attributes: CollectionsAttributes;
+	/** Function to update attributes. */
+	setAttributes: ( attributes: Partial< CollectionsAttributes > ) => void;
+};
+
+const InspectorPanel = ( { attributes, setAttributes }: InspectorPanelProps ) => {
 	const {
 		queryType,
 		numberOfItems,
@@ -47,16 +59,16 @@ const InspectorPanel = ( { attributes, setAttributes } ) => {
 	} = attributes;
 
 	// Category suggestions.
-	const fetchCategorySuggestions = useCallback( search => fetchCategorySuggestionsRaw( search ), [] );
+	const fetchCategorySuggestions = useCallback( ( search: string ) => fetchCategorySuggestionsRaw( search ), [] );
 
 	// Saved categories.
-	const fetchSavedCategories = useCallback( categoryIDs => fetchSavedCategoriesRaw( categoryIDs ), [] );
+	const fetchSavedCategories = useCallback( ( categoryIDs: TokenValue[] ) => fetchSavedCategoriesRaw( categoryIDs ), [] );
 
 	// Collection suggestions.
-	const fetchCollectionSuggestions = useCallback( search => fetchCollectionSuggestionsRaw( search ), [] );
+	const fetchCollectionSuggestions = useCallback( ( search: string ) => fetchCollectionSuggestionsRaw( search ), [] );
 
 	// Saved collections.
-	const fetchSavedCollections = useCallback( collectionIDs => fetchSavedCollectionsRaw( collectionIDs ), [] );
+	const fetchSavedCollections = useCallback( ( collectionIDs: TokenValue[] ) => fetchSavedCollectionsRaw( collectionIDs ), [] );
 
 	return (
 		<InspectorControls>
@@ -64,7 +76,7 @@ const InspectorPanel = ( { attributes, setAttributes } ) => {
 				<ToggleGroupControl
 					label={ __( 'Mode', 'newspack-plugin' ) }
 					value={ queryType }
-					onChange={ value => setAttributes( { queryType: value } ) }
+					onChange={ value => setAttributes( { queryType: value as string } ) }
 					isBlock
 					help={
 						queryType === 'recent'
@@ -80,7 +92,8 @@ const InspectorPanel = ( { attributes, setAttributes } ) => {
 				{ queryType === 'specific' && (
 					<AutocompleteTokenField
 						tokens={ selectedCollections || [] }
-						onChange={ value => setAttributes( { selectedCollections: value } ) }
+						// Without `returnFullObjects`, the token field reports raw id values.
+						onChange={ value => setAttributes( { selectedCollections: value as Array< string | number > } ) }
 						fetchSuggestions={ fetchCollectionSuggestions }
 						fetchSavedInfo={ fetchSavedCollections }
 						label={ __( 'Collections', 'newspack-plugin' ) }
@@ -112,7 +125,8 @@ const InspectorPanel = ( { attributes, setAttributes } ) => {
 
 						<AutocompleteTokenField
 							tokens={ includeCategories }
-							onChange={ value => setAttributes( { includeCategories: value } ) }
+							// Without `returnFullObjects`, the token field reports raw id values.
+							onChange={ value => setAttributes( { includeCategories: value as Array< string | number > } ) }
 							fetchSuggestions={ fetchCategorySuggestions }
 							fetchSavedInfo={ fetchSavedCategories }
 							label={ __( 'Included categories', 'newspack-plugin' ) }
@@ -122,7 +136,8 @@ const InspectorPanel = ( { attributes, setAttributes } ) => {
 
 						<AutocompleteTokenField
 							tokens={ excludeCategories }
-							onChange={ value => setAttributes( { excludeCategories: value } ) }
+							// Without `returnFullObjects`, the token field reports raw id values.
+							onChange={ value => setAttributes( { excludeCategories: value as Array< string | number > } ) }
 							fetchSuggestions={ fetchCategorySuggestions }
 							fetchSavedInfo={ fetchSavedCategories }
 							label={ __( 'Excluded categories', 'newspack-plugin' ) }
@@ -157,7 +172,7 @@ const InspectorPanel = ( { attributes, setAttributes } ) => {
 						<ToggleGroupControl
 							label={ __( 'Alignment', 'newspack-plugin' ) }
 							value={ imageAlignment }
-							onChange={ value => setAttributes( { imageAlignment: value } ) }
+							onChange={ value => setAttributes( { imageAlignment: value as string } ) }
 							isBlock
 							__next40pxDefaultSize
 						>
@@ -181,7 +196,7 @@ const InspectorPanel = ( { attributes, setAttributes } ) => {
 						<ToggleGroupControl
 							label={ __( 'Size', 'newspack-plugin' ) }
 							value={ imageSize }
-							onChange={ value => setAttributes( { imageSize: value } ) }
+							onChange={ value => setAttributes( { imageSize: value as string } ) }
 							isBlock
 							__next40pxDefaultSize
 						>

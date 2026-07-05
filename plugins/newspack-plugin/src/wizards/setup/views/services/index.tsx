@@ -22,9 +22,37 @@ import ReaderRevenue from './ReaderRevenue';
 import { Settings as NewslettersSettings } from '../../../newsletters/views/settings';
 import GAMOnboarding from '../../../advertising/components/onboarding';
 import { AUDIENCE_DONATIONS_WIZARD_SLUG } from '../../../audience/constants';
+import type { SetupScreenComponentProps, SetupScreenProps } from '../../types';
 import './style.scss';
 
-const SERVICES_LIST = {
+/**
+ * A service's configuration: the enabled flag plus service-specific values
+ * (newsletters config values, GAM network code, donation settings, …).
+ */
+type ServiceConfig = {
+	is_service_enabled?: boolean;
+	[ key: string ]: unknown;
+};
+
+/**
+ * Props the services screen passes to a service's configuration component.
+ */
+type ServiceComponentProps = {
+	className?: string;
+	configuration?: ServiceConfig;
+	onUpdate?: ( configuration: Record< string, unknown > ) => void;
+};
+
+type Service = {
+	label: string;
+	description: string;
+	Component?: React.ComponentType< ServiceComponentProps >;
+	configuration: ServiceConfig;
+	href?: string;
+	actionText?: string;
+};
+
+const SERVICES_LIST: Record< string, Service > = {
 	'reader-revenue': {
 		label: __( 'Reader Revenue', 'newspack' ),
 		description: __( 'Encourage site visitors to contribute to your publishing through donations', 'newspack' ),
@@ -40,19 +68,21 @@ const SERVICES_LIST = {
 	'google-ad-manager': {
 		label: __( 'Google Ad Manager', 'newspack' ),
 		description: __( 'An advanced ad inventory creation and management platform, allowing you to be specific about ad placements', 'newspack' ),
-		Component: GAMOnboarding,
+		// The onboarding component is an untyped JS module; its implicitly-`any`
+		// props make it incompatible with the shared component type.
+		Component: GAMOnboarding as React.ComponentType< ServiceComponentProps >,
 		configuration: { is_service_enabled: false },
 	},
 };
 
-const Services = ( { renderPrimaryButton } ) => {
-	const [ services, updateServices ] = hooks.useObjectState( SERVICES_LIST );
+const Services = ( { renderPrimaryButton }: SetupScreenComponentProps ) => {
+	const [ services, updateServices ] = hooks.useObjectState< Record< string, Service > >( SERVICES_LIST );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const slugs = keys( services );
-	const wizardData = useWizardData( AUDIENCE_DONATIONS_WIZARD_SLUG );
+	const wizardData = useWizardData< Partial< AudienceDonationsWizardData > >( AUDIENCE_DONATIONS_WIZARD_SLUG );
 
 	useEffect( () => {
-		apiFetch( {
+		apiFetch< Record< string, { configuration: ServiceConfig } > >( {
 			path: '/newspack/v1/wizard/newspack-setup-wizard/services',
 		} ).then( response => {
 			updateServices( response );
@@ -61,7 +91,7 @@ const Services = ( { renderPrimaryButton } ) => {
 	}, [] );
 
 	const saveSettings = async () => {
-		const data = mapValues( services, property( 'configuration' ) );
+		const data = mapValues( services, property< Service, ServiceConfig >( 'configuration' ) );
 		// Add Reader Revenue Wizard data straight from the Wizard.
 		data[ 'reader-revenue' ] = {
 			...data[ 'reader-revenue' ],
@@ -94,14 +124,17 @@ const Services = ( { renderPrimaryButton } ) => {
 							} )
 						}
 						disabled={ isLoading }
-						href={ service.configuration.is_service_enabled && service.href }
+						href={ service.configuration.is_service_enabled ? service.href : undefined }
 						actionText={ service.configuration.is_service_enabled && service.actionText }
 					>
 						{ service.configuration.is_service_enabled && ServiceComponent ? (
 							<ServiceComponent
 								className="newspack-action-card__region-children__inner"
 								configuration={ service.configuration }
-								onUpdate={ configuration => updateServices( { [ serviceSlug ]: { configuration } } ) }
+								onUpdate={ configuration =>
+									// The payload's shape is service-specific (opaque to this screen).
+									updateServices( { [ serviceSlug ]: { configuration: configuration as ServiceConfig } } )
+								}
 							/>
 						) : null }
 					</ActionCard>
@@ -112,4 +145,4 @@ const Services = ( { renderPrimaryButton } ) => {
 	);
 };
 
-export default withWizardScreen( Services, { hidePrimaryButton: true } );
+export default withWizardScreen< SetupScreenProps >( Services, { hidePrimaryButton: true } );

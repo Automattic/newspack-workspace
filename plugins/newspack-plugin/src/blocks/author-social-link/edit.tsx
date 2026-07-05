@@ -14,16 +14,35 @@ import { getSocialIconSvg } from './social-icons';
 import { getServiceUrl, getServiceData, getServiceLabel } from './utils';
 
 /**
+ * Attributes of the Author Social Link block.
+ */
+type AuthorSocialLinkAttributes = {
+	service: string;
+};
+
+/**
+ * Props for the Author Social Link edit component.
+ */
+type AuthorSocialLinkEditProps = {
+	/** Block attributes. */
+	attributes: AuthorSocialLinkAttributes;
+	/** Block context. */
+	context: {
+		'newspack-blocks/iconSize'?: number;
+	};
+};
+
+/**
  * Edit component for a single Author Social Link block.
  *
- * @param {Object} props            Block props.
- * @param {Object} props.attributes Block attributes.
- * @param {Object} props.context    Block context.
- * @return {JSX.Element|null} The edit component.
+ * @param props            Block props.
+ * @param props.attributes Block attributes.
+ * @param props.context    Block context.
+ * @return The edit component.
  */
-export default function AuthorSocialLinkEdit( { attributes, context } ) {
+export default function AuthorSocialLinkEdit( { attributes, context }: AuthorSocialLinkEditProps ) {
 	const AuthorContext = getSharedAuthorContext();
-	const author = useContext( AuthorContext );
+	const author: NewspackAuthorProfileData | null = useContext( AuthorContext );
 	const { service } = attributes;
 	const iconSize = context?.[ 'newspack-blocks/iconSize' ] ?? 24;
 

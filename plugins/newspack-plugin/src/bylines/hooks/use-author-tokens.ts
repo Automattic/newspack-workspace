@@ -15,18 +15,27 @@ const BASE_QUERY = {
 };
 
 /**
+ * A byline token: a WP user rendered as `[Author id=N]Name[/Author]`.
+ */
+export type AuthorToken = {
+	id: number;
+	name?: string;
+};
+
+/**
  * WP user coauthors as `{ id, name }` byline tokens. Falls back to the `post_author` only when
  * no coauthors are present and CAP is inactive (or has no term IDs assigned). Guests are excluded
  * since the `[Author id=N]` shortcode requires a WP user ID.
  *
- * @param {number} postId The post ID.
- * @return {Object[]} Array of `{ id, name }` tokens.
+ * @param postId The post ID.
+ * @return Array of `{ id, name }` tokens.
  */
-export function useAuthorTokens( postId ) {
+export function useAuthorTokens( postId: number ): AuthorToken[] {
 	const { authors: coAuthors, isCapAvailable, isLoading, hasCoauthorTermIds } = useCoAuthors( postId );
 
-	const postAuthor = useSelect( select => {
-		const editorStore = select( 'core/editor' );
+	const postAuthor = useSelect( ( select ): AuthorToken | null | undefined => {
+		// The editor selectors are probed defensively; assert the opaque shape at the store boundary.
+		const editorStore = select( 'core/editor' ) as { getEditedPostAttribute?: ( attribute: string ) => number | undefined } | undefined;
 		const authorId = editorStore?.getEditedPostAttribute?.( 'author' );
 		if ( ! authorId ) {
 			return null;

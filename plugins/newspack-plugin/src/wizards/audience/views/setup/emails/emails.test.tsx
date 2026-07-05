@@ -4,43 +4,65 @@
  * External dependencies
  */
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import type { ReactNode } from 'react';
 
 jest.mock( './emails.scss', () => ( {} ) );
+
+// Shapes captured from the mocked DataViews so tests can drive its
+// actions / view / data outside the component.
+type CapturedEmailAction = {
+	id: string;
+	callback: ( items: unknown[] ) => void;
+	isEligible: ( item: unknown ) => boolean;
+};
+type CapturedDataViewsField = {
+	id: string;
+	render?: ( args: { item: unknown } ) => ReactNode;
+	getValue?: ( args: { item: unknown } ) => ReactNode;
+};
+type CapturedDataViewsView = { search?: string; page?: number; [ key: string ]: unknown };
+type MockDataViewsProps = {
+	data: Array< Record< string, unknown > >;
+	fields: CapturedDataViewsField[];
+	actions?: CapturedEmailAction[];
+	view: CapturedDataViewsView;
+	onChangeView: ( view: CapturedDataViewsView ) => void;
+};
 
 // Use mock-prefixed names so Jest's hoisted jest.mock can close over them.
 const mockWizardApiFetch = jest.fn();
 const mockResetError = jest.fn();
-let mockErrorMessage = null;
+let mockErrorMessage: string | null = null;
 
 jest.mock( '../../../../hooks/use-wizard-api-fetch', () => ( {
 	useWizardApiFetch: () => ( {
-		wizardApiFetch: ( ...args ) => mockWizardApiFetch( ...args ),
+		wizardApiFetch: ( ...args: unknown[] ) => mockWizardApiFetch( ...args ),
 		isFetching: false,
 		errorMessage: mockErrorMessage,
-		resetError: ( ...args ) => mockResetError( ...args ),
+		resetError: ( ...args: unknown[] ) => mockResetError( ...args ),
 	} ),
 } ) );
 
 jest.mock( '@wordpress/icons', () => ( {
-	Icon: ( { icon } ) => <span data-testid="icon">{ icon }</span>,
+	Icon: ( { icon }: { icon: ReactNode } ) => <span data-testid="icon">{ icon }</span>,
 	envelope: 'envelope',
 } ) );
 
 jest.mock( '@wordpress/dataviews', () => ( {
-	filterSortAndPaginate: data => ( {
+	filterSortAndPaginate: ( data: unknown[] ) => ( {
 		data,
 		paginationInfo: { totalItems: data.length, totalPages: 1 },
 	} ),
 } ) );
 
 // Use mock-prefixed names so Jest's hoisted jest.mock can close over them.
-let mockCapturedActions = [];
-let mockCapturedView = null;
-let mockCapturedOnChangeView = null;
-let mockCapturedData = [];
+let mockCapturedActions: CapturedEmailAction[] = [];
+let mockCapturedView: CapturedDataViewsView | null = null;
+let mockCapturedOnChangeView: ( ( view: CapturedDataViewsView ) => void ) | null = null;
+let mockCapturedData: Array< Record< string, unknown > > = [];
 
 jest.mock( '../../../../../../packages/components/src', () => {
-	function renderField( field, item ) {
+	function renderField( field: CapturedDataViewsField, item: unknown ) {
 		if ( field.render ) {
 			return field.render( { item } );
 		}
@@ -50,8 +72,8 @@ jest.mock( '../../../../../../packages/components/src', () => {
 		return null;
 	}
 	return {
-		Badge: ( { text } ) => <span>{ text }</span>,
-		DataViews: ( { data, fields, actions, view, onChangeView } ) => {
+		Badge: ( { text }: { text: ReactNode } ) => <span>{ text }</span>,
+		DataViews: ( { data, fields, actions, view, onChangeView }: MockDataViewsProps ) => {
 			mockCapturedActions = actions || [];
 			mockCapturedView = view;
 			mockCapturedOnChangeView = onChangeView;
@@ -70,8 +92,8 @@ jest.mock( '../../../../../../packages/components/src', () => {
 				</table>
 			);
 		},
-		Card: ( { children } ) => <div data-testid="card">{ children }</div>,
-		Notice: ( { noticeText } ) => <div data-testid="notice">{ noticeText }</div>,
+		Card: ( { children }: { children: ReactNode } ) => <div data-testid="card">{ children }</div>,
+		Notice: ( { noticeText }: { noticeText: ReactNode } ) => <div data-testid="notice">{ noticeText }</div>,
 		utils: {
 			confirmAction: jest.fn( () => true ),
 		},
@@ -81,7 +103,7 @@ jest.mock( '../../../../../../packages/components/src', () => {
 jest.mock(
 	'../../../../wizards-plugin-card',
 	() =>
-		function MockPluginCard( props ) {
+		function MockPluginCard( props: { slug: string } ) {
 			return <div data-testid="plugin-card">{ props.slug }</div>;
 		}
 );
@@ -92,7 +114,7 @@ jest.mock(
 // id reached the component for each row.
 jest.mock( './email-preview', () => ( {
 	__esModule: true,
-	default: function MockEmailPreview( { postId } ) {
+	default: function MockEmailPreview( { postId }: { postId: number | string } ) {
 		return <div data-testid="email-preview-stub" data-post-id={ String( postId ) } />;
 	},
 } ) );
@@ -220,7 +242,10 @@ describe( 'Emails', () => {
 		mockCapturedView = null;
 		mockCapturedOnChangeView = null;
 		mockCapturedData = [];
-		window.newspackAudience = {
+		// Only the `emails` slice is populated for these tests; cast the
+		// window global to a shape exposing just that key so the partial
+		// mount payload type-checks without inventing the other fields.
+		( window as { newspackAudience: Pick< Window[ 'newspackAudience' ], 'emails' > } ).newspackAudience = {
 			emails: {
 				dependencies: {
 					newspackNewsletters: true,
@@ -294,7 +319,7 @@ describe( 'Emails', () => {
 			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
 		} );
 
-		const deactivate = mockCapturedActions.find( a => a.id === 'deactivate' );
+		const deactivate = mockCapturedActions.find( a => a.id === 'deactivate' )!;
 		deactivate.callback( [ mockEmails[ 0 ] ] );
 
 		// updateStatus applies the new status optimistically in local
@@ -336,7 +361,7 @@ describe( 'Emails', () => {
 			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
 		} );
 
-		const activate = mockCapturedActions.find( a => a.id === 'activate' );
+		const activate = mockCapturedActions.find( a => a.id === 'activate' )!;
 		// mockEmails[4] (Welcome email) is newspack + reader-revenue + draft —
 		// actually eligible for activate (category !== 'reader-activation').
 		// Verifies the callback wiring on an item that would pass `isEligible`.
@@ -368,8 +393,8 @@ describe( 'Emails', () => {
 			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
 		} );
 
-		const deactivate = mockCapturedActions.find( a => a.id === 'deactivate' );
-		const activate = mockCapturedActions.find( a => a.id === 'activate' );
+		const deactivate = mockCapturedActions.find( a => a.id === 'deactivate' )!;
+		const activate = mockCapturedActions.find( a => a.id === 'activate' )!;
 
 		// Reader-activation emails cannot be toggled.
 		expect( deactivate.isEligible( mockEmails[ 2 ] ) ).toBe( false );
@@ -388,7 +413,7 @@ describe( 'Emails', () => {
 			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
 		} );
 
-		const reset = mockCapturedActions.find( a => a.id === 'reset' );
+		const reset = mockCapturedActions.find( a => a.id === 'reset' )!;
 		reset.callback( [ mockEmails[ 0 ] ] );
 
 		expect( utils.confirmAction ).toHaveBeenCalled();
@@ -412,7 +437,7 @@ describe( 'Emails', () => {
 			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
 		} );
 
-		const reset = mockCapturedActions.find( a => a.id === 'reset' );
+		const reset = mockCapturedActions.find( a => a.id === 'reset' )!;
 		// Reset's `isEligible` is gated on `item.source === 'newspack'`
 		// only — the legacy registry_slug check was dropped in the
 		// refactor (the registry_slug field is derived from the unified
@@ -433,7 +458,7 @@ describe( 'Emails', () => {
 			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
 		} );
 
-		const reset = mockCapturedActions.find( a => a.id === 'reset' );
+		const reset = mockCapturedActions.find( a => a.id === 'reset' )!;
 		// WC-source row — source guard rejects, even with registry_slug present.
 		expect( reset.isEligible( mockEmails[ 5 ] ) ).toBe( false );
 		// And again with the auth-account WC row.
@@ -448,7 +473,7 @@ describe( 'Emails', () => {
 			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
 		} );
 
-		const deactivate = mockCapturedActions.find( a => a.id === 'deactivate' );
+		const deactivate = mockCapturedActions.find( a => a.id === 'deactivate' )!;
 		// WC row is publish + category !== reader-activation → eligible.
 		expect( deactivate.isEligible( mockEmails[ 5 ] ) ).toBe( true );
 		deactivate.callback( [ mockEmails[ 5 ] ] );
@@ -482,7 +507,7 @@ describe( 'Emails', () => {
 			expect( screen.getByTestId( 'dataviews' ) ).toBeInTheDocument();
 		} );
 
-		const activate = mockCapturedActions.find( a => a.id === 'activate' );
+		const activate = mockCapturedActions.find( a => a.id === 'activate' )!;
 		// WC draft row → eligible for activate.
 		expect( activate.isEligible( mockEmails[ 6 ] ) ).toBe( true );
 		activate.callback( [ mockEmails[ 6 ] ] );
@@ -509,7 +534,7 @@ describe( 'Emails', () => {
 
 		// Deactivate the enabled WC row (New order). The toggle mock resolves
 		// without invoking callbacks, so we drive onSuccess by hand below.
-		const deactivate = mockCapturedActions.find( a => a.id === 'deactivate' );
+		const deactivate = mockCapturedActions.find( a => a.id === 'deactivate' )!;
 		act( () => {
 			deactivate.callback( [ mockEmails[ 5 ] ] );
 		} );
@@ -542,17 +567,17 @@ describe( 'Emails', () => {
 		} );
 
 		// New order starts enabled (publish).
-		const before = mockCapturedData.find( item => item.post_id === 'wc:new_order' );
+		const before = mockCapturedData.find( item => item.post_id === 'wc:new_order' )!;
 		expect( before.status ).toBe( 'publish' );
 
-		const deactivate = mockCapturedActions.find( a => a.id === 'deactivate' );
+		const deactivate = mockCapturedActions.find( a => a.id === 'deactivate' )!;
 		act( () => {
 			deactivate.callback( [ mockEmails[ 5 ] ] );
 		} );
 
 		// Optimistic update flipped it to draft before the request settled.
 		await waitFor( () => {
-			expect( mockCapturedData.find( item => item.post_id === 'wc:new_order' ).status ).toBe( 'draft' );
+			expect( mockCapturedData.find( item => item.post_id === 'wc:new_order' )!.status ).toBe( 'draft' );
 		} );
 
 		// Drive the failure path — onError restores the pre-toggle snapshot.
@@ -563,7 +588,7 @@ describe( 'Emails', () => {
 		} );
 
 		await waitFor( () => {
-			expect( mockCapturedData.find( item => item.post_id === 'wc:new_order' ).status ).toBe( 'publish' );
+			expect( mockCapturedData.find( item => item.post_id === 'wc:new_order' )!.status ).toBe( 'publish' );
 		} );
 	} );
 
@@ -605,23 +630,23 @@ describe( 'Emails', () => {
 		// Simulate DataViews search/page change. Wrapped in act() because
 		// onChangeView triggers a React state update outside an event handler.
 		act( () => {
-			mockCapturedOnChangeView( {
+			mockCapturedOnChangeView!( {
 				...mockCapturedView,
 				search: 'receipt',
 				page: 3,
 			} );
 		} );
 		await waitFor( () => {
-			expect( mockCapturedView.search ).toBe( 'receipt' );
-			expect( mockCapturedView.page ).toBe( 3 );
+			expect( mockCapturedView!.search ).toBe( 'receipt' );
+			expect( mockCapturedView!.page ).toBe( 3 );
 		} );
 
 		// Click the other chip — selectChip() resets search and page.
 		fireEvent.click( screen.getByRole( 'button', { name: 'Authentication & account' } ) );
 
 		await waitFor( () => {
-			expect( mockCapturedView.search ).toBe( '' );
-			expect( mockCapturedView.page ).toBe( 1 );
+			expect( mockCapturedView!.search ).toBe( '' );
+			expect( mockCapturedView!.page ).toBe( 1 );
 		} );
 	} );
 
@@ -639,7 +664,7 @@ describe( 'Emails', () => {
 
 		// Activate search via the DataViews onChangeView prop.
 		act( () => {
-			mockCapturedOnChangeView( {
+			mockCapturedOnChangeView!( {
 				...mockCapturedView,
 				search: 'anything',
 				page: 1,
@@ -675,7 +700,7 @@ describe( 'Emails', () => {
 		// Search active — both chips deactivate visually (activeChip is
 		// still set in state, but the visual matches what's filtering).
 		act( () => {
-			mockCapturedOnChangeView( {
+			mockCapturedOnChangeView!( {
 				...mockCapturedView,
 				search: 'foo',
 				page: 1,
@@ -698,7 +723,7 @@ describe( 'Emails', () => {
 
 		// Set search.
 		act( () => {
-			mockCapturedOnChangeView( {
+			mockCapturedOnChangeView!( {
 				...mockCapturedView,
 				search: 'foo',
 				page: 1,
@@ -710,7 +735,7 @@ describe( 'Emails', () => {
 
 		// Clear search — activeChip (still 'reader-revenue') re-engages.
 		act( () => {
-			mockCapturedOnChangeView( {
+			mockCapturedOnChangeView!( {
 				...mockCapturedView,
 				search: '',
 				page: 1,
@@ -793,7 +818,7 @@ describe( 'Emails', () => {
 		// emails, so there's a single group — the chip bar is hidden rather
 		// than showing a lone, always-pressed (non-functional) chip. Settings
 		// stays available; the list renders unfiltered.
-		window.newspackAudience.emails.isNewspackPlatform = false;
+		window.newspackAudience.emails!.isNewspackPlatform = false;
 		const Emails = require( './emails' ).default;
 		render( <Emails /> );
 

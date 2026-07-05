@@ -15,8 +15,14 @@ import CollectionMetaCtasField from './collection-meta-ctas-field';
 import { isValidUrl } from './utils';
 import './collection-meta-panel.scss';
 
-const CollectionMetaPanel = ( { postType, metaDefinitions, panelTitle } ) => {
-	const [ fieldErrors, setFieldErrors ] = useState( {} );
+type CollectionMetaPanelProps = {
+	postType: string;
+	metaDefinitions: Record< string, CollectionMetaDefinition >;
+	panelTitle: string;
+};
+
+const CollectionMetaPanel = ( { postType, metaDefinitions, panelTitle }: CollectionMetaPanelProps ) => {
+	const [ fieldErrors, setFieldErrors ] = useState< Record< string, string > >( {} );
 	const { editPost } = useDispatch( editorStore );
 
 	// Get the current post type and meta data.
@@ -30,20 +36,20 @@ const CollectionMetaPanel = ( { postType, metaDefinitions, panelTitle } ) => {
 
 	// Update the meta data.
 	const updateMeta = useCallback(
-		( key, value ) => {
+		( key: string, value: unknown ) => {
 			editPost( { meta: { [ key ]: value } } );
 		},
 		[ editPost ]
 	);
 
 	// Remove an error for a specific field.
-	const removeFieldError = useCallback( key => {
+	const removeFieldError = useCallback( ( key: string ) => {
 		setFieldErrors( prev => Object.fromEntries( Object.entries( prev ).filter( ( [ k ] ) => k !== key ) ) );
 	}, [] );
 
 	// Handle the fields blur event.
 	const handleMetaBlur = useCallback(
-		( key, value, type ) => {
+		( key: string, value: string, type?: string ) => {
 			if ( ! value ) {
 				updateMeta( key, null );
 				removeFieldError( key );
@@ -110,7 +116,7 @@ const CollectionMetaPanel = ( { postType, metaDefinitions, panelTitle } ) => {
 								label={ def.label }
 								help={ fieldErrors[ def.key ] || def.help }
 								value={ meta[ def.key ] || '' }
-								type={ def.type }
+								type={ def.type as 'text' | 'url' }
 								onChange={ value => updateMeta( def.key, value ) }
 								onBlur={ event => handleMetaBlur( def.key, event.target.value, def.type ) }
 								className={ hasError ? 'meta-field-error' : '' }

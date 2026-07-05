@@ -1,8 +1,8 @@
 /**
  * WordPress dependencies
  */
-import { store as blockEditorStore } from '@wordpress/block-editor';
 import { store as coreStore } from '@wordpress/core-data';
+import type { User } from '@wordpress/core-data';
 import { __, sprintf } from '@wordpress/i18n';
 import { useSelect } from '@wordpress/data';
 import { useMemo } from '@wordpress/element';
@@ -11,18 +11,54 @@ import { useMemo } from '@wordpress/element';
  * Internal dependencies
  */
 import { useCoAuthors } from '../../shared/hooks/use-coauthors';
+import type { CoAuthor } from '../../shared/hooks/use-coauthors';
 import { useCustomByline, extractAuthorIdsFromByline } from '../../shared/hooks/use-custom-byline';
+
+/**
+ * Avatar data resolved for display: image source, alt text, and the size
+ * bounds derived from the available avatar sizes.
+ */
+export type AvatarData = {
+	src?: string;
+	alt?: string;
+	minSize?: number | string;
+	maxSize?: number;
+};
+
+/**
+ * User data resolved from the core store for an author.
+ */
+type AuthorUserData = Pick< User< 'edit' >, 'name' | 'avatar_urls' > | null;
+
+/**
+ * Avatar URLs keyed by size: either the core REST shape (WP users) or the
+ * CoAuthors Plus REST shape (guest authors).
+ */
+type AuthorAvatarUrls = User< 'edit' >[ 'avatar_urls' ] | NonNullable< CoAuthor[ 'avatar_urls' ] >;
+
+/**
+ * A post author with resolved avatar data, as returned by usePostAuthors().
+ */
+export type PostAuthorWithAvatar = {
+	id?: number | string;
+	name?: string;
+	display_name?: string;
+	user_nicename?: string;
+	author_link?: string;
+	avatar_urls?: AuthorAvatarUrls | null;
+	avatarSrc?: string;
+};
 
 /**
  * Compute min and max avatar sizes from available size keys.
  *
- * @param {Array|null} sizes Array of available size strings.
- * @return {Object} Object with minSize and maxSize properties.
+ * @param sizes Array of available size strings.
+ * @return Object with minSize and maxSize properties.
  */
-function getAvatarSizes( sizes ) {
+function getAvatarSizes( sizes: string[] | null ) {
 	const minSize = sizes ? sizes[ 0 ] : 24;
 	const maxSize = sizes ? sizes[ sizes.length - 1 ] : 128;
-	const maxSizeBuffer = Math.floor( maxSize * 2.5 );
+	const maxSizeBuffer = Math.floor( Number( maxSize ) * 2.5 );
 	return {
 		minSize,
 		maxSize: maxSizeBuffer,
@@ -32,11 +68,14 @@ function getAvatarSizes( sizes ) {
 /**
  * Hook to get the site's default avatar URL from block editor settings.
  *
- * @return {string|undefined} Default avatar URL.
+ * @return Default avatar URL.
  */
-export function useDefaultAvatar() {
+export function useDefaultAvatar(): string | undefined {
 	const { avatarURL: defaultAvatarUrl } = useSelect( select => {
-		const { getSettings } = select( blockEditorStore );
+		// The block-editor store is untyped; assert the selector shape at the boundary.
+		const { getSettings } = select( 'core/block-editor' ) as {
+			getSettings: () => { __experimentalDiscussionSettings: { avatarURL?: string } };
+		};
 		const { __experimentalDiscussionSettings } = getSettings();
 		return __experimentalDiscussionSettings;
 	} );
@@ -46,16 +85,20 @@ export function useDefaultAvatar() {
 /**
  * Hook to get the avatar data for the post's primary author.
  *
- * @param {Object} props          Hook props.
- * @param {number} props.postId   Post ID.
- * @param {string} props.postType Post type.
- * @return {Object} Avatar object with src, alt, minSize, and maxSize.
+ * @param props          Hook props.
+ * @param props.userId   User ID (accepted from callers, currently unused).
+ * @param props.postId   Post ID.
+ * @param props.postType Post type.
+ * @return Avatar object with src, alt, minSize, and maxSize.
  */
-export function useUserAvatar( { postId, postType } ) {
+export function useUserAvatar( { postId, postType }: { userId?: number; postId?: number; postType?: string } ): AvatarData {
 	const { authorDetails } = useSelect(
 		select => {
 			const { getEditedEntityRecord, getUser } = select( coreStore );
-			const _authorId = getEditedEntityRecord( 'postType', postType, postId )?.author;
+			// Outside a post context there is no record to read; the entity record's
+			// `author` field is asserted at the store boundary.
+			const postRecord = postId && postType ? ( getEditedEntityRecord( 'postType', postType, postId ) as { author?: number } | null ) : null;
+			const _authorId = postRecord?.author;
 			return {
 				authorDetails: _authorId ? getUser( _authorId ) : null,
 			};
@@ -90,18 +133,18 @@ export function useUserAvatar( { postId, postType } ) {
  * falling back to the site's default avatar when user-specific data is unavailable
  * (e.g. CAP guest authors without a linked WordPress account).
  *
- * @param {Object} props          Hook props.
- * @param {number} props.postId   Post ID to get authors for.
- * @param {string} props.postType Post type (default: 'post').
- * @return {Array} Authors array with avatar data.
+ * @param props          Hook props.
+ * @param props.postId   Post ID to get authors for.
+ * @param props.postType Post type (default: 'post').
+ * @return Authors array with avatar data.
  */
-export function usePostAuthors( { postId, postType = 'post' } ) {
+export function usePostAuthors( { postId, postType = 'post' }: { postId?: number; postType?: string } ): PostAuthorWithAvatar[] {
 	const { bylineActive, bylineContent } = useCustomByline( postId, postType );
 	const { authors: coAuthors } = useCoAuthors( postId, postType, bylineActive );
 	const defaultAvatarUrl = useDefaultAvatar();
 
 	// Extract author IDs from custom byline content.
-	const bylineAuthorIds = useMemo(
+	const bylineAuthorIds: number[] = useMemo(
 		() => ( bylineActive && bylineContent ? extractAuthorIdsFromByline( bylineContent ) : [] ),
 		[ bylineActive, bylineContent ]
 	);
@@ -114,7 +157,7 @@ export function usePostAuthors( { postId, postType = 'post' } ) {
 	// Resolve user data from the core store. Return raw getUser() references
 	// (stable store objects) to avoid useSelect memoization warnings from
 	// creating new objects via .map() inside the selector.
-	const userDataMap = useSelect(
+	const userDataMap: Record< number | string, AuthorUserData > | null = useSelect(
 		select => {
 			if ( hasActiveTextOnlyByline ) {
 				return null;
@@ -123,7 +166,7 @@ export function usePostAuthors( { postId, postType = 'post' } ) {
 			const { getUser } = select( coreStore );
 
 			if ( hasCustomBylineAuthors ) {
-				const map = {};
+				const map: Record< number | string, AuthorUserData > = {};
 				bylineAuthorIds.forEach( authorId => {
 					map[ authorId ] = getUser( authorId ) || null;
 				} );
@@ -131,7 +174,7 @@ export function usePostAuthors( { postId, postType = 'post' } ) {
 			}
 
 			if ( coAuthors && coAuthors.length > 0 ) {
-				const map = {};
+				const map: Record< number | string, AuthorUserData > = {};
 				coAuthors.forEach( author => {
 					if ( author.id && ! author.isGuest ) {
 						map[ author.id ] = getUser( author.id ) || null;
@@ -147,7 +190,7 @@ export function usePostAuthors( { postId, postType = 'post' } ) {
 
 	// Build the authors array outside useSelect so .map() doesn't trigger
 	// memoization warnings.
-	const authorsWithAvatars = useMemo( () => {
+	const authorsWithAvatars: PostAuthorWithAvatar[] = useMemo( () => {
 		if ( hasActiveTextOnlyByline || ! userDataMap ) {
 			return [];
 		}
@@ -166,7 +209,7 @@ export function usePostAuthors( { postId, postType = 'post' } ) {
 						avatar_urls: userData.avatar_urls || null,
 					};
 				} )
-				.filter( Boolean );
+				.filter( ( author ): author is NonNullable< typeof author > => Boolean( author ) );
 		}
 
 		if ( coAuthors && coAuthors.length > 0 ) {
@@ -192,7 +235,7 @@ export function usePostAuthors( { postId, postType = 'post' } ) {
 		() =>
 			authorsWithAvatars.map( author => ( {
 				...author,
-				avatarSrc: author.avatar_urls?.[ '96' ] || defaultAvatarUrl,
+				avatarSrc: author.avatar_urls?.[ 96 ] || defaultAvatarUrl,
 			} ) ),
 		[ authorsWithAvatars, defaultAvatarUrl ]
 	);

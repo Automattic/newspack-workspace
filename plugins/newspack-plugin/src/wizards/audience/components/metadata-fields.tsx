@@ -9,7 +9,14 @@ import { CheckboxControl } from '@wordpress/components';
  */
 import { Grid, SectionHeader, TextControl } from '../../../../packages/components/src';
 
-const MetadataFields = ( { availableFields, getSharedProps, selectedFields, updateConfig } ) => {
+type MetadataFieldsProps = {
+	availableFields: string[];
+	getSharedProps: PrequisiteProps[ 'getSharedProps' ];
+	selectedFields: string[];
+	updateConfig: ( key: string, value: string[] ) => void;
+};
+
+const MetadataFields = ( { availableFields, getSharedProps, selectedFields, updateConfig }: MetadataFieldsProps ) => {
 	return (
 		<>
 			<SectionHeader

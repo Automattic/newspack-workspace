@@ -16,14 +16,29 @@ import {
 import { dateI18n } from '@wordpress/date';
 
 /**
+ * Internal dependencies
+ */
+import type { ContributionMeterAttributes } from '../edit';
+
+/**
+ * Props for the contribution meter inspector panel.
+ */
+type InspectorPanelProps = {
+	/** Block attributes. */
+	attributes: ContributionMeterAttributes;
+	/** Function to update attributes. */
+	setAttributes: ( attributes: Partial< ContributionMeterAttributes > ) => void;
+};
+
+/**
  * Inspector panel component for contribution meter block settings.
  *
- * @param {Object}   props               Component props.
- * @param {Object}   props.attributes    Block attributes.
- * @param {Function} props.setAttributes Function to update attributes.
- * @return {Element} InspectorPanel component.
+ * @param props               Component props.
+ * @param props.attributes    Block attributes.
+ * @param props.setAttributes Function to update attributes.
+ * @return InspectorPanel component.
  */
-const InspectorPanel = ( { attributes, setAttributes } ) => {
+const InspectorPanel = ( { attributes, setAttributes }: InspectorPanelProps ) => {
 	const { goalAmount, startDate, endDate, progressBarColor, thickness, showGoal, showAmountRaised, showPercentage } = attributes;
 
 	// Convert YYYY-MM-DD string to Date object at local midnight to avoid timezone issues.
@@ -42,7 +57,7 @@ const InspectorPanel = ( { attributes, setAttributes } ) => {
 				colorSettings={ [
 					{
 						value: progressBarColor,
-						onChange: value => setAttributes( { progressBarColor: value } ),
+						onChange: ( value?: string ) => setAttributes( { progressBarColor: value } ),
 						label: __( 'Progress bar', 'newspack-plugin' ),
 					},
 				] }
@@ -160,7 +175,7 @@ const InspectorPanel = ( { attributes, setAttributes } ) => {
 				<ToggleGroupControl
 					label={ __( 'Thickness', 'newspack-plugin' ) }
 					value={ thickness }
-					onChange={ value => setAttributes( { thickness: value } ) }
+					onChange={ value => setAttributes( { thickness: value as string } ) }
 					isBlock
 					help={ __( 'Adjust the visual weight of the progress bar.', 'newspack-plugin' ) }
 					__next40pxDefaultSize

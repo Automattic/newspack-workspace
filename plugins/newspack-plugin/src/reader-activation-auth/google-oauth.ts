@@ -14,7 +14,7 @@ domReady( function () {
 	const googleLoginElements = document.querySelectorAll( '.newspack-ui__button--google-oauth' );
 	googleLoginElements.forEach( googleLoginElement => {
 		const googleLoginForm = googleLoginElement.closest( 'form' );
-		const checkLoginStatus = metadata => {
+		const checkLoginStatus = ( metadata: Record< string, unknown > ) => {
 			debugLog( 'log', '[Google OAuth] checkLoginStatus called with metadata:', metadata );
 			fetch( `/wp-json/newspack/v1/login/google/register?metadata=${ JSON.stringify( metadata ) }` )
 				.then( res => {
@@ -47,11 +47,13 @@ domReady( function () {
 				googleLoginForm.startLoginFlow();
 			}
 
-			const metadata = googleLoginForm ? convertFormDataToObject( new FormData( googleLoginForm ), [ 'lists[]' ] ) : {};
+			const metadata: Record< string, unknown > = googleLoginForm
+				? convertFormDataToObject( new FormData( googleLoginForm ), [ 'lists[]' ] )
+				: {};
 			metadata.current_page_url = window.location.href;
 			debugLog( 'log', '[Google OAuth] Opening auth window with metadata:', metadata );
 			const authWindow = window.open( 'about:blank', 'newspack_google_login', 'width=500,height=600' );
-			let messageListener = null;
+			let messageListener: ( ( event: MessageEvent ) => void ) | null = null;
 
 			// Clean up function to remove listeners.
 			const cleanup = () => {

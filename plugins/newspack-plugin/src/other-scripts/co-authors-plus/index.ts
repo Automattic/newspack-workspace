@@ -1,6 +1,6 @@
 /* globals guestAuthorRole, jQuery */
 
-jQuery( document ).ready( function ( $ ) {
+jQuery( document ).ready( function ( $: NewspackJQueryStatic ) {
 	$( 'select#role' ).change( function () {
 		if ( guestAuthorRole.role !== $( this ).val() ) {
 			deactivateGuestAuthor();

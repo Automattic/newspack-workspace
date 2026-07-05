@@ -15,7 +15,15 @@ import { plus } from '@wordpress/icons';
  * Internal dependencies
  */
 import { useAuthorTokens } from './hooks/use-author-tokens';
+import type { AuthorToken } from './hooks/use-author-tokens';
 import './style.scss';
+
+/**
+ * Some `useCallback` calls below are made without a dependency array (an upstream
+ * quirk kept verbatim): React then recomputes on every render. The typed alias keeps
+ * that call shape compilable, since the React types require the deps argument.
+ */
+const useCallbackWithoutDeps = useCallback as < T >( callback: T ) => T;
 
 /** Close icon copied from @wordpress/icons/src/library/close.js to be used as markup */
 const close = `
@@ -28,10 +36,10 @@ const close = `
  * Parse byline meta to convert custom tags (<Author></Author> or [Author][/Author]) to token markup.
  *
  * @see    {@link https://github.com/Automattic/newspack-plugin/tree/trunk/includes/bylines#readme|Custom Bylines}
- * @param {string} metaByline Value of byline as stored in meta key.
- * @return {string}            Parsed byline looking up for <Author id=1></Author> tags and replacing them.
+ * @param metaByline Value of byline as stored in meta key.
+ * @return Parsed byline looking up for <Author id=1></Author> tags and replacing them.
  */
-const parseForEdit = metaByline => {
+const parseForEdit = ( metaByline: string ): string => {
 	const tokenMarkup = `<span id="token-$1" contenteditable="false" draggable="true" class="components-form-token-field__token token-inline-block author-token" data-token="$1">
 		<span class="components-form-token-field__token-text">$2</span>
 		<button
@@ -50,10 +58,10 @@ const parseForEdit = metaByline => {
  * Parse byline meta to convert custom tags (<Author></Author> or [Author][/Author]) to token markup.
  *
  * @see    {@link https://github.com/Automattic/newspack-plugin/tree/trunk/includes/bylines#readme|Custom Bylines}
- * @param {string} metaByline Value of byline as stored in meta key.
- * @return {string}            Parsed byline looking up for <Author id=1></Author> tags and replacing them.
+ * @param metaByline Value of byline as stored in meta key.
+ * @return Parsed byline looking up for <Author id=1></Author> tags and replacing them.
  */
-const parseForPreview = metaByline => {
+const parseForPreview = ( metaByline: string ): string => {
 	const tokenMarkup = `<span class="newspack-byline-author" id="token-$1" data-token="$1">$2</span>`;
 
 	return metaByline.replace( /\[Author id=(\d*)\](\D*)\[\/Author\]/g, tokenMarkup );
@@ -63,13 +71,13 @@ const parseForPreview = metaByline => {
  * Transform the bylineElement innerHTML into the format that we expect to save.
  *
  * @see   {@link https://github.com/Automattic/newspack-plugin/tree/trunk/includes/bylines#readme|Custom Bylines}
- * @param {Element} element Byline element reference.
- * @return {string}         Updated byline text, transformed into the save format.
+ * @param element Byline element reference.
+ * @return Updated byline text, transformed into the save format.
  */
-const transformByline = element => {
-	const clonebylineElement = element.cloneNode( true );
+const transformByline = ( element: Element ): string => {
+	const clonebylineElement = element.cloneNode( true ) as Element;
 
-	const tokenElements = clonebylineElement.querySelectorAll( 'span[data-token]' );
+	const tokenElements = clonebylineElement.querySelectorAll< HTMLSpanElement >( 'span[data-token]' );
 
 	tokenElements.forEach( tokenElement => {
 		const authorID = tokenElement.dataset.token;
@@ -87,11 +95,11 @@ const transformByline = element => {
 /**
  * An author "token" button, to add an author to the byline.
  *
- * @param {Object}   props          Component props.
- * @param {Object}   props.token    Author data, with @id and @name.
- * @param {Function} props.onInsert Callback when the token is added to the byline.
+ * @param props          Component props.
+ * @param props.token    Author data, with @id and @name.
+ * @param props.onInsert Callback when the token is added to the byline.
  */
-const Token = ( { token, onInsert } ) => {
+const Token = ( { token, onInsert }: { token: AuthorToken; onInsert: () => void } ) => {
 	return (
 		<span className="components-form-token-field__token token-inline-block">
 			<span className="components-form-token-field__token-text">{ token.name }</span>
@@ -108,12 +116,20 @@ const Token = ( { token, onInsert } ) => {
 /**
  * The list of available tokens to insert.
  *
- * @param {Object}   props             Component props.
- * @param {Object[]} props.tokens      All author values to be inserted.
- * @param {number[]} props.tokensInUse Array of author IDs already inserted in byline.
- * @param {Function} props.insertToken Callback when a token is added to the byline.
+ * @param props             Component props.
+ * @param props.tokens      All author values to be inserted.
+ * @param props.tokensInUse Array of author IDs already inserted in byline.
+ * @param props.insertToken Callback when a token is added to the byline.
  */
-const Tokens = ( { tokens, tokensInUse, insertToken } ) => {
+const Tokens = ( {
+	tokens,
+	tokensInUse,
+	insertToken,
+}: {
+	tokens: AuthorToken[];
+	tokensInUse: number[];
+	insertToken: ( token: AuthorToken ) => void;
+} ) => {
 	return (
 		<div className="tokens">
 			{ tokens.map(
@@ -128,29 +144,32 @@ const Tokens = ( { tokens, tokensInUse, insertToken } ) => {
  */
 const BylinesSettingsPanel = () => {
 	/** Tokens that are in use by the custom byline */
-	const [ tokensInUse, setTokensInUse ] = useState( [] );
+	const [ tokensInUse, setTokensInUse ] = useState< number[] >( [] );
 
-	const [ cursorPos, setCursorPos ] = useState( null );
+	const [ cursorPos, setCursorPos ] = useState< number | null >( null );
 
 	/** Reference to contenteditable element to add event listners */
-	const editableRef = useRef( null );
+	const editableRef = useRef< HTMLDivElement | null >( null );
 
 	const { editPost } = useDispatch( 'core/editor' );
 
 	/** Current post data */
 	const { postId } = useSelect(
-		select => ( {
-			postId: select( 'core/editor' ).getCurrentPostId(),
+		( select ): { postId: number } => ( {
+			// The editor selectors are untyped for string-keyed stores; assert at the store boundary.
+			postId: ( select( 'core/editor' ) as { getCurrentPostId: () => number } ).getCurrentPostId(),
 		} ),
 		[]
 	);
 
 	const tokens = useAuthorTokens( postId );
 
-	const { customByline, isActiveMeta } = useSelect( select => {
-		const meta = select( 'core/editor' ).getEditedPostAttribute( 'meta' );
+	const { customByline, isActiveMeta } = useSelect( ( select ): { customByline: string; isActiveMeta: boolean } => {
+		const meta = (
+			select( 'core/editor' ) as { getEditedPostAttribute: ( attribute: string ) => Record< string, unknown > | undefined }
+		 ).getEditedPostAttribute( 'meta' );
 		return {
-			customByline: meta?.[ newspackBylines.metaKeyByline ] || '',
+			customByline: ( meta?.[ newspackBylines.metaKeyByline ] as string | undefined ) || '',
 			isActiveMeta: !! meta?.[ newspackBylines.metaKeyActive ],
 		};
 	}, [] );
@@ -166,9 +185,9 @@ const BylinesSettingsPanel = () => {
 	/**
 	 * Update the edited byline.
 	 *
-	 * @param {string} element The contenteditable element to read content from.
+	 * @param element The contenteditable element to read content from.
 	 */
-	const updateEditedByline = useCallback( element => {
+	const updateEditedByline = useCallbackWithoutDeps( ( element: HTMLElement ) => {
 		setEditedByline( transformByline( element ) );
 		setTokensInUseFromContentEditable( element );
 	} );
@@ -192,10 +211,10 @@ const BylinesSettingsPanel = () => {
 	/**
 	 * Update the "tokens in use" based on the content.
 	 *
-	 * @param {Element} element The contenteditable element.
+	 * @param element The contenteditable element.
 	 */
-	const setTokensInUseFromContentEditable = element => {
-		const tokenElements = element.querySelectorAll( 'span button[data-token]' );
+	const setTokensInUseFromContentEditable = ( element: Element ) => {
+		const tokenElements = element.querySelectorAll< HTMLElement >( 'span button[data-token]' );
 		const inUse = [ ...tokenElements ].map( span => Number( span.dataset.token ) );
 
 		setTokensInUse( inUse );
@@ -204,10 +223,13 @@ const BylinesSettingsPanel = () => {
 	/**
 	 * Insert token into the custom byline contenteditable div.
 	 *
-	 * @param {Object} token Token prop.
+	 * @param token Token prop.
 	 */
-	const insertToken = token => {
-		let { innerHTML } = editableRef.current;
+	const insertToken = ( token: AuthorToken ) => {
+		// The modal (and therefore the contenteditable element) is mounted whenever
+		// tokens are insertable.
+		const editable = editableRef.current!;
+		let { innerHTML } = editable;
 
 		const tokenId = `token-${ token.id }`;
 
@@ -232,24 +254,22 @@ const BylinesSettingsPanel = () => {
 		}
 
 		// Assign new token to byline innerHTML (Adds a space to the end allowing insertion of content after token).
-		editableRef.current.innerHTML = innerHTML.slice( 0, insertLocation ) + tokenElement + innerHTML.slice( insertLocation );
+		editable.innerHTML = innerHTML.slice( 0, insertLocation ) + tokenElement + innerHTML.slice( insertLocation );
 
 		// Update byline meta.
-		updateEditedByline( editableRef.current );
+		updateEditedByline( editable );
 
 		// Get index of the new token.
-		const tokenIndex = Array.from( editableRef.current.querySelectorAll( 'span[data-token]' ) ).indexOf(
-			editableRef.current.querySelector( `#${ tokenId }` )
-		);
+		const tokenIndex = Array.from( editable.querySelectorAll( 'span[data-token]' ) ).indexOf( editable.querySelector( `#${ tokenId }` )! );
 
 		// Set cursor position and focus on the editable element.
 		const range = document.createRange();
-		range.setStart( editableRef.current, ( tokenIndex + 1 ) * 2 );
+		range.setStart( editable, ( tokenIndex + 1 ) * 2 );
 		range.collapse( true );
-		const selection = editableRef.current.ownerDocument.getSelection();
+		const selection = editable.ownerDocument.getSelection()!;
 		selection.removeAllRanges();
 		selection.addRange( range );
-		editableRef.current.focus();
+		editable.focus();
 	};
 
 	/**
@@ -257,7 +277,7 @@ const BylinesSettingsPanel = () => {
 	 * Used when the custom byline setting is first enabled.
 	 */
 	const insertDefaultByline = () => {
-		let defaultCustomByline;
+		let defaultCustomByline: string | undefined;
 
 		// Add author tags and connecting text for each token.
 		tokens.forEach( ( token, index ) => {
@@ -286,9 +306,9 @@ const BylinesSettingsPanel = () => {
 	/**
 	 * Enable toggle handler.
 	 *
-	 * @param {boolean} value Boolean, true if custom byline is enabled, false if not.
+	 * @param value Boolean, true if custom byline is enabled, false if not.
 	 */
-	const handleEnableToggle = value => {
+	const handleEnableToggle = ( value: boolean ) => {
 		editPost( { meta: { [ newspackBylines.metaKeyActive ]: value } } );
 		setIsEnabled( value );
 		if ( ! customByline ) {
@@ -303,10 +323,10 @@ const BylinesSettingsPanel = () => {
 	 * tokensInUse, and adds event listeners to the remove buttons in token
 	 * spans.
 	 *
-	 * @param {Element} HTML element being rendered.
+	 * @param element HTML element being rendered.
 	 */
 	const onMount = useCallback(
-		element => {
+		( element: HTMLDivElement | null ) => {
 			if ( ! element || ! isModalOpen ) {
 				return;
 			}
@@ -316,8 +336,9 @@ const BylinesSettingsPanel = () => {
 			element.addEventListener( 'blur', updateCursorPos );
 			element.addEventListener( 'input', () => updateEditedByline( element ) );
 			element.addEventListener( 'click', ( { target } ) => {
-				if ( target.classList.contains( 'token-inline-block__remove' ) ) {
-					target.closest( '.token-inline-block' ).remove();
+				const clicked = target as Element;
+				if ( clicked.classList.contains( 'token-inline-block__remove' ) ) {
+					clicked.closest( '.token-inline-block' )!.remove();
 					updateEditedByline( element );
 				}
 			} );
@@ -335,8 +356,9 @@ const BylinesSettingsPanel = () => {
 	 * editor.
 	 */
 	const updateCursorPos = () => {
-		const { current } = editableRef;
-		const selection = current.ownerDocument.getSelection();
+		// Only ever called as a listener on the mounted contenteditable element.
+		const current = editableRef.current!;
+		const selection = current.ownerDocument.getSelection()!;
 		const range = selection.getRangeAt( 0 );
 
 		const clonedRange = range.cloneRange();
@@ -406,5 +428,8 @@ const BylinesSettingsPanel = () => {
 
 registerPlugin( 'newspack-bylines-sidebar', {
 	render: BylinesSettingsPanel,
-	icon: false,
+	// `false` suppresses registerPlugin's default plugins icon (the implementation
+	// spreads settings over `{ icon: pluginsIcon }`), but the upstream WPPlugin type
+	// only admits `IconType` — hence the boundary assertion to keep the runtime value.
+	icon: false as never,
 } );

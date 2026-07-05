@@ -11,7 +11,7 @@ import { caution } from '@wordpress/icons';
 /**
  * Edit function for the Content Gate Countdown Box block.
  *
- * @return {JSX.Element} The Content Gate Countdown Box block.
+ * @return The Content Gate Countdown Box block.
  */
 export default function Edit() {
 	const {
@@ -89,7 +89,7 @@ export default function Edit() {
 												content: sprintf(
 													/* translators: %s is the metered period, e.g. "month" or "week". */
 													__( 'free articles this %s', 'newspack-plugin' ),
-													period
+													period ?? ''
 												),
 												fontSize: 'small',
 												style: {

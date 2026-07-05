@@ -1,13 +1,43 @@
 import { useSelect } from '@wordpress/data';
+import { store as coreStore } from '@wordpress/core-data';
 import { useMemo } from '@wordpress/element';
+
+/**
+ * Internal dependencies
+ */
+import type { Collection, CollectionsAttributes } from '../types';
+
+/**
+ * Query arguments for fetching collections from the core store.
+ */
+type CollectionsQuery = {
+	per_page: number;
+	orderby: string;
+	order: string;
+	_embed: boolean;
+	status: string;
+	offset?: number;
+	include?: Array< string | number >;
+	newspack_collection_category?: Array< string | number >;
+	newspack_collection_category_exclude?: Array< string | number >;
+};
+
+/**
+ * Collections data and loading state returned by the hook.
+ */
+type UseCollectionsResult = {
+	collections: Collection[];
+	isLoading: boolean;
+	hasCollections: boolean;
+};
 
 /**
  * Custom hook to fetch collections using WordPress core data.
  *
- * @param {Object} attributes Block attributes.
- * @return {Object} Object containing collections data and loading state.
+ * @param attributes Block attributes.
+ * @return Object containing collections data and loading state.
  */
-export const useCollections = attributes => {
+export const useCollections = ( attributes: CollectionsAttributes ): UseCollectionsResult => {
 	const { queryType, numberOfItems, offset = 0, selectedCollections = [], includeCategories = [], excludeCategories = [] } = attributes;
 
 	// Normalize and guard common inputs.
@@ -17,12 +47,12 @@ export const useCollections = attributes => {
 	const isDisabledQuery = ( isSpecific && selectedCollections.length === 0 ) || ! hasPerPage;
 
 	// Memoize query object so selectors aren't re-run due to new object identities.
-	const query = useMemo( () => {
+	const query: CollectionsQuery | null = useMemo( () => {
 		if ( isDisabledQuery ) {
 			return null;
 		}
 
-		const q = {
+		const q: CollectionsQuery = {
 			per_page: perPage,
 			orderby: 'date',
 			order: 'desc',
@@ -58,9 +88,10 @@ export const useCollections = attributes => {
 				return { collections: [], isLoading: false, hasCollections: false };
 			}
 
-			const { getEntityRecords, isResolving } = select( 'core' );
-			const collections = getEntityRecords( 'postType', 'newspack_collection', query );
-			const isLoading = isResolving( 'getEntityRecords', [ 'postType', 'newspack_collection', query ] );
+			const { getEntityRecords, isResolving } = select( coreStore );
+			// Collections are a custom post type; assert the record shape at the store boundary.
+			const collections = getEntityRecords( 'postType', 'newspack_collection', query ) as Collection[] | null;
+			const isLoading: boolean = isResolving( 'getEntityRecords', [ 'postType', 'newspack_collection', query ] );
 
 			return {
 				collections: collections || [],

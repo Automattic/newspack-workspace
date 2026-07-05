@@ -13,6 +13,7 @@ import { useSelect } from '@wordpress/data';
  */
 import { usePostAuthors } from './hooks';
 import { useCoAuthors } from '../../shared/hooks/use-coauthors';
+import type { CoAuthor } from '../../shared/hooks/use-coauthors';
 import { useCustomByline } from '../../shared/hooks/use-custom-byline';
 
 jest.mock( '@wordpress/data', () => ( {
@@ -28,8 +29,8 @@ jest.mock( '@wordpress/block-editor', () => ( {
 } ) );
 
 jest.mock( '@wordpress/i18n', () => ( {
-	__: str => str,
-	sprintf: ( str, ...args ) => str.replace( /%s/g, () => args.shift() ),
+	__: ( str: string ) => str,
+	sprintf: ( str: string, ...args: unknown[] ) => str.replace( /%s/g, () => String( args.shift() ) ),
 } ) );
 
 jest.mock( '../../shared/hooks/use-coauthors', () => ( {
@@ -43,12 +44,32 @@ jest.mock( '../../shared/hooks/use-custom-byline', () => ( {
 
 const DEFAULT_AVATAR_URL = 'https://example.com/default-avatar.png';
 
+/** The mapSelect callback shape used by the hooks under test. */
+type MapSelectCallback = ( select: ( storeName: string ) => unknown ) => unknown;
+
+const useSelectMock = jest.mocked( useSelect );
+const useCoAuthorsMock = jest.mocked( useCoAuthors );
+const useCustomBylineMock = jest.mocked( useCustomByline );
+
+/**
+ * Point useSelect at a fake registry of store selector objects.
+ */
+const mockUseSelectStores = ( stores: Record< string, unknown > ) =>
+	useSelectMock.mockImplementation( mapSelect => ( mapSelect as MapSelectCallback )( storeName => stores[ storeName ] || {} ) );
+
+/**
+ * Mock useCoAuthors with the fields the hook under test consumes; the
+ * remaining fields get neutral defaults.
+ */
+const mockCoAuthorsReturn = ( value: { authors: CoAuthor[] } ) =>
+	useCoAuthorsMock.mockReturnValue( { isCapAvailable: true, isLoading: false, hasCoauthorTermIds: false, ...value } );
+
 describe( 'usePostAuthors', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
 	} );
 
-	const mockUserData = {
+	const mockUserData: Record< number, { name: string; avatar_urls: Record< number, string > } > = {
 		1: { name: 'Jane Doe', avatar_urls: { 96: 'https://example.com/jane.jpg' } },
 		2: { name: 'John Smith', avatar_urls: { 96: 'https://example.com/john.jpg' } },
 	};
@@ -58,29 +79,25 @@ describe( 'usePostAuthors', () => {
 	 * store being selected rather than relying on call order.
 	 */
 	const setupMocks = ( userData = mockUserData ) => {
-		const stores = {
+		mockUseSelectStores( {
 			'core/block-editor': {
 				getSettings: () => ( {
 					__experimentalDiscussionSettings: { avatarURL: DEFAULT_AVATAR_URL },
 				} ),
 			},
 			core: {
-				getUser: id => userData[ id ] || null,
+				getUser: ( id: number ) => userData[ id ] || null,
 			},
-		};
-
-		useSelect.mockImplementation( callback => {
-			return callback( storeName => stores[ storeName ] || {} );
 		} );
 	};
 
 	describe( 'custom byline with author shortcodes', () => {
 		it( 'should return only authors from the byline when custom byline is active', () => {
-			useCustomByline.mockReturnValue( {
+			useCustomBylineMock.mockReturnValue( {
 				bylineActive: true,
 				bylineContent: 'By [Author id=1]Jane Doe[/Author]',
 			} );
-			useCoAuthors.mockReturnValue( {
+			mockCoAuthorsReturn( {
 				authors: [
 					{ id: 1, display_name: 'Jane Doe' },
 					{ id: 2, display_name: 'John Smith' },
@@ -98,11 +115,11 @@ describe( 'usePostAuthors', () => {
 		} );
 
 		it( 'should return multiple authors when byline has multiple shortcodes', () => {
-			useCustomByline.mockReturnValue( {
+			useCustomBylineMock.mockReturnValue( {
 				bylineActive: true,
 				bylineContent: 'By [Author id=1]Jane[/Author] and [Author id=2]John[/Author]',
 			} );
-			useCoAuthors.mockReturnValue( { authors: [] } );
+			mockCoAuthorsReturn( { authors: [] } );
 			setupMocks();
 
 			const { result } = renderHook( () => usePostAuthors( { postId: 123 } ) );
@@ -113,11 +130,11 @@ describe( 'usePostAuthors', () => {
 		} );
 
 		it( 'should show one avatar for mixed byline with one author shortcode and text', () => {
-			useCustomByline.mockReturnValue( {
+			useCustomBylineMock.mockReturnValue( {
 				bylineActive: true,
 				bylineContent: 'By [Author id=1]Jane[/Author] and the editorial team',
 			} );
-			useCoAuthors.mockReturnValue( { authors: [] } );
+			mockCoAuthorsReturn( { authors: [] } );
 			setupMocks();
 
 			const { result } = renderHook( () => usePostAuthors( { postId: 123 } ) );
@@ -130,11 +147,11 @@ describe( 'usePostAuthors', () => {
 
 	describe( 'custom byline without author shortcodes (plain text)', () => {
 		it( 'should return empty array when byline is active but has no author shortcodes', () => {
-			useCustomByline.mockReturnValue( {
+			useCustomBylineMock.mockReturnValue( {
 				bylineActive: true,
 				bylineContent: 'By the editorial team',
 			} );
-			useCoAuthors.mockReturnValue( {
+			mockCoAuthorsReturn( {
 				authors: [
 					{ id: 1, display_name: 'Jane Doe', user_nicename: 'jane-doe' },
 					{ id: 2, display_name: 'John Smith', user_nicename: 'john-smith' },
@@ -148,11 +165,11 @@ describe( 'usePostAuthors', () => {
 		} );
 
 		it( 'should return empty array for text-only byline like "By Staff Reporter"', () => {
-			useCustomByline.mockReturnValue( {
+			useCustomBylineMock.mockReturnValue( {
 				bylineActive: true,
 				bylineContent: 'By Staff Reporter',
 			} );
-			useCoAuthors.mockReturnValue( { authors: [] } );
+			mockCoAuthorsReturn( { authors: [] } );
 			setupMocks();
 
 			const { result } = renderHook( () => usePostAuthors( { postId: 123 } ) );
@@ -163,11 +180,11 @@ describe( 'usePostAuthors', () => {
 
 	describe( 'no custom byline', () => {
 		it( 'should use CAP authors when custom byline is inactive', () => {
-			useCustomByline.mockReturnValue( {
+			useCustomBylineMock.mockReturnValue( {
 				bylineActive: false,
 				bylineContent: '',
 			} );
-			useCoAuthors.mockReturnValue( {
+			mockCoAuthorsReturn( {
 				authors: [ { id: 1, display_name: 'Jane Doe', author_link: '/author/jane/' } ],
 			} );
 			setupMocks();
@@ -180,11 +197,11 @@ describe( 'usePostAuthors', () => {
 		} );
 
 		it( 'should return empty array when no CAP authors and no custom byline', () => {
-			useCustomByline.mockReturnValue( {
+			useCustomBylineMock.mockReturnValue( {
 				bylineActive: false,
 				bylineContent: '',
 			} );
-			useCoAuthors.mockReturnValue( { authors: [] } );
+			mockCoAuthorsReturn( { authors: [] } );
 			setupMocks();
 
 			const { result } = renderHook( () => usePostAuthors( { postId: 123 } ) );
@@ -195,11 +212,11 @@ describe( 'usePostAuthors', () => {
 
 	describe( 'avatar data handling', () => {
 		it( 'should resolve avatarSrc from avatar_urls for byline authors', () => {
-			useCustomByline.mockReturnValue( {
+			useCustomBylineMock.mockReturnValue( {
 				bylineActive: true,
 				bylineContent: '[Author id=1]Jane[/Author]',
 			} );
-			useCoAuthors.mockReturnValue( { authors: [] } );
+			mockCoAuthorsReturn( { authors: [] } );
 			setupMocks();
 
 			const { result } = renderHook( () => usePostAuthors( { postId: 123 } ) );
@@ -209,11 +226,11 @@ describe( 'usePostAuthors', () => {
 		} );
 
 		it( 'should filter out deleted users from byline authors', () => {
-			useCustomByline.mockReturnValue( {
+			useCustomBylineMock.mockReturnValue( {
 				bylineActive: true,
 				bylineContent: '[Author id=999]Unknown[/Author]',
 			} );
-			useCoAuthors.mockReturnValue( { authors: [] } );
+			mockCoAuthorsReturn( { authors: [] } );
 			setupMocks();
 
 			const { result } = renderHook( () => usePostAuthors( { postId: 123 } ) );
@@ -222,11 +239,11 @@ describe( 'usePostAuthors', () => {
 		} );
 
 		it( 'should resolve avatarSrc from avatar_urls for CAP authors', () => {
-			useCustomByline.mockReturnValue( {
+			useCustomBylineMock.mockReturnValue( {
 				bylineActive: false,
 				bylineContent: '',
 			} );
-			useCoAuthors.mockReturnValue( {
+			mockCoAuthorsReturn( {
 				authors: [ { id: 1, display_name: 'Jane Doe' } ],
 			} );
 			setupMocks();
@@ -238,12 +255,12 @@ describe( 'usePostAuthors', () => {
 		} );
 
 		it( 'should fall back to default avatar for CAP guest authors without WP user data', () => {
-			useCustomByline.mockReturnValue( {
+			useCustomBylineMock.mockReturnValue( {
 				bylineActive: false,
 				bylineContent: '',
 			} );
 			// Guest author with no WP user ID (id is 0 or falsy).
-			useCoAuthors.mockReturnValue( {
+			mockCoAuthorsReturn( {
 				authors: [ { id: 0, display_name: 'Guest Writer', user_nicename: 'guest-writer' } ],
 			} );
 			setupMocks();
@@ -257,12 +274,12 @@ describe( 'usePostAuthors', () => {
 		} );
 
 		it( 'should use avatar_urls from useCoAuthors for guest authors', () => {
-			useCustomByline.mockReturnValue( {
+			useCustomBylineMock.mockReturnValue( {
 				bylineActive: false,
 				bylineContent: '',
 			} );
 			// Guest author with avatar_urls provided by useCoAuthors (fetched from CAP REST API).
-			useCoAuthors.mockReturnValue( {
+			mockCoAuthorsReturn( {
 				authors: [
 					{
 						id: 1591,
@@ -283,11 +300,11 @@ describe( 'usePostAuthors', () => {
 		} );
 
 		it( 'should not call getUser for guest authors', () => {
-			useCustomByline.mockReturnValue( {
+			useCustomBylineMock.mockReturnValue( {
 				bylineActive: false,
 				bylineContent: '',
 			} );
-			useCoAuthors.mockReturnValue( {
+			mockCoAuthorsReturn( {
 				authors: [
 					{
 						id: 1591,
@@ -300,7 +317,7 @@ describe( 'usePostAuthors', () => {
 			} );
 
 			const getUserMock = jest.fn( () => null );
-			const stores = {
+			mockUseSelectStores( {
 				'core/block-editor': {
 					getSettings: () => ( {
 						__experimentalDiscussionSettings: { avatarURL: DEFAULT_AVATAR_URL },
@@ -309,9 +326,6 @@ describe( 'usePostAuthors', () => {
 				core: {
 					getUser: getUserMock,
 				},
-			};
-			useSelect.mockImplementation( callback => {
-				return callback( storeName => stores[ storeName ] || {} );
 			} );
 
 			renderHook( () => usePostAuthors( { postId: 123 } ) );

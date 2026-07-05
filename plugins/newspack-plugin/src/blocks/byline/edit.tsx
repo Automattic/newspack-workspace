@@ -18,18 +18,34 @@ import { parseBylineForDisplay, formatAuthorsList } from './utils';
 import { useCustomByline } from '../../shared/hooks/use-custom-byline';
 import { useCoAuthors } from '../../shared/hooks/use-coauthors';
 import { useDefaultAuthor } from './hooks/use-default-author';
-import { BylineInspectorControls } from './inspector.jsx';
+import { BylineInspectorControls } from './inspector';
+import type { BylineAttributes } from './inspector';
+
+/**
+ * Props for the Byline block edit component.
+ */
+type BylineEditProps = {
+	/** Block attributes. */
+	attributes: BylineAttributes;
+	/** Block context. */
+	context: {
+		postId?: number;
+		postType?: string;
+	};
+	/** Set attributes function. */
+	setAttributes: ( attributes: Partial< BylineAttributes > ) => void;
+};
 
 /**
  * Edit component for the byline block.
  *
- * @param {Object}   props               Component props.
- * @param {Object}   props.attributes    Block attributes.
- * @param {Object}   props.context       Block context.
- * @param {Function} props.setAttributes Set attributes function.
- * @return {JSX.Element} Edit component.
+ * @param props               Component props.
+ * @param props.attributes    Block attributes.
+ * @param props.context       Block context.
+ * @param props.setAttributes Set attributes function.
+ * @return Edit component.
  */
-export default function Edit( { attributes, context, setAttributes } ) {
+export default function Edit( { attributes, context, setAttributes }: BylineEditProps ) {
 	const { postId, postType = 'post' } = context;
 	const blockProps = useBlockProps();
 

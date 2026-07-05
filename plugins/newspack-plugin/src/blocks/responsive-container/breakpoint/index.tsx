@@ -46,7 +46,7 @@ export const settings = {
 		},
 	],
 	edit: Edit,
-	save: ( { attributes } ) => {
+	save: ( { attributes }: { attributes: { view: string } } ) => {
 		const blockProps = useBlockProps.save( {
 			className: `newspack-responsive-container-breakpoint--${ attributes.view }`,
 		} );

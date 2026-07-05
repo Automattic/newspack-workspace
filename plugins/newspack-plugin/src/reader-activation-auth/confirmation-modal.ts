@@ -3,7 +3,19 @@
 /**
  * Internal dependencies.
  */
-import * as a11y from './accessibility.js';
+import * as a11y from './accessibility';
+
+/**
+ * Configuration accepted by openConfirmationModal().
+ */
+interface ConfirmationModalConfig {
+	/** Email address to display in the modal copy. */
+	email?: string;
+	/** Called when the reader clicks Continue, after the modal closes. */
+	onConfirm?: () => void;
+	/** Called when the reader closes the modal without confirming. */
+	onCancel?: () => void;
+}
 
 /**
  * Helpers for the pre-registration confirmation modal rendered in wp_footer by
@@ -24,7 +36,7 @@ const MODAL_ID = 'newspack-my-account__newspack-reader-registration-confirmation
  *
  * @type {AbortController|null}
  */
-let currentController = null;
+let currentController: AbortController | null = null;
 
 /**
  * Open the pre-registration confirmation modal.
@@ -40,9 +52,9 @@ let currentController = null;
  *
  * @return {boolean} Whether the modal was found and opened.
  */
-function openConfirmationModal( config = {} ) {
+function openConfirmationModal( config: ConfirmationModalConfig = {} ) {
 	const modal = document.getElementById( MODAL_ID );
-	const confirmButton = modal?.querySelector( '[data-confirm-register]' );
+	const confirmButton = modal?.querySelector< HTMLButtonElement >( '[data-confirm-register]' );
 	if ( ! modal || ! confirmButton ) {
 		// Markup missing — caller decides fail-open vs fail-closed by inspecting the return value.
 		return false;
@@ -70,7 +82,7 @@ function openConfirmationModal( config = {} ) {
 
 	function handleConfirmClick() {
 		confirmed = true;
-		modal.setAttribute( 'data-state', 'closed' );
+		modal!.setAttribute( 'data-state', 'closed' );
 		currentController?.abort();
 		releaseController();
 		if ( typeof config.onConfirm === 'function' ) {
@@ -118,7 +130,15 @@ function openConfirmationModal( config = {} ) {
  * @param {Function} args.onProceed  Called once the registration should be submitted.
  * @param {Function} [args.onCancel] Called when the reader cancels the confirmation.
  */
-export function maybeConfirmRegistration( { email, onProceed, onCancel = () => {} } ) {
+export function maybeConfirmRegistration( {
+	email,
+	onProceed,
+	onCancel = () => {},
+}: {
+	email: string;
+	onProceed: () => void;
+	onCancel?: () => void;
+} ) {
 	if ( newspack_ras_config?.verify_new_reader_accounts ) {
 		onProceed();
 		return;

@@ -14,6 +14,24 @@ import { ESCAPE } from '@wordpress/keycodes';
  */
 import { Popover } from '../../../../../packages/components/src';
 
+type CampaignManagementPopoverProps = {
+	/** Closes the popover. */
+	dismiss: () => void;
+	/** Whether the campaign has any prompts. */
+	hasPrompts: boolean;
+	/** Whether the campaign has any published prompts. */
+	hasPublished: boolean;
+	/** Whether the campaign is archived. */
+	isArchive: boolean;
+	onActivate: () => void;
+	onArchive: () => void;
+	onDeactivate: () => void;
+	onDelete: () => void;
+	onDuplicate: () => void;
+	onRename: () => void;
+	onUnarchive: () => void;
+};
+
 const CampaignManagementPopover = ( {
 	dismiss,
 	hasPrompts,
@@ -26,7 +44,7 @@ const CampaignManagementPopover = ( {
 	onDuplicate,
 	onRename,
 	onUnarchive,
-} ) => (
+}: CampaignManagementPopoverProps ) => (
 	<Popover position="bottom right" onFocusOutside={ () => dismiss() } onKeyDown={ event => ESCAPE === event.keyCode && dismiss() }>
 		<MenuItem onClick={ () => dismiss() } className="screen-reader-text">
 			{ __( 'Close Popover', 'newspack-plugin' ) }

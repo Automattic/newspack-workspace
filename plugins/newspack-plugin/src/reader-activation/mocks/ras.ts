@@ -1,32 +1,40 @@
 /**
+ * An event handler as recorded by the mock's `on()`. The reader-activation
+ * setup helpers only subscribe to the `activity` event, so the mock models
+ * that single detail shape.
+ */
+type MockActivityHandler = ( event: { detail: NewspackReaderActivity } ) => void;
+
+/**
  * Creates a mock RAS (Reader Activation System) object for testing.
  *
- * @return {Object} Mock RAS with store, event handlers, and activity helpers.
+ * @return Mock RAS with store, event handlers, and activity helpers.
  */
 export function createMockRAS() {
-	const storeData = {};
-	const activities = [];
-	const handlers = {};
+	const storeData: Record< string, unknown > = {};
+	const activities: NewspackReaderActivity[] = [];
+	const handlers: Record< string, MockActivityHandler > = {};
 
 	const ras = {
 		store: {
-			get: jest.fn( key => storeData[ key ] ?? null ),
-			set: jest.fn( ( key, value ) => {
+			get: jest.fn( ( key: string ) => storeData[ key ] ?? null ),
+			set: jest.fn( ( key: string, value: unknown ) => {
 				storeData[ key ] = value;
 			} ),
 			register: jest.fn(),
 		},
-		on: jest.fn( ( event, callback ) => {
+		on: jest.fn( ( event: 'activity', callback: MockActivityHandler ) => {
 			handlers[ event ] = callback;
 		} ),
 		getActivities: jest.fn( () => activities ),
 		getUniqueActivitiesBy: jest.fn( () => {
-			const seen = {};
+			const seen: Record< string, boolean > = {};
 			return activities.filter( a => {
-				if ( seen[ a.data.post_id ] ) {
+				const postId = a.data.post_id as string;
+				if ( seen[ postId ] ) {
 					return false;
 				}
-				seen[ a.data.post_id ] = true;
+				seen[ postId ] = true;
 				return true;
 			} );
 		} ),
@@ -41,20 +49,20 @@ export function createMockRAS() {
 		/**
 		 * Add an activity to the internal activities array.
 		 *
-		 * @param {string} action    Activity action name.
-		 * @param {Object} data      Activity data.
-		 * @param {number} timestamp Optional timestamp.
+		 * @param action    Activity action name.
+		 * @param data      Activity data.
+		 * @param timestamp Optional timestamp.
 		 */
-		addActivity( action, data, timestamp = Date.now() ) {
+		addActivity( action: string, data: Record< string, unknown >, timestamp = Date.now() ) {
 			activities.push( { action, data, timestamp } );
 		},
 		/**
 		 * Trigger a registered event handler.
 		 *
-		 * @param {string} event  Event name.
-		 * @param {Object} detail Event detail payload.
+		 * @param event  Event name.
+		 * @param detail Event detail payload.
 		 */
-		trigger( event, detail ) {
+		trigger( event: string, detail: NewspackReaderActivity ) {
 			if ( handlers[ event ] ) {
 				handlers[ event ]( { detail } );
 			}

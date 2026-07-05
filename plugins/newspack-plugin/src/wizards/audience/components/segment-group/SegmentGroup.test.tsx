@@ -9,12 +9,43 @@ import { render } from '@testing-library/react';
  */
 import SegmentGroup from './index';
 
+/**
+ * A fixture prompt: carries only the fields the rendered components read, so
+ * the term references and options are narrower than CampaignsPrompt's. Cast
+ * to the wizard type at the render boundary.
+ */
+type FixturePrompt = {
+	tags: CampaignsTermRef[];
+	categories: CampaignsTermRef[];
+	campaign_groups: CampaignsTermRef[];
+	status: string;
+	content: string;
+	id: number;
+	segments: Array< { id: string | number; name: string } >;
+	options: { placement: string; frequency: string };
+	title: string;
+};
+
+/**
+ * A fixture segment, in the legacy configuration shape this test was written
+ * against. Cast to CampaignsSegmentGroup at the render boundary.
+ */
+type FixtureSegment = {
+	label: string;
+	configuration: Record< string, unknown >;
+	id: string | number;
+	created_at?: string;
+	updated_at?: string;
+	priority?: number;
+	prompts?: FixturePrompt[];
+};
+
 // Mock component props.
 const CAMPAIGN = {
 	campaignData: null,
 	campaignId: undefined,
 };
-const SEGMENT = {
+const SEGMENT: FixtureSegment = {
 	label: 'Donors',
 	configuration: {
 		min_posts: 0,
@@ -40,7 +71,7 @@ const PROMPT_DEFAULTS = {
 	campaign_groups: [],
 	status: 'publish',
 };
-const PROMPTS = {
+const PROMPTS: Record< string, FixturePrompt[] > = {
 	overlaysUncategorized: [
 		{
 			...PROMPT_DEFAULTS,
@@ -298,13 +329,14 @@ const PROMPTS = {
 
 describe( 'A segment with conflicting prompts', () => {
 	beforeEach( () => {
-		// Mock global vars for custom placements.
+		// Mock global vars for custom placements. Only the fields exercised by
+		// this test are seeded, hence the cast at the window boundary.
 		window.newspackAudienceCampaigns = {
 			custom_placements: {
 				custom1: 'Custom Placement 1',
 			},
 			overlay_placements: [ 'center' ],
-		};
+		} as Partial< Window[ 'newspackAudienceCampaigns' ] > as Window[ 'newspackAudienceCampaigns' ];
 	} );
 
 	it( 'renders a conflict notice for mutliple overlays in the same segment', async () => {
@@ -315,7 +347,7 @@ describe( 'A segment with conflicting prompts', () => {
 		const props = {
 			campaignData: CAMPAIGN.campaignData,
 			campaign: CAMPAIGN.campaignId,
-			segment: SEGMENT,
+			segment: SEGMENT as Partial< CampaignsSegmentGroup > as CampaignsSegmentGroup,
 		};
 		const { getByTestId } = render( <SegmentGroup { ...props } /> );
 		const notice1 = getByTestId( 'conflict-warning-1' );
@@ -337,7 +369,7 @@ describe( 'A segment with conflicting prompts', () => {
 		const props = {
 			campaignData: CAMPAIGN.campaignData,
 			campaign: CAMPAIGN.campaignId,
-			segment: SEGMENT,
+			segment: SEGMENT as Partial< CampaignsSegmentGroup > as CampaignsSegmentGroup,
 		};
 		const { getByTestId } = render( <SegmentGroup { ...props } /> );
 
@@ -354,7 +386,7 @@ describe( 'A segment with conflicting prompts', () => {
 		const props = {
 			campaignData: CAMPAIGN.campaignData,
 			campaign: CAMPAIGN.campaignId,
-			segment: SEGMENT,
+			segment: SEGMENT as Partial< CampaignsSegmentGroup > as CampaignsSegmentGroup,
 		};
 		const { getByTestId } = render( <SegmentGroup { ...props } /> );
 		const notice1 = getByTestId( 'conflict-warning-5' );
@@ -373,7 +405,7 @@ describe( 'A segment with conflicting prompts', () => {
 		const props = {
 			campaignData: CAMPAIGN.campaignData,
 			campaign: CAMPAIGN.campaignId,
-			segment: SEGMENT,
+			segment: SEGMENT as Partial< CampaignsSegmentGroup > as CampaignsSegmentGroup,
 		};
 		const { getByTestId } = render( <SegmentGroup { ...props } /> );
 		const notice1 = getByTestId( 'conflict-warning-9' );
@@ -385,7 +417,7 @@ describe( 'A segment with conflicting prompts', () => {
 	} );
 
 	it( 'renders a conflict notice for conflicting prompts that have no segment', async () => {
-		const everyone = {
+		const everyone: FixtureSegment = {
 			configuration: {},
 			id: '',
 			label: 'Everyone',
@@ -393,14 +425,14 @@ describe( 'A segment with conflicting prompts', () => {
 		};
 
 		// Unset selected segment ids.
-		everyone.prompts.forEach( prompt => ( prompt.segments = [] ) );
+		everyone.prompts?.forEach( prompt => ( prompt.segments = [] ) );
 
 		// Expected warning text.
 		const noticeText = 'If multiple overlays are rendered on the same pageview, only the most recent one will be displayed.';
 		const props = {
 			campaignData: CAMPAIGN.campaignData,
 			campaign: CAMPAIGN.campaignId,
-			segment: everyone,
+			segment: everyone as Partial< CampaignsSegmentGroup > as CampaignsSegmentGroup,
 		};
 		const { getByTestId } = render( <SegmentGroup { ...props } /> );
 		const notice1 = getByTestId( 'conflict-warning-1' );

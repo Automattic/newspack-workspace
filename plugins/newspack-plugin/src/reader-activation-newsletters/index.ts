@@ -5,7 +5,7 @@ import { openNewslettersSignupModal, refreshNewslettersSignupModal } from './new
 
 import { domReady } from '../utils';
 
-import './newsletters-form.js';
+import './newsletters-form';
 
 window.newspackRAS = window.newspackRAS || [];
 window.newspackRAS.push( readerActivation => {

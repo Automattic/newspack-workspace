@@ -7,12 +7,12 @@ import { domReady, registerElementActivity, registerCheckoutActivity } from '../
 /**
  * Get the subscription ID from the element's href attribute.
  *
- * @param {Element} element The element to get the subscription ID from.
+ * @param element The element to get the subscription ID from.
  *
- * @return {string|null} The subscription ID or null if no subscription ID is found.
+ * @return The subscription ID or null if no subscription ID is found.
  */
-const getSubscriptionIdFromHref = element => {
-	const match = element.getAttribute( 'href' ).match( /subscription_id=(\d+)/ );
+const getSubscriptionIdFromHref = ( element: Element ) => {
+	const match = ( element.getAttribute( 'href' ) as string ).match( /subscription_id=(\d+)/ );
 	return match ? match[ 1 ] : null;
 };
 
@@ -20,7 +20,7 @@ domReady( function () {
 	// Add "name" attribute to My Account forms for analytics purposes.
 	const url = new URL( window.location.href );
 	if ( url.pathname.includes( 'edit-address' ) ) {
-		const form = document.querySelector( '.woocommerce-MyAccount-content form' );
+		const form = document.querySelector< HTMLFormElement >( '.woocommerce-MyAccount-content form' );
 		if ( form && ! form.name ) {
 			form.setAttribute( 'name', url.pathname.includes( 'billing' ) ? 'billing_address' : 'shipping_address' );
 		}
@@ -49,16 +49,16 @@ domReady( function () {
 
 	// Track when a payment method is added.
 	registerElementActivity( 'form#add_payment_method', 'payment_method_added', element => ( {
-		payment_method: element.querySelector( 'input[name="payment_method"]' )?.value,
+		payment_method: element.querySelector< HTMLInputElement >( 'input[name="payment_method"]' )?.value,
 	} ) );
 
 	// Track when the user changes the payment method for a subscription via the checkout page.
 	const orderReviewForm = document.querySelector( '#order_review' );
-	const changePaymentInput = orderReviewForm?.querySelector( 'input[name="woocommerce_change_payment"]' );
+	const changePaymentInput = orderReviewForm?.querySelector< HTMLInputElement >( 'input[name="woocommerce_change_payment"]' );
 	if ( orderReviewForm && changePaymentInput ) {
 		registerElementActivity( orderReviewForm, 'payment_method_changed', () => ( {
 			subscription_id: changePaymentInput.value,
-			update_all_subscriptions: orderReviewForm.querySelector( '#update_all_subscriptions_payment_method' )?.checked,
+			update_all_subscriptions: orderReviewForm.querySelector< HTMLInputElement >( '#update_all_subscriptions_payment_method' )?.checked,
 		} ) );
 	}
 

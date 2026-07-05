@@ -1,6 +1,7 @@
 /* globals newspack_reader_activation_labels */
 export const SIGN_IN_MODAL_HASHES = [ 'signin_modal', 'register_modal' ];
-import * as a11y from './accessibility.js';
+import * as a11y from './accessibility';
+import type { AuthContainerElement, AuthModalElement, ActionItemElement } from './types';
 
 /**
  * Get the authentication modal container.
@@ -8,7 +9,7 @@ import * as a11y from './accessibility.js';
  * @return {HTMLElement} The modal container.
  */
 export function getModalContainer() {
-	return document.querySelector( '.newspack-reader-auth-modal .newspack-reader-auth' );
+	return document.querySelector( '.newspack-reader-auth-modal .newspack-reader-auth' ) as AuthContainerElement | null;
 }
 
 /**
@@ -18,7 +19,7 @@ export function getModalContainer() {
  *
  * @return {void}
  */
-export function onAuthFormReady( callback ) {
+export function onAuthFormReady( callback: () => void ) {
 	// If the auth form is already ready, call the callback immediately.
 	if ( document._newspackReaderAuthFormReady ) {
 		callback();
@@ -34,8 +35,8 @@ export function onAuthFormReady( callback ) {
  *
  * @return {void}
  */
-export function openAuthModal( config = {} ) {
-	const reader = window.newspackReaderActivation.getReader();
+export function openAuthModal( config: NewspackAuthModalConfig = {} ) {
+	const reader = ( window.newspackReaderActivation as NewspackReaderActivation ).getReader();
 	const modalTrigger = config.trigger;
 
 	if ( ! config.skipAuthenticatedCheck && reader?.authenticated ) {
@@ -53,7 +54,7 @@ export function openAuthModal( config = {} ) {
 		return;
 	}
 
-	const modal = container.closest( '.newspack-reader-auth-modal' );
+	const modal = container.closest( '.newspack-reader-auth-modal' ) as AuthModalElement | null;
 	if ( ! modal ) {
 		if ( config.onSuccess && typeof config.onSuccess === 'function' ) {
 			config.onSuccess();
@@ -66,7 +67,7 @@ export function openAuthModal( config = {} ) {
 	 *
 	 * @param {KeyboardEvent} ev The keyboard event.
 	 */
-	const handleKeydown = ev => {
+	const handleKeydown = ( ev: KeyboardEvent ) => {
 		if ( ev.key === 'Escape' ) {
 			close();
 		}
@@ -77,7 +78,7 @@ export function openAuthModal( config = {} ) {
 	 *
 	 * @param {MouseEvent} ev The mouse event.
 	 */
-	const handleCloseButtonClick = ev => {
+	const handleCloseButtonClick = ( ev: MouseEvent ) => {
 		ev.preventDefault();
 		close();
 	};
@@ -131,7 +132,7 @@ export function openAuthModal( config = {} ) {
 	const handleModalClose = () => close();
 	modal.addEventListener( 'closeModal', handleModalClose );
 
-	const closeButtons = modal.querySelectorAll( 'button[data-close], .newspack-ui__modal__close' );
+	const closeButtons = modal.querySelectorAll< HTMLElement >( 'button[data-close], .newspack-ui__modal__close' );
 	if ( closeButtons?.length ) {
 		closeButtons.forEach( closeButton => {
 			closeButton.addEventListener( 'click', handleCloseButtonClick );
@@ -161,17 +162,17 @@ export function openAuthModal( config = {} ) {
 	container.formActionCallback = action => {
 		const titleEl = modal.querySelector( 'h2' );
 		if ( titleEl ) {
-			titleEl.textContent = config.labels.signin.title;
+			titleEl.textContent = config.labels!.signin.title;
 		}
 
-		modal.querySelectorAll( '[data-action]' ).forEach( item => {
+		modal.querySelectorAll< ActionItemElement >( '[data-action]' ).forEach( item => {
 			if ( 'none' !== item.style.display ) {
 				item.prevDisplay = item.style.display;
 			}
 			item.style.display = 'none';
 		} );
-		modal.querySelectorAll( '[data-action~="' + action + '"]' ).forEach( item => {
-			item.style.display = item.prevDisplay;
+		modal.querySelectorAll< ActionItemElement >( '[data-action~="' + action + '"]' ).forEach( item => {
+			item.style.display = item.prevDisplay as string;
 		} );
 		a11y.trapFocus( modal );
 	};
@@ -180,11 +181,11 @@ export function openAuthModal( config = {} ) {
 		const openerContent = document.createElement( 'div' );
 		openerContent.classList.add( 'opener-content' );
 		openerContent.innerHTML = config.content;
-		const form = container.querySelector( 'form' );
+		const form = container.querySelector( 'form' ) as HTMLFormElement;
 		form.insertBefore( openerContent, form.firstChild );
 	}
 
-	const emailInput = container.querySelector( 'input[name="npe"]' );
+	const emailInput = container.querySelector< HTMLInputElement >( 'input[name="npe"]' );
 	if ( emailInput ) {
 		emailInput.value = reader?.email || '';
 	}
@@ -200,7 +201,7 @@ export function openAuthModal( config = {} ) {
 	onAuthFormReady( () => {
 		container.setFormAction( initialFormAction, true );
 		// Default to signin action if otp and timer has expired.
-		if ( initialFormAction === 'otp' && window?.newspackReaderActivation?.getOTPTimeRemaining() <= 0 ) {
+		if ( initialFormAction === 'otp' && ( window?.newspackReaderActivation?.getOTPTimeRemaining() as number ) <= 0 ) {
 			container.setFormAction( 'signin' );
 		}
 	} );

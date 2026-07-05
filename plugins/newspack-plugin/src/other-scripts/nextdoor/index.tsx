@@ -31,14 +31,37 @@ const INGESTION_STATUSES = {
 };
 
 /**
+ * The post's Nextdoor status, as returned by the newspack/v1/nextdoor/post-status endpoint.
+ */
+type NextdoorPostStatus = {
+	can_publish?: boolean;
+	is_shared?: boolean;
+	ingestion_status?: string;
+	ingestion_errors?: string[];
+	shared_at?: string;
+	updated_at?: string;
+};
+
+/**
+ * Extract a non-empty string `message` from an unknown error (e.g. an apiFetch rejection).
+ *
+ * @param error The caught error.
+ * @return The message, or null when absent.
+ */
+const getErrorMessage = ( error: unknown ): string | null => {
+	const message = error && typeof error === 'object' && 'message' in error ? error.message : null;
+	return typeof message === 'string' && message ? message : null;
+};
+
+/**
  * Component for Nextdoor publishing controls in the post editor sidebar.
  */
-const NextdoorPostSidebar = ( { postId, postStatus } ) => {
+const NextdoorPostSidebar = ( { postId, postStatus }: { postId: number; postStatus: string } ) => {
 	const [ isLoading, setIsLoading ] = useState( true );
-	const [ action, setAction ] = useState( null );
-	const [ nextdoorStatus, setNextdoorStatus ] = useState( null );
-	const [ error, setError ] = useState( null );
-	const [ success, setSuccess ] = useState( null );
+	const [ action, setAction ] = useState< string | null >( null );
+	const [ nextdoorStatus, setNextdoorStatus ] = useState< NextdoorPostStatus | null >( null );
+	const [ error, setError ] = useState< string | null >( null );
+	const [ success, setSuccess ] = useState< string | null >( null );
 
 	/**
 	 * Fetch Nextdoor status for the current post
@@ -48,25 +71,25 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 			setIsLoading( true );
 			setError( null );
 
-			const response = await apiFetch( {
+			const response = await apiFetch< NextdoorPostStatus >( {
 				path: `/newspack/v1/nextdoor/post-status/${ postId }`,
 			} );
 
 			setNextdoorStatus( response );
 		} catch ( fetchError ) {
-			setError( fetchError.message || __( 'Failed to load Nextdoor status.', 'newspack-plugin' ) );
+			setError( getErrorMessage( fetchError ) || __( 'Failed to load Nextdoor status.', 'newspack-plugin' ) );
 		} finally {
 			setIsLoading( false );
 		}
 	};
 
-	const callApi = async ( path, method, messages ) => {
+	const callApi = async ( path: string, method: string, messages: { success: string; error: string } ) => {
 		try {
 			setAction( method );
 			setError( null );
 			setSuccess( null );
 
-			const response = await apiFetch( { path, method } );
+			const response = await apiFetch< { success?: boolean; message?: string } >( { path, method } );
 
 			if ( response.success ) {
 				setSuccess( response.message || messages.success );
@@ -75,7 +98,7 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 				setError( response.message || messages.error );
 			}
 		} catch ( err ) {
-			setError( err.message || __( 'Failed to communicate with Nextdoor.', 'newspack-plugin' ) );
+			setError( getErrorMessage( err ) || __( 'Failed to communicate with Nextdoor.', 'newspack-plugin' ) );
 		} finally {
 			setAction( null );
 			clearMessages();
@@ -125,7 +148,7 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 	/**
 	 * Format date for display
 	 */
-	const formatDate = dateString => {
+	const formatDate = ( dateString: string | undefined ) => {
 		if ( ! dateString ) {
 			return '';
 		}
@@ -199,17 +222,25 @@ const NextdoorPostSidebar = ( { postId, postStatus } ) => {
 								{ INGESTION_STATUSES.VALID === nextdoorStatus.ingestion_status && (
 									<p>{ __( 'This post is available in your Nextdoor community.', 'newspack-plugin' ) }</p>
 								) }
-								{ INGESTION_STATUSES.INVALID === nextdoorStatus.ingestion_status && nextdoorStatus.ingestion_errors?.length > 0 && (
-									<>
-										<p>{ __( 'This post could not be published on Nextdoor for the following reasons:', 'newspack-plugin' ) }</p>
-										<ul className="nextdoor-sidebar__error-list">
-											{ nextdoorStatus.ingestion_errors.map( ( msg, index ) => (
-												<li key={ index }>{ msg }</li>
-											) ) }
-										</ul>
-										<p>{ __( 'Please refer to the Publisher policy on Nextdoor for content guidelines.', 'newspack-plugin' ) }</p>
-									</>
-								) }
+								{ INGESTION_STATUSES.INVALID === nextdoorStatus.ingestion_status &&
+									( nextdoorStatus.ingestion_errors?.length ?? 0 ) > 0 && (
+										<>
+											<p>
+												{ __( 'This post could not be published on Nextdoor for the following reasons:', 'newspack-plugin' ) }
+											</p>
+											<ul className="nextdoor-sidebar__error-list">
+												{ nextdoorStatus.ingestion_errors!.map( ( msg, index ) => (
+													<li key={ index }>{ msg }</li>
+												) ) }
+											</ul>
+											<p>
+												{ __(
+													'Please refer to the Publisher policy on Nextdoor for content guidelines.',
+													'newspack-plugin'
+												) }
+											</p>
+										</>
+									) }
 								{ INGESTION_STATUSES.UNPROCESSED === nextdoorStatus.ingestion_status && (
 									<p>
 										{ __(
@@ -292,8 +323,12 @@ const nextdoorIcon = (
 
 // Plugin wrapper.
 const NextdoorPostSidebarPlugin = () => {
-	const { postId, postStatus } = useSelect( select => {
-		const { getCurrentPostId, getCurrentPostAttribute } = select( 'core/editor' );
+	const { postId, postStatus } = useSelect( ( select ): { postId: number; postStatus: string } => {
+		// The editor selectors are untyped for string-keyed stores; assert at the store boundary.
+		const { getCurrentPostId, getCurrentPostAttribute } = select( 'core/editor' ) as {
+			getCurrentPostId: () => number;
+			getCurrentPostAttribute: ( attribute: string ) => string;
+		};
 		return {
 			postId: getCurrentPostId(),
 			postStatus: getCurrentPostAttribute( 'status' ),

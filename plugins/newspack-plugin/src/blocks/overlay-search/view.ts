@@ -30,25 +30,25 @@ const CONTRAST_WHITE = 'var(--wp--custom--color--neutral-0, var(--newspack-ui-co
  * APCA uses a single fixed gamma (2.4) instead of WCAG 2's piecewise function;
  * the per-channel coefficients are APCA's perceptual weighting.
  *
- * @param {number} r Red channel, 0-255.
- * @param {number} g Green channel, 0-255.
- * @param {number} b Blue channel, 0-255.
- * @return {number} Y in 0-1.
+ * @param r Red channel, 0-255.
+ * @param g Green channel, 0-255.
+ * @param b Blue channel, 0-255.
+ * @return Y in 0-1.
  */
 // prettier-ignore
-const sRGBtoY = ( r, g, b ) => ( 0.2126729 * Math.pow( r / 255, 2.4 ) ) + ( 0.7151522 * Math.pow( g / 255, 2.4 ) ) + ( 0.072175 * Math.pow( b / 255, 2.4 ) );
+const sRGBtoY = ( r: number, g: number, b: number ) => ( 0.2126729 * Math.pow( r / 255, 2.4 ) ) + ( 0.7151522 * Math.pow( g / 255, 2.4 ) ) + ( 0.072175 * Math.pow( b / 255, 2.4 ) );
 
 /**
  * APCA Lc contrast value (signed). Polarity-aware: the algorithm uses
  * different exponents depending on whether the text is darker than the
  * background (`bgY > textY`) or lighter.
  *
- * @param {number} textY Text luminance from {@link sRGBtoY}.
- * @param {number} bgY   Background luminance from {@link sRGBtoY}.
- * @return {number} Lc in roughly -108..108. Compare absolute values to pick a winner.
+ * @param textY Text luminance from {@link sRGBtoY}.
+ * @param bgY   Background luminance from {@link sRGBtoY}.
+ * @return Lc in roughly -108..108. Compare absolute values to pick a winner.
  */
 // prettier-ignore
-const apcaLc = ( textY, bgY ) => bgY > textY ? ( Math.pow( bgY, 0.56 ) - Math.pow( textY, 0.57 ) ) * 1.14 * 100 : ( Math.pow( bgY, 0.65 ) - Math.pow( textY, 0.62 ) ) * 1.14 * 100;
+const apcaLc = ( textY: number, bgY: number ) => bgY > textY ? ( Math.pow( bgY, 0.56 ) - Math.pow( textY, 0.57 ) ) * 1.14 * 100 : ( Math.pow( bgY, 0.65 ) - Math.pow( textY, 0.62 ) ) * 1.14 * 100;
 
 /**
  * Pick whichever of `CONTRAST_BLACK`/`CONTRAST_WHITE` has the higher APCA Lc
@@ -57,10 +57,10 @@ const apcaLc = ( textY, bgY ) => bgY > textY ? ( Math.pow( bgY, 0.56 ) - Math.po
  * same way. Falls back to white when the background can't be parsed
  * (transparent, none, or non-rgb keywords).
  *
- * @param {HTMLElement} el Element whose background drives the choice.
- * @return {string} CSS color value (a `var(...)` chain).
+ * @param el Element whose background drives the choice.
+ * @return CSS color value (a `var(...)` chain).
  */
-const pickContrastColor = el => {
+const pickContrastColor = ( el: HTMLElement ) => {
 	const bg = window.getComputedStyle( el ).backgroundColor;
 	const match = bg.match( /rgba?\(([^)]+)\)/ );
 	if ( ! match ) {
@@ -76,8 +76,8 @@ const pickContrastColor = el => {
 	return blackLc > whiteLc ? CONTRAST_BLACK : CONTRAST_WHITE;
 };
 
-const getVisibleFocusable = container =>
-	Array.from( container.querySelectorAll( FOCUSABLE_SELECTOR ) ).filter( el => {
+const getVisibleFocusable = ( container: HTMLElement ): HTMLElement[] =>
+	Array.from( container.querySelectorAll< HTMLElement >( FOCUSABLE_SELECTOR ) ).filter( el => {
 		try {
 			const rect = el.getBoundingClientRect();
 			const style = window.getComputedStyle( el );
@@ -87,14 +87,14 @@ const getVisibleFocusable = container =>
 		}
 	} );
 
-const init = trigger => {
+const init = ( trigger: HTMLElement ) => {
 	const panelId = trigger.getAttribute( 'aria-controls' );
 	const panel = panelId ? document.getElementById( panelId ) : null;
 	if ( ! panel ) {
 		return;
 	}
 
-	const closeBtn = panel.querySelector( '.newspack-overlay-search__close' );
+	const closeBtn = panel.querySelector< HTMLElement >( '.newspack-overlay-search__close' );
 
 	// Captured once. Reassigning on every open is unsafe: if a previous close ever
 	// fell through to the `document.body` fallback, the next open would record
@@ -103,12 +103,12 @@ const init = trigger => {
 	const originalNextSibling = panel.nextSibling;
 
 	let isOpen = false;
-	let lastFocused = null;
-	let focusTrapCleanup = null;
-	let escCleanup = null;
+	let lastFocused: HTMLElement | null = null;
+	let focusTrapCleanup: ( () => void ) | null = null;
+	let escCleanup: ( () => void ) | null = null;
 
 	const trapFocus = () => {
-		const handleKeyDown = e => {
+		const handleKeyDown = ( e: KeyboardEvent ) => {
 			if ( e.key !== 'Tab' ) {
 				return;
 			}
@@ -138,7 +138,7 @@ const init = trigger => {
 		}
 		isOpen = true;
 
-		lastFocused = trigger.ownerDocument.activeElement;
+		lastFocused = trigger.ownerDocument.activeElement as HTMLElement | null;
 
 		document.body.appendChild( panel );
 
@@ -155,7 +155,7 @@ const init = trigger => {
 
 		focusTrapCleanup = trapFocus();
 
-		const onEsc = e => {
+		const onEsc = ( e: KeyboardEvent ) => {
 			if ( e.key === 'Escape' ) {
 				closeOverlay();
 			}
@@ -176,7 +176,7 @@ const init = trigger => {
 				if ( ! isOpen ) {
 					return;
 				}
-				const searchInput = panel.querySelector( 'input[type="search"]' );
+				const searchInput = panel.querySelector< HTMLInputElement >( 'input[type="search"]' );
 				const focusTarget = searchInput || getVisibleFocusable( panel )[ 0 ] || closeBtn;
 				if ( focusTarget && document.contains( focusTarget ) ) {
 					focusTarget.focus();
@@ -251,5 +251,5 @@ const init = trigger => {
 };
 
 domReady( () => {
-	document.querySelectorAll( '.newspack-overlay-search__trigger[aria-controls]' ).forEach( init );
+	document.querySelectorAll< HTMLElement >( '.newspack-overlay-search__trigger[aria-controls]' ).forEach( init );
 } );

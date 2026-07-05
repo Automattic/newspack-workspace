@@ -3,6 +3,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { registerBlockType, registerBlockStyle } from '@wordpress/blocks';
+import type { BlockConfiguration, BlockStyle } from '@wordpress/blocks';
 
 /**
  * Internal dependencies
@@ -41,7 +42,11 @@ export const settings = {
 	save: () => null, // Server-side rendered block.
 };
 
-registerBlockType( { name, ...metadata }, settings );
+// Widen to the generic module shape before asserting the WP types, mirroring
+// the registration barrel (src/blocks/index.ts).
+const blockMetadata: Record< string, unknown > = { ...metadata };
+const blockSettings: Record< string, unknown > = settings;
+registerBlockType( blockMetadata as BlockConfiguration, blockSettings as Partial< BlockConfiguration > );
 
 registerBlockStyle( name, {
 	name: 'linear',
@@ -49,6 +54,7 @@ registerBlockStyle( name, {
 	isDefault: true,
 } );
 
+// `example` is supported by the block styles API but missing from BlockStyle.
 registerBlockStyle( name, {
 	name: 'circular',
 	label: __( 'Circular', 'newspack-plugin' ),
@@ -57,4 +63,4 @@ registerBlockStyle( name, {
 			className: 'is-style-circular',
 		},
 	},
-} );
+} as BlockStyle );

@@ -8,8 +8,19 @@ import classnames from 'classnames';
 import { useCollections } from './hooks/useCollections';
 import CollectionItem from './components/CollectionItem';
 import InspectorPanel from './components/InspectorPanel';
+import type { CollectionsAttributes } from './types';
 
-const Edit = ( { attributes, setAttributes } ) => {
+/**
+ * Props for the Collections block edit component.
+ */
+type CollectionsEditProps = {
+	/** Block attributes. */
+	attributes: CollectionsAttributes;
+	/** Function to update attributes. */
+	setAttributes: ( attributes: Partial< CollectionsAttributes > ) => void;
+};
+
+const Edit = ( { attributes, setAttributes }: CollectionsEditProps ) => {
 	const { layout, columns, imageAlignment, imageSize, showFeaturedImage } = attributes;
 
 	// Fetch collections data.

@@ -50,7 +50,8 @@ type Config = {
 	sync_esp?: boolean;
 	metadata_prefix?: string;
 	sync_esp_delete?: boolean;
-	active_campaign_master_list?: number;
+	// Empty string when unset; a list id (number) once selected.
+	active_campaign_master_list?: number | string;
 	constant_contact_list_id?: string;
 	mailchimp_audience_id?: string;
 	mailchimp_reader_default_status?: string;
@@ -70,6 +71,24 @@ type Config = {
 	sender_name?: string;
 	sender_email_address?: string;
 	contact_email_address?: string;
+	// Reader Activation feature toggles surfaced on the Setup screen.
+	enabled_account_link_menu?: boolean;
+	verify_new_reader_accounts?: boolean;
+	use_custom_lists?: boolean;
+	newsletter_lists?: import( '../../../../packages/components/src/sortable-newsletter-list-control' ).SelectedNewsletterList[];
+	newsletter_list_initial_size?: number;
+	oauth_redirect_to_ras?: boolean;
+	metadata_fields?: string[];
+	// WooCommerce checkout / registration copy managed on the Setup screen.
+	woocommerce_registration_required?: boolean;
+	woocommerce_checkout_privacy_policy_text?: string;
+	woocommerce_enable_subscription_confirmation?: boolean;
+	woocommerce_subscription_confirmation_text?: string;
+	woocommerce_enable_terms_confirmation?: boolean;
+	woocommerce_terms_confirmation_text?: string;
+	woocommerce_terms_confirmation_url?: string;
+	woocommerce_post_checkout_success_text?: string;
+	woocommerce_post_checkout_registration_success_text?: string;
 };
 
 type ConfigKey = keyof Config;
@@ -195,6 +214,93 @@ type PromptProps = {
 	inFlight: boolean;
 	setInFlight: ( inFlight: boolean ) => void;
 	prompt: PromptType;
-	setPrompts: ( prompts: boolean | Array< PromptType > ) => void;
-	unblock: () => void;
+	setPrompts: ( prompts: Array< PromptType > ) => void;
+};
+
+// A published content gate that force-enables reader verification, as returned
+// by the audience-management GET endpoint (verification_required_by_gates).
+type VerificationRequiredGate = {
+	id: string | number;
+	edit_url: string;
+	title: string;
+};
+
+/**
+ * Response of the audience-management GET/POST endpoints consumed by the
+ * Audience wizard root (views/setup/index).
+ */
+type AudienceManagementResponse = {
+	config: Config;
+	prerequisites_status: Record< string, PrequisiteProps[ 'prerequisite' ] >;
+	required_plugins?: Record< string, boolean >;
+	can_esp_sync: {
+		errors: Record< string, string > | string[];
+	};
+	verification_required_by_gates?: VerificationRequiredGate[];
+};
+
+/**
+ * Props bag assembled by the Audience wizard root (views/setup/index) and
+ * shared with every setup screen it renders (Setup, Campaign, Complete,
+ * Content Gating, Payment, Platform Selection). The `headerText`/
+ * `tabbedNavigation` members overlap with `WithWizardScreenProps`, which the
+ * screens receive from `withWizardScreen`.
+ */
+type AudienceSetupSharedProps = {
+	headerText: string;
+	tabbedNavigation?: import( '../../../../packages/components/src/with-wizard-screen' ).WithWizardScreenProps[ 'tabbedNavigation' ];
+	wizardApiFetch: import( '../../../../packages/components/src/with-wizard' ).WithWizardInjectedProps[ 'wizardApiFetch' ];
+	inFlight: boolean;
+	error: false | WpFetchError;
+	fetchConfig: () => Promise< void >;
+	updateConfig: ( key: string, val: unknown ) => void;
+	saveConfig: ( data: Partial< Config > ) => Promise< void >;
+	setInFlight: ( inFlight: boolean ) => void;
+	setError: ( error: false | WpFetchError ) => void;
+	getSharedProps: PrequisiteProps[ 'getSharedProps' ];
+	espSyncErrors: Record< string, string > | string[];
+	prerequisites: Record< string, PrequisiteProps[ 'prerequisite' ] > | null;
+	config: Config;
+	requiredPlugins: Record< string, boolean >;
+	onChangePlatform: () => void;
+	platform?: string;
+	verificationRequiredByGates: VerificationRequiredGate[];
+};
+
+/**
+ * Props of the platform chooser screen (components/platform-selection): the
+ * shared setup props plus the chooser-specific callbacks and flags.
+ */
+type PlatformSelectionProps = AudienceSetupSharedProps & {
+	onComplete: () => void;
+	onCancel?: () => void;
+	showEnableToggle?: boolean;
+	platformSelected?: boolean;
+};
+
+/**
+ * Local config managed by the Content Gating screen (views/setup/content-gating)
+ * and its child controls. Distinct from the Reader Activation `Config`.
+ */
+type ContentGatingViewConfig = {
+	gate_status?: string;
+	edit_gate_url?: string;
+	plans?: unknown[];
+	require_all_plans?: boolean;
+	show_on_subscription_tab?: boolean;
+	has_newsletters?: boolean;
+	newsletter_link_bypass_enabled?: boolean;
+	content_gifting?: ContentGiftingConfig;
+	countdown_banner?: MeteringCountdownConfig;
+};
+
+/**
+ * Props of the Content Gifting and Metered Countdown child controls, which
+ * receive the Content Gating screen's config and its setters.
+ */
+type ContentGatingChildProps = {
+	config: ContentGatingViewConfig;
+	setConfig: import( 'react' ).Dispatch< import( 'react' ).SetStateAction< ContentGatingViewConfig > >;
+	updateConfig: ( newConfig: Partial< ContentGatingViewConfig > ) => void;
+	noBorder?: boolean;
 };

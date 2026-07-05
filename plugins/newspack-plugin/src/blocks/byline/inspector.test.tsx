@@ -2,15 +2,16 @@
  * External dependencies
  */
 import { render, screen, fireEvent } from '@testing-library/react';
+import type { ReactNode } from 'react';
 
 /**
  * Internal dependencies
  */
-import { BylineInspectorControls } from './inspector.jsx';
+import { BylineInspectorControls } from './inspector';
 
 // Mock InspectorControls to render children directly.
 jest.mock( '@wordpress/block-editor', () => ( {
-	InspectorControls: ( { children } ) => <div data-testid="inspector">{ children }</div>,
+	InspectorControls: ( { children }: { children?: ReactNode } ) => <div data-testid="inspector">{ children }</div>,
 } ) );
 
 describe( 'BylineInspectorControls', () => {

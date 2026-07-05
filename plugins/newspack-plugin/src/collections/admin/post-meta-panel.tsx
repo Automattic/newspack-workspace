@@ -6,7 +6,12 @@ import { store as editorStore } from '@wordpress/editor';
 import { useCallback } from '@wordpress/element';
 import domReady from '@wordpress/dom-ready';
 
-const PostMetaPanel = ( { panelTitle, metaDefinitions } ) => {
+type PostMetaPanelProps = {
+	panelTitle: string;
+	metaDefinitions: Record< string, CollectionMetaDefinition >;
+};
+
+const PostMetaPanel = ( { panelTitle, metaDefinitions }: PostMetaPanelProps ) => {
 	const { editPost } = useDispatch( editorStore );
 
 	// Get the current post type and meta data.
@@ -20,11 +25,11 @@ const PostMetaPanel = ( { panelTitle, metaDefinitions } ) => {
 
 	// Update meta data.
 	const updateMeta = useCallback(
-		( key, value, type ) => {
-			let sanitized = value;
+		( key: string, value: string | boolean, type?: string ) => {
+			let sanitized: string | number | boolean = value;
 
 			if ( type === 'integer' ) {
-				sanitized = value === '' ? '' : parseInt( value, 10 ) || 0;
+				sanitized = value === '' ? '' : parseInt( value as string, 10 ) || 0;
 			} else if ( type === 'boolean' ) {
 				sanitized = !! value;
 			}
@@ -35,7 +40,7 @@ const PostMetaPanel = ( { panelTitle, metaDefinitions } ) => {
 	);
 
 	// Render control based on type.
-	const renderControl = ( fieldKey, field ) => {
+	const renderControl = ( fieldKey: string, field: CollectionMetaDefinition ) => {
 		const { key, type, label, help } = field;
 
 		if ( type === 'boolean' ) {

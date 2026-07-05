@@ -7,12 +7,12 @@ import { __, sprintf } from '@wordpress/i18n';
 /**
  * Generates the credit text for the media credit and organization.
  *
- * @param {string} mediaCredit  The media credit.
- * @param {string} organization The organization associated with the media credit. Optional.
+ * @param mediaCredit  The media credit.
+ * @param organization The organization associated with the media credit. Optional.
  *
- * @return {string} The formatted credit text.
+ * @return The formatted credit text.
  */
-const generateCreditText = ( mediaCredit, organization ) => {
+const generateCreditText = ( mediaCredit: string, organization?: string ) => {
 	if ( mediaCredit && organization ) {
 		return sprintf(
 			/* translators: 1: media credit, 2: organization */
@@ -29,17 +29,26 @@ const generateCreditText = ( mediaCredit, organization ) => {
 	);
 };
 
-export const Edit = ( { context: { postType, postId } } ) => {
+export const Edit = ( { context: { postType, postId } }: { context: { postType: string; postId: number } } ) => {
 	const blockProps = useBlockProps();
 
 	const [ featuredImage ] = useEntityProp( 'postType', postType, 'featured_media', postId );
 
 	const { caption, credit } = useSelect(
-		select => {
+		( select ): { caption?: string; credit?: string } => {
 			if ( ! featuredImage ) {
 				return {};
 			}
-			const media = select( 'core' ).getMedia( featuredImage );
+			const media = (
+				select( 'core' ) as {
+					getMedia: ( id: number ) =>
+						| {
+								caption?: { raw?: string };
+								meta?: { _media_credit?: string; _navis_media_credit_org?: string };
+						  }
+						| undefined;
+				}
+			 ).getMedia( featuredImage );
 			if ( ! media ) {
 				return {};
 			}

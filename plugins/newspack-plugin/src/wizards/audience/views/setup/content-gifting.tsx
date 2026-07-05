@@ -16,7 +16,7 @@ import {
 } from '@wordpress/components';
 import { ActionCard, Button, Grid, Notice, SelectControl, TextControl } from '../../../../../packages/components/src';
 
-export default function ContentGifting( { config, setConfig, updateConfig, noBorder = false } ) {
+export default function ContentGifting( { config, setConfig, updateConfig, noBorder = false }: ContentGatingChildProps ) {
 	const giftingErrors = Object.values( newspackAudience?.content_gifting?.can_use_gifting?.errors || {} ).flat();
 	const availableProducts = newspackAudience?.available_products || [];
 	const hasMetering = newspackAudience?.content_gifting?.has_metering;
@@ -94,14 +94,18 @@ export default function ContentGifting( { config, setConfig, updateConfig, noBor
 							label={ __( 'Message', 'newspack-plugin' ) }
 							help={ __( 'Text displayed in the banner shown to recipients of gifted articles.', 'newspack-plugin' ) }
 							value={ config.content_gifting.cta_label }
-							onChange={ value => setConfig( { ...config, content_gifting: { ...config.content_gifting, cta_label: value } } ) }
+							onChange={ ( value: string ) =>
+								setConfig( { ...config, content_gifting: { ...config.content_gifting, cta_label: value } } )
+							}
 							__next40pxDefaultSize
 						/>
 						<TextControl
 							label={ __( 'Subscribe button label', 'newspack-plugin' ) }
 							help={ __( 'Text displayed on the subscribe button in the banner.', 'newspack-plugin' ) }
 							value={ config.content_gifting.button_label }
-							onChange={ value => setConfig( { ...config, content_gifting: { ...config.content_gifting, button_label: value } } ) }
+							onChange={ ( value: string ) =>
+								setConfig( { ...config, content_gifting: { ...config.content_gifting, button_label: value } } )
+							}
 							__next40pxDefaultSize
 						/>
 					</Grid>
@@ -109,7 +113,7 @@ export default function ContentGifting( { config, setConfig, updateConfig, noBor
 						<ToggleGroupControl
 							label={ __( 'Style', 'newspack-plugin' ) }
 							value={ config.content_gifting.style || 'light' }
-							onChange={ value => setConfig( { ...config, content_gifting: { ...config.content_gifting, style: value } } ) }
+							onChange={ value => setConfig( { ...config, content_gifting: { ...config.content_gifting, style: value as string } } ) }
 							isBlock
 							__next40pxDefaultSize
 						>
@@ -123,7 +127,9 @@ export default function ContentGifting( { config, setConfig, updateConfig, noBor
 								'newspack-plugin'
 							) }
 							value={ config.content_gifting.cta_type || 'product' }
-							onChange={ value => setConfig( { ...config, content_gifting: { ...config.content_gifting, cta_type: value } } ) }
+							onChange={ value =>
+								setConfig( { ...config, content_gifting: { ...config.content_gifting, cta_type: value as string } } )
+							}
 							isBlock
 							__next40pxDefaultSize
 						>
@@ -148,7 +154,9 @@ export default function ContentGifting( { config, setConfig, updateConfig, noBor
 								label={ __( 'Subscribe button URL', 'newspack-plugin' ) }
 								help={ __( 'URL for the landing page to redirect to.', 'newspack-plugin' ) }
 								value={ config.content_gifting.cta_url }
-								onChange={ value => setConfig( { ...config, content_gifting: { ...config.content_gifting, cta_url: value } } ) }
+								onChange={ ( value: string ) =>
+									setConfig( { ...config, content_gifting: { ...config.content_gifting, cta_url: value } } )
+								}
 								withMargin={ false }
 								__next40pxDefaultSize
 							/>

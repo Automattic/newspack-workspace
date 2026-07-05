@@ -8,7 +8,9 @@ import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
 import { registerPlugin } from '@wordpress/plugins';
 
 function MembershipsGate() {
-	const newspack_memberships_gate = window.newspack_memberships_gate || {};
+	// The localized config is always present when this editor script runs; the
+	// empty fallback is only defensive and is guarded by the `plans` checks below.
+	const newspack_memberships_gate = ( window.newspack_memberships_gate || {} ) as MembershipsGateConfig;
 	const { gate_plans, plans } = newspack_memberships_gate;
 	const { createNotice } = useDispatch( 'core/notices' );
 	useEffect( () => {
@@ -93,5 +95,6 @@ function MembershipsGate() {
 
 registerPlugin( 'newspack-memberships-gate', {
 	render: MembershipsGate,
-	icon: null,
+	// An explicit falsy icon overrides registerPlugin's default plugins icon via object spread.
+	icon: undefined,
 } );

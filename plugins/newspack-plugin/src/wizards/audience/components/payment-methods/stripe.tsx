@@ -10,12 +10,25 @@ import { useDispatch, useSelect } from '@wordpress/data';
  */
 import { ActionCard, Button } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import type { WizardsStoreSelectors } from '../../../../../packages/components/src/wizard/store';
 
-export const Stripe = ( { stripe } ) => {
-	const isLoading = useSelect( select => select( WIZARD_STORE_NAMESPACE ).isLoading() );
-	const isQuietLoading = useSelect( select => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() );
+/**
+ * The Stripe gateway's data, as returned by the payment wizard endpoint.
+ */
+export type StripeGatewayData = {
+	enabled?: boolean;
+	testMode?: boolean;
+	is_connected_api_test?: boolean;
+	is_connected_api_live?: boolean;
+	is_connected_oauth_test?: boolean;
+	is_connected_oauth_live?: boolean;
+};
+
+export const Stripe = ( { stripe }: { stripe: StripeGatewayData } ) => {
+	const isLoading = useSelect( ( select: ( store: string ) => WizardsStoreSelectors ) => select( WIZARD_STORE_NAMESPACE ).isLoading() );
+	const isQuietLoading = useSelect( ( select: ( store: string ) => WizardsStoreSelectors ) => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() );
 	const { updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
-	const changeHandler = ( key, value ) =>
+	const changeHandler = ( key: string, value: unknown ) =>
 		updateWizardSettings( {
 			slug: 'newspack-audience/payment',
 			path: [ 'payment_gateways', 'stripe', key ],

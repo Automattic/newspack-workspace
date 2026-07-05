@@ -18,8 +18,8 @@ import { useWizardData } from '../../../../../packages/components/src/wizard/sto
 import Configuration from './configuration';
 import { AUDIENCE_DONATIONS_WIZARD_SLUG, OTHER } from '../../constants';
 
-const AudienceDonations = ( props, ref ) => {
-	const { platform_data, donation_data } = useWizardData( AUDIENCE_DONATIONS_WIZARD_SLUG );
+const AudienceDonations = ( props: object, ref: React.ForwardedRef< HTMLDivElement > ) => {
+	const { platform_data, donation_data } = useWizardData< AudienceDonationsWizardData >( AUDIENCE_DONATIONS_WIZARD_SLUG );
 	const usedPlatform = platform_data?.platform;
 	const sections = [
 		{
@@ -34,7 +34,11 @@ const AudienceDonations = ( props, ref ) => {
 			headerText={ __( 'Audience Management / Donations', 'newspack-plugin' ) }
 			sections={ sections }
 			apiSlug={ AUDIENCE_DONATIONS_WIZARD_SLUG }
-			renderAboveSections={ () => values( donation_data?.errors ).map( ( error, i ) => <Notice key={ i } isError noticeText={ error } /> ) }
+			renderAboveSections={ () =>
+				values( donation_data && 'errors' in donation_data ? donation_data.errors : undefined ).map( ( error, i ) => (
+					<Notice key={ i } isError noticeText={ error } />
+				) )
+			}
 			requiredPlugins={ [ 'newspack-blocks', 'woocommerce', 'woocommerce-subscriptions' ] }
 			ref={ ref }
 		/>

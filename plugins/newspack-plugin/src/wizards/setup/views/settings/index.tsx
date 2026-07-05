@@ -9,25 +9,69 @@ import apiFetch from '@wordpress/api-fetch';
  * Internal dependencies
  */
 import { Grid, ImageUpload, SectionHeader, SelectControl, TextControl, withWizardScreen, hooks } from '../../../../../packages/components/src';
+import type { SelectedImageAttachment } from '../../../../../packages/components/src/image-upload';
+import type { SelectControlOption } from '../../../../../packages/components/src/select-control';
+import type { SetupScreenComponentProps, SetupScreenProps } from '../../types';
 
 const pageTitleTemplate = document.title.replace( newspack_aux_data.site_title, '__SITE_TITLE__' );
 
 /**
+ * A profile field value: text fields hold strings, the site icon holds an
+ * image attachment.
+ */
+type ProfileValue = string | SelectedImageAttachment | null | undefined;
+
+/**
+ * The site profile, keyed by field.
+ */
+type ProfileData = Record< string, ProfileValue >;
+
+/**
+ * Descriptor of a single profile setting control.
+ */
+type ProfileSetting = {
+	key: string;
+	label: string;
+	type?: string;
+	placeholder?: string;
+	className?: string;
+	options?: SelectControlOption[];
+};
+
+/**
+ * The profile endpoint's response shape.
+ */
+type ProfileApiResponse = {
+	profile: ProfileData;
+	currencies: SelectControlOption[];
+	countries: SelectControlOption[];
+	wpseo_fields: ProfileSetting[];
+};
+
+type ProfileOptions = {
+	currencies?: SelectControlOption[];
+	countries?: SelectControlOption[];
+	wpseoFields?: ProfileSetting[];
+};
+
+/**
  * Settings Setup Screen.
  */
-const Settings = ( { setError, wizardApiFetch, renderPrimaryButton } ) => {
-	const [ { currencies = [], countries = [], wpseoFields = [] }, setOptions ] = useState( {} );
-	const [ profileData, updateProfileData ] = hooks.useObjectState( {} );
+const Settings = ( { setError, wizardApiFetch, renderPrimaryButton }: SetupScreenComponentProps ) => {
+	const [ { currencies = [], countries = [], wpseoFields = [] }, setOptions ] = useState< ProfileOptions >( {} );
+	const [ profileData, updateProfileData ] = hooks.useObjectState< ProfileData >( {} );
 
 	useEffect( () => {
 		wizardApiFetch( { path: '/newspack/v1/profile/', method: 'GET' } )
 			.then( response => {
+				// The profile endpoint's response (opaque API boundary).
+				const data = response as ProfileApiResponse;
 				setOptions( {
-					currencies: response.currencies,
-					countries: response.countries,
-					wpseoFields: response.wpseo_fields,
+					currencies: data.currencies,
+					countries: data.countries,
+					wpseoFields: data.wpseo_fields,
 				} );
-				updateProfileData( response.profile );
+				updateProfileData( data.profile );
 			} )
 			.catch( setError );
 	}, [] );
@@ -45,12 +89,13 @@ const Settings = ( { setError, wizardApiFetch, renderPrimaryButton } ) => {
 		}
 	}, [ profileData.site_title ] );
 
-	const renderSetting = ( { options, label, key, type, placeholder, className } ) => {
+	const renderSetting = ( { options, label, key, type, placeholder, className }: ProfileSetting ) => {
 		if ( options ) {
 			return (
 				<SelectControl
 					label={ label }
-					value={ profileData[ key ] }
+					// Select-type profile fields hold string values (from the profile API).
+					value={ profileData[ key ] as string }
 					onChange={ updateProfileData( key ) }
 					options={ options }
 					className={ className }
@@ -119,4 +164,4 @@ const Settings = ( { setError, wizardApiFetch, renderPrimaryButton } ) => {
 	);
 };
 
-export default withWizardScreen( Settings, { hidePrimaryButton: true } );
+export default withWizardScreen< SetupScreenProps >( Settings, { hidePrimaryButton: true } );

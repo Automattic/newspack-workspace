@@ -1,4 +1,3 @@
-/* global newspack_newsletters_wizard */
 /**
  * External dependencies
  */
@@ -24,20 +23,34 @@ import {
 } from '@wordpress/components';
 import { atSymbol } from '@wordpress/icons';
 
+/**
+ * Internal dependencies
+ */
+import type {
+	NewslettersBridgeEvents,
+	NewslettersConfigValues,
+	NewslettersError,
+	NewslettersLabels,
+	NewslettersSetting,
+	NewslettersSettingValue,
+	NewslettersWizardData,
+	SubscriptionList,
+} from '../../types';
+
 // Wizard-bridge event contract. The newsletters bridge bundle exposes its
 // event names on `window.newspackNewslettersEvents`; we fall back to the
 // hand-rolled mirror so this file works in isolation (tests, partial loads)
 // and so the two repos stay in sync without coordinated edits once the
 // bridge ships the global.
 const NN_EVENT_NAMESPACE = 'newspack-newsletters';
-const NN_FALLBACK_EVENTS = {
+const NN_FALLBACK_EVENTS: NewslettersBridgeEvents = {
 	BRIDGE_MOUNTED: `${ NN_EVENT_NAMESPACE }:bridge-mounted`,
 	OPEN_MODAL: `${ NN_EVENT_NAMESPACE }:open-local-list-modal`,
 	OPEN_CONFIRM_DELETE: `${ NN_EVENT_NAMESPACE }:open-local-list-confirm-delete`,
 	LOCAL_LIST_SAVED: `${ NN_EVENT_NAMESPACE }:local-list-saved`,
 	LOCAL_LIST_DELETED: `${ NN_EVENT_NAMESPACE }:local-list-deleted`,
 };
-const getNNEvents = () => ( typeof window !== 'undefined' && window.newspackNewslettersEvents ) || NN_FALLBACK_EVENTS;
+const getNNEvents = (): NewslettersBridgeEvents => ( typeof window !== 'undefined' && window.newspackNewslettersEvents ) || NN_FALLBACK_EVENTS;
 const NN_FALLBACK_TIMEOUT_MS = 500;
 
 // Read the bridge-readiness flag synchronously rather than relying on a
@@ -65,6 +78,7 @@ import {
 	integrationIcons,
 	useUnsavedChangesDialog,
 } from '../../../../../packages/components/src';
+import type { ObjectStateUpdate } from '../../../../../packages/components/src/hooks/useObjectState';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import Tracking from './tracking';
 
@@ -74,13 +88,50 @@ const LETTERHEAD_KEY = 'newspack_newsletters_letterhead_api_key';
 
 // Signature over a provider's settings (keys sourced from the settings
 // metadata), so any credential change — key, URL, secret — is detected.
-const providerSettingsSignature = ( config, settings, provider ) =>
+const providerSettingsSignature = (
+	config: NewslettersConfigValues | null | undefined,
+	settings: Record< string, NewslettersSetting > | undefined,
+	provider?: string
+) =>
 	Object.values( settings || {} )
 		.filter( setting => setting?.provider && setting.provider === provider )
 		.map( setting => setting.key )
 		.sort()
 		.map( key => config?.[ key ] ?? '' )
 		.join( '|' );
+
+type SettingsProps = {
+	/** Called with the flat key → value config whenever the fetched settings change. */
+	onUpdate?: ( config: NewslettersConfigValues ) => void;
+	/** Called with the `configured` flag from the settings endpoint. */
+	onConfigured?: ( configured: boolean ) => void;
+	/** Called with the provider-specific labels from the settings endpoint. */
+	onLabels?: ( labels: NewslettersLabels ) => void;
+	/** Called with the Letterhead API key setting's metadata, when present. */
+	onLetterheadSetting?: ( setting: NewslettersSetting ) => void;
+	/** The current flat key → value config, sent on save. */
+	newslettersConfig?: NewslettersConfigValues;
+	/** The provider persisted by the last save. */
+	savedProvider?: string;
+	/** Whether the ESP is connected. */
+	espConnected?: boolean;
+	/** Called with the `esp_connected` flag from the settings endpoint. */
+	onEspConnected?: ( connected: boolean ) => void;
+	/** Whether the component renders in the onboarding (setup wizard) context. */
+	isOnboarding?: boolean;
+	/** OAuth authorization URL, or false when none is needed. */
+	authUrl?: string | false;
+	/** Whether the parent's save request is in flight. */
+	isSaving?: boolean;
+	/** The currently selected provider. */
+	provider?: string;
+	/** Sets the currently selected provider. */
+	setProvider?: ( provider?: string ) => void;
+	/** Sets the OAuth authorization URL. */
+	setAuthUrl?: ( authUrl: string | false ) => void;
+	/** Locks or unlocks the subscription lists. */
+	setLockedLists?: ( locked: boolean ) => void;
+};
 
 export const Settings = ( {
 	onUpdate,
@@ -98,10 +149,10 @@ export const Settings = ( {
 	setProvider = () => {},
 	setAuthUrl = () => {},
 	setLockedLists = () => {},
-} ) => {
+}: SettingsProps ) => {
 	const [ inFlight, setInFlight ] = useState( false );
-	const [ error, setError ] = useState( false );
-	const [ config, updateConfig ] = hooks.useObjectState( {} );
+	const [ error, setError ] = useState< NewslettersError | false >( false );
+	const [ config, updateConfig ] = hooks.useObjectState< NewslettersWizardData >( {} );
 	// Combine the local fetch/verify in-flight state with the parent's save
 	// state so all editing controls are disabled while the outer Save is
 	// in flight — prevents a race where a user changes the ESP between
@@ -124,7 +175,7 @@ export const Settings = ( {
 		verifyToken( newslettersConfig?.newspack_newsletters_service_provider );
 	}, [ newslettersConfig?.newspack_newsletters_service_provider ] );
 
-	const verifyToken = serviceProvider => {
+	const verifyToken = ( serviceProvider?: string ) => {
 		setAuthUrl( false );
 		if ( ! serviceProvider ) {
 			return;
@@ -134,7 +185,7 @@ export const Settings = ( {
 			return;
 		}
 		setInFlight( true );
-		apiFetch( { path: `/newspack-newsletters/v1/${ serviceProvider }/verify_token` } )
+		apiFetch< { valid?: boolean; auth_url?: string } >( { path: `/newspack-newsletters/v1/${ serviceProvider }/verify_token` } )
 			.then( response => {
 				if ( ! response.valid && response.auth_url ) {
 					setAuthUrl( response.auth_url );
@@ -150,15 +201,15 @@ export const Settings = ( {
 			} );
 	};
 
-	const performConfigUpdate = update => {
+	const performConfigUpdate = ( update: ObjectStateUpdate< NewslettersWizardData > ) => {
 		updateConfig( update );
 		if ( onUpdate ) {
-			onUpdate( mapValues( update.settings, property( 'value' ) ) );
+			onUpdate( mapValues( update.settings, property( 'value' ) ) as NewslettersConfigValues );
 		}
 	};
 	const fetchConfiguration = () => {
 		setError( false );
-		apiFetch( {
+		apiFetch< NewslettersWizardData >( {
 			path: '/newspack/v1/wizard/newspack-newsletters/settings',
 		} )
 			.then( response => {
@@ -177,14 +228,14 @@ export const Settings = ( {
 			.catch( setError );
 	};
 	const getSelectedProviderName = () => {
-		const configItem = config.settings.newspack_newsletters_service_provider;
+		const configItem = config.settings?.newspack_newsletters_service_provider;
 		const value = configItem?.value;
 		return configItem?.options?.find( option => option.value === value )?.name;
 	};
 	const handleAuth = () => {
 		if ( authUrl ) {
 			const authWindow = window.open( authUrl, 'esp_oauth', 'width=500,height=600' );
-			authWindow.opener = {
+			authWindow!.opener = {
 				verify: once( () => {
 					window.location.reload();
 				} ),
@@ -206,34 +257,36 @@ export const Settings = ( {
 		} );
 	};
 	useEffect( fetchConfiguration, [] );
-	const getSettingProps = key => ( {
+	const getSettingProps = ( key: string ) => ( {
 		disabled: isDisabled,
-		value: config.settings[ key ]?.value || '',
-		checked: Boolean( config.settings[ key ]?.value ),
-		label: config.settings[ key ]?.description,
-		placeholder: config.settings[ key ]?.placeholder,
+		value: config.settings?.[ key ]?.value || '',
+		checked: Boolean( config.settings?.[ key ]?.value ),
+		label: config.settings?.[ key ]?.description,
+		placeholder: config.settings?.[ key ]?.placeholder,
 		options:
-			config.settings[ key ]?.options?.map( option => ( {
+			config.settings?.[ key ]?.options?.map( option => ( {
 				value: option.value,
 				label: option.name,
 			} ) ) || null,
-		onChange: value => performConfigUpdate( { settings: { [ key ]: { value } } } ),
+		onChange: ( value: NewslettersSettingValue ) => performConfigUpdate( { settings: { [ key ]: { value } } } ),
 	} );
 
 	const providerSelectProps = config.settings ? getSettingProps( 'newspack_newsletters_service_provider' ) : null;
 
 	const ESP_PROVIDER_KEY = 'newspack_newsletters_service_provider';
 
-	const isESPSetting = setting => setting.key === ESP_PROVIDER_KEY || !! setting.provider;
-	const isPostSetting = setting => ! setting.provider && setting.key !== ESP_PROVIDER_KEY && setting.key !== LETTERHEAD_KEY;
+	const isESPSetting = ( setting: NewslettersSetting ) => setting.key === ESP_PROVIDER_KEY || !! setting.provider;
+	const isPostSetting = ( setting: NewslettersSetting ) => ! setting.provider && setting.key !== ESP_PROVIDER_KEY && setting.key !== LETTERHEAD_KEY;
 
-	const renderSettingControl = setting => {
+	const renderSettingControl = ( setting: NewslettersSetting ) => {
 		if ( isOnboarding && ! setting.onboarding ) {
 			return null;
 		}
 		switch ( setting.type ) {
-			case 'select':
-				return <SelectControl key={ setting.key } { ...getSettingProps( setting.key ) } />;
+			case 'select': {
+				const selectProps = getSettingProps( setting.key );
+				return <SelectControl key={ setting.key } { ...selectProps } options={ selectProps.options || undefined } />;
+			}
 			case 'checkbox': {
 				const props = getSettingProps( setting.key );
 				return (
@@ -267,7 +320,7 @@ export const Settings = ( {
 	const postSettings = values( config.settings ).filter( isPostSetting );
 
 	const PROVIDER_ORDER = [ 'active_campaign', 'mailchimp', 'constant_contact', 'manual' ];
-	const PROVIDER_ICONS = {
+	const PROVIDER_ICONS: Record< string, JSX.Element > = {
 		active_campaign: integrationIcons.activeCampaign,
 		mailchimp: integrationIcons.mailchimp,
 		constant_contact: integrationIcons.constantContact,
@@ -299,7 +352,7 @@ export const Settings = ( {
 					{ sprintf(
 						// translators: %s is the name of the ESP.
 						__( 'Authorize %s to connect to Newspack.', 'newspack-plugin' ),
-						getSelectedProviderName()
+						getSelectedProviderName() || ''
 					) }
 				</p>
 				<Button isSecondary onClick={ handleAuth }>
@@ -336,8 +389,8 @@ export const Settings = ( {
 								icon={ PROVIDER_ICONS[ option.value ] }
 								title={ option.name }
 								isActive={ option.value === selectedProviderValue }
-								onEnable={ () => providerSelectProps.onChange( option.value ) }
-								onHeaderClick={ () => providerSelectProps.onChange( option.value ) }
+								onEnable={ () => providerSelectProps?.onChange( option.value ) }
+								onHeaderClick={ () => providerSelectProps?.onChange( option.value ) }
 							/>
 						) ) }
 					</Grid>
@@ -415,24 +468,46 @@ export const Settings = ( {
 	);
 };
 
-export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {}, reloadToken = 0 } ) => {
-	const [ error, setError ] = useState( false );
+type SubscriptionListsProps = {
+	/** Whether the lists are locked pending an ESP settings save. */
+	lockedLists?: boolean;
+	/** Called with the current lists whenever they change. */
+	onUpdate?: ( lists: SubscriptionList[] ) => void;
+	/** The currently selected provider. */
+	provider?: string;
+	/** Provider-specific labels from the settings endpoint. */
+	labels?: NewslettersLabels;
+	/** Incremented by the parent to force a refetch of the lists. */
+	reloadToken?: number;
+};
+
+/**
+ * An action queued for the wizard bridge while it is not ready yet.
+ */
+type PendingBridgeAction = {
+	dispatch: () => void;
+	fallbackUrl?: string;
+	onUnavailable?: () => void;
+};
+
+export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {}, reloadToken = 0 }: SubscriptionListsProps ) => {
+	const [ error, setError ] = useState< NewslettersError | false >( false );
 	const [ inFlight, setInFlight ] = useState( false );
-	const [ togglingIds, setTogglingIds ] = useState( () => new Set() );
-	const [ lists, setLists ] = useState( [] );
-	const fallbackTimerRef = useRef( null );
+	const [ togglingIds, setTogglingIds ] = useState< Set< number | undefined > >( () => new Set() );
+	const [ lists, setLists ] = useState< SubscriptionList[] >( [] );
+	const fallbackTimerRef = useRef< ReturnType< typeof setTimeout > | undefined >( undefined );
 	// When the bridge isn't ready at click time, we queue the dispatch here
 	// instead of firing it into the void. The bridge-mounted handler
 	// (registered below) flushes this; the fallback timer navigates to the
 	// legacy URL if the bridge never mounts.
-	const pendingActionRef = useRef( null );
+	const pendingActionRef = useRef< PendingBridgeAction | null >( null );
 	// Exposed by the reload-listener effect so other readiness paths (the
 	// fallback timer, the dispatchOrQueue happy-path) can force a re-resolve
 	// of listener names when the bridge becomes ready but its mounted-event
 	// rename means our `BRIDGE_MOUNTED` listener never fired.
-	const reattachReloadListenersRef = useRef( null );
+	const reattachReloadListenersRef = useRef< ( () => void ) | null >( null );
 
-	const updateLists = updater => {
+	const updateLists = ( updater: SubscriptionList[] | ( ( prev: SubscriptionList[] ) => SubscriptionList[] ) ) => {
 		setLists( prev => {
 			const nextLists = typeof updater === 'function' ? updater( prev ) : updater;
 			if ( typeof onUpdate === 'function' ) {
@@ -444,14 +519,14 @@ export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {
 	const fetchLists = () => {
 		setError( false );
 		setInFlight( true );
-		apiFetch( {
+		apiFetch< SubscriptionList[] >( {
 			path: '/newspack-newsletters/v1/lists',
 		} )
 			.then( updateLists )
 			.catch( setError )
 			.finally( () => setInFlight( false ) );
 	};
-	const handleToggleActive = async ( list, next ) => {
+	const handleToggleActive = async ( list: SubscriptionList, next: boolean ) => {
 		if ( ! list?.db_id ) {
 			return;
 		}
@@ -465,19 +540,20 @@ export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {
 		} );
 		setError( false );
 		try {
-			const response = await apiFetch( {
+			const response = await apiFetch< Partial< SubscriptionList > >( {
 				path: `/newspack-newsletters/v1/lists/${ dbId }`,
 				method: 'PATCH',
 				data: { active: next },
 			} );
 			updateLists( prev => prev.map( row => ( row.db_id === dbId ? { ...row, ...response } : row ) ) );
 		} catch ( err ) {
+			const fetchError = err as NewslettersError;
 			updateLists( prev => prev.map( row => ( row.db_id === dbId ? { ...row, active: previousActive } : row ) ) );
 			// `rest_no_route` means the PATCH /lists/{id} endpoint isn't
 			// registered yet — the newsletters plugin needs the NEWS-2168
 			// changes. Surface a friendlier message than WordPress's
 			// generic "No route was found...".
-			if ( err?.code === 'rest_no_route' ) {
+			if ( fetchError?.code === 'rest_no_route' ) {
 				setError( {
 					message: __(
 						'This action requires a newer version of Newspack Newsletters. Update the newsletters plugin and try again.',
@@ -485,7 +561,7 @@ export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {
 					),
 				} );
 			} else {
-				setError( err );
+				setError( fetchError );
 			}
 		} finally {
 			setTogglingIds( prev => {
@@ -584,7 +660,11 @@ export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {
 	// bridge never shows up. The event KEY is stored (not the resolved
 	// name) so a late-mounting bridge that exposes renamed events still
 	// receives the correctly-named replay.
-	const dispatchOrQueue = ( eventKey, detail, { fallbackUrl, onUnavailable } = {} ) => {
+	const dispatchOrQueue = (
+		eventKey: keyof NewslettersBridgeEvents,
+		detail: unknown,
+		{ fallbackUrl, onUnavailable }: { fallbackUrl?: string; onUnavailable?: () => void } = {}
+	) => {
 		const dispatch = () => document.dispatchEvent( new CustomEvent( getNNEvents()[ eventKey ], { detail } ) );
 		if ( isBridgeReady() ) {
 			// Any prior queued action from before the bridge was ready is
@@ -638,12 +718,12 @@ export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {
 		} );
 
 	const dispatchOpenAdd = () => {
-		dispatchOrQueue( 'OPEN_MODAL', { mode: 'add' }, { fallbackUrl: newspack_newsletters_wizard.new_subscription_lists_url } );
+		dispatchOrQueue( 'OPEN_MODAL', { mode: 'add' }, { fallbackUrl: window.newspack_newsletters_wizard.new_subscription_lists_url } );
 	};
-	const dispatchOpenEdit = ( list, kind ) => {
+	const dispatchOpenEdit = ( list: SubscriptionList, kind: 'local' | 'esp' ) => {
 		dispatchOrQueue( 'OPEN_MODAL', { mode: 'edit', kind, list }, { fallbackUrl: list?.edit_link } );
 	};
-	const dispatchConfirmDelete = list => {
+	const dispatchConfirmDelete = ( list: SubscriptionList ) => {
 		// No safe legacy delete URL, so surface a notice instead of navigating.
 		dispatchOrQueue( 'OPEN_CONFIRM_DELETE', { list }, { onUnavailable: bridgeUnavailableError } );
 	};
@@ -652,7 +732,7 @@ export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {
 		return null;
 	}
 
-	const showAddNew = !! newspack_newsletters_wizard.new_subscription_lists_url;
+	const showAddNew = !! window.newspack_newsletters_wizard.new_subscription_lists_url;
 
 	return (
 		<>
@@ -705,7 +785,7 @@ export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {
 											/>
 											{ ( isLocal || list?.type_label ) && (
 												<HStack expanded={ false } justify="flex-start" className="newspack-newsletters-list-item__badge">
-													<Badge text={ isLocal ? __( 'Local', 'newspack-plugin' ) : list.type_label } />
+													<Badge text={ isLocal ? __( 'Local', 'newspack-plugin' ) : list.type_label || '' } />
 												</HStack>
 											) }
 										</VStack>
@@ -770,15 +850,15 @@ export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {
 };
 
 const NewslettersSettings = () => {
-	const [ { newslettersConfig }, updateConfiguration ] = hooks.useObjectState( {} );
-	const [ provider, setProvider ] = useState( '' );
+	const [ { newslettersConfig }, updateConfiguration ] = hooks.useObjectState< { newslettersConfig?: NewslettersConfigValues } >( {} );
+	const [ provider, setProvider ] = useState< string | undefined >( '' );
 	const [ lockedLists, setLockedLists ] = useState( false );
-	const [ authUrl, setAuthUrl ] = useState( false );
+	const [ authUrl, setAuthUrl ] = useState< string | false >( false );
 	const [ inFlight, setInFlight ] = useState( false );
-	const [ error, setError ] = useState( false );
-	const [ savedConfig, setSavedConfig ] = useState( null );
-	const [ labels, setLabels ] = useState( {} );
-	const [ letterheadSetting, setLetterheadSetting ] = useState( null );
+	const [ error, setError ] = useState< NewslettersError | false >( false );
+	const [ savedConfig, setSavedConfig ] = useState< NewslettersConfigValues | null | undefined >( null );
+	const [ labels, setLabels ] = useState< NewslettersLabels >( {} );
+	const [ letterheadSetting, setLetterheadSetting ] = useState< NewslettersSetting | null >( null );
 	const [ isConfigured, setIsConfigured ] = useState( false );
 	const [ espConnected, setEspConnected ] = useState( false );
 	const [ listsReloadToken, setListsReloadToken ] = useState( 0 );
@@ -794,7 +874,7 @@ const NewslettersSettings = () => {
 
 	// Only seed `letterheadSetting` once. The setting metadata is stable —
 	// subsequent fetches would re-set the same value and churn renders.
-	const handleLetterheadSetting = useCallback( setting => {
+	const handleLetterheadSetting = useCallback( ( setting: NewslettersSetting ) => {
 		setLetterheadSetting( prev => ( prev ? prev : setting ) );
 	}, [] );
 
@@ -806,7 +886,7 @@ const NewslettersSettings = () => {
 		setError( false );
 		setInFlight( true );
 		try {
-			const response = await apiFetch( {
+			const response = await apiFetch< NewslettersWizardData >( {
 				path: '/newspack/v1/wizard/newspack-newsletters/settings',
 				method: 'POST',
 				data: payload,
@@ -837,7 +917,7 @@ const NewslettersSettings = () => {
 				message: __( 'Settings saved.', 'newspack-plugin' ),
 			} );
 		} catch ( err ) {
-			setError( err );
+			setError( err as NewslettersError );
 		} finally {
 			setInFlight( false );
 		}
@@ -906,7 +986,9 @@ const NewslettersSettings = () => {
 								<TextControl
 									label={ letterheadSetting.description }
 									value={ newslettersConfig?.[ letterheadSetting.key ] || '' }
-									onChange={ value => updateConfiguration( { newslettersConfig: { [ letterheadSetting.key ]: value } } ) }
+									onChange={ ( value: string ) =>
+										updateConfiguration( { newslettersConfig: { [ letterheadSetting.key ]: value } } )
+									}
 									disabled={ inFlight }
 									withMargin={ false }
 								/>

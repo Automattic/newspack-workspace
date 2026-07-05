@@ -4,7 +4,7 @@ import setupArticleViewsAggregates from './article-view';
 import { createMockRAS } from './mocks/ras';
 
 describe( 'setupArticleViewsAggregates', () => {
-	let mock;
+	let mock: ReturnType< typeof createMockRAS >;
 
 	beforeEach( () => {
 		mock = createMockRAS();
@@ -16,7 +16,7 @@ describe( 'setupArticleViewsAggregates', () => {
 	} );
 
 	describe( 'merge strategies', () => {
-		function getMerge( key ) {
+		function getMerge( key: string ) {
 			const call = mock.ras.store.register.mock.calls.find( ( [ k ] ) => k === key );
 			return call[ 1 ].merge;
 		}
@@ -89,7 +89,7 @@ describe( 'setupArticleViewsAggregates', () => {
 		} );
 	} );
 
-	function simulateArticleView( data, timestamp = Date.now() ) {
+	function simulateArticleView( data: Record< string, unknown >, timestamp = Date.now() ) {
 		mock.trigger( 'activity', { action: 'article_view', data, timestamp } );
 	}
 

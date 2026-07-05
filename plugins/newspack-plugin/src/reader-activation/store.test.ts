@@ -70,7 +70,7 @@ describe( 'Store', () => {
 		for ( let i = 0; i < 1001; i++ ) {
 			store.add( 'my-collection', { foo: 'bar' } );
 		}
-		expect( store.get( 'my-collection' ).length ).toEqual( 1000 );
+		expect( ( store.get( 'my-collection' ) as unknown[] ).length ).toEqual( 1000 );
 	} );
 	it( 'should clear added items older than 30 days in a collection', () => {
 		const [ store ] = Store();
@@ -88,7 +88,7 @@ describe( 'Store', () => {
 	} );
 	it( 'should not add to collection if key is empty', () => {
 		const [ store ] = Store();
-		const storeEmptyKey = () => store.add( undefined, { foo: 'bar' } );
+		const storeEmptyKey = () => ( store.add as ( key?: string, value?: unknown ) => void )( undefined, { foo: 'bar' } );
 		expect( storeEmptyKey ).toThrow( Error );
 		expect( store.get( 'my-collection' ) ).toBeNull();
 	} );
@@ -208,10 +208,10 @@ describe( 'Store', () => {
 		it( 'should prune read-only keys from the unsynced queue on init', () => {
 			// Simulate a pre-upgrade state where a read-only key was queued for sync.
 			localStorage.setItem( 'np_reader__unsynced', JSON.stringify( [ 'is_donor', 'custom_key' ] ) );
-			localStorage.setItem( 'np_reader_is_donor', true );
+			localStorage.setItem( 'np_reader_is_donor', String( true ) );
 			localStorage.setItem( 'np_reader_custom_key', '"value"' );
 			Store();
-			const unsynced = JSON.parse( localStorage.getItem( 'np_reader__unsynced' ) );
+			const unsynced = JSON.parse( localStorage.getItem( 'np_reader__unsynced' )! );
 			expect( unsynced ).toEqual( [ 'custom_key' ] );
 		} );
 	} );
@@ -236,8 +236,8 @@ describe( 'Store', () => {
 		} );
 		it( 'should fire a per-key data event for each wiped key so consumer caches invalidate', () => {
 			localStorage.setItem( 'np_reader_is_donor', JSON.stringify( true ) );
-			const events = [];
-			const callback = e => events.push( e.detail );
+			const events: NewspackReaderActivationEventMap[ 'data' ][] = [];
+			const callback = ( e: CustomEvent< NewspackReaderActivationEventMap[ 'data' ] > ) => events.push( e.detail );
 			on( EVENTS.data, callback );
 			const [ , clearStore ] = Store();
 			clearStore();
@@ -321,7 +321,7 @@ describe( 'Store', () => {
 			// return against a singleton-path regression.
 			const [ firstStore ] = Store();
 			window.newspackRASInitialized = true;
-			window.newspackReaderActivation = { store: firstStore };
+			window.newspackReaderActivation = { store: firstStore } as NewspackReaderActivation;
 			const [ , guardClear ] = Store();
 			expect( typeof guardClear ).toBe( 'function' );
 			localStorage.setItem( 'np_reader_is_donor', JSON.stringify( true ) );

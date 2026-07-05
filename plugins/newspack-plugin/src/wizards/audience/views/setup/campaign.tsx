@@ -15,16 +15,16 @@ import { Button, Notice, Waiting, withWizardScreen } from '../../../../../packag
 import Prompt from '../../components/prompt';
 import './style.scss';
 
-const AudienceCampaign = withWizardScreen( ( { error, setError } ) => {
+const AudienceCampaign = withWizardScreen< AudienceSetupSharedProps >( ( { error, setError }: AudienceSetupSharedProps ) => {
 	const { reader_activation_url } = newspackAudience;
 	const [ inFlight, setInFlight ] = useState( false );
-	const [ prompts, setPrompts ] = useState( null );
+	const [ prompts, setPrompts ] = useState< PromptType[] | null >( null );
 	const [ allReady, setAllReady ] = useState( false );
 
 	const fetchPrompts = () => {
 		setError( false );
 		setInFlight( true );
-		apiFetch( {
+		apiFetch< PromptType[] >( {
 			path: '/newspack-popups/v1/audience-management/campaign',
 		} )
 			.then( fetchedPrompts => {

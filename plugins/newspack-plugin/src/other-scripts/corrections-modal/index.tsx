@@ -19,33 +19,58 @@ import moment from 'moment';
 
 /**
  * Correction types.
- *
- * @type {Object[]} The correction types.
  */
-const types = [
+const types: { label: string; value: string }[] = [
 	{ label: __( 'Correction', 'newspack-plugin' ), value: 'correction' },
 	{ label: __( 'Clarification', 'newspack-plugin' ), value: 'clarification' },
 ];
 
 /**
  * Correction piority.
- *
- * @type {Object[]} The correction piority.
  */
-const piority = [
+const piority: { label: string; value: string }[] = [
 	{ label: __( 'High', 'newspack-plugin' ), value: 'high' },
 	{ label: __( 'Low', 'newspack-plugin' ), value: 'low' },
 ];
 
 /**
+ * A correction being edited in the modal: the server correction (when saved)
+ * plus the editable fields. `date` is null when the DateTimePicker emits a
+ * cleared value; `new Date( null )` coerces that to the epoch, so non-null
+ * assertions at the `new Date()` call sites keep that runtime coercion.
+ */
+type EditableCorrection = Partial< NewspackCorrection > & {
+	ID: number;
+	post_content: string;
+	type: string;
+	date: string | null;
+	priority: string;
+	isNew?: boolean;
+};
+
+/**
+ * The payload sent to the corrections REST endpoint.
+ */
+type CorrectionsPayload = {
+	post_id: number;
+	corrections: {
+		id: number | null;
+		content: string;
+		type: string;
+		priority: string;
+		date: string;
+	}[];
+};
+
+/**
  * Save the corrections data.
  *
- * @param {number} postId  The post ID.
- * @param {Object} payload The corrections data.
+ * @param postId  The post ID.
+ * @param payload The corrections data.
  *
- * @return {Promise} The response.
+ * @return The response.
  */
-const saveData = async ( postId, payload ) => {
+const saveData = async ( postId: number, payload: CorrectionsPayload ) => {
 	const response = await apiFetch( {
 		path: `${ window.NewspackCorrectionsData.restPath }/${ postId }`,
 		method: 'POST',
@@ -63,19 +88,20 @@ const CorrectionsModal = () => {
 	/**
 	 * Get the current post ID.
 	 */
-	const postId = useSelect( select => select( 'core/editor' ).getCurrentPostId(), [] );
+	// The editor selectors are untyped for string-keyed stores; assert at the store boundary.
+	const postId = useSelect( select => ( select( 'core/editor' ) as { getCurrentPostId: () => number } ).getCurrentPostId(), [] );
 
 	/**
 	 * Define the state variables.
 	 */
 	const [ isOpen, setIsOpen ] = useState( false );
 	const [ isSaving, setIsSaving ] = useState( false );
-	const [ saveError, setSaveError ] = useState( null );
-	const [ corrections, setCorrections ] = useState( [] );
+	const [ saveError, setSaveError ] = useState< string | null >( null );
+	const [ corrections, setCorrections ] = useState< EditableCorrection[] >( [] );
 	const [ newCorrection, setNewCorrection ] = useState( '' );
 	const [ newCorrectionType, setNewCorrectionType ] = useState( 'correction' );
 	const [ newCorrectionPriority, setNewCorrectionPriority ] = useState( 'low' );
-	const [ isDatePopoverOpen, setIsDatePopoverOpen ] = useState( null );
+	const [ isDatePopoverOpen, setIsDatePopoverOpen ] = useState< number | null >( null );
 	const [ isAddingCorrection, setIsAddingCorrection ] = useState( false );
 
 	/**
@@ -140,7 +166,7 @@ const CorrectionsModal = () => {
 	};
 
 	// Update an existing correction.
-	const updateCorrection = ( correctionId, postContent, type, date, priority ) => {
+	const updateCorrection = ( correctionId: number, postContent: string, type: string, date: string | null, priority: string ) => {
 		setCorrections(
 			corrections.map( correction => {
 				if ( correction.ID === correctionId ) {
@@ -152,7 +178,7 @@ const CorrectionsModal = () => {
 	};
 
 	// Delete a correction.
-	const deleteCorrection = correctionId => {
+	const deleteCorrection = ( correctionId: number ) => {
 		setCorrections( corrections.filter( correction => correction.ID !== correctionId ) );
 	};
 
@@ -160,14 +186,14 @@ const CorrectionsModal = () => {
 	const saveCorrections = async () => {
 		setSaveError( null );
 
-		const payload = {
+		const payload: CorrectionsPayload = {
 			post_id: postId,
 			corrections: corrections.map( ( { ID, post_content, type, date, priority, isNew } ) => ( {
 				id: isNew ? null : ID, // Null means create a new correction
 				content: post_content,
 				type,
 				priority,
-				date: moment( new Date( date ) ).format( 'YYYY-MM-DD HH:mm:ss' ),
+				date: moment( new Date( date! ) ).format( 'YYYY-MM-DD HH:mm:ss' ),
 			} ) ),
 		};
 
@@ -175,7 +201,8 @@ const CorrectionsModal = () => {
 			await saveData( postId, payload );
 			setIsOpen( false );
 		} catch ( error ) {
-			setSaveError( error.message );
+			const errorMessage = error && typeof error === 'object' && 'message' in error ? error.message : null;
+			setSaveError( typeof errorMessage === 'string' ? errorMessage : null );
 		} finally {
 			setIsSaving( false );
 			createNotice( 'success', __( 'Changes have been saved successfully.', 'newspack-plugin' ), {
@@ -261,7 +288,7 @@ const CorrectionsModal = () => {
 												iconPosition="right"
 												__next40pxDefaultSize
 											>
-												{ new Date( correction.date ).toLocaleString() }
+												{ new Date( correction.date! ).toLocaleString() }
 											</Button>
 										</BaseControl>
 										{ isDatePopoverOpen === correction.ID && (
@@ -271,10 +298,8 @@ const CorrectionsModal = () => {
 												onClose={ () => setIsDatePopoverOpen( null ) }
 											>
 												<DateTimePicker
-													label={ __( 'Date', 'newspack-plugin' ) }
-													className="correction-date"
 													is12Hour={ true }
-													currentDate={ new Date( correction.date ) }
+													currentDate={ new Date( correction.date! ) }
 													onChange={ value =>
 														updateCorrection(
 															correction.ID,
@@ -420,5 +445,6 @@ const CorrectionsModal = () => {
 
 registerPlugin( 'newspack-corrections', {
 	render: CorrectionsModal,
-	icon: null,
+	// An explicit falsy icon overrides registerPlugin's default plugins icon via object spread.
+	icon: undefined,
 } );

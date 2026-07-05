@@ -10,12 +10,27 @@ import { useDispatch, useSelect } from '@wordpress/data';
  */
 import { ActionCard, Button } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import type { WizardsStoreSelectors } from '../../../../../packages/components/src/wizard/store';
 
-export const PaymentGateway = ( { gateway } ) => {
-	const isLoading = useSelect( select => select( WIZARD_STORE_NAMESPACE ).isLoading() );
-	const isQuietLoading = useSelect( select => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() );
+/**
+ * A payment gateway's data, as returned by the payment wizard endpoint.
+ */
+export type PaymentGatewayData = {
+	slug: string;
+	name: string;
+	url?: string;
+	enabled?: boolean;
+	test_mode?: boolean;
+	is_connected?: boolean;
+	connect?: string;
+	settings?: string;
+};
+
+export const PaymentGateway = ( { gateway }: { gateway: PaymentGatewayData } ) => {
+	const isLoading = useSelect( ( select: ( store: string ) => WizardsStoreSelectors ) => select( WIZARD_STORE_NAMESPACE ).isLoading() );
+	const isQuietLoading = useSelect( ( select: ( store: string ) => WizardsStoreSelectors ) => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() );
 	const { updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
-	const changeHandler = ( key, value ) =>
+	const changeHandler = ( key: string, value: unknown ) =>
 		updateWizardSettings( {
 			slug: 'newspack-audience/payment',
 			path: [ 'payment_gateways', gateway.slug, key ],

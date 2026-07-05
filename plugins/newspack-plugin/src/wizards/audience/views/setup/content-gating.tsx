@@ -13,9 +13,9 @@ import ContentGifting from './content-gifting';
 import { ActionCard, Notice, withWizardScreen } from '../../../../../packages/components/src';
 import WizardsTab from '../../../wizards-tab';
 
-export default withWizardScreen( ( { wizardApiFetch } ) => {
-	const [ error, setError ] = useState( false );
-	const [ config, setConfig ] = useState( {} );
+export default withWizardScreen< AudienceSetupSharedProps >( ( { wizardApiFetch }: AudienceSetupSharedProps ) => {
+	const [ error, setError ] = useState< false | WpFetchError >( false );
+	const [ config, setConfig ] = useState< ContentGatingViewConfig >( {} );
 
 	useEffect( () => {
 		fetchConfig();
@@ -27,12 +27,12 @@ export default withWizardScreen( ( { wizardApiFetch } ) => {
 			path: '/newspack/v1/wizard/newspack-audience/content-gating',
 		} )
 			.then( data => {
-				setConfig( data );
+				setConfig( data as ContentGatingViewConfig );
 			} )
 			.catch( setError );
 	};
 
-	const updateConfig = newConfig => {
+	const updateConfig = ( newConfig: Partial< ContentGatingViewConfig > ) => {
 		setError( false );
 		wizardApiFetch( {
 			path: '/newspack/v1/wizard/newspack-audience/content-gating',
@@ -41,13 +41,13 @@ export default withWizardScreen( ( { wizardApiFetch } ) => {
 			data: newConfig,
 		} )
 			.then( data => {
-				setConfig( data );
+				setConfig( data as ContentGatingViewConfig );
 			} )
 			.catch( setError );
 	};
 
 	const getContentGateDescription = () => {
-		let message = __( 'Configure the gate rendered on content with restricted access.', 'newspack-plugin' );
+		let message: string = __( 'Configure the gate rendered on content with restricted access.', 'newspack-plugin' );
 		if ( 'publish' === config?.gate_status ) {
 			message += ' ' + __( 'The gate is currently published.', 'newspack-plugin' );
 		} else if ( 'draft' === config?.gate_status || 'trash' === config?.gate_status ) {

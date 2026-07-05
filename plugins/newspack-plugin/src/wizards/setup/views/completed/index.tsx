@@ -17,7 +17,8 @@ import { withWizardScreen, ActionCard, Button, Card, Grid, SectionHeader } from 
 const Completed = () => {
 	useEffect( () => {
 		document.body.classList.add( 'newspack-wizard__completed' );
-		document.querySelector( '.newspack-wizard__header' ).remove();
+		// The wizard header is always rendered on setup wizard screens.
+		document.querySelector( '.newspack-wizard__header' )!.remove();
 		return () => document.body.classList.remove( 'newspack-wizard__completed' );
 	}, [] );
 
@@ -68,7 +69,8 @@ const Completed = () => {
 						className={ cardClasses }
 					>
 						<div className={ buttonClasses }>
-							<Button variant="primary" href={ newspack_urls.homepage }>
+							{ /* The homepage edit link is always present here – setup creates the homepage. */ }
+							<Button variant="primary" href={ newspack_urls.homepage! }>
 								{ __( 'Edit Homepage', 'newspack' ) }
 							</Button>
 						</div>

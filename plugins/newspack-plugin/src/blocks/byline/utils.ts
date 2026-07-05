@@ -1,8 +1,23 @@
 /**
+ * External dependencies
+ */
+import type { MouseEvent as ReactMouseEvent, ReactElement } from 'react';
+
+/**
  * WordPress dependencies
  */
 import { createElement } from '@wordpress/element';
 import { _x } from '@wordpress/i18n';
+
+/**
+ * An author as rendered by the byline block (WP user or CoAuthors Plus
+ * author).
+ */
+export type BylineAuthor = {
+	id?: number | string;
+	name?: string;
+	display_name?: string;
+};
 
 /**
  * Decode HTML entities in a string.
@@ -10,10 +25,10 @@ import { _x } from '@wordpress/i18n';
  * Uses a textarea element to safely decode entities without executing scripts.
  * DOMParser is not used because it normalizes whitespace per HTML parsing rules.
  *
- * @param {string} text Text with HTML entities.
- * @return {string} Decoded text.
+ * @param text Text with HTML entities.
+ * @return Decoded text.
  */
-export function decodeHtmlEntities( text ) {
+export function decodeHtmlEntities( text: string | null | undefined ): string {
 	if ( ! text ) {
 		return '';
 	}
@@ -25,15 +40,15 @@ export function decodeHtmlEntities( text ) {
 /**
  * Parse byline shortcodes to extract display names and render as React elements.
  *
- * @param {string} bylineContent Raw byline content with shortcodes.
- * @return {Array} Array of React elements for display.
+ * @param bylineContent Raw byline content with shortcodes.
+ * @return Array of React elements for display.
  */
-export function parseBylineForDisplay( bylineContent ) {
+export function parseBylineForDisplay( bylineContent: string | null | undefined ): Array< string | ReactElement > {
 	if ( ! bylineContent ) {
 		return [];
 	}
 
-	const elements = [];
+	const elements: Array< string | ReactElement > = [];
 	let lastIndex = 0;
 	const regex = /\[Author id=(\d+)\](.*?)\[\/Author\]/g;
 	let match;
@@ -54,7 +69,7 @@ export function parseBylineForDisplay( bylineContent ) {
 				{
 					key: `author-${ authorId }-${ match.index }`,
 					href: '#author-link',
-					onClick: e => e.preventDefault(),
+					onClick: ( e: ReactMouseEvent ) => e.preventDefault(),
 					className: 'url fn n',
 				},
 				decodeHtmlEntities( authorName )
@@ -76,18 +91,18 @@ export function parseBylineForDisplay( bylineContent ) {
 /**
  * Create an author element for display.
  *
- * @param {Object}  author        Author object.
- * @param {number}  index         Author index for key generation.
- * @param {boolean} linkToArchive Whether to show as a link.
- * @return {Object} React element.
+ * @param author        Author object.
+ * @param index         Author index for key generation.
+ * @param linkToArchive Whether to show as a link.
+ * @return React element.
  */
-function createAuthorElement( author, index, linkToArchive ) {
+function createAuthorElement( author: BylineAuthor, index: number, linkToArchive: boolean | undefined ): ReactElement {
 	const name = author.display_name || author.name;
 	return createElement(
 		'span',
 		{ key: `author-wrapper-${ author.id || index }`, className: 'author vcard' },
 		linkToArchive
-			? createElement( 'a', { href: '#author-link', onClick: e => e.preventDefault(), className: 'url fn n' }, name )
+			? createElement( 'a', { href: '#author-link', onClick: ( e: ReactMouseEvent ) => e.preventDefault(), className: 'url fn n' }, name )
 			: createElement( 'span', { className: 'fn n' }, name )
 	);
 }
@@ -95,11 +110,11 @@ function createAuthorElement( author, index, linkToArchive ) {
 /**
  * Format authors list for display.
  *
- * @param {Array}   authors       Array of author objects.
- * @param {boolean} linkToArchive Whether to show as links.
- * @return {Array} Array of React elements.
+ * @param authors       Array of author objects.
+ * @param linkToArchive Whether to show as links.
+ * @return Array of React elements.
  */
-export function formatAuthorsList( authors, linkToArchive ) {
+export function formatAuthorsList( authors: BylineAuthor[] | null | undefined, linkToArchive: boolean | undefined ): Array< string | ReactElement > {
 	if ( ! authors || authors.length === 0 ) {
 		return [];
 	}
@@ -108,7 +123,7 @@ export function formatAuthorsList( authors, linkToArchive ) {
 		return [ createAuthorElement( authors[ 0 ], 0, linkToArchive ) ];
 	}
 
-	const result = [];
+	const result: Array< string | ReactElement > = [];
 	authors.forEach( ( author, index ) => {
 		result.push( createAuthorElement( author, index, linkToArchive ) );
 		if ( index < authors.length - 2 ) {

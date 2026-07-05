@@ -11,15 +11,36 @@ import { InspectorControls } from '@wordpress/block-editor';
 import { PanelBody, TextControl, ToggleControl } from '@wordpress/components';
 
 /**
+ * Attributes of the Byline block. Both attributes have block.json defaults,
+ * so they are always present.
+ */
+export type BylineAttributes = {
+	prefix: string;
+	linkToAuthorArchive: boolean;
+};
+
+/**
+ * Props for the Byline block inspector controls.
+ */
+type BylineInspectorControlsProps = {
+	/** Block attributes. */
+	attributes: BylineAttributes;
+	/** Set attributes function. */
+	setAttributes: ( attributes: Partial< BylineAttributes > ) => void;
+	/** Whether custom byline is active. */
+	isCustomByline: boolean;
+};
+
+/**
  * Inspector controls for the byline block.
  *
- * @param {Object}   props                Component props.
- * @param {Object}   props.attributes     Block attributes.
- * @param {Function} props.setAttributes  Set attributes function.
- * @param {boolean}  props.isCustomByline Whether custom byline is active.
- * @return {JSX.Element} Inspector controls.
+ * @param props                Component props.
+ * @param props.attributes     Block attributes.
+ * @param props.setAttributes  Set attributes function.
+ * @param props.isCustomByline Whether custom byline is active.
+ * @return Inspector controls.
  */
-export function BylineInspectorControls( { attributes, setAttributes, isCustomByline } ) {
+export function BylineInspectorControls( { attributes, setAttributes, isCustomByline }: BylineInspectorControlsProps ) {
 	return (
 		<InspectorControls>
 			<PanelBody title={ __( 'Settings', 'newspack-plugin' ) }>

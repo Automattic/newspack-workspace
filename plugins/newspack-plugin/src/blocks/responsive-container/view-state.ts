@@ -12,28 +12,30 @@ import { useState, useEffect } from '@wordpress/element';
  * for its preview state. State is keyed by the container's clientId and shared
  * between the container and its breakpoint children.
  */
-const views = new Map();
-const listeners = new Map();
+export type View = 'desktop' | 'mobile';
 
-const DEFAULT_VIEW = 'desktop';
+const views = new Map< string, View >();
+const listeners = new Map< string, Set< ( view: View ) => void > >();
+
+const DEFAULT_VIEW: View = 'desktop';
 
 /**
  * Returns the current view for a container, defaulting to desktop.
  *
- * @param {string} clientId Container clientId.
- * @return {string} 'desktop' | 'mobile'
+ * @param clientId Container clientId.
+ * @return 'desktop' | 'mobile'
  */
-export function getView( clientId ) {
+export function getView( clientId: string ): View {
 	return views.get( clientId ) || DEFAULT_VIEW;
 }
 
 /**
  * Sets the view for a container and notifies subscribers.
  *
- * @param {string} clientId Container clientId.
- * @param {string} view     'desktop' | 'mobile'
+ * @param clientId Container clientId.
+ * @param view     'desktop' | 'mobile'
  */
-function setView( clientId, view ) {
+function setView( clientId: string, view: View ) {
 	views.set( clientId, view );
 	listeners.get( clientId )?.forEach( callback => callback( view ) );
 }
@@ -41,11 +43,11 @@ function setView( clientId, view ) {
 /**
  * Subscribe to the view of a container instance and read/update it.
  *
- * @param {string} clientId Container clientId (the container's own, or a
- *                          breakpoint's parent clientId).
- * @return {Array} `[ view, setViewForContainer ]`.
+ * @param clientId Container clientId (the container's own, or a
+ *                 breakpoint's parent clientId).
+ * @return `[ view, setViewForContainer ]`.
  */
-export function useView( clientId ) {
+export function useView( clientId: string ): [ View, ( newView: View ) => void ] {
 	const [ view, setLocal ] = useState( () => getView( clientId ) );
 
 	useEffect( () => {
@@ -56,10 +58,11 @@ export function useView( clientId ) {
 			subscribers = new Set();
 			listeners.set( clientId, subscribers );
 		}
-		subscribers.add( setLocal );
+		const containerSubscribers = subscribers;
+		containerSubscribers.add( setLocal );
 		return () => {
-			subscribers.delete( setLocal );
-			if ( subscribers.size === 0 ) {
+			containerSubscribers.delete( setLocal );
+			if ( containerSubscribers.size === 0 ) {
 				listeners.delete( clientId );
 			}
 		};

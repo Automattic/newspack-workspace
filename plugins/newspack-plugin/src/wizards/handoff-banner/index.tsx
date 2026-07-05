@@ -16,12 +16,19 @@ import { __ } from '@wordpress/i18n';
 import { Button } from '../../../packages/components/src';
 import './style.scss';
 
+interface HandoffBannerProps {
+	bodyText?: string;
+	primaryButtonText?: string;
+	dismissButtonText?: string;
+	primaryButtonURL?: string;
+}
+
 const HandoffBanner = ( {
 	bodyText = __( 'Return to Newspack after completing configuration', 'newspack-plugin' ),
 	primaryButtonText = __( 'Back to Newspack', 'newspack-plugin' ),
 	dismissButtonText = __( 'Dismiss', 'newspack-plugin' ),
 	primaryButtonURL = '/wp-admin/admin.php?page=newspack-dashboard',
-} ) => {
+}: HandoffBannerProps ) => {
 	const [ visibility, setVisibility ] = useState( true );
 	return (
 		visibility && (

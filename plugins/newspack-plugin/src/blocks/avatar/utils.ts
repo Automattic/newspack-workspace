@@ -1,19 +1,41 @@
 /**
+ * Border radius as stored in block attributes: a single CSS value, or a
+ * per-corner object of CSS values.
+ */
+type AvatarBorderRadius = string | number | Record< string, string | number >;
+
+/**
+ * Attributes of the Avatar block (size and linkToAuthorArchive have
+ * block.json defaults, so they are always present).
+ */
+export type AvatarAttributes = {
+	size: number;
+	linkToAuthorArchive: boolean;
+	className?: string;
+	userId?: number;
+	style?: {
+		border?: {
+			radius?: AvatarBorderRadius;
+		};
+	};
+};
+
+/**
  * Generate a --overlap-mask CSS custom property for the overlapped avatar style.
  *
  * Builds an SVG mask with a <rect rx="..."> cutout that adapts to the
  * actual border-radius, producing a clean notch where the next avatar overlaps.
  *
- * @param {Object} attrs Block attributes.
- * @return {Object} Style object with --overlap-mask, or empty object if not applicable.
+ * @param attrs Block attributes.
+ * @return Style object with --overlap-mask, or empty object if not applicable.
  */
-export const getOverlapMaskStyle = attrs => {
+export const getOverlapMaskStyle = ( attrs: AvatarAttributes ): Record< string, string > => {
 	const className = attrs.className || '';
 	if ( ! className.includes( 'is-style-overlapped' ) ) {
 		return {};
 	}
 
-	let radius = attrs?.style?.border?.radius ?? '100%';
+	let radius: AvatarBorderRadius | undefined = attrs?.style?.border?.radius ?? '100%';
 
 	// Per-corner object: use the value if all corners are the same.
 	if ( typeof radius === 'object' ) {

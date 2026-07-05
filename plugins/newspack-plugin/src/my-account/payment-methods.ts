@@ -9,11 +9,11 @@ domReady( function () {
 	const { nonce, rest_url, should_rate_limit } = newspack_my_account || {};
 
 	// Rate limit the add payment method form.
-	const addPaymentForm = document.getElementById( 'add_payment_method' );
+	const addPaymentForm = document.getElementById( 'add_payment_method' ) as HTMLFormElement | null;
 	if ( addPaymentForm && Boolean( should_rate_limit ) ) {
-		const errorContainer = document.querySelector( '.woocommerce-notices-wrapper' );
-		const submitButton = addPaymentForm.querySelector( 'input[type="submit"], button[type="submit"]' );
-		const rateLimit = function ( e ) {
+		const errorContainer = document.querySelector( '.woocommerce-notices-wrapper' ) as HTMLElement;
+		const submitButton = addPaymentForm.querySelector( 'input[type="submit"], button[type="submit"]' ) as HTMLElement;
+		const rateLimit = function ( e: Event ) {
 			if ( addPaymentForm.hasAttribute( 'data-check-rate-limit' ) ) {
 				errorContainer.textContent = '';
 				submitButton.setAttribute( 'disabled', '' );

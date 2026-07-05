@@ -34,7 +34,7 @@ const MODAL_TYPE_RENAME = 2;
 const MODAL_TYPE_NEW = 3;
 const DEFAULT_CAMPAIGNS_FILTER = 'active';
 
-const modalTitle = modalType => {
+const modalTitle = ( modalType: number | undefined ) => {
 	if ( MODAL_TYPE_RENAME === modalType ) {
 		return __( 'Rename Campaign', 'newspack-plugin' );
 	} else if ( MODAL_TYPE_DUPLICATE === modalType ) {
@@ -43,7 +43,7 @@ const modalTitle = modalType => {
 	return __( 'Add New Campaign', 'newspack-plugin' );
 };
 
-const modalButton = modalType => {
+const modalButton = ( modalType: number | undefined ) => {
 	if ( MODAL_TYPE_RENAME === modalType ) {
 		return __( 'Rename', 'newspack-plugin' );
 	} else if ( MODAL_TYPE_DUPLICATE === modalType ) {
@@ -52,7 +52,7 @@ const modalButton = modalType => {
 	return __( 'Add', 'newspack-plugin' );
 };
 
-const filterByCampaign = ( prompts, campaignId ) => {
+const filterByCampaign = ( prompts: CampaignsPrompt[], campaignId: string ) => {
 	if ( 'trash' === campaignId ) {
 		return prompts.filter( ( { status } ) => 'trash' === status );
 	}
@@ -69,8 +69,8 @@ const filterByCampaign = ( prompts, campaignId ) => {
 	return notTrashedPrompts.filter( ( { campaign_groups: campaigns } ) => campaigns && campaigns.find( term => +term.term_id === +campaignId ) );
 };
 
-const groupBySegment = ( segments, prompts ) => {
-	const grouped = [];
+const groupBySegment = ( segments: CampaignsSegment[], prompts: CampaignsPrompt[] ): CampaignsSegmentGroup[] => {
+	const grouped: CampaignsSegmentGroup[] = [];
 	grouped.push(
 		...segments.map( ( { name: label, id, configuration, criteria } ) => ( {
 			label,
@@ -98,7 +98,7 @@ const groupBySegment = ( segments, prompts ) => {
 /**
  * Campaign management screen.
  */
-const Campaigns = props => {
+const Campaigns = ( props: CampaignsScreenProps ) => {
 	const {
 		campaignId = DEFAULT_CAMPAIGNS_FILTER,
 		campaigns = [],
@@ -111,12 +111,14 @@ const Campaigns = props => {
 		renameCampaignGroup,
 	} = props;
 
-	const [ popoverVisible, setPopoverVisible ] = useState();
-	const [ modalVisible, setModalVisible ] = useState();
-	const [ modalType, setModalType ] = useState();
-	const [ campaignName, setCampaignName ] = useState();
+	const [ popoverVisible, setPopoverVisible ] = useState< boolean >();
+	const [ modalVisible, setModalVisible ] = useState< boolean >();
+	const [ modalType, setModalType ] = useState< number >();
+	const [ campaignName, setCampaignName ] = useState< string >();
 
-	const allPrompts = useContext( CampaignsContext );
+	// The provider (the Campaigns wizard root) supplies the prompts array; the
+	// context's default-value shape is the documented mismatch — see contexts/Campaigns.
+	const allPrompts = useContext( CampaignsContext ) as CampaignsPrompt[];
 	const prompts = filterByCampaign( allPrompts, campaignId );
 	const hasUnassigned = filterByCampaign( allPrompts, 'unassigned' ).length;
 
@@ -128,7 +130,7 @@ const Campaigns = props => {
 
 	const history = useHistory();
 
-	const submitModal = modalText => {
+	const submitModal = ( modalText: string ) => {
 		if ( MODAL_TYPE_NEW === modalType ) {
 			createCampaignGroup( modalText );
 		} else if ( MODAL_TYPE_RENAME === modalType ) {
@@ -143,7 +145,7 @@ const Campaigns = props => {
 	const archivedCampaigns = campaigns.filter( ( { status } ) => 'archive' === status );
 	const campaignData = dataForCampaignId( campaignId, campaigns );
 
-	const campaignsSelectOptions = [
+	const campaignsSelectOptions: Array< { key: string; name: string; className?: string } > = [
 		{
 			key: DEFAULT_CAMPAIGNS_FILTER,
 			name: __( 'Active Prompts', 'newspack-plugin' ),
@@ -215,7 +217,7 @@ const Campaigns = props => {
 					{ campaignData && (
 						<div className="newspack-campaigns__campaign-group__filter-group-actions__button">
 							<Button
-								className={ popoverVisible && 'popover-active' }
+								className={ popoverVisible ? 'popover-active' : undefined }
 								onClick={ () => setPopoverVisible( ! popoverVisible ) }
 								icon={ moreVertical }
 								label={ __( 'Actions', 'newspack-plugin' ) }
@@ -224,7 +226,7 @@ const Campaigns = props => {
 							{ popoverVisible && (
 								<CampaignManagementPopover
 									dismiss={ () => setPopoverVisible( false ) }
-									isArchive={ campaignData && 'archive' === campaignData.status }
+									isArchive={ !! campaignData && 'archive' === campaignData.status }
 									onActivate={ () => manageCampaignGroup( prompts ) }
 									onArchive={ () => archiveCampaignGroup( campaignId, true ) }
 									onDeactivate={ () => manageCampaignGroup( prompts, 'DELETE' ) }
@@ -272,8 +274,8 @@ const Campaigns = props => {
 								label={ __( 'Campaign Name', 'newspack-plugin' ) }
 								hideLabelFromVision={ true }
 								value={ campaignName }
-								onKeyDown={ event => {
-									if ( ENTER === event.keyCode && '' !== campaignName ) {
+								onKeyDown={ ( event: React.KeyboardEvent ) => {
+									if ( ENTER === event.keyCode && !! campaignName && '' !== campaignName ) {
 										event.preventDefault();
 										submitModal( campaignName );
 									}
@@ -288,7 +290,7 @@ const Campaigns = props => {
 								>
 									{ __( 'Cancel', 'newspack-plugin' ) }
 								</Button>
-								<Button variant="primary" disabled={ ! campaignName } onClick={ () => submitModal( campaignName ) }>
+								<Button variant="primary" disabled={ ! campaignName } onClick={ () => campaignName && submitModal( campaignName ) }>
 									{ modalButton( modalType ) }
 								</Button>
 							</Card>

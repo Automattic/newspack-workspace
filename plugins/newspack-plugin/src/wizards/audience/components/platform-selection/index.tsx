@@ -41,9 +41,18 @@ export const OPTIONS = [
 	},
 ];
 
-const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight, showEnableToggle, platform, platformSelected } ) => {
+const PlatformSelection = ( {
+	onComplete,
+	onCancel,
+	config,
+	saveConfig,
+	inFlight,
+	showEnableToggle,
+	platform,
+	platformSelected,
+}: PlatformSelectionProps ) => {
 	const { saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
-	const [ installing, setInstalling ] = useState( null );
+	const [ installing, setInstalling ] = useState< keyof typeof PLATFORM_PLUGINS | null >( null );
 	const [ installFailed, setInstallFailed ] = useState( false );
 	const { confirmDialog: disableDialog, requestConfirm: requestDisable } = useConfirmDialog( {
 		title: __( 'Disable Audience Management?', 'newspack-plugin' ),
@@ -55,7 +64,7 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 		isDestructive: true,
 	} );
 
-	const choose = value => {
+	const choose = ( value: keyof typeof PLATFORM_PLUGINS ) => {
 		saveWizardSettings( {
 			slug: PAYMENT_WIZARD_SLUG,
 			payloadPath: [ 'platform_data' ],
@@ -63,7 +72,7 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 				path: [ 'platform_data', 'platform' ],
 				value,
 			},
-		} ).then( result => {
+		} ).then( ( result: unknown ) => {
 			// On a failed save the store swallows the error and resolves to
 			// undefined; don't advance past an unsaved platform choice.
 			if ( ! result ) {
@@ -163,7 +172,7 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 								badge={ isSelected ? __( 'Selected', 'newspack-plugin' ) : undefined }
 								badgeLevel={ isSelected ? 'success' : undefined }
 								actionText={ __( 'Select', 'newspack-plugin' ) }
-								onClick={ () => choose( option.value ) }
+								onClick={ () => choose( option.value as keyof typeof PLATFORM_PLUGINS ) }
 							/>
 						);
 					} ) }
@@ -181,4 +190,4 @@ const PlatformSelection = ( { onComplete, onCancel, config, saveConfig, inFlight
 	);
 };
 
-export default withWizardScreen( PlatformSelection );
+export default withWizardScreen< PlatformSelectionProps >( PlatformSelection );

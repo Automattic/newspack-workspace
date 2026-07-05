@@ -10,17 +10,17 @@ import { domReady } from '../utils';
  *
  * @return {HTMLInputElement|null} The hidden input holding the OTP code value, the original input if maxlength is missing, or null if no input provided.
  */
-export function initOTPInput( originalInput ) {
+export function initOTPInput( originalInput: HTMLInputElement ) {
 	if ( ! originalInput ) {
 		return null;
 	}
-	const length = parseInt( originalInput.getAttribute( 'maxlength' ) );
+	const length = parseInt( originalInput.getAttribute( 'maxlength' ) as string );
 	if ( ! length ) {
 		return originalInput;
 	}
-	const inputContainer = originalInput.parentNode;
+	const inputContainer = originalInput.parentNode as HTMLElement;
 	inputContainer.removeChild( originalInput );
-	const values = [];
+	const values: string[] = [];
 	const otpCodeInput = document.createElement( 'input' );
 	otpCodeInput.setAttribute( 'type', 'hidden' );
 	otpCodeInput.setAttribute( 'name', 'otp_code' );
@@ -31,14 +31,15 @@ export function initOTPInput( originalInput ) {
 		digit.setAttribute( 'pattern', '[0-9]' );
 		digit.setAttribute( 'autocomplete', 0 === i ? 'one-time-code' : 'off' );
 		digit.setAttribute( 'inputmode', 'numeric' );
-		digit.setAttribute( 'data-index', i );
+		digit.setAttribute( 'data-index', String( i ) );
 		digit.addEventListener( 'keydown', ev => {
-			const prev = inputContainer.querySelector( `[data-index="${ i - 1 }"]` );
-			const next = inputContainer.querySelector( `[data-index="${ i + 1 }"]` );
+			const target = ev.target as HTMLInputElement;
+			const prev = inputContainer.querySelector< HTMLInputElement >( `[data-index="${ i - 1 }"]` );
+			const next = inputContainer.querySelector< HTMLInputElement >( `[data-index="${ i + 1 }"]` );
 			switch ( ev.key ) {
 				case 'Backspace':
 					ev.preventDefault();
-					ev.target.value = '';
+					target.value = '';
 					if ( prev ) {
 						prev.focus();
 					}
@@ -60,8 +61,8 @@ export function initOTPInput( originalInput ) {
 				default:
 					if ( ev.key.match( /^[0-9]$/ ) ) {
 						ev.preventDefault();
-						ev.target.value = ev.key;
-						ev.target.dispatchEvent(
+						target.value = ev.key;
+						target.dispatchEvent(
 							new Event( 'input', {
 								bubbles: true,
 								cancelable: true,
@@ -75,13 +76,14 @@ export function initOTPInput( originalInput ) {
 			}
 		} );
 		digit.addEventListener( 'input', ev => {
-			const otpInput = ev.target.value.trim();
+			const target = ev.target as HTMLInputElement;
+			const otpInput = target.value.trim();
 			if ( length === otpInput.length ) {
 				for ( let index = 0; index < length; index++ ) {
 					const char = otpInput[ index ];
 					if ( /^[0-9]$/.test( char ) ) {
-						const input = inputContainer.querySelector( `[data-index="${ index }"]` );
-						input.value = char;
+						const input = inputContainer.querySelector< HTMLInputElement >( `[data-index="${ index }"]` );
+						input!.value = char;
 						values[ index ] = char;
 					}
 				}
@@ -89,25 +91,25 @@ export function initOTPInput( originalInput ) {
 				return;
 			} else if ( otpInput.match( /^[0-9]$/ ) ) {
 				values[ i ] = otpInput;
-				const next = inputContainer.querySelector( `[data-index="${ i + 1 }"]` );
+				const next = inputContainer.querySelector< HTMLInputElement >( `[data-index="${ i + 1 }"]` );
 				if ( next ) {
 					next.focus();
 				}
 			} else {
-				ev.target.value = '';
+				target.value = '';
 			}
 			otpCodeInput.value = values.join( '' );
 		} );
 		digit.addEventListener( 'paste', ev => {
 			ev.preventDefault();
-			const paste = ( ev.clipboardData || window.clipboardData ).getData( 'text' );
+			const paste = ( ev.clipboardData || ( window.clipboardData as DataTransfer ) ).getData( 'text' );
 			if ( paste.length !== length ) {
 				return;
 			}
 			for ( let j = 0; j < length; j++ ) {
 				if ( paste[ j ].match( /^[0-9]$/ ) ) {
-					const digitInput = inputContainer.querySelector( `[data-index="${ j }"]` );
-					digitInput.value = paste[ j ];
+					const digitInput = inputContainer.querySelector< HTMLInputElement >( `[data-index="${ j }"]` );
+					digitInput!.value = paste[ j ];
 					values[ j ] = paste[ j ];
 				}
 			}
@@ -122,7 +124,7 @@ export function initOTPInput( originalInput ) {
  * Initialize all OTP inputs on the page.
  */
 export function initAllOTPInputs() {
-	const otpInputs = document.querySelectorAll( 'input[name="otp_code"]' );
+	const otpInputs = document.querySelectorAll< HTMLInputElement >( 'input[name="otp_code"]' );
 	otpInputs.forEach( initOTPInput );
 }
 

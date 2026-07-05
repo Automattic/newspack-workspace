@@ -1,6 +1,7 @@
 /**
  * External dependencies
  */
+import type { ComponentProps } from 'react';
 import { render, fireEvent, waitFor, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -37,7 +38,7 @@ const criteria = [
 		placeholder: 'google.com, facebook.com',
 		matching_attribute: 'referrer',
 	},
-];
+] as CampaignsCriteriaConfig[];
 
 const SEGMENTS = [
 	{
@@ -56,7 +57,7 @@ describe( 'A new segment creation', () => {
 	const mockProps = {
 		segmentId: 'new',
 		setSegments: jest.fn(),
-		wizardApiFetch: ( { data, method } ) =>
+		wizardApiFetch: ( { data, method }: { data: unknown; method?: string } ) =>
 			new Promise( resolve => {
 				if ( method === 'POST' ) {
 					resolve( [ ...SEGMENTS, data ] );
@@ -67,10 +68,10 @@ describe( 'A new segment creation', () => {
 	};
 
 	beforeEach( () => {
-		window.newspackAudienceCampaigns = { criteria };
+		window.newspackAudienceCampaigns = { criteria } as Partial< Window[ 'newspackAudienceCampaigns' ] > as Window[ 'newspackAudienceCampaigns' ];
 		render(
 			<MemoryRouter>
-				<SingleSegment { ...mockProps } />
+				<SingleSegment { ...( mockProps as ComponentProps< typeof SingleSegment > ) } />
 			</MemoryRouter>
 		);
 	} );
@@ -93,7 +94,7 @@ describe( 'A new segment creation', () => {
 		expect( screen.getByText( 'Save' ) ).toBeDisabled();
 
 		// Save button is disabled until at least one option has been updated.
-		fireEvent.change( screen.getByTestId( 'newspack-criteria-articles_read' ).querySelector( 'input[data-testid="min"]' ), {
+		fireEvent.change( screen.getByTestId( 'newspack-criteria-articles_read' ).querySelector( 'input[data-testid="min"]' )!, {
 			target: { value: '42' },
 		} );
 		expect( screen.getByText( 'Save' ) ).not.toBeDisabled();

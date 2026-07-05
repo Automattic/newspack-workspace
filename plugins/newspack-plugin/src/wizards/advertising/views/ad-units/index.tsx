@@ -16,18 +16,39 @@ import { arrowLeft } from '@wordpress/icons';
 import { ActionCard, Button, Card, Notice, SelectControl, TextControl, withWizardScreen } from '../../../../../packages/components/src';
 import ServiceAccountConnection from './service-account-connection';
 import OptionsPopover from './options-popover';
+import type { AdUnit as AdUnitData, AdsWizardApiFetch, FetchAdvertisingData, GoogleAdManagerServiceData, UpdateWithAPI } from '../../types';
 
 const CREATE_AD_ID_PARAM = 'create';
+
+export type AdUnitsViewProps = {
+	adUnits: Record< string, AdUnitData >;
+	parentAdUnits?: AdUnitData[];
+	onDelete: ( id: AdUnitData[ 'id' ] ) => void;
+	wizardApiFetch: AdsWizardApiFetch;
+	updateWithAPI: UpdateWithAPI;
+	service: string;
+	serviceData: GoogleAdManagerServiceData;
+	fetchAdvertisingData: FetchAdvertisingData;
+};
 
 /**
  * Advertising management screen.
  */
-const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWithAPI, service, serviceData, fetchAdvertisingData } ) => {
+const AdUnits = ( {
+	adUnits,
+	parentAdUnits,
+	onDelete,
+	wizardApiFetch,
+	updateWithAPI,
+	service,
+	serviceData,
+	fetchAdvertisingData,
+}: AdUnitsViewProps ) => {
 	const gamErrorMessage = serviceData?.status?.error
 		? `${ __( 'Google Ad Manager Error', 'newspack-plugin' ) }: ${ serviceData.status.error }`
 		: false;
 
-	const updateNetworkCode = async ( value, isGam ) => {
+	const updateNetworkCode = async ( value: string | undefined, isGam: boolean ) => {
 		await wizardApiFetch( {
 			path: '/newspack/v1/wizard/billboard/network_code/',
 			method: 'POST',
@@ -67,15 +88,15 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 	const { connection_mode } = serviceData.status;
 	const isLegacy = 'legacy' === connection_mode;
 
-	const isDisconnectedGAM = adUnit => {
+	const isDisconnectedGAM = ( adUnit: AdUnitData ) => {
 		return ! adUnit.is_default && ! adUnit.is_legacy && isLegacy;
 	};
 
-	const canEdit = adUnit => {
+	const canEdit = ( adUnit: AdUnitData ) => {
 		return ! adUnit.is_default && ! isDisconnectedGAM( adUnit );
 	};
 
-	const getCodeValue = adUnit => {
+	const getCodeValue = ( adUnit: AdUnitData ) => {
 		const { code, path } = adUnit;
 		if ( isLegacy ) {
 			return code;
@@ -112,7 +133,7 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 					<SelectControl
 						label={ __( 'Connected GAM network code', 'newspack-plugin' ) }
 						value={ networkCode }
-						options={ serviceData.available_networks.map( network => ( {
+						options={ ( serviceData.available_networks || [] ).map( network => ( {
 							label: `${ network.name } (${ network.code })`,
 							value: network.code,
 						} ) ) }
@@ -123,7 +144,7 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 						value={ parentNetworkCode }
 						onChange={ setParentNetworkCode }
 					/>
-					{ parentAdUnits.length > 0 && (
+					{ !! parentAdUnits?.length && (
 						<SelectControl
 							label={ __( 'Set parent ad unit for the site inventory', 'newspack-plugin' ) }
 							value={ parentAdUnitId }
@@ -160,7 +181,7 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 				/>
 			) }
 			{ gamErrorMessage && <Notice noticeText={ gamErrorMessage } isError /> }
-			{ serviceData.created_targeting_keys?.length > 0 && (
+			{ !! serviceData.created_targeting_keys?.length && (
 				<Notice
 					noticeText={ [
 						__( 'Created custom targeting keys:', 'newspack-plugin' ) + '\u00A0',
@@ -221,7 +242,7 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 								key={ adUnit.id }
 								title={ adUnit.name }
 								isSmall
-								titleLink={ canEdit( adUnit ) && editLink }
+								titleLink={ canEdit( adUnit ) ? editLink : null }
 								description={ () => (
 									<span>
 										{ adUnit.code ? (
@@ -276,4 +297,4 @@ const AdUnits = ( { adUnits, parentAdUnits, onDelete, wizardApiFetch, updateWith
 	);
 };
 
-export default withWizardScreen( AdUnits );
+export default withWizardScreen< AdUnitsViewProps >( AdUnits );

@@ -17,8 +17,8 @@ import { DonationAmounts } from '../../../audience/views/donations/configuration
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { AUDIENCE_DONATIONS_WIZARD_SLUG } from '../../../audience/constants';
 
-const ReaderRevenue = ( { className } ) => {
-	const wizardData = useWizardData( AUDIENCE_DONATIONS_WIZARD_SLUG );
+const ReaderRevenue = ( { className }: { className?: string } ) => {
+	const wizardData = useWizardData< Partial< AudienceDonationsWizardData > >( AUDIENCE_DONATIONS_WIZARD_SLUG );
 	return (
 		<div className={ classnames( className, { 'o-50': isEmpty( wizardData ) } ) }>
 			<Platform />

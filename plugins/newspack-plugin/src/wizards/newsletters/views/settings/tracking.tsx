@@ -13,13 +13,23 @@ import { Divider, Grid, SectionHeader } from '../../../../../packages/components
 
 const apiPath = '/newspack/v1/wizard/newspack-newsletters/settings/tracking';
 
+/**
+ * Newsletters ads-tracking configuration, as returned by the tracking endpoint.
+ */
+type TrackingConfig = {
+	/** Whether click-tracking is enabled. */
+	click?: boolean;
+	/** Whether the impressions tracking pixel is enabled. */
+	pixel?: boolean;
+};
+
 const Tracking = () => {
 	const [ inFlight, setInFlight ] = useState( false );
-	const [ tracking, setTracking ] = useState( {} );
+	const [ tracking, setTracking ] = useState< TrackingConfig >( {} );
 
 	const fetchData = () => {
 		setInFlight( true );
-		apiFetch( { path: apiPath } )
+		apiFetch< TrackingConfig >( { path: apiPath } )
 			.then( response => {
 				setTracking( response );
 			} )
@@ -28,7 +38,7 @@ const Tracking = () => {
 			} );
 	};
 
-	const handleChange = type => async value => {
+	const handleChange = ( type: keyof TrackingConfig ) => async ( value: boolean ) => {
 		const newData = {
 			...tracking,
 			[ type ]: value,

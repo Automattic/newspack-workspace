@@ -19,7 +19,7 @@ export { name };
 export const settings = {
 	...metadata,
 	title: __( 'Link', 'newspack-plugin' ),
-	__experimentalLabel: ( { service } ) => ( service ? getServiceLabel( service ) : __( 'Link', 'newspack-plugin' ) ),
+	__experimentalLabel: ( { service }: { service?: string } ) => ( service ? getServiceLabel( service ) : __( 'Link', 'newspack-plugin' ) ),
 	icon: link,
 	edit,
 	save: () => null,

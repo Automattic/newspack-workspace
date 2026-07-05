@@ -16,20 +16,32 @@ const BLOCKS_TEMPLATE = [
 	[ 'newspack/overlay-menu-panel', { lock: CHILD_LOCK } ],
 ];
 
+type OverlayMenuAttributes = {
+	instanceId: string;
+};
+
 /**
  * Edit component for the Overlay Menu block.
  *
  * Provides a locked template containing the trigger and panel child blocks.
  * The instanceId is set on first insert and shared with children via block context.
  *
- * @param {Object}   props               Block props.
- * @param {Object}   props.attributes    Block attributes.
- * @param {Function} props.setAttributes Attribute setter.
- * @param {string}   props.clientId      Block client ID.
+ * @param props               Block props.
+ * @param props.attributes    Block attributes.
+ * @param props.setAttributes Attribute setter.
+ * @param props.clientId      Block client ID.
  *
- * @return {JSX.Element} The block editor UI.
+ * @return The block editor UI.
  */
-export default function OverlayMenuEdit( { attributes, setAttributes, clientId } ) {
+export default function OverlayMenuEdit( {
+	attributes,
+	setAttributes,
+	clientId,
+}: {
+	attributes: OverlayMenuAttributes;
+	setAttributes: ( attributes: Partial< OverlayMenuAttributes > ) => void;
+	clientId: string;
+} ) {
 	const { instanceId } = attributes;
 
 	// Keep instanceId in sync with clientId so duplicated blocks get a unique ID.

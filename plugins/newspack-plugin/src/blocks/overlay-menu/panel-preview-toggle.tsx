@@ -8,13 +8,13 @@ import { ToolbarButton, ToolbarGroup } from '@wordpress/components';
 /**
  * Toolbar toggle button shared by all three Overlay Menu edit components.
  *
- * @param {Object}   props          Component props.
- * @param {boolean}  props.isOpen   Whether the panel preview is currently open.
- * @param {Function} props.onToggle Callback invoked when the button is clicked.
+ * @param props          Component props.
+ * @param props.isOpen   Whether the panel preview is currently open.
+ * @param props.onToggle Callback invoked when the button is clicked.
  *
- * @return {JSX.Element} The toolbar button inside BlockControls.
+ * @return The toolbar button inside BlockControls.
  */
-export default function PanelPreviewToggle( { isOpen, onToggle } ) {
+export default function PanelPreviewToggle( { isOpen, onToggle }: { isOpen: boolean; onToggle: () => void } ) {
 	return (
 		<BlockControls>
 			<ToolbarGroup>

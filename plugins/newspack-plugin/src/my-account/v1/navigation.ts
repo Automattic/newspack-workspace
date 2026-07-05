@@ -9,11 +9,11 @@ import { domReady } from '../../utils';
 
 domReady( () => {
 	// Open and close navigation menu.
-	const openNavigationButton = document.querySelector( '.newspack-my-account__navigation-topbar__button .newspack-ui__button' );
-	let setButtonState;
+	const openNavigationButton = document.querySelector< HTMLElement >( '.newspack-my-account__navigation-topbar__button .newspack-ui__button' );
+	let setButtonState: ( ( isOpen: boolean ) => void ) | undefined;
 
 	if ( openNavigationButton ) {
-		const openLabel = openNavigationButton.dataset.labelOpen || openNavigationButton.getAttribute( 'aria-label' );
+		const openLabel = ( openNavigationButton.dataset.labelOpen || openNavigationButton.getAttribute( 'aria-label' ) ) as string;
 		const closeLabel = openNavigationButton.dataset.labelClose || openLabel;
 		setButtonState = isOpen => {
 			openNavigationButton.setAttribute( 'aria-expanded', isOpen ? 'true' : 'false' );
@@ -24,7 +24,8 @@ domReady( () => {
 
 		openNavigationButton.addEventListener( 'click', () => {
 			const isOpen = document.body.classList.toggle( 'navigation-open' );
-			setButtonState( isOpen );
+			// Assigned just above; the closure runs only after the assignment.
+			( setButtonState as ( isOpen: boolean ) => void )( isOpen );
 		} );
 	}
 

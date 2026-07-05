@@ -1,6 +1,11 @@
 /* globals newspack_emails */
 
 /**
+ * External dependencies
+ */
+import type { ComponentType } from 'react';
+
+/**
  * WordPress dependencies
  */
 import { useState, useEffect } from '@wordpress/element';
@@ -18,9 +23,27 @@ import { registerPlugin } from '@wordpress/plugins';
 import { hooks } from '../../../packages/components/src';
 import './style.scss';
 
-const ReaderRevenueEmailSidebar = compose( [
+type ReaderRevenueEmailSidebarProps = {
+	postId: number;
+	savePost: () => Promise< void >;
+	title: string;
+	postMeta: Record< string, string >;
+	updatePostTitle: ( title: string ) => void;
+	createNotice: ( status: string, content: string, options?: { id?: string; isDismissible?: boolean } ) => void;
+};
+
+// compose() is loosely typed (its result takes and returns `unknown`), so the
+// composed component is asserted as ComponentType at the trailing boundary.
+const ReaderRevenueEmailSidebar = compose(
 	withSelect( select => {
-		const { getEditedPostAttribute, getCurrentPostId } = select( 'core/editor' );
+		// The editor selectors are untyped for string-keyed stores; assert at the store boundary.
+		const { getEditedPostAttribute, getCurrentPostId } = select( 'core/editor' ) as {
+			getEditedPostAttribute: {
+				( attribute: 'meta' ): Record< string, string >;
+				( attribute: 'title' ): string;
+			};
+			getCurrentPostId: () => number;
+		};
 		const postMeta = getEditedPostAttribute( 'meta' );
 		return {
 			title: getEditedPostAttribute( 'title' ),
@@ -28,17 +51,25 @@ const ReaderRevenueEmailSidebar = compose( [
 			postMeta,
 		};
 	} ),
-	withDispatch( dispatch => {
-		const { savePost, editPost } = dispatch( 'core/editor' );
-		const { createNotice } = dispatch( 'core/notices' );
+	// The mapper returns specifically-typed action props; withDispatch's own
+	// signature widens them to an unknown-arg index, so cast the mapper at the boundary.
+	withDispatch( ( ( dispatch: ( store: string ) => Record< string, ( ...args: unknown[] ) => unknown > ) => {
+		const wpDispatch = dispatch;
+		const { savePost, editPost } = wpDispatch( 'core/editor' ) as {
+			savePost: () => Promise< void >;
+			editPost: ( edits: { meta?: Record< string, string >; title?: string } ) => void;
+		};
+		const { createNotice } = wpDispatch( 'core/notices' ) as {
+			createNotice: ( status: string, content: string, options?: { id?: string; isDismissible?: boolean } ) => void;
+		};
 		return {
 			savePost,
 			createNotice,
-			updatePostMeta: key => value => editPost( { meta: { [ key ]: value } } ),
-			updatePostTitle: title => editPost( { title } ),
+			updatePostMeta: ( key: string ) => ( value: string ) => editPost( { meta: { [ key ]: value } } ),
+			updatePostTitle: ( title: string ) => editPost( { title } ),
 		};
-	} ),
-] )( ( { postId, savePost, title, postMeta, updatePostTitle, createNotice } ) => {
+	} ) as Parameters< typeof withDispatch >[ 0 ] )
+)( ( { postId, savePost, title, postMeta, updatePostTitle, createNotice }: ReaderRevenueEmailSidebarProps ) => {
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ settings, updateSettings ] = hooks.useObjectState( {
 		testRecipient: newspack_emails.current_user_email,
@@ -93,7 +124,8 @@ const ReaderRevenueEmailSidebar = compose( [
 			// failure: invalid recipient, missing HTML payload, trashed post,
 			// etc.). The generic is the fallback for unstructured errors
 			// (a savePost failure, network failures, CORS) with no `.message`.
-			const message = ( error && error.message ) || __( 'Test email was not sent.', 'newspack-plugin' );
+			const errorMessage = error && typeof error === 'object' && 'message' in error ? error.message : null;
+			const message = ( typeof errorMessage === 'string' && errorMessage ) || __( 'Test email was not sent.', 'newspack-plugin' );
 			createNotice( 'error', message );
 		} finally {
 			setInFlight( false );
@@ -132,9 +164,10 @@ const ReaderRevenueEmailSidebar = compose( [
 			</PluginDocumentSettingPanel>
 		</>
 	);
-} );
+} ) as ComponentType;
 
 registerPlugin( 'newspack-emails-sidebar', {
 	render: ReaderRevenueEmailSidebar,
-	icon: null,
+	// An explicit falsy icon overrides registerPlugin's default plugins icon via object spread.
+	icon: undefined,
 } );

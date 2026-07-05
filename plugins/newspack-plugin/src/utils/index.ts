@@ -3,10 +3,10 @@
  *
  * @see https://github.com/WordPress/gutenberg/blob/trunk/packages/dom-ready/
  *
- * @param {Function} callback A function to execute after the DOM is ready.
+ * @param  callback A function to execute after the DOM is ready.
  * @return {void}
  */
-export function domReady( callback ) {
+export function domReady( callback: () => void ): void {
 	if ( typeof document === 'undefined' ) {
 		return;
 	}
@@ -23,9 +23,9 @@ export function domReady( callback ) {
 /**
  * Format time in MM:SS format.
  *
- * @param {number} time Time in seconds.
+ * @param time Time in seconds.
  */
-export function formatTime( time ) {
+export function formatTime( time: number ) {
 	const minutes = Math.floor( time / 60 );
 	const seconds = time % 60;
 	return `${ minutes }:${ seconds < 10 ? '0' : '' }${ seconds }`;
@@ -34,20 +34,21 @@ export function formatTime( time ) {
 /**
  * Converts FormData into an object.
  *
- * @param {FormData} formData       The form data to convert.
- * @param {Array}    includedFields Form fields to include.
+ * @param formData       The form data to convert.
+ * @param includedFields Form fields to include.
  *
- * @return {Object} The converted form data.
+ * @return The converted form data.
  */
-export function convertFormDataToObject( formData, includedFields = [] ) {
-	return Array.from( formData.entries() ).reduce( ( acc, [ key, val ] ) => {
+export function convertFormDataToObject( formData: FormData, includedFields: string[] = [] ) {
+	return Array.from( formData.entries() ).reduce( ( acc: Record< string, FormDataEntryValue | FormDataEntryValue[] >, [ key, val ] ) => {
 		if ( ! includedFields.includes( key ) ) {
 			return acc;
 		}
 		if ( key.indexOf( '[]' ) > -1 ) {
 			key = key.replace( '[]', '' );
 			acc[ key ] = acc[ key ] || [];
-			acc[ key ].push( val );
+			// Multi-value keys are only ever seeded with an array (line above).
+			( acc[ key ] as FormDataEntryValue[] ).push( val );
 		} else {
 			acc[ key ] = val;
 		}
@@ -56,14 +57,19 @@ export function convertFormDataToObject( formData, includedFields = [] ) {
 }
 
 /**
+ * The callback populating a reader activity's data payload.
+ */
+type ActivityDataCallback = ( element: Element ) => Record< string, unknown >;
+
+/**
  * Register a reader activity dispatch on an element event.
  *
- * @param {string|Element} element The element to register the activity on. Can either be the element node or a string for the element selector.
- * @param {string}         action  The action to dispatch an activity for.
- * @param {Function}       cb      The callback to populate the activity data.
- * @param {string}         event   The element event to listen for. Defaults to `submit` for form elements and `click` for other elements.
+ * @param element The element to register the activity on. Can either be the element node or a string for the element selector.
+ * @param action  The action to dispatch an activity for.
+ * @param cb      The callback to populate the activity data.
+ * @param event   The element event to listen for. Defaults to `submit` for form elements and `click` for other elements.
  */
-export function registerElementActivity( element, action, cb, event ) {
+export function registerElementActivity( element: string | Element | Element[] | null, action: string, cb?: ActivityDataCallback, event?: string ) {
 	window.newspackRAS = window.newspackRAS || [];
 	if ( typeof element === 'string' ) {
 		element = [ ...document.querySelectorAll( element ) ];
@@ -81,6 +87,7 @@ export function registerElementActivity( element, action, cb, event ) {
 	if ( ! cb ) {
 		cb = () => ( {} );
 	}
+	const activityDataCallback = cb;
 
 	element.forEach( el => {
 		el.addEventListener( event || ( el.tagName === 'FORM' ? 'submit' : 'click' ), ev => {
@@ -90,7 +97,7 @@ export function registerElementActivity( element, action, cb, event ) {
 				// Form submissions will not consider the default prevented because they
 				// are commonly ajaxified.
 				if ( el.tagName === 'FORM' || ! ev.defaultPrevented ) {
-					window.newspackRAS.push( [ action, cb( el ) ] );
+					window.newspackRAS.push( [ action, activityDataCallback( el ) ] );
 				}
 			} );
 		} );
@@ -100,10 +107,10 @@ export function registerElementActivity( element, action, cb, event ) {
 /**
  * Register an activity dispatch on checkout submission.
  *
- * @param {string}   action The action to dispatch an activity for.
- * @param {Function} cb     The callback to populate the activity data.
+ * @param action The action to dispatch an activity for.
+ * @param cb     The callback to populate the activity data.
  */
-export function registerCheckoutActivity( action, cb ) {
+export function registerCheckoutActivity( action: string, cb?: ActivityDataCallback ) {
 	// Woo Block checkout is react, so we need to wait for the form to be rendered.
 	wp?.hooks?.addAction( 'experimental__woocommerce_blocks-checkout-render-checkout-form', 'newspack/my-account/activity', () => {
 		registerElementActivity( '.wc-block-components-checkout-place-order-button', action, cb );

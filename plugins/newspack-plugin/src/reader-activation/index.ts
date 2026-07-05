@@ -1,19 +1,19 @@
-/* globals newspack_ras_config, newspack_reader_data, gform */
+/* globals newspack_ras_config, newspack_reader_data */
 
 window.newspack_ras_config = window.newspack_ras_config || {};
 
-import Store from './store.js';
-import { getPendingCheckout, setPendingCheckout } from './checkout.js';
-import { EVENTS, on, off, emit } from './events.js';
-import { getCookie, setCookie, generateID, debugLog } from './utils.js';
-import overlays from './overlays.js';
-import segments from './segments.js';
-import initAnalytics from './analytics.js';
-import setupArticleViewsAggregates from './article-view.js';
-import setupEngagement from './engagement.js';
-import initSubscriptionTiersForm from './subscription-tiers-form.js';
-import { openAuthModal as _openAuthModal } from '../reader-activation-auth/auth-modal.js';
-import { getApiNonce, hydrateSession } from './session.js';
+import Store from './store';
+import { getPendingCheckout, setPendingCheckout } from './checkout';
+import { EVENTS, on, off, emit } from './events';
+import { getCookie, setCookie, generateID, debugLog } from './utils';
+import overlays from './overlays';
+import segments from './segments';
+import initAnalytics from './analytics';
+import setupArticleViewsAggregates from './article-view';
+import setupEngagement from './engagement';
+import initSubscriptionTiersForm from './subscription-tiers-form';
+import { openAuthModal as _openAuthModal } from '../reader-activation-auth/auth-modal';
+import { getApiNonce, hydrateSession } from './session';
 
 /**
  * Reader Activation Library.
@@ -36,7 +36,7 @@ export { store };
  *
  * @return {Object} Activity.
  */
-export function dispatchActivity( action, data, timestamp = 0 ) {
+export function dispatchActivity( action: string, data: Record< string, unknown >, timestamp = 0 ): NewspackReaderActivity {
 	const activity = { action, data, timestamp: timestamp || Date.now() };
 	store.add( 'activity', activity );
 	emit( EVENTS.activity, activity );
@@ -50,8 +50,8 @@ export function dispatchActivity( action, data, timestamp = 0 ) {
  *
  * @return {Array} Activities.
  */
-export function getActivities( action ) {
-	const activities = store.get( 'activity' ) || [];
+export function getActivities( action?: string ): NewspackReaderActivity[] {
+	const activities = ( store.get( 'activity' ) || [] ) as NewspackReaderActivity[];
 	if ( ! action ) {
 		return activities;
 	}
@@ -66,15 +66,18 @@ export function getActivities( action ) {
  *
  * @return {Array} Unique activities.
  */
-export function getUniqueActivitiesBy( action, iteratee ) {
+export function getUniqueActivitiesBy(
+	action: string,
+	iteratee: string | ( ( activity: NewspackReaderActivity ) => unknown )
+): NewspackReaderActivity[] {
 	const activities = getActivities( action );
-	const unique = [];
-	const seen = {};
+	const unique: NewspackReaderActivity[] = [];
+	const seen: Record< string, boolean > = {};
 	for ( const activity of activities ) {
 		const value = typeof iteratee === 'function' ? iteratee( activity ) : activity.data[ iteratee ];
-		if ( ! seen[ value ] ) {
+		if ( ! seen[ value as string ] ) {
 			unique.push( activity );
-			seen[ value ] = true;
+			seen[ value as string ] = true;
 		}
 	}
 	return unique;
@@ -89,7 +92,7 @@ export function getUniqueActivitiesBy( action, iteratee ) {
  *
  * @param {string} email Email.
  */
-export function setReaderEmail( email ) {
+export function setReaderEmail( email: string ) {
 	if ( ! email ) {
 		return;
 	}
@@ -105,7 +108,7 @@ export function setReaderEmail( email ) {
  * @param {boolean} authenticated Whether the current reader is authenticated. Default is true.
  */
 export function setAuthenticated( authenticated = true ) {
-	const reader = store.get( 'reader' ) || {};
+	const reader = ( store.get( 'reader' ) || {} ) as NewspackReader;
 	if ( ! reader.email ) {
 		throw new Error( 'Reader email not set' );
 	}
@@ -132,8 +135,8 @@ export function refreshAuthentication() {
  *
  * @return {Object} Reader data.
  */
-export function getReader() {
-	return store.get( 'reader' ) || {};
+export function getReader(): NewspackReader {
+	return ( store.get( 'reader' ) || {} ) as NewspackReader;
 }
 
 /**
@@ -154,7 +157,7 @@ const authStrategies = [ 'pwd', 'link' ];
  *
  * @param {Object} config Config.
  */
-export function openAuthModal( config = {} ) {
+export function openAuthModal( config: NewspackAuthModalConfig = {} ) {
 	config = {
 		onSuccess: null,
 		onDismiss: null,
@@ -190,7 +193,7 @@ export function openAuthModal( config = {} ) {
  *
  * @param {Object} config Config.
  */
-export function openNewslettersSignupModal( config = {} ) {
+export function openNewslettersSignupModal( config: NewspackNewslettersSignupModalConfig = {} ) {
 	// Set default config.
 	config = {
 		...{
@@ -234,7 +237,7 @@ const OTP_TIMER_STORAGE_KEY = 'newspack_otp_timer';
  * Set the OTP timer to the current time.
  */
 export function setOTPTimer() {
-	localStorage.setItem( OTP_TIMER_STORAGE_KEY, Math.floor( Date.now() / 1000 ) );
+	localStorage.setItem( OTP_TIMER_STORAGE_KEY, String( Math.floor( Date.now() / 1000 ) ) );
 }
 
 /**
@@ -254,7 +257,7 @@ export function getOTPTimeRemaining() {
 	if ( ! timer ) {
 		return 0;
 	}
-	const timeRemaining = newspack_ras_config.otp_rate_interval - ( Math.floor( Date.now() / 1000 ) - timer );
+	const timeRemaining = newspack_ras_config.otp_rate_interval! - ( Math.floor( Date.now() / 1000 ) - Number( timer ) );
 	if ( ! timeRemaining ) {
 		clearOTPTimer();
 	}
@@ -268,8 +271,8 @@ export function getOTPTimeRemaining() {
  *
  * @return {Promise} Promise.
  */
-export function authenticateOTP( code ) {
-	return new Promise( ( resolve, reject ) => {
+export function authenticateOTP( code: string ) {
+	return new Promise< NewspackAuthResponseData >( ( resolve, reject ) => {
 		const hash = getOTPHash();
 		const email = getReader()?.email;
 		if ( ! hash ) {
@@ -287,7 +290,7 @@ export function authenticateOTP( code ) {
 				Accept: 'application/json',
 			},
 			body: new URLSearchParams( {
-				action: newspack_ras_config.otp_auth_action,
+				action: newspack_ras_config.otp_auth_action!,
 				email,
 				hash,
 				code,
@@ -318,7 +321,7 @@ export function authenticateOTP( code ) {
  *
  * @return {string} Reader preferred authentication strategy.
  */
-export function setAuthStrategy( strategy ) {
+export function setAuthStrategy( strategy: string ) {
 	if ( ! authStrategies.includes( strategy ) ) {
 		throw new Error( 'Invalid authentication strategy' );
 	}
@@ -342,7 +345,7 @@ export function getAuthStrategy() {
  * Ensure the client ID cookie is set.
  */
 function fixClientID() {
-	const clientIDCookieName = newspack_ras_config.cid_cookie;
+	const clientIDCookieName = newspack_ras_config.cid_cookie!;
 	if ( ! getCookie( clientIDCookieName ) ) {
 		setCookie( clientIDCookieName, generateID( 12 ) );
 	}
@@ -360,7 +363,7 @@ function pushActivities() {
  * Store the referrer.
  */
 function setReferrer() {
-	const normalize = hostname =>
+	const normalize = ( hostname: string ) =>
 		hostname
 			.trim()
 			.toLowerCase()
@@ -407,7 +410,7 @@ function attachNewsletterFormListener() {
 	// newspack-subscribe-form is a generic class that can be added to any 3rd party form. Once it's submitted, we consider the reader a newsletter subscriber.
 	const thirdPartyForms = [ '.mc4wp-form', '.newspack-subscribe-form' ];
 
-	const attachHandler = ( el, eventToListenTo = 'submit' ) => {
+	const attachHandler = ( el: Element, eventToListenTo = 'submit' ) => {
 		const form = 'FORM' === el.tagName ? el : el.querySelector( 'form' );
 		if ( ! form ) {
 			return;
@@ -417,14 +420,14 @@ function attachNewsletterFormListener() {
 		} );
 	};
 
-	const gformIds = [];
+	const gformIds: number[] = [];
 
 	// For third-party forms, set reader data on form submit. Also detect Gravity Forms.
 	document.querySelectorAll( thirdPartyForms.join( ',' ) ).forEach( el => {
 		// If the form id stats with gform_ and it has a data-formid prop, it's a gravity form.
 		const isGravityForm = el.id.startsWith( 'gform_' ) && el.hasAttribute( 'data-formid' );
 		if ( isGravityForm ) {
-			gformIds.push( parseInt( el.getAttribute( 'data-formid' ) ) );
+			gformIds.push( parseInt( el.getAttribute( 'data-formid' )! ) );
 			return;
 		}
 		// If not a gravity form, just attach the handler.
@@ -436,8 +439,8 @@ function attachNewsletterFormListener() {
 
 	// Gravity forms handlers.
 	document.addEventListener( 'gform/post_render', event => {
-		if ( window.gform?.utils?.addAsyncFilter && gformIds.includes( event.detail?.formId ) ) {
-			gform.utils.addAsyncFilter( 'gform/submission/pre_submission', async data => {
+		if ( window.gform?.utils?.addAsyncFilter && gformIds.includes( ( event as CustomEvent ).detail?.formId ) ) {
+			window.gform.utils.addAsyncFilter( 'gform/submission/pre_submission', async data => {
 				store.set( 'is_newsletter_subscriber', true );
 				return data;
 			} );
@@ -458,8 +461,8 @@ function attachNewsletterFormListener() {
  * @param {string} siteKey reCAPTCHA site key.
  * @return {Promise<string>} Resolves with the reCAPTCHA token.
  */
-function acquireV2InvisibleToken( siteKey ) {
-	return new Promise( function ( resolve, reject ) {
+function acquireV2InvisibleToken( siteKey: string ) {
+	return new Promise< string >( function ( resolve, reject ) {
 		const container = document.createElement( 'div' );
 		container.style.display = 'none';
 		document.body.appendChild( container );
@@ -473,7 +476,7 @@ function acquireV2InvisibleToken( siteKey ) {
 			}
 		}, 30000 );
 
-		function settle( fn, value ) {
+		function settle( fn: ( value?: unknown ) => void, value?: unknown ) {
 			if ( settled ) {
 				return;
 			}
@@ -484,12 +487,12 @@ function acquireV2InvisibleToken( siteKey ) {
 		}
 
 		try {
-			const widgetId = window.grecaptcha.render( container, {
+			const widgetId = window.grecaptcha!.render( container, {
 				sitekey: siteKey,
 				size: 'invisible',
 				isolated: true,
 				callback( token ) {
-					settle( resolve, token );
+					settle( resolve as ( value?: unknown ) => void, token );
 				},
 				'error-callback'() {
 					settle( reject, new Error( 'reCAPTCHA challenge failed.' ) );
@@ -498,7 +501,7 @@ function acquireV2InvisibleToken( siteKey ) {
 					settle( reject, new Error( 'reCAPTCHA token expired.' ) );
 				},
 			} );
-			window.grecaptcha.execute( widgetId );
+			window.grecaptcha!.execute( widgetId );
 		} catch ( err ) {
 			settle( reject, err );
 		}
@@ -514,7 +517,7 @@ function acquireV2InvisibleToken( siteKey ) {
  * @param {Object} profileFields.metadata Optional arbitrary key-value pairs to store as user meta.
  * @return {Promise} Resolves with reader data on success, rejects with error on failure.
  */
-function register( email, integrationId, profileFields = {} ) {
+function register( email: string, integrationId: string, profileFields: NewspackFrontendRegistrationFields = {} ) {
 	const config = newspack_ras_config?.frontend_registration_integrations || {};
 	const integration = config[ integrationId ];
 
@@ -530,7 +533,7 @@ function register( email, integrationId, profileFields = {} ) {
 		return Promise.reject( new Error( 'Registration is not available.' ) );
 	}
 
-	const body = {
+	const body: Record< string, unknown > = {
 		npe: email,
 		integration_id: integrationId,
 		integration_key: integration.key,
@@ -550,9 +553,9 @@ function register( email, integrationId, profileFields = {} ) {
 		}
 		if ( captchaVersion === 'v3' ) {
 			captchaPromise = new Promise( function ( resolve, reject ) {
-				window.grecaptcha.ready( function () {
-					window.grecaptcha
-						.execute( captchaSiteKey, {
+				window.grecaptcha!.ready( function () {
+					window
+						.grecaptcha!.execute( captchaSiteKey, {
 							action: 'integration_registration',
 						} )
 						.then( resolve )
@@ -561,7 +564,7 @@ function register( email, integrationId, profileFields = {} ) {
 			} );
 		} else if ( captchaVersion && captchaVersion.substring( 0, 2 ) === 'v2' ) {
 			captchaPromise = new Promise( function ( resolve, reject ) {
-				window.grecaptcha.ready( function () {
+				window.grecaptcha!.ready( function () {
 					acquireV2InvisibleToken( captchaSiteKey ).then( resolve ).catch( reject );
 				} );
 			} );
@@ -577,12 +580,12 @@ function register( email, integrationId, profileFields = {} ) {
 			if ( token ) {
 				body[ 'g-recaptcha-response' ] = token;
 			}
-			const headers = { 'Content-Type': 'application/json' };
+			const headers: Record< string, string > = { 'Content-Type': 'application/json' };
 			const nonce = getApiNonce();
 			if ( nonce ) {
 				headers[ 'X-WP-Nonce' ] = nonce;
 			}
-			return fetch( newspack_ras_config.frontend_registration_url, {
+			return fetch( newspack_ras_config.frontend_registration_url!, {
 				method: 'POST',
 				headers,
 				credentials: 'same-origin',
@@ -592,7 +595,7 @@ function register( email, integrationId, profileFields = {} ) {
 		.then( function ( response ) {
 			return response.json().then( function ( data ) {
 				if ( ! response.ok ) {
-					const error = new Error( data.message || 'Registration failed.' );
+					const error: Error & { code?: unknown } = new Error( data.message || 'Registration failed.' );
 					error.code = data.code;
 					throw error;
 				}
@@ -625,7 +628,7 @@ function register( email, integrationId, profileFields = {} ) {
 		} );
 }
 
-const readerActivation = {
+const readerActivation: NewspackReaderActivation = {
 	store,
 	overlays,
 	segments,
@@ -666,7 +669,7 @@ const readerActivation = {
  *                                 function to callback with the
  *                                 readerActivation object.
  */
-function handlePush( ...args ) {
+function handlePush( ...args: NewspackRASQueueItem[] ) {
 	args.forEach( arg => {
 		if ( Array.isArray( arg ) && typeof arg[ 0 ] === 'string' ) {
 			dispatchActivity( ...arg );
@@ -705,8 +708,18 @@ function handlePush( ...args ) {
  * @param {boolean} args.hasAuthReaderCookie Whether the np_auth_reader cookie is present (the reader cookie = cache guard).
  * @return {boolean} Whether to clear the namespace.
  */
-export function shouldClearReaderData( { authenticatedEmail, initialEmail, storedReader, hasAuthReaderCookie } ) {
-	const norm = email => ( email || '' ).trim().toLowerCase();
+export function shouldClearReaderData( {
+	authenticatedEmail,
+	initialEmail,
+	storedReader,
+	hasAuthReaderCookie,
+}: {
+	authenticatedEmail?: string;
+	initialEmail?: string;
+	storedReader?: { email?: string; authenticated?: unknown } | null;
+	hasAuthReaderCookie: boolean;
+} ): boolean {
+	const norm = ( email?: string ) => ( email || '' ).trim().toLowerCase();
 	const authed = norm( authenticatedEmail );
 	const stored = norm( storedReader?.email );
 
@@ -799,7 +812,7 @@ function init() {
 	// per-reader cache invalidation should key off the EVENTS.data wipe events.
 	emit( EVENTS.reader, reader );
 	initAnalytics( readerActivation );
-	initSubscriptionTiersForm( readerActivation );
+	initSubscriptionTiersForm();
 	fixClientID();
 	setupArticleViewsAggregates( readerActivation );
 	setupEngagement( readerActivation );

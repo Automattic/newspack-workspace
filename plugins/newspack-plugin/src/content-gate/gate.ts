@@ -9,6 +9,18 @@ import { debugLog } from '../reader-activation/utils';
 const EVENT_NAME = 'np_gate_interaction';
 
 /**
+ * Detail shape of the reader-activation events this module reacts to. The same
+ * handler is bound to both `overlay` and `activity`, so the members from both
+ * event details are combined here (all optional).
+ */
+type GateReloadEventDetail = {
+	action?: string;
+	overlays?: string[];
+	added?: string;
+	removed?: string;
+};
+
+/**
  * Specify a function to execute when the DOM is fully loaded.
  *
  * @see https://github.com/WordPress/gutenberg/blob/trunk/packages/dom-ready/
@@ -16,7 +28,7 @@ const EVENT_NAME = 'np_gate_interaction';
  * @param {Function} callback A function to execute after the DOM is ready.
  * @return {void}
  */
-function domReady( callback ) {
+function domReady( callback: () => void ) {
 	if ( typeof document === 'undefined' ) {
 		return;
 	}
@@ -32,7 +44,7 @@ function domReady( callback ) {
 
 // Gate info to send with each event.
 // This is mutable so that its properties can be carried from event to event in gate interaction flows.
-const gateInfo = {
+const gateInfo: Record< string, unknown > = {
 	...newspack_content_gate.metadata,
 	referrer: window.location.pathname,
 };
@@ -47,7 +59,7 @@ function initReloadHandler() {
 		debugLog( 'log', '[Gate] RAS initialized' );
 		let reload = false;
 
-		const refreshPage = function ( ev ) {
+		const refreshPage = function ( ev: CustomEvent< GateReloadEventDetail > ) {
 			debugLog( 'log', '[Gate] refreshPage called with event:', ev );
 			debugLog( 'log', '[Gate] Event detail:', ev?.detail );
 			debugLog( 'log', '[Gate] Event detail action:', ev?.detail?.action );
@@ -61,9 +73,10 @@ function initReloadHandler() {
 
 			// When closing an overlay, check if the last activity was a checkout, registration, or login.
 			if ( ev?.detail?.overlays && ev.detail.removed ) {
-				const activities = window?.newspackReaderActivation?.getActivities();
+				// The RAS client is always present inside this handler; assert the array at the window boundary.
+				const activities = window?.newspackReaderActivation?.getActivities() as NewspackReaderActivity[];
 				debugLog( 'log', '[Gate] Overlay removed, activities:', activities );
-				const lastActivity = activities?.[ activities.length - 1 ] || {};
+				const lastActivity = ( activities?.[ activities.length - 1 ] || {} ) as NewspackReaderActivity;
 				const validActions = [ 'checkout_completed', 'reader_registered', 'reader_logged_in', 'newsletter_signup' ];
 				if ( activities.length && validActions.includes( lastActivity.action ) ) {
 					debugLog( 'log', '[Gate] Valid action detected:', lastActivity.action );
@@ -107,7 +120,7 @@ function initReloadHandler() {
  *
  * @param {HTMLElement} gate The gate element.
  */
-function addFormInputs( gate ) {
+function addFormInputs( gate: HTMLElement ) {
 	const forms = [
 		...document.querySelectorAll( '.newspack-reader-auth form' ), // Auth modal.
 		...gate.querySelectorAll( '.newspack-registration form' ), // Registration block.
@@ -119,9 +132,9 @@ function addFormInputs( gate ) {
 			const input = document.createElement( 'input' );
 			input.type = 'hidden';
 			input.name = 'gate_post_id';
-			input.value = newspack_content_gate.metadata?.gate_post_id || '1';
+			input.value = String( newspack_content_gate.metadata?.gate_post_id || '1' );
 			form.appendChild( input );
-			form.addEventListener( 'submit', evt => handleFormSubmission( evt, gate ) );
+			form.addEventListener( 'submit', ( evt: Event ) => handleFormSubmission( evt, gate ) );
 		}
 	} );
 }
@@ -129,7 +142,7 @@ function addFormInputs( gate ) {
 /**
  * Check if a DOM element is visible.
  */
-function isVisible( el ) {
+function isVisible( el: HTMLElement | null ) {
 	if ( ! el ) {
 		return false;
 	}
@@ -145,13 +158,15 @@ function isVisible( el ) {
  *
  * @return {Array} The full event payload
  */
-function getGateEventPayload( payload, gate ) {
+function getGateEventPayload( payload: Record< string, unknown >, gate?: HTMLElement | null ) {
 	if ( gate ) {
-		gateInfo.gate_has_donation_block = isVisible( gate.querySelector( '.wp-block-newspack-blocks-donate' ) ) ? 'yes' : 'no';
-		gateInfo.gate_has_registration_block = isVisible( gate.querySelector( '.newspack-registration' ) ) ? 'yes' : 'no';
-		gateInfo.gate_has_checkout_button = isVisible( gate.querySelector( '.wp-block-newspack-blocks-checkout-button' ) ) ? 'yes' : 'no';
-		gateInfo.gate_has_registration_link = isVisible( gate.querySelector( 'a[href="#register_modal"]' ) ) ? 'yes' : 'no';
-		gateInfo.gate_has_signin_link = isVisible( gate.querySelector( 'a[href="#signin_modal"]' ) ) ? 'yes' : 'no';
+		gateInfo.gate_has_donation_block = isVisible( gate.querySelector< HTMLElement >( '.wp-block-newspack-blocks-donate' ) ) ? 'yes' : 'no';
+		gateInfo.gate_has_registration_block = isVisible( gate.querySelector< HTMLElement >( '.newspack-registration' ) ) ? 'yes' : 'no';
+		gateInfo.gate_has_checkout_button = isVisible( gate.querySelector< HTMLElement >( '.wp-block-newspack-blocks-checkout-button' ) )
+			? 'yes'
+			: 'no';
+		gateInfo.gate_has_registration_link = isVisible( gate.querySelector< HTMLElement >( 'a[href="#register_modal"]' ) ) ? 'yes' : 'no';
+		gateInfo.gate_has_signin_link = isVisible( gate.querySelector< HTMLElement >( 'a[href="#signin_modal"]' ) ) ? 'yes' : 'no';
 	}
 
 	return getEventPayload( { ...payload, ...gateInfo } );
@@ -163,12 +178,12 @@ function getGateEventPayload( payload, gate ) {
  * @param {HTMLElement} gate            The gate element.
  * @param {boolean}     shouldRecordHit Whether to record a hit in RAS for this seen event. Defaults to false.
  */
-function handleSeen( gate, shouldRecordHit = false ) {
+function handleSeen( gate: HTMLElement, shouldRecordHit = false ) {
 	if ( shouldRecordHit ) {
 		// paywall_hits - Number of times reader has reached a paywall.
 		window.newspackRAS = window.newspackRAS || [];
 		window.newspackRAS.push( function ( ras ) {
-			const currentHits = ras.store.get( 'paywall_hits' ) || 0;
+			const currentHits = ( ras.store.get( 'paywall_hits' ) as number ) || 0;
 			ras.store.set( 'paywall_hits', currentHits + 1 );
 		} );
 	}
@@ -201,13 +216,13 @@ function handleDismissed() {
  * @param {Event}       evt  The event object.
  * @param {HTMLElement} gate The gate element.
  */
-function handleFormSubmission( evt, gate ) {
+function handleFormSubmission( evt: Event, gate: HTMLElement ) {
 	if ( 'function' !== typeof window.gtag ) {
 		return;
 	}
-	const payload = { action: 'form_submission' };
-	const postedData = new FormData( evt.target );
-	const data = {};
+	const payload: Record< string, unknown > = { action: 'form_submission' };
+	const postedData = new FormData( evt.target as HTMLFormElement );
+	const data: Record< string, FormDataEntryValue > = {};
 	for ( const pair of postedData.entries() ) {
 		data[ pair[ 0 ] ] = pair[ 1 ];
 	}
@@ -238,7 +253,8 @@ function handleFormSubmission( evt, gate ) {
 		payload.action_type = 'checkout_button';
 
 		// Checkout data attached to Checkout Button form.
-		const checkoutData = evt.target.getAttribute( 'data-checkout' ) ? JSON.parse( evt.target.getAttribute( 'data-checkout' ) ) : null;
+		const form = evt.target as HTMLFormElement;
+		const checkoutData = form.getAttribute( 'data-checkout' ) ? JSON.parse( form.getAttribute( 'data-checkout' ) as string ) : null;
 		if ( checkoutData ) {
 			Object.assign( payload, checkoutData );
 		}
@@ -252,7 +268,7 @@ function handleFormSubmission( evt, gate ) {
  *
  * @param {HTMLElement} gate The gate element.
  */
-function initOverlay( gate ) {
+function initOverlay( gate: HTMLElement ) {
 	let entry = document.querySelector( '.entry-content' );
 	if ( ! entry ) {
 		entry = document.querySelector( '#content' ) || document.querySelector( 'main' );
@@ -269,7 +285,7 @@ function initOverlay( gate ) {
 			}
 			seen = true;
 		}
-		gate.setAttribute( 'data-visible', visible );
+		gate.setAttribute( 'data-visible', String( visible ) );
 	};
 	document.addEventListener( 'scroll', handleScroll );
 	handleScroll();
@@ -286,7 +302,7 @@ function handleFloatingElements() {
 		// No excerpt, nothing to do.
 		return;
 	}
-	const floatingElements = excerpt.querySelectorAll( '.alignleft, .alignright' );
+	const floatingElements = excerpt.querySelectorAll< HTMLElement >( '.alignleft, .alignright' );
 	if ( ! floatingElements.length ) {
 		// No floating elements, nothing to do.
 		return;
@@ -313,7 +329,7 @@ function handleFloatingElements() {
 }
 
 domReady( function () {
-	const gate = document.querySelector( '.newspack-content-gate__gate' );
+	const gate = document.querySelector< HTMLElement >( '.newspack-content-gate__gate' );
 	if ( ! gate ) {
 		return;
 	}

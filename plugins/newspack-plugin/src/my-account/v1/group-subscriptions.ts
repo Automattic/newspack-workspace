@@ -12,14 +12,14 @@ domReady( function () {
 		return;
 	}
 
-	const subId = parseInt( content.getAttribute( 'data-subscription-id' ), 10 );
+	const subId = parseInt( content.getAttribute( 'data-subscription-id' ) as string, 10 );
 	const baseUrl = newspackMyAccountV1?.rest?.base_url;
 	const namespace = newspackMyAccountV1?.rest?.namespaces?.group;
 	const nonce = newspackMyAccountV1?.rest?.nonce;
 	const showSnackbar =
 		typeof newspackUI?.notices?.createNotice === 'function'
 			? newspackUI.notices.createNotice
-			: ( msg, type ) => console.warn( '[group-subscriptions]', type, msg ); // eslint-disable-line no-console
+			: ( msg: string, type?: string ) => console.warn( '[group-subscriptions]', type, msg ); // eslint-disable-line no-console
 
 	// Handle invite modal.
 	const inviteModal = document.getElementById( 'newspack-my-account__group_subscription--invite-member' );
@@ -36,10 +36,10 @@ domReady( function () {
 	// Handle remove-member confirm modal via event delegation.
 	const removeMemberModal = document.getElementById( 'newspack-my-account__group_subscription--confirm-remove-member' );
 	if ( removeMemberModal ) {
-		const memberIdInput = removeMemberModal.querySelector( '[data-remove-member-id]' );
+		const memberIdInput = removeMemberModal.querySelector< HTMLInputElement >( '[data-remove-member-id]' );
 		const memberNameSlot = removeMemberModal.querySelector( '[data-member-name]' );
 		document.addEventListener( 'click', event => {
-			const trigger = event.target.closest( '.newspack-my-account__group_subscription__remove-member' );
+			const trigger = ( event.target as HTMLElement ).closest( '.newspack-my-account__group_subscription__remove-member' );
 			if ( ! trigger ) {
 				return;
 			}
@@ -107,7 +107,7 @@ domReady( function () {
 			modal.setAttribute( 'data-state', 'closed' )
 		);
 	};
-	const copyToClipboard = async text => {
+	const copyToClipboard = async ( text: string ) => {
 		if ( ! text ) {
 			return false;
 		}
@@ -133,24 +133,24 @@ domReady( function () {
 		}
 	};
 
-	const copyFailedMessage = url => {
+	const copyFailedMessage = ( url: string ) => {
 		const text = newspackMyAccountV1?.labels?.invite_link_copy_failed || "Couldn't copy the invite link to your clipboard. Copy it manually:";
 		return `${ text } ${ url }`;
 	};
 	// Minimum loading duration so the spinner reads as "system thinking" even when the API is instant.
 	const MIN_LOADING_MS = 500;
 	const now = () => ( typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now() );
-	const waitForMinLoading = start => {
+	const waitForMinLoading = ( start: number ) => {
 		const elapsed = now() - start;
 		return elapsed < MIN_LOADING_MS ? new Promise( resolve => setTimeout( resolve, MIN_LOADING_MS - elapsed ) ) : Promise.resolve();
 	};
 
-	const generateLink = async e => {
-		const el = e.currentTarget;
+	const generateLink = async ( e: Event ) => {
+		const el = e.currentTarget as HTMLElement;
 		el.classList.add( 'newspack-ui__button--loading' );
 		el.setAttribute( 'aria-busy', 'true' );
 		el.setAttribute( 'disabled', '' );
-		const errorText = e.currentTarget.getAttribute( 'data-error-text' );
+		const errorText = ( e.currentTarget as HTMLElement ).getAttribute( 'data-error-text' ) as string;
 		const loadingStart = now();
 		try {
 			const response = await fetch( restUrl, {
@@ -190,12 +190,12 @@ domReady( function () {
 		}
 	};
 
-	const deleteLink = async e => {
-		const el = e.currentTarget;
+	const deleteLink = async ( e: Event ) => {
+		const el = e.currentTarget as HTMLElement;
 		el.classList.add( 'newspack-ui__button--loading' );
 		el.setAttribute( 'aria-busy', 'true' );
 		el.setAttribute( 'disabled', '' );
-		const errorText = e.currentTarget.getAttribute( 'data-error-text' );
+		const errorText = ( e.currentTarget as HTMLElement ).getAttribute( 'data-error-text' ) as string;
 		const loadingStart = now();
 		try {
 			const response = await fetch( restUrl, {

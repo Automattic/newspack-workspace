@@ -17,11 +17,13 @@ import { decodeEntities } from '@wordpress/html-entities';
  * External dependencies.
  */
 import { stringify } from 'qs';
+import type { RouteComponentProps } from 'react-router-dom';
 
 /**
  * Internal dependencies.
  */
 import { WebPreview, withWizard } from '../../../../../packages/components/src';
+import type { WithWizardInjectedProps, WizardError } from '../../../../../packages/components/src/with-wizard';
 import Router from '../../../../../packages/components/src/proxied-imports/router';
 import { Campaigns, Settings, Segments } from './views';
 import { CampaignsContext } from '../../contexts';
@@ -48,8 +50,21 @@ const tabbedNavigation = [
 	},
 ];
 
-class AudienceCampaigns extends Component {
-	constructor( props ) {
+type AudienceCampaignsProps = WithWizardInjectedProps;
+
+type AudienceCampaignsState = {
+	campaigns: CampaignGroup[];
+	prompts: CampaignsPrompt[];
+	segments: CampaignsSegment[];
+	settings: Record< string, unknown >[];
+	previewUrl: string | null;
+	previewTitle: string | null;
+	duplicated: number | null;
+	inFlight: boolean;
+};
+
+class AudienceCampaigns extends Component< AudienceCampaignsProps, AudienceCampaignsState > {
+	constructor( props: AudienceCampaignsProps ) {
 		super( props );
 		this.state = {
 			campaigns: [],
@@ -66,102 +81,109 @@ class AudienceCampaigns extends Component {
 		this.refetch();
 	};
 
+	/**
+	 * The Campaigns wizard API responds with the full wizard state; the fetch
+	 * layer is untyped, so the payload is asserted at this single boundary.
+	 */
+	fetchCampaignsData = ( args: Parameters< AudienceCampaignsProps[ 'wizardApiFetch' ] >[ 0 ] ) =>
+		this.props.wizardApiFetch( args ) as Promise< CampaignsData >;
+
 	refetch = () => {
-		const { setError, wizardApiFetch } = this.props;
-		wizardApiFetch( {
+		const { setError } = this.props;
+		this.fetchCampaignsData( {
 			path: newspackAudienceCampaigns.api,
 		} )
 			.then( this.updateAfterAPI )
-			.catch( error => setError( error ) );
+			.catch( ( error: WizardError ) => setError( error ) );
 	};
 
-	updatePopup = ( { id, ...promptConfig } ) => {
-		const { setError, wizardApiFetch } = this.props;
+	updatePopup = ( { id, ...promptConfig }: CampaignsPrompt ) => {
+		const { setError } = this.props;
 		this.setState( { inFlight: true } );
-		return wizardApiFetch( {
+		return this.fetchCampaignsData( {
 			path: `${ newspackAudienceCampaigns.api }/${ id }`,
 			method: 'POST',
 			data: { config: promptConfig },
 			quiet: true,
 		} )
 			.then( this.updateAfterAPI )
-			.catch( error => setError( error ) );
+			.catch( ( error: WizardError ) => setError( error ) );
 	};
 
 	/**
 	 * Delete a popup.
 	 *
-	 * @param {number} popupId ID of the Popup to alter.
+	 * @param popupId ID of the Popup to alter.
 	 */
-	deletePopup = popupId => {
-		const { setError, wizardApiFetch } = this.props;
-		return wizardApiFetch( {
+	deletePopup = ( popupId: number ) => {
+		const { setError } = this.props;
+		return this.fetchCampaignsData( {
 			path: `${ newspackAudienceCampaigns.api }/${ popupId }`,
 			method: 'DELETE',
 			quiet: true,
 		} )
 			.then( this.updateAfterAPI )
-			.catch( error => setError( error ) );
+			.catch( ( error: WizardError ) => setError( error ) );
 	};
 
 	/**
 	 * Restore a deleted a popup.
 	 *
-	 * @param {number} popupId ID of the Popup to alter.
+	 * @param popupId ID of the Popup to alter.
 	 */
-	restorePopup = popupId => {
-		const { setError, wizardApiFetch } = this.props;
-		return wizardApiFetch( {
+	restorePopup = ( popupId: number ) => {
+		const { setError } = this.props;
+		return this.fetchCampaignsData( {
 			path: `${ newspackAudienceCampaigns.api }/${ popupId }/restore`,
 			method: 'POST',
 			quiet: true,
 		} )
 			.then( this.updateAfterAPI )
-			.catch( error => setError( error ) );
+			.catch( ( error: WizardError ) => setError( error ) );
 	};
 
 	/**
 	 * Publish a popup.
 	 *
-	 * @param {number} popupId ID of the Popup to alter.
+	 * @param popupId ID of the Popup to alter.
 	 */
-	publishPopup = popupId => {
-		const { setError, wizardApiFetch } = this.props;
-		return wizardApiFetch( {
+	publishPopup = ( popupId: number ) => {
+		const { setError } = this.props;
+		return this.fetchCampaignsData( {
 			path: `${ newspackAudienceCampaigns.api }/${ popupId }/publish`,
 			method: 'POST',
 			quiet: true,
 		} )
 			.then( this.updateAfterAPI )
-			.catch( error => setError( error ) );
+			.catch( ( error: WizardError ) => setError( error ) );
 	};
 
 	/**
 	 * Unpublish a popup.
 	 *
-	 * @param {number} popupId ID of the Popup to alter.
+	 * @param popupId ID of the Popup to alter.
 	 */
-	unpublishPopup = popupId => {
-		const { setError, wizardApiFetch } = this.props;
-		return wizardApiFetch( {
+	unpublishPopup = ( popupId: number ) => {
+		const { setError } = this.props;
+		return this.fetchCampaignsData( {
 			path: `${ newspackAudienceCampaigns.api }/${ popupId }/publish`,
 			method: 'DELETE',
 			quiet: true,
 		} )
 			.then( this.updateAfterAPI )
-			.catch( error => setError( error ) );
+			.catch( ( error: WizardError ) => setError( error ) );
 	};
 
 	/**
 	 * Duplicate a popup.
 	 *
-	 * @param {number} popupId ID of the Popup to duplicate.
-	 * @param {string} title   Title to give to the duplicated prompt.
+	 * @param popupId ID of the Popup to duplicate.
+	 * @param title   Title to give to the duplicated prompt.
 	 */
-	duplicatePopup = ( popupId, title ) => {
-		const { setError, wizardApiFetch } = this.props;
+	duplicatePopup = ( popupId: number, title: string | Promise< void > ) => {
+		const { setError } = this.props;
 		this.setState( { inFlight: true } );
-		return wizardApiFetch( {
+		return this.fetchCampaignsData( {
 			path: addQueryArgs( `${ newspackAudienceCampaigns.api }/${ popupId }/duplicate`, {
 				title,
 			} ),
@@ -177,13 +199,15 @@ class AudienceCampaigns extends Component {
 			} );
 	};
 
-	previewUrlForPopup = ( { options, id } ) => {
+	previewUrlForPopup = ( { options, id }: CampaignsPrompt ) => {
 		const { placement, trigger_type: triggerType } = options;
-		const previewQueryKeys = window.newspackAudienceCampaigns?.preview_query_keys || {};
-		const abbreviatedKeys = {};
-		Object.keys( options ).forEach( key => {
-			if ( previewQueryKeys.hasOwnProperty( key ) ) {
-				abbreviatedKeys[ previewQueryKeys[ key ] ] = options[ key ];
+		const previewQueryKeys: Partial< Record< string, string > > = window.newspackAudienceCampaigns?.preview_query_keys || {};
+		const abbreviatedKeys: Record< string, unknown > = {};
+		const optionsRecord: Record< string, unknown > = options;
+		Object.keys( optionsRecord ).forEach( key => {
+			const abbreviatedKey = previewQueryKeys[ key ];
+			if ( abbreviatedKey !== undefined ) {
+				abbreviatedKeys[ abbreviatedKey ] = optionsRecord[ key ];
 			}
 		} );
 
@@ -197,19 +221,19 @@ class AudienceCampaigns extends Component {
 		return `${ previewURL }?${ stringify( { ...abbreviatedKeys, pid: id } ) }`;
 	};
 
-	updateAfterAPI = ( { campaigns, prompts, segments, settings, duplicated = null } ) =>
+	updateAfterAPI = ( { campaigns, prompts, segments, settings, duplicated = null }: CampaignsData ) =>
 		this.setState( { campaigns, prompts, segments, settings, duplicated, inFlight: false } );
 
-	manageCampaignGroup = ( campaigns, method = 'POST' ) => {
-		const { setError, wizardApiFetch } = this.props;
-		return wizardApiFetch( {
+	manageCampaignGroup = ( campaigns: CampaignsPrompt[], method: 'POST' | 'DELETE' = 'POST' ) => {
+		const { setError } = this.props;
+		return this.fetchCampaignsData( {
 			path: `${ newspackAudienceCampaigns.api }/batch-publish/`,
 			data: { ids: campaigns.map( campaign => campaign.id ) },
 			method,
 			quiet: true,
 		} )
 			.then( this.updateAfterAPI )
-			.catch( error => setError( error ) );
+			.catch( ( error: WizardError ) => setError( error ) );
 	};
 
 	render() {
@@ -217,11 +241,11 @@ class AudienceCampaigns extends Component {
 		const { campaigns, inFlight, prompts, segments, settings, previewUrl, previewTitle, duplicated } = this.state;
 		return (
 			<WebPreview
-				url={ previewUrl }
+				url={ previewUrl ?? undefined }
 				title={
 					previewTitle
 						? /* translators: %s: prompt title */ sprintf( __( 'Prompt: %s', 'newspack-plugin' ), decodeEntities( previewTitle ) )
-						: null
+						: undefined
 				}
 				onClose={ () => this.setState( { previewUrl: null, previewTitle: null } ) }
 				renderButton={ ( { showPreview } ) => {
@@ -246,7 +270,7 @@ class AudienceCampaigns extends Component {
 						deletePopup: this.deletePopup,
 						restorePopup: this.restorePopup,
 						duplicatePopup: this.duplicatePopup,
-						previewPopup: popup =>
+						previewPopup: ( popup: CampaignsPrompt ) =>
 							this.setState( { previewUrl: this.previewUrlForPopup( popup ), previewTitle: popup.title }, () => showPreview() ),
 						publishPopup: this.publishPopup,
 						resetDuplicated: () => this.setState( { duplicated: null } ),
@@ -259,20 +283,20 @@ class AudienceCampaigns extends Component {
 								{ pluginRequirements }
 								<Route
 									path="/campaigns/:id?"
-									render={ props => {
+									render={ ( props: RouteComponentProps< { id?: string } > ) => {
 										const campaignId = props.match.params.id;
 
-										const archiveCampaignGroup = ( id, status ) => {
-											return wizardApiFetch( {
+										const archiveCampaignGroup = ( id: number | string, status: boolean ) => {
+											return this.fetchCampaignsData( {
 												path: `${ newspackAudienceCampaigns.api }/archive-campaign/${ id }`,
 												method: status ? 'POST' : 'DELETE',
 												quiet: true,
 											} )
 												.then( this.updateAfterAPI )
-												.catch( error => setError( error ) );
+												.catch( ( error: WizardError ) => setError( error ) );
 										};
-										const createCampaignGroup = name => {
-											return wizardApiFetch( {
+										const createCampaignGroup = ( name: string ) => {
+											return this.fetchCampaignsData( {
 												path: `${ newspackAudienceCampaigns.api }/create-campaign/`,
 												method: 'POST',
 												data: { name },
@@ -287,10 +311,10 @@ class AudienceCampaigns extends Component {
 													} );
 													props.history.push( `/campaigns/${ result.term_id }` );
 												} )
-												.catch( error => setError( error ) );
+												.catch( ( error: WizardError ) => setError( error ) );
 										};
-										const deleteCampaignGroup = id => {
-											return wizardApiFetch( {
+										const deleteCampaignGroup = ( id: number | string ) => {
+											return this.fetchCampaignsData( {
 												path: `${ newspackAudienceCampaigns.api }/delete-campaign/${ id }`,
 												method: 'DELETE',
 												quiet: true,
@@ -304,10 +328,10 @@ class AudienceCampaigns extends Component {
 													} );
 													props.history.push( '/campaigns/' );
 												} )
-												.catch( error => setError( error ) );
+												.catch( ( error: WizardError ) => setError( error ) );
 										};
-										const duplicateCampaignGroup = ( id, name ) => {
-											return wizardApiFetch( {
+										const duplicateCampaignGroup = ( id: number | string, name: string ) => {
+											return this.fetchCampaignsData( {
 												path: `${ newspackAudienceCampaigns.api }/duplicate-campaign/${ id }`,
 												method: 'POST',
 												data: { name },
@@ -322,17 +346,17 @@ class AudienceCampaigns extends Component {
 													} );
 													props.history.push( `/campaigns/${ result.term_id }` );
 												} )
-												.catch( error => setError( error ) );
+												.catch( ( error: WizardError ) => setError( error ) );
 										};
-										const renameCampaignGroup = ( id, name ) => {
-											return wizardApiFetch( {
+										const renameCampaignGroup = ( id: number | string, name: string ) => {
+											return this.fetchCampaignsData( {
 												path: `${ newspackAudienceCampaigns.api }/rename-campaign/${ id }`,
 												method: 'POST',
 												data: { name },
 												quiet: true,
 											} )
 												.then( this.updateAfterAPI )
-												.catch( error => setError( error ) );
+												.catch( ( error: WizardError ) => setError( error ) );
 										};
 
 										return (
@@ -353,11 +377,11 @@ class AudienceCampaigns extends Component {
 								/>
 								<Route
 									path="/segments/:id?"
-									render={ props => (
+									render={ ( props: RouteComponentProps< { id?: string } > ) => (
 										<Segments
 											{ ...props }
 											{ ...sharedProps }
-											setSegments={ segmentsList => this.setState( { segments: segmentsList } ) }
+											setSegments={ ( segmentsList: CampaignsSegment[] ) => this.setState( { segments: segmentsList } ) }
 										/>
 									) }
 								/>

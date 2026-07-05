@@ -9,15 +9,21 @@ import { useEffect, useState } from '@wordpress/element';
  * Internal dependencies
  */
 import { Notice, SectionHeader, SelectControl } from '../../../../packages/components/src';
+import type { NewsletterList } from './settings';
 
-export default function ActiveCampaign( { value, onChange } ) {
+type ActiveCampaignProps = {
+	value: { masterList?: string | number };
+	onChange?: ( key: string, value: string ) => void;
+};
+
+export default function ActiveCampaign( { value, onChange }: ActiveCampaignProps ) {
 	const [ inFlight, setInFlight ] = useState( false );
-	const [ lists, setLists ] = useState( [] );
-	const [ error, setError ] = useState( false );
+	const [ lists, setLists ] = useState< NewsletterList[] >( [] );
+	const [ error, setError ] = useState< { message?: string } | false >( false );
 	const fetchLists = () => {
 		setError( false );
 		setInFlight( true );
-		apiFetch( {
+		apiFetch< NewsletterList[] >( {
 			path: '/newspack-newsletters/v1/lists',
 		} )
 			.then( setLists )
@@ -25,7 +31,7 @@ export default function ActiveCampaign( { value, onChange } ) {
 			.finally( () => setInFlight( false ) );
 	};
 	useEffect( fetchLists, [] );
-	const handleChange = key => val => onChange && onChange( key, val );
+	const handleChange = ( key: string ) => ( val: string ) => onChange && onChange( key, val );
 	return (
 		<>
 			{ error && <Notice noticeText={ error?.message || __( 'Something went wrong.', 'newspack-plugin' ) } isError /> }

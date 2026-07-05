@@ -17,15 +17,19 @@ const { gates = [], taxonomyMap = {}, canEditGates = false } = window.newspackCo
 
 function PostSettings() {
 	const { meta, postId, postType, termsByTax } = useSelect( select => {
-		const { getEditedPostAttribute, getCurrentPostId } = select( 'core/editor' );
-		const terms = {};
+		// The editor selectors are untyped for string-keyed stores; assert at the store boundary.
+		const { getEditedPostAttribute, getCurrentPostId } = select( 'core/editor' ) as {
+			getEditedPostAttribute: ( attribute: string ) => unknown;
+			getCurrentPostId: () => number;
+		};
+		const terms: Record< string, number[] > = {};
 		Object.values( taxonomyMap ).forEach( restBase => {
-			terms[ restBase ] = getEditedPostAttribute( restBase ) || [];
+			terms[ restBase ] = ( getEditedPostAttribute( restBase ) as number[] ) || [];
 		} );
 		return {
-			meta: getEditedPostAttribute( 'meta' ),
+			meta: getEditedPostAttribute( 'meta' ) as { newspack_content_restriction_is_exempt?: boolean },
 			postId: getCurrentPostId(),
-			postType: getEditedPostAttribute( 'type' ),
+			postType: getEditedPostAttribute( 'type' ) as string,
 			termsByTax: terms,
 		};
 	} );
@@ -78,5 +82,6 @@ function PostSettings() {
 
 registerPlugin( 'newspack-content-gate-post-exemptions', {
 	render: PostSettings,
-	icon: null,
+	// An explicit falsy icon overrides registerPlugin's default plugins icon via object spread.
+	icon: undefined,
 } );

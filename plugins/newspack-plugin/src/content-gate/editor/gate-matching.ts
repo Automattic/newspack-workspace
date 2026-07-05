@@ -11,7 +11,14 @@
  *
  * @return {boolean} Whether the gate applies to this post.
  */
-export function gateMatchesPost( contentRules, postType, termsByTax, postId, matchMode = 'all', taxonomyMap = {} ) {
+export function gateMatchesPost(
+	contentRules: GateContentRule[],
+	postType: string,
+	termsByTax: Record< string, number[] >,
+	postId: number | string,
+	matchMode = 'all',
+	taxonomyMap: Record< string, string > = {}
+): boolean {
 	// Inclusion override: if this post ID is listed in any specific_posts
 	// rule, the gate applies regardless of other rules.
 	const specificMatch = contentRules.some(
@@ -19,13 +26,13 @@ export function gateMatchesPost( contentRules, postType, termsByTax, postId, mat
 			rule.slug === 'specific_posts' &&
 			Array.isArray( rule.value ) &&
 			rule.value.length > 0 &&
-			rule.value.map( v => parseInt( v ) ).includes( parseInt( postId ) )
+			rule.value.map( v => parseInt( String( v ) ) ).includes( parseInt( String( postId ) ) )
 	);
 	if ( specificMatch ) {
 		return true;
 	}
 
-	const ruleMatches = rule => {
+	const ruleMatches = ( rule: GateContentRule ) => {
 		const isExclusion = rule.exclusion;
 		if ( rule.slug === 'post_types' ) {
 			return isExclusion ? ! rule.value.includes( postType ) : rule.value.includes( postType );
@@ -33,7 +40,7 @@ export function gateMatchesPost( contentRules, postType, termsByTax, postId, mat
 		if ( rule.slug === 'newsletters' ) {
 			// Mirrors the PHP matcher: a membership test against the post ID. The
 			// newsletters rule is include-only, so the exclusion flag is never set.
-			return rule.value.map( id => parseInt( id ) ).includes( parseInt( postId ) );
+			return rule.value.map( id => parseInt( String( id ) ) ).includes( parseInt( String( postId ) ) );
 		}
 		const restBase = taxonomyMap[ rule.slug ];
 		if ( ! restBase ) {
@@ -43,7 +50,7 @@ export function gateMatchesPost( contentRules, postType, termsByTax, postId, mat
 		if ( ! isExclusion && ! postTerms.length ) {
 			return false;
 		}
-		const hasOverlap = rule.value.some( id => postTerms.includes( parseInt( id ) ) );
+		const hasOverlap = rule.value.some( id => postTerms.includes( parseInt( String( id ) ) ) );
 		return isExclusion ? ! hasOverlap : hasOverlap;
 	};
 

@@ -4,15 +4,12 @@
 import { renderHook } from '@testing-library/react';
 
 /**
- * WordPress dependencies
- */
-import { useSelect } from '@wordpress/data';
-
-/**
  * Internal dependencies
  */
 import { useAuthorTokens } from './use-author-tokens';
 import { useCoAuthors } from '../../shared/hooks/use-coauthors';
+import type { CoAuthor } from '../../shared/hooks/use-coauthors';
+import { mockUseSelectWith } from '../../shared/test-utils/mock-use-select';
 
 jest.mock( '@wordpress/data', () => ( {
 	useSelect: jest.fn(),
@@ -26,28 +23,42 @@ jest.mock( '../../shared/hooks/use-coauthors', () => ( {
 	useCoAuthors: jest.fn(),
 } ) );
 
-const mockUseCoAuthors = ( { authors = [], isCapAvailable = false, isLoading = false, hasCoauthorTermIds = false } = {} ) => {
-	useCoAuthors.mockReturnValue( { authors, isCapAvailable, isLoading, hasCoauthorTermIds } );
+const mockUseCoAuthors = ( {
+	authors = [],
+	isCapAvailable = false,
+	isLoading = false,
+	hasCoauthorTermIds = false,
+}: {
+	authors?: CoAuthor[];
+	isCapAvailable?: boolean;
+	isLoading?: boolean;
+	hasCoauthorTermIds?: boolean;
+} = {} ) => {
+	jest.mocked( useCoAuthors ).mockReturnValue( { authors, isCapAvailable, isLoading, hasCoauthorTermIds } );
 };
 
 /**
  * Mock `useSelect` for the hook's own post_author lookup.
  *
- * @param {Object}  options
- * @param {number}  options.authorId The author ID returned by `getEditedPostAttribute('author')`.
- * @param {?Object} options.user     User record returned by `getUser`, or null.
+ * @param options
+ * @param options.authorId The author ID returned by `getEditedPostAttribute('author')`.
+ * @param options.user     User record returned by `getUser`, or null.
  */
-const mockPostAuthorSelect = ( { authorId = 1, user = { id: 1, name: 'WP User' } } = {} ) => {
-	useSelect.mockImplementation( callback => {
-		return callback( storeName => {
-			if ( storeName === 'core/editor' ) {
-				return { getEditedPostAttribute: attr => ( attr === 'author' ? authorId : undefined ) };
-			}
-			if ( storeName === 'core' ) {
-				return { getUser: id => ( id === authorId ? user : null ) };
-			}
-			return null;
-		} );
+const mockPostAuthorSelect = ( {
+	authorId = 1,
+	user = { id: 1, name: 'WP User' },
+}: {
+	authorId?: number;
+	user?: { id: number; name: string } | null;
+} = {} ) => {
+	mockUseSelectWith( storeName => {
+		if ( storeName === 'core/editor' ) {
+			return { getEditedPostAttribute: ( attr: string ) => ( attr === 'author' ? authorId : undefined ) };
+		}
+		if ( storeName === 'core' ) {
+			return { getUser: ( id: number ) => ( id === authorId ? user : null ) };
+		}
+		return null;
 	} );
 };
 

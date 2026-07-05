@@ -17,6 +17,8 @@ import Setup from './setup';
 import Campaign from './campaign';
 import Complete from './complete';
 import { withWizard } from '../../../../../packages/components/src';
+import type { WithWizardInjectedProps } from '../../../../../packages/components/src/with-wizard';
+import type { TabbedNavigationItem } from '../../../../../packages/components/src/tabbed-navigation';
 import Router from '../../../../../packages/components/src/proxied-imports/router';
 import ContentGating from './content-gating';
 import Payment from './payment';
@@ -29,15 +31,15 @@ import Emails from './emails';
 
 const { HashRouter, Redirect, Route, Switch } = Router;
 
-function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
+function AudienceWizard( { pluginRequirements, wizardApiFetch }: WithWizardInjectedProps, ref: import('react').ForwardedRef< HTMLDivElement > ) {
 	const [ inFlight, setInFlight ] = useState( false );
-	const [ config, setConfig ] = useState( {} );
-	const [ prerequisites, setPrerequisites ] = useState( null );
-	const [ error, setError ] = useState( false );
-	const [ espSyncErrors, setEspSyncErrors ] = useState( [] );
-	const [ requiredPlugins, setRequiredPlugins ] = useState( {} );
+	const [ config, setConfig ] = useState< Config >( {} );
+	const [ prerequisites, setPrerequisites ] = useState< AudienceSetupSharedProps[ 'prerequisites' ] >( null );
+	const [ error, setError ] = useState< false | WpFetchError >( false );
+	const [ espSyncErrors, setEspSyncErrors ] = useState< Record< string, string > | string[] >( [] );
+	const [ requiredPlugins, setRequiredPlugins ] = useState< Record< string, boolean > >( {} );
 	const [ configLoaded, setConfigLoaded ] = useState( false );
-	const [ verificationRequiredByGates, setVerificationRequiredByGates ] = useState( [] );
+	const [ verificationRequiredByGates, setVerificationRequiredByGates ] = useState< VerificationRequiredGate[] >( [] );
 
 	const fetchConfig = () => {
 		setError( false );
@@ -45,7 +47,14 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 		return wizardApiFetch( {
 			path: '/newspack/v1/wizard/newspack-audience/audience-management',
 		} )
-			.then( ( { config: fetchedConfig, prerequisites_status, required_plugins, can_esp_sync, verification_required_by_gates } ) => {
+			.then( response => {
+				const {
+					config: fetchedConfig,
+					prerequisites_status,
+					required_plugins,
+					can_esp_sync,
+					verification_required_by_gates,
+				} = response as AudienceManagementResponse;
 				setPrerequisites( prerequisites_status );
 				setRequiredPlugins( required_plugins || {} );
 				setConfig( fetchedConfig );
@@ -56,10 +65,10 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 			.catch( setError )
 			.finally( () => setInFlight( false ) );
 	};
-	const updateConfig = ( key, val ) => {
-		setConfig( { ...config, [ key ]: val } );
+	const updateConfig = ( key: string, val: unknown ) => {
+		setConfig( { ...config, [ key ]: val } as Config );
 	};
-	const saveConfig = data => {
+	const saveConfig = ( data: Partial< Config > ) => {
 		setError( false );
 		setInFlight( true );
 		return wizardApiFetch( {
@@ -68,7 +77,14 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 			quiet: true,
 			data,
 		} )
-			.then( ( { config: fetchedConfig, prerequisites_status, required_plugins, can_esp_sync, verification_required_by_gates } ) => {
+			.then( response => {
+				const {
+					config: fetchedConfig,
+					prerequisites_status,
+					required_plugins,
+					can_esp_sync,
+					verification_required_by_gates,
+				} = response as AudienceManagementResponse;
 				setPrerequisites( prerequisites_status );
 				setRequiredPlugins( required_plugins || {} );
 				setConfig( fetchedConfig );
@@ -89,7 +105,7 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 		fetchConfig();
 	}, [] );
 
-	const paymentData = useWizardData( 'newspack-audience/payment' );
+	const paymentData = useWizardData< AudienceDonationsWizardData >( 'newspack-audience/payment' );
 	const platform = paymentData?.platform_data?.platform;
 	const platformSelected = paymentData?.platform_data?.platform_selected;
 	// `null` = undecided until config + payment data load. Driven by local state (not the
@@ -97,7 +113,7 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 	// — the saves flip platform_selected/enabled before the flow finishes. Open the chooser
 	// when no platform has been chosen OR Audience Management is disabled, so a disabled site
 	// lands on the platform/enable screen rather than the (active-looking) configuration page.
-	const [ showChooser, setShowChooser ] = useState( null );
+	const [ showChooser, setShowChooser ] = useState< boolean | null >( null );
 	useEffect( () => {
 		if ( showChooser === null && configLoaded && typeof platformSelected === 'boolean' ) {
 			setShowChooser( ! platformSelected || ! config.enabled );
@@ -114,7 +130,7 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 	const isNewspackPlatform = Boolean( newspackAudience.emails?.isNewspackPlatform );
 	const showEmails = Boolean( config.enabled ) || isNewspackPlatform;
 
-	let tabs = chooserOpen
+	const rawTabs: ( TabbedNavigationItem | false | undefined )[] = chooserOpen
 		? []
 		: [
 				{
@@ -142,10 +158,15 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 					path: '/groups',
 				},
 		  ];
-	tabs = tabs.filter( tab => tab );
+	const tabs = rawTabs.filter( ( tab ): tab is TabbedNavigationItem => Boolean( tab ) );
 
-	const getSharedProps = ( configKey, type = 'checkbox' ) => {
-		const props = {
+	const getSharedProps = ( configKey: string, type = 'checkbox' ) => {
+		const props: {
+			onChange: ( value: string | boolean ) => void;
+			disabled?: boolean;
+			checked?: boolean;
+			value?: string;
+		} = {
 			onChange: val => updateConfig( configKey, val ),
 		};
 		if ( configKey !== 'enabled' ) {
@@ -153,17 +174,17 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 		}
 		switch ( type ) {
 			case 'checkbox':
-				props.checked = Boolean( config[ configKey ] );
+				props.checked = Boolean( config[ configKey as ConfigKey ] );
 				break;
 			case 'text':
-				props.value = config[ configKey ] || '';
+				props.value = ( config[ configKey as ConfigKey ] || '' ) as string;
 				break;
 		}
 
 		return props;
 	};
 
-	const props = {
+	const props: AudienceSetupSharedProps = {
 		headerText: __( 'Audience Management', 'newspack-plugin' ),
 		tabbedNavigation: tabs,
 		wizardApiFetch,
@@ -196,7 +217,7 @@ function AudienceWizard( { pluginRequirements, wizardApiFetch }, ref ) {
 							chooserOpen ? (
 								<PlatformSelection
 									{ ...props }
-									tabbedNavigation={ null }
+									tabbedNavigation={ undefined }
 									platformSelected={ platformSelected }
 									showEnableToggle={ platformSelected }
 									onComplete={ () => {

@@ -37,11 +37,24 @@ const overlaySizes = [
 	{ value: 'full-width', label: __( 'Full Width', 'newspack-plugin' ) },
 ];
 
+/** The gate CPT meta consumed by this panel. */
+type GateMeta = {
+	style: string;
+	inline_fade: boolean;
+	overlay_size: string;
+	overlay_position: string;
+	visible_paragraphs: number | string;
+	use_more_tag: boolean;
+};
+
 function GateEdit() {
 	const { meta } = useSelect( select => {
-		const { getEditedPostAttribute } = select( 'core/editor' );
+		// The editor selectors are untyped for string-keyed stores; assert at the store boundary.
+		const { getEditedPostAttribute } = select( 'core/editor' ) as {
+			getEditedPostAttribute: ( attribute: string ) => unknown;
+		};
 		return {
-			meta: getEditedPostAttribute( 'meta' ),
+			meta: getEditedPostAttribute( 'meta' ) as GateMeta,
 		};
 	} );
 	const { editPost } = useDispatch( 'core/editor' );
@@ -109,7 +122,7 @@ function GateEdit() {
 							help={ sprintf(
 								// translators: %s is the placement of the gate.
 								__( 'The gate will be displayed at the %s of the screen.', 'newspack-plugin' ),
-								overlayPositionsLabels[ meta.overlay_position ]
+								overlayPositionsLabels[ meta.overlay_position as keyof typeof overlayPositionsLabels ]
 							) }
 						/>
 					</Fragment>
@@ -142,5 +155,6 @@ function GateEdit() {
 
 registerPlugin( 'newspack-content-gate', {
 	render: GateEdit,
-	icon: null,
+	// An explicit falsy icon overrides registerPlugin's default plugins icon via object spread.
+	icon: undefined,
 } );

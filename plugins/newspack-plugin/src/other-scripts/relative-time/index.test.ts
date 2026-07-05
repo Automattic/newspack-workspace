@@ -2,7 +2,7 @@ describe( 'relative-time', () => {
 	const HOUR = 3600;
 	const DAY = 86400;
 
-	let dateNowSpy;
+	let dateNowSpy: jest.SpyInstance< number, [] >;
 
 	const NOW = new Date( '2026-03-17T12:00:00Z' ).getTime();
 
@@ -17,7 +17,11 @@ describe( 'relative-time', () => {
 		jest.resetModules();
 	} );
 
-	function createTimeElement( datetime, text, { parentClass = 'wp-block-post-date', isLink = false } = {} ) {
+	function createTimeElement(
+		datetime: string,
+		text: string,
+		{ parentClass = 'wp-block-post-date', isLink = false }: { parentClass?: string; isLink?: boolean } = {}
+	) {
 		const div = document.createElement( 'div' );
 		div.className = parentClass;
 		const time = document.createElement( 'time' );
@@ -35,7 +39,7 @@ describe( 'relative-time', () => {
 		return time;
 	}
 
-	function loadScript( config ) {
+	function loadScript( config: NewspackRelativeTimeConfig ) {
 		window.newspackRelativeTime = config;
 		jest.isolateModules( () => {
 			require( './index' );
@@ -47,7 +51,7 @@ describe( 'relative-time', () => {
 		createTimeElement( twoHoursAgo, 'March 17, 2026' );
 		loadScript( { cutoff: 14 * DAY, locale: 'en_US' } );
 
-		const time = document.querySelector( 'time' );
+		const time = document.querySelector( 'time' )!;
 		expect( time.textContent ).toContain( 'ago' );
 	} );
 
@@ -56,7 +60,7 @@ describe( 'relative-time', () => {
 		createTimeElement( twentyDaysAgo, 'February 25, 2026' );
 		loadScript( { cutoff: 14 * DAY, locale: 'en_US' } );
 
-		const time = document.querySelector( 'time' );
+		const time = document.querySelector( 'time' )!;
 		expect( time.textContent ).toBe( 'February 25, 2026' );
 	} );
 
@@ -65,7 +69,7 @@ describe( 'relative-time', () => {
 		createTimeElement( tomorrow, 'March 18, 2026' );
 		loadScript( { cutoff: 14 * DAY, locale: 'en_US' } );
 
-		const time = document.querySelector( 'time' );
+		const time = document.querySelector( 'time' )!;
 		expect( time.textContent ).toBe( 'March 18, 2026' );
 	} );
 
@@ -74,7 +78,7 @@ describe( 'relative-time', () => {
 		createTimeElement( twoHoursAgo, 'March 17, 2026' );
 		loadScript( { cutoff: 14 * DAY, locale: 'en_US' } );
 
-		const time = document.querySelector( 'time' );
+		const time = document.querySelector( 'time' )!;
 		expect( time.getAttribute( 'title' ) ).toBeTruthy();
 	} );
 
@@ -83,7 +87,7 @@ describe( 'relative-time', () => {
 		createTimeElement( twoHoursAgo, 'March 17, 2026', { isLink: true } );
 		loadScript( { cutoff: 14 * DAY, locale: 'en_US' } );
 
-		const anchor = document.querySelector( 'time a' );
+		const anchor = document.querySelector( 'time a' )!;
 		expect( anchor ).not.toBeNull();
 		expect( anchor.textContent ).toContain( 'ago' );
 		expect( anchor.getAttribute( 'href' ) ).toBe( '/test/' );
@@ -96,14 +100,14 @@ describe( 'relative-time', () => {
 		} );
 		loadScript( { cutoff: 14 * DAY, locale: 'en_US' } );
 
-		const time = document.querySelector( 'time' );
+		const time = document.querySelector( 'time' )!;
 		expect( time.textContent ).toBe( 'Updated 2 hours ago' );
 	} );
 
 	it( 'should skip text replacement for modified date blocks with data attribute', () => {
 		const twoHoursAgo = new Date( NOW - 2 * HOUR * 1000 ).toISOString();
 		const time = createTimeElement( twoHoursAgo, 'Updated 2 hours ago' );
-		time.parentElement.setAttribute( 'data-newspack-modified', '' );
+		time.parentElement!.setAttribute( 'data-newspack-modified', '' );
 		loadScript( { cutoff: 14 * DAY, locale: 'en_US' } );
 
 		expect( time.textContent ).toBe( 'Updated 2 hours ago' );
@@ -116,7 +120,7 @@ describe( 'relative-time', () => {
 		} );
 		loadScript( { cutoff: 14 * DAY, locale: 'en_US' } );
 
-		const time = document.querySelector( 'time' );
+		const time = document.querySelector( 'time' )!;
 		expect( time.getAttribute( 'title' ) ).toBeTruthy();
 	} );
 
@@ -128,7 +132,7 @@ describe( 'relative-time', () => {
 			require( './index' );
 		} );
 
-		const time = document.querySelector( 'time' );
+		const time = document.querySelector( 'time' )!;
 		expect( time.textContent ).toBe( 'March 17, 2026' );
 	} );
 } );

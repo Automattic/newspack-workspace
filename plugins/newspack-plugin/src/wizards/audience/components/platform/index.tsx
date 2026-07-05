@@ -14,10 +14,18 @@ import { useWizardData } from '../../../../../packages/components/src/wizard/sto
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 
 /**
+ * The payment wizard data consumed by this component.
+ */
+type PlatformWizardData = {
+	platform_data?: { platform?: string };
+	plugin_status?: boolean;
+};
+
+/**
  * Platform Selection  Screen Component
  */
 const Platform = () => {
-	const wizardData = useWizardData( 'newspack-audience/payment' );
+	const wizardData = useWizardData< PlatformWizardData >( 'newspack-audience/payment' );
 	const { saveWizardSettings, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	return (
 		<WizardsSection>

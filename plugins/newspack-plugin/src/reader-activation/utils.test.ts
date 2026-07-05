@@ -20,7 +20,7 @@ describe( 'generateID', () => {
 		expect( failedIds ).toEqual( 0 );
 	} );
 	it( 'should be unique among 10000 generated IDs', () => {
-		const ids = [];
+		const ids: Record< string, boolean > = {};
 		for ( let i = 0; i < 10000; i++ ) {
 			ids[ generateID() ] = true;
 		}

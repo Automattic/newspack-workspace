@@ -45,14 +45,68 @@ import {
 	Waiting,
 	WebPreview,
 } from '../../../packages/components/src';
+import type { SelectedPostItem } from '../../../packages/components/src/autocomplete-with-latest-posts';
+import type { SelectedItem } from '../../../packages/components/src/autocomplete-with-suggestions';
+import type { SelectedImageAttachment } from '../../../packages/components/src/image-upload';
+import type { SelectControlOption } from '../../../packages/components/src/select-control';
 import * as newspackIcons from '../../../packages/icons';
 
-class ComponentsDemo extends Component {
+const {
+	newspack_aux_data: { is_debug_mode: isDebugMode = false },
+} = window;
+
+// The `newspack_data` script localizes `newspack_urls` on all wizard pages;
+// `dashboard` is part of that payload but missing from the `NewspackUrls` type
+// owned by newspack-components, so it's typed locally at this boundary.
+const newspackUrls = window.newspack_urls as { dashboard?: string };
+
+// Options for the single-value select dropdown demos. The placeholder option
+// carries a `null` value, which the SelectControlOption type doesn't admit.
+const demoSelectOptions = [
+	{
+		value: null,
+		label: __( '- Select -', 'newspack-plugin' ),
+		disabled: true,
+	},
+	{ value: '1st', label: __( 'First', 'newspack-plugin' ) },
+	{ value: '2nd', label: __( 'Second', 'newspack-plugin' ) },
+	{ value: '3rd', label: __( 'Third', 'newspack-plugin' ) },
+] as SelectControlOption[];
+
+interface DraggableListItem {
+	id: number;
+	title: string;
+}
+
+interface ComponentsDemoState {
+	selectedPostForAutocompleteWithSuggestions: SelectedItem[];
+	selectedPostsForAutocompleteWithSuggestionsMultiSelect: SelectedItem[];
+	selectedPostForAutocompleteWithLatestPosts: SelectedPostItem[];
+	selectedPostsForAutocompleteWithLatestPostsMultiSelect: SelectedPostItem[];
+	image: SelectedImageAttachment | null;
+	selectValue1: string;
+	selectValue2: string;
+	selectValue3: string;
+	selectValues: string[];
+	modalShown: boolean;
+	color1: string;
+	draggableList: DraggableListItem[];
+	settingsGroupCardActive: boolean;
+	cardFeatureEnabled: boolean;
+	cardFeatureCustomEnabled: boolean;
+	cardFormEnabled: boolean;
+	cardFormOpen: boolean;
+	actionCardToggleChecked?: boolean;
+}
+
+class ComponentsDemo extends Component< Record< string, never >, ComponentsDemoState > {
+	dragWrapperRef: React.RefObject< HTMLDivElement >;
+
 	/**
 	 * constructor. Demo of how the parent interacts with the components, and controls their values.
 	 */
-	constructor() {
-		super( ...arguments );
+	constructor( props: Record< string, never > ) {
+		super( props );
 		this.state = {
 			selectedPostForAutocompleteWithSuggestions: [],
 			selectedPostsForAutocompleteWithSuggestionsMultiSelect: [],
@@ -78,7 +132,7 @@ class ComponentsDemo extends Component {
 			cardFormEnabled: false,
 			cardFormOpen: false,
 		};
-		this.dragWrapperRef = createRef();
+		this.dragWrapperRef = createRef< HTMLDivElement >();
 	}
 
 	/**
@@ -100,13 +154,13 @@ class ComponentsDemo extends Component {
 
 		return (
 			<Fragment>
-				{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
+				{ isDebugMode && <Notice debugMode /> }
 				<div className="newspack-wizard__header">
 					<div className="newspack-wizard__header__inner">
 						<div className="newspack-wizard__title">
 							<Button
 								isLink
-								href={ newspack_urls.dashboard }
+								href={ newspackUrls.dashboard }
 								label={ __( 'Return to Dashboard', 'newspack-plugin' ) }
 								showTooltip={ true }
 								icon={ category }
@@ -290,7 +344,6 @@ class ComponentsDemo extends Component {
 						<h2>{ __( 'Plugin installer', 'newspack-plugin' ) }</h2>
 						<PluginInstaller
 							plugins={ [ 'woocommerce', 'wordpress-seo' ] }
-							canUninstall
 							onStatus={ ( { complete, pluginInfo } ) => {
 								console.log( complete ? 'All plugins installed successfully' : 'Plugin installation incomplete', pluginInfo );
 							} }
@@ -301,7 +354,6 @@ class ComponentsDemo extends Component {
 						<PluginInstaller
 							plugins={ [ 'woocommerce', 'wordpress-seo' ] }
 							isSmall
-							canUninstall
 							onStatus={ ( { complete, pluginInfo } ) => {
 								console.log( complete ? 'All plugins installed successfully' : 'Plugin installation incomplete', pluginInfo );
 							} }
@@ -530,61 +582,21 @@ class ComponentsDemo extends Component {
 							<SelectControl
 								label={ __( 'Label for Select with a preselection', 'newspack-plugin' ) }
 								value={ selectValue1 }
-								options={ [
-									{
-										value: null,
-										label: __( '- Select -', 'newspack-plugin' ),
-										disabled: true,
-									},
-									{ value: '1st', label: __( 'First', 'newspack-plugin' ) },
-									{ value: '2nd', label: __( 'Second', 'newspack-plugin' ) },
-									{ value: '3rd', label: __( 'Third', 'newspack-plugin' ) },
-								] }
+								options={ demoSelectOptions }
 								onChange={ value => this.setState( { selectValue1: value } ) }
 							/>
 							<SelectControl
 								label={ __( 'Label for Select with no preselection', 'newspack-plugin' ) }
 								value={ selectValue2 }
-								options={ [
-									{
-										value: null,
-										label: __( '- Select -', 'newspack-plugin' ),
-										disabled: true,
-									},
-									{ value: '1st', label: __( 'First', 'newspack-plugin' ) },
-									{ value: '2nd', label: __( 'Second', 'newspack-plugin' ) },
-									{ value: '3rd', label: __( 'Third', 'newspack-plugin' ) },
-								] }
+								options={ demoSelectOptions }
 								onChange={ value => this.setState( { selectValue2: value } ) }
 							/>
-							<SelectControl
-								label={ __( 'Label for disabled Select', 'newspack-plugin' ) }
-								disabled
-								options={ [
-									{
-										value: null,
-										label: __( '- Select -', 'newspack-plugin' ),
-										disabled: true,
-									},
-									{ value: '1st', label: __( 'First', 'newspack-plugin' ) },
-									{ value: '2nd', label: __( 'Second', 'newspack-plugin' ) },
-									{ value: '3rd', label: __( 'Third', 'newspack-plugin' ) },
-								] }
-							/>
+							<SelectControl label={ __( 'Label for disabled Select', 'newspack-plugin' ) } disabled options={ demoSelectOptions } />
 							<SelectControl
 								label={ __( 'Small', 'newspack-plugin' ) }
 								value={ selectValue3 }
 								isSmall
-								options={ [
-									{
-										value: null,
-										label: __( '- Select -', 'newspack-plugin' ),
-										disabled: true,
-									},
-									{ value: '1st', label: __( 'First', 'newspack-plugin' ) },
-									{ value: '2nd', label: __( 'Second', 'newspack-plugin' ) },
-									{ value: '3rd', label: __( 'Third', 'newspack-plugin' ) },
-								] }
+								options={ demoSelectOptions }
 								onChange={ value => this.setState( { selectValue3: value } ) }
 							/>
 							<SelectControl
@@ -763,6 +775,7 @@ class ComponentsDemo extends Component {
 											label={ __( 'A settings option', 'newspack-plugin' ) }
 											help={ __( 'A description of the setting', 'newspack-plugin' ) }
 											checked={ false }
+											onChange={ () => {} }
 										/>
 									</CardBody>
 									<CardDivider />
@@ -848,7 +861,7 @@ class ComponentsDemo extends Component {
 							{ this.state.draggableList.map( ( { id, title }, index ) => (
 								<ActionCard
 									key={ id }
-									id={ id }
+									id={ String( id ) }
 									draggable
 									dragIndex={ index }
 									dragWrapperRef={ this.dragWrapperRef }
@@ -1060,7 +1073,7 @@ class ComponentsDemo extends Component {
 						</VStack>
 						<h3>{ __( 'Badge levels', 'newspack-plugin' ) }</h3>
 						<VStack spacing={ 2 }>
-							{ [ 'success', 'info', 'warning', 'error' ].map( level => (
+							{ ( [ 'success', 'info', 'warning', 'error' ] as const ).map( level => (
 								<CardForm
 									key={ level }
 									title={ __( 'Example placement', 'newspack-plugin' ) }
@@ -1087,7 +1100,8 @@ class ComponentsDemo extends Component {
 								{
 									br: <br />,
 									code: <code />,
-									link: <ExternalLink href="https://npmjs.com/package/newspack-icons" />,
+									// The children are replaced by createInterpolateElement with the tag's translated content.
+									link: <ExternalLink href="https://npmjs.com/package/newspack-icons">npm package</ExternalLink>,
 								}
 							) }
 						</p>

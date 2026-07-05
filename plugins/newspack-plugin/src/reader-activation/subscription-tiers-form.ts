@@ -1,7 +1,7 @@
 import { domReady } from '../utils';
 import { queuePageReload } from './utils';
 
-function handleCheckoutClose( completed ) {
+function handleCheckoutClose( completed: boolean ) {
 	if ( ! completed ) {
 		return;
 	}
@@ -29,7 +29,7 @@ export default function init() {
 		window.newspackRAS.push( ras => {
 			const reader = ras.getReader();
 			if ( isSwitchingSubscription && ! reader?.authenticated ) {
-				ras.openAuthModal( {
+				ras.openAuthModal!( {
 					labels: {
 						signin: {
 							title: window.newspack_reader_activation_labels.sign_in_to_upgrade,
@@ -48,17 +48,17 @@ export default function init() {
 			}
 		} );
 
-		const forms = document.querySelectorAll( '.newspack__subscription-tiers__form' );
+		const forms = document.querySelectorAll< HTMLFormElement >( '.newspack__subscription-tiers__form' );
 		if ( ! forms.length ) {
 			return;
 		}
 
 		[ ...forms ].forEach( form => {
 			const modal = form.closest( '.newspack-ui__modal-container' );
-			const submitButton = form.querySelector( 'button[type="submit"]' );
-			const cancelButton = form.querySelector( '.newspack-ui__modal__cancel' );
+			const submitButton = form.querySelector< HTMLButtonElement >( 'button[type="submit"]' );
+			const cancelButton = form.querySelector< HTMLElement >( '.newspack-ui__modal__cancel' );
 			const isNYP = form.classList.contains( 'nyp' );
-			const originalSubmitButtonText = submitButton.textContent;
+			const originalSubmitButtonText = submitButton!.textContent;
 
 			let isFormValid = false;
 
@@ -74,36 +74,36 @@ export default function init() {
 			const handleChange = () => {
 				// Update submit label.
 				if ( isNYP ) {
-					const amountInput = form.querySelector( '#nyp_amount' );
+					const amountInput = form.querySelector< HTMLInputElement >( '#nyp_amount' );
 					if ( amountInput?.value ) {
 						const amountText = parseFloat( amountInput.value ).toLocaleString( document.documentElement.lang, {
 							style: 'currency',
 							currency: amountInput.dataset.currency,
 							currencyDisplay: 'narrowSymbol',
 						} );
-						submitButton.textContent = originalSubmitButtonText + ': ' + amountText + ' / ' + amountInput.dataset.frequency;
+						submitButton!.textContent = originalSubmitButtonText + ': ' + amountText + ' / ' + amountInput.dataset.frequency;
 					} else {
-						submitButton.textContent = originalSubmitButtonText;
+						submitButton!.textContent = originalSubmitButtonText;
 					}
 				}
 
 				// Validate inputs.
 				if ( isNYP ) {
-					const amountInput = form.querySelector( '#nyp_amount.current' );
+					const amountInput = form.querySelector< HTMLInputElement >( '#nyp_amount.current' );
 					if ( amountInput && ( ! amountInput.value || amountInput.value === amountInput.dataset.originalValue ) ) {
-						form.querySelector( 'button[type="submit"]' ).disabled = true;
+						form.querySelector< HTMLButtonElement >( 'button[type="submit"]' )!.disabled = true;
 						isFormValid = false;
 					} else {
-						form.querySelector( 'button[type="submit"]' ).disabled = false;
+						form.querySelector< HTMLButtonElement >( 'button[type="submit"]' )!.disabled = false;
 						isFormValid = true;
 					}
 				} else {
 					const selected = form.querySelector( '.current input[type="radio"]:checked' );
 					if ( selected ) {
-						form.querySelector( 'button[type="submit"]' ).disabled = true;
+						form.querySelector< HTMLButtonElement >( 'button[type="submit"]' )!.disabled = true;
 						isFormValid = false;
 					} else {
-						form.querySelector( 'button[type="submit"]' ).disabled = false;
+						form.querySelector< HTMLButtonElement >( 'button[type="submit"]' )!.disabled = false;
 						isFormValid = true;
 					}
 				}
@@ -118,11 +118,11 @@ export default function init() {
 			handleChange();
 
 			if ( modal ) {
-				cancelButton.addEventListener( 'click', () => {
+				cancelButton!.addEventListener( 'click', () => {
 					modal?.setAttribute( 'data-state', 'closed' );
 				} );
 			} else {
-				cancelButton.style.display = 'none';
+				cancelButton!.style.display = 'none';
 			}
 
 			form.addEventListener( 'submit', ev => {
@@ -146,7 +146,7 @@ export default function init() {
 				modal?.setAttribute( 'data-state', 'closed' );
 				const url = new URL( form.action );
 				for ( const param of formData.entries() ) {
-					url.searchParams.append( param[ 0 ], param[ 1 ] );
+					url.searchParams.append( param[ 0 ], param[ 1 ] as string );
 				}
 				window.newspackOpenModalCheckout( {
 					url: url.toString(),
@@ -166,7 +166,7 @@ export default function init() {
 						modal.setAttribute( 'data-state', 'closed' );
 					}
 					window.newspackRAS.push( ras => {
-						ras.openAuthModal( {
+						ras.openAuthModal!( {
 							skipSuccess: true,
 							skipNewslettersSignup: true,
 							onSuccess: () => {

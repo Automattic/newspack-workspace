@@ -7,14 +7,14 @@ import { __ } from '@wordpress/i18n';
  * Human-readable label for a service key (for block title, aria-label, etc.).
  * Only Email and Phone are translatable; company names are left as-is.
  *
- * @param {string} service Service key (e.g. 'facebook', 'email').
- * @return {string} Display label.
+ * @param service Service key (e.g. 'facebook', 'email').
+ * @return Display label.
  */
-export function getServiceLabel( service ) {
+export function getServiceLabel( service: string | undefined ): string {
 	if ( ! service ) {
 		return '';
 	}
-	const labels = {
+	const labels: Record< string, string > = {
 		facebook: 'Facebook',
 		twitter: 'X',
 		instagram: 'Instagram',
@@ -35,11 +35,11 @@ export function getServiceLabel( service ) {
 /**
  * Get the URL for a service from author data.
  *
- * @param {Object} author  Author data object.
- * @param {string} service Service key.
- * @return {string|null} URL or null.
+ * @param author  Author data object.
+ * @param service Service key.
+ * @return URL or null.
  */
-export function getServiceUrl( author, service ) {
+export function getServiceUrl( author: NewspackAuthorProfileData | null | undefined, service: string | undefined ): string | null {
 	if ( ! author || ! service ) {
 		return null;
 	}
@@ -77,11 +77,11 @@ export function getServiceUrl( author, service ) {
 /**
  * Get the author data object for a service (for SVG lookup).
  *
- * @param {Object} author  Author data object.
- * @param {string} service Service key.
- * @return {Object|null} Service data with optional svg property.
+ * @param author  Author data object.
+ * @param service Service key.
+ * @return Service data with optional svg property.
  */
-export function getServiceData( author, service ) {
+export function getServiceData( author: NewspackAuthorProfileData | null | undefined, service: string | undefined ): NewspackAuthorSocialData | null {
 	if ( ! author || ! service ) {
 		return null;
 	}

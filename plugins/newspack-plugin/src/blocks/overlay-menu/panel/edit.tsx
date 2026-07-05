@@ -28,7 +28,7 @@ import {
 import PanelPreviewToggle from '../panel-preview-toggle';
 import { panelToggles, notifySubscribers } from '../preview-refs';
 
-const DIRECTION_CONFIG = {
+const DIRECTION_CONFIG: Record< string, { positionClass: string } > = {
 	left: { positionClass: 'overlay-menu__panel--left' },
 	right: { positionClass: 'overlay-menu__panel--right' },
 };
@@ -43,17 +43,34 @@ const PANEL_WIDTH_OPTIONS = [
 	{ value: 'x-large', label: __( 'XL', 'newspack-plugin' ), ariaLabel: __( 'Extra large', 'newspack-plugin' ) },
 ];
 
+type OverlayMenuPanelAttributes = {
+	slideDirection: string;
+	overlayColor: string;
+	panelBackgroundColor: string;
+	panelTextColor: string;
+	isFullScreen: boolean;
+	panelWidth: string;
+};
+
 /**
  * Edit component for the Overlay Menu Panel block.
  *
- * @param {Object}   props               Block props.
- * @param {Object}   props.attributes    Block attributes.
- * @param {string}   props.clientId      Block client ID.
- * @param {Function} props.setAttributes Attribute setter.
+ * @param props               Block props.
+ * @param props.attributes    Block attributes.
+ * @param props.clientId      Block client ID.
+ * @param props.setAttributes Attribute setter.
  *
- * @return {JSX.Element} The block editor UI.
+ * @return The block editor UI.
  */
-export default function OverlayMenuPanelEdit( { attributes, clientId, setAttributes } ) {
+export default function OverlayMenuPanelEdit( {
+	attributes,
+	clientId,
+	setAttributes,
+}: {
+	attributes: OverlayMenuPanelAttributes;
+	clientId: string;
+	setAttributes: ( attributes: Partial< OverlayMenuPanelAttributes > ) => void;
+} ) {
 	const { slideDirection, overlayColor, panelBackgroundColor, panelTextColor, isFullScreen, panelWidth } = attributes;
 
 	const [ isPreviewOpen, setIsPreviewOpen ] = useState( false );
@@ -63,10 +80,13 @@ export default function OverlayMenuPanelEdit( { attributes, clientId, setAttribu
 	isOpenRef.current = isPreviewOpen;
 
 	// Key everything by the parent's clientId so the parent/trigger can look up the toggle using their own clientId or getBlockRootClientId.
-	const parentClientId = useSelect( select => select( 'core/block-editor' ).getBlockRootClientId( clientId ), [ clientId ] );
+	const parentClientId: string | null = useSelect(
+		select => ( select( 'core/block-editor' ) as { getBlockRootClientId: ( id: string ) => string | null } ).getBlockRootClientId( clientId ),
+		[ clientId ]
+	);
 
 	// Keep a stable ref to the toggle function so the Map entry is always current.
-	const toggleFnRef = useRef( null );
+	const toggleFnRef = useRef< ( () => void ) | null >( null );
 	toggleFnRef.current = () => {
 		const next = ! isOpenRef.current;
 		setIsPreviewOpen( next );
@@ -92,11 +112,13 @@ export default function OverlayMenuPanelEdit( { attributes, clientId, setAttribu
 			return;
 		}
 		panelToggles.set( parentClientId, () => toggleFnRef.current?.() );
-		return () => panelToggles.delete( parentClientId );
+		return () => {
+			panelToggles.delete( parentClientId );
+		};
 	}, [ parentClientId ] ); // eslint-disable-line react-hooks/exhaustive-deps
 
 	// Update local state and notify all subscribers (parent + trigger toolbar buttons).
-	const togglePreview = open => {
+	const togglePreview = ( open: boolean ) => {
 		setIsPreviewOpen( open );
 		if ( parentClientId ) {
 			notifySubscribers( parentClientId, open );
@@ -113,7 +135,7 @@ export default function OverlayMenuPanelEdit( { attributes, clientId, setAttribu
 		: `overlay-menu__panel is-layout-constrained ${ positionClass } overlay-menu__panel--width--${ panelWidth } overlay-menu__panel--open`;
 
 	const panelClassName = isPreviewOpen ? openPanelClasses : 'overlay-menu__editor-panel-hidden';
-	const panelStyle = isPreviewOpen
+	const panelStyle: React.CSSProperties = isPreviewOpen
 		? {
 				// Force fixed positioning in the editor — Gutenberg can override
 				// class-based position on block root elements, so we use an inline
@@ -144,7 +166,7 @@ export default function OverlayMenuPanelEdit( { attributes, clientId, setAttribu
 								label={ __( 'Slide direction', 'newspack-plugin' ) }
 								help={ __( 'Choose which side of the screen the panel slides in from.', 'newspack-plugin' ) }
 								value={ slideDirection }
-								onChange={ val => setAttributes( { slideDirection: val } ) }
+								onChange={ val => setAttributes( { slideDirection: val as string } ) }
 								isBlock
 							>
 								<ToggleGroupControlOption value="left" label={ __( 'Left', 'newspack-plugin' ) } />
@@ -157,7 +179,7 @@ export default function OverlayMenuPanelEdit( { attributes, clientId, setAttribu
 									'newspack-plugin'
 								) }
 								value={ panelWidth }
-								onChange={ val => setAttributes( { panelWidth: val } ) }
+								onChange={ val => setAttributes( { panelWidth: val as string } ) }
 								isBlock
 							>
 								{ PANEL_WIDTH_OPTIONS.map( ( { value, label, ariaLabel } ) => (
@@ -175,17 +197,17 @@ export default function OverlayMenuPanelEdit( { attributes, clientId, setAttribu
 						{
 							label: __( 'Text', 'newspack-plugin' ),
 							colorValue: panelTextColor,
-							onColorChange: val => setAttributes( { panelTextColor: val ?? '' } ),
+							onColorChange: ( val?: string ) => setAttributes( { panelTextColor: val ?? '' } ),
 						},
 						{
 							label: __( 'Background', 'newspack-plugin' ),
 							colorValue: panelBackgroundColor,
-							onColorChange: val => setAttributes( { panelBackgroundColor: val ?? '' } ),
+							onColorChange: ( val?: string ) => setAttributes( { panelBackgroundColor: val ?? '' } ),
 						},
 						{
 							label: __( 'Overlay', 'newspack-plugin' ),
 							colorValue: overlayColor,
-							onColorChange: val => setAttributes( { overlayColor: val ?? '' } ),
+							onColorChange: ( val?: string ) => setAttributes( { overlayColor: val ?? '' } ),
 						},
 					] }
 					panelId={ clientId }

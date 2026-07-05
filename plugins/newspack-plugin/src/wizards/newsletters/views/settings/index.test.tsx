@@ -5,13 +5,32 @@ import { HashRouter } from 'react-router-dom';
 
 import NewslettersSettings, { Settings, SubscriptionLists } from './index';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import type { WizardHeaderAction, WizardNotice } from '../../../../../packages/components/src/wizard/store';
+
+// The components under test read `newspack_newsletters_wizard` off the global.
+// The shared `Window` declaration (../../types) covers `window.*` access; this
+// mirrors it onto `globalThis` for the test's `global.*` assignment.
+declare global {
+	// eslint-disable-next-line no-var
+	var newspack_newsletters_wizard: Window[ 'newspack_newsletters_wizard' ];
+}
 
 // NewslettersSettings mounts useUnsavedChangesDialog → useConfirmDialog →
 // ConfirmDialog, which calls `useHistory()`. In production it runs inside
 // Wizard's HashRouter; in tests we provide the same Router context.
-const renderWithRouter = ui => render( <HashRouter>{ ui }</HashRouter> );
+const renderWithRouter = ( ui: React.ReactElement ) => render( <HashRouter>{ ui }</HashRouter> );
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
+const apiFetchMock = jest.mocked( apiFetch );
+
+// @wordpress/data cannot type string-keyed store lookups, so the wizard
+// store's bound actions are asserted at this boundary — the same pattern the
+// store's own code uses.
+const wizardDispatch = () =>
+	dispatch( WIZARD_STORE_NAMESPACE ) as {
+		resetNotices: () => void;
+		resetHeaderData: () => void;
+	};
 
 const NN_EVENTS = {
 	BRIDGE_MOUNTED: 'newspack-newsletters:bridge-mounted',
@@ -60,8 +79,8 @@ beforeAll( () => {
 } );
 
 beforeEach( () => {
-	apiFetch.mockReset();
-	apiFetch.mockResolvedValue( SUBSCRIPTION_LISTS_FIXTURE );
+	apiFetchMock.mockReset();
+	apiFetchMock.mockResolvedValue( SUBSCRIPTION_LISTS_FIXTURE );
 	// Mark the bridge ready so the fallback timer doesn't navigate the test window.
 	window.newspackNewslettersBridgeReady = true;
 } );
@@ -111,7 +130,7 @@ describe( 'SubscriptionLists — wizard-bridge wiring', () => {
 		render( <SubscriptionLists lockedLists={ false } provider="mailchimp" /> );
 		await waitFor( () => expect( screen.getByText( 'Local A' ) ).toBeInTheDocument() );
 		// Simulate WP returning rest_no_route for the PATCH call.
-		apiFetch.mockRejectedValueOnce( {
+		apiFetchMock.mockRejectedValueOnce( {
 			code: 'rest_no_route',
 			message: 'No route was found matching the URL and request method.',
 		} );
@@ -126,7 +145,7 @@ describe( 'SubscriptionLists — wizard-bridge wiring', () => {
 	it( 'commits the active toggle immediately via PATCH /lists/{db_id}', async () => {
 		render( <SubscriptionLists lockedLists={ false } provider="mailchimp" /> );
 		await waitFor( () => expect( screen.getByText( 'Local A' ) ).toBeInTheDocument() );
-		apiFetch.mockResolvedValueOnce( { id: 'tag-1', db_id: 1, active: true } );
+		apiFetchMock.mockResolvedValueOnce( { id: 'tag-1', db_id: 1, active: true } );
 		fireEvent.click( screen.getAllByRole( 'checkbox' )[ 0 ] );
 		await waitFor( () =>
 			expect( apiFetch ).toHaveBeenLastCalledWith( {
@@ -235,7 +254,6 @@ describe( 'SubscriptionLists — wizard-bridge wiring', () => {
 		jest.useFakeTimers();
 		const renamedSavedListener = jest.fn();
 		const fallbackSavedListener = jest.fn();
-		const { default: apiFetchMock } = await import( '@wordpress/api-fetch' );
 		render( <SubscriptionLists lockedLists={ false } provider="mailchimp" /> );
 		await waitFor( () => expect( apiFetchMock ).toHaveBeenCalled() );
 		// Bridge appears with renamed events; our BRIDGE_MOUNTED handler
@@ -342,8 +360,8 @@ describe( 'SubscriptionLists — wizard-bridge wiring', () => {
 
 describe( 'Settings — ESP card grid', () => {
 	beforeEach( () => {
-		apiFetch.mockReset();
-		apiFetch.mockResolvedValue( SETTINGS_FIXTURE );
+		apiFetchMock.mockReset();
+		apiFetchMock.mockResolvedValue( SETTINGS_FIXTURE );
 	} );
 
 	const renderSettings = ( overrides = {} ) => {
@@ -395,14 +413,14 @@ describe( 'Settings — ESP card grid', () => {
 
 describe( 'NewslettersSettings — dirty tracking, save flow, snackbar', () => {
 	beforeEach( () => {
-		apiFetch.mockReset();
-		apiFetch.mockResolvedValue( SETTINGS_FIXTURE );
+		apiFetchMock.mockReset();
+		apiFetchMock.mockResolvedValue( SETTINGS_FIXTURE );
 		// Reset wizard store between tests so prior notices/header don't leak.
-		dispatch( WIZARD_STORE_NAMESPACE ).resetNotices();
-		dispatch( WIZARD_STORE_NAMESPACE ).resetHeaderData();
+		wizardDispatch().resetNotices();
+		wizardDispatch().resetHeaderData();
 	} );
 
-	const getSaveAction = () => select( WIZARD_STORE_NAMESPACE ).getHeaderData()?.actions?.[ 0 ];
+	const getSaveAction = (): WizardHeaderAction | undefined => select( WIZARD_STORE_NAMESPACE ).getHeaderData()?.actions?.[ 0 ];
 
 	it( 'registers a Save header action that is initially disabled (no dirty state)', async () => {
 		renderWithRouter( <NewslettersSettings /> );
@@ -413,11 +431,11 @@ describe( 'NewslettersSettings — dirty tracking, save flow, snackbar', () => {
 		renderWithRouter( <NewslettersSettings /> );
 		await waitFor( () => expect( getSaveAction() ).toBeDefined() );
 		// Save endpoint echoes the response on POST.
-		apiFetch.mockResolvedValueOnce( SETTINGS_FIXTURE );
+		apiFetchMock.mockResolvedValueOnce( SETTINGS_FIXTURE );
 		await act( async () => {
-			await getSaveAction().action();
+			await getSaveAction()?.action?.();
 		} );
-		const notices = select( WIZARD_STORE_NAMESPACE ).getNotices();
+		const notices: WizardNotice[] = select( WIZARD_STORE_NAMESPACE ).getNotices();
 		expect( notices ).toEqual(
 			expect.arrayContaining( [ expect.objectContaining( { type: 'success', message: expect.stringMatching( /saved/i ) } ) ] )
 		);
@@ -426,7 +444,7 @@ describe( 'NewslettersSettings — dirty tracking, save flow, snackbar', () => {
 	it( 'does not render Tracking until the wizard endpoint reports configured=true', async () => {
 		// Unconfigured response — Tracking should stay hidden so it doesn't
 		// hit the tracking endpoint on installs without the newsletters plugin.
-		apiFetch.mockResolvedValue( { ...SETTINGS_FIXTURE, configured: false } );
+		apiFetchMock.mockResolvedValue( { ...SETTINGS_FIXTURE, configured: false } );
 		renderWithRouter( <NewslettersSettings /> );
 		await waitFor( () => expect( getSaveAction() ).toBeDefined() );
 		expect( screen.queryByText( /Ads tracking/i ) ).not.toBeInTheDocument();
@@ -450,7 +468,7 @@ describe( 'NewslettersSettings — dirty tracking, save flow, snackbar', () => {
 		};
 		// The backend reports the ESP disconnected once the key is removed.
 		const unconfiguredFixture = { ...configuredFixture, esp_connected: false };
-		apiFetch.mockImplementation( config => {
+		apiFetchMock.mockImplementation( config => {
 			if ( config?.path === '/newspack-newsletters/v1/lists' ) {
 				return Promise.resolve( SUBSCRIPTION_LISTS_FIXTURE );
 			}
@@ -470,7 +488,7 @@ describe( 'NewslettersSettings — dirty tracking, save flow, snackbar', () => {
 			fireEvent.change( screen.getByLabelText( 'Mailchimp API Key' ), { target: { value: '' } } );
 		} );
 		await act( async () => {
-			await getSaveAction().action();
+			await getSaveAction()?.action?.();
 		} );
 
 		await waitFor( () =>
@@ -494,13 +512,13 @@ describe( 'NewslettersSettings — dirty tracking, save flow, snackbar', () => {
 				},
 			},
 		};
-		apiFetch.mockImplementation( config => {
+		apiFetchMock.mockImplementation( config => {
 			if ( config?.path === '/newspack-newsletters/v1/lists' ) {
 				return Promise.resolve( SUBSCRIPTION_LISTS_FIXTURE );
 			}
 			return Promise.resolve( configuredFixture );
 		} );
-		const listCalls = () => apiFetch.mock.calls.filter( ( [ c ] ) => c?.path === '/newspack-newsletters/v1/lists' ).length;
+		const listCalls = () => apiFetchMock.mock.calls.filter( ( [ c ] ) => c?.path === '/newspack-newsletters/v1/lists' ).length;
 		renderWithRouter( <NewslettersSettings /> );
 		await waitFor( () => expect( screen.getByText( 'Local A' ) ).toBeInTheDocument() );
 		const before = listCalls();
@@ -510,7 +528,7 @@ describe( 'NewslettersSettings — dirty tracking, save flow, snackbar', () => {
 			fireEvent.change( screen.getByLabelText( 'Mailchimp API Key' ), { target: { value: 'xyz-key' } } );
 		} );
 		await act( async () => {
-			await getSaveAction().action();
+			await getSaveAction()?.action?.();
 		} );
 
 		await waitFor( () => expect( listCalls() ).toBeGreaterThan( before ) );
@@ -519,11 +537,12 @@ describe( 'NewslettersSettings — dirty tracking, save flow, snackbar', () => {
 	it( 'clears the dirty flag after save even if a fetch resolves during the request', async () => {
 		// Captures the payload at save-call time so the saved snapshot reflects
 		// what was actually sent, not a later edit.
-		let resolveSave;
-		const savePromise = new Promise( resolve => {
+		// The executor runs synchronously, so `resolveSave` is assigned before use.
+		let resolveSave!: ( value: typeof SETTINGS_FIXTURE ) => void;
+		const savePromise = new Promise< typeof SETTINGS_FIXTURE >( resolve => {
 			resolveSave = resolve;
 		} );
-		apiFetch.mockImplementation( config => {
+		apiFetchMock.mockImplementation( config => {
 			if ( config?.method === 'POST' ) {
 				return savePromise;
 			}
@@ -532,7 +551,7 @@ describe( 'NewslettersSettings — dirty tracking, save flow, snackbar', () => {
 		renderWithRouter( <NewslettersSettings /> );
 		await waitFor( () => expect( getSaveAction() ).toBeDefined() );
 		const pending = act( async () => {
-			await getSaveAction().action();
+			await getSaveAction()?.action?.();
 		} );
 		resolveSave( SETTINGS_FIXTURE );
 		await pending;

@@ -11,8 +11,15 @@ import { Spinner, Notice } from '@wordpress/components';
  */
 import { Badge } from '../../../../../packages/components/src';
 import { API_BASE, STATUS_MAP, formatTimestamp } from './constants';
+import type { IntegrationActionDetails, IntegrationActionStatusBadge } from './constants';
 
-function formatArgs( args ) {
+/**
+ * Format the action's decoded payload for display.
+ *
+ * @param args The decoded action payload.
+ * @return The formatted payload, or an empty string.
+ */
+function formatArgs( args: unknown ): string {
 	if ( null === args || undefined === args ) {
 		return '';
 	}
@@ -26,23 +33,28 @@ function formatArgs( args ) {
 	}
 }
 
-export const LogDetailsModal = ( { integrationId, actionId } ) => {
-	const [ data, setData ] = useState( null );
+type LogDetailsModalProps = {
+	integrationId: string;
+	actionId: string;
+};
+
+export const LogDetailsModal = ( { integrationId, actionId }: LogDetailsModalProps ) => {
+	const [ data, setData ] = useState< IntegrationActionDetails | null >( null );
 	const [ isLoading, setIsLoading ] = useState( true );
-	const [ error, setError ] = useState( null );
+	const [ error, setError ] = useState< string | null >( null );
 
 	useEffect( () => {
 		let cancelled = false;
 		setIsLoading( true );
 		setError( null );
 
-		apiFetch( { path: `${ API_BASE }/${ integrationId }/logs/${ actionId }` } )
+		apiFetch< IntegrationActionDetails >( { path: `${ API_BASE }/${ integrationId }/logs/${ actionId }` } )
 			.then( response => {
 				if ( ! cancelled ) {
 					setData( response );
 				}
 			} )
-			.catch( err => {
+			.catch( ( err: WpFetchError ) => {
 				if ( cancelled ) {
 					return;
 				}
@@ -84,7 +96,7 @@ export const LogDetailsModal = ( { integrationId, actionId } ) => {
 	}
 
 	const { action, logs } = data;
-	const status = STATUS_MAP[ action.status ] || { label: action.status, level: 'default' };
+	const status: IntegrationActionStatusBadge = STATUS_MAP[ action.status ] || { label: action.status, level: 'default' };
 	const formattedArgs = formatArgs( action.args );
 
 	return (

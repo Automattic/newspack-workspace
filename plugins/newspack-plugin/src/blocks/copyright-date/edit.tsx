@@ -14,14 +14,32 @@ import metadata from './block.json';
 const blockClass = getBlockDefaultClassName( metadata.name );
 
 /**
+ * Attributes of the Copyright Date block.
+ */
+type CopyrightDateAttributes = {
+	prefix: string;
+	suffix: string;
+};
+
+/**
+ * Props for the Copyright Date edit component.
+ */
+type CopyrightDateEditProps = {
+	/** Block attributes. */
+	attributes: CopyrightDateAttributes;
+	/** Set attributes function. */
+	setAttributes: ( attributes: Partial< CopyrightDateAttributes > ) => void;
+};
+
+/**
  * Edit component for the copyright date block.
  *
- * @param {Object}   props               Component props.
- * @param {Object}   props.attributes    Block attributes.
- * @param {Function} props.setAttributes Set attributes function.
- * @return {JSX.Element} Edit component.
+ * @param props               Component props.
+ * @param props.attributes    Block attributes.
+ * @param props.setAttributes Set attributes function.
+ * @return Edit component.
  */
-export default function Edit( { attributes, setAttributes } ) {
+export default function Edit( { attributes, setAttributes }: CopyrightDateEditProps ) {
 	const { prefix, suffix } = attributes;
 	const blockProps = useBlockProps();
 	const year = dateI18n( 'Y' );
@@ -33,7 +51,7 @@ export default function Edit( { attributes, setAttributes } ) {
 				tagName="span"
 				placeholder={ __( 'Prefix…', 'newspack-plugin' ) }
 				value={ prefix }
-				onChange={ value => setAttributes( { prefix: value } ) }
+				onChange={ ( value: string ) => setAttributes( { prefix: value } ) }
 				allowedFormats={ [ 'core/link' ] }
 			/>
 			<span className={ `${ blockClass }__year` }>{ year }</span>{ ' ' }
@@ -42,7 +60,7 @@ export default function Edit( { attributes, setAttributes } ) {
 				tagName="span"
 				placeholder={ __( 'Suffix…', 'newspack-plugin' ) }
 				value={ suffix }
-				onChange={ value => setAttributes( { suffix: value } ) }
+				onChange={ ( value: string ) => setAttributes( { suffix: value } ) }
 				allowedFormats={ [ 'core/link' ] }
 			/>
 		</div>

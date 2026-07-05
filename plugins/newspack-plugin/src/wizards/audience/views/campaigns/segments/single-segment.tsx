@@ -12,27 +12,39 @@ import { applyFilters, addFilter } from '@wordpress/hooks';
 /**
  * Internal dependencies.
  */
+import type { ComponentProps } from 'react';
 import { Button, CategoryAutocomplete, Router, SelectControl, Settings, TextControl, hooks, Grid } from '../../../../../../packages/components/src';
 import ListsControl from '../../../components/lists-control';
 
 const { useHistory } = Router;
 const { SettingsCard, SettingsSection, MinMaxSetting } = Settings;
 
-const DEFAULT_CONFIG = {
+const DEFAULT_CONFIG: CampaignsSegmentConfig = {
 	is_disabled: false,
 };
 
-const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
+type SingleSegmentProps = {
+	segmentId: string;
+	setSegments: ( segments: CampaignsSegment[] ) => void;
+	wizardApiFetch: CampaignsWizardSharedProps[ 'wizardApiFetch' ];
+};
+
+/** Updater returned by updateCriteria: receives the criteria's new value. */
+type CriteriaValueUpdater = ( value?: CampaignsSegmentCriteriaValue ) => void;
+
+const SingleSegment = ( { segmentId, setSegments, wizardApiFetch }: SingleSegmentProps ) => {
 	const allCriteria = window.newspackAudienceCampaigns?.criteria || [];
 
 	const [ segmentConfig, updateSegmentConfig ] = hooks.useObjectState( DEFAULT_CONFIG );
 	const [ name, setName ] = useState( '' );
-	const [ segmentCriteria, setSegmentCriteria ] = useState( [] );
-	const [ segmentCriteriaInitially, setSegmentCriteriaInitially ] = useState( [] );
+	const [ segmentCriteria, setSegmentCriteria ] = useState< CampaignsSegmentCriteria[] >( [] );
+	const [ segmentCriteriaInitially, setSegmentCriteriaInitially ] = useState< CampaignsSegmentCriteria[] | string >( [] );
 	const [ nameInitially, setNameInitially ] = useState( '' );
 	const history = useHistory();
 
-	const [ segmentInitially, setSegmentInitially ] = useState( '[]' );
+	// Initialized with a placeholder string; replaced with the fetched segment's
+	// configuration object once loaded.
+	const [ segmentInitially, setSegmentInitially ] = useState< CampaignsSegmentConfig | string >( '[]' );
 
 	const isSegmentValid = () => {
 		const _segmentConfig = { ...segmentConfig };
@@ -45,7 +57,8 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 	const isDirty =
 		segmentCriteriaInitially !== JSON.stringify( segmentCriteria ) ||
 		nameInitially !== name ||
-		JSON.stringify( segmentInitially.is_disabled ) !== JSON.stringify( segmentConfig.is_disabled );
+		JSON.stringify( typeof segmentInitially === 'string' ? undefined : segmentInitially.is_disabled ) !==
+			JSON.stringify( segmentConfig.is_disabled );
 
 	const unblock = hooks.usePrompt( isDirty, __( 'There are unsaved changes to this segment. Discard changes?', 'newspack-plugin' ) );
 
@@ -54,7 +67,8 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 		if ( ! isNew ) {
 			wizardApiFetch( {
 				path: `${ newspackAudienceCampaigns.api }/segmentation`,
-			} ).then( segments => {
+			} ).then( response => {
+				const segments = response as CampaignsSegment[];
 				const foundSegment = find( segments, ( { id } ) => id === segmentId );
 				if ( foundSegment ) {
 					const segmentConfigurationWithDefaults = {
@@ -86,11 +100,15 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 			},
 			quiet: true,
 		} )
-			.then( setSegments )
-			.then( history.push( '/segments' ) );
+			.then( segments => setSegments( segments as CampaignsSegment[] ) )
+			// Pre-existing bug (flagged, not fixed): `history.push` is invoked
+			// immediately — not as a fulfillment callback — so navigation happens
+			// as soon as the request is fired. The `undefined` it returns is a
+			// valid no-op `onfulfilled` argument.
+			.then( history.push( '/segments' ) as undefined );
 	};
 
-	const getCriteriaValue = id => {
+	const getCriteriaValue = ( id: string ) => {
 		const item = segmentCriteria.find( c => c.criteria_id === id );
 		if ( ! item ) {
 			return '';
@@ -98,35 +116,39 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 		return item.value;
 	};
 
-	const updateCriteria = id => value => {
-		const config = [ ...segmentCriteria ];
-		const item = config.find( c => c.criteria_id === id );
-		if ( item ) {
-			if ( ! value || ( Array.isArray( value ) && 0 === value.length ) ) {
-				config.splice( config.indexOf( item ), 1 );
-			} else if ( ! Array.isArray( value ) && typeof value === 'object' ) {
-				item.value = { ...item.value, ...value };
-			} else {
-				item.value = value;
+	const updateCriteria =
+		( id: string ): CriteriaValueUpdater =>
+		value => {
+			const config = [ ...segmentCriteria ];
+			const item = config.find( c => c.criteria_id === id );
+			if ( item ) {
+				if ( ! value || ( Array.isArray( value ) && 0 === value.length ) ) {
+					config.splice( config.indexOf( item ), 1 );
+				} else if ( ! Array.isArray( value ) && typeof value === 'object' ) {
+					const existingRange = typeof item.value === 'object' && ! Array.isArray( item.value ) ? item.value : undefined;
+					item.value = { ...existingRange, ...value };
+				} else {
+					item.value = value;
+				}
+			} else if ( value ) {
+				config.push( { criteria_id: id, value } );
 			}
-		} else if ( value ) {
-			config.push( { criteria_id: id, value } );
-		}
-		setSegmentCriteria( config );
-	};
+			setSegmentCriteria( config );
+		};
 
-	const getCriteriaInput = criteria => {
+	const getCriteriaInput = ( criteria: CampaignsCriteriaConfig ) => {
 		const value = getCriteriaValue( criteria.id );
 		const update = updateCriteria( criteria.id );
 		const getInput = () => {
 			if ( criteria.matching_function === 'range' ) {
+				const rangeValue = typeof value === 'object' && ! Array.isArray( value ) ? value : undefined;
 				return (
 					<MinMaxSetting
 						data-testid={ `newspack-criteria-${ criteria.id }` }
-						min={ value?.min }
-						max={ value?.max }
-						onChangeMin={ min => update( { min } ) }
-						onChangeMax={ max => update( { max } ) }
+						min={ rangeValue?.min as number | undefined }
+						max={ rangeValue?.max as number | undefined }
+						onChangeMin={ ( min: number | string ) => update( { min } ) }
+						onChangeMax={ ( max: number | string ) => update( { max } ) }
 					/>
 				);
 			}
@@ -136,7 +158,7 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 						data-testid={ `newspack-criteria-${ criteria.id }` }
 						isWide
 						onChange={ update }
-						value={ value }
+						value={ value as string | number }
 						options={ criteria.options }
 					/>
 				);
@@ -148,11 +170,11 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 					placeholder={ criteria.placeholder }
 					help={ criteria.help }
 					value={ value }
-					onChange={ update }
+					onChange={ update as ComponentProps< typeof ListsControl >[ 'onChange' ] }
 				/>
 			);
 		};
-		return applyFilters( 'newspack.criteria.input', getInput(), criteria, value, update );
+		return applyFilters( 'newspack.criteria.input', getInput(), criteria, value, update ) as React.ReactNode;
 	};
 
 	return (
@@ -280,105 +302,125 @@ const SingleSegment = ( { segmentId, setSegments, wizardApiFetch } ) => {
 /**
  * Adds a custom input for the favorite_categories criteria.
  */
-addFilter( 'newspack.criteria.input', 'newspack.favoriteCategories', function ( element, criteria, value, update ) {
-	if ( criteria.id === 'favorite_categories' ) {
-		return (
-			<CategoryAutocomplete
-				value={ value || [] }
-				onChange={ selected => {
-					update( selected.map( item => item.id ) );
-				} }
-				label={ criteria.name }
-				hideLabelFromVision
-			/>
-		);
+addFilter(
+	'newspack.criteria.input',
+	'newspack.favoriteCategories',
+	function ( element: React.ReactNode, criteria: CampaignsCriteriaConfig, value: CampaignsSegmentCriteriaValue, update: CriteriaValueUpdater ) {
+		if ( criteria.id === 'favorite_categories' ) {
+			return (
+				<CategoryAutocomplete
+					value={ ( Array.isArray( value ) ? value : [] ) as number[] }
+					onChange={ selected => {
+						update( selected.map( item => item.id ) as number[] );
+					} }
+					label={ criteria.name }
+					hideLabelFromVision
+				/>
+			);
+		}
+		return element;
 	}
-	return element;
-} );
+);
 
 /**
  * Adds a custom input for the subscribed_lists and not_subscribed_lists criteria.
  */
-addFilter( 'newspack.criteria.input', 'newspack.newsletterSubscribedLists', function ( element, criteria, value, update ) {
-	if ( [ 'subscribed_lists', 'not_subscribed_lists' ].includes( criteria.id ) ) {
-		return (
-			<ListsControl
-				placeholder={ __( 'Start typing to search for lists…', 'newspack-plugin' ) }
-				path="/newspack-newsletters/v1/lists_config"
-				value={ value }
-				onChange={ update }
-				deletedItemLabel={ __( 'Deleted list', 'newspack-plugin' ) }
-			/>
-		);
+addFilter(
+	'newspack.criteria.input',
+	'newspack.newsletterSubscribedLists',
+	function ( element: React.ReactNode, criteria: CampaignsCriteriaConfig, value: CampaignsSegmentCriteriaValue, update: CriteriaValueUpdater ) {
+		if ( [ 'subscribed_lists', 'not_subscribed_lists' ].includes( criteria.id ) ) {
+			return (
+				<ListsControl
+					placeholder={ __( 'Start typing to search for lists…', 'newspack-plugin' ) }
+					path="/newspack-newsletters/v1/lists_config"
+					value={ Array.isArray( value ) ? value : undefined }
+					onChange={ update as ComponentProps< typeof ListsControl >[ 'onChange' ] }
+					deletedItemLabel={ __( 'Deleted list', 'newspack-plugin' ) }
+				/>
+			);
+		}
+		return element;
 	}
-	return element;
-} );
+);
 
 /**
  * Adds a custom input for the active_subscriptions and not_active_subscriptions criteria.
  */
-addFilter( 'newspack.criteria.input', 'newspack.activeSubscriptions', function ( element, criteria, value, update ) {
-	if ( [ 'active_subscriptions', 'not_active_subscriptions' ].includes( criteria.id ) ) {
-		return (
-			<ListsControl
-				placeholder={ __( 'Start typing to search for products…', 'newspack-plugin' ) }
-				path={ `${ newspackAudienceCampaigns.api }/subscription-products` }
-				value={ value }
-				onChange={ update }
-				deletedItemLabel={ __( 'Deleted subscription', 'newspack-plugin' ) }
-			/>
-		);
+addFilter(
+	'newspack.criteria.input',
+	'newspack.activeSubscriptions',
+	function ( element: React.ReactNode, criteria: CampaignsCriteriaConfig, value: CampaignsSegmentCriteriaValue, update: CriteriaValueUpdater ) {
+		if ( [ 'active_subscriptions', 'not_active_subscriptions' ].includes( criteria.id ) ) {
+			return (
+				<ListsControl
+					placeholder={ __( 'Start typing to search for products…', 'newspack-plugin' ) }
+					path={ `${ newspackAudienceCampaigns.api }/subscription-products` }
+					value={ Array.isArray( value ) ? value : undefined }
+					onChange={ update as ComponentProps< typeof ListsControl >[ 'onChange' ] }
+					deletedItemLabel={ __( 'Deleted subscription', 'newspack-plugin' ) }
+				/>
+			);
+		}
+		return element;
 	}
-	return element;
-} );
+);
 
 /**
  * Adds a custom input for the active_memberships and not_active_memberships criteria.
  */
-addFilter( 'newspack.criteria.input', 'newspack.activeMemberships', function ( element, criteria, value, update ) {
-	if ( [ 'active_memberships', 'not_active_memberships' ].includes( criteria.id ) ) {
-		return (
-			<ListsControl
-				placeholder={ __( 'Start typing to search for membership plans…', 'newspack-plugin' ) }
-				path="/wc/v3/memberships/plans?per_page=100"
-				value={ value }
-				onChange={ update }
-				deletedItemLabel={ __( 'Deleted plan', 'newspack-plugin' ) }
-			/>
-		);
+addFilter(
+	'newspack.criteria.input',
+	'newspack.activeMemberships',
+	function ( element: React.ReactNode, criteria: CampaignsCriteriaConfig, value: CampaignsSegmentCriteriaValue, update: CriteriaValueUpdater ) {
+		if ( [ 'active_memberships', 'not_active_memberships' ].includes( criteria.id ) ) {
+			return (
+				<ListsControl
+					placeholder={ __( 'Start typing to search for membership plans…', 'newspack-plugin' ) }
+					path="/wc/v3/memberships/plans?per_page=100"
+					value={ Array.isArray( value ) ? value : undefined }
+					onChange={ update as ComponentProps< typeof ListsControl >[ 'onChange' ] }
+					deletedItemLabel={ __( 'Deleted plan', 'newspack-plugin' ) }
+				/>
+			);
+		}
+		return element;
 	}
-	return element;
-} );
+);
 
 /**
  * Adds a custom input for the devices criteria so more than one device can be selected.
  */
-addFilter( 'newspack.criteria.input', 'newspack.devices', function ( element, criteria, value, update ) {
-	if ( criteria.id === 'devices' ) {
-		const selectedDevices = Array.isArray( value ) ? value : [];
+addFilter(
+	'newspack.criteria.input',
+	'newspack.devices',
+	function ( element: React.ReactNode, criteria: CampaignsCriteriaConfig, value: CampaignsSegmentCriteriaValue, update: CriteriaValueUpdater ) {
+		if ( criteria.id === 'devices' ) {
+			const selectedDevices = Array.isArray( value ) ? value : [];
 
-		return (
-			<div className="newspack-device-segments">
-				<Grid columns={ 1 } rowGap={ 16 }>
-					{ criteria.options.map( device => (
-						<CheckboxControl
-							key={ device.value }
-							label={ device.label }
-							checked={ selectedDevices.includes( device.value ) }
-							onChange={ isChecked => {
-								if ( isChecked ) {
-									update( [ ...selectedDevices, device.value ] );
-								} else {
-									update( selectedDevices.filter( item => item !== device.value ) );
-								}
-							} }
-						/>
-					) ) }
-				</Grid>
-			</div>
-		);
+			return (
+				<div className="newspack-device-segments">
+					<Grid columns={ 1 } rowGap={ 16 }>
+						{ ( criteria.options || [] ).map( device => (
+							<CheckboxControl
+								key={ device.value }
+								label={ device.label }
+								checked={ selectedDevices.includes( device.value ) }
+								onChange={ isChecked => {
+									if ( isChecked ) {
+										update( [ ...selectedDevices, device.value ] );
+									} else {
+										update( selectedDevices.filter( item => item !== device.value ) );
+									}
+								} }
+							/>
+						) ) }
+					</Grid>
+				</div>
+			);
+		}
+		return element;
 	}
-	return element;
-} );
+);
 
 export default SingleSegment;

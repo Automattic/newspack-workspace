@@ -13,6 +13,7 @@
  * External dependencies
  */
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import type { ChangeEvent, ReactNode } from 'react';
 
 jest.mock( './emails.scss', () => ( {} ) );
 
@@ -24,14 +25,14 @@ const mockRequestConfirm = jest.fn();
 // Mutable hook state so individual tests can drive the fetching /
 // error surfaces the modal reads. Reset in beforeEach.
 let mockIsFetching = false;
-let mockErrorMessage = null;
+let mockErrorMessage: string | null = null;
 
 jest.mock( '../../../../hooks/use-wizard-api-fetch', () => ( {
 	useWizardApiFetch: () => ( {
-		wizardApiFetch: ( ...args ) => mockWizardApiFetch( ...args ),
+		wizardApiFetch: ( ...args: unknown[] ) => mockWizardApiFetch( ...args ),
 		isFetching: mockIsFetching,
 		errorMessage: mockErrorMessage,
-		resetError: ( ...args ) => mockResetError( ...args ),
+		resetError: ( ...args: unknown[] ) => mockResetError( ...args ),
 	} ),
 } ) );
 
@@ -40,7 +41,7 @@ jest.mock( '../../../../hooks/use-wizard-api-fetch', () => ( {
 // changes, add corresponding mock entries here.
 jest.mock( '@wordpress/data', () => ( {
 	useDispatch: () => ( {
-		addNotice: ( ...args ) => mockAddNotice( ...args ),
+		addNotice: ( ...args: unknown[] ) => mockAddNotice( ...args ),
 	} ),
 } ) );
 
@@ -56,7 +57,7 @@ jest.mock( '../../../../../../packages/components/src/wizard/store', () => ( {
 // test #1 can render the grid and click the Settings button.
 
 jest.mock( '@wordpress/icons', () => ( {
-	Icon: ( { icon } ) => <span data-testid="icon">{ icon }</span>,
+	Icon: ( { icon }: { icon: ReactNode } ) => <span data-testid="icon">{ icon }</span>,
 	envelope: 'envelope',
 } ) );
 
@@ -76,7 +77,23 @@ jest.mock( '@wordpress/components', () => {
 	// `...rest` forwards passthrough props (e.g. `aria-invalid`) onto the
 	// input, mirroring the real TextControl's behavior, so tests can
 	// assert the accessible invalid state.
-	const TextControl = ( { label, help, value, onChange, type, required, ...rest } ) =>
+	const TextControl = ( {
+		label,
+		help,
+		value,
+		onChange,
+		type,
+		required,
+		...rest
+	}: {
+		label: ReactNode;
+		help?: ReactNode;
+		value?: string;
+		onChange: ( value: string ) => void;
+		type?: string;
+		required?: boolean;
+		[ key: string ]: unknown;
+	} ) =>
 		React.createElement(
 			'div',
 			null,
@@ -87,20 +104,32 @@ jest.mock( '@wordpress/components', () => {
 				React.createElement( 'input', {
 					type: type || 'text',
 					value: value === undefined ? '' : value,
-					onChange: e => onChange( e.target.value ),
+					onChange: ( e: ChangeEvent< HTMLInputElement > ) => onChange( e.target.value ),
 					required: required || undefined,
 					...rest,
 				} )
 			),
 			help ? React.createElement( 'span', null, help ) : null
 		);
-	const Passthrough = ( { children } ) => React.createElement( 'div', null, children );
+	const Passthrough = ( { children }: { children?: ReactNode } ) => React.createElement( 'div', null, children );
 	// Discard `loading` rather than spreading it to the DOM <button> —
 	// React warns on unrecognized non-boolean attributes. The real
 	// Newspack Button accepts the prop and translates it to a spinner;
 	// for tests we only need the click behavior.
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	const Button = ( { children, onClick, disabled, loading, ...rest } ) => React.createElement( 'button', { onClick, disabled, ...rest }, children );
+	const Button = ( {
+		children,
+		onClick,
+		disabled,
+		loading,
+		...rest
+	}: {
+		children?: ReactNode;
+		onClick?: () => void;
+		disabled?: boolean;
+		loading?: boolean;
+		[ key: string ]: unknown;
+	} ) => React.createElement( 'button', { onClick, disabled, ...rest }, children );
 	return {
 		TextControl,
 		Button,
@@ -110,7 +139,7 @@ jest.mock( '@wordpress/components', () => {
 } );
 
 jest.mock( '@wordpress/dataviews', () => ( {
-	filterSortAndPaginate: data => ( {
+	filterSortAndPaginate: ( data: unknown[] ) => ( {
 		data,
 		paginationInfo: { totalItems: data.length, totalPages: 1 },
 	} ),
@@ -139,22 +168,36 @@ jest.mock( './email-preview', () => ( {
 jest.mock( '../../../../../../packages/components/src', () => {
 	const React = require( 'react' );
 	return {
-		Badge: ( { text } ) => <span>{ text }</span>,
-		DataViews: ( { data } ) => <div data-testid="dataviews">{ data.length }</div>,
-		Notice: ( { noticeText } ) => <div data-testid="notice">{ noticeText }</div>,
+		Badge: ( { text }: { text: ReactNode } ) => <span>{ text }</span>,
+		DataViews: ( { data }: { data: unknown[] } ) => <div data-testid="dataviews">{ data.length }</div>,
+		Notice: ( { noticeText }: { noticeText: ReactNode } ) => <div data-testid="notice">{ noticeText }</div>,
 		// Discard `loading` and `variant` rather than spreading them to
 		// the DOM button — React warns on unrecognized non-boolean
 		// attributes. Same treatment as the @wordpress/components Button
 		// mock above.
 		// eslint-disable-next-line @typescript-eslint/no-unused-vars
-		Button: function MockButton( { children, onClick, disabled, loading, variant, ...rest } ) {
+		Button: function MockButton( {
+			children,
+			onClick,
+			disabled,
+			loading,
+			variant,
+			...rest
+		}: {
+			children?: ReactNode;
+			onClick?: () => void;
+			disabled?: boolean;
+			loading?: boolean;
+			variant?: string;
+			[ key: string ]: unknown;
+		} ) {
 			return (
 				<button onClick={ onClick } disabled={ disabled } { ...rest }>
 					{ children }
 				</button>
 			);
 		},
-		Modal: function MockModal( { children, title, onRequestClose } ) {
+		Modal: function MockModal( { children, title, onRequestClose }: { children?: ReactNode; title?: string; onRequestClose?: () => void } ) {
 			return (
 				<div role="dialog" aria-label={ title }>
 					<button aria-label="Close" onClick={ onRequestClose }>
@@ -164,9 +207,9 @@ jest.mock( '../../../../../../packages/components/src', () => {
 				</div>
 			);
 		},
-		useConfirmDialog: function MockUseConfirmDialog( opts ) {
+		useConfirmDialog: function MockUseConfirmDialog( opts: { when: boolean } ) {
 			return {
-				requestConfirm: function MockRequestConfirm( callback ) {
+				requestConfirm: function MockRequestConfirm( callback: () => void ) {
 					mockRequestConfirm( { when: opts.when, callback } );
 					// Match the real hook's contract: when=false skips
 					// the dialog and fires the callback synchronously.
@@ -252,7 +295,17 @@ describe( 'SettingsModal', () => {
 		// Window globals emails.tsx reads at mount. Empty newspack_emails
 		// is still truthy, so the grid's mount-time fetch is skipped —
 		// only the modal will fire a fetch when opened.
-		window.newspackAudience = {
+		// Only the `emails` slice is populated (and only the keys the modal
+		// path reads); cast the window global to a shape exposing that key
+		// as a partial so the minimal fixture type-checks without inventing
+		// the other fields.
+		(
+			window as {
+				newspackAudience: {
+					emails?: Partial< NonNullable< Window[ 'newspackAudience' ][ 'emails' ] > >;
+				};
+			}
+		 ).newspackAudience = {
 			emails: {
 				dependencies: { newspackNewsletters: true },
 				initial: { newspack_emails: [], post_type: 'newspack_em' },
@@ -285,7 +338,7 @@ describe( 'SettingsModal', () => {
 
 		// Wait for the GET fetch to resolve and fields to populate.
 		await waitFor( () => {
-			expect( screen.getByLabelText( 'Sender Name' ).value ).toBe( 'My Site' );
+			expect( ( screen.getByLabelText( 'Sender Name' ) as HTMLInputElement ).value ).toBe( 'My Site' );
 		} );
 
 		// Edit a field to make the modal dirty (enables Save).
@@ -320,7 +373,7 @@ describe( 'SettingsModal', () => {
 		render( <SettingsModal showModal={ true } closeModal={ closeModal } /> );
 
 		await waitFor( () => {
-			expect( screen.getByLabelText( 'Sender Name' ).value ).toBe( 'My Site' );
+			expect( ( screen.getByLabelText( 'Sender Name' ) as HTMLInputElement ).value ).toBe( 'My Site' );
 		} );
 
 		// Dirty the form.
@@ -343,7 +396,7 @@ describe( 'SettingsModal', () => {
 		render( <SettingsModal showModal={ true } closeModal={ closeModal } /> );
 
 		await waitFor( () => {
-			expect( screen.getByLabelText( 'Sender Name' ).value ).toBe( 'My Site' );
+			expect( ( screen.getByLabelText( 'Sender Name' ) as HTMLInputElement ).value ).toBe( 'My Site' );
 		} );
 
 		// No edits — directly click Cancel.
@@ -374,7 +427,7 @@ describe( 'SettingsModal', () => {
 		render( <SettingsModal showModal={ true } closeModal={ closeModal } /> );
 
 		await waitFor( () => {
-			expect( screen.getByLabelText( 'Sender Name' ).value ).toBe( 'My Site' );
+			expect( ( screen.getByLabelText( 'Sender Name' ) as HTMLInputElement ).value ).toBe( 'My Site' );
 		} );
 
 		// Dirty + valid → Save enabled.
@@ -401,7 +454,7 @@ describe( 'SettingsModal', () => {
 		// Form loads from the GET, then dirty + valid — the only thing
 		// keeping Save disabled is the in-flight request.
 		await waitFor( () => {
-			expect( screen.getByLabelText( 'Sender Name' ).value ).toBe( 'My Site' );
+			expect( ( screen.getByLabelText( 'Sender Name' ) as HTMLInputElement ).value ).toBe( 'My Site' );
 		} );
 		fireEvent.change( screen.getByLabelText( 'Sender Name' ), { target: { value: 'New Name' } } );
 
@@ -414,7 +467,7 @@ describe( 'SettingsModal', () => {
 		render( <SettingsModal showModal={ true } closeModal={ jest.fn() } /> );
 
 		await waitFor( () => {
-			expect( screen.getByLabelText( 'Sender Email Address' ).value ).toBe( 'hello@example.com' );
+			expect( ( screen.getByLabelText( 'Sender Email Address' ) as HTMLInputElement ).value ).toBe( 'hello@example.com' );
 		} );
 
 		// Type a malformed (non-empty) email.
@@ -463,7 +516,7 @@ describe( 'SettingsModal', () => {
 
 		await waitFor( () => {
 			// Saved value rendered decoded in the input.
-			expect( screen.getByLabelText( 'Sender Name' ).value ).toBe( 'Tom & Jerry News' );
+			expect( ( screen.getByLabelText( 'Sender Name' ) as HTMLInputElement ).value ).toBe( 'Tom & Jerry News' );
 		} );
 		// Derived default rendered decoded in the placeholder.
 		expect( screen.getByLabelText( 'Sender Name' ) ).toHaveAttribute( 'placeholder', 'Smith & Co.' );

@@ -22,7 +22,7 @@ domReady( function () {
 	if ( deleteButton ) {
 		const confirmationModal = document.getElementById( 'newspack-my-account__delete-account' );
 		if ( confirmationModal ) {
-			const confirmDelete = event => {
+			const confirmDelete = ( event: Event ) => {
 				event.preventDefault();
 				confirmationModal.setAttribute( 'data-state', 'open' );
 			};

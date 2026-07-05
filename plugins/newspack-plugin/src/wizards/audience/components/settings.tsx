@@ -10,14 +10,39 @@ import { useEffect, useState } from '@wordpress/element';
  */
 import { Notice, SectionHeader, SelectControl } from '../../../../packages/components/src';
 
-export default function Settings( { title, value, onChange } ) {
+/**
+ * A newsletter list as returned by the newspack-newsletters lists endpoint.
+ */
+export type NewsletterList = {
+	id: string;
+	name: string;
+	type?: string;
+	type_label?: string;
+};
+
+/**
+ * The ESP connection settings edited by the Settings component.
+ */
+export type EspSettingsValue = {
+	masterList?: string | number;
+	audienceId?: string;
+	readerDefaultStatus?: string;
+};
+
+type SettingsProps = {
+	title: string;
+	value: EspSettingsValue;
+	onChange?: ( key: string, value: string ) => void;
+};
+
+export default function Settings( { title, value, onChange }: SettingsProps ) {
 	const [ inFlight, setInFlight ] = useState( false );
-	const [ lists, setLists ] = useState( [] );
-	const [ error, setError ] = useState( false );
+	const [ lists, setLists ] = useState< NewsletterList[] >( [] );
+	const [ error, setError ] = useState< { message?: string } | false >( false );
 	const fetchLists = () => {
 		setError( false );
 		setInFlight( true );
-		apiFetch( {
+		apiFetch< NewsletterList[] >( {
 			path: '/newspack-newsletters/v1/lists',
 		} )
 			.then( res => {
@@ -36,7 +61,7 @@ export default function Settings( { title, value, onChange } ) {
 	const helpText = isMailchimp
 		? __( 'Choose an audience to receive reader activity data.', 'newspack-plugin' )
 		: __( 'Choose a master list to which all registered readers will be added.', 'newspack-plugin' );
-	const handleChange = key => val => onChange && onChange( key, val );
+	const handleChange = ( key: string ) => ( val: string ) => onChange && onChange( key, val );
 	return (
 		<>
 			{ error && <Notice noticeText={ error?.message || __( 'Something went wrong.', 'newspack-plugin' ) } isError /> }

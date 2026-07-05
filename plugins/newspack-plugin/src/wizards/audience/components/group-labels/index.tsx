@@ -11,15 +11,26 @@ import { useDispatch, useSelect } from '@wordpress/data';
 import { Button, Grid, SectionHeader, TextControl } from '../../../../../packages/components/src';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import type { WizardsStoreSelectors } from '../../../../../packages/components/src/wizard/store';
 
 const DATA_STORE_KEY = 'newspack-audience/group-labels';
 
-export default function GroupLabels() {
-	const settings = useWizardData( DATA_STORE_KEY );
-	const { updateWizardSettings, saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
-	const isQuietLoading = useSelect( select => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() ?? false, [] );
+/**
+ * Group-labels settings as stored by the wizards store.
+ */
+type GroupLabelsSettings = {
+	label_singular?: string;
+	label_plural?: string;
+	label_singular_default?: string;
+	label_plural_default?: string;
+};
 
-	const change = ( key, value ) =>
+export default function GroupLabels() {
+	const settings = useWizardData< GroupLabelsSettings >( DATA_STORE_KEY );
+	const { updateWizardSettings, saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const isQuietLoading = useSelect( select => ( select( WIZARD_STORE_NAMESPACE ) as WizardsStoreSelectors ).isQuietLoading() ?? false, [] );
+
+	const change = ( key: keyof GroupLabelsSettings, value: string ) =>
 		updateWizardSettings( {
 			slug: DATA_STORE_KEY,
 			path: [ key ],
@@ -52,7 +63,7 @@ export default function GroupLabels() {
 						singularDefault
 					) }
 					value={ settings.label_singular ?? '' }
-					onChange={ value => change( 'label_singular', value ) }
+					onChange={ ( value: string ) => change( 'label_singular', value ) }
 					disabled={ isQuietLoading }
 					withMargin={ false }
 				/>
@@ -65,7 +76,7 @@ export default function GroupLabels() {
 						pluralDefault
 					) }
 					value={ settings.label_plural ?? '' }
-					onChange={ value => change( 'label_plural', value ) }
+					onChange={ ( value: string ) => change( 'label_plural', value ) }
 					disabled={ isQuietLoading }
 					withMargin={ false }
 				/>

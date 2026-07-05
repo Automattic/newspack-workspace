@@ -102,8 +102,8 @@ describe( 'init() post-logout clearing (NPPM-2721)', () => {
 	// store_prefix, so a regression in its propagation must be caught here.
 	const BLOG_ID = 123;
 	const STORE_PREFIX = `np_reader_${ BLOG_ID }_`;
-	const storeKey = key => STORE_PREFIX + key;
-	const readStore = key => localStorage.getItem( storeKey( key ) );
+	const storeKey = ( key: string ) => STORE_PREFIX + key;
+	const readStore = ( key: string ) => localStorage.getItem( storeKey( key ) );
 
 	beforeEach( () => {
 		// Each Store() re-instantiation registers a 1s sync setInterval. Fake
@@ -132,7 +132,23 @@ describe( 'init() post-logout clearing (NPPM-2721)', () => {
 	 * @param {string[]} opts.readOnlyKeys  newspack_reader_data.read_only_keys (e.g. is_donor).
 	 * @param {Function} opts.beforeRequire Hook run after seeding, just before the module loads.
 	 */
-	function bootInit( { storage = {}, rawStorage = {}, config = {}, cookies = {}, serverItems = null, readOnlyKeys = null, beforeRequire } = {} ) {
+	function bootInit( {
+		storage = {},
+		rawStorage = {},
+		config = {},
+		cookies = {},
+		serverItems = null,
+		readOnlyKeys = null,
+		beforeRequire,
+	}: {
+		storage?: Record< string, unknown >;
+		rawStorage?: Record< string, unknown >;
+		config?: Partial< NewspackRasConfig >;
+		cookies?: Record< string, string >;
+		serverItems?: Record< string, unknown > | null;
+		readOnlyKeys?: string[] | null;
+		beforeRequire?: () => void;
+	} = {} ) {
 		// Reset singleton flags and storage backing.
 		delete window.newspackRASInitialized;
 		delete window.newspackReaderActivation;
@@ -185,7 +201,7 @@ describe( 'init() post-logout clearing (NPPM-2721)', () => {
 		} );
 		expect( readStore( 'activity' ) ).toBeNull();
 		expect( readStore( 'is_donor' ) ).toBeNull();
-		const reader = JSON.parse( readStore( 'reader' ) );
+		const reader = JSON.parse( readStore( 'reader' )! );
 		expect( reader.email ).toBeUndefined();
 		expect( reader.authenticated ).toBe( false );
 		// Sibling blog namespace untouched.
@@ -205,7 +221,7 @@ describe( 'init() post-logout clearing (NPPM-2721)', () => {
 		} );
 		expect( readStore( 'activity' ) ).toBeNull();
 		expect( readStore( 'is_donor' ) ).toBeNull();
-		const reader = JSON.parse( readStore( 'reader' ) );
+		const reader = JSON.parse( readStore( 'reader' )! );
 		expect( reader.email ).toBeUndefined();
 	} );
 
@@ -292,7 +308,7 @@ describe( 'init() post-logout clearing (NPPM-2721)', () => {
 				config: { authenticated_email: '' },
 			} )
 		).not.toThrow();
-		const reader = JSON.parse( readStore( 'reader' ) );
+		const reader = JSON.parse( readStore( 'reader' )! );
 		expect( reader.authenticated ).toBe( false );
 		expect( reader.email ).toBeUndefined();
 	} );
@@ -308,7 +324,7 @@ describe( 'init() post-logout clearing (NPPM-2721)', () => {
 		} );
 		expect( readStore( 'activity' ) ).toBeNull();
 		expect( readStore( 'is_donor' ) ).toBeNull();
-		const reader = JSON.parse( readStore( 'reader' ) );
+		const reader = JSON.parse( readStore( 'reader' )! );
 		expect( reader.email ).toBe( 'b@example.com' );
 		expect( reader.authenticated ).toBe( true );
 	} );
@@ -336,9 +352,9 @@ describe( 'init() post-logout clearing (NPPM-2721)', () => {
 		// Reader A's writable carryover is gone — cross-reader isolation still holds.
 		expect( readStore( 'activity' ) ).toBeNull();
 		// Reader B's own server data is restored, not lost for the switch pageload.
-		expect( JSON.parse( readStore( 'is_donor' ) ) ).toBe( false );
-		expect( JSON.parse( readStore( 'is_newsletter_subscriber' ) ) ).toBe( true );
-		const reader = JSON.parse( readStore( 'reader' ) );
+		expect( JSON.parse( readStore( 'is_donor' )! ) ).toBe( false );
+		expect( JSON.parse( readStore( 'is_newsletter_subscriber' )! ) ).toBe( true );
+		const reader = JSON.parse( readStore( 'reader' )! );
 		expect( reader.email ).toBe( 'b@example.com' );
 		expect( reader.authenticated ).toBe( true );
 	} );
@@ -361,7 +377,7 @@ describe( 'init() post-logout clearing (NPPM-2721)', () => {
 		} );
 		expect( readStore( 'activity' ) ).toBeNull();
 		expect( readStore( 'is_donor' ) ).toBeNull();
-		const reader = JSON.parse( readStore( 'reader' ) );
+		const reader = JSON.parse( readStore( 'reader' )! );
 		expect( reader.email ).toBe( 'b@example.com' );
 		expect( reader.authenticated ).toBe( true );
 	} );
@@ -385,7 +401,7 @@ describe( 'init() post-logout clearing (NPPM-2721)', () => {
 		expect( readStore( 'activity' ) ).toBeNull();
 		expect( readStore( 'is_donor' ) ).toBeNull();
 		expect( readStore( 'is_newsletter_subscriber' ) ).toBeNull();
-		const reader = JSON.parse( readStore( 'reader' ) );
+		const reader = JSON.parse( readStore( 'reader' )! );
 		expect( reader.email ).toBeUndefined();
 		expect( reader.authenticated ).toBe( false );
 	} );
@@ -414,7 +430,7 @@ describe( 'init() post-logout clearing (NPPM-2721)', () => {
 } );
 
 describe( 'shouldClearReaderData (NPPM-2899)', () => {
-	let shouldClearReaderData;
+	let shouldClearReaderData: typeof import('./index').shouldClearReaderData;
 	beforeAll( () => {
 		// Pre-set the RAS-init guard so requiring the module doesn't run init().
 		window.newspackRASInitialized = true;
@@ -424,7 +440,7 @@ describe( 'shouldClearReaderData (NPPM-2899)', () => {
 		delete window.newspackRASInitialized;
 	} );
 
-	const reader = ( email, authenticated ) => ( { email, authenticated } );
+	const reader = ( email: string, authenticated: unknown ) => ( { email, authenticated } );
 
 	it( 'clears on authenticated A→B switch', () => {
 		expect(

@@ -14,7 +14,7 @@ import {
 
 import { ActionCard, Button, Grid, SelectControl, TextControl } from '../../../../../packages/components/src';
 
-export default function CountdownBanner( { config, setConfig, updateConfig, noBorder = false } ) {
+export default function CountdownBanner( { config, setConfig, updateConfig, noBorder = false }: ContentGatingChildProps ) {
 	const availableProducts = newspackAudience?.available_products || [];
 	return (
 		<ActionCard
@@ -34,14 +34,18 @@ export default function CountdownBanner( { config, setConfig, updateConfig, noBo
 							label={ __( 'Message', 'newspack-plugin' ) }
 							help={ __( 'Text displayed in the countdown banner.', 'newspack-plugin' ) }
 							value={ config.countdown_banner.cta_label }
-							onChange={ value => setConfig( { ...config, countdown_banner: { ...config.countdown_banner, cta_label: value } } ) }
+							onChange={ ( value: string ) =>
+								setConfig( { ...config, countdown_banner: { ...config.countdown_banner, cta_label: value } } )
+							}
 							__next40pxDefaultSize
 						/>
 						<TextControl
 							label={ __( 'Subscribe button label', 'newspack-plugin' ) }
 							help={ __( 'Text displayed on the subscribe button in the banner.', 'newspack-plugin' ) }
 							value={ config.countdown_banner.button_label }
-							onChange={ value => setConfig( { ...config, countdown_banner: { ...config.countdown_banner, button_label: value } } ) }
+							onChange={ ( value: string ) =>
+								setConfig( { ...config, countdown_banner: { ...config.countdown_banner, button_label: value } } )
+							}
 							__next40pxDefaultSize
 						/>
 					</Grid>
@@ -49,7 +53,7 @@ export default function CountdownBanner( { config, setConfig, updateConfig, noBo
 						<ToggleGroupControl
 							label={ __( 'Style', 'newspack-plugin' ) }
 							value={ config.countdown_banner.style || 'light' }
-							onChange={ value => setConfig( { ...config, countdown_banner: { ...config.countdown_banner, style: value } } ) }
+							onChange={ value => setConfig( { ...config, countdown_banner: { ...config.countdown_banner, style: value as string } } ) }
 							isBlock
 							__next40pxDefaultSize
 						>
@@ -63,7 +67,9 @@ export default function CountdownBanner( { config, setConfig, updateConfig, noBo
 								'newspack-plugin'
 							) }
 							value={ config.countdown_banner.cta_type || 'product' }
-							onChange={ value => setConfig( { ...config, countdown_banner: { ...config.countdown_banner, cta_type: value } } ) }
+							onChange={ value =>
+								setConfig( { ...config, countdown_banner: { ...config.countdown_banner, cta_type: value as string } } )
+							}
 							isBlock
 							__next40pxDefaultSize
 						>
@@ -88,7 +94,9 @@ export default function CountdownBanner( { config, setConfig, updateConfig, noBo
 								label={ __( 'Subscribe button URL', 'newspack-plugin' ) }
 								help={ __( 'URL for the landing page to redirect to.', 'newspack-plugin' ) }
 								value={ config.countdown_banner.cta_url }
-								onChange={ value => setConfig( { ...config, countdown_banner: { ...config.countdown_banner, cta_url: value } } ) }
+								onChange={ ( value: string ) =>
+									setConfig( { ...config, countdown_banner: { ...config.countdown_banner, cta_url: value } } )
+								}
 								withMargin={ false }
 								__next40pxDefaultSize
 							/>

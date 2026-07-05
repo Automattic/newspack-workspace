@@ -2,13 +2,13 @@
 /**
  * Internal dependencies
  */
-import { SIGN_IN_MODAL_HASHES, getModalContainer, openAuthModal } from './auth-modal.js';
-import { openVerificationModal as openVerificationModalImpl } from './verification-modal.js';
-import { maybeConfirmRegistration as maybeConfirmRegistrationImpl } from './confirmation-modal.js';
+import { SIGN_IN_MODAL_HASHES, getModalContainer, openAuthModal } from './auth-modal';
+import { openVerificationModal as openVerificationModalImpl } from './verification-modal';
+import { maybeConfirmRegistration as maybeConfirmRegistrationImpl } from './confirmation-modal';
 
 import { domReady } from '../utils';
 
-import './auth-form.js';
+import './auth-form';
 
 window.newspackRAS = window.newspackRAS || [];
 window.newspackRAS.push( readerActivation => {
@@ -37,7 +37,7 @@ window.newspackRAS.push( readerActivation => {
 		 *
 		 * @param {Event} ev Hash change event.
 		 */
-		function handleHashChange( ev ) {
+		function handleHashChange( ev?: Event ) {
 			const container = getModalContainer();
 			if ( ! container ) {
 				return;
@@ -64,17 +64,18 @@ window.newspackRAS.push( readerActivation => {
 		 *
 		 * @param {Event} ev Click event.
 		 */
-		function handleAccountLinkClick( ev ) {
+		function handleAccountLinkClick( ev: Event ) {
 			ev.preventDefault();
-			const modalTrigger = ev.target;
-			let callback, redirect;
-			if ( ev.target.getAttribute( 'data-redirect' ) ) {
-				redirect = ev.target.getAttribute( 'data-redirect' );
+			const modalTrigger = ev.target as HTMLElement;
+			let callback: ( () => void ) | undefined;
+			let redirect: string | null | undefined;
+			if ( modalTrigger.getAttribute( 'data-redirect' ) ) {
+				redirect = modalTrigger.getAttribute( 'data-redirect' );
 			} else {
-				redirect = ev.target.getAttribute( 'href' );
+				redirect = modalTrigger.getAttribute( 'href' );
 			}
 			if ( ! redirect ) {
-				const closestEl = ev.target.closest( 'a' );
+				const closestEl = modalTrigger.closest( 'a' );
 				if ( closestEl ) {
 					if ( closestEl.getAttribute( 'data-redirect' ) ) {
 						redirect = closestEl.getAttribute( 'data-redirect' );
@@ -117,11 +118,11 @@ window.newspackRAS.push( readerActivation => {
 		 * Handle reader changes.
 		 */
 		function handleReaderChanges() {
-			const reader = window.newspackReaderActivation.getReader();
+			const reader = ( window.newspackReaderActivation as NewspackReaderActivation ).getReader();
 			const accountLinks = document.querySelectorAll( '.newspack-reader__account-link' );
 			if ( accountLinks?.length ) {
 				accountLinks.forEach( link => {
-					const labels = JSON.parse( link.getAttribute( 'data-labels' ) );
+					const labels = JSON.parse( link.getAttribute( 'data-labels' ) as string );
 					const labelEl = link.querySelector( '.newspack-reader__account-link__label' );
 					if ( labelEl ) {
 						// Change the label for the My Account button only.
@@ -134,13 +135,13 @@ window.newspackRAS.push( readerActivation => {
 
 						// Set my account link href if the reader is authenticated.
 						if ( reader?.authenticated ) {
-							link.setAttribute( 'href', newspack_ras_config.account_url );
+							link.setAttribute( 'href', newspack_ras_config.account_url as string );
 						}
 					}
 				} );
 			}
 		}
-		window.newspackReaderActivation.on( 'reader', handleReaderChanges );
+		( window.newspackReaderActivation as NewspackReaderActivation ).on( 'reader', handleReaderChanges );
 		handleReaderChanges();
 	} );
 
@@ -150,9 +151,9 @@ window.newspackRAS.push( readerActivation => {
 	const queryString = window.location.search;
 	const params = new URLSearchParams( queryString );
 	const reader = readerActivation.getReader();
-	if ( params.get( newspack_ras_config?.auth_action_result ) && reader?.email && reader?.authenticated ) {
+	if ( params.get( newspack_ras_config?.auth_action_result as string ) && reader?.email && reader?.authenticated ) {
 		// Remove the auth action result from the URL.
-		params.delete( newspack_ras_config?.auth_action_result );
+		params.delete( newspack_ras_config?.auth_action_result as string );
 		const newQueryString = params.toString() ? '?' + params.toString() : '';
 		window.history.replaceState( {}, '', window.location.pathname + newQueryString );
 		readerActivation.dispatchActivity( 'reader_logged_in', {

@@ -6,8 +6,8 @@
 import './plugins-screen.scss';
 
 const getCreateButton =
-	targetEl =>
-	( text, hrefOrCallback, isPrimary = false ) => {
+	( targetEl: HTMLElement ) =>
+	( text: string, hrefOrCallback: string | ( () => void ) | null, isPrimary = false ) => {
 		const buttonEl = document.createElement( 'a' );
 		if ( typeof hrefOrCallback === 'string' ) {
 			buttonEl.setAttribute( 'href', hrefOrCallback );
@@ -28,7 +28,7 @@ const getCreateButton =
  *
  * @see Admin_Plugins_Screen::enqueue_scripts_and_styles().
  */
-( function ( $ ) {
+( function ( $: NewspackJQueryStatic ) {
 	// Display a modal when adding a new plugin.
 	if ( newspack_plugin_info.screen === 'plugin-install.php' && newspack_plugin_info.plugin_review_link ) {
 		const modalEl = document.createElement( 'div' );

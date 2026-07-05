@@ -9,13 +9,21 @@ import { useEffect, useState } from '@wordpress/element';
  * Internal dependencies
  */
 import { AutocompleteWithSuggestions, Button, Divider, Grid, TextControl } from '../../../../../packages/components/src';
+import type { SelectedItem } from '../../../../../packages/components/src/autocomplete-with-suggestions';
 import { useWizardData } from '../../../../../packages/components/src/wizard/store/utils';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsSection from '../../../wizards-section';
 
+type NRHPlatformData = {
+	nrh_organization_id?: string;
+	nrh_custom_domain?: string;
+	nrh_salesforce_campaign_id?: string;
+	donor_landing_page?: SelectedItem | null;
+};
+
 const NRHSettings = () => {
-	const [ selectedPage, setSelectedPage ] = useState( null );
-	const wizardData = useWizardData( 'newspack-audience/payment' );
+	const [ selectedPage, setSelectedPage ] = useState< SelectedItem | null >( null );
+	const wizardData = useWizardData< { platform_data?: NRHPlatformData } >( 'newspack-audience/payment' );
 	const { updateWizardSettings, saveWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	useEffect( () => {
@@ -24,7 +32,7 @@ const NRHSettings = () => {
 		}
 	}, [] );
 
-	const changeHandler = ( key, value ) => {
+	const changeHandler = ( key: string, value: unknown ) => {
 		return updateWizardSettings( {
 			slug: 'newspack-audience/payment',
 			path: [ 'platform_data', key ],
@@ -50,20 +58,20 @@ const NRHSettings = () => {
 						label={ __( 'Organization ID', 'newspack-plugin' ) }
 						placeholder="exampleid"
 						value={ settings?.nrh_organization_id || '' }
-						onChange={ value => changeHandler( 'nrh_organization_id', value ) }
+						onChange={ ( value: string ) => changeHandler( 'nrh_organization_id', value ) }
 					/>
 					<TextControl
 						label={ __( 'Custom domain (optional)', 'newspack-plugin' ) }
 						help={ __( 'Enter the raw domain without protocol or slashes.' ) }
 						placeholder="donate.example.com"
 						value={ settings?.nrh_custom_domain || '' }
-						onChange={ value => changeHandler( 'nrh_custom_domain', value ) }
+						onChange={ ( value: string ) => changeHandler( 'nrh_custom_domain', value ) }
 					/>
 					<TextControl
 						label={ __( 'Salesforce Campaign ID (optional)', 'newspack-plugin' ) }
 						placeholder="exampleid"
 						value={ settings?.nrh_salesforce_campaign_id || '' }
-						onChange={ value => changeHandler( 'nrh_salesforce_campaign_id', value ) }
+						onChange={ ( value: string ) => changeHandler( 'nrh_salesforce_campaign_id', value ) }
 					/>
 				</Grid>
 			</div>

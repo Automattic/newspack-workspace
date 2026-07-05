@@ -5,10 +5,9 @@ import './style.scss';
  *
  * @see https://github.com/WordPress/gutenberg/blob/trunk/packages/dom-ready/
  *
- * @param {Function} callback A function to execute after the DOM is ready.
- * @return {void}
+ * @param callback A function to execute after the DOM is ready.
  */
-function domReady( callback ) {
+function domReady( callback: () => void ): void {
 	if ( typeof document === 'undefined' ) {
 		return;
 	}
@@ -25,7 +24,7 @@ function domReady( callback ) {
 /**
  * A lightweight lightbox.
  */
-const createLightbox = url => {
+const createLightbox = ( url: string ) => {
 	const lightboxContainer = document.createElement( 'div' );
 	lightboxContainer.classList.add( 'newspack-img-lightbox' );
 	const lightboxImgEl = document.createElement( 'img' );
@@ -46,7 +45,7 @@ const createLightbox = url => {
 domReady( function () {
 	[ ...document.querySelectorAll( 'figure[data-lightbox]' ) ].forEach( lightboxEl => {
 		lightboxEl.addEventListener( 'click', () => {
-			createLightbox( lightboxEl.querySelector( 'img' ).src );
+			createLightbox( lightboxEl.querySelector( 'img' )!.src );
 		} );
 	} );
 } );

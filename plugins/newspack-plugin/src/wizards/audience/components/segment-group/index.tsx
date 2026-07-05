@@ -20,13 +20,35 @@ import { promptDescription, segmentDescription, getCardClassName, warningForPopu
 import { overlayBottom, overlayInline, overlayCenter, overlayTop } from '../../../../../packages/icons';
 import './style.scss';
 
-const addNewURL = ( placement, campaignId, segmentId ) => {
+/**
+ * Props provided by the campaigns screen and forwarded (spread) to each
+ * prompt's action card. Optional in SegmentGroupProps because the unit test
+ * renders the component without them; the campaigns screen always passes
+ * the full set.
+ */
+type SharedCampaignScreenProps = CampaignsPopupManagement & {
+	prompts: CampaignsPrompt[];
+	segments: CampaignsSegment[];
+	inFlight: boolean;
+	duplicated: number | null;
+};
+
+type SegmentGroupProps = {
+	/** The segment with its prompts, as grouped for display. */
+	segment: CampaignsSegmentGroup;
+	/** The selected campaign filter (a term id, or e.g. 'active'/'unassigned'). */
+	campaignId?: string;
+	/** Campaign group data for the selected campaign, if a specific one is selected. */
+	campaignData: CampaignGroup | null;
+} & Partial< SharedCampaignScreenProps >;
+
+const addNewURL = ( placement: string | null, campaignId: string | undefined, segmentId: string ) => {
 	const base = '/wp-admin/post-new.php?post_type=newspack_popups_cpt&';
 	const params = [];
 	if ( placement ) {
 		params.push( `placement=${ placement }` );
 	}
-	if ( +campaignId > 0 ) {
+	if ( +campaignId! > 0 ) {
 		params.push( `group=${ campaignId }` );
 	}
 	if ( segmentId ) {
@@ -35,11 +57,11 @@ const addNewURL = ( placement, campaignId, segmentId ) => {
 	return base + params.join( '&' );
 };
 
-const SegmentGroup = props => {
+const SegmentGroup = ( props: SegmentGroupProps ) => {
 	const { campaignData, campaignId, segment } = props;
 	const [ modalVisible, setModalVisible ] = useState( false );
 	const { label, id, prompts } = segment;
-	const campaignToPreview = 'unassigned' !== campaignId ? parseInt( campaignId ) : -1;
+	const campaignToPreview = 'unassigned' !== campaignId ? parseInt( String( campaignId ) ) : -1;
 
 	let emptySegmentText;
 	if ( 'unassigned' === campaignId ) {
@@ -266,7 +288,10 @@ const SegmentGroup = props => {
 						description={ promptDescription( item ) }
 						warning={ warningForPopup( prompts, item ) }
 						prompt={ item }
-						{ ...props }
+						// The campaigns screen always provides the shared management props
+						// (they're optional in SegmentGroupProps only for the unit test),
+						// so assert the full shape when forwarding.
+						{ ...( props as SegmentGroupProps & SharedCampaignScreenProps ) }
 					/>
 					{ index < prompts.length - 1 && <CardDivider /> }
 				</Fragment>

@@ -5,14 +5,14 @@
 	}
 	const $body = $( document.body );
 	const getInputs = function () {
-		return Array.from( document.querySelectorAll( '.newspack-cover-fees input' ) );
+		return Array.from( document.querySelectorAll< HTMLInputElement >( '.newspack-cover-fees input' ) );
 	};
 	$body.on( 'init_checkout', function () {
 		const form = document.querySelector( 'form.checkout' );
 		if ( ! form ) {
 			return;
 		}
-		let checked = document.querySelector( '.newspack-cover-fees input' )?.checked;
+		let checked = document.querySelector< HTMLInputElement >( '.newspack-cover-fees input' )?.checked;
 		form.addEventListener( 'change', function () {
 			// Get elements on every change because the DOM is replaced by AJAX.
 			const inputs = getInputs();
@@ -30,9 +30,10 @@
 
 			// Update checked state of all checkboxes.
 			if ( update ) {
-				checked = update.checked;
+				const updatedChecked = update.checked;
+				checked = updatedChecked;
 				inputs.forEach( function ( input ) {
-					input.checked = checked;
+					input.checked = updatedChecked;
 				} );
 				$body.trigger( 'update_checkout', { update_shipping_method: false } );
 			}

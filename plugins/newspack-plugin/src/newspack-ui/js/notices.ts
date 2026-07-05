@@ -1,7 +1,7 @@
 import { domReady } from './utils';
 
 domReady( function () {
-	const notices = [ ...document.querySelectorAll( '.newspack-ui__snackbar__item' ) ];
+	const notices = [ ...document.querySelectorAll< HTMLElement >( '.newspack-ui__snackbar__item' ) ];
 	notices.forEach( notice => {
 		if ( notice.dataset.activeOnLoad === 'true' ) {
 			openNotice( notice );
@@ -18,10 +18,10 @@ domReady( function () {
 /**
  * Open a notice.
  *
- * @param {Element} element - The notice element.
- * @param {boolean} remove  - Whether to remove the notice element on close.
+ * @param element - The notice element.
+ * @param remove  - Whether to remove the notice element on close.
  */
-function openNotice( element, remove = true ) {
+function openNotice( element: HTMLElement, remove = true ) {
 	element.classList.add( 'active' );
 	if ( element.dataset.autohide !== 'false' ) {
 		setTimeout( () => {
@@ -33,10 +33,10 @@ function openNotice( element, remove = true ) {
 /**
  * Close a notice.
  *
- * @param {Element} element - The notice element.
- * @param {boolean} remove  - Whether to remove the notice element on dismiss.
+ * @param element - The notice element.
+ * @param remove  - Whether to remove the notice element on dismiss.
  */
-function closeNotice( element, remove = true ) {
+function closeNotice( element: HTMLElement, remove = true ) {
 	element.classList.remove( 'active' );
 	if ( remove ) {
 		setTimeout( () => {
@@ -56,10 +56,10 @@ function closeNotice( element, remove = true ) {
 /**
  * Dynamically create and show a snackbar notice.
  *
- * @param {string} message Message text to show.
- * @param {string} type    Notice type.
+ * @param message Message text to show.
+ * @param type    Notice type.
  */
-function createNotice( message, type = 'success' ) {
+function createNotice( message: string, type = 'success' ) {
 	let snackbar = document.querySelector( '.newspack-ui__snackbar--top-right' );
 	if ( ! snackbar ) {
 		let wrapper = document.querySelector( '.newspack-ui' );

@@ -1,14 +1,14 @@
-import * as a11y from '../reader-activation-auth/accessibility.js';
+import * as a11y from '../reader-activation-auth/accessibility';
 import { getApiNonce } from '../reader-activation/session';
 import { EVENTS, on } from '../reader-activation/events';
 
 /**
  * Get the newsletters signup modal container.
  *
- * @return {HTMLElement} The modal container.
+ * @return The modal container.
  */
-export function getModalContainer() {
-	return document.querySelector( '.newspack-newsletters-signup-modal .newspack-newsletters-signup' );
+export function getModalContainer(): NewspackNewslettersSignupContainer | null {
+	return document.querySelector< NewspackNewslettersSignupContainer >( '.newspack-newsletters-signup-modal .newspack-newsletters-signup' );
 }
 
 /**
@@ -26,7 +26,7 @@ export async function refreshNewslettersSignupModal() {
 	}
 
 	const nonce = getApiNonce();
-	const headers = {};
+	const headers: Record< string, string > = {};
 	if ( nonce ) {
 		headers[ 'X-WP-Nonce' ] = nonce;
 	}
@@ -66,11 +66,9 @@ on( EVENTS.session, refreshNewslettersSignupModal );
 /**
  * Open the newsletters signup modal.
  *
- * @param {Object} config Configuration object.
- *
- * @return {void}
+ * @param config Configuration object.
  */
-export function openNewslettersSignupModal( config = {} ) {
+export function openNewslettersSignupModal( config: NewspackNewslettersSignupModalConfig = {} ) {
 	const container = getModalContainer();
 	if ( ! container ) {
 		if ( config?.onSuccess && typeof config.onSuccess === 'function' ) {
@@ -79,14 +77,14 @@ export function openNewslettersSignupModal( config = {} ) {
 		return;
 	}
 
-	const modal = container.closest( '.newspack-newsletters-signup-modal' );
+	const modal = container.closest< NewspackNewslettersSignupModalElement >( '.newspack-newsletters-signup-modal' );
 	if ( ! modal ) {
 		if ( config?.onSuccess && typeof config.onSuccess === 'function' ) {
 			config.onSuccess();
 		}
 		return;
 	}
-	const form = container.querySelector( 'form' );
+	const form = container.querySelector( 'form' )!;
 
 	/**
 	 * Close the modal.
@@ -146,7 +144,7 @@ export function openNewslettersSignupModal( config = {} ) {
 	}
 
 	// Populate email if not already set.
-	const emailInput = modal.querySelector( 'strong.email' );
+	const emailInput = modal.querySelector< HTMLElement >( 'strong.email' );
 	if ( emailInput && ! emailInput.innerText ) {
 		const reader = window?.newspackReaderActivation?.getReader();
 
@@ -154,7 +152,7 @@ export function openNewslettersSignupModal( config = {} ) {
 			emailInput.textContent = reader.email;
 		} else {
 			// Remove parent element of emailInput if no email is found.
-			emailInput.parentElement.remove();
+			emailInput.parentElement!.remove();
 		}
 	}
 

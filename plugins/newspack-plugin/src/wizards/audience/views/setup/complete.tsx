@@ -28,17 +28,17 @@ const ACTIVATION_STEPS = [ __( 'Setting up new segments…', 'newspack-plugin' )
  * @param {number} max Maximum value to return.
  * @return {number} Random number between min and max.
  */
-const generateRandomNumber = ( min, max ) => {
+const generateRandomNumber = ( min: number, max: number ) => {
 	return min + Math.random() * ( max - min );
 };
 
-export default withWizardScreen( ( { fetchConfig } ) => {
+export default withWizardScreen< AudienceSetupSharedProps >( ( { fetchConfig }: AudienceSetupSharedProps ) => {
 	const [ inFlight, setInFlight ] = useState( false );
-	const [ error, setError ] = useState( false );
-	const [ progress, setProgress ] = useState( null );
-	const [ progressLabel, setProgressLabel ] = useState( false );
+	const [ error, setError ] = useState< false | WpFetchError >( false );
+	const [ progress, setProgress ] = useState< number | null >( null );
+	const [ progressLabel, setProgressLabel ] = useState< string | false >( false );
 	const [ completed, setCompleted ] = useState( false );
-	const timer = useRef();
+	const timer = useRef< ReturnType< typeof setTimeout > >();
 	const { reader_activation_url } = newspackAudience;
 
 	useEffect( () => {
@@ -48,16 +48,16 @@ export default withWizardScreen( ( { fetchConfig } ) => {
 		if ( error ) {
 			setInFlight( false );
 		}
-		if ( ! error && inFlight && 0 <= progress && progress < ACTIVATION_STEPS.length ) {
-			setProgressLabel( ACTIVATION_STEPS[ progress ] );
+		if ( ! error && inFlight && 0 <= ( progress ?? 0 ) && ( progress ?? 0 ) < ACTIVATION_STEPS.length ) {
+			setProgressLabel( ACTIVATION_STEPS[ progress ?? 0 ] );
 			timer.current = setTimeout(
 				() => {
-					setProgress( _progress => _progress + 1 );
+					setProgress( _progress => ( _progress ?? 0 ) + 1 );
 				},
 				generateRandomNumber( 1000, 2000 )
 			);
 		}
-		if ( progress >= ACTIVATION_STEPS.length && completed ) {
+		if ( ( progress ?? 0 ) >= ACTIVATION_STEPS.length && completed ) {
 			setProgress( ACTIVATION_STEPS.length + 1 ); // Plus one to account for the "Done!" step.
 			setProgressLabel( __( 'Done!', 'newspack-plugin' ) );
 			setTimeout( () => {
@@ -76,7 +76,7 @@ export default withWizardScreen( ( { fetchConfig } ) => {
 
 		try {
 			setCompleted(
-				await apiFetch( {
+				await apiFetch< boolean >( {
 					path: '/newspack/v1/wizard/newspack-audience/audience-management/activate',
 					method: 'post',
 				} )
@@ -86,7 +86,7 @@ export default withWizardScreen( ( { fetchConfig } ) => {
 				clearTimeout( timer.current );
 			}
 			setInFlight( false );
-			setError( err );
+			setError( err as WpFetchError );
 		}
 	};
 
@@ -109,7 +109,7 @@ export default withWizardScreen( ( { fetchConfig } ) => {
 				{ inFlight && (
 					<Card className="newspack-ras-campaign__completed-card">
 						<ProgressBar
-							completed={ progress }
+							completed={ progress ?? 0 }
 							displayFraction={ false }
 							total={ ACTIVATION_STEPS.length + 1 } // Plus one to account for the "Done!" step.
 							label={ progressLabel }

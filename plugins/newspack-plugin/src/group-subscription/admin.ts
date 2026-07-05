@@ -6,7 +6,7 @@
 
 import './admin.scss';
 
-( function ( $ ) {
+( function ( $: NewspackJQueryStatic ) {
 	if ( ! $ ) {
 		return;
 	}
@@ -55,7 +55,7 @@ import './admin.scss';
 	}
 
 	// Show or hide group subscription options based on the enabled checkbox.
-	function showOrHideOptions( e ) {
+	function showOrHideOptions( e: NewspackJQueryEvent ) {
 		const $metabox = $( e.currentTarget ).closest( '#newspack-group-subscription' );
 		if ( $( e.currentTarget ).is( ':checked' ) ) {
 			$metabox.addClass( 'enabled' );
@@ -65,7 +65,7 @@ import './admin.scss';
 	}
 
 	// Add member by ID to a group subscription.
-	function addMember( e ) {
+	function addMember( e: NewspackJQueryEvent ) {
 		e.preventDefault();
 		const $select = $( e.currentTarget );
 		$select.attr( 'disabled', true );
@@ -115,7 +115,7 @@ import './admin.scss';
 	}
 
 	// Remove member from a group subscription.
-	function removeMember( e ) {
+	function removeMember( e: NewspackJQueryEvent ) {
 		e.preventDefault();
 		const $this = $( e.currentTarget );
 		const userId = $this.data( 'user-id' );
@@ -157,7 +157,7 @@ import './admin.scss';
 				$this.parent().removeClass( 'newspack-group-subscription__to-remove' );
 			} );
 	}
-	function inviteMember( e ) {
+	function inviteMember( e: NewspackJQueryEvent ) {
 		if ( e.keyCode && e.keyCode !== 13 ) {
 			return;
 		}
@@ -218,7 +218,7 @@ import './admin.scss';
 				$button.attr( 'disabled', false );
 			} );
 	}
-	function cancelInvite( e ) {
+	function cancelInvite( e: NewspackJQueryEvent ) {
 		e.preventDefault();
 		const $this = $( e.currentTarget );
 		const $listItem = $this.closest( 'li' );

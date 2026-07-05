@@ -3,7 +3,7 @@
 /**
  * Internal dependencies.
  */
-import * as a11y from './accessibility.js';
+import * as a11y from './accessibility';
 
 /**
  * Helpers for the post-registration verification modal rendered in wp_footer
@@ -21,7 +21,7 @@ const MODAL_ID = 'newspack-my-account__newspack-reader-verification';
  *
  * @type {AbortController|null}
  */
-let currentController = null;
+let currentController: AbortController | null = null;
 
 /**
  * Send the verification OTP email.
@@ -29,11 +29,11 @@ let currentController = null;
  * @param {string} nonce Verification nonce.
  * @return {Promise<any>} Resolves with the JSON response on success, rejects on network/HTTP error.
  */
-function sendVerificationOTP( nonce ) {
+function sendVerificationOTP( nonce: string ) {
 	const body = new FormData();
 	body.set( 'action', 'newspack_reader_registration_verification' );
 	body.set( 'nonce', nonce );
-	return fetch( newspack_ras_config.verification_url, {
+	return fetch( newspack_ras_config.verification_url as string, {
 		method: 'POST',
 		headers: { Accept: 'application/json' },
 		body,
@@ -67,9 +67,9 @@ function sendVerificationOTP( nonce ) {
  *
  * @return {boolean} Whether the modal was found and opened.
  */
-export function openVerificationModal( config = {} ) {
+export function openVerificationModal( config: NewspackVerificationModalConfig = {} ) {
 	const modal = document.getElementById( MODAL_ID );
-	const sendOtpButton = modal?.querySelector( '[data-send-otp]' );
+	const sendOtpButton = modal?.querySelector< HTMLButtonElement >( '[data-send-otp]' );
 	if ( ! modal || ! sendOtpButton ) {
 		if ( typeof config.onDismiss === 'function' ) {
 			config.onDismiss();
@@ -99,14 +99,14 @@ export function openVerificationModal( config = {} ) {
 	};
 
 	function handleSendClick() {
-		sendOtpButton.disabled = true;
-		sendVerificationOTP( config.verificationNonce )
+		sendOtpButton!.disabled = true;
+		sendVerificationOTP( config.verificationNonce as string )
 			.then( () => {
 				codeSent = true;
 				if ( typeof config.setOTPTimer === 'function' ) {
 					config.setOTPTimer();
 				}
-				modal.setAttribute( 'data-state', 'closed' );
+				modal!.setAttribute( 'data-state', 'closed' );
 				currentController?.abort();
 				releaseController();
 				if ( typeof config.onSendCode === 'function' ) {
@@ -114,9 +114,9 @@ export function openVerificationModal( config = {} ) {
 				}
 			} )
 			.catch( () => {
-				sendOtpButton.disabled = false;
-				sendOtpButton.textContent = sendOtpButton.textContent.trim();
-				const errorP = modal.querySelector( '.newspack-ui__box p:not(:has(button))' );
+				sendOtpButton!.disabled = false;
+				sendOtpButton!.textContent = sendOtpButton!.textContent!.trim();
+				const errorP = modal!.querySelector( '.newspack-ui__box p:not(:has(button))' );
 				if ( errorP ) {
 					errorP.textContent = newspack_reader_activation_labels?.verification_error || '';
 				}

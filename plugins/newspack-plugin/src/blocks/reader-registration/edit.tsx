@@ -1,5 +1,3 @@
-/* global newspack_blocks */
-
 /**
  * External dependencies
  */
@@ -20,7 +18,24 @@ import { Icon, check } from '@wordpress/icons';
  */
 import './editor.scss';
 
-const getListCheckboxId = listId => {
+type ListConfig = Record< string, { title: string; description: string } >;
+
+type ReaderRegistrationAttributes = {
+	title: string;
+	description: string;
+	placeholder: string;
+	label: string;
+	privacyLabel: string;
+	newsletterSubscription: boolean;
+	displayListDescription: boolean;
+	hideSubscriptionInput: boolean;
+	newsletterLabel: string;
+	lists: string[];
+	listsCheckboxes: Record< string, boolean >;
+	hideOauth: boolean;
+};
+
+const getListCheckboxId = ( listId: string ) => {
 	return 'newspack-reader-registration-list-checkbox-' + listId;
 };
 
@@ -45,6 +60,10 @@ export default function ReaderRegistrationEdit( {
 		listsCheckboxes,
 		hideOauth,
 	},
+}: {
+	isSelected: boolean;
+	setAttributes: ( attributes: Partial< ReaderRegistrationAttributes > ) => void;
+	attributes: ReaderRegistrationAttributes;
 } ) {
 	const blockProps = useBlockProps();
 	const [ editedState, setEditedState ] = useState( editedStateOptions[ 0 ].value );
@@ -72,12 +91,12 @@ export default function ReaderRegistrationEdit( {
 		}
 	);
 	const [ inFlight, setInFlight ] = useState( false );
-	const [ listConfig, setListConfig ] = useState( {} );
+	const [ listConfig, setListConfig ] = useState< ListConfig >( {} );
 
 	const fetchLists = () => {
 		if ( newspack_blocks.has_newsletters && newsletterSubscription ) {
 			setInFlight( true );
-			apiFetch( {
+			apiFetch< ListConfig >( {
 				path: '/newspack-newsletters/v1/lists_config',
 			} )
 				.then( setListConfig )
@@ -99,10 +118,10 @@ export default function ReaderRegistrationEdit( {
 		return lists.length === 1 && hideSubscriptionInput;
 	};
 
-	const isListSelected = listId => {
+	const isListSelected = ( listId: string ) => {
 		return listsCheckboxes.hasOwnProperty( listId ) && listsCheckboxes[ listId ];
 	};
-	const toggleListCheckbox = listId => () => {
+	const toggleListCheckbox = ( listId: string ) => () => {
 		const newListsCheckboxes = { ...listsCheckboxes };
 		newListsCheckboxes[ listId ] = ! isListSelected( listId );
 		setAttributes( { listsCheckboxes: newListsCheckboxes } );
@@ -243,7 +262,7 @@ export default function ReaderRegistrationEdit( {
 							{ ( isSelected || title ) && (
 								<div className="newspack-registration__header">
 									<RichText
-										onChange={ value => setAttributes( { title: value } ) }
+										onChange={ ( value: string ) => setAttributes( { title: value } ) }
 										placeholder={ __( 'Add title', 'newspack-plugin' ) }
 										value={ title }
 										allowedFormats={ [] }
@@ -254,7 +273,7 @@ export default function ReaderRegistrationEdit( {
 							) }
 							{ ( isSelected || description ) && (
 								<RichText
-									onChange={ value => setAttributes( { description: value } ) }
+									onChange={ ( value: string ) => setAttributes( { description: value } ) }
 									placeholder={ __( 'Add description', 'newspack-plugin' ) }
 									value={ description }
 									tagName="p"
@@ -275,7 +294,7 @@ export default function ReaderRegistrationEdit( {
 												<strong>
 													{ lists.length === 1 ? (
 														<RichText
-															onChange={ value => setAttributes( { newsletterLabel: value } ) }
+															onChange={ ( value: string ) => setAttributes( { newsletterLabel: value } ) }
 															placeholder={ __( 'Subscribe to our newsletter', 'newspack-plugin' ) }
 															value={ newsletterLabel }
 															allowedFormats={ [] }
@@ -311,7 +330,7 @@ export default function ReaderRegistrationEdit( {
 											<input type="email" placeholder={ placeholder } />
 											<button type="submit" className="newspack-ui__button newspack-ui__button--primary">
 												<RichText
-													onChange={ value => setAttributes( { label: value } ) }
+													onChange={ ( value: string ) => setAttributes( { label: value } ) }
 													placeholder={ __( 'Continue', 'newspack-plugin' ) }
 													value={ label }
 													allowedFormats={ [] }
@@ -325,7 +344,7 @@ export default function ReaderRegistrationEdit( {
 							</div>
 							<div className="newspack-registration__help-text">
 								<RichText
-									onChange={ value => setAttributes( { privacyLabel: value } ) }
+									onChange={ ( value: string ) => setAttributes( { privacyLabel: value } ) }
 									placeholder={ __( 'Terms & Conditions statement…', 'newspack-plugin' ) }
 									value={ privacyLabel || defaultTermsText }
 									allowedFormats={ [ 'core/bold', 'core/italic', 'core/link' ] }

@@ -13,10 +13,25 @@ import { Component } from '@wordpress/element';
 import { TextControl } from '../../../../../packages/components/src';
 import './style.scss';
 
+export type MoneyInputProps = {
+	/** The currency symbol displayed next to the input. */
+	currencySymbol: string;
+	/** Validation message displayed under the input. */
+	error?: React.ReactNode;
+	/** The input's label. */
+	label: string;
+	/** Minimum allowed amount. */
+	min?: number;
+	/** The current amount. */
+	value: string | number;
+	/** Called with the new amount. */
+	onChange: ( value: string ) => void;
+};
+
 /**
  * Settings for donation collection.
  */
-class MoneyInput extends Component {
+class MoneyInput extends Component< MoneyInputProps > {
 	/**
 	 * Render.
 	 */

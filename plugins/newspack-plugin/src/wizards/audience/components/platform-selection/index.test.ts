@@ -6,7 +6,7 @@ describe( 'PlatformSelection mapping', () => {
 	} );
 
 	it( 'relabels the NRH platform as RevEngine', () => {
-		expect( OPTIONS.find( o => o.value === 'nrh' ).title ).toBe( 'RevEngine' );
+		expect( OPTIONS.find( o => o.value === 'nrh' )?.title ).toBe( 'RevEngine' );
 	} );
 
 	it( 'maps each platform to its required plugins', () => {

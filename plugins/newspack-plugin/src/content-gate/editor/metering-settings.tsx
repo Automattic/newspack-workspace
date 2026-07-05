@@ -7,11 +7,22 @@ import { useSelect, useDispatch } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
 import { registerPlugin } from '@wordpress/plugins';
 
+/** The gate CPT meta consumed by this panel. */
+type MeteringMeta = {
+	metering: boolean;
+	metering_anonymous_count: number | string;
+	metering_registered_count: number | string;
+	metering_period: 'day' | 'week' | 'month';
+};
+
 function MeteringSettings() {
 	const { meta } = useSelect( select => {
-		const { getEditedPostAttribute } = select( 'core/editor' );
+		// The editor selectors are untyped for string-keyed stores; assert at the store boundary.
+		const { getEditedPostAttribute } = select( 'core/editor' ) as {
+			getEditedPostAttribute: ( attribute: string ) => unknown;
+		};
 		return {
-			meta: getEditedPostAttribute( 'meta' ),
+			meta: getEditedPostAttribute( 'meta' ) as MeteringMeta,
 		};
 	} );
 	const { editPost } = useDispatch( 'core/editor' );
@@ -73,5 +84,6 @@ function MeteringSettings() {
 
 registerPlugin( 'newspack-content-gate-metering', {
 	render: MeteringSettings,
-	icon: null,
+	// An explicit falsy icon overrides registerPlugin's default plugins icon via object spread.
+	icon: undefined,
 } );

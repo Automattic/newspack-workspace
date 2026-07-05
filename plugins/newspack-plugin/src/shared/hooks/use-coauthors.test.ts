@@ -6,13 +6,14 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 /**
  * WordPress dependencies
  */
-import { useSelect } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 
 /**
  * Internal dependencies
  */
 import { useCoAuthors, resetGuestAvatarCacheForTests, resetCoauthorDetailsCacheForTests } from './use-coauthors';
+import { mockUseSelectWith } from '../test-utils/mock-use-select';
+import type { FakeSelect } from '../test-utils/mock-use-select';
 
 jest.mock( '@wordpress/data', () => ( {
 	useSelect: jest.fn(),
@@ -24,19 +25,50 @@ jest.mock( '@wordpress/core-data', () => ( {
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
+const apiFetchMock = jest.mocked( apiFetch );
+
+/** A legacy CAP store author entry as these tests feed it. */
+type TestCapAuthor = {
+	id: number;
+	display?: string;
+	value?: string;
+	label?: string;
+	userType?: string;
+};
+
+/** A `newspack_author_info` REST author entry as these tests feed it. */
+type TestRestAuthor = {
+	id: number;
+	display_name?: string;
+	author_link?: string | null;
+	user_nicename?: string;
+	is_guest?: boolean;
+	avatar_urls?: Record< number, string >;
+};
+
 /**
  * Helper to create a mock select function for multiple stores.
  *
- * @param {Object}   options                 Mock options.
- * @param {Object}   options.capStore        Legacy CAP store mock (null if unavailable — i.e., new CAP).
- * @param {number}   options.currentPostId   Currently-edited post ID.
- * @param {Object}   options.entityRecords   Map of postId -> post entity record (used for Query Loop).
- * @param {number[]} options.coauthorTermIds `coauthors` post attribute (new CAP).
- *                                           `undefined` means attribute not set (legacy CAP / plugin missing);
- *                                           `[]` means the attribute is present but empty.
- * @return {Function} Mock select function.
+ * @param options                 Mock options.
+ * @param options.capStore        Legacy CAP store mock (null if unavailable — i.e., new CAP).
+ * @param options.currentPostId   Currently-edited post ID.
+ * @param options.entityRecords   Map of postId -> post entity record (used for Query Loop).
+ * @param options.coauthorTermIds `coauthors` post attribute (new CAP).
+ *                                `undefined` means attribute not set (legacy CAP / plugin missing);
+ *                                `[]` means the attribute is present but empty.
+ * @return Mock select function.
  */
-const createMockSelect = ( { capStore = null, currentPostId = 123, entityRecords = {}, coauthorTermIds } = {} ) => {
+const createMockSelect = ( {
+	capStore = null,
+	currentPostId = 123,
+	entityRecords = {},
+	coauthorTermIds,
+}: {
+	capStore?: { getAuthors?: ( postId: number ) => TestCapAuthor[] } | null;
+	currentPostId?: number;
+	entityRecords?: Record< number, { newspack_author_info?: TestRestAuthor[] | null } >;
+	coauthorTermIds?: number[];
+} = {} ): FakeSelect => {
 	return storeName => {
 		if ( storeName === 'cap/authors' ) {
 			return capStore;
@@ -44,12 +76,12 @@ const createMockSelect = ( { capStore = null, currentPostId = 123, entityRecords
 		if ( storeName === 'core/editor' ) {
 			return {
 				getCurrentPostId: () => currentPostId,
-				getEditedPostAttribute: attr => ( attr === 'coauthors' ? coauthorTermIds : undefined ),
+				getEditedPostAttribute: ( attr: string ) => ( attr === 'coauthors' ? coauthorTermIds : undefined ),
 			};
 		}
 		if ( storeName === 'core' ) {
 			return {
-				getEntityRecord: ( kind, type, id ) => entityRecords[ id ] || null,
+				getEntityRecord: ( kind: string, type: string, id: number ) => entityRecords[ id ] || null,
 			};
 		}
 		return null;
@@ -62,12 +94,12 @@ describe( 'useCoAuthors', () => {
 		resetGuestAvatarCacheForTests();
 		resetCoauthorDetailsCacheForTests();
 		// Default: apiFetch resolves with empty object (no avatar_urls).
-		apiFetch.mockResolvedValue( {} );
+		apiFetchMock.mockResolvedValue( {} );
 	} );
 
 	describe( 'CAP store availability', () => {
 		it( 'should return isCapAvailable false when CAP store is not available', () => {
-			useSelect.mockImplementation( callback => callback( createMockSelect( { capStore: null } ) ) );
+			mockUseSelectWith( createMockSelect( { capStore: null } ) );
 
 			const { result } = renderHook( () => useCoAuthors( 123 ) );
 
@@ -76,7 +108,7 @@ describe( 'useCoAuthors', () => {
 		} );
 
 		it( 'should return isCapAvailable false when getAuthors is not a function', () => {
-			useSelect.mockImplementation( callback => callback( createMockSelect( { capStore: {} } ) ) );
+			mockUseSelectWith( createMockSelect( { capStore: {} } ) );
 
 			const { result } = renderHook( () => useCoAuthors( 123 ) );
 
@@ -87,13 +119,11 @@ describe( 'useCoAuthors', () => {
 
 	describe( 'currently-edited post (uses CAP store)', () => {
 		it( 'should return empty authors when CAP is available but no authors assigned', () => {
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => [] },
-						currentPostId: 123,
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => [] },
+					currentPostId: 123,
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 123 ) );
@@ -104,13 +134,11 @@ describe( 'useCoAuthors', () => {
 
 		it( 'should return empty authors when postId is falsy', () => {
 			const getAuthorsMock = jest.fn( () => [] );
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: getAuthorsMock },
-						currentPostId: 123,
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: getAuthorsMock },
+					currentPostId: 123,
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( null ) );
@@ -125,13 +153,11 @@ describe( 'useCoAuthors', () => {
 				{ id: 2, display: 'John Smith', value: 'john-smith', label: 'John' },
 			];
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => capAuthors },
-						currentPostId: 123,
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => capAuthors },
+					currentPostId: 123,
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 123 ) );
@@ -149,13 +175,11 @@ describe( 'useCoAuthors', () => {
 				{ id: 1591, display: 'Guest Writer', value: 'guest-writer', userType: 'guest-author' },
 			];
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => capAuthors },
-						currentPostId: 123,
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => capAuthors },
+					currentPostId: 123,
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 123 ) );
@@ -170,13 +194,11 @@ describe( 'useCoAuthors', () => {
 				{ id: 2, label: 'Only Label' }, // no display or value
 			];
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => capAuthors },
-						currentPostId: 123,
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => capAuthors },
+					currentPostId: 123,
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 123 ) );
@@ -194,16 +216,14 @@ describe( 'useCoAuthors', () => {
 		];
 
 		it( 'should resolve term IDs via REST when legacy CAP store is absent', async () => {
-			apiFetch.mockResolvedValueOnce( NEW_CAP_RESPONSE );
+			apiFetchMock.mockResolvedValueOnce( NEW_CAP_RESPONSE );
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: null, // legacy CAP not registered
-						currentPostId: 123,
-						coauthorTermIds: [ 471, 488, 483 ],
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: null, // legacy CAP not registered
+					currentPostId: 123,
+					coauthorTermIds: [ 471, 488, 483 ],
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 123 ) );
@@ -228,14 +248,12 @@ describe( 'useCoAuthors', () => {
 		} );
 
 		it( 'should return empty authors when coauthors attribute is an empty array', async () => {
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: null,
-						currentPostId: 123,
-						coauthorTermIds: [],
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: null,
+					currentPostId: 123,
+					coauthorTermIds: [],
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 123 ) );
@@ -248,14 +266,12 @@ describe( 'useCoAuthors', () => {
 		} );
 
 		it( 'should mark isCapAvailable false when neither legacy store nor coauthors attribute are present', () => {
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: null,
-						currentPostId: 123,
-						// coauthorTermIds undefined
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: null,
+					currentPostId: 123,
+					// coauthorTermIds undefined
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 123 ) );
@@ -267,16 +283,14 @@ describe( 'useCoAuthors', () => {
 		it( 'should prefer legacy CAP store when both legacy store and coauthors attribute are present', async () => {
 			// This simulates an in-flight upgrade scenario where old JS is still loaded.
 			// Legacy path should win to keep behavior consistent.
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: {
-							getAuthors: () => [ { id: 99, display: 'Legacy', value: 'legacy', userType: 'wpuser' } ],
-						},
-						currentPostId: 123,
-						coauthorTermIds: [ 471 ],
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: {
+						getAuthors: () => [ { id: 99, display: 'Legacy', value: 'legacy', userType: 'wpuser' } ],
+					},
+					currentPostId: 123,
+					coauthorTermIds: [ 471 ],
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 123 ) );
@@ -288,16 +302,14 @@ describe( 'useCoAuthors', () => {
 		} );
 
 		it( 'should cache results so subsequent mounts skip the REST call', async () => {
-			apiFetch.mockResolvedValue( NEW_CAP_RESPONSE );
+			apiFetchMock.mockResolvedValue( NEW_CAP_RESPONSE );
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: null,
-						currentPostId: 123,
-						coauthorTermIds: [ 471, 488, 483 ],
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: null,
+					currentPostId: 123,
+					coauthorTermIds: [ 471, 488, 483 ],
+				} )
 			);
 
 			const { result: result1 } = renderHook( () => useCoAuthors( 123 ) );
@@ -306,7 +318,7 @@ describe( 'useCoAuthors', () => {
 				expect( result1.current.authors ).toHaveLength( 3 );
 			} );
 
-			const callsAfterFirstMount = apiFetch.mock.calls.length;
+			const callsAfterFirstMount = apiFetchMock.mock.calls.length;
 
 			// A later mount re-uses the cache and makes no additional calls.
 			const { result: result2 } = renderHook( () => useCoAuthors( 123 ) );
@@ -320,16 +332,14 @@ describe( 'useCoAuthors', () => {
 
 		it( 'should silently drop term IDs that do not resolve', async () => {
 			// REST returns only 2 of 3 requested IDs (the third was deleted).
-			apiFetch.mockResolvedValueOnce( [ NEW_CAP_RESPONSE[ 0 ], NEW_CAP_RESPONSE[ 1 ] ] );
+			apiFetchMock.mockResolvedValueOnce( [ NEW_CAP_RESPONSE[ 0 ], NEW_CAP_RESPONSE[ 1 ] ] );
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: null,
-						currentPostId: 123,
-						coauthorTermIds: [ 471, 488, 99999 ],
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: null,
+					currentPostId: 123,
+					coauthorTermIds: [ 471, 488, 99999 ],
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 123 ) );
@@ -342,16 +352,14 @@ describe( 'useCoAuthors', () => {
 		} );
 
 		it( 'should handle REST errors without blocking the component', async () => {
-			apiFetch.mockRejectedValueOnce( new Error( 'Server error' ) );
+			apiFetchMock.mockRejectedValueOnce( new Error( 'Server error' ) );
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: null,
-						currentPostId: 123,
-						coauthorTermIds: [ 471 ],
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: null,
+					currentPostId: 123,
+					coauthorTermIds: [ 471 ],
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 123 ) );
@@ -371,18 +379,16 @@ describe( 'useCoAuthors', () => {
 				{ id: '1', termId: 471, displayName: 'Jane', userNicename: 'jane', userType: 'wpuser', login: 'jane', email: '' },
 			];
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: null,
-						currentPostId: 123,
-						coauthorTermIds: [ 471 ],
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: null,
+					currentPostId: 123,
+					coauthorTermIds: [ 471 ],
+				} )
 			);
 
 			// First attempt fails with a transient error; cache should NOT be poisoned.
-			apiFetch.mockRejectedValueOnce( new Error( 'Transient 500' ) );
+			apiFetchMock.mockRejectedValueOnce( new Error( 'Transient 500' ) );
 
 			const { result: result1, unmount: unmount1 } = renderHook( () => useCoAuthors( 123 ) );
 
@@ -394,7 +400,7 @@ describe( 'useCoAuthors', () => {
 			unmount1();
 
 			// Second attempt succeeds — we should actually re-fetch (not a cached failure).
-			apiFetch.mockResolvedValueOnce( RETRY_RESPONSE );
+			apiFetchMock.mockResolvedValueOnce( RETRY_RESPONSE );
 
 			const { result: result2 } = renderHook( () => useCoAuthors( 123 ) );
 
@@ -414,16 +420,14 @@ describe( 'useCoAuthors', () => {
 				{ id: 2, display_name: 'John Smith', author_link: '/author/john/' },
 			];
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => [] },
-						currentPostId: 123, // Editing post 123
-						entityRecords: {
-							456: { newspack_author_info: restAuthors }, // Query Loop post 456
-						},
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => [] },
+					currentPostId: 123, // Editing post 123
+					entityRecords: {
+						456: { newspack_author_info: restAuthors }, // Query Loop post 456
+					},
+				} )
 			);
 
 			// Request authors for post 456 (different from current 123)
@@ -437,16 +441,14 @@ describe( 'useCoAuthors', () => {
 		} );
 
 		it( 'should return empty authors when REST API has no author info', () => {
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => [] },
-						currentPostId: 123,
-						entityRecords: {
-							456: { newspack_author_info: null },
-						},
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => [] },
+					currentPostId: 123,
+					entityRecords: {
+						456: { newspack_author_info: null },
+					},
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 456, 'post' ) );
@@ -460,16 +462,14 @@ describe( 'useCoAuthors', () => {
 				{ id: 1591, display_name: 'External Contributor', author_link: 'https://example.com/author/external-contributor/' },
 			];
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => [] },
-						currentPostId: 123,
-						entityRecords: {
-							456: { newspack_author_info: restAuthors },
-						},
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => [] },
+					currentPostId: 123,
+					entityRecords: {
+						456: { newspack_author_info: restAuthors },
+					},
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 456, 'post' ) );
@@ -484,16 +484,14 @@ describe( 'useCoAuthors', () => {
 				{ id: 3, display_name: 'Jill', author_link: '/author/jill/?x=1#top' },
 			];
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => [] },
-						currentPostId: 123,
-						entityRecords: {
-							456: { newspack_author_info: restAuthors },
-						},
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => [] },
+					currentPostId: 123,
+					entityRecords: {
+						456: { newspack_author_info: restAuthors },
+					},
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 456, 'post' ) );
@@ -511,16 +509,14 @@ describe( 'useCoAuthors', () => {
 				{ id: 4, display_name: 'Plain Permalink Author', author_link: '/?author=123' },
 			];
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => [] },
-						currentPostId: 123,
-						entityRecords: {
-							456: { newspack_author_info: restAuthors },
-						},
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => [] },
+					currentPostId: 123,
+					entityRecords: {
+						456: { newspack_author_info: restAuthors },
+					},
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 456, 'post' ) );
@@ -533,22 +529,20 @@ describe( 'useCoAuthors', () => {
 
 		it( 'should fetch avatars for Query Loop authors via CAP endpoint when not enriched', async () => {
 			const avatarUrls = { 96: 'https://example.com/guest-96.jpg' };
-			apiFetch.mockResolvedValue( { avatar_urls: avatarUrls } );
+			apiFetchMock.mockResolvedValue( { avatar_urls: avatarUrls } );
 
 			const restAuthors = [
 				{ id: 1591, display_name: 'External Contributor', author_link: 'https://example.com/author/external-contributor/' },
 			];
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => [] },
-						currentPostId: 123,
-						entityRecords: {
-							456: { newspack_author_info: restAuthors },
-						},
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => [] },
+					currentPostId: 123,
+					entityRecords: {
+						456: { newspack_author_info: restAuthors },
+					},
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 456, 'post' ) );
@@ -565,16 +559,14 @@ describe( 'useCoAuthors', () => {
 		it( 'should use enriched user_nicename directly when available', () => {
 			const restAuthors = [ { id: 1, display_name: 'Jane Doe', author_link: '/author/jane/', user_nicename: 'jane-doe-enriched' } ];
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => [] },
-						currentPostId: 123,
-						entityRecords: {
-							456: { newspack_author_info: restAuthors },
-						},
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => [] },
+					currentPostId: 123,
+					entityRecords: {
+						456: { newspack_author_info: restAuthors },
+					},
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 456, 'post' ) );
@@ -588,16 +580,14 @@ describe( 'useCoAuthors', () => {
 				{ id: 2, display_name: 'Guest', author_link: '/author/guest/', user_nicename: 'guest', is_guest: true },
 			];
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => [] },
-						currentPostId: 123,
-						entityRecords: {
-							456: { newspack_author_info: restAuthors },
-						},
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => [] },
+					currentPostId: 123,
+					entityRecords: {
+						456: { newspack_author_info: restAuthors },
+					},
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 456, 'post' ) );
@@ -612,16 +602,14 @@ describe( 'useCoAuthors', () => {
 				{ id: 1, display_name: 'Jane', author_link: '/author/jane/', user_nicename: 'jane', is_guest: false, avatar_urls: avatarUrls },
 			];
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => [] },
-						currentPostId: 123,
-						entityRecords: {
-							456: { newspack_author_info: restAuthors },
-						},
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => [] },
+					currentPostId: 123,
+					entityRecords: {
+						456: { newspack_author_info: restAuthors },
+					},
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 456, 'post' ) );
@@ -632,16 +620,14 @@ describe( 'useCoAuthors', () => {
 		it( 'should skip avatar fetch for enriched authors with is_guest false', async () => {
 			const restAuthors = [ { id: 1, display_name: 'WP User', author_link: '/author/wp-user/', user_nicename: 'wp-user', is_guest: false } ];
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => [] },
-						currentPostId: 123,
-						entityRecords: {
-							456: { newspack_author_info: restAuthors },
-						},
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => [] },
+					currentPostId: 123,
+					entityRecords: {
+						456: { newspack_author_info: restAuthors },
+					},
+				} )
 			);
 
 			renderHook( () => useCoAuthors( 456, 'post' ) );
@@ -664,16 +650,14 @@ describe( 'useCoAuthors', () => {
 				},
 			];
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => [] },
-						currentPostId: 123,
-						entityRecords: {
-							456: { newspack_author_info: restAuthors },
-						},
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => [] },
+					currentPostId: 123,
+					entityRecords: {
+						456: { newspack_author_info: restAuthors },
+					},
+				} )
 			);
 
 			renderHook( () => useCoAuthors( 456, 'post' ) );
@@ -684,14 +668,12 @@ describe( 'useCoAuthors', () => {
 		} );
 
 		it( 'should return empty authors when post entity is not loaded', () => {
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => [] },
-						currentPostId: 123,
-						entityRecords: {}, // No entity records
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => [] },
+					currentPostId: 123,
+					entityRecords: {}, // No entity records
+				} )
 			);
 
 			const { result } = renderHook( () => useCoAuthors( 456, 'post' ) );
@@ -704,19 +686,17 @@ describe( 'useCoAuthors', () => {
 	describe( 'guest author avatar fetching', () => {
 		const GUEST_AVATAR_URLS = { 24: 'https://example.com/guest-24.jpg', 96: 'https://example.com/guest-96.jpg' };
 
-		const setupWithGuest = capAuthors => {
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => capAuthors },
-						currentPostId: 123,
-					} )
-				)
+		const setupWithGuest = ( capAuthors: TestCapAuthor[] ) => {
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => capAuthors },
+					currentPostId: 123,
+				} )
 			);
 		};
 
 		it( 'should fetch avatar by nicename for guest authors', async () => {
-			apiFetch.mockResolvedValue( { avatar_urls: GUEST_AVATAR_URLS } );
+			apiFetchMock.mockResolvedValue( { avatar_urls: GUEST_AVATAR_URLS } );
 			setupWithGuest( [
 				{ id: 1, display: 'Jane', value: 'jane-doe', userType: 'wpuser' },
 				{ id: 1591, display: 'Guest Writer', value: 'guest-writer', userType: 'guest-author' },
@@ -726,7 +706,7 @@ describe( 'useCoAuthors', () => {
 
 			await waitFor( () => {
 				const guest = result.current.authors.find( a => a.id === 1591 );
-				expect( guest.avatar_urls ).toEqual( GUEST_AVATAR_URLS );
+				expect( guest?.avatar_urls ).toEqual( GUEST_AVATAR_URLS );
 			} );
 
 			expect( apiFetch ).toHaveBeenCalledWith( {
@@ -749,7 +729,7 @@ describe( 'useCoAuthors', () => {
 		} );
 
 		it( 'should not fetch avatars when skip is true', async () => {
-			apiFetch.mockResolvedValue( { avatar_urls: GUEST_AVATAR_URLS } );
+			apiFetchMock.mockResolvedValue( { avatar_urls: GUEST_AVATAR_URLS } );
 			setupWithGuest( [ { id: 1591, display: 'Guest Writer', value: 'guest-writer', userType: 'guest-author' } ] );
 
 			renderHook( () => useCoAuthors( 123, 'post', true ) );
@@ -760,7 +740,7 @@ describe( 'useCoAuthors', () => {
 		} );
 
 		it( 'should not modify WP user authors when merging avatar data', async () => {
-			apiFetch.mockResolvedValue( { avatar_urls: GUEST_AVATAR_URLS } );
+			apiFetchMock.mockResolvedValue( { avatar_urls: GUEST_AVATAR_URLS } );
 			setupWithGuest( [
 				{ id: 1, display: 'Jane', value: 'jane-doe', userType: 'wpuser' },
 				{ id: 1591, display: 'Guest Writer', value: 'guest-writer', userType: 'guest-author' },
@@ -769,12 +749,12 @@ describe( 'useCoAuthors', () => {
 			const { result } = renderHook( () => useCoAuthors( 123 ) );
 
 			await waitFor( () => {
-				expect( result.current.authors.find( a => a.id === 1591 ).avatar_urls ).toEqual( GUEST_AVATAR_URLS );
+				expect( result.current.authors.find( a => a.id === 1591 )?.avatar_urls ).toEqual( GUEST_AVATAR_URLS );
 			} );
 
 			// WP user should not have avatar_urls added by the hook.
 			const wpUser = result.current.authors.find( a => a.id === 1 );
-			expect( wpUser.avatar_urls ).toBeUndefined();
+			expect( wpUser?.avatar_urls ).toBeUndefined();
 		} );
 
 		it( 'should not fetch avatar for guest author without user_nicename', async () => {
@@ -788,7 +768,7 @@ describe( 'useCoAuthors', () => {
 		} );
 
 		it( 'should encode nicename in the REST path', async () => {
-			apiFetch.mockResolvedValue( { avatar_urls: GUEST_AVATAR_URLS } );
+			apiFetchMock.mockResolvedValue( { avatar_urls: GUEST_AVATAR_URLS } );
 			setupWithGuest( [ { id: 1591, display: 'Guest Writer', value: 'name with spaces', userType: 'guest-author' } ] );
 
 			renderHook( () => useCoAuthors( 123 ) );
@@ -801,7 +781,7 @@ describe( 'useCoAuthors', () => {
 		} );
 
 		it( 'should handle failed fetches gracefully', async () => {
-			apiFetch.mockRejectedValue( new Error( 'Not found' ) );
+			apiFetchMock.mockRejectedValue( new Error( 'Not found' ) );
 			setupWithGuest( [ { id: 1591, display: 'Guest Writer', value: 'ghost-author', userType: 'guest-author' } ] );
 
 			const { result } = renderHook( () => useCoAuthors( 123 ) );
@@ -815,22 +795,20 @@ describe( 'useCoAuthors', () => {
 		} );
 
 		it( 'should deduplicate concurrent avatar fetches for the same nicename', async () => {
-			apiFetch.mockResolvedValue( { avatar_urls: GUEST_AVATAR_URLS } );
+			apiFetchMock.mockResolvedValue( { avatar_urls: GUEST_AVATAR_URLS } );
 
 			// Two Query Loop posts sharing the same guest author.
 			const sharedAuthor = { id: 1591, display_name: 'Guest Writer', author_link: '/author/guest-writer/' };
 
-			useSelect.mockImplementation( callback =>
-				callback(
-					createMockSelect( {
-						capStore: { getAuthors: () => [] },
-						currentPostId: 123,
-						entityRecords: {
-							456: { newspack_author_info: [ sharedAuthor ] },
-							789: { newspack_author_info: [ sharedAuthor ] },
-						},
-					} )
-				)
+			mockUseSelectWith(
+				createMockSelect( {
+					capStore: { getAuthors: () => [] },
+					currentPostId: 123,
+					entityRecords: {
+						456: { newspack_author_info: [ sharedAuthor ] },
+						789: { newspack_author_info: [ sharedAuthor ] },
+					},
+				} )
 			);
 
 			// Render two hooks concurrently, simulating two avatar blocks in a Query Loop.
@@ -843,7 +821,7 @@ describe( 'useCoAuthors', () => {
 			} );
 
 			// Only one apiFetch call should have been made despite two concurrent hooks.
-			const guestWriterCalls = apiFetch.mock.calls.filter( ( [ arg ] ) => arg.path === '/coauthors/v1/coauthors/guest-writer' );
+			const guestWriterCalls = apiFetchMock.mock.calls.filter( ( [ arg ] ) => arg.path === '/coauthors/v1/coauthors/guest-writer' );
 			expect( guestWriterCalls ).toHaveLength( 1 );
 		} );
 	} );

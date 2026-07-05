@@ -2,7 +2,26 @@
  * Create useful data from the 'article_view' activity.
  */
 
-export default function setupArticleViewsAggregates( ras ) {
+/**
+ * Per-period view aggregate: a map of period-boundary timestamps to
+ * { post_id: true } maps. JSON round-tripped through the store.
+ */
+type ViewsPerPeriod = Record< string, Record< string, boolean > >;
+
+/**
+ * The slice of the reader-activation client this module consumes. Declared
+ * structurally (rather than the full NewspackReaderActivation) so the unit test
+ * can drive it with a lightweight mock (see mocks/ras). The full client and the
+ * mock both satisfy this shape.
+ */
+type ArticleViewReaderActivation = {
+	store: Pick< NewspackReaderActivationStore, 'register' | 'get' | 'set' >;
+	on: ( event: 'activity', callback: ( event: { detail: NewspackReaderActivity } ) => void ) => void;
+	getActivities: NewspackReaderActivation[ 'getActivities' ];
+	getUniqueActivitiesBy: NewspackReaderActivation[ 'getUniqueActivitiesBy' ];
+};
+
+export default function setupArticleViewsAggregates( ras: ArticleViewReaderActivation ): void {
 	// Merge strategies for rehydration.
 
 	/**
@@ -11,14 +30,14 @@ export default function setupArticleViewsAggregates( ras ) {
 	 * only be equal or greater than either.
 	 */
 	ras.store.register( 'articles_read', {
-		merge: ( server, client ) => Math.max( server || 0, client || 0 ),
+		merge: ( server, client ) => Math.max( ( server as number ) || 0, ( client as number ) || 0 ),
 	} );
 
 	/**
 	 * paywall_hits — cumulative count, same reasoning as articles_read.
 	 */
 	ras.store.register( 'paywall_hits', {
-		merge: ( server, client ) => Math.max( server || 0, client || 0 ),
+		merge: ( server, client ) => Math.max( ( server as number ) || 0, ( client as number ) || 0 ),
 	} );
 
 	/**
@@ -28,9 +47,10 @@ export default function setupArticleViewsAggregates( ras ) {
 	 */
 	ras.store.register( 'article_view_per_week', {
 		merge: ( server, client ) => {
-			const merged = { ...( server || {} ) };
-			for ( const period of Object.keys( client || {} ) ) {
-				merged[ period ] = { ...merged[ period ], ...client[ period ] };
+			const merged: ViewsPerPeriod = { ...( ( server as ViewsPerPeriod | null ) || {} ) };
+			const clientViews = ( client as ViewsPerPeriod | null ) || {};
+			for ( const period of Object.keys( clientViews ) ) {
+				merged[ period ] = { ...merged[ period ], ...clientViews[ period ] };
 			}
 			return merged;
 		},
@@ -42,9 +62,10 @@ export default function setupArticleViewsAggregates( ras ) {
 	 */
 	ras.store.register( 'article_view_per_month', {
 		merge: ( server, client ) => {
-			const merged = { ...( server || {} ) };
-			for ( const period of Object.keys( client || {} ) ) {
-				merged[ period ] = { ...merged[ period ], ...client[ period ] };
+			const merged: ViewsPerPeriod = { ...( ( server as ViewsPerPeriod | null ) || {} ) };
+			const clientViews = ( client as ViewsPerPeriod | null ) || {};
+			for ( const period of Object.keys( clientViews ) ) {
+				merged[ period ] = { ...merged[ period ], ...clientViews[ period ] };
 			}
 			return merged;
 		},
@@ -58,8 +79,8 @@ export default function setupArticleViewsAggregates( ras ) {
 	 */
 	ras.store.register( 'favorite_categories', {
 		merge: ( server, client ) => {
-			const clientCats = client || [];
-			const serverCats = server || [];
+			const clientCats = ( client as number[] | null ) || [];
+			const serverCats = ( server as number[] | null ) || [];
 			const merged = [ ...clientCats ];
 			for ( const cat of serverCats ) {
 				if ( ! merged.includes( cat ) ) {
@@ -81,27 +102,29 @@ export default function setupArticleViewsAggregates( ras ) {
 		date.setSeconds( 0 );
 		date.setMilliseconds( 0 );
 
+		const postId = data.post_id as string | number;
+
 		// Per week.
 		const day = date.getDay();
 		const daysToSaturday = 6 - day;
 		date.setDate( date.getDate() + daysToSaturday );
 		const week = date.getTime();
-		const per_week = ras.store.get( 'article_view_per_week' ) || {};
+		const per_week = ( ras.store.get( 'article_view_per_week' ) as ViewsPerPeriod | null ) || {};
 		if ( ! per_week[ week ] ) {
 			per_week[ week ] = {};
 		}
-		per_week[ week ][ data.post_id ] = true;
+		per_week[ week ][ postId ] = true;
 		ras.store.set( 'article_view_per_week', per_week );
 
 		// Per month.
 		date.setMonth( date.getMonth() + 1 );
 		date.setDate( 1 );
 		const month = date.getTime();
-		const per_month = ras.store.get( 'article_view_per_month' ) || {};
+		const per_month = ( ras.store.get( 'article_view_per_month' ) as ViewsPerPeriod | null ) || {};
 		if ( ! per_month[ month ] ) {
 			per_month[ month ] = {};
 		}
-		per_month[ month ][ data.post_id ] = true;
+		per_month[ month ][ postId ] = true;
 		ras.store.set( 'article_view_per_month', per_month );
 
 		// articles_read — A cumulative count of articles the reader has read.
@@ -110,9 +133,9 @@ export default function setupArticleViewsAggregates( ras ) {
 
 		// favorite_categories — A list of the reader's most-engaged content categories, ordered by frequency.
 		const allActivities = ras.getActivities( 'article_view' );
-		const catCounts = {};
+		const catCounts: Record< string, number > = {};
 		for ( const activity of allActivities ) {
-			const cats = activity.data?.categories || [];
+			const cats = ( activity.data?.categories as Array< string | number > | undefined ) || [];
 			for ( const cat of cats ) {
 				catCounts[ cat ] = ( catCounts[ cat ] || 0 ) + 1;
 			}

@@ -14,7 +14,7 @@ import './style.scss';
 
 export const title = __( 'Correction Item', 'newspack-plugin' );
 
-const EditComponent = ( { context: { postType } } ) => {
+const EditComponent = ( { context: { postType } }: { context: { postType: string } } ) => {
 	if ( 'newspack_correction' !== postType ) {
 		return (
 			<Placeholder
@@ -28,7 +28,7 @@ const EditComponent = ( { context: { postType } } ) => {
 	return (
 		<>
 			<div className="correction__item">
-				<strong className="correction__item-title">{ __( 'Correction Type, Date, and Time: ', 'newspack-plugin' ) }</strong>
+				<strong className="correction__item-title">{ __( 'Correction Type, Date, and Time:', 'newspack-plugin' ) }</strong>
 				<span className="correction__item-content">
 					{ __(
 						'This is where the content will appear, providing details about the update, whether correcting an error or offering additional context.',

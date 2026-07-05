@@ -2,10 +2,10 @@
  * Trap focus in the modal when opened.
  * See: https://uxdesign.cc/how-to-trap-focus-inside-modal-to-make-it-ada-compliant-6a50f9a70700
  */
-export function trapFocus( currentModal ) {
+export function trapFocus( currentModal: HTMLElement ) {
 	const focusableEls = 'button, [href], input:not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"])';
-	const visibleFocusableEls = [];
-	const focusableElsAll = currentModal.querySelectorAll( focusableEls );
+	const visibleFocusableEls: HTMLElement[] = [];
+	const focusableElsAll = currentModal.querySelectorAll< HTMLElement >( focusableEls );
 
 	// Make sure we have elements to focus on before continuing.
 	if ( 0 === focusableElsAll.length ) {

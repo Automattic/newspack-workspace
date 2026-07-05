@@ -2,13 +2,45 @@ import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import { decodeEntities } from '@wordpress/html-entities';
 
+/**
+ * Internal dependencies
+ */
+import type { TokenValue } from '../../../../packages/components/src/autocomplete-tokenfield';
+
+/**
+ * A value/label option for the AutocompleteTokenField.
+ */
+type SuggestionOption = {
+	value: number;
+	label: string;
+};
+
+/**
+ * A newspack_collection_category term as returned by the REST API.
+ */
+type CategoryRecord = {
+	id: number;
+	name: string;
+	parent: number;
+};
+
+/**
+ * A newspack_collection post as returned by the REST API (fields subset).
+ */
+type CollectionRecord = {
+	id: number;
+	title: {
+		rendered: string;
+	};
+};
+
 export const ENDPOINTS = {
 	categories: '/wp/v2/newspack_collection_category',
 	collections: '/wp/v2/newspack_collection',
 };
 
-export const fetchCategorySuggestions = search => {
-	return apiFetch( {
+export const fetchCategorySuggestions = ( search: string ): Promise< SuggestionOption[] > => {
+	return apiFetch< CategoryRecord[] >( {
 		path: addQueryArgs( ENDPOINTS.categories, {
 			search,
 			per_page: 20,
@@ -20,7 +52,7 @@ export const fetchCategorySuggestions = search => {
 		Promise.all(
 			categories.map( category => {
 				if ( category.parent > 0 ) {
-					return apiFetch( {
+					return apiFetch< Pick< CategoryRecord, 'name' > >( {
 						path: addQueryArgs( `${ ENDPOINTS.categories }/${ category.parent }`, {
 							_fields: 'name',
 						} ),
@@ -38,12 +70,12 @@ export const fetchCategorySuggestions = search => {
 	);
 };
 
-export const fetchSavedCategories = categoryIDs => {
+export const fetchSavedCategories = ( categoryIDs: TokenValue[] ): Promise< SuggestionOption[] > => {
 	if ( ! categoryIDs.length ) {
 		return Promise.resolve( [] );
 	}
 
-	return apiFetch( {
+	return apiFetch< CategoryRecord[] >( {
 		path: addQueryArgs( ENDPOINTS.categories, {
 			per_page: 100,
 			_fields: 'id,name',
@@ -56,9 +88,9 @@ export const fetchSavedCategories = categoryIDs => {
 		} ) );
 
 		categoryIDs.forEach( catID => {
-			if ( ! allCats.find( cat => cat.value === parseInt( catID ) ) ) {
+			if ( ! allCats.find( cat => cat.value === parseInt( String( catID ) ) ) ) {
 				allCats.push( {
-					value: parseInt( catID ),
+					value: parseInt( String( catID ) ),
 					label: `(Deleted category - ID: ${ catID })`,
 				} );
 			}
@@ -68,8 +100,8 @@ export const fetchSavedCategories = categoryIDs => {
 	} );
 };
 
-export const fetchCollectionSuggestions = search => {
-	return apiFetch( {
+export const fetchCollectionSuggestions = ( search: string ): Promise< SuggestionOption[] > => {
+	return apiFetch< CollectionRecord[] >( {
 		path: addQueryArgs( ENDPOINTS.collections, {
 			search,
 			per_page: 20,
@@ -86,12 +118,12 @@ export const fetchCollectionSuggestions = search => {
 	);
 };
 
-export const fetchSavedCollections = collectionIDs => {
+export const fetchSavedCollections = ( collectionIDs: TokenValue[] ): Promise< SuggestionOption[] > => {
 	if ( ! collectionIDs.length ) {
 		return Promise.resolve( [] );
 	}
 
-	return apiFetch( {
+	return apiFetch< CollectionRecord[] >( {
 		path: addQueryArgs( ENDPOINTS.collections, {
 			per_page: 100,
 			_fields: 'id,title',
@@ -105,9 +137,9 @@ export const fetchSavedCollections = collectionIDs => {
 		} ) );
 
 		collectionIDs.forEach( collectionID => {
-			if ( ! allCollections.find( collection => collection.value === parseInt( collectionID ) ) ) {
+			if ( ! allCollections.find( collection => collection.value === parseInt( String( collectionID ) ) ) ) {
 				allCollections.push( {
-					value: parseInt( collectionID ),
+					value: parseInt( String( collectionID ) ),
 					label: `(Deleted collection - ID: ${ collectionID })`,
 				} );
 			}

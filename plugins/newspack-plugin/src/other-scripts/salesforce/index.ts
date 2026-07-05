@@ -7,7 +7,9 @@ import { __ } from '@wordpress/i18n';
 
 ( function () {
 	const statusMarker = document.getElementById( 'newspack-salesforce-sync-status' );
-	const statusMarkerLabel = statusMarker.querySelector( 'span' );
+	// Non-null assertions preserve the original behavior: this line runs before
+	// the `if ( statusMarker )` guard below, so a missing marker throws here.
+	const statusMarkerLabel = statusMarker!.querySelector( 'span' )!;
 	const { base_url: baseUrl, order_id: orderId, salesforce_url: salesforceUrl, nonce } = newspack_salesforce_data;
 
 	if ( statusMarker ) {
@@ -17,7 +19,7 @@ import { __ } from '@wordpress/i18n';
 			},
 		} )
 			.then( response => response.json() )
-			.then( opportunityId => {
+			.then( ( opportunityId: unknown ) => {
 				if ( false === opportunityId ) {
 					statusMarker.classList.add( 'status-failed' );
 					statusMarkerLabel.textContent = __( 'Not synced', 'newspack-plugin' );
@@ -34,9 +36,10 @@ import { __ } from '@wordpress/i18n';
 					throw __( 'Error fetching status', 'newspack-plugin' );
 				}
 			} )
-			.catch( e => {
+			.catch( ( e: unknown ) => {
 				statusMarker.classList.add( 'status-failed' );
-				statusMarkerLabel.textContent = e || __( 'Error fetching status', 'newspack-plugin' );
+				// String() replicates the DOMString coercion textContent applies to non-string values.
+				statusMarkerLabel.textContent = String( e || __( 'Error fetching status', 'newspack-plugin' ) );
 			} );
 	}
 } )();

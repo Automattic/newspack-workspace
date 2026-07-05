@@ -1,4 +1,3 @@
-/* globals reader_registration_block_config, newspack_ras_config */
 /**
  * Internal dependencies
  */
@@ -9,13 +8,30 @@ import { openVerificationModal } from '../../reader-activation-auth/verification
 import { maybeConfirmRegistration } from '../../reader-activation-auth/confirmation-modal';
 import { openNewslettersSignupModal } from '../../reader-activation-newsletters/newsletters-modal';
 
+/**
+ * Shape of the `data` member of the registration endpoint's JSON response.
+ */
+type RegistrationResponseData = {
+	existing_user?: boolean;
+	authenticated?: boolean;
+	action?: string;
+	email?: string;
+	verified?: boolean | null;
+	sso?: boolean;
+	verification_nonce?: string;
+	metadata?: {
+		login_method?: string;
+		registration_method?: string;
+	};
+};
+
 window.newspackRAS = window.newspackRAS || [];
 
 window.newspackRAS.push( function ( readerActivation ) {
 	/**
 	 * Send verification OTP via the dedicated AJAX endpoint.
 	 *
-	 * @return {Promise} Resolves on success, rejects on failure.
+	 * @return Resolves on success, rejects on failure.
 	 */
 	const sendVerificationOTP = () => {
 		const body = new FormData();
@@ -34,7 +50,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 		} );
 	};
 
-	const openAuth = ( initialState = 'otp', overrides = {} ) => {
+	const openAuth = ( initialState = 'otp', overrides: Record< string, unknown > = {} ) => {
 		openAuthModal( {
 			skipAuthenticatedCheck: true,
 			skipNewslettersSignup: true,
@@ -80,7 +96,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 			box => ! box.querySelector( '.newspack-ui__modal-container' )
 		);
 		inlineVerificationBoxes.forEach( box => {
-			const sendOtpButton = box.querySelector( '[data-send-otp]' );
+			const sendOtpButton = box.querySelector< HTMLButtonElement >( '[data-send-otp]' );
 			if ( ! sendOtpButton ) {
 				return;
 			}
@@ -92,7 +108,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 					} )
 					.catch( () => {
 						sendOtpButton.disabled = false;
-						sendOtpButton.textContent = sendOtpButton.textContent.trim();
+						sendOtpButton.textContent = ( sendOtpButton.textContent || '' ).trim();
 						const errorP = box.querySelector( 'p:not(:has(button))' );
 						if ( errorP ) {
 							errorP.textContent = 'Something went wrong. Please try again.';
@@ -111,8 +127,8 @@ window.newspackRAS.push( function ( readerActivation ) {
 
 			let body = new FormData( form );
 			let flowCompleted = false; // Guard to prevent re-running endLoginFlow
-			const messageElement = container.querySelector( '.newspack-registration__response' );
-			const submitElement = form.querySelector( 'button[type="submit"]' );
+			const messageElement = container.querySelector( '.newspack-registration__response' ) as HTMLElement;
+			const submitElement = form.querySelector( 'button[type="submit"]' ) as HTMLButtonElement;
 			const spinner = document.createElement( 'span' );
 			spinner.classList.add( 'spinner' );
 
@@ -124,13 +140,13 @@ window.newspackRAS.push( function ( readerActivation ) {
 				container.classList.add( 'newspack-registration--in-progress' );
 			};
 
-			form.endLoginFlow = ( message = null, status = 500, data = null ) => {
+			form.endLoginFlow = ( message: string | null = null, status = 500, data: RegistrationResponseData | null = null ) => {
 				// Prevent re-running after successful completion
 				if ( flowCompleted ) {
 					return;
 				}
 
-				let messageNode;
+				let messageNode: HTMLParagraphElement | undefined;
 
 				// For existing users, open the auth modal with the appropriate state
 				if ( data?.existing_user && ! data?.authenticated && data?.action ) {
@@ -205,7 +221,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 					flowCompleted = true;
 					if ( ! needsVerification && ! data?.existing_user ) {
 						form.remove();
-						successElement.classList.remove( 'newspack-registration--hidden' );
+						successElement!.classList.remove( 'newspack-registration--hidden' );
 					}
 					if ( data?.email ) {
 						body = new FormData( form );
@@ -226,7 +242,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 							} );
 						}
 						if ( data.authenticated && ! needsVerification ) {
-							const baseActivity = { email: data.email };
+							const baseActivity: Record< string, unknown > = { email: data.email };
 							const lists = body.getAll( 'lists[]' );
 							if ( body.has( 'newspack_popup_id' ) ) {
 								baseActivity.newspack_popup_id = body.get( 'newspack_popup_id' );
@@ -301,7 +317,7 @@ window.newspackRAS.push( function ( readerActivation ) {
 				// "You're about to create an account for X" confirmation step. Cancel reverts the
 				// in-progress UI state so the reader can edit the email and try again.
 				maybeConfirmRegistration( {
-					email: body.get( 'npe' ),
+					email: body.get( 'npe' ) as string,
 					onProceed: submitForm,
 					onCancel: () => {
 						flowCompleted = false;
