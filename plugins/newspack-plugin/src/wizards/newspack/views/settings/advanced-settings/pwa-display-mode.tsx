@@ -44,7 +44,6 @@ export default function PwaDisplayMode( { data, isFetching, update }: PwaDisplay
 						'This setting controls how your site appears when users install it as a Progressive Web App on their devices.',
 						'newspack-plugin'
 					) }
-					isInfo
 				/>
 			</Grid>
 		</Grid>

@@ -161,7 +161,7 @@ export const Onboarding = ( { settings, status, error, updateSettings, startOAut
 
 	return (
 		<>
-			{ error && <Notice noticeText={ error } isError onClose={ () => setError( null ) } /> }
+			{ error && <Notice noticeText={ error } isError /> }
 
 			{ /* Step 1: API Credentials - Only shown in manual mode */ }
 			{ isManualMode && currentStep === STEPS.manual.CREDENTIALS && (

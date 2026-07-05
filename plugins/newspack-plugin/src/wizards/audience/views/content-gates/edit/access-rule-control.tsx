@@ -85,7 +85,7 @@ export default function AccessRuleControl( { slug, value, onChange }: GateRuleCo
 				value={ options
 					.filter( o => ( value as Array< string | number > ).some( v => String( v ) === String( o.value ) ) )
 					.map( o => o.label ) }
-				onChange={ ( items: string[] ) => onChange( options?.filter( o => items.includes( o.label ) ).map( o => o.value ) ?? [] ) }
+				onChange={ items => onChange( options?.filter( o => items.includes( o.label ) ).map( o => o.value ) ?? [] ) }
 				suggestions={ options.map( o => o.label ) }
 				__experimentalExpandOnFocus
 				__next40pxDefaultSize

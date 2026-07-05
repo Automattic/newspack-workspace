@@ -99,9 +99,8 @@ declare global {
 		newspack_aux_data: {
 			is_debug_mode: boolean;
 		};
-		newspack_urls: {
-			site: string;
-		};
+		// newspack_urls is declared by newspack-components (packages/components/src/footer),
+		// which owns the full shape of that payload.
 	}
 }
 

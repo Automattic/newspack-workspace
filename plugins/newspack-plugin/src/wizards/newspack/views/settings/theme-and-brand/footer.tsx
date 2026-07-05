@@ -57,7 +57,7 @@ export default function Footer( { themeMods, onUpdate }: { themeMods: ThemeMods;
 								themeMods.footer_color === 'custom' && themeMods.footer_color_hex ? themeMods.footer_color_hex : 'transparent',
 						} }
 						image={ themeMods.newspack_footer_logo }
-						onChange={ ( newspack_footer_logo: string ) => updateThemeMods( { newspack_footer_logo } ) }
+						onChange={ newspack_footer_logo => updateThemeMods( { newspack_footer_logo } ) }
 					/>
 					{ themeMods.newspack_footer_logo && (
 						<SelectControl

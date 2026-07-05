@@ -52,7 +52,7 @@ export default function Brand( {
 	fetchLogoAttachment: ( brandId: number, logoId: number ) => void;
 	errorMessage?: string | null;
 } ) {
-	const { brandId = '0' } = useParams();
+	const { brandId = '0' } = useParams< { brandId?: string } >();
 	const selectedBrand = brands.find( ( { id } ) => id === Number( brandId ) );
 
 	const [ brand, updateBrand ] = hooks.useObjectState< Brand >( {
@@ -163,7 +163,7 @@ export default function Brand( {
 		} );
 	}
 
-	const baseUrl = `${ window.newspack_urls.site }/${ brand.meta._custom_url === 'no' ? 'brand/' : '' }`;
+	const baseUrl = `${ window.newspack_urls?.site }/${ brand.meta._custom_url === 'no' ? 'brand/' : '' }`;
 
 	function findSelectedMenu( location: string ) {
 		return brand.meta._menus.find( menu => menu.location === location )?.menu || 0;
@@ -192,9 +192,9 @@ export default function Brand( {
 						buttonLabel={ isFetchingLogo() ? __( 'Fetching logo…', 'newspack-plugin' ) : undefined }
 						label={ __( 'Logo', 'newspack-plugin' ) }
 						image={ isFetchingLogo() ? undefined : brand.meta._logo }
-						onChange={ ( logoId: number ) =>
+						onChange={ logo =>
 							updateBrand( {
-								meta: { ...brand.meta, _logo: logoId },
+								meta: { ...brand.meta, _logo: logo },
 							} )
 						}
 					/>

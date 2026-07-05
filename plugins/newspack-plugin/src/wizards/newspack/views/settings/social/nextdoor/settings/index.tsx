@@ -77,7 +77,7 @@ export const Settings = ( { settings, status, error, updateSettings, disconnect,
 
 	return (
 		<>
-			{ error && <Notice noticeText={ error } isError onClose={ () => setError( null ) } /> }
+			{ error && <Notice noticeText={ error } isError /> }
 			<Card>
 				<CardHeader>
 					<Heading level={ 4 }>{ __( 'Connection Information', 'newspack-plugin' ) }</Heading>
