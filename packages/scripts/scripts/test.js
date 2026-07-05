@@ -18,7 +18,7 @@ args.push( 'test-unit-js' );
 const JEST_CONFIG = {
 	rootDir: modules.rootDirectory,
 	setupFilesAfterEnv: [ path.resolve( __dirname, 'utils/jestSetup.js' ) ],
-	testMatch: [ '<rootDir>/**/*test.js?(x)' ],
+	testMatch: [ '<rootDir>/**/*test.js?(x)', '<rootDir>/**/*test.ts?(x)' ],
 	transform: {
 		'^.+\\.(j|t)sx?$': path.resolve( __dirname, 'utils/babelJestTransformer.js' ),
 	},
