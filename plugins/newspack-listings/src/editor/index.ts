@@ -39,7 +39,8 @@ if ( isListing() ) {
 		// Register plugin editor settings.
 		registerPlugin( 'newspack-listings-editor', {
 			render: Sidebar,
-			icon: null,
+			// An explicit falsy icon overrides registerPlugin's default plugins icon via object spread.
+			icon: undefined,
 		} );
 
 		// Register featured listing sidebar.
@@ -47,7 +48,8 @@ if ( isListing() ) {
 		if ( ! isListingCustomer ) {
 			registerPlugin( 'newspack-listings-featured', {
 				render: FeaturedListings,
-				icon: null,
+				// An explicit falsy icon overrides registerPlugin's default plugins icon via object spread.
+				icon: undefined,
 			} );
 		}
 	}
@@ -99,16 +101,17 @@ if ( isListingCustomer ) {
 				const observer = new MutationObserver( mutationsList => {
 					for ( const mutation of mutationsList ) {
 						if ( 'childList' === mutation.type ) {
-							if ( mutation.target.classList.contains( 'components-panel' ) ) {
+							// Assumed to be an Element for childList mutations on this DOM subtree.
+							if ( ( mutation.target as Element ).classList.contains( 'components-panel' ) ) {
 								const sidebar = editor.querySelector( '.components-panel' );
 								if ( sidebar ) {
-									const panels = Array.from( sidebar.querySelectorAll( '.components-panel__body' ) );
+									const panels = Array.from( sidebar.querySelectorAll< HTMLElement >( '.components-panel__body' ) );
 
 									panels.forEach( panel => {
 										const title = panel.querySelector( '.components-panel__body-title' );
 
 										// No other way to identify a particular sidebar panel, so this will only work for English-language sites.
-										if ( 'Mapbox Access Token' === title.textContent ) {
+										if ( 'Mapbox Access Token' === title!.textContent ) {
 											panel.style.display = 'none';
 										}
 									} );

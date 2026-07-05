@@ -11,18 +11,38 @@ import { PluginDocumentSettingPanel } from '@wordpress/editor';
 import { useEffect, useState } from '@wordpress/element';
 import { addQueryArgs } from '@wordpress/url';
 
+import type { ComponentType } from 'react';
+
+/**
+ * Post meta read/written by this panel.
+ */
+interface FeaturedListingsMeta {
+	newspack_listings_featured?: boolean;
+	newspack_listings_featured_expires?: string;
+	[ key: string ]: unknown;
+}
+
+interface FeaturedListingsComponentProps {
+	createNotice: ( status: string, message: string, options?: Record< string, unknown > ) => void;
+	isSavingPost: boolean;
+	meta: FeaturedListingsMeta;
+	postId: number;
+	setIsDirty: () => void;
+	updateMetaValue: ( key: string, value: unknown ) => void;
+}
+
 // Priority can be an integer between 0 and 9.
-const validateResponse = ( response = 0 ) => {
+const validateResponse = ( response = 0 ): number | false => {
 	if ( isNaN( response ) || 0 > response || 9 < response ) {
 		return false;
 	}
 
-	return parseInt( response );
+	return parseInt( String( response ) );
 };
 
-const FeaturedListingsComponent = ( { createNotice, isSavingPost, meta, postId, setIsDirty, updateMetaValue } ) => {
-	const [ error, setError ] = useState( null );
-	const [ priority, setPriority ] = useState( null );
+const FeaturedListingsComponent = ( { createNotice, isSavingPost, meta, postId, setIsDirty, updateMetaValue }: FeaturedListingsComponentProps ) => {
+	const [ error, setError ] = useState< string | null >( null );
+	const [ priority, setPriority ] = useState< number | null | undefined >( null );
 	const { newspack_listings_featured, newspack_listings_featured_expires } = meta;
 
 	// Show error messages thrown by API requests.
@@ -39,7 +59,7 @@ const FeaturedListingsComponent = ( { createNotice, isSavingPost, meta, postId, 
 	useEffect( () => {
 		if ( isSavingPost ) {
 			const priorityToSet = newspack_listings_featured ? priority : 0;
-			apiFetch( {
+			apiFetch< unknown >( {
 				path: addQueryArgs( '/newspack-listings/v1/priority', {
 					post_id: postId,
 					priority: priorityToSet,
@@ -53,7 +73,7 @@ const FeaturedListingsComponent = ( { createNotice, isSavingPost, meta, postId, 
 						);
 					}
 				} )
-				.catch( e => {
+				.catch( ( e: { message?: string } ) => {
 					setError(
 						e?.message ||
 							__( 'There was an error updating the feature priority for this post. Please try saving again.', 'newspack-listings' )
@@ -67,7 +87,7 @@ const FeaturedListingsComponent = ( { createNotice, isSavingPost, meta, postId, 
 		setError( null );
 
 		if ( newspack_listings_featured && ! priority ) {
-			apiFetch( {
+			apiFetch< number >( {
 				path: addQueryArgs( '/newspack-listings/v1/priority', {
 					post_id: postId,
 				} ),
@@ -78,7 +98,7 @@ const FeaturedListingsComponent = ( { createNotice, isSavingPost, meta, postId, 
 						setPriority( response );
 					}
 				} )
-				.catch( e => {
+				.catch( ( e: { message?: string } ) => {
 					setError(
 						e?.message || __( 'There was an error fetching the priority for this post. Please refresh the editor.', 'newspack-listings' )
 					);
@@ -147,25 +167,35 @@ const FeaturedListingsComponent = ( { createNotice, isSavingPost, meta, postId, 
 	);
 };
 
-const mapStateToProps = select => {
-	const { getCurrentPostId, getEditedPostAttribute, isAutosavingPost, isSavingPost } = select( 'core/editor' );
+const mapStateToProps = ( select: ( store: string ) => unknown ) => {
+	const { getCurrentPostId, getEditedPostAttribute, isAutosavingPost, isSavingPost } = select( 'core/editor' ) as {
+		getCurrentPostId: () => number;
+		getEditedPostAttribute: ( attribute: string ) => unknown;
+		isAutosavingPost: () => boolean;
+		isSavingPost: () => boolean;
+	};
 
 	return {
 		isSavingPost: isSavingPost() && ! isAutosavingPost(),
-		meta: getEditedPostAttribute( 'meta' ),
+		meta: getEditedPostAttribute( 'meta' ) as FeaturedListingsMeta,
 		postId: getCurrentPostId(),
 	};
 };
 
-const mapDispatchToProps = dispatch => {
-	const { editPost } = dispatch( 'core/editor' );
-	const { createNotice } = dispatch( 'core/notices' );
+const mapDispatchToProps = ( dispatch: ( store: string ) => unknown ) => {
+	const { editPost } = dispatch( 'core/editor' ) as { editPost: ( edits: Record< string, unknown > ) => void };
+	const { createNotice } = dispatch( 'core/notices' ) as {
+		createNotice: ( status: string, message: string, options?: Record< string, unknown > ) => void;
+	};
 
 	return {
-		updateMetaValue: ( key, value ) => editPost( { meta: { [ key ]: value } } ),
+		updateMetaValue: ( key: string, value: unknown ) => editPost( { meta: { [ key ]: value } } ),
 		setIsDirty: () => editPost( { editorShouldAllowSave: true } ),
 		createNotice,
-	};
+	} as Record< string, ( ...args: unknown[] ) => unknown >;
 };
 
-export const FeaturedListings = compose( [ withSelect( mapStateToProps ), withDispatch( mapDispatchToProps ) ] )( FeaturedListingsComponent );
+export const FeaturedListings = compose(
+	withSelect( mapStateToProps ),
+	withDispatch( mapDispatchToProps )
+)( FeaturedListingsComponent ) as ComponentType;

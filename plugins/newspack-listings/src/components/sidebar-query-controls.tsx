@@ -14,17 +14,53 @@ import { decodeEntities } from '@wordpress/html-entities';
 import { AutocompleteTokenField } from 'newspack-components';
 import './autocomplete-tokenfield.scss';
 
-class QueryControls extends Component {
+type Suggestion = { value: number; label: string };
+
+/**
+ * The real AutocompleteTokenField's onChange can hand back `undefined` entries
+ * for tokens whose label no longer matches a known value (e.g. deleted terms) --
+ * see `getValuesForLabels` in packages/components/src/autocomplete-tokenfield.
+ */
+type TokenValue = string | number | undefined;
+
+type QueryOptions = {
+	type: string | null;
+	authors: TokenValue[];
+	categories: TokenValue[];
+	categoryExclusions: TokenValue[];
+	tags: TokenValue[];
+	tagExclusions: TokenValue[];
+	// RangeControl's onChange can hand back `undefined` (e.g. on reset), and that
+	// value is stored into this field unmodified, matching the untyped original.
+	maxItems: number | undefined;
+	sortBy: string;
+	order: string;
+};
+
+type QueryControlsProps = {
+	disabled?: boolean;
+	loadMoreText?: string;
+	queryOptions?: QueryOptions;
+	setAttributes?: ( attrs: Partial< { queryOptions: QueryOptions; showLoadMore: boolean; loadMoreText: string } > ) => void;
+	showAuthor?: boolean;
+	showLoadMore?: boolean;
+};
+
+type QueryControlsState = {
+	showAdvancedFilters: boolean;
+};
+
+class QueryControls extends Component< QueryControlsProps, QueryControlsState > {
 	state = {
 		showAdvancedFilters: false,
 	};
 
-	fetchAuthorSuggestions = search => {
+	fetchAuthorSuggestions = ( search: string ): Promise< Suggestion[] > => {
 		if ( ! search ) {
 			return new Promise( resolve => resolve( [] ) );
 		}
 
-		return apiFetch( {
+		return apiFetch< { id: number; name: string }[] >( {
 			path: addQueryArgs( '/wp/v2/users', {
 				search,
 				per_page: 20,
@@ -37,8 +73,8 @@ class QueryControls extends Component {
 			} ) );
 		} );
 	};
-	fetchSavedAuthors = userIDs => {
-		return apiFetch( {
+	fetchSavedAuthors = ( userIDs: TokenValue[] ): Promise< Suggestion[] > => {
+		return apiFetch< { id: number; name: string }[] >( {
 			path: addQueryArgs( '/wp/v2/users', {
 				per_page: 100,
 				include: userIDs.join( ',' ),
@@ -52,12 +88,12 @@ class QueryControls extends Component {
 		} );
 	};
 
-	fetchCategorySuggestions = search => {
+	fetchCategorySuggestions = ( search: string ): Promise< Suggestion[] > => {
 		if ( ! search ) {
 			return new Promise( resolve => resolve( [] ) );
 		}
 
-		return apiFetch( {
+		return apiFetch< { id: number; name: string }[] >( {
 			path: addQueryArgs( '/newspack-listings/v1/terms', {
 				search,
 				per_page: 20,
@@ -73,8 +109,8 @@ class QueryControls extends Component {
 			} ) );
 		} );
 	};
-	fetchSavedCategories = categoryIDs => {
-		return apiFetch( {
+	fetchSavedCategories = ( categoryIDs: TokenValue[] ): Promise< Suggestion[] > => {
+		return apiFetch< { id: number; name: string }[] >( {
 			path: addQueryArgs( '/newspack-listings/v1/terms', {
 				per_page: 100,
 				_fields: 'id,name',
@@ -89,12 +125,12 @@ class QueryControls extends Component {
 		} );
 	};
 
-	fetchTagSuggestions = search => {
+	fetchTagSuggestions = ( search: string ): Promise< Suggestion[] > => {
 		if ( ! search ) {
 			return new Promise( resolve => resolve( [] ) );
 		}
 
-		return apiFetch( {
+		return apiFetch< { id: number; name: string }[] >( {
 			path: addQueryArgs( '/newspack-listings/v1/terms', {
 				search,
 				per_page: 20,
@@ -110,8 +146,8 @@ class QueryControls extends Component {
 			} ) );
 		} );
 	};
-	fetchSavedTags = tagIDs => {
-		return apiFetch( {
+	fetchSavedTags = ( tagIDs: TokenValue[] ): Promise< Suggestion[] > => {
+		return apiFetch< { id: number; name: string }[] >( {
 			path: addQueryArgs( '/newspack-listings/v1/terms', {
 				per_page: 100,
 				_fields: 'id,name',
@@ -137,7 +173,7 @@ class QueryControls extends Component {
 		const { showAdvancedFilters } = this.state;
 		const { post_types } = window.newspack_listings_data;
 		const isEventList = post_types.event.name === type;
-		const sortOptions = [
+		const sortOptions: { label: string; value: string }[] = [
 			{ label: __( 'Publish Date', 'newspack-listings' ), value: 'date' },
 			{ label: __( 'Title', 'newspack-listings' ), value: 'title' },
 		];
@@ -161,12 +197,18 @@ class QueryControls extends Component {
 		}
 
 		return [
+			// FLAG (pre-existing, not fixed here): `BaseControl` is `@wordpress/components`'
+			// `QueryControls` widget, whose props (numberOfItems, order, orderBy, etc.) don't
+			// overlap with this component's own props being spread in here (queryOptions,
+			// setAttributes, etc.), so this element likely renders nothing useful.
 			<BaseControl disabled={ disabled } key="queryControls" { ...this.props } />,
 			<SelectControl
 				key="type"
 				disabled={ disabled }
 				label={ __( 'Listing Type', 'newspack-listings' ) }
-				value={ type }
+				// SelectControl's `value` prop type doesn't include `null`, but `type` legitimately is
+				// `null` before a listing type has been chosen; cast at this rendering boundary only.
+				value={ type as string | undefined }
 				onChange={ value => setAttributes( { queryOptions: { ...queryOptions, type: value } } ) }
 				options={ [
 					{ label: __( 'Any', 'newspack-listings' ), value: 'any' },
@@ -230,7 +272,9 @@ class QueryControls extends Component {
 					key="loadMoreText"
 					disabled={ disabled }
 					label={ __( '"Load more" button text', 'newspack-listings' ) }
-					value={ loadMoreText }
+					// TextControl's `value` prop doesn't accept `undefined`, but this component's own
+					// `loadMoreText` prop is optional; cast at this rendering boundary only.
+					value={ loadMoreText as string }
 					onChange={ value => setAttributes( { loadMoreText: value } ) }
 				/>
 			),

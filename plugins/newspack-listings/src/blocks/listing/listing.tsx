@@ -13,7 +13,83 @@ import { decodeEntities } from '@wordpress/html-entities';
  */
 import { getTermClasses } from '../../editor/utils';
 
-export const Listing = ( { attributes, error, post } ) => {
+/**
+ * A single listing's location, as read from the `newspack_listings_locations`
+ * post meta (see `includes/class-api.php`'s listings REST endpoint).
+ */
+export type ListingLocation = {
+	id: string | number;
+	coordinates: { latitude: number; longitude: number };
+};
+
+/**
+ * Attributes owned by the individual `newspack-listings/{event,generic,marketplace,place}`
+ * child blocks (see `blocks/listing/block.json`), merged onto the parent
+ * Curated List's display attributes at registration time.
+ */
+export type ListingBlockAttributes = {
+	className: string;
+	listing: string;
+	locations: ListingLocation[];
+};
+
+export type ListingSponsor = {
+	sponsor_id: string | number;
+	sponsor_name: string;
+	sponsor_flag: string;
+	sponsor_byline: string;
+	sponsor_logo: {
+		src: string;
+		img_width: number;
+		img_height: number;
+	};
+};
+
+/**
+ * A listing post as returned by the `/newspack-listings/v1/listings` REST
+ * endpoint (see `includes/class-api.php`), for the
+ * `id,title,author,category,tags,excerpt,media,meta,type,sponsors,classes` fields
+ * requested by this unit's editors.
+ */
+export type ListingPost = {
+	id: number;
+	title: string;
+	author?: string;
+	category?: { name: string; slug: string }[];
+	tags?: { name: string; slug: string }[];
+	excerpt?: string;
+	media?: { image?: string; caption?: string };
+	sponsors?: ListingSponsor[] | false;
+	meta?: {
+		newspack_listings_locations?: ListingLocation[];
+		[ key: string ]: unknown;
+	};
+	type?: string;
+	classes?: string[];
+};
+
+/**
+ * The subset of the parent Curated List block's attributes (see
+ * `blocks/curated-list/block.json`) that control this component's own
+ * rendering. Declared as its own shape (rather than importing the parent's
+ * full attributes type) to keep this leaf component decoupled.
+ */
+export type ListingDisplayAttributes = {
+	showAuthor: boolean;
+	showCategory: boolean;
+	showTags: boolean;
+	showExcerpt: boolean;
+	showImage: boolean;
+	showCaption: boolean;
+};
+
+type ListingProps = {
+	attributes: ListingDisplayAttributes;
+	error?: string | null;
+	post: ListingPost;
+};
+
+export const Listing = ( { attributes, error, post }: ListingProps ) => {
 	// Parent Curated List block attributes.
 	const { showAuthor, showCategory, showTags, showExcerpt, showImage, showCaption } = attributes;
 	const { author = '', category = [], excerpt = '', media = {}, sponsors = false, tags = [], title = '' } = post;

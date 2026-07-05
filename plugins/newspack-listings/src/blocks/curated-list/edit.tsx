@@ -12,6 +12,7 @@ import {
 	useBlockProps,
 } from '@wordpress/block-editor';
 import { createBlock } from '@wordpress/blocks';
+import type { Block } from '@wordpress/blocks';
 import {
 	BaseControl,
 	Button,
@@ -27,22 +28,32 @@ import {
 } from '@wordpress/components';
 import { compose } from '@wordpress/compose';
 import { withDispatch, withSelect } from '@wordpress/data';
+import type { DataRegistry } from '@wordpress/data';
 import { Fragment, useEffect, useState } from '@wordpress/element';
 import { addQueryArgs } from '@wordpress/url';
 import { Icon, loop, postList } from '@wordpress/icons';
+import type { ComponentType } from 'react';
 
 /**
  * Internal dependencies
  */
-import { Listing } from '../listing/listing';
+import { Listing, type ListingPost, type ListingLocation, type ListingBlockAttributes } from '../listing/listing';
 import { SidebarQueryControls } from '../../components';
 import { List } from '../../svg';
 import { getContrastRatio, getCuratedListClasses, useDidMount } from '../../editor/utils';
 
 /**
+ * `Button`'s types have dropped the legacy `isLarge` prop in this package
+ * version (only `isSmall` remains) - re-type at this boundary to preserve the
+ * existing call below without altering runtime behavior, matching the
+ * `Toolbar` re-typing pattern in newspack-blocks' `blocks/iframe/edit.tsx`.
+ */
+const LegacyButton = Button as import('react').FC< import('react').ComponentProps< typeof Button > & { isLarge?: boolean } >;
+
+/**
  * Debounced fetchPosts function outside of component scope.
  */
-let debouncedFetchPosts;
+let debouncedFetchPosts: ReturnType< typeof setTimeout >;
 
 /**
  * Absolute maximum number of listing posts to fetch in the editor.
@@ -51,6 +62,88 @@ let debouncedFetchPosts;
  * fetch a massive number of posts if the query options are too broad.
  */
 const MAX_EDITOR_ITEMS = 100;
+
+/**
+ * `authors`/`categories`/`tags`/`categoryExclusions`/`tagExclusions` allow
+ * `undefined` entries, and `maxItems` allows `undefined`, to match
+ * `../../components/sidebar-query-controls.tsx`'s own `QueryOptions` type --
+ * this attribute is edited through that component's `AutocompleteTokenField`/
+ * `RangeControl` fields, which can legitimately hand back those values.
+ */
+type QueryOptionTokenValue = string | number | undefined;
+
+export type CuratedListQueryOptions = {
+	type: string | null;
+	authors: QueryOptionTokenValue[];
+	categories: QueryOptionTokenValue[];
+	tags: QueryOptionTokenValue[];
+	categoryExclusions: QueryOptionTokenValue[];
+	tagExclusions: QueryOptionTokenValue[];
+	maxItems: number | undefined;
+	sortBy: string;
+	order: string;
+};
+
+/**
+ * Matches `blocks/curated-list/block.json`'s `attributes`.
+ */
+export type CuratedListAttributes = {
+	className: string;
+	isSelected: boolean;
+	showNumbers: boolean;
+	showMap: boolean;
+	showSortUi: boolean;
+	showAuthor: boolean;
+	showExcerpt: boolean;
+	showImage: boolean;
+	showCaption: boolean;
+	imageShape: string;
+	minHeight: number;
+	showCategory: boolean;
+	showTags: boolean;
+	mediaPosition: string;
+	categories: number[];
+	tags: number[];
+	tagExclusions: number[];
+	typeScale: number;
+	imageScale: number;
+	textColor: string;
+	backgroundColor: string;
+	hasDarkBackground: boolean;
+	startup: boolean;
+	queryMode: boolean;
+	queryOptions: CuratedListQueryOptions;
+	listingIds: number[];
+	queriedListings: ListingPost[];
+	showLoadMore: boolean;
+	loadMoreText: string;
+};
+
+/**
+ * A `newspack-listings/list-container` block whose `innerBlocks` are the
+ * individual listing blocks placed into it. Declared as its own shape
+ * (rather than intersecting `Block`, whose own `innerBlocks: Block[]` field
+ * would conflict with the narrower element type wanted here) covering only
+ * the fields this file reads off `list`.
+ */
+type ListContainerChild = {
+	clientId: string;
+	innerBlocks: Block< ListingBlockAttributes >[];
+};
+
+type CuratedListEditorComponentProps = {
+	attributes: CuratedListAttributes;
+	canUseMapBlock: boolean;
+	clientId: string;
+	innerBlocks: Block[];
+	insertBlocks: ( blocks: Block[], index: number | null, rootClientId: string ) => void;
+	isSelected: boolean;
+	removeBlocks: ( clientIds: string[] ) => void;
+	selectBlock: ( clientId: string ) => void;
+	selectedBlock: string | null;
+	setAttributes: ( attributes: Partial< CuratedListAttributes > ) => void;
+	updateBlockAttributes: ( clientIds: string | string[], attributes: Record< string, unknown >, uniqueByBlock?: boolean ) => void;
+};
 
 const CuratedListEditorComponent = ( {
 	attributes,
@@ -64,10 +157,10 @@ const CuratedListEditorComponent = ( {
 	selectedBlock,
 	setAttributes,
 	updateBlockAttributes,
-} ) => {
-	const [ error, setError ] = useState( null );
+}: CuratedListEditorComponentProps ) => {
+	const [ error, setError ] = useState< string | null >( null );
 	const [ isFetching, setIsFetching ] = useState( false );
-	const [ locations, setLocations ] = useState( [] );
+	const [ locations, setLocations ] = useState< ListingLocation[] >( [] );
 	const blockProps = useBlockProps( {
 		className: 'newspack-listings__curated-list-editor',
 	} );
@@ -96,7 +189,7 @@ const CuratedListEditorComponent = ( {
 	} = attributes;
 
 	const isEmpty = !! window.newspack_listings_data.no_listings || false;
-	const list = innerBlocks.find( innerBlock => innerBlock.name === 'newspack-listings/list-container' );
+	const list = innerBlocks.find( innerBlock => innerBlock.name === 'newspack-listings/list-container' ) as ListContainerChild | undefined;
 	const hasMap = innerBlocks.find( innerBlock => innerBlock.name === 'jetpack/map' );
 	const classes = getCuratedListClasses( blockProps.className, attributes );
 	const initialRender = useDidMount();
@@ -107,7 +200,7 @@ const CuratedListEditorComponent = ( {
 	 * @param {Object} query Query args.
 	 * @return {void}
 	 */
-	const fetchPosts = async query => {
+	const fetchPosts = async ( query: CuratedListQueryOptions ) => {
 		if ( isFetching || ! queryMode ) {
 			return;
 		}
@@ -116,9 +209,16 @@ const CuratedListEditorComponent = ( {
 
 		try {
 			setError( null );
-			const posts = await apiFetch( {
+			const posts = await apiFetch< ListingPost[] >( {
 				path: addQueryArgs( '/newspack-listings/v1/listings', {
-					query: { maxItems: MAX_EDITOR_ITEMS, ...query }, // Get up to MAX_EDITOR_ITEMS listings in the editor so we can show all locations.
+					// FLAG (pre-existing, not fixed here): `query` always carries its own
+					// `maxItems` (see `CuratedListQueryOptions`), so it always overwrites
+					// the `MAX_EDITOR_ITEMS` default below -- the "up to MAX_EDITOR_ITEMS"
+					// comment doesn't actually hold. `Object.assign` (a function call, not
+					// an object literal) produces the exact same merged result as the
+					// original spread while sidestepping tsc's "specified more than once,
+					// will be overwritten" diagnostic on that literal pattern.
+					query: Object.assign( { maxItems: MAX_EDITOR_ITEMS }, query ),
 					_fields: 'id,title,author,category,tags,excerpt,media,meta,type,sponsors,classes',
 				} ),
 			} );
@@ -129,7 +229,10 @@ const CuratedListEditorComponent = ( {
 				throw 'No posts matching query options. Try selecting different or less specific query options.';
 			}
 		} catch ( e ) {
-			setError( e );
+			// The catch value can be either the string thrown above or an apiFetch
+			// rejection; preserved as-is (matching the original untyped JS) rather
+			// than narrowed/extracted, since this state is rendered directly.
+			setError( e as string );
 		}
 
 		setIsFetching( false );
@@ -165,11 +268,11 @@ const CuratedListEditorComponent = ( {
 			return;
 		}
 
-		let newLocations = [];
+		let newLocations: ListingLocation[] = [];
 
 		// Only build locations array if we have any listings, and the Jetpack Maps block exists.
 		if ( queryMode ) {
-			newLocations = queriedListings.reduce( ( acc, queriedListing ) => {
+			newLocations = queriedListings.reduce< ListingLocation[] >( ( acc, queriedListing ) => {
 				if ( queriedListing.meta && queriedListing.meta.newspack_listings_locations ) {
 					queriedListing.meta.newspack_listings_locations.map( location => {
 						if ( isValidLocation( location ) ) {
@@ -184,7 +287,7 @@ const CuratedListEditorComponent = ( {
 			}, [] );
 		} else {
 			newLocations = list
-				? list.innerBlocks.reduce( ( acc, innerBlock ) => {
+				? list.innerBlocks.reduce< ListingLocation[] >( ( acc, innerBlock ) => {
 						if ( innerBlock.attributes.locations && 0 < innerBlock.attributes.locations.length ) {
 							innerBlock.attributes.locations.map( location => {
 								if ( isValidLocation( location ) ) {
@@ -307,7 +410,7 @@ const CuratedListEditorComponent = ( {
 	 * @param {Object} listing Post object for listing to show.
 	 * @param {number} index   Index of the item in the array.
 	 */
-	const renderQueriedListings = ( listing, index ) => (
+	const renderQueriedListings = ( listing: ListingPost, index: number ) => (
 		<div key={ index } className="newspack-listings__listing-editor newspack-listings__listing">
 			<Listing attributes={ attributes } error={ error } post={ listing } />
 			{
@@ -324,7 +427,7 @@ const CuratedListEditorComponent = ( {
 	 * @param {*} location Location data to check.
 	 * @return {boolean} True if the data is valid location data, false if not.
 	 */
-	const isValidLocation = location => {
+	const isValidLocation = ( location: ListingLocation ) => {
 		if ( ! location || ! location.id || ! location.coordinates || ! location.coordinates.latitude || ! location.coordinates.longitude ) {
 			return false;
 		}
@@ -380,7 +483,11 @@ const CuratedListEditorComponent = ( {
 						icon={ <List /> }
 						label={ __( 'Curated List', 'newspack-listings' ) }
 						instructions={ __( 'Select the type of list to start with.' ) }
-						onSelect={ variation => {
+						// `BlockVariationPicker` (`__experimentalBlockVariationPicker`) comes from
+						// `@wordpress/block-editor`, which ships no types at all (see
+						// `packages/scripts/types/wordpress-block-editor.d.ts`) -- annotate this
+						// callback param at that opaque boundary.
+						onSelect={ ( variation: { name?: string } ) => {
 							if ( variation.name && 'query' === variation.name ) {
 								setAttributes( {
 									queryMode: true,
@@ -479,7 +586,12 @@ const CuratedListEditorComponent = ( {
 							</PanelRow>
 							<SelectControl
 								label={ __( 'Featured Image Position', 'newspack-listings' ) }
-								value={ mediaPosition }
+								// `SelectControl`'s `value` type is inferred from the literal `options`
+								// below ('top' | 'left' | 'right'), narrower than `mediaPosition`'s
+								// declared `string` (block.json only declares `"type": "string"`, so
+								// the attribute itself isn't restricted to these three values) - cast
+								// at this rendering boundary only.
+								value={ mediaPosition as 'top' | 'left' | 'right' }
 								onChange={ value => setAttributes( { mediaPosition: value } ) }
 								options={ [
 									{ label: __( 'Top', 'newspack-listings' ), value: 'top' },
@@ -498,7 +610,7 @@ const CuratedListEditorComponent = ( {
 										{ imageSizeOptions.map( option => {
 											const isCurrent = imageScale === option.value;
 											return (
-												<Button
+												<LegacyButton
 													isLarge
 													isPrimary={ isCurrent }
 													aria-pressed={ isCurrent }
@@ -507,7 +619,7 @@ const CuratedListEditorComponent = ( {
 													onClick={ () => setAttributes( { imageScale: option.value } ) }
 												>
 													{ option.shortName }
-												</Button>
+												</LegacyButton>
 											);
 										} ) }
 									</ButtonGroup>
@@ -552,15 +664,18 @@ const CuratedListEditorComponent = ( {
 				<PanelColorSettings
 					title={ __( 'Color Settings', 'newspack-listings' ) }
 					initialOpen={ true }
+					// `PanelColorSettings` comes from `@wordpress/block-editor`, which ships no
+					// types at all (see `packages/scripts/types/wordpress-block-editor.d.ts`) --
+					// annotate these callback params at that opaque boundary.
 					colorSettings={ [
 						{
 							value: textColor,
-							onChange: value => setAttributes( { textColor: value } ),
+							onChange: ( value: string ) => setAttributes( { textColor: value } ),
 							label: __( 'Text Color', 'newspack-listings' ),
 						},
 						{
 							value: backgroundColor,
-							onChange: value => setAttributes( { backgroundColor: value } ),
+							onChange: ( value: string ) => setAttributes( { backgroundColor: value } ),
 							label: __( 'Background Color', 'newspack-listings' ),
 						},
 					] }
@@ -620,7 +735,10 @@ const CuratedListEditorComponent = ( {
 						// If in query mode, show the queried listings.
 						! isFetching && queryMode && queriedListings.map( renderQueriedListings )
 					}
-					{ ! isFetching && queryMode && showLoadMore && queryOptions.maxItems < queriedListings.length && (
+					{ /* `maxItems` defaults to 10 in block.json and is only ever `undefined` via the
+					   `RangeControl` reset case handled in sidebar-query-controls.tsx; the original
+					   untyped JS carried no guard here either. */ }
+					{ ! isFetching && queryMode && showLoadMore && ( queryOptions.maxItems as number ) < queriedListings.length && (
 						<Button className="newspack-listings__load-more" isPrimary>
 							{ loadMoreText }
 						</Button>
@@ -631,10 +749,23 @@ const CuratedListEditorComponent = ( {
 	);
 };
 
-const mapStateToProps = ( select, ownProps ) => {
-	const { getBlocksByClientId, getSelectedBlockClientId } = select( 'core/block-editor' );
-	const { getBlockType } = select( 'core/blocks' );
-	const innerBlocks = getBlocksByClientId( ownProps.clientId )[ 0 ].innerBlocks || [];
+// The wordpress/data HOCs type mapSelect/mapDispatch params loosely (registry
+// select/dispatch, Record ownProps); accept what they pass and narrow once,
+// matching the pattern used in newspack-blocks' homepage-articles/utils.ts.
+type Select = ( namespace: string ) => {
+	// core/block-editor
+	getBlocksByClientId: ( clientId: string ) => Block[];
+	getSelectedBlockClientId: () => string | null;
+	// core/blocks
+	getBlockType: ( name: string ) => unknown;
+};
+
+const mapStateToProps = ( select: unknown, ownProps: Record< string, unknown > ) => {
+	const typedSelect = select as Select;
+	const { clientId } = ownProps as { clientId: string };
+	const { getBlocksByClientId, getSelectedBlockClientId } = typedSelect( 'core/block-editor' );
+	const { getBlockType } = typedSelect( 'core/blocks' );
+	const innerBlocks = getBlocksByClientId( clientId )[ 0 ].innerBlocks || [];
 	const canUseMapBlock = !! getBlockType( 'jetpack/map' ); // Check for existence of Jetpack Map block before enabling location-based features.
 
 	return {
@@ -644,7 +775,7 @@ const mapStateToProps = ( select, ownProps ) => {
 	};
 };
 
-const mapDispatchToProps = dispatch => {
+const mapDispatchToProps = ( dispatch: DataRegistry[ 'dispatch' ] ) => {
 	const { insertBlocks, removeBlocks, selectBlock, updateBlockAttributes } = dispatch( 'core/block-editor' );
 
 	return {
@@ -655,4 +786,16 @@ const mapDispatchToProps = dispatch => {
 	};
 };
 
-export const CuratedListEditor = compose( [ withSelect( mapStateToProps ), withDispatch( mapDispatchToProps ) ] )( CuratedListEditorComponent );
+// `compose`'s declared type is `(...funcs: Function[]) => ...` (a rest
+// parameter, not a single array argument) even though its real implementation
+// also flattens a single array of functions (see `@wordpress/compose`'s
+// `basePipe`) - called here with separate arguments to match the declared
+// signature; behaviorally identical either way. `compose` itself is untyped
+// (returns `(...args: unknown[]) => unknown`), and `withSelect`/`withDispatch`
+// type their injected props loosely - re-type the composed result at this
+// boundary to the shape `registerBlockType` actually needs, matching the
+// pattern used in newspack-blocks' carousel/edit.tsx.
+export const CuratedListEditor = compose(
+	withSelect( mapStateToProps ),
+	withDispatch( mapDispatchToProps )
+)( CuratedListEditorComponent ) as ComponentType< Record< string, unknown > >;

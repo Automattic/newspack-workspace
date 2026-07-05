@@ -3,7 +3,7 @@
  */
 import { Path, SVG } from '@wordpress/components';
 
-const List = ( { size = 24 } ) => (
+const List = ( { size = 24 }: { size?: number } ) => (
 	<SVG xmlns="http://www.w3.org/2000/svg" width={ size } height={ size } viewBox="0 0 24 24">
 		<Path d="M5.5 7.5h2v2h-2v-2zM7.5 11.5h-2v2h2v-2zM8.5 7.5h7v2h-7v-2zM15.5 11.5h-7v2h7v-2z" />
 		<Path

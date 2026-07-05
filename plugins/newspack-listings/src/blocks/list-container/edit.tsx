@@ -6,8 +6,22 @@ import { InnerBlocks, InspectorControls, useBlockProps } from '@wordpress/block-
 import { Notice, PanelRow, Spinner } from '@wordpress/components';
 import { compose } from '@wordpress/compose';
 import { withDispatch, withSelect } from '@wordpress/data';
+import type { DataRegistry } from '@wordpress/data';
+import type { Block } from '@wordpress/blocks';
+import type { ComponentType } from 'react';
 
-const ListContainerEditorComponent = ( { attributes, clientId, innerBlocks } ) => {
+/**
+ * Internal dependencies
+ */
+import type { CuratedListAttributes } from '../curated-list/edit';
+
+type ListContainerEditorComponentProps = {
+	attributes: CuratedListAttributes;
+	clientId: string;
+	innerBlocks: Block[];
+};
+
+const ListContainerEditorComponent = ( { attributes, clientId, innerBlocks }: ListContainerEditorComponentProps ) => {
 	const { queryMode, queryOptions, showSortUi } = attributes;
 	const { order } = queryOptions;
 	const blockProps = useBlockProps( {
@@ -93,9 +107,16 @@ const ListContainerEditorComponent = ( { attributes, clientId, innerBlocks } ) =
 	);
 };
 
-const mapStateToProps = ( select, ownProps ) => {
-	const { clientId } = ownProps;
-	const { getBlock } = select( 'core/block-editor' );
+// The wordpress/data HOCs type mapSelect/mapDispatch params loosely (registry
+// select/dispatch, Record ownProps); accept what they pass and narrow once,
+// matching the pattern used in newspack-blocks' homepage-articles/utils.ts.
+type Select = ( namespace: string ) => {
+	getBlock: ( clientId: string ) => Block;
+};
+
+const mapStateToProps = ( select: unknown, ownProps: Record< string, unknown > ) => {
+	const { clientId } = ownProps as { clientId: string };
+	const { getBlock } = ( select as Select )( 'core/block-editor' );
 	const innerBlocks = getBlock( clientId ).innerBlocks || [];
 
 	return {
@@ -103,7 +124,7 @@ const mapStateToProps = ( select, ownProps ) => {
 	};
 };
 
-const mapDispatchToProps = dispatch => {
+const mapDispatchToProps = ( dispatch: DataRegistry[ 'dispatch' ] ) => {
 	const { insertBlock, removeBlocks, updateBlockAttributes } = dispatch( 'core/block-editor' );
 
 	return {
@@ -113,4 +134,14 @@ const mapDispatchToProps = dispatch => {
 	};
 };
 
-export const ListContainerEditor = compose( [ withSelect( mapStateToProps ), withDispatch( mapDispatchToProps ) ] )( ListContainerEditorComponent );
+// `compose`'s declared type is `(...funcs: Function[]) => ...` (a rest
+// parameter, not a single array argument) even though its real implementation
+// also flattens a single array of functions - called here with separate
+// arguments to match the declared signature; behaviorally identical either
+// way. `compose` itself is untyped, and `withSelect`/`withDispatch` type
+// their injected props loosely - re-type the composed result at this
+// boundary to the shape `registerBlockType` actually needs.
+export const ListContainerEditor = compose(
+	withSelect( mapStateToProps ),
+	withDispatch( mapDispatchToProps )
+)( ListContainerEditorComponent ) as ComponentType< Record< string, unknown > >;

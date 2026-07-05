@@ -6,6 +6,9 @@ import './listing.scss';
  * JavaScript used on front of site.
  */
 
+// The "Load more"/sort posts endpoint payload shape (see isPostsDataValid's JSDoc below).
+type ListingItem = { html: string };
+
 const fetchRetryCount = 3;
 
 /**
@@ -26,14 +29,15 @@ Array.prototype.forEach.call( document.querySelectorAll( '.newspack-listings__cu
  *
  * @param {HTMLElement} blockWrapperEl the button that was clicked
  */
-function buildLoadMoreHandler( blockWrapperEl ) {
+function buildLoadMoreHandler( blockWrapperEl: HTMLElement ) {
 	const btnEl = blockWrapperEl.querySelector( '[data-next]' );
 	if ( ! btnEl ) {
 		return;
 	}
-	const postsContainerEl = blockWrapperEl.querySelector( '.newspack-listings__list-container' );
-	const btnText = btnEl.textContent.trim();
-	const loadingText = blockWrapperEl.querySelector( '.loading' ).textContent;
+	// Assumed present, matching every other unguarded query in this file.
+	const postsContainerEl = blockWrapperEl.querySelector( '.newspack-listings__list-container' ) as Element;
+	const btnText = btnEl.textContent!.trim();
+	const loadingText = blockWrapperEl.querySelector( '.loading' )!.textContent;
 
 	// Set initial state flags.
 	let isFetching = false;
@@ -53,7 +57,8 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 			btnEl.textContent = loadingText;
 		}
 
-		const requestURL = btnEl.getAttribute( 'data-next' );
+		// Assumed present: this handler is only attached when `[data-next]` matched.
+		const requestURL = btnEl.getAttribute( 'data-next' ) as string;
 
 		fetchWithRetry( { url: requestURL, onSuccess, onError }, fetchRetryCount );
 
@@ -61,7 +66,7 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 		 * @param {Object} data Post data
 		 * @param {string} next URL to fetch next batch of posts
 		 */
-		function onSuccess( data, next ) {
+		function onSuccess( data: unknown, next: string | null ) {
 			// Validate received data.
 			if ( ! isPostsDataValid( data ) ) {
 				return onError();
@@ -75,7 +80,9 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 
 			if ( next ) {
 				// Save next URL as button's attribute.
-				btnEl.setAttribute( 'data-next', next );
+				// btnEl is narrowed non-null by the early return above, but that
+				// narrowing doesn't persist into this nested function declaration.
+				btnEl!.setAttribute( 'data-next', next );
 			}
 
 			// Remove next button if we're done.
@@ -86,7 +93,7 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 			isFetching = false;
 
 			blockWrapperEl.classList.remove( 'is-loading' );
-			btnEl.textContent = btnText;
+			btnEl!.textContent = btnText;
 		}
 
 		/**
@@ -97,7 +104,7 @@ function buildLoadMoreHandler( blockWrapperEl ) {
 
 			blockWrapperEl.classList.remove( 'is-loading' );
 			blockWrapperEl.classList.add( 'is-error' );
-			btnEl.textContent = btnText;
+			btnEl!.textContent = btnText;
 		}
 	} );
 }
@@ -109,7 +116,7 @@ function buildLoadMoreHandler( blockWrapperEl ) {
  *
  * @param {HTMLElement} blockWrapperEl the button that was clicked
  */
-function buildSortHandler( blockWrapperEl ) {
+function buildSortHandler( blockWrapperEl: HTMLElement ) {
 	const sortUi = blockWrapperEl.querySelector( '.newspack-listings__sort-ui' );
 	const sortBy = blockWrapperEl.querySelector( '.newspack-listings__sort-select-control' );
 	const sortOrder = blockWrapperEl.querySelectorAll( '[name="newspack-listings__sort-order"]' );
@@ -120,18 +127,19 @@ function buildSortHandler( blockWrapperEl ) {
 	}
 
 	const btnEl = blockWrapperEl.querySelector( '[data-next]' );
-	const triggers = Array.prototype.concat.call( Array.prototype.slice.call( sortOrder ), [ sortBy ] );
+	const triggers: Element[] = Array.prototype.concat.call( Array.prototype.slice.call( sortOrder ), [ sortBy ] );
 
-	const postsContainerEl = blockWrapperEl.querySelector( '.newspack-listings__list-container' );
+	// Assumed present, matching every other unguarded query in this file.
+	const postsContainerEl = blockWrapperEl.querySelector( '.newspack-listings__list-container' ) as Element;
 	const restURL = sortUi.getAttribute( 'data-url' );
 	const hasMoreButton = blockWrapperEl.classList.contains( 'has-more-button' );
 
 	// Set initial state flags and data.
 	let isFetching = false;
-	let _sortBy = sortUi.querySelector( '[selected]' ).value;
-	let _order = sortUi.querySelector( '[checked]' ).value;
+	let _sortBy = ( sortUi.querySelector( '[selected]' ) as HTMLOptionElement ).value;
+	let _order = ( sortUi.querySelector( '[checked]' ) as HTMLInputElement ).value;
 
-	const sortHandler = e => {
+	const sortHandler = ( e: Event ) => {
 		// Early return if still fetching or no more posts to render.
 		if ( isFetching ) {
 			return false;
@@ -142,14 +150,16 @@ function buildSortHandler( blockWrapperEl ) {
 		blockWrapperEl.classList.remove( 'is-error' );
 		blockWrapperEl.classList.add( 'is-loading' );
 
-		if ( e.target.tagName.toLowerCase() === 'select' ) {
-			_sortBy = e.target.value;
+		const target = e.target as HTMLInputElement | HTMLSelectElement;
+
+		if ( target.tagName.toLowerCase() === 'select' ) {
+			_sortBy = target.value;
 		} else {
-			_order = e.target.value;
+			_order = target.value;
 		}
 
 		// Enable disabled sort order radio buttons.
-		if ( 'post__in' === e.target.value ) {
+		if ( 'post__in' === target.value ) {
 			sortOrderContainer.classList.add( 'is-hidden' );
 		} else {
 			sortOrderContainer.classList.remove( 'is-hidden' );
@@ -170,7 +180,7 @@ function buildSortHandler( blockWrapperEl ) {
 		 * @param {Object} data Post data
 		 * @param {string} next URL to fetch next batch of posts
 		 */
-		function onSuccess( data, next ) {
+		function onSuccess( data: unknown, next: string | null ) {
 			// Validate received data.
 			if ( ! isPostsDataValid( data ) ) {
 				return onError();
@@ -212,10 +222,13 @@ function buildSortHandler( blockWrapperEl ) {
  * Wrapper for XMLHttpRequest that performs given number of retries when error
  * occurs.
  *
- * @param {Object} options XMLHttpRequest options
- * @param {number} n       retry count before throwing
+ * @param {Object}   options           XMLHttpRequest options
+ * @param {string}   options.url       Request URL.
+ * @param {Function} options.onSuccess Called with the parsed JSON response and the "next page" URL on success.
+ * @param {Function} options.onError   Called once retries are exhausted.
+ * @param {number}   n                 retry count before throwing
  */
-function fetchWithRetry( options, n ) {
+function fetchWithRetry( options: { url: string; onSuccess: ( data: unknown, next: string | null ) => void; onError: () => void }, n: number ) {
 	const xhr = new XMLHttpRequest();
 
 	xhr.onreadystatechange = () => {
@@ -262,13 +275,13 @@ function fetchWithRetry( options, n ) {
  *
  * @param {Object} data posts endpoint payload
  */
-function isPostsDataValid( data ) {
+function isPostsDataValid( data: unknown ): data is ListingItem[] {
 	let isValid = false;
 
 	if ( data && Array.isArray( data ) ) {
 		isValid = true;
 
-		if ( data.length && ! ( hasOwnProp( data[ 0 ], 'html' ) && typeof data[ 0 ].html === 'string' ) ) {
+		if ( data.length && ! ( hasOwnProp( data[ 0 ], 'html' ) && typeof ( data[ 0 ] as { html: unknown } ).html === 'string' ) ) {
 			isValid = false;
 		}
 	}
@@ -282,6 +295,6 @@ function isPostsDataValid( data ) {
  * @param {Object} obj  Object
  * @param {string} prop Property to check
  */
-function hasOwnProp( obj, prop ) {
+function hasOwnProp( obj: unknown, prop: string ) {
 	return Object.prototype.hasOwnProperty.call( obj, prop );
 }

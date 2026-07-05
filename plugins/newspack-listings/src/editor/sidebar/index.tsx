@@ -14,7 +14,26 @@ import { useState } from '@wordpress/element';
 import { isListing } from '../utils';
 import './style.scss';
 
-const SidebarComponent = ( { createNotice, meta, publishDate, updateMetaValue } ) => {
+import type { ComponentType } from 'react';
+
+/**
+ * Post meta read/written by this panel.
+ */
+interface SidebarMeta {
+	newspack_listings_hide_author?: boolean;
+	newspack_listings_hide_publish_date?: boolean;
+	newspack_listings_expiration_date?: string;
+	[ key: string ]: unknown;
+}
+
+interface SidebarComponentProps {
+	createNotice: ( status: string, message: string, options?: Record< string, unknown > ) => void;
+	meta: SidebarMeta;
+	publishDate: string;
+	updateMetaValue: ( key: string, value: unknown ) => void;
+}
+
+const SidebarComponent = ( { createNotice, meta, publishDate, updateMetaValue }: SidebarComponentProps ) => {
 	const {
 		is_listing_customer: isListingCustomer = false,
 		post_type_label: postTypeLabel,
@@ -94,13 +113,13 @@ const SidebarComponent = ( { createNotice, meta, publishDate, updateMetaValue } 
 									const fromExpirationDate = initialExpirationDate ? new Date( initialExpirationDate ) : null;
 									const publishDateDate = new Date( publishDate );
 									const fromPublishDate = new Date(
-										publishDateDate.setDate( publishDateDate.getDate() + parseInt( expirationPeriod ) )
+										publishDateDate.setDate( publishDateDate.getDate() + parseInt( String( expirationPeriod ) ) )
 									);
 									const laterDate = fromExpirationDate
-										? new Date( Math.max( fromPublishDate, fromExpirationDate ) )
+										? new Date( Math.max( fromPublishDate.getTime(), fromExpirationDate.getTime() ) )
 										: fromPublishDate;
 
-									if ( 0 < new Date( value ) - laterDate ) {
+									if ( 0 < new Date( value as string ).getTime() - laterDate.getTime() ) {
 										return createNotice(
 											'warning',
 											sprintf(
@@ -125,7 +144,7 @@ const SidebarComponent = ( { createNotice, meta, publishDate, updateMetaValue } 
 								if (
 									value &&
 									publishDate &&
-									0 <= new Date( value ) - new Date( publishDate ) // Expiration date must come after publish date.
+									0 <= new Date( value as string ).getTime() - new Date( publishDate ).getTime() // Expiration date must come after publish date.
 								) {
 									return updateMetaValue( 'newspack_listings_expiration_date', value );
 								}
@@ -149,23 +168,27 @@ const SidebarComponent = ( { createNotice, meta, publishDate, updateMetaValue } 
 	);
 };
 
-const mapStateToProps = select => {
-	const { getEditedPostAttribute } = select( 'core/editor' );
+const mapStateToProps = ( select: ( store: string ) => unknown ) => {
+	const { getEditedPostAttribute } = select( 'core/editor' ) as {
+		getEditedPostAttribute: ( attribute: string ) => unknown;
+	};
 
 	return {
-		meta: getEditedPostAttribute( 'meta' ),
-		publishDate: getEditedPostAttribute( 'date' ),
+		meta: getEditedPostAttribute( 'meta' ) as SidebarMeta,
+		publishDate: getEditedPostAttribute( 'date' ) as string,
 	};
 };
 
-const mapDispatchToProps = dispatch => {
-	const { editPost } = dispatch( 'core/editor' );
-	const { createNotice } = dispatch( 'core/notices' );
+const mapDispatchToProps = ( dispatch: ( store: string ) => unknown ) => {
+	const { editPost } = dispatch( 'core/editor' ) as { editPost: ( edits: Record< string, unknown > ) => void };
+	const { createNotice } = dispatch( 'core/notices' ) as {
+		createNotice: ( status: string, message: string, options?: Record< string, unknown > ) => void;
+	};
 
 	return {
 		createNotice,
-		updateMetaValue: ( key, value ) => editPost( { meta: { [ key ]: value } } ),
-	};
+		updateMetaValue: ( key: string, value: unknown ) => editPost( { meta: { [ key ]: value } } ),
+	} as Record< string, ( ...args: unknown[] ) => unknown >;
 };
 
-export const Sidebar = compose( [ withSelect( mapStateToProps ), withDispatch( mapDispatchToProps ) ] )( SidebarComponent );
+export const Sidebar = compose( withSelect( mapStateToProps ), withDispatch( mapDispatchToProps ) )( SidebarComponent ) as ComponentType;

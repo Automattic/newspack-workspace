@@ -6,7 +6,26 @@ import { InspectorControls, useBlockProps } from '@wordpress/block-editor';
 import { BaseControl, Button, DateTimePicker, PanelBody, PanelRow, ToggleControl } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 
-export const EventDatesEditor = ( { attributes, clientId, setAttributes } ) => {
+/**
+ * Matches `blocks/event-dates/block.json`'s `attributes`. `startDate`/`endDate`
+ * are declared `type: "string"` there but default to `false` (and the
+ * `DateTimePicker` below can also hand back `null`), so both fields are
+ * widened to reflect the real runtime possibilities rather than just `string`.
+ */
+export type EventDatesAttributes = {
+	startDate: string | false | null;
+	endDate: string | false | null;
+	showTime: boolean;
+	showEnd: boolean;
+};
+
+type EventDatesEditorProps = {
+	attributes: EventDatesAttributes;
+	clientId: string;
+	setAttributes: ( attributes: Partial< EventDatesAttributes > ) => void;
+};
+
+export const EventDatesEditor = ( { attributes, clientId, setAttributes }: EventDatesEditorProps ) => {
 	const { endDate, showEnd, showTime, startDate } = attributes;
 	const { createNotice } = useDispatch( 'core/notices' );
 	const classes = [ 'newspack-listings__event-dates' ];
@@ -65,7 +84,10 @@ export const EventDatesEditor = ( { attributes, clientId, setAttributes } ) => {
 									if (
 										! value || // If clearing the value.
 										! endDate || // If there isn't an end date to compare with.
-										( endDate && 0 <= new Date( endDate ) - new Date( value ) ) // If there is an end date, and it's after the selected start date.
+										// If there is an end date, and it's after the selected start date. `Date - Date`
+										// isn't a TS-supported arithmetic operation (unlike plain JS); `getTime()` makes
+										// the same numeric comparison explicit without changing the result.
+										( endDate && 0 <= new Date( endDate ).getTime() - new Date( value ).getTime() )
 									) {
 										return setAttributes( { startDate: value } );
 									}
@@ -96,7 +118,11 @@ export const EventDatesEditor = ( { attributes, clientId, setAttributes } ) => {
 									currentDate={ endDate ? new Date( endDate ) : null }
 									is12Hour={ true }
 									onChange={ value => {
-										if ( ! value || ! startDate || ( startDate && 0 <= new Date( value ) - new Date( startDate ) ) ) {
+										if (
+											! value ||
+											! startDate ||
+											( startDate && 0 <= new Date( value ).getTime() - new Date( startDate ).getTime() )
+										) {
 											return setAttributes( { endDate: value } );
 										}
 

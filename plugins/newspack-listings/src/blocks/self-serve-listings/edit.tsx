@@ -25,9 +25,30 @@ const {
 	self_serve_listing_expiration: singleExpirationPeriod = 30,
 } = window.newspack_listings_data || {};
 
-export const SelfServeListingsEditor = ( { attributes, clientId, setAttributes } ) => {
+/**
+ * Matches `blocks/self-serve-listings/block.json`'s `attributes`.
+ */
+export type SelfServeListingType = { slug: string; name: string };
+
+export type SelfServeListingsAttributes = {
+	allowedSingleListingTypes: SelfServeListingType[];
+	allowSubscription: boolean;
+	allowedPurchases: string;
+	buttonText: string;
+	clientId: string;
+	singleDescription: string;
+	subscriptionDescription: string;
+};
+
+type SelfServeListingsEditorProps = {
+	attributes: SelfServeListingsAttributes;
+	clientId: string;
+	setAttributes: ( attributes: Partial< SelfServeListingsAttributes > ) => void;
+};
+
+export const SelfServeListingsEditor = ( { attributes, clientId, setAttributes }: SelfServeListingsEditorProps ) => {
 	const [ selectedType, setSelectedType ] = useState( 'single' );
-	const [ error, setError ] = useState( null );
+	const [ error, setError ] = useState< string | null >( null );
 	const {
 		allowedSingleListingTypes,
 		allowSubscription, // Legacy attribute superseded by allowedPurchases.
@@ -70,10 +91,16 @@ export const SelfServeListingsEditor = ( { attributes, clientId, setAttributes }
 							label={ __( 'Purchase Types Allowed', 'newspack-listings' ) }
 							help={ sprintf(
 								__( 'Allow readers to purchase %s.', 'newspack-listings' ),
-								getPurchaseTypeLabel()
+								// `getPurchaseTypeLabel`'s `switch` has no `default` case, so it can
+								// return `undefined` if `allowedPurchases` is ever a value outside its
+								// three cases -- same assumption the original untyped JS made.
+								getPurchaseTypeLabel() as string
 							) }
 							onChange={ value => setAttributes( { allowedPurchases: value, allowSubscription: true } ) }
-							value={ false === allowSubscription ? 'single-only' : allowedPurchases }
+							// `SelectControl`'s `value` type is inferred from the literal `options`
+							// below, narrower than `allowedPurchases`'s declared `string` (block.json
+							// only declares `"type": "string"`) - cast at this rendering boundary only.
+							value={ ( false === allowSubscription ? 'single-only' : allowedPurchases ) as 'both' | 'single-only' | 'subscription-only' }
 							options={ [
 								{
 									label: __( 'Single listings and subscriptions', 'newspack-listings' ),
@@ -100,7 +127,7 @@ export const SelfServeListingsEditor = ( { attributes, clientId, setAttributes }
 							label={ __( 'Allowed Single Listing Types', 'newspack-listings' ) }
 						>
 							{ singleListingTypes.map( listingType => {
-								const isAllowed = allowedSingleListingTypes.reduce( ( acc, type ) => {
+								const isAllowed = allowedSingleListingTypes.reduce< boolean >( ( acc, type ) => {
 									if ( type.slug === listingType.slug ) {
 										return true;
 									}
@@ -178,7 +205,7 @@ export const SelfServeListingsEditor = ( { attributes, clientId, setAttributes }
 							</label>
 							<div className="input-container listing-details">
 								<RichText
-									onChange={ value => setAttributes( { singleDescription: value } ) }
+									onChange={ ( value: string ) => setAttributes( { singleDescription: value } ) }
 									placeholder={ __(
 										'Description text for your single listing product…',
 										'newspack-listings'
@@ -256,7 +283,7 @@ export const SelfServeListingsEditor = ( { attributes, clientId, setAttributes }
 							</label>
 							<div className="input-container listing-details">
 								<RichText
-									onChange={ value => setAttributes( { subscriptionDescription: value } ) }
+									onChange={ ( value: string ) => setAttributes( { subscriptionDescription: value } ) }
 									placeholder={ __(
 										'Description text for your subscription product…',
 										'newspack-listings'
@@ -302,7 +329,7 @@ export const SelfServeListingsEditor = ( { attributes, clientId, setAttributes }
 				</div>
 				<button type="submit" onClick={ e => e.preventDefault() }>
 					<RichText
-						onChange={ value => setAttributes( { buttonText: value } ) }
+						onChange={ ( value: string ) => setAttributes( { buttonText: value } ) }
 						placeholder={ __( 'Button text…', 'newspack-listings' ) }
 						value={ buttonText }
 						tagName="span"

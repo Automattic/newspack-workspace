@@ -14,7 +14,7 @@ import { Icon, calendar, mapMarker, postList, store } from '@wordpress/icons';
  * @param {string|null} listingType (Optional) If given, check if the current post is this exact listing type
  * @return {boolean} Whether or not the current post is a listing CPT.
  */
-export const isListing = ( listingType = null ) => {
+export const isListing = ( listingType: string | null = null ): boolean => {
 	if ( ! window.newspack_listings_data ) {
 		return false;
 	}
@@ -27,7 +27,9 @@ export const isListing = ( listingType = null ) => {
 	}
 
 	// Otherwise, check whether the current post type is any listing type.
-	for ( const slug in post_types ) {
+	// `post_types` only ever has the four keys below (from PHP), so iterating via
+	// `Object.keys` (cast to those literal keys) keeps direct, uncast indexing below.
+	for ( const slug of Object.keys( post_types ) as ( keyof NewspackListingsPostTypes )[] ) {
 		if ( post_types.hasOwnProperty( slug ) && post_type === post_types[ slug ].name ) {
 			return true;
 		}
@@ -43,11 +45,12 @@ export const isListing = ( listingType = null ) => {
  * @param {string} hex Color in HEX format
  * @return {Array} RGB values, e.g. [red, green, blue]
  */
-const hexToRGB = hex =>
+const hexToRGB = ( hex: string ): number[] =>
 	hex
 		.replace( /^#?([a-f\d])([a-f\d])([a-f\d])$/i, ( m, r, g, b ) => '#' + r + r + g + g + b + b )
 		.substring( 1 )
-		.match( /.{2}/g )
+		// Always matches for a valid 3- or 6-digit hex color (the expected input shape); not guarded further here.
+		.match( /.{2}/g )!
 		.map( x => parseInt( x, 16 ) );
 
 /**
@@ -56,7 +59,7 @@ const hexToRGB = hex =>
  * @param {string} backgroundColor Color HEX value to compare with black.
  * @return {number} Contrast ratio vs. black.
  */
-export const getContrastRatio = backgroundColor => {
+export const getContrastRatio = ( backgroundColor: string ): number => {
 	const blackColor = '#000';
 	const backgroundColorRGB = hexToRGB( backgroundColor );
 	const blackRGB = hexToRGB( blackColor );
@@ -68,7 +71,23 @@ export const getContrastRatio = backgroundColor => {
 	const l2 =
 		0.2126 * Math.pow( blackRGB[ 0 ] / 255, 2.2 ) + 0.7152 * Math.pow( blackRGB[ 1 ] / 255, 2.2 ) + 0.0722 * Math.pow( blackRGB[ 2 ] / 255, 2.2 );
 
-	return l1 > l2 ? parseInt( ( l1 + 0.05 ) / ( l2 + 0.05 ) ) : parseInt( ( l2 + 0.05 ) / ( l1 + 0.05 ) );
+	return l1 > l2 ? parseInt( String( ( l1 + 0.05 ) / ( l2 + 0.05 ) ) ) : parseInt( String( ( l2 + 0.05 ) / ( l1 + 0.05 ) ) );
+};
+
+/**
+ * Attributes read by getCuratedListClasses, matching the Curated List block's `block.json`.
+ */
+type CuratedListClassAttributes = {
+	backgroundColor?: string;
+	hasDarkBackground?: boolean;
+	queryMode?: boolean;
+	showNumbers?: boolean;
+	showMap?: boolean;
+	showSortUi?: boolean;
+	showImage?: boolean;
+	mediaPosition?: string;
+	typeScale?: number;
+	imageScale?: number;
 };
 
 /**
@@ -78,7 +97,7 @@ export const getContrastRatio = backgroundColor => {
  * @param {Object} attributes Block attributes.
  * @return {Array} Array of class names for the block.
  */
-export const getCuratedListClasses = ( className, attributes ) => {
+export const getCuratedListClasses = ( className: string, attributes: CuratedListClassAttributes ): string[] => {
 	const { backgroundColor, hasDarkBackground, queryMode, showNumbers, showMap, showSortUi, showImage, mediaPosition, typeScale, imageScale } =
 		attributes;
 
@@ -136,7 +155,7 @@ export const useDidMount = () => {
  * @param {string} str String to capitalize.
  * @return {string} Same string, with first letter capitalized.
  */
-export const capitalize = str => str[ 0 ].toUpperCase() + str.slice( 1 );
+export const capitalize = ( str: string ): string => str[ 0 ].toUpperCase() + str.slice( 1 );
 
 /**
  * Map listing type icons to listing type slugs.
@@ -145,7 +164,7 @@ export const capitalize = str => str[ 0 ].toUpperCase() + str.slice( 1 );
  *                                 One of: event, generic, marketplace, place
  * @return {Function} SVG component for the matching icon.
  */
-export const getIcon = listingTypeSlug => {
+export const getIcon = ( listingTypeSlug: string ) => {
 	switch ( listingTypeSlug ) {
 		case 'event':
 			return <Icon icon={ calendar } />;
@@ -159,13 +178,29 @@ export const getIcon = listingTypeSlug => {
 };
 
 /**
+ * A term (category or tag) as referenced on a listing post for class name purposes.
+ */
+type ListingPostTerm = { slug: string };
+
+/**
+ * The subset of a listing post's shape read by getTermClasses.
+ */
+type ListingPostForClasses = {
+	id?: number;
+	type?: string;
+	category?: ListingPostTerm[];
+	tags?: ListingPostTerm[];
+	classes?: string[];
+};
+
+/**
  * Get an array of term-based class names for the given or current listing.
  *
  * @param {Object} post Post object for the post.
  * @return {Array} Array of term-based class names.
  */
-export const getTermClasses = post => {
-	const classes = [];
+export const getTermClasses = ( post: ListingPostForClasses ): string[] => {
+	const classes: string[] = [];
 
 	if ( ! post.id || ! post.type ) {
 		return classes;
