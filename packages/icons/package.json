@@ -2,8 +2,8 @@
 	"name": "newspack-icons",
 	"version": "1.0.8",
 	"description": "A collection of custom SVG icons for Newspack projects",
-	"main": "index.js",
-	"module": "index.js",
+	"main": "index.ts",
+	"module": "index.ts",
 	"types": "./build-types/index.d.ts",
 	"sideEffects": false,
 	"keywords": [
@@ -45,7 +45,7 @@
 	"files": [
 		"build-types/",
 		"src/",
-		"index.js",
+		"index.ts",
 		"README.md"
 	]
 }
