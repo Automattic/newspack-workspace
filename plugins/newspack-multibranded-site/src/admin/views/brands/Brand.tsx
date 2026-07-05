@@ -20,14 +20,41 @@ import {
 	hooks,
 } from 'newspack-components';
 
+import type { Brand as BrandData, BrandFormState, BrandMenuAssignment, BrandThemeColorOverride } from './types';
+
 import './style.scss';
 
-const Brand = ( { brands = [], saveBrand, fetchLogoAttachment } ) => {
-	const [ brand, updateBrand ] = hooks.useObjectState( { slug: '', meta: { _custom_url: 'yes' } } );
-	const [ publicPages, setPublicPages ] = useState( [] );
+/**
+ * A page as returned by the `/wp/v2/pages` REST endpoint (only the fields
+ * this unit reads).
+ */
+interface PublicPage {
+	id: number;
+	title: {
+		rendered: string;
+	};
+}
+
+/**
+ * Props of the raw `Brand` screen. Also received (but unused by this
+ * component) via the `withWizard`-injected `setError`/`wizardApiFetch` and the
+ * `withWizardScreen`-injected `renderPrimaryButton` — see the two call sites
+ * in `./index.tsx`.
+ */
+interface BrandScreenProps {
+	brands?: BrandData[];
+	saveBrand: ( brandId: number, brand: BrandFormState ) => void;
+	fetchLogoAttachment?: ( brandId: number, attachmentId: number ) => void;
+	setError?: ( error?: unknown ) => void;
+	wizardApiFetch?: ( args: Record< string, unknown > ) => Promise< unknown >;
+}
+
+const Brand = ( { brands = [], saveBrand, fetchLogoAttachment }: BrandScreenProps ) => {
+	const [ brand, updateBrand ] = hooks.useObjectState< BrandFormState >( { slug: '', meta: { _custom_url: 'yes' } } );
+	const [ publicPages, setPublicPages ] = useState< PublicPage[] >( [] );
 	const [ showOnFrontSelect, setShowOnFrontSelect ] = useState( 'no' );
 
-	const { brandId } = useParams();
+	const { brandId } = useParams< { brandId: string } >();
 	const selectedBrand = brands.find( ( { id } ) => id === Number( brandId ) );
 
 	const registeredThemeColors = newspack_aux_data.theme_colors;
@@ -37,27 +64,30 @@ const Brand = ( { brands = [], saveBrand, fetchLogoAttachment } ) => {
 	useEffect( () => {
 		if ( selectedBrand ) {
 			updateBrand( selectedBrand );
-			if ( ! isNaN( selectedBrand.meta._logo ) ) {
-				fetchLogoAttachment( Number( brandId ), selectedBrand.meta._logo );
+			// `_logo` is either the raw attachment ID (from the REST response) or an
+			// already-resolved attachment object; `isNaN` on an object always evaluates to
+			// `true` (via `Number({})` -> `NaN`), so this correctly only fires for the raw ID.
+			if ( ! isNaN( selectedBrand.meta._logo as number ) ) {
+				fetchLogoAttachment?.( Number( brandId ), selectedBrand.meta._logo as number );
 			}
 			setShowOnFrontSelect( selectedBrand.meta._show_page_on_front ? 'yes' : 'no' );
 		}
 	}, [ selectedBrand ] );
 
-	const getThemeColor = colorName => {
+	const getThemeColor = ( colorName: string ) => {
 		const color = brand.meta._theme_colors?.find( c => colorName === c.name )?.color;
 		return color ? color : registeredThemeColors.find( c => colorName === c.theme_mod_name )?.default;
 	};
 
-	const hasCustomThemeColor = colorName => {
+	const hasCustomThemeColor = ( colorName: string ) => {
 		const color = brand.meta._theme_colors?.find( c => colorName === c.name )?.color;
 		return color ? true : false;
 	};
 
-	const setThemeColor = ( name, color ) => {
-		const themeColors = brand?.meta._theme_colors ? brand?.meta._theme_colors : [];
+	const setThemeColor = ( name: string, color: string ) => {
+		const themeColors: BrandThemeColorOverride[] = brand?.meta._theme_colors ? brand?.meta._theme_colors : [];
 		const colorIndex = themeColors.findIndex( _color => name === _color.name );
-		let updatedThemeColors = [];
+		let updatedThemeColors: BrandThemeColorOverride[] = [];
 
 		if ( ! color && colorIndex > -1 ) {
 			// Resetting default color.
@@ -81,21 +111,21 @@ const Brand = ( { brands = [], saveBrand, fetchLogoAttachment } ) => {
 		} );
 	};
 
-	const updateSlugFromName = e => {
+	const updateSlugFromName = ( e: import('react').FocusEvent< HTMLInputElement > ) => {
 		if ( '' === brand.slug ) {
 			updateBrand( { slug: cleanForSlug( e.target.value ) } );
 		}
 	};
 
-	const updateShowOnFront = value => {
+	const updateShowOnFront = ( value: string ) => {
 		if ( 'no' === value ) {
 			updateBrand( { meta: { ...brand.meta, _show_page_on_front: 0 } } );
 		}
 		setShowOnFrontSelect( value );
 	};
 
-	const updateMenus = ( location, menu ) => {
-		const menus = brand.meta._menus ? brand.meta._menus : [];
+	const updateMenus = ( location: string, menu: number ) => {
+		const menus: BrandMenuAssignment[] = brand.meta._menus ? brand.meta._menus : [];
 		const menuIndex = menus.findIndex( _menu => location === _menu.location );
 
 		const updatedMenus =
@@ -112,7 +142,7 @@ const Brand = ( { brands = [], saveBrand, fetchLogoAttachment } ) => {
 
 	const fetchPublicPages = () => {
 		// Limiting to 100 pages, just in case.
-		apiFetch( {
+		apiFetch< PublicPage[] >( {
 			path: addQueryArgs( '/wp/v2/pages', { per_page: 100, orderby: 'title', order: 'asc' } ),
 		} ).then( setPublicPages );
 	};
@@ -120,10 +150,13 @@ const Brand = ( { brands = [], saveBrand, fetchLogoAttachment } ) => {
 	useEffect( fetchPublicPages, [] );
 
 	// Brand is valid when it has a name, and if a page is selected to be shown in front, the page should be selected.
+	// `Number(...)` mirrors the implicit `ToNumber(undefined) -> NaN` coercion the original
+	// comparison relied on when `brand.name` was undefined.
 	const isBrandValid =
-		0 < brand.name?.length && ( 'no' === showOnFrontSelect || ( 'yes' === showOnFrontSelect && 0 < brand.meta._show_page_on_front ) );
+		0 < Number( brand.name?.length ) &&
+		( 'no' === showOnFrontSelect || ( 'yes' === showOnFrontSelect && 0 < Number( brand.meta._show_page_on_front ) ) );
 
-	const findSelectedMenu = location => {
+	const findSelectedMenu = ( location: string ) => {
 		if ( ! brand.meta._menus ) {
 			return 0;
 		}

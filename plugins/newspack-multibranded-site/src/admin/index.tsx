@@ -7,7 +7,7 @@ import domReady from '@wordpress/dom-ready';
 import './index.scss';
 import Brands from './views/brands';
 
-class App extends Component {
+class App extends Component< Record< string, never > > {
 	render() {
 		return (
 			<React.StrictMode>
@@ -20,5 +20,6 @@ class App extends Component {
 }
 
 domReady( () => {
-	render( createElement( App ), document.getElementById( 'root' ) );
+	// The root element is rendered server-side by the admin page template, so it's always present.
+	render( createElement( App ), document.getElementById( 'root' ) as HTMLElement );
 } );

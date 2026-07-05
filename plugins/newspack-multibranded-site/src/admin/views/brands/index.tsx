@@ -8,9 +8,19 @@ import { __ } from '@wordpress/i18n';
 
 import BrandsList from './BrandsList';
 import Brand from './Brand';
+import type { Brand as BrandData, BrandFormState, MediaAttachment } from './types';
 
-const Brands = ( { setError, wizardApiFetch } ) => {
-	const [ brands, setBrands ] = useState( [] );
+/**
+ * Injected by the `withWizard` HOC (see `packages/components/src/with-wizard`).
+ * This unit's own contract only needs the two members it actually calls.
+ */
+interface BrandsInjectedProps {
+	setError: ( error?: unknown ) => void;
+	wizardApiFetch: ( args: Record< string, unknown > ) => Promise< unknown >;
+}
+
+const Brands = ( { setError, wizardApiFetch }: BrandsInjectedProps ) => {
+	const [ brands, setBrands ] = useState< BrandData[] >( [] );
 	const navigate = useNavigate();
 
 	const headerText = __( 'Brands', 'newspack' );
@@ -29,7 +39,9 @@ const Brands = ( { setError, wizardApiFetch } ) => {
 		} )
 			.then( response =>
 				setBrands(
-					response.map( brand => ( {
+					// The REST response isn't typed by `@wordpress/api-fetch`; this is the
+					// documented shape of the `/wp/v2/brand` endpoint.
+					( response as BrandData[] ).map( brand => ( {
 						...brand,
 						meta: {
 							...brand.meta,
@@ -42,7 +54,7 @@ const Brands = ( { setError, wizardApiFetch } ) => {
 			.catch( error => setError( error ) );
 	};
 
-	const saveBrand = ( brandId, brand ) => {
+	const saveBrand = ( brandId: number, brand: BrandFormState ) => {
 		wizardApiFetch( {
 			path: brandId ? `/wp/v2/brand/${ brandId }` : '/wp/v2/brand',
 			method: 'POST',
@@ -50,7 +62,10 @@ const Brands = ( { setError, wizardApiFetch } ) => {
 				...brand,
 				meta: {
 					...brand.meta,
-					...( brand.meta._logo && { _logo: brand.meta._logo.id } ),
+					// By the time a save happens, a truthy `_logo` has always already been
+					// resolved to an attachment object (via `ImageUpload`'s `onChange` or
+					// `fetchLogoAttachment`), never the raw numeric ID.
+					...( brand.meta._logo && { _logo: ( brand.meta._logo as { id: number } ).id } ),
 				},
 			},
 			quiet: true,
@@ -58,7 +73,7 @@ const Brands = ( { setError, wizardApiFetch } ) => {
 			.then( result =>
 				setBrands( brandsList => {
 					// The result from the API call doesn't contain the logo details.
-					const newBrand = { id: result.id, ...brand };
+					const newBrand = { id: ( result as { id: number } ).id, ...brand } as BrandData;
 					if ( brandId ) {
 						const brandIndex = brandsList.findIndex( _brand => brandId === _brand.id );
 						if ( brandIndex > -1 ) {
@@ -69,11 +84,14 @@ const Brands = ( { setError, wizardApiFetch } ) => {
 					return [ newBrand, ...brandsList ];
 				} )
 			)
-			.then( navigate( '/' ) )
+			// NOTE: this calls `navigate( '/' )` eagerly (as soon as `saveBrand` runs), not
+			// after the promise above resolves — likely a pre-existing bug in the original
+			// JS (probably meant `.then( () => navigate( '/' ) )`), left as-is here.
+			.then( navigate( '/' ) as undefined )
 			.catch( setError );
 	};
 
-	const deleteBrand = brand => {
+	const deleteBrand = ( brand: BrandData ) => {
 		// eslint-disable-next-line no-alert
 		if ( confirm( __( 'Are you sure you want to delete this brand?', 'newspack' ) ) ) {
 			return wizardApiFetch( {
@@ -82,7 +100,7 @@ const Brands = ( { setError, wizardApiFetch } ) => {
 				quiet: true,
 			} )
 				.then( result => {
-					if ( result.deleted ) {
+					if ( ( result as { deleted?: boolean } ).deleted ) {
 						setBrands( oldBrands => oldBrands.filter( oldBrand => brand.id !== oldBrand.id ) );
 					}
 				} )
@@ -92,7 +110,7 @@ const Brands = ( { setError, wizardApiFetch } ) => {
 		}
 	};
 
-	const fetchLogoAttachment = ( brandId, attachmentId ) => {
+	const fetchLogoAttachment = ( brandId: number, attachmentId: number ) => {
 		if ( ! attachmentId ) {
 			return;
 		}
@@ -100,8 +118,9 @@ const Brands = ( { setError, wizardApiFetch } ) => {
 			path: `/wp/v2/media/${ attachmentId }`,
 			method: 'GET',
 		} )
-			.then( attachment =>
-				setBrands( brandsList => {
+			.then( attachment => {
+				const media = attachment as MediaAttachment;
+				return setBrands( brandsList => {
 					const brandIndex = brandsList.findIndex( _brand => brandId === _brand.id );
 					return brandIndex > -1
 						? brandsList.map( _brand =>
@@ -110,14 +129,14 @@ const Brands = ( { setError, wizardApiFetch } ) => {
 											..._brand,
 											meta: {
 												..._brand.meta,
-												_logo: { ...attachment, url: attachment.source_url },
+												_logo: { ...media, url: media.source_url },
 											},
 									  }
 									: _brand
 						  )
 						: brandsList;
-				} )
-			)
+				} );
+			} )
 			.catch( setError );
 	};
 

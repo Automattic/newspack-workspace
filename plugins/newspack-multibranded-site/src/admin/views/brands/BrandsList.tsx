@@ -7,6 +7,7 @@ import { ESCAPE } from '@wordpress/keycodes';
 import { __ } from '@wordpress/i18n';
 
 import { Card, ActionCard, Button, Popover, withWizardScreen } from 'newspack-components';
+import type { Brand } from './types';
 
 const AddNewBrandLink = () => (
 	<NavLink to="brands/new">
@@ -14,7 +15,12 @@ const AddNewBrandLink = () => (
 	</NavLink>
 );
 
-const BrandActionCard = ( { brand, deleteBrand } ) => {
+interface BrandActionCardProps {
+	brand: Brand;
+	deleteBrand: ( brand: Brand ) => void;
+}
+
+const BrandActionCard = ( { brand, deleteBrand }: BrandActionCardProps ) => {
 	const [ popoverVisibility, setPopoverVisibility ] = useState( false );
 	const onFocusOutside = () => setPopoverVisibility( false );
 	const navigate = useNavigate();
@@ -32,6 +38,9 @@ const BrandActionCard = ( { brand, deleteBrand } ) => {
 						className={ popoverVisibility && 'popover-active' }
 					/>
 					{ popoverVisibility && (
+						// NOTE: `onKeyDown` below only references `onFocusOutside` when Escape is
+						// pressed, it never calls it (missing `()`) — likely a pre-existing bug
+						// in the original JS, left as-is here.
 						<Popover
 							position="bottom left"
 							onKeyDown={ event => ESCAPE === event.keyCode && onFocusOutside }
@@ -54,7 +63,12 @@ const BrandActionCard = ( { brand, deleteBrand } ) => {
 	);
 };
 
-const BrandsList = ( { brands, deleteBrand } ) => {
+interface BrandsListProps {
+	brands: Brand[];
+	deleteBrand: ( brand: Brand ) => void;
+}
+
+const BrandsList = ( { brands, deleteBrand }: BrandsListProps ) => {
 	return brands.length ? (
 		<Fragment>
 			<Card headerActions noBorder>
