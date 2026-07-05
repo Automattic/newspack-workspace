@@ -7,18 +7,35 @@ import { createInterpolateElement } from '@wordpress/element';
 
 const META_KEY = 'republication-tracker-tool-hide-widget';
 
+interface ShareEntry {
+	url: string;
+	count: number;
+}
+
+interface ShareData {
+	total?: number;
+	entries?: ShareEntry[];
+}
+
+interface PostMeta {
+	[ key: string ]: unknown;
+}
+
 const RepublicationTrackerPanel = () => {
 	const { postType, meta, filterHides, shareData } = useSelect( select => {
-		const editor = select( 'core/editor' );
+		const editor = select( 'core/editor' ) as {
+			getCurrentPostType: () => string;
+			getEditedPostAttribute: ( attribute: string ) => unknown;
+		};
 		return {
 			postType: editor.getCurrentPostType(),
-			meta: editor.getEditedPostAttribute( 'meta' ),
-			filterHides: editor.getEditedPostAttribute( 'republication_tracker_tool_filter_hides' ),
-			shareData: editor.getEditedPostAttribute( 'republication_tracker_tool_share_data' ),
+			meta: editor.getEditedPostAttribute( 'meta' ) as PostMeta | undefined,
+			filterHides: editor.getEditedPostAttribute( 'republication_tracker_tool_filter_hides' ) as boolean,
+			shareData: editor.getEditedPostAttribute( 'republication_tracker_tool_share_data' ) as ShareData | undefined,
 		};
 	}, [] );
 
-	const { editPost } = useDispatch( 'core/editor' );
+	const { editPost } = useDispatch( 'core/editor' ) as { editPost: ( edits: Record< string, unknown > ) => void };
 
 	if ( 'post' !== postType ) {
 		return null;
