@@ -433,8 +433,8 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 					<FrequencyBasedLayout
 						isTiered={ isTiered }
 						canUseNameYourPrice={ canUseNameYourPrice }
-						amounts={ displayedAmounts }
 						{ ...componentProps }
+						amounts={ displayedAmounts }
 					/>
 				</div>
 			) }
