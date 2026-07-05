@@ -12,6 +12,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from '@wordpress/element
  * Internal dependencies
  */
 import { Badge, Card } from '../';
+import type { CoreCardMenuAction } from '../card/core-card';
 import './style.scss';
 
 /**
@@ -24,7 +25,7 @@ const BUTTON_MOVE_DURATION = 200; // ms — must match $shift-duration in style.
 
 type DraggableItemAction = {
 	label: string;
-	icon?: unknown;
+	icon?: CoreCardMenuAction[ 'icon' ];
 	action: () => void;
 	disabled?: boolean;
 	destructive?: boolean;

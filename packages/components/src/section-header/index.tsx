@@ -7,7 +7,13 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useEffect, useRef } from '@wordpress/element';
-import { DropdownMenu, MenuItem, Tooltip, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import {
+	DropdownMenu,
+	MenuItem,
+	Tooltip,
+	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
+	__experimentalHStack as HStack,
+} from '@wordpress/components';
 import { Icon, chevronLeft, moreVertical } from '@wordpress/icons';
 
 /**
@@ -37,7 +43,7 @@ export interface SectionHeaderMenuItem {
 	/** URL the menu item links to. */
 	href?: string;
 	/** Called when the menu item is clicked. */
-	action?(): void;
+	action?: () => void;
 	/** Whether the menu item is disabled. */
 	disabled?: boolean;
 	/** Whether the menu item is destructive. */
@@ -50,7 +56,7 @@ export interface SectionHeaderAction {
 	/** URL the action links to. */
 	href?: string;
 	/** Called when the action is clicked. */
-	action?(): void;
+	action?: () => void;
 }
 
 export interface SectionHeaderProps {
@@ -91,7 +97,23 @@ export interface SectionHeaderProps {
 /**
  * Creates a section header.
  *
- * @param props - The properties for the section header.
+ * @param props                 - The properties for the section header.
+ * @param props.backNav
+ * @param props.badges
+ * @param props.centered
+ * @param props.className
+ * @param props.description
+ * @param props.heading
+ * @param props.icon
+ * @param props.isWhite
+ * @param props.noMargin
+ * @param props.pageHeader
+ * @param props.title
+ * @param props.id
+ * @param props.menu
+ * @param props.primaryAction
+ * @param props.secondaryAction
+ * @param props.children
  */
 const SectionHeader = ( {
 	backNav = '',
@@ -146,18 +168,21 @@ const SectionHeader = ( {
 					<DropdownMenu className="newspack-section-header__menu" icon={ moreVertical } label={ __( 'More options', 'newspack-plugin' ) }>
 						{ () => (
 							<>
-								{ menu.map( ( item, index ) => (
-									<MenuItem
-										key={ index }
-										icon={ item.icon }
-										href={ item.href }
-										onClick={ item.action }
-										disabled={ item.disabled || false }
-										isDestructive={ item.destructive || false }
-									>
-										{ item.label }
-									</MenuItem>
-								) ) }
+								{ menu.map( ( item, index ) => {
+									// MenuItem's type omits `href`, though its underlying Button supports it.
+									const menuItemProps = {
+										icon: item.icon,
+										href: item.href,
+										onClick: item.action,
+										disabled: item.disabled || false,
+										isDestructive: item.destructive || false,
+									};
+									return (
+										<MenuItem key={ index } { ...menuItemProps }>
+											{ item.label }
+										</MenuItem>
+									);
+								} ) }
 							</>
 						) }
 					</DropdownMenu>

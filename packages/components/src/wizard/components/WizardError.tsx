@@ -9,7 +9,7 @@ import { useSelect } from '@wordpress/data';
  */
 import { Button, Card, Modal, Notice } from '../..';
 import { WIZARD_STORE_NAMESPACE } from '../store';
-import type { WizardApiError } from '../store';
+import type { WizardApiError, WizardsStoreSelectors } from '../store';
 
 const parseError = ( { data, message, code }: NonNullable< WizardApiError > ) => {
 	let level: string | undefined = 'fatal';
@@ -25,7 +25,7 @@ const parseError = ( { data, message, code }: NonNullable< WizardApiError > ) =>
 };
 
 const WizardError = () => {
-	const error: WizardApiError = useSelect( select => select( WIZARD_STORE_NAMESPACE ).getError() );
+	const error: WizardApiError = useSelect( select => ( select( WIZARD_STORE_NAMESPACE ) as WizardsStoreSelectors ).getError() );
 	if ( ! error ) {
 		return null;
 	}
@@ -36,7 +36,11 @@ const WizardError = () => {
 		return (
 			<Modal
 				title={ __( 'Unrecoverable error' ) }
-				onRequestClose={ fallbackURL ? () => ( window.location.href = fallbackURL ) : undefined }
+				onRequestClose={ () => {
+					if ( fallbackURL ) {
+						window.location.href = fallbackURL;
+					}
+				} }
 			>
 				<Notice noticeText={ message } isError rawHTML />
 				{ fallbackURL && (

@@ -8,7 +8,8 @@ import { render } from '@testing-library/react';
  */
 import CoreCard from './core-card';
 
-const getHeader = container => container.querySelector( '.newspack-card--core__header' );
+// The cast keeps the original crash-on-missing behavior if the header ever fails to render.
+const getHeader = ( container: HTMLElement ) => container.querySelector( '.newspack-card--core__header' ) as HTMLElement;
 
 describe( 'CoreCard', () => {
 	it( 'renders the header as a <button> when onHeaderClick is supplied and it has no interactive children', () => {

@@ -34,7 +34,7 @@ type ParsedWizardError = {
 
 export interface WizardConfirmationOptions {
 	/** The title for the modal component. */
-	title?: React.ReactNode | null;
+	title?: string | null;
 	/** The message for the modal component body. */
 	message?: React.ReactNode;
 	/** The text for the confirmation button. */
@@ -50,23 +50,23 @@ export interface WizardConfirmationOptions {
  */
 export interface WithWizardInjectedProps {
 	/** Shows a confirmation modal, executing the options' callback if confirmed. */
-	confirmAction( options: WizardConfirmationOptions ): void;
+	confirmAction: ( options: WizardConfirmationOptions ) => void;
 	/** Plugin-requirements route, rendered while required plugins are being installed. */
 	pluginRequirements?: React.ReactNode;
 	/** Renders the current error, if any. */
-	getError(): React.ReactNode;
+	getError: () => React.ReactNode;
 	/** The current error, if any. */
 	errorData: WizardError;
 	/** Sets the error. Resolves after the state update. */
-	setError( error?: WizardError ): Promise< void >;
+	setError: ( error?: WizardError ) => Promise< void >;
 	/** Loading-operations counter; truthy while loading. */
 	isLoading: number;
 	/** Begins a (quiet or regular) loading operation. */
-	startLoading( quiet?: boolean ): void;
+	startLoading: ( quiet?: boolean ) => void;
 	/** Ends a (quiet or regular) loading operation. */
-	doneLoading( quiet?: boolean ): void;
+	doneLoading: ( quiet?: boolean ) => void;
 	/** apiFetch wrapper that manages the wizard loading UI. */
-	wizardApiFetch( args: APIFetchOptions & { quiet?: boolean } ): Promise< unknown >;
+	wizardApiFetch: ( args: APIFetchOptions & { quiet?: boolean } ) => Promise< unknown >;
 }
 
 /**
@@ -74,7 +74,7 @@ export interface WithWizardInjectedProps {
  * `onWizardReady` on the instance once plugin requirements are satisfied.
  */
 interface WithWizardWrappedInstance {
-	onWizardReady?(): void;
+	onWizardReady?: () => void;
 }
 
 type WithWizardState = {
@@ -87,14 +87,19 @@ type WithWizardState = {
 
 /**
  * Higher-Order Component to provide plugin management and error handling to Newspack Wizards.
+ * @param WrappedComponent
+ * @param requiredPlugins
  */
 export default function withWizard< P extends object >( WrappedComponent: React.ComponentType< P >, requiredPlugins?: string[] ) {
 	// The wrapped component receives the injected wizard props along with the
 	// pass-through props, and may expose `onWizardReady` on its instance
 	// (class components only), which the HOC reaches through a ref.
-	const WrappedComponentWithInjectedProps = WrappedComponent as React.ComponentClass<
-		P & Partial< WithWizardInjectedProps > & { ref?: React.Ref< WithWizardWrappedInstance > }
-	>;
+	const WrappedComponentWithInjectedProps = WrappedComponent as (
+		props: P &
+			Partial< WithWizardInjectedProps > & {
+				ref?: React.Ref< WithWizardWrappedInstance >;
+			}
+	) => JSX.Element;
 
 	return class WrappedWithWizard extends Component< P & { simpleFooter?: boolean }, WithWizardState > {
 		wrappedComponentRef: React.RefObject< WithWizardWrappedInstance >;
@@ -123,6 +128,7 @@ export default function withWizard< P extends object >( WrappedComponent: React.
 		/**
 		 * Set the error. Called by Wizards when an error occurs.
 		 *
+		 * @param error
 		 * @return Resolved after state update
 		 */
 		setError = ( error?: WizardError ) => {
@@ -194,8 +200,8 @@ export default function withWizard< P extends object >( WrappedComponent: React.
 		 */
 		parseError = ( error: NonNullable< WizardError > ): ParsedWizardError => {
 			const { data, message, code } = error;
-			let level = 'fatal';
-			if ( !! data && 'level' in data && typeof data.level === 'string' ) {
+			let level: string | undefined = 'fatal';
+			if ( !! data && 'level' in data ) {
 				level = data.level;
 			} else if ( 'rest_invalid_param' === code ) {
 				level = 'notice';
@@ -209,6 +215,8 @@ export default function withWizard< P extends object >( WrappedComponent: React.
 
 		/**
 		 * Called when plugin installation is complete. Updates state and calls onWizardReady on the wrapped component.
+		 * @param root0
+		 * @param root0.complete
 		 */
 		pluginInstallationStatus = ( { complete }: PluginInstallationStatus ) => {
 			if ( this.state.loading ) {
@@ -223,6 +231,7 @@ export default function withWizard< P extends object >( WrappedComponent: React.
 
 		/**
 		 * Begin loading.
+		 * @param quiet
 		 */
 		startLoading = ( quiet?: boolean ) => {
 			if ( quiet ) {
@@ -238,6 +247,7 @@ export default function withWizard< P extends object >( WrappedComponent: React.
 
 		/**
 		 * End loading.
+		 * @param quiet
 		 */
 		doneLoading = ( quiet?: boolean ) => {
 			if ( quiet ) {
@@ -253,6 +263,7 @@ export default function withWizard< P extends object >( WrappedComponent: React.
 
 		/**
 		 * Replacement for core apiFetch that automatically manages wizard loading UI.
+		 * @param args
 		 */
 		wizardApiFetch = ( args: APIFetchOptions & { quiet?: boolean } ) => {
 			const { quiet } = args;
@@ -350,7 +361,12 @@ export default function withWizard< P extends object >( WrappedComponent: React.
 			return (
 				message &&
 				callback && (
-					<Modal size="small" hideTitle={ ! title } title={ title } onRequestClose={ () => this.setState( { confirmation: null } ) }>
+					<Modal
+						size="small"
+						hideTitle={ ! title }
+						title={ title ?? undefined }
+						onRequestClose={ () => this.setState( { confirmation: null } ) }
+					>
 						<p>{ message }</p>
 						<Card buttonsCard noBorder className="justify-end">
 							<Button variant="secondary" onClick={ () => this.setState( { confirmation: null } ) }>

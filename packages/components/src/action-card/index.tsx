@@ -43,7 +43,7 @@ export interface ActionCardProps {
 	hasWhiteHeader?: boolean;
 	heading?: 1 | 2 | 3 | 4 | 5 | 6;
 	toggleChecked?: boolean;
-	toggleOnChange?: ( value?: boolean ) => void;
+	toggleOnChange?: ( value: boolean ) => void;
 	togglePosition?: 'leading' | 'trailing';
 	actionContent?: ReactNode;
 	error?: Error | string | null;
@@ -160,25 +160,26 @@ const ActionCard = ( {
 		simple && 'newspack-card--is-clickable',
 		hasGreyHeader && 'newspack-card--has-grey-header',
 		hasWhiteHeader && 'newspack-card--has-white-header',
-		hasChildren && 'newspack-card--has-children',
+		!! hasChildren && 'newspack-card--has-children',
 		indent && 'newspack-card--indent',
 		isSmall && 'is-small',
 		isMedium && 'is-medium',
 		checkbox && 'has-checkbox',
 		expandable && 'is-expandable',
 		draggable && 'is-draggable',
-		actionContent && 'has-action-content',
+		!! actionContent && 'has-action-content',
 		className
 	);
 	const backgroundImageStyles = ( url: string | false | null | undefined ) => {
 		return url ? { backgroundImage: `url(${ url })` } : {};
 	};
-	const titleProps =
-		toggleOnChange && ! titleLink && ! disabled ? { onClick: () => toggleOnChange( ! toggleChecked ), tabIndex: 0 } : {};
+	const titleProps = toggleOnChange && ! titleLink && ! disabled ? { onClick: () => toggleOnChange( ! toggleChecked ), tabIndex: 0 } : {};
 	const togglePositionClass = togglePosition === 'trailing' ? 'is-toggle-trailing' : 'is-toggle-leading';
 	const hasInternalLink = href && href.indexOf( 'http' ) !== 0;
 	const isDisplayingSecondaryAction = secondaryActionText && onSecondaryActionClick;
-	const badges = ! Array.isArray( badge ) && badge ? [ badge ] : badge;
+	// The false branch only ever carries an array or an empty value at runtime — a
+	// truthy non-array badge is always wrapped by the true branch.
+	const badges = ! Array.isArray( badge ) && badge ? [ badge ] : ( badge as string[] | null | undefined );
 	const HeadingTag = `h${ heading }` as const;
 
 	const cardContent = (
@@ -186,6 +187,7 @@ const ActionCard = ( {
 			<div className="newspack-action-card__region newspack-action-card__region-top">
 				{ toggleOnChange && (
 					<ToggleControl
+						label={ undefined }
 						checked={ toggleChecked }
 						onChange={ toggleOnChange }
 						disabled={ Boolean( disabled ) }

@@ -26,9 +26,9 @@ import ButtonGroupControl, { ButtonGroupControlOption } from './ButtonGroupContr
 
 export interface SelectControlOption {
 	/** The option's label. */
-	label: string;
+	label?: string;
 	/** The option's value. */
-	value: string;
+	value: string | number;
 	/** Whether the option is disabled. */
 	disabled?: boolean;
 }
@@ -57,11 +57,16 @@ export interface SelectControlProps {
 	/** The `name` attribute of the select element. */
 	name?: string;
 	/** The selected value(s). */
-	value?: string | number | string[];
+	value?: string | number | boolean | string[];
 	/** The options to display. */
 	options?: SelectControlOption[];
-	/** Called with the selected value; grouped selects also pass the optgroup. */
-	onChange?( value: never, extra?: never ): void;
+	/**
+	 * Called with the selected value; grouped selects also pass the optgroup.
+	 * The parameters are typed `never` so any handler is accepted: the value's
+	 * type depends on the rendering mode, and this wrapper only forwards the
+	 * handler to the mode's control.
+	 */
+	onChange?: ( value: never, extra: never ) => void;
 	children?: never;
 	[ propName: string ]: unknown;
 }

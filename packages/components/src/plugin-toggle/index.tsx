@@ -37,7 +37,7 @@ export interface PluginToggleConfig {
 	/** Action label override. */
 	actionText?: React.ReactNode;
 	/** Called when the card is clicked. */
-	onClick?(): void;
+	onClick?: () => void;
 	/** Whether to reload the page after the plugin is toggled. */
 	shouldRefreshAfterUpdate?: boolean;
 }
@@ -79,16 +79,18 @@ class PluginToggle extends Component< PluginToggleProps, PluginToggleState > {
 	 */
 	retrievePluginInfo = () => {
 		return new Promise( () => {
-			apiFetch< Record< string, PluginApiData > >( { path: '/newspack/v1/plugins/' } ).then( pluginInfo =>
-				this.setState( { pluginInfo } )
-			);
+			apiFetch< Record< string, PluginApiData > >( {
+				path: '/newspack/v1/plugins/',
+			} ).then( pluginInfo => this.setState( { pluginInfo } ) );
 		} );
 	};
 
 	/**
 	 * Install/activate or remove a plugin.
+	 * @param plugin
+	 * @param value
 	 */
-	managePlugin = ( plugin: string, value: boolean ) => {
+	managePlugin = ( plugin: string, value?: boolean ) => {
 		const { plugins } = this.props;
 		const { pluginInfo } = this.state;
 		const action = value ? 'configure' : 'deactivate';
@@ -99,7 +101,10 @@ class PluginToggle extends Component< PluginToggleProps, PluginToggleState > {
 
 		this.setState(
 			{
-				pluginInfo: { ...pluginInfo, [ plugin ]: { ...pluginInfo[ plugin ], inFlight: action } },
+				pluginInfo: {
+					...pluginInfo,
+					[ plugin ]: { ...pluginInfo[ plugin ], inFlight: action },
+				},
 			},
 			() => {
 				apiFetch< PluginApiData >( params )
@@ -107,7 +112,10 @@ class PluginToggle extends Component< PluginToggleProps, PluginToggleState > {
 						const { shouldRefreshAfterUpdate } = plugins[ plugin ];
 						this.setState(
 							( { pluginInfo: currentPluginInfo } ) => ( {
-								pluginInfo: { ...currentPluginInfo, [ plugin ]: response },
+								pluginInfo: {
+									...currentPluginInfo,
+									[ plugin ]: response,
+								},
 							} ),
 							() => shouldRefreshAfterUpdate && location.reload()
 						);
@@ -146,13 +154,12 @@ class PluginToggle extends Component< PluginToggleProps, PluginToggleState > {
 					description={ description }
 					actionText={ this.actionTextForPlugin( plugin ) }
 					handoff={ handoff }
-					onClick={ plugin.onClick ?? null }
+					onClick={ plugin.onClick ?? undefined }
 					href={ href }
-					toggle
 					toggleChecked={ this.isPluginInstalledAndActive( plugin ) }
-					toggleOnChange={ ( value: boolean ) => this.managePlugin( String( slug ), value ) }
+					toggleOnChange={ ( value?: boolean ) => this.managePlugin( String( slug ), value ) }
 					notification={ error }
-					notificationHTML={ error }
+					notificationHTML={ !! error }
 					notificationLevel="error"
 				/>
 			);
@@ -161,6 +168,8 @@ class PluginToggle extends Component< PluginToggleProps, PluginToggleState > {
 
 	/**
 	 * Prepare plugins data for render. Change all keys to camelCase, merge API-fetched data with prop.
+	 * @param pluginsFromProps
+	 * @param pluginsFromAPI
 	 */
 	prepareDataForRender = (
 		pluginsFromProps: Record< string, PluginToggleConfig >,
@@ -182,6 +191,7 @@ class PluginToggle extends Component< PluginToggleProps, PluginToggleState > {
 
 	/**
 	 * Generate a classname for the ActionCard based on plugin state. Applies 'in-flight' class if an API is underway and 'loading' if the plugin data is not yet available.
+	 * @param plugin
 	 */
 	classNameForPlugin = ( plugin: PreparedPlugin ) => {
 		const { status, inFlight } = plugin;
@@ -195,6 +205,7 @@ class PluginToggle extends Component< PluginToggleProps, PluginToggleState > {
 
 	/**
 	 * Generate the ActionCard action text for a plugin.
+	 * @param plugin
 	 */
 	actionTextForPlugin = ( plugin: PreparedPlugin ) => {
 		const { actionText, editPath, href, inFlight, name } = plugin;
@@ -231,6 +242,7 @@ class PluginToggle extends Component< PluginToggleProps, PluginToggleState > {
 
 	/**
 	 * Get error message for this plugin.
+	 * @param plugin
 	 */
 	errorForPlugin = ( plugin: PreparedPlugin ) => {
 		const { slug } = plugin;
@@ -241,6 +253,7 @@ class PluginToggle extends Component< PluginToggleProps, PluginToggleState > {
 
 	/**
 	 * Get installation/activation status for a plugin.
+	 * @param plugin
 	 */
 	isPluginInstalledAndActive = ( plugin: PreparedPlugin ) => {
 		const { status } = plugin;

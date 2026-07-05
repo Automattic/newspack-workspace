@@ -2,6 +2,8 @@
  * External dependencies
  */
 import { render } from '@testing-library/react';
+// Type-side registration of the jest-dom matchers (loaded at runtime by the shared jest setup).
+import '@testing-library/jest-dom';
 
 /**
  * Internal dependencies

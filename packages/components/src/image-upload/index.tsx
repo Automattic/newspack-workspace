@@ -22,11 +22,21 @@ import classnames from 'classnames';
 import type { CSSProperties, ReactNode } from 'react';
 
 /**
- * An attachment as serialized by the WP media modal.
+ * An image reference accepted by the `image` prop: an attachment-like object,
+ * or a raw value (id, url) — only objects with a url render a preview.
+ * No index signature, so interface-typed attachments remain assignable.
  */
 export type ImageAttachment = {
 	id?: number;
 	url?: string;
+};
+
+/**
+ * An attachment as serialized by the WP media modal on selection.
+ */
+export type SelectedImageAttachment = {
+	id: number;
+	url: string;
 	[ key: string ]: unknown;
 };
 
@@ -36,7 +46,7 @@ type MediaFrame = {
 	state: () => {
 		get: ( key: string ) => {
 			first: () => {
-				toJSON: () => ImageAttachment;
+				toJSON: () => SelectedImageAttachment;
 			};
 		};
 	};
@@ -45,12 +55,7 @@ type MediaFrame = {
 declare global {
 	// The classic-editor media library global, loaded via the 'media' script dependency.
 	const wp: {
-		media: ( options: {
-			title: string;
-			button: { text: string };
-			library: { type: string };
-			multiple: boolean;
-		} ) => MediaFrame;
+		media: ( options: { title: string; button: { text: string }; library: { type: string }; multiple: boolean } ) => MediaFrame;
 	};
 }
 
@@ -59,10 +64,10 @@ type ImageUploadProps = {
 	className?: string;
 	disabled?: boolean;
 	help?: ReactNode;
-	image?: ImageAttachment | null;
+	image?: ImageAttachment | string | number | null;
 	isCovering?: boolean;
 	label?: ReactNode;
-	onChange: ( image: ImageAttachment | null ) => void;
+	onChange: ( image: SelectedImageAttachment | null ) => void;
 	style?: CSSProperties;
 };
 
@@ -124,6 +129,8 @@ class ImageUpload extends Component< ImageUploadProps, ImageUploadState > {
 	 */
 	render = () => {
 		const { buttonLabel, className, disabled, help, image, isCovering, label, onChange, style = {} } = this.props;
+		// Raw (id/url) image values never carry a previewable url property.
+		const imageObject = image && typeof image === 'object' ? image : undefined;
 		const classes = classnames(
 			'newspack-image-upload__image',
 			{ 'newspack-image-upload__image--has-image': image },
@@ -133,9 +140,9 @@ class ImageUpload extends Component< ImageUploadProps, ImageUploadState > {
 			<BaseControl __nextHasNoMarginBottom className={ classnames( 'newspack-image-upload', className ) } help={ help }>
 				{ label && <BaseControl.VisualLabel>{ label }</BaseControl.VisualLabel> }
 				<div className={ classes } style={ style }>
-					{ image?.url ? (
+					{ imageObject?.url ? (
 						<>
-							<img data-testid="image-upload" src={ image.url } alt={ __( 'Image preview', 'newspack-plugin' ) } />
+							<img data-testid="image-upload" src={ imageObject.url } alt={ __( 'Image preview', 'newspack-plugin' ) } />
 							<div className="newspack-image-upload__controls">
 								<Button disabled={ disabled } onClick={ this.openModal } variant="tertiary">
 									{ __( 'Replace', 'newspack-plugin' ) }

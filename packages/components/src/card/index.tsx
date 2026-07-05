@@ -21,6 +21,8 @@ import classNames from 'classnames';
 import type { HTMLAttributes, MouseEventHandler } from 'react';
 
 type CardProps = {
+	/** Forwarded to CoreCard when __experimentalCoreCard is set. */
+	actionType?: CoreCardProps[ 'actionType' ];
 	buttonsCard?: boolean;
 	headerActions?: boolean;
 	isNarrow?: boolean;
@@ -34,8 +36,10 @@ type CardProps = {
 	__experimentalCoreProps?: CoreCardProps;
 	/** `false` is tolerated (and ignored, like `undefined`) so callers can write `onClick={ condition && handler }`. */
 	onClick?: MouseEventHandler< HTMLDivElement > | false;
-	id?: string | null;
-} & Omit< HTMLAttributes< HTMLDivElement >, 'onClick' | 'id' >;
+	id?: string | number | null;
+	// onToggle is omitted from the div attributes so the rest props stay compatible
+	// with CoreCard's own onToggle when forwarded.
+} & Omit< HTMLAttributes< HTMLDivElement >, 'onClick' | 'id' | 'onToggle' >;
 
 class Card extends Component< CardProps > {
 	/**
@@ -94,7 +98,11 @@ class Card extends Component< CardProps > {
 			isWhite && 'newspack-card__is-white',
 			noBorder && 'newspack-card__no-border'
 		);
-		return <div className={ classes } onClick={ onClick || undefined } id={ id ?? undefined } { ...otherProps } />;
+		// onClick/id pass through a spread (as part of the rest props before the split
+		// destructure) — a false onClick and null id are normalized away, and a numeric
+		// id is stringified (matching what React renders for the id attribute anyway).
+		const passThroughProps = { onClick: onClick || undefined, id: id === null || id === undefined ? undefined : String( id ) };
+		return <div className={ classes } { ...passThroughProps } { ...otherProps } />;
 	}
 }
 

@@ -52,7 +52,7 @@ type HandoffState = {
 };
 
 class Handoff extends Component< HandoffProps, HandoffState > {
-	declare _isMounted?: boolean;
+	_isMounted?: boolean;
 
 	static defaultProps = {
 		onReady: () => {},
@@ -189,6 +189,7 @@ class Handoff extends Component< HandoffProps, HandoffState > {
 				) }
 				{ ! url && Name && 'active' !== Status && (
 					<Button className={ classes } variant="secondary" disabled { ...otherProps }>
+						{ /* eslint-disable-next-line @wordpress/i18n-no-flanking-whitespace -- the leading space is part of the existing translated string. */ }
 						{ Name + __( ' not installed', 'newspack-plugin' ) }
 					</Button>
 				) }

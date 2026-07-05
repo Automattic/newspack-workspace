@@ -25,20 +25,20 @@ type WebPreviewProps = {
 	/** Label of the button that opens the preview. */
 	label: React.ReactNode;
 	/** Called with the iframe element once the previewed page has loaded. */
-	onLoad( iframe: HTMLIFrameElement | null ): void;
+	onLoad: ( iframe: HTMLIFrameElement | null ) => void;
 	/** Title displayed in the preview toolbar. */
 	title?: string;
 	/** Variant of the button that opens the preview. */
 	variant?: React.ComponentProps< typeof Button >[ 'variant' ];
 	/** Called when the preview is closed. */
-	onClose?(): void;
+	onClose?: () => void;
 	/** Called right before the preview modal renders. */
-	beforeLoad?(): void;
+	beforeLoad?: () => void;
 	/**
 	 * Inversion of control - let the caller render
 	 * the button that will trigger the modal
 	 */
-	renderButton?( props: { showPreview: () => void } ): React.ReactNode;
+	renderButton?: ( props: { showPreview: () => void } ) => React.ReactNode;
 };
 
 type WebPreviewState = {
@@ -87,6 +87,8 @@ class WebPreview extends Component< WebPreviewProps, WebPreviewState > {
 
 	/**
 	 * Add or remove applicable body classes and keyboard event listeners
+	 * @param prevProps
+	 * @param prevState
 	 */
 	componentDidUpdate( prevProps: WebPreviewProps, prevState: WebPreviewState ) {
 		if ( this.state.isPreviewVisible === true ) {
@@ -114,6 +116,7 @@ class WebPreview extends Component< WebPreviewProps, WebPreviewState > {
 
 	/**
 	 * Handle keyboard events
+	 * @param event
 	 */
 	handleKeyDown = ( event: KeyboardEvent ) => {
 		if ( event.key === 'Escape' && this.state.isPreviewVisible ) {
@@ -167,7 +170,9 @@ class WebPreview extends Component< WebPreviewProps, WebPreviewState > {
 											role="menuitemradio"
 											isSelected={ device === 'desktop' }
 											onClick={ () => {
-												this.setState( { device: 'desktop' } );
+												this.setState( {
+													device: 'desktop',
+												} );
 												onDropdownClose();
 											} }
 										>
@@ -178,7 +183,9 @@ class WebPreview extends Component< WebPreviewProps, WebPreviewState > {
 											role="menuitemradio"
 											isSelected={ device === 'tablet' }
 											onClick={ () => {
-												this.setState( { device: 'tablet' } );
+												this.setState( {
+													device: 'tablet',
+												} );
 												onDropdownClose();
 											} }
 										>
@@ -189,7 +196,9 @@ class WebPreview extends Component< WebPreviewProps, WebPreviewState > {
 											role="menuitemradio"
 											isSelected={ device === 'phone' }
 											onClick={ () => {
-												this.setState( { device: 'phone' } );
+												this.setState( {
+													device: 'phone',
+												} );
 												onDropdownClose();
 											} }
 										>

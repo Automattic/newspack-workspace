@@ -16,8 +16,8 @@ import './style.scss';
 
 const { useHistory } = Router;
 
-type OriginalButtonProps = typeof BaseComponent.defaultProps;
-type Props = OriginalButtonProps & {
+type OriginalButtonProps = Partial< React.ComponentProps< typeof BaseComponent > >;
+type Props = Omit< OriginalButtonProps, 'href' | 'onClick' > & {
 	href?: string;
 	loading?: boolean;
 	onClick?: () => void;
@@ -42,8 +42,10 @@ const Button = ( { href, loading = undefined, onClick, ...otherProps }: Props ) 
 	if ( isAwaitingOnClick ) {
 		otherProps.disabled = true;
 	}
-	// @ts-expect-error - @wordpress/components' Button can only have either href or onClick, not both.
-	return <BaseComponent loading={ loading ? true : undefined } { ...otherProps } />;
+	// `loading` isn't a typed @wordpress/components Button prop; forwarded via spread for prop-parity.
+	// The cast crosses Button's button/anchor union: href and onClick are reassigned above, which
+	// the flattened rest type can't express.
+	return <BaseComponent { ...{ loading: loading ? true : undefined } } { ...( otherProps as React.ComponentProps< typeof BaseComponent > ) } />;
 };
 
 export default Button;

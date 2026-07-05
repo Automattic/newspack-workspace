@@ -21,7 +21,7 @@ export interface GroupedSelectControlOption {
 	/** The option's label. */
 	label: string;
 	/** The option's value. */
-	value: string;
+	value?: string | number;
 	/** Whether the option is disabled. */
 	disabled?: boolean;
 }
@@ -39,7 +39,7 @@ type GroupedSelectControlProps = {
 	/** Control label. */
 	label?: React.ReactNode;
 	/** Called with the selected value and the optgroup it belongs to. */
-	onChange?( value: string, optgroup?: GroupedSelectControlOptgroup ): void;
+	onChange?: ( value: string, optgroup?: GroupedSelectControlOptgroup ) => void;
 	/** The options to display, grouped in optgroups. */
 	optgroups?: GroupedSelectControlOptgroup[];
 	/** Additional CSS class name. */
@@ -50,6 +50,13 @@ type GroupedSelectControlProps = {
 
 /**
  * SelectControl with optgroup support
+ * @param root0
+ * @param root0.help
+ * @param root0.label
+ * @param root0.onChange
+ * @param root0.optgroups
+ * @param root0.className
+ * @param root0.hideLabelFromVision
  */
 export default function GroupedSelectControl( {
 	help,

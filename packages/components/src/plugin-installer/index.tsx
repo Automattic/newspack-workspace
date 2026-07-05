@@ -26,11 +26,7 @@ const PLUGIN_STATE_ERROR = 3;
  */
 import classnames from 'classnames';
 
-type PluginInstallationState =
-	| typeof PLUGIN_STATE_NONE
-	| typeof PLUGIN_STATE_ACTIVE
-	| typeof PLUGIN_STATE_INSTALLING
-	| typeof PLUGIN_STATE_ERROR;
+type PluginInstallationState = typeof PLUGIN_STATE_NONE | typeof PLUGIN_STATE_ACTIVE | typeof PLUGIN_STATE_INSTALLING | typeof PLUGIN_STATE_ERROR;
 
 /**
  * Plugin data fetched from the Newspack plugins API.
@@ -65,9 +61,9 @@ type PluginInstallerProps = {
 	/** Whether to omit the install-all footer button. */
 	withoutFooterButton?: boolean;
 	/** Called with the installation status after every status change. */
-	onStatus( status: PluginInstallationStatus ): void;
+	onStatus: ( status: PluginInstallationStatus ) => void;
 	/** Called with the plugin slug after each successful installation. */
-	onInstalled( slug: string ): void;
+	onInstalled: ( slug: string ) => void;
 };
 
 type PluginInstallerState = {
@@ -116,7 +112,9 @@ class PluginInstaller extends Component< PluginInstallerProps, PluginInstallerSt
 
 	retrievePluginInfo = ( plugins: string[] ) => {
 		return new Promise< void >( resolve => {
-			apiFetch< Record< string, PluginApiData > >( { path: '/newspack/v1/plugins/' } ).then( response => {
+			apiFetch< Record< string, PluginApiData > >( {
+				path: '/newspack/v1/plugins/',
+			} ).then( response => {
 				const pluginInfo = Object.keys( response ).reduce( ( result: Record< string, PluginInfo >, slug ) => {
 					if ( plugins.indexOf( slug ) === -1 ) {
 						return result;
@@ -155,7 +153,10 @@ class PluginInstaller extends Component< PluginInstallerProps, PluginInstallerSt
 				this.props.onInstalled( slug );
 				return this.updatePluginInfo( prev => ( {
 					...prev,
-					[ slug ]: { ...response, installationStatus: PLUGIN_STATE_ACTIVE },
+					[ slug ]: {
+						...response,
+						installationStatus: PLUGIN_STATE_ACTIVE,
+					},
 				} ) );
 			} )
 			.catch( error => {
@@ -294,7 +295,7 @@ class PluginInstaller extends Component< PluginInstallerProps, PluginInstallerSt
 						}
 
 						const classes = classnames( 'newspack-action-card__plugin-installer', this.classForInstallationStatus( installationStatus ) );
-						const onClick = isButton ? () => this.installPlugin( slug ) : null;
+						const onClick = isButton ? () => this.installPlugin( slug ) : undefined;
 						return (
 							<ActionCard
 								key={ slug }

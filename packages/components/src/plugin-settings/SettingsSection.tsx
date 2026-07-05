@@ -57,9 +57,9 @@ export type PluginSettingsSectionProps = {
 	/** Whether the section controls are disabled. */
 	disabled?: boolean;
 	/** Called with a setting key and its new value on any control change. */
-	onChange( key: string | undefined, value: unknown ): void;
+	onChange: ( key: string | undefined, value: unknown ) => void;
 	/** Called to persist the section, optionally with an explicit payload. */
-	onUpdate( data?: Record< string, unknown > ): void;
+	onUpdate: ( data?: Record< string, unknown > ) => void;
 	/** Error to display in the section. */
 	error?: { message?: string } | null;
 	/** Whether the section header has a grey background. */
@@ -136,14 +136,14 @@ const SettingsSection = ( props: PluginSettingsSectionProps ) => {
 	}
 	return (
 		<ActionCard
-			id={ props.id ?? null }
+			id={ props.id }
 			isMedium
 			disabled={ disabled }
 			title={ title }
 			description={ description }
-			toggleChecked={ active }
+			toggleChecked={ active ?? undefined }
 			hasGreyHeader={ active || null === active }
-			toggleOnChange={ active !== null ? ( value: boolean ) => onUpdate( { active: value } ) : null }
+			toggleOnChange={ active !== null ? ( value?: boolean ) => onUpdate( { active: value } ) : undefined }
 			actionContent={
 				( active || null === active ) &&
 				createFilter(

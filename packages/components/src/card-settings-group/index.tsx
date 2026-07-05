@@ -11,6 +11,7 @@ import classNames from 'classnames';
  * Internal dependencies
  */
 import { Card } from '../';
+import type { CoreCardHeaderAction, CoreCardProps } from '../card/core-card';
 import './style.scss';
 
 const CardSettingsGroup = ( {
@@ -30,18 +31,9 @@ const CardSettingsGroup = ( {
 	children?: React.ReactNode;
 	className?: string;
 	disabled?: boolean;
-	icon?: React.ReactNode;
+	icon?: CoreCardProps[ 'icon' ];
 	title: string;
-	headerAction?: {
-		label: string;
-		icon?: React.ReactNode;
-		href?: string;
-		onClick?: () => void;
-		disabled?: boolean;
-		destructive?: boolean;
-		tone?: 'primary' | 'secondary' | 'tertiary' | 'link';
-		variant?: 'primary' | 'secondary' | 'tertiary' | 'link';
-	};
+	headerAction?: CoreCardHeaderAction;
 	description?: string;
 	isActive?: boolean;
 	onEnable?: () => void;

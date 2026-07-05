@@ -24,7 +24,7 @@ type PositionControlProps = {
 	/** Help text displayed under the control. */
 	help?: React.ReactNode;
 	/** Called with the new position value on selection. */
-	onChange( value: string ): void;
+	onChange: ( value: string ) => void;
 	/** Layout size: `full-width` offers vertical positions only. */
 	size?: string;
 } & Omit< React.ComponentProps< typeof ButtonGroup >, 'children' | 'onChange' >;

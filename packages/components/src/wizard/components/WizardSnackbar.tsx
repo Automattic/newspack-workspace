@@ -34,13 +34,18 @@ type WizardSnackbarProps = {
 	/** Additional CSS class name. */
 	className?: string;
 	/** Called when the snackbar is dismissed. */
-	onRemove?(): void;
+	onRemove?: () => void;
 	/** Remaining props are passed through to the Snackbar component. See: https://wordpress.github.io/gutenberg/?path=/docs/components-snackbar--docs */
 	[ propName: string ]: unknown;
 };
 
 /**
  * WizardSnackbar component.
+ * @param root0
+ * @param root0.children
+ * @param root0.position
+ * @param root0.type
+ * @param root0.actions
  */
 const WizardSnackbar = ( { children, position = 'bottom-left', type = 'info', actions = [], ...props }: WizardSnackbarProps ) => {
 	const className = classnames(

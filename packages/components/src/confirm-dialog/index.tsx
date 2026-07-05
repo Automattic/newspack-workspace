@@ -85,7 +85,7 @@ function ConfirmDialog(
 		if ( ! when ) {
 			return;
 		}
-		const unblock = history.block( ( location: string, action: string ) => {
+		const unblock = history.block( ( location, action ) => {
 			pendingNavigation.current = () => {
 				unblock();
 				if ( action === 'REPLACE' ) {

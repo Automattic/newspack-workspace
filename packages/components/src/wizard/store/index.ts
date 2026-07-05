@@ -38,7 +38,7 @@ export interface WizardHeaderAction {
 	/** The action's icon: an element, or the name of a registered icon. */
 	icon?: string | JSX.Element | null;
 	/** Called when the action is clicked. */
-	action?(): void;
+	action?: () => void;
 	/** Whether the action is disabled. */
 	disabled?: boolean;
 	/** Whether the action is destructive. */
@@ -62,11 +62,11 @@ export interface WizardMenuItem {
 	/** The menu item's label. */
 	label: React.ReactNode;
 	/** Icon displayed next to the label. */
-	icon?: JSX.Element | string;
+	icon?: JSX.Element | null;
 	/** URL the menu item links to. */
 	href?: string;
 	/** Called when the menu item is clicked. */
-	action?(): void;
+	action?: () => void;
 	/** Whether the menu item is disabled. */
 	disabled?: boolean;
 	/** Whether the menu item is destructive. */
@@ -82,7 +82,7 @@ export interface WizardSectionAction {
 	/** URL the action links to. */
 	href?: string;
 	/** Called when the action is clicked. */
-	action?(): void;
+	action?: () => void;
 }
 
 /**
@@ -112,7 +112,7 @@ export interface WizardNotice {
 	/** The notice content. */
 	message?: React.ReactNode;
 	/** Action buttons displayed in the snackbar. */
-	actions?: { label: string; url?: string; onClick?(): void }[];
+	actions?: { label: string; url?: string; onClick?: () => void }[];
 }
 
 /**
@@ -127,6 +127,22 @@ export interface WizardsState {
 	apiData: Record< string, WizardData >;
 	notices: WizardNotice[];
 	error: WizardApiError;
+}
+
+/**
+ * The wizards store's bound selectors, as returned by
+ * `select( WIZARD_STORE_NAMESPACE )`. @wordpress/data cannot type
+ * string-keyed store lookups, so consumers assert this interface at that
+ * boundary.
+ */
+export interface WizardsStoreSelectors {
+	getHeaderData: () => WizardHeaderData;
+	isLoading: () => boolean;
+	isQuietLoading: () => boolean;
+	getWizardAPIData: ( slug?: string ) => WizardData;
+	getWizardData: ( slug?: string ) => WizardData;
+	getNotices: () => WizardNotice[];
+	getError: () => WizardApiError;
 }
 
 /**
@@ -175,7 +191,14 @@ type WizardReducerAction =
 	| { type: 'START_LOADING_DATA'; payload?: { isQuietLoading?: boolean } }
 	| { type: 'FINISH_LOADING_DATA'; payload?: undefined }
 	| { type: 'SET_API_DATA'; payload: { slug: string; data?: WizardData } }
-	| { type: 'UPDATE_WIZARD_SETTINGS'; payload: { slug: string; path: ( string | number )[]; value: unknown } }
+	| {
+			type: 'UPDATE_WIZARD_SETTINGS';
+			payload: {
+				slug: string;
+				path: ( string | number )[];
+				value: unknown;
+			};
+	  }
 	| { type: 'ADD_NOTICE'; payload: WizardNotice }
 	| { type: 'REMOVE_NOTICE'; payload?: string }
 	| { type: 'SET_ERROR'; payload?: WizardApiError }
@@ -185,13 +208,18 @@ type WizardReducerAction =
  * wordpress/data does not trigger a component re-render
  * on deep state change (via lodash's set function)
  * unless the state was cloned first.
+ *
+ * @param objectToClone The object to deep-clone.
  */
 const clone = < T >( objectToClone: T ): T => JSON.parse( JSON.stringify( objectToClone ) );
 
 const reducer = ( state: WizardsState = DEFAULT_STATE, action: WizardReducerAction ): WizardsState => {
 	switch ( action.type ) {
 		case 'SET_HEADER_DATA':
-			return { ...state, headerData: { ...state.headerData, ...action.payload } };
+			return {
+				...state,
+				headerData: { ...state.headerData, ...action.payload },
+			};
 		case 'RESET_HEADER_DATA':
 			return { ...state, headerData: { ...DEFAULT_STATE.headerData } };
 		case 'START_LOADING_DATA':
@@ -202,13 +230,22 @@ const reducer = ( state: WizardsState = DEFAULT_STATE, action: WizardReducerActi
 		case 'FINISH_LOADING_DATA':
 			return { ...state, isLoading: false, isQuietLoading: false };
 		case 'SET_API_DATA':
-			return { ...state, apiData: set( clone( state.apiData ), [ action.payload.slug ], action.payload.data ) };
+			return {
+				...state,
+				apiData: set( clone( state.apiData ), [ action.payload.slug ], action.payload.data ),
+			};
 		case 'UPDATE_WIZARD_SETTINGS':
-			return { ...state, apiData: set( clone( state.apiData ), [ action.payload.slug, ...action.payload.path ], action.payload.value ) };
+			return {
+				...state,
+				apiData: set( clone( state.apiData ), [ action.payload.slug, ...action.payload.path ], action.payload.value ),
+			};
 		case 'ADD_NOTICE':
 			return { ...state, notices: [ ...state.notices, action.payload ] };
 		case 'REMOVE_NOTICE':
-			return { ...state, notices: state.notices.filter( notice => notice.id !== action.payload ) };
+			return {
+				...state,
+				notices: state.notices.filter( notice => notice.id !== action.payload ),
+			};
 		case 'SET_ERROR':
 			return { ...state, error: action.payload ?? null };
 		case 'RESET_NOTICES':
@@ -226,7 +263,11 @@ const actions = {
 	finishLoadingData: createAction( 'FINISH_LOADING_DATA' ),
 	fetchFromAPI: createAction< WizardApiFetchConfig >( 'FETCH_FROM_API' ),
 	setAPIDataForWizard: createAction< { slug: string; data?: WizardData } >( 'SET_API_DATA' ),
-	updateWizardSettings: createAction< { slug: string; path: ( string | number )[]; value: unknown } >( 'UPDATE_WIZARD_SETTINGS' ),
+	updateWizardSettings: createAction< {
+		slug: string;
+		path: ( string | number )[];
+		value: unknown;
+	} >( 'UPDATE_WIZARD_SETTINGS' ),
 	addNotice: createAction< WizardNotice >( 'ADD_NOTICE' ),
 	removeNotice: createAction< string >( 'REMOVE_NOTICE' ),
 	resetNotices: createAction( 'RESET_NOTICES' ),
@@ -245,7 +286,7 @@ const actions = {
 		if ( updatePayload ) {
 			yield actions.updateWizardSettings( { slug, ...updatePayload } );
 		}
-		const wizardState = select( WIZARD_STORE_NAMESPACE ).getWizardAPIData( slug );
+		const wizardState: WizardData = select( WIZARD_STORE_NAMESPACE ).getWizardAPIData( slug );
 		const data = payloadPath ? get( wizardState, payloadPath ) : wizardState;
 		const updatedData = yield actions.fetchFromAPI( {
 			path: `/newspack/v1/wizard/${ slug }/${ section }`,
@@ -282,22 +323,24 @@ const store = createReduxStore( WIZARD_STORE_NAMESPACE, {
 	controls: {
 		FETCH_FROM_API: ( action: { payload: WizardApiFetchConfig } ) => {
 			const { isLocalError = false, isQuietFetch = false } = action.payload;
-			dispatch( WIZARD_STORE_NAMESPACE ).startLoadingData( {
+			// @wordpress/data cannot type string-keyed store lookups.
+			const storeDispatch = dispatch( WIZARD_STORE_NAMESPACE ) as typeof actions;
+			storeDispatch.startLoadingData( {
 				isQuietLoading: Boolean( isQuietFetch ),
 			} );
 			return apiFetch( action.payload )
 				.then( data => {
-					dispatch( WIZARD_STORE_NAMESPACE ).setError( null );
+					storeDispatch.setError( null );
 					return data;
 				} )
 				.catch( error => {
 					if ( isLocalError ) {
 						throw error;
 					}
-					dispatch( WIZARD_STORE_NAMESPACE ).setError( error );
+					storeDispatch.setError( error );
 				} )
 				.finally( () => {
-					dispatch( WIZARD_STORE_NAMESPACE ).finishLoadingData();
+					storeDispatch.finishLoadingData();
 				} );
 		},
 	},

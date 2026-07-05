@@ -106,7 +106,8 @@ const Footer = ( { simple = undefined }: { simple?: boolean } ) => {
 				<ul>
 					{ footerElements.map( ( { url, label, external }, index ) => (
 						<li key={ index }>
-							{ external ? <ExternalLink href={ url || undefined }>{ label }</ExternalLink> : <a href={ url || undefined }>{ label }</a> }
+							{ /* A false url (e.g. missing support URL) renders the label without an href, as before. */ }
+							{ external ? <ExternalLink href={ url as string }>{ label }</ExternalLink> : <a href={ url || undefined }>{ label }</a> }
 						</li>
 					) ) }
 				</ul>

@@ -59,13 +59,15 @@ export type CoreCardProps = {
 	className?: string;
 	footer?: ReactNode;
 	header?: ReactNode;
+	/** Forwarded to the underlying WP Card; renders as the anchor href for link cards. */
+	href?: string;
 	headerAction?: CoreCardHeaderAction;
 	headerStyle?: CSSProperties;
 	childrenStyle?: CSSProperties;
 	footerStyle?: CSSProperties;
 	disabled?: boolean;
 	icon?: WpIcon | null;
-	iconBackgroundColor?: string;
+	iconBackgroundColor?: string | boolean;
 	isActive?: boolean;
 	isDraggable?: boolean;
 	isFirstTarget?: boolean;
@@ -129,21 +131,22 @@ const CoreCard = ( {
 		isDraggable && 'newspack-card--core__is-draggable',
 		isNarrow && 'newspack-card--core__is-narrow',
 		isSmall && 'newspack-card--core__is-small',
-		icon && 'newspack-card--core__has-icon',
-		iconBackgroundColor && 'newspack-card--core__has-icon-background-color',
+		!! icon && 'newspack-card--core__has-icon',
+		!! iconBackgroundColor && 'newspack-card--core__has-icon-background-color',
 		isActive && 'newspack-card--core__is-active',
 		disabled && 'newspack-card--core__is-disabled',
-		children && 'newspack-card--core__has-children',
+		!! children && 'newspack-card--core__has-children',
 		noMargin && 'newspack-card--core__no-margin',
 		hasGreyHeader && 'newspack-card--core__has-grey-header'
 	);
 	let sizeProps = isSmall ? ( 'small' as const ) : otherProps.size;
+	let wrapperAs = as;
 	if ( buttonsCard || as === 'a' ) {
 		if ( ! isSmall ) {
 			sizeProps = 'large';
 		}
 		if ( as !== 'a' ) {
-			otherProps.as = 'a'; // Render as an anchor tag.
+			wrapperAs = 'a'; // Render as an anchor tag.
 		}
 	}
 	if ( noBorder ) {
@@ -172,7 +175,7 @@ const CoreCard = ( {
 		tone: headerAction?.tone || 'primary',
 	};
 	return (
-		<CardWrapper as={ as } className={ classes } { ...otherProps }>
+		<CardWrapper as={ wrapperAs } className={ classes } { ...otherProps }>
 			{ ( header || icon ) && (
 				<CardHeader
 					className={ classNames(
@@ -216,7 +219,8 @@ const CoreCard = ( {
 						<ToggleControl
 							className="newspack-card--core__action"
 							label={ otherProps.title }
-							hideLabelFromVision
+							// hideLabelFromVision is not a typed ToggleControl prop; forwarded via spread for prop-parity.
+							{ ...{ hideLabelFromVision: true } }
 							checked={ isActive }
 							onChange={ onToggle }
 						/>
@@ -229,7 +233,8 @@ const CoreCard = ( {
 						<ToggleControl
 							className="newspack-card--core__action"
 							label={ otherProps.title }
-							hideLabelFromVision
+							// hideLabelFromVision is not a typed ToggleControl prop; forwarded via spread for prop-parity.
+							{ ...{ hideLabelFromVision: true } }
 							checked={ isActive }
 							onChange={ onToggle }
 						/>
@@ -248,7 +253,8 @@ const CoreCard = ( {
 															key={ i }
 															icon={ subAction.icon }
 															onClick={ subAction.action }
-															href={ subAction.href }
+															// href is only typed on the anchor variant of MenuItem's underlying Button; forwarded via spread.
+															{ ...{ href: subAction.href } }
 															disabled={ subAction.disabled || false }
 															isDestructive={ subAction.destructive || false }
 														>
@@ -264,7 +270,8 @@ const CoreCard = ( {
 											key={ index }
 											icon={ action.icon }
 											onClick={ action.action }
-											href={ action.href }
+											// href is only typed on the anchor variant of MenuItem's underlying Button; forwarded via spread.
+											{ ...{ href: action.href } }
 											disabled={ action.disabled || false }
 											isDestructive={ action.destructive || false }
 										>

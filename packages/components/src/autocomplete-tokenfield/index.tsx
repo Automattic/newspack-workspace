@@ -58,7 +58,7 @@ type AutocompleteTokenFieldState = {
  * An multi-selecting, api-driven autocomplete input suitable for use in block attributes.
  */
 class AutocompleteTokenField extends Component< AutocompleteTokenFieldProps, AutocompleteTokenFieldState > {
-	declare suggestionsRequest?: Promise< Suggestion[] >;
+	suggestionsRequest?: Promise< Suggestion[] >;
 
 	debouncedUpdateSuggestions: DebouncedFunc< ( input: string ) => void >;
 

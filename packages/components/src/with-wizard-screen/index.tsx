@@ -43,13 +43,16 @@ export interface WithWizardScreenProps {
 	/** Action of the secondary button: a URL, a callback, or a handoff descriptor. */
 	secondaryButtonAction?: ButtonAction;
 	/** Renders content between the header and the wrapped component. */
-	renderAboveContent?(): React.ReactNode;
+	renderAboveContent?: () => React.ReactNode;
 	/** Whether to disable the tabs after the active one. */
 	disableUpcomingInTabbedNavigation?: boolean;
 }
 
 /**
  * Higher-Order Component to provide plugin management and error handling to Newspack Wizards.
+ * @param WrappedComponent
+ * @param root0
+ * @param root0.hidePrimaryButton
  */
 export default function withWizardScreen< P extends object >(
 	WrappedComponent: React.ComponentType< P & { renderPrimaryButton: RenderPrimaryButton } >,

@@ -15,9 +15,9 @@ type MinMaxSettingProps = {
 	/** The maximum value. */
 	max?: number;
 	/** Called with the new minimum value. */
-	onChangeMin( value: number | string ): void;
+	onChangeMin: ( value: number | string ) => void;
 	/** Called with the new maximum value. */
-	onChangeMax( value: number | string ): void;
+	onChangeMax: ( value: number | string ) => void;
 	/** Placeholder for the minimum-value input. */
 	minPlaceholder?: string;
 	/** Placeholder for the maximum-value input. */
@@ -38,7 +38,7 @@ const MinMaxSetting = ( { min, max, onChangeMin, onChangeMax, minPlaceholder, ma
 					type="number"
 					value={ min }
 					placeholder={ minPlaceholder }
-					onChange={ ( value: number ) => onChangeMin( value > 0 ? value : 0 ) }
+					onChange={ ( value: string | number ) => onChangeMin( Number( value ) > 0 ? value : 0 ) }
 				/>
 			</div>
 			<div className="newspack-settings__min-max" data-testid="max">
@@ -52,7 +52,7 @@ const MinMaxSetting = ( { min, max, onChangeMin, onChangeMax, minPlaceholder, ma
 					type="number"
 					value={ max }
 					placeholder={ maxPlaceholder }
-					onChange={ ( value: number ) => onChangeMax( value > 0 ? value : 0 ) }
+					onChange={ ( value: string | number ) => onChangeMax( Number( value ) > 0 ? value : 0 ) }
 				/>
 			</div>
 		</div>

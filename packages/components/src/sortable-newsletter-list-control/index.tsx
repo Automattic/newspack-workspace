@@ -34,7 +34,7 @@ type SortableNewsletterListControlProps = {
 	/** The selected lists, in order. */
 	selected?: SelectedNewsletterList[];
 	/** Called with the new selection on any change. */
-	onChange?( selected: SelectedNewsletterList[] ): void;
+	onChange?: ( selected: SelectedNewsletterList[] ) => void;
 };
 
 export default function SortableNewsletterListControl( { lists, selected = [], onChange = () => {} }: SortableNewsletterListControlProps ) {

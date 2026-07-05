@@ -14,7 +14,7 @@ const { NavLink, useHistory } = Router;
 
 export interface TabbedNavigationItem {
 	/** The tab's label. */
-	label: React.ReactNode;
+	label?: React.ReactNode;
 	/** The tab's route path. */
 	path: string;
 	/** Whether the route has to match exactly. Defaults to exact matching. */

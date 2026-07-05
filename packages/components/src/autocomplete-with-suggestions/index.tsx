@@ -200,9 +200,7 @@ const AutocompleteWithSuggestions = ( {
 
 		// Loop through new selections to determine whether to add or remove them.
 		_selections.forEach( _selection => {
-			const existingSelection = selections.findIndex(
-				selection => parseInt( `${ selection.value }` ) === parseInt( `${ _selection.value }` )
-			);
+			const existingSelection = selections.findIndex( selection => parseInt( `${ selection.value }` ) === parseInt( `${ _selection.value }` ) );
 
 			if ( -1 < existingSelection ) {
 				// If the selection is already selected, remove it.
@@ -227,7 +225,7 @@ const AutocompleteWithSuggestions = ( {
 			? sprintf(
 					// Translators: %1: the length of selections. %2: the selection leabel.
 					__( '%1$s %2$s selected', 'newspack-plugin' ),
-					selections.length,
+					String( selections.length ),
 					selections.length > 1 ? postTypeLabelPlural : postTypeLabel
 			  )
 			: sprintf(
@@ -240,6 +238,7 @@ const AutocompleteWithSuggestions = ( {
 			<div className="newspack-autocomplete-with-suggestions__selected-items">
 				<p className="newspack-autocomplete-with-suggestions__label">
 					{ selectedMessage }
+					{ /* eslint-disable-next-line @wordpress/i18n-no-flanking-whitespace -- the flanking spaces are part of the existing translated separator. */ }
 					{ 1 < selections.length && _x( ' – ', 'separator character', 'newspack-plugin' ) }
 					{ 1 < selections.length && (
 						<Button onClick={ () => onChange( [] ) } isLink isDestructive>

@@ -28,9 +28,9 @@ type PluginSettingsProps = {
 	/** Whether to use the Newspack wizard settings API instead of the plugin's own. */
 	isWizard?: boolean;
 	/** Called with the fetched settings. */
-	afterFetch?( settings: PluginSettingsData ): void;
+	afterFetch?: ( settings: PluginSettingsData ) => void;
 	/** Called with the updated settings after a section is saved. */
-	afterUpdate?( settings: PluginSettingsData ): void;
+	afterUpdate?: ( settings: PluginSettingsData ) => void;
 	/** Title displayed above the settings. */
 	title?: string;
 	/** Description displayed under the title. */
@@ -97,55 +97,51 @@ class PluginSettings extends Component< PluginSettingsProps, PluginSettingsState
 		);
 	};
 
-	handleSettingChange =
-		( sectionKey: string ) =>
-		( key: string | undefined, value: unknown ) => {
-			const sectionSettings = [ ...this.state.settings[ sectionKey ] ];
-			sectionSettings.forEach( setting => {
-				if ( setting.key === key ) {
-					setting.value = value as PluginSettingValue;
-				}
-			} );
-			this.setState( {
-				settings: {
-					...this.state.settings,
-					[ sectionKey ]: sectionSettings,
-				},
-			} );
-		};
+	handleSettingChange = ( sectionKey: string ) => ( key: string | undefined, value: unknown ) => {
+		const sectionSettings = [ ...this.state.settings[ sectionKey ] ];
+		sectionSettings.forEach( setting => {
+			if ( setting.key === key ) {
+				setting.value = value as PluginSettingValue;
+			}
+		} );
+		this.setState( {
+			settings: {
+				...this.state.settings,
+				[ sectionKey ]: sectionSettings,
+			},
+		} );
+	};
 
-	handleSectionUpdate =
-		( sectionKey: string ) =>
-		( data?: Record< string, unknown > ) => {
-			const { afterUpdate, pluginSlug, isWizard } = this.props;
-			this.setState( { inFlight: true } );
-			apiFetch< PluginSettingsData >( {
-				path: isWizard ? `/newspack/v1/wizard/${ pluginSlug }/settings` : `/${ pluginSlug }/v1/settings`,
-				method: 'POST',
-				data: {
-					section: sectionKey,
-					settings: data ? data : this.getSettingsValues( sectionKey ),
-				},
-			} )
-				.then( settings => {
-					this.setState( {
-						settings: {
-							...this.state.settings,
-							[ sectionKey ]: settings[ sectionKey ],
-						},
-						error: null,
-					} );
-					if ( 'function' === typeof afterUpdate ) {
-						afterUpdate( settings );
-					}
-				} )
-				.catch( error => {
-					this.setState( { error } );
-				} )
-				.finally( () => {
-					this.setState( { inFlight: false } );
+	handleSectionUpdate = ( sectionKey: string ) => ( data?: Record< string, unknown > ) => {
+		const { afterUpdate, pluginSlug, isWizard } = this.props;
+		this.setState( { inFlight: true } );
+		apiFetch< PluginSettingsData >( {
+			path: isWizard ? `/newspack/v1/wizard/${ pluginSlug }/settings` : `/${ pluginSlug }/v1/settings`,
+			method: 'POST',
+			data: {
+				section: sectionKey,
+				settings: data ? data : this.getSettingsValues( sectionKey ),
+			},
+		} )
+			.then( settings => {
+				this.setState( {
+					settings: {
+						...this.state.settings,
+						[ sectionKey ]: settings[ sectionKey ],
+					},
+					error: null,
 				} );
-		};
+				if ( 'function' === typeof afterUpdate ) {
+					afterUpdate( settings );
+				}
+			} )
+			.catch( error => {
+				this.setState( { error } );
+			} )
+			.finally( () => {
+				this.setState( { inFlight: false } );
+			} );
+	};
 
 	/**
 	 * Get the section setting containing section information.

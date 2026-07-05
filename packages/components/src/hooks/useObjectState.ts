@@ -10,11 +10,7 @@ import mergeWith from 'lodash/mergeWith';
  * A recursive partial of the state object: nested objects may be partial,
  * but arrays are always provided (and replaced) wholesale.
  */
-export type ObjectStateUpdate< T > = T extends readonly unknown[]
-	? T
-	: T extends object
-	? { [ K in keyof T ]?: ObjectStateUpdate< T[ K ] > }
-	: T;
+export type ObjectStateUpdate< T > = T extends readonly unknown[] ? T : T extends object ? { [ K in keyof T ]?: ObjectStateUpdate< T[ K ] > } : T;
 
 export type ObjectStateSetter< T > = {
 	< K extends keyof T >( key: K ): ( value: T[ K ] ) => void;

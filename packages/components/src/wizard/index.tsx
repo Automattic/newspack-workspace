@@ -18,6 +18,8 @@ import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 import { Footer, Notice, Button, NewspackIcon, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage } from '../';
 import Router from '../proxied-imports/router';
 import registerStore, { WIZARD_STORE_NAMESPACE } from './store';
+import type { WizardHeaderAction, WizardHeaderData, WizardNotice, WizardsStoreSelectors } from './store';
+import type { SectionHeaderProps } from '../section-header';
 import WizardSnackbar from './components/WizardSnackbar';
 import WizardError from './components/WizardError';
 
@@ -28,8 +30,12 @@ registerStore();
  * React elements from @wordpress/icons can't cross webpack entry point boundaries
  * because each bundle has its own copy of the icon primitives.
  */
-const ICON_REGISTRY = { chevronLeft, category, moreVertical };
-const resolveIcon = icon => {
+const ICON_REGISTRY: Record< string, JSX.Element > = {
+	chevronLeft,
+	category,
+	moreVertical,
+};
+const resolveIcon = ( icon?: string | JSX.Element | null ) => {
 	if ( typeof icon === 'string' ) {
 		return ICON_REGISTRY[ icon ] || null;
 	}
@@ -54,25 +60,85 @@ const ResetHeaderData = () => {
 };
 
 /**
- * @typedef  {Object}     WizardProps
- * @property {string}     headerText                The header text.
- * @property {string}     [subHeaderText]           The sub-header text, optional.
- * @property {string}     [apiSlug]                 The API slug, optional.
- * @property {string}     [className]               CSS classes, optional.
- * @property {any[]}      sections                  Array of sections.
- * @property {boolean}    [hasSimpleFooter]         Indicates if a simple footer is used, optional.
- * @property {() => void} [renderAboveSections]     Function to render content above sections, optional.
- * @property {string[]}   [requiredPlugins]         Array of required plugin strings, optional.
- * @property {boolean}    [isInitialFetchTriggered] Indicates if the initial fetch should be triggered, optional.
+ * A wizard section, rendered as a route.
  */
+export interface WizardSection {
+	/** The section's route path. */
+	path: string;
+	/** The section's component. Receives the router props, `props` and `sharedProps`. */
+	render?: React.ElementType;
+	/** The section's tab label. */
+	label?: React.ReactNode;
+	/** Whether the route has to match exactly. */
+	exact?: boolean;
+	/** Whether the section is hidden entirely. */
+	isHidden?: boolean;
+	/** Whether the section is excluded from the tabbed navigation. */
+	isHiddenInTabbedNavigation?: boolean;
+	/** Additional paths marking the section's tab as active. */
+	activeTabPaths?: string[];
+	/** The section header's title. */
+	title?: SectionHeaderProps[ 'title' ];
+	/** The section header's description. */
+	description?: SectionHeaderProps[ 'description' ];
+	/** Badges displayed next to the section title. */
+	badges?: SectionHeaderProps[ 'badges' ];
+	/** Items of the section's more-options menu. */
+	menu?: SectionHeaderProps[ 'menu' ];
+	/** URL to navigate back to. */
+	backNav?: string;
+	/** The section's primary action. */
+	primaryAction?: SectionHeaderProps[ 'primaryAction' ];
+	/** The section's secondary action. */
+	secondaryAction?: SectionHeaderProps[ 'secondaryAction' ];
+	/** Whether the section content spans the full width. */
+	fullWidth?: boolean;
+	/** Additional props passed to the section component. */
+	props?: Record< string, unknown >;
+}
+
+export interface WizardProps {
+	/** Array of sections. */
+	sections?: WizardSection[];
+	/** The header text. */
+	headerText?: string;
+	/** The API slug of the wizard data fetched on mount. */
+	apiSlug?: string;
+	/** Props passed to every section component. */
+	sharedProps?: Record< string, unknown >;
+	/** The sub-header text. */
+	subHeaderText?: string;
+	/** Indicates if a simple footer is used. */
+	hasSimpleFooter?: boolean;
+	/** CSS classes of the section content wrapper. */
+	className?: string;
+	/** Function to render content above sections. */
+	renderAboveSections?: () => React.ReactNode;
+	/** Slugs of plugins required by the wizard. */
+	requiredPlugins?: string[];
+	/** Indicates if the initial fetch should be triggered. */
+	isInitialFetchTriggered?: boolean;
+	/** Whether the wizard header is fixed. */
+	fixedHeader?: boolean;
+}
 
 /**
  * Wizard Component
  *
  * Provides a tabbed UI with history.
- *
- * @param {WizardProps} props
- * @return {JSX.Element} Wizard component
+ * @param root0
+ * @param root0.sections
+ * @param root0.headerText
+ * @param root0.apiSlug
+ * @param root0.sharedProps
+ * @param root0.subHeaderText
+ * @param root0.hasSimpleFooter
+ * @param root0.className
+ * @param root0.renderAboveSections
+ * @param root0.requiredPlugins
+ * @param root0.isInitialFetchTriggered
+ * @param root0.fixedHeader
+ * @param ref
  */
 const Wizard = (
 	{
@@ -87,22 +153,24 @@ const Wizard = (
 		requiredPlugins = [],
 		isInitialFetchTriggered = true,
 		fixedHeader = false,
-	},
-	ref
+	}: WizardProps,
+	ref: React.ForwardedRef< HTMLDivElement >
 ) => {
-	const isLoading = useSelect( select => select( WIZARD_STORE_NAMESPACE ).isLoading() );
-	const isQuietLoading = useSelect( select => select( WIZARD_STORE_NAMESPACE ).isQuietLoading() );
-	const headerData = useSelect( select => select( WIZARD_STORE_NAMESPACE ).getHeaderData() );
-	const notices = useSelect( select => select( WIZARD_STORE_NAMESPACE ).getNotices() );
+	const isLoading = useSelect( select => ( select( WIZARD_STORE_NAMESPACE ) as WizardsStoreSelectors ).isLoading() );
+	const isQuietLoading = useSelect( select => ( select( WIZARD_STORE_NAMESPACE ) as WizardsStoreSelectors ).isQuietLoading() );
+	const headerData: WizardHeaderData = useSelect( select => ( select( WIZARD_STORE_NAMESPACE ) as WizardsStoreSelectors ).getHeaderData() );
+	const notices: WizardNotice[] = useSelect( select => ( select( WIZARD_STORE_NAMESPACE ) as WizardsStoreSelectors ).getNotices() );
 	const { actions, backNav, badges, sectionDescription, sectionMenu, sectionName, sectionTitle, sectionPrimaryAction, sectionSecondaryAction } =
 		headerData;
 
-	const mainActions = actions?.filter( action => action.type === 'primary' || action.type === 'secondary' );
+	const mainActions = actions?.filter(
+		( action ): action is WizardHeaderAction & { type: 'primary' | 'secondary' } => action.type === 'primary' || action.type === 'secondary'
+	);
 	const moreActions = actions?.filter( action => action.type === 'more' );
 
 	// Trigger initial data fetch. Some sections might not use the wizard data,
 	// but for consistency, fetching is triggered regardless of the section.
-	useSelect( select => isInitialFetchTriggered && select( WIZARD_STORE_NAMESPACE ).getWizardAPIData( apiSlug ) );
+	useSelect( select => isInitialFetchTriggered && ( select( WIZARD_STORE_NAMESPACE ) as WizardsStoreSelectors ).getWizardAPIData( apiSlug ) );
 
 	let displayedSections = sections.filter( section => ! section.isHidden );
 
@@ -167,14 +235,14 @@ const Wizard = (
 								</div>
 							</div>
 						</div>
-						{ actions?.length > 0 && (
+						{ !! actions?.length && (
 							<div className="newspack-wizard__header__actions">
-								{ mainActions.map( ( action, index ) => (
+								{ mainActions?.map( ( action, index ) => (
 									<Button
 										key={ index }
 										className="newspack-wizard__header__actions__main"
 										href={ action.href }
-										icon={ resolveIcon( action.icon ) }
+										icon={ resolveIcon( action.icon ) ?? undefined }
 										variant={ action.type }
 										onClick={ action.action }
 										disabled={ action.disabled || false }
@@ -187,27 +255,33 @@ const Wizard = (
 									className={ moreActions?.length === 0 ? 'newspack-wizard__header__actions__more--primary-only' : '' }
 									icon={ moreVertical }
 									label={ __( 'More', 'newspack-plugin' ) }
-									popoverProps={ { className: 'newspack-wizard__header__actions__more' } }
+									popoverProps={ {
+										className: 'newspack-wizard__header__actions__more',
+									} }
 								>
-									{ () =>
-										actions.map( ( action, index ) => (
-											<MenuItem
-												key={ index }
-												className={
-													action.type === 'primary' || action.type === 'secondary'
-														? 'newspack-wizard__header__actions__more__main'
-														: 'newspack-wizard__header__actions__more__more'
-												}
-												icon={ action.icon }
-												href={ action.href }
-												onClick={ action.action }
-												disabled={ action.disabled || false }
-												isDestructive={ action.destructive || false }
-											>
-												{ action.label }
-											</MenuItem>
-										) )
-									}
+									{ () => (
+										<>
+											{ actions.map( ( action, index ) => {
+												// MenuItem's type omits `href`, though its underlying Button supports it.
+												const menuItemProps = {
+													className:
+														action.type === 'primary' || action.type === 'secondary'
+															? 'newspack-wizard__header__actions__more__main'
+															: 'newspack-wizard__header__actions__more__more',
+													icon: ( action.icon ?? undefined ) as JSX.Element | undefined,
+													href: action.href,
+													onClick: action.action,
+													disabled: action.disabled || false,
+													isDestructive: action.destructive || false,
+												};
+												return (
+													<MenuItem key={ index } { ...menuItemProps }>
+														{ action.label }
+													</MenuItem>
+												);
+											} ) }
+										</>
+									) }
 								</DropdownMenu>
 							</div>
 						) }
@@ -243,7 +317,7 @@ const Wizard = (
 													<SectionHeader
 														className="newspack-wizard__section-header"
 														backNav={ backNav || section.backNav }
-														title={ sectionTitle || section.title }
+														title={ sectionTitle || section.title || '' }
 														description={ sectionDescription || section.description }
 														badges={ badges || section.badges }
 														menu={ sectionMenu || section.menu }
@@ -253,7 +327,7 @@ const Wizard = (
 														noMargin
 													/>
 												) }
-												<SectionComponent { ...routerProps } { ...sectionProps } { ...sharedProps } />
+												{ SectionComponent && <SectionComponent { ...routerProps } { ...sectionProps } { ...sharedProps } /> }
 											</div>
 										) }
 									/>
@@ -263,7 +337,7 @@ const Wizard = (
 						</Switch>
 					</div>
 				</HashRouter>
-				{ notices?.length > 0 &&
+				{ !! notices?.length &&
 					notices.map( ( notice, index ) => (
 						<WizardSnackbar key={ notice.id || index } type={ notice.type } id={ notice.id } actions={ notice.actions }>
 							{ notice.message }

@@ -40,5 +40,6 @@ export default function HandoffMessage() {
 	if ( ! handoffMessage ) {
 		return null;
 	}
-	return <Notice isHandoff isDismissible={ false } rawHTML noticeText={ handoffMessage } />;
+	// isDismissible is not a typed Notice prop; forwarded via spread for prop-parity.
+	return <Notice isHandoff { ...{ isDismissible: false } } rawHTML noticeText={ handoffMessage } />;
 }

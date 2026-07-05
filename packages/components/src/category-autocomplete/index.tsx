@@ -56,7 +56,7 @@ type CategoryAutocompleteProps = {
 
 type CategoryAutocompleteState = {
 	suggestions: Record< string, Term >;
-	allCategories: Term[] | Record< string, Term >;
+	allCategories: Term[];
 	isLoading: boolean;
 };
 
@@ -72,7 +72,7 @@ class CategoryAutocomplete extends Component< CategoryAutocompleteProps, Categor
 
 	state: CategoryAutocompleteState = {
 		suggestions: {},
-		allCategories: {},
+		allCategories: [],
 		isLoading: false,
 	};
 
