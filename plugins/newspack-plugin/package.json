@@ -52,6 +52,9 @@
 	"devDependencies": {
 		"clsx": "^2.1.0",
 		"lodash": "^4.17.0",
+		"newspack-colors": "workspace:*",
+		"newspack-components": "workspace:*",
+		"newspack-icons": "workspace:*",
 		"newspack-scripts": "workspace:*",
 		"prop-types": "^15.8.0",
 		"react": "^18.0.0"

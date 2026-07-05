@@ -32,7 +32,8 @@
 		"lint:scss:staged": "newspack-scripts wp-scripts lint-style --customSyntax postcss-scss",
 		"format:scss": "newspack-scripts wp-scripts lint-style '**/{src,includes}/**/*.scss' --customSyntax postcss-scss --fix",
 		"release": "npm run build && npm run semantic-release",
-		"release:archive": "rm -rf release && mkdir -p release && rsync -r . ./release/newspack-ads --exclude-from='./.distignore' && cd release && zip -r newspack-ads.zip newspack-ads"
+		"release:archive": "rm -rf release && mkdir -p release && rsync -r . ./release/newspack-ads --exclude-from='./.distignore' && cd release && zip -r newspack-ads.zip newspack-ads",
+		"typescript:check": "newspack-scripts typescript-check"
 	},
 	"browserslist": [
 		"extends @wordpress/browserslist-config"

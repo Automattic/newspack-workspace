@@ -38,7 +38,8 @@
 	"scripts": {
 		"build-types": "node build-types.js",
 		"prepublishOnly": "npm run build-types",
-		"clean": "rm -rf build-types"
+		"clean": "rm -rf build-types",
+		"typescript:check": "newspack-scripts typescript-check"
 	},
 	"files": [
 		"build-types/",
