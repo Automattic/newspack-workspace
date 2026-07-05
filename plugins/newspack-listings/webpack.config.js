@@ -9,6 +9,7 @@
  */
 const fs = require( 'fs' );
 const getBaseWebpackConfig = require( 'newspack-scripts/config/getWebpackConfig' );
+const { SOURCE_FILE_REGEX } = require( 'newspack-scripts/config/resolveSource' );
 const path = require( 'path' );
 
 /**
@@ -18,11 +19,11 @@ const editor = path.join( __dirname, 'src', 'editor' );
 const assetsDir = path.join( __dirname, 'src', 'assets', 'front-end' );
 const assets = fs
 	.readdirSync( assetsDir )
-	.filter( asset => /.js?$/.test( asset ) )
+	.filter( asset => SOURCE_FILE_REGEX.test( asset ) )
 	.reduce(
 		( acc, fileName ) => ( {
 			...acc,
-			[ fileName.replace( '.js', '' ) ]: path.join( __dirname, 'src', 'assets', 'front-end', fileName ),
+			[ fileName.replace( SOURCE_FILE_REGEX, '' ) ]: path.join( assetsDir, fileName ),
 		} ),
 		{}
 	);
