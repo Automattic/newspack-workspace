@@ -12,7 +12,7 @@ import AccessRules from './access-rules';
 
 interface CustomAccessProps {
 	customAccess: CustomAccess;
-	onChange: ( customAccess: Partial< CustomAccess > ) => void;
+	onChange: ( customAccess: CustomAccess ) => void;
 	isNewsletter?: boolean;
 }
 

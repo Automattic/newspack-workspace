@@ -48,7 +48,7 @@ const ContentGates = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] )
 			resetHeaderData();
 			return;
 		}
-		const sectionMenu = [
+		const sectionMenu: { label: string; action: () => void }[] = [
 			{
 				label: __( 'Institutions', 'newspack-plugin' ),
 				action: () => history.push( '/institutions' ),

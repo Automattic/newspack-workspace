@@ -1,10 +1,12 @@
 declare module '@wordpress/block-editor';
-import type { Icon } from '@wordpress/icons';
 
+// No top-level imports here: they would turn this declaration file into a
+// module and strip every type below of its global scope. Use inline
+// import() types instead.
 type HeaderAction = {
 	type: 'primary' | 'secondary' | 'more';
 	label: string;
-	icon?: Icon | string;
+	icon?: import('@wordpress/icons').Icon | string;
 	disabled?: boolean;
 	destructive?: boolean;
 	action?: () => void;
@@ -108,7 +110,9 @@ type Registration = {
 	active: boolean;
 	metering: Metering;
 	require_verification: boolean;
-	gate_layout_id: number;
+	// Optional: the edit UI rebuilds this object without `gate_layout_id`
+	// (see edit/registration.tsx), and the server falls back to the gate ID.
+	gate_layout_id?: number;
 };
 
 type GateAccessRuleGroup = GateAccessRule[];
@@ -116,32 +120,37 @@ type GateAccessRuleGroup = GateAccessRule[];
 type CustomAccess = {
 	active: boolean;
 	metering: Metering;
-	gate_layout_id: number;
+	// Optional: the edit UI rebuilds this object without `gate_layout_id`
+	// (see edit/custom-access.tsx), and the server falls back to the gate ID.
+	gate_layout_id?: number;
 	access_rules: GateAccessRuleGroup[];
 };
 
+// All fields are optional: the settings screens build these objects
+// incrementally by spreading a possibly-empty stored config, and every read
+// falls back to a default (e.g. `config?.content_gifting?.limit || 10`).
 type ContentGiftingConfig = {
-	enabled: boolean;
-	limit: number;
-	interval: string;
-	expiration_time: number;
-	expiration_time_unit: string;
-	style: string;
-	cta_label: string;
-	button_label: string;
-	cta_type: string;
-	cta_product_id: number;
-	cta_url: string;
+	enabled?: boolean;
+	limit?: number;
+	interval?: string;
+	expiration_time?: number;
+	expiration_time_unit?: string;
+	style?: string;
+	cta_label?: string;
+	button_label?: string;
+	cta_type?: string;
+	cta_product_id?: number;
+	cta_url?: string;
 };
 
 type MeteringCountdownConfig = {
-	enabled: boolean;
-	style: string;
-	cta_label: string;
-	button_label: string;
-	cta_url: string;
-	cta_type: string;
-	cta_product_id: number;
+	enabled?: boolean;
+	style?: string;
+	cta_label?: string;
+	button_label?: string;
+	cta_url?: string;
+	cta_type?: string;
+	cta_product_id?: number;
 };
 
 type AdvancedSettingsConfig = {
@@ -159,6 +168,38 @@ type GateConfig = {
 	gates: Gate[];
 	config: GateSettings;
 };
+
+/**
+ * Shape of the content-gates wizard store data (`useWizardData`): `gates` and
+ * `config` are written under those keys via `updateWizardSettings`, alongside
+ * the per-path request cache the store also maintains.
+ */
+type ContentGatesWizardData = {
+	gates?: Gate[];
+	config?: GateSettings;
+};
+
+type PurchasableProductOption = {
+	label: string;
+	value: number;
+};
+
+/**
+ * Data localized by the Audience wizard (`Audience_Wizard`) as
+ * `newspackAudience`. Only the slice consumed by the content-gates screens is
+ * typed here; the full window-level shape lives in wizards/types/window.d.ts.
+ */
+declare const newspackAudience:
+	| {
+			available_products?: PurchasableProductOption[];
+			content_gifting?: {
+				has_metering?: boolean;
+				can_use_gifting?: {
+					errors?: Record< string, string[] >;
+				};
+			};
+	  }
+	| undefined;
 
 type Institution = {
 	id: number;

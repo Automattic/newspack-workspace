@@ -35,7 +35,7 @@ export default function ContentGateSettings( {
 	isNewsletter?: boolean;
 } ) {
 	const history = useHistory();
-	const { gates = null as unknown as Gate[] } = useWizardData( slug ) as WizardData;
+	const { gates } = useWizardData( slug ) as { gates: Gate[] };
 	const { wizardApiFetch, isFetching, resetError } = useWizardApiFetch( slug );
 	const { addNotice, resetNotices } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const { confirmDialog: deleteDialog, requestConfirm: requestDelete } = useConfirmDialog( {
@@ -118,7 +118,7 @@ export default function ContentGateSettings( {
 		);
 	};
 
-	const actions = [
+	const actions: { label: string; action?: () => void; href?: string; disabled?: boolean; destructive?: boolean }[][] = [
 		[
 			{
 				label: __( 'Edit', 'newspack-plugin' ),

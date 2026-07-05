@@ -14,6 +14,10 @@ import { institution } from '@wordpress/icons';
  */
 import { Button, Grid, SectionHeader } from '../../../../../../packages/components/src';
 
+// Rendered as `start`/`end` DOM attributes on the stack element, which the
+// Grid stylesheet targets via attribute selectors for column placement.
+const gridPlacementProps = { start: 2, end: 4 };
+
 const InstitutionsOnboarding = () => {
 	return (
 		<div
@@ -24,7 +28,7 @@ const InstitutionsOnboarding = () => {
 			} }
 		>
 			<Grid columns={ 4 } noMargin>
-				<VStack start={ 2 } end={ 4 } spacing={ 8 }>
+				<VStack { ...gridPlacementProps } spacing={ 8 }>
 					<SectionHeader
 						icon={ institution }
 						title={ __( 'Get started with institutions', 'newspack-plugin' ) }
