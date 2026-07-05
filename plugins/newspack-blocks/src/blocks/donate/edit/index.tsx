@@ -44,11 +44,11 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ error, setError ] = useState( '' );
 
+	// Amounts and disabled frequencies arrive with the settings fetch; nothing
+	// reads them before the isLoading guard, so they start absent.
 	const [ settings, setSettings ] = hooks.useObjectState< EditState >( {
-		amounts: {},
 		currencySymbol: '$',
 		tiered: false,
-		disabledFrequencies: {},
 		minimumDonation: 5,
 		platform: '',
 	} );
@@ -187,7 +187,7 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 
 	const minimumDonation = isManual ? attributes.minimumDonation : settings.minimumDonation;
 	const displayedAmounts = { ...amounts };
-	Object.keys( amounts ).forEach( frequency => {
+	( Object.keys( amounts ) as DonationFrequencySlug[] ).forEach( frequency => {
 		const amountsWithMinimum = amounts[ frequency ].map( amount => Math.max( amount, minimumDonation ) ) as DonationAmountsArray;
 		displayedAmounts[ frequency ] = amountsWithMinimum;
 	} );
