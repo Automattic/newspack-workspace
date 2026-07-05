@@ -13,18 +13,33 @@ import { __ } from '@wordpress/i18n';
 import { ad as icon } from '../utils/icons';
 
 /**
+ * Shape of a single entry in the `/newspack-ads/v1/placements` response, as
+ * assembled by Newspack_Ads\Placements::register_placement() (only the
+ * fields this hook reads are declared).
+ */
+type Placement = {
+	name?: string;
+	show_ui?: boolean;
+	block_rendered?: boolean;
+};
+
+type PlacementOption = { value: string; label: string };
+
+type AdSlotAttributes = { placement: string };
+
+/**
  * Hook: fetch the list of registered placements from the REST endpoint that
  * the ads wizard already consumes. We rely on whatever endpoint is in place;
  * if the endpoint shape changes we'll surface it here, not in PHP.
  *
  * Returns an array of { value, label } options suitable for SelectControl.
  */
-function usePlacementOptions() {
-	const [ options, setOptions ] = useState( null );
+function usePlacementOptions(): PlacementOption[] | null {
+	const [ options, setOptions ] = useState< PlacementOption[] | null >( null );
 
 	useEffect( () => {
 		let cancelled = false;
-		apiFetch( { path: '/newspack-ads/v1/placements' } )
+		apiFetch< Record< string, Placement > >( { path: '/newspack-ads/v1/placements' } )
 			.then( placements => {
 				if ( cancelled ) {
 					return;
@@ -32,10 +47,12 @@ function usePlacementOptions() {
 				// `placements` is keyed by placement key; convert to options.
 				const opts = Object.entries( placements || {} )
 					.filter( ( [ , config ] ) => config?.show_ui !== false && config?.block_rendered === true )
-					.map( ( [ key, config ] ) => ( {
-						value: key,
-						label: config?.name || key,
-					} ) );
+					.map(
+						( [ key, config ] ): PlacementOption => ( {
+							value: key,
+							label: config?.name || key,
+						} )
+					);
 				setOptions( opts );
 			} )
 			.catch( () => {
@@ -51,7 +68,12 @@ function usePlacementOptions() {
 	return options;
 }
 
-export default function Edit( { attributes, setAttributes } ) {
+type EditProps = {
+	attributes: AdSlotAttributes;
+	setAttributes: ( attrs: Partial< AdSlotAttributes > ) => void;
+};
+
+export default function Edit( { attributes, setAttributes }: EditProps ) {
 	const { placement } = attributes;
 	const options = usePlacementOptions();
 	const blockProps = useBlockProps( { className: 'newspack-ads-ad-block' } );

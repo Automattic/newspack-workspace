@@ -21,34 +21,38 @@ import { ActionCard, Card, Modal, Notice, Button } from 'newspack-components';
 import './style.scss';
 import Order from './order';
 import OrderPopover from './order-popover';
+import type { ApiError, GamBidder, GamOrderListItem } from './types';
+import type { FunctionComponent } from 'react';
 
 const { network_code } = window.newspack_ads_bidding_gam;
 
-const getOrderUrl = orderId => {
+const getOrderUrl = ( orderId: number ) => {
 	return `https://admanager.google.com/${ network_code }#delivery/order/order_overview/order_id=${ orderId }`;
 };
 
-const HeaderBiddingGAM = () => {
+// Typed to accept (and ignore) arbitrary props: `addFilter`'s callback below spreads the
+// section's `props` onto this component, none of which it reads.
+const HeaderBiddingGAM: FunctionComponent< Record< string, unknown > > = () => {
 	const [ inFlight, setInFlight ] = useState( true );
-	const [ bidders, setBidders ] = useState( {} );
-	const [ unrecoverable, setUnrecoverable ] = useState( null );
+	const [ bidders, setBidders ] = useState< Record< string, GamBidder > >( {} );
+	const [ unrecoverable, setUnrecoverable ] = useState< ApiError | false | null >( null );
 	const [ isManaging, setIsManaging ] = useState( false );
-	const [ editingOrder, setEditingOrder ] = useState( false );
+	const [ editingOrder, setEditingOrder ] = useState< number | false >( false );
 	const [ orderName, setOrderName ] = useState( 'Newspack Header Bidding' );
-	const [ orders, setOrders ] = useState( null );
-	const [ error, setError ] = useState( null );
+	const [ orders, setOrders ] = useState< GamOrderListItem[] | null >( null );
+	const [ error, setError ] = useState< ApiError | null >( null );
 	const fetchOrders = async () => {
 		setInFlight( true );
-		let data;
+		let data: GamOrderListItem[] | undefined;
 		try {
-			data = await apiFetch( {
+			data = await apiFetch< GamOrderListItem[] >( {
 				path: '/newspack-ads/v1/bidding/gam/orders',
 				method: 'GET',
 			} );
 			setOrders( data );
 			setError( null );
 		} catch ( err ) {
-			setError( err );
+			setError( err as ApiError );
 		} finally {
 			setInFlight( false );
 		}
@@ -57,7 +61,7 @@ const HeaderBiddingGAM = () => {
 	const getActiveOrders = () => {
 		return orders?.filter( order => order.is_archived === false ) || [];
 	};
-	const archiveOrder = async orderId => {
+	const archiveOrder = async ( orderId: number ) => {
 		return await apiFetch( {
 			path: '/newspack-ads/v1/bidding/gam/order',
 			method: 'DELETE',
@@ -77,9 +81,9 @@ const HeaderBiddingGAM = () => {
 		const setBiddersOnInit = async () => {
 			await fetchOrders();
 			try {
-				setBidders( await apiFetch( { path: '/newspack-ads/v1/bidders' } ) );
+				setBidders( await apiFetch< Record< string, GamBidder > >( { path: '/newspack-ads/v1/bidders' } ) );
 			} catch ( err ) {
-				setError( err );
+				setError( err as ApiError );
 			}
 		};
 		setBiddersOnInit();
@@ -132,7 +136,9 @@ const HeaderBiddingGAM = () => {
 												activeOrders.length,
 												'newspack-ads'
 											),
-											activeOrders.length
+											// `sprintf`'s types require a `string` for a `%s` placeholder;
+											// `String()` matches what `sprintf` already coerces it to at runtime.
+											String( activeOrders.length )
 									  )
 									: getMissingOrderMessage() }
 							</span>
@@ -249,7 +255,10 @@ const HeaderBiddingGAM = () => {
 							setInFlight( pending );
 						} }
 						onUnrecoverable={ async ( { order_id }, err ) => {
-							await archiveOrder( order_id );
+							// NOTE: `order_id` is optional on the shared `GamOrder` type (some
+							// endpoints omit it), but `onUnrecoverable` is only ever invoked here
+							// with an order that has already been created, so it is always present.
+							await archiveOrder( order_id as number );
 							await fetchOrders();
 							setUnrecoverable( err );
 							setEditingOrder( 0 );
@@ -272,9 +281,13 @@ const HeaderBiddingGAM = () => {
 	);
 };
 
-addFilter( 'newspack.settingSection.bidding.beforeControls', 'newspack-ads/header-bidding-gam', ( AfterControls, props ) => {
-	if ( props.sectionKey === 'bidding' ) {
-		return <HeaderBiddingGAM { ...props } />;
+addFilter(
+	'newspack.settingSection.bidding.beforeControls',
+	'newspack-ads/header-bidding-gam',
+	( AfterControls: unknown, props: { sectionKey?: string } ) => {
+		if ( props.sectionKey === 'bidding' ) {
+			return <HeaderBiddingGAM { ...props } />;
+		}
+		return AfterControls;
 	}
-	return AfterControls;
-} );
+);

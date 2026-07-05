@@ -9,10 +9,20 @@ import { __ } from '@wordpress/i18n';
 const AD_BLOCK = 'newspack-ads/ad-unit';
 const NOTICE_ID = 'newspack-ads/ad-visibility-warning';
 
+/** The subset of the `core/block-editor` store's selectors used below. */
+type BlockEditorSelectors = {
+	getClientIdsWithDescendants: () => string[];
+	getBlockName: ( clientId: string ) => string;
+	getBlockParents: ( clientId: string ) => string[];
+	getBlockAttributes: ( clientId: string ) => { metadata?: { blockVisibility?: { viewport?: Record< string, boolean > } } } | null | undefined;
+};
+
 const AdVisibilityWarning = () => {
-	const hasHiddenAdContainer = useSelect( select => {
-		const { getClientIdsWithDescendants, getBlockName, getBlockParents, getBlockAttributes } = select( 'core/block-editor' );
-		const isHidden = clientId => {
+	const hasHiddenAdContainer = useSelect( ( select: unknown ) => {
+		const { getClientIdsWithDescendants, getBlockName, getBlockParents, getBlockAttributes } = (
+			select as ( namespace: string ) => BlockEditorSelectors
+		 )( 'core/block-editor' );
+		const isHidden = ( clientId: string ) => {
 			const viewport = getBlockAttributes( clientId )?.metadata?.blockVisibility?.viewport;
 			return viewport && Object.values( viewport ).some( visible => visible === false );
 		};

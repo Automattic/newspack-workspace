@@ -1,9 +1,4 @@
 /**
- * External dependencies
- */
-import PropTypes from 'prop-types';
-
-/**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
@@ -12,6 +7,8 @@ import { compose } from '@wordpress/compose';
 import { withSelect } from '@wordpress/data';
 import { applyFilters } from '@wordpress/hooks';
 import { decodeEntities } from '@wordpress/html-entities';
+import type { Block } from '@wordpress/blocks';
+import type { ComponentType } from 'react';
 
 /**
  * Internal dependencies
@@ -21,7 +18,17 @@ import createFilterableComponent from '../utils/createFilterableComponent';
 const FilterableTabsItemHeader = createFilterableComponent( 'newspack.tabsItem.header' );
 const FilterableTabsItemFooter = createFilterableComponent( 'newspack.tabsItem.footer' );
 
-const TabsItemEdit = props => {
+type TabsItemEditProps = {
+	isSelected: boolean;
+	hasSelectedInnerBlock: () => boolean;
+	setAttributes: ( attrs: Partial< { header: string } > ) => void;
+	clientId: string;
+	position: number;
+	name: string;
+	attributes: { header: string };
+};
+
+const TabsItemEdit = ( props: TabsItemEditProps ) => {
 	const {
 		isSelected,
 		hasSelectedInnerBlock,
@@ -46,7 +53,7 @@ const TabsItemEdit = props => {
 					tagName="div"
 					value={ header }
 					placeholder={ __( 'Tab Header', 'newspack-ads' ) }
-					onChange={ newHeader => {
+					onChange={ ( newHeader: string ) => {
 						setAttributes( {
 							header: decodeEntities( newHeader ).replace( /<\/?[a-z][^>]*?>/gi, ' ' ),
 						} );
@@ -65,19 +72,25 @@ const TabsItemEdit = props => {
 	);
 };
 
-TabsItemEdit.propTypes = {
-	attributes: PropTypes.shape( {
-		header: PropTypes.string.isRequired,
-	} ).isRequired,
-	clientId: PropTypes.string.isRequired,
-	isSelected: PropTypes.bool.isRequired,
-	setAttributes: PropTypes.func.isRequired,
-	hasSelectedInnerBlock: PropTypes.func,
+/**
+ * The subset of the `core/block-editor` store's selectors used below. The
+ * package ships no store types, so this is hand-declared to match usage.
+ */
+type BlockEditorSelectors = {
+	hasSelectedInnerBlock: () => boolean;
+	getBlockParents: ( clientId: string ) => string[];
+	// `getBlock` is typed non-nullable here (rather than `Block | null`, its
+	// real return type) because the code below dereferences the result with
+	// no null check -- it assumes a tabs-item block always has a parent.
+	getBlock: ( clientId: string ) => Block;
 };
 
 export default compose(
-	withSelect( ( select, { clientId } ) => {
-		const { hasSelectedInnerBlock, getBlockParents, getBlock } = select( 'core/block-editor' );
+	withSelect( ( select: unknown, ownProps: Record< string, unknown > ) => {
+		const { clientId } = ownProps as { clientId: string };
+		const { hasSelectedInnerBlock, getBlockParents, getBlock } = ( select as ( namespace: string ) => BlockEditorSelectors )(
+			'core/block-editor'
+		);
 
 		const parentBlockIds = getBlockParents( clientId );
 		const parentBlockId = parentBlockIds[ parentBlockIds.length - 1 ];
@@ -97,4 +110,4 @@ export default compose(
 			hasSelectedInnerBlock,
 		};
 	} )
-)( TabsItemEdit );
+)( TabsItemEdit ) as ComponentType< Record< string, unknown > >;

@@ -1,10 +1,10 @@
 import './preview.scss';
 
-( function ( api, $ ) {
+( function ( api: NewspackCustomizeAPI, $: NewspackCustomizerJQueryStatic ) {
 	$( document ).ready( function () {
 		if ( 'undefined' !== typeof api.selectiveRefresh ) {
 			api.selectiveRefresh.bind( 'partial-content-rendered', function ( placement ) {
-				const data = placement.container.find( '[data-placement]' ).data( 'placement' );
+				const data = placement.container.find( '[data-placement]' ).data( 'placement' ) as { stick_to_top?: boolean } | undefined;
 				/**
 				 * The placement preview render callback does not differ different hooks
 				 * and renders all placement mocks. We should hide placement hooks that

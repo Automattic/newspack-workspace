@@ -1,8 +1,8 @@
 import { set, debounce } from 'lodash';
 
-( function ( api, $ ) {
+( function ( api: NewspackCustomizeAPI, $: NewspackCustomizerJQueryStatic ) {
 	api.bind( 'ready', function () {
-		let controls = [];
+		let controls: NewspackCustomizeControl[] = [];
 		const sections = api.panel( 'newspack-ads' ).sections();
 		sections.forEach( function ( section ) {
 			controls = controls.concat( section.controls() );
@@ -12,7 +12,7 @@ import { set, debounce } from 'lodash';
 			if ( control.params.type !== 'newspack_ads_placement' ) {
 				return;
 			}
-			let value;
+			let value: Record< string, unknown >;
 			try {
 				value = JSON.parse( control.setting.get() || '{}' );
 			} catch ( e ) {
@@ -23,7 +23,7 @@ import { set, debounce } from 'lodash';
 			const _update = debounce( function () {
 				control.setting.set( JSON.stringify( value ) );
 			}, 300 );
-			const updateValue = ( hook, path, val ) => {
+			const updateValue = ( hook: string, path: string | string[], val: unknown ) => {
 				if ( ! Array.isArray( path ) ) {
 					path = [ path ];
 				}
@@ -45,7 +45,7 @@ import { set, debounce } from 'lodash';
 				const $provider = $container.find( '.provider-select select' );
 				const $adUnit = $container.find( '.ad-unit-select select' );
 				const $biddersIds = $container.find( '.bidder-id-input input' );
-				const hook = $container.data( 'hook' ) || '';
+				const hook = ( $container.data( 'hook' ) as string | undefined ) || '';
 				$provider.on( 'change', function () {
 					const val = $( this ).val();
 					updateValue( hook, 'provider', val );
@@ -60,7 +60,7 @@ import { set, debounce } from 'lodash';
 					updateValue( hook, 'ad_unit', $( this ).val() );
 				} );
 				$biddersIds.on( 'change', function () {
-					const bidderId = $( this ).data( 'bidder-id' );
+					const bidderId = $( this ).data( 'bidder-id' ) as string;
 					updateValue( hook, [ 'bidders_ids', bidderId ], $( this ).val() );
 				} );
 			} );

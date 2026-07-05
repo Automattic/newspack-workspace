@@ -3,7 +3,7 @@
  */
 import { Path, SVG } from '@wordpress/components';
 
-const NewspackLogo = ( { size = 24 } ) => (
+const NewspackLogo = ( { size = 24 }: { size?: number } ) => (
 	<SVG className="newspack-logo" width={ size } height={ size } viewBox="0 0 24 24">
 		<Path fill="#003da5" d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10Z" />
 		<Path

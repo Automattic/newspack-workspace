@@ -12,7 +12,15 @@ import { ESCAPE } from '@wordpress/keycodes';
  */
 import { Button, Popover } from 'newspack-components';
 
-const OrderPopover = ( { disabled = false, isDraft, onEdit, onArchive, gamLink } ) => {
+interface OrderPopoverProps {
+	disabled?: boolean;
+	isDraft: boolean;
+	onEdit?: () => void;
+	onArchive?: () => void | Promise< void >;
+	gamLink: string;
+}
+
+const OrderPopover = ( { disabled = false, isDraft, onEdit, onArchive, gamLink }: OrderPopoverProps ) => {
 	const [ isVisible, setIsVisible ] = useState( false );
 	const toggleVisible = () => setIsVisible( state => ! state );
 	return (

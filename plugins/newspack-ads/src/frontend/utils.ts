@@ -3,11 +3,9 @@
  *
  * @see https://github.com/WordPress/gutenberg/blob/trunk/packages/dom-ready/
  *
- * @param {Function} callback A function to execute after the DOM is ready.
- *
- * @return {void}
+ * @param callback A function to execute after the DOM is ready.
  */
-export function domReady( callback ) {
+export function domReady( callback: () => void ): void {
 	if ( typeof document === 'undefined' ) {
 		return;
 	}
@@ -24,23 +22,23 @@ export function domReady( callback ) {
 /**
  * Check if the site has a sticky header.
  *
- * @return {boolean} Whether the site has a sticky header.
+ * @return Whether the site has a sticky header.
  */
-export function hasStickyHeader() {
+export function hasStickyHeader(): boolean {
 	return document.body.classList.contains( 'h-stk' );
 }
 
 /**
  * Debounce a function.
  *
- * @param {Function} fn    The function to debounce.
- * @param {number}   delay The delay in milliseconds.
+ * @param fn    The function to debounce.
+ * @param delay The delay in milliseconds.
  *
- * @return {Function} The debounced function.
+ * @return The debounced function.
  */
-export function debounce( fn, delay ) {
-	let timeoutId;
-	return function ( ...args ) {
+export function debounce< Args extends unknown[] >( fn: ( ...args: Args ) => void, delay: number ): ( ...args: Args ) => void {
+	let timeoutId: ReturnType< typeof setTimeout >;
+	return function ( this: unknown, ...args: Args ) {
 		clearTimeout( timeoutId );
 		timeoutId = setTimeout( () => fn.apply( this, args ), delay );
 	};
@@ -49,12 +47,12 @@ export function debounce( fn, delay ) {
 /**
  * Detect whether an element is colliding with any of the given elements.
  *
- * @param {Element}  element  The element to detect collisions for.
- * @param {NodeList} elements The elements to detect collisions with.
+ * @param element  The element to detect collisions for.
+ * @param elements The elements to detect collisions with.
  *
- * @return {boolean} Whether the element is colliding with any of the given elements.
+ * @return Whether the element is colliding with any of the given elements.
  */
-export function elementCollides( element, elements ) {
+export function elementCollides( element: Element, elements: Iterable< Element > ): boolean {
 	const rect = element.getBoundingClientRect();
 	// Out of screen bounds.
 	if ( rect.left < 0 || window.innerWidth < rect.right || rect.top < 0 || window.innerHeight < rect.bottom ) {
