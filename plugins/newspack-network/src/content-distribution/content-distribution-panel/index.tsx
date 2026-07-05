@@ -11,7 +11,19 @@ import { broadcast } from '../../icons';
  */
 import './style.scss';
 
-const ContentDistributionPanel = ( { header, body, footer, buttons } ) => {
+/**
+ * External dependencies.
+ */
+import type { ReactNode } from 'react';
+
+interface ContentDistributionPanelProps {
+	header?: ReactNode;
+	body?: ReactNode;
+	footer?: ReactNode;
+	buttons?: ReactNode;
+}
+
+const ContentDistributionPanel = ( { header, body, footer, buttons }: ContentDistributionPanelProps ) => {
 	return (
 		<PluginSidebar
 			name="newspack-network-content-distribution-panel"

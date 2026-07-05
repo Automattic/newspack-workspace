@@ -14,23 +14,60 @@ import { __, sprintf } from '@wordpress/i18n';
 import { useState, useRef, useEffect } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
+import type { APIFetchOptions } from '@wordpress/api-fetch';
 
 /**
  * Internal dependencies.
  */
 import LocalBudgetsControl from './local-budgets-control';
 
-export default function PullStory( { items, closeModal, onActionPerformed } ) {
+/**
+ * External dependencies.
+ */
+import type { FormEvent } from 'react';
+
+/**
+ * A Story Budget story item, as used by the `newspack-story-budget.actions`
+ * DataViews action this component is registered against (see ../index.tsx).
+ * Only the fields this component (and its `isEligible` check) reads are
+ * declared here.
+ */
+export interface StoryItem {
+	id: number;
+	name: string;
+	metadata?: {
+		can_pull?: boolean;
+		is_pulled?: boolean;
+	};
+}
+
+export interface PullStoryProps {
+	items: StoryItem[];
+	closeModal: () => void;
+	onActionPerformed?: ( items: StoryItem[] ) => void;
+}
+
+/**
+ * `apiFetch`'s options type has no `isStoryBudget`/`fullPath` members -- those are a
+ * custom extension read by newspack-story-budget's own apiFetch middleware
+ * (src/store/controls.js), not part of the published `@wordpress/api-fetch` contract.
+ */
+type StoryBudgetFetchOptions = APIFetchOptions< true > & {
+	isStoryBudget: true;
+	fullPath: string;
+};
+
+export default function PullStory( { items, closeModal, onActionPerformed }: PullStoryProps ) {
 	const isBulk = items.length > 1;
 
 	const [ statusOnPublish, setStatusOnPublish ] = useState( 'draft' );
 	const [ isLoading, setIsLoading ] = useState( false );
-	const [ errors, setErrors ] = useState( [] );
+	const [ errors, setErrors ] = useState< string[] >( [] );
 	const [ budget, setBudget ] = useState( '' );
 
 	const { fetchStory } = useDispatch( 'newspack-story-budget' );
 
-	const headingRef = useRef( null );
+	const headingRef = useRef< HTMLHeadingElement >( null );
 
 	useEffect( () => {
 		if ( errors.length > 0 ) {
@@ -41,14 +78,18 @@ export default function PullStory( { items, closeModal, onActionPerformed } ) {
 		}
 	}, [ errors ] );
 
-	const pullStory = async storyId => {
-		const payload = await apiFetch( {
+	// The second argument (also passed by handleSubmit below) is unused -- status_on_publish
+	// is read from the closed-over `statusOnPublish` state instead.
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
+	const pullStory = async ( storyId: number, _statusOnPublish?: string ) => {
+		const pullOptions: StoryBudgetFetchOptions = {
 			isStoryBudget: true,
 			fullPath: `newspack-network/v1/content-distribution/pull/${ storyId }`,
 			method: 'POST',
 			data: { status_on_publish: statusOnPublish },
-		} );
-		const res = await apiFetch( {
+		};
+		const payload = await apiFetch< unknown >( pullOptions );
+		const res = await apiFetch< { post_id: number } >( {
 			path: 'newspack-network/v1/content-distribution/insert',
 			method: 'POST',
 			data: { payload },
@@ -63,11 +104,11 @@ export default function PullStory( { items, closeModal, onActionPerformed } ) {
 		fetchStory( storyId );
 	};
 
-	const handleSubmit = ev => {
+	const handleSubmit = ( ev: FormEvent< HTMLFormElement > ) => {
 		ev.preventDefault();
 		setErrors( [] );
 		setIsLoading( true );
-		const promises = [];
+		const promises: Promise< void >[] = [];
 		for ( const item of items ) {
 			promises.push( pullStory( item.id, statusOnPublish ) );
 		}

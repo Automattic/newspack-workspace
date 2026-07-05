@@ -20,6 +20,12 @@ import { registerPlugin } from '@wordpress/plugins';
 import './style.scss';
 import ContentDistributionPanel from '../content-distribution-panel';
 
+/**
+ * The global `wp.data.dispatch` singleton, used here (instead of the
+ * `useDispatch` hook) to dispatch actions outside of the component's render.
+ */
+declare const wp: { data: { dispatch: typeof import('@wordpress/data').dispatch } };
+
 const originalSiteUrl = newspack_network_incoming_post.originalSiteUrl;
 const originalPostEditUrl = newspack_network_incoming_post.originalPostEditUrl;
 const unlinked = newspack_network_incoming_post.unlinked;
@@ -34,8 +40,12 @@ function IncomingPost() {
 	const [ showConfirmDialog, setShowConfirmDialog ] = useState( false );
 
 	const { postId, areMetaBoxesInitialized } = useSelect( select => {
-		const { getCurrentPostId } = select( 'core/editor' );
-		const { areMetaBoxesInitialized: _areMetaBoxesInitialized } = select( 'core/edit-post' );
+		// `select( storeName )` resolves to `never` for plain string store names (it's only
+		// typed for `StoreDescriptor` arguments); cast to the subset of selectors used here.
+		const { getCurrentPostId } = select( 'core/editor' ) as { getCurrentPostId: () => number };
+		const { areMetaBoxesInitialized: _areMetaBoxesInitialized } = select( 'core/edit-post' ) as {
+			areMetaBoxesInitialized: () => boolean;
+		};
 		return {
 			postId: getCurrentPostId(),
 			areMetaBoxesInitialized: _areMetaBoxesInitialized(),
@@ -83,8 +93,8 @@ function IncomingPost() {
 		document.querySelector( '#editor' )?.classList.toggle( 'newspack-network-incoming-post-linked', ! isUnLinked );
 	}, [ isUnLinked ] );
 
-	const toggleUnlinkedState = async _unlinked => {
-		return apiFetch( {
+	const toggleUnlinkedState = async ( _unlinked: boolean ) => {
+		return apiFetch< { unlinked: boolean } >( {
 			path: `newspack-network/v1/content-distribution/unlink/${ postId }`,
 			method: 'POST',
 			data: {
@@ -97,23 +107,22 @@ function IncomingPost() {
 			.catch( error => createNotice( 'error', error.message ) );
 	};
 
-	const toggleUnlinkedClicked = _unlinked => {
+	const toggleUnlinkedClicked = ( _unlinked: boolean ) => {
 		setIsUnLinkedToggling( true );
 		if ( isUnLinked ) {
 			// For relinking, we need to save the post (it will be overwritten by the origin post)
 			// to avoid the browser warning when reloading.
-			wp.data
-				.dispatch( 'core/editor' )
-				.savePost()
-				.then( () => {
-					// Remove the 'draft saved' notice.
-					wp.data.dispatch( 'core/notices' ).removeNotice( 'SAVE_POST_NOTICE_ID' );
-					toggleUnlinkedState( _unlinked ).then( () => {
-						setIsUnLinkedToggling( false );
-						setIsUnLinked( false );
-						window.location.reload();
-					} ); // Reload to get the origin post content.
-				} );
+			// `dispatch( storeName )` resolves to `unknown` for plain string store names; cast to
+			// the subset of action creators used here.
+			( wp.data.dispatch( 'core/editor' ) as { savePost: () => Promise< void > } ).savePost().then( () => {
+				// Remove the 'draft saved' notice.
+				( wp.data.dispatch( 'core/notices' ) as { removeNotice: ( id: string ) => void } ).removeNotice( 'SAVE_POST_NOTICE_ID' );
+				toggleUnlinkedState( _unlinked ).then( () => {
+					setIsUnLinkedToggling( false );
+					setIsUnLinked( false );
+					window.location.reload();
+				} ); // Reload to get the origin post content.
+			} );
 		} else {
 			toggleUnlinkedState( _unlinked ).then( () => {
 				setIsUnLinkedToggling( false );

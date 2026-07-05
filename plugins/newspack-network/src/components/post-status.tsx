@@ -14,7 +14,15 @@ import { drafts, published, pending } from '../icons';
  */
 import PostPanelRow from './post-panel-row';
 
-const postStatusesInfo = {
+interface PostStatusProps {
+	label?: string | null;
+	description?: string | null;
+	status: string;
+	onChange: ( status: string ) => void;
+	disabled?: boolean;
+}
+
+const postStatusesInfo: Record< string, { label: string; icon: JSX.Element } > = {
 	draft: { label: __( 'Draft' ), icon: drafts },
 	pending: { label: __( 'Pending' ), icon: pending },
 	publish: { label: __( 'Published' ), icon: published },
@@ -38,8 +46,8 @@ const STATUS_OPTIONS = [
 	},
 ];
 
-export default function PostStatus( { label, description, status, onChange, disabled } ) {
-	const [ popoverAnchor, setPopoverAnchor ] = useState( null );
+export default function PostStatus( { label, description, status, onChange, disabled }: PostStatusProps ) {
+	const [ popoverAnchor, setPopoverAnchor ] = useState< HTMLDivElement | null >( null );
 	// Memoize popoverProps to avoid returning a new object every time.
 	const popoverProps = useMemo(
 		() => ( {

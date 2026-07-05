@@ -27,22 +27,31 @@ const postTypeLabel = newspack_network_outgoing_post.post_type_label;
 function OutgoingPost() {
 	const [ search, setSearch ] = useState( '' );
 	const [ isDistributing, setIsDistributing ] = useState( false );
-	const [ distribution, setDistribution ] = useState( [] );
-	const [ siteSelection, setSiteSelection ] = useState( [] );
+	const [ distribution, setDistribution ] = useState< string[] >( [] );
+	const [ siteSelection, setSiteSelection ] = useState< string[] >( [] );
 	const [ statusOnPublish, setStatusOnPublish ] = useState( defaultStatus );
 
 	const { postId, postStatus, savedUrls, hasChangedContent, isSavingPost, isCleanNewPost } = useSelect( select => {
+		// `select( storeName )` resolves to `never` for plain string store names (it's only
+		// typed for `StoreDescriptor` arguments); cast to the subset of selectors used here.
 		const {
 			getCurrentPostId,
 			getCurrentPostAttribute,
 			hasChangedContent: _hasChangedContent,
 			isSavingPost: _isSavingPost,
 			isCleanNewPost: _isCleanNewPost,
-		} = select( 'core/editor' );
+		} = select( 'core/editor' ) as {
+			getCurrentPostId: () => number;
+			getCurrentPostAttribute: ( attribute: string ) => unknown;
+			hasChangedContent: () => boolean;
+			isSavingPost: () => boolean;
+			isCleanNewPost: () => boolean;
+		};
+		const meta = getCurrentPostAttribute( 'meta' ) as Record< string, unknown > | undefined;
 		return {
 			postId: getCurrentPostId(),
-			postStatus: getCurrentPostAttribute( 'status' ),
-			savedUrls: getCurrentPostAttribute( 'meta' )?.[ distributedMetaKey ] || [],
+			postStatus: getCurrentPostAttribute( 'status' ) as string,
+			savedUrls: ( meta?.[ distributedMetaKey ] as string[] | undefined ) || [],
 			hasChangedContent: _hasChangedContent(),
 			isSavingPost: _isSavingPost(),
 			isCleanNewPost: _isCleanNewPost(),
@@ -90,14 +99,14 @@ function OutgoingPost() {
 
 	const isDisabled = isSavingPost || isDistributing || isCleanNewPost || isAutoDraft;
 
-	const getFormattedSite = site => {
+	const getFormattedSite = ( site: string ) => {
 		const url = new URL( site );
 		return url.hostname;
 	};
 
 	const distribute = () => {
 		setIsDistributing( true );
-		apiFetch( {
+		apiFetch< string[] >( {
 			path: `newspack-network/v1/content-distribution/distribute/${ postId }`,
 			method: 'POST',
 			data: {
