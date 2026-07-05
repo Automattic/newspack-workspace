@@ -1,0 +1,428 @@
+/* eslint-disable jsdoc/no-undefined-types, jsdoc/valid-types */
+
+/**
+ * External dependencies
+ */
+import type { ComponentProps, ComponentType } from 'react';
+
+/**
+ * WordPress dependencies
+ */
+import { PlainText, __experimentalPanelColorGradientSettings as PanelColorGradientSettings } from '@wordpress/block-editor'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { compose, useInstanceId } from '@wordpress/compose';
+import {
+	BaseControl,
+	Panel,
+	PanelBody,
+	PanelRow,
+	SelectControl,
+	__experimentalVStack as VStack, // eslint-disable-line @wordpress/no-unsafe-wp-apis
+} from '@wordpress/components';
+import { __ } from '@wordpress/i18n';
+import { useSelect, withDispatch, withSelect, type SelectFunction } from '@wordpress/data';
+import { useEffect, useRef, useState } from '@wordpress/element';
+
+/**
+ * Internal dependencies
+ */
+import type { NewsletterMeta } from '../../service-providers/types';
+import './style.scss';
+
+/** The color/typography values this panel reads from and writes to post meta. */
+interface StylingProps {
+	fontBody: string;
+	fontHeader: string;
+	backgroundColor: string;
+	textColor: string;
+	customCss: string;
+	[ key: string ]: string;
+}
+
+const fontOptgroups = [
+	{
+		label: __( 'Sans Serif', 'newspack-newsletters' ),
+		options: [
+			{
+				value: 'Arial, Helvetica, sans-serif',
+				label: __( 'Arial', 'newspack-newsletters' ),
+			},
+			{
+				value: 'Tahoma, sans-serif',
+				label: __( 'Tahoma', 'newspack-newsletters' ),
+			},
+			{
+				value: 'Trebuchet MS, sans-serif',
+				label: __( 'Trebuchet', 'newspack-newsletters' ),
+			},
+			{
+				value: 'Verdana, sans-serif',
+				label: __( 'Verdana', 'newspack-newsletters' ),
+			},
+		],
+	},
+
+	{
+		label: __( 'Serif', 'newspack-newsletters' ),
+		options: [
+			{
+				value: 'Georgia, serif',
+				label: __( 'Georgia', 'newspack-newsletters' ),
+			},
+			{
+				value: 'Palatino, serif',
+				label: __( 'Palatino', 'newspack-newsletters' ),
+			},
+			{
+				value: 'Times New Roman, serif',
+				label: __( 'Times New Roman', 'newspack-newsletters' ),
+			},
+		],
+	},
+
+	{
+		label: __( 'Monospace', 'newspack-newsletters' ),
+		options: [
+			{
+				value: 'Courier, monospace',
+				label: __( 'Courier', 'newspack-newsletters' ),
+			},
+		],
+	},
+];
+
+const customStylesSelector = ( select: SelectFunction ): StylingProps => {
+	const { getEditedPostAttribute } = select( 'core/editor' ) as {
+		getEditedPostAttribute?: ( attribute: string ) => NewsletterMeta;
+	};
+	const meta = ( getEditedPostAttribute?.( 'meta' ) || {} ) as NewsletterMeta;
+	return {
+		fontBody: ( meta.font_body || fontOptgroups[ 1 ].options[ 0 ].value ) as string,
+		fontHeader: ( meta.font_header || fontOptgroups[ 0 ].options[ 0 ].value ) as string,
+		backgroundColor: ( meta.background_color || '#ffffff' ) as string,
+		textColor: ( meta.text_color || '#000000' ) as string,
+		customCss: ( meta.custom_css || '' ) as string,
+	};
+};
+
+// Create a temporary DOM document (not displayed) for parsing CSS rules.
+const doc = document.implementation.createHTMLDocument( 'Temp' );
+
+/**
+ * Takes a given CSS string, parses it, and scopes all its rules to the given `scope`.
+ *
+ * @param scope The scope to apply to each rule in the CSS.
+ * @param css   The CSS to scope.
+ * @return Scoped CSS string.
+ */
+export const getScopedCss = ( scope: string, css: string ): string => {
+	const style = doc.querySelector< HTMLStyleElement >( 'style' ) || document.createElement( 'style' );
+
+	style.textContent = css;
+	doc.head.appendChild( style );
+
+	// Just appended above, so the stylesheet is always populated.
+	const rules = [ ...style.sheet!.cssRules ] as CSSStyleRule[];
+	return rules
+		.map( rule => {
+			rule.selectorText = rule.selectorText
+				.split( ',' )
+				.map( selector => `${ scope } ${ selector }` )
+				.join( ', ' );
+			return rule.cssText;
+		} )
+		.join( '\n' );
+};
+
+/**
+ * Hook to apply body and header fonts variables in store to an iframe as root
+ * element style property.
+ *
+ * @return The ref to attach to the component containing the canvas iframe.
+ */
+export const useCustomFontsInIframe = () => {
+	const ref = useRef< HTMLElement | null >( null );
+	const { fontBody, fontHeader } = useSelect( customStylesSelector );
+	useEffect( () => {
+		// Populated by the time this effect runs, since the ref is attached to a mounted element.
+		const node = ref.current!;
+		const updateIframe = () => {
+			const iframe = node.querySelector< HTMLIFrameElement >( 'iframe[title="Editor canvas"]' );
+			if ( iframe ) {
+				const updateStyleProperties = () => {
+					const element = iframe.contentDocument?.documentElement;
+					if ( element ) {
+						element.style.setProperty( '--newspack-newsletters-body-font', fontBody );
+						element.style.setProperty( '--newspack-newsletters-header-font', fontHeader );
+						element.querySelector< HTMLElement >( 'body' )!.style.setProperty( 'background', 'none' );
+					}
+				};
+				updateStyleProperties();
+				// Handle Firefox iframe.
+				iframe.addEventListener( 'load', updateStyleProperties );
+				return () => {
+					iframe.removeEventListener( 'load', updateStyleProperties );
+				};
+			}
+		};
+		updateIframe();
+		const observer = new MutationObserver( updateIframe );
+		observer.observe( node, { childList: true } );
+		return () => {
+			observer.disconnect();
+		};
+	}, [ fontBody, fontHeader ] );
+	return ref;
+};
+
+const EDITOR_CANVAS_SELECTOR = 'iframe[name="editor-canvas"]';
+
+// TODO: Remove the parent-document fallback once WP 7.0 is officially released
+// and becomes the minimum supported version.
+const getEditorCanvasDocument = () => {
+	const iframe = document.querySelector< HTMLIFrameElement >( EDITOR_CANVAS_SELECTOR );
+	return iframe?.contentDocument ?? document;
+};
+
+export const ApplyStyling = withSelect( customStylesSelector )( ( { fontBody, fontHeader, backgroundColor, textColor, customCss }: StylingProps ) => {
+	// Bumped on canvas iframe mount/remount/load so the per-style effects
+	// below re-apply styles inside the new canvas document.
+	const [ iframeKey, setIframeKey ] = useState( 0 );
+
+	useEffect( () => {
+		const bump = () => setIframeKey( key => key + 1 );
+		let currentIframe = document.querySelector< HTMLIFrameElement >( EDITOR_CANVAS_SELECTOR );
+		if ( currentIframe ) {
+			currentIframe.addEventListener( 'load', bump );
+		}
+		const observer = new MutationObserver( () => {
+			const nextIframe = document.querySelector< HTMLIFrameElement >( EDITOR_CANVAS_SELECTOR );
+			if ( nextIframe === currentIframe ) {
+				return;
+			}
+			if ( currentIframe ) {
+				currentIframe.removeEventListener( 'load', bump );
+			}
+			currentIframe = nextIframe;
+			if ( currentIframe ) {
+				currentIframe.addEventListener( 'load', bump );
+			}
+			bump();
+		} );
+		// Scope the observer to the editor content region rather than the whole
+		// body so unrelated editor mutations don't trigger the callback.
+		const observerRoot = document.querySelector( '.interface-interface-skeleton__content' ) || document.body;
+		observer.observe( observerRoot, { childList: true, subtree: true } );
+		return () => {
+			if ( currentIframe ) {
+				currentIframe.removeEventListener( 'load', bump );
+			}
+			observer.disconnect();
+		};
+	}, [] );
+
+	useEffect( () => {
+		document.documentElement.style.setProperty( '--newspack-newsletters-body-font', fontBody );
+	}, [ fontBody ] );
+	useEffect( () => {
+		document.documentElement.style.setProperty( '--newspack-newsletters-header-font', fontHeader );
+	}, [ fontHeader ] );
+	// Fallback for non-iframed canvases (older WP / classic metabox); the iframe walker below handles modern iframed canvases.
+	useEffect( () => {
+		const parentWrapper = document.querySelector< HTMLElement >( '.editor-styles-wrapper' );
+		if ( parentWrapper ) {
+			parentWrapper.style.backgroundColor = backgroundColor;
+			parentWrapper.style.color = textColor;
+		}
+	}, [ backgroundColor, textColor ] );
+	// Walks all canvas iframes (including the nested posts-inserter BlockPreview) so fonts and bg/text colour apply inside each.
+	useEffect( () => {
+		const selector = 'iframe[name="editor-canvas"], iframe[title="Editor canvas"]';
+		const seenIframes = new WeakSet< HTMLIFrameElement >();
+		const seenDocs = new WeakSet< Document >();
+		const observers: MutationObserver[] = [];
+		const listeners: Array< () => void > = [];
+		const apply = ( iframeDoc: Document ) => {
+			iframeDoc.documentElement.style.setProperty( '--newspack-newsletters-body-font', fontBody );
+			iframeDoc.documentElement.style.setProperty( '--newspack-newsletters-header-font', fontHeader );
+			// Clear the iframe body background so the editor-styles-wrapper background colour shows through.
+			if ( iframeDoc.body ) {
+				iframeDoc.body.style.setProperty( 'background', 'none' );
+			}
+			const wrapper = iframeDoc.querySelector< HTMLElement >( '.editor-styles-wrapper' );
+			if ( wrapper ) {
+				wrapper.style.backgroundColor = backgroundColor;
+				wrapper.style.color = textColor;
+			}
+		};
+		const visit = ( root: Document ) => {
+			root.querySelectorAll< HTMLIFrameElement >( selector ).forEach( iframe => {
+				if ( seenIframes.has( iframe ) ) {
+					return;
+				}
+				seenIframes.add( iframe );
+				const onLoad = () => {
+					const iframeDoc = iframe.contentDocument;
+					if ( ! iframeDoc?.documentElement ) {
+						return;
+					}
+					apply( iframeDoc );
+					if ( iframeDoc.body && ! seenDocs.has( iframeDoc ) ) {
+						seenDocs.add( iframeDoc );
+						const innerObserver = new MutationObserver( () => {
+							apply( iframeDoc );
+							visit( iframeDoc );
+						} );
+						innerObserver.observe( iframeDoc.body, { childList: true, subtree: true } );
+						observers.push( innerObserver );
+						visit( iframeDoc );
+					}
+				};
+				onLoad();
+				iframe.addEventListener( 'load', onLoad );
+				listeners.push( () => iframe.removeEventListener( 'load', onLoad ) );
+			} );
+		};
+		if ( ! document.body ) {
+			return;
+		}
+		visit( document );
+		// Scope to the editor wrapper when present so we don't react to every mutation across the admin chrome.
+		const scope = document.querySelector( '.editor-styles-wrapper, .edit-post-visual-editor, #editor' ) || document.body;
+		const rootObserver = new MutationObserver( mutations => {
+			const isCanvasIframe = ( n: Node ) =>
+				n.nodeType === 1 && ( ( n as Element ).matches?.( selector ) || ( n as Element ).querySelector?.( selector ) );
+			const hasIframeChange = mutations.some( m => Array.from( m.addedNodes ).some( isCanvasIframe ) );
+			if ( hasIframeChange ) {
+				visit( document );
+			}
+		} );
+		rootObserver.observe( scope, { childList: true, subtree: true } );
+		observers.push( rootObserver );
+		return () => {
+			observers.forEach( o => o.disconnect() );
+			listeners.forEach( remove => remove() );
+		};
+	}, [ fontBody, fontHeader, backgroundColor, textColor ] );
+
+	useEffect( () => {
+		const canvasDoc = getEditorCanvasDocument();
+		const editorElement = canvasDoc.querySelector( '.editor-styles-wrapper' );
+		if ( ! editorElement ) {
+			return;
+		}
+		let styleEl = canvasDoc.getElementById( 'newspack-newsletters__custom-styles' );
+		if ( ! styleEl ) {
+			styleEl = canvasDoc.createElement( 'style' );
+			styleEl.setAttribute( 'type', 'text/css' );
+			styleEl.setAttribute( 'id', 'newspack-newsletters__custom-styles' );
+			canvasDoc.head.appendChild( styleEl );
+		}
+		styleEl.textContent = getScopedCss( '.editor-styles-wrapper', customCss );
+	}, [ customCss, iframeKey ] );
+
+	return null;
+} );
+
+interface StylingPanelProps {
+	editPost: ( edits: Record< string, unknown > ) => void;
+	fontBody: string;
+	fontHeader: string;
+	backgroundColor: string;
+	textColor: string;
+	customCss: string;
+}
+
+// `PanelBody` doesn't declare a `name` prop in its own types; this pre-existing (no-op) prop
+// is passed through unchanged rather than removed, to avoid altering existing behavior.
+const PanelBodyWithName = PanelBody as ComponentType< ComponentProps< typeof PanelBody > & { name?: string } >;
+
+export const Styling = compose(
+	withDispatch( dispatch => {
+		// `dispatch()`'s non-generic overload already types unknown-string stores as
+		// `Record<string, (...args: any[]) => any>`, so no cast is needed here.
+		const { editPost } = dispatch( 'core/editor' );
+		return { editPost };
+	} ),
+	withSelect( customStylesSelector )
+)( ( { editPost, fontBody, fontHeader, customCss, backgroundColor, textColor }: StylingPanelProps ) => {
+	const updateStyleValue = ( key: string, value: string ) => {
+		editPost( { meta: { [ key ]: value } } );
+	};
+
+	const instanceId = useInstanceId( SelectControl );
+
+	const renderFontOptions = () =>
+		fontOptgroups.map( group => (
+			<optgroup key={ group.label } label={ group.label }>
+				{ group.options.map( option => (
+					<option key={ option.value } value={ option.value }>
+						{ option.label }
+					</option>
+				) ) }
+			</optgroup>
+		) );
+
+	return (
+		<Panel>
+			<PanelColorGradientSettings
+				title={ __( 'Color', 'newspack-newsletters' ) }
+				gradients={ [] } // Pass empty array to disable gradients.
+				settings={ [
+					{
+						colorValue: textColor,
+						onColorChange: ( value: string ) => updateStyleValue( 'text_color', value ),
+						label: __( 'Text', 'newspack-newsletters' ),
+					},
+					{
+						colorValue: backgroundColor,
+						onColorChange: ( value: string ) => updateStyleValue( 'background_color', value ),
+						label: __( 'Background', 'newspack-newsletters' ),
+					},
+				] }
+			/>
+			<PanelBodyWithName name="newsletters-typography-panel" title={ __( 'Typography', 'newspack-newsletters' ) }>
+				<VStack spacing={ 4 }>
+					<SelectControl
+						label={ __( 'Headings font', 'newspack-newsletters' ) }
+						value={ fontHeader }
+						onChange={ value => updateStyleValue( 'font_header', value ) }
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+					>
+						{ renderFontOptions() }
+					</SelectControl>
+					<SelectControl
+						label={ __( 'Body font', 'newspack-newsletters' ) }
+						value={ fontBody }
+						onChange={ value => updateStyleValue( 'font_body', value ) }
+						__next40pxDefaultSize
+						__nextHasNoMarginBottom
+					>
+						{ renderFontOptions() }
+					</SelectControl>
+				</VStack>
+			</PanelBodyWithName>
+			<PanelBodyWithName name="newsletters-css-panel" title={ __( 'Custom CSS', 'newspack-newsletters' ) } initialOpen={ false }>
+				<PanelRow className="newspack-newsletters__css-panel">
+					<BaseControl
+						id={ `inspector-custom-css-control-${ instanceId }` }
+						label={ __( 'Custom CSS', 'newspack-newsletters' ) }
+						help={ __(
+							'This is an advanced feature and may result in unpredictable behavior. Custom CSS will be appended to default styles in sent emails only.',
+							'newspack-newsletters'
+						) }
+						hideLabelFromVision
+					>
+						<PlainText
+							className="components-textarea-control__input"
+							value={ customCss }
+							onChange={ ( content: string ) => editPost( { meta: { custom_css: content } } ) }
+							aria-label={ __( 'Custom CSS', 'newspack-newsletters' ) }
+							placeholder={ __( 'Write custom CSS…', 'newspack-newsletters' ) }
+						/>
+					</BaseControl>
+				</PanelRow>
+			</PanelBodyWithName>
+		</Panel>
+	);
+} ) as ComponentType;
