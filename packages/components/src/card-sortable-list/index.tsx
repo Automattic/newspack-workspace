@@ -269,7 +269,7 @@ const CardSortableList = ( {
 		return itemTops.length; // below all items
 	};
 
-	const handleDragEnd = ( event: DragEvent ) => {
+	const handleDragEnd = ( event: React.DragEvent ) => {
 		// Take a local copy of measurements before clearDragState nulls it.
 		const m = measurements;
 		const sourceIndex = draggingIndex;

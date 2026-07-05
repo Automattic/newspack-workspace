@@ -38,7 +38,7 @@ type CardFeatureIcon = {
 type MoreControl = {
 	title: string;
 	onClick: () => void;
-	icon?: React.ReactNode;
+	icon?: JSX.Element;
 };
 
 type CardFeatureProps = {
