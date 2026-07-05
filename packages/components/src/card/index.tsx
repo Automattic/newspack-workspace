@@ -34,6 +34,8 @@ type CardProps = {
 	__experimentalCoreCard?: boolean;
 	/** Pass props supported by WP Core's Card component in this single prop. */
 	__experimentalCoreProps?: CoreCardProps;
+	/** Forwarded (via the rest props) to CoreCard, which renders link cards; not a plain-div attribute. */
+	href?: string;
 	/** `false` is tolerated (and ignored, like `undefined`) so callers can write `onClick={ condition && handler }`. */
 	onClick?: MouseEventHandler< HTMLDivElement > | false;
 	id?: string | number | null;

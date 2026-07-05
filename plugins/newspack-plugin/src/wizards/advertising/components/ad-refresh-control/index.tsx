@@ -13,8 +13,12 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import { PluginSettings } from '../../../../../packages/components/src';
+import type { PluginSettingField, PluginSettingValue } from '../../../../../packages/components/src/plugin-settings/SettingsSection';
+import type { AdsApiError } from '../../types';
 
-const fields = [
+type AdRefreshControlSettings = Record< string, PluginSettingValue | undefined >;
+
+const fields: ( PluginSettingField & { key: string } )[] = [
 	{
 		key: 'viewability_threshold',
 		type: 'int',
@@ -73,13 +77,13 @@ const fields = [
 
 export default function AdRefreshControlSettings() {
 	const [ inFlight, setInFlight ] = useState( false );
-	const [ error, setError ] = useState( null );
-	const [ settings, setSettings ] = useState( null );
+	const [ error, setError ] = useState< AdsApiError | null >( null );
+	const [ settings, setSettings ] = useState< AdRefreshControlSettings | null >( null );
 	useEffect( () => {
 		const fetchSettings = async () => {
 			setInFlight( true );
 			try {
-				setSettings( await apiFetch( { path: '/newspack-ads/v1/ad-refresh-control' } ) );
+				setSettings( await apiFetch< AdRefreshControlSettings >( { path: '/newspack-ads/v1/ad-refresh-control' } ) );
 			} catch ( err ) {
 				setSettings( null );
 			}
@@ -87,17 +91,17 @@ export default function AdRefreshControlSettings() {
 		};
 		fetchSettings();
 	}, [] );
-	const handleChange = ( key, value ) => {
+	const handleChange = ( key: string | undefined, value: unknown ) => {
 		setSettings( {
 			...settings,
-			[ key ]: value,
+			[ String( key ) ]: value as PluginSettingValue,
 		} );
 	};
-	const handleUpdate = async data => {
+	const handleUpdate = async ( data?: Record< string, unknown > ) => {
 		setError( null );
 		setInFlight( true );
 		try {
-			const result = await apiFetch( {
+			const result = await apiFetch< AdRefreshControlSettings >( {
 				path: '/newspack-ads/v1/ad-refresh-control',
 				method: 'POST',
 				data: {
@@ -107,7 +111,7 @@ export default function AdRefreshControlSettings() {
 			} );
 			setSettings( result );
 		} catch ( err ) {
-			setError( err );
+			setError( err as AdsApiError );
 		}
 		setInFlight( false );
 	};

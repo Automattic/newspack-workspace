@@ -11,22 +11,43 @@ import { addQueryArgs } from '@wordpress/url';
  * Internal dependencies
  */
 import { ActionCard, Grid, Notice, Button, CategoryAutocomplete, SectionHeader, Waiting } from '../../../../../packages/components/src';
+import type { AdsApiError, SuppressionConfig } from '../../types';
+
+/**
+ * A post type as returned by the /wp/v2/types endpoint.
+ */
+type WpPostType = {
+	slug: string;
+	name: string;
+	viewable?: boolean;
+	visibility?: {
+		show_ui?: boolean;
+	};
+};
+
+/**
+ * A post type checkbox option.
+ */
+type PostTypeOption = {
+	value: string;
+	label: string;
+};
 
 const Suppression = () => {
-	const [ error, setError ] = useState( false );
+	const [ error, setError ] = useState< AdsApiError | false >( false );
 	const [ inFlight, setInFlight ] = useState( false );
-	const [ initialConfig, setInitialConfig ] = useState( false );
+	const [ initialConfig, setInitialConfig ] = useState< SuppressionConfig | false >( false );
 	const [ isDirty, setIsDirty ] = useState( false );
-	const [ config, setConfig ] = useState( false );
-	const [ postTypes, setPostTypes ] = useState( [] );
+	const [ config, setConfig ] = useState< SuppressionConfig | false >( false );
+	const [ postTypes, setPostTypes ] = useState< PostTypeOption[] >( [] );
 	const fetchConfig = () => {
-		apiFetch( { path: '/newspack-ads/v1/suppression' } ).then( response => {
+		apiFetch< SuppressionConfig >( { path: '/newspack-ads/v1/suppression' } ).then( response => {
 			setConfig( response );
 			setInitialConfig( response );
 		} );
 	};
 	const fetchPostTypes = () => {
-		apiFetch( {
+		apiFetch< Record< string, WpPostType > >( {
 			path: addQueryArgs( '/wp/v2/types', { context: 'edit' } ),
 		} )
 			.then( result => {
@@ -43,7 +64,7 @@ const Suppression = () => {
 	};
 	const updateConfig = () => {
 		setInFlight( true );
-		apiFetch( {
+		apiFetch< SuppressionConfig >( {
 			path: '/newspack-ads/v1/suppression',
 			method: 'POST',
 			data: { config },
@@ -104,7 +125,7 @@ const Suppression = () => {
 			/>
 			<CategoryAutocomplete
 				disabled={ config?.tag_archive_pages }
-				value={ config.tags?.map( v => parseInt( v ) ) || [] }
+				value={ config.tags?.map( v => parseInt( String( v ) ) ) || [] }
 				onChange={ selected => {
 					setConfig( {
 						...config,
@@ -115,7 +136,7 @@ const Suppression = () => {
 				taxonomy="tags"
 			/>
 			<ToggleControl
-				disabled={ config === false }
+				disabled={ ! config }
 				checked={ config?.tag_archive_pages }
 				onChange={ tag_archive_pages => {
 					setConfig( { ...config, tag_archive_pages } );
@@ -129,7 +150,7 @@ const Suppression = () => {
 			/>
 			<CategoryAutocomplete
 				disabled={ config?.category_archive_pages }
-				value={ config.categories?.map( v => parseInt( v ) ) || [] }
+				value={ config.categories?.map( v => parseInt( String( v ) ) ) || [] }
 				onChange={ selected => {
 					setConfig( {
 						...config,
@@ -139,7 +160,7 @@ const Suppression = () => {
 				label={ __( 'Categories to suppress ads on (archives and posts)', 'newspack-plugin' ) }
 			/>
 			<ToggleControl
-				disabled={ config === false }
+				disabled={ ! config }
 				checked={ config?.category_archive_pages }
 				onChange={ category_archive_pages => {
 					setConfig( { ...config, category_archive_pages } );
@@ -152,7 +173,7 @@ const Suppression = () => {
 				description={ __( 'Suppress ads on automatically generated pages displaying a list of posts by an author.', 'newspack-plugin' ) }
 			/>
 			<ToggleControl
-				disabled={ config === false }
+				disabled={ ! config }
 				checked={ config?.author_archive_pages }
 				onChange={ author_archive_pages => {
 					setConfig( { ...config, author_archive_pages } );

@@ -13,14 +13,15 @@ import { __experimentalVStack as VStack } from '@wordpress/components'; // eslin
  * Internal dependencies
  */
 import { Notice, SelectControl, TextControl } from '../../../../../packages/components/src';
+import type { AdUnitSizeDimensions, Bidder, PlacementData, Provider } from '../../types';
 
 /**
  * Get select options from object of ad units.
  *
- * @param {Array} providers List of providers.
- * @return {Array} Providers options for select control.
+ * @param providers List of providers.
+ * @return Providers options for select control.
  */
-const getProvidersForSelect = providers => {
+const getProvidersForSelect = ( providers: Provider[] ) => {
 	return [
 		{
 			label: __( 'Select a provider', 'newspack-plugin' ),
@@ -38,10 +39,10 @@ const getProvidersForSelect = providers => {
 /**
  * Get select options from object of ad units.
  *
- * @param {Object} provider Provider object.
- * @return {Array} Ad unit options for select control.
+ * @param provider Provider object.
+ * @return Ad unit options for select control.
  */
-const getProviderUnitsForSelect = provider => {
+const getProviderUnitsForSelect = ( provider?: Provider | null ) => {
 	if ( ! provider?.units ) {
 		return [];
 	}
@@ -67,14 +68,23 @@ const getProviderUnitsForSelect = provider => {
 /**
  * Whether any `sizesToCheck` size exists in `sizes`.
  *
- * @param {Array} sizes        Array of sizes.
- * @param {Array} sizesToCheck Array of sizes to check.
- * @return {boolean} Whether any size was found.
+ * @param sizes        Array of sizes.
+ * @param sizesToCheck Array of sizes to check.
+ * @return Whether any size was found.
  */
-const hasAnySize = ( sizes, sizesToCheck ) => {
+const hasAnySize = ( sizes: number[][] | undefined, sizesToCheck: AdUnitSizeDimensions[] ) => {
 	return sizesToCheck.some( sizeToCheck => {
 		return ( sizes || [] ).find( size => size[ 0 ] === sizeToCheck[ 0 ] && size[ 1 ] === sizeToCheck[ 1 ] );
 	} );
+};
+
+type PlacementControlProps = {
+	label?: string;
+	providers?: Provider[];
+	bidders?: Record< string, Bidder >;
+	value?: PlacementData;
+	disabled?: boolean;
+	onChange: ( value: PlacementData ) => void;
 };
 
 const PlacementControl = ( {
@@ -85,8 +95,8 @@ const PlacementControl = ( {
 	disabled = false,
 	onChange,
 	...props
-} ) => {
-	const [ biddersErrors, setBiddersErrors ] = useState( {} );
+}: PlacementControlProps ) => {
+	const [ biddersErrors, setBiddersErrors ] = useState< Record< string, string | null > >( {} );
 
 	// Ensure incoming value is available otherwise reset to empty values.
 	const showProviderSelect = providers.length > 1;
@@ -101,7 +111,7 @@ const PlacementControl = ( {
 	);
 
 	useEffect( () => {
-		const errors = {};
+		const errors: Record< string, string | null > = {};
 		Object.keys( bidders ).forEach( bidderKey => {
 			const bidder = bidders[ bidderKey ];
 			const unit = placementAdUnit;
@@ -112,8 +122,7 @@ const PlacementControl = ( {
 					: sprintf(
 							// translators: %s: ad bidder name.
 							__( '%s does not support the selected ad unit sizes.', 'newspack-plugin' ),
-							bidder.name,
-							''
+							bidder.name
 					  );
 		} );
 		setBiddersErrors( errors );
@@ -131,7 +140,7 @@ const PlacementControl = ( {
 						label={ __( 'Provider', 'newspack-plugin' ) }
 						value={ placementProvider ? placementProvider.id : '' }
 						options={ getProvidersForSelect( providers ) }
-						onChange={ provider => onChange( { ...value, provider } ) }
+						onChange={ ( provider: string ) => onChange( { ...value, provider } ) }
 						disabled={ disabled }
 					/>
 				) }
@@ -139,7 +148,7 @@ const PlacementControl = ( {
 					label={ label }
 					value={ placementAdUnit ? placementAdUnit.value : '' }
 					options={ getProviderUnitsForSelect( effectiveProvider ) }
-					onChange={ data => {
+					onChange={ ( data: string ) => {
 						onChange( {
 							...value,
 							ad_unit: data,
@@ -160,7 +169,7 @@ const PlacementControl = ( {
 								value={ value.bidders_ids ? value.bidders_ids[ bidderKey ] : null }
 								label={ bidderLabel }
 								disabled={ biddersErrors[ bidderKey ] || disabled }
-								onChange={ data => {
+								onChange={ ( data: string ) => {
 									onChange( {
 										...value,
 										bidders_ids: {

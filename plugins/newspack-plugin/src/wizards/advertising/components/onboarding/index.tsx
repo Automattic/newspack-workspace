@@ -14,15 +14,25 @@ import { Card, Notice, TextControl } from '../../../../../packages/components/sr
 import GoogleOAuth from '../../../newspack/views/settings/connections/google-oauth';
 import { handleJSONFile } from '../utils';
 
-export default function AdsOnboarding( { onUpdate, onSuccess } ) {
-	const credentialsInputFile = useRef( null );
+/**
+ * External dependencies.
+ */
+import type { ChangeEvent } from 'react';
+
+type AdsOnboardingProps = {
+	onUpdate?: ( change: { networkCode: string } ) => void;
+	onSuccess?: () => void;
+};
+
+export default function AdsOnboarding( { onUpdate, onSuccess }: AdsOnboardingProps ) {
+	const credentialsInputFile = useRef< HTMLInputElement >( null );
 	const [ fileError, setFileError ] = useState( '' );
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ networkCode, setNetworkCode ] = useState( '' );
 	const [ isConnected, setIsConnected ] = useState( false );
-	const [ useOAuth, setUseOAuth ] = useState( null );
+	const [ useOAuth, setUseOAuth ] = useState< boolean | null >( null );
 
-	const updateGAMCredentials = credentials => {
+	const updateGAMCredentials = ( credentials: unknown ) => {
 		setInFlight( true );
 		apiFetch( {
 			path: '/newspack/v1/wizard/billboard/credentials',
@@ -40,11 +50,11 @@ export default function AdsOnboarding( { onUpdate, onSuccess } ) {
 			} );
 	};
 
-	const handleCredentialsFile = event => {
-		if ( event.target.files.length && event.target.files[ 0 ] ) {
+	const handleCredentialsFile = ( event: ChangeEvent< HTMLInputElement > ) => {
+		if ( event.target.files?.length && event.target.files[ 0 ] ) {
 			handleJSONFile( event.target.files[ 0 ] )
 				.then( credentials => updateGAMCredentials( credentials ) )
-				.catch( err => setFileError( err ) );
+				.catch( ( err: string ) => setFileError( err ) );
 		}
 	};
 
@@ -101,7 +111,7 @@ export default function AdsOnboarding( { onUpdate, onSuccess } ) {
 											</>
 										),
 										actionType: 'chevron',
-										onHeaderClick: inFlight ? undefined : () => credentialsInputFile.current.click(),
+										onHeaderClick: inFlight ? undefined : () => credentialsInputFile.current?.click(),
 									} }
 								/>
 								<p>

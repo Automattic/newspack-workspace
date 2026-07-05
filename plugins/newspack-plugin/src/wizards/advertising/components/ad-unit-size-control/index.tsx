@@ -19,15 +19,16 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies.
  */
 import { SelectControl, TextControl } from '../../../../../packages/components/src';
+import type { AdUnitSizeDimensions, AdUnitSizeOption } from '../../types';
 
 const IAB_SIZES = window.newspack_ads_wizard.iab_sizes;
 
 /**
  * Get the list of sizes.
  *
- * @return {Array} List of sizes.
+ * @return List of sizes.
  */
-export function getSizes() {
+export function getSizes(): AdUnitSizeOption[] {
 	return [ ...Object.keys( IAB_SIZES ).map( sizeString => sizeString.split( 'x' ).map( Number ) ), 'fluid' ];
 }
 
@@ -35,10 +36,10 @@ export function getSizes() {
  * Get size label from IAB standard sizes. Returns {width}x{height} if label is
  * not found.
  *
- * @param {Array|string} size Size array or string.
- * @return {string} Size label.
+ * @param size Size array or string.
+ * @return Size label.
  */
-export function getSizeLabel( size ) {
+export function getSizeLabel( size: AdUnitSizeDimensions | string ): string {
 	if ( Array.isArray( size ) ) {
 		size = size.join( 'x' );
 	}
@@ -49,10 +50,16 @@ export function getSizeLabel( size ) {
 	return size;
 }
 
+type AdUnitSizeControlProps = {
+	value: AdUnitSizeOption;
+	selectedOptions: AdUnitSizeOption[];
+	onChange: ( value: AdUnitSizeOption ) => void;
+};
+
 /**
  * Ad Unit Size Control.
  */
-const AdUnitSizeControl = ( { value, selectedOptions, onChange } ) => {
+const AdUnitSizeControl = ( { value, selectedOptions, onChange }: AdUnitSizeControlProps ) => {
 	const [ isCustom, setIsCustom ] = useState( false );
 	const options = getSizes().filter(
 		size =>
@@ -72,7 +79,7 @@ const AdUnitSizeControl = ( { value, selectedOptions, onChange } ) => {
 					} ) ),
 					{ label: __( 'Custom', 'newspack-plugin' ), value: -1 },
 				] }
-				onChange={ index => {
+				onChange={ ( index: number ) => {
 					const size = options[ index ];
 					setIsCustom( ! size );
 					onChange( size || [] );
@@ -91,7 +98,7 @@ const AdUnitSizeControl = ( { value, selectedOptions, onChange } ) => {
 					<TextControl
 						label={ __( 'Width', 'newspack-plugin' ) }
 						value={ value[ 0 ] }
-						onChange={ newWidth => onChange( [ newWidth, value[ 1 ] ] ) }
+						onChange={ ( newWidth: string ) => onChange( [ newWidth, value[ 1 ] ] ) }
 						disabled={ ! isCustom && sizeIndex !== -1 }
 						type="number"
 						hideLabelFromVision
@@ -99,7 +106,7 @@ const AdUnitSizeControl = ( { value, selectedOptions, onChange } ) => {
 					<TextControl
 						label={ __( 'Height', 'newspack-plugin' ) }
 						value={ value[ 1 ] }
-						onChange={ newHeight => onChange( [ value[ 0 ], newHeight ] ) }
+						onChange={ ( newHeight: string ) => onChange( [ value[ 0 ], newHeight ] ) }
 						disabled={ ! isCustom && sizeIndex !== -1 }
 						type="number"
 						hideLabelFromVision
