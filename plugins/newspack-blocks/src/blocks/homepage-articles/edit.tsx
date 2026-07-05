@@ -29,7 +29,7 @@ import {
 	Placeholder,
 	RangeControl,
 	Spinner,
-	Toolbar,
+	Toolbar as WPToolbar,
 	ToggleControl,
 	TextControl,
 	// eslint-disable-next-line @wordpress/no-unsafe-wp-apis
@@ -41,6 +41,9 @@ import { withDispatch, withSelect } from '@wordpress/data';
 import { compose } from '@wordpress/compose';
 import { decodeEntities } from '@wordpress/html-entities';
 import { fullscreen, grid, image, list, postFeaturedImage, pullLeft, pullRight, sidesAll, textColor as typeScaleIcon } from '@wordpress/icons';
+
+// Re-type `Toolbar` to accept the legacy `controls` prop and optional `label`.
+const Toolbar = WPToolbar as import('react').FC< LegacyToolbarProps >;
 
 let IS_SUBTITLE_SUPPORTED_IN_THEME: boolean;
 if ( typeof window === 'object' && window.newspack_blocks_data && window.newspack_blocks_data.post_subtitle ) {
@@ -86,7 +89,8 @@ class Edit extends Component< HomepageArticlesProps > {
 		const postTitle = this.titleForPost( post );
 		return (
 			<article className={ postClasses } key={ post.id } style={ styles }>
-				{ getPostStatusLabel( post ) }
+				{ /* The shared `Post` type doesn't declare `post_status`, which the REST payload does carry. */ }
+				{ getPostStatusLabel( post as Post & { post_status?: string } ) }
 				{ showImage && post.newspack_featured_image_src && (
 					<figure className="post-thumbnail" key="thumbnail">
 						<a href="#">
@@ -277,7 +281,7 @@ class Edit extends Component< HomepageArticlesProps > {
 				<PanelBody title={ __( 'Settings', 'newspack-blocks' ) } className="newspack-block__panel is-content">
 					<QueryControls
 						numberOfItems={ postsToShow }
-						onNumberOfItemsChange={ ( _postsToShow: number ) => setAttributes( { postsToShow: _postsToShow || 1 } ) }
+						onNumberOfItemsChange={ ( _postsToShow?: number ) => setAttributes( { postsToShow: _postsToShow || 1 } ) }
 						specificMode={ specificMode }
 						onSpecificModeChange={ () => setAttributes( { specificMode: true } ) }
 						onLoopModeChange={ () => setAttributes( { specificMode: false } ) }
@@ -317,6 +321,7 @@ class Edit extends Component< HomepageArticlesProps > {
 							label={ __( 'Show "Load more posts" button', 'newspack-blocks' ) }
 							help={ __( 'This site is private, therefore this feature is not active.', 'newspack-blocks' ) }
 							disabled={ true }
+							onChange={ () => {} }
 						/>
 					) : (
 						! specificMode && (
@@ -348,7 +353,7 @@ class Edit extends Component< HomepageArticlesProps > {
 							}
 							return 'none';
 						} )() }
-						onChange={ ( value: string ) => {
+						onChange={ value => {
 							setAttributes( {
 								showExcerpt: value === 'excerpt',
 								showFullContent: value === 'full',
@@ -365,7 +370,7 @@ class Edit extends Component< HomepageArticlesProps > {
 						<RangeControl
 							label={ __( 'Max number of words in excerpt', 'newspack-blocks' ) }
 							value={ excerptLength }
-							onChange={ ( value: number ) => setAttributes( { excerptLength: value } ) }
+							onChange={ ( value?: number ) => setAttributes( { excerptLength: value ?? excerptLength } ) }
 							min={ 10 }
 							max={ 100 }
 							__next40pxDefaultSize
@@ -425,7 +430,7 @@ class Edit extends Component< HomepageArticlesProps > {
 							<ToggleGroupControl
 								label={ __( 'Size', 'newspack-blocks' ) }
 								value={ String( imageScale ) }
-								onChange={ ( value: string ) => setAttributes( { imageScale: parseInt( value ) } ) }
+								onChange={ value => setAttributes( { imageScale: parseInt( value as string ) } ) }
 								isBlock
 								__next40pxDefaultSize
 							>
@@ -448,7 +453,7 @@ class Edit extends Component< HomepageArticlesProps > {
 								'newspack-blocks'
 							) }
 							value={ minHeight }
-							onChange={ ( _minHeight: number ) => setAttributes( { minHeight: _minHeight } ) }
+							onChange={ ( _minHeight?: number ) => setAttributes( { minHeight: _minHeight ?? minHeight } ) }
 							min={ 0 }
 							max={ 100 }
 							required
@@ -520,7 +525,7 @@ class Edit extends Component< HomepageArticlesProps > {
 						beforeIcon={ typeScaleIcon }
 						className="spacing-sizes-control"
 						value={ typeScale }
-						onChange={ ( _typeScale: number ) => setAttributes( { typeScale: _typeScale } ) }
+						onChange={ ( _typeScale?: number ) => setAttributes( { typeScale: _typeScale ?? typeScale } ) }
 						min={ 1 }
 						max={ 10 }
 						marks={ true }
@@ -536,7 +541,7 @@ class Edit extends Component< HomepageArticlesProps > {
 							beforeIcon={ sidesAll }
 							className="spacing-sizes-control"
 							value={ colGap }
-							onChange={ ( _colGap: number ) => setAttributes( { colGap: _colGap } ) }
+							onChange={ ( _colGap?: number ) => setAttributes( { colGap: _colGap ?? colGap } ) }
 							min={ 1 }
 							max={ 3 }
 							marks={ true }

@@ -12,26 +12,89 @@ declare global {
 			can_use_name_your_price: boolean;
 			tier_amounts_template: string;
 			currency: string;
+			posts_rest_url: string;
+			specific_posts_rest_url: string;
+			authors_rest_url: string;
+			custom_taxonomies: { slug: string; label: string }[];
+			can_use_cap?: boolean;
+			editable_roles?: unknown[];
+			author_custom_fields?: unknown[];
+			iframe_accepted_file_mimes?: string[];
+			iframe_can_upload_archives?: boolean;
 		};
 		grecaptcha: any;
-		newspackReaderActivation: {
-			on: function;
-			off: function;
-			setReaderEmail: function;
-			setAuthenticated: function;
-			refreshAuthentication: function;
-			getReader: function;
-			hasAuthLink: function;
-			setAuthStrategy: function;
-			getAuthStrategy: function;
-		};
+		/**
+		 * The reader-activation client, implemented by
+		 * newspack-plugin/src/reader-activation/index and exposed cross-plugin on
+		 * `window.newspackReaderActivation`. newspack-plugin's own tsconfig pulls in
+		 * the canonical, full contract from `newspack-scripts/types/newspack-globals.d.ts`;
+		 * this plugin's tsconfig doesn't, so this type re-declares the subset this
+		 * plugin's modal checkout script actually calls. Optional because the client
+		 * doesn't exist until the reader-activation bundle initializes.
+		 */
+		newspackReaderActivation?: ReaderActivation;
 	}
+
+	/**
+	 * A Reader Activation activity payload dispatched on the `activity` event.
+	 */
+	type RASActivity = { detail: { action: string; data: unknown } };
+
+	/**
+	 * The subset of the reader-activation client (`window.newspackReaderActivation`)
+	 * used by this plugin. See the `newspackReaderActivation` note on `Window` above.
+	 */
+	type ReaderActivation = {
+		on: ( event: string, handler: ( payload: RASActivity ) => void ) => void;
+		off: ( event: string, handler: ( payload: RASActivity ) => void ) => void;
+		getReader: () => { email?: string; authenticated?: boolean };
+		setReaderEmail: ( email: string ) => void;
+		setAuthenticated: ( authenticated: boolean ) => void;
+		refreshNewslettersSignupModal: ( email?: string ) => void;
+		openNewslettersSignupModal: ( options: {
+			onSuccess?: () => void;
+			onError?: () => void;
+			closeOnSuccess?: boolean;
+		} ) => void;
+		setPendingCheckout: ( url?: string ) => void;
+		getPendingCheckout: () => string | undefined;
+		openAuthModal: ( options: {
+			title?: string;
+			onSuccess?: ( message?: string, authData?: { registered?: boolean; [ key: string ]: unknown } ) => void;
+			onError?: () => void;
+			onDismiss?: () => void;
+			skipSuccess?: boolean;
+			skipNewslettersSignup?: boolean;
+			labels?: { signin?: { title?: string }; register?: { title?: string } };
+			content?: string;
+			trigger?: HTMLElement | null;
+			closeOnSuccess?: boolean;
+		} ) => void;
+		overlays: {
+			add: () => string;
+			remove: ( id: string ) => void;
+		};
+	};
 
 	type PostId = number;
 	type CategoryId = number;
 	type TagId = number;
+	// All custom taxonomies' selected terms (as used by Newspack_Blocks::build_articles_query).
+	// Already flat (not doubly-wrapped) -- consumers reference `Taxonomy` directly, not `Taxonomy[]`.
 	type Taxonomy = { slug: string; terms: number[] }[];
 	type AuthorId = number;
+
+	// The `@wordpress/components` `Toolbar` no longer types the legacy `controls`
+	// prop (its modern replacement lives on `ToolbarGroup`) and requires `label`
+	// even when wrapping children. The blocks render toolbars the historical way,
+	// so this shape re-types the component at the boundary without altering the
+	// rendered markup.
+	type LegacyToolbarProps = {
+		label?: string;
+		controls?: Array< Record< string, unknown > >;
+		className?: string;
+		children?: import('react').ReactNode;
+	};
 
 	type PostType = { name: string; slug: string; supports: { newspack_blocks: boolean } };
 
@@ -102,17 +165,18 @@ declare global {
 		includeSubcategories: boolean;
 		categoryJoinType: string;
 		excerptLength: number;
-		postType: PostType[];
+		postType: string[];
 		showImage: boolean;
 		showExcerpt: boolean;
 		showFullContent: boolean;
 		tags: TagId[];
-		customTaxonomies: Taxonomy[];
+		customTaxonomies: Taxonomy;
 		specificPosts: string[];
 		specificMode: boolean;
 		tagExclusions: TagId[];
 		categoryExclusions: CategoryId[];
-		customTaxonomyExclusions: Taxonomy[];
+		customTaxonomyExclusions: Taxonomy;
+		includedPostStatuses: string[];
 		className: string;
 		excerptLength: number;
 		showReadMore: boolean;

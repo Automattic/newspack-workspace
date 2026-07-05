@@ -18,7 +18,7 @@ const RedirectAfterSuccess = ( { attributes, setAttributes }: Props ) => (
 		<SelectControl
 			label={ __( 'Post-Checkout Button', 'newspack-blocks' ) }
 			help={ __( 'After a successful purchase, a button will be presented to finish the process.', 'newspack-blocks' ) }
-			value={ attributes.afterSuccessBehavior }
+			value={ attributes.afterSuccessBehavior as '' | 'custom' | 'referrer' }
 			options={ [
 				{ label: __( 'Close the modal', 'newspack-blocks' ), value: '' },
 				{ label: __( 'Go to a custom URL', 'newspack-blocks' ), value: 'custom' },

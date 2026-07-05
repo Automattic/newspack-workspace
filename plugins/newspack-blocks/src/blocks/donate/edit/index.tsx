@@ -18,7 +18,7 @@ import {
 	Spinner,
 	SelectControl,
 	ToggleControl,
-	Toolbar,
+	Toolbar as WPToolbar,
 	TextControl,
 	Button,
 	Notice,
@@ -39,6 +39,9 @@ import { FREQUENCIES, FREQUENCY_SLUGS, LAYOUT_OPTIONS, DISABLED_IN_TIERS_BASED_L
 import RedirectAfterSuccess from '../../../components/redirect-after-success';
 
 const TIER_LABELS = [ __( 'Low-tier', 'newspack-blocks' ), __( 'Mid-tier', 'newspack-blocks' ), __( 'High-tier', 'newspack-blocks' ) ];
+
+// Re-type `Toolbar` to accept the legacy `controls` prop without altering the rendered markup.
+const Toolbar = WPToolbar as import('react').FC< LegacyToolbarProps >;
 
 const Edit = ( { attributes, setAttributes }: EditProps ) => {
 	const [ isLoading, setIsLoading ] = useState( true );
@@ -354,7 +357,7 @@ const Edit = ( { attributes, setAttributes }: EditProps ) => {
 									type="number"
 									label={ __( 'Minimum donation', 'newspack-blocks' ) }
 									min={ 1 }
-									onChange={ ( value: number ) => setAttributes( { minimumDonation: value } ) }
+									onChange={ ( value: string ) => setAttributes( { minimumDonation: Number( value ) } ) }
 									value={ attributes.minimumDonation }
 								/>
 							</>
