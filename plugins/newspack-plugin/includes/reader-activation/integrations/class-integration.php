@@ -335,10 +335,14 @@ abstract class Integration {
 	 *
 	 * Return null (default) to opt out. Otherwise return:
 	 *   [
-	 *     'slug'     => 'newsletters',          // endpoint slug, unique across integrations.
-	 *     'label'    => __( 'Newsletters', 'newspack-plugin' ),
+	 *     'slug'     => 'rewards',              // endpoint slug, unique across integrations.
+	 *     'label'    => __( 'Rewards', 'newspack-plugin' ),
 	 *     'position' => 25,                     // optional, menu sort order.
 	 *   ]
+	 *
+	 * The slug must not collide with a core My Account endpoint or one owned by
+	 * another plugin's My Account bridge — `newsletters` is reserved by
+	 * newspack-newsletters. A duplicate slug would render two tab bodies.
 	 *
 	 * @return array|null
 	 */

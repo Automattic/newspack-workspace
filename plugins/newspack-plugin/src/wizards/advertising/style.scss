@@ -6,6 +6,22 @@
 	z-index: 99999;
 }
 
+// Stack both Edit/Cancel labels so the button reserves the width of the
+// wider label and does not shift when the label toggles.
+.newspack-wizard-ads-placements__toggle-label {
+	display: inline-grid;
+	justify-items: center;
+
+	span {
+		grid-area: 1 / 1;
+		visibility: hidden;
+
+		&.is-visible {
+			visibility: visible;
+		}
+	}
+}
+
 .newspack-ads-display-ads {
 	.newspack-button-card .newspack-notice {
 		margin: 24px 0 0;

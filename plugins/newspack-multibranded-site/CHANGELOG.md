@@ -1,3 +1,15 @@
+# newspack-multibranded-site [2.3.0](https://github.com/Automattic/newspack-workspace/compare/newspack-multibranded-site@2.2.0...newspack-multibranded-site@2.3.0) (2026-06-29)
+
+
+### Features
+
+* **access-control:** enable Brand taxonomy for content rules ([#93](https://github.com/Automattic/newspack-workspace/issues/93)) ([280620e](https://github.com/Automattic/newspack-workspace/commit/280620e8d99ede231f90c9890b895611fc10b2a8))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.4.0
+
 # [2.2.0](https://github.com/Automattic/newspack-multibranded-site/compare/v2.1.0...v2.2.0) (2025-11-24)
 
 
