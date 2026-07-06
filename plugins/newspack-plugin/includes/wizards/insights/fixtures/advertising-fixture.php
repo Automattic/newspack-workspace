@@ -44,48 +44,61 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 	$metrics = function ( float $scale, string $window_variant ): array {
 		if ( 'zero' === $window_variant ) {
 			return [
-				'total_impressions'      => [
+				// Cross-system scorecards (NPPD-1675) can't be joined in a no-activity
+				// window (no sessions to divide by); the section collapses to its empty
+				// state anyway, but keep the metric keys present as data-unavailable.
+				'rpm'                         => [
+					'value'      => null,
+					'computable' => false,
+					'overlay'    => [ 'type' => 'data_unavailable' ],
+				],
+				'avg_impressions_per_session' => [
+					'value'      => null,
+					'computable' => false,
+					'overlay'    => [ 'type' => 'data_unavailable' ],
+				],
+				'total_impressions'           => [
 					'value'      => 0,
 					'computable' => true,
 					'type'       => 'count',
 				],
-				'total_revenue'          => [
+				'total_revenue'               => [
 					'value'      => 0.0,
 					'computable' => true,
 					'type'       => 'currency',
 				],
-				'avg_ecpm'               => [
+				'avg_ecpm'                    => [
 					'value'       => 0.0,
 					'computable'  => false,
 					'type'        => 'currency',
 					'numerator'   => 0.0,
 					'denominator' => 0,
 				],
-				'fill_rate'              => [
+				'fill_rate'                   => [
 					'value'       => 0.0,
 					'computable'  => false,
 					'type'        => 'rate',
 					'numerator'   => 0,
 					'denominator' => 0,
 				],
-				'viewability_rate'       => [
+				'viewability_rate'            => [
 					'value'       => 0.0,
 					'computable'  => false,
 					'type'        => 'rate',
 					'numerator'   => 0,
 					'denominator' => 0,
 				],
-				'direct_vs_programmatic' => [
+				'direct_vs_programmatic'      => [
 					'rows'       => [],
 					'computable' => false,
 					'type'       => 'breakdown',
 				],
-				'top_ad_units'           => [
+				'top_ad_units'                => [
 					'rows'       => [],
 					'computable' => false,
 					'type'       => 'table',
 				],
-				'top_advertisers'        => [
+				'top_advertisers'             => [
 					'rows'       => [],
 					'computable' => false,
 					'type'       => 'table',
@@ -97,47 +110,66 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 			// Impressions running, zero revenue — exercises the ReachRevenue per-card
 			// no-revenue treatment on the Total Revenue card.
 			$no_rev_impressions = (int) round( 2400000 * $scale );
+			$no_rev_sessions    = 800000;
 			return [
-				'total_impressions'      => [
+				// Derived scorecards still compute: RPM is a genuine $0.00 (no revenue),
+				// while impressions-per-session stays meaningful.
+				'rpm'                         => \Newspack\Insights\Derived\Cross_System_Metrics::rpm(
+					[
+						'value'      => 0.0,
+						'computable' => true,
+						'type'       => 'currency',
+					],
+					$no_rev_sessions
+				),
+				'avg_impressions_per_session' => \Newspack\Insights\Derived\Cross_System_Metrics::avg_impressions_per_session(
+					[
+						'value'      => $no_rev_impressions,
+						'computable' => true,
+						'type'       => 'count',
+					],
+					$no_rev_sessions
+				),
+				'total_impressions'           => [
 					'value'      => $no_rev_impressions,
 					'computable' => true,
 					'type'       => 'count',
 				],
-				'total_revenue'          => [
+				'total_revenue'               => [
 					'value'      => 0.0,
 					'computable' => true,
 					'type'       => 'currency',
 				],
-				'avg_ecpm'               => [
+				'avg_ecpm'                    => [
 					'value'       => 0.0,
 					'computable'  => false,
 					'type'        => 'currency',
 					'numerator'   => 0.0,
 					'denominator' => 0,
 				],
-				'fill_rate'              => [
+				'fill_rate'                   => [
 					'value'       => 0.0,
 					'computable'  => false,
 					'type'        => 'rate',
 					'numerator'   => 0,
 					'denominator' => 0,
 				],
-				'viewability_rate'       => [
+				'viewability_rate'            => [
 					'value'      => null,
 					'computable' => false,
 					'overlay'    => [ 'type' => 'data_unavailable' ],
 				],
-				'direct_vs_programmatic' => [
+				'direct_vs_programmatic'      => [
 					'rows'       => [],
 					'computable' => false,
 					'type'       => 'breakdown',
 				],
-				'top_ad_units'           => [
+				'top_ad_units'                => [
 					'rows'       => [],
 					'computable' => false,
 					'type'       => 'table',
 				],
-				'top_advertisers'        => [
+				'top_advertisers'             => [
 					'rows'       => [],
 					'computable' => false,
 					'type'       => 'table',
@@ -149,6 +181,11 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 		$coded       = (int) round( $impressions * 0.87 );
 		$revenue     = round( 4200.0 * $scale, 2 );
 		$ecpm        = $coded > 0 ? round( ( $revenue / $coded ) * 1000, 2 ) : 0.0;
+		// Mock sessions (NPPD-1675): 800k against 2.4M impressions / $4,200 revenue →
+		// 3.0 ads per session and $5.25 RPM. Held FLAT across windows (not scaled)
+		// so the comparison window — whose volume/revenue scale down — produces a
+		// visible RPM / ads-per-session delta ("revenue grew on flat traffic").
+		$sessions = 800000;
 
 		$viewability = 'no_viewability' === $window_variant
 			? [
@@ -191,32 +228,50 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 		}
 
 		return [
-			'total_impressions'      => [
+			// Cross-system derived scorecards (NPPD-1675), computed through the real
+			// join so the fixture and production render identically.
+			'rpm'                         => \Newspack\Insights\Derived\Cross_System_Metrics::rpm(
+				[
+					'value'      => $revenue,
+					'computable' => true,
+					'type'       => 'currency',
+				],
+				$sessions
+			),
+			'avg_impressions_per_session' => \Newspack\Insights\Derived\Cross_System_Metrics::avg_impressions_per_session(
+				[
+					'value'      => $impressions,
+					'computable' => true,
+					'type'       => 'count',
+				],
+				$sessions
+			),
+			'total_impressions'           => [
 				'value'      => $impressions,
 				'computable' => true,
 				'type'       => 'count',
 			],
-			'total_revenue'          => [
+			'total_revenue'               => [
 				'value'      => $revenue,
 				'computable' => true,
 				'type'       => 'currency',
 			],
-			'avg_ecpm'               => [
+			'avg_ecpm'                    => [
 				'value'       => $ecpm,
 				'computable'  => true,
 				'type'        => 'currency',
 				'numerator'   => $revenue,
 				'denominator' => $coded,
 			],
-			'fill_rate'              => [
+			'fill_rate'                   => [
 				'value'       => 0.87,
 				'computable'  => true,
 				'type'        => 'rate',
 				'numerator'   => $coded,
 				'denominator' => $impressions,
 			],
-			'viewability_rate'       => $viewability,
-			'direct_vs_programmatic' => [
+			'viewability_rate'            => $viewability,
+			'direct_vs_programmatic'      => [
 				'rows'       => [
 					[
 						'label'       => 'direct',
@@ -242,12 +297,12 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 				'computable' => true,
 				'type'       => 'breakdown',
 			],
-			'top_ad_units'           => [
+			'top_ad_units'                => [
 				'rows'       => $ad_units,
 				'computable' => true,
 				'type'       => 'table',
 			],
-			'top_advertisers'        => [
+			'top_advertisers'             => [
 				'rows'       => $advertisers,
 				'computable' => true,
 				'type'       => 'table',

@@ -24,7 +24,17 @@ import { __, sprintf } from '@wordpress/i18n';
  * Internal dependencies
  */
 import { Card } from '../../../../../packages/components/src';
-import { formatCurrency, formatDecimal, formatDuration, formatNumber, formatPercent, formatDelta, deltaTone } from './format';
+import {
+	formatCurrency,
+	formatCount,
+	formatDecimal,
+	formatDuration,
+	formatNumber,
+	formatPercent,
+	formatDelta,
+	deltaTone,
+	type FormattedCurrency,
+} from './format';
 import MetricNote from './MetricNote';
 
 export type MetricFormat = 'number' | 'currency' | 'percent' | 'decimal' | 'duration';
@@ -115,8 +125,9 @@ export interface MetricCardProps {
 	notComputableMessage?: string;
 }
 
-// Currency is handled by the caller (it needs both display + title from one
-// formatCurrency call); every other format maps to a plain string here.
+// Currency and large counts are handled by the caller (they need both a display
+// string and a full-value title from one call); every other format maps to a
+// plain string here.
 const formatValue = ( v: number, fmt: MetricFormat ): string => {
 	switch ( fmt ) {
 		case 'percent':
@@ -128,6 +139,20 @@ const formatValue = ( v: number, fmt: MetricFormat ): string => {
 		default:
 			return formatNumber( v );
 	}
+};
+
+// The two tiered formats: currency and count both yield a { display, title }
+// pair (title = the full value when the display is abbreviated to "$1.2M" /
+// "2.4M"). Other formats have no tier and return null so the caller falls back
+// to formatValue.
+const tieredFormat = ( v: number, fmt: MetricFormat ): FormattedCurrency | null => {
+	if ( fmt === 'currency' ) {
+		return formatCurrency( v );
+	}
+	if ( fmt === 'number' ) {
+		return formatCount( v );
+	}
+	return null;
 };
 
 // Em-dash null glyph (U+2014). Matches the "Not applicable" treatment in the
@@ -262,14 +287,15 @@ const MetricCard = ( props: MetricCardProps ) => {
 			  ).trim()
 			: null;
 
-	// Currency formats once, yielding both the display string and (when
-	// abbreviated, e.g. "$1.2M") the full-value title; other formats go through
-	// formatValue.
-	const currency = format === 'currency' ? formatCurrency( value ) : null;
-	const valueText = currency ? currency.display : formatValue( value, format );
+	// Currency and large counts format once, yielding both the display string and
+	// (when abbreviated, e.g. "$1.2M" / "2.4M") the full-value title; other formats
+	// go through formatValue. Counts share the currency millions tier so a 7+ digit
+	// impressions total abbreviates instead of overflowing the card (NPPD-1684).
+	const tiered = tieredFormat( value, format );
+	const valueText = tiered ? tiered.display : formatValue( value, format );
 	// Explicit `valueTitle` wins; `||` (not `??`) so an empty string isn't treated
 	// as an override and still falls back to the formatter-derived full value.
-	const valueTooltip = valueTitle || currency?.title || undefined;
+	const valueTooltip = valueTitle || tiered?.title || undefined;
 
 	// Hero content: a count-fallback string, the em-dash null glyph (matched to
 	// the Performance by gate table's null cell — same glyph + aria-label), or

@@ -47,7 +47,7 @@ describe( 'Advertising sections', () => {
 	it( 'ReachRevenueSection shows impressions, revenue, and the revenue-mix card', () => {
 		render( <ReachRevenueSection current={ metrics } previous={ null } /> );
 		expect( screen.getByText( 'Total Impressions' ) ).toBeInTheDocument();
-		expect( screen.getByText( '2,400,000' ) ).toBeInTheDocument();
+		expect( screen.getByText( '2.4M' ) ).toBeInTheDocument(); // 7-digit impressions abbreviate (NPPD-1684)
 		expect( screen.getByText( '$4,200' ) ).toBeInTheDocument();
 		// Definitional descriptions fill the third slot (no short caption).
 		expect( screen.getByText( 'Total ad impressions served on your site in this timeframe.' ) ).toBeInTheDocument();

@@ -1,9 +1,12 @@
 /**
- * Advertising › Reach & revenue (NPPD-1618, Section 1; empty states NPPD-1697).
+ * Advertising › Reach & revenue (NPPD-1618, Section 1; empty states NPPD-1697;
+ * cross-system scorecards NPPD-1675).
  *
  * Headline scorecards for the period: impressions served, revenue earned, and
- * the revenue mix (direct share). Three equal-width cards, matching the
- * Inventory performance row's sizing.
+ * two cross-system derived cards — RPM (revenue per 1,000 sessions) and
+ * impressions per session — that join the GAM figures with GA4 sessions. Those
+ * four sit in a --cols-4 row; the revenue mix (direct share) sits in its own row
+ * below, keeping the same card width.
  *
  * Empty states (NPPD-1697), mirroring Donors (NPPD-1696) / Subscribers
  * (NPPD-1695):
@@ -84,7 +87,10 @@ const ReachRevenueSection = ( { current, previous, hasWindowActivity, lastUpdate
 	return (
 		<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-reach-revenue">
 			<SectionHeading id="newspack-insights-advertising-reach-revenue" title={ TITLE } description={ CAPTION } actions={ lastUpdated } />
-			<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
+			{ /* Row 1: the four headline scorecards. Volume + revenue (raw), then the
+			     two cross-system derived cards (NPPD-1675) — RPM and impressions per
+			     session — which join GAM figures with GA4 sessions. */ }
+			<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-4">
 				<Scorecard
 					label={ __( 'Total Impressions', 'newspack-plugin' ) }
 					description={ __( 'Total ad impressions served on your site in this timeframe.', 'newspack-plugin' ) }
@@ -113,6 +119,22 @@ const ReachRevenueSection = ( { current, previous, hasWindowActivity, lastUpdate
 						previous={ previous?.total_revenue }
 					/>
 				) }
+				<Scorecard
+					label={ __( 'RPM', 'newspack-plugin' ) }
+					description={ __( 'Revenue per 1,000 sessions', 'newspack-plugin' ) }
+					current={ current.rpm }
+					previous={ previous?.rpm }
+				/>
+				<Scorecard
+					label={ __( 'Impressions per session', 'newspack-plugin' ) }
+					description={ __( 'Avg ad impressions each session', 'newspack-plugin' ) }
+					current={ current.avg_impressions_per_session }
+					previous={ previous?.avg_impressions_per_session }
+				/>
+			</div>
+			{ /* Row 2: revenue mix sits below the headline scorecards, keeping the same
+			     card width as the row above. */ }
+			<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-4">
 				<RevenueMixCard payload={ current.direct_vs_programmatic } />
 			</div>
 		</section>
