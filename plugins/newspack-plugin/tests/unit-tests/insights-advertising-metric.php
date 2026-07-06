@@ -376,7 +376,7 @@ class Newspack_Test_Insights_Advertising_Metric extends WP_UnitTestCase {
 		$this->assertSame( ( 4200.0 / 800000 ) * 1000, $window['metrics']['rpm']['value'] );
 
 		$this->assertArrayHasKey( 'avg_impressions_per_session', $window['metrics'] );
-		$this->assertSame( 2400000 / 800000, $window['metrics']['avg_impressions_per_session']['value'] );
+		$this->assertSame( 3.0, $window['metrics']['avg_impressions_per_session']['value'] );
 	}
 
 	/**

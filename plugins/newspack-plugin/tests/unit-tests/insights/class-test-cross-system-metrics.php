@@ -82,7 +82,9 @@ class Test_Cross_System_Metrics extends WP_UnitTestCase {
 		$out = Cross_System_Metrics::avg_impressions_per_session( $this->impressions( 2400000 ), 800000 );
 		$this->assertTrue( $out['computable'] );
 		$this->assertSame( 'count', $out['type'] );
-		$this->assertSame( 2400000 / 800000, $out['value'] );
+		// Value is the raw float ratio (3.0), not the int the whole-number display
+		// implies — impressions is divided as a float so deltas stay exact.
+		$this->assertSame( 3.0, $out['value'] );
 		$this->assertSame( 2400000, $out['numerator'] );
 		$this->assertSame( 800000, $out['denominator'] );
 	}
