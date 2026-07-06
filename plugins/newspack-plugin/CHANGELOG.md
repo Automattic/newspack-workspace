@@ -1,3 +1,52 @@
+## newspack [6.44.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.7...newspack@6.44.8) (2026-07-06)
+
+
+### Bug Fixes
+
+* **group-subscription:** render metabox on non-HPOS order storage ([#426](https://github.com/Automattic/newspack-workspace/issues/426)) ([c542f0b](https://github.com/Automattic/newspack-workspace/commit/c542f0bf942c7b41d331a4e407e7110833f0f653))
+
+## newspack [6.44.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.6...newspack@6.44.7) (2026-07-02)
+
+
+### Bug Fixes
+
+* **access-control:** restore long-lived institutional IP access cookie ([14b3aad](https://github.com/Automattic/newspack-workspace/commit/14b3aadc02463132b8b251aa412a649529205f13)), closes [#136](https://github.com/Automattic/newspack-workspace/issues/136) [#4749](https://github.com/Automattic/newspack-workspace/issues/4749) [#4749](https://github.com/Automattic/newspack-workspace/issues/4749)
+
+## newspack [6.44.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.5...newspack@6.44.6) (2026-07-02)
+
+
+### Bug Fixes
+
+* **salesforce:** verify WooCommerce webhook signature ([80ab615](https://github.com/Automattic/newspack-workspace/commit/80ab615129ab7004fe4811dfe3ea8fc5c106b107))
+
+## newspack [6.44.5](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.4...newspack@6.44.5) (2026-07-02)
+
+
+### Bug Fixes
+
+* **group-subscription:** validate invite before creating an account ([ee44068](https://github.com/Automattic/newspack-workspace/commit/ee440684908c11eb7b174b4ee40031ca9140312d))
+
+## newspack [6.44.4](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.3...newspack@6.44.4) (2026-07-02)
+
+
+### Bug Fixes
+
+* **content-gate:** keep commenting per Discussion Settings on metered posts (NPPD-1829, [#459](https://github.com/Automattic/newspack-workspace/issues/459)) ([43d4fc6](https://github.com/Automattic/newspack-workspace/commit/43d4fc64543b8e8be5ba21529ac6eb1194fbe0af))
+
+## newspack [6.44.3](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.2...newspack@6.44.3) (2026-07-01)
+
+
+### Bug Fixes
+
+* **oauth:** verify Google token audience on sign-in ([9aa30b9](https://github.com/Automattic/newspack-workspace/commit/9aa30b98495db08d968b2dc2ae0e4bb96fb28aef))
+
+## newspack [6.44.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.1...newspack@6.44.2) (2026-06-30)
+
+
+### Bug Fixes
+
+* **checkout:** sync repeat trial pricing in modal checkout ([#264](https://github.com/Automattic/newspack-workspace/issues/264)) ([#468](https://github.com/Automattic/newspack-workspace/issues/468)) ([d7d2356](https://github.com/Automattic/newspack-workspace/commit/d7d23564a1d350266fb9016caeee398eb211fe71))
+
 ## newspack [6.44.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.0...newspack@6.44.1) (2026-06-30)
 
 
