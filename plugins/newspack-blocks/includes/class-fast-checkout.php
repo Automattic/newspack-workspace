@@ -439,8 +439,10 @@ final class Fast_Checkout {
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( isset( $_GET[ self::QP_SUCCESS ] ) ) {
+			// Restrict to http/https so unsafe schemes (e.g. javascript:) can't
+			// slip through to the post-purchase redirect.
 			// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$success = esc_url_raw( wp_unslash( $_GET[ self::QP_SUCCESS ] ) );
+			$success = esc_url_raw( wp_unslash( $_GET[ self::QP_SUCCESS ] ), [ 'http', 'https' ] );
 			if ( $success ) {
 				$params['success'] = $success;
 			}
@@ -643,7 +645,9 @@ final class Fast_Checkout {
 		if ( ! $block ) {
 			return '';
 		}
-		return $block['attrs']['afterSuccessURL'] ?? '';
+		$after_success_url = $block['attrs']['afterSuccessURL'] ?? '';
+		// Restrict to http/https so unsafe schemes can't be used as a redirect target.
+		return $after_success_url ? esc_url_raw( $after_success_url, [ 'http', 'https' ] ) : '';
 	}
 
 	/**

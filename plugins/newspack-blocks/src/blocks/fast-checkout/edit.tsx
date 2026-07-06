@@ -3,7 +3,7 @@
  */
 
 import { __ } from '@wordpress/i18n';
-import { useEffect, useRef, useState } from '@wordpress/element';
+import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { debounce } from 'lodash';
 import { InnerBlocks, InspectorControls, useBlockProps } from '@wordpress/block-editor';
@@ -35,23 +35,32 @@ function ProductPicker( { productId, onChange }: ProductPickerProps ) {
 		} );
 	}, [ productId ] );
 
-	const fetchSuggestions = debounce( ( search: string ) => {
-		if ( search.length < 3 ) {
-			return;
-		}
-		setInFlight( true );
-		apiFetch< StoreApiProduct[] >( {
-			path: `/wc/store/v1/products?search=${ encodeURIComponent( search ) }&per_page=10`,
-		} )
-			.then( products => {
-				const next: Record< string, string > = {};
-				products.forEach( p => {
-					next[ p.id ] = p.name;
-				} );
-				setSuggestions( next );
-			} )
-			.finally( () => setInFlight( false ) );
-	}, 200 );
+	// Keep the debounced function stable across renders so its timer isn't
+	// recreated on every render (which would defeat debouncing and leak timers).
+	const fetchSuggestions = useMemo(
+		() =>
+			debounce( ( search: string ) => {
+				if ( search.length < 3 ) {
+					return;
+				}
+				setInFlight( true );
+				apiFetch< StoreApiProduct[] >( {
+					path: `/wc/store/v1/products?search=${ encodeURIComponent( search ) }&per_page=10`,
+				} )
+					.then( products => {
+						const next: Record< string, string > = {};
+						products.forEach( p => {
+							next[ p.id ] = p.name;
+						} );
+						setSuggestions( next );
+					} )
+					.finally( () => setInFlight( false ) );
+			}, 200 ),
+		[]
+	);
+
+	// Cancel any pending debounced request on unmount.
+	useEffect( () => () => fetchSuggestions.cancel(), [ fetchSuggestions ] );
 
 	if ( productId && ! isChanging ) {
 		return (
