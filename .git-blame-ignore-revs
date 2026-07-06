@@ -1,0 +1,67 @@
+# JS→TypeScript migration: mechanical rename + type-annotation commits.
+# These commits rename .js/.jsx to .ts/.tsx and add type annotations without
+# changing runtime behavior. Use `git blame --ignore-revs-file .git-blame-ignore-revs`
+# (or configure `git config blame.ignoreRevsFile .git-blame-ignore-revs`) to skip
+# past them and attribute lines to their last real logic change instead.
+
+# Phase 0-2: infra, gates, packages/icons+components, newspack-plugin.
+# chore(scripts): revive typescript-check as the canonical type gate
+3037610393688e3142c42a0a235cdca327aaff52
+# ci: run typescript:check per changed package in the js job
+9e84149de04bc162c7b98a3e84b26b2276ece435
+# chore: make webpack entry resolution extension-agnostic
+9c913eef1afc2fda6b29c9c6074b8d6cc354971f
+# chore: add per-unit tsconfig and typescript:check gates
+a700563c373eefea000a88b9727beada30661acf
+# chore(components): fix strict type errors surfaced by the type gate
+d18b76b0d08fbfaa1291bab85c58c25121b1ae76
+# chore(sync): hold legacy sync when incoming JS regresses TS migration
+ea8bbb2d2b000df255806959d5bc8c2fe2ddcf73
+# chore(blocks): make TypeScript strict-clean and enable type gate
+8823cd48351fdd1058f844188404ee68e3394eb4
+# chore(components): generic DataViews wrapper and color-picker JSDoc
+f177fec93c4aa6283f14df622d8cc918b54d49ad
+# chore(newspack-plugin): make TS strict-clean and enable type gate
+fb03a1d610c3179c1c56b818bf7a8d34688fca70
+# chore(scripts): run TypeScript test files in jest
+ff62f6b8e3502fd783496169cace04738a75054e
+# chore(icons): migrate newspack-icons to TypeScript
+3fe7b6d7bd73c44c689b5bb1ca775c07ab63b726
+# chore(components): migrate newspack-components to TypeScript
+5469da32695dc392c19b434733cfd0db7f186878
+# chore(newspack-plugin): adapt call sites to typed components
+5702a9eb39e172cac59ac8890c8bb7770ee04a8b
+# chore(components): extend shared RAS contract and widen prop types
+ae2f5a05fa54dacfef1a50037cfa6b694ba11ac5
+# chore(newspack-plugin): migrate src to TypeScript and lock the unit
+af89cd162f5533fcd751a34e324e3ec192c344d3
+
+# Phase 3: blocks + newsletters.
+# chore(blocks): migrate src to TypeScript and lock the unit
+448b2f50f79afdd875770e5e18be93fc907ce922
+# chore(newsletters): migrate src to TypeScript and lock the unit
+4c2864f6a867853394da2f781a8804981615efb8
+
+# Phase 4: small plugins.
+# chore(republication-tracker-tool): migrate src to TypeScript and lock the unit
+fa715bcf402785106b3815072f8c2c7dcb43ae2f
+# chore(sponsors): migrate src to TypeScript and lock the unit
+a0bd4260dcee8ec9166b1032d7dc1d78342f978d
+# chore(network): migrate src to TypeScript and lock the unit
+3227347c0d7e6762aa459a192e1c615095ff2081
+# chore(multibranded-site): migrate src to TypeScript and lock the unit
+0d020cafbb12b4298086a08dd457700018bfb1d2
+# chore(ads): migrate src to TypeScript and lock the unit
+e142523ac7496a8e729626c4b6739ba7316c78c9
+# chore(listings): migrate src to TypeScript and lock the unit
+ce326781e05f52af3574aa26252455a7e94f2bb9
+# chore(popups): migrate src to TypeScript and lock the unit
+cebe8949cf455b173c85945d539c73a61e1f4f16
+# chore(story-budget): migrate src to TypeScript and lock the unit
+90e944b7a14961c0be010e1537bdf774956d2250
+
+# Phase 5: themes.
+# chore(block-theme): migrate src to TypeScript and lock the unit
+360b2a9418493551df62bc7202809775e4b6d670
+# chore(theme): migrate js/src to TypeScript and lock the unit
+eddd52aa667149867f8025515d925592c5c8e867
