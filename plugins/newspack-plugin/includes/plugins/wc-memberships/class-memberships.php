@@ -42,6 +42,7 @@ class Memberships {
 		add_action( 'enqueue_block_editor_assets', [ __CLASS__, 'enqueue_block_editor_assets' ], 9 ); // Render before gate layout editor.
 		add_filter( 'newspack_post_has_restrictions', [ __CLASS__, 'post_has_restrictions' ], 10, 2 );
 		add_filter( 'newspack_is_post_restricted', [ __CLASS__, 'is_post_restricted' ], 10, 2 );
+		add_filter( 'newspack_gate_access_product_ids', [ __CLASS__, 'filter_gate_access_product_ids' ], 10, 2 );
 
 		// Handle restriction when using metering.
 		add_action( 'wp', [ __CLASS__, 'handle_metering_restriction' ], 5 ); // Before Woo Memberships' restriction handler, which was lowered to 9 in 1.27.2.
@@ -448,6 +449,32 @@ class Memberships {
 			}
 		}
 		return $plans;
+	}
+
+	/**
+	 * Filter the product IDs required to access a restricted post via
+	 * Membership plans.
+	 *
+	 * @param int[] $product_ids Array of product IDs.
+	 * @param int   $post_id     The post ID.
+	 *
+	 * @return int[] Filtered array of product IDs.
+	 */
+	public static function filter_gate_access_product_ids( $product_ids, $post_id ) {
+		if ( ! self::is_active() || ! empty( $product_ids ) ) {
+			return $product_ids;
+		}
+		$plan_ids = self::get_restricted_post_plans( $post_id );
+		if ( empty( $plan_ids ) ) {
+			return $product_ids;
+		}
+		foreach ( $plan_ids as $plan_id ) {
+			$plan = wc_memberships_get_membership_plan( $plan_id );
+			if ( $plan ) {
+				$product_ids = array_merge( $product_ids, $plan->get_product_ids() );
+			}
+		}
+		return array_values( array_unique( array_filter( $product_ids ) ) );
 	}
 
 	/**

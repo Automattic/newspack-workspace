@@ -36,6 +36,19 @@ domReady( () => {
 
 	setBodyOffset();
 
+	// Tiers modal buttons: open the corresponding modal when clicked.
+	const tiersButtons = document.querySelectorAll( '[data-tiers-modal]' );
+	[ ...tiersButtons ].forEach( button => {
+		button.addEventListener( 'click', ev => {
+			ev.preventDefault();
+			const modalId = button.getAttribute( 'data-tiers-modal' );
+			const tiersModal = document.getElementById( modalId );
+			if ( tiersModal ) {
+				tiersModal.setAttribute( 'data-state', 'open' );
+			}
+		} );
+	} );
+
 	// Countdown banner.
 	window.newspackRAS?.push( ras => {
 		const views = document.querySelector( '.newspack-countdown-banner__views' );

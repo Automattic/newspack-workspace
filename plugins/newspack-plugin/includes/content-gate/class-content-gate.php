@@ -1459,6 +1459,45 @@ class Content_Gate {
 	}
 
 	/**
+	 * Get product IDs required to access a given post.
+	 *
+	 * Checks the content gate's custom access rules for subscription products.
+	 * Other restriction strategies (e.g. Memberships) can provide additional
+	 * product IDs via the 'newspack_gate_access_product_ids' filter.
+	 *
+	 * @param int $post_id Optional post ID. Defaults to current post.
+	 *
+	 * @return int[] Array of unique product IDs, or empty array if none found.
+	 */
+	public static function get_gate_access_product_ids( $post_id = null ) {
+		$gate_id = self::get_gate_post_id( $post_id );
+		if ( ! $gate_id ) {
+			/**
+			 * Filter the product IDs required to access a restricted post.
+			 *
+			 * @param int[] $product_ids Array of product IDs.
+			 * @param int   $post_id     The post ID.
+			 */
+			return apply_filters( 'newspack_gate_access_product_ids', [], $post_id ?? get_the_ID() );
+		}
+		$custom_access = self::get_custom_access_settings( $gate_id );
+		$product_ids   = [];
+		if ( ! empty( $custom_access['active'] ) && ! empty( $custom_access['access_rules'] ) ) {
+			foreach ( $custom_access['access_rules'] as $group ) {
+				foreach ( $group as $rule ) {
+					if ( 'subscription' === ( $rule['slug'] ?? '' ) && ! empty( $rule['value'] ) ) {
+						$product_ids = array_merge( $product_ids, array_map( 'intval', (array) $rule['value'] ) );
+					}
+				}
+			}
+		}
+		$product_ids = array_values( array_unique( array_filter( $product_ids ) ) );
+
+		/** This filter is documented above. */
+		return apply_filters( 'newspack_gate_access_product_ids', $product_ids, $post_id ?? get_the_ID() );
+	}
+
+	/**
 	 * Get an array of tier-eligible subscription product options, formatted for select controls.
 	 *
 	 * @return array Array of subscription product options.

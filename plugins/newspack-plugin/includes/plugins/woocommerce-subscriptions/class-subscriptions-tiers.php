@@ -14,6 +14,13 @@ defined( 'ABSPATH' ) || exit;
  */
 class Subscriptions_Tiers {
 	/**
+	 * Deferred tiers modals to render in wp_footer.
+	 *
+	 * @var array[]
+	 */
+	private static $deferred_modals = [];
+
+	/**
 	 * Switch subscription links rendered in the page.
 	 *
 	 * @var array
@@ -35,6 +42,7 @@ class Subscriptions_Tiers {
 
 		// Link-triggered modal rendering.
 		add_action( 'wp_footer', [ __CLASS__, 'print_modal' ] );
+		add_action( 'wp_footer', [ __CLASS__, 'render_deferred_modals' ], 100 );
 		add_filter( 'newspack_popups_assess_has_disabled_popups', [ __CLASS__, 'disable_popups' ] );
 
 		// Unhook Upgrade/Downgrade switch direction text.
@@ -239,6 +247,72 @@ class Subscriptions_Tiers {
 	}
 
 	/**
+	 * Resolve products to their purchasable forms.
+	 *
+	 * Grouped products are expanded into their subscription children.
+	 * Variable subscriptions are expanded into their available variations.
+	 * Simple subscriptions and subscription variations are kept as-is.
+	 * Non-subscription and private products are excluded.
+	 *
+	 * @param (\WC_Product|int)[] $products Array of WC_Product objects or product IDs.
+	 *
+	 * @return \WC_Product[] Array of purchasable subscription products.
+	 */
+	public static function resolve_purchasable_products( $products ) {
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return [];
+		}
+		$purchasable = [];
+		foreach ( $products as $product ) {
+			if ( is_int( $product ) ) {
+				$product = wc_get_product( $product );
+			}
+			if ( ! $product ) {
+				continue;
+			}
+			if ( ! $product->is_purchasable() ) {
+				continue;
+			}
+			// Expand grouped products into their purchasable children.
+			if ( $product->is_type( 'grouped' ) ) {
+				foreach ( $product->get_children() as $child_id ) {
+					$child = wc_get_product( $child_id );
+					if ( ! $child || ! $child->is_purchasable() ) {
+						continue;
+					}
+					// Expand variable subscriptions into their purchasable variations.
+					if ( $child->is_type( 'variable-subscription' ) ) {
+						foreach ( $child->get_available_variations() as $variation ) {
+							$variation_product = wc_get_product( $variation['variation_id'] );
+							if ( $variation_product && $variation_product->is_purchasable() ) {
+								$purchasable[] = $variation_product;
+							}
+						}
+					} elseif ( $child->is_type( 'subscription' ) ) {
+						$purchasable[] = $child;
+					}
+				}
+				continue;
+			}
+			if ( ! in_array( $product->get_type(), [ 'subscription', 'subscription_variation', 'variable-subscription' ], true ) ) {
+				continue;
+			}
+			// Expand variable subscriptions into their purchasable variations.
+			if ( $product->is_type( 'variable-subscription' ) ) {
+				foreach ( $product->get_available_variations() as $variation ) {
+					$variation_product = wc_get_product( $variation['variation_id'] );
+					if ( $variation_product && $variation_product->is_purchasable() ) {
+						$purchasable[] = $variation_product;
+					}
+				}
+			} else {
+				$purchasable[] = $product;
+			}
+		}
+		return array_values( $purchasable );
+	}
+
+	/**
 	 * Get the frequency of a product.
 	 *
 	 * @param \WC_Product $product Product object.
@@ -258,70 +332,23 @@ class Subscriptions_Tiers {
 	}
 
 	/**
-	 * Get tiered products by frequency given a grouped or
-	 * variable subscription product.
+	 * Get products organized by frequency.
 	 *
-	 * If no product is provided, it will use all
-	 * non-donation subscription products.
+	 * Takes an array of already-resolved purchasable products and groups
+	 * them by their subscription frequency.
 	 *
-	 * @param \WC_Product|null $product       Optional product.
-	 * @param bool|null        $sort_by_price Whether to sort by price.
+	 * @param \WC_Product[] $products      Array of purchasable product objects.
+	 * @param bool          $sort_by_price Whether to sort by price.
 	 *
-	 * @return array<string, \WC_Product[]> Product tiers by frequency.
+	 * @return array<string, \WC_Product[]> Products organized by frequency.
 	 */
-	public static function get_tiers_by_frequency( $product = null, $sort_by_price = null ) {
-		if ( ! function_exists( 'wc_get_products' ) || ! function_exists( 'wcs_user_has_subscription' ) ) {
-			return [];
-		}
-
-		if ( empty( $product ) ) {
-			$products = wc_get_products(
-				[
-					'type'  => [ 'subscription', 'variable-subscription' ],
-					'limit' => -1,
-				]
-			);
-			$sort_by_price = $sort_by_price ?? true;
-		} elseif ( $product->is_type( 'grouped' ) ) {
-			$products = $product->get_children();
-			$sort_by_price = $sort_by_price ?? false;
-		} elseif ( $product->is_type( 'variable' ) || $product->is_type( 'variable-subscription' ) || $product->is_type( 'subscription' ) ) {
-			$products = [ $product ];
-			$sort_by_price = $sort_by_price ?? true;
-		}
-
+	public static function get_products_by_frequency( $products, $sort_by_price = true ) {
 		if ( empty( $products ) ) {
 			return [];
 		}
 
-		$selected_products = [];
-
-		foreach ( $products as $product ) {
-			if ( is_int( $product ) ) {
-				$product = wc_get_product( $product );
-			}
-
-			if ( ! in_array( $product->get_type(), [ 'subscription', 'variable-subscription' ], true ) ) {
-				continue;
-			}
-
-			if ( $product->get_status() === 'private' ) {
-				continue;
-			}
-
-			// Extract the variations if it's a variable subscription product.
-			if ( $product->is_type( 'variable-subscription' ) ) {
-				$variations = $product->get_available_variations();
-				foreach ( $variations as $variation ) {
-					$selected_products[] = new \WC_Product_Variation( $variation['variation_id'] );
-				}
-			} else {
-				$selected_products[] = $product;
-			}
-		}
-
 		$products_by_frequency = [];
-		foreach ( $selected_products as $product ) {
+		foreach ( $products as $product ) {
 			$frequency = self::get_frequency( $product );
 			if ( ! $frequency ) {
 				continue;
@@ -330,18 +357,59 @@ class Subscriptions_Tiers {
 		}
 
 		if ( $sort_by_price ) {
-			foreach ( $products_by_frequency as $frequency => $products ) {
+			foreach ( $products_by_frequency as $frequency => $frequency_products ) {
 				usort(
-					$products,
+					$frequency_products,
 					function( $a, $b ) {
 						return intval( $a->get_price() ) <=> intval( $b->get_price() );
 					}
 				);
-				$products_by_frequency[ $frequency ] = $products;
+				$products_by_frequency[ $frequency ] = $frequency_products;
 			}
 		}
 
 		return $products_by_frequency;
+	}
+
+	/**
+	 * Get tiers by frequency given a grouped or variable subscription
+	 * product, or an array of products.
+	 *
+	 * If no product is provided, it will use all
+	 * non-donation subscription products.
+	 *
+	 * @param \WC_Product|\WC_Product[]|null $product       Optional product or array of products.
+	 * @param bool|null                      $sort_by_price Whether to sort by price.
+	 *
+	 * @return array<string, \WC_Product[]> Product tiers by frequency.
+	 */
+	public static function get_tiers( $product = null, $sort_by_price = null ) {
+		if ( ! function_exists( 'wc_get_products' ) || ! function_exists( 'wcs_user_has_subscription' ) ) {
+			return [];
+		}
+
+		$products = [];
+
+		if ( is_array( $product ) ) {
+			$products      = $product;
+			$sort_by_price = $sort_by_price ?? true;
+		} elseif ( empty( $product ) ) {
+			$products = wc_get_products(
+				[
+					'type'  => [ 'subscription', 'variable-subscription' ],
+					'limit' => -1,
+				]
+			);
+			$sort_by_price = $sort_by_price ?? true;
+		} elseif ( $product->is_type( 'grouped' ) ) {
+			$products      = [ $product ];
+			$sort_by_price = $sort_by_price ?? false;
+		} elseif ( $product->is_type( 'variable' ) || $product->is_type( 'variable-subscription' ) || $product->is_type( 'subscription' ) ) {
+			$products      = [ $product ];
+			$sort_by_price = $sort_by_price ?? true;
+		}
+
+		return self::get_products_by_frequency( self::resolve_purchasable_products( $products ), $sort_by_price ?? true );
 	}
 
 	/**
@@ -570,13 +638,13 @@ class Subscriptions_Tiers {
 	/**
 	 * Render subscription tiers form.
 	 *
-	 * @param \WC_Product $product      Optional product.
-	 * @param string|null $title        Optional title.
-	 * @param string|null $button_label Optional button label.
-	 * @param array|null  $switch_data  Switch subscription data or null.
+	 * @param \WC_Product|\WC_Product[]|null $product      Optional product, array of products, or null.
+	 * @param string|null                    $title        Optional title.
+	 * @param string|null                    $button_label Optional button label.
+	 * @param array|null                     $switch_data  Switch subscription data or null.
 	 */
 	public static function render_form( $product = null, $title = null, $button_label = null, $switch_data = null ) {
-		$tiers = self::get_tiers_by_frequency( $product );
+		$tiers = self::get_tiers( $product );
 		if ( empty( $tiers ) ) {
 			return;
 		}
@@ -591,11 +659,11 @@ class Subscriptions_Tiers {
 		if ( is_user_logged_in() ) {
 			$user_subscriptions = wcs_get_users_subscriptions( get_current_user_id() );
 			foreach ( $frequencies as $frequency ) {
-				foreach ( $tiers[ $frequency ] as $product ) {
+				foreach ( $tiers[ $frequency ] as $tier_product ) {
 					foreach ( $user_subscriptions as $subscription ) {
-						if ( $subscription->has_product( $product->get_id() ) && $subscription->has_status( 'active' ) ) {
+						if ( $subscription->has_product( $tier_product->get_id() ) && $subscription->has_status( 'active' ) ) {
 							$current_frequency = $frequency;
-							$current_product   = $product;
+							$current_product   = $tier_product;
 							$user_subscription = $subscription;
 							break 2;
 						}
@@ -642,9 +710,11 @@ class Subscriptions_Tiers {
 			}
 		}
 
+		// Derive data-product-id for the form (only for a single WC_Product).
+		$data_product_id    = ( $product && ! is_array( $product ) ) ? $product->get_id() : '';
 		$should_render_tabs = ! $is_single_tier || $is_nyp;
 		?>
-		<form class="newspack__subscription-tiers__form <?php echo esc_attr( $is_nyp ? 'nyp' : '' ); ?>" target="newspack_modal_checkout_iframe" data-title="<?php echo esc_attr( $title ); ?>" data-product-id="<?php echo esc_attr( $product ? $product->get_id() : '' ); ?>">
+		<form class="newspack__subscription-tiers__form <?php echo esc_attr( $is_nyp ? 'nyp' : '' ); ?>" target="newspack_modal_checkout_iframe" data-title="<?php echo esc_attr( $title ); ?>" data-product-id="<?php echo esc_attr( $data_product_id ); ?>">
 			<?php if ( $should_render_tabs ) : ?>
 				<div class="newspack-ui__segmented-control">
 					<?php
@@ -697,22 +767,89 @@ class Subscriptions_Tiers {
 	}
 
 	/**
+	 * Render a checkout button that opens a deferred tiers modal.
+	 *
+	 * The button is rendered inline and the modal is queued for rendering
+	 * in wp_footer at a late priority, outside any banner wrappers.
+	 *
+	 * @param int[]  $product_ids  Array of product IDs.
+	 * @param string $button_label Button label text.
+	 * @param string $button_class CSS class for the button.
+	 */
+	public static function render_checkout_button( $product_ids, $button_label, $button_class ) {
+		// Normalize product IDs so the modal ID is stable for the same set of products.
+		$product_ids = array_map( 'intval', (array) $product_ids );
+		$product_ids = array_values( array_unique( $product_ids ) );
+		sort( $product_ids, SORT_NUMERIC );
+
+		$modal_id = 'newspack-tiers-modal-' . md5( implode( '-', $product_ids ) );
+
+		// If modal is already queued, just render the button.
+		if ( isset( self::$deferred_modals[ $modal_id ] ) ) {
+			?>
+			<button type="button" class="newspack-ui__button newspack-ui__button--x-small <?php echo esc_attr( $button_class ); ?>" data-tiers-modal="<?php echo esc_attr( $modal_id ); ?>"><?php echo esc_html( $button_label ); ?></button>
+			<?php
+			return;
+		}
+
+		// Resolve purchasable products.
+		$products = self::resolve_purchasable_products( $product_ids );
+		if ( empty( $products ) ) {
+			return;
+		}
+
+		if ( ! class_exists( 'Newspack_Blocks' ) || ! class_exists( 'Newspack_Blocks\Modal_Checkout' ) ) {
+			return;
+		}
+		\Newspack_Blocks\Modal_Checkout::enqueue_modal();
+
+		// Queue the modal for deferred rendering.
+		self::$deferred_modals[ $modal_id ] = [
+			'products'     => $products,
+			'button_label' => $button_label,
+		];
+
+		// Render the CTA button that opens the modal.
+		?>
+		<button type="button" class="newspack-ui__button newspack-ui__button--x-small <?php echo esc_attr( $button_class ); ?>" data-tiers-modal="<?php echo esc_attr( $modal_id ); ?>"><?php echo esc_html( $button_label ); ?></button>
+		<?php
+	}
+
+	/**
+	 * Render all deferred tiers modals.
+	 *
+	 * Called on wp_footer at a late priority so modals are rendered
+	 * at the top level of the DOM, outside any banner wrappers.
+	 */
+	public static function render_deferred_modals() {
+		foreach ( self::$deferred_modals as $modal_id => $data ) {
+			self::render_modal( $data['products'], null, $data['button_label'], null, 'closed', $modal_id );
+		}
+		self::$deferred_modals = [];
+	}
+
+	/**
 	 * Render subscription tiers modal given a grouped or variable
-	 * subscription product.
+	 * subscription product, or an array of products.
 	 *
 	 * If no grouped or variable subscription product is provided,
 	 * all non-donation subscription products are rendered.
 	 *
-	 * @param \WC_Product|null $product       Optional product.
-	 * @param string|null      $title         Optional title.
-	 * @param string|null      $button_label  Optional button label.
-	 * @param array|null       $switch_data   Switch subscription data or null.
-	 * @param string           $initial_state Optional initial state.
+	 * @param \WC_Product|\WC_Product[]|null $product       Optional product, array of products, or null.
+	 * @param string|null                    $title         Optional title.
+	 * @param string|null                    $button_label  Optional button label.
+	 * @param array|null                     $switch_data   Switch subscription data or null.
+	 * @param string                         $initial_state Optional initial state.
+	 * @param string|null                    $modal_id      Optional HTML id attribute for the modal container.
 	 */
-	public static function render_modal( $product = null, $title = null, $button_label = null, $switch_data = null, $initial_state = 'closed' ) {
+	public static function render_modal( $product = null, $title = null, $button_label = null, $switch_data = null, $initial_state = 'closed', $modal_id = null ) {
 		$default_title = $switch_data ? __( 'Change Subscription', 'newspack-plugin' ) : __( 'Complete your transaction', 'newspack-plugin' );
+
+		// Derive data-product-id for the container (only for a single WC_Product).
+		$data_product_id      = ( $product && ! is_array( $product ) ) ? $product->get_id() : '';
+		$data_subscription_id = $switch_data ? $switch_data['subscription']->get_id() : '';
 		?>
-		<div class="newspack-ui newspack-ui__modal-container newspack__subscription-tiers" data-state="<?php echo esc_attr( $initial_state ); ?>" data-product-id="<?php echo esc_attr( $product ? $product->get_id() : '' ); ?>" data-subscription-id="<?php echo esc_attr( $switch_data ? $switch_data['subscription']->get_id() : '' ); ?>">
+		<div <?php echo $modal_id ? 'id="' . esc_attr( $modal_id ) . '"' : ''; ?> class="newspack-ui newspack-ui__modal-container newspack__subscription-tiers" data-state="<?php echo esc_attr( $initial_state ); ?>" data-product-id="<?php echo esc_attr( $data_product_id ); ?>" data-subscription-id="<?php echo esc_attr( $data_subscription_id ); ?>">
 			<div class="newspack-ui__modal-container__overlay"></div>
 			<div class="newspack-ui__modal newspack-ui__modal--small">
 				<header class="newspack-ui__modal__header">

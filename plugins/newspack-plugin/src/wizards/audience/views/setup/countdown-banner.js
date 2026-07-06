@@ -1,5 +1,3 @@
-/* global newspackAudience */
-
 /**
  * WordPress dependencies
  */
@@ -12,10 +10,10 @@ import {
 	__experimentalToggleGroupControlOption as ToggleGroupControlOption,
 } from '@wordpress/components';
 
-import { ActionCard, Button, Grid, SelectControl, TextControl } from '../../../../../packages/components/src';
+import { ActionCard, Button, Grid, TextControl } from '../../../../../packages/components/src';
 
 export default function CountdownBanner( { config, setConfig, updateConfig, noBorder = false } ) {
-	const availableProducts = newspackAudience?.available_products || [];
+	const ctaType = config.countdown_banner?.cta_type || 'product';
 	return (
 		<ActionCard
 			title={ __( 'Metered Countdown', 'newspack-plugin' ) }
@@ -58,11 +56,12 @@ export default function CountdownBanner( { config, setConfig, updateConfig, noBo
 						</ToggleGroupControl>
 						<ToggleGroupControl
 							label={ __( 'Subscribe button action', 'newspack-plugin' ) }
-							help={ __(
-								'Whether the subscribe button should start a product checkout or redirect to a landing page.',
-								'newspack-plugin'
-							) }
-							value={ config.countdown_banner.cta_type || 'product' }
+							help={
+								ctaType === 'product'
+									? __( 'The product is automatically set by the content gate access rules.', 'newspack-plugin' )
+									: __( 'Redirect to a landing page.', 'newspack-plugin' )
+							}
+							value={ ctaType }
 							onChange={ value => setConfig( { ...config, countdown_banner: { ...config.countdown_banner, cta_type: value } } ) }
 							isBlock
 							__next40pxDefaultSize
@@ -70,20 +69,7 @@ export default function CountdownBanner( { config, setConfig, updateConfig, noBo
 							<ToggleGroupControlOption label={ __( 'Product', 'newspack-plugin' ) } value="product" />
 							<ToggleGroupControlOption label={ __( 'Landing page', 'newspack-plugin' ) } value="url" />
 						</ToggleGroupControl>
-						{ config.countdown_banner.cta_type === 'product' && (
-							<SelectControl
-								label={ __( 'Subscribe button product', 'newspack-plugin' ) }
-								help={ __( 'Product linked to the subscribe button.', 'newspack-plugin' ) }
-								options={ [ { label: __( 'Select a product', 'newspack-plugin' ), value: 0, disabled: true }, ...availableProducts ] }
-								value={ config.countdown_banner.cta_product_id }
-								suggestions={ availableProducts.map( o => o.label ) }
-								onChange={ value =>
-									setConfig( { ...config, countdown_banner: { ...config.countdown_banner, cta_product_id: value } } )
-								}
-								__next40pxDefaultSize
-							/>
-						) }
-						{ config.countdown_banner.cta_type === 'url' && (
+						{ ctaType === 'url' && (
 							<TextControl
 								label={ __( 'Subscribe button URL', 'newspack-plugin' ) }
 								help={ __( 'URL for the landing page to redirect to.', 'newspack-plugin' ) }
@@ -113,8 +99,7 @@ export default function CountdownBanner( { config, setConfig, updateConfig, noBo
 														<a href="#signin_modal">{ __( 'Sign in to an existing account', 'newspack-plugin' ) }</a>.
 													</span>
 												</div>
-												{ ( ( config.countdown_banner.cta_type === 'product' && config.countdown_banner.cta_product_id ) ||
-													( config.countdown_banner.cta_type === 'url' && config.countdown_banner.cta_url ) ) && (
+												{ ( ctaType === 'product' || ( ctaType === 'url' && config.countdown_banner.cta_url ) ) && (
 													<button
 														className={ `newspack-ui__button newspack-ui__button--x-small ${
 															( config.countdown_banner.style || 'light' ) === 'dark'

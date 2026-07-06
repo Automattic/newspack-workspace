@@ -213,7 +213,6 @@ class Content_Gifting {
 			'cta_label'            => Content_Gifting_CTA::get_cta_label(),
 			'button_label'         => Content_Gifting_CTA::get_button_label(),
 			'cta_type'             => Content_Gifting_CTA::get_cta_type(),
-			'cta_product_id'       => Content_Gifting_CTA::get_cta_product_id(),
 			'cta_url'              => Content_Gifting_CTA::get_cta_url(),
 			'style'                => Content_Gifting_CTA::get_style(),
 		];
