@@ -263,6 +263,21 @@ class Client {
 	 * @throws \RuntimeException If credentials or the library are unavailable.
 	 */
 	protected static function get_report_service( $network_code ) {
+		return ( new \Google\AdsApi\AdManager\v202602\ServiceFactory() )->createReportService( self::build_session( $network_code ) );
+	}
+
+	/**
+	 * Build a GAM API session bound to the network code, authenticated with the
+	 * publisher's OAuth credentials. Shared by the ReportService and the
+	 * CustomTargetingService (NPPD-1671) so both authenticate identically —
+	 * OAuth-only, never a service account.
+	 *
+	 * @param int $network_code The GAM network code.
+	 * @return \Google\AdsApi\AdManager\AdManagerSession
+	 *
+	 * @throws \RuntimeException If credentials or the library are unavailable.
+	 */
+	protected static function build_session( $network_code ) {
 		self::ensure_library_loaded();
 
 		$credentials = Google_Services_Connection::get_oauth2_credentials();
@@ -270,18 +285,51 @@ class Client {
 			throw new \RuntimeException( 'No Google OAuth credentials available for GAM reporting.' );
 		}
 
-		$config  = [
+		$config = [
 			'AD_MANAGER' => [
 				'applicationName' => self::APPLICATION_NAME,
 				'networkCode'     => (string) $network_code,
 			],
 		];
-		$session = ( new \Google\AdsApi\AdManager\AdManagerSessionBuilder() )
+		return ( new \Google\AdsApi\AdManager\AdManagerSessionBuilder() )
 			->from( new \Google\AdsApi\Common\Configuration( $config ) )
 			->withOAuth2Credential( $credentials )
 			->build();
+	}
 
-		return ( new \Google\AdsApi\AdManager\v202602\ServiceFactory() )->createReportService( $session );
+	/**
+	 * Resolve a reportable custom-dimension key by name to its GAM key ID
+	 * (NPPD-1671), for use as {@see Report_Query::$custom_dimension_key_ids}.
+	 * Queries the CustomTargetingService over the same OAuth session as reporting.
+	 * Returns null when the key doesn't exist (e.g. a non-network publisher, whose
+	 * GAM has no `site` dimension). SOAP-touching, so the orchestrator wraps calls
+	 * in a mockable seam.
+	 *
+	 * @param string $name         Custom targeting key name (e.g. 'site').
+	 * @param int    $network_code GAM network code.
+	 * @return int|null The key ID, or null when not found.
+	 *
+	 * @throws \RuntimeException On a (translated) API error.
+	 */
+	public static function resolve_custom_dimension_key_id( $name, $network_code ) {
+		// Key names are simple identifiers; hard-sanitize before it reaches the PQL.
+		$safe_name = preg_replace( '/[^a-z0-9_]/i', '', (string) $name );
+		if ( '' === $safe_name ) {
+			return null;
+		}
+		$service = ( new \Google\AdsApi\AdManager\v202602\ServiceFactory() )->createCustomTargetingService( self::build_session( $network_code ) );
+		try {
+			$statement = new \Google\AdsApi\AdManager\v202602\Statement(
+				"WHERE name = '" . $safe_name . "' AND status = 'ACTIVE'"
+			);
+			$results = $service->getCustomTargetingKeysByStatement( $statement )->getResults();
+		} catch ( \Exception $e ) {
+			throw self::friendly_api_error( $e ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- friendly_api_error() returns a RuntimeException with an already-escaped message.
+		}
+		if ( empty( $results ) ) {
+			return null;
+		}
+		return (int) $results[0]->getId();
 	}
 
 	/**
@@ -344,6 +392,11 @@ class Client {
 		$report_query = new \Google\AdsApi\AdManager\v202602\ReportQuery();
 		$report_query->setDimensions( $query->dimensions );
 		$report_query->setColumns( $query->columns );
+		// Custom-dimension breakdown (NPPD-1671): referencing the reportable key(s)
+		// by ID makes GAM emit one row per value (e.g. per network `site`).
+		if ( ! empty( $query->custom_dimension_key_ids ) ) {
+			$report_query->setCustomDimensionKeyIds( $query->custom_dimension_key_ids );
+		}
 		$report_query->setDateRangeType( $query->date_range_type );
 
 		if ( 'CUSTOM_DATE' === $query->date_range_type ) {
