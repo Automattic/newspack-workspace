@@ -601,7 +601,26 @@ domReady( () => {
 					if ( 'custom' === afterSuccessBehavior ) {
 						window.location.href = afterSuccessUrl;
 					} else if ( 'referrer' === afterSuccessBehavior ) {
-						window.history.back();
+						// window.history.back() is a no-op when there's no in-session
+						// history entry (reader landed directly, opened in a new tab, or
+						// the previous entry is cross-origin), stranding the reader with no
+						// feedback. Prefer the same-origin document.referrer when we have
+						// one, and fall back to history.back() otherwise.
+						const referrer = document.referrer;
+						let navigated = false;
+						if ( referrer ) {
+							try {
+								if ( new URL( referrer ).origin === window.location.origin ) {
+									window.location.href = referrer;
+									navigated = true;
+								}
+							} catch ( e ) {
+								// Malformed referrer — fall through to history.back().
+							}
+						}
+						if ( ! navigated ) {
+							window.history.back();
+						}
 					}
 				}
 				window?.newspackReaderActivation?.setPendingCheckout?.();

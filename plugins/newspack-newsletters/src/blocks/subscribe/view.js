@@ -54,6 +54,13 @@ function maybeRenderAfterSuccessButton( container, responseContainer, submitButt
 	if ( 'custom' === behavior && ! url ) {
 		return;
 	}
+	// Idempotency guard. endFlow runs once per submit and the success branch
+	// detaches the form, so this can't be reached twice today — but bail if a
+	// Continue button already exists so a future control-flow change can't
+	// append a duplicate.
+	if ( responseContainer.querySelector( '.newspack-newsletters-subscribe__continue' ) ) {
+		return;
+	}
 	const label = container.getAttribute( 'data-after-success-label' ) || 'Continue';
 	const button = document.createElement( 'button' );
 	button.type = 'button';
@@ -71,10 +78,41 @@ function maybeRenderAfterSuccessButton( container, responseContainer, submitButt
 		if ( 'custom' === behavior ) {
 			window.location.href = url;
 		} else if ( 'referrer' === behavior ) {
-			window.history.back();
+			goToPreviousPage();
 		}
 	} );
 	responseContainer.appendChild( button );
+	// Move focus to the new control. The success branch replaces the form, so
+	// focus would otherwise be left on the now-detached submit button; since the
+	// whole point of this button is to move the reader onward, focusing it helps
+	// keyboard and screen-reader users act on it.
+	button.focus();
+}
+
+/**
+ * Navigate to the reader's previous page for the 'referrer' behavior.
+ *
+ * `window.history.back()` is a no-op when there's no in-session history entry
+ * (reader landed directly, opened in a new tab, or the previous entry is
+ * cross-origin), leaving the reader stuck with no feedback. Prefer the
+ * same-origin `document.referrer` when we have one and fall back to
+ * `history.back()` otherwise.
+ *
+ * @return {void}
+ */
+function goToPreviousPage() {
+	const referrer = document.referrer;
+	if ( referrer ) {
+		try {
+			if ( new URL( referrer ).origin === window.location.origin ) {
+				window.location.href = referrer;
+				return;
+			}
+		} catch ( e ) {
+			// Malformed referrer — fall through to history.back().
+		}
+	}
+	window.history.back();
 }
 
 domReady( function () {
@@ -82,6 +120,14 @@ domReady( function () {
 	document.querySelectorAll( '.newspack-newsletters-subscribe' ).forEach( container => {
 		const form = container.querySelector( 'form' );
 		if ( ! form ) {
+			// No form means the reader is already subscribed: render_block emits
+			// the block with data-status="200" and no form, so there's nothing to
+			// wire up. By design the Continue button only appears for the reader
+			// who just subscribed in this page view — a returning/already-subscribed
+			// reader (including one who reloads after subscribing) sees the plain
+			// success message, matching the "redirect the reader who just engaged"
+			// intent. Adding it here would require SSR'ing the button in the
+			// no-form render.
 			return;
 		}
 		const responseContainer = container.querySelector( '.newspack-newsletters-subscribe__response' );

@@ -443,14 +443,17 @@ export default function SubscribeEdit( {
 										allowedFormats={ [ 'core/bold', 'core/italic' ] }
 									/>
 								</div>
-								{ afterSuccessBehavior && (
-									<div
-										className="newspack-newsletters-subscribe__continue submit-button"
-										style={ { backgroundColor, color: textColor } }
-									>
-										{ afterSuccessButtonLabel || __( 'Continue', 'newspack-newsletters' ) }
-									</div>
-								) }
+								{ afterSuccessBehavior &&
+									// Mirror the front-end guard: a 'custom' redirect with no URL
+									// renders no button on the published page, so don't preview one.
+									! ( 'custom' === afterSuccessBehavior && ! afterSuccessURL ) && (
+										<div
+											className="newspack-newsletters-subscribe__continue submit-button"
+											style={ { backgroundColor, color: textColor } }
+										>
+											{ afterSuccessButtonLabel || __( 'Continue', 'newspack-newsletters' ) }
+										</div>
+									) }
 							</div>
 						) }
 					</div>

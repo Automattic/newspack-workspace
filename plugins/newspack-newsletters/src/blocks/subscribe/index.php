@@ -185,6 +185,7 @@ function render_block( $attrs ) {
 		data-success-message="<?php echo \esc_attr( $attrs['successMessage'] ); ?>"
 		<?php if ( $after_success_behavior ) : ?>
 			data-after-success-behavior="<?php echo \esc_attr( $after_success_behavior ); ?>"
+			<?php // The redirect URL is escaped with esc_url() rather than the Checkout Button's esc_attr(): it strips javascript:/data: schemes and only ever feeds window.location.href. This intentionally diverges from strict parity — esc_url() rewrites a schemeless relative path without a leading slash (e.g. "foo/bar" → "http://foo/bar"), so publishers should use a leading slash ("/foo/bar") or an absolute URL for a same-site destination. ?>
 			data-after-success-url="<?php echo \esc_url( $after_success_url ); ?>"
 			data-after-success-label="<?php echo \esc_attr( $after_success_label ); ?>"
 		<?php endif; ?>
