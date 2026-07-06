@@ -2,7 +2,7 @@
  * Fast Checkout block — editor component.
  */
 
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import { debounce } from 'lodash';
@@ -213,13 +213,13 @@ function NypDefaultPrice( { productId, value, onChange }: NypDefaultPriceProps )
 				if ( min && max ) {
 					parts.push(
 						/* translators: 1: min price, 2: max price */
-						__( 'Allowed: %1$s – %2$s.', 'newspack-blocks' ).replace( '%1$s', min ).replace( '%2$s', max )
+						sprintf( __( 'Allowed: %1$s – %2$s.', 'newspack-blocks' ), min, max )
 					);
 				}
 				if ( suggested ) {
 					parts.push(
 						/* translators: %s: suggested price */
-						__( 'Suggested: %s.', 'newspack-blocks' ).replace( '%s', suggested )
+						sprintf( __( 'Suggested: %s.', 'newspack-blocks' ), suggested )
 					);
 				}
 				setHelp( parts.join( ' ' ) || __( 'Reader can set any amount.', 'newspack-blocks' ) );

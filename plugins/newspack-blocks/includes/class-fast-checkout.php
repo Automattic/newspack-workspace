@@ -223,6 +223,16 @@ final class Fast_Checkout {
 				return (int) $attrs['grouped_child'];
 			}
 			if ( ! empty( $valid_children ) ) {
+				// Prefer the first purchasable child so a leading out-of-stock or
+				// unpurchasable child doesn't render the whole block unavailable.
+				if ( function_exists( 'wc_get_product' ) ) {
+					foreach ( $valid_children as $child_id ) {
+						$child = wc_get_product( $child_id );
+						if ( $child && $child->is_purchasable() ) {
+							return $child_id;
+						}
+					}
+				}
 				return (int) $valid_children[0];
 			}
 			return $parent;
@@ -760,10 +770,19 @@ final class Fast_Checkout {
 			$json = $request->get_json_params();
 			$raw  = is_array( $json ) ? ( $json['nyp'] ?? null ) : null;
 		}
-		// No explicit price provided — fall back to the product's suggested
-		// price, then minimum. Lets selector swaps (which don't carry an nyp
-		// value) succeed for grouped/variable products with NYP children.
+		// Respect an nyp value already present in cart_item_data — some Store API
+		// clients carry the reader-set price there rather than at the top level.
+		if ( ( null === $raw || ! is_numeric( $raw ) ) && isset( $cart_item_data['nyp'] ) && is_numeric( $cart_item_data['nyp'] ) ) {
+			$raw = $cart_item_data['nyp'];
+		}
+		// Still no explicit price — fall back to the product's suggested price,
+		// then minimum, but only for Fast Checkout selector swaps (identified by
+		// the source-post marker set in propagate_source_post). This keeps
+		// unrelated Store API add-to-cart calls for NYP products unchanged.
 		if ( null === $raw || ! is_numeric( $raw ) ) {
+			if ( ! isset( $cart_item_data[ self::CART_ITEM_SOURCE_KEY ] ) ) {
+				return $cart_item_data;
+			}
 			$raw = \WC_Name_Your_Price_Helpers::get_suggested_price( $product_id );
 			if ( ! is_numeric( $raw ) || (float) $raw <= 0 ) {
 				$raw = \WC_Name_Your_Price_Helpers::get_minimum_price( $product_id );

@@ -26,7 +26,7 @@ interface ChildData {
 }
 
 interface RootProps {
-	host: HTMLFormElement;
+	host: HTMLElement;
 	productId: number;
 	children: ChildData[];
 	currentChildId: number;
@@ -288,7 +288,7 @@ function updateUrlParam( key: string, value: string ) {
 }
 
 function init() {
-	document.querySelectorAll< HTMLFormElement >( '.wp-block-newspack-blocks-fast-checkout-donate-selector' ).forEach( host => {
+	document.querySelectorAll< HTMLElement >( '.wp-block-newspack-blocks-fast-checkout-donate-selector' ).forEach( host => {
 		const productId = parseInt( host.dataset.productId || '0', 10 );
 		const currentChildId = parseInt( host.dataset.currentChild || '0', 10 );
 		let children: ChildData[] = [];

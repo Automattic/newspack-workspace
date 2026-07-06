@@ -255,7 +255,7 @@ function render_block( $attrs, $content, $block ) {
 
 	ob_start();
 	?>
-	<form <?php echo $wrapper_attributes; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
+	<div <?php echo $wrapper_attributes; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>>
 		<div class="wp-block-newspack-blocks-fast-checkout-donate-selector__frequencies">
 			<?php foreach ( $children as $c ) : ?>
 				<?php $radio_id = 'fc-donate-child-' . $c['id']; ?>
@@ -308,7 +308,7 @@ function render_block( $attrs, $content, $block ) {
 				hidden
 			></p>
 		</div>
-	</form>
+	</div>
 	<?php
 	return (string) ob_get_clean();
 }

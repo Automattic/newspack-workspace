@@ -763,13 +763,81 @@ class Test_Fast_Checkout extends WP_UnitTestCase_Blocks {
 			]
 		);
 
+		// Selector swaps carry the source-post marker (set by propagate_source_post),
+		// which is what enables the suggested-price fallback.
+		$cart_item_data = Fast_Checkout::store_api_nyp_bridge(
+			[ Fast_Checkout::CART_ITEM_SOURCE_KEY => 123 ],
+			$product->get_id(),
+			$request
+		);
+
+		$this->assertSame( 15.0, (float) ( $cart_item_data['nyp'] ?? 0 ) );
+	}
+
+	/**
+	 * Test that the bridge does NOT inject a fallback price for non-Fast-Checkout
+	 * Store API add-to-cart calls (no source-post marker present).
+	 */
+	public function test_store_api_nyp_bridge_skips_fallback_without_source_marker() {
+		$this->skip_without_wc();
+		if ( ! class_exists( '\WC_Name_Your_Price_Helpers' ) ) {
+			$this->markTestSkipped( 'WC Name Your Price not available.' );
+		}
+
+		$product = $this->create_simple_product();
+		update_post_meta( $product->get_id(), '_nyp', 'yes' );
+		update_post_meta( $product->get_id(), '_min_price', '5' );
+		update_post_meta( $product->get_id(), '_suggested_price', '15' );
+
+		$request = new \WP_REST_Request( 'POST', '/wc/store/v1/cart/add-item' );
+		$request->set_body_params(
+			[
+				'id'       => $product->get_id(),
+				'quantity' => 1,
+			]
+		);
+
 		$cart_item_data = Fast_Checkout::store_api_nyp_bridge(
 			[],
 			$product->get_id(),
 			$request
 		);
 
-		$this->assertSame( 15.0, (float) ( $cart_item_data['nyp'] ?? 0 ) );
+		$this->assertArrayNotHasKey( 'nyp', $cart_item_data );
+	}
+
+	/**
+	 * Test that the bridge respects an nyp value already present in
+	 * cart_item_data rather than overwriting it with the fallback price.
+	 */
+	public function test_store_api_nyp_bridge_respects_existing_cart_item_data_nyp() {
+		$this->skip_without_wc();
+		if ( ! class_exists( '\WC_Name_Your_Price_Helpers' ) ) {
+			$this->markTestSkipped( 'WC Name Your Price not available.' );
+		}
+
+		$product = $this->create_simple_product();
+		update_post_meta( $product->get_id(), '_nyp', 'yes' );
+		update_post_meta( $product->get_id(), '_min_price', '5' );
+		update_post_meta( $product->get_id(), '_max_price', '50' );
+		update_post_meta( $product->get_id(), '_suggested_price', '15' );
+
+		// No top-level nyp in the request; the price rides along in cart_item_data.
+		$request = new \WP_REST_Request( 'POST', '/wc/store/v1/cart/add-item' );
+		$request->set_body_params(
+			[
+				'id'       => $product->get_id(),
+				'quantity' => 1,
+			]
+		);
+
+		$cart_item_data = Fast_Checkout::store_api_nyp_bridge(
+			[ 'nyp' => 22.5 ],
+			$product->get_id(),
+			$request
+		);
+
+		$this->assertSame( 22.5, (float) ( $cart_item_data['nyp'] ?? 0 ) );
 	}
 
 	/**
