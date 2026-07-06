@@ -178,8 +178,14 @@ class Test_Fast_Checkout extends WP_UnitTestCase_Blocks {
 
 	/**
 	 * Test that filter_render shows unavailable notice for missing product.
+	 *
+	 * Requires real WooCommerce: relies on wc_get_product() returning false for a
+	 * non-existent product ID. The blocks PHPUnit stub instead returns a bare
+	 * product object without is_purchasable(), so this must skip without WC.
 	 */
 	public function test_filter_render_replaces_when_product_missing() {
+		$this->skip_without_wc();
+
 		$content  = '<div>Buy now</div>';
 		$block    = [ 'attrs' => [ 'product' => '999999' ] ];
 		$filtered = Fast_Checkout::filter_render( $content, $block );
