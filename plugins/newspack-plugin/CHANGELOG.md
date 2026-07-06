@@ -1,3 +1,10 @@
+## newspack [6.44.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.7...newspack@6.44.8) (2026-07-06)
+
+
+### Bug Fixes
+
+* **group-subscription:** render metabox on non-HPOS order storage ([#426](https://github.com/Automattic/newspack-workspace/issues/426)) ([c542f0b](https://github.com/Automattic/newspack-workspace/commit/c542f0bf942c7b41d331a4e407e7110833f0f653))
+
 ## newspack [6.44.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.6...newspack@6.44.7) (2026-07-02)
 
 
