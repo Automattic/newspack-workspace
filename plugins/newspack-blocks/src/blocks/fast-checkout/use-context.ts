@@ -19,11 +19,12 @@ addFilter( 'blocks.registerBlockType', 'newspack-blocks/fast-checkout/use-contex
 		return settings;
 	}
 	const existing = Array.isArray( settings.usesContext ) ? settings.usesContext : [];
-	if ( existing.includes( PRODUCT_CONTEXT_KEY ) ) {
+	const missing = [ PRODUCT_CONTEXT_KEY, VARIATION_CONTEXT_KEY ].filter( key => ! existing.includes( key ) );
+	if ( ! missing.length ) {
 		return settings;
 	}
 	return {
 		...settings,
-		usesContext: [ ...existing, PRODUCT_CONTEXT_KEY, VARIATION_CONTEXT_KEY ],
+		usesContext: [ ...existing, ...missing ],
 	};
 } );

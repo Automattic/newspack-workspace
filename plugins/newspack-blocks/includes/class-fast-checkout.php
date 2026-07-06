@@ -306,6 +306,11 @@ final class Fast_Checkout {
 
 		$success = filter_input( INPUT_GET, self::QP_SUCCESS, FILTER_SANITIZE_URL );
 		if ( $success ) {
+			// Restrict to http/https so unsafe schemes (e.g. javascript:) can't
+			// slip through to the post-purchase redirect.
+			$success = esc_url_raw( $success, [ 'http', 'https' ] );
+		}
+		if ( $success ) {
 			$params['success'] = $success;
 		}
 
@@ -505,7 +510,9 @@ final class Fast_Checkout {
 		if ( ! $block ) {
 			return '';
 		}
-		return $block['attrs']['afterSuccessURL'] ?? '';
+		$after_success_url = $block['attrs']['afterSuccessURL'] ?? '';
+		// Restrict to http/https so unsafe schemes can't be used as a redirect target.
+		return $after_success_url ? esc_url_raw( $after_success_url, [ 'http', 'https' ] ) : '';
 	}
 
 	/**
