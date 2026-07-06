@@ -26,6 +26,7 @@ import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import DataLagIndicator from './components/DataLagIndicator';
 import FinishConnectingDiagnostic from './components/FinishConnectingDiagnostic';
 import ReachRevenueSection from './advertising/sections/ReachRevenueSection';
+import RevenueTrendSection from './advertising/sections/RevenueTrendSection';
 import InventoryPerformanceSection from './advertising/sections/InventoryPerformanceSection';
 import SitePerformanceSection from './advertising/sections/SitePerformanceSection';
 import TopPerformersSection from './advertising/sections/TopPerformersSection';
@@ -88,6 +89,7 @@ const AdvertisingTab = ( { range, previousRange }: AdvertisingTabProps ) => {
 						lastUpdated={ <LastUpdated tab="advertising" range={ range } previousRange={ previousRange } /> }
 					/>
 					<InventoryPerformanceSection current={ current.metrics } previous={ previous } />
+					<RevenueTrendSection current={ current.metrics } previous={ previous } />
 					{ /* Per-site breakdown (NPPD-1671): network members only; absent otherwise. */ }
 					{ current.is_network_member && <SitePerformanceSection current={ current.metrics } previous={ previous } /> }
 					<TopPerformersSection current={ current.metrics } previous={ previous } />

@@ -310,6 +310,33 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 		];
 	};
 
+	// Daily revenue series for the Revenue trend chart (NPPD-1674). One point per
+	// day across the window, with a slight upward drift and a weekend lift so the
+	// line has a readable shape. Date-relative (spans the requested window), capped
+	// at 92 days so a huge range stays sane.
+	$revenue_series = function ( string $from, string $to, float $scale ) use ( $tz ): array {
+		try {
+			$day = new DateTimeImmutable( $from, $tz );
+			$end = new DateTimeImmutable( $to, $tz );
+		} catch ( Exception $e ) {
+			return [];
+		}
+		$rows = [];
+		$i    = 0;
+		while ( $day <= $end && $i < 92 ) {
+			$is_weekend = (int) $day->format( 'N' ) >= 6 ? 1.35 : 1.0;
+			$trend      = 1 + ( $i * 0.01 );
+			$wobble     = 1 + ( ( $i % 5 ) - 2 ) * 0.06;
+			$rows[]     = [
+				'date'  => $day->format( 'Y-m-d' ),
+				'value' => round( 120.0 * $scale * $trend * $is_weekend * $wobble, 2 ),
+			];
+			$day = $day->modify( '+1 day' );
+			++$i;
+		}
+		return $rows;
+	};
+
 	// Not-ready render path: tab visible, reporting not ready, both issues.
 	if ( 'not_ready' === $variant ) {
 		$not_ready = [
@@ -413,6 +440,15 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 	};
 
 	$current_metrics = $metrics( 1.0, $variant );
+	// Revenue trend (NPPD-1674): a daily series across the window. Empty on the
+	// revenue-less variants (zero, no_revenue) — both report $0 revenue, so the
+	// chart (current AND its compare overlay) stays coherent with the scorecards.
+	$revenueless                       = in_array( $variant, [ 'zero', 'no_revenue' ], true );
+	$current_metrics['revenue_by_day'] = [
+		'rows'       => $revenueless ? [] : $revenue_series( $start_date, $end_date, 1.0 ),
+		'computable' => ! $revenueless,
+		'type'       => 'timeseries',
+	];
 	if ( $is_network ) {
 		$current_metrics['top_sites'] = [
 			'rows'       => $site_rows( 1.0 ),
@@ -462,6 +498,14 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 		// per-row figures land lower, exercising both delta directions. The prior
 		// window always uses a non-empty variant so comparison deltas render.
 		$prev_metrics = $metrics( 0.85, 'zero' === $variant ? 'populated' : $variant );
+		// Prior-period daily revenue (NPPD-1674): the dimmed overlay line under compare.
+		$prev_from                      = $prior_start instanceof DateTimeImmutable ? $prior_start->format( 'Y-m-d' ) : $prior_start;
+		$prev_to                        = $prior_end instanceof DateTimeImmutable ? $prior_end->format( 'Y-m-d' ) : $prior_end;
+		$prev_metrics['revenue_by_day'] = [
+			'rows'       => $revenueless ? [] : $revenue_series( $prev_from, $prev_to, 0.85 ),
+			'computable' => ! $revenueless,
+			'type'       => 'timeseries',
+		];
 		if ( $is_network ) {
 			$prev_metrics['top_sites'] = [
 				'rows'       => $site_rows( 0.85 ),

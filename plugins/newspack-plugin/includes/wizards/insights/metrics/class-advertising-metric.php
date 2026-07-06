@@ -94,6 +94,7 @@ class Advertising_Metric {
 	const DIM_AD_UNIT_NAME     = 'AD_UNIT_NAME';
 	const DIM_ADVERTISER_NAME  = 'ADVERTISER_NAME';
 	const DIM_CUSTOM_DIMENSION = 'CUSTOM_DIMENSION';
+	const DIM_DATE             = 'DATE';
 
 	/**
 	 * The reportable custom-dimension key newspack-network creates for each site
@@ -510,6 +511,7 @@ class Advertising_Metric {
 		$metrics = [
 			'total_impressions'      => self::total_impressions( $start_date, $end_date ),
 			'total_revenue'          => self::total_revenue( $start_date, $end_date ),
+			'revenue_by_day'         => self::revenue_by_day( $start_date, $end_date ),
 			'avg_ecpm'               => self::avg_ecpm( $start_date, $end_date ),
 			'fill_rate'              => self::fill_rate( $start_date, $end_date ),
 			'viewability_rate'       => self::viewability_rate( $start_date, $end_date ),
@@ -582,6 +584,57 @@ class Advertising_Metric {
 			'value'      => $revenue,
 			'computable' => true,
 			'type'       => 'currency',
+		];
+	}
+
+	/**
+	 * Revenue by day (NPPD-1674) — the window's revenue broken down by the GAM
+	 * `DATE` dimension for the trend line chart. Returns a timeseries payload of
+	 * `{ date: 'YYYY-MM-DD', value: <dollars> }` rows sorted chronologically
+	 * (GAM's row order isn't guaranteed), micros normalized at the boundary.
+	 *
+	 * @param string $s Start date.
+	 * @param string $e End date.
+	 * @return array
+	 */
+	public static function revenue_by_day( string $s, string $e ): array {
+		$rows = static::run_gam_report(
+			new Report_Query(
+				[
+					'dimensions' => [ self::DIM_DATE ],
+					'columns'    => [ self::COL_REVENUE ],
+					'start_date' => $s,
+					'end_date'   => $e,
+				]
+			)
+		);
+		if ( isset( $rows['error'] ) || isset( $rows['overlay'] ) ) {
+			return $rows;
+		}
+		$out = [];
+		foreach ( $rows['rows'] as $row ) {
+			// TODO(NPPD-1666): confirm the DATE dimension's CSV header + value format
+			// (assumed 'YYYY-MM-DD') against a live network.
+			$date = (string) self::cell( $row, self::DIM_DATE );
+			if ( '' === $date ) {
+				continue;
+			}
+			$out[] = [
+				'date'  => $date,
+				'value' => Client::normalize_currency_micros( self::cell_number( $row, self::COL_REVENUE ) ),
+			];
+		}
+		// GAM doesn't guarantee chronological order; sort so the line reads left→right.
+		usort(
+			$out,
+			function ( $a, $b ) {
+				return strcmp( $a['date'], $b['date'] );
+			}
+		);
+		return [
+			'rows'       => $out,
+			'computable' => ! empty( $out ),
+			'type'       => 'timeseries',
 		];
 	}
 
