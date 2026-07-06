@@ -131,7 +131,6 @@ type ContentGiftingConfig = {
 	cta_label: string;
 	button_label: string;
 	cta_type: string;
-	cta_product_id: number;
 	cta_url: string;
 };
 
@@ -142,7 +141,6 @@ type MeteringCountdownConfig = {
 	button_label: string;
 	cta_url: string;
 	cta_type: string;
-	cta_product_id: number;
 };
 
 type AdvancedSettingsConfig = {

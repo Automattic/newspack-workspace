@@ -47,7 +47,6 @@ const ContentGiftingSettings = () => {
 	const { addNotice, resetNotices, setHeaderData, updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const { wizardApiFetch, errorMessage, resetError } = useWizardApiFetch( AUDIENCE_CONTENT_GATES_WIZARD_SLUG );
 	const [ config, setConfig ] = useState< GateSettings >( wizardData?.config || {} );
-	const availableProducts = newspackAudience?.available_products || [];
 	const hasMetering = newspackAudience?.content_gifting?.has_metering;
 	const giftingErrors = Object.values( newspackAudience?.content_gifting?.can_use_gifting?.errors || {} ).flat() as string[];
 	const isDirty = useMemo( () => {
@@ -235,10 +234,11 @@ const ContentGiftingSettings = () => {
 					</ToggleGroupControl>
 					<ToggleGroupControl
 						label={ __( 'Subscribe button action', 'newspack-plugin' ) }
-						help={ __(
-							'Whether the subscribe button should start a product checkout or redirect to a landing page.',
-							'newspack-plugin'
-						) }
+						help={
+							( config?.content_gifting?.cta_type || 'product' ) === 'product'
+								? __( 'The product is automatically set by the content gate access rules.', 'newspack-plugin' )
+								: __( 'Redirect to a landing page.', 'newspack-plugin' )
+						}
 						value={ config?.content_gifting?.cta_type || 'product' }
 						onChange={ ( value: string ) => setConfig( { ...config, content_gifting: { ...config?.content_gifting, cta_type: value } } ) }
 						isBlock
@@ -247,19 +247,6 @@ const ContentGiftingSettings = () => {
 						<ToggleGroupControlOption label={ __( 'Product', 'newspack-plugin' ) } value="product" />
 						<ToggleGroupControlOption label={ __( 'Landing page', 'newspack-plugin' ) } value="url" />
 					</ToggleGroupControl>
-					{ config?.content_gifting?.cta_type === 'product' && (
-						<SelectControl
-							label={ __( 'Subscribe button product', 'newspack-plugin' ) }
-							help={ __( 'Product linked to the subscribe button.', 'newspack-plugin' ) }
-							options={ [ { label: __( 'Select a product', 'newspack-plugin' ), value: 0, disabled: true }, ...availableProducts ] }
-							value={ config?.content_gifting?.cta_product_id || 0 }
-							suggestions={ availableProducts.map( o => o.label ) }
-							onChange={ ( value: number ) =>
-								setConfig( { ...config, content_gifting: { ...config?.content_gifting, cta_product_id: value } } )
-							}
-							__next40pxDefaultSize
-						/>
-					) }
 					{ config?.content_gifting?.cta_type === 'url' && (
 						<TextControl
 							label={ __( 'Subscribe button URL', 'newspack-plugin' ) }
@@ -294,7 +281,7 @@ const ContentGiftingSettings = () => {
 											) }
 										</div>
 									</div>
-									{ ( ( config?.content_gifting?.cta_type === 'product' && config?.content_gifting?.cta_product_id ) ||
+									{ ( config?.content_gifting?.cta_type === 'product' ||
 										( config?.content_gifting?.cta_type === 'url' && config?.content_gifting?.cta_url ) ) && (
 										<button
 											className={ `newspack-ui__button newspack-ui__button--x-small ${
