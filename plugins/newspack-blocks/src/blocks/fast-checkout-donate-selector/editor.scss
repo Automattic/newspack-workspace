@@ -1,0 +1,10 @@
+.wp-block-newspack-blocks-fast-checkout-donate-selector {
+	pointer-events: none;
+	opacity: 0.85;
+
+	// view.scss sets a 1.25em font-size on the amount input that compounds
+	// against the editor canvas cascade; normalize for the preview.
+	input[ type="number" ] {
+		font-size: 14px;
+	}
+}

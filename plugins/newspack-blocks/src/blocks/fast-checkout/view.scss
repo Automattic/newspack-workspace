@@ -8,3 +8,39 @@
 	border-radius: 4px;
 	text-align: center;
 }
+
+// Mask the descendant WC Checkout block while a selector is swapping the
+// cart line, hiding the brief "Your cart is currently empty" flash that
+// renders between the remove and add operations.
+.wp-block-newspack-blocks-fast-checkout[ data-fc-swapping ] .wp-block-woocommerce-checkout {
+	position: relative;
+
+	&::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: var( --wp--preset--color--background, #fff );
+		z-index: 5;
+		pointer-events: none;
+	}
+
+	&::before {
+		content: '';
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 24px;
+		height: 24px;
+		margin: -12px 0 0 -12px;
+		border: 2px solid var( --wp--preset--color--border, rgba( 0, 0, 0, 0.15 ) );
+		border-top-color: var( --wp--preset--color--primary, #0073aa );
+		border-radius: 50%;
+		animation: newspack-fast-checkout-spin 0.8s linear infinite;
+		z-index: 6;
+		pointer-events: none;
+	}
+}
+
+@keyframes newspack-fast-checkout-spin {
+	to { transform: rotate( 360deg ); }
+}
