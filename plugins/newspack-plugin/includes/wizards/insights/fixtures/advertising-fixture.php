@@ -319,6 +319,7 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 			],
 			'is_tab_visible'              => true,
 			'is_report_ready'             => false,
+			'is_network_member'           => false,
 			'readiness_issues'            => [
 				[
 					'code'            => 'oauth_scope_missing',
@@ -349,28 +350,84 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 	if ( 'loading' === $variant ) {
 		return [
 			'current'  => [
-				'window'           => [
+				'window'            => [
 					'start' => $start_date,
 					'end'   => $end_date,
 				],
-				'is_tab_visible'   => true,
-				'is_report_ready'  => true,
-				'readiness_issues' => [],
-				'metrics'          => [],
-				'is_loading'       => true,
+				'is_tab_visible'    => true,
+				'is_report_ready'   => true,
+				'is_network_member' => false,
+				'readiness_issues'  => [],
+				'metrics'           => [],
+				'is_loading'        => true,
 			],
 			'previous' => null,
 		];
 	}
 
+	// Per-site breakdown (NPPD-1671): the `network` fixture state flags the site as
+	// a network member and adds a top_sites table; every other state is a
+	// non-network publisher (is_network_member false, no top_sites).
+	$is_network = 'network' === $variant;
+	$site_rows  = function ( float $scale ): array {
+		$sites = [
+			[
+				'site'        => 'almanacnews.com',
+				'impressions' => 980000,
+				'revenue'     => 1720.0,
+			],
+			[
+				'site'        => 'paloaltoonline.com',
+				'impressions' => 760000,
+				'revenue'     => 1340.0,
+			],
+			[
+				'site'        => 'mv-voice.com',
+				'impressions' => 410000,
+				'revenue'     => 705.0,
+			],
+			[
+				'site'        => 'pleasantonweekly.com',
+				'impressions' => 190000,
+				'revenue'     => 300.0,
+			],
+			[
+				'site'        => 'livermorevine.com',
+				'impressions' => 95000,
+				'revenue'     => 138.0,
+			],
+		];
+		return array_map(
+			function ( $row ) use ( $scale ) {
+				$impressions = (int) round( $row['impressions'] * $scale );
+				$revenue     = round( $row['revenue'] * $scale, 2 );
+				return [
+					'site'        => $row['site'],
+					'impressions' => $impressions,
+					'revenue'     => $revenue,
+					'ecpm'        => $impressions > 0 ? round( ( $revenue / $impressions ) * 1000, 2 ) : 0.0,
+				];
+			},
+			$sites
+		);
+	};
+
 	$current_metrics = $metrics( 1.0, $variant );
-	$envelope        = [
+	if ( $is_network ) {
+		$current_metrics['top_sites'] = [
+			'rows'       => $site_rows( 1.0 ),
+			'computable' => true,
+			'type'       => 'table',
+		];
+	}
+	$envelope = [
 		'window'                      => [
 			'start' => $start_date,
 			'end'   => $end_date,
 		],
 		'is_tab_visible'              => true,
 		'is_report_ready'             => true,
+		'is_network_member'           => $is_network,
 		'readiness_issues'            => [],
 		'metrics'                     => $current_metrics,
 		'data_as_of'                  => $data_as_of,
@@ -405,13 +462,21 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 		// per-row figures land lower, exercising both delta directions. The prior
 		// window always uses a non-empty variant so comparison deltas render.
 		$prev_metrics = $metrics( 0.85, 'zero' === $variant ? 'populated' : $variant );
-		$previous     = [
+		if ( $is_network ) {
+			$prev_metrics['top_sites'] = [
+				'rows'       => $site_rows( 0.85 ),
+				'computable' => true,
+				'type'       => 'table',
+			];
+		}
+		$previous = [
 			'window'                      => [
 				'start' => $prior_start instanceof DateTimeImmutable ? $prior_start->format( 'Y-m-d' ) : $prior_start,
 				'end'   => $prior_end instanceof DateTimeImmutable ? $prior_end->format( 'Y-m-d' ) : $prior_end,
 			],
 			'is_tab_visible'              => true,
 			'is_report_ready'             => true,
+			'is_network_member'           => $is_network,
 			'readiness_issues'            => [],
 			'metrics'                     => $prev_metrics,
 			'data_as_of'                  => $data_as_of,

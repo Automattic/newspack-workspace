@@ -34,6 +34,16 @@ class Report_Query {
 	public $columns = [];
 
 	/**
+	 * GAM custom-dimension key IDs to break the report down by (NPPD-1671). When
+	 * set, the `dimensions` list should include `CUSTOM_DIMENSION`; GAM then emits
+	 * one row per value of each referenced key. Used for the network `site`
+	 * breakdown — the reportable custom dimension newspack-network creates.
+	 *
+	 * @var int[]
+	 */
+	public $custom_dimension_key_ids = [];
+
+	/**
 	 * Optional PQL filter clause (the report's WHERE), or null.
 	 *
 	 * @var string|null
@@ -70,7 +80,7 @@ class Report_Query {
 	 *                    keyed by property name.
 	 */
 	public function __construct( array $args = [] ) {
-		$keys = [ 'dimensions', 'columns', 'pql_filter', 'start_date', 'end_date', 'date_range_type' ];
+		$keys = [ 'dimensions', 'columns', 'custom_dimension_key_ids', 'pql_filter', 'start_date', 'end_date', 'date_range_type' ];
 		foreach ( $keys as $key ) {
 			if ( array_key_exists( $key, $args ) ) {
 				$this->$key = $args[ $key ];
@@ -89,6 +99,7 @@ class Report_Query {
 				[
 					$this->dimensions,
 					$this->columns,
+					$this->custom_dimension_key_ids,
 					$this->pql_filter,
 					$this->start_date,
 					$this->end_date,
