@@ -2533,7 +2533,13 @@ final class Reader_Activation {
 			return new \WP_Error( 'newspack_register_reader_disabled', __( 'Registration is disabled.', 'newspack-plugin' ) );
 		}
 
-		if ( \is_user_logged_in() ) {
+		// Registration is only blocked while logged in when it would also authenticate:
+		// a session can't be re-authenticated as a second identity. A non-authenticating
+		// registration is allowed so that a logged-in browser (e.g. a returning reader, or
+		// a shared device still carrying a prior reader's cookie) can still create an account
+		// for a different email — e.g. a Newsletter Subscription block signup — without
+		// hijacking the current session.
+		if ( \is_user_logged_in() && $authenticate ) {
 			return new \WP_Error( 'newspack_register_reader_logged_in', __( 'Cannot register while logged in.', 'newspack-plugin' ) );
 		}
 
@@ -2543,7 +2549,12 @@ final class Reader_Activation {
 			return new \WP_Error( 'newspack_register_reader_empty_email', __( 'Please enter a valid email address.', 'newspack-plugin' ) );
 		}
 
-		self::set_auth_intention_cookie( $email );
+		// Only record an auth intention for a logged-out visitor. While logged in (a
+		// non-authenticating registration for a different email) the browser has no pending
+		// authentication, so the intention cookie must not be overwritten with the other email.
+		if ( ! \is_user_logged_in() ) {
+			self::set_auth_intention_cookie( $email );
+		}
 
 		$existing_user = \get_user_by( 'email', $email );
 		if ( \is_wp_error( $existing_user ) ) {
@@ -2555,7 +2566,13 @@ final class Reader_Activation {
 		if ( $existing_user ) {
 			// If the user is not a reader, send a non-reader login reminder. We don't want to expose on the front-end that the email address belongs to a non-reader account.
 			if ( ! self::is_user_reader( $existing_user ) ) {
-				self::send_non_reader_login_reminder( $existing_user );
+				// The "you already have an account, log in" reminder only makes sense for a
+				// logged-out registration attempt. While logged in (a non-authenticating
+				// registration for someone else's existing non-reader account) suppress it: the
+				// email's owner did not initiate this, and may even be the current user.
+				if ( ! \is_user_logged_in() ) {
+					self::send_non_reader_login_reminder( $existing_user );
+				}
 				return false;
 			}
 

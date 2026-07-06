@@ -9,14 +9,14 @@
 	"license": "GPL-2.0-or-later",
 	"packageManager": "pnpm@10.33.0",
 	"engines": {
-		"node": ">=20"
+		"node": ">=20.17"
 	},
 	"scripts": {
 		"build:packages": "pnpm --filter './packages/*' run --if-present build",
 		"build": "pnpm run build:packages && pnpm --filter './plugins/*' --filter './themes/*' run build",
 		"build:changed": "pnpm run build:packages && pnpm --filter '...[origin/main]' run build",
 		"watch": "node ./bin/watch-all.mjs",
-		"prepare": "pnpm run build:packages",
+		"prepare": "husky || true; pnpm run build:packages",
 		"lint": "pnpm --filter './plugins/*' --filter './themes/*' run lint:js && composer phpcs",
 		"lint:changed": "pnpm --filter '...[origin/main]' run lint:js",
 		"test:js": "pnpm --filter './plugins/*' --filter './themes/*' run test",
@@ -25,16 +25,8 @@
 		"cm": "commit"
 	},
 	"devDependencies": {
-		"newspack-scripts": "workspace:*",
-		"multi-semantic-release": "^3.0.2",
 		"@commitlint/cli": "^20.1.0",
 		"@commitlint/config-conventional": "^19.8.1",
-		"chokidar": "^3.6.0",
-		"commitizen": "^4.3.1",
-		"cz-conventional-changelog": "^3.3.0",
-		"husky": "^9.1.7",
-		"lint-staged": "^16.2.6",
-		"prettier": "npm:wp-prettier@^3.0.3",
 		"@wordpress/a11y": "^4.48.0",
 		"@wordpress/api-fetch": "^7.48.0",
 		"@wordpress/base-styles": "^6.9.0",
@@ -56,7 +48,18 @@
 		"@wordpress/keycodes": "^4.48.0",
 		"@wordpress/plugins": "^7.48.0",
 		"@wordpress/primitives": "^3.0.0",
-		"@wordpress/url": "^4.48.0"
+		"@wordpress/url": "^4.48.0",
+		"chokidar": "^3.6.0",
+		"commitizen": "^4.3.1",
+		"cz-conventional-changelog": "^3.3.0",
+		"eslint": "^8.57.1",
+		"husky": "^9.1.7",
+		"lint-staged": "^16.2.6",
+		"multi-semantic-release": "^3.0.2",
+		"newspack-scripts": "workspace:*",
+		"postcss-scss": "^4.0.9",
+		"prettier": "npm:wp-prettier@^3.0.3",
+		"stylelint": "^16.26.1"
 	},
 	"config": {
 		"commitizen": {
@@ -67,11 +70,6 @@
 		"extends": [
 			"@commitlint/config-conventional"
 		]
-	},
-	"lint-staged": {
-		"*.{js,jsx,ts,tsx}": "eslint --fix",
-		"*.{css,scss}": "stylelint --fix",
-		"*.php": "composer phpcbf --"
 	},
 	"pnpm": {
 		"overrides": {
