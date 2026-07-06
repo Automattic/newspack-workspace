@@ -27,13 +27,13 @@ describe( 'EmptyMetricSection', () => {
 		const { container } = render(
 			<EmptyMetricSection
 				title="Paid reader conversion"
-				caption="How effectively paid access gate gates convert visitors."
+				caption="How effectively paid access gates convert visitors."
 				state="no_opportunity"
 				body="No paid access gate attempts in this window."
 			/>
 		);
 		expect( container ).toHaveTextContent( 'Paid reader conversion' );
-		expect( container ).toHaveTextContent( 'How effectively paid access gate gates convert visitors.' );
+		expect( container ).toHaveTextContent( 'How effectively paid access gates convert visitors.' );
 		expect( container ).toHaveTextContent( 'No paid access gate attempts in this window.' );
 	} );
 
@@ -41,7 +41,7 @@ describe( 'EmptyMetricSection', () => {
 		const { container } = render(
 			<EmptyMetricSection title="Free reader conversion" state="no_opportunity" body="No registration impressions." />
 		);
-		expect( container ).not.toHaveTextContent( 'How effectively paid access gate gates convert visitors.' );
+		expect( container ).not.toHaveTextContent( 'How effectively paid access gates convert visitors.' );
 	} );
 
 	it.each( [ 'no_opportunity', 'no_conversions', 'configuration_missing' ] as const )( 'exposes the %s state via the data attribute', state => {
@@ -57,7 +57,12 @@ describe( 'EmptyMetricSection', () => {
 	describe( '{N} interpolation', () => {
 		it( 'substitutes {N} with the localized signalCount when provided', () => {
 			const { container } = render(
-				<EmptyMetricSection title="Section" state="no_conversions" body="Your paid access gate reached {N} readers." signalCount={ 1234567 } />
+				<EmptyMetricSection
+					title="Section"
+					state="no_conversions"
+					body="Your paid access gate reached {N} readers."
+					signalCount={ 1234567 }
+				/>
 			);
 			expect( container ).toHaveTextContent( 'Your paid access gate reached 1,234,567 readers.' );
 		} );
