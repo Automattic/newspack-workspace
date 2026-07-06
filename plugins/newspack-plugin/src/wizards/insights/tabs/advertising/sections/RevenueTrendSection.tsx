@@ -29,7 +29,8 @@ export interface SectionProps {
 }
 
 // GAM's DATE dimension is 'YYYY-MM-DD'; formatShortDate expects GA4's 'YYYYMMDD'.
-const formatDateLabel = ( date: string ) => formatShortDate( date.replace( /-/g, '' ) );
+// Strip all non-digits so any separator variation still yields the 8-digit form.
+const formatDateLabel = ( date: string ) => formatShortDate( date.replace( /\D/g, '' ) );
 const formatDollars = ( value: number ) => formatCurrency( value ).display;
 
 const RevenueTrendSection = ( { current, previous }: SectionProps ) => {

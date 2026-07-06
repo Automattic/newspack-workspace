@@ -441,10 +441,12 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 
 	$current_metrics = $metrics( 1.0, $variant );
 	// Revenue trend (NPPD-1674): a daily series across the window. Empty on the
-	// zero-activity variant so the chart renders its no-data state.
+	// revenue-less variants (zero, no_revenue) — both report $0 revenue, so the
+	// chart (current AND its compare overlay) stays coherent with the scorecards.
+	$revenueless                       = in_array( $variant, [ 'zero', 'no_revenue' ], true );
 	$current_metrics['revenue_by_day'] = [
-		'rows'       => 'zero' === $variant ? [] : $revenue_series( $start_date, $end_date, 1.0 ),
-		'computable' => 'zero' !== $variant,
+		'rows'       => $revenueless ? [] : $revenue_series( $start_date, $end_date, 1.0 ),
+		'computable' => ! $revenueless,
 		'type'       => 'timeseries',
 	];
 	if ( $is_network ) {
@@ -500,8 +502,8 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 		$prev_from                      = $prior_start instanceof DateTimeImmutable ? $prior_start->format( 'Y-m-d' ) : $prior_start;
 		$prev_to                        = $prior_end instanceof DateTimeImmutable ? $prior_end->format( 'Y-m-d' ) : $prior_end;
 		$prev_metrics['revenue_by_day'] = [
-			'rows'       => $revenue_series( $prev_from, $prev_to, 0.85 ),
-			'computable' => true,
+			'rows'       => $revenueless ? [] : $revenue_series( $prev_from, $prev_to, 0.85 ),
+			'computable' => ! $revenueless,
 			'type'       => 'timeseries',
 		];
 		if ( $is_network ) {
