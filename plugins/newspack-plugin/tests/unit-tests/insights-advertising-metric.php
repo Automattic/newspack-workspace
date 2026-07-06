@@ -25,6 +25,13 @@ class Insights_Advertising_Test_Metric extends Advertising_Metric {
 	public static $next_report = [ 'rows' => [] ];
 
 	/**
+	 * The next resolve_site_key_id() result to return (NPPD-1671).
+	 *
+	 * @var int|null
+	 */
+	public static $next_site_key_id = 42;
+
+	/**
 	 * Override the GAM-touching seam with the injected result.
 	 *
 	 * @param Report_Query $query The query (ignored).
@@ -32,6 +39,15 @@ class Insights_Advertising_Test_Metric extends Advertising_Metric {
 	 */
 	protected static function run_gam_report( Report_Query $query ): array {
 		return self::$next_report;
+	}
+
+	/**
+	 * Override the CustomTargetingService-touching seam with the injected key ID.
+	 *
+	 * @return int|null
+	 */
+	protected static function resolve_site_key_id(): ?int {
+		return static::$next_site_key_id;
 	}
 }
 
@@ -59,7 +75,8 @@ class Newspack_Test_Insights_Advertising_Metric extends WP_UnitTestCase {
 	 * Reset the double between tests.
 	 */
 	public function tear_down() {
-		Insights_Advertising_Test_Metric::$next_report = [ 'rows' => [] ];
+		Insights_Advertising_Test_Metric::$next_report      = [ 'rows' => [] ];
+		Insights_Advertising_Test_Metric::$next_site_key_id = 42;
 		Advertising_Metric::reset_readiness_cache();
 		parent::tear_down();
 	}
@@ -255,6 +272,68 @@ class Newspack_Test_Insights_Advertising_Metric extends WP_UnitTestCase {
 		$this->with_rows( $rows );
 		$payload = Insights_Advertising_Test_Metric::top_ad_units( '2026-01-01', '2026-01-31', 25 );
 		$this->assertCount( 25, $payload['rows'] );
+	}
+
+	/**
+	 * Per-site breakdown (NPPD-1671) humanizes the `site` URL to a domain,
+	 * normalizes revenue micros, derives eCPM, and ranks by revenue desc.
+	 */
+	public function test_top_sites_shapes_and_ranks_rows() {
+		$this->with_rows(
+			[
+				[
+					'CUSTOM_DIMENSION'                  => 'https://www.mv-voice.com',
+					'TOTAL_IMPRESSIONS'                 => '410000',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => (string) ( 705 * 1000000 ),
+				],
+				[
+					'CUSTOM_DIMENSION'                  => 'https://www.almanacnews.com',
+					'TOTAL_IMPRESSIONS'                 => '980000',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => (string) ( 1720 * 1000000 ),
+				],
+			]
+		);
+		$payload = Insights_Advertising_Test_Metric::top_sites( '2026-01-01', '2026-01-31', 25 );
+
+		$this->assertTrue( $payload['computable'] );
+		$this->assertSame( 'table', $payload['type'] );
+		$this->assertCount( 2, $payload['rows'] );
+
+		// Ranked by revenue desc → almanacnews (higher) first; URL humanized to domain.
+		$top = $payload['rows'][0];
+		$this->assertSame( 'almanacnews.com', $top['site'] );
+		$this->assertSame( 980000, $top['impressions'] );
+		$this->assertSame( 1720.0, $top['revenue'] );
+		$this->assertSame( round( ( 1720.0 / 980000 ) * 1000, 2 ), $top['ecpm'] );
+	}
+
+	/**
+	 * Returns an empty, non-computable table (and never runs a report) when the
+	 * `site` dimension can't be resolved — e.g. not a network member.
+	 */
+	public function test_top_sites_empty_when_dimension_unresolved() {
+		Insights_Advertising_Test_Metric::$next_site_key_id = null;
+		// A report result that WOULD shape into rows, to prove it isn't consulted.
+		$this->with_rows(
+			[
+				[
+					'CUSTOM_DIMENSION'  => 'https://x.com',
+					'TOTAL_IMPRESSIONS' => '5',
+				],
+			] 
+		);
+
+		$payload = Insights_Advertising_Test_Metric::top_sites( '2026-01-01', '2026-01-31', 25 );
+		$this->assertFalse( $payload['computable'] );
+		$this->assertSame( [], $payload['rows'] );
+	}
+
+	/**
+	 * Without newspack-network active (test env), the site is not a network member,
+	 * so the per-site breakdown stays gated off.
+	 */
+	public function test_is_network_member_false_without_network() {
+		$this->assertFalse( Advertising_Metric::is_network_member() );
 	}
 
 	/**

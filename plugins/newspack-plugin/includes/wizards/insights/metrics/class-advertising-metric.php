@@ -90,9 +90,24 @@ class Advertising_Metric {
 	const COL_AV_VIEWABLE   = 'TOTAL_ACTIVE_VIEW_VIEWABLE_IMPRESSIONS';
 	const COL_AV_MEASURABLE = 'TOTAL_ACTIVE_VIEW_MEASURABLE_IMPRESSIONS';
 
-	const DIM_LINE_ITEM_TYPE  = 'LINE_ITEM_TYPE';
-	const DIM_AD_UNIT_NAME    = 'AD_UNIT_NAME';
-	const DIM_ADVERTISER_NAME = 'ADVERTISER_NAME';
+	const DIM_LINE_ITEM_TYPE   = 'LINE_ITEM_TYPE';
+	const DIM_AD_UNIT_NAME     = 'AD_UNIT_NAME';
+	const DIM_ADVERTISER_NAME  = 'ADVERTISER_NAME';
+	const DIM_CUSTOM_DIMENSION = 'CUSTOM_DIMENSION';
+
+	/**
+	 * The reportable custom-dimension key newspack-network creates for each site
+	 * in a Newspack Network (NPPD-1671). Its values are sanitized site URLs.
+	 */
+	const SITE_DIMENSION_KEY = 'site';
+
+	/**
+	 * Cache of the resolved `site` custom-dimension key ID (per network). Stable —
+	 * the dimension rarely changes — so a 1-day TTL keeps the CustomTargetingService
+	 * lookup off the per-window path. An empty-string entry caches "not found".
+	 */
+	const SITE_KEY_CACHE_PREFIX = 'newspack_insights_advertising_site_key:';
+	const SITE_KEY_CACHE_TTL    = DAY_IN_SECONDS;
 
 	const DIRECT_LINE_ITEM_TYPES       = [ 'SPONSORSHIP', 'STANDARD', 'BULK', 'PRICE_PRIORITY' ];
 	const PROGRAMMATIC_LINE_ITEM_TYPES = [ 'NETWORK', 'AD_EXCHANGE' ];
@@ -124,6 +139,20 @@ class Advertising_Metric {
 	 */
 	public static function is_tab_visible(): bool {
 		return Client::is_gam_active();
+	}
+
+	/**
+	 * Whether this site belongs to a Newspack Network (NPPD-1671). Gates the
+	 * per-site GAM breakdown: newspack-network creates a reportable `site` custom
+	 * dimension in the network's shared GAM, so any network site with GAM
+	 * connected (in practice the nodes, whose credentials carry network-level
+	 * reporting) can query impressions/revenue by site. Guarded so Insights never
+	 * hard-depends on newspack-network being active.
+	 *
+	 * @return bool
+	 */
+	public static function is_network_member(): bool {
+		return class_exists( '\Newspack_Network\Site_Role' ) && \Newspack_Network\Site_Role::has_role();
 	}
 
 	/**
@@ -233,13 +262,14 @@ class Advertising_Metric {
 	 */
 	public static function get_all( string $start_date, string $end_date, bool $compare = false ): array {
 		$envelope = [
-			'window'           => [
+			'window'            => [
 				'start' => $start_date,
 				'end'   => $end_date,
 			],
-			'is_tab_visible'   => self::is_tab_visible(),
-			'is_report_ready'  => self::is_report_ready(),
-			'readiness_issues' => self::readiness_issues(),
+			'is_tab_visible'    => self::is_tab_visible(),
+			'is_report_ready'   => self::is_report_ready(),
+			'is_network_member' => self::is_network_member(),
+			'readiness_issues'  => self::readiness_issues(),
 		];
 
 		// Not connected enough to report: return the envelope so the UI can show
@@ -477,7 +507,7 @@ class Advertising_Metric {
 	 * @return array<string,array> Keyed metric payloads.
 	 */
 	private static function compute_window( string $start_date, string $end_date ): array {
-		return [
+		$metrics = [
 			'total_impressions'      => self::total_impressions( $start_date, $end_date ),
 			'total_revenue'          => self::total_revenue( $start_date, $end_date ),
 			'avg_ecpm'               => self::avg_ecpm( $start_date, $end_date ),
@@ -487,6 +517,15 @@ class Advertising_Metric {
 			'top_ad_units'           => self::top_ad_units( $start_date, $end_date ),
 			'top_advertisers'        => self::top_advertisers( $start_date, $end_date ),
 		];
+
+		// Per-site breakdown (NPPD-1671): only for network members. The runner skips
+		// this GAM report entirely for non-members — even when reporting is otherwise
+		// ready — so a standalone publisher never pays for a `site` report it can't run.
+		if ( self::is_network_member() ) {
+			$metrics['top_sites'] = self::top_sites( $start_date, $end_date );
+		}
+
+		return $metrics;
 	}
 
 	/*
@@ -784,6 +823,105 @@ class Advertising_Metric {
 			];
 		}
 		return self::rank_table( $out, 'revenue', $limit );
+	}
+
+	/**
+	 * Performance by site (NPPD-1671) — impressions + revenue broken down by the
+	 * network `site` custom dimension. Resolves the reportable key ID first (cached),
+	 * then runs a report dimensioned by it. Returns an empty table when the site
+	 * has no `site` dimension (e.g. a network where it wasn't created), so the
+	 * section renders nothing rather than erroring.
+	 *
+	 * @param string $s     Start date.
+	 * @param string $e     End date.
+	 * @param int    $limit Max rows.
+	 * @return array
+	 */
+	public static function top_sites( string $s, string $e, int $limit = 25 ): array {
+		$key_id = static::resolve_site_key_id();
+		if ( null === $key_id ) {
+			return [
+				'rows'       => [],
+				'computable' => false,
+				'type'       => 'table',
+			];
+		}
+		$rows = static::run_gam_report(
+			new Report_Query(
+				[
+					'dimensions'               => [ self::DIM_CUSTOM_DIMENSION ],
+					'custom_dimension_key_ids' => [ $key_id ],
+					'columns'                  => [ self::COL_IMPRESSIONS, self::COL_REVENUE ],
+					'start_date'               => $s,
+					'end_date'                 => $e,
+				]
+			)
+		);
+		if ( isset( $rows['error'] ) || isset( $rows['overlay'] ) ) {
+			return $rows;
+		}
+		$out = [];
+		foreach ( $rows['rows'] as $row ) {
+			// The custom-dimension value column carries the sanitized site URL.
+			// TODO(NPPD-1666): confirm the exact CSV header for a custom-dimension
+			// report against a live network before GA.
+			$site = (string) self::cell( $row, self::DIM_CUSTOM_DIMENSION );
+			if ( '' === $site ) {
+				continue;
+			}
+			$impressions = (int) self::cell_number( $row, self::COL_IMPRESSIONS );
+			$revenue     = Client::normalize_currency_micros( self::cell_number( $row, self::COL_REVENUE ) );
+			$out[]       = [
+				'site'        => self::humanize_site( $site ),
+				'impressions' => $impressions,
+				'revenue'     => $revenue,
+				'ecpm'        => $impressions > 0 ? round( ( $revenue / $impressions ) * 1000, 2 ) : 0.0,
+			];
+		}
+		return self::rank_table( $out, 'revenue', $limit );
+	}
+
+	/**
+	 * Resolve the `site` custom-dimension key ID for the current network, cached
+	 * for a day (the dimension rarely changes) so the CustomTargetingService lookup
+	 * stays off the per-window path. An empty-string transient caches "not found".
+	 * A `protected` seam so tests inject a known ID without touching SOAP.
+	 *
+	 * @return int|null The key ID, or null when unavailable / not a network.
+	 */
+	protected static function resolve_site_key_id(): ?int {
+		$network_code = self::resolve_network_code();
+		if ( '' === $network_code ) {
+			return null;
+		}
+		$cache_key = self::SITE_KEY_CACHE_PREFIX . $network_code;
+		$cached    = get_transient( $cache_key );
+		if ( false !== $cached ) {
+			return '' === $cached ? null : (int) $cached;
+		}
+		try {
+			$key_id = Client::resolve_custom_dimension_key_id( self::SITE_DIMENSION_KEY, (int) $network_code );
+		} catch ( \Exception $e ) {
+			Logger::error( $e->getMessage(), self::LOGGER_HEADER );
+			return null; // Transient outage — don't cache; retry next window.
+		}
+		set_transient( $cache_key, null === $key_id ? '' : (int) $key_id, self::SITE_KEY_CACHE_TTL );
+		return $key_id;
+	}
+
+	/**
+	 * Humanize a `site` dimension value (a sanitized site URL) to a bare domain
+	 * for the table label: "https://www.example.com" → "example.com".
+	 *
+	 * @param string $value The raw dimension value.
+	 * @return string
+	 */
+	private static function humanize_site( string $value ): string {
+		$host = wp_parse_url( $value, PHP_URL_HOST );
+		if ( ! $host ) {
+			$host = preg_replace( '#^https?://#', '', $value );
+		}
+		return (string) preg_replace( '#^www\.#', '', (string) $host );
 	}
 
 	/*

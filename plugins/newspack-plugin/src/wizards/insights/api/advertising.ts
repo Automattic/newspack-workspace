@@ -37,6 +37,8 @@ export interface AdvertisingWindow {
 	window?: { start: string; end: string };
 	is_tab_visible: boolean;
 	is_report_ready: boolean;
+	/** Newspack Network member (NPPD-1671): gates the per-site breakdown (`metrics.top_sites`). */
+	is_network_member?: boolean;
 	readiness_issues: ReadinessIssue[];
 	data_as_of?: string;
 	has_estimated_data?: boolean;
