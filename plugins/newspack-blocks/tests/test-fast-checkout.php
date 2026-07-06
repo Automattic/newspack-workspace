@@ -22,6 +22,17 @@ class Test_Fast_Checkout extends WP_UnitTestCase_Blocks {
 	}
 
 	/**
+	 * Invoke the private static get_query_params method via Reflection.
+	 *
+	 * @return array
+	 */
+	private function invoke_get_query_params(): array {
+		$method = ( new ReflectionClass( Fast_Checkout::class ) )->getMethod( 'get_query_params' );
+		$method->setAccessible( true );
+		return $method->invoke( null );
+	}
+
+	/**
 	 * Test that a simple product attribute resolves to the product ID.
 	 */
 	public function test_resolve_simple_product() {
@@ -192,6 +203,30 @@ class Test_Fast_Checkout extends WP_UnitTestCase_Blocks {
 		$this->assertStringContainsString( 'unavailable', $filtered );
 	}
 
+	/**
+	 * Test that filter_render passes through for a grouped product without
+	 * an editor-set grouped_child, by resolving to the first purchasable child.
+	 *
+	 * Regression: previously called resolve_product_id_from_attrs (attrs-only),
+	 * which returned the parent grouped product ID — and grouped parents are
+	 * not purchasable, so the unavailable notice rendered instead of content.
+	 */
+	public function test_filter_render_passes_through_for_grouped_without_child() {
+		$this->skip_without_wc();
+
+		$child   = $this->create_simple_product();
+		$grouped = $this->create_grouped_product( [ $child->get_id() ] );
+		$content = '<div class="wp-block-newspack-blocks-fast-checkout">Buy now</div>';
+		$block   = [
+			'attrs' => [
+				'product'    => (string) $grouped->get_id(),
+				'is_grouped' => true,
+			],
+		];
+		$filtered = Fast_Checkout::filter_render( $content, $block );
+		$this->assertSame( $content, $filtered );
+	}
+
 	// ---- Cart replacement tests (WC-dependent) ----
 
 	/**
@@ -227,6 +262,21 @@ class Test_Fast_Checkout extends WP_UnitTestCase_Blocks {
 		$product->set_name( 'Test Product' );
 		$product->set_regular_price( '10.00' );
 		$product->set_status( 'publish' );
+		$product->save();
+		return $product;
+	}
+
+	/**
+	 * Create a grouped WC product with the given children.
+	 *
+	 * @param int[] $child_ids Existing child product IDs.
+	 * @return \WC_Product_Grouped
+	 */
+	private function create_grouped_product( $child_ids ) {
+		$product = new \WC_Product_Grouped();
+		$product->set_name( 'Test Grouped Product' );
+		$product->set_status( 'publish' );
+		$product->set_children( $child_ids );
 		$product->save();
 		return $product;
 	}
@@ -432,6 +482,66 @@ class Test_Fast_Checkout extends WP_UnitTestCase_Blocks {
 		$this->assertSame( 'https://default.com', $result );
 	}
 
+	// ---- Grouped product resolution tests ----
+
+	/**
+	 * Test that a grouped product with grouped_child resolves to the child ID.
+	 */
+	public function test_resolve_grouped_prefers_child() {
+		$result = Fast_Checkout::resolve_product_id_from_attrs(
+			[
+				'product'       => '42',
+				'grouped_child' => '88',
+				'is_grouped'    => true,
+			]
+		);
+		$this->assertSame( 88, $result );
+	}
+
+	/**
+	 * Test that a grouped product without grouped_child returns the parent ID.
+	 * Server-side runtime resolution to the first child happens in maybe_replace_cart.
+	 */
+	public function test_resolve_grouped_without_child_returns_parent() {
+		$result = Fast_Checkout::resolve_product_id_from_attrs(
+			[
+				'product'    => '42',
+				'is_grouped' => true,
+			]
+		);
+		// Without runtime WC lookup, the helper returns the parent ID.
+		// Runtime resolution to the first child happens in maybe_replace_cart.
+		$this->assertSame( 42, $result );
+	}
+
+	// ---- Query param tests ----
+
+	/**
+	 * Test that fc_grouped_child query param is read into params.
+	 */
+	public function test_get_query_params_reads_grouped_child() {
+		$_GET[ Fast_Checkout::QP_GROUPED_CHILD ] = '123';
+
+		$params = $this->invoke_get_query_params();
+
+		$this->assertSame( 123, $params['grouped_child'] ?? null );
+
+		unset( $_GET[ Fast_Checkout::QP_GROUPED_CHILD ] );
+	}
+
+	/**
+	 * Test that an invalid (non-numeric) fc_grouped_child is dropped.
+	 */
+	public function test_get_query_params_rejects_invalid_grouped_child() {
+		$_GET[ Fast_Checkout::QP_GROUPED_CHILD ] = 'not-a-number';
+
+		$params = $this->invoke_get_query_params();
+
+		$this->assertArrayNotHasKey( 'grouped_child', $params );
+
+		unset( $_GET[ Fast_Checkout::QP_GROUPED_CHILD ] );
+	}
+
 	/**
 	 * Test that a mismatched product in the cart is replaced.
 	 */
@@ -456,5 +566,353 @@ class Test_Fast_Checkout extends WP_UnitTestCase_Blocks {
 
 		$item = reset( $cart_contents );
 		$this->assertSame( $product_b->get_id(), (int) $item['product_id'] );
+	}
+
+	// ---- Cart replacement: grouped product tests ----
+
+	/**
+	 * Test that maybe_replace_cart adds grouped_child product to cart when set.
+	 */
+	public function test_maybe_replace_cart_adds_grouped_child() {
+		$this->skip_without_wc();
+
+		$child   = $this->create_simple_product();
+		$grouped = $this->create_grouped_product( [ $child->get_id() ] );
+		$post_id = $this->make_fast_checkout_post(
+			$grouped->get_id(),
+			[
+				'is_grouped'    => true,
+				'grouped_child' => (string) $child->get_id(),
+			]
+		);
+		$this->go_to( get_permalink( $post_id ) );
+
+		Fast_Checkout::maybe_replace_cart();
+
+		$cart_contents = WC()->cart->get_cart();
+		$this->assertCount( 1, $cart_contents );
+		$item = reset( $cart_contents );
+		$this->assertSame( $child->get_id(), (int) $item['product_id'] );
+	}
+
+	/**
+	 * Test that maybe_replace_cart resolves to the first child when grouped_child is empty.
+	 */
+	public function test_maybe_replace_cart_grouped_falls_back_to_first_child() {
+		$this->skip_without_wc();
+
+		$first   = $this->create_simple_product();
+		$second  = $this->create_simple_product();
+		$grouped = $this->create_grouped_product( [ $first->get_id(), $second->get_id() ] );
+		$post_id = $this->make_fast_checkout_post(
+			$grouped->get_id(),
+			[ 'is_grouped' => true ]
+		);
+		$this->go_to( get_permalink( $post_id ) );
+
+		Fast_Checkout::maybe_replace_cart();
+
+		$cart_contents = WC()->cart->get_cart();
+		$this->assertCount( 1, $cart_contents );
+		$item = reset( $cart_contents );
+		$this->assertSame( $first->get_id(), (int) $item['product_id'] );
+	}
+
+	/**
+	 * Test that fc_grouped_child query param overrides grouped_child attribute.
+	 */
+	public function test_maybe_replace_cart_grouped_query_param_override() {
+		$this->skip_without_wc();
+
+		$first   = $this->create_simple_product();
+		$second  = $this->create_simple_product();
+		$grouped = $this->create_grouped_product( [ $first->get_id(), $second->get_id() ] );
+		$post_id = $this->make_fast_checkout_post(
+			$grouped->get_id(),
+			[
+				'is_grouped'    => true,
+				'grouped_child' => (string) $first->get_id(),
+			]
+		);
+
+		$_GET[ Fast_Checkout::QP_GROUPED_CHILD ] = (string) $second->get_id();
+		$this->go_to( get_permalink( $post_id ) );
+
+		Fast_Checkout::maybe_replace_cart();
+
+		$cart_contents = WC()->cart->get_cart();
+		$this->assertCount( 1, $cart_contents );
+		$item = reset( $cart_contents );
+		$this->assertSame( $second->get_id(), (int) $item['product_id'] );
+
+		unset( $_GET[ Fast_Checkout::QP_GROUPED_CHILD ] );
+	}
+
+	/**
+	 * Test that fc_grouped_child referencing a non-child is rejected (falls back).
+	 */
+	public function test_maybe_replace_cart_grouped_query_param_rejects_foreign_id() {
+		$this->skip_without_wc();
+
+		$first    = $this->create_simple_product();
+		$foreign  = $this->create_simple_product();
+		$grouped  = $this->create_grouped_product( [ $first->get_id() ] );
+		$post_id  = $this->make_fast_checkout_post(
+			$grouped->get_id(),
+			[ 'is_grouped' => true ]
+		);
+
+		$_GET[ Fast_Checkout::QP_GROUPED_CHILD ] = (string) $foreign->get_id();
+		$this->go_to( get_permalink( $post_id ) );
+
+		Fast_Checkout::maybe_replace_cart();
+
+		$cart_contents = WC()->cart->get_cart();
+		$this->assertCount( 1, $cart_contents );
+		$item = reset( $cart_contents );
+		$this->assertSame( $first->get_id(), (int) $item['product_id'] );
+
+		unset( $_GET[ Fast_Checkout::QP_GROUPED_CHILD ] );
+	}
+
+	/**
+	 * Test that maybe_replace_cart applies nyp_price attribute when fc_price is absent.
+	 *
+	 * Skips when WC Name Your Price plugin isn't active.
+	 */
+	public function test_maybe_replace_cart_applies_nyp_attribute() {
+		$this->skip_without_wc();
+		if ( ! class_exists( '\WC_Name_Your_Price_Helpers' ) ) {
+			$this->markTestSkipped( 'WC Name Your Price not available.' );
+		}
+
+		$product = $this->create_simple_product();
+		update_post_meta( $product->get_id(), '_nyp', 'yes' );
+		update_post_meta( $product->get_id(), '_min_price', '5' );
+		update_post_meta( $product->get_id(), '_max_price', '50' );
+		update_post_meta( $product->get_id(), '_suggested_price', '15' );
+
+		$post_id = $this->make_fast_checkout_post(
+			$product->get_id(),
+			[
+				'is_nyp'    => true,
+				'nyp_price' => '20.00',
+			]
+		);
+		$this->go_to( get_permalink( $post_id ) );
+
+		Fast_Checkout::maybe_replace_cart();
+
+		$cart_contents = WC()->cart->get_cart();
+		$this->assertCount( 1, $cart_contents );
+		$item = reset( $cart_contents );
+		$this->assertSame( 20.0, (float) $item['nyp'] );
+	}
+
+	/**
+	 * Test that the Store API NYP bridge filter applies nyp from request body.
+	 */
+	public function test_store_api_nyp_bridge_applies_request_value() {
+		$this->skip_without_wc();
+		if ( ! class_exists( '\WC_Name_Your_Price_Helpers' ) ) {
+			$this->markTestSkipped( 'WC Name Your Price not available.' );
+		}
+
+		$product = $this->create_simple_product();
+		update_post_meta( $product->get_id(), '_nyp', 'yes' );
+		update_post_meta( $product->get_id(), '_min_price', '5' );
+		update_post_meta( $product->get_id(), '_max_price', '50' );
+		update_post_meta( $product->get_id(), '_suggested_price', '15' );
+
+		// Simulate Store API add_to_cart payload with cart_item_data.nyp.
+		$request = new \WP_REST_Request( 'POST', '/wc/store/v1/cart/add-item' );
+		$request->set_body_params(
+			[
+				'id'       => $product->get_id(),
+				'quantity' => 1,
+				'nyp'      => 22.5,
+			]
+		);
+
+		$cart_item_data = [];
+		$cart_item_data = Fast_Checkout::store_api_nyp_bridge(
+			$cart_item_data,
+			$product->get_id(),
+			$request
+		);
+
+		$this->assertSame( 22.5, $cart_item_data['nyp'] ?? null );
+	}
+
+	/**
+	 * Test that the bridge falls back to the suggested price when the request
+	 * has no nyp value — covers the case of grouped-selector swaps for NYP
+	 * children, where addItemToCart is called without an explicit price.
+	 */
+	public function test_store_api_nyp_bridge_falls_back_to_suggested() {
+		$this->skip_without_wc();
+		if ( ! class_exists( '\WC_Name_Your_Price_Helpers' ) ) {
+			$this->markTestSkipped( 'WC Name Your Price not available.' );
+		}
+
+		$product = $this->create_simple_product();
+		update_post_meta( $product->get_id(), '_nyp', 'yes' );
+		update_post_meta( $product->get_id(), '_min_price', '5' );
+		update_post_meta( $product->get_id(), '_max_price', '50' );
+		update_post_meta( $product->get_id(), '_suggested_price', '15' );
+
+		$request = new \WP_REST_Request( 'POST', '/wc/store/v1/cart/add-item' );
+		$request->set_body_params(
+			[
+				'id'       => $product->get_id(),
+				'quantity' => 1,
+			]
+		);
+
+		// Selector swaps carry the source-post marker (set by propagate_source_post),
+		// which is what enables the suggested-price fallback.
+		$cart_item_data = Fast_Checkout::store_api_nyp_bridge(
+			[ Fast_Checkout::CART_ITEM_SOURCE_KEY => 123 ],
+			$product->get_id(),
+			$request
+		);
+
+		$this->assertSame( 15.0, (float) ( $cart_item_data['nyp'] ?? 0 ) );
+	}
+
+	/**
+	 * Test that the bridge does NOT inject a fallback price for non-Fast-Checkout
+	 * Store API add-to-cart calls (no source-post marker present).
+	 */
+	public function test_store_api_nyp_bridge_skips_fallback_without_source_marker() {
+		$this->skip_without_wc();
+		if ( ! class_exists( '\WC_Name_Your_Price_Helpers' ) ) {
+			$this->markTestSkipped( 'WC Name Your Price not available.' );
+		}
+
+		$product = $this->create_simple_product();
+		update_post_meta( $product->get_id(), '_nyp', 'yes' );
+		update_post_meta( $product->get_id(), '_min_price', '5' );
+		update_post_meta( $product->get_id(), '_suggested_price', '15' );
+
+		$request = new \WP_REST_Request( 'POST', '/wc/store/v1/cart/add-item' );
+		$request->set_body_params(
+			[
+				'id'       => $product->get_id(),
+				'quantity' => 1,
+			]
+		);
+
+		$cart_item_data = Fast_Checkout::store_api_nyp_bridge(
+			[],
+			$product->get_id(),
+			$request
+		);
+
+		$this->assertArrayNotHasKey( 'nyp', $cart_item_data );
+	}
+
+	/**
+	 * Test that the bridge respects an nyp value already present in
+	 * cart_item_data rather than overwriting it with the fallback price.
+	 */
+	public function test_store_api_nyp_bridge_respects_existing_cart_item_data_nyp() {
+		$this->skip_without_wc();
+		if ( ! class_exists( '\WC_Name_Your_Price_Helpers' ) ) {
+			$this->markTestSkipped( 'WC Name Your Price not available.' );
+		}
+
+		$product = $this->create_simple_product();
+		update_post_meta( $product->get_id(), '_nyp', 'yes' );
+		update_post_meta( $product->get_id(), '_min_price', '5' );
+		update_post_meta( $product->get_id(), '_max_price', '50' );
+		update_post_meta( $product->get_id(), '_suggested_price', '15' );
+
+		// No top-level nyp in the request; the price rides along in cart_item_data.
+		$request = new \WP_REST_Request( 'POST', '/wc/store/v1/cart/add-item' );
+		$request->set_body_params(
+			[
+				'id'       => $product->get_id(),
+				'quantity' => 1,
+			]
+		);
+
+		$cart_item_data = Fast_Checkout::store_api_nyp_bridge(
+			[ 'nyp' => 22.5 ],
+			$product->get_id(),
+			$request
+		);
+
+		$this->assertSame( 22.5, (float) ( $cart_item_data['nyp'] ?? 0 ) );
+	}
+
+	/**
+	 * Test that fc_price query param overrides nyp_price attribute when both set.
+	 *
+	 * Skips when WC Name Your Price plugin isn't active.
+	 */
+	public function test_maybe_replace_cart_nyp_query_param_overrides_attribute() {
+		$this->skip_without_wc();
+		if ( ! class_exists( '\WC_Name_Your_Price_Helpers' ) ) {
+			$this->markTestSkipped( 'WC Name Your Price not available.' );
+		}
+
+		$product = $this->create_simple_product();
+		update_post_meta( $product->get_id(), '_nyp', 'yes' );
+		update_post_meta( $product->get_id(), '_min_price', '5' );
+		update_post_meta( $product->get_id(), '_max_price', '50' );
+		update_post_meta( $product->get_id(), '_suggested_price', '15' );
+
+		$post_id = $this->make_fast_checkout_post(
+			$product->get_id(),
+			[
+				'is_nyp'    => true,
+				'nyp_price' => '20.00',
+			]
+		);
+
+		$_GET[ Fast_Checkout::QP_PRICE ] = '35.00';
+		$this->go_to( get_permalink( $post_id ) );
+
+		Fast_Checkout::maybe_replace_cart();
+
+		$cart_contents = WC()->cart->get_cart();
+		$this->assertCount( 1, $cart_contents );
+		$item = reset( $cart_contents );
+		$this->assertSame( 35.0, (float) $item['nyp'] );
+
+		unset( $_GET[ Fast_Checkout::QP_PRICE ] );
+	}
+
+	/**
+	 * Test that maybe_replace_cart falls back to the product's suggested price
+	 * when neither fc_price nor nyp_price attribute is set.
+	 *
+	 * Skips when WC Name Your Price plugin isn't active.
+	 */
+	public function test_maybe_replace_cart_falls_back_to_suggested_nyp() {
+		$this->skip_without_wc();
+		if ( ! class_exists( '\WC_Name_Your_Price_Helpers' ) ) {
+			$this->markTestSkipped( 'WC Name Your Price not available.' );
+		}
+
+		$product = $this->create_simple_product();
+		update_post_meta( $product->get_id(), '_nyp', 'yes' );
+		update_post_meta( $product->get_id(), '_min_price', '5' );
+		update_post_meta( $product->get_id(), '_max_price', '50' );
+		update_post_meta( $product->get_id(), '_suggested_price', '15' );
+
+		$post_id = $this->make_fast_checkout_post(
+			$product->get_id(),
+			[ 'is_nyp' => true ]
+		);
+		$this->go_to( get_permalink( $post_id ) );
+
+		Fast_Checkout::maybe_replace_cart();
+
+		$cart_contents = WC()->cart->get_cart();
+		$this->assertCount( 1, $cart_contents );
+		$item = reset( $cart_contents );
+		$this->assertSame( 15.0, (float) $item['nyp'] );
 	}
 }

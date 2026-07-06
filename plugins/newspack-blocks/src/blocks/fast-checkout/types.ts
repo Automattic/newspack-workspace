@@ -5,10 +5,20 @@ export interface StoreApiProduct {
 	name: string;
 	short_description: string;
 	price_html: string;
-	prices?: { price?: string };
+	prices?: { price?: string; currency_minor_unit?: number };
 	images?: { src: string }[];
 	permalink: string;
+	type?: 'simple' | 'variable' | 'grouped' | 'variation' | string;
 	variations?: number[];
+	grouped_products?: number[];
+	extensions?: {
+		name_your_price?: {
+			minimum_price?: string;
+			maximum_price?: string;
+			suggested_price?: string;
+			is_nyp?: boolean;
+		};
+	};
 }
 
 export interface StoreApiVariation {
@@ -21,10 +31,26 @@ export interface Variation {
 	label: string;
 }
 
+export interface GroupedChild {
+	id: number;
+	name: string;
+	priceHtml: string;
+}
+
+export interface NypConfig {
+	min: number;
+	max: number;
+	suggested: number;
+}
+
 export interface FastCheckoutAttributes {
 	product?: string;
 	variation?: string;
 	is_variable: boolean;
+	is_grouped: boolean;
+	is_nyp: boolean;
+	grouped_child?: string;
+	nyp_price?: string;
 	afterSuccessURL?: string;
 }
 
@@ -39,4 +65,6 @@ export interface Binding {
 export interface BindingsContext {
 	'newspack-blocks/fastCheckoutProductId'?: string | number;
 	'newspack-blocks/fastCheckoutVariationId'?: string | number;
+	'newspack-blocks/fastCheckoutGroupedChild'?: string | number;
+	'newspack-blocks/fastCheckoutNypPrice'?: string | number;
 }

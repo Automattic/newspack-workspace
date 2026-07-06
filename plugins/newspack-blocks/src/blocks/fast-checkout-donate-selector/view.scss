@@ -1,0 +1,71 @@
+.wp-block-newspack-blocks-fast-checkout-donate-selector {
+	display: flex;
+	flex-direction: column;
+	gap: 1em;
+
+	&__frequencies {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5em 1.25em;
+
+		label {
+			display: inline-flex;
+			align-items: center;
+			gap: 0.4em;
+			cursor: pointer;
+		}
+
+		input[ type="radio" ]:checked + span {
+			font-weight: 600;
+		}
+	}
+
+	&__amount {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4em;
+
+		label {
+			font-weight: 600;
+		}
+	}
+
+	&__input-wrapper {
+		position: relative;
+		display: block;
+
+		input[ type="number" ] {
+			width: 100%;
+			font-size: 1.25em;
+			padding: 0.4em 5em 0.4em 0.6em;
+		}
+	}
+
+	&__suffix {
+		position: absolute;
+		top: 50%;
+		right: 0.6em;
+		transform: translateY( -50% );
+		font-size: 0.95em;
+		opacity: 0.75;
+		pointer-events: none;
+	}
+
+	&__hint {
+		font-size: 0.8125em;
+		opacity: 0.75;
+	}
+
+	&__notice {
+		color: var( --wp--preset--color--vivid-red, #cc1818 );
+		font-size: 0.8125em;
+	}
+
+	&[ data-status="busy" ] {
+		input[ type="radio" ],
+		input[ type="number" ] {
+			opacity: 0.6;
+			pointer-events: none;
+		}
+	}
+}

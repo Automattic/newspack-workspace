@@ -46,17 +46,18 @@ const blocks = fs
 	.filter( block => isDevelopment || blockList.production.includes( block ) )
 	.filter( hasEditorEntry );
 
-// Helps split up each block into its own folder view script
+// Helps split up each block into its own folder view script.
 const viewBlocksScripts = blocks.reduce( ( viewBlocks, block ) => {
 	const pathToBlock = [ __dirname, 'src', 'blocks', block ];
-	let viewScriptPath = path.join( ...pathToBlock, 'view.js' );
-	let fileExists = fs.existsSync( viewScriptPath );
-	if ( ! fileExists ) {
-		// Try TS.
-		viewScriptPath = path.join( ...pathToBlock, 'view.ts' );
-		fileExists = fs.existsSync( viewScriptPath );
+	let viewScriptPath;
+	for ( const ext of [ 'view.js', 'view.ts', 'view.tsx' ] ) {
+		const candidate = path.join( ...pathToBlock, ext );
+		if ( fs.existsSync( candidate ) ) {
+			viewScriptPath = candidate;
+			break;
+		}
 	}
-	if ( fileExists ) {
+	if ( viewScriptPath ) {
 		viewBlocks[ block + '/view' ] = viewScriptPath;
 	}
 	return viewBlocks;

@@ -1,0 +1,25 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "newspack-blocks/fast-checkout-donate-selector",
+	"title": "Fast Checkout — Donate Selector",
+	"category": "newspack",
+	"description": "Frequency radios with a shared Name Your Price input for a grouped donate product.",
+	"keywords": [ "woocommerce", "checkout", "donate", "subscription", "fast" ],
+	"textdomain": "newspack-blocks",
+	"parent": [ "newspack-blocks/fast-checkout" ],
+	"usesContext": [
+		"newspack-blocks/fastCheckoutProductId",
+		"newspack-blocks/fastCheckoutVariationId",
+		"newspack-blocks/fastCheckoutGroupedChild",
+		"newspack-blocks/fastCheckoutNypPrice"
+	],
+	"attributes": {},
+	"supports": {
+		"html": false,
+		"reusable": false,
+		"spacing": { "padding": true, "margin": true }
+	},
+	"editorStyle": "newspack-blocks-editor",
+	"style": "newspack-blocks-fast-checkout-donate-selector"
+}

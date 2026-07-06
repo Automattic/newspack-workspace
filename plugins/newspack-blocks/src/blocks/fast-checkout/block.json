@@ -11,11 +11,17 @@
 		"product": { "type": "string" },
 		"variation": { "type": "string" },
 		"is_variable": { "type": "boolean", "default": false },
+		"is_grouped": { "type": "boolean", "default": false },
+		"is_nyp": { "type": "boolean", "default": false },
+		"grouped_child": { "type": "string" },
+		"nyp_price": { "type": "string" },
 		"afterSuccessURL": { "type": "string" }
 	},
 	"providesContext": {
 		"newspack-blocks/fastCheckoutProductId": "product",
-		"newspack-blocks/fastCheckoutVariationId": "variation"
+		"newspack-blocks/fastCheckoutVariationId": "variation",
+		"newspack-blocks/fastCheckoutGroupedChild": "grouped_child",
+		"newspack-blocks/fastCheckoutNypPrice": "nyp_price"
 	},
 	"supports": {
 		"anchor": true,
