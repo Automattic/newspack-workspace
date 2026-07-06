@@ -1270,7 +1270,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		);
 
 		// Map the post to this gate.
-		$filter = function() use ( $gate_id ) {
+		$filter = function( $post_id ) use ( $gate_id ) {
 			return $gate_id;
 		};
 		add_filter( 'newspack_content_gate_post_id', $filter );
@@ -1304,7 +1304,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		);
 
 		// Map the post to this gate.
-		$filter = function() use ( $gate_id ) {
+		$filter = function( $post_id ) use ( $gate_id ) {
 			return $gate_id;
 		};
 		add_filter( 'newspack_content_gate_post_id', $filter );
@@ -1344,7 +1344,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		);
 
 		// Map the post to this gate.
-		$filter = function() use ( $gate_id ) {
+		$filter = function( $post_id ) use ( $gate_id ) {
 			return $gate_id;
 		};
 		add_filter( 'newspack_content_gate_post_id', $filter );
@@ -1385,7 +1385,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		);
 
 		// Map the post to this gate.
-		$filter = function() use ( $gate_id ) {
+		$filter = function( $post_id ) use ( $gate_id ) {
 			return $gate_id;
 		};
 		add_filter( 'newspack_content_gate_post_id', $filter );
