@@ -36,6 +36,7 @@ const SitePerformanceSection = ( { current }: SectionProps ) => (
 			emptyMessage={ __( 'No per-site data in this timeframe.', 'newspack-plugin' ) }
 			expandable
 			defaultRowLimit={ 10 }
+			rowLimit={ 25 }
 			columns={ [
 				{ key: 'site', label: __( 'Site', 'newspack-plugin' ) },
 				{ key: 'impressions', label: __( 'Impr.', 'newspack-plugin' ), format: 'number', align: 'right' },

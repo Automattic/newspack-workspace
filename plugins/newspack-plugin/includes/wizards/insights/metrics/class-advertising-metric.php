@@ -828,9 +828,9 @@ class Advertising_Metric {
 	/**
 	 * Performance by site (NPPD-1671) — impressions + revenue broken down by the
 	 * network `site` custom dimension. Resolves the reportable key ID first (cached),
-	 * then runs a report dimensioned by it. Returns an empty table when the site
-	 * has no `site` dimension (e.g. a network where it wasn't created), so the
-	 * section renders nothing rather than erroring.
+	 * then runs a report dimensioned by it. Returns an empty (non-computable) table
+	 * when the site has no `site` dimension (e.g. a network where it wasn't created);
+	 * the UI renders the section with its empty-state message rather than erroring.
 	 *
 	 * @param string $s     Start date.
 	 * @param string $e     End date.

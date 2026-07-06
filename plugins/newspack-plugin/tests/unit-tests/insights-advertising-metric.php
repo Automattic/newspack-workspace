@@ -320,7 +320,7 @@ class Newspack_Test_Insights_Advertising_Metric extends WP_UnitTestCase {
 					'CUSTOM_DIMENSION'  => 'https://x.com',
 					'TOTAL_IMPRESSIONS' => '5',
 				],
-			] 
+			]
 		);
 
 		$payload = Insights_Advertising_Test_Metric::top_sites( '2026-01-01', '2026-01-31', 25 );
