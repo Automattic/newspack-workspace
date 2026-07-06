@@ -33,7 +33,8 @@
 		"react": "^16.8.0 || ^17.0.0 || ^18.0.0"
 	},
 	"devDependencies": {
-		"@types/react": "^18.0.0"
+		"@types/react": "^18.0.0",
+		"newspack-scripts": "workspace:*"
 	},
 	"scripts": {
 		"build-types": "node build-types.js",

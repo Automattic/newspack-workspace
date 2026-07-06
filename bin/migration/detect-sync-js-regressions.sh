@@ -97,7 +97,9 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
       echo "| --- | --- | --- |"
       while IFS='|' read -r reason unit path; do
         [ -n "${path:-}" ] || continue
-        echo "| $unit | \`$path\` | $reason |"
+        # A literal backtick in the path would break the code-span below; drop any.
+        safe_path=$(printf '%s' "$path" | tr -d '`')
+        echo "| $unit | \`$safe_path\` | $reason |"
       done < "$HITS"
     fi
   } >> "$GITHUB_STEP_SUMMARY"
