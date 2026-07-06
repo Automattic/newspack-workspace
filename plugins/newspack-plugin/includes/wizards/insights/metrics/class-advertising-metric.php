@@ -40,6 +40,7 @@ namespace Newspack\Insights;
 use Newspack\Insights\GAM\Client;
 use Newspack\Insights\GAM\Report_Query;
 use Newspack\Insights\GAM\Report_Job_Status;
+use Newspack\Insights\Derived\Cross_System_Metrics;
 use Newspack\Logger;
 
 defined( 'ABSPATH' ) || exit;
@@ -334,6 +335,27 @@ class Advertising_Metric {
 		$rev     = $metrics['total_revenue'] ?? [];
 		if ( ! empty( $imp['computable'] ) && ! empty( $rev['computable'] ) ) {
 			$window['has_window_activity'] = self::window_activity_signal( (int) ( $imp['value'] ?? 0 ), (float) ( $rev['value'] ?? 0 ) );
+		}
+
+		// Cross-system derived scorecards (NPPD-1675): RPM and avg impressions per
+		// session join this window's GAM revenue/impressions (already resolved, from
+		// the cache above) with GA4 sessions fetched fresh from the Audience
+		// orchestrator. Computed HERE at the read layer — not baked into the day-long
+		// GAM cache in compute_window() — so the sessions denominator tracks Audience's
+		// 15-minute cache rather than lagging up to a day. Skipped on a loading/empty
+		// window (that branch returned above); each derived metric degrades to a
+		// data-unavailable overlay on its own when sessions or its source is missing.
+		if ( ! empty( $metrics ) ) {
+			$sessions = Cross_System_Metrics::sessions_for_window( $start_date, $end_date );
+
+			$window['metrics']['rpm'] = Cross_System_Metrics::rpm(
+				$metrics['total_revenue'] ?? [],
+				$sessions
+			);
+			$window['metrics']['avg_impressions_per_session'] = Cross_System_Metrics::avg_impressions_per_session(
+				$metrics['total_impressions'] ?? [],
+				$sessions
+			);
 		}
 
 		return $window;

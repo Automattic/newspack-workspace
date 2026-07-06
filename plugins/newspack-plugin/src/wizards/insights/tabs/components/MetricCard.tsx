@@ -24,7 +24,7 @@ import { __, sprintf } from '@wordpress/i18n';
  * Internal dependencies
  */
 import { Card } from '../../../../../packages/components/src';
-import { formatCurrency, formatDecimal, formatDuration, formatNumber, formatPercent, formatDelta, deltaTone } from './format';
+import { formatCurrency, formatCount, formatDecimal, formatDuration, formatNumber, formatPercent, formatDelta, deltaTone } from './format';
 import MetricNote from './MetricNote';
 
 export type MetricFormat = 'number' | 'currency' | 'percent' | 'decimal' | 'duration';
@@ -262,14 +262,16 @@ const MetricCard = ( props: MetricCardProps ) => {
 			  ).trim()
 			: null;
 
-	// Currency formats once, yielding both the display string and (when
-	// abbreviated, e.g. "$1.2M") the full-value title; other formats go through
-	// formatValue.
-	const currency = format === 'currency' ? formatCurrency( value ) : null;
-	const valueText = currency ? currency.display : formatValue( value, format );
+	// Currency and large counts format once, yielding both the display string and
+	// (when abbreviated, e.g. "$1.2M" / "2.4M") the full-value title; other formats
+	// go through formatValue. Counts share the currency millions tier so a 7+ digit
+	// impressions total abbreviates instead of overflowing the card (NPPD-1684).
+	const tiered =
+		format === 'currency' ? formatCurrency( value ) : format === 'number' ? formatCount( value ) : null;
+	const valueText = tiered ? tiered.display : formatValue( value, format );
 	// Explicit `valueTitle` wins; `||` (not `??`) so an empty string isn't treated
 	// as an override and still falls back to the formatter-derived full value.
-	const valueTooltip = valueTitle || currency?.title || undefined;
+	const valueTooltip = valueTitle || tiered?.title || undefined;
 
 	// Hero content: a count-fallback string, the em-dash null glyph (matched to
 	// the Performance by gate table's null cell — same glyph + aria-label), or

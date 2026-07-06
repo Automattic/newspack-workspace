@@ -7,7 +7,7 @@
 /**
  * Internal dependencies
  */
-import { formatCurrency, formatPercent } from './format';
+import { formatCount, formatCurrency, formatPercent } from './format';
 
 describe( 'formatCurrency', () => {
 	it( 'keeps cents below $1,000', () => {
@@ -42,6 +42,31 @@ describe( 'formatCurrency', () => {
 
 	it( 'renders zero with cents and no title', () => {
 		expect( formatCurrency( 0 ) ).toEqual( { display: '$0.00', title: null } );
+	} );
+} );
+
+describe( 'formatCount', () => {
+	it( 'renders below 1M in full with thousands separators and no title', () => {
+		expect( formatCount( 98765 ) ).toEqual( { display: '98,765', title: null } );
+	} );
+
+	it( 'rounds a fractional value to a whole number (impressions-per-session case)', () => {
+		expect( formatCount( 3.4 ) ).toEqual( { display: '3', title: null } );
+	} );
+
+	it( 'abbreviates 1M+ to the millions tier and carries the full value as a title', () => {
+		expect( formatCount( 2400000 ) ).toEqual( { display: '2.4M', title: '2,400,000' } );
+	} );
+
+	it( 'treats exactly 1,000,000 as the abbreviated tier', () => {
+		// Trailing ".0" varies by ICU version ("1M" vs "1.0M"); assert the invariants.
+		const result = formatCount( 1000000 );
+		expect( result.display ).toMatch( /^1(\.0)?M$/ );
+		expect( result.title ).toBe( '1,000,000' );
+	} );
+
+	it( 'renders zero as 0 with no title', () => {
+		expect( formatCount( 0 ) ).toEqual( { display: '0', title: null } );
 	} );
 } );
 

@@ -332,6 +332,66 @@ class Newspack_Test_Insights_Advertising_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Injects the cross-system derived scorecards (NPPD-1675) onto a resolved
+	 * window via read_window(): RPM and avg impressions per session, joining the
+	 * cached GAM volume/revenue with GA4 sessions (fed here via the filter).
+	 */
+	public function test_read_window_injects_cross_system_metrics() {
+		add_filter( 'newspack_insights_pre_total_sessions', [ $this, 'return_fixed_sessions' ], 10, 3 );
+
+		$start = '2026-01-01';
+		$end   = '2026-01-31';
+		$key   = $this->invoke( 'cache_key', [ $start, $end ] );
+		set_transient(
+			$key,
+			[
+				'computed_at' => time(),
+				'payload'     => [
+					'window'  => [
+						'start' => $start,
+						'end'   => $end,
+					],
+					'metrics' => [
+						'total_impressions' => [
+							'value'      => 2400000,
+							'computable' => true,
+							'type'       => 'count',
+						],
+						'total_revenue'     => [
+							'value'      => 4200.0,
+							'computable' => true,
+							'type'       => 'currency',
+						],
+					],
+				],
+			]
+		);
+
+		$window = $this->invoke( 'read_window', [ $start, $end ] );
+		delete_transient( $key );
+		remove_filter( 'newspack_insights_pre_total_sessions', [ $this, 'return_fixed_sessions' ], 10 );
+
+		$this->assertArrayHasKey( 'rpm', $window['metrics'] );
+		$this->assertTrue( $window['metrics']['rpm']['computable'] );
+		$this->assertSame( ( 4200.0 / 800000 ) * 1000, $window['metrics']['rpm']['value'] );
+
+		$this->assertArrayHasKey( 'avg_impressions_per_session', $window['metrics'] );
+		$this->assertSame( 2400000 / 800000, $window['metrics']['avg_impressions_per_session']['value'] );
+	}
+
+	/**
+	 * Filter callback: a known session count for the cross-system injection test.
+	 *
+	 * @param int|null $pre        Incoming value.
+	 * @param string   $start_date Window start.
+	 * @param string   $end_date   Window end.
+	 * @return int
+	 */
+	public function return_fixed_sessions( $pre, $start_date, $end_date ): int {
+		return 800000;
+	}
+
+	/**
 	 * Prior period is the contiguous, equal-length preceding window.
 	 */
 	public function test_prior_period() {

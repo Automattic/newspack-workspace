@@ -45,6 +45,11 @@ const USD_COMPACT = new Intl.NumberFormat( undefined, {
 	maximumFractionDigits: 1,
 } );
 
+const NUMBER_COMPACT = new Intl.NumberFormat( undefined, {
+	notation: 'compact',
+	maximumFractionDigits: 1,
+} );
+
 const percentFormatter = new Intl.NumberFormat( undefined, {
 	style: 'percent',
 	maximumFractionDigits: 1,
@@ -100,6 +105,24 @@ export const formatCurrency = ( value: number ): FormattedCurrency => {
 	return {
 		display: USD_COMPACT.format( value ),
 		title: USD_WITH_CENTS.format( value ),
+	};
+};
+
+/**
+ * Tiered count: `< 1M` renders in full with thousands separators; `>= 1M`
+ * abbreviates (e.g. "2.4M") and carries the full value as `title` for a tooltip.
+ * Mirrors {@see formatCurrency}'s millions tier (NPPD-1684) so large counts —
+ * ad impressions especially — don't overflow a scorecard at 7+ digits. Shares
+ * `FormattedCurrency`'s `{ display, title }` shape so MetricCard treats an
+ * abbreviated count exactly like an abbreviated amount.
+ */
+export const formatCount = ( value: number ): FormattedCurrency => {
+	if ( Math.abs( value ) < 1_000_000 ) {
+		return { display: numberFormatter.format( value ), title: null };
+	}
+	return {
+		display: NUMBER_COMPACT.format( value ),
+		title: numberFormatter.format( value ),
 	};
 };
 

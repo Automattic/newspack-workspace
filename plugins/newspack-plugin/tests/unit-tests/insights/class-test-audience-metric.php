@@ -320,6 +320,69 @@ class Test_Audience_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Reads the `sessions` total off the reused avg-sessions-per-reader query
+	 * (NPPD-1675 precursor).
+	 */
+	public function test_total_sessions_via_bq_reads_sessions() {
+		$proxy = $this->makeProxyReturning(
+			'audience_avg_sessions_per_reader',
+			[
+				[
+					'sessions'       => 6000,
+					'active_readers' => 2000,
+				],
+			]
+		);
+		$out = Audience_Metric::total_sessions_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertSame( 6000, $out['value'] );
+		$this->assertTrue( $out['computable'] );
+		$this->assertSame( 'count', $out['type'] );
+	}
+
+	/**
+	 * Surfaces a proxy outage as computable=false, so the consumer can render
+	 * "data unavailable" rather than a zero denominator.
+	 */
+	public function test_total_sessions_via_bq_outage_not_computable() {
+		$proxy = $this->makeProxyError();
+		$out   = Audience_Metric::total_sessions_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertFalse( $out['computable'] );
+		$this->assertArrayHasKey( 'error', $out );
+	}
+
+	/**
+	 * Returns not-computable when the query yields no rows.
+	 */
+	public function test_total_sessions_via_bq_empty_not_computable() {
+		$proxy = $this->makeProxyReturning( 'audience_avg_sessions_per_reader', [] );
+		$out   = Audience_Metric::total_sessions_via_bq( $proxy, new \DateTimeImmutable( '2026-01-01' ), new \DateTimeImmutable( '2026-01-31' ) );
+		$this->assertFalse( $out['computable'] );
+	}
+
+	/**
+	 * Honors the pre-filter short-circuit (the cross-system seam), returning the
+	 * injected count without a BigQuery call.
+	 */
+	public function test_get_total_sessions_pre_filter_short_circuits() {
+		add_filter( 'newspack_insights_pre_total_sessions', [ $this, 'return_fixed_sessions' ], 10, 3 );
+		$sessions = Audience_Metric::get_total_sessions( '2026-01-01', '2026-01-31' );
+		remove_filter( 'newspack_insights_pre_total_sessions', [ $this, 'return_fixed_sessions' ], 10 );
+		$this->assertSame( 42000, $sessions );
+	}
+
+	/**
+	 * Filter callback: a known session count for the short-circuit test.
+	 *
+	 * @param int|null $pre        Incoming value.
+	 * @param string   $start_date Window start.
+	 * @param string   $end_date   Window end.
+	 * @return int
+	 */
+	public function return_fixed_sessions( $pre, $start_date, $end_date ): int {
+		return 42000;
+	}
+
+	/**
 	 * Tests that proxy_scalar returns computable=false when the column is absent.
 	 */
 	public function test_active_readers_via_bq_missing_column_not_computable() {

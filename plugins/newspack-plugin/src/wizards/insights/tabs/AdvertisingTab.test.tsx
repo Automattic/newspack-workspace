@@ -134,7 +134,7 @@ describe( 'AdvertisingTab', () => {
 		render( <AdvertisingTab range={ range } previousRange={ null } /> );
 
 		expect( screen.getByText( 'Reach & revenue' ) ).toBeInTheDocument();
-		expect( screen.getByText( '2,400,000' ) ).toBeInTheDocument();
+		expect( screen.getByText( '2.4M' ) ).toBeInTheDocument(); // 7-digit impressions abbreviate (NPPD-1684)
 		expect( screen.getByText( '$4,200' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Sidebar' ) ).toBeInTheDocument();
 		// Viewability degrades to the data-unavailable note.

@@ -487,6 +487,96 @@ final class Audience_Metric {
 		];
 	}
 
+	/**
+	 * Total sessions for a window via BigQuery (NPPD-1675 precursor). The GA4 side
+	 * of the cross-system RPM / avg-impressions-per-session joins. Reuses the
+	 * existing `audience_avg_sessions_per_reader` catalog query — it already
+	 * returns a `sessions` total alongside `active_readers` — so no new BigQuery
+	 * catalog entry (and no hub-side change) is needed to expose sessions.
+	 *
+	 * `computable` is false on a proxy outage or an empty result set, so the
+	 * caller can distinguish "sessions unavailable" from a genuine zero.
+	 *
+	 * @param BigQuery_Proxy_Client $proxy Proxy client.
+	 * @param \DateTimeInterface    $start Window start.
+	 * @param \DateTimeInterface    $end   Window end.
+	 * @return array Scalar count payload { value, computable, type: count[, error] }.
+	 */
+	public static function total_sessions_via_bq( BigQuery_Proxy_Client $proxy, \DateTimeInterface $start, \DateTimeInterface $end ): array {
+		$rows = $proxy->query( 'audience_avg_sessions_per_reader', $start, $end );
+		if ( is_wp_error( $rows ) ) {
+			return [
+				'value'      => 0,
+				'computable' => false,
+				'type'       => 'count',
+				'error'      => $rows->get_error_message(),
+			];
+		}
+		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! isset( $rows[0]['sessions'] ) ) {
+			return [
+				'value'      => 0,
+				'computable' => false,
+				'type'       => 'count',
+			];
+		}
+		return [
+			'value'      => (int) $rows[0]['sessions'],
+			'computable' => true,
+			'type'       => 'count',
+		];
+	}
+
+	/**
+	 * Total sessions for a window as a plain integer, for cross-system consumers
+	 * (NPPD-1675). Callable server-side from another orchestrator without going
+	 * through the Audience REST endpoint. Independently cached (15 minutes, its own
+	 * transient) so it never triggers the full Audience window computation — the
+	 * Advertising tab needs only this one figure, not all 19 Audience metrics.
+	 *
+	 * Returns null when sessions can't be established (no GA4 property, proxy
+	 * outage, empty result). Unavailable results are NOT cached, so a transient
+	 * outage clears on the next request rather than suppressing RPM for the full
+	 * TTL. A `newspack_insights_pre_total_sessions` filter can short-circuit the
+	 * BigQuery call (used by tests and available as a production override).
+	 *
+	 * @param string $start_date Inclusive window start, YYYY-MM-DD (site timezone).
+	 * @param string $end_date   Inclusive window end, YYYY-MM-DD (site timezone).
+	 * @return int|null Total sessions, or null when unavailable.
+	 */
+	public static function get_total_sessions( string $start_date, string $end_date ): ?int {
+		/**
+		 * Short-circuit the sessions lookup. Return a non-null value to bypass the
+		 * BigQuery call entirely (tests inject a known count; production may override).
+		 *
+		 * @param int|null $pre        Pre-computed sessions, or null to run the query.
+		 * @param string   $start_date Window start, YYYY-MM-DD.
+		 * @param string   $end_date   Window end, YYYY-MM-DD.
+		 */
+		$pre = apply_filters( 'newspack_insights_pre_total_sessions', null, $start_date, $end_date );
+		if ( null !== $pre ) {
+			return is_numeric( $pre ) ? (int) $pre : null;
+		}
+
+		$cache_key = self::CACHE_KEY_PREFIX . 'sessions:' . md5( self::resolve_property_id() . '|' . $start_date . '|' . $end_date );
+		$cached    = get_transient( $cache_key );
+		if ( false !== $cached ) {
+			return (int) $cached;
+		}
+
+		$payload = self::total_sessions_via_bq(
+			new BigQuery_Proxy_Client(),
+			new \DateTimeImmutable( $start_date ),
+			new \DateTimeImmutable( $end_date )
+		);
+		if ( empty( $payload['computable'] ) ) {
+			return null;
+		}
+
+		$sessions = (int) $payload['value'];
+		set_transient( $cache_key, $sessions, self::CACHE_TTL );
+		return $sessions;
+	}
+
 	/*
 	===================================================================
 	 * BigQuery breakdown / table / timeseries methods (NPPD-1729 Task B2)
