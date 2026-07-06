@@ -261,9 +261,12 @@ class Test_Group_Subscription_Settings extends WP_UnitTestCase {
 			define( 'NEWSPACK_CONTENT_GATES', true );
 		}
 		global $wp_meta_boxes;
-		$wp_meta_boxes = [];
+		$original_meta_boxes = $wp_meta_boxes;
+		$wp_meta_boxes       = [];
 		Group_Subscription_Settings::add_group_subscription_meta_box( 'shop_subscription', $hook_arg );
-		return isset( $wp_meta_boxes['shop_subscription']['normal']['high']['newspack-group-subscription'] );
+		$registered    = isset( $wp_meta_boxes['shop_subscription']['normal']['high']['newspack-group-subscription'] );
+		$wp_meta_boxes = $original_meta_boxes;
+		return $registered;
 	}
 
 	/**

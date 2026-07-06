@@ -345,6 +345,11 @@ class Group_Subscription_Settings {
 				return false;
 			}
 			$post_or_subscription = $post_or_subscription->ID;
+		} elseif ( is_object( $post_or_subscription ) && ! is_a( $post_or_subscription, 'WC_Subscription' ) ) {
+			// The add_meta_boxes hook fires on every admin edit screen, so under HPOS this can
+			// receive a non-subscription order object (e.g. WC_Order). Reject it explicitly
+			// rather than passing it to WCS.
+			return false;
 		}
 		return WooCommerce_Subscriptions::sanitize_subscription( $post_or_subscription );
 	}
@@ -356,11 +361,13 @@ class Group_Subscription_Settings {
 	 * @param WP_Post|WC_Subscription $post_or_subscription The post or subscription currently being edited.
 	 */
 	public static function add_group_subscription_meta_box( $post_type, $post_or_subscription ) {
+		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
+			return;
+		}
 		// On the classic (non-HPOS) order editor WP core passes a WP_Post; under HPOS it
 		// passes the WC_Subscription object. Resolve either form so the metabox registers
 		// in both storage modes.
-		$subscription = self::resolve_hook_subscription( $post_or_subscription );
-		if ( ! Content_Gate::is_newspack_feature_enabled() || ! $subscription ) {
+		if ( ! self::resolve_hook_subscription( $post_or_subscription ) ) {
 			return;
 		}
 		\add_meta_box(
@@ -376,13 +383,16 @@ class Group_Subscription_Settings {
 	/**
 	 * Add Group Subscription options to subscription admin pages.
 	 *
-	 * @param WC_Subscription $subscription The subscription object.
+	 * @param WP_Post|WC_Subscription $subscription The post or subscription currently being edited.
 	 */
 	public static function add_group_subscription_options( $subscription ) {
+		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
+			return;
+		}
 		// WP core passes the metabox callback a WP_Post (classic editor) or the
 		// WC_Subscription (HPOS); normalize to a subscription before rendering.
 		$subscription = self::resolve_hook_subscription( $subscription );
-		if ( ! Content_Gate::is_newspack_feature_enabled() || ! $subscription ) {
+		if ( ! $subscription ) {
 			return;
 		}
 		$settings = self::get_subscription_settings( $subscription );
