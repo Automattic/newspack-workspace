@@ -37,7 +37,7 @@ const HEADING_ID = 'newspack-insights-gates-paid-heading';
 const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversionSectionProps ) => {
 	const title = __( 'Paid reader conversion', 'newspack-plugin' );
 	const caption = __(
-		'How effectively paid access gate gates convert visitors into paying subscribers. Direct counts subscriptions that happened in the same session as a paid access gate impression. Influenced counts subscriptions that happened in a later session within 14 days of a paid access gate impression. Revenue is computed from actual Woo orders, not gate-event amounts.',
+		'How effectively paid access gates convert visitors into paying subscribers. Direct counts subscriptions that happened in the same session as a paid access gate impression. Influenced counts subscriptions that happened in a later session within 14 days of a paid access gate impression. Revenue is computed from actual Woo orders, not gate-event amounts.',
 		'newspack-plugin'
 	);
 	const impressionsLabel = __( 'paid access gate impressions', 'newspack-plugin' );
@@ -66,7 +66,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				caption={ caption }
 				state="no_opportunity"
 				body={ __(
-					'No paid access gate impressions in this timeframe. Your paid access gate gates may not be reaching readers — could be a placement question, a frequency question, or simply that the timeframe doesn’t include enough traffic. See the per-gate breakdown below for configuration details.',
+					'No paid access gate impressions in this timeframe. Your paid access gates may not be reaching readers — could be a placement question, a frequency question, or simply that the timeframe doesn’t include enough traffic. See the per-gate breakdown below for configuration details.',
 					'newspack-plugin'
 				) }
 			/>
