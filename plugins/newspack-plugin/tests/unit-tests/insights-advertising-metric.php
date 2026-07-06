@@ -95,6 +95,46 @@ class Newspack_Test_Insights_Advertising_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Revenue by day (NPPD-1674) sorts chronologically regardless of GAM's return
+	 * order and normalizes each day's revenue from micros.
+	 */
+	public function test_revenue_by_day_sorts_and_normalizes() {
+		$this->with_rows(
+			[
+				[
+					'DATE'                              => '2026-01-03',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => (string) ( 150 * 1000000 ),
+				],
+				[
+					'DATE'                              => '2026-01-01',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => (string) ( 100 * 1000000 ),
+				],
+				[
+					'DATE'                              => '2026-01-02',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => (string) ( 120 * 1000000 ),
+				],
+			]
+		);
+		$payload = Insights_Advertising_Test_Metric::revenue_by_day( '2026-01-01', '2026-01-31' );
+
+		$this->assertTrue( $payload['computable'] );
+		$this->assertSame( 'timeseries', $payload['type'] );
+		$this->assertSame( [ '2026-01-01', '2026-01-02', '2026-01-03' ], array_column( $payload['rows'], 'date' ) );
+		$this->assertSame( 100.0, $payload['rows'][0]['value'] );
+		$this->assertSame( 150.0, $payload['rows'][2]['value'] );
+	}
+
+	/**
+	 * Revenue by day is not computable when the window has no daily rows.
+	 */
+	public function test_revenue_by_day_empty_not_computable() {
+		$this->with_rows( [] );
+		$payload = Insights_Advertising_Test_Metric::revenue_by_day( '2026-01-01', '2026-01-31' );
+		$this->assertFalse( $payload['computable'] );
+		$this->assertSame( [], $payload['rows'] );
+	}
+
+	/**
 	 * Average eCPM derives from normalized revenue and coded impressions.
 	 */
 	public function test_avg_ecpm() {

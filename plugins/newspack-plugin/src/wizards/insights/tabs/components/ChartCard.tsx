@@ -15,7 +15,11 @@ import MetricNote from './MetricNote';
 import type { MetricPayload } from './metrics';
 
 export interface ChartCardProps {
-	title: string;
+	/**
+	 * Chart heading. Optional: a single-chart section whose own SectionHeading
+	 * already names it (e.g. Revenue trend) omits this to avoid a duplicate title.
+	 */
+	title?: string;
 	/** Small temporal-scope subhead above the title (e.g. "Day to day"). */
 	subhead?: string;
 	caption?: string;
@@ -42,7 +46,7 @@ const ChartCard = ( { title, subhead, caption, payload, children }: ChartCardPro
 	return (
 		<div className="newspack-insights__chart-card">
 			{ subhead && <p className="newspack-insights__chart-card-subhead">{ subhead }</p> }
-			<h3 className="newspack-insights__chart-card-title">{ title }</h3>
+			{ title && <h3 className="newspack-insights__chart-card-title">{ title }</h3> }
 			{ caption && <p className="newspack-insights__chart-card-caption">{ caption }</p> }
 			{ body }
 		</div>
