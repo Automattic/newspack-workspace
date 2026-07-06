@@ -41,6 +41,20 @@ class Newspack_Test_GoogleSiteKit_Group_Param extends WP_UnitTestCase {
 	private $institution_ids = [];
 
 	/**
+	 * Original $_SERVER['REMOTE_ADDR'] captured in set_up, restored in tear_down.
+	 *
+	 * @var string|null
+	 */
+	private $original_remote_addr;
+
+	/**
+	 * Original IP-access cookie value captured in set_up, restored in tear_down.
+	 *
+	 * @var string|null
+	 */
+	private $original_ip_cookie;
+
+	/**
 	 * Enable the content gating feature flag and load WC mocks.
 	 */
 	public static function set_up_before_class() {
@@ -56,6 +70,11 @@ class Newspack_Test_GoogleSiteKit_Group_Param extends WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+
+		// Capture request globals that IP-based tests mutate, so tear_down can
+		// restore them even if an assertion fails mid-test.
+		$this->original_remote_addr = $_SERVER['REMOTE_ADDR'] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
+		$this->original_ip_cookie   = $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 
 		// Reset mock WC databases.
 		global $subscriptions_database, $products_database;
@@ -102,6 +121,20 @@ class Newspack_Test_GoogleSiteKit_Group_Param extends WP_UnitTestCase {
 		Group_Subscription::reset_cache();
 		Institution::reset_matching_cache();
 		wp_set_current_user( 0 );
+
+		// Restore request globals to their pre-test values so IP-based tests
+		// can't leak state into later tests in the same process.
+		if ( null === $this->original_remote_addr ) {
+			unset( $_SERVER['REMOTE_ADDR'] ); // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
+		} else {
+			$_SERVER['REMOTE_ADDR'] = $this->original_remote_addr; // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
+		}
+		if ( null === $this->original_ip_cookie ) {
+			unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		} else {
+			$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = $this->original_ip_cookie; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		}
+
 		parent::tear_down();
 	}
 
@@ -208,9 +241,7 @@ class Newspack_Test_GoogleSiteKit_Group_Param extends WP_UnitTestCase {
 
 		$this->assertEquals( 'Institution ' . $inst_id, $params['group'] );
 
-		// Unset whitelisted IP and cookie.
-		unset( $_SERVER['REMOTE_ADDR'] ); // phpcs:ignore WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__
-		unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		// The whitelisted IP and cookie are restored in tear_down().
 	}
 
 	/**

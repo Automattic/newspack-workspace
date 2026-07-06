@@ -16,7 +16,7 @@ import registerAdBlock from './blocks/ad';
 import registerPostsInserterBlock from './blocks/posts-inserter';
 import registerShareBlock from './blocks/share';
 import registerEmbedBlockEdit from './blocks/embed';
-import registerMergeTagsFilters from './blocks/mailchimp-merge-tags';
+import registerMergeTagsFilters from './blocks/merge-tags';
 import registerVisibilityFilters from './blocks/visibility-attribute';
 import registerConditionalContent from './blocks/conditional-content';
 import { addBlocksValidationFilter } from './blocks-validation/blocks-filters';

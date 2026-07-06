@@ -18,6 +18,7 @@ declare global {
 			};
 			preview_post: string;
 			preview_archive: string;
+			integrations_settings_enabled: boolean;
 		};
 		newspackAudienceCampaigns: {
 			api: string;

@@ -37,26 +37,6 @@ export default function FeaturedImagePostsNew( { data, update }: ThemeModCompone
 				] }
 				onChange={ ( featured_image_default: string ) => update( { featured_image_default } ) }
 			/>
-			<SelectControl
-				label={ __( 'Default template for new posts', 'newspack-plugin' ) }
-				help={ __( 'Set a default template for new posts.', 'newspack-plugin' ) }
-				value={ data.post_template_default }
-				options={ [
-					{
-						label: __( 'With sidebar', 'newspack-plugin' ),
-						value: 'default',
-					},
-					{
-						label: __( 'One Column', 'newspack-plugin' ),
-						value: 'single-feature.php',
-					},
-					{
-						label: __( 'One Column Wide', 'newspack-plugin' ),
-						value: 'single-wide.php',
-					},
-				] }
-				onChange={ ( post_template_default: string ) => update( { post_template_default } ) }
-			/>
 		</Grid>
 	);
 }
