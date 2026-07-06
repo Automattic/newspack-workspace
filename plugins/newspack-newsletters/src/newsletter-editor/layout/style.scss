@@ -1,9 +1,10 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-newsletters-layouts {
 	&__spinner {
 		text-align: center;
-		padding: 40px 10px;
+		padding: wp-vars.$grid-unit-50 wp-vars.$grid-unit-15;
 	}
 
 	&__item {
@@ -11,77 +12,42 @@
 	}
 
 	&__item-preview {
-		background: white;
-		border: 1px solid wp-colors.$gray-300;
-		border-radius: 2px;
+		aspect-ratio: 1;
+		background: wp-colors.$white;
+		border: 1px solid wp-colors.$gray-200;
+		border-radius: wp-vars.$grid-unit-05;
+		box-sizing: border-box;
 		overflow: hidden;
-		padding: 0 0 75%;
 		position: relative;
-		width: 100%;
 
-		&::before {
-			border: 2px solid white;
-			content: "";
-			display: block;
-			position: absolute;
-			inset: 0;
-			z-index: 1;
+		.block-editor-block-preview__content {
+			left: 0;
+			margin: 0;
+			min-height: auto;
+			overflow: visible;
+			top: 0;
+			transform-origin: top left;
+			width: 100%;
 		}
 
-		.block-editor-block-preview__container,
-		.block-editor-block-preview__content-iframe {
-			position: absolute;
-			top: 0;
+		.block-editor-iframe__container {
+			height: 100%;
+			width: 100%;
+		}
 
-			.wp-block[data-type="newspack-newsletters/posts-inserter"] {
-				padding: 0;
-			}
-
-			.newspack-posts-inserter {
-				border: 0;
-				padding: 0;
-
-				&__header,
-				.components-button {
-					display: none;
-				}
-
-				&__preview {
-					border: 0;
-					margin: 0;
-				}
-
-				.block-editor-block-preview__container {
-					height: 100% !important;
-					max-height: 100%;
-					position: relative;
-				}
-
-				.block-editor-block-preview__content {
-					transform: scale(1) !important;
-					width: 600px !important;
-				}
-			}
+		.block-editor-iframe__scale-container {
+			height: 100%;
 		}
 	}
 
 	&__item-label {
-		padding: 4px 2px;
-		text-align: center;
+		align-items: center;
+		display: flex;
+		margin-top: wp-vars.$grid-unit-10;
+		min-height: wp-vars.$grid-unit-30;
 
 		&:empty {
 			display: none;
-		}
-
-		input {
-			text-align: center;
-			border-color: transparent !important;
-			&:focus {
-				border-color: var(--wp-admin-theme-color) !important;
-			}
-		}
-		.components-base-control__field {
-			margin-bottom: 0;
 		}
 	}
 }

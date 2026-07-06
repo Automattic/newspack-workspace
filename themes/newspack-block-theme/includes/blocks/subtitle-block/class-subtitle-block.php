@@ -22,7 +22,7 @@ final class Subtitle_Block {
 	public static function init() {
 		\add_action( 'init', [ __CLASS__, 'register_block_and_post_meta' ] );
 		\add_action( 'enqueue_block_assets', [ __CLASS__, 'enqueue_block_assets' ] );
-		\add_filter( 'is_protected_meta', [ __CLASS__, 'protect_post_meta' ], 10, 3 );
+		\add_action( 'admin_init', [ __CLASS__, 'prevent_classic_metabox_meta_clobber' ] );
 	}
 
 	/**
@@ -40,39 +40,55 @@ final class Subtitle_Block {
 			'post',
 			self::POST_META_NAME,
 			[
-				'show_in_rest'  => true,
-				'single'        => true,
-				'type'          => 'string',
-				// Managed by the editor subtitle UI via REST. An explicit
-				// auth_callback keeps it REST-editable while protect_post_meta()
-				// marks it protected (see that method).
-				'auth_callback' => function ( $allowed, $meta_key, $object_id ) {
-					return current_user_can( 'edit_post', $object_id );
-				},
+				'show_in_rest' => true,
+				'single'       => true,
+				'type'         => 'string',
 			]
 		);
 	}
 
 	/**
-	 * Mark the subtitle meta as protected.
+	 * Stop the classic "Custom Fields" box from clobbering the subtitle meta.
 	 *
-	 * The subtitle is edited through the editor subtitle UI (saved via the REST
-	 * API), not the classic "Custom Fields" box. Leaving it unprotected lets
-	 * that box resubmit a stale value on save and silently overwrite the
-	 * REST-saved value when a classic meta box triggers the block editor's
-	 * meta-box save. Protecting it removes it from the Custom Fields box; the
-	 * explicit auth_callback on the registration keeps it REST-editable.
+	 * The subtitle is edited through the editor subtitle UI and saved via the
+	 * REST API. When the "Custom Fields" panel is enabled, the editor also fires
+	 * a separate classic meta-box save (the `meta-box-loader` request) that
+	 * resubmits the box's page-load value and writes it through edit_post(),
+	 * landing just after the REST save and silently overwriting it.
 	 *
-	 * @param bool   $protected Whether the meta key is considered protected.
-	 * @param string $meta_key  The meta key.
-	 * @param string $meta_type The type of object the meta belongs to (post, term, user, etc.).
-	 * @return bool Whether the meta key is protected.
+	 * Rather than protecting the key (which would remove it from the Custom
+	 * Fields box and block publishers who manage it there), we drop it from the
+	 * meta-box-loader payload only. Intentional edits made with the box's own
+	 * Add/Update buttons save through a separate admin-ajax request and are
+	 * unaffected.
+	 *
+	 * @return void
 	 */
-	public static function protect_post_meta( $protected, $meta_key, $meta_type ) {
-		if ( 'post' !== $meta_type ) {
-			return $protected;
+	public static function prevent_classic_metabox_meta_clobber() {
+		// Only the block editor's auxiliary meta-box save carries this flag; a
+		// genuine classic-editor save does not, and must keep writing normally.
+		if ( ! isset( $_REQUEST['meta-box-loader'], $_POST['post_ID'], $_POST['_wpnonce'], $_POST['meta'] ) ) {
+			return;
 		}
-		return self::POST_META_NAME === $meta_key ? true : $protected;
+
+		// edit_post() processes $_POST['meta'] only after core verifies this nonce
+		// for the 'editpost' action (wp-admin/post.php). This runs earlier (on
+		// admin_init), so verify the same nonce before touching the payload.
+		$post_id = (int) $_POST['post_ID'];
+		$nonce   = sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) );
+		if ( ! $post_id || ! wp_verify_nonce( $nonce, 'update-post_' . $post_id ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- only the meta-row key is read and sanitized below; the row value is never used, and the nonce is verified above.
+		foreach ( array_keys( (array) $_POST['meta'] ) as $mid ) {
+			$key = isset( $_POST['meta'][ $mid ]['key'] )
+				? sanitize_text_field( wp_unslash( $_POST['meta'][ $mid ]['key'] ) )
+				: '';
+			if ( self::POST_META_NAME === $key ) {
+				unset( $_POST['meta'][ $mid ] );
+			}
+		}
 	}
 
 	/**

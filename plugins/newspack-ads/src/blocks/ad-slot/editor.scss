@@ -1,0 +1,12 @@
+// Re-uses the shared `.newspack-ads-ad-block-placeholder` styles defined in
+// src/blocks/ad-unit/editor.scss (bundled together by webpack).
+// This file only adds a minimum height for the ad slot block, which has
+// no ad-unit sizes to compute from at edit time.
+
+.editor-styles-wrapper {
+	[data-type="newspack-ads/ad-slot"] {
+		.newspack-ads-ad-block-placeholder {
+			min-height: 80px;
+		}
+	}
+}

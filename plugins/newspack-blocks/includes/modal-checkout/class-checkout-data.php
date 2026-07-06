@@ -256,7 +256,7 @@ final class Checkout_Data {
 				$is_grouped = true;
 				$product_id = $source->get_id();
 				$children   = self::get_children( $source );
-			} elseif ( $source->is_type( 'variable' ) ) {
+			} elseif ( $source->is_type( 'variable' ) || $source->is_type( 'variable-subscription' ) ) {
 				$is_variable = true;
 				$product_id  = $source->get_id();
 				$children    = self::get_children( $source );

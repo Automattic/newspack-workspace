@@ -290,6 +290,42 @@ class Newspack_Test_Webhooks extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A rescheduled request must stay in 'future' status until its scheduled time.
+	 *
+	 * WordPress' wp_insert_post() flips a 'future' post straight to 'publish'
+	 * when its date is less than MINUTE_IN_SECONDS away. The shortest retry
+	 * backoff is 1 minute, which lands exactly on that edge: scheduling at +60s
+	 * means a single wall-clock second ticking before WordPress runs its own
+	 * check shaves the gap to 59s and publishes the request immediately. That
+	 * spurious publish fires an extra processing pass and burns a retry, which
+	 * made test_request_max_retries intermittently trash one iteration early.
+	 * The scheduled time must clear the boundary by more than MINUTE_IN_SECONDS.
+	 */
+	public function test_scheduled_retry_clears_publish_boundary() {
+		add_filter( 'newspack_data_events_use_action_scheduler', '__return_false' );
+		try {
+			$this->dispatch_event();
+
+			$requests = Data_Events\Webhooks::get_endpoint_requests( $this->action_endpoint );
+			$this->assertNotEmpty( $requests );
+			$request_id = $requests[0]['id'];
+
+			$schedule_request_method = new ReflectionMethod( Data_Events\Webhooks::class, 'schedule_request' );
+			$schedule_request_method->setAccessible( true );
+
+			// Capture the reference time before scheduling so the measured offset is
+			// immune to a wall-clock second elapsing during the assertion.
+			$before_schedule = time();
+			$schedule_request_method->invoke( null, $request_id, 1 );
+			$scheduled_offset = (int) get_post_meta( $request_id, 'scheduled', true ) - $before_schedule;
+			$this->assertGreaterThan( MINUTE_IN_SECONDS, $scheduled_offset );
+			$this->assertEquals( 'future', get_post_status( $request_id ) );
+		} finally {
+			remove_filter( 'newspack_data_events_use_action_scheduler', '__return_false' );
+		}
+	}
+
+	/**
 	 * Test that finished requests older than 7 days should be deleted.
 	 */
 	public function test_finished_request_deletion() {

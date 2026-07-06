@@ -65,3 +65,12 @@ ActiveCampaign, Constant Contact, and Mailchimp are currently supported.
 
 1. Pick from one of the bundled templates to start your new newsletter, or start with a blank page. You can also create and save your own templates to create a consistent newsletter series.
 2. In the editor, you can add and remove blocks, save settings, and send yourself a test email before sending out your newsletter.
+
+== Credits ==
+
+The `assets/sample-posts/` directory ships four placeholder photos used in layout previews, all by [Abhishek Navlakha](https://www.pexels.com/@abhinav/) and used under the [Pexels License](https://www.pexels.com/license/):
+
+* [Bustling downtown San Francisco street scene](https://www.pexels.com/photo/bustling-downtown-san-francisco-street-scene-32490265/)
+* [Autonomous vehicle in San Francisco street scene](https://www.pexels.com/photo/autonomous-vehicle-in-san-francisco-street-scene-32461216/)
+* [Colorful gelato display in Las Vegas shop](https://www.pexels.com/photo/colorful-gelato-display-in-las-vegas-shop-33431371/)
+* [Vibrant organic salad at an outdoor lunch setting](https://www.pexels.com/photo/vibrant-organic-salad-at-an-outdoor-lunch-setting-32904717/)

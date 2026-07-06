@@ -86,12 +86,13 @@ const Autocomplete = ( { availableItems, label = '', onChange, onFocus, onInputC
 			<BaseControl
 				id="newspack-newsletters__send-to-autocomplete-input"
 				help={
-					isRetrieving &&
-					sprintf(
-						// Translators: Message shown while fetching list or sublist info. %s is the provider's label for the given entity type (list or sublist).
-						__( 'Fetching %s info…', 'newspack-newsletters' ),
-						label.toLowerCase()
-					)
+					isRetrieving
+						? sprintf(
+								// Translators: Message shown while fetching list or sublist info. %s is the provider's label for the given entity type (list or sublist).
+								__( 'Fetching %s info…', 'newspack-newsletters' ),
+								label.toLowerCase()
+						  )
+						: __( 'Start typing to search by name or type.', 'newspack-newsletters' )
 				}
 			>
 				<FormTokenField
@@ -108,7 +109,6 @@ const Autocomplete = ( { availableItems, label = '', onChange, onFocus, onInputC
 					onFocus={ onFocus }
 					onInputChange={ onInputChange }
 					suggestions={ availableItems.map( item => item.label ) }
-					placeholder={ __( 'Start typing to search by name or type', 'newspack-newsletters' ) }
 					value={ [] }
 					__experimentalExpandOnFocus={ true }
 					__experimentalShowHowTo={ false }

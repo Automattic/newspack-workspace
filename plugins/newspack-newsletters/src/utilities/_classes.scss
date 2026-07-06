@@ -1,0 +1,9 @@
+// Shared utility classes. Imported by any bundle that needs them so the rules
+// ship inside whichever bundle is enqueued on a given screen.
+
+// Force-zeroes the 16px margin-bottom on `.components-base-control`. Use this
+// wherever `__nextHasNoMarginBottom` doesn't take effect (it's a no-op on
+// `TextControl` in the current @wordpress/components).
+.newspack-newsletters__no-margin-bottom {
+	margin-bottom: 0 !important;
+}

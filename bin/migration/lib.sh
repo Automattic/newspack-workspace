@@ -8,6 +8,9 @@
 #   • Path-rewrite / merge helpers used to land legacy commits cleanly:
 #       - apply_structural_overrides: drop legacy .github/, package-lock.json,
 #         and pin workspace:* in plugin/theme package.json.
+#       - restore_release_artifacts: pin release-stamped files (CHANGELOG.md,
+#         theme SCSS + plugin-PHP version headers, package.json name/version) to
+#         the monorepo side so a late legacy hotfix release can't downgrade it.
 #       - normalize_package_repos: rewrite repository.url in every workspace
 #         package.json so semantic-release resolves to the monorepo, not the
 #         standalone legacy repo.
@@ -91,6 +94,105 @@ apply_structural_overrides() {
         ;;
     esac
   done < <(git diff --name-only --diff-filter=U)
+}
+
+# Pin release-stamped files to the monorepo (HEAD) side after a merge.
+#
+# The monorepo owns its own release versioning: semantic-release at the root
+# bumps every version-bearing file and regenerates each CHANGELOG, so "the sync
+# brings code, not the release commits" (see lib-versions.sh). The legacy repos
+# are frozen but still occasionally cut a late hotfix; that hotfix's
+# `chore(release)` commit stamps a *regressed* version (the legacy line sits
+# below the monorepo's) into the package's version-bearing files. A clean
+# "legacy wins" merge (legacy advanced the file, the monorepo had not touched
+# it) lands the stale stamp unchallenged and downgrades the monorepo;
+# apply_structural_overrides only rescues package.json, and only on a conflict.
+#
+# Two kinds of release-stamped file, handled differently:
+#
+#   • Pure artifacts — CHANGELOG.md and the theme stylesheet header SCSS
+#     (classic `theme-description.scss`, the block theme's underscore-prefixed
+#     `_theme-description.scss`). Comment / generated content only, no SCSS
+#     rules or source, so they are restored to HEAD wholesale.
+#   • Source files that merely carry a stamped version — package.json
+#     (name+version), each plugin's main PHP file (the WordPress `Version:`
+#     header that WP itself reads, plus any `*_VERSION` constant kept in lockstep
+#     with it; see config/release.js `files: [ phpFile ]`), and a theme
+#     `functions.php`. Restoring these wholesale would drop the real fix the
+#     hotfix carried, so only the version token is reset to HEAD's value; every
+#     other line the legacy commit touched survives.
+#
+# `git checkout HEAD -- <path>` resolves to the pre-merge monorepo blob whether
+# the path conflicted or merged cleanly (`--ours` only works for conflicts), and
+# also marks any conflicted path resolved. HEAD is the pre-merge monorepo tip
+# here because integrate runs `git merge --no-commit`.
+restore_release_artifacts() {
+  local target=$1
+
+  # Pure artifacts: restore wholesale.
+  while IFS= read -r f; do
+    if git cat-file -e "HEAD:$f" 2> /dev/null; then
+      git checkout HEAD -- "$f"
+    fi
+  done < <(git ls-files "$target" \
+    | grep -E '(^|/)(CHANGELOG\.md|_?theme-description\.scss)$' || true)
+
+  # package.json: pin name + version, keeping any real dependency change. The
+  # node block is the `if` condition so a malformed package.json skips that one
+  # file (exit 1) instead of aborting the whole sync under `set -e`. Any
+  # conflicted package.json was already taken --ours by apply_structural_overrides
+  # above; the later normalize_package_repos / restore_workspace_deps passes
+  # rewrite other fields, so this is not the last word on the file.
+  while IFS= read -r pj; do
+    if node -e '
+      const fs = require( "fs" ), cp = require( "child_process" );
+      const pj = process.argv[1];
+      let head;
+      try { head = JSON.parse( cp.execSync( "git show HEAD:" + pj, { encoding: "utf8", stdio: [ "pipe", "pipe", "ignore" ] } ) ); }
+      catch ( e ) { process.exit( 0 ); }   // not in HEAD (new package) — leave as-is.
+      const src = fs.readFileSync( pj, "utf8" );
+      const indentMatch = src.match( /\n(\t+|[ ]+)"/ );
+      const indent = indentMatch ? indentMatch[1] : "  ";
+      const trail = src.endsWith( "\n" ) ? "\n" : "";
+      const j = JSON.parse( src );
+      let dirty = false;
+      for ( const k of [ "name", "version" ] ) {
+        if ( head[k] !== undefined && j[k] !== head[k] ) { j[k] = head[k]; dirty = true; }
+      }
+      if ( dirty ) fs.writeFileSync( pj, JSON.stringify( j, null, indent ) + trail );
+    ' "$pj"; then
+      git add -- "$pj"
+    fi
+  done < <(git ls-files "$target" | grep -E '(^|/)package\.json$' || true)
+
+  # Main plugin PHP file + theme functions.php: reset the WordPress `Version:`
+  # header (and any `*_VERSION` constant) to HEAD's version, leaving real code
+  # intact. The version is read from HEAD's own copy of the file, so a package
+  # without a stamped header is a no-op. Restricted to files directly under the
+  # target so a vendored library header is never touched. An unmerged PHP file
+  # (a conflict -Xtheirs couldn't auto-resolve) is skipped rather than edited:
+  # a surgical rewrite + `git add` would mark it resolved with conflict markers
+  # still inside, hiding it from the post-merge unmerged-paths check that
+  # escalates. Leaving it unmerged lets that escalation fire.
+  while IFS= read -r f; do
+    if git ls-files --unmerged -- "$f" | grep -q .; then continue; fi
+    if node -e '
+      const fs = require( "fs" ), cp = require( "child_process" );
+      const f = process.argv[1];
+      let head;
+      try { head = cp.execSync( "git show HEAD:" + f, { encoding: "utf8", stdio: [ "pipe", "pipe", "ignore" ] } ); }
+      catch ( e ) { process.exit( 0 ); }
+      const headVer = ( head.match( /^[\s*#\/]*Version:\s*(\S+)/m ) || [] )[1];
+      if ( ! headVer ) process.exit( 0 );   // not version-stamped in HEAD.
+      const src = fs.readFileSync( f, "utf8" );
+      const next = src
+        .replace( /^([\s*#\/]*Version:\s*)\S+/m, "$1" + headVer )
+        .replace( /(define\(\s*[\x27"][A-Z0-9_]*_VERSION[\x27"]\s*,\s*[\x27"])[^\x27"]+([\x27"])/g, "$1" + headVer + "$2" );
+      if ( next !== src ) fs.writeFileSync( f, next );
+    ' "$f"; then
+      git add -- "$f"
+    fi
+  done < <(git ls-files "$target" | grep -E "^${target}/[^/]+\.php$" || true)
 }
 
 # Rewrite repository field in every workspace package.json so semantic-release

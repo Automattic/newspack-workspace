@@ -517,15 +517,25 @@ class Subscription_List {
 		if ( isset( $fields['active'] ) && $fields['active'] !== $this->is_active() ) {
 			$post_data['post_status'] = $fields['active'] ? 'publish' : 'draft';
 		}
-		if ( ! empty( $fields['title'] ) && $this->get_title() !== $fields['title'] ) {
-			$post_data['post_title'] = $fields['title'];
+		if ( isset( $fields['title'] ) && is_string( $fields['title'] ) ) {
+			$title = $fields['title'];
+			if ( '' !== $title && $title !== $this->get_title() ) {
+				$post_data['post_title'] = $title;
+			}
 		}
-		if ( ! empty( $fields['description'] ) && $this->get_description() !== $fields['description'] ) {
-			$post_data['post_content'] = $fields['description'];
+		if ( isset( $fields['description'] ) && is_string( $fields['description'] ) ) {
+			// kses at the sink so all callers store a safe description regardless of writer caps.
+			$description = wp_kses_post( $fields['description'] );
+			if ( $description !== $this->get_description() ) {
+				$post_data['post_content'] = $description;
+			}
 		}
 		if ( ! empty( $post_data ) ) {
 			$post_data['ID'] = $this->get_id();
-			wp_update_post( $post_data );
+			$result          = wp_update_post( $post_data, true );
+			if ( is_wp_error( $result ) ) {
+				return $result;
+			}
 			$this->post = get_post( $this->get_id() );
 			return true;
 		}
@@ -538,6 +548,13 @@ class Subscription_List {
 	 * @return array
 	 */
 	public function to_array() {
+		$audience = '';
+		if ( $this->is_local() ) {
+			$settings = $this->get_current_provider_settings();
+			if ( is_array( $settings ) && isset( $settings['list'] ) ) {
+				$audience = (string) $settings['list'];
+			}
+		}
 		return [
 			'id'          => $this->get_public_id(),
 			'db_id'       => $this->get_id(),
@@ -549,6 +566,7 @@ class Subscription_List {
 			'edit_link'   => $this->get_edit_link(),
 			'active'      => $this->is_active(),
 			'remote_name' => $this->get_remote_name(),
+			'audience'    => $audience,
 		];
 	}
 }
