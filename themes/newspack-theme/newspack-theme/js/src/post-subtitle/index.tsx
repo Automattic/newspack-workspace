@@ -19,7 +19,7 @@ import { appendSubtitleToTitleDOMElement, connectWithSelect } from './utils';
  *
  * https://developer.wordpress.org/block-editor/developers/slotfills/plugin-document-setting-panel/
  */
-const NewspackSubtitlePanel = ( { subtitle } ) => {
+const NewspackSubtitlePanel = ( { subtitle }: { subtitle: string } ) => {
 	// Update the DOM when subtitle value changes.
 	useEffect( () => {
 		appendSubtitleToTitleDOMElement( subtitle );
@@ -35,5 +35,7 @@ const NewspackSubtitlePanel = ( { subtitle } ) => {
 
 registerPlugin( 'plugin-document-setting-panel-newspack-subtitle', {
 	render: connectWithSelect( NewspackSubtitlePanel ),
-	icon: null,
+	// `null` suppresses registerPlugin's default plugins icon at runtime, but the
+	// upstream WPPlugin type only admits `IconType` -- boundary assertion to keep it.
+	icon: null as never,
 } );

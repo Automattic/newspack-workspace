@@ -31,5 +31,7 @@ const NewspackSummaryPanel = () => {
 
 registerPlugin( 'plugin-document-setting-panel-newspack-summary', {
 	render: connectWithSelect( NewspackSummaryPanel ),
-	icon: null,
+	// `null` suppresses registerPlugin's default plugins icon at runtime, but the
+	// upstream WPPlugin type only admits `IconType` -- boundary assertion to keep it.
+	icon: null as never,
 } );

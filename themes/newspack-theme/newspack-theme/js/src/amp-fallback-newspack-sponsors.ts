@@ -11,8 +11,8 @@
 	const supportToggle = document.getElementById( 'sponsor-info-toggle' );
 
 	if ( null !== supportToggle ) {
-		const supportLabel = supportToggle.parentNode,
-			supportInfo = document.getElementById( 'sponsor-info' ),
+		const supportLabel = supportToggle.parentNode as HTMLElement,
+			supportInfo = document.getElementById( 'sponsor-info' ) as HTMLElement,
 			supportToggleTextContain = supportToggle.getElementsByTagName( 'span' )[ 0 ],
 			supportToggleTextDefault = supportToggleTextContain.innerText;
 
