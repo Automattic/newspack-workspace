@@ -51,15 +51,15 @@ const makeWindow = ( over: Partial< GatesWindow > = {} ): GatesWindow => ( {
 } );
 
 describe( 'PaidReaderConversionSection empty states', () => {
-	it( 'renders no_opportunity when there are no paywall impressions', () => {
+	it( 'renders no_opportunity when there are no paid access gate impressions', () => {
 		const current = makeWindow( { paywall_impressions_total: 0, paywall_conversions_total: 0 } );
 		const { container } = render( <PaidReaderConversionSection current={ current } previous={ null } /> );
 
 		expect( container.querySelector( '[data-empty-state="no_opportunity"]' ) ).toBeInTheDocument();
 		// Body is asserted on the container — the Notice's speak() duplicates it into a
 		// global live-region, so a screen-level text query would match twice.
-		expect( container ).toHaveTextContent( 'No paywall impressions in this timeframe' );
-		expect( screen.queryByText( 'Paywall Conversion (Direct)' ) ).not.toBeInTheDocument();
+		expect( container ).toHaveTextContent( 'No paid access gate impressions in this timeframe' );
+		expect( screen.queryByText( 'Paid access gate Conversion (Direct)' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'renders no_conversions with the impression count interpolated when impressions > 0 and conversions = 0', () => {
@@ -67,8 +67,8 @@ describe( 'PaidReaderConversionSection empty states', () => {
 		const { container } = render( <PaidReaderConversionSection current={ current } previous={ null } /> );
 
 		expect( container.querySelector( '[data-empty-state="no_conversions"]' ) ).toBeInTheDocument();
-		expect( container ).toHaveTextContent( 'Your paywall was shown 17 times' );
-		expect( screen.queryByText( 'Paywall Conversion (Direct)' ) ).not.toBeInTheDocument();
+		expect( container ).toHaveTextContent( 'Your paid access gate was shown 17 times' );
+		expect( screen.queryByText( 'Paid access gate Conversion (Direct)' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'renders the four scorecards (no empty state) when the section has data', () => {
@@ -83,13 +83,13 @@ describe( 'PaidReaderConversionSection empty states', () => {
 		const { container } = render( <PaidReaderConversionSection current={ current } previous={ null } /> );
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
-		expect( screen.getByText( 'Paywall Conversion (Direct)' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Total Paywall Revenue (Direct)' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Paid access gate Conversion (Direct)' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Total Paid access gate Revenue (Direct)' ) ).toBeInTheDocument();
 	} );
 
 	it( 'does NOT show an empty state when the Direct scalar errored — renders the scorecards instead', () => {
 		// An errored Direct query leaves paywall_impressions_total at 0 (null denominator).
-		// That must not be mistaken for a genuine "no paywall impressions" empty state — the
+		// That must not be mistaken for a genuine "no paid access gate impressions" empty state — the
 		// cards should render so the errored one surfaces its own error treatment.
 		const current = makeWindow( {
 			paywall_impressions_total: 0,
@@ -99,8 +99,8 @@ describe( 'PaidReaderConversionSection empty states', () => {
 		const { container } = render( <PaidReaderConversionSection current={ current } previous={ null } /> );
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
-		expect( container ).not.toHaveTextContent( 'No paywall impressions in this timeframe' );
-		expect( screen.getByText( 'Paywall Conversion (Direct)' ) ).toBeInTheDocument();
+		expect( container ).not.toHaveTextContent( 'No paid access gate impressions in this timeframe' );
+		expect( screen.getByText( 'Paid access gate Conversion (Direct)' ) ).toBeInTheDocument();
 	} );
 
 	it( 'does NOT show an empty state when the Influenced scalar errored — renders the scorecards instead', () => {
@@ -118,9 +118,9 @@ describe( 'PaidReaderConversionSection empty states', () => {
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
 		// Assert on the container, not `screen`: the Notice's speak() leaves the
 		// no_conversions copy in a global live-region from an earlier test.
-		expect( container ).not.toHaveTextContent( 'No paywall conversions in this timeframe' );
+		expect( container ).not.toHaveTextContent( 'No paid access gate conversions in this timeframe' );
 		// Scorecards render; the errored Influenced card shows the shared error note.
-		expect( screen.getByText( 'Paywall Conversion (Influenced, 14d)' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Paid access gate Conversion (Influenced, 14d)' ) ).toBeInTheDocument();
 	} );
 
 	it( 'applies the per-card count fallback inside a normal section render', () => {

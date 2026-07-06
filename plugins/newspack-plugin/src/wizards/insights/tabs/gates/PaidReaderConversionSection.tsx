@@ -3,11 +3,11 @@
  *
  * Four scorecards in a single row covering paywall-gate conversion
  * (Direct attribution, Influenced 14-day lookback) plus revenue
- * from same-session paywall conversions.
+ * from same-session paid access gate conversions.
  *
  * When the section would render as a row of zeros it swaps the grid for a
  * single `<EmptyMetricSection>` (detection stays here, not in the orchestrator):
- *   - no paywall impressions in the window → `no_opportunity`
+ *   - no paid access gate impressions in the window → `no_opportunity`
  *   - impressions but no conversions       → `no_conversions` (with the impression count)
  *   - otherwise the four scorecards, each carrying its count fallback so an
  *     individual zero card reads as "0 of N" / "0 conversions" rather than 0%/$0.
@@ -37,12 +37,12 @@ const HEADING_ID = 'newspack-insights-gates-paid-heading';
 const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversionSectionProps ) => {
 	const title = __( 'Paid reader conversion', 'newspack-plugin' );
 	const caption = __(
-		'How effectively paywall gates convert visitors into paying subscribers. Direct counts subscriptions that happened in the same session as a paywall impression. Influenced counts subscriptions that happened in a later session within 14 days of a paywall impression. Revenue is computed from actual Woo orders, not gate-event amounts.',
+		'How effectively paid access gates convert visitors into paying subscribers. Direct counts subscriptions that happened in the same session as a paid access gate impression. Influenced counts subscriptions that happened in a later session within 14 days of a paid access gate impression. Revenue is computed from actual Woo orders, not gate-event amounts.',
 		'newspack-plugin'
 	);
-	const impressionsLabel = __( 'paywall impressions', 'newspack-plugin' );
+	const impressionsLabel = __( 'paid access gate impressions', 'newspack-plugin' );
 	// The Influenced rate is converter-denominated (NPPD-1764): its denominator is all
-	// new subscribers in the window, not paywall impressions.
+	// new subscribers in the window, not paid access gate impressions.
 	const subscribersLabel = __( 'subscribers', 'newspack-plugin' );
 	const conversionsLabel = __( 'conversions', 'newspack-plugin' );
 
@@ -54,7 +54,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 	// coercing the totals to 0. A zero total is only a *genuine* empty state when
 	// both source metrics actually computed; if either errored we fall through to
 	// the scorecards so each card surfaces its own error treatment rather than a
-	// misleading "no paywall impressions" / "no conversions" empty state. (Direct and
+	// misleading "no paid access gate impressions" / "no conversions" empty state. (Direct and
 	// Influenced are separate queries and can fail independently.)
 	const dataKnown = current.paywall_conversion_direct.state !== 'error' && current.paywall_conversion_influenced_14d.state !== 'error';
 
@@ -66,7 +66,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				caption={ caption }
 				state="no_opportunity"
 				body={ __(
-					'No paywall impressions in this timeframe. Your paywall gates may not be reaching readers — could be a placement question, a frequency question, or simply that the timeframe doesn’t include enough traffic. See the per-gate breakdown below for configuration details.',
+					'No paid access gate impressions in this timeframe. Your paid access gates may not be reaching readers — could be a placement question, a frequency question, or simply that the timeframe doesn’t include enough traffic. See the per-gate breakdown below for configuration details.',
 					'newspack-plugin'
 				) }
 			/>
@@ -80,7 +80,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				state="no_conversions"
 				signalCount={ impressions }
 				body={ __(
-					'No paywall conversions in this timeframe. Your paywall was shown {N} times, but none led to a paid subscription within the 14-day attribution window. Worth a look at your checkout flow or pricing. See the per-gate breakdown below.',
+					'No paid access gate conversions in this timeframe. Your paid access gate was shown {N} times, but none led to a paid subscription within the 14-day attribution window. Worth a look at your checkout flow or pricing. See the per-gate breakdown below.',
 					'newspack-plugin'
 				) }
 			/>
@@ -93,9 +93,9 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 			<div className="newspack-insights__metric-grid">
 				<MetricCard
 					{ ...scalarToMetricCardProps( {
-						label: __( 'Paywall Conversion (Direct)', 'newspack-plugin' ),
+						label: __( 'Paid access gate Conversion (Direct)', 'newspack-plugin' ),
 						description: __(
-							'Sessions with a subscription after a paywall impression ÷ sessions with a paywall impression',
+							'Sessions with a subscription after a paid access gate impression ÷ sessions with a paid access gate impression',
 							'newspack-plugin'
 						),
 						current: current.paywall_conversion_direct,
@@ -109,9 +109,9 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				/>
 				<MetricCard
 					{ ...scalarToMetricCardProps( {
-						label: __( 'Paywall Conversion (Influenced, 14d)', 'newspack-plugin' ),
+						label: __( 'Paid access gate Conversion (Influenced, 14d)', 'newspack-plugin' ),
 						description: __(
-							'Subscribers whose conversion followed a paywall exposure in a prior session within 14 days ÷ all new subscribers',
+							'Subscribers whose conversion followed a paid access gate exposure in a prior session within 14 days ÷ all new subscribers',
 							'newspack-plugin'
 						),
 						current: current.paywall_conversion_influenced_14d,
@@ -125,9 +125,9 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				/>
 				<MetricCard
 					{ ...scalarToMetricCardProps( {
-						label: __( 'Total Paywall Revenue (Direct)', 'newspack-plugin' ),
+						label: __( 'Total Paid access gate Revenue (Direct)', 'newspack-plugin' ),
 						description: __(
-							'Sum of Woo order totals from subscriptions completed in the same session as a paywall impression',
+							'Sum of Woo order totals from subscriptions completed in the same session as a paid access gate impression',
 							'newspack-plugin'
 						),
 						current: current.total_paywall_revenue_direct,
@@ -136,7 +136,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 						// impressions come from the section total — but only when the Direct
 						// scalar computed. Otherwise `impressions` is an unreliable 0, so pass
 						// undefined and let the card render its own value/error treatment
-						// instead of a misleading "No paywall impressions".
+						// instead of a misleading "No paid access gate impressions".
 						zeroFallback: {
 							numerator: current.total_paywall_revenue_direct.denominator ?? undefined,
 							denominator: dataKnown ? impressions : undefined,
@@ -148,8 +148,8 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				/>
 				<MetricCard
 					{ ...scalarToMetricCardProps( {
-						label: __( 'Avg Revenue per Paywall Conversion', 'newspack-plugin' ),
-						description: __( 'Total paywall revenue ÷ paywall conversions', 'newspack-plugin' ),
+						label: __( 'Avg Revenue per Paid access gate Conversion', 'newspack-plugin' ),
+						description: __( 'Total paid access gate revenue ÷ paid access gate conversions', 'newspack-plugin' ),
 						current: current.avg_revenue_per_paywall_conversion,
 						previous: previous?.avg_revenue_per_paywall_conversion,
 						zeroFallback: {
