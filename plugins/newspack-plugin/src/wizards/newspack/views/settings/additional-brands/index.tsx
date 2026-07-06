@@ -22,6 +22,9 @@ import { TAB_PATH } from './constants';
 
 const { Route, Switch, useHistory, useRouteMatch, useLocation } = Router;
 
+// The `/wp/v2/media/<id>` REST response; only the fields this view reads are declared.
+type MediaAttachment = Record< string, unknown > & { source_url?: string };
+
 export default function AdditionalBrands() {
 	const { wizardApiFetch, isFetching, cache, errorMessage, resetError } = useWizardApiFetch( 'newspack-settings/additional-brands' );
 
@@ -129,7 +132,7 @@ export default function AdditionalBrands() {
 		if ( ! attachmentId ) {
 			return;
 		}
-		wizardApiFetch(
+		wizardApiFetch< MediaAttachment >(
 			{
 				path: `/wp/v2/media/${ attachmentId }`,
 			},
@@ -144,10 +147,13 @@ export default function AdditionalBrands() {
 												..._brand,
 												meta: {
 													..._brand.meta,
+													// The full media REST payload is stored as-is; it satisfies the
+													// `Attachment` shape at runtime but TS can't verify that from
+													// a partially-declared response type.
 													_logo: {
 														...attachment,
 														url: attachment.source_url,
-													},
+													} as Brand[ 'meta' ][ '_logo' ],
 												},
 										  }
 										: _brand

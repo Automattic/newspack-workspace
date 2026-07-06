@@ -49,7 +49,7 @@ export const DonationAmounts = () => {
 
 	const { amounts, currencySymbol, tiered, disabledFrequencies, minimumDonation, trashed } = wizardData.donation_data;
 
-	const changeHandler = ( path: ( string | number )[] ) => ( value: any ) =>
+	const changeHandler = ( path: ( string | number )[] ) => ( value: string | boolean ) =>
 		updateWizardSettings( {
 			slug: AUDIENCE_DONATIONS_WIZARD_SLUG,
 			path: [ 'donation_data', ...path ],

@@ -13,7 +13,7 @@ import { Button, Card, SelectControl, Wizard, withWizard, Notice } from '../../.
 import WizardsTab from '../../../wizards-tab';
 import WizardSection from '../../../wizards-section';
 
-function AudienceSubscriptions( props: Record< string, any >, ref: React.ForwardedRef< HTMLDivElement > ) {
+function AudienceSubscriptions( props: object, ref: React.ForwardedRef< HTMLDivElement > ) {
 	const [ inFlight, setInFlight ] = useState( false );
 	const [ primaryProduct, setPrimaryProduct ] = useState( window.newspackAudienceSubscriptions.primary_product );
 

@@ -40,6 +40,9 @@ declare global {
 			};
 			// Products purchasable via gifting / countdown CTAs.
 			available_products?: PurchasableProductOption[];
+			// Front-end URL of the institutional (IP-range) access endpoint, localized
+			// by the Content Gates wizard for the "Copy access page URL" action.
+			institutional_access_url?: string;
 			// Optional: consumers guard with `?.`/fallbacks because the
 			// payload can be absent (plugin filter strips it, non-Audience
 			// mount, HMR reseed) — keep the type honest about that.

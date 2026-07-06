@@ -29,7 +29,7 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 	// Function to fetch fresh data
 	const fetchFreshData = () => {
 		setLocalIsFetching( true );
-		wizardApiFetch(
+		wizardApiFetch< PageData >(
 			{
 				path: `/newspack/v1/wizard/newspack-settings/accessibility-statement`,
 				method: 'GET',
@@ -60,7 +60,7 @@ export default function AccessibilityStatement( { isFetching }: AccessibilitySta
 
 	const createPage = () => {
 		setLocalIsFetching( true );
-		wizardApiFetch(
+		wizardApiFetch< PageData >(
 			{
 				path: '/newspack/v1/wizard/newspack-settings/accessibility-statement',
 				method: 'POST',

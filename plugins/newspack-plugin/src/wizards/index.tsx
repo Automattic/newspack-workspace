@@ -24,7 +24,18 @@ import '../shared/js/public-path';
 const pageParam = new URLSearchParams( window.location.search ).get( 'page' ) ?? '';
 const rootElement = document.getElementById( pageParam );
 
-const components: Record< string, any > = {
+type WizardEntryPoint = {
+	label: string;
+	// `React.ElementType` (not `ComponentType`): a few wrapped views declare their
+	// own props as `WithWizardInjectedProps` — the shape `withWizard` injects at
+	// runtime — which makes `withWizard`'s generic `P` resolve to that type and
+	// its class component require it as an external prop too. That's a
+	// pre-existing gap in `withWizard`'s typing (not fixed here); `ElementType`
+	// is the loosest non-`any` React type that still accommodates it.
+	component: React.ElementType;
+};
+
+const components: Record< string, WizardEntryPoint > = {
 	/**
 	 * `page` param with `newspack-*`.
 	 */

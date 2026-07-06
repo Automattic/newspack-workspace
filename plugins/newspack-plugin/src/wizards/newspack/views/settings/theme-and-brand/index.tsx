@@ -43,7 +43,7 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 	}
 
 	const finishSetup = () => {
-		wizardApiFetch(
+		wizardApiFetch< ThemeData >(
 			{
 				data,
 				path: '/newspack/v1/wizard/newspack-setup-wizard/complete',
@@ -61,7 +61,7 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 
 	async function save() {
 		return new Promise( resolve =>
-			wizardApiFetch(
+			wizardApiFetch< ThemeData >(
 				{
 					data,
 					path: '/newspack/v1/wizard/newspack-setup-wizard/theme',
@@ -79,7 +79,7 @@ const ThemeBrand = ( { isPartOfSetup = false } ) => {
 	}
 
 	useEffect( () => {
-		wizardApiFetch(
+		wizardApiFetch< ThemeData >(
 			{
 				path: '/newspack/v1/wizard/newspack-setup-wizard/theme',
 			},

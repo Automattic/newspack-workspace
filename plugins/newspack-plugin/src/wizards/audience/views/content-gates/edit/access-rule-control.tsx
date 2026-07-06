@@ -20,14 +20,15 @@ interface DynamicRuleConfig< T > {
 	mapItem: ( item: T ) => RuleOption;
 }
 
-function dynamicRule< T >( config: DynamicRuleConfig< T > ): DynamicRuleConfig< T > {
-	return config;
+// Type-erase T to unknown so differently-shaped rule configs can share one heterogeneous record.
+function dynamicRule< T >( config: DynamicRuleConfig< T > ): DynamicRuleConfig< unknown > {
+	return config as DynamicRuleConfig< unknown >;
 }
 
 /**
  * Rules whose options should be fetched dynamically via the REST API.
  */
-const DYNAMIC_OPTION_RULES: Record< string, DynamicRuleConfig< any > > = {
+const DYNAMIC_OPTION_RULES: Record< string, DynamicRuleConfig< unknown > > = {
 	institution: dynamicRule< Institution >( {
 		path: '/wp/v2/np_institution?per_page=100&context=edit',
 		mapItem: item => ( { value: item.id, label: item.title.raw } ),
