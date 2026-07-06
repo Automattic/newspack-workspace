@@ -109,7 +109,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 			<div className="newspack-insights__metric-grid newspack-insights__metric-grid--pair">
 				<MetricCard
 					{ ...scalarToMetricCardProps( {
-						label: __( 'Regwall Conversion (Direct)', 'newspack-plugin' ),
+						label: __( 'Registered access gate Conversion (Direct)', 'newspack-plugin' ),
 						description: __(
 							'Sessions with a registration after a registration gate impression ÷ sessions with a registration gate impression',
 							'newspack-plugin'
@@ -129,7 +129,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 				/>
 				<MetricCard
 					{ ...scalarToMetricCardProps( {
-						label: __( 'Regwall Conversion (Influenced, 7d)', 'newspack-plugin' ),
+						label: __( 'Registered access gate Conversion (Influenced, 7d)', 'newspack-plugin' ),
 						description: __(
 							'Registrants whose registration followed a registration-gate view in a prior session within 7 days ÷ all new registrations',
 							'newspack-plugin'

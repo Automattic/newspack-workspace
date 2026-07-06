@@ -23,7 +23,7 @@ const scalar = ( overrides: Partial< GatesScalarMetric > = {} ): GatesScalarMetr
 describe( 'gates scalarToMetricCardProps — data_missing routing', () => {
 	it( 'returns dataMissing:true (no value) when populated and data_missing is true', () => {
 		const props = scalarToMetricCardProps( {
-			label: 'Paywall Conversion (Direct)',
+			label: 'Paid access gate Conversion (Direct)',
 			description: 'd',
 			current: scalar( { data_missing: true } ),
 		} );
@@ -34,7 +34,7 @@ describe( 'gates scalarToMetricCardProps — data_missing routing', () => {
 	it( 'returns the normal value mapping when populated and data_missing is false', () => {
 		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		const props: any = scalarToMetricCardProps( {
-			label: 'Paywall Conversion (Direct)',
+			label: 'Paid access gate Conversion (Direct)',
 			description: 'd',
 			current: scalar( { data_missing: false } ),
 		} );
@@ -44,7 +44,7 @@ describe( 'gates scalarToMetricCardProps — data_missing routing', () => {
 
 	it( 'lets the error treatment win over data_missing', () => {
 		const props = scalarToMetricCardProps( {
-			label: 'Paywall Conversion (Direct)',
+			label: 'Paid access gate Conversion (Direct)',
 			description: 'd',
 			current: scalar( { state: 'error', data_missing: true, error_message: 'BQ down' } ),
 		} );

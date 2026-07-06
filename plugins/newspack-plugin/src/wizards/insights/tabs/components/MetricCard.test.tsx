@@ -43,13 +43,13 @@ describe( 'MetricCard value tooltip', () => {
 } );
 
 describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
-	const PAYWALL = { attemptsLabel: 'paywall attempts', conversionsLabel: 'conversions' };
+	const PAYWALL = { attemptsLabel: 'paid access gate attempts', conversionsLabel: 'conversions' };
 
 	describe( 'rate card (format="percent")', () => {
 		it( 'renders "0 of N" (count, no % suffix) when numerator is 0 and denominator > 0', () => {
 			render(
 				<MetricCard
-					label="Paywall conversion (Direct)"
+					label="Paid access gate conversion (Direct)"
 					value={ 0 }
 					format="percent"
 					zeroFallback={ { numerator: 0, denominator: 17, ...PAYWALL } }
@@ -65,10 +65,10 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 			expect( screen.getByText( '0 of 1,234,567' ) ).toBeInTheDocument();
 		} );
 
-		it( 'renders the em-dash + "No paywall attempts in this timeframe" when denominator is 0', () => {
+		it( 'renders the em-dash + "No paid access gate attempts in this timeframe" when denominator is 0', () => {
 			render( <MetricCard label="Rate" value={ 0 } format="percent" zeroFallback={ { numerator: 0, denominator: 0, ...PAYWALL } } /> );
 			expect( screen.getByLabelText( 'Not applicable' ) ).toHaveTextContent( '—' );
-			expect( screen.getByText( 'No paywall attempts in this timeframe' ) ).toBeInTheDocument();
+			expect( screen.getByText( 'No paid access gate attempts in this timeframe' ) ).toBeInTheDocument();
 		} );
 
 		it( 'falls through to the normal percentage when numerator and denominator are both positive', () => {
@@ -82,7 +82,7 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 		it( 'renders "0 conversions" when conversions are 0 and attempts > 0', () => {
 			render(
 				<MetricCard
-					label="Total paywall revenue (Direct)"
+					label="Total paid access gate revenue (Direct)"
 					value={ 0 }
 					format="currency"
 					zeroFallback={ { numerator: 0, denominator: 17, currencyRole: 'total', ...PAYWALL } }
@@ -92,7 +92,7 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 			expect( screen.queryByText( '$0.00' ) ).not.toBeInTheDocument();
 		} );
 
-		it( 'renders the em-dash + "No paywall attempts in this timeframe" when attempts are 0', () => {
+		it( 'renders the em-dash + "No paid access gate attempts in this timeframe" when attempts are 0', () => {
 			render(
 				<MetricCard
 					label="Total"
@@ -102,7 +102,7 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 				/>
 			);
 			expect( screen.getByLabelText( 'Not applicable' ) ).toHaveTextContent( '—' );
-			expect( screen.getByText( 'No paywall attempts in this timeframe' ) ).toBeInTheDocument();
+			expect( screen.getByText( 'No paid access gate attempts in this timeframe' ) ).toBeInTheDocument();
 		} );
 	} );
 
@@ -110,7 +110,7 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 		it( 'renders the em-dash + "No conversions in this timeframe" when conversions are 0 but attempts > 0', () => {
 			render(
 				<MetricCard
-					label="Avg revenue per paywall conversion"
+					label="Avg revenue per paid access gate conversion"
 					value={ 0 }
 					format="currency"
 					zeroFallback={ { numerator: 0, denominator: 17, currencyRole: 'average', ...PAYWALL } }
@@ -120,7 +120,7 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 			expect( screen.getByText( 'No conversions in this timeframe' ) ).toBeInTheDocument();
 		} );
 
-		it( 'renders "No paywall attempts in this timeframe" when attempts are 0', () => {
+		it( 'renders "No paid access gate attempts in this timeframe" when attempts are 0', () => {
 			render(
 				<MetricCard
 					label="Avg"
@@ -129,14 +129,14 @@ describe( 'MetricCard zeroFallback (NPPD-1694)', () => {
 					zeroFallback={ { numerator: 0, denominator: 0, currencyRole: 'average', ...PAYWALL } }
 				/>
 			);
-			expect( screen.getByText( 'No paywall attempts in this timeframe' ) ).toBeInTheDocument();
+			expect( screen.getByText( 'No paid access gate attempts in this timeframe' ) ).toBeInTheDocument();
 		} );
 	} );
 
 	it( 'renders a custom plural opportunity label', () => {
 		render(
 			<MetricCard
-				label="Regwall conversion"
+				label="Registered access gate conversion"
 				value={ 0 }
 				format="percent"
 				zeroFallback={ { numerator: 0, denominator: 0, attemptsLabel: 'registration gate impressions' } }
