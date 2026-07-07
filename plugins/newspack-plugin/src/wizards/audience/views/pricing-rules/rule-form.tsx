@@ -180,6 +180,18 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 			addNotice( { message: __( 'Choose a goal for this rule.', 'newspack-plugin' ), type: 'error', id: 'pricing-rule-path' } );
 			return;
 		}
+		// A blank flat value is "not set" — distinct from a deliberate 0. The
+		// schedule model already drops empty steps and refuses to save with none;
+		// mirror that here instead of silently coercing blank to $0 (NPPD-1854). A
+		// typed 0 is still allowed (an intentional free price).
+		if ( ! isSchedule && String( value ).trim() === '' ) {
+			addNotice( {
+				message: __( 'Enter a price for this rule.', 'newspack-plugin' ),
+				type: 'error',
+				id: 'pricing-rule-value',
+			} );
+			return;
+		}
 		setIsSaving( true );
 		const body: Record< string, unknown > = {
 			title,
@@ -647,7 +659,11 @@ export default function RuleForm( { isNew, rule, vocab, onDone }: RuleFormProps 
 								'newspack-plugin'
 							) }
 						/>
-						<RulePreview body={ previewBody } />
+						{ ! isSchedule && String( value ).trim() === '' ? (
+							<p className="newspack-pricing-rules__muted">{ __( 'Enter a price to see the impact preview.', 'newspack-plugin' ) }</p>
+						) : (
+							<RulePreview body={ previewBody } />
+						) }
 					</div>
 				</>
 			) }
