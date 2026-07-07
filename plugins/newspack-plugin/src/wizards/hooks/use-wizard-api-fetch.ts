@@ -208,7 +208,6 @@ export function useWizardApiFetch( slug: string ) {
 
 			// Cache exists and is not empty, return it.
 			if ( isCached && cachedMethod ) {
-				setError( null );
 				on( 'onSuccess', cachedMethod );
 				return cachedMethod;
 			}

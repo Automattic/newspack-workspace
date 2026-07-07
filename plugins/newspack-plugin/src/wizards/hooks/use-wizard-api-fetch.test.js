@@ -75,4 +75,31 @@ describe( 'useWizardApiFetch', () => {
 		expect( screen.getByTestId( 'error' ).textContent ).toBe( 'Boom' );
 		expect( errorStoreWrites() ).toEqual( [] );
 	} );
+
+	it( 'clears a stale error when the slug changes (NPPM-2733)', async () => {
+		// The loop-free slug-reset effect must clear a prior slug's error so it
+		// can't leak into a new slug. Added in response to earlier review.
+		mockWizardApiFetch.mockRejectedValue( {
+			message: 'Boom',
+			code: 'boom_error',
+			data: { status: 500 },
+		} );
+
+		function SlugProbe( { slug } ) {
+			hook = useWizardApiFetch( slug );
+			return hook.errorMessage ? <div data-testid="error">{ hook.errorMessage }</div> : null;
+		}
+
+		const { rerender } = render( <SlugProbe slug="slug-a" /> );
+
+		// Path matches the slug so the returned promise is the rejecting one.
+		await act( async () => {
+			await hook.wizardApiFetch( { path: 'slug-a' } ).catch( () => {} );
+		} );
+		expect( screen.getByTestId( 'error' ).textContent ).toBe( 'Boom' );
+
+		// Changing the slug must clear the stale error.
+		rerender( <SlugProbe slug="slug-b" /> );
+		expect( screen.queryByTestId( 'error' ) ).toBeNull();
+	} );
 } );
