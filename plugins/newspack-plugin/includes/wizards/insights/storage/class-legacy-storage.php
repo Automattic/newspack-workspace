@@ -1054,6 +1054,22 @@ class Legacy_Storage implements Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * Mirrors HPOS_Storage::get_stale_registered_users(). Base population and
+	 * exclusion logic are identical — the only difference is using
+	 * posts/postmeta for donation orders instead of wc_orders/wc_orders_meta,
+	 * and wc_order_product_lookup (cross-backend) for the product filter. See
+	 * the HPOS variant for the full Phase-A approximation rationale.
+	 *
+	 * Both exclusion sets (active non-donation subscribers; trailing-365-day
+	 * donors) are pre-aggregated to DISTINCT customer_ids and LEFT-JOINed
+	 * against `u.ID`, keeping only rows where both sides are NULL — an
+	 * anti-join, not a correlated `NOT IN (subquery)` (MySQL's slowest
+	 * anti-join form). Same approach as
+	 * {@see self::get_churned_subscribers_in_window()}. The base-population /
+	 * restricted-role checks stay as correlated `EXISTS` — each is a single
+	 * indexed lookup on `usermeta.user_id`, not a multi-join subquery, so they
+	 * are not a timeout risk.
+	 *
 	 * @return int
 	 */
 	public function get_stale_registered_users(): int {
@@ -1061,12 +1077,6 @@ class Legacy_Storage implements Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
-		// Mirrors HPOS_Storage::get_stale_registered_users(). Base population and
-		// exclusion logic are identical — the only difference is using
-		// posts/postmeta for donation orders instead of wc_orders/wc_orders_meta,
-		// and wc_order_product_lookup (cross-backend) for the product filter.
-		// See the HPOS variant for the full Phase-A approximation rationale.
-		//
 		// Phase-A approximation (M1): hardcodes 'subscriber'/'customer' as reader
 		// roles and 'administrator'/'editor' as restricted roles — does NOT honor
 		// the filterable newspack_reader_user_roles / newspack_reader_restricted_roles
@@ -1074,6 +1084,30 @@ class Legacy_Storage implements Storage_Interface {
 		// (acceptable upper-bound for Phase A; adjust in a later iteration).
 		$sql = "SELECT COUNT(DISTINCT u.ID)
 			FROM {$prefix}users u
+			LEFT JOIN (
+				SELECT DISTINCT CAST(cust.meta_value AS UNSIGNED) AS customer_id
+				FROM {$prefix}posts p
+				JOIN {$prefix}postmeta cust
+					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE p.post_type = 'shop_subscription'
+				  AND p.post_status = 'wc-active'
+				  AND oim.meta_value NOT IN ($donations)
+			) AS active_subscribers ON active_subscribers.customer_id = u.ID
+			LEFT JOIN (
+				SELECT DISTINCT CAST(cust2.meta_value AS UNSIGNED) AS customer_id
+				FROM {$prefix}posts p2
+				JOIN {$prefix}postmeta cust2
+					ON cust2.post_id = p2.ID AND cust2.meta_key = '_customer_user'
+				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p2.ID
+				WHERE p2.post_type = 'shop_order'
+				  AND p2.post_status IN ('wc-completed', 'wc-processing')
+				  AND p2.post_date_gmt >= DATE_SUB(NOW(), INTERVAL 365 DAY)
+				  AND opl.product_id IN ($donations)
+			) AS recent_donors ON recent_donors.customer_id = u.ID
 			WHERE (
 				EXISTS (
 					SELECT 1 FROM {$prefix}usermeta um
@@ -1100,30 +1134,8 @@ class Legacy_Storage implements Storage_Interface {
 					OR um3.meta_value LIKE '%\"editor\"%'
 				  )
 			)
-			AND u.ID NOT IN (
-				SELECT DISTINCT CAST(cust.meta_value AS UNSIGNED)
-				FROM {$prefix}posts p
-				JOIN {$prefix}postmeta cust
-					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
-				JOIN {$prefix}woocommerce_order_items oi
-					ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
-				JOIN {$prefix}woocommerce_order_itemmeta oim
-					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
-				WHERE p.post_type = 'shop_subscription'
-				  AND p.post_status = 'wc-active'
-				  AND oim.meta_value NOT IN ($donations)
-			)
-			AND u.ID NOT IN (
-				SELECT DISTINCT CAST(cust2.meta_value AS UNSIGNED)
-				FROM {$prefix}posts p2
-				JOIN {$prefix}postmeta cust2
-					ON cust2.post_id = p2.ID AND cust2.meta_key = '_customer_user'
-				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p2.ID
-				WHERE p2.post_type = 'shop_order'
-				  AND p2.post_status IN ('wc-completed', 'wc-processing')
-				  AND p2.post_date_gmt >= DATE_SUB(NOW(), INTERVAL 365 DAY)
-				  AND opl.product_id IN ($donations)
-			)";
+			AND active_subscribers.customer_id IS NULL
+			AND recent_donors.customer_id IS NULL";
 
 		return (int) $wpdb->get_var( $sql );
 	}

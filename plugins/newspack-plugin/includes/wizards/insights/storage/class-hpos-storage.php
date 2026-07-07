@@ -1130,6 +1130,34 @@ class HPOS_Storage implements Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * Base population: registered readers. The canonical Newspack signal is
+	 * the `np_reader` user meta written at reader registration time. As a
+	 * non-strict fallback we also include users in the 'subscriber' or
+	 * 'customer' roles even when np_reader is absent — mirroring
+	 * Reader_Activation::is_user_reader( $user, strict=false ). Admins and
+	 * editors are excluded (the default restricted_roles set).
+	 *
+	 * Phase-A approximation (M1): hardcodes 'subscriber'/'customer' as reader
+	 * roles and 'administrator'/'editor' as restricted roles — does NOT honor
+	 * the filterable newspack_reader_user_roles / newspack_reader_restricted_roles
+	 * hooks, so sites with custom reader roles may see a slightly off count
+	 * (acceptable upper-bound for Phase A; adjust in a later iteration).
+	 *
+	 * Exclusion sets: (a) users with ≥1 active non-donation subscription today;
+	 * (b) users who completed a donation order in the trailing 365 days. Both
+	 * are pre-aggregated to DISTINCT customer_ids and LEFT-JOINed against
+	 * `u.ID`, keeping only rows where both sides are NULL — an anti-join, not a
+	 * correlated `NOT IN (subquery)` (MySQL's slowest anti-join form). Same
+	 * approach as {@see self::get_churned_subscribers_in_window()}. The
+	 * base-population / restricted-role checks stay as correlated `EXISTS` —
+	 * each is a single indexed lookup on `usermeta.user_id`, not a multi-join
+	 * subquery, so they are not a timeout risk.
+	 *
+	 * Phase-A approximation: the "no BQ-tracked activity in 90 days"
+	 * refinement that distinguishes truly stale readers from recently-active
+	 * non-converters is deferred to Phase B (requires the BQ event export).
+	 * This count is an upper bound, not an exact match for the BQ definition.
+	 *
 	 * @return int
 	 */
 	public function get_stale_registered_users(): int {
@@ -1137,28 +1165,28 @@ class HPOS_Storage implements Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
-		// Base population: registered readers. The canonical Newspack signal is
-		// the `np_reader` user meta written at reader registration time. As a
-		// non-strict fallback we also include users in the 'subscriber' or
-		// 'customer' roles even when np_reader is absent — mirroring
-		// Reader_Activation::is_user_reader( $user, strict=false ). Admins and
-		// editors are excluded (the default restricted_roles set).
-		//
-		// Phase-A approximation (M1): hardcodes 'subscriber'/'customer' as reader
-		// roles and 'administrator'/'editor' as restricted roles — does NOT honor
-		// the filterable newspack_reader_user_roles / newspack_reader_restricted_roles
-		// hooks, so sites with custom reader roles may see a slightly off count
-		// (acceptable upper-bound for Phase A; adjust in a later iteration).
-		//
-		// Exclusion sub-queries: (a) users with ≥1 active non-donation subscription
-		// today; (b) users who completed a donation order in the trailing 365 days.
-		//
-		// Phase-A approximation: the "no BQ-tracked activity in 90 days"
-		// refinement that distinguishes truly stale readers from recently-active
-		// non-converters is deferred to Phase B (requires the BQ event export).
-		// This count is an upper bound, not an exact match for the BQ definition.
 		$sql = "SELECT COUNT(DISTINCT u.ID)
 			FROM {$prefix}users u
+			LEFT JOIN (
+				SELECT DISTINCT o.customer_id
+				FROM {$prefix}wc_orders o
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = o.id AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE o.type = 'shop_subscription'
+				  AND o.status = 'wc-active'
+				  AND oim.meta_value NOT IN ($donations)
+			) AS active_subscribers ON active_subscribers.customer_id = u.ID
+			LEFT JOIN (
+				SELECT DISTINCT o2.customer_id
+				FROM {$prefix}wc_orders o2
+				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = o2.id
+				WHERE o2.type = 'shop_order'
+				  AND o2.status IN ('wc-completed', 'wc-processing')
+				  AND o2.date_created_gmt >= DATE_SUB(NOW(), INTERVAL 365 DAY)
+				  AND opl.product_id IN ($donations)
+			) AS recent_donors ON recent_donors.customer_id = u.ID
 			WHERE (
 				EXISTS (
 					SELECT 1 FROM {$prefix}usermeta um
@@ -1185,26 +1213,8 @@ class HPOS_Storage implements Storage_Interface {
 					OR um3.meta_value LIKE '%\"editor\"%'
 				  )
 			)
-			AND u.ID NOT IN (
-				SELECT DISTINCT o.customer_id
-				FROM {$prefix}wc_orders o
-				JOIN {$prefix}woocommerce_order_items oi
-					ON oi.order_id = o.id AND oi.order_item_type = 'line_item'
-				JOIN {$prefix}woocommerce_order_itemmeta oim
-					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
-				WHERE o.type = 'shop_subscription'
-				  AND o.status = 'wc-active'
-				  AND oim.meta_value NOT IN ($donations)
-			)
-			AND u.ID NOT IN (
-				SELECT DISTINCT o2.customer_id
-				FROM {$prefix}wc_orders o2
-				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = o2.id
-				WHERE o2.type = 'shop_order'
-				  AND o2.status IN ('wc-completed', 'wc-processing')
-				  AND o2.date_created_gmt >= DATE_SUB(NOW(), INTERVAL 365 DAY)
-				  AND opl.product_id IN ($donations)
-			)";
+			AND active_subscribers.customer_id IS NULL
+			AND recent_donors.customer_id IS NULL";
 
 		return (int) $wpdb->get_var( $sql );
 	}
