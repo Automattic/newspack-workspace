@@ -125,13 +125,15 @@ export const payloadToCard = ( args: PayloadToCardArgs ): MetricCardProps | null
 	if ( current.not_configured ) {
 		return { label, description, notConfigured: true };
 	}
-	// Incalculable percentage (NEWS-2593): a populated rate with no population to
-	// divide from (`computable === false`, e.g. Completion Rate on a site that
-	// emits no scroll events) carries no signal. Render MetricCard's em-dash hero +
-	// explanatory line rather than a misleading `0%`. Scoped to rate format so
-	// count/currency/decimal good-zeros keep their real `0`. A generic fallback
-	// guarantees the em-dash even if a call site omits its per-metric copy.
-	if ( current.computable === false && current.type === 'rate' ) {
+	// Incalculable metric (NEWS-2593, NPPD-1861): a payload with
+	// `computable === false` carries no signal — render MetricCard's em-dash hero +
+	// explanatory line rather than a misleading `0%`/`$0.00`. Rates always get this
+	// treatment (with a generic fallback message, so a call site omitting its
+	// per-metric copy still avoids a fake `0%`). Other types (count/currency/
+	// decimal) get it only when the call site passes an explicit
+	// `notComputableMessage` — an intentional opt-in, so good-zeros on cards that
+	// never emit `computable: false` keep rendering their real `0`.
+	if ( current.computable === false && ( current.type === 'rate' || notComputableMessage ) ) {
 		return {
 			label,
 			description,
