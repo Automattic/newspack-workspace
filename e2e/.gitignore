@@ -6,3 +6,5 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+test-videos/
+.playwright-mcp/
