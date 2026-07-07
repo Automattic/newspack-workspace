@@ -20,6 +20,7 @@ foreach ( $notices as $notice ) {
 		$notice['notice'],
 		[
 			'id'             => uniqid( 'newspack-myaccount-notice-' ),
+			'type'           => 'warning',
 			'autohide'       => ! apply_filters( 'newspack_ui_notice_is_urgent', false, $notice['notice'] ),
 			'active_on_load' => true,
 		]

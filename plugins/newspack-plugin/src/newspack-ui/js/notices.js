@@ -15,16 +15,17 @@ domReady( function () {
 		} );
 	} );
 
-	// Activate on-load notices on the next tick so the live regions are already registered
-	// when their message text is injected — otherwise the announcement is missed, since a live
-	// region only announces content that changes after it has been parsed.
-	setTimeout( () => {
-		notices.forEach( notice => {
-			if ( notice.dataset.activeOnLoad === 'true' ) {
-				openNotice( notice );
-			}
-		} );
-	}, 100 );
+	// Activate after two frames so the live regions are parsed before their text is injected;
+	// a live region will not announce content that changed before it existed.
+	requestAnimationFrame( () =>
+		requestAnimationFrame( () => {
+			notices.forEach( notice => {
+				if ( notice.dataset.activeOnLoad === 'true' ) {
+					openNotice( notice );
+				}
+			} );
+		} )
+	);
 } );
 
 /**
@@ -106,7 +107,9 @@ function openNotice( element, remove = true ) {
 function closeNotice( element, remove = true ) {
 	element.classList.remove( 'active' );
 	if ( remove ) {
-		// Wait for the slide-out and slot collapse before removing from the DOM.
+		// Wait for the slide-out and slot collapse before removing from the DOM. This 500ms must
+		// stay >= the exit transition in _notices.scss (transform 250ms + height 200ms delayed 250ms);
+		// shortening it there without updating this clips the animation.
 		setTimeout( () => {
 			element.remove();
 		}, 500 );
@@ -125,7 +128,7 @@ function closeNotice( element, remove = true ) {
  * Dynamically create and show a snackbar notice.
  *
  * @param {string} message Message text to show.
- * @param {string} type    Severity; drives the ARIA announcement and, for 'error', shows the error icon.
+ * @param {string} type    Severity; drives the ARIA announcement and the type icon ('error' and 'warning').
  */
 function createNotice( message, type = 'success' ) {
 	let snackbar = document.querySelector( '.newspack-ui__snackbar' );
@@ -140,11 +143,11 @@ function createNotice( message, type = 'success' ) {
 	item.dataset.type = type;
 	item.setAttribute( 'data-autohide', 'true' );
 
-	const errorIcon = window.newspackUIData?.icons?.error;
-	if ( type === 'error' && errorIcon ) {
+	const typeIcon = window.newspackUIData?.icons?.[ type ];
+	if ( typeIcon ) {
 		const icon = document.createElement( 'span' );
 		icon.classList.add( 'newspack-ui__snackbar__icon' );
-		icon.innerHTML = errorIcon;
+		icon.innerHTML = typeIcon;
 		item.appendChild( icon );
 	}
 

@@ -20,7 +20,7 @@ class Newspack_UI {
 	 *
 	 * @var array
 	 */
-	private static $notices = [];
+	private static array $notices = [];
 
 	/**
 	 * Initialize hooks.
@@ -60,15 +60,30 @@ class Newspack_UI {
 			true
 		);
 
+		$icons = [];
+		foreach ( self::get_type_icons() as $type => $icon_name ) {
+			$icons[ $type ] = Newspack_UI_Icons::get_svg( $icon_name );
+		}
 		wp_localize_script(
 			'newspack-ui',
 			'newspackUIData',
 			[
-				'icons' => [
-					'error' => Newspack_UI_Icons::get_svg( 'error' ),
-				],
+				'icons' => $icons,
 			]
 		);
+	}
+
+	/**
+	 * Map of notice types to their Newspack UI icon name. Types absent from the
+	 * map render no icon.
+	 *
+	 * @return array<string, string> Notice type => icon name.
+	 */
+	private static function get_type_icons() {
+		return [
+			'error'   => 'error',
+			'warning' => 'caution',
+		];
 	}
 
 	/**
@@ -79,7 +94,7 @@ class Newspack_UI {
 	 *
 	 * @return string The notice ID.
 	 */
-	public static function add_notice( $message, $args = [] ) {
+	public static function add_notice( string $message, string|array $args = [] ): string {
 		if ( is_string( $args ) ) {
 			$args = [ 'type' => $args ];
 		}
@@ -122,8 +137,9 @@ class Newspack_UI {
 								<?php Newspack_UI_Icons::print_svg( 'closeSmall' ); ?>
 							</button>
 						<?php endif; ?>
-						<?php if ( 'error' === $notice['type'] ) : ?>
-							<span class="newspack-ui__snackbar__icon"><?php Newspack_UI_Icons::print_svg( 'error' ); ?></span>
+						<?php $type_icons = self::get_type_icons(); ?>
+						<?php if ( isset( $type_icons[ $notice['type'] ] ) ) : ?>
+							<span class="newspack-ui__snackbar__icon"><?php Newspack_UI_Icons::print_svg( $type_icons[ $notice['type'] ] ); ?></span>
 						<?php endif; ?>
 						<div class="newspack-ui__snackbar__content">
 							<?php echo wp_kses_post( $notice['message'] ); ?>
@@ -526,7 +542,8 @@ class Newspack_UI {
 			</div>
 			<div class="newspack-ui__stack newspack-ui__stack--horizontal">
 				<button id="show-snackbar-example" class="newspack-ui__button newspack-ui__button--primary">Show snackbar</button>
-				<button id="show-snackbar-persistent" class="newspack-ui__button newspack-ui__button--secondary">Show persistent snackbar</button>
+				<button id="show-snackbar-warning" class="newspack-ui__button newspack-ui__button--secondary">Show warning snackbar</button>
+				<button id="show-snackbar-persistent" class="newspack-ui__button newspack-ui__button--secondary">Show error snackbar</button>
 			</div>
 			<div class="newspack-ui__snackbar"></div>
 			<template id="snackbar-persistent-template">
@@ -543,6 +560,9 @@ class Newspack_UI {
 					const snackbar = document.querySelector( '.newspack-ui__snackbar' );
 					document.getElementById( 'show-snackbar-example' ).addEventListener( 'click', function() {
 						newspackUI.notices.createNotice( 'This is a snackbar message' );
+					} );
+					document.getElementById( 'show-snackbar-warning' ).addEventListener( 'click', function() {
+						newspackUI.notices.createNotice( 'This is a warning snackbar message', 'warning' );
 					} );
 					const template = document.getElementById( 'snackbar-persistent-template' );
 					document.getElementById( 'show-snackbar-persistent' ).addEventListener( 'click', function() {
