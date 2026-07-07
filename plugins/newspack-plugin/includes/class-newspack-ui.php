@@ -62,7 +62,7 @@ class Newspack_UI {
 
 		$icons = [];
 		foreach ( self::get_type_icons() as $type => $icon_name ) {
-			$icons[ $type ] = Newspack_UI_Icons::get_svg( $icon_name );
+			$icons[ $type ] = wp_kses( Newspack_UI_Icons::get_svg( $icon_name ), Newspack_UI_Icons::sanitize_svgs() );
 		}
 		wp_localize_script(
 			'newspack-ui',
@@ -102,7 +102,7 @@ class Newspack_UI {
 			$args,
 			[
 				'message'        => $message,
-				'type'           => 'success', // Severity; drives the ARIA announcement only ('error' announces assertively, anything else politely).
+				'type'           => 'success', // Severity; drives the ARIA announcement politeness ('error' assertive, else polite), the type icon, and the [data-type] styling.
 				'id'             => uniqid(),
 				'autohide'       => true, // If false, the notice will have a close button.
 				'active_on_load' => true, // Whether the notice should be visible on page load.
@@ -132,11 +132,6 @@ class Newspack_UI {
 						data-autohide="<?php echo $notice['autohide'] ? 'true' : 'false'; ?>"
 						data-active-on-load="<?php echo $notice['active_on_load'] ? 'true' : 'false'; ?>"
 					>
-						<?php if ( ! $notice['autohide'] ) : ?>
-							<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost-dark newspack-ui__snackbar__close" aria-label="<?php esc_attr_e( 'Close', 'newspack-plugin' ); ?>" title="<?php esc_attr_e( 'Close', 'newspack-plugin' ); ?>">
-								<?php Newspack_UI_Icons::print_svg( 'closeSmall' ); ?>
-							</button>
-						<?php endif; ?>
 						<?php $type_icons = self::get_type_icons(); ?>
 						<?php if ( isset( $type_icons[ $notice['type'] ] ) ) : ?>
 							<span class="newspack-ui__snackbar__icon"><?php Newspack_UI_Icons::print_svg( $type_icons[ $notice['type'] ] ); ?></span>
@@ -144,6 +139,11 @@ class Newspack_UI {
 						<div class="newspack-ui__snackbar__content">
 							<?php echo wp_kses_post( $notice['message'] ); ?>
 						</div>
+						<?php if ( ! $notice['autohide'] ) : ?>
+							<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost-dark newspack-ui__snackbar__close" aria-label="<?php esc_attr_e( 'Close', 'newspack-plugin' ); ?>" title="<?php esc_attr_e( 'Close', 'newspack-plugin' ); ?>">
+								<?php Newspack_UI_Icons::print_svg( 'closeSmall' ); ?>
+							</button>
+						<?php endif; ?>
 					</div>
 				<?php endforeach; ?>
 			</div>
@@ -548,11 +548,11 @@ class Newspack_UI {
 			<div class="newspack-ui__snackbar"></div>
 			<template id="snackbar-persistent-template">
 				<div class="newspack-ui__snackbar__item" data-type="error" data-autohide="false">
+					<span class="newspack-ui__snackbar__icon"><?php Newspack_UI_Icons::print_svg( 'error' ); ?></span>
+					<div class="newspack-ui__snackbar__content">This snackbar stays until dismissed. Please <a href="#">take action</a>.</div>
 					<button class="newspack-ui__button newspack-ui__button--icon newspack-ui__button--ghost-dark newspack-ui__snackbar__close" aria-label="<?php esc_attr_e( 'Close', 'newspack-plugin' ); ?>" title="<?php esc_attr_e( 'Close', 'newspack-plugin' ); ?>">
 						<?php Newspack_UI_Icons::print_svg( 'closeSmall' ); ?>
 					</button>
-					<span class="newspack-ui__snackbar__icon"><?php Newspack_UI_Icons::print_svg( 'error' ); ?></span>
-					<div class="newspack-ui__snackbar__content">This snackbar stays until dismissed. Please <a href="#">take action</a>.</div>
 				</div>
 			</template>
 			<script>
