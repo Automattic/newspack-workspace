@@ -218,6 +218,18 @@
 		}
 	}
 
+	// The submit button gets its default background/text color from the
+	// `button[type="submit"]` selector above. The after-success Continue button is
+	// a sibling of the (now-replaced) form and is rendered as `type="button"`, so
+	// it doesn't match that selector — give it the same default appearance here.
+	// The named-palette classes and inline colors copied from the submit button in
+	// view.js are more specific, so a customized button still overrides these.
+	&__continue {
+		background-color: #d33;
+		color: white;
+		cursor: pointer;
+	}
+
 	.nphp {
 		border: 0;
 		clip: rect(1px, 1px, 1px, 1px);
