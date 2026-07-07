@@ -82,34 +82,6 @@ class Insights_Wizard extends Wizard {
 	}
 
 	/**
-	 * Whether the Gates preview tab (Tab 4 / NPPD-1604) is enabled
-	 * for this environment.
-	 *
-	 * Independent from {@see self::is_enabled()} so the preview can
-	 * be flipped on only where it's wanted (development, staging,
-	 * canary), separately from the broader Insights wizard rollout.
-	 * Once Phase 2 (NPPD-1630) lands and the tab is no longer a
-	 * placeholder, this gate can be retired in favor of the standard
-	 * Insights flag plus a runtime feature-detection check.
-	 *
-	 * @return bool True when the Gates preview should appear in the
-	 *              Insights tab nav and have its REST route active.
-	 */
-	public static function is_gates_preview_enabled(): bool {
-		/**
-		 * Enables the Gates tab preview (Phase 1, placeholder data).
-		 *
-		 * @constant NEWSPACK_INSIGHTS_GATES_PREVIEW
-		 * @type     bool
-		 * @default  Gates preview tab hidden
-		 * @status   draft
-		 *
-		 * @example define( 'NEWSPACK_INSIGHTS_GATES_PREVIEW', true );
-		 */
-		return defined( 'NEWSPACK_INSIGHTS_GATES_PREVIEW' ) && NEWSPACK_INSIGHTS_GATES_PREVIEW;
-	}
-
-	/**
 	 * Whether the Advertising tab (Tab 8 / NPPD-1663) is enabled for this
 	 * environment.
 	 *
@@ -448,13 +420,13 @@ class Insights_Wizard extends Wizard {
 			// donation products, then checks for an active donation subscription or
 			// a qualifying donation order in the trailing
 			// DONATION_ACTIVITY_WINDOW_DAYS window (cached for a day). Gates is
-			// gated to the preview constant NEWSPACK_INSIGHTS_GATES_PREVIEW while
-			// Phase 1 (placeholder data) is being validated.
+			// always shown (true) alongside the other BQ-backed tabs; it is
+			// governed solely by the Insights feature flag.
 			'tabs'                => [
 				'audience'       => true,
 				'engagement'     => true,
 				'conversion'     => true,
-				'gates'          => self::is_gates_preview_enabled(),
+				'gates'          => true,
 				'prompts'        => true,
 				'subscribers'    => true,
 				'donors'         => self::has_donation_activity(),

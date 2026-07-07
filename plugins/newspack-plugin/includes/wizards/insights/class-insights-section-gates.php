@@ -8,10 +8,8 @@
  * underlying metric implementations to BigQuery via the Newspack
  * Manager query proxy.
  *
- * Visibility is gated by both the standard {@see Insights_Wizard::is_enabled()}
- * flag AND the additional {@see Insights_Wizard::is_gates_preview_enabled()}
- * constant — set `NEWSPACK_INSIGHTS_GATES_PREVIEW` to surface the
- * preview tab on a given environment.
+ * Visibility is gated by the standard {@see Insights_Wizard::is_enabled()}
+ * flag — the `NEWSPACK_INSIGHTS_ENABLED` constant.
  *
  * @package Newspack
  */
@@ -35,14 +33,10 @@ class Insights_Section_Gates {
 	const SECTION_NAME = 'Gates';
 
 	/**
-	 * Initialize. Bails early when either the parent Insights feature
-	 * flag or the Gates preview flag is off.
+	 * Initialize. Bails early when the Insights feature flag is off.
 	 */
 	public static function init() {
 		if ( ! Insights_Wizard::is_enabled() ) {
-			return;
-		}
-		if ( ! Insights_Wizard::is_gates_preview_enabled() ) {
 			return;
 		}
 		self::load_dependencies();
@@ -63,7 +57,7 @@ class Insights_Section_Gates {
 	/**
 	 * Register the Tab 4 REST route and warm the gates tab.
 	 *
-	 * Called only when NEWSPACK_INSIGHTS_GATES_PREVIEW is set (enforced by init()).
+	 * Called only when the Insights feature flag is enabled (enforced by init()).
 	 *
 	 * @return void
 	 */
