@@ -757,7 +757,11 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 		// product row, so SUM(lapsed_donors_in_window) across rows can
 		// exceed the scorecard. In Newspack's typical data shape a
 		// donor only has one recurring donation, so this reconciles
-		// cleanly in practice.
+		// cleanly in practice. The active-subscriber exclusion is a LEFT
+		// JOIN anti-join (`active.customer_id IS NULL`) against a
+		// pre-aggregated DISTINCT active-donation-subscriber derived table,
+		// not a correlated `NOT IN (subquery)` (MySQL's slowest anti-join
+		// form) — same approach as {@see self::get_lapsed_donors_in_window()}.
 		$lapsed_sql = $wpdb->prepare(
 			"SELECT
 				pv.ID AS variation_id,
@@ -780,12 +784,7 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 			LEFT JOIN {$prefix}posts pp ON pp.ID = pv.post_parent
 			LEFT JOIN {$prefix}postmeta period_meta
 				ON period_meta.post_id = pv.ID AND period_meta.meta_key = '_subscription_period'
-			WHERE o.type = 'shop_subscription'
-			  AND o.status IN ('wc-cancelled', 'wc-expired')
-			  AND pid_meta.meta_value IN ($donations)
-			  AND cm.meta_value BETWEEN %s AND %s
-			  AND cm.meta_value != ''
-			  AND o.customer_id NOT IN (
+			LEFT JOIN (
 				SELECT DISTINCT o2.customer_id
 				FROM {$prefix}wc_orders o2
 				JOIN {$prefix}woocommerce_order_items oi2
@@ -795,7 +794,13 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 				WHERE o2.type = 'shop_subscription'
 				  AND o2.status = 'wc-active'
 				  AND oim2.meta_value IN ($donations)
-			  )
+			) AS active ON active.customer_id = o.customer_id
+			WHERE o.type = 'shop_subscription'
+			  AND o.status IN ('wc-cancelled', 'wc-expired')
+			  AND pid_meta.meta_value IN ($donations)
+			  AND cm.meta_value BETWEEN %s AND %s
+			  AND cm.meta_value != ''
+			  AND active.customer_id IS NULL
 			GROUP BY pv.ID, pv.post_title, pv.post_parent, parent_name, sub_period",
 			$this->fmt( $start ),
 			$this->fmt( $end )

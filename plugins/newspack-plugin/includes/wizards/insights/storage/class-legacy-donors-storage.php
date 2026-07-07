@@ -724,7 +724,11 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 		$subs_rows = $wpdb->get_results( $subs_sql, ARRAY_A );
 
 		// Lapsed-donors pass: per-tier bucket of the {@see get_lapsed_donors_in_window}
-		// scorecard cohort. See HPOS variant for the over-count note.
+		// scorecard cohort. See HPOS variant for the over-count note. The
+		// active-subscriber exclusion is a LEFT JOIN anti-join (`active.customer_id
+		// IS NULL`) against a pre-aggregated DISTINCT active-donation-subscriber
+		// derived table, not a correlated `NOT IN (subquery)` (MySQL's slowest
+		// anti-join form) — same approach as {@see self::get_lapsed_donors_in_window()}.
 		$lapsed_sql = $wpdb->prepare(
 			"SELECT
 				pv.ID AS variation_id,
@@ -749,13 +753,8 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 			LEFT JOIN {$prefix}posts pp ON pp.ID = pv.post_parent
 			LEFT JOIN {$prefix}postmeta period_meta
 				ON period_meta.post_id = pv.ID AND period_meta.meta_key = '_subscription_period'
-			WHERE p.post_type = 'shop_subscription'
-			  AND p.post_status IN ('wc-cancelled', 'wc-expired')
-			  AND pid_meta.meta_value IN ($donations)
-			  AND cancelled.meta_value BETWEEN %s AND %s
-			  AND cancelled.meta_value != ''
-			  AND cust.meta_value NOT IN (
-				SELECT DISTINCT cust2.meta_value
+			LEFT JOIN (
+				SELECT DISTINCT cust2.meta_value AS customer_id
 				FROM {$prefix}posts p2
 				JOIN {$prefix}postmeta cust2
 					ON cust2.post_id = p2.ID AND cust2.meta_key = '_customer_user'
@@ -766,7 +765,13 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 				WHERE p2.post_type = 'shop_subscription'
 				  AND p2.post_status = 'wc-active'
 				  AND oim2.meta_value IN ($donations)
-			  )
+			) AS active ON active.customer_id = cust.meta_value
+			WHERE p.post_type = 'shop_subscription'
+			  AND p.post_status IN ('wc-cancelled', 'wc-expired')
+			  AND pid_meta.meta_value IN ($donations)
+			  AND cancelled.meta_value BETWEEN %s AND %s
+			  AND cancelled.meta_value != ''
+			  AND active.customer_id IS NULL
 			GROUP BY pv.ID, pv.post_title, pv.post_parent, parent_name, sub_period",
 			$this->fmt( $start ),
 			$this->fmt( $end )
