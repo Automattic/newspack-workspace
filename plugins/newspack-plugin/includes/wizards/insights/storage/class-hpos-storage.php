@@ -1346,24 +1346,32 @@ class HPOS_Storage implements Storage_Interface {
 	 * initial shop_order; we read _gate_post_id / _memberships_content_gate /
 	 * _newspack_popup_id from that parent order's meta.
 	 *
-	 * `first_sub_parent` pre-aggregates, per (customer_id, first_start) pair,
-	 * the parent_order_id of that first subscription — `MIN(parent_order_id)`
-	 * deterministically resolves the rare case of two subscriptions tying on
-	 * the same customer + start timestamp (the original's `LIMIT 1` with no
-	 * ORDER BY picked "any one" of the tied rows just as arbitrarily). Gate /
+	 * `first_sub_parents` pre-aggregates, per (customer_id, first_start) pair,
+	 * the FULL SET of parent_order_id values across ALL of that pair's tied
+	 * first subscriptions (not just the lowest one) — two subscriptions can
+	 * tie on the same customer + start timestamp with DIFFERENT parent
+	 * orders, and only one of those parents may carry the gate/popup meta.
+	 * Collapsing to `MIN(parent_order_id)` before the meta lookup (as an
+	 * earlier version of this query did) can silently lose that attribution
+	 * when the lowest-id parent happens to be the meta-less one. Gate /
 	 * legacy-gate / popup meta are each pre-aggregated to one row per order_id
 	 * (`MIN(meta_value)` guards against an order carrying more than one
-	 * non-empty value for the same key, mirroring the original's `LIMIT 1`)
-	 * and LEFT-JOINed on that resolved parent id, instead of three correlated
-	 * per-row subqueries that each re-execute the whole 4-table join on every
-	 * outer row.
+	 * non-empty value for the same key) and LEFT-JOINed onto the full
+	 * parent-id set, then re-aggregated with `MIN(meta_value)` per
+	 * (customer_id, first_start) — an arbitrary but deterministic pick among
+	 * the tied siblings that DO carry the meta, mirroring the original
+	 * correlated-subquery version's `LIMIT 1` (no ORDER BY) semantics of "any
+	 * one" of the tied rows. This avoids the three correlated per-row
+	 * subqueries that each re-execute the whole 4-table join on every outer
+	 * row.
 	 *
-	 * gate_post_id: first non-empty _gate_post_id on the parent order, falling
-	 * back to legacy _memberships_content_gate (both NOT IN ('','0')).
-	 * popup_id: non-empty _newspack_popup_id on the parent order. A LEFT JOIN
-	 * miss (no parent order / no meta) still yields '' via COALESCE, exactly
-	 * as the original — the metric layer falls those records to the BQ
-	 * temporal matcher (unchanged behaviour).
+	 * gate_post_id: first non-empty _gate_post_id across the tied parent
+	 * orders, falling back to legacy _memberships_content_gate (both
+	 * NOT IN ('','0')).
+	 * popup_id: non-empty _newspack_popup_id across the tied parent orders. A
+	 * miss across every tied parent (no parent order / no meta) still yields
+	 * '' via COALESCE, exactly as the original — the metric layer falls those
+	 * records to the BQ temporal matcher (unchanged behaviour).
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
@@ -1378,8 +1386,12 @@ class HPOS_Storage implements Storage_Interface {
 			"SELECT
 				first_subs.customer_id,
 				first_subs.first_start,
-				COALESCE(gate.gate_post_id, legacy_gate.gate_post_id, '') AS gate_post_id,
-				COALESCE(popup.popup_id, '') AS popup_id
+				COALESCE(
+					MIN(CASE WHEN gate.meta_value IS NOT NULL THEN gate.meta_value END),
+					MIN(CASE WHEN legacy_gate.meta_value IS NOT NULL THEN legacy_gate.meta_value END),
+					''
+				) AS gate_post_id,
+				COALESCE(MIN(CASE WHEN popup.meta_value IS NOT NULL THEN popup.meta_value END), '') AS popup_id
 			FROM (
 				SELECT o.customer_id, MIN(om.meta_value) AS first_start
 				FROM {$prefix}wc_orders o
@@ -1396,10 +1408,10 @@ class HPOS_Storage implements Storage_Interface {
 				GROUP BY o.customer_id
 			) AS first_subs
 			LEFT JOIN (
-				SELECT
+				SELECT DISTINCT
 					o_sub.customer_id,
 					om_start_s.meta_value AS first_start,
-					MIN(o_sub.parent_order_id) AS parent_id
+					o_sub.parent_order_id AS parent_id
 				FROM {$prefix}wc_orders o_sub
 				JOIN {$prefix}wc_orders_meta om_start_s
 					ON om_start_s.order_id = o_sub.id AND om_start_s.meta_key = '_schedule_start'
@@ -1409,29 +1421,23 @@ class HPOS_Storage implements Storage_Interface {
 					ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
 				WHERE o_sub.type = 'shop_subscription'
 				  AND oim_s.meta_value NOT IN ($donations)
-				GROUP BY o_sub.customer_id, om_start_s.meta_value
-			) AS first_sub_parent
-				ON first_sub_parent.customer_id = first_subs.customer_id
-				AND first_sub_parent.first_start = first_subs.first_start
-			LEFT JOIN (
-				SELECT order_id, MIN(meta_value) AS gate_post_id
-				FROM {$prefix}wc_orders_meta
-				WHERE meta_key = '_gate_post_id' AND meta_value NOT IN ('', '0')
-				GROUP BY order_id
-			) AS gate ON gate.order_id = first_sub_parent.parent_id
-			LEFT JOIN (
-				SELECT order_id, MIN(meta_value) AS gate_post_id
-				FROM {$prefix}wc_orders_meta
-				WHERE meta_key = '_memberships_content_gate' AND meta_value NOT IN ('', '0')
-				GROUP BY order_id
-			) AS legacy_gate ON legacy_gate.order_id = first_sub_parent.parent_id
-			LEFT JOIN (
-				SELECT order_id, MIN(meta_value) AS popup_id
-				FROM {$prefix}wc_orders_meta
-				WHERE meta_key = '_newspack_popup_id' AND meta_value NOT IN ('', '0')
-				GROUP BY order_id
-			) AS popup ON popup.order_id = first_sub_parent.parent_id
-			WHERE first_subs.first_start BETWEEN %s AND %s",
+			) AS first_sub_parents
+				ON first_sub_parents.customer_id = first_subs.customer_id
+				AND first_sub_parents.first_start = first_subs.first_start
+			LEFT JOIN {$prefix}wc_orders_meta gate
+				ON gate.order_id = first_sub_parents.parent_id
+				AND gate.meta_key = '_gate_post_id'
+				AND gate.meta_value NOT IN ('', '0')
+			LEFT JOIN {$prefix}wc_orders_meta legacy_gate
+				ON legacy_gate.order_id = first_sub_parents.parent_id
+				AND legacy_gate.meta_key = '_memberships_content_gate'
+				AND legacy_gate.meta_value NOT IN ('', '0')
+			LEFT JOIN {$prefix}wc_orders_meta popup
+				ON popup.order_id = first_sub_parents.parent_id
+				AND popup.meta_key = '_newspack_popup_id'
+				AND popup.meta_value NOT IN ('', '0')
+			WHERE first_subs.first_start BETWEEN %s AND %s
+			GROUP BY first_subs.customer_id, first_subs.first_start",
 			$this->fmt( $start ),
 			$this->fmt( $end )
 		);

@@ -1264,20 +1264,26 @@ class Legacy_Storage implements Storage_Interface {
 	 *
 	 * Source meta lives on the PARENT shop_order (post_parent of the
 	 * shop_subscription post), NOT on the shop_subscription post itself.
-	 * `first_sub_parent` pre-aggregates, per (customer_id, first_start) pair,
-	 * the post_parent of that first subscription — `MIN(post_parent)`
-	 * deterministically resolves the rare case of two subscriptions tying on
-	 * the same customer + start timestamp (the original's `LIMIT 1` with no
-	 * ORDER BY picked "any one" of the tied rows just as arbitrarily). Gate /
-	 * legacy-gate / popup meta are each pre-aggregated to one row per post_id
-	 * (`MIN(meta_value)` guards against a post carrying more than one non-empty
-	 * value for the same key, mirroring the original's `LIMIT 1`) and
-	 * LEFT-JOINed on that resolved parent id, instead of three correlated
-	 * per-row subqueries that each re-execute the whole 4-table join on every
-	 * outer row. A LEFT JOIN miss (no such meta on the parent order, or no
-	 * parent order at all) still yields '' via COALESCE, exactly as the
-	 * original — a customer with no gate/popup attribution still appears in
-	 * the result set.
+	 * `first_sub_parents` pre-aggregates, per (customer_id, first_start) pair,
+	 * the FULL SET of post_parent ids across ALL of that pair's tied first
+	 * subscriptions (not just the lowest one) — two subscriptions can tie on
+	 * the same customer + start timestamp with DIFFERENT parent orders, and
+	 * only one of those parents may carry the gate/popup meta. Collapsing to
+	 * `MIN(post_parent)` before the meta lookup (as an earlier version of
+	 * this query did) can silently lose that attribution when the
+	 * lowest-id parent happens to be the meta-less one. Gate / legacy-gate /
+	 * popup meta are each pre-aggregated to one row per post_id (`MIN(meta_value)`
+	 * guards against a post carrying more than one non-empty value for the
+	 * same key) and LEFT-JOINed onto the full parent-id set, then re-aggregated
+	 * with `MIN(meta_value)` per (customer_id, first_start) — an arbitrary but
+	 * deterministic pick among the tied siblings that DO carry the meta,
+	 * mirroring the original correlated-subquery version's `LIMIT 1` (no
+	 * ORDER BY) semantics of "any one" of the tied rows. This avoids the three
+	 * correlated per-row subqueries that each re-execute the whole 4-table join
+	 * on every outer row. A miss across every tied parent (no such meta on any
+	 * of them, or no parent order at all) still yields '' via COALESCE, exactly
+	 * as the original — a customer with no gate/popup attribution still
+	 * appears in the result set.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
@@ -1292,8 +1298,12 @@ class Legacy_Storage implements Storage_Interface {
 			"SELECT
 				first_subs.customer_id,
 				first_subs.first_start,
-				COALESCE(gate.gate_post_id, legacy_gate.gate_post_id, '') AS gate_post_id,
-				COALESCE(popup.popup_id, '') AS popup_id
+				COALESCE(
+					MIN(CASE WHEN gate.meta_value IS NOT NULL THEN gate.meta_value END),
+					MIN(CASE WHEN legacy_gate.meta_value IS NOT NULL THEN legacy_gate.meta_value END),
+					''
+				) AS gate_post_id,
+				COALESCE(MIN(CASE WHEN popup.meta_value IS NOT NULL THEN popup.meta_value END), '') AS popup_id
 			FROM (
 				SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id, MIN(start.meta_value) AS first_start
 				FROM {$prefix}posts p
@@ -1312,10 +1322,10 @@ class Legacy_Storage implements Storage_Interface {
 				GROUP BY CAST(cust.meta_value AS UNSIGNED)
 			) AS first_subs
 			LEFT JOIN (
-				SELECT
+				SELECT DISTINCT
 					CAST(cust_s.meta_value AS UNSIGNED) AS customer_id,
 					start_s.meta_value AS first_start,
-					MIN(p_sub.post_parent) AS parent_id
+					p_sub.post_parent AS parent_id
 				FROM {$prefix}posts p_sub
 				JOIN {$prefix}postmeta cust_s
 					ON cust_s.post_id = p_sub.ID AND cust_s.meta_key = '_customer_user'
@@ -1327,29 +1337,23 @@ class Legacy_Storage implements Storage_Interface {
 					ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
 				WHERE p_sub.post_type = 'shop_subscription'
 				  AND oim_s.meta_value NOT IN ($donations)
-				GROUP BY CAST(cust_s.meta_value AS UNSIGNED), start_s.meta_value
-			) AS first_sub_parent
-				ON first_sub_parent.customer_id = first_subs.customer_id
-				AND first_sub_parent.first_start = first_subs.first_start
-			LEFT JOIN (
-				SELECT post_id, MIN(meta_value) AS gate_post_id
-				FROM {$prefix}postmeta
-				WHERE meta_key = '_gate_post_id' AND meta_value NOT IN ('', '0')
-				GROUP BY post_id
-			) AS gate ON gate.post_id = first_sub_parent.parent_id
-			LEFT JOIN (
-				SELECT post_id, MIN(meta_value) AS gate_post_id
-				FROM {$prefix}postmeta
-				WHERE meta_key = '_memberships_content_gate' AND meta_value NOT IN ('', '0')
-				GROUP BY post_id
-			) AS legacy_gate ON legacy_gate.post_id = first_sub_parent.parent_id
-			LEFT JOIN (
-				SELECT post_id, MIN(meta_value) AS popup_id
-				FROM {$prefix}postmeta
-				WHERE meta_key = '_newspack_popup_id' AND meta_value NOT IN ('', '0')
-				GROUP BY post_id
-			) AS popup ON popup.post_id = first_sub_parent.parent_id
-			WHERE first_subs.first_start BETWEEN %s AND %s",
+			) AS first_sub_parents
+				ON first_sub_parents.customer_id = first_subs.customer_id
+				AND first_sub_parents.first_start = first_subs.first_start
+			LEFT JOIN {$prefix}postmeta gate
+				ON gate.post_id = first_sub_parents.parent_id
+				AND gate.meta_key = '_gate_post_id'
+				AND gate.meta_value NOT IN ('', '0')
+			LEFT JOIN {$prefix}postmeta legacy_gate
+				ON legacy_gate.post_id = first_sub_parents.parent_id
+				AND legacy_gate.meta_key = '_memberships_content_gate'
+				AND legacy_gate.meta_value NOT IN ('', '0')
+			LEFT JOIN {$prefix}postmeta popup
+				ON popup.post_id = first_sub_parents.parent_id
+				AND popup.meta_key = '_newspack_popup_id'
+				AND popup.meta_value NOT IN ('', '0')
+			WHERE first_subs.first_start BETWEEN %s AND %s
+			GROUP BY first_subs.customer_id, first_subs.first_start",
 			$this->fmt( $start ),
 			$this->fmt( $end )
 		);

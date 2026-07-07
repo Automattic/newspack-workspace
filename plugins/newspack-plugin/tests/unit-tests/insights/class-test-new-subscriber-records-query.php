@@ -500,6 +500,79 @@ class Test_New_Subscriber_Records_Query extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Crux case: tied first subscriptions (same customer, same
+	 * `_schedule_start`) with DIFFERENT parent orders — the lower-id parent
+	 * order carries NO gate/popup meta, but the tied sibling's (higher-id)
+	 * parent order DOES carry `_gate_post_id`. Attribution must be recovered
+	 * from the tied sibling rather than lost because the resolver collapsed
+	 * to the lowest parent id before the meta lookup.
+	 *
+	 * @dataProvider backends
+	 * @param string $backend Backend key.
+	 */
+	public function test_tied_first_subscriptions_recover_attribution_from_sibling_parent( string $backend ): void {
+		$base        = 81900 + ( 'hpos' === $backend ? 500 : 0 );
+		$in_window   = gmdate( 'Y-m-d H:i:s', strtotime( '-10 days' ) );
+		$customer_id = 501;
+
+		// Lower-id parent order: NO gate/popup meta at all.
+		$this->insert_parent_order(
+			$backend,
+			[
+				'order_id'    => $base + 1,
+				'customer_id' => $customer_id,
+				'product_id'  => self::SUB_PRODUCT_ID,
+			]
+		);
+		// Its subscription — tied first-start, lower-id parent.
+		$this->insert_subscription(
+			$backend,
+			[
+				'order_id'        => $base + 2,
+				'customer_id'     => $customer_id,
+				'product_id'      => self::SUB_PRODUCT_ID,
+				'status'          => 'wc-active',
+				'schedule_start'  => $in_window,
+				'parent_order_id' => $base + 1,
+			]
+		);
+
+		// Higher-id parent order: HAS `_gate_post_id`.
+		$this->insert_parent_order(
+			$backend,
+			[
+				'order_id'    => $base + 3,
+				'customer_id' => $customer_id,
+				'product_id'  => self::SUB_PRODUCT_ID,
+				'gate_ids'    => [ 7001 ],
+			]
+		);
+		// Its subscription — the SAME tied first-start, higher-id parent.
+		$this->insert_subscription(
+			$backend,
+			[
+				'order_id'        => $base + 4,
+				'customer_id'     => $customer_id,
+				'product_id'      => self::SUB_PRODUCT_ID,
+				'status'          => 'wc-active',
+				'schedule_start'  => $in_window,
+				'parent_order_id' => $base + 3,
+			]
+		);
+
+		[ $start, $end ] = $this->window();
+		$records          = $this->storage_for( $backend )->get_new_subscriber_records_in_window( $start, $end );
+		$record           = $this->find_record( $records, $customer_id );
+
+		$this->assertNotNull( $record, 'Customer with tied first subscriptions must still be recorded.' );
+		$this->assertSame(
+			'7001',
+			$record['gate_post_id'],
+			'Attribution must be recovered from the tied sibling parent order, not lost because the MIN(parent) resolver picked the meta-less lower-id parent.'
+		);
+	}
+
+	/**
 	 * Combined scenario: run all the anchor cases together in one fixture set
 	 * and assert the full result set — proving the rewrite doesn't cross-
 	 * contaminate attribution between customers when multiple derived-table
@@ -520,7 +593,7 @@ class Test_New_Subscriber_Records_Query extends WP_UnitTestCase {
 				'customer_id' => 401,
 				'product_id'  => self::SUB_PRODUCT_ID,
 				'gate_ids'    => [ 9001 ],
-			] 
+			]
 		);
 		$this->insert_subscription(
 			$backend,
@@ -531,7 +604,7 @@ class Test_New_Subscriber_Records_Query extends WP_UnitTestCase {
 				'status'          => 'wc-active',
 				'schedule_start'  => $in_window,
 				'parent_order_id' => $base + 1,
-			] 
+			]
 		);
 
 		// Popup-attributed customer 402.
@@ -542,7 +615,7 @@ class Test_New_Subscriber_Records_Query extends WP_UnitTestCase {
 				'customer_id' => 402,
 				'product_id'  => self::SUB_PRODUCT_ID,
 				'popup_ids'   => [ 9002 ],
-			] 
+			]
 		);
 		$this->insert_subscription(
 			$backend,
@@ -553,7 +626,7 @@ class Test_New_Subscriber_Records_Query extends WP_UnitTestCase {
 				'status'          => 'wc-active',
 				'schedule_start'  => $in_window,
 				'parent_order_id' => $base + 3,
-			] 
+			]
 		);
 
 		// Unattributed customer 403 (no parent order meta at all — organic).
@@ -565,7 +638,7 @@ class Test_New_Subscriber_Records_Query extends WP_UnitTestCase {
 				'product_id'     => self::SUB_PRODUCT_ID,
 				'status'         => 'wc-active',
 				'schedule_start' => $in_window,
-			] 
+			]
 		);
 
 		[ $start, $end ] = $this->window();
