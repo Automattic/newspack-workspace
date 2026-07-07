@@ -295,6 +295,20 @@ class Subscribers_Metric {
 		$arpu = $arr / $active;
 
 		// 12-month retention annualized from churn (no subscriber cohort series).
+		//
+		// TODO (follow-up, not this fix): get_churned_subscribers_in_window()
+		// returns a bare `int` (Storage_Interface contract), and its result is
+		// also transient-cached in Subscribers_Metric::cached() before it gets
+		// here. A DB failure inside $wpdb->get_var() surfaces as `null`, which
+		// casts to 0 — indistinguishable from a legitimate "zero churn" and, once
+		// cached, invisible to this method entirely. That silently computes
+		// r = 1.0 (no churn) and reports an INFLATED CLV as `computable: true`.
+		// Cleanly fixing this needs either (a) widening the storage contract to
+		// signal failure (e.g. return null, or a {value, ok} shape) across every
+		// implementation and call site, or (b) checking $wpdb->last_error at the
+		// storage boundary and threading that through the cache layer. Both are
+		// broader, riskier changes than this perf fix's scope — flagging as a
+		// recommended follow-up rather than forcing it in here.
 		$year_ago = \DateTimeImmutable::createFromInterface( $end )->sub( new \DateInterval( 'P365D' ) );
 		$churned  = $this->get_churned_subscribers_in_window( $year_ago, $end );
 		$r        = 1.0 - ( $churned / $active );
