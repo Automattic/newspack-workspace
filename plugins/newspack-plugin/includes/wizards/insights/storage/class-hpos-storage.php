@@ -1331,6 +1331,36 @@ class HPOS_Storage implements Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * Same inner aggregate as get_new_subscribers_in_window() (first
+	 * non-donation _schedule_start per customer), filtered to the window.
+	 * Guest orders (customer_id = 0) are excluded: a guest has no user account
+	 * to match against BQ registration events.
+	 *
+	 * Source meta lives on the PARENT shop_order (the subscription's initial
+	 * checkout order), NOT on the shop_subscription row itself. Each
+	 * subscription's parent_order_id in {prefix}wc_orders points to the
+	 * initial shop_order; we read _gate_post_id / _memberships_content_gate /
+	 * _newspack_popup_id from that parent order's meta.
+	 *
+	 * `first_sub_parent` pre-aggregates, per (customer_id, first_start) pair,
+	 * the parent_order_id of that first subscription — `MIN(parent_order_id)`
+	 * deterministically resolves the rare case of two subscriptions tying on
+	 * the same customer + start timestamp (the original's `LIMIT 1` with no
+	 * ORDER BY picked "any one" of the tied rows just as arbitrarily). Gate /
+	 * legacy-gate / popup meta are each pre-aggregated to one row per order_id
+	 * (`MIN(meta_value)` guards against an order carrying more than one
+	 * non-empty value for the same key, mirroring the original's `LIMIT 1`)
+	 * and LEFT-JOINed on that resolved parent id, instead of three correlated
+	 * per-row subqueries that each re-execute the whole 4-table join on every
+	 * outer row.
+	 *
+	 * gate_post_id: first non-empty _gate_post_id on the parent order, falling
+	 * back to legacy _memberships_content_gate (both NOT IN ('','0')).
+	 * popup_id: non-empty _newspack_popup_id on the parent order. A LEFT JOIN
+	 * miss (no parent order / no meta) still yields '' via COALESCE, exactly
+	 * as the original — the metric layer falls those records to the BQ
+	 * temporal matcher (unchanged behaviour).
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array<int, array{customer_id:int, ts:int}>
@@ -1340,88 +1370,12 @@ class HPOS_Storage implements Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
-		// Same inner aggregate as get_new_subscribers_in_window() (first
-		// non-donation _schedule_start per customer), filtered to the window.
-		// Guest orders (customer_id = 0) are excluded: a guest has no user
-		// account to match against BQ registration events.
-		//
-		// Source meta lives on the PARENT shop_order (the subscription's initial
-		// checkout order), NOT on the shop_subscription row itself. Each
-		// subscription's parent_order_id in {prefix}wc_orders points to the
-		// initial shop_order; we read _gate_post_id / _memberships_content_gate
-		// / _newspack_popup_id from that parent order's meta.
-		//
-		// To identify the first subscription per customer in the window we pick
-		// the subscription whose _schedule_start = the customer's MIN. Correlated
-		// subqueries (MySQL 5.7-safe, no window functions) then read meta from
-		// that first subscription's parent order. LIMIT 1 resolves same-timestamp
-		// ties (two subscriptions sharing the same MIN _schedule_start): any one
-		// tied first-subscription's parent order meta is used — the signal is a
-		// soft fallback, not an exact ID.
-		//
-		// gate_post_id: first non-empty _gate_post_id on the parent order,
-		// falling back to legacy _memberships_content_gate (both
-		// NOT IN ('','0')).
-		// popup_id:     non-empty _newspack_popup_id on the parent order.
-		// No parent order / no meta → '' for that column; the metric layer falls
-		// those records to the BQ temporal matcher (unchanged behaviour).
 		$sql = $wpdb->prepare(
 			"SELECT
 				first_subs.customer_id,
 				first_subs.first_start,
-				COALESCE((
-					SELECT om_gate.meta_value
-					FROM {$prefix}wc_orders o_sub
-					JOIN {$prefix}wc_orders_meta om_start_s
-						ON om_start_s.order_id = o_sub.id AND om_start_s.meta_key = '_schedule_start'
-					JOIN {$prefix}wc_orders_meta om_gate
-						ON om_gate.order_id = o_sub.parent_order_id AND om_gate.meta_key = '_gate_post_id'
-					JOIN {$prefix}woocommerce_order_items oi_s
-						ON oi_s.order_id = o_sub.id AND oi_s.order_item_type = 'line_item'
-					JOIN {$prefix}woocommerce_order_itemmeta oim_s
-						ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
-					WHERE o_sub.type = 'shop_subscription'
-					  AND o_sub.customer_id = first_subs.customer_id
-					  AND oim_s.meta_value NOT IN ($donations)
-					  AND om_start_s.meta_value = first_subs.first_start
-					  AND om_gate.meta_value NOT IN ('', '0')
-					LIMIT 1
-				), (
-					SELECT om_legacy.meta_value
-					FROM {$prefix}wc_orders o_sub
-					JOIN {$prefix}wc_orders_meta om_start_s
-						ON om_start_s.order_id = o_sub.id AND om_start_s.meta_key = '_schedule_start'
-					JOIN {$prefix}wc_orders_meta om_legacy
-						ON om_legacy.order_id = o_sub.parent_order_id AND om_legacy.meta_key = '_memberships_content_gate'
-					JOIN {$prefix}woocommerce_order_items oi_s
-						ON oi_s.order_id = o_sub.id AND oi_s.order_item_type = 'line_item'
-					JOIN {$prefix}woocommerce_order_itemmeta oim_s
-						ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
-					WHERE o_sub.type = 'shop_subscription'
-					  AND o_sub.customer_id = first_subs.customer_id
-					  AND oim_s.meta_value NOT IN ($donations)
-					  AND om_start_s.meta_value = first_subs.first_start
-					  AND om_legacy.meta_value NOT IN ('', '0')
-					LIMIT 1
-				), '') AS gate_post_id,
-				COALESCE((
-					SELECT om_popup.meta_value
-					FROM {$prefix}wc_orders o_sub
-					JOIN {$prefix}wc_orders_meta om_start_s
-						ON om_start_s.order_id = o_sub.id AND om_start_s.meta_key = '_schedule_start'
-					JOIN {$prefix}wc_orders_meta om_popup
-						ON om_popup.order_id = o_sub.parent_order_id AND om_popup.meta_key = '_newspack_popup_id'
-					JOIN {$prefix}woocommerce_order_items oi_s
-						ON oi_s.order_id = o_sub.id AND oi_s.order_item_type = 'line_item'
-					JOIN {$prefix}woocommerce_order_itemmeta oim_s
-						ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
-					WHERE o_sub.type = 'shop_subscription'
-					  AND o_sub.customer_id = first_subs.customer_id
-					  AND oim_s.meta_value NOT IN ($donations)
-					  AND om_start_s.meta_value = first_subs.first_start
-					  AND om_popup.meta_value NOT IN ('', '0')
-					LIMIT 1
-				), '') AS popup_id
+				COALESCE(gate.gate_post_id, legacy_gate.gate_post_id, '') AS gate_post_id,
+				COALESCE(popup.popup_id, '') AS popup_id
 			FROM (
 				SELECT o.customer_id, MIN(om.meta_value) AS first_start
 				FROM {$prefix}wc_orders o
@@ -1437,6 +1391,42 @@ class HPOS_Storage implements Storage_Interface {
 				  AND om.meta_value != ''
 				GROUP BY o.customer_id
 			) AS first_subs
+			LEFT JOIN (
+				SELECT
+					o_sub.customer_id,
+					om_start_s.meta_value AS first_start,
+					MIN(o_sub.parent_order_id) AS parent_id
+				FROM {$prefix}wc_orders o_sub
+				JOIN {$prefix}wc_orders_meta om_start_s
+					ON om_start_s.order_id = o_sub.id AND om_start_s.meta_key = '_schedule_start'
+				JOIN {$prefix}woocommerce_order_items oi_s
+					ON oi_s.order_id = o_sub.id AND oi_s.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim_s
+					ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
+				WHERE o_sub.type = 'shop_subscription'
+				  AND oim_s.meta_value NOT IN ($donations)
+				GROUP BY o_sub.customer_id, om_start_s.meta_value
+			) AS first_sub_parent
+				ON first_sub_parent.customer_id = first_subs.customer_id
+				AND first_sub_parent.first_start = first_subs.first_start
+			LEFT JOIN (
+				SELECT order_id, MIN(meta_value) AS gate_post_id
+				FROM {$prefix}wc_orders_meta
+				WHERE meta_key = '_gate_post_id' AND meta_value NOT IN ('', '0')
+				GROUP BY order_id
+			) AS gate ON gate.order_id = first_sub_parent.parent_id
+			LEFT JOIN (
+				SELECT order_id, MIN(meta_value) AS gate_post_id
+				FROM {$prefix}wc_orders_meta
+				WHERE meta_key = '_memberships_content_gate' AND meta_value NOT IN ('', '0')
+				GROUP BY order_id
+			) AS legacy_gate ON legacy_gate.order_id = first_sub_parent.parent_id
+			LEFT JOIN (
+				SELECT order_id, MIN(meta_value) AS popup_id
+				FROM {$prefix}wc_orders_meta
+				WHERE meta_key = '_newspack_popup_id' AND meta_value NOT IN ('', '0')
+				GROUP BY order_id
+			) AS popup ON popup.order_id = first_sub_parent.parent_id
 			WHERE first_subs.first_start BETWEEN %s AND %s",
 			$this->fmt( $start ),
 			$this->fmt( $end )

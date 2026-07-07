@@ -44,7 +44,7 @@ trait Insights_Woo_Order_Fixtures {
 		global $wpdb;
 		$p = $wpdb->prefix;
 		// HPOS authoritative store.
-		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$p}wc_orders ( id BIGINT UNSIGNED NOT NULL PRIMARY KEY, status VARCHAR(20) NULL, type VARCHAR(20) NULL, date_created_gmt DATETIME NULL, total_amount DECIMAL(26,8) NULL, customer_id BIGINT UNSIGNED NULL ) ENGINE=InnoDB" );
+		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$p}wc_orders ( id BIGINT UNSIGNED NOT NULL PRIMARY KEY, status VARCHAR(20) NULL, type VARCHAR(20) NULL, date_created_gmt DATETIME NULL, total_amount DECIMAL(26,8) NULL, customer_id BIGINT UNSIGNED NULL, parent_order_id BIGINT UNSIGNED NULL ) ENGINE=InnoDB" );
 		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$p}wc_orders_meta ( id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, order_id BIGINT UNSIGNED NULL, meta_key VARCHAR(255) NULL, meta_value LONGTEXT NULL, KEY order_id ( order_id ) ) ENGINE=InnoDB" );
 		// Product lookup (both backends maintain this).
 		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$p}wc_order_product_lookup ( order_id BIGINT UNSIGNED NOT NULL, product_id BIGINT UNSIGNED NOT NULL, PRIMARY KEY ( order_id, product_id ) ) ENGINE=InnoDB" );
@@ -243,7 +243,11 @@ trait Insights_Woo_Order_Fixtures {
 	 *                    `product_id` (required), `status` (post_status, e.g.
 	 *                    'wc-cancelled' / 'wc-expired' / 'wc-active'),
 	 *                    `schedule_cancelled` (optional 'Y-m-d H:i:s'),
-	 *                    `schedule_start` (optional 'Y-m-d H:i:s').
+	 *                    `schedule_start` (optional 'Y-m-d H:i:s'),
+	 *                    `parent_order_id` (optional int — sets `post_parent` to
+	 *                    the initiating shop_order id, the shape
+	 *                    {@see Legacy_Storage::get_new_subscriber_records_in_window()}
+	 *                    reads gate/popup attribution meta from).
 	 * @return int The created subscription's post ID.
 	 */
 	protected function insert_legacy_subscription( array $args ): int {
@@ -254,6 +258,7 @@ trait Insights_Woo_Order_Fixtures {
 				'post_type'   => 'shop_subscription',
 				'post_status' => $args['status'],
 				'post_title'  => 'Subscription',
+				'post_parent' => (int) ( $args['parent_order_id'] ?? 0 ),
 			]
 		);
 		add_post_meta( $order_id, '_customer_user', (string) $args['customer_id'] );
@@ -273,7 +278,11 @@ trait Insights_Woo_Order_Fixtures {
 	 * the exact shape {@see HPOS_Storage::get_churned_subscribers_in_window()}
 	 * and its winback counterpart query.
 	 *
-	 * @param array $args Same shape as {@see insert_legacy_subscription()}.
+	 * @param array $args Same shape as {@see insert_legacy_subscription()};
+	 *                    `parent_order_id` (optional int) sets `parent_order_id`
+	 *                    on `wc_orders`, the shape
+	 *                    {@see HPOS_Storage::get_new_subscriber_records_in_window()}
+	 *                    reads gate/popup attribution meta from.
 	 * @return int The order ID.
 	 */
 	protected function insert_hpos_subscription( array $args ): int {
@@ -289,6 +298,7 @@ trait Insights_Woo_Order_Fixtures {
 				'date_created_gmt' => $args['date'] ?? $this->default_order_date_gmt(),
 				'total_amount'     => $args['total'] ?? 0,
 				'customer_id'      => (int) $args['customer_id'],
+				'parent_order_id'  => (int) ( $args['parent_order_id'] ?? 0 ),
 			]
 		);
 		if ( isset( $args['schedule_cancelled'] ) ) {
