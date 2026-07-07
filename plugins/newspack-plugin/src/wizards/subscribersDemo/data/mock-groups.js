@@ -55,6 +55,21 @@ export const GROUP_STATUS_BADGE_LEVEL = {
 	cancelled: 'error',
 };
 
+// Roles within a group. The owner is implicitly a manager but only ever
+// renders as Owner; rank drives the members-table default sort
+// (owner → managers → members).
+export const ROLE_LABELS = {
+	owner: 'Owner',
+	manager: 'Manager',
+	member: 'Member',
+};
+
+export const ROLE_RANK = {
+	owner: 0,
+	manager: 1,
+	member: 2,
+};
+
 // Tiny deterministic PRNG (distinct seed from mock-subscribers) so the list is
 // stable between reloads.
 function mulberry32( seed ) {
@@ -258,6 +273,17 @@ const FIXTURES = [
 		invites: [],
 	},
 ];
+
+// Seed a manager into a few curated groups (promote the first non-owner
+// member) so the role is visible without clicking: an active group, Priya's
+// multi-group case, and the on-hold grp_northside showing the role surviving
+// a non-active group.
+[ 'grp_acme', 'grp_riverside', 'grp_northside' ].forEach( id => {
+	const first = ( FIXTURES.find( g => g.id === id )?.members || [] ).find( m => m.role !== 'owner' );
+	if ( first ) {
+		first.role = 'manager';
+	}
+} );
 
 function makeRandom( i ) {
 	const ownerId = pickOwner();
@@ -552,6 +578,19 @@ export function clearSeatRequest( group ) {
 	return { ...group, seatRequest: null };
 }
 
+// Promote or demote between 'manager' and 'member'. The owner is never
+// re-roled: ownership transfer is retired (DSGNEWS-184) — billing stays with
+// the owner and delegation happens through managers.
+export function setMemberRole( group, subscriberId, role ) {
+	if ( subscriberId === group.ownerId ) {
+		return group;
+	}
+	return {
+		...group,
+		members: ( group.members || [] ).map( m => ( m.subscriberId === subscriberId ? { ...m, role } : m ) ),
+	};
+}
+
 // PROTOTYPE ONLY: group mutations are persisted to the current admin's
 // localStorage so they survive a refresh during a demo. The seeded GROUPS array
 // stays immutable; reads layer the stored override on top. In production this
@@ -615,14 +654,14 @@ export function createGroup( { ownerId, plan, cadence, amount, seatLimit } ) {
 
 /**
  * Groups a subscriber owns and/or belongs to, with the relationship flagged.
- * Returns [ { group, isOwner, isMember } ].
+ * Returns [ { group, isOwner, isMember, role } ].
  */
 export function getGroupsForSubscriber( subscriberId ) {
 	return getAllGroups()
 		.map( group => {
 			const isOwner = group.ownerId === subscriberId;
-			const isMember = ( group.members || [] ).some( m => m.subscriberId === subscriberId );
-			return { group, isOwner, isMember };
+			const entry = ( group.members || [] ).find( m => m.subscriberId === subscriberId );
+			return { group, isOwner, isMember: !! entry, role: isOwner ? 'owner' : entry?.role || 'member' };
 		} )
 		.filter( entry => entry.isOwner || entry.isMember );
 }

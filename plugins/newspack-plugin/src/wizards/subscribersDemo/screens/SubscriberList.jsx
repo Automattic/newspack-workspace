@@ -21,7 +21,7 @@ import { fmtRelative, fmtDate } from '../format';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { SUBSCRIBERS, DIGITAL_PLANS, PRINT_PLANS, ALL_TAGS, NEWSLETTERS } from '../data/mock-subscribers';
-import { getAllGroups, ALL_GROUP_PLAN_NAMES } from '../data/mock-groups';
+import { getAllGroups, ALL_GROUP_PLAN_NAMES, ROLE_LABELS } from '../data/mock-groups';
 import { GROUP_LABEL } from '../labels';
 import { STATUS_LABELS, STATUS_BADGE_LEVEL, STATUS_RANK, displayStatuses } from '../status';
 
@@ -30,12 +30,12 @@ const { useHistory } = Router;
 // Every subscription a subscriber has, group and individual alike: cohorts they
 // own or belong to (tagged by role) plus their own individual subscriptions.
 // Each entry carries its own status so the column can show them independently.
-// `groupEntries` is the subscriber's precomputed [{ group, isOwner }] memberships.
+// `groupEntries` is the subscriber's precomputed [{ group, role }] memberships.
 const planEntries = ( item, groupEntries ) => {
-	const cohorts = ( groupEntries || [] ).map( ( { group, isOwner } ) => ( {
+	const cohorts = ( groupEntries || [] ).map( ( { group, role } ) => ( {
 		plan: group.plan,
 		status: group.status,
-		role: isOwner ? 'owner' : 'member',
+		role,
 	} ) );
 	const individual = ( item.subscriptions || [] ).map( s => ( {
 		plan: s.plan,
@@ -103,12 +103,16 @@ export default function SubscriberList() {
 	const groupsBySubscriber = useMemo( () => {
 		const index = {};
 		getAllGroups().forEach( group => {
-			const ids = new Set( [ group.ownerId, ...( group.members || [] ).map( m => m.subscriberId ) ] );
-			ids.forEach( id => {
+			const roleById = {};
+			( group.members || [] ).forEach( m => {
+				roleById[ m.subscriberId ] = m.role || 'member';
+			} );
+			roleById[ group.ownerId ] = 'owner';
+			Object.keys( roleById ).forEach( id => {
 				if ( ! index[ id ] ) {
 					index[ id ] = [];
 				}
-				index[ id ].push( { group, isOwner: group.ownerId === id } );
+				index[ id ].push( { group, role: roleById[ id ] } );
 			} );
 		} );
 		return index;
@@ -172,25 +176,42 @@ export default function SubscriberList() {
 					if ( entries.length === 0 ) {
 						return <span>—</span>;
 					}
-					// 8px between subscriptions so each (a group's plan + its
-					// Owner/Member line included) reads as a distinct block.
+					// 8px between subscriptions so each reads as a distinct block. A
+					// group entry is tagged "(Group)"; the subscriber's role in it is
+					// L1 information (profile card, group members table).
 					return (
 						<VStack spacing={ 2 } alignment="left">
-							{ entries.map( ( e, i ) =>
-								e.role ? (
-									<div key={ i }>
-										<HStack spacing={ 2 } justify="flex-start" alignment="center">
-											<span>{ e.plan }</span>
-											<Badge level={ e.role === 'owner' ? 'info' : undefined } text={ GROUP_LABEL } />
-										</HStack>
-										<div className="newspack-subscribers-demo__muted">
-											{ e.role === 'owner' ? __( 'Owner', 'newspack-plugin' ) : __( 'Member', 'newspack-plugin' ) }
-										</div>
-									</div>
-								) : (
-									<div key={ i }>{ e.plan }</div>
-								)
-							) }
+							{ entries.map( ( e, i ) => (
+								<div key={ i }>
+									{ e.plan }
+									{ e.role && <>&nbsp;{ `(${ GROUP_LABEL })` }</> }
+								</div>
+							) ) }
+						</VStack>
+					);
+				},
+				enableSorting: false,
+			},
+			{
+				id: 'groupRole',
+				// translators: %s: singular group label (publisher-customisable).
+				label: sprintf( __( '%s role', 'newspack-plugin' ), GROUP_LABEL ),
+				elements: Object.entries( ROLE_LABELS ).map( ( [ value, label ] ) => ( { value, label } ) ),
+				filterBy: { operators: [ 'isAny' ] },
+				// Hidden by default (not in DEFAULT_VIEW fields); its main job is the
+				// filter ("show me every group owner / manager"). One line per group,
+				// plan-qualified only when the reader belongs to more than one.
+				getValue: ( { item } ) => ( groupsBySubscriber[ item.id ] || [] ).map( e => e.role ),
+				render: ( { item } ) => {
+					const entries = groupsBySubscriber[ item.id ] || [];
+					if ( entries.length === 0 ) {
+						return <span>—</span>;
+					}
+					return (
+						<VStack spacing={ 2 } alignment="left">
+							{ entries.map( ( e, i ) => (
+								<div key={ i }>{ entries.length > 1 ? `${ ROLE_LABELS[ e.role ] } (${ e.group.plan })` : ROLE_LABELS[ e.role ] }</div>
+							) ) }
 						</VStack>
 					);
 				},

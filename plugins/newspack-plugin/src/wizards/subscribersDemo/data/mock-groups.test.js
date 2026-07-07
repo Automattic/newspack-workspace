@@ -9,6 +9,8 @@ import {
 	clearSeatRequest,
 	hasSeatRequest,
 	canRequestSeats,
+	setMemberRole,
+	GROUPS,
 } from './mock-groups';
 
 const baseGroup = () => ( {
@@ -62,5 +64,34 @@ describe( 'seat request helpers', () => {
 		expect( canRequestSeats( requestSeatIncrease( baseGroup(), 15 ) ) ).toBe( false );
 		expect( hasSeatRequest( requestSeatIncrease( baseGroup(), 15 ) ) ).toBe( true );
 		expect( canRequestSeats( { ...baseGroup(), status: 'on-hold' } ) ).toBe( false );
+	} );
+} );
+
+describe( 'manager role helpers', () => {
+	const managedGroup = () => ( {
+		...baseGroup(),
+		ownerId: 's1',
+		members: [
+			{ subscriberId: 's1', role: 'owner', joinedAt: '2026-01-01' },
+			{ subscriberId: 's2', role: 'member', joinedAt: '2026-02-01' },
+		],
+	} );
+
+	it( 'setMemberRole promotes a member to manager and demotes back', () => {
+		const promoted = setMemberRole( managedGroup(), 's2', 'manager' );
+		expect( promoted.members.find( m => m.subscriberId === 's2' ).role ).toBe( 'manager' );
+		const demoted = setMemberRole( promoted, 's2', 'member' );
+		expect( demoted.members.find( m => m.subscriberId === 's2' ).role ).toBe( 'member' );
+	} );
+
+	it( 'setMemberRole never re-roles the owner', () => {
+		const group = managedGroup();
+		expect( setMemberRole( group, 's1', 'manager' ) ).toBe( group );
+	} );
+
+	it( 'seeds managers who are group members and never the owner', () => {
+		const withManagers = GROUPS.filter( g => ( g.members || [] ).some( m => m.role === 'manager' ) );
+		expect( withManagers.map( g => g.id ) ).toEqual( expect.arrayContaining( [ 'grp_acme', 'grp_riverside', 'grp_northside' ] ) );
+		withManagers.forEach( g => g.members.filter( m => m.role === 'manager' ).forEach( m => expect( m.subscriberId ).not.toBe( g.ownerId ) ) );
 	} );
 } );
