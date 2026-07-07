@@ -82,58 +82,6 @@ class Insights_Wizard extends Wizard {
 	}
 
 	/**
-	 * Whether the Gates preview tab (Tab 4 / NPPD-1604) is enabled
-	 * for this environment.
-	 *
-	 * Independent from {@see self::is_enabled()} so the preview can
-	 * be flipped on only where it's wanted (development, staging,
-	 * canary), separately from the broader Insights wizard rollout.
-	 * Once Phase 2 (NPPD-1630) lands and the tab is no longer a
-	 * placeholder, this gate can be retired in favor of the standard
-	 * Insights flag plus a runtime feature-detection check.
-	 *
-	 * @return bool True when the Gates preview should appear in the
-	 *              Insights tab nav and have its REST route active.
-	 */
-	public static function is_gates_preview_enabled(): bool {
-		/**
-		 * Enables the Gates tab preview (Phase 1, placeholder data).
-		 *
-		 * @constant NEWSPACK_INSIGHTS_GATES_PREVIEW
-		 * @type     bool
-		 * @default  Gates preview tab hidden
-		 * @status   draft
-		 *
-		 * @example define( 'NEWSPACK_INSIGHTS_GATES_PREVIEW', true );
-		 */
-		return defined( 'NEWSPACK_INSIGHTS_GATES_PREVIEW' ) && NEWSPACK_INSIGHTS_GATES_PREVIEW;
-	}
-
-	/**
-	 * Whether the Advertising tab (Tab 8 / NPPD-1663) is enabled for this
-	 * environment.
-	 *
-	 * Independent from {@see self::is_enabled()} so the GAM-backed Advertising
-	 * orchestrator (its REST route and Action Scheduler refresh) only registers
-	 * where wanted, separately from the broader Insights rollout.
-	 *
-	 * @return bool True when Tab 8's data layer should be active.
-	 */
-	public static function is_advertising_enabled(): bool {
-		/**
-		 * Enables the Advertising tab (Tab 8) GAM orchestrator.
-		 *
-		 * @constant NEWSPACK_INSIGHTS_ADVERTISING_ENABLED
-		 * @type     bool
-		 * @default  Advertising tab disabled
-		 * @status   draft
-		 *
-		 * @example define( 'NEWSPACK_INSIGHTS_ADVERTISING_ENABLED', true );
-		 */
-		return defined( 'NEWSPACK_INSIGHTS_ADVERTISING_ENABLED' ) && NEWSPACK_INSIGHTS_ADVERTISING_ENABLED;
-	}
-
-	/**
 	 * Globally disable the Insights cache for development / debugging.
 	 *
 	 * @constant NEWSPACK_INSIGHTS_CACHE_DISABLED
@@ -387,16 +335,13 @@ class Insights_Wizard extends Wizard {
 	}
 
 	/**
-	 * Whether the Advertising (Tab 8) nav entry should render. Requires the
-	 * feature flag, plus either an active Google Ad Manager ad provider or
-	 * fixture mode (so the tab is testable without a GAM connection).
+	 * Whether the Advertising (Tab 8) nav entry should render. Shown when Google
+	 * Ad Manager is the active ad provider (runtime check), or when fixture mode
+	 * is on (so the tab is testable without a GAM connection).
 	 *
 	 * @return bool
 	 */
 	private static function is_advertising_tab_visible(): bool {
-		if ( ! self::is_advertising_enabled() ) {
-			return false;
-		}
 		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
 			return true;
 		}
@@ -437,10 +382,10 @@ class Insights_Wizard extends Wizard {
 			// are live BQ-backed tabs (data layers complete per NPPD-1729). They
 			// are always shown (true) — feature detection is handled at the metric
 			// level via the BQ proxy, not at tab-registration time. Advertising
-			// (Tab 8, NPPD-1618) has its own data layer: it shows when its feature
-			// flag is enabled AND either Google Ad Manager is the active ad provider
-			// (Advertising_Metric::is_tab_visible() === Client::is_gam_active()) or
-			// fixture mode is on for dev testing. See is_advertising_tab_visible().
+			// (Tab 8, NPPD-1618) has its own data layer: it shows when Google Ad
+			// Manager is the active ad provider (Advertising_Metric::is_tab_visible()
+			// === Client::is_gam_active()) or fixture mode is on for dev testing.
+			// See is_advertising_tab_visible().
 			// Subscribers stays all-on for now; Tab 6 visibility detection
 			// (non-donation subscription product presence) is a separate follow-up.
 			// Donors hides when there's no recent donation activity —
@@ -448,13 +393,13 @@ class Insights_Wizard extends Wizard {
 			// donation products, then checks for an active donation subscription or
 			// a qualifying donation order in the trailing
 			// DONATION_ACTIVITY_WINDOW_DAYS window (cached for a day). Gates is
-			// gated to the preview constant NEWSPACK_INSIGHTS_GATES_PREVIEW while
-			// Phase 1 (placeholder data) is being validated.
+			// always shown (true) alongside the other BQ-backed tabs; it is
+			// governed solely by the Insights feature flag.
 			'tabs'                => [
 				'audience'       => true,
 				'engagement'     => true,
 				'conversion'     => true,
-				'gates'          => self::is_gates_preview_enabled(),
+				'gates'          => true,
 				'prompts'        => true,
 				'subscribers'    => true,
 				'donors'         => self::has_donation_activity(),

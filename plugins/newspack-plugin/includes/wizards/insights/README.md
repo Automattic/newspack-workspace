@@ -11,8 +11,6 @@ All gated by PHP constants. The wizard registers nothing when `NEWSPACK_INSIGHTS
 | Constant | Effect |
 | --- | --- |
 | `NEWSPACK_INSIGHTS_ENABLED` | Master switch. When off, no admin page, no REST routes, no asset enqueue. |
-| `NEWSPACK_INSIGHTS_GATES_PREVIEW` | Shows the Gates (Tab 4) nav entry and activates its REST route. Requires `NEWSPACK_INSIGHTS_ENABLED` to be on as well — the section bails before either check otherwise. The two flags are kept separate so the Phase 1 preview can ship to a subset of Insights-enabled environments. |
-| `NEWSPACK_INSIGHTS_ADVERTISING_ENABLED` | Shows the Advertising (Tab 8) nav entry and activates its GAM-backed orchestrator. Also requires `NEWSPACK_INSIGHTS_ENABLED`. |
 | `NEWSPACK_INSIGHTS_FIXTURE_MODE` | REST controllers that wrap a metric with a `get_fixture()` method short-circuit to fixtures instead of live data. Used for UI smoke testing. (Conversion, Subscribers, and Donors don't implement fixtures today; see [Metric orchestrators](#metric-orchestrators-metricsclass--metricphp).) |
 | `NEWSPACK_INSIGHTS_CACHE_DISABLED` | Bypass the server-side transient cache entirely. Dev/debug only. |
 | `NEWSPACK_INSIGHTS_AUDIENCE_USE_GA4`, `NEWSPACK_INSIGHTS_ENGAGEMENT_USE_GA4` | Per-tab backend dispatch (default on). When off, the metric would route to the BigQuery proxy path — currently a stub until NPPD-1630. |
@@ -49,7 +47,7 @@ src/wizards/insights/               (frontend)
 
 ### Sections (`class-insights-section-*.php`)
 
-One per tab. Each section's `init()` is called from [`includes/class-wizards.php`](../../class-wizards.php) during wizard bootstrap. The section bails immediately when `Insights_Wizard::is_enabled()` is false; Gates and Advertising sections also gate on their per-tab preview/enabled constants. When the gate passes, the section:
+One per tab. Each section's `init()` is called from [`includes/class-wizards.php`](../../class-wizards.php) during wizard bootstrap. The section bails immediately when `Insights_Wizard::is_enabled()` is false. When the gate passes, the section:
 
 1. Loads the tab's `metrics/class-*-metric.php` and `api/class-*-rest-controller.php` files.
 2. Registers the REST route on the `rest_api_init` hook.
@@ -82,11 +80,11 @@ Current tab status:
 | Audience (1) | GA4 Data API | Default path; BQ v1.1 path is stubbed behind `NEWSPACK_INSIGHTS_AUDIENCE_USE_GA4`. |
 | Engagement (2) | GA4 Data API | Same dispatch pattern (`NEWSPACK_INSIGHTS_ENGAGEMENT_USE_GA4`). |
 | Conversion (3) | Inline placeholders | The metric returns synthetic payloads with `pending: true` per shape until NPPD-1630 Phase 2 lands. No BigQuery calls and no fixtures wired today. |
-| Gates (4) | BigQuery | Preview-flag gated. |
+| Gates (4) | BigQuery | Gate exposure, conversion funnel, per-gate breakdown. |
 | Prompts (5) | BigQuery | Conversion funnels. |
 | Subscribers (6) | Local Woo | Reads via [`storage/`](storage/). |
 | Donors (7) | Local Woo | Donation-scoped queries via the donors storage interface. |
-| Advertising (8) | GAM async SOAP | Polls async report jobs; gated by `NEWSPACK_INSIGHTS_ADVERTISING_ENABLED` and a runtime "GAM active" check. |
+| Advertising (8) | GAM async SOAP | Polls async report jobs; shown when GAM is the active ad provider (runtime "GAM active" check) or fixture mode is on. |
 
 ### Data clients
 
