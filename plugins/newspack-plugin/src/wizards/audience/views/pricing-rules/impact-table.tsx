@@ -4,6 +4,13 @@
  * column is the "Everyone else" baseline (no segment / not-logged-in); each
  * segment the preview computed adds a column, so prices compare side by side.
  * Flat rules show a bare price; stepped rules join cycles with ` · `.
+ *
+ * Every column prices a NEW subscriber — the calculator projects with no
+ * customer at acquisition intent — so a first-time-only/locked rule shows in
+ * every segment column even though existing subscribers are excluded at
+ * checkout. A caption spells this out whenever segment columns are present, so a
+ * segment named for existing subscribers isn't misread as modeling their
+ * lifecycle (NPPD-1853).
  */
 
 /**
@@ -73,35 +80,45 @@ export default function ImpactTable( { baseline, segmentGroups, currency }: Impa
 	];
 
 	return (
-		<table className="newspack-pricing-rules__impact-table">
-			<caption className="screen-reader-text">{ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }</caption>
-			<thead>
-				<tr>
-					<th scope="col">{ __( 'Product', 'newspack-plugin' ) }</th>
-					<th scope="col">{ __( 'Regular', 'newspack-plugin' ) }</th>
-					{ columns.map( col => (
-						<th scope="col" key={ col.key }>
-							{ col.label }
-						</th>
-					) ) }
-				</tr>
-			</thead>
-			<tbody>
-				{ baseline.map( row => (
-					<tr key={ row.product_id }>
-						<td>{ row.edit_link ? <a href={ row.edit_link }>{ row.name }</a> : row.name }</td>
-						<td>{ formatPrice( row.regular, currency ) }</td>
-						{ columns.map( col => {
-							const cell = col.byId[ row.product_id ];
-							return (
-								<td key={ col.key } className={ cell?.changed ? 'is-changed' : undefined }>
-									<ResultingCell row={ cell } currency={ currency } />
-								</td>
-							);
-						} ) }
+		<>
+			<table className="newspack-pricing-rules__impact-table">
+				<caption className="screen-reader-text">{ __( 'Resulting prices by product and reader segment', 'newspack-plugin' ) }</caption>
+				<thead>
+					<tr>
+						<th scope="col">{ __( 'Product', 'newspack-plugin' ) }</th>
+						<th scope="col">{ __( 'Regular', 'newspack-plugin' ) }</th>
+						{ columns.map( col => (
+							<th scope="col" key={ col.key }>
+								{ col.label }
+							</th>
+						) ) }
 					</tr>
-				) ) }
-			</tbody>
-		</table>
+				</thead>
+				<tbody>
+					{ baseline.map( row => (
+						<tr key={ row.product_id }>
+							<td>{ row.edit_link ? <a href={ row.edit_link }>{ row.name }</a> : row.name }</td>
+							<td>{ formatPrice( row.regular, currency ) }</td>
+							{ columns.map( col => {
+								const cell = col.byId[ row.product_id ];
+								return (
+									<td key={ col.key } className={ cell?.changed ? 'is-changed' : undefined }>
+										<ResultingCell row={ cell } currency={ currency } />
+									</td>
+								);
+							} ) }
+						</tr>
+					) ) }
+				</tbody>
+			</table>
+			{ hasSegments && (
+				<p className="newspack-pricing-rules__muted">
+					{ __(
+						'Each column shows what a new subscriber would pay — overall, or assuming membership in that segment. First-time-only and locked rules apply to new sign-ups only, so existing subscribers are not modeled here.',
+						'newspack-plugin'
+					) }
+				</p>
+			) }
+		</>
 	);
 }
