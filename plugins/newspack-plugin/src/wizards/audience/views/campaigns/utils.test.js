@@ -18,10 +18,11 @@ import { render, waitFor } from '@testing-library/react';
  */
 import apiFetch from '@wordpress/api-fetch';
 
-jest.mock( '@wordpress/api-fetch' );
+jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 
 // `utils.js` captures `window.newspackAudienceCampaigns.criteria` at module-load
-// time, so the global must be set before the module is required.
+// time, so the global must be set before the module is loaded (see the dynamic
+// import in `beforeAll`).
 const CRITERIA = [
 	{
 		id: 'newsletter',
@@ -43,12 +44,12 @@ const CRITERIA = [
 describe( 'segmentDescription', () => {
 	let segmentDescription;
 
-	beforeAll( () => {
+	beforeAll( async () => {
 		window.newspackAudienceCampaigns = {
 			api: '/newspack/v1/wizard/newspack-audience-campaigns',
 			criteria: CRITERIA,
 		};
-		( { segmentDescription } = require( './utils' ) );
+		( { segmentDescription } = await import( './utils' ) );
 	} );
 
 	it( 'renders an element-valued criteria message as a label, not "[object Object]"', async () => {
