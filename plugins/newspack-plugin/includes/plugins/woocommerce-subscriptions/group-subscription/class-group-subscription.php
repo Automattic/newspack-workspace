@@ -179,8 +179,9 @@ class Group_Subscription {
 		if ( $subscription ) {
 			$stored = \get_users(
 				[
-					'fields'     => [ 'ID' ],
-					'meta_query' => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+					'fields'      => [ 'ID' ],
+					'count_total' => false,
+					'meta_query'  => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 						[
 							'key'   => self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY,
 							'value' => $subscription->get_id(),

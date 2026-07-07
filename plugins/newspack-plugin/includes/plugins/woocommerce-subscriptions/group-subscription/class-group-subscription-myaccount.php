@@ -600,11 +600,13 @@ class Group_Subscription_MyAccount {
 	}
 
 	/**
-	 * Handle the make/remove manager form submission (owner-only).
+	 * Handle the make/remove manager form submission.
 	 *
-	 * An instant action with no confirm step, mirroring the admin prototype:
-	 * promote/demote stays with the person who owns the billing, so managers
-	 * cannot change peer roles.
+	 * Gated to the subscription owner — or a store admin acting on the owner's
+	 * behalf (the admin-side parity from DSGNEWS-184). An instant action with
+	 * no confirm step, mirroring the admin prototype: promote/demote stays
+	 * with the person who owns the billing, so managers cannot change peer
+	 * roles.
 	 */
 	public static function handle_set_manager_role() {
 		check_admin_referer( self::SET_MANAGER_ROLE_NONCE_ACTION );
@@ -627,13 +629,13 @@ class Group_Subscription_MyAccount {
 		}
 		self::verify_manageable( $subscription_id, $redirect_url, 'members' );
 
-		$member_id = filter_input( INPUT_POST, 'member_id', FILTER_VALIDATE_INT ) ?? 0;
+		$member_id = absint( filter_input( INPUT_POST, 'member_id', FILTER_VALIDATE_INT ) );
 		$role      = 'manager' === filter_input( INPUT_POST, 'role', FILTER_SANITIZE_SPECIAL_CHARS ) ? 'manager' : 'member';
 		$result    = 'manager' === $role
 			? Group_Subscription::add_manager( $subscription, $member_id )
 			: Group_Subscription::remove_manager( $subscription, $member_id );
 
-		$member = get_userdata( (int) $member_id );
+		$member = get_userdata( $member_id );
 		$name   = $member ? newspack_get_user_display_label( $member ) : __( 'This member', 'newspack-plugin' );
 
 		self::redirect(
