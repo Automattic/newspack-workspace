@@ -39,12 +39,12 @@ activate_worktree_tooling() {
     # changing branch the lockfile is out of sync and --frozen-lockfile fails;
     # fall back to a full install so the hook still activates.
     if ! ( cd "$dir" && pnpm install --frozen-lockfile ); then
-        echo "[worktree] Lockfile out of sync with manifests; retrying with a full 'pnpm install' (may update pnpm-lock.yaml in the worktree)..."
+        echo "[worktree] Frozen install failed (lockfile out of sync, or another install error); retrying with a full 'pnpm install' (may update pnpm-lock.yaml in the worktree)..."
         ( cd "$dir" && pnpm install ) || echo "[worktree] Warning: pnpm install failed; husky hooks may be inactive. Run 'pnpm install' in $dir manually."
     fi
 
     # Verify the load-bearing outcome, not just the exit code: `prepare` can
-    # silently no-op (HUSKY=0, NODE_ENV=production, .git-as-file) while install
+    # silently no-op (HUSKY=0, NODE_ENV=production) while install
     # still exits 0. Assert so a hookless worktree is discoverable.
     if [[ ! -e "$dir/.husky/_/pre-commit" ]]; then
         echo "[worktree] Warning: husky hook not present after install; pre-commit hooks are INACTIVE in $dir."

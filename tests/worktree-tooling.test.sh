@@ -98,6 +98,17 @@ has  "case7 warns dir not found"              "$OUT" "not found"
 ok   "case7 pnpm NOT invoked"                 "$(cat "$PNPM_LOG")" ""
 ok   "case7 returns 0"                         "$RC" "0"
 
+# --- Case 8: frozen fails AND plain fallback also fails -> failed warning, still returns 0 ---
+S8="$FIX/c8"; make_stub_dir "$S8"; export PNPM_LOG="$S8/log"; : > "$PNPM_LOG"
+export PNPM_FROZEN_EXIT=1 PNPM_PLAIN_EXIT=1
+D8="$FIX/wt8"; mkdir -p "$D8/.husky/_"; : > "$D8/.husky/_/pre-commit"
+run_helper "$S8/bin" "$D8" false
+has  "case8 frozen+plain both attempted"     "$(cat "$PNPM_LOG")" "install --frozen-lockfile"
+ok   "case8 two invocations (both failed)"   "$(wc -l < "$PNPM_LOG" | tr -d ' ')" "2"
+has  "case8 warns pnpm install failed"       "$OUT" "pnpm install failed"
+ok   "case8 returns 0"                         "$RC" "0"
+unset PNPM_FROZEN_EXIT PNPM_PLAIN_EXIT
+
 echo ""
 echo "worktree-tooling: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

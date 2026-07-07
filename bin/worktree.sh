@@ -362,10 +362,10 @@ case $1 in
     *)
         echo "Usage: n worktree <add|list|remove|cleanup> [args]"
         echo "  add <branch> [--repo <name>] [--no-install]  Create a worktree at the given branch"
-        echo "                                              (--repo: a standalone repos/{plugins,themes}/<name> checkout)"
-        echo "                                              (--no-install: skip auto 'pnpm install'; ignored for --repo/tier-2)"
-        echo "  list                                      List all worktrees (workspace + standalone)"
-        echo "  remove <branch> [--repo <name>] [--yes]   Remove a worktree and delete the branch"
-        echo "  cleanup [--all] [--yes]                   Interactive bulk cleanup (workspace worktrees only)"
+        echo "                                               (--repo: a standalone repos/{plugins,themes}/<name> checkout)"
+        echo "                                               (--no-install: skip auto 'pnpm install'; ignored for --repo/tier-2)"
+        echo "  list                                         List all worktrees (workspace + standalone)"
+        echo "  remove <branch> [--repo <name>] [--yes]      Remove a worktree and delete the branch"
+        echo "  cleanup [--all] [--yes]                      Interactive bulk cleanup (workspace worktrees only)"
         ;;
 esac
