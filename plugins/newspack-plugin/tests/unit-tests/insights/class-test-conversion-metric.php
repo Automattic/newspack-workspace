@@ -3363,6 +3363,172 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 		$this->assertSame( 'Mon 2026-06-29 06:00', $result, 'Sunday night must schedule next-day Monday.' );
 	}
 
+	// --- NEWS-2603 Task 2: get_newsletter_subscriber_value_3yr() state propagation ---
+
+	/**
+	 * Build a Subscribers_Metric mock whose get_supporter_clv_3yr() returns a
+	 * fixed computable/non-computable CLV.
+	 *
+	 * @param bool $computable Whether the CLV should read as computable.
+	 * @return Subscribers_Metric
+	 */
+	private function subscribers_metric_with_clv( bool $computable ): Subscribers_Metric {
+		$mock = $this->createMock( Subscribers_Metric::class );
+		$mock->method( 'get_supporter_clv_3yr' )->willReturn(
+			[
+				'value'       => $computable ? 100.0 : 0.0,
+				'computable'  => $computable,
+				'denominator' => $computable ? 10 : 0,
+			]
+		);
+		return $mock;
+	}
+
+	/**
+	 * Build a Donors_Metric mock whose get_supporter_clv_3yr() returns a fixed
+	 * computable/non-computable CLV.
+	 *
+	 * @param bool $computable Whether the CLV should read as computable.
+	 * @return Donors_Metric
+	 */
+	private function donors_metric_with_clv( bool $computable ): Donors_Metric {
+		$mock = $this->createMock( Donors_Metric::class );
+		$mock->method( 'get_supporter_clv_3yr' )->willReturn(
+			[
+				'value'       => $computable ? 50.0 : 0.0,
+				'computable'  => $computable,
+				'denominator' => $computable ? 5 : 0,
+			]
+		);
+		return $mock;
+	}
+
+	/**
+	 * Not-configured branch (no WooCommerce): 'state' is 'populated' — this is
+	 * deliberate non-applicability, not a data problem, so it must not make the
+	 * Audience envelope's data_status anything other than 'complete'.
+	 */
+	public function test_newsletter_subscriber_value_not_configured_state_is_populated() {
+		add_filter( 'newspack_insights_woocommerce_active', '__return_false' );
+		try {
+			$metric          = new Conversion_Metric( $this->proxy_returning( [] ) );
+			[ $start, $end ] = $this->window();
+			$result          = $metric->get_newsletter_subscriber_value_3yr( $start, $end );
+
+			$this->assertTrue( $result['not_configured'] );
+			$this->assertFalse( $result['computable'] );
+			$this->assertSame( 'populated', $result['state'] );
+		} finally {
+			remove_filter( 'newspack_insights_woocommerce_active', '__return_false' );
+		}
+	}
+
+	/**
+	 * Computable branch (both a rate and its CLV are computable): 'state' is
+	 * 'populated'.
+	 */
+	public function test_newsletter_subscriber_value_computable_state_is_populated() {
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+		try {
+			$row = [
+				'newsletter_conversion_rate' => 0.05,
+				'newsletter_signups'         => 200,
+			];
+			$metric          = new Conversion_Metric(
+				$this->proxy_returning( [ $row ] ),
+				$this->subscribers_metric_with_clv( true ),
+				$this->donors_metric_with_clv( true )
+			);
+			[ $start, $end ] = $this->window();
+			$result          = $metric->get_newsletter_subscriber_value_3yr( $start, $end );
+
+			$this->assertTrue( $result['computable'] );
+			$this->assertSame( 'populated', $result['state'] );
+		} finally {
+			remove_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+		}
+	}
+
+	/**
+	 * Error branch: a proxy WP_Error on the rate query (surfaced by the rate
+	 * scalar as `state === 'error'`) propagates as 'state' => 'error' on the
+	 * aggregate, taking precedence over any warming signal from the other path.
+	 */
+	public function test_newsletter_subscriber_value_error_state_propagates() {
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+		try {
+			$metric          = new Conversion_Metric(
+				$this->proxy_returning( new \WP_Error( 'bigquery_proxy_http_error', 'boom' ) ),
+				$this->subscribers_metric_with_clv( false ),
+				$this->donors_metric_with_clv( false )
+			);
+			[ $start, $end ] = $this->window();
+			$result          = $metric->get_newsletter_subscriber_value_3yr( $start, $end );
+
+			$this->assertFalse( $result['computable'] );
+			$this->assertSame( 'error', $result['state'] );
+			$this->assertArrayHasKey( 'error', $result );
+		} finally {
+			remove_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+		}
+	}
+
+	/**
+	 * Warming branch (NEWS-2603): when neither path is computable and neither
+	 * rate errored, but at least one rate is warming (a hub snapshot cache miss
+	 * being backfilled — see Conversion_Metric::warming_scalar()), the aggregate
+	 * must surface 'state' => 'warming', not silently fall through to the
+	 * generic insufficient-history 'populated' state.
+	 */
+	public function test_newsletter_subscriber_value_warming_state_when_rate_is_warming() {
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+		try {
+			// Bare [] from the snapshot query is the hub's warming signal (see
+			// test_bare_empty_from_snapshot_query_is_treated_as_warming above).
+			$metric          = new Conversion_Metric(
+				$this->proxy_returning( [] ),
+				$this->subscribers_metric_with_clv( false ),
+				$this->donors_metric_with_clv( false )
+			);
+			[ $start, $end ] = $this->window();
+			$result          = $metric->get_newsletter_subscriber_value_3yr( $start, $end );
+
+			$this->assertFalse( $result['computable'] );
+			$this->assertSame( 'warming', $result['state'] );
+			$this->assertArrayNotHasKey( 'error', $result );
+		} finally {
+			remove_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+		}
+	}
+
+	/**
+	 * Genuine insufficient-history branch: both rates are real computed zero
+	 * cohorts (never warming, never error), so 'state' stays 'populated'.
+	 */
+	public function test_newsletter_subscriber_value_insufficient_history_state_is_populated() {
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+		try {
+			$row = [
+				'newsletter_signups'         => 0,
+				'converted_within_window'    => 0,
+				'newsletter_conversion_rate' => null,
+			];
+			$metric          = new Conversion_Metric(
+				$this->proxy_returning( [ $row ] ),
+				$this->subscribers_metric_with_clv( false ),
+				$this->donors_metric_with_clv( false )
+			);
+			[ $start, $end ] = $this->window();
+			$result          = $metric->get_newsletter_subscriber_value_3yr( $start, $end );
+
+			$this->assertFalse( $result['computable'] );
+			$this->assertSame( 'populated', $result['state'] );
+			$this->assertArrayNotHasKey( 'error', $result );
+		} finally {
+			remove_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+		}
+	}
+
 	/**
 	 * Clear the cohort snapshot transient between tests.
 	 */

@@ -62,6 +62,19 @@ class Audience_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Bumped when the tab payload's shape changes so a deploy doesn't keep
+	 * serving a stale tab-level envelope. Overrides the global default so only
+	 * the audience envelope is busted — other tabs keep their caches. v2 adds
+	 * the NEWS-2603 top-level `data_status` field (a stale v1 envelope would
+	 * lack it and the warming banner would never render).
+	 *
+	 * @return string
+	 */
+	protected function cache_schema_version(): string {
+		return '2';
+	}
+
+	/**
 	 * Tab slug used as the cache namespace.
 	 *
 	 * @return string
@@ -236,6 +249,11 @@ class Audience_REST_Controller extends WP_REST_Controller {
 			$previous             = Audience_Metric::get_all( $compare_start->format( 'Y-m-d' ), $compare_end->format( 'Y-m-d' ), false );
 			$response['previous'] = isset( $previous['tab_error'] ) ? null : $previous;
 		}
+
+		// NEWS-2603: top-level warming-aware status derived from every nested
+		// metric-scalar `state`, for the React banner to consume.
+		$response['data_status'] = Metric_Status::derive( $response );
+
 		return $response;
 	}
 }

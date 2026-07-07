@@ -1887,18 +1887,21 @@ final class Conversion_Metric {
 	 *
 	 * @param DateTimeInterface $start Picker start (passed through to the rate queries).
 	 * @param DateTimeInterface $end   Report end date (the "now" anchor).
-	 * @return array{value: float, computable: bool, denominator: int}
+	 * @return array{value: float, computable: bool, denominator: int, state: string}
 	 */
 	public function get_newsletter_subscriber_value_3yr( DateTimeInterface $start, DateTimeInterface $end ): array {
 		// Both revenue paths need local Woo; no WooCommerce means there is no reader-
 		// revenue model to value — a "not configured" state, distinct from a site that
 		// has Woo but not yet enough history. Short-circuits before the hub calls.
+		// Deliberate non-applicability, not a data problem, so it counts as
+		// 'populated' for the envelope-level data_status (NEWS-2603).
 		if ( ! $this->woocommerce_active() ) {
 			return [
 				'value'          => 0.0,
 				'computable'     => false,
 				'denominator'    => 0,
 				'not_configured' => true,
+				'state'          => 'populated',
 			];
 		}
 
@@ -1927,12 +1930,15 @@ final class Conversion_Metric {
 				'value'       => round( $value, 2 ),
 				'computable'  => true,
 				'denominator' => $signups,
+				'state'       => 'populated',
 			];
 		}
 
 		// Not computable: a hub proxy failure on a rate query is an error state, not
 		// "insufficient history" — surface it distinctly so the card doesn't imply the
-		// publisher just needs to wait for data.
+		// publisher just needs to wait for data. Error takes precedence over warming
+		// (NEWS-2603): if either path outright failed, that's the more actionable
+		// signal even if the other path is merely still warming up.
 		foreach ( [ $sub_rate, $don_rate ] as $rate ) {
 			if ( isset( $rate['state'] ) && 'error' === $rate['state'] ) {
 				return [
@@ -1940,6 +1946,22 @@ final class Conversion_Metric {
 					'computable'  => false,
 					'denominator' => 0,
 					'error'       => $rate['error_message'] ?? __( 'Newsletter conversion data is unavailable right now.', 'newspack-plugin' ),
+					'state'       => 'error',
+				];
+			}
+		}
+
+		// Warming (NEWS-2603): the hub snapshot for at least one path is a cache
+		// miss being backfilled — a distinct, expected, transient condition, not
+		// an error and not "insufficient history" (which implies the publisher
+		// just needs more time/volume, not a rebuild already in progress).
+		foreach ( [ $sub_rate, $don_rate ] as $rate ) {
+			if ( isset( $rate['state'] ) && 'warming' === $rate['state'] ) {
+				return [
+					'value'       => 0.0,
+					'computable'  => false,
+					'denominator' => 0,
+					'state'       => 'warming',
 				];
 			}
 		}
@@ -1949,6 +1971,7 @@ final class Conversion_Metric {
 			'value'       => 0.0,
 			'computable'  => false,
 			'denominator' => 0,
+			'state'       => 'populated',
 		];
 	}
 

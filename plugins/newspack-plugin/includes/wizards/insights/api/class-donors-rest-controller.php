@@ -62,12 +62,13 @@ class Donors_REST_Controller extends WP_REST_Controller {
 	 * CACHE_PREFIX bump. Only the donors envelope is busted — other
 	 * (BigQuery-backed) tabs keep their caches. v4 adds the NEWS-2603 snapshot
 	 * fields `newsletter_conversion` and `supporter_clv_3yr` (a stale v3 envelope
-	 * would lack them and the cards would dereference `undefined`).
+	 * would lack them and the cards would dereference `undefined`); v5 adds the
+	 * NEWS-2603 top-level `data_status` field.
 	 *
 	 * @return string
 	 */
 	protected function cache_schema_version(): string {
-		return '4';
+		return '5';
 	}
 
 	/**

@@ -74,12 +74,13 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 	 * merge + synthetic "(no variation)" row); v3 adds `winback_subscribers` to
 	 * each window payload; v4 adds the NEWS-2603 snapshot fields
 	 * `newsletter_conversion` and `supporter_clv_3yr` (a stale v3 envelope would
-	 * lack them and the cards would dereference `undefined`).
+	 * lack them and the cards would dereference `undefined`); v5 adds the
+	 * NEWS-2603 top-level `data_status` field.
 	 *
 	 * @return string
 	 */
 	protected function cache_schema_version(): string {
-		return '4';
+		return '5';
 	}
 
 	/**
@@ -206,6 +207,10 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 		if ( $compare_start && $compare_end ) {
 			$response['previous'] = $this->build_window( $metric, $compare_start, $compare_end );
 		}
+
+		// NEWS-2603: top-level warming-aware status derived from every nested
+		// metric-scalar `state`, for the React banner to consume.
+		$response['data_status'] = Metric_Status::derive( $response );
 
 		return $response;
 	}
