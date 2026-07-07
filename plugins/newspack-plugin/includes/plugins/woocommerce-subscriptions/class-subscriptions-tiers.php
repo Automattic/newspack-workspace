@@ -899,11 +899,13 @@ class Subscriptions_Tiers {
 			return $passed;
 		}
 
+		// The tiers modal submits the switch as query params, but read from
+		// $_REQUEST so the backstop also covers a crafted POST request.
 		// phpcs:disable WordPress.Security.NonceVerification.Recommended
-		if ( empty( $_GET['switch-subscription'] ) ) {
+		if ( empty( $_REQUEST['switch-subscription'] ) ) {
 			return $passed;
 		}
-		$subscription = wcs_get_subscription( absint( $_GET['switch-subscription'] ) );
+		$subscription = wcs_get_subscription( absint( wp_unslash( $_REQUEST['switch-subscription'] ) ) );
 		if (
 			! $subscription
 			|| ! is_user_logged_in()
@@ -911,8 +913,11 @@ class Subscriptions_Tiers {
 		) {
 			return $passed;
 		}
-		$target_id     = $variation_id ? (int) $variation_id : (int) $product_id;
-		$price_param   = isset( $_GET['price'] ) ? sanitize_text_field( wp_unslash( $_GET['price'] ) ) : '';
+		$target_id = $variation_id ? (int) $variation_id : (int) $product_id;
+		// The name-your-price amount comes from an <input type="number">, so it is
+		// always a period-decimal string; a plain (float) cast is correct here and
+		// wc_format_decimal() would misread it on comma-decimal stores.
+		$price_param   = isset( $_REQUEST['price'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['price'] ) ) : '';
 		$target_amount = '' !== $price_param ? (float) $price_param : null;
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 

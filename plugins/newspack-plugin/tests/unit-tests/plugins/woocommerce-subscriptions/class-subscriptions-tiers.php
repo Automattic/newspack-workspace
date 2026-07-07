@@ -24,7 +24,14 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 		$subscriptions_database = [];
 		$products_database      = [];
 		wp_set_current_user( 0 );
-		unset( $_GET['switch-subscription'], $_GET['item'], $_GET['price'] );
+		unset(
+			$_GET['switch-subscription'],
+			$_GET['item'],
+			$_GET['price'],
+			$_REQUEST['switch-subscription'],
+			$_REQUEST['item'],
+			$_REQUEST['price']
+		);
 	}
 
 	/**
@@ -32,7 +39,14 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 	 */
 	public function tear_down() {
 		wp_set_current_user( 0 );
-		unset( $_GET['switch-subscription'], $_GET['item'], $_GET['price'] );
+		unset(
+			$_GET['switch-subscription'],
+			$_GET['item'],
+			$_GET['price'],
+			$_REQUEST['switch-subscription'],
+			$_REQUEST['item'],
+			$_REQUEST['price']
+		);
 		parent::tear_down();
 	}
 
@@ -231,7 +245,7 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 		$user_id = self::factory()->user->create();
 		wp_set_current_user( $user_id );
 		$subscription                = $this->make_subscription( $user_id, 'pending-cancel', 102 );
-		$_GET['switch-subscription'] = (string) $subscription->get_id();
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
 
 		$this->assertFalse( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102 ) );
 	}
@@ -243,7 +257,7 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 		$user_id = self::factory()->user->create();
 		wp_set_current_user( $user_id );
 		$subscription                = $this->make_subscription( $user_id, 'active', 102 );
-		$_GET['switch-subscription'] = (string) $subscription->get_id();
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
 
 		$this->assertTrue( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 101 ) );
 	}
@@ -255,8 +269,8 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 		$user_id = self::factory()->user->create();
 		wp_set_current_user( $user_id );
 		$subscription                = $this->make_subscription( $user_id, 'active', 102, 10.00 );
-		$_GET['switch-subscription'] = (string) $subscription->get_id();
-		$_GET['price']               = '15';
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+		$_REQUEST['price']               = '15';
 
 		$this->assertTrue( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102 ) );
 	}
@@ -268,8 +282,8 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 		$user_id = self::factory()->user->create();
 		wp_set_current_user( $user_id );
 		$subscription                = $this->make_subscription( $user_id, 'active', 102, 10.00 );
-		$_GET['switch-subscription'] = (string) $subscription->get_id();
-		$_GET['price']               = '10';
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+		$_REQUEST['price']               = '10';
 
 		$this->assertFalse( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102 ) );
 	}
@@ -282,7 +296,7 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 		$other_id        = self::factory()->user->create();
 		$subscription    = $this->make_subscription( $owner_id, 'active', 102 );
 		wp_set_current_user( $other_id );
-		$_GET['switch-subscription'] = (string) $subscription->get_id();
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
 
 		$this->assertTrue( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102 ) );
 	}
