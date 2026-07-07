@@ -53,9 +53,12 @@ activate_worktree_tooling() {
         echo "[worktree] --no-install: husky hooks inactive until you run 'pnpm install' in $dir"
         return 0
     fi
-    if ! command -v pnpm >/dev/null 2>&1; then
-        # Covers both "pnpm missing" and "pnpm on PATH but not executable"
-        # (command -v only reports an executable), degrading to the same note.
+    local pnpm_bin
+    pnpm_bin="$(command -v pnpm 2>/dev/null)"
+    if [[ -z "$pnpm_bin" || ! -x "$pnpm_bin" ]]; then
+        # Explicit -x check: macOS's stock /bin/bash 3.2 `command -v` does not
+        # verify the executable bit, so a present-but-non-executable pnpm must be
+        # caught here to degrade gracefully rather than fail loudly at install.
         echo "[worktree] pnpm not available on PATH; skipping husky activation. Run 'pnpm install' in $dir to enable pre-commit hooks."
         return 0
     fi

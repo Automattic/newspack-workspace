@@ -53,8 +53,8 @@ BIN="$(cd "$(dirname "$0")/../bin" && pwd)"
 FIX="$(mktemp -d)"; trap 'rm -rf "$FIX"' EXIT
 pass=0; fail=0
 ok(){ if [ "$2" = "$3" ]; then echo "  PASS  $1"; pass=$((pass+1)); else echo "  FAIL  $1 (got [$2] want [$3])"; fail=$((fail+1)); fi; }
-has(){ if printf '%s' "$2" | grep -qF "$3"; then echo "  PASS  $1"; pass=$((pass+1)); else echo "  FAIL  $1 (missing [$3] in: $2)"; fail=$((fail+1)); fi; }
-hasnt(){ if printf '%s' "$2" | grep -qF "$3"; then echo "  FAIL  $1 (unexpected [$3])"; fail=$((fail+1)); else echo "  PASS  $1"; pass=$((pass+1)); fi; }
+has(){ if printf '%s' "$2" | grep -qF -- "$3"; then echo "  PASS  $1"; pass=$((pass+1)); else echo "  FAIL  $1 (missing [$3] in: $2)"; fail=$((fail+1)); fi; }
+hasnt(){ if printf '%s' "$2" | grep -qF -- "$3"; then echo "  FAIL  $1 (unexpected [$3])"; fail=$((fail+1)); else echo "  PASS  $1"; pass=$((pass+1)); fi; }
 
 source "$BIN/worktree-tooling.sh"
 
@@ -179,8 +179,13 @@ activate_worktree_tooling() {
         echo "[worktree] --no-install: husky hooks inactive until you run 'pnpm install' in $dir"
         return 0
     fi
-    if ! command -v pnpm >/dev/null 2>&1; then
-        # Also covers "pnpm on PATH but not executable" (command -v needs an executable).
+    local pnpm_bin
+    pnpm_bin="$(command -v pnpm 2>/dev/null)"
+    if [[ -z "$pnpm_bin" || ! -x "$pnpm_bin" ]]; then
+        # Explicit -x check (not just `command -v`'s exit status): some bash
+        # builds (notably macOS's stock /bin/bash 3.2) do not verify the
+        # executable bit, so a present-but-non-executable pnpm would slip past
+        # and fail loudly during install instead of degrading gracefully here.
         echo "[worktree] pnpm not available on PATH; skipping husky activation. Run 'pnpm install' in $dir to enable pre-commit hooks."
         return 0
     fi
