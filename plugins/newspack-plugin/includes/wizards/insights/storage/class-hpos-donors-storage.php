@@ -305,6 +305,15 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * Tab 6 churn pattern scoped to donation products: customers whose
+	 * donation subscriptions cancelled/expired in window AND who currently
+	 * have no active donation subscription. Cancelled/expired side
+	 * pre-aggregated to DISTINCT customer_ids and LEFT-JOINed against the
+	 * DISTINCT active-donation-subscriber customer_ids (also pre-aggregated),
+	 * keeping only rows where the active side is NULL — an anti-join, not a
+	 * correlated `NOT IN (subquery)` (MySQL's slowest anti-join form). Same
+	 * approach as {@see HPOS_Storage::get_churned_subscribers_in_window()}.
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return int
@@ -314,12 +323,9 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
-		// Tab 6 churn pattern scoped to donation products: customers
-		// whose donation subscriptions cancelled/expired in window AND
-		// who currently have no active donation subscription.
 		$sql = $wpdb->prepare(
 			"SELECT COUNT(DISTINCT cancellations.customer_id) FROM (
-				SELECT o.customer_id
+				SELECT DISTINCT o.customer_id
 				FROM {$prefix}wc_orders o
 				JOIN {$prefix}wc_orders_meta om
 					ON om.order_id = o.id AND om.meta_key = '_schedule_cancelled'
@@ -333,7 +339,7 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 				  AND om.meta_value BETWEEN %s AND %s
 				  AND om.meta_value != ''
 			) AS cancellations
-			WHERE cancellations.customer_id NOT IN (
+			LEFT JOIN (
 				SELECT DISTINCT o2.customer_id
 				FROM {$prefix}wc_orders o2
 				JOIN {$prefix}woocommerce_order_items oi2
@@ -343,7 +349,8 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 				WHERE o2.type = 'shop_subscription'
 				  AND o2.status = 'wc-active'
 				  AND oim2.meta_value IN ($donations)
-			)",
+			) AS active ON active.customer_id = cancellations.customer_id
+			WHERE active.customer_id IS NULL",
 			$this->fmt( $start ),
 			$this->fmt( $end )
 		);
