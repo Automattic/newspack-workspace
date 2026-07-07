@@ -308,7 +308,12 @@ class Contact_Sync extends Sync {
 		// shutdown queue refuses to re-push it for the rest of the request.
 		self::$deleted_emails[ $email ] = true;
 
-		$integrations = Integrations::get_active_integrations();
+		// Only act on integrations the admin has finished configuring. This path
+		// performs real I/O (delete_contact / flag-mode upserts) and schedules AS
+		// retries per integration, so it must use the same configured-only gate as
+		// the sync path to avoid deleting against, or retrying on, an integration
+		// whose external prerequisites are not set up.
+		$integrations = Integrations::get_active_configured_integrations();
 		$errors       = [];
 
 		// Build the flag-mode contact once. The timestamp uses the same format constant
@@ -800,6 +805,11 @@ class Contact_Sync extends Sync {
 		$integration = Integrations::get_integration( $integration_id );
 		if ( ! $integration ) {
 			Logger::log( sprintf( 'Integration "%s" not found on deletion retry %d.', $integration_id, $retry_count ), 'NEWSPACK-SYNC', 'error' );
+			return;
+		}
+
+		if ( ! $integration->is_set_up() ) {
+			static::log( sprintf( 'Integration "%s" no longer set up on deletion retry %d; aborting retry chain.', $integration_id, $retry_count ) );
 			return;
 		}
 

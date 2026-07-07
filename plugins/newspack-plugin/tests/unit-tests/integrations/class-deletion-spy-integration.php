@@ -41,6 +41,24 @@ class Deletion_Spy_Integration extends Integration {
 	public $push_result = true;
 
 	/**
+	 * Value returned by is_set_up(). Tests flip this to false to model an
+	 * enabled-but-unconfigured integration (e.g. an ESP whose provider was
+	 * deselected) and assert the deletion path skips it.
+	 *
+	 * @var bool
+	 */
+	public $is_set_up = true;
+
+	/**
+	 * Whether the integration's external prerequisites are configured.
+	 *
+	 * @return bool
+	 */
+	public function is_set_up() {
+		return $this->is_set_up;
+	}
+
+	/**
 	 * Register settings fields (test implementation).
 	 */
 	public function register_settings_fields() {
