@@ -574,8 +574,17 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 		$donations = $this->id_list( $this->donation_product_ids );
 		unset( $end ); // cache key only; SQL uses NOW for the "still active" check.
 
-		$active_at_start_sql = $wpdb->prepare(
-			"SELECT DISTINCT cust.meta_value AS customer_id, p.ID AS subscription_id, p.post_status
+		// The active-at-start cohort used to be pulled into a PHP array and
+		// serialized back into a `CAST(... AS UNSIGNED) IN ($customer_list)`
+		// filter for the numerator query — slow, and a `max_allowed_packet`
+		// "MySQL server has gone away" trigger on large cohorts. Prepared once
+		// with the :start bound baked in as a literal, then reused
+		// (already-escaped) as a derived table by both the denominator COUNT
+		// and the numerator JOIN below — nesting a second prepare() around an
+		// interpolated %s-bearing string would double-escape / mis-count
+		// placeholders.
+		$active_at_start_cte = $wpdb->prepare(
+			"SELECT DISTINCT CAST(cust.meta_value AS UNSIGNED) AS customer_id
 			FROM {$prefix}posts p
 			JOIN {$prefix}postmeta cust
 				ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
@@ -600,17 +609,8 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 			$this->fmt( $start ),
 			$this->fmt( $start )
 		);
-		$rows = $wpdb->get_results( $active_at_start_sql, ARRAY_A );
-		if ( empty( $rows ) ) {
-			return [
-				'value'       => 0.0,
-				'computable'  => false,
-				'denominator' => 0,
-			];
-		}
 
-		$customers_active_at_start = array_unique( array_map( 'intval', array_column( $rows, 'customer_id' ) ) );
-		$denominator               = count( $customers_active_at_start );
+		$denominator = (int) $wpdb->get_var( "SELECT COUNT(*) FROM ({$active_at_start_cte}) AS active_at_start" );
 		if ( 0 === $denominator ) {
 			return [
 				'value'       => 0.0,
@@ -619,19 +619,18 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 			];
 		}
 
-		$customer_list = $this->id_list( $customers_active_at_start );
-		$numerator_sql = "SELECT COUNT(DISTINCT cust.meta_value)
-			FROM {$prefix}posts p
+		$numerator_sql = "SELECT COUNT(DISTINCT active_at_start.customer_id)
+			FROM ({$active_at_start_cte}) AS active_at_start
 			JOIN {$prefix}postmeta cust
-				ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+				ON CAST(cust.meta_value AS UNSIGNED) = active_at_start.customer_id AND cust.meta_key = '_customer_user'
+			JOIN {$prefix}posts p ON p.ID = cust.post_id
 			JOIN {$prefix}woocommerce_order_items oi
 				ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
 			JOIN {$prefix}woocommerce_order_itemmeta oim
 				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
 			WHERE p.post_type = 'shop_subscription'
 			  AND p.post_status = 'wc-active'
-			  AND oim.meta_value IN ($donations)
-			  AND CAST(cust.meta_value AS UNSIGNED) IN ($customer_list)";
+			  AND oim.meta_value IN ($donations)";
 		$numerator     = (int) $wpdb->get_var( $numerator_sql );
 
 		return [

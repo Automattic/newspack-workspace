@@ -579,11 +579,18 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 		$donations = $this->id_list( $this->donation_product_ids );
 		unset( $end ); // included in cache key by orchestrator; SQL uses NOW for the "still active" check.
 
-		// Subscriptions active at :start (subscription start <= :start
-		// AND not cancelled before :start). The CTE yields one row per
-		// (customer, subscription) pair.
-		$active_at_start_sql = $wpdb->prepare(
-			"SELECT DISTINCT o.customer_id, o.id AS subscription_id, o.status
+		// Subscriptions active at :start (subscription start <= :start AND
+		// not cancelled before :start). The active-at-start cohort used to
+		// be pulled into a PHP array and serialized back into an
+		// `o.customer_id IN ($customer_list)` filter for the numerator query —
+		// slow, and a `max_allowed_packet` "MySQL server has gone away"
+		// trigger on large cohorts. Prepared once with the :start bound
+		// baked in as a literal, then reused (already-escaped) as a derived
+		// table by both the denominator COUNT and the numerator JOIN below —
+		// nesting a second prepare() around an interpolated %s-bearing
+		// string would double-escape / mis-count placeholders.
+		$active_at_start_cte = $wpdb->prepare(
+			"SELECT DISTINCT o.customer_id
 			FROM {$prefix}wc_orders o
 			JOIN {$prefix}wc_orders_meta start_meta
 				ON start_meta.order_id = o.id AND start_meta.meta_key = '_schedule_start'
@@ -606,18 +613,9 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 			$this->fmt( $start ),
 			$this->fmt( $start )
 		);
-		$rows = $wpdb->get_results( $active_at_start_sql, ARRAY_A );
-		if ( empty( $rows ) ) {
-			return [
-				'value'       => 0.0,
-				'computable'  => false,
-				'denominator' => 0,
-			];
-		}
 
 		// Denominator: distinct customers who were active at start.
-		$customers_active_at_start = array_unique( array_map( 'intval', array_column( $rows, 'customer_id' ) ) );
-		$denominator               = count( $customers_active_at_start );
+		$denominator = (int) $wpdb->get_var( "SELECT COUNT(*) FROM ({$active_at_start_cte}) AS active_at_start" );
 		if ( 0 === $denominator ) {
 			return [
 				'value'       => 0.0,
@@ -628,17 +626,16 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 
 		// Numerator: those customers who still have at least one
 		// active donation subscription right now.
-		$customer_list = $this->id_list( $customers_active_at_start );
-		$numerator_sql = "SELECT COUNT(DISTINCT o.customer_id)
-			FROM {$prefix}wc_orders o
+		$numerator_sql = "SELECT COUNT(DISTINCT active_at_start.customer_id)
+			FROM ({$active_at_start_cte}) AS active_at_start
+			JOIN {$prefix}wc_orders o ON o.customer_id = active_at_start.customer_id
 			JOIN {$prefix}woocommerce_order_items oi
 				ON oi.order_id = o.id AND oi.order_item_type = 'line_item'
 			JOIN {$prefix}woocommerce_order_itemmeta oim
 				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
 			WHERE o.type = 'shop_subscription'
 			  AND o.status = 'wc-active'
-			  AND oim.meta_value IN ($donations)
-			  AND o.customer_id IN ($customer_list)";
+			  AND oim.meta_value IN ($donations)";
 		$numerator     = (int) $wpdb->get_var( $numerator_sql );
 
 		return [
