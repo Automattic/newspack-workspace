@@ -1712,6 +1712,19 @@ class HPOS_Storage implements Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * Cohort membership (first-ever non-donation subscription start within the
+	 * trailing 365 days) is pre-aggregated to one row per customer_id in the
+	 * `cohort` derived table and INNER-JOINed against the outer subscription
+	 * scan, instead of a correlated `customer_id IN (SELECT ... GROUP BY ...
+	 * HAVING ...)` semi-join subquery — the INNER JOIN lets MySQL build the
+	 * cohort set once rather than re-evaluating it as part of a full outer
+	 * scan. Mirrors the first-start definition in
+	 * get_first_subscription_order_dates(). MIN(meta_value) is a lexical
+	 * comparison; _schedule_start is zero-padded `Y-m-d H:i:s`, so lexical
+	 * order == chronological order. The outer scan is otherwise unchanged: it
+	 * still returns every non-donation subscription belonging to a cohort
+	 * member, not just the qualifying first one.
+	 *
 	 * @return array<int, array{customer_id:int, start:string, cancelled:?string, end:?string}>
 	 */
 	public function get_new_subscriber_cohort_intervals(): array {
@@ -1724,13 +1737,6 @@ class HPOS_Storage implements Storage_Interface {
 		// Upper bound excludes subscriptions with a future _schedule_start (scheduled/pending).
 		$now = gmdate( 'Y-m-d H:i:s', ( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) )->getTimestamp() );
 
-		// Inner subquery: customers whose earliest non-donation subscription
-		// start is within the window (the cohort). Mirrors the first-start
-		// definition in get_first_subscription_order_dates(). MIN(meta_value)
-		// is a lexical comparison; _schedule_start is zero-padded `Y-m-d H:i:s`,
-		// so lexical order == chronological order.
-		// Outer query: every non-donation subscription of those customers, with
-		// its start/cancelled/end schedule meta.
 		$sql = $wpdb->prepare(
 			"SELECT o.customer_id,
 				sm.meta_value AS sched_start,
@@ -1747,28 +1753,26 @@ class HPOS_Storage implements Storage_Interface {
 				ON oi.order_id = o.id AND oi.order_item_type = 'line_item'
 			JOIN {$prefix}woocommerce_order_itemmeta oim
 				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+			INNER JOIN (
+				SELECT o2.customer_id, MIN(sm2.meta_value) AS first_start
+				FROM {$prefix}wc_orders o2
+				JOIN {$prefix}wc_orders_meta sm2
+					ON sm2.order_id = o2.id AND sm2.meta_key = '_schedule_start'
+				JOIN {$prefix}woocommerce_order_items oi2
+					ON oi2.order_id = o2.id AND oi2.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim2
+					ON oim2.order_item_id = oi2.order_item_id AND oim2.meta_key = '_product_id'
+				WHERE o2.type = 'shop_subscription'
+				  AND o2.customer_id > 0 -- exclude guest subscriptions
+				  AND oim2.meta_value NOT IN ($donations)
+				  AND sm2.meta_value != ''
+				GROUP BY o2.customer_id
+				HAVING first_start >= %s AND first_start <= %s
+			) AS cohort ON cohort.customer_id = o.customer_id
 			WHERE o.type = 'shop_subscription'
 			  AND o.customer_id > 0 -- exclude guest subscriptions (mirrors get_new_subscriber_records_in_window)
 			  AND oim.meta_value NOT IN ($donations)
-			  AND sm.meta_value != ''
-			  AND o.customer_id IN (
-				SELECT cohort.customer_id FROM (
-					SELECT o2.customer_id, MIN(sm2.meta_value) AS first_start
-					FROM {$prefix}wc_orders o2
-					JOIN {$prefix}wc_orders_meta sm2
-						ON sm2.order_id = o2.id AND sm2.meta_key = '_schedule_start'
-					JOIN {$prefix}woocommerce_order_items oi2
-						ON oi2.order_id = o2.id AND oi2.order_item_type = 'line_item'
-					JOIN {$prefix}woocommerce_order_itemmeta oim2
-						ON oim2.order_item_id = oi2.order_item_id AND oim2.meta_key = '_product_id'
-					WHERE o2.type = 'shop_subscription'
-					  AND o2.customer_id > 0 -- exclude guest subscriptions
-					  AND oim2.meta_value NOT IN ($donations)
-					  AND sm2.meta_value != ''
-					GROUP BY o2.customer_id
-					HAVING first_start >= %s AND first_start <= %s
-				) cohort
-			  )",
+			  AND sm.meta_value != ''",
 			$cutoff,
 			$now
 		);

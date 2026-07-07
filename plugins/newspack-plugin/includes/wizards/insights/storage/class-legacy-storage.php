@@ -1635,6 +1635,20 @@ class Legacy_Storage implements Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * Legacy CPT equivalent of HPOS_Storage::get_new_subscriber_cohort_intervals().
+	 * _customer_user is cast to UNSIGNED (stored as a string) to align with the
+	 * other list-scoped legacy queries.
+	 *
+	 * Cohort membership (first-ever non-donation subscription start within the
+	 * trailing 365 days) is pre-aggregated to one row per customer_id in the
+	 * `cohort` derived table and INNER-JOINed against the outer subscription
+	 * scan, instead of a correlated `customer_id IN (SELECT ... GROUP BY ...
+	 * HAVING ...)` semi-join subquery — the INNER JOIN lets MySQL build the
+	 * cohort set once rather than re-evaluating it as part of a full outer
+	 * scan. The outer scan is otherwise unchanged: it still returns every
+	 * non-donation subscription belonging to a cohort member, not just the
+	 * qualifying first one.
+	 *
 	 * @return array<int, array{customer_id:int, start:string, cancelled:?string, end:?string}>
 	 */
 	public function get_new_subscriber_cohort_intervals(): array {
@@ -1646,9 +1660,6 @@ class Legacy_Storage implements Storage_Interface {
 		// Upper bound excludes subscriptions with a future _schedule_start (scheduled/pending).
 		$now = gmdate( 'Y-m-d H:i:s', ( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) )->getTimestamp() );
 
-		// Legacy CPT equivalent of HPOS_Storage::get_new_subscriber_cohort_intervals().
-		// _customer_user is cast to UNSIGNED (stored as a string) to align with the
-		// other list-scoped legacy queries.
 		$sql = $wpdb->prepare(
 			"SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id,
 				sm.meta_value AS sched_start,
@@ -1667,30 +1678,28 @@ class Legacy_Storage implements Storage_Interface {
 				ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
 			JOIN {$prefix}woocommerce_order_itemmeta oim
 				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+			INNER JOIN (
+				SELECT CAST(cust2.meta_value AS UNSIGNED) AS customer_id, MIN(sm2.meta_value) AS first_start
+				FROM {$prefix}posts p2
+				JOIN {$prefix}postmeta cust2
+					ON cust2.post_id = p2.ID AND cust2.meta_key = '_customer_user'
+				JOIN {$prefix}postmeta sm2
+					ON sm2.post_id = p2.ID AND sm2.meta_key = '_schedule_start'
+				JOIN {$prefix}woocommerce_order_items oi2
+					ON oi2.order_id = p2.ID AND oi2.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim2
+					ON oim2.order_item_id = oi2.order_item_id AND oim2.meta_key = '_product_id'
+				WHERE p2.post_type = 'shop_subscription'
+				  AND CAST(cust2.meta_value AS UNSIGNED) > 0 -- exclude guest subscriptions
+				  AND oim2.meta_value NOT IN ($donations)
+				  AND sm2.meta_value != ''
+				GROUP BY CAST(cust2.meta_value AS UNSIGNED)
+				HAVING first_start >= %s AND first_start <= %s
+			) AS cohort ON cohort.customer_id = CAST(cust.meta_value AS UNSIGNED)
 			WHERE p.post_type = 'shop_subscription'
 			  AND CAST(cust.meta_value AS UNSIGNED) > 0 -- exclude guest subscriptions (mirrors get_new_subscriber_records_in_window)
 			  AND oim.meta_value NOT IN ($donations)
-			  AND sm.meta_value != ''
-			  AND CAST(cust.meta_value AS UNSIGNED) IN (
-				SELECT cohort.customer_id FROM (
-					SELECT CAST(cust2.meta_value AS UNSIGNED) AS customer_id, MIN(sm2.meta_value) AS first_start
-					FROM {$prefix}posts p2
-					JOIN {$prefix}postmeta cust2
-						ON cust2.post_id = p2.ID AND cust2.meta_key = '_customer_user'
-					JOIN {$prefix}postmeta sm2
-						ON sm2.post_id = p2.ID AND sm2.meta_key = '_schedule_start'
-					JOIN {$prefix}woocommerce_order_items oi2
-						ON oi2.order_id = p2.ID AND oi2.order_item_type = 'line_item'
-					JOIN {$prefix}woocommerce_order_itemmeta oim2
-						ON oim2.order_item_id = oi2.order_item_id AND oim2.meta_key = '_product_id'
-					WHERE p2.post_type = 'shop_subscription'
-					  AND CAST(cust2.meta_value AS UNSIGNED) > 0 -- exclude guest subscriptions
-					  AND oim2.meta_value NOT IN ($donations)
-					  AND sm2.meta_value != ''
-					GROUP BY CAST(cust2.meta_value AS UNSIGNED)
-					HAVING first_start >= %s AND first_start <= %s
-				) cohort
-			  )",
+			  AND sm.meta_value != ''",
 			$cutoff,
 			$now
 		);
