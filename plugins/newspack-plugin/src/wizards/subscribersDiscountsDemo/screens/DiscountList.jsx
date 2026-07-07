@@ -29,9 +29,7 @@ import { getAllDiscounts, deleteDiscount, setDiscountActive, discountLabel, targ
 import { fmtDate } from '../format';
 import ConfirmFlow from '../flows/ConfirmFlow';
 import DiscountRuleFlow from '../flows/DiscountRuleFlow';
-
-// Task 5 replaces this with the real settings-drawer flow.
-const DiscountSettingsFlow = null;
+import DiscountSettingsFlow from '../flows/DiscountSettingsFlow';
 
 const DEFAULT_VIEW = {
 	type: 'table',
@@ -224,7 +222,7 @@ export default function DiscountList() {
 				/>
 			) }
 
-			{ settingsOpen && DiscountSettingsFlow && (
+			{ settingsOpen && (
 				<DiscountSettingsFlow
 					onClose={ () => setSettingsOpen( false ) }
 					onSaved={ message => {
