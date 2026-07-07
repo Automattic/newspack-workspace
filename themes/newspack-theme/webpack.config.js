@@ -10,10 +10,7 @@ const fs = require( 'fs' );
 const getBaseWebpackConfig = require( 'newspack-scripts/config/getWebpackConfig' );
 const path = require( 'path' );
 
-const {
-	SOURCE_FILE_REGEX,
-	findSourceFile,
-} = require( 'newspack-scripts/config/resolveSource' );
+const { SOURCE_FILE_REGEX, findSourceFile } = require( 'newspack-scripts/config/resolveSource' );
 const srcDir = path.join( __dirname, 'newspack-theme/js', 'src' );
 
 // Add all js/src/*.{js,jsx,ts,tsx} scripts. Basenames are deduped and re-resolved via
@@ -23,8 +20,8 @@ const basenames = [
 	...new Set(
 		fs
 			.readdirSync( srcDir )
-			.filter( ( script ) => SOURCE_FILE_REGEX.test( script ) )
-			.map( ( script ) => script.replace( SOURCE_FILE_REGEX, '' ) )
+			.filter( script => SOURCE_FILE_REGEX.test( script ) )
+			.map( script => script.replace( SOURCE_FILE_REGEX, '' ) )
 	),
 ];
 const entry = basenames.reduce( ( obj, basename ) => {
