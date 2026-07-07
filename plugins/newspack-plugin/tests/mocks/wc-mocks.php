@@ -590,17 +590,17 @@ function wc_get_checkout_url() {
 }
 function wcs_is_subscription( $order ) {
 	global $subscriptions_database;
+	// Mirror real WooCommerce Subscriptions: only an actual WC_Subscription object
+	// (or a numeric ID present in the store) counts as a subscription. In particular
+	// a WP_Post — which WP core passes as the second `add_meta_boxes` argument on the
+	// classic (non-HPOS) order editor — is NOT a subscription here, just as it isn't
+	// under real WCS. That distinction is what the metabox-registration guard must
+	// resolve, so the mock must not paper over it.
 	if ( is_object( $order ) ) {
-		if ( method_exists( $order, 'get_id' ) ) {
-			$id = $order->get_id();
-		} elseif ( isset( $order->ID ) ) {
-			$id = (int) $order->ID;
-		} elseif ( isset( $order->id ) ) {
-			$id = (int) $order->id;
-		} else {
-			// Object has no recognisable ID property — treat as not-a-subscription.
+		if ( ! $order instanceof WC_Subscription ) {
 			return false;
 		}
+		$id = $order->get_id();
 	} else {
 		$id = (int) $order;
 	}
@@ -1097,4 +1097,46 @@ function wc_get_template( $template_name, $args = [] ) {
 		extract( $args );
 		include $map[ $template_name ];
 	}
+}
+
+/**
+ * Minimal mock for WC_Webhook. generate_signature() mirrors the real
+ * WC_Webhook::generate_signature() (default sha256; the
+ * woocommerce_webhook_hash_algorithm filter is not applied) so signature
+ * verification can be tested.
+ */
+class WC_Webhook {
+	public static $registry = [];
+	private $id     = 0;
+	private $secret = '';
+	public function set_name( $value ) {}
+	public function set_topic( $value ) {}
+	public function set_status( $value ) {}
+	public function set_delivery_url( $value ) {}
+	public function set_user_id( $value ) {}
+	public function set_secret( $value ) {
+		$this->secret = $value;
+	}
+	public function delete( $force = false ) {
+		unset( self::$registry[ $this->id ] );
+	}
+	public function get_id() {
+		return $this->id;
+	}
+	public function get_secret() {
+		return $this->secret;
+	}
+	public function save() {
+		if ( ! $this->id ) {
+			$this->id = count( self::$registry ) + 1;
+		}
+		self::$registry[ $this->id ] = $this;
+		return $this->id;
+	}
+	public function generate_signature( $payload ) {
+		return base64_encode( hash_hmac( 'sha256', $payload, wp_specialchars_decode( $this->secret, ENT_QUOTES ), true ) );
+	}
+}
+function wc_get_webhook( $id ) {
+	return isset( WC_Webhook::$registry[ (int) $id ] ) ? WC_Webhook::$registry[ (int) $id ] : null;
 }
