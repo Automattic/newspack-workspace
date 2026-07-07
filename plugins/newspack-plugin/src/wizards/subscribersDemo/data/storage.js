@@ -7,7 +7,7 @@ export const STORAGE_PREFIX = 'newspack-subscribers-demo:';
 // Bump this whenever the seeded mock data changes shape or content. On the next load
 // a mismatch wipes every stored override so the new seed surfaces instead of being
 // masked by stale localStorage from a previous build.
-const DATA_VERSION = '18';
+const DATA_VERSION = '19';
 const VERSION_STORAGE_KEY = STORAGE_PREFIX + 'data-version';
 
 export function readStore( key ) {

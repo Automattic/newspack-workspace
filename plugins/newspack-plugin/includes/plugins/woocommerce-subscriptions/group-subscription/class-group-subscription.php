@@ -25,6 +25,13 @@ class Group_Subscription {
 	const GROUP_SUBSCRIPTION_JOINED_META_KEY_PREFIX = '_newspack_group_subscription_joined_';
 
 	/**
+	 * Per-manager user meta key. Repeatable, with the subscription ID as the
+	 * value — mirroring the membership storage above. The owner is never
+	 * stored: ownership implies management.
+	 */
+	const GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY = '_newspack_group_subscription_manager';
+
+	/**
 	 * Build the per-subscription joined-at user_meta key.
 	 *
 	 * @param int $subscription_id Subscription ID.
@@ -107,7 +114,7 @@ class Group_Subscription {
 	 * @param string    $meta_key  Meta key.
 	 */
 	public static function maybe_reset_cache_on_user_meta( $meta_ids, $object_id, $meta_key ) {
-		if ( self::GROUP_SUBSCRIPTION_USER_META_KEY === $meta_key ) {
+		if ( in_array( $meta_key, [ self::GROUP_SUBSCRIPTION_USER_META_KEY, self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY ], true ) ) {
 			self::reset_cache();
 		}
 	}
@@ -168,15 +175,84 @@ class Group_Subscription {
 	 */
 	public static function get_managers( $subscription ) {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		$managers     = [ $subscription ? $subscription->get_user_id() : 0 ];
+		if ( $subscription ) {
+			$stored = \get_users(
+				[
+					'fields'      => [ 'ID' ],
+					'count_total' => false,
+					'meta_query'  => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+						[
+							'key'   => self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY,
+							'value' => $subscription->get_id(),
+						],
+					],
+				]
+			);
+			foreach ( $stored as $user ) {
+				$managers[] = (int) $user->ID;
+			}
+			$managers = array_values( array_unique( $managers ) );
+		}
 
 		/**
 		 * Filter the managers of a group subscription.
-		 * Currently this is only the subscription owner.
 		 *
 		 * @param int[] $member_ids The group manager user IDs.
 		 * @param WC_Subscription $subscription The subscription object.
 		 */
-		return apply_filters( 'newspack_group_subscription_managers', [ $subscription ? $subscription->get_user_id() : 0 ], $subscription );
+		return apply_filters( 'newspack_group_subscription_managers', $managers, $subscription );
+	}
+
+	/**
+	 * Promote a group member to manager.
+	 *
+	 * Only an existing member qualifies, and the owner is never stored —
+	 * ownership implies management. Storage mirrors membership: a repeatable
+	 * user meta with the subscription ID as the value.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 * @param int                  $user_id      The member user ID.
+	 *
+	 * @return true|\WP_Error True on success.
+	 */
+	public static function add_manager( $subscription, $user_id ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		$user_id      = absint( $user_id );
+		if ( ! self::is_group_subscription( $subscription ) ) {
+			return new \WP_Error( 'newspack_group_subscription_add_manager', __( 'Subscription not found.', 'newspack-plugin' ), [ 'status' => 404 ] );
+		}
+		if ( $user_id === (int) $subscription->get_user_id() ) {
+			return new \WP_Error( 'newspack_group_subscription_add_manager', __( 'The owner already manages this subscription.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		if ( ! self::user_is_member( $user_id, $subscription ) ) {
+			return new \WP_Error( 'newspack_group_subscription_add_manager', __( 'Only an existing member can be made a manager.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		if ( ! in_array( $user_id, self::get_managers( $subscription ), true ) ) {
+			\add_user_meta( $user_id, self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY, $subscription->get_id() );
+		}
+		return true;
+	}
+
+	/**
+	 * Demote a manager back to a regular member.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 * @param int                  $user_id      The manager user ID.
+	 *
+	 * @return true|\WP_Error True on success.
+	 */
+	public static function remove_manager( $subscription, $user_id ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		$user_id      = absint( $user_id );
+		if ( ! self::is_group_subscription( $subscription ) ) {
+			return new \WP_Error( 'newspack_group_subscription_remove_manager', __( 'Subscription not found.', 'newspack-plugin' ), [ 'status' => 404 ] );
+		}
+		if ( $user_id === (int) $subscription->get_user_id() ) {
+			return new \WP_Error( 'newspack_group_subscription_remove_manager', __( 'The owner cannot be demoted.', 'newspack-plugin' ), [ 'status' => 400 ] );
+		}
+		\delete_user_meta( $user_id, self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY, $subscription->get_id() );
+		return true;
 	}
 
 	/**
@@ -217,6 +293,31 @@ class Group_Subscription {
 				continue;
 			}
 			$managed[] = $ids_only ? $sub->get_id() : $sub;
+		}
+
+		// Subscriptions the user manages without owning (a promoted manager),
+		// read from their own manager meta — the reverse of get_managers().
+		$have_ids = array_map(
+			function ( $sub ) {
+				return $sub instanceof \WC_Subscription ? $sub->get_id() : (int) $sub;
+			},
+			$managed
+		);
+		$manager_of = array_map( 'absint', (array) \get_user_meta( $user_id, self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY, false ) );
+		foreach ( $manager_of as $managed_id ) {
+			if ( in_array( $managed_id, $have_ids, true ) ) {
+				continue;
+			}
+			$sub = WooCommerce_Subscriptions::sanitize_subscription( $managed_id );
+			if ( ! $sub instanceof \WC_Subscription ) {
+				continue;
+			}
+			$settings = Group_Subscription_Settings::get_subscription_settings( $sub );
+			if ( empty( $settings['enabled'] ) ) {
+				continue;
+			}
+			$managed[]  = $ids_only ? $sub->get_id() : $sub;
+			$have_ids[] = $managed_id;
 		}
 
 		/**
@@ -302,6 +403,8 @@ class Group_Subscription {
 			}
 			if ( \delete_user_meta( $member_id, self::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() ) ) {
 				\delete_user_meta( $member_id, self::get_member_joined_meta_key( $subscription->get_id() ) );
+				// Leaving the group also ends any manager role — no orphaned managers.
+				\delete_user_meta( $member_id, self::GROUP_SUBSCRIPTION_MANAGER_USER_META_KEY, $subscription->get_id() );
 				$members_removed[ $member_id ] = [
 					'email' => \get_userdata( $member_id )->user_email,
 					'url'   => \get_edit_user_link( $member_id ),

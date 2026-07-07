@@ -111,7 +111,11 @@ source of truth; this is a map of it.
   behind a spinner until avatars resolve. Avatar + name/email column, **Status**
   (active-first badges; cancelled hidden while a live plan remains; the Cancelled
   filter matches only fully churned readers, never one with a live plan),
-  **Subscription** (individual plans + group plan with an Owner/Member role badge;
+  **Subscription** (individual plans + group plan tagged "(Group)" — the
+  subscriber's role lives in the optional filterable **Group role** column
+  (hidden by default; the "Group" part follows the publisher label): Owner /
+  Manager / Member per group, plan-qualified in parentheses when they belong
+  to several, "—" when none;
   cancelled plans are hidden here too while a live one remains, though the filter
   still matches them), Last payment, Member since (date + relative), optional
   Last seen, Tags, Newsletters. Live header count; whole row clicks through.
@@ -175,7 +179,9 @@ source of truth; this is a map of it.
   `groupOnHoldNotice` builder, deferring to the owner via "View owner"). A
   cancelled group shows no notice: the status badge and disabled actions say so.
   Members DataViews
-  (avatar + name/email column, role badges, per-row kebab, "Remove member" as a
+  (avatar + name/email column, plain-text roles — Owner / Manager / Member —
+  sorted owner → managers → members, per-row kebab with Make manager / Remove
+  manager (instant, snackbar-confirmed, no modal) and "Remove member" as a
   per-row and bulk action), seat count + Adjust seats + a single "Add members"
   menu (Add directly / Invite by email / Copy invite link, plus Regenerate /
   Disable invite link once a link exists). The Invitations DataViews
@@ -195,6 +201,27 @@ accept or bulk-approve pending invitations on the invitee's behalf, creating
 accounts for unknown emails. Both paths respect the seat limit. Runtime adds are
 additive — they don't apply the seed-time covered-member clearing that strips a
 member's own individual subscription.
+
+### Roles (owner / manager / member)
+
+A group has exactly one **owner** (full control including billing), any number
+of **managers** (day-to-day maintenance: members, invites, links, seat
+requests — never money), and **members**. Decisions carried by this design
+(for the real implementation, NPPD-1753):
+
+- Front-end promote/demote is **owner-only**; managers inherit the
+  member-management controls via the existing `user_is_manager()` gating but
+  cannot appoint or demote other managers.
+- A manager sees **no billing controls at all** — hidden, not disabled, with
+  no explanatory line.
+- Make/Remove manager is **instant** (snackbar, no confirmation modal); the
+  reverse action in the same menu is the undo.
+- Every add path (email invite, invite link, direct add, accept on behalf)
+  creates a **member**; manager is a promotion after joining.
+- Ownership transfer is retired: `MakeOwnerFlow` is deleted and there is no
+  "Make owner" action. Roles render as plain text (no badges); the group
+  indicator is a muted "(Group)". The owner is implicitly a manager but only
+  ever reads as Owner.
 
 ### Flows (modals)
 
@@ -217,13 +244,14 @@ All mutate through the `onComplete({ message, mutate })` convention above.
 | `AddMembersFlow` | "Add members → Add directly" | `FormTokenField` multi-email, capacity-aware (trims over capacity with a warning), "Send a welcome email" checkbox. Existing accounts resolve by email; unknown emails create a stub account. | Members added immediately; a matching pending invite is consumed. |
 | `AcceptInviteFlow` | Invitations "Accept on behalf" (row or bulk) | Confirms the count with a "Send a welcome email" checkbox. | Pending invite(s) converted to members; seat count unchanged. |
 | `AdjustSeatsFlow` | "Adjust seats" | Number input floored at reserved seats, raise only while active; two-step input → confirm summary. When raising the limit, offers Increase for free or Increase & send a payment link (admin-entered amount); can be opened pre-filled from an owner seat request. | Seat limit updated (free path: immediate; payment-link path: sends link and sets `awaiting-payment` on the request). |
-| `MakeOwnerFlow` | Member kebab "Make owner" | `ConfirmFlow`. | Ownership transferred; previous owner demoted. |
 | `RemoveMemberFlow` | Member kebab / bulk "Remove member" (row or bulk) | `ConfirmFlow` (destructive); pluralizes the copy for multiple members. The owner is never eligible. | Member(s) removed; seats freed. |
 | `RegenerateLinkFlow` / `DisableLinkFlow` | "Add members" menu (when a link exists) | `ConfirmFlow` (disable is destructive). Copy invite link itself is no modal: it copies and creates the link if none exists. | Link regenerated / disabled. |
 | `ResendInviteFlow` / `CancelInviteFlow` | Invite row kebab | `ConfirmFlow` (cancel is destructive). | Invite `sentAt` refreshed / invite removed. |
 
 `ConfirmFlow` is the shared scaffold (title, body, Cancel + primary/destructive
-Confirm) behind the six simple confirmations above.
+Confirm) behind the simple confirmations above. Make manager / Remove manager
+are deliberately **not** flows: they apply instantly from the member-row kebab
+with a snackbar, and the reverse action in the same menu is the undo.
 
 The owner's "Request more seats" / seat-upgrade payment is **not** part of this
 prototype: it ships as a real front-end feature on the My Account group page
@@ -271,7 +299,7 @@ real owner template lives at
   status,            // 'active' | 'on-hold' | 'cancelled'
   seatLimit, createdAt,
   nextBillingDate,   // 'YYYY-MM-DD' | null
-  members: [ { subscriberId, joinedAt, role } ],   // role: 'owner' | 'member'
+  members: [ { subscriberId, joinedAt, role } ],   // role: 'owner' | 'manager' | 'member'
   invites: [
     { id, type: 'email', email, status, sentAt },  // status 'pending'; expiry derived from sentAt
     { id, type: 'link', status, createdAt },        // one persistent reusable link
@@ -321,7 +349,7 @@ item just shows it instead).
    - `GET subscribers` (list, server-side filter/sort/paginate), `GET subscribers/{id}`
    - `GET groups`, `GET groups/{id}`
    - writes for subscriptions (refund/cancel/change/resubscribe), payment methods,
-     tags, notes, newsletters, and group invites/members/seats/ownership.
+     tags, notes, newsletters, and group invites/members/seats/managers.
    - `POST avatars` already exists.
 3. **Delete `data/storage.js`** and the `getStored*`/`setStored*` functions;
    persistence is now server-side and shared across admins.

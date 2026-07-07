@@ -655,7 +655,8 @@ function PersonProfileView() {
 	// A group subscription rendered inside the Subscriptions section. For an owner
 	// it's the plan that grants the group, with seat usage and a manage action;
 	// for a member it's their access through the owner, with a link to the owner
-	// and a remove action. The "Group" badge is colored to match owner/member.
+	// and a remove action. The muted "(Group)" text marks it as a group
+	// subscription.
 	const renderGroupSubscription = ( group, isOwner ) => {
 		const groupOwner = getSubscriberById( group.ownerId );
 		const isActiveGroup = group.status === 'active';
@@ -679,9 +680,10 @@ function PersonProfileView() {
 											aria-label={ sprintf( __( 'View %1$s: %2$s', 'newspack-plugin' ), GROUP_LABEL_LOWER, group.plan ) }
 										>
 											{ group.plan }
+											&nbsp;
+											<span className="newspack-subscribers-demo__muted">{ `(${ GROUP_LABEL })` }</span>
 										</Button>
 									</h4>
-									<Badge level={ isOwner ? 'info' : 'default' } text={ GROUP_LABEL } />
 									<Badge level={ GROUP_STATUS_BADGE_LEVEL[ group.status ] } text={ GROUP_STATUS_LABELS[ group.status ] } />
 								</HStack>
 								<span className="newspack-subscribers-demo__muted">

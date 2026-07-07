@@ -5,7 +5,7 @@
  * The publisher-facing counterpart to the owner My Account group page. Reuses
  * the person-profile two-column layout. Members and Invitations are sortable
  * DataViews tables; admins can invite on behalf of the owner, remove members,
- * manage invites, adjust the seat limit and reassign ownership.
+ * manage invites, adjust the seat limit and manage managers.
  */
 
 /**
@@ -46,8 +46,11 @@ import {
 	hasActiveInviteLink,
 	clearSeatRequest,
 	paySeatUpgrade,
+	setMemberRole,
 	GROUP_STATUS_LABELS,
 	GROUP_STATUS_BADGE_LEVEL,
+	ROLE_LABELS,
+	ROLE_RANK,
 } from '../data/mock-groups';
 import { GROUP_LABEL, GROUP_LABEL_PLURAL } from '../labels';
 import { fmtCurrency, fmtDate } from '../format';
@@ -60,7 +63,6 @@ import AddMembersFlow from '../flows/AddMembersFlow';
 import InviteMemberFlow from '../flows/InviteMemberFlow';
 import RemoveMemberFlow from '../flows/RemoveMemberFlow';
 import AdjustSeatsFlow from '../flows/AdjustSeatsFlow';
-import MakeOwnerFlow from '../flows/MakeOwnerFlow';
 import RegenerateLinkFlow from '../flows/RegenerateLinkFlow';
 import DisableLinkFlow from '../flows/DisableLinkFlow';
 import ResendInviteFlow from '../flows/ResendInviteFlow';
@@ -87,8 +89,8 @@ const MEMBERS_VIEW = {
 	type: 'table',
 	page: 1,
 	perPage: 10,
-	// Owner first by default (role 'owner' sorts ahead of 'member' descending).
-	sort: { field: 'role', direction: 'desc' },
+	// Owner first, then managers, then members (ROLE_RANK ascending).
+	sort: { field: 'role', direction: 'asc' },
 	search: '',
 	fields: [ 'role', 'joinedAt' ],
 	filters: [],
@@ -353,13 +355,10 @@ function GroupDetailView() {
 			{
 				id: 'role',
 				label: __( 'Role', 'newspack-plugin' ),
-				getValue: ( { item } ) => item.role,
-				render: ( { item } ) =>
-					item.role === 'owner' ? (
-						<Badge level="info" text={ __( 'Owner', 'newspack-plugin' ) } />
-					) : (
-						<Badge text={ __( 'Member', 'newspack-plugin' ) } />
-					),
+				// Rank keeps the sort owner → managers → members; the alphabetical
+				// string would slot Manager below Member.
+				getValue: ( { item } ) => ROLE_RANK[ item.role ] ?? ROLE_RANK.member,
+				render: ( { item } ) => <span>{ ROLE_LABELS[ item.role ] || ROLE_LABELS.member }</span>,
 				enableSorting: true,
 			},
 			{
@@ -380,10 +379,24 @@ function GroupDetailView() {
 				callback: items => history.push( `/profile/${ items[ 0 ].id }?from=${ encodeURIComponent( `#/group/${ group.id }` ) }` ),
 			},
 			{
-				id: 'make-owner',
-				label: __( 'Make owner', 'newspack-plugin' ),
-				isEligible: item => item.role !== 'owner' && isGroupManageable( group ),
-				callback: items => setModal( { kind: 'make-owner', member: { subscriberId: items[ 0 ].id }, memberName: items[ 0 ].name } ),
+				id: 'make-manager',
+				label: __( 'Make manager', 'newspack-plugin' ),
+				isEligible: item => item.role === 'member' && isGroupManageable( group ),
+				callback: items =>
+					applyMutation( {
+						message: sprintf( __( '%s is now a manager.', 'newspack-plugin' ), items[ 0 ].name ),
+						mutate: g => setMemberRole( g, items[ 0 ].id, 'manager' ),
+					} ),
+			},
+			{
+				id: 'remove-manager',
+				label: __( 'Remove manager', 'newspack-plugin' ),
+				isEligible: item => item.role === 'manager' && isGroupManageable( group ),
+				callback: items =>
+					applyMutation( {
+						message: sprintf( __( '%s is no longer a manager.', 'newspack-plugin' ), items[ 0 ].name ),
+						mutate: g => setMemberRole( g, items[ 0 ].id, 'member' ),
+					} ),
 			},
 			{
 				id: 'remove-member',
@@ -666,15 +679,6 @@ function GroupDetailView() {
 						</HStack>
 					</VStack>
 				</Modal>
-			) }
-			{ modal?.kind === 'make-owner' && (
-				<MakeOwnerFlow
-					group={ group }
-					member={ modal.member }
-					memberName={ modal.memberName }
-					onClose={ closeModal }
-					onComplete={ completeFlow }
-				/>
 			) }
 			{ modal?.kind === 'regenerate-link' && <RegenerateLinkFlow group={ group } onClose={ closeModal } onComplete={ completeFlow } /> }
 			{ modal?.kind === 'disable-link' && <DisableLinkFlow group={ group } onClose={ closeModal } onComplete={ completeFlow } /> }
