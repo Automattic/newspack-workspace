@@ -6,7 +6,7 @@
  * WordPress dependencies.
  */
 import { __ } from '@wordpress/i18n';
-import { ToggleControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
+import { SelectControl, ToggleControl, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
@@ -86,10 +86,29 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 				<VStack>
 					<ToggleControl
 						label={ __( 'Restrict content in feeds', 'newspack-plugin' ) }
-						help={ __( 'Truncate restricted content in RSS feeds.', 'newspack-plugin' ) }
+						help={ __( 'Apply gate restrictions to articles in RSS feeds.', 'newspack-plugin' ) }
 						checked={ config?.restrict_feeds }
 						onChange={ value => setConfig( { ...config, restrict_feeds: value } ) }
 					/>
+					{ config?.restrict_feeds && (
+						<SelectControl
+							label={ __( 'In feeds, restricted articles should', 'newspack-plugin' ) }
+							help={ __(
+								'Remove the article from the feed entirely, or keep it listed with the same teaser readers see on the site.',
+								'newspack-plugin'
+							) }
+							value={ config?.feed_restriction_mode || 'exclude' }
+							options={
+								[
+									{ label: __( 'Be removed from the feed', 'newspack-plugin' ), value: 'exclude' },
+									{ label: __( 'Show a truncated preview', 'newspack-plugin' ), value: 'truncate' },
+								] as { label: string; value: FeedRestrictionMode }[]
+							}
+							onChange={ ( value: string ) =>
+								setConfig( { ...config, feed_restriction_mode: value as FeedRestrictionMode } )
+							}
+						/>
+					) }
 					{ wizardData?.config?.has_newsletters && (
 						<ToggleControl
 							label={ __( 'Bypass restrictions for newsletter links', 'newspack-plugin' ) }

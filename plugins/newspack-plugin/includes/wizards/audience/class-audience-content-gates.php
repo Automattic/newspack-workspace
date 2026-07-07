@@ -177,7 +177,11 @@ class Audience_Content_Gates extends Wizard {
 					'advanced_settings' => [
 						'type'       => 'object',
 						'properties' => [
-							'restrict_feeds' => [ 'type' => 'boolean' ],
+							'restrict_feeds'        => [ 'type' => 'boolean' ],
+							'feed_restriction_mode' => [
+								'type' => 'string',
+								'enum' => [ Content_Gate_Advanced_Settings::FEED_MODE_TRUNCATE, Content_Gate_Advanced_Settings::FEED_MODE_EXCLUDE ],
+							],
 							'newsletter_link_bypass_enabled' => [ 'type' => 'boolean' ],
 						],
 					],
@@ -377,6 +381,7 @@ class Audience_Content_Gates extends Wizard {
 		// Internal storage remains as 0/1 integers — only the REST response payload is cast.
 		$advanced_settings_response = [
 			'restrict_feeds'                 => (bool) ( $advanced['restrict_feeds'] ?? false ),
+			'feed_restriction_mode'          => (string) ( $advanced['feed_restriction_mode'] ?? Content_Gate_Advanced_Settings::FEED_MODE_EXCLUDE ),
 			'newsletter_link_bypass_enabled' => (bool) ( $advanced['newsletter_link_bypass_enabled'] ?? false ),
 		];
 		$config = [
