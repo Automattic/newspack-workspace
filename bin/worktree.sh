@@ -2,6 +2,7 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/repos.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/worktree-tooling.sh"
 
 # Two kinds of worktrees:
 #
@@ -39,10 +40,12 @@ case $1 in
         #    or: worktree.sh add <branch> --repo <name>   # tier 2 (standalone repo)
         shift  # consume "add"
         repo=""
+        no_install=false
         positionals=()
         while [[ $# -gt 0 ]]; do
             case "$1" in
                 --repo) repo="$2"; shift 2 ;;
+                --no-install) no_install=true; shift ;;
                 *) positionals+=("$1"); shift ;;
             esac
         done
@@ -53,7 +56,7 @@ case $1 in
             # for tier 1 (there's one workspace repo); use the second positional as branch.
             branch="${positionals[1]}"
         else
-            echo "Usage: n worktree add <branch> [--repo <name>]"
+            echo "Usage: n worktree add <branch> [--repo <name>] [--no-install]"
             echo "   or: n worktree add <repo> <branch>  (legacy; repo arg ignored for tier 1)"
             exit 1
         fi
@@ -102,6 +105,7 @@ case $1 in
             git worktree add -b "$branch" "$worktree_dir" || exit 1
         fi
         echo "Created worktree at worktrees/$safe_branch"
+        activate_worktree_tooling "$worktree_dir" "$no_install"
         ;;
     list)
         cd "$NABSPATH" || exit 1
@@ -357,8 +361,9 @@ case $1 in
         ;;
     *)
         echo "Usage: n worktree <add|list|remove|cleanup> [args]"
-        echo "  add <branch> [--repo <name>]              Create a worktree at the given branch"
+        echo "  add <branch> [--repo <name>] [--no-install]  Create a worktree at the given branch"
         echo "                                              (--repo: a standalone repos/{plugins,themes}/<name> checkout)"
+        echo "                                              (--no-install: skip auto 'pnpm install'; ignored for --repo/tier-2)"
         echo "  list                                      List all worktrees (workspace + standalone)"
         echo "  remove <branch> [--repo <name>] [--yes]   Remove a worktree and delete the branch"
         echo "  cleanup [--all] [--yes]                   Interactive bulk cleanup (workspace worktrees only)"
