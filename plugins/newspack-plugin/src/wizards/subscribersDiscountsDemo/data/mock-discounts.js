@@ -119,7 +119,7 @@ export function saveDiscount( rule ) {
 		id: rule.id || 'disc_new_' + Date.now(),
 		createdAt: rule.createdAt || new Date().toISOString().slice( 0, 10 ),
 	};
-	overrides[ saved.id ] = saved.id.startsWith( 'disc_new_' ) ? saved : { ...saved };
+	overrides[ saved.id ] = saved;
 	writeStore( DISCOUNTS_KEY, overrides );
 	return saved;
 }
@@ -193,8 +193,8 @@ export function targetingLabel( rule ) {
 	}
 	const excluded = ( rule.excludedIds || [] ).length;
 	if ( excluded ) {
-		// translators: 1: targeting label, 2: number of excluded products.
-		return sprintf( _n( '%1$s · %2$d excluded', '%1$s · %2$d excluded', excluded, 'newspack-plugin' ), label, excluded );
+		// translators: %1$s: targeting label, %2$d: number of excluded products.
+		return sprintf( __( '%1$s · %2$d excluded', 'newspack-plugin' ), label, excluded );
 	}
 	return label;
 }

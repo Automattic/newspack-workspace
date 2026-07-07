@@ -20,14 +20,16 @@ export function useTwoStep() {
 }
 
 // A step's footer: a tertiary action on the left (Cancel / Back) and a primary
-// action on the right (Continue / Confirm).
-export function StepButtons( { leftLabel, onLeft, rightLabel, onRight, busy = false, disabled = false } ) {
+// action on the right (Continue / Confirm). `disabled` affects both buttons
+// (e.g. while busy); `rightDisabled` affects only the primary button, so
+// per-step validation never leaves the left button dead.
+export function StepButtons( { leftLabel, onLeft, rightLabel, onRight, busy = false, disabled = false, rightDisabled = false } ) {
 	return (
 		<HStack spacing={ 2 } justify="flex-end">
 			<Button variant="tertiary" size="compact" disabled={ disabled } onClick={ onLeft }>
 				{ leftLabel }
 			</Button>
-			<Button variant="primary" size="compact" isBusy={ busy } disabled={ disabled } onClick={ onRight }>
+			<Button variant="primary" size="compact" isBusy={ busy } disabled={ disabled || rightDisabled } onClick={ onRight }>
 				{ rightLabel }
 			</Button>
 		</HStack>

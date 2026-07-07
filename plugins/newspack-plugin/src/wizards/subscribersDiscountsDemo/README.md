@@ -5,7 +5,7 @@
 A design prototype for a people-first subscriber management experience, shipped
 for internal review. It is a **hidden wizard** (not in the admin menu) with mock
 data, so reviewers can explore the full flow without a populated WooCommerce
-store. Reachable at `admin.php?page=newspack-subscribers-demo` **when the site
+store. Reachable at `admin.php?page=newspack-subscribers-discounts-demo` **when the site
 is in Newspack debug mode**.
 
 It is a prototype: there is no real backend. All data is mocked and edits persist

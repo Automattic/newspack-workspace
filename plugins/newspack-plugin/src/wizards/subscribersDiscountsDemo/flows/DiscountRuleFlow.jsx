@@ -185,7 +185,7 @@ export default function DiscountRuleFlow( { rule, onClose, onSaved } ) {
 					onLeft={ onClose }
 					rightLabel={ __( 'Continue', 'newspack-plugin' ) }
 					onRight={ step.toDetails }
-					disabled={ targeting === 'products' && ! productIds.length }
+					rightDisabled={ targeting === 'products' && ! productIds.length }
 				/>
 			</VStack>
 		);
@@ -257,7 +257,8 @@ export default function DiscountRuleFlow( { rule, onClose, onSaved } ) {
 					rightLabel={ __( 'Save', 'newspack-plugin' ) }
 					onRight={ onSave }
 					busy={ busy }
-					disabled={ busy || ! canSave }
+					disabled={ busy }
+					rightDisabled={ ! canSave }
 				/>
 			</VStack>
 		);
