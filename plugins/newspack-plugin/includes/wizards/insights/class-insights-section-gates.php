@@ -3,10 +3,8 @@
  * Newspack Insights — Gates section (NPPD-1604).
  *
  * Gates tab scope: gate exposure, free + paid reader conversion,
- * conversion-journey funnel, per-gate breakdown. Phase 1 ships the
- * full UI with placeholder data; Phase 2 (NPPD-1630) swaps the
- * underlying metric implementations to BigQuery via the Newspack
- * Manager query proxy.
+ * conversion-journey funnel, per-gate breakdown. Metrics are backed by
+ * BigQuery via the Newspack Manager query proxy (NPPD-1630).
  *
  * Visibility is gated by the standard {@see Insights_Wizard::is_enabled()}
  * flag — the `NEWSPACK_INSIGHTS_ENABLED` constant.
