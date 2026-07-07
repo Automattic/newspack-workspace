@@ -127,28 +127,3 @@ add_action(
 		}
 	}
 );
-
-/**
- * Display testing snapshot label for non-logged in users too.
- */
-add_action(
-	'wp_footer',
-	function () {
-		if ( is_user_logged_in() ) {
-			return;
-		}
-
-		echo '<div id="np-testing-snapshot-label">' . esc_html( get_option( 'np_testing_snapshot_current', 'No snapshot set' ) ) . '</div>';
-		echo '<style>
-			#np-testing-snapshot-label {
-                position: fixed;
-                inset: auto auto 10px 10px;
-				background-color: #ff6b6b;
-                padding: 5px 10px;
-                color: #fff;
-                font: bold 16px sans-serif;
-                z-index: 999999;
-            }
-    </style>';
-	}
-);

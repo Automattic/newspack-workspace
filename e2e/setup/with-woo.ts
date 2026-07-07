@@ -1,6 +1,7 @@
-import {loadSnapshot} from "../tests/utils-admin";
-import {test} from "@playwright/test";
+import { setupSite } from "../tests/site-setup";
+import { test } from "@playwright/test";
 
-test('load with-woo snapshot', async ({ page }, testInfo) => {
-    await loadSnapshot(page, 'with-woo');
-})
+test("Setup With Woo", async () => {
+  // Provision a Newspack site with the full WooCommerce stack for the @with-woo tests.
+  setupSite({ woo: true });
+});

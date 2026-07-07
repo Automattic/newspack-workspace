@@ -31,9 +31,9 @@ test("Create and view a prompt",  {
   await editor.getByLabel("Empty block; start writing or").fill(campaignBody);
 
   // The Settings sidebar may be collapsed by default depending on user prefs
-  // (always on mobile; sometimes on desktop after a snapshot load). Open it via
-  // the top-bar toggle, scoped to the editor top bar so DOM order can't pick a
-  // different "Settings" control.
+  // (always on mobile; sometimes on desktop). Open it via the top-bar toggle,
+  // scoped to the editor top bar so DOM order can't pick a different "Settings"
+  // control.
   const promptTab = page.getByRole("tab", { name: "Prompt" });
   if (!(await promptTab.isVisible())) {
     await page

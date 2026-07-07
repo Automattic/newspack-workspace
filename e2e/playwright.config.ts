@@ -6,12 +6,17 @@ import { defineConfig, devices, LaunchOptions } from "@playwright/test";
  */
 require("dotenv").config();
 
-// Whether the target site is a local env (a *.local host or a loopback IP). We
-// only tweak proxy behavior for these.
+// Whether the target site is a local env (a *.local / *.test host or a loopback
+// IP). We only tweak proxy behavior for these. Keep this in sync with the same
+// check in tests/site-setup.ts, which decides docker-exec vs SSH provisioning.
 const isLocalTarget = (() => {
   try {
     const { hostname } = new URL(process.env.SITE_URL ?? "");
-    return hostname.endsWith(".local") || /^127\.|^localhost$/.test(hostname);
+    return (
+      hostname.endsWith(".local") ||
+      hostname.endsWith(".test") ||
+      /^127\.|^localhost$/.test(hostname)
+    );
   } catch {
     return false;
   }
@@ -56,7 +61,7 @@ export default defineConfig({
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL: process.env.SITE_URL,
 
-    /* Applied to every project (including the snapshot-setup projects). */
+    /* Applied to every project (including the setup projects). */
     launchOptions,
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
@@ -66,22 +71,32 @@ export default defineConfig({
   },
   timeout: 120000,
   expect: { timeout: 20000 },
-  /* Note that projects depend on each other if we are using snapshots. Vanilla needs to run first and then with Woo.  */
+  /* Note that projects depend on each other when provisioning is enabled: the
+     vanilla site is set up and its tests run first, then the site is re-provisioned
+     with WooCommerce and those tests run. */
   projects: [
-    // These two projects are used to set up the environment for the tests.
-    {
-      name: "setup-vanilla",
-      testMatch: "vanilla.ts",
-      testDir: "./setup",
-    },
-    {
-      name: "setup-with-woo",
-      testMatch: "with-woo.ts",
-      testDir: "./setup",
-      dependencies: process.env.USE_SNAPSHOTS
-        ? ["Vanilla in Mobile Chrome"]
-        : [],
-    },
+    // These two projects provision the site into the state their tests expect.
+    // They run a destructive from-scratch rebuild, so they are only included when
+    // USE_SETUP is set; without it, `npm test` runs the specs against the site's
+    // current state and never re-provisions. Re-provisioning is much slower than
+    // the browser actions in a regular test, so give them a generous timeout.
+    ...(process.env.USE_SETUP
+      ? [
+          {
+            name: "setup-vanilla",
+            testMatch: "vanilla.ts",
+            testDir: "./setup",
+            timeout: 900000,
+          },
+          {
+            name: "setup-with-woo",
+            testMatch: "with-woo.ts",
+            testDir: "./setup",
+            timeout: 900000,
+            dependencies: ["Vanilla in Mobile Chrome"],
+          },
+        ]
+      : []),
 
     // Vanilla tests.
     {
@@ -90,7 +105,7 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
       },
       grep: /@vanilla/,
-      dependencies: process.env.USE_SNAPSHOTS ? ["setup-vanilla"] : [],
+      dependencies: process.env.USE_SETUP ? ["setup-vanilla"] : [],
     },
     {
       name: "Vanilla in Mobile Chrome",
@@ -98,7 +113,7 @@ export default defineConfig({
         ...devices["Pixel 5"],
       },
       grep: /@vanilla/,
-      dependencies: process.env.USE_SNAPSHOTS
+      dependencies: process.env.USE_SETUP
         ? ["Vanilla in Desktop Chrome"]
         : [],
     },
@@ -110,7 +125,7 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
       },
       grep: /@with-woo/,
-      dependencies: process.env.USE_SNAPSHOTS ? ["setup-with-woo"] : [],
+      dependencies: process.env.USE_SETUP ? ["setup-with-woo"] : [],
     },
     {
       name: "With Woo in Mobile Chrome",
@@ -118,7 +133,7 @@ export default defineConfig({
         ...devices["Pixel 5"],
       },
       grep: /@with-woo/,
-      dependencies: process.env.USE_SNAPSHOTS
+      dependencies: process.env.USE_SETUP
         ? ["With Woo in Desktop Chrome"]
         : [],
     },

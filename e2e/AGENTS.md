@@ -6,67 +6,58 @@ Playwright end-to-end suite for Newspack. CI (TeamCity) runs it against
 ## How to run
 
 ```sh
-# Local env (default; targets SITE_URL from .env, usually https://e2e-release.local):
-USE_SNAPSHOTS=true npm run test:snapshots
+# Local env (default; targets SITE_URL from .env, usually https://e2e-release.test):
+npm run test:setup
 
 # A single project (skips the rest):
-USE_SNAPSHOTS=true npx playwright test --project="Vanilla in Desktop Chrome"
+USE_SETUP=true npx playwright test --project="Vanilla in Desktop Chrome"
 
 # Against staging – override SITE_URL and ADMIN_PASSWORD inline:
 SITE_URL="https://e2e.newspackstaging.com" ADMIN_PASSWORD="<staging-pw>" \
-  USE_SNAPSHOTS=true npx playwright test --project="With Woo in Desktop Chrome"
+  USE_SETUP=true npx playwright test --project="With Woo in Desktop Chrome"
 ```
 
-- Projects: `setup-vanilla` and `setup-with-woo` load snapshots; the four
-  `Vanilla/With Woo in Desktop/Mobile Chrome` projects depend on them (so running
-  a spec project pulls in its setup).
+- Projects: `setup-vanilla` and `setup-with-woo` provision the site into the state
+  their tests expect; the four `Vanilla/With Woo in Desktop/Mobile Chrome` projects
+  depend on them (so running a spec project pulls in its setup).
 - The local env runs in the docker container `newspack_env_e2e_release`
   (`docker exec newspack_env_e2e_release wp --allow-root ...`).
-- `e2e-reset.sh` provisions a site from scratch and (re)creates the snapshots. You
-  rarely need it – snapshots are the normal reset mechanism. It is written for the
-  local `--allow-root` docker env, not staging.
+- `USE_SETUP` gates whether the setup projects (and the dependency chain) run. With
+  it unset, `npm test` runs the specs against whatever state the site is already in.
 
-## Snapshot model (read this before touching credentials or "missing snapshot" errors)
+## Site setup model (read this before touching provisioning or the setup phases)
 
-Snapshots are filesystem DB dumps under `get_temp_dir()/np-snapshots/<slug>/`
-(`db.sql.gz` + `metadata.json`), managed by the `newspack-manager` plugin
-(`includes/site-testing-snapshots/`). `loadSnapshot` (`tests/utils-admin.ts`)
-drives the admin UI at `tools.php?page=newspack-snapshots`.
+The suite provisions the site from scratch each phase rather than restoring a DB
+dump. This keeps it drift-free: the site is always rebuilt against the currently
+installed plugin code, so a plugin/core update can't leave a stale fixture behind.
 
-- **Loading a snapshot replaces the entire DB**, including `wp_users` – so the
-  admin password becomes the one captured when the snapshot was created.
-  Therefore `ADMIN_PASSWORD` must match the snapshot's admin password.
-  - `.env`'s `ADMIN_PASSWORD=password` is for the **local** env only.
-  - Staging's admin password lives in the a8c secret store (README → `secret_id=12168`)
-    and matches what's baked into the staging snapshots.
-  - Do **not** `wp user update --user_pass` to fix a login failure – the snapshot
-    is the source of truth; you'd just desync it. Running the suite twice with the
-    wrong password fails the second time at `logIn`'s `waitForURL(/\/wp-admin/)`
-    (the first load swaps in the snapshot's password).
+- **`site-setup.sh`** (this repo) is the from-scratch Newspack bootstrap (DB reset +
+  fresh install + posts/users/WooCommerce+donations/memberships/subscriptions/
+  campaigns/menus). It's a generic dev provisioner, parameterised by `--url`,
+  `--admin-*`, `--allow-root`, `--reset`, and the `--no-*` toggles.
+- **`e2e-setup.sh`** (this repo) is the entry point. It runs `site-setup.sh` and then
+  layers the e2e-specific config that script deliberately omits: the `NEWSPACK_IS_E2E`
+  flag, the `e2e-plugin`, the extra Newspack plugins the suite drives
+  (ads/newsletters/manager), Stripe test keys, editor preferences, timezone, etc.
+  `--woo` / `--no-woo` selects the WooCommerce stack.
+- **`tests/site-setup.ts`** (`setupSite`) is how the Playwright setup projects run
+  it: it copies `site-setup.sh` onto the target and streams `e2e-setup.sh` (which
+  points at the copy via `SITE_SETUP_SCRIPT`). Locally it `docker cp` + `docker exec`s
+  into the env container (as root, `--allow-root`, full `wp db reset`); on CI it
+  SSHes to the host (no `--allow-root`, `--reset clean` since a managed host can't
+  `DROP DATABASE`). Local vs remote is decided from the `SITE_URL` host.
+- **Credentials**: `setupSite` reinstalls WordPress with `ADMIN_USER` /
+  `ADMIN_PASSWORD` from `.env`, so those are authoritative – provisioning sets the
+  admin login, there is no separate captured password to keep in sync. `.env`'s
+  `ADMIN_PASSWORD=password` is for the local env; staging's lives in the a8c secret
+  store (README → `secret_id=12168`).
+- **On-site prerequisites**: the WooCommerce stack for the `--woo` path, and the
+  `e2e-plugin` + the Newspack plugins the suite activates (incl. `newspack-manager`)
+  must be installed. `site-setup.sh` itself is shipped from this repo, not the site.
 
-- **WP-version coupling.** A snapshot's dump carries the `db_version` of the core
-  it was created on. After a WP core bump, loading an older snapshot rolls
-  `db_version` back below the running core; `wp-admin/admin.php` then redirects
-  every admin request to `upgrade.php` (this check runs *before* `auth_redirect()`).
-  That makes the snapshots page appear empty and surfaces as
-  `FATAL: Snapshot "<slug>" not found` – even though the files are fine and WP-CLI
-  lists them (CLI ignores the redirect). `loadSnapshot` handles this by calling
-  `ensureDatabaseUpgraded()` (hits `upgrade.php?step=1`, a no-op when current)
-  before login and after each load. So "snapshot not found" usually means a
-  *pending DB upgrade*, not deleted files – check `db_version` vs core's
-  `$wp_db_version` first.
+## CI (TeamCity) notes
 
-## Reproducing the CI environment locally
-
-To simulate an older-schema snapshot on a current-core local env, lower the
-`db_version` baked into a snapshot's dump:
-
-```sh
-docker exec newspack_env_e2e_release bash -c '
-  cd /tmp/np-snapshots
-  zcat vanilla/db.sql.gz | perl -pe "s/('\''db_version'\''\s*,\s*)'\''<NEW>'\''/\${1}'\''<OLD>'\''/g" \
-    | gzip > vanilla/db.sql.gz.new && mv vanilla/db.sql.gz.new vanilla/db.sql.gz'
-```
-
-(Back up the dump dir first; restore it after.) Loading it then reproduces the
-post-core-bump `upgrade.php` redirect.
+The build definition lives in TeamCity settings, not this repo. It provisions over
+SSH using the `E2E_SSH_HOST` / `E2E_SSH_USER` / `E2E_SSH_PASS` credentials, which
+`setupSite` also reads for the remote path. A managed host (Atomic) cannot
+`DROP DATABASE`, so the remote path uses `--reset clean` (drop tables, keep the DB).
