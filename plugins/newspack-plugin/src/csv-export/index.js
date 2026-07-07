@@ -1,4 +1,6 @@
 /* globals newspackCsvExport */
+import './style.scss';
+
 /**
  * Drives the batched CSV export from the admin list tables: one AJAX request
  * per page (WooCommerce product-exporter style), then a nonce-protected

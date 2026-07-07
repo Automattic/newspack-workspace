@@ -255,6 +255,12 @@ final class CSV_Exports {
 			Newspack::asset_version( 'csv-export' ),
 			true
 		);
+		\wp_enqueue_style(
+			'newspack-csv-export',
+			Newspack::plugin_url() . '/dist/csv-export.css',
+			[],
+			Newspack::asset_version( 'csv-export' )
+		);
 		\wp_localize_script(
 			'newspack-csv-export',
 			'newspackCsvExport',
