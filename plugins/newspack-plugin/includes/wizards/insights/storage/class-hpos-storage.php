@@ -1222,6 +1222,13 @@ class HPOS_Storage implements Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * The non-donation filter is pre-aggregated to DISTINCT order_ids in a
+	 * derived table and INNER-JOINed against `o.id`, instead of an `o.id IN
+	 * (SELECT DISTINCT ...)` semi-join subquery — the DISTINCT is preserved
+	 * (so a subscription with multiple non-donation line items still counts
+	 * once) but MySQL builds the set once rather than re-evaluating it as part
+	 * of the outer scan.
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array
@@ -1231,9 +1238,6 @@ class HPOS_Storage implements Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
-		// DISTINCT id-subselect on the non-donation filter so a sub with
-		// multiple line items doesn't get counted multiple times under the
-		// same reason.
 		$sql = $wpdb->prepare(
 			"SELECT
 				COALESCE(om.meta_value, 'unknown') AS cancellation_reason,
@@ -1243,16 +1247,16 @@ class HPOS_Storage implements Storage_Interface {
 				ON om.order_id = o.id AND om.meta_key = 'newspack_subscriptions_cancellation_reason'
 			JOIN {$prefix}wc_orders_meta sch
 				ON sch.order_id = o.id AND sch.meta_key = '_schedule_cancelled'
-			WHERE o.type = 'shop_subscription'
-			  AND o.status IN ('wc-cancelled', 'wc-expired')
-			  AND o.id IN (
+			INNER JOIN (
 				SELECT DISTINCT oi.order_id
 				FROM {$prefix}woocommerce_order_items oi
 				JOIN {$prefix}woocommerce_order_itemmeta oim
 					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
 				WHERE oi.order_item_type = 'line_item'
 				  AND oim.meta_value NOT IN ($donations)
-			  )
+			) AS non_donation_orders ON non_donation_orders.order_id = o.id
+			WHERE o.type = 'shop_subscription'
+			  AND o.status IN ('wc-cancelled', 'wc-expired')
 			  AND sch.meta_value BETWEEN %s AND %s
 			GROUP BY cancellation_reason
 			ORDER BY count DESC",
