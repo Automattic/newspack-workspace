@@ -28,9 +28,9 @@ import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wiza
 import { getAllDiscounts, deleteDiscount, setDiscountActive, discountLabel, targetingLabel } from '../data/mock-discounts';
 import { fmtDate } from '../format';
 import ConfirmFlow from '../flows/ConfirmFlow';
+import DiscountRuleFlow from '../flows/DiscountRuleFlow';
 
-// Tasks 4 and 5 replace these with the real rule-editor and settings-drawer flows.
-const DiscountRuleFlow = null;
+// Task 5 replaces this with the real settings-drawer flow.
 const DiscountSettingsFlow = null;
 
 const DEFAULT_VIEW = {
@@ -212,7 +212,7 @@ export default function DiscountList() {
 				search
 			/>
 
-			{ editorRule !== null && DiscountRuleFlow && (
+			{ editorRule !== null && (
 				<DiscountRuleFlow
 					rule={ editorRule }
 					onClose={ () => setEditorRule( null ) }

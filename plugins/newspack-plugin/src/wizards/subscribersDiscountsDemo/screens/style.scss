@@ -458,3 +458,28 @@
 	font-weight: wp-vars.$font-weight-medium;
 	text-transform: uppercase;
 }
+
+// Live preview table in the discount rule editor: original vs. member price
+// for the products currently in scope, capped with a muted "…and N more" row.
+.newspack-subscribers-demo__discount-preview {
+	border-collapse: collapse;
+	width: 100%;
+
+	th,
+	td {
+		border-bottom: 1px solid wp-colors.$gray-100;
+		padding: wp-vars.$grid-unit-05 wp-vars.$grid-unit-10;
+		text-align: left;
+	}
+
+	th {
+		color: wp-colors.$gray-700;
+		font-size: wp-vars.$helptext-font-size;
+		font-weight: normal;
+	}
+
+	.newspack-subscribers-demo__discount-preview-more td {
+		color: wp-colors.$gray-700;
+		font-style: italic;
+	}
+}
