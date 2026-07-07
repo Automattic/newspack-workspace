@@ -73,6 +73,13 @@ fi
 
 case $WHAT_TO_BUILD in
     all)
+        # Root composer install provisions the shared PHP dev tooling
+        # (PHP_CodeSniffer + the WP coding standards in ./vendor) that the
+        # pre-commit hook's PHP check and `composer phpcs` depend on -- the
+        # counterpart to the root `pnpm install` above that provisions the JS
+        # linters. The monorepo root is bind-mounted (.:/newspack-monorepo), so
+        # this lands on the host ./vendor where the git hook runs.
+        composer install --working-dir "$MONOREPO_ROOT"
         # Composer install per monorepo project (each plugin still has its own
         # composer.json for production deps; dev deps are hoisted to the root).
         # Standalone repos/ checkouts are not built here -- they're external and

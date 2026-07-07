@@ -93,6 +93,7 @@ final class Newspack {
 
 		include_once NEWSPACK_ABSPATH . 'includes/util.php';
 		include_once NEWSPACK_ABSPATH . 'includes/emails/class-emails.php';
+		include_once NEWSPACK_ABSPATH . 'includes/emails/class-idempotent-send.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-plugin-manager.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-theme-manager.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-admin-plugins-screen.php';
@@ -162,6 +163,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-components-demo.php';
 
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/traits/trait-wizards-admin-header.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/traits/trait-content-gate-preferences.php';
 
 		// Newspack Wizards and Sections.
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/newspack/class-newspack-dashboard.php';

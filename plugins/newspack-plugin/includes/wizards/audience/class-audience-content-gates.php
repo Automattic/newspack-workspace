@@ -14,6 +14,8 @@ defined( 'ABSPATH' ) || exit;
  */
 class Audience_Content_Gates extends Wizard {
 
+	use Wizards\Traits\Content_Gate_Preferences;
+
 	/**
 	 * Admin page slug.
 	 *
@@ -97,6 +99,8 @@ class Audience_Content_Gates extends Wizard {
 				'available_access_rules'  => Access_Rules::get_access_rules(),
 				'available_content_rules' => Content_Rules::get_content_rules(),
 				'edit_gate_layout_url'    => Content_Gate::get_edit_gate_layout_url(),
+				'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
+				'default_gate_status'     => Content_Gate::get_default_new_gate_status(),
 			]
 		);
 
@@ -358,6 +362,8 @@ class Audience_Content_Gates extends Wizard {
 				],
 			]
 		);
+
+		$this->register_preferences_route();
 	}
 
 	/**
@@ -464,7 +470,7 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function create_gate( $request ) {
-		$gate = Content_Gate::create_gate( $request->get_param( 'gate' ) );
+		$gate = Content_Gate::create_gate( Content_Gate::with_default_new_gate_status( $request->get_param( 'gate' ) ) );
 		if ( is_wp_error( $gate ) ) {
 			return $gate;
 		}
