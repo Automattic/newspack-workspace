@@ -52,6 +52,7 @@ import {
 	GROUP_STATUS_LABELS,
 	GROUP_STATUS_BADGE_LEVEL,
 } from '../data/mock-groups';
+import { benefitsForPlans, discountLabel, targetingLabel } from '../data/mock-discounts';
 import { GROUP_LABEL, GROUP_LABEL_PLURAL, GROUP_LABEL_LOWER } from '../labels';
 import { STATUS_LABELS, STATUS_BADGE_LEVEL, STATUS_RANK, displayStatuses } from '../status';
 import { fmtCurrency, fmtRelative, fmtDate } from '../format';
@@ -85,6 +86,7 @@ import RemovePaymentFlow from '../flows/RemovePaymentFlow';
 import GuidedFixFlow from '../flows/GuidedFixFlow';
 import NoteFlow from '../flows/NoteFlow';
 import TagsFlow from '../flows/TagsFlow';
+import DiscountRuleFlow from '../flows/DiscountRuleFlow';
 
 const { useParams, useLocation, useHistory } = Router;
 
@@ -228,6 +230,7 @@ function PersonProfileView() {
 	const [ snackbar, setSnackbar ] = useState( null );
 	const [ modal, setModal ] = useState( null );
 	const [ groupsRefresh, setGroupsRefresh ] = useState( 0 );
+	const [ discountsRefresh, setDiscountsRefresh ] = useState( 0 );
 	const [ ordersView, setOrdersView ] = useState( {
 		type: 'table',
 		page: 1,
@@ -295,6 +298,19 @@ function PersonProfileView() {
 		() => groupMemberships.some( entry => entry.isOwner && entry.group.status === 'active' ),
 		[ groupMemberships ]
 	);
+
+	// Plan names granting the reader access right now: their own active/on-hold
+	// subscriptions, plus any group (owned or joined) in the same live states —
+	// a member with no individual plan still gets their group's benefits.
+	const livePlanNames = useMemo( () => {
+		const isLive = status => status === 'active' || status === 'on-hold';
+		return [
+			...( subscriber?.subscriptions || [] ).filter( s => isLive( s.status ) ).map( s => s.plan ),
+			...groupMemberships.filter( entry => isLive( entry.group.status ) ).map( entry => entry.group.plan ),
+		];
+	}, [ subscriber, groupMemberships ] );
+
+	const benefits = useMemo( () => benefitsForPlans( livePlanNames ), [ livePlanNames, discountsRefresh ] );
 
 	// Subscription instances an order can be billed against: the reader's
 	// individual subscriptions plus any group they own. Keyed by id so an order's
@@ -1327,6 +1343,44 @@ function PersonProfileView() {
 				</VStack>
 			</Row>
 
+			{ benefits.length > 0 && (
+				<Row
+					title={ __( 'Benefits', 'newspack-plugin' ) }
+					description={ __( 'Store discounts this reader gets through their plans.', 'newspack-plugin' ) }
+				>
+					<VStack spacing={ 4 }>
+						{ benefits.map( rule => (
+							<Card key={ rule.id } __experimentalCoreCard>
+								<HStack spacing={ 3 } justify="space-between" alignment="center">
+									<VStack spacing={ 1 }>
+										<strong>{ `${ discountLabel( rule ) } · ${ targetingLabel( rule ) }` }</strong>
+										<span className="newspack-subscribers-demo__muted">
+											{ sprintf(
+												// translators: %s: name of the plan granting the discount.
+												__( 'via %s', 'newspack-plugin' ),
+												rule.audience
+											) }
+										</span>
+									</VStack>
+									<Button
+										variant="tertiary"
+										size="compact"
+										aria-label={ sprintf(
+											__( 'View discount: %1$s · %2$s', 'newspack-plugin' ),
+											discountLabel( rule ),
+											targetingLabel( rule )
+										) }
+										onClick={ () => setModal( { kind: 'benefit', rule } ) }
+									>
+										{ __( 'View', 'newspack-plugin' ) }
+									</Button>
+								</HStack>
+							</Card>
+						) ) }
+					</VStack>
+				</Row>
+			) }
+
 			<Row title={ __( 'Payment methods', 'newspack-plugin' ) } showDivider={ orderRows.length > 0 }>
 				<VStack spacing={ 4 }>
 					{ subscriber.paymentMethods.length === 0 ? (
@@ -1526,6 +1580,17 @@ function PersonProfileView() {
 			) }
 			{ modal?.kind === 'note' && <NoteFlow note={ modal.note } onClose={ closeModal } onComplete={ completeFlow } /> }
 			{ modal?.kind === 'tags' && <TagsFlow tags={ subscriber.tags || [] } onClose={ closeModal } onComplete={ completeFlow } /> }
+			{ modal?.kind === 'benefit' && (
+				<DiscountRuleFlow
+					rule={ modal.rule }
+					onClose={ closeModal }
+					onSaved={ message => {
+						setDiscountsRefresh( n => n + 1 );
+						setSnackbar( { message } );
+						closeModal();
+					} }
+				/>
+			) }
 			{ modal?.kind === 'guided' && (
 				<GuidedFixFlow
 					modalTitle={ modal.alert.modalTitle || modal.alert.title }
