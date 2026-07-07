@@ -108,8 +108,27 @@ describe( 'ContentGateSettings per-gate actions', () => {
 			expect( mockAddNotice ).toHaveBeenCalledWith(
 				expect.objectContaining( {
 					type: 'error',
+					id: 'content-gate-status-error',
 					// decodeEntities( 'Status change failed &amp; rejected' )
 					message: 'Status change failed & rejected',
+				} )
+			);
+		} );
+	} );
+
+	it( 'surfaces a failed delete as an error notice (NPPM-2733)', async () => {
+		const ContentGateSettings = require( './content-gate-settings' ).default;
+		render( <ContentGateSettings gate={ mockGate } updateGatesData={ () => {} } /> );
+
+		// The Delete action routes through useConfirmDialog, mocked to fire its
+		// callback immediately -> handleDelete -> failed DELETE -> onError.
+		fireEvent.click( screen.getByRole( 'button', { name: 'Delete' } ) );
+
+		await waitFor( () => {
+			expect( mockAddNotice ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					type: 'error',
+					id: 'content-gate-delete-error',
 				} )
 			);
 		} );
