@@ -117,6 +117,27 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 		onFieldChange( integrationId, fieldKey, newValue );
 	};
 
+	const fieldIsVisible = field => {
+		if ( ! field.condition || typeof field.condition !== 'object' ) {
+			return true;
+		}
+		const ref = settingsFields.find( f => f.key === field.condition.field );
+		if ( ! ref ) {
+			return true;
+		}
+		const refValue = getFieldValue( ref );
+		// For boolean conditions, coerce both sides — values can arrive from WP options
+		// as scalar strings (`'1'`/`'0'`/`'true'`/`'false'`/`''`) after migration or from
+		// the REST layer, so strict equality would hide dependent fields until the parent
+		// is re-saved. Note `Boolean( '0' )` is `true` in JS, so the falsy string forms
+		// are matched explicitly rather than via a bare `Boolean()` cast.
+		if ( typeof field.condition.equals === 'boolean' ) {
+			const normalized = typeof refValue === 'string' ? ! [ '', '0', 'false' ].includes( refValue.toLowerCase() ) : Boolean( refValue );
+			return normalized === field.condition.equals;
+		}
+		return refValue === field.condition.equals;
+	};
+
 	return (
 		<WizardsTab isFetching={ loading }>
 			<div className="newspack-configure-view">
@@ -125,7 +146,7 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 					<Grid columns={ 2 } gutter={ 32 }>
 						<SectionHeader heading={ 2 } title={ __( 'Settings', 'newspack-plugin' ) } />
 						<Grid columns={ 1 } rowGap={ 16 }>
-							{ settingsFields.map( field => (
+							{ settingsFields.filter( fieldIsVisible ).map( field => (
 								<SettingsField
 									key={ field.key }
 									field={ field }
