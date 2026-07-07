@@ -1,3 +1,10 @@
+## @automattic/newspack-blocks [4.26.8](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.7...newspack-blocks@4.26.8) (2026-07-02)
+
+
+### Bug Fixes
+
+* **blocks:** restrict articles endpoint to viewable post types ([cde3e84](https://github.com/Automattic/newspack-workspace/commit/cde3e84ebf2c8e653f085560799f32c69bd75a36))
+
 ## @automattic/newspack-blocks [4.26.7](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.6...newspack-blocks@4.26.7) (2026-06-30)
 
 
