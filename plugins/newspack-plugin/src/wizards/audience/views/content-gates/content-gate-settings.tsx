@@ -4,6 +4,7 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { CardBody } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
+import { decodeEntities } from '@wordpress/html-entities';
 import { createInterpolateElement, useRef } from '@wordpress/element';
 
 /**
@@ -86,6 +87,13 @@ export default function ContentGateSettings( {
 						actions: [ { label: __( 'Undo', 'newspack-plugin' ), onClick: () => updateStatus.current?.( prevStatus ) } ],
 					} );
 				},
+				onError( fetchError: WpFetchError ) {
+					addNotice( {
+						message: decodeEntities( fetchError.message ),
+						type: 'error',
+						id: 'content-gate-status-error',
+					} );
+				},
 			}
 		);
 	};
@@ -112,6 +120,13 @@ export default function ContentGateSettings( {
 						),
 						type: 'success',
 						id: 'content-gate-deleted',
+					} );
+				},
+				onError( fetchError: WpFetchError ) {
+					addNotice( {
+						message: decodeEntities( fetchError.message ),
+						type: 'error',
+						id: 'content-gate-delete-error',
 					} );
 				},
 			}
