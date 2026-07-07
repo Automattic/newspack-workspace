@@ -350,6 +350,29 @@ final class Conversion_Metric {
 	}
 
 	/**
+	 * Warming payload for a snapshot scalar scorecard metric (NEWS-2603). The hub
+	 * returns this state when a snapshot cache miss is being backfilled by an
+	 * async refresh — a distinct, expected, transient condition, NOT an error and
+	 * NOT schema drift. Unlike error_scalar, no error_code/error_message is set;
+	 * unlike populated_scalar's data_missing branch, data_missing is always false.
+	 * The React layer reads `state` to render a "warming up" treatment rather than
+	 * a non-computable zero or an error.
+	 *
+	 * @param string $placeholder_type One of 'count', 'rate', 'currency', 'decimal'.
+	 * @return array
+	 */
+	private function warming_scalar( string $placeholder_type ): array {
+		return [
+			'state'            => 'warming',
+			'value'            => 0.0,
+			'computable'       => false,
+			'denominator'      => null,
+			'placeholder_type' => $placeholder_type,
+			'data_missing'     => false,
+		];
+	}
+
+	/**
 	 * Error payload for a collection metric (funnel / distribution / table).
 	 *
 	 * @param string    $rows_key Key holding the (empty) collection: 'stages'|'slices'|'points'|'groups'|'cohorts'|'rows'|'weeks'.
@@ -460,9 +483,13 @@ final class Conversion_Metric {
 		if ( is_wp_error( $rows ) ) {
 			return $this->error_scalar( 'rate', $rows );
 		}
-		if ( empty( $rows ) ) {
-			// No rows → empty window, legitimately no data.
-			return $this->populated_scalar( 0.0, false, null, 'rate' );
+		// Warming (NEWS-2603): the hub snapshot isn't built yet. A cache miss is
+		// signaled either by the explicit marker row, or — on a hub not yet
+		// updated to emit the marker — a bare [] result set. Distinct from a
+		// genuinely computed empty cohort, which always arrives as a real data
+		// row (e.g. newsletter_signups => 0), never as an empty result set.
+		if ( empty( $rows ) || ( isset( $rows[0]['__status'] ) && 'warming' === $rows[0]['__status'] ) ) {
+			return $this->warming_scalar( 'rate' );
 		}
 		if ( ! is_array( $rows[0] ) || ! array_key_exists( $rate_key, $rows[0] ) || ! array_key_exists( $denominator_key, $rows[0] ) ) {
 			// Row present but unusable → schema drift. Non-computable, flagged.

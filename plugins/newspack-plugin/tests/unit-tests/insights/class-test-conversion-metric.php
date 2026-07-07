@@ -405,6 +405,57 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NEWS-2603 (warming state): the hub returns the warming marker
+	 * (`[ [ '__status' => 'warming' ] ]`) on a snapshot cache miss — the
+	 * background refresh hasn't populated the snapshot yet. This is a
+	 * distinct, expected, transient state — NOT an error and NOT
+	 * `data_missing` — so no error_code/error_message must be set.
+	 */
+	public function test_warming_marker_yields_warming_state() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ [ '__status' => 'warming' ] ] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_newsletter_to_subscription_conversion( $start, $end );
+
+		$this->assertSame( 'warming', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+		$this->assertFalse( $result['data_missing'] );
+		$this->assertArrayNotHasKey( 'error_code', $result );
+		$this->assertArrayNotHasKey( 'error_message', $result );
+	}
+
+	/**
+	 * NEWS-2603 (warming state): a bare `[]` from the snapshot query is also
+	 * treated as warming — an un-updated hub returns an empty result set on
+	 * a cache miss rather than the marker row.
+	 */
+	public function test_bare_empty_from_snapshot_query_is_treated_as_warming() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_newsletter_to_subscription_conversion( $start, $end );
+
+		$this->assertSame( 'warming', $result['state'] );
+	}
+
+	/**
+	 * NEWS-2603 (warming state): a genuine data row for an empty cohort
+	 * (zero newsletter signups, NULL rate) is a real computed result, not a
+	 * cache miss — it must stay 'populated', never 'warming'.
+	 */
+	public function test_real_zero_cohort_row_stays_populated_not_warming() {
+		$row             = [
+			'newsletter_signups'         => 0,
+			'converted_within_window'    => 0,
+			'newsletter_conversion_rate' => null,
+		];
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ $row ] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_newsletter_to_subscription_conversion( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+	}
+
+	/**
 	 * C3 empty: proxy returns [] → state 'empty', empty stages array.
 	 */
 	public function test_anon_to_registered_funnel_returns_empty_state_on_no_rows() {
