@@ -32,12 +32,17 @@ export interface PieChartProps {
 	centerLabel?: string;
 	/** Empty-state copy shown when there's no data. Defaults to the generic line. */
 	emptyMessage?: string;
+	/**
+	 * Legend value formatter (e.g. currency for revenue-weighted slices).
+	 * Defaults to plain number formatting. Mirrors LineChart's `formatValue`.
+	 */
+	formatValue?: ( value: number ) => string;
 }
 
 const RADIUS = 16;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
-const PieChart = ( { segments, centerLabel, emptyMessage }: PieChartProps ) => {
+const PieChart = ( { segments, centerLabel, emptyMessage, formatValue = formatNumber }: PieChartProps ) => {
 	const total = segments.reduce( ( sum, s ) => sum + ( s.value || 0 ), 0 );
 	if ( total <= 0 ) {
 		return <p className="newspack-insights__chart-empty">{ emptyMessage ?? __( 'No data in this timeframe.', 'newspack-plugin' ) }</p>;
@@ -82,7 +87,7 @@ const PieChart = ( { segments, centerLabel, emptyMessage }: PieChartProps ) => {
 						<span className={ `newspack-insights__legend-swatch is-series-${ i % 7 }` } aria-hidden="true" />
 						<span className="newspack-insights__legend-label">{ segment.label }</span>
 						<span className="newspack-insights__legend-value">
-							{ formatNumber( segment.value ) } ({ formatPercent( segment.value / total ) })
+							{ formatValue( segment.value ) } ({ formatPercent( segment.value / total ) })
 						</span>
 					</li>
 				) ) }

@@ -285,6 +285,11 @@
 	// "See more" / "See less" toggle below an expandable MetricTable.
 	&__table-toggle {
 		display: inline-block;
+		// Hug the start when the toggle is a direct flex child (e.g. a full-width
+		// table rendered straight into a flex-column section) — otherwise it
+		// stretches full width and the button's default centered text drifts to
+		// the middle. A no-op where the toggle isn't a flex item.
+		align-self: flex-start;
 		margin-top: 8px;
 		padding: 0;
 		background: transparent;

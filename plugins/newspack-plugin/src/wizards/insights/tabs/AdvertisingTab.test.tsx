@@ -117,7 +117,7 @@ describe( 'AdvertisingTab', () => {
 		expect( container.querySelector( '[data-empty-state="no_opportunity"]' ) ).toBeInTheDocument();
 		expect( container ).toHaveTextContent( 'No ad impressions in this timeframe' );
 		// The headline scorecards are gone; the other sections still render.
-		expect( screen.queryByText( 'Total Impressions' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Impressions' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'renders all sections with values when ready', () => {

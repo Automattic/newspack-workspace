@@ -55,7 +55,7 @@ defined( 'ABSPATH' ) || exit;
  */
 class Advertising_Metric {
 
-	const CACHE_KEY_PREFIX = 'newspack_insights_advertising_v1:';
+	const CACHE_KEY_PREFIX = 'newspack_insights_advertising_v2:';
 	const CACHE_FRESH_TTL  = 15 * MINUTE_IN_SECONDS;
 	const CACHE_HARD_TTL   = DAY_IN_SECONDS;
 	const CACHE_RETRY_TTL  = 5 * MINUTE_IN_SECONDS;
@@ -95,6 +95,8 @@ class Advertising_Metric {
 	const DIM_ADVERTISER_NAME  = 'ADVERTISER_NAME';
 	const DIM_CUSTOM_DIMENSION = 'CUSTOM_DIMENSION';
 	const DIM_DATE             = 'DATE';
+	const DIM_DEVICE_CATEGORY  = 'DEVICE_CATEGORY_NAME';
+	const DIM_ORDER_NAME       = 'ORDER_NAME';
 
 	/**
 	 * The reportable custom-dimension key newspack-network creates for each site
@@ -112,6 +114,30 @@ class Advertising_Metric {
 
 	const DIRECT_LINE_ITEM_TYPES       = [ 'SPONSORSHIP', 'STANDARD', 'BULK', 'PRICE_PRIORITY' ];
 	const PROGRAMMATIC_LINE_ITEM_TYPES = [ 'NETWORK', 'AD_EXCHANGE' ];
+
+	/**
+	 * By-channel bucket map: raw GAM LINE_ITEM_TYPE → channel bucket key
+	 * (the single source of truth for the `by_channel` grouping behind the
+	 * impressions-weighted "Impressions by type" pie; distinct from the legacy
+	 * `direct_vs_programmatic` payload above). Types not in the map fall back per
+	 * {@see self::channel_bucket()}: anything containing "EXCHANGE" is
+	 * programmatic; everything else is "other".
+	 *
+	 * NETWORK / BULK / PRICE_PRIORITY back non-guaranteed demand that most
+	 * publishers monetize programmatically, so they're bucketed as programmatic —
+	 * a product-tunable default, not a GAM-defined grouping.
+	 */
+	const CHANNEL_BUCKETS = [
+		'SPONSORSHIP'    => 'direct',
+		'STANDARD'       => 'direct',
+		'AD_EXCHANGE'    => 'programmatic',
+		'ADSENSE'        => 'programmatic',
+		'PREFERRED_DEAL' => 'programmatic',
+		'NETWORK'        => 'programmatic',
+		'BULK'           => 'programmatic',
+		'PRICE_PRIORITY' => 'programmatic',
+		'HOUSE'          => 'house',
+	];
 
 	/**
 	 * Per-request memo of Client::can_run_reports() (which makes a remote OAuth
@@ -516,8 +542,11 @@ class Advertising_Metric {
 			'fill_rate'              => self::fill_rate( $start_date, $end_date ),
 			'viewability_rate'       => self::viewability_rate( $start_date, $end_date ),
 			'direct_vs_programmatic' => self::direct_vs_programmatic( $start_date, $end_date ),
+			'by_channel'             => self::by_channel( $start_date, $end_date ),
+			'by_device'              => self::by_device( $start_date, $end_date ),
 			'top_ad_units'           => self::top_ad_units( $start_date, $end_date ),
 			'top_advertisers'        => self::top_advertisers( $start_date, $end_date ),
+			'top_campaigns'          => self::top_campaigns( $start_date, $end_date ),
 		];
 
 		// Per-site breakdown (NPPD-1671): only for network members. The runner skips
@@ -806,7 +835,8 @@ class Advertising_Metric {
 	}
 
 	/**
-	 * Top Ad Units by revenue.
+	 * Top Ad Units by revenue. Rows carry clicks and CTR (clicks / impressions,
+	 * null — never 0% — when the unit served no impressions).
 	 *
 	 * @param string $s     Start date.
 	 * @param string $e     End date.
@@ -836,16 +866,18 @@ class Advertising_Metric {
 			$out[]       = [
 				'ad_unit'     => (string) self::cell( $row, self::DIM_AD_UNIT_NAME ),
 				'impressions' => $impressions,
+				'clicks'      => $clicks,
 				'revenue'     => $revenue,
 				'ecpm'        => $coded > 0 ? ( $revenue / $coded ) * 1000 : 0.0,
-				'ctr'         => $coded > 0 ? $clicks / $coded : 0.0,
+				'ctr'         => self::ctr( $clicks, $impressions ),
 			];
 		}
 		return self::rank_table( $out, 'revenue', $limit );
 	}
 
 	/**
-	 * Top Advertisers by revenue — direct-sold line item types only.
+	 * Top Advertisers by revenue — direct-sold line item types only. Rows carry
+	 * clicks and CTR (clicks / impressions, null when impressions are zero).
 	 *
 	 * @param string $s     Start date.
 	 * @param string $e     End date.
@@ -857,7 +889,7 @@ class Advertising_Metric {
 			new Report_Query(
 				[
 					'dimensions' => [ self::DIM_ADVERTISER_NAME ],
-					'columns'    => [ self::COL_IMPRESSIONS, self::COL_REVENUE ],
+					'columns'    => [ self::COL_IMPRESSIONS, self::COL_REVENUE, self::COL_CLICKS ],
 					'pql_filter' => self::direct_sold_pql_filter(),
 					'start_date' => $s,
 					'end_date'   => $e,
@@ -869,9 +901,188 @@ class Advertising_Metric {
 		}
 		$out = [];
 		foreach ( $rows['rows'] as $row ) {
-			$out[] = [
+			$impressions = (int) self::cell_number( $row, self::COL_IMPRESSIONS );
+			$clicks      = (int) self::cell_number( $row, self::COL_CLICKS );
+			$out[]       = [
 				'advertiser'  => (string) self::cell( $row, self::DIM_ADVERTISER_NAME ),
-				'impressions' => (int) self::cell_number( $row, self::COL_IMPRESSIONS ),
+				'impressions' => $impressions,
+				'clicks'      => $clicks,
+				'ctr'         => self::ctr( $clicks, $impressions ),
+				'revenue'     => Client::normalize_currency_micros( self::cell_number( $row, self::COL_REVENUE ) ),
+			];
+		}
+		return self::rank_table( $out, 'revenue', $limit );
+	}
+
+	/**
+	 * By channel — the window's impressions and revenue grouped from raw
+	 * LINE_ITEM_TYPE values into the {@see self::CHANNEL_BUCKETS} buckets
+	 * (Direct-sold / Programmatic / House / Other), for the channel pie. The pie
+	 * is impressions-weighted — house line items are unpaid, so a revenue
+	 * weighting would render House invisible; impressions show how inventory is
+	 * allocated, including the house/unsold share. Rows keep both revenue and
+	 * impressions; each row's `share` is its fraction of total impressions
+	 * (0–1). Fully-empty buckets are dropped so the legend only lists channels
+	 * with activity. Micros normalized at the boundary; rows sorted by
+	 * impressions desc.
+	 *
+	 * @param string $s Start date.
+	 * @param string $e End date.
+	 * @return array
+	 */
+	public static function by_channel( string $s, string $e ): array {
+		$rows = static::run_gam_report(
+			new Report_Query(
+				[
+					'dimensions' => [ self::DIM_LINE_ITEM_TYPE ],
+					'columns'    => [ self::COL_IMPRESSIONS, self::COL_REVENUE ],
+					'start_date' => $s,
+					'end_date'   => $e,
+				]
+			)
+		);
+		if ( isset( $rows['error'] ) || isset( $rows['overlay'] ) ) {
+			return $rows;
+		}
+		$buckets = [
+			'direct'       => [
+				'revenue'     => 0.0,
+				'impressions' => 0,
+			],
+			'programmatic' => [
+				'revenue'     => 0.0,
+				'impressions' => 0,
+			],
+			'house'        => [
+				'revenue'     => 0.0,
+				'impressions' => 0,
+			],
+			'other'        => [
+				'revenue'     => 0.0,
+				'impressions' => 0,
+			],
+		];
+		foreach ( $rows['rows'] as $row ) {
+			$type   = strtoupper( (string) self::cell( $row, self::DIM_LINE_ITEM_TYPE ) );
+			$bucket = self::channel_bucket( $type );
+			$buckets[ $bucket ]['revenue']     += Client::normalize_currency_micros( self::cell_number( $row, self::COL_REVENUE ) );
+			$buckets[ $bucket ]['impressions'] += (int) self::cell_number( $row, self::COL_IMPRESSIONS );
+		}
+		$total_revenue     = array_sum( array_column( $buckets, 'revenue' ) );
+		$total_impressions = array_sum( array_column( $buckets, 'impressions' ) );
+		$out               = [];
+		foreach ( $buckets as $bucket => $vals ) {
+			// Drop buckets with no activity at all — an empty legend row is noise.
+			if ( $vals['revenue'] <= 0 && $vals['impressions'] <= 0 ) {
+				continue;
+			}
+			$out[] = [
+				'channel'     => self::channel_label( $bucket ),
+				'revenue'     => $vals['revenue'],
+				'impressions' => $vals['impressions'],
+				// (float) — an evenly-divisible int/int division returns int in PHP.
+				'share'       => $total_impressions > 0 ? (float) ( $vals['impressions'] / $total_impressions ) : 0.0,
+			];
+		}
+		usort(
+			$out,
+			function ( $a, $b ) {
+				return $b['impressions'] <=> $a['impressions'];
+			}
+		);
+		// Computable when there's anything to show — revenue OR impressions —
+		// matching direct_vs_programmatic (house/unsold inventory is real at $0).
+		return [
+			'rows'       => $out,
+			'computable' => $total_revenue > 0 || $total_impressions > 0,
+			'type'       => 'breakdown',
+		];
+	}
+
+	/**
+	 * Performance by device — impressions + revenue broken down by the GAM
+	 * DEVICE_CATEGORY_NAME dimension (Desktop / Smartphone / Tablet / Connected
+	 * TV), with per-row eCPM (null when the device served no impressions).
+	 * Rows sorted by impressions desc.
+	 *
+	 * @param string $s     Start date.
+	 * @param string $e     End date.
+	 * @param int    $limit Max rows.
+	 * @return array
+	 */
+	public static function by_device( string $s, string $e, int $limit = 10 ): array {
+		$rows = static::run_gam_report(
+			new Report_Query(
+				[
+					'dimensions' => [ self::DIM_DEVICE_CATEGORY ],
+					'columns'    => [ self::COL_IMPRESSIONS, self::COL_REVENUE ],
+					'start_date' => $s,
+					'end_date'   => $e,
+				]
+			)
+		);
+		if ( isset( $rows['error'] ) || isset( $rows['overlay'] ) ) {
+			return $rows;
+		}
+		$out = [];
+		foreach ( $rows['rows'] as $row ) {
+			$device = (string) self::cell( $row, self::DIM_DEVICE_CATEGORY );
+			if ( '' === $device ) {
+				continue;
+			}
+			$impressions = (int) self::cell_number( $row, self::COL_IMPRESSIONS );
+			$revenue     = Client::normalize_currency_micros( self::cell_number( $row, self::COL_REVENUE ) );
+			$out[]       = [
+				'device'      => $device,
+				'impressions' => $impressions,
+				'revenue'     => $revenue,
+				'ecpm'        => $impressions > 0 ? ( $revenue / $impressions ) * 1000 : null,
+			];
+		}
+		return self::rank_table( $out, 'impressions', $limit );
+	}
+
+	/**
+	 * Top campaigns (orders) by revenue — impressions, clicks, CTR, and revenue
+	 * broken down by ORDER_NAME with ADVERTISER_NAME as a secondary dimension.
+	 * This reports DIRECT-SOLD orders: programmatic delivery has no order, so
+	 * GAM emits it (if at all) with an empty or "-" order name — those rows are
+	 * filtered out. CTR is clicks / impressions (null when impressions are zero).
+	 *
+	 * @param string $s     Start date.
+	 * @param string $e     End date.
+	 * @param int    $limit Max rows.
+	 * @return array
+	 */
+	public static function top_campaigns( string $s, string $e, int $limit = 10 ): array {
+		$rows = static::run_gam_report(
+			new Report_Query(
+				[
+					'dimensions' => [ self::DIM_ORDER_NAME, self::DIM_ADVERTISER_NAME ],
+					'columns'    => [ self::COL_IMPRESSIONS, self::COL_CLICKS, self::COL_REVENUE ],
+					'start_date' => $s,
+					'end_date'   => $e,
+				]
+			)
+		);
+		if ( isset( $rows['error'] ) || isset( $rows['overlay'] ) ) {
+			return $rows;
+		}
+		$out = [];
+		foreach ( $rows['rows'] as $row ) {
+			$campaign = trim( (string) self::cell( $row, self::DIM_ORDER_NAME ) );
+			// Order-less (programmatic) delivery: skip empty / "-" order names.
+			if ( '' === $campaign || '-' === $campaign ) {
+				continue;
+			}
+			$impressions = (int) self::cell_number( $row, self::COL_IMPRESSIONS );
+			$clicks      = (int) self::cell_number( $row, self::COL_CLICKS );
+			$out[]       = [
+				'campaign'    => $campaign,
+				'advertiser'  => (string) self::cell( $row, self::DIM_ADVERTISER_NAME ),
+				'impressions' => $impressions,
+				'clicks'      => $clicks,
+				'ctr'         => self::ctr( $clicks, $impressions ),
 				'revenue'     => Client::normalize_currency_micros( self::cell_number( $row, self::COL_REVENUE ) ),
 			];
 		}
@@ -1093,6 +1304,57 @@ class Advertising_Metric {
 			return 'programmatic';
 		}
 		return 'other';
+	}
+
+	/**
+	 * Bucket a LINE_ITEM_TYPE value for the by_channel (Impressions by type) grouping. The
+	 * explicit map is {@see self::CHANNEL_BUCKETS}; unmapped EXCHANGE-suffixed
+	 * types (e.g. legacy Ad Exchange variants) fall back to programmatic, and
+	 * anything else to "other".
+	 *
+	 * @param string $type Upper-cased line item type.
+	 * @return string One of direct|programmatic|house|other.
+	 */
+	private static function channel_bucket( string $type ): string {
+		if ( isset( self::CHANNEL_BUCKETS[ $type ] ) ) {
+			return self::CHANNEL_BUCKETS[ $type ];
+		}
+		if ( false !== strpos( $type, 'EXCHANGE' ) ) {
+			return 'programmatic';
+		}
+		return 'other';
+	}
+
+	/**
+	 * User-facing label for a by_channel (Impressions by type) bucket key. Resolved at compute
+	 * time (the payload is server-rendered) so the pie legend is translatable.
+	 *
+	 * @param string $bucket Bucket key from {@see self::channel_bucket()}.
+	 * @return string
+	 */
+	private static function channel_label( string $bucket ): string {
+		switch ( $bucket ) {
+			case 'direct':
+				return __( 'Direct-sold', 'newspack-plugin' );
+			case 'programmatic':
+				return __( 'Programmatic', 'newspack-plugin' );
+			case 'house':
+				return __( 'House', 'newspack-plugin' );
+			default:
+				return __( 'Other', 'newspack-plugin' );
+		}
+	}
+
+	/**
+	 * CTR = clicks / impressions. Null — never 0% — when there were no
+	 * impressions, so the UI renders an em-dash instead of a misleading zero.
+	 *
+	 * @param int $clicks      Clicks.
+	 * @param int $impressions Impressions.
+	 * @return float|null
+	 */
+	private static function ctr( int $clicks, int $impressions ): ?float {
+		return $impressions > 0 ? $clicks / $impressions : null;
 	}
 
 	/**

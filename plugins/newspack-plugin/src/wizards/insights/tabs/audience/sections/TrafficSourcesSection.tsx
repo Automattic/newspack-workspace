@@ -57,10 +57,10 @@ const TrafficSourcesSection = ( { current }: SectionProps ) => {
 			{ /* Channel breakdown (left ~35%) reads as a unit with the campaigns
 			     driving each channel (right ~65%) — NPPD-1649 fix #3. */ }
 			<div className="newspack-insights__traffic-grid">
-				<ChartCard title={ __( 'Traffic Sources Breakdown', 'newspack-plugin' ) } payload={ current.traffic_sources_breakdown }>
+				<ChartCard title={ __( 'Traffic sources breakdown', 'newspack-plugin' ) } payload={ current.traffic_sources_breakdown }>
 					<PieChart segments={ toSeries( current.traffic_sources_breakdown, 'channel', 'readers' ) } />
 				</ChartCard>
-				<ChartCard title={ __( 'Top Campaigns', 'newspack-plugin' ) } payload={ campaigns }>
+				<ChartCard title={ __( 'Top campaigns', 'newspack-plugin' ) } payload={ campaigns }>
 					<MetricTable
 						payload={ campaigns }
 						emptyMessage={ __( 'No campaign traffic in this timeframe.', 'newspack-plugin' ) }
