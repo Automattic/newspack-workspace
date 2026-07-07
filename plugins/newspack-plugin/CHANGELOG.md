@@ -1,3 +1,24 @@
+## newspack [6.44.9](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.8...newspack@6.44.9) (2026-07-06)
+
+
+### Bug Fixes
+
+* **reader-activation:** load RAS scripts after commons (NPPM-2951) ([#414](https://github.com/Automattic/newspack-workspace/issues/414)) ([d2dab16](https://github.com/Automattic/newspack-workspace/commit/d2dab162e8ff59c99b3b676ee13ca20bb3a79d96))
+
+## newspack [6.44.8](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.7...newspack@6.44.8) (2026-07-06)
+
+
+### Bug Fixes
+
+* **group-subscription:** render metabox on non-HPOS order storage ([#426](https://github.com/Automattic/newspack-workspace/issues/426)) ([c542f0b](https://github.com/Automattic/newspack-workspace/commit/c542f0bf942c7b41d331a4e407e7110833f0f653))
+
+## newspack [6.44.7](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.6...newspack@6.44.7) (2026-07-02)
+
+
+### Bug Fixes
+
+* **access-control:** restore long-lived institutional IP access cookie ([14b3aad](https://github.com/Automattic/newspack-workspace/commit/14b3aadc02463132b8b251aa412a649529205f13)), closes [#136](https://github.com/Automattic/newspack-workspace/issues/136) [#4749](https://github.com/Automattic/newspack-workspace/issues/4749) [#4749](https://github.com/Automattic/newspack-workspace/issues/4749)
+
 ## newspack [6.44.6](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.5...newspack@6.44.6) (2026-07-02)
 
 

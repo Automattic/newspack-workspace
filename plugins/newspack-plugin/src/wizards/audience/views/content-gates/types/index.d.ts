@@ -9,6 +9,7 @@ type HeaderAction = {
 	destructive?: boolean;
 	action?: () => void;
 	href?: string;
+	separator?: boolean;
 };
 
 type GateAccessRuleValue = string | string[] | boolean;

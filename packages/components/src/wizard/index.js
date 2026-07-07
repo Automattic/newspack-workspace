@@ -6,7 +6,7 @@ import classnames from 'classnames';
 /**
  * WordPress dependencies.
  */
-import { DropdownMenu, MenuItem } from '@wordpress/components';
+import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { useEffect, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
@@ -190,23 +190,37 @@ const Wizard = (
 									popoverProps={ { className: 'newspack-wizard__header__actions__more' } }
 								>
 									{ () =>
-										actions.map( ( action, index ) => (
-											<MenuItem
-												key={ index }
-												className={
-													action.type === 'primary' || action.type === 'secondary'
-														? 'newspack-wizard__header__actions__more__main'
-														: 'newspack-wizard__header__actions__more__more'
+										// Split actions into groups whenever an action opts in via `separator: true`.
+										// Consecutive MenuGroups render the WordPress-standard divider between them.
+										actions
+											.reduce( ( groups, action ) => {
+												if ( action.separator || groups.length === 0 ) {
+													groups.push( [] );
 												}
-												icon={ action.icon }
-												href={ action.href }
-												onClick={ action.action }
-												disabled={ action.disabled || false }
-												isDestructive={ action.destructive || false }
-											>
-												{ action.label }
-											</MenuItem>
-										) )
+												groups[ groups.length - 1 ].push( action );
+												return groups;
+											}, [] )
+											.map( ( group, groupIndex ) => (
+												<MenuGroup key={ groupIndex }>
+													{ group.map( ( action, index ) => (
+														<MenuItem
+															key={ index }
+															className={
+																action.type === 'primary' || action.type === 'secondary'
+																	? 'newspack-wizard__header__actions__more__main'
+																	: 'newspack-wizard__header__actions__more__more'
+															}
+															icon={ action.icon }
+															href={ action.href }
+															onClick={ action.action }
+															disabled={ action.disabled || false }
+															isDestructive={ action.destructive || false }
+														>
+															{ action.label }
+														</MenuItem>
+													) ) }
+												</MenuGroup>
+											) )
 									}
 								</DropdownMenu>
 							</div>
