@@ -37,6 +37,10 @@ class Subscriptions_Tiers {
 		add_action( 'wp_footer', [ __CLASS__, 'print_modal' ] );
 		add_filter( 'newspack_popups_assess_has_disabled_popups', [ __CLASS__, 'disable_popups' ] );
 
+		// Server-side backstop preventing a switch to the subscription the reader
+		// already owns (NPPM-2952). The front-end guard is the primary defense.
+		add_filter( 'woocommerce_add_to_cart_validation', [ __CLASS__, 'prevent_switch_to_same_subscription' ], 10, 4 );
+
 		// Unhook Upgrade/Downgrade switch direction text.
 		add_action(
 			'init',
@@ -345,6 +349,52 @@ class Subscriptions_Tiers {
 	}
 
 	/**
+	 * Find the tier the current user is actively subscribed to, if any.
+	 *
+	 * A subscription counts as "current" when it holds one of the tier products
+	 * and is in one of the statuses we treat as owned:
+	 * {@see WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES} (`active` or
+	 * `pending-cancel`). This must stay in sync with the status set used to
+	 * decide switch eligibility in
+	 * {@see WooCommerce_Subscriptions::get_user_subscription()}. If the two
+	 * diverge, a switch can be offered for a subscription that is never flagged
+	 * as "current" — which drops the "Current" badge and the front-end guard
+	 * that stops a reader switching to the subscription they already own
+	 * (NPPM-2952).
+	 *
+	 * @param array<string, \WC_Product[]> $tiers   Tier products grouped by frequency.
+	 * @param int|null                     $user_id Optional user ID. Defaults to the current user.
+	 *
+	 * @return array The current frequency (string|null), tier product
+	 *               (\WC_Product|null) and subscription (\WC_Subscription|null),
+	 *               or a triple of nulls when the user owns none of the tiers.
+	 */
+	public static function get_current_tier( $tiers, $user_id = null ) {
+		$none = [ null, null, null ];
+		if ( ! function_exists( 'wcs_get_users_subscriptions' ) ) {
+			return $none;
+		}
+		$user_id = $user_id ?? get_current_user_id();
+		if ( ! $user_id ) {
+			return $none;
+		}
+		$user_subscriptions = wcs_get_users_subscriptions( $user_id );
+		foreach ( $tiers as $frequency => $products ) {
+			foreach ( $products as $product ) {
+				foreach ( $user_subscriptions as $subscription ) {
+					if (
+						$subscription->has_product( $product->get_id() )
+						&& $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES )
+					) {
+						return [ $frequency, $product, $subscription ];
+					}
+				}
+			}
+		}
+		return $none;
+	}
+
+	/**
 	 * Get product title.
 	 *
 	 * @param \WC_Product $product                   Product.
@@ -589,19 +639,7 @@ class Subscriptions_Tiers {
 		$current_product   = null;
 		$user_subscription = null;
 		if ( is_user_logged_in() ) {
-			$user_subscriptions = wcs_get_users_subscriptions( get_current_user_id() );
-			foreach ( $frequencies as $frequency ) {
-				foreach ( $tiers[ $frequency ] as $product ) {
-					foreach ( $user_subscriptions as $subscription ) {
-						if ( $subscription->has_product( $product->get_id() ) && $subscription->has_status( 'active' ) ) {
-							$current_frequency = $frequency;
-							$current_product   = $product;
-							$user_subscription = $subscription;
-							break 2;
-						}
-					}
-				}
-			}
+			[ $current_frequency, $current_product, $user_subscription ] = self::get_current_tier( $tiers );
 		}
 
 		if ( ! $switch_data ) {
@@ -833,6 +871,107 @@ class Subscriptions_Tiers {
 			}
 		}
 		return $switch_data;
+	}
+
+	/**
+	 * Prevent a reader from "switching" to the subscription they already own.
+	 *
+	 * The tiers/upgrade modal submits a WooCommerce Subscriptions switch
+	 * (`switch-subscription` + `item`) straight into the modal checkout, which
+	 * adds the product to the cart directly and so bypasses WCS's own
+	 * "you can't switch to the same subscription" validation. The front-end
+	 * guard (a disabled submit button on the current tier) is the primary
+	 * protection; this is the server-side backstop for crafted requests or
+	 * disabled JavaScript (NPPM-2952).
+	 *
+	 * A no-op for anything that isn't a switch onto a product the reader's own
+	 * subscription already holds at the same amount.
+	 *
+	 * @param bool $passed       Whether add-to-cart validation has passed so far.
+	 * @param int  $product_id   The product being added to the cart.
+	 * @param int  $quantity     The quantity (unused).
+	 * @param int  $variation_id The variation being added, if any.
+	 *
+	 * @return bool Whether the product may be added to the cart.
+	 */
+	public static function prevent_switch_to_same_subscription( $passed, $product_id, $quantity = 1, $variation_id = 0 ) {
+		if ( true !== $passed || ! function_exists( 'wcs_get_subscription' ) ) {
+			return $passed;
+		}
+
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended
+		if ( empty( $_GET['switch-subscription'] ) ) {
+			return $passed;
+		}
+		$subscription = wcs_get_subscription( absint( $_GET['switch-subscription'] ) );
+		if (
+			! $subscription
+			|| ! is_user_logged_in()
+			|| (int) $subscription->get_user_id() !== get_current_user_id()
+		) {
+			return $passed;
+		}
+		$target_id     = $variation_id ? (int) $variation_id : (int) $product_id;
+		$price_param   = isset( $_GET['price'] ) ? sanitize_text_field( wp_unslash( $_GET['price'] ) ) : '';
+		$target_amount = '' !== $price_param ? (float) $price_param : null;
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
+		// Find the reader's subscription line item for the product being switched to.
+		$current_id     = null;
+		$current_amount = null;
+		foreach ( $subscription->get_items() as $line_item ) {
+			$line_product_id = $line_item->get_variation_id() ? $line_item->get_variation_id() : $line_item->get_product_id();
+			if ( (int) $line_product_id === $target_id ) {
+				$current_id     = (int) $line_product_id;
+				$current_amount = (float) $line_item->get_total();
+				break;
+			}
+		}
+
+		// The reader's subscription doesn't hold this product: it's a real switch.
+		if ( null === $current_id ) {
+			return $passed;
+		}
+
+		if ( self::is_same_subscription_switch( $current_id, $current_amount, $target_id, $target_amount ) ) {
+			if ( function_exists( 'wc_add_notice' ) ) {
+				wc_add_notice(
+					__( 'You’re already subscribed to this option. Choose a different one to change your subscription.', 'newspack-plugin' ),
+					'error'
+				);
+			}
+			return false;
+		}
+
+		return $passed;
+	}
+
+	/**
+	 * Whether a switch would land on the same subscription the reader already has.
+	 *
+	 * Mirrors the front-end guard: the current tier can't be re-selected, and a
+	 * name-your-price tier can only be "switched" to when the amount changes.
+	 *
+	 * @param int        $current_product_id Canonical product ID of the current subscription item.
+	 * @param float|null $current_amount     Current recurring amount, or null if unknown.
+	 * @param int        $target_product_id  Canonical product ID being switched to.
+	 * @param float|null $target_amount      Target amount for name-your-price, or null for a fixed-price tier.
+	 *
+	 * @return bool True when the switch is a no-op (same product and, for NYP, an unchanged amount).
+	 */
+	public static function is_same_subscription_switch( $current_product_id, $current_amount, $target_product_id, $target_amount ) {
+		if ( (int) $current_product_id !== (int) $target_product_id ) {
+			return false;
+		}
+		// Same product. A fixed-price tier has no amount to change, so it is a no-op.
+		if ( null === $target_amount ) {
+			return true;
+		}
+		// Name-your-price: without a known current amount, don't risk blocking a real change.
+		if ( null === $current_amount ) {
+			return false;
+		}
+		return abs( (float) $target_amount - (float) $current_amount ) < 0.01;
 	}
 
 	/**

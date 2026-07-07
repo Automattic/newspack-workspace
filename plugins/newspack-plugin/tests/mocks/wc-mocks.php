@@ -145,6 +145,12 @@ class WC_Order_Item_Product {
 	public function get_product_id() {
 		return $this->data['product_id'] ?? 0;
 	}
+	public function get_variation_id() {
+		return $this->data['variation_id'] ?? 0;
+	}
+	public function get_id() {
+		return $this->data['id'] ?? 0;
+	}
 	public function get_subtotal() {
 		return $this->data['subtotal'] ?? 0;
 	}
