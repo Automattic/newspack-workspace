@@ -243,6 +243,14 @@ class Legacy_Storage implements Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * Cancelled/expired side pre-aggregated to DISTINCT customer_ids and
+	 * LEFT-JOINed against the DISTINCT active-subscriber customer_ids (also
+	 * pre-aggregated), keeping only rows where the active side is NULL — an
+	 * anti-join, not a correlated `NOT IN (subquery)` (MySQL's slowest anti-join
+	 * form) and not the unindexed `BETWEEN` string range scan's only filter.
+	 * Same approach as {@see self::get_winback_subscribers_in_window()}. DISTINCT
+	 * on both derived tables prevents JOIN fan-out from the line-item join.
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return int
@@ -254,7 +262,7 @@ class Legacy_Storage implements Storage_Interface {
 
 		$sql = $wpdb->prepare(
 			"SELECT COUNT(DISTINCT cancellations.customer_id) FROM (
-				SELECT cust.meta_value AS customer_id
+				SELECT DISTINCT cust.meta_value AS customer_id
 				FROM {$prefix}posts p
 				JOIN {$prefix}postmeta cust
 					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
@@ -270,8 +278,8 @@ class Legacy_Storage implements Storage_Interface {
 				  AND cancelled.meta_value BETWEEN %s AND %s
 				  AND cancelled.meta_value != ''
 			) AS cancellations
-			WHERE cancellations.customer_id NOT IN (
-				SELECT DISTINCT cust2.meta_value
+			LEFT JOIN (
+				SELECT DISTINCT cust2.meta_value AS customer_id
 				FROM {$prefix}posts p2
 				JOIN {$prefix}postmeta cust2
 					ON cust2.post_id = p2.ID AND cust2.meta_key = '_customer_user'
@@ -282,7 +290,8 @@ class Legacy_Storage implements Storage_Interface {
 				WHERE p2.post_type = 'shop_subscription'
 				  AND p2.post_status = 'wc-active'
 				  AND oim2.meta_value NOT IN ($donations)
-			)",
+			) AS active ON active.customer_id = cancellations.customer_id
+			WHERE active.customer_id IS NULL",
 			$this->fmt( $start ),
 			$this->fmt( $end )
 		);
