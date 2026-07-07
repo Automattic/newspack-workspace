@@ -22,6 +22,7 @@ import SubscriberList from './screens/SubscriberList';
 import GroupList from './screens/GroupList';
 import GroupDetail from './screens/GroupDetail';
 import PersonProfile from './screens/PersonProfile';
+import DiscountList from './screens/DiscountList';
 import { GROUP_LABEL_PLURAL } from './labels';
 import { purgeStaleStorage } from './data/storage';
 
@@ -48,6 +49,13 @@ function SubscribersDemoApp() {
 					path: '/group/:id',
 					render: GroupDetail,
 					isHidden: true,
+				},
+				{
+					label: __( 'Discounts', 'newspack-plugin' ),
+					path: '/discounts',
+					exact: true,
+					fullWidth: true,
+					render: DiscountList,
 				},
 				{
 					path: '/profile/:id',
