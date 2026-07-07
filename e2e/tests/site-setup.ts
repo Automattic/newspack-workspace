@@ -102,11 +102,11 @@ export const setupSite = ({ woo }: SetupOptions): void => {
   // host, and a `clean` reset (drop tables, keep the DB) since we can't DROP DATABASE.
   const host = process.env.E2E_SSH_HOST;
   const user = process.env.E2E_SSH_USER;
-  const pass = process.env.E2E_SSH_PASS;
+  const pass = process.env.E2E_SSH_USER_PASS;
   const wpPath = process.env.E2E_REMOTE_WP_PATH ?? "htdocs";
   if (!host || !user) {
     throw new Error(
-      "Remote provisioning needs E2E_SSH_HOST and E2E_SSH_USER (and E2E_SSH_PASS for password auth)."
+      "Remote provisioning needs E2E_SSH_HOST and E2E_SSH_USER (and E2E_SSH_USER_PASS for password auth)."
     );
   }
 
@@ -119,7 +119,7 @@ export const setupSite = ({ woo }: SetupOptions): void => {
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT" && cmd === "sshpass") {
         throw new Error(
-          "sshpass is required for E2E_SSH_PASS auth but was not found on PATH. Install sshpass, or use key-based SSH (unset E2E_SSH_PASS)."
+          "sshpass is required for E2E_SSH_USER_PASS auth but was not found on PATH. Install sshpass, or use key-based SSH (unset E2E_SSH_USER_PASS)."
         );
       }
       throw err;

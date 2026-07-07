@@ -34,9 +34,10 @@ The build is parameterised by these variables (set in TeamCity, not committed):
    admin login. These are written into `.env` as `SITE_URL`, `ADMIN_USER` and
    `ADMIN_PASSWORD`. Provisioning reinstalls WordPress with these credentials, so
    they define the admin login (there is no captured password to match).
-2. `E2E_SSH_HOST`, `E2E_SSH_USER`, `E2E_SSH_PASS` – SSH access to the site, read by
-   `setupSite` (`tests/site-setup.ts`) to run the provisioning script remotely.
-   Optionally `E2E_REMOTE_WP_PATH` (defaults to `htdocs`).
+2. `E2E_SSH_HOST`, `E2E_SSH_USER`, `E2E_SSH_USER_PASS` – SSH
+   access to the site, read by `setupSite` (`tests/site-setup.ts`) to run the
+   provisioning script remotely. Optionally `E2E_REMOTE_WP_PATH` (defaults to
+   `htdocs`). Password auth uses `sshpass`, which must be on the agent's PATH.
 3. `STRIPE_PUB_KEY`, `STRIPE_SECRET_KEY` – Stripe test-mode keys (TeamCity env
    variables). `setupSite` forwards them to the remote provisioning, which applies
    them to the WooCommerce Stripe gateway so the `@with-woo` donation test can

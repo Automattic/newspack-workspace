@@ -58,6 +58,6 @@ installed plugin code, so a plugin/core update can't leave a stale fixture behin
 ## CI (TeamCity) notes
 
 The build definition lives in TeamCity settings, not this repo. It provisions over
-SSH using the `E2E_SSH_HOST` / `E2E_SSH_USER` / `E2E_SSH_PASS` credentials, which
+SSH using the `E2E_SSH_HOST` / `E2E_SSH_USER` / `E2E_SSH_USER_PASS` credentials, which
 `setupSite` also reads for the remote path. A managed host (Atomic) cannot
 `DROP DATABASE`, so the remote path uses `--reset clean` (drop tables, keep the DB).
