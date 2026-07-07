@@ -462,6 +462,15 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * The prior-window lapsed cohort used to be pulled into a PHP array and
+	 * serialized back into a `CAST(... AS UNSIGNED) IN ($lapsed_list)` filter
+	 * for the "recovered" query — slow, and a `max_allowed_packet` risk on
+	 * large cohorts. Now computed as a single reusable derived table
+	 * (`lapsed`, itself an anti-join against active donation subscribers —
+	 * see {@see self::get_lapsed_donors_in_window()}) that both the
+	 * denominator COUNT and the numerator's INNER JOIN read from directly,
+	 * eliminating the PHP round trip entirely.
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return float
@@ -479,10 +488,14 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
-		$lapsed_sql = $wpdb->prepare(
+		// Prepared once with the prior-window bounds baked in as literals, then
+		// reused (already-escaped) as a derived table by both queries below —
+		// nesting a second prepare() around an interpolated %s-bearing string
+		// would double-escape / mis-count placeholders.
+		$lapsed_cte = $wpdb->prepare(
 			"SELECT DISTINCT cancellations.customer_id
 			FROM (
-				SELECT cust.meta_value AS customer_id
+				SELECT DISTINCT cust.meta_value AS customer_id
 				FROM {$prefix}posts p
 				JOIN {$prefix}postmeta cust
 					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
@@ -498,8 +511,8 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 				  AND cancelled.meta_value BETWEEN %s AND %s
 				  AND cancelled.meta_value != ''
 			) AS cancellations
-			WHERE cancellations.customer_id NOT IN (
-				SELECT DISTINCT cust2.meta_value
+			LEFT JOIN (
+				SELECT DISTINCT cust2.meta_value AS customer_id
 				FROM {$prefix}posts p2
 				JOIN {$prefix}postmeta cust2
 					ON cust2.post_id = p2.ID AND cust2.meta_key = '_customer_user'
@@ -510,33 +523,32 @@ class Legacy_Donors_Storage implements Donors_Storage_Interface {
 				WHERE p2.post_type = 'shop_subscription'
 				  AND p2.post_status = 'wc-active'
 				  AND oim2.meta_value IN ($donations)
-			)",
+			) AS active ON active.customer_id = cancellations.customer_id
+			WHERE active.customer_id IS NULL",
 			$prior_start_iso,
 			$prior_end_iso
 		);
 
-		$lapsed_customer_ids = $wpdb->get_col( $lapsed_sql );
-		if ( empty( $lapsed_customer_ids ) ) {
+		$lapsed_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM ({$lapsed_cte}) AS lapsed" );
+		if ( 0 === $lapsed_count ) {
 			return [
 				'value'       => 0.0,
 				'computable'  => false,
 				'denominator' => 0,
 			];
 		}
-		$lapsed_count = count( $lapsed_customer_ids );
-		$lapsed_list  = $this->id_list( array_map( 'intval', $lapsed_customer_ids ) );
 
 		$recovered_sql = $wpdb->prepare(
-			"SELECT COUNT(DISTINCT cust.meta_value)
-			FROM {$prefix}posts p
+			"SELECT COUNT(DISTINCT lapsed.customer_id)
+			FROM ({$lapsed_cte}) AS lapsed
 			JOIN {$prefix}postmeta cust
-				ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+				ON CAST(cust.meta_value AS UNSIGNED) = lapsed.customer_id AND cust.meta_key = '_customer_user'
+			JOIN {$prefix}posts p ON p.ID = cust.post_id
 			JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p.ID
 			WHERE p.post_type = 'shop_order'
 			  AND p.post_status IN ('wc-completed', 'wc-processing')
 			  AND p.post_date_gmt BETWEEN %s AND %s
-			  AND opl.product_id IN ($donations)
-			  AND CAST(cust.meta_value AS UNSIGNED) IN ($lapsed_list)",
+			  AND opl.product_id IN ($donations)",
 			$current_start_iso,
 			$current_end_iso
 		);

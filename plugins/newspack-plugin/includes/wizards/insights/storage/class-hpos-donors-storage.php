@@ -468,6 +468,15 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * The prior-window lapsed cohort used to be pulled into a PHP array and
+	 * serialized back into an `o.customer_id IN ($lapsed_list)` filter for the
+	 * "recovered" query — slow, and a `max_allowed_packet` risk on large
+	 * cohorts. Now computed as a single reusable derived table (`lapsed`,
+	 * itself an anti-join against active donation subscribers — see
+	 * {@see self::get_lapsed_donors_in_window()}) that both the denominator
+	 * COUNT and the numerator's JOIN read from directly, eliminating the PHP
+	 * round trip entirely.
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return float
@@ -487,11 +496,15 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 		$donations = $this->id_list( $this->donation_product_ids );
 
 		// Lapsed-in-prior cohort (same shape as get_lapsed_donors_in_window
-		// but with explicit prior window bounds rather than current window).
-		$lapsed_sql = $wpdb->prepare(
+		// but with explicit prior window bounds rather than current window),
+		// reused by both the denominator and numerator queries below.
+		// Prepared once with the prior-window bounds baked in as literals;
+		// nesting a second prepare() around an interpolated %s-bearing string
+		// would double-escape / mis-count placeholders.
+		$lapsed_cte = $wpdb->prepare(
 			"SELECT DISTINCT cancellations.customer_id
 			FROM (
-				SELECT o.customer_id
+				SELECT DISTINCT o.customer_id
 				FROM {$prefix}wc_orders o
 				JOIN {$prefix}wc_orders_meta om
 					ON om.order_id = o.id AND om.meta_key = '_schedule_cancelled'
@@ -505,7 +518,7 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 				  AND om.meta_value BETWEEN %s AND %s
 				  AND om.meta_value != ''
 			) AS cancellations
-			WHERE cancellations.customer_id NOT IN (
+			LEFT JOIN (
 				SELECT DISTINCT o2.customer_id
 				FROM {$prefix}wc_orders o2
 				JOIN {$prefix}woocommerce_order_items oi2
@@ -515,33 +528,32 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 				WHERE o2.type = 'shop_subscription'
 				  AND o2.status = 'wc-active'
 				  AND oim2.meta_value IN ($donations)
-			)",
+			) AS active ON active.customer_id = cancellations.customer_id
+			WHERE active.customer_id IS NULL",
 			$prior_start_iso,
 			$prior_end_iso
 		);
 
-		$lapsed_customer_ids = $wpdb->get_col( $lapsed_sql );
-		if ( empty( $lapsed_customer_ids ) ) {
+		$lapsed_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM ({$lapsed_cte}) AS lapsed" );
+		if ( 0 === $lapsed_count ) {
 			return [
 				'value'       => 0.0,
 				'computable'  => false,
 				'denominator' => 0,
 			];
 		}
-		$lapsed_count = count( $lapsed_customer_ids );
-		$lapsed_list  = $this->id_list( array_map( 'intval', $lapsed_customer_ids ) );
 
 		// Of the lapsed cohort, who made a NEW completed donation order
 		// in the current window.
 		$recovered_sql = $wpdb->prepare(
-			"SELECT COUNT(DISTINCT o.customer_id)
-			FROM {$prefix}wc_orders o
+			"SELECT COUNT(DISTINCT lapsed.customer_id)
+			FROM ({$lapsed_cte}) AS lapsed
+			JOIN {$prefix}wc_orders o ON o.customer_id = lapsed.customer_id
 			JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = o.id
 			WHERE o.type = 'shop_order'
 			  AND o.status IN ('wc-completed', 'wc-processing')
 			  AND o.date_created_gmt BETWEEN %s AND %s
-			  AND opl.product_id IN ($donations)
-			  AND o.customer_id IN ($lapsed_list)",
+			  AND opl.product_id IN ($donations)",
 			$current_start_iso,
 			$current_end_iso
 		);
