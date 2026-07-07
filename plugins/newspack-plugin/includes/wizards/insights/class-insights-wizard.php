@@ -404,6 +404,23 @@ class Insights_Wizard extends Wizard {
 	}
 
 	/**
+	 * Whether the Newsletter Ads (NPPD-1861) nav entry should render: the
+	 * newsletter ads CPT exists and the site has at least one published ad
+	 * (transient-cached in the orchestrator), or fixture mode is on so the tab
+	 * is testable without the newsletters plugin. Class-guarded so a boot-order
+	 * hiccup (section not loaded) degrades to a hidden tab, never a fatal.
+	 *
+	 * @return bool
+	 */
+	private static function is_newsletter_ads_tab_visible(): bool {
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			return true;
+		}
+		return class_exists( '\Newspack\Insights\Newsletter_Ads_Metric' )
+			&& \Newspack\Insights\Newsletter_Ads_Metric::is_tab_visible();
+	}
+
+	/**
 	 * Build the boot config consumed by the React entry.
 	 *
 	 * @return array
@@ -434,14 +451,17 @@ class Insights_Wizard extends Wizard {
 			// gated to the preview constant NEWSPACK_INSIGHTS_GATES_PREVIEW while
 			// Phase 1 (placeholder data) is being validated.
 			'tabs'                => [
-				'audience'    => true,
-				'engagement'  => true,
-				'conversion'  => true,
-				'gates'       => self::is_gates_preview_enabled(),
-				'prompts'     => true,
-				'subscribers' => true,
-				'donors'      => self::has_donation_activity(),
-				'advertising' => self::is_advertising_tab_visible(),
+				'audience'       => true,
+				'engagement'     => true,
+				'conversion'     => true,
+				'gates'          => self::is_gates_preview_enabled(),
+				'prompts'        => true,
+				'subscribers'    => true,
+				'donors'         => self::has_donation_activity(),
+				'advertising'    => self::is_advertising_tab_visible(),
+				// Newsletter Ads (NPPD-1861): shown when the site has published
+				// newsletter ads (or fixture mode). See is_newsletter_ads_tab_visible().
+				'newsletter_ads' => self::is_newsletter_ads_tab_visible(),
 			],
 			'defaultDateRange'    => [
 				'preset' => 'last-30',

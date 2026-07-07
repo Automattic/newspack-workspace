@@ -37,7 +37,7 @@ import useComparisonMode from '../state/useComparisonMode';
 import useDateRange, { type DateRange } from '../state/useDateRange';
 import { RefreshRegistryProvider } from '../state/refreshRegistry';
 
-export type TabKey = 'audience' | 'engagement' | 'conversion' | 'gates' | 'prompts' | 'subscribers' | 'donors' | 'advertising';
+export type TabKey = 'audience' | 'engagement' | 'conversion' | 'gates' | 'prompts' | 'subscribers' | 'donors' | 'advertising' | 'newsletter_ads';
 
 export interface TabDef {
 	key: TabKey;
@@ -61,6 +61,7 @@ export const ALL_TABS: TabDef[] = [
 	{ key: 'subscribers', label: __( 'Subscribers', 'newspack-plugin' ) },
 	{ key: 'donors', label: __( 'Donors', 'newspack-plugin' ) },
 	{ key: 'advertising', label: __( 'Advertising', 'newspack-plugin' ) },
+	{ key: 'newsletter_ads', label: __( 'Newsletter Ads', 'newspack-plugin' ) },
 ];
 
 export type TabVisibility = Record< TabKey, boolean >;
@@ -110,6 +111,7 @@ const PromptsTab = lazy( () => import( '../tabs/PromptsTab' ) );
 const SubscribersTab = lazy( () => import( '../tabs/SubscribersTab' ) );
 const DonorsTab = lazy( () => import( '../tabs/DonorsTab' ) );
 const AdvertisingTab = lazy( () => import( '../tabs/AdvertisingTab' ) );
+const NewsletterAdsTab = lazy( () => import( '../tabs/NewsletterAdsTab' ) );
 
 /**
  * Props every tab component receives. Exported so each tab module can
@@ -181,6 +183,8 @@ const renderTabComponent = ( tabKey: TabKey, sectionProps: TabSectionProps ): Re
 			return <DonorsTab { ...sectionProps } />;
 		case 'advertising':
 			return <AdvertisingTab { ...sectionProps } />;
+		case 'newsletter_ads':
+			return <NewsletterAdsTab { ...sectionProps } />;
 		default:
 			return null;
 	}

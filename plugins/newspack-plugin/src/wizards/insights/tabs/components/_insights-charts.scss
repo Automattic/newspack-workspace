@@ -796,10 +796,34 @@
 // butting against the previous one (NPPD-1649 fix #2).
 .newspack-insights__audience-tab,
 .newspack-insights__engagement-tab,
-.newspack-insights__advertising-tab {
+.newspack-insights__advertising-tab,
+.newspack-insights__newsletter-ads-tab {
 	display: flex;
 	flex-direction: column;
 	gap: 32px;
+}
+
+// "Finish connecting" diagnostic (FinishConnectingDiagnostic): chrome comes
+// from the shared Notice component; these rules only structure the itemized
+// list of readiness issues inside it. Shared by the Advertising and Newsletter
+// Ads tabs (moved here from advertising.scss when the second consumer arrived,
+// NPPD-1861).
+.newspack-insights__finish-connecting {
+	&-list {
+		list-style: none;
+		margin: 8px 0 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	&-item {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px 16px;
+	}
 }
 
 // Shared refetch chrome for every data tab (Audience, Engagement, Gates,

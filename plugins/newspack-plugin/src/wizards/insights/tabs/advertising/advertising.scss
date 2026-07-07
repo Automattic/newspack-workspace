@@ -3,32 +3,14 @@
  *
  * Reuses the shared chart / table / grid / failure-state chrome from the
  * components partial (the `.newspack-insights__advertising-tab` wrapper gap is
- * defined there alongside audience/engagement). This file adds the two new
- * shared components introduced for Tab 8 — FinishConnectingDiagnostic and
- * DataLagIndicator — whose only consumer today is this tab.
+ * defined there alongside audience/engagement).
  */
 
 @use "../components/insights-charts";
 
-// "Finish connecting" diagnostic: chrome comes from the shared Notice component;
-// these rules only structure the itemized list of readiness issues inside it.
-.newspack-insights__finish-connecting {
-	&-list {
-		list-style: none;
-		margin: 8px 0 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-	}
-
-	&-item {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 8px 16px;
-	}
-}
+// The "Finish connecting" diagnostic (FinishConnectingDiagnostic) styles moved
+// to the shared components/_insights-charts.scss partial when the Newsletter
+// Ads tab became its second consumer (NPPD-1861).
 
 // The data-lag note now renders via the shared `.newspack-insights__info-callout`
 // (components/_insights-charts.scss) — see DataLagIndicator / InfoCallout.

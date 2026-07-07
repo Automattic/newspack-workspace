@@ -1,0 +1,12 @@
+/**
+ * Newsletter Ads tab (Tab 9, NPPD-1861) styles.
+ *
+ * No tab-specific rules yet — this file exists to pull the shared chart /
+ * table / grid / failure-state chrome into the tab's lazy-loaded chunk (tabs
+ * load their styles with their chunk, so relying on another tab having been
+ * visited first leaves this one unstyled on deep links). The
+ * `.newspack-insights__newsletter-ads-tab` wrapper gap and the
+ * FinishConnectingDiagnostic rules live in the partial.
+ */
+
+@use "../components/insights-charts";
