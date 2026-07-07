@@ -566,17 +566,17 @@ function wc_get_checkout_url() {
 }
 function wcs_is_subscription( $order ) {
 	global $subscriptions_database;
+	// Mirror real WooCommerce Subscriptions: only an actual WC_Subscription object
+	// (or a numeric ID present in the store) counts as a subscription. In particular
+	// a WP_Post — which WP core passes as the second `add_meta_boxes` argument on the
+	// classic (non-HPOS) order editor — is NOT a subscription here, just as it isn't
+	// under real WCS. That distinction is what the metabox-registration guard must
+	// resolve, so the mock must not paper over it.
 	if ( is_object( $order ) ) {
-		if ( method_exists( $order, 'get_id' ) ) {
-			$id = $order->get_id();
-		} elseif ( isset( $order->ID ) ) {
-			$id = (int) $order->ID;
-		} elseif ( isset( $order->id ) ) {
-			$id = (int) $order->id;
-		} else {
-			// Object has no recognisable ID property — treat as not-a-subscription.
+		if ( ! $order instanceof WC_Subscription ) {
 			return false;
 		}
+		$id = $order->get_id();
 	} else {
 		$id = (int) $order;
 	}
