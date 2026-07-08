@@ -250,10 +250,6 @@ class Audience_REST_Controller extends WP_REST_Controller {
 			$response['previous'] = isset( $previous['tab_error'] ) ? null : $previous;
 		}
 
-		// NEWS-2603: top-level warming-aware status derived from every nested
-		// metric-scalar `state`, for the React banner to consume.
-		$response['data_status'] = Metric_Status::derive( $response );
-
 		return $response;
 	}
 }

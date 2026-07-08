@@ -208,10 +208,6 @@ class Subscribers_REST_Controller extends WP_REST_Controller {
 			$response['previous'] = $this->build_window( $metric, $compare_start, $compare_end );
 		}
 
-		// NEWS-2603: top-level warming-aware status derived from every nested
-		// metric-scalar `state`, for the React banner to consume.
-		$response['data_status'] = Metric_Status::derive( $response );
-
 		return $response;
 	}
 

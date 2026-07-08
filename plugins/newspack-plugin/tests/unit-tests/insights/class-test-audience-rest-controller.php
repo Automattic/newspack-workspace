@@ -354,22 +354,23 @@ class Test_Audience_REST_Controller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * NEWS-2603: `build_response()` must compute `data_status` by calling
-	 * `Metric_Status::derive()` on the response it just assembled — not by
-	 * hardcoding 'complete'. Proven directly: `build_response()`'s
-	 * `data_status` must equal `Metric_Status::derive()` run independently
-	 * over the same response with `data_status` stripped out, so the two can
-	 * never drift apart.
+	 * NEWS-2603: `data_status` is stamped centrally by the shared
+	 * `Cached_Controller_Trait::status_stamped_window_payload()` — the single
+	 * path every cached/refreshed/pre-warmed current window flows through — by
+	 * calling `Metric_Status::derive()` on the assembled window, never by
+	 * hardcoding 'complete'. Proven directly: the stamped `data_status` must
+	 * equal `Metric_Status::derive()` run independently over the same payload
+	 * with `data_status` stripped out, so the two can never drift apart.
 	 */
 	public function test_data_status_matches_independent_deriver_call() {
 		$controller = new Audience_REST_Controller();
-		$m          = new ReflectionMethod( $controller, 'build_response' );
+		$m          = new ReflectionMethod( $controller, 'status_stamped_window_payload' );
 		$m->setAccessible( true );
 
 		$start = new DateTimeImmutable( '2026-01-01' );
 		$end   = new DateTimeImmutable( '2026-01-31' );
 
-		$response = $m->invoke( $controller, $start, $end, null, null );
+		$response = $m->invoke( $controller, $start, $end );
 
 		$this->assertArrayHasKey( 'data_status', $response );
 

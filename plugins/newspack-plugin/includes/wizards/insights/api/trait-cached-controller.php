@@ -51,6 +51,30 @@ trait Cached_Controller_Trait {
 	abstract public function build_window_payload( DateTimeImmutable $start, DateTimeImmutable $end ): array;
 
 	/**
+	 * Build a base window payload and stamp the NEWS-2603 top-level
+	 * `data_status` (`complete` | `warming` | `incomplete`) derived from every
+	 * nested metric-scalar `state`.
+	 *
+	 * Centralized here — on the single path every cached/refreshed/pre-warmed
+	 * current window flows through — rather than in each controller's
+	 * build_response(). Deriving it once makes it structurally impossible for a
+	 * tab to bump its schema version yet ship an envelope without `data_status`
+	 * (the omission that left the Donors banner, auto-refetch, and escalation
+	 * inert). It also feeds the cache's provisional-payload detection, so a
+	 * warming window gets the short TTL and skips the durable pools uniformly
+	 * across store(), refresh(), and the pre-warm path.
+	 *
+	 * @param DateTimeImmutable $start Window start.
+	 * @param DateTimeImmutable $end   Window end.
+	 * @return array The window payload with a top-level `data_status`.
+	 */
+	protected function status_stamped_window_payload( DateTimeImmutable $start, DateTimeImmutable $end ): array {
+		$payload                = $this->build_window_payload( $start, $end );
+		$payload['data_status'] = Metric_Status::derive( $payload );
+		return $payload;
+	}
+
+	/**
 	 * Build and durably store one pre-warmed base window. Uses the controller's
 	 * own tab/source/versioned key so the entry key-matches the GET read path.
 	 *
@@ -74,7 +98,7 @@ trait Cached_Controller_Trait {
 			$this->tab_slug(),
 			$this->cache_source(),
 			$key_parts,
-			$this->build_window_payload( $start, $end ),
+			$this->status_stamped_window_payload( $start, $end ),
 			[
 				'start' => $start->format( 'Y-m-d' ),
 				'end'   => $end->format( 'Y-m-d' ),
@@ -168,7 +192,7 @@ trait Cached_Controller_Trait {
 			$this->tab_slug(),
 			$this->cache_source(),
 			$this->base_key_parts( $start, $end ),
-			fn() => $this->build_window_payload( $start, $end ),
+			fn() => $this->status_stamped_window_payload( $start, $end ),
 			$this->window_map( $start, $end )
 		);
 
@@ -214,7 +238,7 @@ trait Cached_Controller_Trait {
 			$this->tab_slug(),
 			$this->cache_source(),
 			$this->base_key_parts( $start, $end ),
-			fn() => $this->build_window_payload( $start, $end ),
+			fn() => $this->status_stamped_window_payload( $start, $end ),
 			$this->window_map( $start, $end )
 		);
 
