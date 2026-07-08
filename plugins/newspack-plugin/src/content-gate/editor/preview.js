@@ -11,6 +11,9 @@ import { addQueryArgs } from '@wordpress/url';
 /**
  * Internal dependencies
  */
+// Deep-import the component directly rather than from the `newspack-components`
+// barrel: this is a standalone editor entry, and the barrel would pull in
+// unrelated wizard modules (and their data store) that don't belong here.
 import WebPreview from '../../../packages/components/src/web-preview';
 
 /**
@@ -68,12 +71,23 @@ export default function GatePreview() {
 		}
 	};
 
+	// Open the preview after the autosave settles. On a failed autosave, still
+	// open it: the server falls back to the layout's saved content, so the reader
+	// gets a (slightly stale) preview rather than a dead button.
+	const previewAfterAutosave = showPreview =>
+		autosave()
+			.catch( e => {
+				// eslint-disable-next-line no-console
+				console.warn( 'Gate preview: autosave failed; previewing saved content.', e );
+			} )
+			.then( showPreview );
+
 	return (
 		<WebPreview
 			url={ addQueryArgs( previewPost, query ) }
 			onLoad={ onWebPreviewLoad }
 			renderButton={ ( { showPreview } ) => (
-				<Button variant="primary" isBusy={ isSavingPost } disabled={ isSavingPost } onClick={ () => autosave().then( showPreview ) }>
+				<Button variant="primary" isBusy={ isSavingPost } disabled={ isSavingPost } onClick={ () => previewAfterAutosave( showPreview ) }>
 					{ __( 'Preview', 'newspack-plugin' ) }
 				</Button>
 			) }

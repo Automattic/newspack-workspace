@@ -62,7 +62,10 @@ class Gate_Preview {
 		add_filter( 'newspack_content_gate_post_id', [ __CLASS__, 'filter_gate_post_id' ], PHP_INT_MAX );
 		add_filter( 'newspack_content_gate_metering_short_circuit', [ __CLASS__, 'filter_metering_short_circuit' ], PHP_INT_MAX );
 		add_filter( 'newspack_can_render_overlay_gate', [ __CLASS__, 'filter_can_render_overlay_gate' ], PHP_INT_MAX );
-		add_filter( 'newspack_gate_layout_content', [ __CLASS__, 'filter_gate_layout_content' ], 10, 2 );
+		// At PHP_INT_MAX so the autosave substitution deterministically wins over
+		// any other newspack_gate_layout_content consumer (e.g. newspack-manager)
+		// during a preview, matching the sibling force-render seams.
+		add_filter( 'newspack_gate_layout_content', [ __CLASS__, 'filter_gate_layout_content' ], PHP_INT_MAX, 2 );
 		add_filter( 'get_post_metadata', [ __CLASS__, 'filter_layout_meta' ], 10, 4 );
 		add_filter( 'show_admin_bar', [ __CLASS__, 'filter_show_admin_bar' ] ); // phpcs:ignore WordPressVIPMinimum.UserExperience.AdminBarRemoval.RemovalDetected
 	}
@@ -110,35 +113,43 @@ class Gate_Preview {
 	 * controls the front-end, so a forced preview would show an ungated post;
 	 * we don't offer the preview there and this returns false.
 	 *
-	 * Memoized for the request lifetime (the underlying signals are immutable
-	 * within a request) since it is consulted from hot filters. The cache is
-	 * skipped under IS_TEST_ENV, where a single suite drives multiple users and
-	 * query states through this method (precedent: Content_Gate::is_newspack_feature_enabled()).
+	 * The request-immutable signals are memoized for the request lifetime since
+	 * this is consulted from hot filters. The capability check is evaluated
+	 * fresh on every call, never cached: it depends on the current user, which
+	 * may not be established when the first hot filter fires — caching a `false`
+	 * from an early call would silently disable the preview for the whole
+	 * request. The cache is skipped under IS_TEST_ENV, where a single suite
+	 * drives multiple users and query states through this method (precedent:
+	 * Content_Gate::is_newspack_feature_enabled()).
 	 *
 	 * @return bool
 	 */
 	public static function is_preview_request() {
 		if ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV ) {
-			return self::compute_is_preview_request();
+			return self::request_targets_preview() && self::current_user_can_preview();
 		}
-		static $is_preview = null;
-		if ( null === $is_preview ) {
-			$is_preview = self::compute_is_preview_request();
+		static $targets_preview = null;
+		if ( null === $targets_preview ) {
+			$targets_preview = self::request_targets_preview();
 		}
-		return $is_preview;
+		return $targets_preview && self::current_user_can_preview();
 	}
 
 	/**
-	 * Compute whether this request is a gate preview request.
+	 * Whether the request targets a gate preview, ignoring the current user.
+	 *
+	 * These signals are immutable for the request; the capability check is kept
+	 * separate (see is_preview_request()). previewed_layout_id() is 0 on any
+	 * request without the query param, so non-preview requests short-circuit
+	 * here before the capability check ever runs.
 	 *
 	 * @return bool
 	 */
-	private static function compute_is_preview_request() {
+	private static function request_targets_preview() {
 		return ! is_admin()
 			&& Content_Gate_Controller::is_newspack_feature_enabled()
 			&& ! Memberships::is_active()
-			&& (bool) self::previewed_layout_id()
-			&& self::current_user_can_preview();
+			&& (bool) self::previewed_layout_id();
 	}
 
 	/**
@@ -208,6 +219,13 @@ class Gate_Preview {
 	 * sets. Returns the first matching gate ID regardless of its post status;
 	 * the caller decides how to treat a draft parent.
 	 *
+	 * The layout→parent-gate mapping is memoized per request: this is consulted
+	 * from filter_gate_post_id, which fires many times per preview render
+	 * (has_gate, metering, analytics, overlay), and each scan runs two uncached
+	 * `get_gates()` queries. The cache is skipped under IS_TEST_ENV, where a
+	 * single suite creates and deletes gates across tests (precedent:
+	 * Content_Gate::is_newspack_feature_enabled()).
+	 *
 	 * @param int $layout_id Gate layout post ID.
 	 *
 	 * @return int Parent gate post ID, or 0 if none references the layout.
@@ -217,6 +235,13 @@ class Gate_Preview {
 		if ( ! $layout_id ) {
 			return 0;
 		}
+
+		$use_cache = ! ( defined( 'IS_TEST_ENV' ) && IS_TEST_ENV );
+		static $cache = [];
+		if ( $use_cache && isset( $cache[ $layout_id ] ) ) {
+			return $cache[ $layout_id ];
+		}
+
 		$gate_sets = [
 			Content_Gate_Controller::get_gates( Content_Gate_Controller::GATE_CPT ),
 			Content_Gate_Controller::get_gates( Content_Gate_Controller::GATE_CPT, null, true ),
@@ -231,9 +256,16 @@ class Gate_Preview {
 					(int) ( $gate['custom_access']['gate_layout_id'] ?? 0 ),
 				];
 				if ( in_array( $layout_id, $layout_ids, true ) ) {
-					return (int) $gate['id'];
+					$parent_id = (int) $gate['id'];
+					if ( $use_cache ) {
+						$cache[ $layout_id ] = $parent_id;
+					}
+					return $parent_id;
 				}
 			}
+		}
+		if ( $use_cache ) {
+			$cache[ $layout_id ] = 0;
 		}
 		return 0;
 	}
@@ -328,8 +360,10 @@ class Gate_Preview {
 	 * that Content_Gate::has_gate() — which requires a `publish` status — stays
 	 * true (layout posts are always published). Consumers that expect a *gate*
 	 * post ID (e.g. metering settings, analytics) degrade gracefully: the layout
-	 * carries no gate meta, so they read defaults. This is contained to preview
-	 * requests only.
+	 * carries no gate meta, so they read defaults. In the fallback case
+	 * get_gate_metadata() therefore reports the layout ID as `gate_post_id` in
+	 * any analytics fired during the admin's preview view — harmless noise,
+	 * contained to preview requests only.
 	 *
 	 * @param int $gate_post_id Gate post ID.
 	 *
@@ -387,9 +421,13 @@ class Gate_Preview {
 	 * Substitute the previewed layout's autosaved content.
 	 *
 	 * Autosaves don't persist to the published post, so the reader's unsaved
-	 * edits are read from the autosave revision. Falls back to the passed
-	 * (saved) content when there is no autosave. The returned raw block content
-	 * flows on through the existing `newspack_gate_content` pipeline.
+	 * edits are read from the autosave revision. The lookup is scoped to the
+	 * current user: Gutenberg keeps one autosave per user per post, and the
+	 * preview is inherently the previewing user's own view (the editor autosaves
+	 * as them, then opens), so an unscoped lookup could surface a co-editor's
+	 * more recent autosave instead. Falls back to the passed (saved) content
+	 * when there is no autosave. The returned raw block content flows on through
+	 * the existing `newspack_gate_content` pipeline.
 	 *
 	 * @param string $content        Layout content.
 	 * @param int    $gate_layout_id Gate layout ID being rendered.
@@ -403,7 +441,7 @@ class Gate_Preview {
 		if ( (int) $gate_layout_id !== self::previewed_layout_id() ) {
 			return $content;
 		}
-		$autosave = wp_get_post_autosave( $gate_layout_id );
+		$autosave = wp_get_post_autosave( $gate_layout_id, get_current_user_id() );
 		if ( $autosave instanceof \WP_Post ) {
 			return $autosave->post_content;
 		}

@@ -332,6 +332,7 @@ trait Content_Gate_Layout {
 				<div class="newspack-content-gate__overlay-gate__content">
 					<?php
 					// $gate_post_id is the layout ID here despite the name; the preview seam keys off it.
+					/** This filter is documented in includes/content-gate/trait-content-gate-layout.php */
 					echo \apply_filters( 'newspack_gate_content', \apply_filters( 'newspack_gate_layout_content', \get_the_content( null, null, $gate_post_id ), $gate_post_id ) );  // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 					?>
 				</div>

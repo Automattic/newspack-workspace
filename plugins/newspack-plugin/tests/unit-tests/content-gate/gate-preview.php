@@ -272,6 +272,58 @@ class Test_Gate_Preview extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A preview restores overlay rendering even when Content_Gifting disabled it
+	 * (it sets newspack_can_render_overlay_gate to false).
+	 */
+	public function test_overlay_render_is_restored_during_preview() {
+		wp_set_current_user( $this->admin_id );
+		add_filter( 'newspack_can_render_overlay_gate', '__return_false' );
+
+		$this->assertFalse(
+			(bool) apply_filters( 'newspack_can_render_overlay_gate', true ),
+			'Without a preview, the overlay-disable filter stands.'
+		);
+
+		$this->set_query_param( Gate_Preview::PREVIEW_QUERY_PARAM, $this->layout_id );
+		$this->assertTrue(
+			(bool) apply_filters( 'newspack_can_render_overlay_gate', true ),
+			'The preview restores overlay rendering even when it was disabled.'
+		);
+
+		remove_filter( 'newspack_can_render_overlay_gate', '__return_false' );
+	}
+
+	/**
+	 * The overlay render path substitutes the autosaved content and honors the
+	 * overlay position/size overrides carried in the preview URL.
+	 */
+	public function test_overlay_preview_renders_autosave_with_meta_overrides() {
+		wp_set_current_user( $this->admin_id );
+		$this->set_query_param( Gate_Preview::PREVIEW_QUERY_PARAM, $this->layout_id );
+		$this->set_query_param( 'ngp_st', 'overlay' );
+		$this->set_query_param( 'ngp_op', 'bottom' );
+		$this->set_query_param( 'ngp_os', 'large' );
+
+		wp_create_post_autosave(
+			[
+				'post_ID'      => $this->layout_id,
+				'post_type'    => Content_Gate::GATE_LAYOUT_CPT,
+				'post_content' => '<!-- wp:paragraph --><p>OVERLAY_DRAFT_PROMPT</p><!-- /wp:paragraph -->',
+				'post_title'   => 'Autosave',
+			]
+		);
+
+		ob_start();
+		Content_Gate::render_overlay_gate_html( $this->layout_id );
+		$html = ob_get_clean();
+
+		$this->assertStringContainsString( 'newspack-content-gate__overlay-gate', $html, 'Overlay gate markup is rendered.' );
+		$this->assertStringContainsString( 'OVERLAY_DRAFT_PROMPT', $html, 'Overlay renders the autosaved content via the layout-content seam.' );
+		$this->assertStringContainsString( 'data-position="bottom"', $html, 'Overlay position override from the URL is applied.' );
+		$this->assertStringContainsString( 'data-size="large"', $html, 'Overlay size override from the URL is applied.' );
+	}
+
+	/**
 	 * Meta overrides in the URL are sanitized: valid values are applied, invalid
 	 * ones are dropped so the stored meta wins.
 	 */
