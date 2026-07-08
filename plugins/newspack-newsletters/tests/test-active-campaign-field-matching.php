@@ -96,7 +96,17 @@ class ActiveCampaignFieldMatchingTest extends WP_UnitTestCase {
 		}
 		if ( false !== strpos( $url, '/api/3/fields' ) && 'POST' === $args['method'] ) {
 			$this->called_actions[] = 'v3:fields:create';
-			return $respond( 422, [ 'errors' => [ [ 'code' => 'duplicate', 'title' => 'There is already a field with this title' ] ] ] );
+			return $respond(
+				422,
+				[
+					'errors' => [
+						[
+							'code'  => 'duplicate',
+							'title' => 'There is already a field with this title',
+						],
+					],
+				] 
+			);
 		}
 		if ( false !== strpos( $url, '/api/3/contacts' ) ) {
 			$this->called_actions[] = 'v3:contacts';
@@ -128,6 +138,7 @@ class ActiveCampaignFieldMatchingTest extends WP_UnitTestCase {
 			],
 		];
 
+		// phpcs:ignore phpcsSniffs.Newsletters.ForbiddenMethods.PossibleForbiddenContactsMethods -- this test exercises the provider method itself.
 		$result = Newspack_Newsletters_Active_Campaign::instance()->add_contact(
 			[
 				'email'    => 'reader@example.net',
@@ -147,6 +158,7 @@ class ActiveCampaignFieldMatchingTest extends WP_UnitTestCase {
 	public function test_field_create_failure_does_not_block_signup() {
 		$this->remote_fields = []; // Field genuinely missing; create will fail with 422.
 
+		// phpcs:ignore phpcsSniffs.Newsletters.ForbiddenMethods.PossibleForbiddenContactsMethods -- this test exercises the provider method itself.
 		$result = Newspack_Newsletters_Active_Campaign::instance()->add_contact(
 			[
 				'email'    => 'reader2@example.net',
@@ -174,6 +186,7 @@ class ActiveCampaignFieldMatchingTest extends WP_UnitTestCase {
 			],
 		];
 
+		// phpcs:ignore phpcsSniffs.Newsletters.ForbiddenMethods.PossibleForbiddenContactsMethods -- this test exercises the provider method itself.
 		$result = Newspack_Newsletters_Active_Campaign::instance()->add_contact(
 			[
 				'email'    => 'reader3@example.net',
@@ -201,9 +214,9 @@ class ActiveCampaignFieldMatchingTest extends WP_UnitTestCase {
 				// No title key at all.
 			],
 			[
-				'id'      => '5',
-				'title'   => 'Some Broken Field',
-				'type'    => 'text',
+				'id'    => '5',
+				'title' => 'Some Broken Field',
+				'type'  => 'text',
 				// Title but no perstag: unusable for payload, must not match.
 			],
 			[
@@ -216,6 +229,7 @@ class ActiveCampaignFieldMatchingTest extends WP_UnitTestCase {
 			],
 		];
 
+		// phpcs:ignore phpcsSniffs.Newsletters.ForbiddenMethods.PossibleForbiddenContactsMethods -- this test exercises the provider method itself.
 		$result = Newspack_Newsletters_Active_Campaign::instance()->add_contact(
 			[
 				'email'    => 'reader4@example.net',
