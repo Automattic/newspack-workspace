@@ -3,15 +3,15 @@
  *
  * Owns the active date range state for the Insights wizard. Hydrates
  * initial state from URL query (so refresh / direct links preserve range)
- * with fallback to the boot config default; persists changes back to URL
- * via history.replaceState (no history pollution).
+ * with fallback to the boot config default. URL persistence happens at
+ * commit time via `writeDateRangeUrl` (see `./controlsUrl`), not here.
  */
 
 /**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useCallback, useEffect, useState } from '@wordpress/element';
+import { useCallback, useState } from '@wordpress/element';
 
 export type DateRangePreset = 'last-7' | 'last-30' | 'last-90' | 'this-month' | 'last-month' | 'custom';
 
@@ -145,23 +145,6 @@ const readUrl = (): Partial< DateRange > => {
 	return out;
 };
 
-const writeUrl = ( range: DateRange ) => {
-	if ( typeof window === 'undefined' ) {
-		return;
-	}
-	const params = new URLSearchParams( window.location.search );
-	params.set( 'range', range.preset );
-	if ( range.preset === 'custom' ) {
-		params.set( 'start', range.start );
-		params.set( 'end', range.end );
-	} else {
-		params.delete( 'start' );
-		params.delete( 'end' );
-	}
-	const next = `${ window.location.pathname }?${ params.toString() }${ window.location.hash }`;
-	window.history.replaceState( window.history.state, '', next );
-};
-
 export interface UseDateRangeOptions {
 	defaultRange: DateRange;
 }
@@ -170,13 +153,14 @@ export interface UseDateRangeReturn {
 	range: DateRange;
 	setPreset: ( preset: DateRangePreset ) => void;
 	setCustom: ( start: string, end: string ) => void;
+	setRange: ( range: DateRange ) => void;
 }
 
 /**
- * Hydrate from URL first, fall back to defaultRange. Persist on change.
+ * Hydrate from URL first, fall back to defaultRange.
  */
 const useDateRange = ( { defaultRange }: UseDateRangeOptions ): UseDateRangeReturn => {
-	const [ range, setRange ] = useState< DateRange >( () => {
+	const [ range, setRangeState ] = useState< DateRange >( () => {
 		const fromUrl = readUrl();
 		// Custom preset requires both start and end from URL; otherwise fall
 		// back to default.
@@ -199,16 +183,12 @@ const useDateRange = ( { defaultRange }: UseDateRangeOptions ): UseDateRangeRetu
 		return defaultRange;
 	} );
 
-	useEffect( () => {
-		writeUrl( range );
-	}, [ range ] );
-
 	const setPreset = useCallback( ( preset: DateRangePreset ) => {
 		if ( preset === 'custom' ) {
 			// Custom needs explicit start/end; setCustom handles that path.
 			// Hitting "Custom" without supplying dates keeps the current
 			// range but flags it as custom so the picker opens.
-			setRange( prev => ( {
+			setRangeState( prev => ( {
 				preset: 'custom',
 				start: prev.start,
 				end: prev.end,
@@ -217,7 +197,7 @@ const useDateRange = ( { defaultRange }: UseDateRangeOptions ): UseDateRangeRetu
 		}
 		const computed = computeRangeForPreset( preset );
 		if ( computed ) {
-			setRange( { preset, ...computed } );
+			setRangeState( { preset, ...computed } );
 		}
 	}, [] );
 
@@ -231,10 +211,14 @@ const useDateRange = ( { defaultRange }: UseDateRangeOptions ): UseDateRangeRetu
 		// otherwise propagates a nonsensical range into the URL and
 		// breaks computePreviousRange.
 		const [ s, e ] = start <= end ? [ start, end ] : [ end, start ];
-		setRange( { preset: 'custom', start: s, end: e } );
+		setRangeState( { preset: 'custom', start: s, end: e } );
 	}, [] );
 
-	return { range, setPreset, setCustom };
+	const setRange = useCallback( ( next: DateRange ): void => {
+		setRangeState( next );
+	}, [] );
+
+	return { range, setPreset, setCustom, setRange };
 };
 
 export default useDateRange;
