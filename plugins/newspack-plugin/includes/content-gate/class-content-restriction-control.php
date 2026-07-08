@@ -470,6 +470,9 @@ class Content_Restriction_Control {
 	 * Register post meta for the exemption flag.
 	 */
 	public static function register_meta() {
+		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
+			return;
+		}
 		$post_types = array_column( (array) self::get_available_post_types(), 'value' );
 		foreach ( $post_types as $post_type ) {
 			\register_meta(
