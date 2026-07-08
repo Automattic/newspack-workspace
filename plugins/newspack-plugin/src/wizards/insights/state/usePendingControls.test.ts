@@ -76,4 +76,31 @@ describe( 'usePendingControls', () => {
 		act( () => result.current.confirmApply() );
 		expect( result.current.appliedPreviousRange ).not.toBeNull();
 	} );
+
+	it( 'writes the URL only on apply — an un-applied edit leaves it untouched', () => {
+		const { result } = setup();
+		// No commit on mount, so no range param is written yet.
+		expect( new URLSearchParams( window.location.search ).get( 'range' ) ).toBeNull();
+		// Editing the draft must NOT touch the URL — persistence is commit-time only.
+		act( () => result.current.setPreset( 'last-7' ) );
+		expect( new URLSearchParams( window.location.search ).get( 'range' ) ).toBeNull();
+		// Applying commits the range (and compare) to the URL.
+		act( () => result.current.apply() );
+		const params = new URLSearchParams( window.location.search );
+		expect( params.get( 'range' ) ).toBe( 'last-7' );
+		expect( params.get( 'compare' ) ).toBe( '0' );
+	} );
+
+	it( 'writes custom range params to the URL on confirmApply', () => {
+		const { result } = setup();
+		act( () => result.current.setCustom( '2026-04-01', '2026-04-15' ) );
+		// Still un-applied — the URL stays untouched even for a custom edit.
+		expect( new URLSearchParams( window.location.search ).get( 'range' ) ).toBeNull();
+		act( () => result.current.apply() ); // opens the confirmation modal for custom
+		act( () => result.current.confirmApply() ); // commits
+		const params = new URLSearchParams( window.location.search );
+		expect( params.get( 'range' ) ).toBe( 'custom' );
+		expect( params.get( 'start' ) ).toBe( '2026-04-01' );
+		expect( params.get( 'end' ) ).toBe( '2026-04-15' );
+	} );
 } );
