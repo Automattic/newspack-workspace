@@ -35,7 +35,7 @@ const HeaderControls = ( { controls }: HeaderControlsProps ) => {
 				<DateRangePicker range={ draftRange } onPresetChange={ setPreset } onCustomChange={ setCustom } />
 				<ComparisonToggle enabled={ draftCompare } onChange={ setCompare } />
 			</div>
-			{ isDirty && (
+			{ isDirty && ! confirmOpen && (
 				<div className="newspack-insights__header-controls-actions">
 					<Button variant="secondary" isSmall onClick={ apply }>
 						{ __( 'Apply', 'newspack-plugin' ) }
