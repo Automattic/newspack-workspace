@@ -78,11 +78,10 @@ export interface AppMetrics {
 	notification_open_rate?: MetricPayload;
 	notifications_received?: MetricPayload;
 	notification_opt_changes?: MetricPayload;
-	// Editions.
+	// Downloads.
 	downloads_started?: MetricPayload;
 	downloads_completed?: MetricPayload;
 	download_completion_rate?: MetricPayload;
-	edition_opens?: MetricPayload;
 	// Tier-2: KG custom-dimension breakdowns. Carry `not_configured` until the
 	// dimensions are registered on the property (auto-registration is Tier-2b).
 	top_sections?: MetricPayload;

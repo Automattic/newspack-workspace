@@ -753,7 +753,6 @@ final class App_Metric {
 				'BoltNotificationStatusChange',
 				'BoltDownloadStarted',
 				'BoltDownloadCompleted',
-				'BoltEditionOpened',
 			]
 		);
 
@@ -762,11 +761,12 @@ final class App_Metric {
 			'notification_open_rate'   => $ev_ok ? self::rate_payload( $ev['notification_open'], $ev['notification_receive'] ) : self::not_computable( 'rate' ),
 			'notifications_received'   => $ev_ok ? self::count_payload( $ev['notification_receive'] ) : self::not_computable( 'count' ),
 			'notification_opt_changes' => $ev_ok ? self::count_payload( $ev['BoltNotificationStatusChange'] ) : self::not_computable( 'count' ),
-			// Editions.
+			// Downloads. `BoltEditionOpened` was never confirmed in the live data
+			// (it read as a misleading 0 on real properties), so there's no "opens"
+			// metric — only the confirmed download events.
 			'downloads_started'        => $ev_ok ? self::count_payload( $ev['BoltDownloadStarted'] ) : self::not_computable( 'count' ),
 			'downloads_completed'      => $ev_ok ? self::count_payload( $ev['BoltDownloadCompleted'] ) : self::not_computable( 'count' ),
 			'download_completion_rate' => $ev_ok ? self::rate_payload( $ev['BoltDownloadCompleted'], $ev['BoltDownloadStarted'] ) : self::not_computable( 'rate' ),
-			'edition_opens'            => $ev_ok ? self::count_payload( $ev['BoltEditionOpened'] ) : self::not_computable( 'count' ),
 		];
 
 		// Tier-2: content + audience-composition breakdowns keyed on the Pugpig
@@ -972,11 +972,6 @@ final class App_Metric {
 				'type'        => 'rate',
 				'numerator'   => 33805,
 				'denominator' => 35495,
-			],
-			'edition_opens'            => [
-				'value'      => 4180,
-				'computable' => true,
-				'type'       => 'count',
 			],
 			'retention'                => [
 				'rows'       => [

@@ -53,7 +53,6 @@ const metricsMap = (): AppMetrics => ( {
 	downloads_started: { value: 35495, computable: true, type: 'count' },
 	downloads_completed: { value: 33805, computable: true, type: 'count' },
 	download_completion_rate: { value: 0.952, computable: true, type: 'rate' },
-	edition_opens: { value: 4180, computable: true, type: 'count' },
 	top_sections: { rows: [ { section: 'News', views: 7078 } ], computable: true, type: 'breakdown' },
 	top_authors: { rows: [ { author: 'Alex Rivera', views: 3120 } ], computable: true, type: 'breakdown' },
 	subscriber_mix: { rows: [ { status: 'ExistingSubscriber', users: 483 } ], computable: true, type: 'breakdown' },

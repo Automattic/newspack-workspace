@@ -31,7 +31,7 @@ import ReachSection from './app/ReachSection';
 import EngagementSection from './app/EngagementSection';
 import RetentionSection from './app/RetentionSection';
 import NotificationsSection from './app/NotificationsSection';
-import EditionsSection from './app/EditionsSection';
+import DownloadsSection from './app/DownloadsSection';
 import ContentSection from './app/ContentSection';
 import CompositionSection from './app/CompositionSection';
 import type { TabSectionProps } from '../components/InsightsWizard';
@@ -148,7 +148,7 @@ const AppMetricsView = ( { range, previousRange }: Pick< TabSectionProps, 'range
 			<CompositionSection metrics={ current } />
 			<RetentionSection metrics={ current } />
 			<NotificationsSection metrics={ current } previous={ previous } />
-			<EditionsSection metrics={ current } previous={ previous } />
+			<DownloadsSection metrics={ current } previous={ previous } />
 		</div>
 	);
 };
