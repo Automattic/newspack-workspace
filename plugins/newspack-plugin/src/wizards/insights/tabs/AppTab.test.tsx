@@ -133,9 +133,12 @@ describe( 'AppTab', () => {
 		expect( screen.getByText( 'Active users' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Engagement' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Avg. engagement time' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Retention' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Notifications' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Editions' ) ).toBeInTheDocument();
+		// Assert later sections by a unique card label (the section titles like
+		// "Notifications" collide with card labels such as "Notifications received"
+		// under the text matcher).
+		expect( screen.getByText( 'Weekly retention' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Notification open rate' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Download completion rate' ) ).toBeInTheDocument();
 		await waitFor( () => expect( mockMetrics ).toHaveBeenCalledWith( '2026-05-01', '2026-05-31' ) );
 	} );
 
