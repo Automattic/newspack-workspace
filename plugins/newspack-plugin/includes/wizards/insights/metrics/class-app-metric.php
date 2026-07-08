@@ -548,7 +548,7 @@ final class App_Metric {
 
 		$payload = self::parse_breakdown_result( $result, $dim_key, $metric_key );
 		if ( ! empty( $payload['rows'] ) ) {
-			$payload['rows'] = array_values(
+			$rows            = array_values(
 				array_filter(
 					$payload['rows'],
 					static function ( $row ) use ( $dim_key ) {
@@ -557,8 +557,56 @@ final class App_Metric {
 					}
 				)
 			);
+			$payload['rows'] = self::merge_case_duplicates( $rows, $dim_key, $metric_key );
 		}
 		return $payload;
+	}
+
+	/**
+	 * Merge breakdown rows whose dimension value differs only by case (a Pugpig
+	 * data-quality artifact — e.g. `KGSection` "Business" and "business"): sum
+	 * their metrics, keep the casing of the higher-count variant as canonical,
+	 * and re-sort descending. A no-op when there are no case collisions.
+	 *
+	 * @param array  $rows       Filtered breakdown rows.
+	 * @param string $dim_key    Dimension key.
+	 * @param string $metric_key Metric key.
+	 * @return array
+	 */
+	private static function merge_case_duplicates( array $rows, string $dim_key, string $metric_key ): array {
+		$merged = [];
+		foreach ( $rows as $row ) {
+			$label = (string) ( $row[ $dim_key ] ?? '' );
+			$value = (int) ( $row[ $metric_key ] ?? 0 );
+			$key   = function_exists( 'mb_strtolower' ) ? mb_strtolower( $label ) : strtolower( $label );
+			if ( ! isset( $merged[ $key ] ) ) {
+				$merged[ $key ] = [
+					$dim_key    => $label,
+					$metric_key => $value,
+					'_top'      => $value,
+				];
+				continue;
+			}
+			$merged[ $key ][ $metric_key ] += $value;
+			// Canonical casing = the variant that occurred most on its own.
+			if ( $value > $merged[ $key ]['_top'] ) {
+				$merged[ $key ][ $dim_key ] = $label;
+				$merged[ $key ]['_top']     = $value;
+			}
+		}
+
+		$out = [];
+		foreach ( $merged as $entry ) {
+			unset( $entry['_top'] );
+			$out[] = $entry;
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) use ( $metric_key ) {
+				return $b[ $metric_key ] <=> $a[ $metric_key ];
+			}
+		);
+		return $out;
 	}
 
 	/**

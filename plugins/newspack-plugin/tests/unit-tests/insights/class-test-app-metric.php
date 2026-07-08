@@ -392,4 +392,44 @@ class Test_App_Metric extends WP_UnitTestCase {
 			$payload['rows'][0]
 		);
 	}
+
+	/**
+	 * Case-duplicate dimension values (e.g. `KGSection` "Business" vs "business")
+	 * merge into one row: metrics summed, the higher-count casing kept as
+	 * canonical, and the result re-sorted descending.
+	 */
+	public function test_kg_merges_case_duplicate_rows() {
+		$method = new \ReflectionMethod( App_Metric::class, 'kg_payload_from_result' );
+		$method->setAccessible( true );
+
+		$result  = [
+			'rows' => [
+				[
+					'dimensionValues' => [ [ 'value' => 'News' ] ],
+					'metricValues'    => [ [ 'value' => '900' ] ],
+				],
+				[
+					'dimensionValues' => [ [ 'value' => 'Business' ] ],
+					'metricValues'    => [ [ 'value' => '800' ] ],
+				],
+				[
+					'dimensionValues' => [ [ 'value' => 'business' ] ],
+					'metricValues'    => [ [ 'value' => '250' ] ],
+				],
+			],
+		];
+		$payload = $method->invoke( null, $result, 'section', 'views' );
+
+		// Business (800) + business (250) = 1050 collapses to one row and, being
+		// the largest, sorts to the top with the dominant "Business" casing.
+		$this->assertCount( 2, $payload['rows'] );
+		$this->assertSame(
+			[
+				'section' => 'Business',
+				'views'   => 1050,
+			],
+			$payload['rows'][0]
+		);
+		$this->assertSame( 'News', $payload['rows'][1]['section'] );
+	}
 }
