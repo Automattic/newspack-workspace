@@ -4,6 +4,12 @@
  * Four scorecards covering free-conversion intents — registration and
  * newsletter signup — each in Direct and Influenced (7-day lookback)
  * attribution.
+ *
+ * Direct here is NOT session-scoped. The hub counts `np_reader_registered` /
+ * `np_newsletter_subscribed` events carrying a `newspack_popup_id` param — the
+ * param is present because the reader submitted the form the prompt itself
+ * rendered. There is no session join anywhere in that query. Copy must say
+ * "submitted through a prompt's ... block", never "in the same session".
  */
 
 /**
@@ -32,7 +38,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 			id="newspack-insights-prompts-free-heading"
 			title={ __( 'Free reader conversion', 'newspack-plugin' ) }
 			description={ __(
-				'How effectively prompts convert readers into registered readers and newsletter subscribers. Direct counts conversions in the same session as a prompt impression. Influenced counts conversions in a later session within 7 days of seeing a prompt.',
+				'How effectively prompts convert readers into registered readers and newsletter subscribers. Direct counts conversions submitted through a prompt’s own form. Influenced counts conversions in a later session within 7 days of seeing a prompt.',
 				'newspack-plugin'
 			) }
 		/>
@@ -41,7 +47,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Registration Conversion (Direct)', 'newspack-plugin' ),
 					description: __(
-						'Sessions with a registration after a prompt impression with a registration block ÷ sessions with a prompt impression with a registration block',
+						'Registrations submitted through a prompt’s registration block ÷ impressions of prompts with a registration block',
 						'newspack-plugin'
 					),
 					current: current.registration_conversion_direct,
@@ -67,7 +73,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Newsletter Signup Conversion (Direct)', 'newspack-plugin' ),
 					description: __(
-						'Sessions with a newsletter signup after a prompt impression with a newsletter block ÷ sessions with a prompt impression with a newsletter block',
+						'Newsletter signups submitted through a prompt’s newsletter block ÷ impressions of prompts with a newsletter block',
 						'newspack-plugin'
 					),
 					current: current.newsletter_signup_conversion_direct,

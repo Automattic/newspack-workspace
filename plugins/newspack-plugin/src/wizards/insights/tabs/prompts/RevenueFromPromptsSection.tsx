@@ -6,6 +6,10 @@
  * Direct revenue sums actual Woo order totals (order meta). Influenced revenue
  * is hub-computed (BQ-internal) from the checkout `amount` of the influenced
  * conversion events — no Woo join on the consumer.
+ *
+ * "Direct" here means the order carried `_newspack_popup_id` — i.e. the reader
+ * converted through the block the prompt itself rendered. It is not session-
+ * scoped. See PaidReaderConversionSection's docblock.
  */
 
 /**
@@ -34,7 +38,7 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 			id="newspack-insights-prompts-revenue-heading"
 			title={ __( 'Revenue from prompts', 'newspack-plugin' ) }
 			description={ __(
-				'Donation and subscription revenue completed after a prompt impression. Direct totals Woo order revenue from same-session completions. Influenced totals checkout revenue from later-session completions within 14 days of seeing a prompt.',
+				'Donation and subscription revenue completed after a prompt impression. Direct totals Woo order revenue from conversions completed through a prompt’s own block. Influenced totals checkout revenue from later-session completions within 14 days of seeing a prompt.',
 				'newspack-plugin'
 			) }
 		/>
@@ -43,7 +47,7 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Donation Revenue (Direct)', 'newspack-plugin' ),
 					description: __(
-						'Sum of Woo donation order totals from same-session completions after a donation-intent prompt impression',
+						'Sum of Woo donation order totals from donations completed through a prompt’s donation block',
 						'newspack-plugin'
 					),
 					current: current.donation_revenue_direct,
@@ -72,7 +76,7 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Subscription Revenue (Direct)', 'newspack-plugin' ),
 					description: __(
-						'Sum of Woo subscription order totals from same-session completions after a subscription-intent prompt impression',
+						'Sum of Woo subscription order totals from subscriptions purchased through a prompt’s checkout button',
 						'newspack-plugin'
 					),
 					current: current.subscription_revenue_direct,
