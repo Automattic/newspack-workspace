@@ -111,8 +111,19 @@ export default function DiscountRuleFlow( { rule, onClose, onSaved } ) {
 		}, 700 );
 	};
 
-	// Guard an unsaved close behind a discard confirmation.
-	const attemptClose = () => ( isDirty ? setConfirmDiscard( true ) : onClose() );
+	// Guard an unsaved close behind a discard confirmation. Blocked while busy so
+	// a discard during the in-flight save's 700ms timeout can't unmount the flow
+	// out from under the pending saveDiscount()/onSaved() call.
+	const attemptClose = () => {
+		if ( busy ) {
+			return;
+		}
+		if ( isDirty ) {
+			setConfirmDiscard( true );
+		} else {
+			onClose();
+		}
+	};
 
 	const previewRows = products.slice( 0, 8 );
 	const extra = products.length - previewRows.length;
@@ -248,7 +259,7 @@ export default function DiscountRuleFlow( { rule, onClose, onSaved } ) {
 	);
 	const footer = (
 		<HStack spacing={ 2 } justify="flex-end">
-			<Button variant="secondary" onClick={ attemptClose }>
+			<Button variant="secondary" disabled={ busy } onClick={ attemptClose }>
 				{ __( 'Cancel', 'newspack-plugin' ) }
 			</Button>
 			<Button variant="primary" isBusy={ busy } disabled={ busy || ! canSave } onClick={ onSave }>
@@ -268,7 +279,7 @@ export default function DiscountRuleFlow( { rule, onClose, onSaved } ) {
 			>
 				<HStack className="newspack-subscribers-demo__sub-detail-header" spacing={ 2 } alignment="center">
 					<h2 className="newspack-subscribers-demo__sub-detail-title">{ title }</h2>
-					<Button icon={ close } size="small" label={ __( 'Close', 'newspack-plugin' ) } onClick={ attemptClose } />
+					<Button icon={ close } size="small" label={ __( 'Close', 'newspack-plugin' ) } disabled={ busy } onClick={ attemptClose } />
 				</HStack>
 				<div className="newspack-subscribers-demo__sub-detail-content">{ content }</div>
 				<div className="newspack-subscribers-demo__sub-detail-footer">{ footer }</div>

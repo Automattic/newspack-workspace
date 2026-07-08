@@ -87,6 +87,10 @@ export default function SubscriptionList() {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ editorRule, setEditorRule ] = useState( null );
 	const [ snackbar, setSnackbar ] = useState( null );
+	// Bumped after a discount is saved so statsByPlan (below) re-reads
+	// getPlanStats(), which pulls discount rules from localStorage and isn't
+	// otherwise reflected in the `plans` dependency.
+	const [ statsRevision, setStatsRevision ] = useState( 0 );
 
 	const plans = useMemo( () => getAllPlans(), [] );
 
@@ -106,7 +110,7 @@ export default function SubscriptionList() {
 			byName[ plan.name ] = getPlanStats( plan.name );
 		} );
 		return byName;
-	}, [ plans ] );
+	}, [ plans, statsRevision ] );
 
 	const fields = useMemo(
 		() =>
@@ -280,6 +284,7 @@ export default function SubscriptionList() {
 					onSaved={ message => {
 						setEditorRule( null );
 						setSnackbar( { message } );
+						setStatsRevision( n => n + 1 );
 					} }
 				/>
 			) }

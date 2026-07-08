@@ -88,7 +88,7 @@ export default function SubscriberList() {
 	// link) opens the list pre-filtered to that subscription's subscribers.
 	const [ view, setView ] = useState( () => {
 		const subscription = new URLSearchParams( location.search ).get( 'subscription' );
-		return subscription ? { ...DEFAULT_VIEW, filters: [ { field: 'plans', operator: 'isAny', value: [ subscription ] } ] } : DEFAULT_VIEW;
+		return subscription ? { ...DEFAULT_VIEW, filters: [ { field: 'livePlans', operator: 'isAny', value: [ subscription ] } ] } : DEFAULT_VIEW;
 	} );
 
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -200,6 +200,24 @@ export default function SubscriberList() {
 						</VStack>
 					);
 				},
+				enableSorting: false,
+			},
+			{
+				// Filter-only (not in DEFAULT_VIEW.fields): backs the subscription
+				// "View subscribers" deep-link. Unlike `plans` above, this only
+				// counts live (active/on-hold) holders, matching the subscriber
+				// count shown on the Subscriptions list.
+				id: 'livePlans',
+				label: __( 'Subscription (live)', 'newspack-plugin' ),
+				elements: [ ...ALL_PLAN_NAMES, ...ALL_GROUP_PLAN_NAMES ].map( n => ( {
+					value: n,
+					label: n,
+				} ) ),
+				filterBy: { operators: [ 'isAny' ] },
+				getValue: ( { item } ) =>
+					planEntries( item, groupsBySubscriber[ item.id ] )
+						.filter( e => e.status === 'active' || e.status === 'on-hold' )
+						.map( e => e.plan ),
 				enableSorting: false,
 			},
 			{
