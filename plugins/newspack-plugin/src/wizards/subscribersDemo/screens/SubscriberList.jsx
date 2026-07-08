@@ -204,9 +204,10 @@ export default function SubscriberList() {
 			},
 			{
 				// Filter-only (not in DEFAULT_VIEW.fields): backs the subscription
-				// "View subscribers" deep-link. Unlike `plans` above, this only
-				// counts live (active/on-hold) holders, matching the subscriber
-				// count shown on the Subscriptions list.
+				// "View subscribers" deep-link. Unlike `plans` above, this matches
+				// only the holders the Subscriptions list counts: live (active/
+				// on-hold) individual subscriptions, and — for group subscriptions —
+				// the owner alone (one per group), not covered members/managers.
 				id: 'livePlans',
 				label: __( 'Subscription (live)', 'newspack-plugin' ),
 				elements: [ ...ALL_PLAN_NAMES, ...ALL_GROUP_PLAN_NAMES ].map( n => ( {
@@ -216,7 +217,7 @@ export default function SubscriberList() {
 				filterBy: { operators: [ 'isAny' ] },
 				getValue: ( { item } ) =>
 					planEntries( item, groupsBySubscriber[ item.id ] )
-						.filter( e => e.status === 'active' || e.status === 'on-hold' )
+						.filter( e => ( e.status === 'active' || e.status === 'on-hold' ) && ( e.role === null || e.role === 'owner' ) )
 						.map( e => e.plan ),
 				enableSorting: false,
 			},
