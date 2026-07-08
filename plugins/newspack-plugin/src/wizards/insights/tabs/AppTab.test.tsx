@@ -31,6 +31,11 @@ const metricsResponse = () => ( {
 		sessions: { value: 12790, computable: true, type: 'count' },
 		platform: { rows: [ { platform: 'iOS', active_users: 590 } ], computable: true, type: 'breakdown' },
 		app_version: { rows: [ { app_version: '1.2', active_users: 840 } ], computable: true, type: 'breakdown' },
+		avg_engagement_time: { value: 1130, computable: true, type: 'duration' },
+		engagement_rate: { value: 0.83, computable: true, type: 'rate' },
+		engaged_sessions: { value: 10600, computable: true, type: 'count' },
+		screens_per_session: { value: 6.2, computable: true, type: 'decimal' },
+		screen_views: { value: 70473, computable: true, type: 'count' },
 	},
 } );
 
@@ -110,6 +115,8 @@ describe( 'AppTab', () => {
 
 		expect( await screen.findByText( 'Reach' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Active users' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Engagement' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Avg. engagement time' ) ).toBeInTheDocument();
 		await waitFor( () => expect( mockMetrics ).toHaveBeenCalledWith( '2026-05-01', '2026-05-31' ) );
 	} );
 

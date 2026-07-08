@@ -226,20 +226,23 @@ final class App_Metric {
 			return $cached;
 		}
 
-		$metrics = self::compute_reach_metrics( $property, $start_date, $end_date );
+		$metrics = self::compute_metrics( $property, $start_date, $end_date );
 		set_transient( $cache_key, $metrics, self::METRICS_CACHE_TTL );
 		return $metrics;
 	}
 
 	/**
-	 * Compose + run the Reach-section GA4 reports for a property/window.
+	 * Compose + run the GA4 reports for a property/window. Reach + Engagement
+	 * scalars batch into one runReport (GA4 caps a request at 10 metrics);
+	 * platform + app-version are one breakdown report each. PR1 ships Reach +
+	 * Engagement; later sections add their own keys here.
 	 *
 	 * @param string $property   GA4 property ID.
 	 * @param string $start_date YYYY-MM-DD.
 	 * @param string $end_date   YYYY-MM-DD.
 	 * @return array
 	 */
-	private static function compute_reach_metrics( string $property, string $start_date, string $end_date ): array {
+	private static function compute_metrics( string $property, string $start_date, string $end_date ): array {
 		$range = [
 			'dateRanges' => [
 				[
@@ -249,11 +252,49 @@ final class App_Metric {
 			],
 		];
 
-		return [
-			'active_users' => self::scalar_report( $property, $range + [ 'metrics' => [ [ 'name' => 'activeUsers' ] ] ], 'count' ),
-			'new_users'    => self::scalar_report( $property, $range + [ 'metrics' => [ [ 'name' => 'newUsers' ] ] ], 'count' ),
-			'sessions'     => self::scalar_report( $property, $range + [ 'metrics' => [ [ 'name' => 'sessions' ] ] ], 'count' ),
-			'platform'     => self::breakdown_report(
+		$scalars = self::scalars_report(
+			$property,
+			$range,
+			[
+				// Reach.
+				'active_users'        => [
+					'metric' => 'activeUsers',
+					'type'   => 'count',
+				],
+				'new_users'           => [
+					'metric' => 'newUsers',
+					'type'   => 'count',
+				],
+				'sessions'            => [
+					'metric' => 'sessions',
+					'type'   => 'count',
+				],
+				// Engagement.
+				'avg_engagement_time' => [
+					'metric' => 'averageSessionDuration',
+					'type'   => 'duration',
+				],
+				'engagement_rate'     => [
+					'metric' => 'engagementRate',
+					'type'   => 'rate',
+				],
+				'engaged_sessions'    => [
+					'metric' => 'engagedSessions',
+					'type'   => 'count',
+				],
+				'screens_per_session' => [
+					'metric' => 'screenPageViewsPerSession',
+					'type'   => 'decimal',
+				],
+				'screen_views'        => [
+					'metric' => 'screenPageViews',
+					'type'   => 'count',
+				],
+			]
+		);
+
+		$breakdowns = [
+			'platform'    => self::breakdown_report(
 				$property,
 				$range + [
 					'dimensions' => [ [ 'name' => 'platform' ] ],
@@ -268,7 +309,7 @@ final class App_Metric {
 				'platform',
 				'active_users'
 			),
-			'app_version'  => self::breakdown_report(
+			'app_version' => self::breakdown_report(
 				$property,
 				$range + [
 					'dimensions' => [ [ 'name' => 'appVersion' ] ],
@@ -285,21 +326,10 @@ final class App_Metric {
 				'active_users'
 			),
 		];
+
+		return array_merge( $scalars, $breakdowns );
 	}
 
-	/**
-	 * Run a single-scalar GA4 report and shape it as a scorecard payload. A
-	 * report failure (or a non-numeric/absent value) yields a non-computable
-	 * payload so the card degrades gracefully instead of showing a wrong number.
-	 *
-	 * @param string $property GA4 property ID.
-	 * @param array  $body     runReport body.
-	 * @param string $type     Payload type ('count'|'decimal'|'rate'|'duration').
-	 * @return array
-	 */
-	private static function scalar_report( string $property, array $body, string $type ): array {
-		return self::parse_scalar_result( Client::run_report( $property, $body ), $type );
-	}
 
 	/**
 	 * Shape a GA4 runReport result (or WP_Error) as a scorecard payload. Pure, so
@@ -311,6 +341,18 @@ final class App_Metric {
 	 */
 	public static function parse_scalar_result( $result, string $type ): array {
 		$raw = is_wp_error( $result ) ? null : ( $result['rows'][0]['metricValues'][0]['value'] ?? null );
+		return self::parse_scalar_value( $raw, $type );
+	}
+
+	/**
+	 * Shape a single raw GA4 metric value (string|null) as a scorecard payload.
+	 * Absent / non-numeric → non-computable.
+	 *
+	 * @param string|null $raw  Raw metric value.
+	 * @param string      $type Payload type.
+	 * @return array
+	 */
+	private static function parse_scalar_value( $raw, string $type ): array {
 		if ( null === $raw || ! is_numeric( $raw ) ) {
 			return [
 				'value'      => 0,
@@ -323,6 +365,33 @@ final class App_Metric {
 			'computable' => true,
 			'type'       => $type,
 		];
+	}
+
+	/**
+	 * Run one GA4 report for several scalar metrics at once (GA4 caps a request at
+	 * 10 metrics) and shape each into its scorecard payload, keyed by the caller's
+	 * output key. A report failure degrades every card gracefully.
+	 *
+	 * @param string $property GA4 property ID.
+	 * @param array  $range    The dateRanges wrapper.
+	 * @param array  $specs    output_key => [ 'metric' => apiName, 'type' => payload type ].
+	 * @return array output_key => scorecard payload.
+	 */
+	private static function scalars_report( string $property, array $range, array $specs ): array {
+		$metrics = [];
+		foreach ( $specs as $spec ) {
+			$metrics[] = [ 'name' => $spec['metric'] ];
+		}
+		$result = Client::run_report( $property, $range + [ 'metrics' => $metrics ] );
+
+		$out = [];
+		$i   = 0;
+		foreach ( $specs as $key => $spec ) {
+			$raw         = is_wp_error( $result ) ? null : ( $result['rows'][0]['metricValues'][ $i ]['value'] ?? null );
+			$out[ $key ] = self::parse_scalar_value( $raw, $spec['type'] );
+			++$i;
+		}
+		return $out;
 	}
 
 	/**
@@ -377,22 +446,47 @@ final class App_Metric {
 	 */
 	private static function get_fixture_metrics(): array {
 		return [
-			'active_users' => [
+			'active_users'        => [
 				'value'      => 892,
 				'computable' => true,
 				'type'       => 'count',
 			],
-			'new_users'    => [
+			'new_users'           => [
 				'value'      => 150,
 				'computable' => true,
 				'type'       => 'count',
 			],
-			'sessions'     => [
+			'sessions'            => [
 				'value'      => 12790,
 				'computable' => true,
 				'type'       => 'count',
 			],
-			'platform'     => [
+			'avg_engagement_time' => [
+				'value'      => 1130,
+				'computable' => true,
+				'type'       => 'duration',
+			],
+			'engagement_rate'     => [
+				'value'      => 0.83,
+				'computable' => true,
+				'type'       => 'rate',
+			],
+			'engaged_sessions'    => [
+				'value'      => 10600,
+				'computable' => true,
+				'type'       => 'count',
+			],
+			'screens_per_session' => [
+				'value'      => 6.2,
+				'computable' => true,
+				'type'       => 'decimal',
+			],
+			'screen_views'        => [
+				'value'      => 70473,
+				'computable' => true,
+				'type'       => 'count',
+			],
+			'platform'            => [
 				'rows'       => [
 					[
 						'platform'     => 'iOS',
@@ -406,7 +500,7 @@ final class App_Metric {
 				'computable' => true,
 				'type'       => 'breakdown',
 			],
-			'app_version'  => [
+			'app_version'         => [
 				'rows'       => [
 					[
 						'app_version'  => '1.2',

@@ -60,11 +60,18 @@ export const saveAppProperty = async ( propertyId: string ): Promise< AppConfig 
 /** Windowed app metric payloads, keyed by metric name (`tab_error` when unavailable). */
 export interface AppMetrics {
 	tab_error?: string;
+	// Reach.
 	active_users?: MetricPayload;
 	new_users?: MetricPayload;
 	sessions?: MetricPayload;
 	platform?: MetricPayload;
 	app_version?: MetricPayload;
+	// Engagement.
+	avg_engagement_time?: MetricPayload;
+	engagement_rate?: MetricPayload;
+	engaged_sessions?: MetricPayload;
+	screens_per_session?: MetricPayload;
+	screen_views?: MetricPayload;
 }
 
 export interface AppMetricsResponse {

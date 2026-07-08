@@ -26,6 +26,7 @@ import { Notice, Button, Grid, SelectControl } from '../../../../packages/compon
 import WizardsActionCard from '../../wizards-action-card';
 import TabSpinner from './components/TabSpinner';
 import ReachSection from './app/ReachSection';
+import EngagementSection from './app/EngagementSection';
 import type { TabSectionProps } from '../components/InsightsWizard';
 import './app/app.scss';
 import { fetchAppConfig, saveAppProperty, fetchAppMetrics, type AppConfig, type AppProperty, type AppMetrics } from '../api/app';
@@ -132,7 +133,12 @@ const AppMetricsView = ( { range }: { range: TabSectionProps[ 'range' ] } ) => {
 	if ( ! metrics || metrics.tab_error ) {
 		return <Notice noticeText={ __( 'App analytics aren’t available for this property yet.', 'newspack-plugin' ) } />;
 	}
-	return <ReachSection metrics={ metrics } />;
+	return (
+		<>
+			<ReachSection metrics={ metrics } />
+			<EngagementSection metrics={ metrics } />
+		</>
+	);
 };
 
 const AppTab = ( { range }: TabSectionProps ) => {
