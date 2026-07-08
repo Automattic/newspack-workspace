@@ -139,7 +139,7 @@ describe( 'NewsletterAdsTab', () => {
 		expect( screen.getAllByText( 'Requires the latest Newspack Newsletters plugin.' ).length ).toBeGreaterThan( 0 );
 		// The timeframe-scoped sections stay withheld…
 		expect( screen.queryByText( 'Performance trend' ) ).not.toBeInTheDocument();
-		expect( screen.queryByText( 'Top performers' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Top ads' ) ).not.toBeInTheDocument();
 		// …and the absent has_window_activity signal must NOT collapse the
 		// Overview into the empty state (the lifetime cards carry the signal).
 		expect( document.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
@@ -165,7 +165,8 @@ describe( 'NewsletterAdsTab', () => {
 		// …and every section still renders.
 		expect( screen.getByText( 'Reach & revenue' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Performance trend' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Top performers' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top ads' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Ad performance by newsletter' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders all sections with values when ready', () => {
