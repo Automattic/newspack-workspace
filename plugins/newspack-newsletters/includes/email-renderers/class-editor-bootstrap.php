@@ -34,8 +34,8 @@ class Editor_Bootstrap {
 	/**
 	 * Per-render memoization of the built WP_Theme_JSON, keyed by post ID.
 	 *
-	 * merge_theme_json() fires several times per render, so the build is cached.
-	 * The cache is process-global, so Renderer_Controller::render_wc() resets it
+	 * The merge_theme_json() filter fires several times per render, so the build
+	 * is cached. The cache is process-global, so Renderer_Controller::render_wc() resets it
 	 * before each render (see reset_theme_json_cache) — otherwise a second render
 	 * of a post whose colors changed would reuse the stale theme, and in the test
 	 * suite recycled post IDs would collide across tests.
