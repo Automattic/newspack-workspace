@@ -23,11 +23,18 @@ final class Cache {
 	const SOURCE_SNAPSHOT = 'snapshot';
 
 	/**
-	 * Global envelope cache-schema version, folded into every Insights window
-	 * cache key (durable + transient) via Cached_Controller_Trait. Bump this on
-	 * ANY Insights window-payload shape change so a shape-changing deploy cannot
-	 * serve an old-shaped durable/transient payload to the new frontend. A bump
-	 * busts every tab's window cache at once (one cold pre-warm cycle).
+	 * Global envelope cache-schema version. Bump this on ANY Insights
+	 * window-payload shape change so a shape-changing deploy cannot serve an
+	 * old-shaped payload to the new frontend; a bump busts every tab's window
+	 * cache at once — trait-backed tabs recompute on their next pre-warm cycle,
+	 * the local-cache tabs on their next request.
+	 *
+	 * Trait-backed tabs fold it into every durable/transient key via
+	 * Cached_Controller_Trait. The two local-cache tabs that don't go through the
+	 * trait's cached path — App (no trait) and Newsletter Ads (SOURCE_LOCAL, so
+	 * Cache::store() is a pass-through) — fold it into their own metric-layer
+	 * transient keys instead ({@see App_Metric::metrics_cache_key()} /
+	 * {@see Newsletter_Ads_Metric::envelope_cache_key()}), so a bump busts them too.
 	 */
 	const ENVELOPE_SCHEMA_VERSION = 'v1';
 

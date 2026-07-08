@@ -300,7 +300,7 @@ final class App_Metric {
 			];
 		}
 
-		$window_key = self::METRICS_CACHE_PREFIX . md5( $property . '|' . $start_date . '|' . $end_date );
+		$window_key = self::metrics_cache_key( $property, $start_date, $end_date );
 		$cached     = $force_refresh ? false : get_transient( $window_key );
 		if ( is_array( $cached ) && isset( $cached['metrics'], $cached['computed_at'] ) ) {
 			$window = $cached;
@@ -312,7 +312,7 @@ final class App_Metric {
 			set_transient( $window_key, $window, self::METRICS_CACHE_TTL );
 		}
 
-		$retention_key = self::RETENTION_CACHE_PREFIX . md5( $property );
+		$retention_key = self::retention_cache_key( $property );
 		$retention     = $force_refresh ? false : get_transient( $retention_key );
 		if ( ! is_array( $retention ) ) {
 			$retention = self::compute_retention( $property );
@@ -323,6 +323,34 @@ final class App_Metric {
 			'metrics'     => array_merge( $window['metrics'], [ 'retention' => $retention ] ),
 			'computed_at' => $window['computed_at'],
 		];
+	}
+
+	/**
+	 * Transient key for a property/window's metric payload. Folds in the global
+	 * {@see Cache::ENVELOPE_SCHEMA_VERSION} alongside the prefix's own local
+	 * payload-version token, so a cross-tab envelope-shape bump busts this tab's
+	 * cache too — the guarantee the BigQuery/external tabs get for free from
+	 * {@see Cached_Controller_Trait}, which this GA4-only tab doesn't use.
+	 *
+	 * @param string $property   GA4 property ID.
+	 * @param string $start_date YYYY-MM-DD.
+	 * @param string $end_date   YYYY-MM-DD.
+	 * @return string
+	 */
+	private static function metrics_cache_key( string $property, string $start_date, string $end_date ): string {
+		return self::METRICS_CACHE_PREFIX . Cache::ENVELOPE_SCHEMA_VERSION . ':' . md5( $property . '|' . $start_date . '|' . $end_date );
+	}
+
+	/**
+	 * Transient key for a property's retention payload. Version-folded like
+	 * {@see self::metrics_cache_key()}; retention is window-independent, so the
+	 * key is property-scoped only.
+	 *
+	 * @param string $property GA4 property ID.
+	 * @return string
+	 */
+	private static function retention_cache_key( string $property ): string {
+		return self::RETENTION_CACHE_PREFIX . Cache::ENVELOPE_SCHEMA_VERSION . ':' . md5( $property );
 	}
 
 	/**
