@@ -199,6 +199,23 @@ class Test_Gate_Preview extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The restriction is forced only for the queried (previewed) post. A call
+	 * for an unrelated post id during a preview must pass through untouched, and
+	 * an empty post id resolves to the queried object.
+	 */
+	public function test_only_queried_post_is_force_restricted() {
+		wp_set_current_user( $this->admin_id );
+		$other_post_id = $this->factory->post->create( [ 'post_status' => 'publish' ] );
+
+		$this->go_to( add_query_arg( Gate_Preview::PREVIEW_QUERY_PARAM, $this->layout_id, get_permalink( $this->canvas_post_id ) ) );
+		$this->preview_query_params[] = Gate_Preview::PREVIEW_QUERY_PARAM;
+
+		$this->assertTrue( Gate_Preview::filter_is_post_restricted( false, $this->canvas_post_id ), 'The queried post is force-restricted.' );
+		$this->assertTrue( Gate_Preview::filter_is_post_restricted( false, 0 ), 'An empty post id resolves to the queried post and is restricted.' );
+		$this->assertFalse( Gate_Preview::filter_is_post_restricted( false, $other_post_id ), 'An unrelated post id is not force-restricted.' );
+	}
+
+	/**
 	 * With no ngp_id, an admin viewing the post sees full, ungated content.
 	 */
 	public function test_no_param_leaves_content_untouched_for_admin() {
@@ -275,15 +292,19 @@ class Test_Gate_Preview extends \WP_UnitTestCase {
 		$this->assertSame( 'bottom', $overrides['overlay_position'] );
 		$this->assertSame( 'large', $overrides['overlay_size'] );
 
-		// Invalid enum values and non-numeric counts are dropped entirely.
+		// Invalid enum values, non-numeric counts, and malformed booleans are
+		// dropped entirely (a malformed boolean must not coerce to false and
+		// silently override stored meta).
 		$_GET['ngp_st'] = 'not-a-style';
 		$_GET['ngp_vp'] = 'abc';
 		$_GET['ngp_os'] = 'gigantic';
+		$_GET['ngp_if'] = 'abc';
 		$overrides      = Gate_Preview::get_preview_meta_overrides();
 
 		$this->assertArrayNotHasKey( 'style', $overrides, 'An invalid style is dropped so stored meta wins.' );
 		$this->assertArrayNotHasKey( 'visible_paragraphs', $overrides, 'A non-numeric count is dropped.' );
 		$this->assertArrayNotHasKey( 'overlay_size', $overrides, 'An invalid overlay size is dropped.' );
+		$this->assertArrayNotHasKey( 'inline_fade', $overrides, 'A malformed boolean is dropped rather than coerced to false.' );
 	}
 
 	/**

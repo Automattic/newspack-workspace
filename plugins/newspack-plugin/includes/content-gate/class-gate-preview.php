@@ -178,7 +178,17 @@ class Gate_Preview {
 				return in_array( $raw, [ 'inline', 'overlay' ], true ) ? $raw : null;
 			case 'inline_fade':
 			case 'use_more_tag':
-				return rest_sanitize_boolean( $raw );
+				// Only recognized boolean strings win; anything else is invalid and
+				// falls back to stored meta (rest_sanitize_boolean would coerce a
+				// malformed value like "abc" to false and wrongly override).
+				$normalized = strtolower( trim( (string) $raw ) );
+				if ( in_array( $normalized, [ 'true', '1', 'yes', 'on' ], true ) ) {
+					return true;
+				}
+				if ( in_array( $normalized, [ 'false', '0', 'no', 'off' ], true ) ) {
+					return false;
+				}
+				return null;
 			case 'visible_paragraphs':
 				return is_numeric( $raw ) ? absint( $raw ) : null;
 			case 'overlay_position':
@@ -284,7 +294,13 @@ class Gate_Preview {
 		if ( ! self::is_preview_request() ) {
 			return $restricted;
 		}
-		if ( empty( $post_id ) || (int) $post_id === (int) get_queried_object_id() ) {
+		// Force only the queried (previewed) post. An empty $post_id resolves to
+		// the queried object so in-loop calls still gate, but an explicit,
+		// unrelated post id is never force-restricted, and nothing is forced when
+		// there is no singular queried object.
+		$queried_id = (int) get_queried_object_id();
+		$target_id  = empty( $post_id ) ? $queried_id : (int) $post_id;
+		if ( $queried_id && $target_id === $queried_id ) {
 			return true;
 		}
 		return $restricted;

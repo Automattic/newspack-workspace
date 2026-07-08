@@ -55,9 +55,17 @@ export default function GatePreview() {
 		if ( ! iframeEl ) {
 			return;
 		}
-		[ ...iframeEl.contentWindow.document.querySelectorAll( 'a[href^="' + frontendUrl + '"]' ) ].forEach( anchor => {
-			anchor.setAttribute( 'href', addQueryArgs( anchor.getAttribute( 'href' ), query ) );
-		} );
+		// Same-origin access can throw a DOMException on a cross-origin iframe
+		// (mapped domains, scheme mismatch). Link-rewriting is a nicety; never let
+		// it break opening the preview.
+		try {
+			[ ...iframeEl.contentWindow.document.querySelectorAll( 'a[href^="' + frontendUrl + '"]' ) ].forEach( anchor => {
+				anchor.setAttribute( 'href', addQueryArgs( anchor.getAttribute( 'href' ), query ) );
+			} );
+		} catch ( e ) {
+			// eslint-disable-next-line no-console
+			console.warn( 'Gate preview: could not rewrite in-iframe links (cross-origin).', e );
+		}
 	};
 
 	return (
