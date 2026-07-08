@@ -194,6 +194,75 @@ class Test_Cache_Ondemand extends WP_UnitTestCase {
 		Cache::prune_durable( $this->tab, [] );
 	}
 
+	/**
+	 * A provisional (warming) payload is cached with the short TTL_PROVISIONAL
+	 * transient expiry and is NOT written through to the on-demand durable pool,
+	 * even though the source/window would otherwise be on-demand-eligible.
+	 */
+	public function test_store_uses_provisional_ttl_and_skips_ondemand_for_warming_payload() {
+		$k     = $this->key( '2026-08-01', '2026-08-10' );
+		$win   = $this->window( '2026-08-01', '2026-08-10' );
+		$start = time();
+		$env   = Cache::store(
+			$this->tab,
+			$this->source,
+			$k,
+			fn() => [
+				'data_status' => 'warming',
+				'n'           => 1,
+			],
+			$win
+		);
+		$this->assertSame( 'warming', $env['payload']['data_status'] );
+
+		// No on-demand durable entry written for a provisional payload.
+		$this->assertNull( Cache::peek_ondemand( $this->tab, $this->source, $k ) );
+
+		// The transient's expiry reflects TTL_PROVISIONAL, not ttl_for( $source ).
+		$transient_key = 'newspack_insights_' . $this->tab . '_' . md5( (string) wp_json_encode( $k ) );
+		$timeout       = (int) get_option( '_transient_timeout_' . $transient_key );
+		$this->assertNotEmpty( $timeout, 'Transient must be written with a timeout.' );
+		$this->assertEqualsWithDelta( $start + Cache::TTL_PROVISIONAL, $timeout, 5, 'Transient TTL should be TTL_PROVISIONAL for a warming payload.' );
+	}
+
+	/**
+	 * A complete payload (data_status absent or 'complete') still uses the
+	 * ordinary durable/on-demand write-through path with the source's normal TTL.
+	 */
+	public function test_store_uses_normal_ttl_and_writes_ondemand_for_complete_payload() {
+		$k     = $this->key( '2026-08-11', '2026-08-20' );
+		$win   = $this->window( '2026-08-11', '2026-08-20' );
+		$start = time();
+		$env   = Cache::store(
+			$this->tab,
+			$this->source,
+			$k,
+			fn() => [
+				'data_status' => 'complete',
+				'n'           => 2,
+			],
+			$win
+		);
+		$this->assertSame( 'complete', $env['payload']['data_status'] );
+
+		// On-demand durable entry IS written for a complete payload.
+		$ondemand = Cache::peek_ondemand( $this->tab, $this->source, $k );
+		$this->assertNotNull( $ondemand );
+		$this->assertSame(
+			[
+				'data_status' => 'complete',
+				'n'           => 2,
+			],
+			$ondemand['payload']
+		);
+
+		// The transient's expiry reflects the source's normal TTL (TTL_EXTERNAL here).
+		$transient_key = 'newspack_insights_' . $this->tab . '_' . md5( (string) wp_json_encode( $k ) );
+		$timeout       = (int) get_option( '_transient_timeout_' . $transient_key );
+		$this->assertNotEmpty( $timeout );
+		$this->assertEqualsWithDelta( $start + Cache::TTL_EXTERNAL, $timeout, 5, 'Transient TTL should be the normal source TTL for a complete payload.' );
+	}
+
 	/** A stale on-demand entry is recomputed inline and the refreshed payload is stored. */
 	public function test_stale_ondemand_is_recomputed_inline() {
 		$k   = $this->key( '2026-03-01', '2026-03-10' );

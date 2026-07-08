@@ -40,6 +40,14 @@ final class Cache {
 	const BQ_COOLDOWN_SECONDS = 10 * MINUTE_IN_SECONDS;
 
 	/**
+	 * TTL for a provisional (warming) payload — one whose top-level
+	 * `data_status` is 'warming'. Short-lived so the next visit recomputes
+	 * soon and picks up the fully-warmed value, instead of serving the
+	 * provisional payload for the source's normal (much longer) TTL.
+	 */
+	const TTL_PROVISIONAL = 3 * MINUTE_IN_SECONDS;
+
+	/**
 	 * Max number of transient keys retained per tab in the index. Older
 	 * entries are dropped FIFO when the cap is exceeded; the underlying
 	 * transients still expire naturally on their TTL — losing the index
@@ -146,18 +154,26 @@ final class Cache {
 		$payload  = (array) $compute();
 		$envelope = self::envelope( $payload, $source );
 
+		// A provisional (warming) payload gets a short TTL and is kept out of
+		// the on-demand durable pool, so the next visit recomputes soon and
+		// picks up the fully-warmed value rather than serving this provisional
+		// payload for the source's normal (much longer) TTL.
+		$is_provisional = is_array( $payload ) && ( 'warming' === ( $payload['data_status'] ?? null ) );
+
 		$store = [
 			'payload'     => $envelope['payload'],
 			'computed_at' => $envelope['computed_at'],
 			'source'      => $envelope['source'],
 		];
-		set_transient( self::transient_key( $tab, $key_parts ), $store, self::ttl_for( $source ) );
+		set_transient( self::transient_key( $tab, $key_parts ), $store, $is_provisional ? self::TTL_PROVISIONAL : self::ttl_for( $source ) );
 		if ( self::SOURCE_SNAPSHOT !== $source ) {
 			self::index_add( $tab, self::transient_key( $tab, $key_parts ) );
 		}
 
-		// Write-through / refresh the on-demand pool (same eligibility as the read).
-		if ( $ondemand_eligible ) {
+		// Write-through / refresh the on-demand pool (same eligibility as the
+		// read), skipped for a provisional payload so a warming value can't
+		// stick in the 25h-fresh on-demand pool.
+		if ( $ondemand_eligible && ! $is_provisional ) {
 			self::store_ondemand( $tab, $source, $key_parts, $envelope['payload'], $window );
 		}
 
@@ -254,6 +270,15 @@ final class Cache {
 	public static function store_durable( string $tab, string $source, array $key_parts, array $payload, array $window ): array {
 		$envelope = self::envelope( $payload, $source );
 		if ( self::is_disabled() ) {
+			return $envelope;
+		}
+		// A provisional (warming) payload must never enter the durable pool: it
+		// is served as fresh for TTL_DURABLE_FRESH (~25h), which would cement a
+		// "still calculating" envelope long after the hub finished warming. Skip
+		// the write (the prewarm/refresh caller that produced it will recompute
+		// and persist a non-provisional payload on a later pass). Return the
+		// envelope so callers behave uniformly, exactly as the is_disabled() path.
+		if ( 'warming' === ( $payload['data_status'] ?? null ) ) {
 			return $envelope;
 		}
 		$store = [
@@ -635,6 +660,14 @@ final class Cache {
 
 		$envelope = self::envelope( $payload, $source );
 
+		// A provisional (warming) refresh — the state the client's warming poll
+		// drives this method into — must behave like store()'s provisional path:
+		// short transient TTL and no durable/on-demand write-through, so the
+		// warming envelope isn't cemented as fresh (~25h) in a pool that the
+		// poll can't force past the BQ cooldown. The next recompute picks up the
+		// warmed value off the short transient.
+		$is_provisional = 'warming' === ( $payload['data_status'] ?? null );
+
 		if ( null !== $key ) {
 			$store = [
 				'payload'     => $envelope['payload'],
@@ -642,7 +675,7 @@ final class Cache {
 				'source'      => $envelope['source'],
 			];
 			// set_transient() overwrites in place — no need to delete_transient() first.
-			set_transient( $key, $store, self::ttl_for( $source ) );
+			set_transient( $key, $store, $is_provisional ? self::TTL_PROVISIONAL : self::ttl_for( $source ) );
 			if ( self::SOURCE_SNAPSHOT !== $source ) {
 				self::index_add( $tab, $key );
 			}
@@ -652,19 +685,22 @@ final class Cache {
 			// returns fresh data on the next request. Preset entries are synced in
 			// place; on-demand entries are synced or (for a windowed source with a
 			// supplied window) created — a refreshed custom range becomes durable.
-			$existing_durable = self::peek_durable( $tab, $source, $key_parts );
-			if ( null !== $existing_durable ) {
-				self::store_durable( $tab, $source, $key_parts, $envelope['payload'], $existing_durable['window'] );
-			}
-			$existing_ondemand = self::peek_ondemand( $tab, $source, $key_parts );
-			if ( null !== $existing_ondemand ) {
-				self::store_ondemand( $tab, $source, $key_parts, $envelope['payload'], $existing_ondemand['window'] );
-			} elseif (
-				null === $existing_durable &&
-				null !== $window &&
-				( self::SOURCE_EXTERNAL === $source || self::SOURCE_BIGQUERY === $source )
-			) {
-				self::store_ondemand( $tab, $source, $key_parts, $envelope['payload'], $window );
+			// Skipped entirely for a provisional payload (see above).
+			if ( ! $is_provisional ) {
+				$existing_durable = self::peek_durable( $tab, $source, $key_parts );
+				if ( null !== $existing_durable ) {
+					self::store_durable( $tab, $source, $key_parts, $envelope['payload'], $existing_durable['window'] );
+				}
+				$existing_ondemand = self::peek_ondemand( $tab, $source, $key_parts );
+				if ( null !== $existing_ondemand ) {
+					self::store_ondemand( $tab, $source, $key_parts, $envelope['payload'], $existing_ondemand['window'] );
+				} elseif (
+					null === $existing_durable &&
+					null !== $window &&
+					( self::SOURCE_EXTERNAL === $source || self::SOURCE_BIGQUERY === $source )
+				) {
+					self::store_ondemand( $tab, $source, $key_parts, $envelope['payload'], $window );
+				}
 			}
 		}
 

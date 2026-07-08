@@ -62,6 +62,23 @@ class Audience_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
+	 * Bumped when the tab payload's shape changes so a deploy doesn't keep
+	 * serving a stale tab-level envelope. Overrides the global default so only
+	 * the audience envelope is busted — other tabs keep their caches. v2 adds
+	 * the NEWS-2603 top-level `data_status` field (a stale v1 envelope would
+	 * lack it and the warming banner would never render). v3 adds `error_code`
+	 * to the core BigQuery-proxy metric error payloads AND changes how
+	 * `data_status` is derived (core-metric outages now flip it to
+	 * `incomplete`); a stale v2 window would keep serving the pre-fix
+	 * `data_status: 'complete'` and hide the outage banner until natural expiry.
+	 *
+	 * @return string
+	 */
+	protected function cache_schema_version(): string {
+		return '3';
+	}
+
+	/**
 	 * Tab slug used as the cache namespace.
 	 *
 	 * @return string
@@ -236,6 +253,7 @@ class Audience_REST_Controller extends WP_REST_Controller {
 			$previous             = Audience_Metric::get_all( $compare_start->format( 'Y-m-d' ), $compare_end->format( 'Y-m-d' ), false );
 			$response['previous'] = isset( $previous['tab_error'] ) ? null : $previous;
 		}
+
 		return $response;
 	}
 }

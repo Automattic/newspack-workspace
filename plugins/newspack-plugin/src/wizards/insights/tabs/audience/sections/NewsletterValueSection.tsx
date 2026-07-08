@@ -32,6 +32,10 @@ const NewsletterValueSection = ( { value }: NewsletterValueSectionProps ) => {
 	// history" — surface those distinctly so the em-dash copy isn't misleading.
 	const hasError = !! value?.error;
 	const notConfigured = !! value?.not_configured;
+	// Hub snapshot cache miss being backfilled (NEWS-2603): a transient, expected
+	// condition — render the "still calculating" note, not the insufficient-
+	// history copy.
+	const warming = value?.state === 'warming';
 
 	return (
 		<section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-newsletter-value">
@@ -47,8 +51,9 @@ const NewsletterValueSection = ( { value }: NewsletterValueSectionProps ) => {
 					format="currency"
 					error={ value?.error }
 					notConfigured={ notConfigured }
+					warming={ warming }
 					notComputableMessage={
-						amount === null && ! hasError && ! notConfigured
+						amount === null && ! hasError && ! notConfigured && ! warming
 							? __( 'Not enough newsletter or supporter history to model yet.', 'newspack-plugin' )
 							: undefined
 					}

@@ -17,6 +17,7 @@ namespace Newspack\Tests\Insights;
 use DateTimeImmutable;
 use Newspack\Insights\Cache;
 use Newspack\Insights\Audience_REST_Controller;
+use Newspack\Insights\Metric_Status;
 use WP_REST_Request;
 use WP_REST_Server;
 use WP_UnitTestCase;
@@ -25,6 +26,16 @@ use ReflectionMethod;
 // Registered-readers metric reads reader roles via Reader_Activation and
 // product detection via WC stubs — pull in the shared stubs.
 require_once __DIR__ . '/../../mocks/wc-mocks.php';
+
+// Newspack_Manager stub (the real class lives in a separate, non-monorepo
+// plugin), declared in the global namespace to match
+// BigQuery_Proxy_Client's `\Newspack_Manager` reference. Off (not connected)
+// by default — armed only around the two data_status end-to-end tests below
+// via \Newspack_Manager::enable_stub_connection()/disable_stub_connection()
+// — so every other test in this file (and this file's presence doesn't
+// affect other test files, since none of them load this mock) keeps
+// exercising the default "hub not configured" path.
+require_once __DIR__ . '/../../mocks/class-newspack-manager.php';
 
 /**
  * Audience_REST_Controller test class.
@@ -41,6 +52,15 @@ class Test_Audience_REST_Controller extends WP_UnitTestCase {
 	 * @var WP_REST_Server
 	 */
 	private $server;
+
+	/**
+	 * Which canned response `stub_bq_hub_response()` returns for the
+	 * newsletter-conversion catalog queries: 'warming' | 'error'. Set by each
+	 * end-to-end data_status test right before dispatching.
+	 *
+	 * @var string
+	 */
+	private $bq_hub_response_variant = 'warming';
 
 	/**
 	 * Set up: an admin user + a registered Audience route on a fresh server.
@@ -312,5 +332,231 @@ class Test_Audience_REST_Controller extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'data', $body );
 		$this->assertSame( Cache::SOURCE_EXTERNAL, $body['cache']['source'] );
 		$this->assertArrayNotHasKey( 'tab_pending', $body['data'] );
+	}
+
+	/**
+	 * With no BQ hub configured (the default test-env state), no metric in the
+	 * Audience envelope carries a 'warming' or 'error' state, so the NEWS-2603
+	 * top-level `data_status` field is 'complete'.
+	 */
+	public function test_data_status_is_complete_by_default() {
+		$response = $this->dispatch(
+			[
+				'start' => '2026-01-01',
+				'end'   => '2026-01-31',
+			]
+		);
+
+		$this->assertSame( 200, $response->get_status() );
+		$data = $response->get_data()['data'];
+		$this->assertArrayHasKey( 'data_status', $data );
+		$this->assertSame( 'complete', $data['data_status'] );
+	}
+
+	/**
+	 * NEWS-2603: `data_status` is stamped centrally by the shared
+	 * `Cached_Controller_Trait::status_stamped_window_payload()` — the single
+	 * path every cached/refreshed/pre-warmed current window flows through — by
+	 * calling `Metric_Status::derive()` on the assembled window, never by
+	 * hardcoding 'complete'. Proven directly: the stamped `data_status` must
+	 * equal `Metric_Status::derive()` run independently over the same payload
+	 * with `data_status` stripped out, so the two can never drift apart.
+	 */
+	public function test_data_status_matches_independent_deriver_call() {
+		$controller = new Audience_REST_Controller();
+		$m          = new ReflectionMethod( $controller, 'status_stamped_window_payload' );
+		$m->setAccessible( true );
+
+		$start = new DateTimeImmutable( '2026-01-01' );
+		$end   = new DateTimeImmutable( '2026-01-31' );
+
+		$response = $m->invoke( $controller, $start, $end );
+
+		$this->assertArrayHasKey( 'data_status', $response );
+
+		$without_status = $response;
+		unset( $without_status['data_status'] );
+
+		$this->assertSame(
+			Metric_Status::derive( $without_status ),
+			$response['data_status']
+		);
+	}
+
+	/**
+	 * NEWS-2603 end-to-end: when the hub's newsletter-conversion snapshot
+	 * query returns the warming marker (a cache-miss-being-backfilled signal
+	 * — see Conversion_Metric::warming_scalar()), that state now propagates
+	 * through Conversion_Metric::get_newsletter_subscriber_value_3yr() (fixed
+	 * alongside this test — it previously dropped the state entirely) into
+	 * the Audience envelope's top-level `data_status`. Requires WooCommerce
+	 * "active" (via the newspack_insights_woocommerce_active filter, mirroring
+	 * how other Insights tests toggle it) so get_newsletter_subscriber_value_3yr()
+	 * reaches the hub call at all, and the stubbed Newspack_Manager +
+	 * pre_http_request so BigQuery_Proxy_Client::is_configured() is true and
+	 * the hub round-trip is reachable in-process.
+	 */
+	public function test_data_status_is_warming_when_newsletter_metric_is_warming() {
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+		add_filter( 'pre_http_request', [ $this, 'stub_bq_hub_response' ], 10, 3 );
+		\Newspack_Manager::enable_stub_connection();
+		$this->bq_hub_response_variant = 'warming';
+
+		try {
+			$response = $this->dispatch(
+				[
+					'start' => '2026-01-01',
+					'end'   => '2026-01-31',
+				]
+			);
+
+			$this->assertSame( 200, $response->get_status() );
+			$data = $response->get_data()['data'];
+			$this->assertSame( 'warming', $data['data_status'] );
+		} finally {
+			remove_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+			remove_filter( 'pre_http_request', [ $this, 'stub_bq_hub_response' ], 10 );
+			\Newspack_Manager::disable_stub_connection();
+		}
+	}
+
+	/**
+	 * NEWS-2603 end-to-end: an errored newsletter-conversion hub query makes
+	 * `data_status` 'incomplete' — error takes precedence over any concurrent
+	 * warming signal elsewhere in the envelope.
+	 */
+	public function test_data_status_is_incomplete_when_newsletter_metric_errors() {
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+		add_filter( 'pre_http_request', [ $this, 'stub_bq_hub_response' ], 10, 3 );
+		\Newspack_Manager::enable_stub_connection();
+		$this->bq_hub_response_variant = 'error';
+
+		try {
+			$response = $this->dispatch(
+				[
+					'start' => '2026-01-01',
+					'end'   => '2026-01-31',
+				]
+			);
+
+			$this->assertSame( 200, $response->get_status() );
+			$data = $response->get_data()['data'];
+			$this->assertSame( 'incomplete', $data['data_status'] );
+		} finally {
+			remove_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+			remove_filter( 'pre_http_request', [ $this, 'stub_bq_hub_response' ], 10 );
+			\Newspack_Manager::disable_stub_connection();
+		}
+	}
+
+	/**
+	 * NEWS-2603 follow-up end-to-end: a failed CORE Audience BigQuery metric
+	 * (not the newsletter snapshot) makes `data_status` 'incomplete'. Core
+	 * metrics signal a hub failure as `computable:false` + an `error` string
+	 * with no `state` key; Metric_Status::derive() must recognise that legacy
+	 * convention so the warning banner reflects a genuine core-BQ outage.
+	 * WooCommerce is left inactive so the newsletter metric short-circuits to
+	 * `not_configured` (a populated, non-error state) — isolating the core
+	 * metric error as the sole driver.
+	 */
+	public function test_data_status_is_incomplete_when_core_bq_metric_errors() {
+		add_filter( 'pre_http_request', [ $this, 'stub_bq_hub_response' ], 10, 3 );
+		\Newspack_Manager::enable_stub_connection();
+		$this->bq_hub_response_variant = 'core_error';
+
+		try {
+			$response = $this->dispatch(
+				[
+					'start' => '2026-01-01',
+					'end'   => '2026-01-31',
+				]
+			);
+
+			$this->assertSame( 200, $response->get_status() );
+			$data = $response->get_data()['data'];
+			$this->assertSame( 'incomplete', $data['data_status'] );
+		} finally {
+			remove_filter( 'pre_http_request', [ $this, 'stub_bq_hub_response' ], 10 );
+			\Newspack_Manager::disable_stub_connection();
+		}
+	}
+
+	/**
+	 * `pre_http_request` responder: the newsletter-conversion catalog queries
+	 * return either the hub's warming marker or an HTTP error, per
+	 * $this->bq_hub_response_variant; every other catalog query (the 19
+	 * Audience metrics) returns an empty result set, which the corresponding
+	 * metric shapers already degrade to a non-computable, non-`state`-bearing
+	 * value for (see Audience_Metric::proxy_scalar()/proxy_rows()) — so only
+	 * the newsletter metric contributes a state to the envelope.
+	 *
+	 * @param mixed  $preempt Pre-emptive response (unused).
+	 * @param array  $args    Request args, including the JSON-encoded body.
+	 * @param string $url     Request URL (unused).
+	 * @return array
+	 */
+	public function stub_bq_hub_response( $preempt, $args, $url ) {
+		$decoded    = json_decode( $args['body'] ?? '{}', true );
+		$query_name = is_array( $decoded ) ? ( $decoded['query_name'] ?? '' ) : '';
+
+		$is_newsletter_conversion = in_array(
+			$query_name,
+			[
+				'conversion_journey_newsletter_to_subscription',
+				'conversion_journey_newsletter_to_donation',
+			],
+			true
+		);
+
+		// Core-metric-error variant (NEWS-2603 follow-up): every core Audience
+		// BigQuery query fails with an HTTP error (which BigQuery_Proxy_Client
+		// turns into a WP_Error, shaped by proxy_scalar/proxy_rows into a
+		// `computable:false` + `error` payload), isolating a core-metric error
+		// as the sole data_status driver. The test leaves WooCommerce inactive so
+		// the newsletter metric short-circuits to `not_configured` before calling
+		// the hub — so the newsletter branch below normally isn't reached; it
+		// returns an empty (non-error) set defensively, only in case that query
+		// is ever invoked, so it never contributes an error of its own.
+		if ( 'core_error' === $this->bq_hub_response_variant ) {
+			if ( $is_newsletter_conversion ) {
+				return [
+					'response' => [ 'code' => 200 ],
+					'body'     => wp_json_encode( [] ),
+				];
+			}
+			return [
+				'response' => [ 'code' => 500 ],
+				'body'     => wp_json_encode(
+					[
+						'code'    => 'bigquery_proxy_http_error',
+						'message' => 'Simulated core metric failure.',
+					]
+				),
+			];
+		}
+
+		if ( ! $is_newsletter_conversion ) {
+			return [
+				'response' => [ 'code' => 200 ],
+				'body'     => wp_json_encode( [] ),
+			];
+		}
+
+		if ( 'error' === $this->bq_hub_response_variant ) {
+			return [
+				'response' => [ 'code' => 500 ],
+				'body'     => wp_json_encode(
+					[
+						'code'    => 'bigquery_proxy_http_error',
+						'message' => 'Simulated hub failure.',
+					]
+				),
+			];
+		}
+
+		return [
+			'response' => [ 'code' => 200 ],
+			'body'     => wp_json_encode( [ [ '__status' => 'warming' ] ] ),
+		];
 	}
 }

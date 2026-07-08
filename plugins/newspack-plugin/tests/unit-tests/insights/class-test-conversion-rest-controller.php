@@ -520,12 +520,16 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Global-version consolidation: a previously-unversioned tab (Audience, Tab 1)
-	 * now inherits Cache::ENVELOPE_SCHEMA_VERSION from the trait default, confirming
-	 * that the consolidation applies to ALL tabs — not just the three that formerly
-	 * opted in via per-tab CACHE_PREFIX overrides.
+	 * Audience (Tab 1) now carries its own `cache_schema_version()` override
+	 * ('3' — bumped to '2' for the NEWS-2603 `data_status` envelope field, then
+	 * to '3' when core-BQ-outage discrimination changed the derived value and
+	 * added `error_code`; see Audience_REST_Controller::cache_schema_version())
+	 * instead of inheriting Cache::ENVELOPE_SCHEMA_VERSION from the trait
+	 * default. This mirrors the Subscribers/Donors tabs, which already opt out
+	 * of the global version via their own overrides, so a per-tab bump doesn't
+	 * bust every other tab's cache.
 	 */
-	public function test_global_version_applies_to_previously_unversioned_tab() {
+	public function test_audience_has_its_own_schema_version_override() {
 		$controller = new Audience_REST_Controller();
 		$request    = new WP_REST_Request( 'GET', '/newspack-insights/v1/audience' );
 		$request->set_param( 'start', '2026-01-01' );
@@ -535,9 +539,10 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 		$method->setAccessible( true );
 		$parts = $method->invoke( $controller, $request );
 
-		// Five parts: global version + start + end + null + null.
+		// Five parts: tab version + start + end + null + null.
 		$this->assertCount( 5, $parts );
-		$this->assertSame( Cache::ENVELOPE_SCHEMA_VERSION, $parts[0] );
+		$this->assertSame( '3', $parts[0] );
+		$this->assertNotSame( Cache::ENVELOPE_SCHEMA_VERSION, $parts[0] );
 		$this->assertSame( '2026-01-01', $parts[1] );
 		$this->assertSame( '2026-01-31', $parts[2] );
 	}

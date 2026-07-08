@@ -72,9 +72,14 @@ export interface BillingNature {
 export interface DonorsRateValue {
 	value: number;
 	computable: boolean;
-	denominator: number;
-	/** `'error'` when the hub proxy failed — distinct from `'populated'` (a real result, computable or not). */
-	state?: 'error' | 'populated';
+	/** Null in the `'warming'` state (the backend's warming_scalar emits a null denominator). */
+	denominator: number | null;
+	/**
+	 * `'error'` when the hub proxy failed; `'warming'` when the hub snapshot is a
+	 * cache miss being backfilled (NEWS-2603, transient) — both distinct from
+	 * `'populated'` (a real result, computable or not).
+	 */
+	state?: 'error' | 'warming' | 'populated';
 }
 
 export interface DonorsTierVariationRow extends BillingNature {
@@ -161,6 +166,8 @@ export interface DonorsResponse {
 	snapshot: DonorsSnapshot;
 	current: DonorsWindow;
 	previous: DonorsWindow | null;
+	/** Snapshot freshness (NEWS-2603): drives the top-of-tab TabStatusBanner. */
+	data_status?: 'complete' | 'warming' | 'incomplete';
 }
 
 export interface DonorsQuery {

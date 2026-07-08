@@ -46,6 +46,17 @@ class BigQuery_Proxy_Client {
 	const REQUEST_TIMEOUT = 30;
 
 	/**
+	 * WP_Error code returned when the hub proxy isn't set up (Newspack Manager
+	 * not connected). This is a SETUP state, not a failed data fetch —
+	 * {@see \Newspack\Insights\Metric_Status::derive()} excludes it from the
+	 * envelope `data_status` so a never-connected hub doesn't trip the "last
+	 * data fetch didn't finish" warning banner.
+	 *
+	 * @var string
+	 */
+	const ERROR_NOT_CONFIGURED = 'bigquery_proxy_not_configured';
+
+	/**
 	 * Logger header so all BQ proxy failures land in one Logstash bucket.
 	 *
 	 * @var string
@@ -144,7 +155,7 @@ class BigQuery_Proxy_Client {
 	public function query( string $query_name, DateTimeInterface $start, DateTimeInterface $end ) {
 		if ( ! $this->is_configured() ) {
 			$error = new WP_Error(
-				'bigquery_proxy_not_configured',
+				self::ERROR_NOT_CONFIGURED,
 				__( 'Newspack Manager is not configured for BigQuery proxy calls.', 'newspack-plugin' )
 			);
 			$this->log_failure( $error, $query_name, $start, $end );

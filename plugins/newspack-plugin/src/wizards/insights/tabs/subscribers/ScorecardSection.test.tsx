@@ -57,4 +57,15 @@ describe( 'Subscribers ScorecardSection — at-a-glance snapshot cards', () => {
 		expect( screen.getByText( 'Data temporarily unavailable.' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Not enough newsletter signups with a full year of history yet.' ) ).not.toBeInTheDocument();
 	} );
+
+	it( 'shows the warming note (not the insufficient-history copy) when the hub snapshot is still backfilling (NEWS-2603)', () => {
+		render(
+			<ScorecardSection
+				snapshot={ makeSnapshot( { newsletter_conversion: { value: 0, computable: false, denominator: 0, state: 'warming' } } ) }
+			/>
+		);
+		expect( screen.getByText( 'Newsletter → subscription' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Still calculating — check back shortly.' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Not enough newsletter signups with a full year of history yet.' ) ).not.toBeInTheDocument();
+	} );
 } );

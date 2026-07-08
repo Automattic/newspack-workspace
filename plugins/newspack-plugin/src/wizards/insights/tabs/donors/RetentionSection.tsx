@@ -96,7 +96,7 @@ const RetentionSection = ( { current, previous }: RetentionSectionProps ) => {
 						value={ recovery.value }
 						format="percent"
 						previousValue={ previous?.lapsed_donor_recovery_rate?.computable ? previous.lapsed_donor_recovery_rate.value : null }
-						secondary={ cohortSubtitle( recovery.denominator ) }
+						secondary={ cohortSubtitle( recovery.denominator ?? 0 ) }
 						description={ RECOVERY_DESCRIPTION() }
 					/>
 				) : (
@@ -113,7 +113,7 @@ const RetentionSection = ( { current, previous }: RetentionSectionProps ) => {
 						value={ retention.value }
 						format="percent"
 						previousValue={ previous?.recurring_donor_retention?.computable ? previous.recurring_donor_retention.value : null }
-						secondary={ cohortSubtitle( retention.denominator ) }
+						secondary={ cohortSubtitle( retention.denominator ?? 0 ) }
 						description={ RETENTION_DESCRIPTION() }
 					/>
 				) : (

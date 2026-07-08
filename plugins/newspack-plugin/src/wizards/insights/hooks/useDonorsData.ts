@@ -17,6 +17,7 @@ import type { DateRange } from '../state/useDateRange';
 import { fetchDonorsData, refreshDonorsData, type DonorsResponse } from '../api/donors';
 import { insightsCache, makeSlotKey } from '../state/insightsCache';
 import { useRegisterRefresh } from '../state/refreshRegistry';
+import usePollWhileWarming from './usePollWhileWarming';
 
 export type FetchStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -55,9 +56,11 @@ const useDonorsData = ( range: DateRange, previousRange: DateRange | null ): Use
 
 	useRegisterRefresh( 'donors', refetch );
 
+	const polledData = usePollWhileWarming( key, slot.data, refetch );
+
 	return {
 		status: slot.status,
-		data: slot.data,
+		data: polledData,
 		error: slot.error,
 		refetch,
 		computedAt: slot.computedAt,

@@ -31,4 +31,11 @@ describe( 'Audience NewsletterValueSection', () => {
 		expect( screen.getByText( 'Value per newsletter subscriber' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Not enough newsletter or supporter history to model yet.' ) ).not.toBeInTheDocument();
 	} );
+
+	it( 'shows the warming note when the hub snapshot is still backfilling (NEWS-2603)', () => {
+		render( <NewsletterValueSection value={ { value: 0, computable: false, state: 'warming' } } /> );
+		expect( screen.getByText( 'Value per newsletter subscriber' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Still calculating — check back shortly.' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Not enough newsletter or supporter history to model yet.' ) ).not.toBeInTheDocument();
+	} );
 } );
