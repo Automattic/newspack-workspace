@@ -26,3 +26,12 @@
 .newspack-insights__app-property-sep {
 	color: wp-colors.$gray-400;
 }
+
+// Compact per-publication filter in the Content section header.
+.newspack-insights__app-collection-select {
+	margin-bottom: 0;
+
+	.components-input-control__container {
+		min-width: 160px;
+	}
+}

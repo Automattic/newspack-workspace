@@ -90,6 +90,9 @@ export interface AppMetrics {
 	top_authors?: MetricPayload;
 	subscriber_mix?: MetricPayload;
 	content_cost?: MetricPayload;
+	/** collection × section/author matrices for the Content per-publication selector (multi-property apps). */
+	sections_by_collection?: MetricPayload;
+	authors_by_collection?: MetricPayload;
 }
 
 /** The windowed report the cache envelope wraps: current + optional prior window. */
