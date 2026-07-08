@@ -357,7 +357,7 @@ class Newsletter_Ads_Metric {
 	 */
 	private static function read_envelope( string $start_date, string $end_date ): array {
 		$cache_disabled = defined( 'NEWSPACK_INSIGHTS_CACHE_DISABLED' ) && NEWSPACK_INSIGHTS_CACHE_DISABLED;
-		$cache_key      = self::CACHE_KEY_PREFIX . $start_date . ':' . $end_date;
+		$cache_key      = self::envelope_cache_key( $start_date, $end_date );
 		if ( ! $cache_disabled ) {
 			$cached = get_transient( $cache_key );
 			if ( is_array( $cached ) ) {
@@ -369,6 +369,22 @@ class Newsletter_Ads_Metric {
 			set_transient( $cache_key, $envelope, self::CACHE_TTL );
 		}
 		return $envelope;
+	}
+
+	/**
+	 * Transient key for a window's envelope. Folds in the global
+	 * {@see Cache::ENVELOPE_SCHEMA_VERSION} alongside the prefix's own local
+	 * payload-version token. This tab uses {@see Cached_Controller_Trait} but is
+	 * SOURCE_LOCAL, so {@see Cache::store()} short-circuits to a pass-through and
+	 * never consults the trait's version-folded key — this transient is the real
+	 * cache, so it must carry the version itself for a global bump to bust it.
+	 *
+	 * @param string $start_date YYYY-MM-DD.
+	 * @param string $end_date   YYYY-MM-DD.
+	 * @return string
+	 */
+	private static function envelope_cache_key( string $start_date, string $end_date ): string {
+		return self::CACHE_KEY_PREFIX . Cache::ENVELOPE_SCHEMA_VERSION . ':' . $start_date . ':' . $end_date;
 	}
 
 	/**
