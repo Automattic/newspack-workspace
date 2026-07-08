@@ -7,11 +7,12 @@
  * Site Kit's web property). App data never lands in BigQuery, so this tab is
  * GA4-only.
  *
- * PR0 scope (this file): the connection + property-selection layer — detect the
- * Newspack Google connection, enumerate the GA4 properties the connected identity
- * can see (across account boundaries, via `accountSummaries.list`), and persist
- * the publisher's chosen app property. The metric orchestration (Reach,
- * Engagement, Retention, …) lands in later PRs.
+ * Two layers: the connection + property-selection layer (detect the Newspack
+ * Google connection, enumerate GA4 properties across account boundaries via
+ * `accountSummaries.list`, persist the chosen app property), and the windowed
+ * metric orchestration ({@see self::get_metrics()}) that runs the GA4 reports
+ * for the selected property. PR1 ships the Reach section; Engagement,
+ * Notifications, Editions, and retention follow.
  *
  * Auth reuses Newspack's own Google OAuth via {@see \Newspack\Insights\GA4\Client}
  * — proven live for both same-account and separate-account (Firebase) app
@@ -38,6 +39,17 @@ final class App_Metric {
 	 * so a cleared selection re-enters the default path.
 	 */
 	const OPTION_PROPERTY_ID = 'newspack_insights_app_property_id';
+
+	/**
+	 * Windowed-metrics transient TTL. GA4 Data API has per-property quotas, so the
+	 * per-window result is cached; the key includes the property id + window.
+	 */
+	const METRICS_CACHE_TTL = 15 * MINUTE_IN_SECONDS;
+
+	/**
+	 * Metrics transient key prefix.
+	 */
+	const METRICS_CACHE_PREFIX = 'newspack_insights_app_metrics_v1:';
 
 	/**
 	 * Whether this site is a Pugpig app publisher, read at runtime from the
@@ -181,6 +193,237 @@ final class App_Metric {
 			'properties'          => $properties,
 			'properties_error'    => $properties_error,
 			'settings_url'        => admin_url( 'admin.php?page=newspack-settings' ),
+		];
+	}
+
+	/**
+	 * Windowed metric payloads for the selected app property. Returns a
+	 * `tab_error` payload when there's no property or connection, so the tab can
+	 * surface a single banner instead of N failed reports. Cached per
+	 * property+window (GA4 quota). PR1 ships the Reach section; more sections
+	 * follow.
+	 *
+	 * @param string $start_date YYYY-MM-DD.
+	 * @param string $end_date   YYYY-MM-DD.
+	 * @return array Keyed metric payloads, or `[ 'tab_error' => ... ]`.
+	 */
+	public static function get_metrics( string $start_date, string $end_date ): array {
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			return self::get_fixture_metrics();
+		}
+
+		$property = self::get_selected_property_id();
+		if ( '' === $property ) {
+			return [ 'tab_error' => 'no_property' ];
+		}
+		if ( ! self::is_connected() ) {
+			return [ 'tab_error' => 'not_connected' ];
+		}
+
+		$cache_key = self::METRICS_CACHE_PREFIX . md5( $property . '|' . $start_date . '|' . $end_date );
+		$cached    = get_transient( $cache_key );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+
+		$metrics = self::compute_reach_metrics( $property, $start_date, $end_date );
+		set_transient( $cache_key, $metrics, self::METRICS_CACHE_TTL );
+		return $metrics;
+	}
+
+	/**
+	 * Compose + run the Reach-section GA4 reports for a property/window.
+	 *
+	 * @param string $property   GA4 property ID.
+	 * @param string $start_date YYYY-MM-DD.
+	 * @param string $end_date   YYYY-MM-DD.
+	 * @return array
+	 */
+	private static function compute_reach_metrics( string $property, string $start_date, string $end_date ): array {
+		$range = [
+			'dateRanges' => [
+				[
+					'startDate' => $start_date,
+					'endDate'   => $end_date,
+				],
+			],
+		];
+
+		return [
+			'active_users' => self::scalar_report( $property, $range + [ 'metrics' => [ [ 'name' => 'activeUsers' ] ] ], 'count' ),
+			'new_users'    => self::scalar_report( $property, $range + [ 'metrics' => [ [ 'name' => 'newUsers' ] ] ], 'count' ),
+			'sessions'     => self::scalar_report( $property, $range + [ 'metrics' => [ [ 'name' => 'sessions' ] ] ], 'count' ),
+			'platform'     => self::breakdown_report(
+				$property,
+				$range + [
+					'dimensions' => [ [ 'name' => 'platform' ] ],
+					'metrics'    => [ [ 'name' => 'activeUsers' ] ],
+					'orderBys'   => [
+						[
+							'metric' => [ 'metricName' => 'activeUsers' ],
+							'desc'   => true,
+						],
+					],
+				],
+				'platform',
+				'active_users'
+			),
+			'app_version'  => self::breakdown_report(
+				$property,
+				$range + [
+					'dimensions' => [ [ 'name' => 'appVersion' ] ],
+					'metrics'    => [ [ 'name' => 'activeUsers' ] ],
+					'orderBys'   => [
+						[
+							'metric' => [ 'metricName' => 'activeUsers' ],
+							'desc'   => true,
+						],
+					],
+					'limit'      => 10,
+				],
+				'app_version',
+				'active_users'
+			),
+		];
+	}
+
+	/**
+	 * Run a single-scalar GA4 report and shape it as a scorecard payload. A
+	 * report failure (or a non-numeric/absent value) yields a non-computable
+	 * payload so the card degrades gracefully instead of showing a wrong number.
+	 *
+	 * @param string $property GA4 property ID.
+	 * @param array  $body     runReport body.
+	 * @param string $type     Payload type ('count'|'decimal'|'rate'|'duration').
+	 * @return array
+	 */
+	private static function scalar_report( string $property, array $body, string $type ): array {
+		return self::parse_scalar_result( Client::run_report( $property, $body ), $type );
+	}
+
+	/**
+	 * Shape a GA4 runReport result (or WP_Error) as a scorecard payload. Pure, so
+	 * the graceful-failure branches are unit-testable without the network.
+	 *
+	 * @param array|\WP_Error $result GA4 runReport result.
+	 * @param string          $type   Payload type.
+	 * @return array
+	 */
+	public static function parse_scalar_result( $result, string $type ): array {
+		$raw = is_wp_error( $result ) ? null : ( $result['rows'][0]['metricValues'][0]['value'] ?? null );
+		if ( null === $raw || ! is_numeric( $raw ) ) {
+			return [
+				'value'      => 0,
+				'computable' => false,
+				'type'       => $type,
+			];
+		}
+		return [
+			'value'      => 'count' === $type ? (int) $raw : (float) $raw,
+			'computable' => true,
+			'type'       => $type,
+		];
+	}
+
+	/**
+	 * Run a one-dimension GA4 breakdown report and shape it as a rows payload.
+	 *
+	 * @param string $property   GA4 property ID.
+	 * @param array  $body       runReport body.
+	 * @param string $dim_key    Output key for the dimension value.
+	 * @param string $metric_key Output key for the (integer) metric value.
+	 * @return array
+	 */
+	private static function breakdown_report( string $property, array $body, string $dim_key, string $metric_key ): array {
+		return self::parse_breakdown_result( Client::run_report( $property, $body ), $dim_key, $metric_key );
+	}
+
+	/**
+	 * Shape a GA4 runReport result (or WP_Error) as a rows payload. Pure, so it's
+	 * unit-testable without the network.
+	 *
+	 * @param array|\WP_Error $result     GA4 runReport result.
+	 * @param string          $dim_key    Output key for the dimension value.
+	 * @param string          $metric_key Output key for the (integer) metric value.
+	 * @return array
+	 */
+	public static function parse_breakdown_result( $result, string $dim_key, string $metric_key ): array {
+		if ( is_wp_error( $result ) ) {
+			return [
+				'rows'       => [],
+				'computable' => false,
+				'type'       => 'breakdown',
+			];
+		}
+		$rows = [];
+		foreach ( $result['rows'] ?? [] as $row ) {
+			$rows[] = [
+				$dim_key    => $row['dimensionValues'][0]['value'] ?? '',
+				$metric_key => (int) ( $row['metricValues'][0]['value'] ?? 0 ),
+			];
+		}
+		return [
+			'rows'       => $rows,
+			'computable' => true,
+			'type'       => 'breakdown',
+		];
+	}
+
+	/**
+	 * Canned Reach metrics for fixture/dev mode, so the sections render without a
+	 * live GA4 connection. Numbers are illustrative.
+	 *
+	 * @return array
+	 */
+	private static function get_fixture_metrics(): array {
+		return [
+			'active_users' => [
+				'value'      => 892,
+				'computable' => true,
+				'type'       => 'count',
+			],
+			'new_users'    => [
+				'value'      => 150,
+				'computable' => true,
+				'type'       => 'count',
+			],
+			'sessions'     => [
+				'value'      => 12790,
+				'computable' => true,
+				'type'       => 'count',
+			],
+			'platform'     => [
+				'rows'       => [
+					[
+						'platform'     => 'iOS',
+						'active_users' => 590,
+					],
+					[
+						'platform'     => 'Android',
+						'active_users' => 302,
+					],
+				],
+				'computable' => true,
+				'type'       => 'breakdown',
+			],
+			'app_version'  => [
+				'rows'       => [
+					[
+						'app_version'  => '1.2',
+						'active_users' => 840,
+					],
+					[
+						'app_version'  => '1.1',
+						'active_users' => 30,
+					],
+					[
+						'app_version'  => '1.0',
+						'active_users' => 22,
+					],
+				],
+				'computable' => true,
+				'type'       => 'breakdown',
+			],
 		];
 	}
 

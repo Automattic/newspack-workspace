@@ -12,15 +12,27 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
  * Internal dependencies
  */
 import AppTab from './AppTab';
-import { fetchAppConfig, saveAppProperty, type AppConfig } from '../api/app';
+import { fetchAppConfig, saveAppProperty, fetchAppMetrics, type AppConfig } from '../api/app';
 import type { DateRange } from '../state/useDateRange';
 
 jest.mock( '../api/app' );
 
 const mockFetch = fetchAppConfig as jest.Mock;
 const mockSave = saveAppProperty as jest.Mock;
+const mockMetrics = fetchAppMetrics as jest.Mock;
 
 const range = { start: '2026-05-01', end: '2026-05-31', preset: 'last-30' } as unknown as DateRange;
+
+/** A minimal metrics response so the ready state renders the Reach section. */
+const metricsResponse = () => ( {
+	current: {
+		active_users: { value: 892, computable: true, type: 'count' },
+		new_users: { value: 150, computable: true, type: 'count' },
+		sessions: { value: 12790, computable: true, type: 'count' },
+		platform: { rows: [ { platform: 'iOS', active_users: 590 } ], computable: true, type: 'breakdown' },
+		app_version: { rows: [ { app_version: '1.2', active_users: 840 } ], computable: true, type: 'breakdown' },
+	},
+} );
 
 const baseConfig = ( overrides: Partial< AppConfig > = {} ): AppConfig => ( {
 	is_app_publisher: true,
@@ -39,6 +51,7 @@ describe( 'AppTab', () => {
 	afterEach( () => {
 		mockFetch.mockReset();
 		mockSave.mockReset();
+		mockMetrics.mockReset();
 	} );
 
 	it( 'shows the Connections CTA (not Site Kit) when not connected', async () => {
@@ -79,21 +92,25 @@ describe( 'AppTab', () => {
 			} )
 		);
 		mockSave.mockResolvedValue( baseConfig( { selected_property: '533212292', selected_is_visible: true } ) );
+		mockMetrics.mockResolvedValue( metricsResponse() );
 		renderTab();
 
 		fireEvent.change( await screen.findByRole( 'combobox' ), { target: { value: '533212292' } } );
 		fireEvent.click( screen.getByRole( 'button', { name: /Save property/i } ) );
 
 		await waitFor( () => expect( mockSave ).toHaveBeenCalledWith( '533212292' ) );
-		// After saving, the ready state renders.
-		expect( await screen.findByText( /will appear here/i ) ).toBeInTheDocument();
+		// After saving, the ready state fetches metrics and renders the Reach section.
+		expect( await screen.findByText( 'Reach' ) ).toBeInTheDocument();
 	} );
 
-	it( 'renders the ready state when a visible property is selected', async () => {
+	it( 'renders the Reach section when a visible property is selected', async () => {
 		mockFetch.mockResolvedValue( baseConfig( { selected_property: '533212292', selected_is_visible: true } ) );
+		mockMetrics.mockResolvedValue( metricsResponse() );
 		renderTab();
 
-		expect( await screen.findByText( /App analytics for property 533212292/i ) ).toBeInTheDocument();
+		expect( await screen.findByText( 'Reach' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Active users' ) ).toBeInTheDocument();
+		await waitFor( () => expect( mockMetrics ).toHaveBeenCalledWith( '2026-05-01', '2026-05-31' ) );
 	} );
 
 	it( 'falls back to the picker when the saved property is no longer visible', async () => {

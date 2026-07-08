@@ -13,6 +13,11 @@
  */
 import apiFetch from '@wordpress/api-fetch';
 
+/**
+ * Internal dependencies
+ */
+import type { MetricPayload } from '../tabs/components/metrics';
+
 /** One selectable GA4 property (spans accounts — app data often lives in a separate account). */
 export interface AppProperty {
 	account_id: string;
@@ -51,3 +56,25 @@ export const fetchAppConfig = async (): Promise< AppConfig > => apiFetch< AppCon
  */
 export const saveAppProperty = async ( propertyId: string ): Promise< AppConfig > =>
 	apiFetch< AppConfig >( { path: CONFIG_ENDPOINT, method: 'POST', data: { property_id: propertyId } } );
+
+/** Windowed app metric payloads, keyed by metric name (`tab_error` when unavailable). */
+export interface AppMetrics {
+	tab_error?: string;
+	active_users?: MetricPayload;
+	new_users?: MetricPayload;
+	sessions?: MetricPayload;
+	platform?: MetricPayload;
+	app_version?: MetricPayload;
+}
+
+export interface AppMetricsResponse {
+	current: AppMetrics;
+}
+
+const METRICS_ENDPOINT = '/newspack-insights/v1/app';
+
+export const fetchAppMetrics = async ( start: string, end: string ): Promise< AppMetricsResponse > =>
+	apiFetch< AppMetricsResponse >( {
+		path: `${ METRICS_ENDPOINT }?start=${ encodeURIComponent( start ) }&end=${ encodeURIComponent( end ) }`,
+		method: 'GET',
+	} );

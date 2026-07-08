@@ -138,6 +138,77 @@ class Test_App_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A GA4 scalar result parses to a computable count; a WP_Error or an absent /
+	 * non-numeric value degrades to non-computable (so the card never shows a
+	 * wrong number).
+	 */
+	public function test_parse_scalar_result() {
+		$ok = App_Metric::parse_scalar_result(
+			[ 'rows' => [ [ 'metricValues' => [ [ 'value' => '892' ] ] ] ] ],
+			'count'
+		);
+		$this->assertSame(
+			[
+				'value'      => 892,
+				'computable' => true,
+				'type'       => 'count',
+			],
+			$ok
+		);
+
+		$err = App_Metric::parse_scalar_result( new \WP_Error( 'x', 'boom' ), 'count' );
+		$this->assertFalse( $err['computable'] );
+
+		$empty = App_Metric::parse_scalar_result( [ 'rows' => [] ], 'count' );
+		$this->assertFalse( $empty['computable'] );
+	}
+
+	/**
+	 * A GA4 breakdown result parses to keyed rows with integer metric values; a
+	 * WP_Error degrades to a non-computable empty payload.
+	 */
+	public function test_parse_breakdown_result() {
+		$payload = App_Metric::parse_breakdown_result(
+			[
+				'rows' => [
+					[
+						'dimensionValues' => [ [ 'value' => 'iOS' ] ],
+						'metricValues'    => [ [ 'value' => '590' ] ],
+					],
+					[
+						'dimensionValues' => [ [ 'value' => 'Android' ] ],
+						'metricValues'    => [ [ 'value' => '302' ] ],
+					],
+				],
+			],
+			'platform',
+			'active_users'
+		);
+		$this->assertTrue( $payload['computable'] );
+		$this->assertSame( 'breakdown', $payload['type'] );
+		$this->assertSame(
+			[
+				'platform'     => 'iOS',
+				'active_users' => 590,
+			],
+			$payload['rows'][0]
+		);
+
+		$err = App_Metric::parse_breakdown_result( new \WP_Error( 'x', 'boom' ), 'platform', 'active_users' );
+		$this->assertFalse( $err['computable'] );
+		$this->assertSame( [], $err['rows'] );
+	}
+
+	/**
+	 * Metrics gate: no saved property → a `no_property` tab_error (single banner
+	 * instead of N failed reports). No network is hit.
+	 */
+	public function test_get_metrics_without_property_returns_tab_error() {
+		$metrics = App_Metric::get_metrics( '2026-06-09', '2026-07-08' );
+		$this->assertSame( 'no_property', $metrics['tab_error'] );
+	}
+
+	/**
 	 * With no Google connection (test env), the config reports not-connected with
 	 * an empty property list and a Connections URL, and never throws.
 	 */

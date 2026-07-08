@@ -2,20 +2,21 @@
  * AppTab (Tab 10, NPPD-1882).
  *
  * Mobile-app analytics for Pugpig app publishers, live from the GA4 Data API
- * against a publisher-selected app property. PR0 implements the connect → select
- * → render state machine; the metric sections land in later PRs.
+ * against a publisher-selected app property. Drives the connect → select → render
+ * state machine and, once ready, fetches the windowed metrics and renders the
+ * sections (Reach so far; Engagement, Notifications, Editions follow).
  *
  * States:
  *   1. loading           — fetching config
  *   2. not connected      — CTA to Newspack → Connections → Google (NOT Site Kit)
  *   3. connected, no prop — property picker (spans all accounts the identity sees)
- *   4. ready              — placeholder for the metric sections (Phase 1)
+ *   4. ready              — fetch windowed metrics → render sections
  */
 
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n';
 import { useEffect, useState } from '@wordpress/element';
 
 /**
@@ -24,8 +25,10 @@ import { useEffect, useState } from '@wordpress/element';
 import { Notice, Button, Grid, SelectControl } from '../../../../packages/components/src';
 import WizardsActionCard from '../../wizards-action-card';
 import TabSpinner from './components/TabSpinner';
+import ReachSection from './app/ReachSection';
 import type { TabSectionProps } from '../components/InsightsWizard';
-import { fetchAppConfig, saveAppProperty, type AppConfig, type AppProperty } from '../api/app';
+import './app/app.scss';
+import { fetchAppConfig, saveAppProperty, fetchAppMetrics, type AppConfig, type AppProperty, type AppMetrics } from '../api/app';
 
 /** Label a property option so a separate (e.g. Firebase) account is distinguishable. */
 const propertyLabel = ( p: AppProperty ): string =>
@@ -101,20 +104,36 @@ const PropertyPicker = ( { config, onSaved }: { config: AppConfig; onSaved: ( ne
 	);
 };
 
-/** Ready state — metric sections land here in Phase 1. */
-const ReadyState = ( { config, range }: { config: AppConfig; range: TabSectionProps[ 'range' ] } ) => (
-	<div className="newspack-insights__app-ready">
-		<Notice
-			noticeText={ sprintf(
-				// translators: %1$s is a GA4 property id, %2$s and %3$s are dates.
-				__( 'App analytics for property %1$s (%2$s – %3$s) will appear here.', 'newspack-plugin' ),
-				config.selected_property ?? '',
-				range.start,
-				range.end
-			) }
-		/>
-	</div>
-);
+/** Ready state — fetch the windowed metrics for the selected property and render the sections. */
+const AppMetricsView = ( { range }: { range: TabSectionProps[ 'range' ] } ) => {
+	const [ metrics, setMetrics ] = useState< AppMetrics | null >( null );
+	const [ loading, setLoading ] = useState( true );
+	const [ error, setError ] = useState< string | null >( null );
+
+	useEffect( () => {
+		let active = true;
+		setLoading( true );
+		setError( null );
+		fetchAppMetrics( range.start, range.end )
+			.then( response => active && setMetrics( response.current ) )
+			.catch( e => active && setError( e instanceof Error ? e.message : String( e ) ) )
+			.finally( () => active && setLoading( false ) );
+		return () => {
+			active = false;
+		};
+	}, [ range.start, range.end ] );
+
+	if ( loading ) {
+		return <TabSpinner className="newspack-insights__tab-fallback" />;
+	}
+	if ( error ) {
+		return <Notice isError noticeText={ error } />;
+	}
+	if ( ! metrics || metrics.tab_error ) {
+		return <Notice noticeText={ __( 'App analytics aren’t available for this property yet.', 'newspack-plugin' ) } />;
+	}
+	return <ReachSection metrics={ metrics } />;
+};
 
 const AppTab = ( { range }: TabSectionProps ) => {
 	const [ config, setConfig ] = useState< AppConfig | null >( null );
@@ -149,7 +168,7 @@ const AppTab = ( { range }: TabSectionProps ) => {
 		return <PropertyPicker config={ config } onSaved={ setConfig } />;
 	}
 
-	return <ReadyState config={ config } range={ range } />;
+	return <AppMetricsView range={ range } />;
 };
 
 export default AppTab;

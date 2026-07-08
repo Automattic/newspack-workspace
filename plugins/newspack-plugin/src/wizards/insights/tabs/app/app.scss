@@ -1,0 +1,9 @@
+/**
+ * App tab (Tab 10, NPPD-1882) styles.
+ *
+ * Pulls in the shared chart styling (`.is-series-*` category colors, pie/legend
+ * layout, chart-card chrome) used by the Reach section's composition pies. Tab
+ * layout (sections, metric grid) comes from the shared `sections` partial loaded
+ * by the wizard's top-level `style.scss`.
+ */
+@use "../components/insights-charts";
