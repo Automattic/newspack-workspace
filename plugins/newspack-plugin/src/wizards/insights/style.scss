@@ -27,33 +27,28 @@
 	// Column: the controls row on top, the Apply / Cancel action row beneath,
 	// both right-aligned. Rendered via the Wizard's renderAboveSections slot.
 	&__header-controls {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 12px;
-		margin-bottom: 24px;
-	}
-
-	&__header-controls-row {
+		align-items: flex-start;
 		display: flex;
 		flex-wrap: wrap;
-		align-items: center;
-		justify-content: flex-end;
 		gap: 16px;
-		// Full width so `justify-content` actually positions the controls: the
-		// parent column sets `align-items: flex-end`, which would otherwise
-		// shrink this row to its content and keep it right-aligned even when the
-		// media query flips `justify-content` to flex-start at <=782px.
-		width: 100%;
+		margin-bottom: 24px;
 
-		@media ( max-width: 782px ) {
-			justify-content: flex-start;
+		@media ( min-width: 783px ) {
+			align-items: center;
+			justify-content: flex-end;
+		}
+
+		.components-button.has-icon svg {
+			fill: wp-colors.$gray-900;
 		}
 	}
 
 	&__header-controls-actions {
 		display: flex;
-		gap: 8px;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: flex-start;
+		gap: 4px;
 	}
 
 	// While a tab is loading (chunk Suspense fallback OR in-tab loading view),
@@ -123,9 +118,9 @@
 		margin: 0;
 	}
 
-	// Date range picker
-
-	&__date-range-picker {
+	// Date range picker + comparison toggle
+	&__date-range-picker,
+	&__comparison-toggle {
 		display: flex;
 		align-items: center;
 		gap: 8px;
@@ -146,10 +141,11 @@
 		gap: 6px;
 
 		input[type="date"] {
-			font-size: 13px;
+			font-size: 12px;
+			min-height: 34px;
 			padding: 6px 8px;
 			border: 1px solid wp-colors.$gray-300;
-			border-radius: 4px;
+			border-radius: 2px;
 			background: #fff;
 			color: wp-colors.$gray-900;
 

@@ -13,6 +13,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { Button } from '@wordpress/components';
+import { closeSmall } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -31,18 +32,14 @@ const HeaderControls = ( { controls }: HeaderControlsProps ) => {
 
 	return (
 		<div className="newspack-insights__header-controls">
-			<div className="newspack-insights__header-controls-row">
-				<DateRangePicker range={ draftRange } onPresetChange={ setPreset } onCustomChange={ setCustom } />
-				<ComparisonToggle enabled={ draftCompare } onChange={ setCompare } />
-			</div>
+			<DateRangePicker range={ draftRange } onPresetChange={ setPreset } onCustomChange={ setCustom } />
+			<ComparisonToggle enabled={ draftCompare } onChange={ setCompare } />
 			{ isDirty && ! confirmOpen && (
 				<div className="newspack-insights__header-controls-actions">
-					<Button variant="secondary" isSmall onClick={ apply }>
+					<Button variant="secondary" size={ 'small' } onClick={ apply }>
 						{ __( 'Apply', 'newspack-plugin' ) }
 					</Button>
-					<Button variant="tertiary" isSmall onClick={ cancel }>
-						{ __( 'Cancel', 'newspack-plugin' ) }
-					</Button>
+					<Button variant="tertiary" size={ 'small' } onClick={ cancel } icon={ closeSmall } label={ __( 'Cancel', 'newspack-plugin' ) } />
 				</div>
 			) }
 			{ confirmOpen && <ConfirmModal onContinue={ confirmApply } onCancel={ cancel } /> }
