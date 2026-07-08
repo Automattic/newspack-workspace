@@ -83,4 +83,30 @@ class Test_Authoring_Permissions extends WP_UnitTestCase {
 		$request = new WP_REST_Request( 'GET', '/newspack-newsletters/v1/layouts' );
 		$this->assertWPError( \Newspack_Newsletters::api_edit_posts_permissions_check( $request ) );
 	}
+
+	/**
+	 * The color-palette write defaults to requiring edit_others_posts.
+	 */
+	public function test_color_palette_defaults_to_edit_others_posts() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+		$request = new WP_REST_Request( 'POST', '/newspack-newsletters/v1/color-palette' );
+		$this->assertWPError( \Newspack_Newsletters::api_color_palette_permissions_check( $request ) );
+
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
+		$this->assertTrue( \Newspack_Newsletters::api_color_palette_permissions_check( $request ) );
+	}
+
+	/**
+	 * The color-palette write capability can be overridden via filter.
+	 */
+	public function test_color_palette_capability_is_filterable() {
+		$filter = function () {
+			return 'edit_posts';
+		};
+		add_filter( 'newspack_newsletters_color_palette_capability', $filter );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+		$request = new WP_REST_Request( 'POST', '/newspack-newsletters/v1/color-palette' );
+		$this->assertTrue( \Newspack_Newsletters::api_color_palette_permissions_check( $request ) );
+		remove_filter( 'newspack_newsletters_color_palette_capability', $filter );
+	}
 }
