@@ -16,7 +16,7 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { useEffect, useState } from '@wordpress/element';
 
 /**
@@ -193,11 +193,26 @@ const AppTab = ( { range, previousRange }: TabSectionProps ) => {
 		);
 	}
 
+	// Name the property the tab is reading — it often lives in a different Google
+	// account than the website, so surfacing which one confirms you're looking at
+	// the right data. `selected_is_visible` guarantees it's in the list here.
+	const selected = config.properties.find( property => property.property_id === config.selected_property );
+
 	return (
 		<>
 			<div className="newspack-insights__app-toolbar">
+				<span className="newspack-insights__app-property">
+					{ sprintf(
+						/* translators: %s: the selected GA4 app property (name and id). */
+						__( 'App property: %s', 'newspack-plugin' ),
+						selected ? propertyLabel( selected ) : config.selected_property
+					) }
+				</span>
+				<span className="newspack-insights__app-property-sep" aria-hidden="true">
+					·
+				</span>
 				<Button variant="link" onClick={ () => setChanging( true ) }>
-					{ __( 'Change app property', 'newspack-plugin' ) }
+					{ __( 'Change', 'newspack-plugin' ) }
 				</Button>
 			</div>
 			<AppMetricsView range={ range } previousRange={ previousRange } />

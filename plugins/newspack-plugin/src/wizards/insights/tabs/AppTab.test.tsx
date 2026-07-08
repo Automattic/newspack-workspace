@@ -143,10 +143,18 @@ describe( 'AppTab', () => {
 	} );
 
 	it( 'renders the Reach section when a visible property is selected', async () => {
-		mockFetch.mockResolvedValue( baseConfig( { selected_property: '533212292', selected_is_visible: true } ) );
+		mockFetch.mockResolvedValue(
+			baseConfig( {
+				selected_property: '533212292',
+				selected_is_visible: true,
+				properties: [ { account_id: '1', account_name: 'YubaNet', property_id: '533212292', property_name: 'yubanetapp' } ],
+			} )
+		);
 		renderTab();
 
 		expect( await screen.findByText( 'Reach' ) ).toBeInTheDocument();
+		// The property-context line names the property the tab is reading.
+		expect( screen.getByText( /App property: YubaNet → yubanetapp \(533212292\)/ ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Active users' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Engagement' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Avg. engagement time' ) ).toBeInTheDocument();
