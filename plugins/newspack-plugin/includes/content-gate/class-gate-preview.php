@@ -201,7 +201,10 @@ class Gate_Preview {
 				}
 				return null;
 			case 'visible_paragraphs':
-				return is_numeric( $raw ) ? absint( $raw ) : null;
+				// Clamp with max( 0, (int) ) to match the stored-meta path in
+				// get_visible_paragraphs(); absint() would turn "-5" into 5 and
+				// preview more paragraphs than the real gate ever would.
+				return is_numeric( $raw ) ? max( 0, (int) $raw ) : null;
 			case 'overlay_position':
 				return in_array( $raw, [ 'center', 'bottom' ], true ) ? $raw : null;
 			case 'overlay_size':

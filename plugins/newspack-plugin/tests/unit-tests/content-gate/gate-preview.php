@@ -361,6 +361,12 @@ class Test_Gate_Preview extends \WP_UnitTestCase {
 		$this->assertArrayNotHasKey( 'visible_paragraphs', $overrides, 'A non-numeric count is dropped.' );
 		$this->assertArrayNotHasKey( 'overlay_size', $overrides, 'An invalid overlay size is dropped.' );
 		$this->assertArrayNotHasKey( 'inline_fade', $overrides, 'A malformed boolean is dropped rather than coerced to false.' );
+
+		// A negative paragraph count clamps to 0 (matching get_visible_paragraphs),
+		// not absint()'s 5 — a preview must never show more paragraphs than the gate.
+		$_GET['ngp_vp'] = '-5';
+		$overrides      = Gate_Preview::get_preview_meta_overrides();
+		$this->assertSame( 0, $overrides['visible_paragraphs'], 'A negative count clamps to 0, not its absolute value.' );
 	}
 
 	/**
