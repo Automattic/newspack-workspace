@@ -28,7 +28,8 @@ export type StorageBackend = 'hpos' | 'legacy';
 export interface SubscribersRateValue {
 	value: number;
 	computable: boolean;
-	denominator: number;
+	/** Null in the `'warming'` state (the backend's warming_scalar emits a null denominator). */
+	denominator: number | null;
 	/**
 	 * `'error'` when the hub proxy failed; `'warming'` when the hub snapshot is a
 	 * cache miss being backfilled (NEWS-2603, transient) — both distinct from

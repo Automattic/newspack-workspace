@@ -220,7 +220,7 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 					format="percent"
 					previousValue={ refundEmptyMessage ? undefined : refundPrevious }
 					lowerIsBetter
-					secondary={ refundEmptyMessage ? undefined : ordersCohortSubtitle( refund.denominator ) }
+					secondary={ refundEmptyMessage ? undefined : ordersCohortSubtitle( refund.denominator ?? 0 ) }
 					notComputableMessage={ refundEmptyMessage }
 					description={ __( 'Refunds ÷ subscription orders', 'newspack-plugin' ) }
 				/>
@@ -229,7 +229,7 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 					value={ retry.computable ? retry.value : 0 }
 					format="percent"
 					previousValue={ retryEmptyMessage ? undefined : retryPrevious }
-					secondary={ retryEmptyMessage ? undefined : retriesCohortSubtitle( retry.denominator ) }
+					secondary={ retryEmptyMessage ? undefined : retriesCohortSubtitle( retry.denominator ?? 0 ) }
 					notComputableMessage={ retryEmptyMessage }
 					description={ __( 'Recovered retries ÷ retry attempts', 'newspack-plugin' ) }
 				/>
