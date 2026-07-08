@@ -450,6 +450,38 @@ class Test_Audience_REST_Controller extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NEWS-2603 follow-up end-to-end: a failed CORE Audience BigQuery metric
+	 * (not the newsletter snapshot) makes `data_status` 'incomplete'. Core
+	 * metrics signal a hub failure as `computable:false` + an `error` string
+	 * with no `state` key; Metric_Status::derive() must recognise that legacy
+	 * convention so the warning banner reflects a genuine core-BQ outage.
+	 * WooCommerce is left inactive so the newsletter metric short-circuits to
+	 * `not_configured` (a populated, non-error state) — isolating the core
+	 * metric error as the sole driver.
+	 */
+	public function test_data_status_is_incomplete_when_core_bq_metric_errors() {
+		add_filter( 'pre_http_request', [ $this, 'stub_bq_hub_response' ], 10, 3 );
+		\Newspack_Manager::enable_stub_connection();
+		$this->bq_hub_response_variant = 'core_error';
+
+		try {
+			$response = $this->dispatch(
+				[
+					'start' => '2026-01-01',
+					'end'   => '2026-01-31',
+				]
+			);
+
+			$this->assertSame( 200, $response->get_status() );
+			$data = $response->get_data()['data'];
+			$this->assertSame( 'incomplete', $data['data_status'] );
+		} finally {
+			remove_filter( 'pre_http_request', [ $this, 'stub_bq_hub_response' ], 10 );
+			\Newspack_Manager::disable_stub_connection();
+		}
+	}
+
+	/**
 	 * `pre_http_request` responder: the newsletter-conversion catalog queries
 	 * return either the hub's warming marker or an HTTP error, per
 	 * $this->bq_hub_response_variant; every other catalog query (the 19
@@ -475,6 +507,33 @@ class Test_Audience_REST_Controller extends WP_UnitTestCase {
 			],
 			true
 		);
+
+		// Core-metric-error variant (NEWS-2603 follow-up): every core Audience
+		// BigQuery query fails with an HTTP error (which BigQuery_Proxy_Client
+		// turns into a WP_Error, shaped by proxy_scalar/proxy_rows into a
+		// `computable:false` + `error` payload), isolating a core-metric error
+		// as the sole data_status driver. The test leaves WooCommerce inactive so
+		// the newsletter metric short-circuits to `not_configured` before calling
+		// the hub — so the newsletter branch below normally isn't reached; it
+		// returns an empty (non-error) set defensively, only in case that query
+		// is ever invoked, so it never contributes an error of its own.
+		if ( 'core_error' === $this->bq_hub_response_variant ) {
+			if ( $is_newsletter_conversion ) {
+				return [
+					'response' => [ 'code' => 200 ],
+					'body'     => wp_json_encode( [] ),
+				];
+			}
+			return [
+				'response' => [ 'code' => 500 ],
+				'body'     => wp_json_encode(
+					[
+						'code'    => 'bigquery_proxy_http_error',
+						'message' => 'Simulated core metric failure.',
+					]
+				),
+			];
+		}
 
 		if ( ! $is_newsletter_conversion ) {
 			return [

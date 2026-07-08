@@ -103,4 +103,143 @@ class Test_Metric_Status extends WP_UnitTestCase {
 	public function test_derive_complete_for_empty_envelope() {
 		$this->assertSame( 'complete', Metric_Status::derive( [] ) );
 	}
+
+	/**
+	 * NEWS-2603 follow-up: the core BigQuery-proxy metrics (Audience's
+	 * proxy_scalar/proxy_rows) predate the three-state model and signal a hub
+	 * failure as `computable:false` + a non-empty `error` message string, with
+	 * NO `state` key. Such a node must make the envelope 'incomplete' — a core
+	 * metric that failed to fetch is a genuine incomplete data load.
+	 */
+	public function test_derive_incomplete_when_metric_has_error_key_without_state() {
+		$env = [
+			'a' => [
+				'value'      => 5,
+				'computable' => true,
+			],
+			'b' => [
+				'value'      => 0,
+				'computable' => false,
+				'error'      => 'BigQuery proxy unavailable.',
+			],
+		];
+		$this->assertSame( 'incomplete', Metric_Status::derive( $env ) );
+	}
+
+	/**
+	 * NEWS-2603 follow-up: a core-metric `error` key wins over a warming
+	 * metric-scalar elsewhere in the envelope — error precedence holds across
+	 * both the `state:'error'` and the legacy `error`-string conventions.
+	 */
+	public function test_derive_incomplete_when_error_key_beats_warming() {
+		$env = [
+			'a' => [ 'state' => 'warming' ],
+			'b' => [
+				'value'      => 0,
+				'computable' => false,
+				'error'      => 'Simulated core failure.',
+			],
+		];
+		$this->assertSame( 'incomplete', Metric_Status::derive( $env ) );
+	}
+
+	/**
+	 * NEWS-2603 follow-up: a `computable:false` node with NO error (an empty
+	 * cohort, an overlay/not-configured metric, etc.) is NOT a failure — it
+	 * must stay 'complete'. Only a genuine `error` (or `state:'error'`) counts.
+	 */
+	public function test_derive_complete_when_computable_false_without_error() {
+		$env = [
+			'a' => [
+				'value'      => 3,
+				'computable' => true,
+			],
+			'b' => [
+				'value'      => 0,
+				'computable' => false,
+			],
+		];
+		$this->assertSame( 'complete', Metric_Status::derive( $env ) );
+	}
+
+	/**
+	 * NEWS-2603 follow-up: an empty-string `error` is not a failure signal —
+	 * only a non-empty error message flips the envelope to 'incomplete'.
+	 */
+	public function test_derive_ignores_empty_error_string() {
+		$env = [
+			'a' => [
+				'value'      => 0,
+				'computable' => false,
+				'error'      => '',
+			],
+		];
+		$this->assertSame( 'complete', Metric_Status::derive( $env ) );
+	}
+
+	/**
+	 * NEWS-2603 follow-up: a `not_configured` proxy error is a setup state (the
+	 * hub was never connected), NOT a failed data fetch — it must stay
+	 * 'complete' so the "last data fetch didn't finish" warning banner doesn't
+	 * fire on a never-connected hub. Distinguished by the WP_Error code carried
+	 * alongside the message.
+	 */
+	public function test_derive_complete_when_error_is_only_not_configured() {
+		$env = [
+			'a' => [
+				'value'      => 0,
+				'computable' => false,
+				'error'      => 'BigQuery proxy is not configured.',
+				'error_code' => 'bigquery_proxy_not_configured',
+			],
+		];
+		$this->assertSame( 'complete', Metric_Status::derive( $env ) );
+	}
+
+	/**
+	 * NEWS-2603 follow-up: a genuine fetch failure (any error code other than
+	 * the not-configured setup code) still flips the envelope to 'incomplete'.
+	 */
+	public function test_derive_incomplete_when_error_code_is_a_genuine_failure() {
+		$env = [
+			'a' => [
+				'value'      => 0,
+				'computable' => false,
+				'error'      => 'Simulated hub HTTP failure.',
+				'error_code' => 'bigquery_proxy_http_error',
+			],
+		];
+		$this->assertSame( 'incomplete', Metric_Status::derive( $env ) );
+	}
+
+	/**
+	 * NEWS-2603 follow-up: a not-configured setup error on the THREE-STATE path
+	 * (`state: 'error'` + the not-configured `error_code`, as `error_scalar()`
+	 * emits for an unconfigured hub — e.g. Subscribers/Donors `newsletter_conversion`)
+	 * is a setup state, not a failed fetch, and must stay 'complete' — the same
+	 * exclusion the legacy `error`-string path already gets.
+	 */
+	public function test_derive_complete_when_state_error_is_not_configured() {
+		$env = [
+			'a' => [
+				'state'      => 'error',
+				'error_code' => 'bigquery_proxy_not_configured',
+			],
+		];
+		$this->assertSame( 'complete', Metric_Status::derive( $env ) );
+	}
+
+	/**
+	 * NEWS-2603 follow-up: a genuine fetch failure on the three-state path
+	 * (`state: 'error'` with a non-setup `error_code`) still flips to 'incomplete'.
+	 */
+	public function test_derive_incomplete_when_state_error_is_a_genuine_failure() {
+		$env = [
+			'a' => [
+				'state'      => 'error',
+				'error_code' => 'bigquery_proxy_http_error',
+			],
+		];
+		$this->assertSame( 'incomplete', Metric_Status::derive( $env ) );
+	}
 }
