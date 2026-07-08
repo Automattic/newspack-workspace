@@ -488,12 +488,13 @@ final class App_Metric {
 	 * "unlock" state. The client owns the (per-request memoized) registration
 	 * lookup, so this makes no separate Admin API round-trip.
 	 *
-	 * @param string $property   GA4 property ID.
-	 * @param array  $range      The dateRanges wrapper.
-	 * @param string $kg_param   KG parameter (without the `customEvent:` prefix).
-	 * @param string $metric     GA4 metric apiName.
-	 * @param string $dim_key    Output key for the dimension value.
-	 * @param string $metric_key Output key for the metric value.
+	 * @param string      $property   GA4 property ID.
+	 * @param array       $range      The dateRanges wrapper.
+	 * @param string      $kg_param   KG parameter (without the `customEvent:` prefix).
+	 * @param string      $metric     GA4 metric apiName.
+	 * @param string      $dim_key    Output key for the dimension value.
+	 * @param string      $metric_key Output key for the metric value.
+	 * @param string|null $event_name Optional: scope the breakdown to a single event.
 	 * @return array
 	 */
 	private static function kg_breakdown( string $property, array $range, string $kg_param, string $metric, string $dim_key, string $metric_key, ?string $event_name = null ): array {
@@ -600,10 +601,16 @@ final class App_Metric {
 			unset( $entry['_top'] );
 			$out[] = $entry;
 		}
+		// Sort by metric desc, with a case-insensitive label tie-breaker so tied
+		// rows keep a deterministic order (no UI jitter / flaky tests).
 		usort(
 			$out,
-			static function ( $a, $b ) use ( $metric_key ) {
-				return $b[ $metric_key ] <=> $a[ $metric_key ];
+			static function ( $a, $b ) use ( $metric_key, $dim_key ) {
+				$by_metric = $b[ $metric_key ] <=> $a[ $metric_key ];
+				if ( 0 !== $by_metric ) {
+					return $by_metric;
+				}
+				return strcasecmp( (string) ( $a[ $dim_key ] ?? '' ), (string) ( $b[ $dim_key ] ?? '' ) );
 			}
 		);
 		return $out;

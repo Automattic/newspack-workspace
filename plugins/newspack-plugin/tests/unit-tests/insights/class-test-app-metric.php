@@ -432,4 +432,31 @@ class Test_App_Metric extends WP_UnitTestCase {
 		);
 		$this->assertSame( 'News', $payload['rows'][1]['section'] );
 	}
+
+	/**
+	 * Rows tied on the metric sort deterministically by a case-insensitive label
+	 * tie-breaker (so row order can't jitter across runs).
+	 */
+	public function test_kg_tied_rows_sort_by_label() {
+		$method = new \ReflectionMethod( App_Metric::class, 'kg_payload_from_result' );
+		$method->setAccessible( true );
+
+		$result  = [
+			'rows' => [
+				[
+					'dimensionValues' => [ [ 'value' => 'Sports' ] ],
+					'metricValues'    => [ [ 'value' => '500' ] ],
+				],
+				[
+					'dimensionValues' => [ [ 'value' => 'News' ] ],
+					'metricValues'    => [ [ 'value' => '500' ] ],
+				],
+			],
+		];
+		$payload = $method->invoke( null, $result, 'section', 'views' );
+
+		// Equal views (500) → alphabetical: News before Sports.
+		$this->assertSame( 'News', $payload['rows'][0]['section'] );
+		$this->assertSame( 'Sports', $payload['rows'][1]['section'] );
+	}
 }
