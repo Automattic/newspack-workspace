@@ -336,6 +336,7 @@ final class Audience_Metric {
 				'computable' => false,
 				'type'       => $type,
 				'error'      => $rows->get_error_message(),
+				'error_code' => $rows->get_error_code(),
 			];
 		}
 		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $column, $rows[0] ) ) {
@@ -387,6 +388,7 @@ final class Audience_Metric {
 				'computable' => false,
 				'type'       => $type,
 				'error'      => $rows->get_error_message(),
+				'error_code' => $rows->get_error_code(),
 			];
 		}
 		if ( ! is_array( $rows ) ) {
@@ -465,6 +467,7 @@ final class Audience_Metric {
 				'numerator'   => 0,
 				'denominator' => 0,
 				'error'       => $rows->get_error_message(),
+				'error_code'  => $rows->get_error_code(),
 			];
 		}
 		if ( empty( $rows ) || ! is_array( $rows[0] ) ) {
@@ -510,6 +513,7 @@ final class Audience_Metric {
 				'computable' => false,
 				'type'       => 'count',
 				'error'      => $rows->get_error_message(),
+				'error_code' => $rows->get_error_code(),
 			];
 		}
 		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! isset( $rows[0]['sessions'] ) ) {
@@ -956,6 +960,7 @@ final class Audience_Metric {
 				'computable' => false,
 				'type'       => 'rate',
 				'error'      => $rows->get_error_message(),
+				'error_code' => $rows->get_error_code(),
 			];
 		}
 		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( 'returning_reader_rate', $rows[0] ) ) {

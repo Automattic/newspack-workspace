@@ -217,6 +217,7 @@ final class Engagement_Metric {
 				'computable' => false,
 				'type'       => $type,
 				'error'      => $rows->get_error_message(),
+				'error_code' => $rows->get_error_code(),
 			];
 		}
 		if ( empty( $rows ) || ! is_array( $rows[0] ) || ! array_key_exists( $column, $rows[0] ) ) {
@@ -268,6 +269,7 @@ final class Engagement_Metric {
 				'computable' => false,
 				'type'       => $type,
 				'error'      => $rows->get_error_message(),
+				'error_code' => $rows->get_error_code(),
 			];
 		}
 		if ( ! is_array( $rows ) ) {
@@ -498,6 +500,7 @@ final class Engagement_Metric {
 				'computable' => false,
 				'type'       => 'table',
 				'error'      => $rows->get_error_message(),
+				'error_code' => $rows->get_error_code(),
 			];
 		}
 		if ( ! is_array( $rows ) ) {
