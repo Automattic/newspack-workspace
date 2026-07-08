@@ -9,8 +9,6 @@ import {
   goToMyAccount,
 } from "./utils";
 
-const emailAddress = randomEmailAddress();
-
 test.beforeEach(addClickIndicator);
 
 test("Register on the site", {
@@ -22,6 +20,10 @@ test("Register on the site", {
   // round-trips against remote staging, where CI also applies slowMo. The
   // default 120s is too tight once staging latency varies, so allow more room.
   test.setTimeout(240000);
+  // Scoped to the test body (not module scope) so a Playwright retry, which
+  // reuses the worker, gets a fresh reader instead of re-running against the
+  // half-registered account from the failed attempt.
+  const emailAddress = randomEmailAddress();
   /**
    * Create a new reader account using the "Sign In" header link. The auth modal
    * is a single email-first form: entering an email that isn't associated with
@@ -76,17 +78,26 @@ test("Register on the site", {
   await expect(page.getByPlaceholder("Your Last Name")).toHaveValue("Doe");
 
   /**
-   * Reader sets up a password.
+   * Reader sets up a password. The "Create a password" link is a GET that runs a
+   * server-side password reset (emails a "Set a new password" link and shows a
+   * confirmation notice) via a redirect. On a cached environment that GET can be
+   * served from the page cache, so the handler never runs — no email, no notice
+   * (NPPM-2919). Drive it with a cache-busting param (as openEmail does), and
+   * gate on the real outcome (the email landing in the sendbox) rather than the
+   * transient notice, re-triggering until the email is captured.
    */
-  await page
+  const resetPasswordHref = await page
     .getByRole("link", { name: "Create a password" })
-    .click();
-  await expect(
-    page.getByText(
-      "Please check your email inbox for instructions on how to set a new password."
-    )
-  ).toBeVisible();
-  await openEmail(page, "Set a new password", emailAddress);
+    .getAttribute("href");
+  const resetPasswordURL = new URL(resetPasswordHref, page.url());
+  await expect(async () => {
+    resetPasswordURL.searchParams.set(
+      "cachebust",
+      `${emailAddress}-${Date.now()}`
+    );
+    await page.goto(resetPasswordURL.toString());
+    await openEmail(page, "Set a new password", emailAddress);
+  }).toPass({ timeout: 90000 });
   await clickLinkURL(page, "Set password");
 
   const password = randomString(14);
