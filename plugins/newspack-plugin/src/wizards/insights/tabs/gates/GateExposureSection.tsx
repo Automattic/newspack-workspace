@@ -2,10 +2,11 @@
  * GateExposureSection (NPPD-1604, Section 1).
  *
  * Top-of-funnel exposure scorecards. Four cards in a single row.
- * The Direct vs Influenced explainer used to live below this
- * section's caption but moved to the tab top (above Section 1) so
- * publishers encounter the framing before any section that uses
- * the terms — see {@see GatesTab}.
+ * The tab-level Direct vs Influenced explainer that used to sit above this
+ * section was removed: Direct is session-scoped for the regwall rate but
+ * order-meta-scoped (checkout through the gate) for the paywall rate, so a
+ * single tab-wide definition could not be true of both. Each card now
+ * describes its own mechanism.
  */
 
 /**

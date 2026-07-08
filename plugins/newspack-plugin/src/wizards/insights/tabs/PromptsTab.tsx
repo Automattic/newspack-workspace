@@ -25,7 +25,6 @@ import usePromptsData from '../hooks/usePromptsData';
 import LastUpdated from '../components/LastUpdated';
 import TabStateView from './components/TabStateView';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
-import InfoCallout from './components/InfoCallout';
 import TabErrorBanner from './components/TabErrorBanner';
 import PromptExposureSection from './prompts/PromptExposureSection';
 import PromptEngagementSection from './prompts/PromptEngagementSection';
@@ -56,28 +55,6 @@ const PromptsTab = ( { range, previousRange }: PromptsTabProps ) => {
 			{ data && (
 				<>
 					{ data.tab_error && <TabErrorBanner /> }
-					<InfoCallout heading={ __( 'About Direct vs Influenced conversion', 'newspack-plugin' ) } dismissible persist={ false }>
-						<p>
-							<strong>{ __( 'Direct', 'newspack-plugin' ) }</strong>{ ' ' }
-							{ __(
-								'conversions happen in the same session as a prompt impression. The prompt is credited regardless of whether checkout happens on the same page (embedded checkout block) or after clicking through to a subscription page.',
-								'newspack-plugin'
-							) }
-						</p>
-						<p>
-							<strong>{ __( 'Influenced', 'newspack-plugin' ) }</strong>{ ' ' }
-							{ __(
-								'conversions happen after a prompt impression but in a later session, within a lookback window (7 days for free conversions, 14 days for paid).',
-								'newspack-plugin'
-							) }
-						</p>
-						<p>
-							{ __(
-								'Same-session is Direct. Later-session-within-lookback is Influenced. The two are mutually exclusive and together capture every prompt-touched conversion within the lookback period.',
-								'newspack-plugin'
-							) }
-						</p>
-					</InfoCallout>
 					<PromptExposureSection
 						current={ data.current }
 						previous={ data.previous }

@@ -5,6 +5,12 @@
  * subscription — each in Direct and Influenced (14-day lookback)
  * attribution. Completion (not just attempt) is established via the
  * Woo join in Phase 2.
+ *
+ * Direct here is NOT session-scoped. Its numerator is Woo orders carrying
+ * `_newspack_popup_id`, stamped by the hidden field the prompt injects into its
+ * own donation block / checkout button. A reader who clicks a prompt's link out
+ * to a landing page and converts there is not counted. Copy must describe that
+ * mechanism, not a session.
  */
 
 /**
@@ -33,7 +39,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 			id="newspack-insights-prompts-paid-heading"
 			title={ __( 'Paid reader conversion', 'newspack-plugin' ) }
 			description={ __(
-				'How effectively prompts convert readers into donors and subscribers. Direct counts conversions in the same session as a prompt impression. Influenced counts conversions in a later session within 14 days of seeing a prompt.',
+				'How effectively prompts convert readers into donors and subscribers. Direct counts conversions completed through a prompt’s own donation block or checkout button. Influenced counts conversions in a later session within 14 days of seeing a prompt.',
 				'newspack-plugin'
 			) }
 		/>
@@ -42,7 +48,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Donation Conversion (Direct)', 'newspack-plugin' ),
 					description: __(
-						'Sessions with a completed donation after a prompt impression with a donation block ÷ sessions with a prompt impression with a donation block',
+						'Donations completed through a prompt’s donation block ÷ impressions of prompts with a donation block',
 						'newspack-plugin'
 					),
 					current: current.donation_conversion_direct,
@@ -71,7 +77,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Subscription Conversion (Direct)', 'newspack-plugin' ),
 					description: __(
-						'Sessions with a completed subscription after a subscription-intent prompt impression ÷ sessions with a subscription-intent prompt impression',
+						'Subscriptions purchased through a prompt’s checkout button ÷ impressions of prompts with a checkout button',
 						'newspack-plugin'
 					),
 					current: current.subscription_conversion_direct,

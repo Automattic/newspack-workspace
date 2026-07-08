@@ -112,11 +112,13 @@ describe( 'PromptsTab', () => {
 		mockHook.mockReset();
 	} );
 
-	it( 'renders all seven section headings + the explainer when scalars are populated', () => {
+	it( 'renders all seven section headings, without the removed tab-level explainer', () => {
 		mockSuccess();
 		render( <PromptsTab range={ range } previousRange={ null } /> );
 
-		expect( screen.getByText( 'About Direct vs Influenced conversion' ) ).toBeInTheDocument();
+		// The tab-level Direct vs Influenced explainer was removed: Direct means a
+		// different thing per metric, so each card describes its own mechanism.
+		expect( screen.queryByText( 'About Direct vs Influenced conversion' ) ).not.toBeInTheDocument();
 		expect( screen.getByText( 'Prompt exposure' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Prompt engagement' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Free reader conversion' ) ).toBeInTheDocument();
