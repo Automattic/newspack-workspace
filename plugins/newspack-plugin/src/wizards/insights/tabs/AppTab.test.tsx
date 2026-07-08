@@ -13,7 +13,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
  * Internal dependencies
  */
 import AppTab from './AppTab';
-import { fetchAppConfig, saveAppProperty, type AppConfig } from '../api/app';
+import { fetchAppConfig, saveAppProperty, type AppConfig, type AppMetrics } from '../api/app';
 import useAppMetricsData from '../hooks/useAppMetricsData';
 import type { DateRange } from '../state/useDateRange';
 
@@ -27,7 +27,7 @@ const mockUseData = useAppMetricsData as jest.Mock;
 const range = { start: '2026-05-01', end: '2026-05-31', preset: 'last-30' } as unknown as DateRange;
 
 /** A minimal current-window metrics map so the ready state renders every section. */
-const metricsMap = () => ( {
+const metricsMap = (): AppMetrics => ( {
 	active_users: { value: 892, computable: true, type: 'count' },
 	new_users: { value: 150, computable: true, type: 'count' },
 	sessions: { value: 12790, computable: true, type: 'count' },
@@ -200,8 +200,8 @@ describe( 'AppTab', () => {
 		// Runtime tiering: the backend emits not_configured for KG breakdowns that
 		// aren't registered on the property. The card renders the unlock note
 		// instead of data, and the rest of the tab still renders.
-		current.top_sections = { rows: [], computable: false, not_configured: true, type: 'breakdown' } as never;
-		current.subscriber_mix = { rows: [], computable: false, not_configured: true, type: 'breakdown' } as never;
+		current.top_sections = { rows: [], computable: false, not_configured: true, type: 'breakdown' };
+		current.subscriber_mix = { rows: [], computable: false, not_configured: true, type: 'breakdown' };
 		mockUseData.mockReturnValue( readyState( { data: { current, previous: null } } ) );
 		renderTab();
 

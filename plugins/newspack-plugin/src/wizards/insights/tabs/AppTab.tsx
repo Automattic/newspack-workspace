@@ -120,13 +120,16 @@ const AppMetricsView = ( { range, previousRange }: Pick< TabSectionProps, 'range
 	// (Fixture mode returns a `previous` window unconditionally, so gate here.)
 	const previous = previousRange ? data?.previous ?? null : null;
 
-	if ( status === 'loading' && ! current ) {
-		return <TabSpinner className="newspack-insights__tab-fallback" />;
-	}
 	if ( status === 'error' ) {
 		return <Notice isError noticeText={ error || __( 'Could not load app analytics.', 'newspack-plugin' ) } />;
 	}
-	if ( ! current || current.tab_error ) {
+	// `idle`/`loading` before the first payload lands: show the spinner rather
+	// than briefly flashing the "not available" notice (the cache slot starts
+	// idle with null data, before the fetch effect runs).
+	if ( ! current ) {
+		return <TabSpinner className="newspack-insights__tab-fallback" />;
+	}
+	if ( current.tab_error ) {
 		return <Notice noticeText={ __( 'App analytics aren’t available for this property yet.', 'newspack-plugin' ) } />;
 	}
 
