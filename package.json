@@ -35,7 +35,7 @@
 		"@wordpress/components": "^30.6.0",
 		"@wordpress/compose": "^7.33.0",
 		"@wordpress/data": "^10.48.0",
-		"@wordpress/dataviews": "^10.2.0",
+		"@wordpress/dataviews": "^17.1.0",
 		"@wordpress/date": "^5.48.0",
 		"@wordpress/dom-ready": "^4.48.0",
 		"@wordpress/edit-post": "^8.48.0",
