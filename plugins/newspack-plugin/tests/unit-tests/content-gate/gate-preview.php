@@ -237,16 +237,20 @@ class Test_Gate_Preview extends \WP_UnitTestCase {
 	 */
 	public function test_subscriber_with_param_is_not_gated() {
 		wp_set_current_user( $this->subscriber_id );
-		$this->set_query_param( Gate_Preview::PREVIEW_QUERY_PARAM, $this->layout_id );
+
+		// Carry ngp_id in the URL so go_to() (which rebuilds $_GET) keeps it — the
+		// render assertion must exercise a subscriber genuinely on the preview URL.
+		$this->go_to( add_query_arg( Gate_Preview::PREVIEW_QUERY_PARAM, $this->layout_id, get_permalink( $this->canvas_post_id ) ) );
+		$this->preview_query_params[] = Gate_Preview::PREVIEW_QUERY_PARAM;
+		$this->reset_gate_render_state();
 
 		$this->assertFalse( Gate_Preview::is_preview_request(), 'Subscriber with the param is not a preview request.' );
 
-		$this->go_to( get_permalink( $this->canvas_post_id ) );
 		$post     = get_post( $this->canvas_post_id );
 		$original = $post->post_content;
 		Content_Gate::restrict_post( $post, $GLOBALS['wp_query'] );
 
-		$this->assertSame( $original, $post->post_content, 'Subscriber preview URL does not force-gate the post.' );
+		$this->assertSame( $original, $post->post_content, 'Subscriber on the preview URL does not force-gate the post.' );
 	}
 
 	/**
