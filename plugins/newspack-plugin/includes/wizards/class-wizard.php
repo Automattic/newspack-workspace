@@ -192,6 +192,7 @@ abstract class Wizard {
 		if ( Newspack::is_debug_mode() && current_user_can( 'manage_options' ) ) {
 			$urls['components_demo']  = esc_url( admin_url( 'admin.php?page=newspack-components-demo' ) );
 			$urls['subscribers_demo'] = esc_url( admin_url( 'admin.php?page=newspack-subscribers-demo' ) );
+			$urls['subscriptions_demo'] = esc_url( admin_url( 'admin.php?page=newspack-subscriptions-demo' ) );
 			$urls['setup_wizard']     = esc_url( admin_url( 'admin.php?page=newspack-setup-wizard' ) );
 			$urls['reset_url']       = esc_url(
 				add_query_arg(

@@ -177,6 +177,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-setup-wizard.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-components-demo.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-subscribers-demo.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-subscriptions-demo.php';
 
 		// Listings Wizard.
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/class-listings-wizard.php';

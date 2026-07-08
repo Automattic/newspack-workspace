@@ -17,6 +17,7 @@ const Footer = ( { simple = undefined } ) => {
 	const {
 		components_demo: componentsDemo = false,
 		subscribers_demo: subscribersDemo = false,
+		subscriptions_demo: subscriptionsDemo = false,
 		support = false,
 		setup_wizard: setupWizard = false,
 		reset_url: resetUrl = false,
@@ -52,6 +53,12 @@ const Footer = ( { simple = undefined } ) => {
 		footerElements.push( {
 			label: __( 'Subscribers Demo', 'newspack-plugin' ),
 			url: subscribersDemo,
+		} );
+	}
+	if ( subscriptionsDemo ) {
+		footerElements.push( {
+			label: __( 'Subscriptions Demo', 'newspack-plugin' ),
+			url: subscriptionsDemo,
 		} );
 	}
 	if ( setupWizard ) {
