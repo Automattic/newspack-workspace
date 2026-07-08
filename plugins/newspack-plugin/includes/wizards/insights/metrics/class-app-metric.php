@@ -52,6 +52,14 @@ final class App_Metric {
 	const METRICS_CACHE_PREFIX = 'newspack_insights_app_metrics_v1:';
 
 	/**
+	 * Retention transient TTL + key prefix. Retention is window-independent (its
+	 * own trailing complete-week cohorts), so it's cached per property — not per
+	 * window — and for a day, so a date-range change doesn't re-run it.
+	 */
+	const RETENTION_CACHE_TTL    = DAY_IN_SECONDS;
+	const RETENTION_CACHE_PREFIX = 'newspack_insights_app_retention_v1:';
+
+	/**
 	 * Retention curve length — nth-weeks after first open (0..N-1).
 	 */
 	const RETENTION_NTH_WEEKS = 4;
@@ -140,8 +148,15 @@ final class App_Metric {
 			}
 			$account_name = isset( $account['displayName'] ) ? (string) $account['displayName'] : '';
 			// Resource names look like "accounts/123"; keep the bare numeric ID.
-			$account_id = isset( $account['account'] ) ? self::strip_resource_prefix( (string) $account['account'] ) : '';
-			foreach ( $account['propertySummaries'] ?? [] as $property ) {
+			$account_id         = isset( $account['account'] ) ? self::strip_resource_prefix( (string) $account['account'] ) : '';
+			$property_summaries = $account['propertySummaries'] ?? [];
+			if ( ! is_array( $property_summaries ) ) {
+				continue;
+			}
+			foreach ( $property_summaries as $property ) {
+				if ( ! is_array( $property ) ) {
+					continue;
+				}
 				$property_id = isset( $property['property'] ) ? self::strip_resource_prefix( (string) $property['property'] ) : '';
 				if ( '' === $property_id ) {
 					continue;
@@ -230,15 +245,25 @@ final class App_Metric {
 			return [ 'tab_error' => 'not_connected' ];
 		}
 
-		$cache_key = self::METRICS_CACHE_PREFIX . md5( $property . '|' . $start_date . '|' . $end_date );
-		$cached    = get_transient( $cache_key );
-		if ( is_array( $cached ) ) {
-			return $cached;
+		// Window-dependent metrics (Reach, Engagement, Notifications, Editions),
+		// cached per property+window.
+		$window_key = self::METRICS_CACHE_PREFIX . md5( $property . '|' . $start_date . '|' . $end_date );
+		$window     = get_transient( $window_key );
+		if ( ! is_array( $window ) ) {
+			$window = self::compute_metrics( $property, $start_date, $end_date );
+			set_transient( $window_key, $window, self::METRICS_CACHE_TTL );
 		}
 
-		$metrics = self::compute_metrics( $property, $start_date, $end_date );
-		set_transient( $cache_key, $metrics, self::METRICS_CACHE_TTL );
-		return $metrics;
+		// Retention is window-independent (its own trailing complete-week cohorts);
+		// cache it per property with a daily TTL so date-range changes reuse it.
+		$retention_key = self::RETENTION_CACHE_PREFIX . md5( $property );
+		$retention     = get_transient( $retention_key );
+		if ( ! is_array( $retention ) ) {
+			$retention = self::compute_retention( $property );
+			set_transient( $retention_key, $retention, self::RETENTION_CACHE_TTL );
+		}
+
+		return array_merge( $window, [ 'retention' => $retention ] );
 	}
 
 	/**
@@ -354,22 +379,25 @@ final class App_Metric {
 	 * @return array timeseries payload.
 	 */
 	private static function compute_retention( string $property ): array {
-		$last_saturday = strtotime( 'last saturday' );
-		if ( false === $last_saturday ) {
+		// Anchor entirely in UTC so cohort week boundaries don't drift by a day on
+		// non-UTC servers (GA4 cohort dates must be Sunday..Saturday aligned).
+		try {
+			$last_saturday = new \DateTimeImmutable( 'last saturday', new \DateTimeZone( 'UTC' ) );
+		} catch ( \Exception $e ) {
 			return self::not_computable_rows( 'timeseries' );
 		}
 
 		$cohorts = [];
 		for ( $i = 0; $i < self::RETENTION_COHORTS; $i++ ) {
 			$weeks_back = ( self::RETENTION_NTH_WEEKS - 1 ) + $i;
-			$saturday   = $last_saturday - ( $weeks_back * 7 * DAY_IN_SECONDS );
-			$sunday     = $saturday - ( 6 * DAY_IN_SECONDS );
+			$saturday   = $last_saturday->modify( '-' . ( $weeks_back * 7 ) . ' days' );
+			$sunday     = $saturday->modify( '-6 days' );
 			$cohorts[]  = [
 				'name'      => 'c' . $i,
 				'dimension' => 'firstSessionDate',
 				'dateRange' => [
-					'startDate' => gmdate( 'Y-m-d', $sunday ),
-					'endDate'   => gmdate( 'Y-m-d', $saturday ),
+					'startDate' => $sunday->format( 'Y-m-d' ),
+					'endDate'   => $saturday->format( 'Y-m-d' ),
 				],
 			];
 		}
@@ -554,11 +582,7 @@ final class App_Metric {
 			'edition_opens'            => $ev_ok ? self::count_payload( $ev['BoltEditionOpened'] ) : self::not_computable( 'count' ),
 		];
 
-		// Retention uses its own trailing complete-week cohorts, not the selected
-		// window; it's a separate cohort report.
-		$retention = [ 'retention' => self::compute_retention( $property ) ];
-
-		return array_merge( $scalars, $breakdowns, $events, $retention );
+		return array_merge( $scalars, $breakdowns, $events );
 	}
 
 

@@ -59,11 +59,13 @@ class App_REST_Controller extends WP_REST_Controller {
 						'start' => [
 							'type'              => 'string',
 							'required'          => true,
+							'validate_callback' => [ $this, 'validate_date_string' ],
 							'sanitize_callback' => [ $this, 'sanitize_date' ],
 						],
 						'end'   => [
 							'type'              => 'string',
 							'required'          => true,
+							'validate_callback' => [ $this, 'validate_date_string' ],
 							'sanitize_callback' => [ $this, 'sanitize_date' ],
 						],
 					],
