@@ -83,7 +83,20 @@ export default function DiscountRuleFlow( { rule, onClose, onSaved } ) {
 		setExcludedIds( names.map( name => scopeProducts.find( p => p.name === name )?.id ).filter( Boolean ) );
 	};
 
-	const draft = ruleShape( { audience, targeting, productIds, category, excludedIds, type, amount: Number( amountInput ) || 0 } );
+	// Drop exclusions no longer in scope (e.g. left over after switching targeting
+	// or category) so the saved rule and its "N excluded" label never count
+	// products the editor isn't showing.
+	const scopedExcludedIds = excludedIds.filter( id => scopeProducts.some( p => p.id === id ) );
+
+	const draft = ruleShape( {
+		audience,
+		targeting,
+		productIds,
+		category,
+		excludedIds: scopedExcludedIds,
+		type,
+		amount: Number( amountInput ) || 0,
+	} );
 	const products = productsForRule( draft );
 
 	const onAmountChange = value => setAmountInput( value );
