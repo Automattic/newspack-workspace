@@ -30,6 +30,8 @@ import EngagementSection from './app/EngagementSection';
 import RetentionSection from './app/RetentionSection';
 import NotificationsSection from './app/NotificationsSection';
 import EditionsSection from './app/EditionsSection';
+import ContentSection from './app/ContentSection';
+import CompositionSection from './app/CompositionSection';
 import type { TabSectionProps } from '../components/InsightsWizard';
 import './app/app.scss';
 import { fetchAppConfig, saveAppProperty, fetchAppMetrics, type AppConfig, type AppProperty, type AppMetrics } from '../api/app';
@@ -143,6 +145,8 @@ const AppMetricsView = ( { range }: { range: TabSectionProps[ 'range' ] } ) => {
 			<RetentionSection metrics={ metrics } />
 			<NotificationsSection metrics={ metrics } />
 			<EditionsSection metrics={ metrics } />
+			<ContentSection metrics={ metrics } />
+			<CompositionSection metrics={ metrics } />
 		</div>
 	);
 };

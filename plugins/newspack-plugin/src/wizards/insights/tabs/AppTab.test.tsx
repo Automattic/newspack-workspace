@@ -52,6 +52,10 @@ const metricsResponse = () => ( {
 		downloads_completed: { value: 33805, computable: true, type: 'count' },
 		download_completion_rate: { value: 0.952, computable: true, type: 'rate' },
 		edition_opens: { value: 4180, computable: true, type: 'count' },
+		top_sections: { rows: [ { section: 'News', views: 7078 } ], computable: true, type: 'breakdown' },
+		top_authors: { rows: [ { author: 'Alex Rivera', views: 3120 } ], computable: true, type: 'breakdown' },
+		subscriber_mix: { rows: [ { status: 'ExistingSubscriber', users: 483 } ], computable: true, type: 'breakdown' },
+		content_cost: { rows: [ { cost: 'Free', views: 52140 } ], computable: true, type: 'breakdown' },
 	},
 } );
 
@@ -139,7 +143,29 @@ describe( 'AppTab', () => {
 		expect( screen.getByText( 'Weekly retention' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Notification open rate' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Download completion rate' ) ).toBeInTheDocument();
+		// Tier-2a content + composition sections (unique card titles).
+		expect( screen.getByText( 'Top sections' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top authors' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Subscriber mix' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Free vs. paid content' ) ).toBeInTheDocument();
 		await waitFor( () => expect( mockMetrics ).toHaveBeenCalledWith( '2026-05-01', '2026-05-31' ) );
+	} );
+
+	it( 'shows the not-configured note for Tier-2 cards whose KG dimension is unregistered', async () => {
+		mockFetch.mockResolvedValue( baseConfig( { selected_property: '533212292', selected_is_visible: true } ) );
+		const response = metricsResponse();
+		// Runtime tiering: the backend emits not_configured for KG breakdowns that
+		// aren't registered on the property. The card renders the unlock note
+		// instead of data, and the rest of the tab still renders.
+		response.current.top_sections = { rows: [], computable: false, not_configured: true, type: 'breakdown' };
+		response.current.subscriber_mix = { rows: [], computable: false, not_configured: true, type: 'breakdown' };
+		mockMetrics.mockResolvedValue( response );
+		renderTab();
+
+		// The section titles still render (the cards are present, just gated).
+		expect( await screen.findByText( 'Top sections' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Subscriber mix' ) ).toBeInTheDocument();
+		expect( screen.getAllByText( /Not configured for this site/i ).length ).toBeGreaterThanOrEqual( 2 );
 	} );
 
 	it( 'falls back to the picker when the saved property is no longer visible', async () => {

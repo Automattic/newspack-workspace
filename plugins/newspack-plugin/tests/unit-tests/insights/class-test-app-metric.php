@@ -259,4 +259,22 @@ class Test_App_Metric extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'settings_url', $config );
 		$this->assertStringContainsString( 'page=newspack-settings', $config['settings_url'] );
 	}
+
+	/**
+	 * Runtime tiering: a Tier-2 KG breakdown for a dimension that isn't registered
+	 * on the property short-circuits to a `not_configured` payload (the card
+	 * renders its unlock note) — no report is run, so no network is hit.
+	 */
+	public function test_kg_breakdown_unregistered_is_not_configured() {
+		$method = new \ReflectionMethod( App_Metric::class, 'kg_breakdown' );
+		$method->setAccessible( true );
+
+		// Registered list omits KGSection → not configured.
+		$payload = $method->invoke( null, '123', [ 'dateRanges' => [] ], [ 'KGAuthor' ], 'KGSection', 'screenPageViews', 'section', 'views' );
+
+		$this->assertFalse( $payload['computable'] );
+		$this->assertTrue( $payload['not_configured'] );
+		$this->assertSame( 'breakdown', $payload['type'] );
+		$this->assertSame( [], $payload['rows'] );
+	}
 }
