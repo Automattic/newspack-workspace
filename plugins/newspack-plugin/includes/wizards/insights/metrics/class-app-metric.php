@@ -145,6 +145,13 @@ final class App_Metric {
 	 * @return array
 	 */
 	public static function get_config(): array {
+		// Dev smoke path: with fixture mode on, present a connected state with
+		// sample properties so the picker → selected flow is demoable without a
+		// live Google connection. Never enabled in production.
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			return self::get_fixture_config();
+		}
+
 		$connected           = self::is_connected();
 		$properties          = [];
 		$properties_error    = null;
@@ -173,6 +180,50 @@ final class App_Metric {
 			'selected_is_visible' => $selected_is_visible,
 			'properties'          => $properties,
 			'properties_error'    => $properties_error,
+			'settings_url'        => admin_url( 'admin.php?page=newspack-settings' ),
+		];
+	}
+
+	/**
+	 * Canned config for fixture/dev mode: connected, with generic sample
+	 * properties across two accounts (one a Firebase-default, to mirror the
+	 * separate-account case). Reflects the real saved property so picking → saving
+	 * → the selected state works end-to-end locally. No real publisher names.
+	 *
+	 * @return array
+	 */
+	private static function get_fixture_config(): array {
+		$properties = [
+			[
+				'account_id'    => '100000001',
+				'account_name'  => 'Example News',
+				'property_id'   => '200000001',
+				'property_name' => 'Example News — Web',
+			],
+			[
+				'account_id'    => '100000002',
+				'account_name'  => 'Default Account for Firebase',
+				'property_id'   => '200000002',
+				'property_name' => 'example-news-app',
+			],
+		];
+
+		$selected            = self::get_selected_property_id();
+		$selected_is_visible = false;
+		foreach ( $properties as $property ) {
+			if ( $property['property_id'] === $selected ) {
+				$selected_is_visible = true;
+				break;
+			}
+		}
+
+		return [
+			'is_app_publisher'    => true,
+			'connected'           => true,
+			'selected_property'   => '' !== $selected ? $selected : null,
+			'selected_is_visible' => $selected_is_visible,
+			'properties'          => $properties,
+			'properties_error'    => null,
 			'settings_url'        => admin_url( 'admin.php?page=newspack-settings' ),
 		];
 	}
