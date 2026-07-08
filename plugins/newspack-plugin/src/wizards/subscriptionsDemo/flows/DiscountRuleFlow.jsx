@@ -113,7 +113,14 @@ export default function DiscountRuleFlow( { rule, onClose, onSaved } ) {
 		amount: rule.amount ?? 0,
 	} );
 	const isDirty = JSON.stringify( draft ) !== JSON.stringify( initial );
-	const isValid = draft.amount > 0 && ( targeting !== 'products' || productIds.length > 0 );
+	// A valid amount is finite and positive; a percentage can't exceed 100. Save
+	// stays disabled (and saveDiscount never runs) until the amount clears these.
+	const amountValue = Number( amountInput );
+	const isValid =
+		Number.isFinite( amountValue ) &&
+		amountValue > 0 &&
+		( type !== 'percent' || amountValue <= 100 ) &&
+		( targeting !== 'products' || productIds.length > 0 );
 	const canSave = isDirty && isValid;
 
 	const onSave = () => {
