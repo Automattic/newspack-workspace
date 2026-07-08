@@ -21,8 +21,6 @@ class Admin_List_Table_Layout {
 	/**
 	 * Screens treated by default. Each entry is a post_type, taxonomy, or screen id.
 	 * Overridable (add or remove) via the `newspack_admin_autolayout_screens` filter.
-	 *
-	 * @var string[]
 	 */
 	const DEFAULT_SCREENS = [ 'post', 'page' ];
 
@@ -34,9 +32,10 @@ class Admin_List_Table_Layout {
 
 	/**
 	 * Allowed min-width syntax: a positive integer plus a length unit. Percentage
-	 * is intentionally excluded — it is ignored on table cells.
+	 * is intentionally excluded (ignored on table cells); the `D` flag anchors the
+	 * end so a trailing newline is rejected too.
 	 */
-	const MIN_WIDTH_PATTERN = '/^\d+(?:px|ch|rem)$/';
+	const MIN_WIDTH_PATTERN = '/^\d+(?:px|ch|rem)$/D';
 
 	/**
 	 * Extra screens registered on top of DEFAULT_SCREENS.
