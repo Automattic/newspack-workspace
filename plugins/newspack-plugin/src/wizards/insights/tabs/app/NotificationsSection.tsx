@@ -20,9 +20,10 @@ import SectionHeading from '../components/SectionHeading';
 
 export interface NotificationsSectionProps {
 	metrics: AppMetrics;
+	previous?: AppMetrics | null;
 }
 
-const NotificationsSection = ( { metrics }: NotificationsSectionProps ) => (
+const NotificationsSection = ( { metrics, previous }: NotificationsSectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-app-notifications-heading">
 		<SectionHeading
 			id="newspack-insights-app-notifications-heading"
@@ -34,16 +35,19 @@ const NotificationsSection = ( { metrics }: NotificationsSectionProps ) => (
 				label={ __( 'Notification open rate', 'newspack-plugin' ) }
 				description={ __( 'Share of received push notifications that were opened', 'newspack-plugin' ) }
 				current={ metrics.notification_open_rate }
+				previous={ previous?.notification_open_rate }
 			/>
 			<Scorecard
 				label={ __( 'Notifications received', 'newspack-plugin' ) }
 				description={ __( 'Push notifications delivered to app users', 'newspack-plugin' ) }
 				current={ metrics.notifications_received }
+				previous={ previous?.notifications_received }
 			/>
 			<Scorecard
 				label={ __( 'Opt-in changes', 'newspack-plugin' ) }
 				description={ __( 'Times users changed their push-notification permission', 'newspack-plugin' ) }
 				current={ metrics.notification_opt_changes }
+				previous={ previous?.notification_opt_changes }
 			/>
 		</div>
 	</section>

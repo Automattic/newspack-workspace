@@ -25,6 +25,8 @@ import { useEffect, useState } from '@wordpress/element';
 import { Notice, Button, Grid, SelectControl } from '../../../../packages/components/src';
 import WizardsActionCard from '../../wizards-action-card';
 import TabSpinner from './components/TabSpinner';
+import LastUpdated from '../components/LastUpdated';
+import useAppMetricsData from '../hooks/useAppMetricsData';
 import ReachSection from './app/ReachSection';
 import EngagementSection from './app/EngagementSection';
 import RetentionSection from './app/RetentionSection';
@@ -34,7 +36,7 @@ import ContentSection from './app/ContentSection';
 import CompositionSection from './app/CompositionSection';
 import type { TabSectionProps } from '../components/InsightsWizard';
 import './app/app.scss';
-import { fetchAppConfig, saveAppProperty, fetchAppMetrics, type AppConfig, type AppProperty, type AppMetrics } from '../api/app';
+import { fetchAppConfig, saveAppProperty, type AppConfig, type AppProperty } from '../api/app';
 
 /** Label a property option so a separate (e.g. Firebase) account is distinguishable. */
 const propertyLabel = ( p: AppProperty ): string =>
@@ -110,51 +112,45 @@ const PropertyPicker = ( { config, onSaved }: { config: AppConfig; onSaved: ( ne
 	);
 };
 
-/** Ready state — fetch the windowed metrics for the selected property and render the sections. */
-const AppMetricsView = ( { range }: { range: TabSectionProps[ 'range' ] } ) => {
-	const [ metrics, setMetrics ] = useState< AppMetrics | null >( null );
-	const [ loading, setLoading ] = useState( true );
-	const [ error, setError ] = useState< string | null >( null );
+/** Ready state — read the windowed metrics (via the shared cache) and render the sections. */
+const AppMetricsView = ( { range, previousRange }: Pick< TabSectionProps, 'range' | 'previousRange' > ) => {
+	const { status, data, error } = useAppMetricsData( range, previousRange );
+	const current = data?.current ?? null;
+	// Only surface period-over-period deltas when the comparison toggle is on.
+	// (Fixture mode returns a `previous` window unconditionally, so gate here.)
+	const previous = previousRange ? data?.previous ?? null : null;
 
-	useEffect( () => {
-		let active = true;
-		setLoading( true );
-		setError( null );
-		fetchAppMetrics( range.start, range.end )
-			.then( response => active && setMetrics( response.current ) )
-			.catch( e => active && setError( e instanceof Error ? e.message : String( e ) ) )
-			.finally( () => active && setLoading( false ) );
-		return () => {
-			active = false;
-		};
-	}, [ range.start, range.end ] );
-
-	if ( loading ) {
+	if ( status === 'loading' && ! current ) {
 		return <TabSpinner className="newspack-insights__tab-fallback" />;
 	}
-	if ( error ) {
-		return <Notice isError noticeText={ error } />;
+	if ( status === 'error' ) {
+		return <Notice isError noticeText={ error || __( 'Could not load app analytics.', 'newspack-plugin' ) } />;
 	}
-	if ( ! metrics || metrics.tab_error ) {
+	if ( ! current || current.tab_error ) {
 		return <Notice noticeText={ __( 'App analytics aren’t available for this property yet.', 'newspack-plugin' ) } />;
 	}
+
+	// The shared "Last updated: … + kebab (Refresh / Print / Export JSON)" chrome,
+	// hosted in the first section's heading like the other data tabs.
+	const lastUpdated = <LastUpdated tab="app" range={ range } previousRange={ previousRange } />;
+
 	return (
 		<div className="newspack-insights__app-tab">
 			{ /* Ordered as a narrative: scale (Reach) → depth (Engagement) → what
 			     they read (Content) → who they are (Audience) → loyalty (Retention)
 			     → the app-ops channels (Notifications, Editions) last. */ }
-			<ReachSection metrics={ metrics } />
-			<EngagementSection metrics={ metrics } />
-			<ContentSection metrics={ metrics } />
-			<CompositionSection metrics={ metrics } />
-			<RetentionSection metrics={ metrics } />
-			<NotificationsSection metrics={ metrics } />
-			<EditionsSection metrics={ metrics } />
+			<ReachSection metrics={ current } previous={ previous } lastUpdated={ lastUpdated } />
+			<EngagementSection metrics={ current } previous={ previous } />
+			<ContentSection metrics={ current } />
+			<CompositionSection metrics={ current } />
+			<RetentionSection metrics={ current } />
+			<NotificationsSection metrics={ current } previous={ previous } />
+			<EditionsSection metrics={ current } previous={ previous } />
 		</div>
 	);
 };
 
-const AppTab = ( { range }: TabSectionProps ) => {
+const AppTab = ( { range, previousRange }: TabSectionProps ) => {
 	const [ config, setConfig ] = useState< AppConfig | null >( null );
 	const [ loading, setLoading ] = useState( true );
 	const [ error, setError ] = useState< string | null >( null );
@@ -204,7 +200,7 @@ const AppTab = ( { range }: TabSectionProps ) => {
 					{ __( 'Change app property', 'newspack-plugin' ) }
 				</Button>
 			</div>
-			<AppMetricsView range={ range } />
+			<AppMetricsView range={ range } previousRange={ previousRange } />
 		</>
 	);
 };

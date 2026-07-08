@@ -55,20 +55,19 @@ class App_REST_Controller extends WP_REST_Controller {
 					'methods'             => WP_REST_Server::READABLE,
 					'callback'            => [ $this, 'get_metrics' ],
 					'permission_callback' => [ $this, 'permissions_check' ],
-					'args'                => [
-						'start' => [
-							'type'              => 'string',
-							'required'          => true,
-							'validate_callback' => [ $this, 'validate_date_string' ],
-							'sanitize_callback' => [ $this, 'sanitize_date' ],
-						],
-						'end'   => [
-							'type'              => 'string',
-							'required'          => true,
-							'validate_callback' => [ $this, 'validate_date_string' ],
-							'sanitize_callback' => [ $this, 'sanitize_date' ],
-						],
-					],
+					'args'                => $this->window_args(),
+				],
+			]
+		);
+		register_rest_route(
+			$this->namespace,
+			'/' . $this->rest_base . '/refresh',
+			[
+				[
+					'methods'             => WP_REST_Server::CREATABLE,
+					'callback'            => [ $this, 'refresh_metrics' ],
+					'permission_callback' => [ $this, 'permissions_check' ],
+					'args'                => $this->window_args(),
 				],
 			]
 		);
@@ -109,12 +108,55 @@ class App_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * GET handler — windowed metric payloads for the selected app property.
+	 * The windowed-report args, shared by the GET and refresh routes: a required
+	 * current window (`start`/`end`) and an optional comparison window
+	 * (`compare_start`/`compare_end`), all validated/sanitized as YYYY-MM-DD.
+	 *
+	 * @return array
+	 */
+	private function window_args(): array {
+		$date_arg = [
+			'type'              => 'string',
+			'validate_callback' => [ $this, 'validate_date_string' ],
+			'sanitize_callback' => [ $this, 'sanitize_date' ],
+		];
+		return [
+			'start'         => array_merge( $date_arg, [ 'required' => true ] ),
+			'end'           => array_merge( $date_arg, [ 'required' => true ] ),
+			'compare_start' => $date_arg,
+			'compare_end'   => $date_arg,
+		];
+	}
+
+	/**
+	 * GET handler — windowed metric envelope for the selected app property.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function get_metrics( WP_REST_Request $request ) {
+		return $this->report_response( $request, false );
+	}
+
+	/**
+	 * POST /app/refresh handler — bypass the per-window transient and recompute.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public function refresh_metrics( WP_REST_Request $request ) {
+		return $this->report_response( $request, true );
+	}
+
+	/**
+	 * Build the windowed-report response (envelope shape the shared insightsCache
+	 * consumes). A comparison window is honored only when both bounds are present.
+	 *
+	 * @param WP_REST_Request $request       Request.
+	 * @param bool            $force_refresh Bypass the transient and recompute.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	private function report_response( WP_REST_Request $request, bool $force_refresh ) {
 		$start = (string) $request->get_param( 'start' );
 		$end   = (string) $request->get_param( 'end' );
 		if ( '' === $start || '' === $end ) {
@@ -124,7 +166,17 @@ class App_REST_Controller extends WP_REST_Controller {
 				[ 'status' => 400 ]
 			);
 		}
-		return rest_ensure_response( [ 'current' => App_Metric::get_metrics( $start, $end ) ] );
+
+		$compare_start = (string) $request->get_param( 'compare_start' );
+		$compare_end   = (string) $request->get_param( 'compare_end' );
+		if ( '' === $compare_start || '' === $compare_end ) {
+			$compare_start = '';
+			$compare_end   = '';
+		}
+
+		$response = rest_ensure_response( App_Metric::get_report( $start, $end, $compare_start, $compare_end, $force_refresh ) );
+		$response->header( 'Cache-Control', 'no-store, private' );
+		return $response;
 	}
 
 	/**
