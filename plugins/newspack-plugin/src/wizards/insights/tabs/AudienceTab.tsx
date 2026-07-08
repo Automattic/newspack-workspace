@@ -20,6 +20,7 @@ import useAudienceData from '../hooks/useAudienceData';
 import LastUpdated from '../components/LastUpdated';
 import ConnectBanner from './components/ConnectBanner';
 import TabStateView from './components/TabStateView';
+import TabStatusBanner from './components/TabStatusBanner';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import ReachSection from './audience/sections/ReachSection';
 import RegisteredReadersSection from './audience/sections/RegisteredReadersSection';
@@ -72,6 +73,7 @@ const AudienceTab = ( { range, previousRange }: AudienceTabProps ) => {
 					</>
 				) : (
 					<>
+						<TabStatusBanner status={ data.data_status } />
 						<ReachSection
 							current={ current }
 							previous={ previous }

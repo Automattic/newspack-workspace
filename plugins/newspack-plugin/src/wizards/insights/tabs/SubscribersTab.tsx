@@ -26,6 +26,7 @@ import type { DateRange } from '../state/useDateRange';
 import useSubscribersData from '../hooks/useSubscribersData';
 import LastUpdated from '../components/LastUpdated';
 import TabStateView from './components/TabStateView';
+import TabStatusBanner from './components/TabStatusBanner';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import ScorecardSection from './subscribers/ScorecardSection';
 import WindowedSection from './subscribers/WindowedSection';
@@ -53,6 +54,7 @@ const SubscribersTab = ( { range, previousRange }: SubscribersTabProps ) => {
 		>
 			{ data && (
 				<>
+					<TabStatusBanner status={ data.data_status } />
 					<ScorecardSection
 						snapshot={ data.snapshot }
 						lastUpdated={ <LastUpdated tab="subscribers" range={ range } previousRange={ previousRange } /> }

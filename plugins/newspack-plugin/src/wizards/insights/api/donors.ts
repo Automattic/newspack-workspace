@@ -165,6 +165,8 @@ export interface DonorsResponse {
 	snapshot: DonorsSnapshot;
 	current: DonorsWindow;
 	previous: DonorsWindow | null;
+	/** Snapshot freshness (NEWS-2603): drives the top-of-tab TabStatusBanner. */
+	data_status?: 'complete' | 'warming' | 'incomplete';
 }
 
 export interface DonorsQuery {

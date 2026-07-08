@@ -158,6 +158,8 @@ export interface SubscribersResponse {
 	snapshot: SubscribersSnapshot;
 	current: SubscribersWindow;
 	previous: SubscribersWindow | null;
+	/** Snapshot freshness (NEWS-2603): drives the top-of-tab TabStatusBanner. */
+	data_status?: 'complete' | 'warming' | 'incomplete';
 }
 
 export interface SubscribersQuery {
