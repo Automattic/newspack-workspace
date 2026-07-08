@@ -149,6 +149,14 @@ n test-php --list-groups            # List available test groups
 n test-js                           # Run JS tests
 ```
 
+#### End-to-end (Playwright) tests
+The Playwright end-to-end suite lives in [`e2e/`](e2e/) — a self-contained npm
+project deliberately kept out of the pnpm workspace, so the per-package lint/build/
+test CI never tries to run it (it needs a live site). It runs nightly on TeamCity
+against a staging site and can also run against a local env. See
+[`e2e/README.md`](e2e/README.md) and [`e2e/AGENTS.md`](e2e/AGENTS.md) for setup and
+the from-scratch provisioning model (`site-setup.sh` / `e2e-setup.sh`).
+
 ### Development
 ```bash
 n watch <name>                # Watch & rebuild a single project (or run `n watch` from inside its folder)
