@@ -54,27 +54,36 @@ add_action(
 );
 
 // Save outgoing emails as email_log CPT.
-add_action(
-	'wp_mail',
-	function ( $attributes ) {
-		$recipient = $attributes['to'];
-		if ( empty( $recipient ) ) {
-			return;
-		}
+// Capture outgoing mail into the sendbox AND short-circuit the real send.
+// Using `pre_wp_mail` (not the `wp_mail` action) lets us return success without
+// actually sending, so wp_mail() always reports true. Reader flows that branch
+// on wp_mail()'s return value — password reset, email change, account
+// verification — then show their success notice regardless of the site's real
+// mail deliverability; the captured copy in the sendbox is the suite's source of
+// truth. Hooking the action instead left the real (often failing) send in play,
+// which surfaced as "the email could not be sent" and broke those flows.
+add_filter(
+	'pre_wp_mail',
+	function ( $short_circuit, $attributes ) {
+		$recipient = is_array( $attributes['to'] ?? '' ) ? ( $attributes['to'][0] ?? '' ) : ( $attributes['to'] ?? '' );
 		// Only save emails sent to non-admin users.
-		$user = get_user_by( 'email', $recipient );
-		if ( $user && in_array( 'administrator', $user->roles ) ) {
-			return;
+		$user = $recipient ? get_user_by( 'email', $recipient ) : false;
+		if ( $recipient && ! ( $user && in_array( 'administrator', $user->roles, true ) ) ) {
+			$message = preg_replace( '/<\/title>.*?<div/s', '</title><div', $attributes['message'] );
+			wp_insert_post(
+				[
+					'post_title'   => $attributes['subject'] . ' (' . $recipient . ')',
+					'post_content' => $message,
+					'post_status'  => 'publish',
+					'post_type'    => 'email_log',
+				]
+			);
 		}
-		$attributes['message'] = preg_replace( '/<\/title>.*?<div/s', '</title><div', $attributes['message'] );
-		$post_data = [
-			'post_title'   => $attributes['subject'] . ' (' . $recipient . ')',
-			'post_content' => $attributes['message'],
-			'post_status'  => 'publish',
-			'post_type'    => 'email_log',
-		];
-		wp_insert_post( $post_data );
-	}
+		// Report success without a real send.
+		return true;
+	},
+	10,
+	2
 );
 
 // Display all sent emails.
