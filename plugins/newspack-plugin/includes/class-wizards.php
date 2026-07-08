@@ -101,6 +101,7 @@ class Wizards {
 			Insights_Section_Donors::init();
 			Insights_Section_Advertising::init();
 			Insights_Section_Newsletter_Ads::init();
+			Insights_Section_App::init();
 			Insights_Feedback::init();
 		}
 	}

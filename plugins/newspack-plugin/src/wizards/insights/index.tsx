@@ -29,6 +29,7 @@ const FALLBACK_CONFIG: InsightsBootConfig = {
 		donors: true,
 		advertising: true,
 		newsletter_ads: true,
+		app: false,
 	},
 	defaultDateRange: ( () => {
 		const pad = ( n: number ) => String( n ).padStart( 2, '0' );

@@ -349,6 +349,38 @@ class Insights_Wizard extends Wizard {
 	}
 
 	/**
+	 * App tab (Tab 10, NPPD-1882) preview flag — keeps it dark on real
+	 * app-publisher sites until the build is ready, mirroring the Gates preview
+	 * gate.
+	 *
+	 * @constant NEWSPACK_INSIGHTS_APP_PREVIEW
+	 * @example define( 'NEWSPACK_INSIGHTS_APP_PREVIEW', true );
+	 * @return bool
+	 */
+	public static function is_app_preview_enabled(): bool {
+		return defined( 'NEWSPACK_INSIGHTS_APP_PREVIEW' ) && NEWSPACK_INSIGHTS_APP_PREVIEW;
+	}
+
+	/**
+	 * Whether the App (Tab 10) nav entry should render: Pugpig ("Bolt") app
+	 * publishers only, behind the preview flag during phased rollout — or fixture
+	 * mode for dev testing. Public because {@see Insights_Section_App::init()}
+	 * gates its own initialization on this.
+	 *
+	 * @return bool
+	 */
+	public static function is_app_tab_visible(): bool {
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			return true;
+		}
+		if ( ! self::is_app_preview_enabled() ) {
+			return false;
+		}
+		return class_exists( '\Newspack_Manager\Pugpig\Pugpig' )
+			&& \Newspack_Manager\Pugpig\Pugpig::is_enabled();
+	}
+
+	/**
 	 * Whether the Newsletter Ads (NPPD-1861) nav entry should render: the
 	 * newsletter ads CPT exists and the site has at least one published ad
 	 * (transient-cached in the orchestrator), or fixture mode is on so the tab
@@ -407,6 +439,9 @@ class Insights_Wizard extends Wizard {
 				// Newsletter Ads (NPPD-1861): shown when the site has published
 				// newsletter ads (or fixture mode). See is_newsletter_ads_tab_visible().
 				'newsletter_ads' => self::is_newsletter_ads_tab_visible(),
+				// App (Tab 10, NPPD-1882): Pugpig app publishers, behind the
+				// NEWSPACK_INSIGHTS_APP_PREVIEW flag during phased rollout.
+				'app'            => self::is_app_tab_visible(),
 			],
 			'defaultDateRange'    => [
 				'preset' => 'last-30',

@@ -183,6 +183,7 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-donors.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-advertising.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-newsletter-ads.php';
+		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-section-app.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/class-insights-feedback.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/gam/class-report-job-status.php';
 		include_once NEWSPACK_ABSPATH . 'includes/wizards/insights/gam/class-report-query.php';

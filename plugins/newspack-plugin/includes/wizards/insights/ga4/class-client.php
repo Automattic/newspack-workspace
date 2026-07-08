@@ -47,6 +47,13 @@ final class Client {
 	const DATA_API_URL = 'https://analyticsdata.googleapis.com/v1beta/properties';
 
 	/**
+	 * GA4 Admin API base URL. Used for `accountSummaries.list` (property
+	 * enumeration for the App tab's property picker — NPPD-1882). The same
+	 * Newspack `analytics` scope covers the Admin and Data APIs.
+	 */
+	const ADMIN_API_URL = 'https://analyticsadmin.googleapis.com/v1beta';
+
+	/**
 	 * Per-request memo of registered EVENT-scoped custom-dimension parameter
 	 * names (or a WP_Error), keyed by property ID. Orchestrators issue several
 	 * reports per request — and batch_run_reports() calls run_report() in a loop
@@ -227,6 +234,87 @@ final class Client {
 			);
 		}
 		return $token;
+	}
+
+	/**
+	 * Whether a usable Newspack Google OAuth access token is available right now.
+	 *
+	 * This is the authoritative "connected" check — it resolves (and refreshes)
+	 * the stored credential, unlike `Google_OAuth::is_oauth_configured()` which
+	 * only reports that the OAuth proxy is configured and returns true even when
+	 * no publisher has actually connected an account (verified on live sites).
+	 * The App tab (NPPD-1882) gates its connect-CTA on this, not on
+	 * `is_oauth_configured()`.
+	 *
+	 * @return bool
+	 */
+	public static function has_valid_credentials(): bool {
+		return ! is_wp_error( self::get_access_token() );
+	}
+
+	/**
+	 * List every GA4 account summary (accounts + their property summaries) the
+	 * connected Newspack Google identity can see, spanning account boundaries.
+	 * Powers the App tab's property picker — the app analytics property is often
+	 * in a different account (e.g. a Firebase-default account) than the web
+	 * property, so a single-account lookup would miss it (NPPD-1882).
+	 *
+	 * @return array|\WP_Error List of GA Admin API `accountSummary` objects, or WP_Error.
+	 *
+	 * Error codes:
+	 *   - token errors bubble up from {@see self::get_access_token()}.
+	 *   - 'ga4_admin_api_error': non-2xx from the Admin API. Data carries `[ 'http_code' => int ]`.
+	 */
+	public static function account_summaries() {
+		$token = self::get_access_token();
+		if ( is_wp_error( $token ) ) {
+			return $token;
+		}
+
+		$summaries  = [];
+		$page_token = '';
+		do {
+			$url = self::ADMIN_API_URL . '/accountSummaries?pageSize=200';
+			if ( '' !== $page_token ) {
+				$url .= '&pageToken=' . rawurlencode( $page_token );
+			}
+			// phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_remote_get_wp_remote_get -- vip_safe_wp_remote_get() is not guaranteed present off-VIP; matches gam/class-client.php.
+			$response = wp_remote_get(
+				$url,
+				[
+					'timeout' => 15, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
+					'headers' => [ 'Authorization' => 'Bearer ' . $token ],
+				]
+			);
+			if ( is_wp_error( $response ) ) {
+				return $response;
+			}
+			$code = wp_remote_retrieve_response_code( $response );
+			$data = json_decode( wp_remote_retrieve_body( $response ), true );
+			if ( $code < 200 || $code >= 300 ) {
+				return new \WP_Error(
+					'ga4_admin_api_error',
+					is_array( $data ) && isset( $data['error']['message'] ) ? $data['error']['message'] : 'HTTP ' . $code,
+					[ 'http_code' => $code ]
+				);
+			}
+			// A 2xx with a non-array body (scalar / invalid JSON, e.g. an upstream
+			// proxy error) would fatal on the offset access below; treat it as an
+			// API error rather than trusting the shape.
+			if ( ! is_array( $data ) ) {
+				return new \WP_Error(
+					'ga4_admin_api_error',
+					__( 'The GA4 Admin API returned an unexpected response.', 'newspack-plugin' ),
+					[ 'http_code' => $code ]
+				);
+			}
+			foreach ( $data['accountSummaries'] ?? [] as $account ) {
+				$summaries[] = $account;
+			}
+			$page_token = $data['nextPageToken'] ?? '';
+		} while ( '' !== $page_token );
+
+		return $summaries;
 	}
 
 	/**
