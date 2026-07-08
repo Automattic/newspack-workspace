@@ -40,6 +40,14 @@ final class Cache {
 	const BQ_COOLDOWN_SECONDS = 10 * MINUTE_IN_SECONDS;
 
 	/**
+	 * TTL for a provisional (warming) payload — one whose top-level
+	 * `data_status` is 'warming'. Short-lived so the next visit recomputes
+	 * soon and picks up the fully-warmed value, instead of serving the
+	 * provisional payload for the source's normal (much longer) TTL.
+	 */
+	const TTL_PROVISIONAL = 3 * MINUTE_IN_SECONDS;
+
+	/**
 	 * Max number of transient keys retained per tab in the index. Older
 	 * entries are dropped FIFO when the cap is exceeded; the underlying
 	 * transients still expire naturally on their TTL — losing the index
@@ -146,18 +154,26 @@ final class Cache {
 		$payload  = (array) $compute();
 		$envelope = self::envelope( $payload, $source );
 
+		// A provisional (warming) payload gets a short TTL and is kept out of
+		// the on-demand durable pool, so the next visit recomputes soon and
+		// picks up the fully-warmed value rather than serving this provisional
+		// payload for the source's normal (much longer) TTL.
+		$is_provisional = is_array( $payload ) && ( 'warming' === ( $payload['data_status'] ?? null ) );
+
 		$store = [
 			'payload'     => $envelope['payload'],
 			'computed_at' => $envelope['computed_at'],
 			'source'      => $envelope['source'],
 		];
-		set_transient( self::transient_key( $tab, $key_parts ), $store, self::ttl_for( $source ) );
+		set_transient( self::transient_key( $tab, $key_parts ), $store, $is_provisional ? self::TTL_PROVISIONAL : self::ttl_for( $source ) );
 		if ( self::SOURCE_SNAPSHOT !== $source ) {
 			self::index_add( $tab, self::transient_key( $tab, $key_parts ) );
 		}
 
-		// Write-through / refresh the on-demand pool (same eligibility as the read).
-		if ( $ondemand_eligible ) {
+		// Write-through / refresh the on-demand pool (same eligibility as the
+		// read), skipped for a provisional payload so a warming value can't
+		// stick in the 25h-fresh on-demand pool.
+		if ( $ondemand_eligible && ! $is_provisional ) {
 			self::store_ondemand( $tab, $source, $key_parts, $envelope['payload'], $window );
 		}
 
