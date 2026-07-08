@@ -95,6 +95,24 @@ describe( 'payloadToCard', () => {
 		expect( card ).not.toHaveProperty( 'notComputableMessage' );
 		expect( card?.value ).toBe( 0 );
 	} );
+
+	it( 'renders a warming metric as { warming: true }, not a value card (NEWS-2603)', () => {
+		const card = payloadToCard( {
+			label: 'Newsletter → subscription',
+			current: { state: 'warming', computable: false },
+		} );
+		expect( card ).toEqual( { label: 'Newsletter → subscription', description: undefined, warming: true } );
+		expect( card ).not.toHaveProperty( 'value' );
+	} );
+
+	it( 'lets a hard error win over a warming state', () => {
+		const card = payloadToCard( {
+			label: 'x',
+			current: { state: 'warming', computable: false, error: 'boom' },
+		} );
+		expect( card?.error ).toBe( 'boom' );
+		expect( card ).not.toHaveProperty( 'warming' );
+	} );
 } );
 
 describe( 'toSeries', () => {

@@ -74,6 +74,14 @@ export interface MetricPayload {
 	not_configured?: boolean;
 	/** Cohort below its minimum-sessions floor: render the "needs data" state instead of a comparison. */
 	needs_data?: boolean;
+	/**
+	 * Metric lifecycle state (NEWS-2603). `'warming'` means the hub snapshot for
+	 * this metric is a cache miss being backfilled — a transient, expected
+	 * condition (distinct from `error` and from "insufficient history").
+	 * `payloadToCard` maps it to `warming: true` on MetricCard, below `error`
+	 * in precedence.
+	 */
+	state?: 'populated' | 'warming' | 'error';
 }
 
 const typeToFormat = ( type?: MetricPayloadType ): MetricFormat => {
@@ -121,6 +129,13 @@ export const payloadToCard = ( args: PayloadToCardArgs ): MetricCardProps | null
 	}
 	if ( current.error ) {
 		return { label, description, error: current.error };
+	}
+	// Warming (NEWS-2603): the hub snapshot is a cache miss being backfilled —
+	// checked after `error` (a hard failure is more actionable than "still
+	// calculating") and before not_configured / not-computable, so a warming
+	// metric never falls through to the generic em-dash treatment.
+	if ( current.state === 'warming' ) {
+		return { label, description, warming: true };
 	}
 	if ( current.not_configured ) {
 		return { label, description, notConfigured: true };

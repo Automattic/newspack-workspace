@@ -97,6 +97,13 @@ export interface MetricCardProps {
 	/** A present hub row was missing required column(s) — renders the data-missing note. */
 	dataMissing?: boolean;
 	/**
+	 * Hub snapshot cache miss being backfilled (NEWS-2603). Renders the shared
+	 * "Still calculating — check back shortly." note in place of the value.
+	 * Additive — every existing call site leaves it undefined, unchanged. Takes
+	 * precedence over the generic non-computable message but yields to `error`.
+	 */
+	warming?: boolean;
+	/**
 	 * Native tooltip for the value (e.g. the full amount behind an abbreviated
 	 * "$1.2M"). Overrides the title the currency formatter derives on its own.
 	 */
@@ -176,19 +183,26 @@ const MetricCard = ( props: MetricCardProps ) => {
 		error,
 		notConfigured,
 		dataMissing,
+		warming,
 		valueTitle,
 		zeroFallback,
 		notCapableMessage,
 		notComputableMessage,
 	} = props;
 
-	// Shared graceful-failure state (missing dimension / not configured / error / data missing).
-	if ( overlay || error || notConfigured || dataMissing ) {
+	// Shared graceful-failure state (missing dimension / not configured / error / data missing / warming).
+	if ( overlay || error || notConfigured || dataMissing || warming ) {
 		return (
 			<Card __experimentalCoreCard className="newspack-insights__metric-card newspack-insights__metric-card--note">
 				<div className="newspack-insights__metric-card-label">{ label }</div>
 				<div className="newspack-insights__metric-card-body">
-					<MetricNote overlay={ overlay } error={ !! error } notConfigured={ notConfigured } dataMissing={ dataMissing } />
+					<MetricNote
+						overlay={ overlay }
+						error={ !! error }
+						notConfigured={ notConfigured }
+						dataMissing={ dataMissing }
+						warming={ warming }
+					/>
 				</div>
 				{ description && <div className="newspack-insights__metric-card-description">{ description }</div> }
 			</Card>

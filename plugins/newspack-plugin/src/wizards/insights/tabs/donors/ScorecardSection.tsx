@@ -88,8 +88,13 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 				// "Data temporarily unavailable." note; the string isn't shown, so pass the
 				// state sentinel rather than a translatable string that never renders.
 				error={ snapshot.newsletter_conversion.state === 'error' ? snapshot.newsletter_conversion.state : undefined }
+				// Hub snapshot cache miss being backfilled (NEWS-2603): render the
+				// "still calculating" note rather than the insufficient-history copy.
+				warming={ snapshot.newsletter_conversion.state === 'warming' }
 				notComputableMessage={
-					! snapshot.newsletter_conversion.computable && snapshot.newsletter_conversion.state !== 'error'
+					! snapshot.newsletter_conversion.computable &&
+					snapshot.newsletter_conversion.state !== 'error' &&
+					snapshot.newsletter_conversion.state !== 'warming'
 						? __( 'Not enough newsletter signups with a full year of history yet.', 'newspack-plugin' )
 						: undefined
 				}

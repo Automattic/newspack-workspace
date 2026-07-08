@@ -210,6 +210,22 @@ describe( 'MetricCard notCapableMessage (NPPD-1720)', () => {
 	} );
 } );
 
+describe( 'MetricCard warming (NEWS-2603)', () => {
+	it( 'renders the "still calculating" note in place of the value', () => {
+		render( <MetricCard label="Newsletter → subscription" value={ 0 } format="percent" warming /> );
+		expect( screen.getByText( 'Still calculating — check back shortly.' ) ).toBeInTheDocument();
+		// Not the generic non-computable / em-dash note.
+		expect( screen.queryByLabelText( 'Not applicable' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Data temporarily unavailable.' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'yields to the error treatment (error wins over warming)', () => {
+		render( <MetricCard label="Newsletter → subscription" error="boom" warming /> );
+		expect( screen.getByText( 'Data temporarily unavailable.' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Still calculating — check back shortly.' ) ).not.toBeInTheDocument();
+	} );
+} );
+
 describe( 'MetricCard dataMissing', () => {
 	it( 'renders the data-missing note in place of the value', () => {
 		render( <MetricCard label="Influenced subscription rate" value={ 0 } format="percent" dataMissing /> );

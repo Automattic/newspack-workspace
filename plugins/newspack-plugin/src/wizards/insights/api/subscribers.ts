@@ -29,8 +29,12 @@ export interface SubscribersRateValue {
 	value: number;
 	computable: boolean;
 	denominator: number;
-	/** `'error'` when the hub proxy failed — distinct from `'populated'` (a real result, computable or not). */
-	state?: 'error' | 'populated';
+	/**
+	 * `'error'` when the hub proxy failed; `'warming'` when the hub snapshot is a
+	 * cache miss being backfilled (NEWS-2603, transient) — both distinct from
+	 * `'populated'` (a real result, computable or not).
+	 */
+	state?: 'error' | 'warming' | 'populated';
 }
 
 export interface SubscribersClassification {
