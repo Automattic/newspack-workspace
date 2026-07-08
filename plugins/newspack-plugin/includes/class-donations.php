@@ -928,11 +928,20 @@ class Donations {
 	 * @return void
 	 */
 	public static function checkout_create_order_line_item( $item, $cart_item_key, $values, $order ) {
-		if ( ! empty( $values['newspack_popup_id'] ) ) {
-			$order->add_meta_data( '_newspack_popup_id', $values['newspack_popup_id'] );
-		}
-		if ( ! empty( $values['prompt_title'] ) ) {
-			$order->add_meta_data( '_prompt_title', $values['prompt_title'] );
+		// The popup id is client-supplied, and since NPPD-1887 it can be replayed from
+		// sessionStorage onto a donation form on a landing page. Verify it names a real
+		// prompt before writing it into order meta — Insights reads `_newspack_popup_id`
+		// as a prompt identity. `Newspack_Popups` is only defined when Campaigns is
+		// active; without it there is no prompt to attribute to anyway.
+		$popup_id = ! empty( $values['newspack_popup_id'] ) ? (int) $values['newspack_popup_id'] : 0;
+		$is_prompt = 0 < $popup_id
+			&& class_exists( 'Newspack_Popups' )
+			&& \Newspack_Popups::NEWSPACK_POPUPS_CPT === get_post_type( $popup_id );
+		if ( $is_prompt ) {
+			$order->add_meta_data( '_newspack_popup_id', $popup_id );
+			if ( ! empty( $values['prompt_title'] ) ) {
+				$order->add_meta_data( '_prompt_title', $values['prompt_title'] );
+			}
 		}
 		if ( ! empty( $values['referer'] ) ) {
 			$order->add_meta_data( '_newspack_referer', $values['referer'] );
