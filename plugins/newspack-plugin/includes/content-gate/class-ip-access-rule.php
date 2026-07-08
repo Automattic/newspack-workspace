@@ -399,7 +399,6 @@ class IP_Access_Rule {
 			Newspack_UI::add_notice(
 				$message,
 				[
-					'type'     => 'success',
 					'autohide' => true,
 				]
 			);
@@ -407,7 +406,7 @@ class IP_Access_Rule {
 			Newspack_UI::add_notice(
 				__( "We couldn't verify your location. Make sure you're on your organization's network and try again.", 'newspack-plugin' ),
 				[
-					'type'     => 'warning',
+					'type'     => 'error',
 					'autohide' => false,
 				]
 			);
