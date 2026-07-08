@@ -105,7 +105,7 @@ class ActiveCampaignFieldMatchingTest extends WP_UnitTestCase {
 							'title' => 'There is already a field with this title',
 						],
 					],
-				] 
+				]
 			);
 		}
 		if ( false !== strpos( $url, '/api/3/contacts' ) ) {
