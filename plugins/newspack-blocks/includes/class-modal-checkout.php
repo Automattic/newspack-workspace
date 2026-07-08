@@ -1332,19 +1332,26 @@ final class Modal_Checkout {
 	}
 
 	/**
-	 * Modify fields for modal checkout.
+	 * Remove the configured-off billing fields from checkout.
+	 *
+	 * Not limited to modal checkout requests (NPPM-2937): the fields must be
+	 * unregistered wherever WooCommerce renders or validates them. When they were
+	 * only removed from the modal render, they stayed registered on the standard
+	 * checkout page, and express checkout wallets (e.g. Apple Pay) would populate
+	 * and fail validation on fields the buyer could not see or edit.
 	 *
 	 * @param array $fields Checkout fields.
 	 *
 	 * @return array
 	 */
 	public static function woocommerce_checkout_fields( $fields ) {
-		if ( ! self::is_modal_checkout() ) {
+		// My Account checkouts relax required flags instead of removing fields.
+		if ( method_exists( 'Newspack\WooCommerce_My_Account', 'is_from_my_account' ) && \Newspack\WooCommerce_My_Account::is_from_my_account() ) {
 			return $fields;
 		}
 		$cart = \WC()->cart;
-		// Don't modify fields if shipping is required.
-		if ( $cart->needs_shipping_address() ) {
+		// Don't modify fields if there is no cart or shipping is required.
+		if ( ! $cart || $cart->needs_shipping_address() ) {
 			return $fields;
 		}
 		/**
