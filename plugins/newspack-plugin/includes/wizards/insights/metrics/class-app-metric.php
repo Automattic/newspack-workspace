@@ -488,30 +488,38 @@ final class App_Metric {
 	 * "unlock" state. The client owns the (per-request memoized) registration
 	 * lookup, so this makes no separate Admin API round-trip.
 	 *
-	 * @param string $property   GA4 property ID.
-	 * @param array  $range      The dateRanges wrapper.
-	 * @param string $kg_param   KG parameter (without the `customEvent:` prefix).
-	 * @param string $metric     GA4 metric apiName.
-	 * @param string $dim_key    Output key for the dimension value.
-	 * @param string $metric_key Output key for the metric value.
+	 * @param string      $property   GA4 property ID.
+	 * @param array       $range      The dateRanges wrapper.
+	 * @param string      $kg_param   KG parameter (without the `customEvent:` prefix).
+	 * @param string      $metric     GA4 metric apiName.
+	 * @param string      $dim_key    Output key for the dimension value.
+	 * @param string      $metric_key Output key for the metric value.
+	 * @param string|null $event_name Optional: scope the breakdown to a single event.
 	 * @return array
 	 */
-	private static function kg_breakdown( string $property, array $range, string $kg_param, string $metric, string $dim_key, string $metric_key ): array {
-		$result = Client::run_report(
-			$property,
-			$range + [
-				'dimensions' => [ [ 'name' => 'customEvent:' . $kg_param ] ],
-				'metrics'    => [ [ 'name' => $metric ] ],
-				'orderBys'   => [
-					[
-						'metric' => [ 'metricName' => $metric ],
-						'desc'   => true,
-					],
+	private static function kg_breakdown( string $property, array $range, string $kg_param, string $metric, string $dim_key, string $metric_key, ?string $event_name = null ): array {
+		$body = $range + [
+			'dimensions' => [ [ 'name' => 'customEvent:' . $kg_param ] ],
+			'metrics'    => [ [ 'name' => $metric ] ],
+			'orderBys'   => [
+				[
+					'metric' => [ 'metricName' => $metric ],
+					'desc'   => true,
 				],
-				'limit'      => self::TOP_ROWS_LIMIT,
-			]
-		);
-		return self::kg_payload_from_result( $result, $dim_key, $metric_key );
+			],
+			'limit'      => self::TOP_ROWS_LIMIT,
+		];
+		// Scope the breakdown to a single event (e.g. count `BoltDownloadCompleted`
+		// per collection) when an event name is given.
+		if ( null !== $event_name ) {
+			$body['dimensionFilter'] = [
+				'filter' => [
+					'fieldName'    => 'eventName',
+					'stringFilter' => [ 'value' => $event_name ],
+				],
+			];
+		}
+		return self::kg_payload_from_result( Client::run_report( $property, $body ), $dim_key, $metric_key );
 	}
 
 	/**
@@ -541,7 +549,7 @@ final class App_Metric {
 
 		$payload = self::parse_breakdown_result( $result, $dim_key, $metric_key );
 		if ( ! empty( $payload['rows'] ) ) {
-			$payload['rows'] = array_values(
+			$rows            = array_values(
 				array_filter(
 					$payload['rows'],
 					static function ( $row ) use ( $dim_key ) {
@@ -550,8 +558,62 @@ final class App_Metric {
 					}
 				)
 			);
+			$payload['rows'] = self::merge_case_duplicates( $rows, $dim_key, $metric_key );
 		}
 		return $payload;
+	}
+
+	/**
+	 * Merge breakdown rows whose dimension value differs only by case (a Pugpig
+	 * data-quality artifact — e.g. `KGSection` "Business" and "business"): sum
+	 * their metrics, keep the casing of the higher-count variant as canonical,
+	 * and re-sort descending. A no-op when there are no case collisions.
+	 *
+	 * @param array  $rows       Filtered breakdown rows.
+	 * @param string $dim_key    Dimension key.
+	 * @param string $metric_key Metric key.
+	 * @return array
+	 */
+	private static function merge_case_duplicates( array $rows, string $dim_key, string $metric_key ): array {
+		$merged = [];
+		foreach ( $rows as $row ) {
+			$label = (string) ( $row[ $dim_key ] ?? '' );
+			$value = (int) ( $row[ $metric_key ] ?? 0 );
+			$key   = function_exists( 'mb_strtolower' ) ? mb_strtolower( $label ) : strtolower( $label );
+			if ( ! isset( $merged[ $key ] ) ) {
+				$merged[ $key ] = [
+					$dim_key    => $label,
+					$metric_key => $value,
+					'_top'      => $value,
+				];
+				continue;
+			}
+			$merged[ $key ][ $metric_key ] += $value;
+			// Canonical casing = the variant that occurred most on its own.
+			if ( $value > $merged[ $key ]['_top'] ) {
+				$merged[ $key ][ $dim_key ] = $label;
+				$merged[ $key ]['_top']     = $value;
+			}
+		}
+
+		$out = [];
+		foreach ( $merged as $entry ) {
+			unset( $entry['_top'] );
+			$out[] = $entry;
+		}
+		// Sort by metric desc, with a case-insensitive label tie-breaker so tied
+		// rows keep a deterministic order (no UI jitter / flaky tests).
+		usort(
+			$out,
+			static function ( $a, $b ) use ( $metric_key, $dim_key ) {
+				$by_metric = $b[ $metric_key ] <=> $a[ $metric_key ];
+				if ( 0 !== $by_metric ) {
+					return $by_metric;
+				}
+				return strcasecmp( (string) ( $a[ $dim_key ] ?? '' ), (string) ( $b[ $dim_key ] ?? '' ) );
+			}
+		);
+		return $out;
 	}
 
 	/**
@@ -753,7 +815,6 @@ final class App_Metric {
 				'BoltNotificationStatusChange',
 				'BoltDownloadStarted',
 				'BoltDownloadCompleted',
-				'BoltEditionOpened',
 			]
 		);
 
@@ -762,11 +823,12 @@ final class App_Metric {
 			'notification_open_rate'   => $ev_ok ? self::rate_payload( $ev['notification_open'], $ev['notification_receive'] ) : self::not_computable( 'rate' ),
 			'notifications_received'   => $ev_ok ? self::count_payload( $ev['notification_receive'] ) : self::not_computable( 'count' ),
 			'notification_opt_changes' => $ev_ok ? self::count_payload( $ev['BoltNotificationStatusChange'] ) : self::not_computable( 'count' ),
-			// Editions.
+			// Downloads. `BoltEditionOpened` was never confirmed in the live data
+			// (it read as a misleading 0 on real properties), so there's no "opens"
+			// metric — only the confirmed download events.
 			'downloads_started'        => $ev_ok ? self::count_payload( $ev['BoltDownloadStarted'] ) : self::not_computable( 'count' ),
 			'downloads_completed'      => $ev_ok ? self::count_payload( $ev['BoltDownloadCompleted'] ) : self::not_computable( 'count' ),
 			'download_completion_rate' => $ev_ok ? self::rate_payload( $ev['BoltDownloadCompleted'], $ev['BoltDownloadStarted'] ) : self::not_computable( 'rate' ),
-			'edition_opens'            => $ev_ok ? self::count_payload( $ev['BoltEditionOpened'] ) : self::not_computable( 'count' ),
 		];
 
 		// Tier-2: content + audience-composition breakdowns keyed on the Pugpig
@@ -774,10 +836,14 @@ final class App_Metric {
 		// dimension as the card's "not configured" state (auto-registration is 2b);
 		// its per-request memo means these four share one registration lookup.
 		$content = [
-			'top_sections'   => self::kg_breakdown( $property, $range, 'KGSection', 'screenPageViews', 'section', 'views' ),
-			'top_authors'    => self::kg_breakdown( $property, $range, 'KGAuthor', 'screenPageViews', 'author', 'views' ),
-			'subscriber_mix' => self::kg_breakdown( $property, $range, 'KGSubscriberStatus', 'activeUsers', 'status', 'users' ),
-			'content_cost'   => self::kg_breakdown( $property, $range, 'KGStoryCost', 'screenPageViews', 'cost', 'views' ),
+			'top_sections'            => self::kg_breakdown( $property, $range, 'KGSection', 'screenPageViews', 'section', 'views' ),
+			'top_authors'             => self::kg_breakdown( $property, $range, 'KGAuthor', 'screenPageViews', 'author', 'views' ),
+			'subscriber_mix'          => self::kg_breakdown( $property, $range, 'KGSubscriberStatus', 'activeUsers', 'status', 'users' ),
+			'content_cost'            => self::kg_breakdown( $property, $range, 'KGStoryCost', 'screenPageViews', 'cost', 'views' ),
+			// Multi-property apps tag downloads with the collection (publication);
+			// count completed downloads per collection. Absent/single-value on
+			// single-property apps, where the tab hides the table.
+			'downloads_by_collection' => self::kg_breakdown( $property, $range, 'KGCollectionSet', 'eventCount', 'collection', 'downloads', 'BoltDownloadCompleted' ),
 		];
 
 		return array_merge( $scalars, $breakdowns, $events, $content );
@@ -973,11 +1039,6 @@ final class App_Metric {
 				'numerator'   => 33805,
 				'denominator' => 35495,
 			],
-			'edition_opens'            => [
-				'value'      => 4180,
-				'computable' => true,
-				'type'       => 'count',
-			],
 			'retention'                => [
 				'rows'       => [
 					[
@@ -1114,6 +1175,30 @@ final class App_Metric {
 					[
 						'cost'  => 'Sample',
 						'views' => 2110,
+					],
+				],
+				'computable' => true,
+				'type'       => 'breakdown',
+			],
+			// A multi-property app: completed downloads split across the collections
+			// (publications) the shared app serves. Generic names — no real pubs.
+			'downloads_by_collection'  => [
+				'rows'       => [
+					[
+						'collection' => 'example city',
+						'downloads'  => 25998,
+					],
+					[
+						'collection' => 'northside',
+						'downloads'  => 4606,
+					],
+					[
+						'collection' => 'harbor',
+						'downloads'  => 2844,
+					],
+					[
+						'collection' => 'valley',
+						'downloads'  => 557,
 					],
 				],
 				'computable' => true,
