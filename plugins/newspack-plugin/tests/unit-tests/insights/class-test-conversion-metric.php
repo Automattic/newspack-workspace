@@ -456,6 +456,35 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * NEWS-2603 (warming scope): a bare `[]` from a NON-snapshot influenced-rate
+	 * query is a legitimately empty window (0 / non-computable), NOT warming.
+	 * Only the two newsletter snapshot queries treat `[]` as a not-yet-warmed
+	 * miss; the shared compute_influenced_rate_from_proxy() also serves the live
+	 * 14-day influenced-rate methods, where an empty result is a real zero.
+	 */
+	public function test_bare_empty_from_non_snapshot_query_stays_populated() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_subscription_rate_14d( $start, $end );
+
+		$this->assertSame( 'populated', $result['state'] );
+		$this->assertFalse( $result['computable'] );
+	}
+
+	/**
+	 * NEWS-2603 (warming scope): the explicit warming marker is honored
+	 * regardless of query name — if the hub ever emits it for a non-snapshot
+	 * query, that still means "still building".
+	 */
+	public function test_warming_marker_yields_warming_even_for_non_snapshot_query() {
+		$metric          = new Conversion_Metric( $this->proxy_returning( [ [ '__status' => 'warming' ] ] ) );
+		[ $start, $end ] = $this->window();
+		$result          = $metric->get_influenced_subscription_rate_14d( $start, $end );
+
+		$this->assertSame( 'warming', $result['state'] );
+	}
+
+	/**
 	 * C3 empty: proxy returns [] → state 'empty', empty stages array.
 	 */
 	public function test_anon_to_registered_funnel_returns_empty_state_on_no_rows() {
@@ -3495,6 +3524,49 @@ class Test_Conversion_Metric extends WP_UnitTestCase {
 
 			$this->assertFalse( $result['computable'] );
 			$this->assertSame( 'warming', $result['state'] );
+			$this->assertArrayNotHasKey( 'error', $result );
+		} finally {
+			remove_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+		}
+	}
+
+	/**
+	 * Partial-warming (NEWS-2603): when ONE revenue path is fully computable but
+	 * the OTHER is still warming, the aggregate must report 'warming' rather than
+	 * a value built from only the ready path. A single-path value understates the
+	 * modeled subscriber value and would show with no "still calculating" note;
+	 * warming takes precedence over a partial computable result (error still
+	 * beats warming, asserted separately).
+	 */
+	public function test_newsletter_subscriber_value_warming_when_one_path_computable_other_warming() {
+		add_filter( 'newspack_insights_woocommerce_active', '__return_true' );
+		try {
+			// Subscription snapshot returns a real, computable rate; the donation
+			// snapshot is still warming (a bare [] miss on its snapshot query).
+			$proxy = $this->createMock( BigQuery_Proxy_Client::class );
+			$proxy->method( 'query' )->willReturnCallback(
+				function ( $query_name ) {
+					if ( 'conversion_journey_newsletter_to_subscription' === $query_name ) {
+						return [
+							[
+								'newsletter_conversion_rate' => 0.05,
+								'newsletter_signups' => 200,
+							],
+						];
+					}
+					return [];
+				}
+			);
+			$metric          = new Conversion_Metric(
+				$proxy,
+				$this->subscribers_metric_with_clv( true ),
+				$this->donors_metric_with_clv( true )
+			);
+			[ $start, $end ] = $this->window();
+			$result          = $metric->get_newsletter_subscriber_value_3yr( $start, $end );
+
+			$this->assertSame( 'warming', $result['state'] );
+			$this->assertFalse( $result['computable'] );
 			$this->assertArrayNotHasKey( 'error', $result );
 		} finally {
 			remove_filter( 'newspack_insights_woocommerce_active', '__return_true' );

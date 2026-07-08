@@ -88,6 +88,21 @@ final class Conversion_Metric {
 	const SNAPSHOT_KEY = 'cohorts';
 
 	/**
+	 * Hub query names whose result is a pre-warmed snapshot. For these — and
+	 * ONLY these — a bare `[]` from the proxy means "snapshot not built yet"
+	 * (warming), because a genuinely-empty cohort always arrives as a real data
+	 * row. The other influenced-rate queries that share
+	 * compute_influenced_rate_from_proxy() treat `[]` as a legitimately empty
+	 * window (see NEWS-2603).
+	 *
+	 * @var string[]
+	 */
+	const SNAPSHOT_QUERY_NAMES = [
+		'conversion_journey_newsletter_to_subscription',
+		'conversion_journey_newsletter_to_donation',
+	];
+
+	/**
 	 * Action Scheduler action name for a one-off cohort snapshot refresh
 	 * (triggered on cold-cache misses from the request path).
 	 *
@@ -484,12 +499,20 @@ final class Conversion_Metric {
 			return $this->error_scalar( 'rate', $rows );
 		}
 		// Warming (NEWS-2603): the hub snapshot isn't built yet. A cache miss is
-		// signaled either by the explicit marker row, or — on a hub not yet
-		// updated to emit the marker — a bare [] result set. Distinct from a
-		// genuinely computed empty cohort, which always arrives as a real data
-		// row (e.g. newsletter_signups => 0), never as an empty result set.
-		if ( empty( $rows ) || ( isset( $rows[0]['__status'] ) && 'warming' === $rows[0]['__status'] ) ) {
+		// signaled either by the explicit marker row (honored for any query), or
+		// — on a hub not yet updated to emit the marker — a bare [] result set.
+		// The bare-[] fallback is scoped to the snapshot queries ONLY: for those,
+		// a genuinely computed empty cohort always arrives as a real data row
+		// (e.g. newsletter_signups => 0), so [] means "not warmed yet". This same
+		// method also serves the live 14-day influenced-rate queries, where [] is
+		// a legitimately empty window — those keep the pre-existing zero behavior.
+		$is_marker = isset( $rows[0]['__status'] ) && 'warming' === $rows[0]['__status'];
+		if ( $is_marker || ( empty( $rows ) && in_array( $query_name, self::SNAPSHOT_QUERY_NAMES, true ) ) ) {
 			return $this->warming_scalar( 'rate' );
+		}
+		if ( empty( $rows ) ) {
+			// No rows on a non-snapshot query → empty window, legitimately no data.
+			return $this->populated_scalar( 0.0, false, null, 'rate' );
 		}
 		if ( ! is_array( $rows[0] ) || ! array_key_exists( $rate_key, $rows[0] ) || ! array_key_exists( $denominator_key, $rows[0] ) ) {
 			// Row present but unusable → schema drift. Non-computable, flagged.
@@ -1910,6 +1933,43 @@ final class Conversion_Metric {
 		$sub_clv  = $this->subscribers_metric->get_supporter_clv_3yr( $end );
 		$don_clv  = $this->donors_metric->get_supporter_clv_3yr( $end );
 
+		// Error precedence (NEWS-2603): a hub proxy failure on a rate query is the
+		// most actionable signal — surface it distinctly (not "insufficient
+		// history", which implies the publisher just needs to wait) even when the
+		// other path is computable or merely still warming up. Checked BEFORE the
+		// value computation so a partial failure is never masked by a value built
+		// from only the healthy path.
+		foreach ( [ $sub_rate, $don_rate ] as $rate ) {
+			if ( isset( $rate['state'] ) && 'error' === $rate['state'] ) {
+				return [
+					'value'       => 0.0,
+					'computable'  => false,
+					'denominator' => 0,
+					'error'       => $rate['error_message'] ?? __( 'Newsletter conversion data is unavailable right now.', 'newspack-plugin' ),
+					'state'       => 'error',
+				];
+			}
+		}
+
+		// Warming precedence over a partial value (NEWS-2603): if either path's hub
+		// snapshot is still being backfilled, report warming rather than a value
+		// computed from only the ready path — a single-path value understates the
+		// modeled subscriber value and would render with no "still calculating"
+		// note. Only reached when neither path errored (error wins above).
+		foreach ( [ $sub_rate, $don_rate ] as $rate ) {
+			if ( isset( $rate['state'] ) && 'warming' === $rate['state'] ) {
+				return [
+					'value'       => 0.0,
+					'computable'  => false,
+					'denominator' => 0,
+					'state'       => 'warming',
+				];
+			}
+		}
+
+		// Both contributing paths are settled (no error, no warming). Compute the
+		// value from whichever paths are computable — a genuinely empty path (e.g.
+		// insufficient history) simply contributes nothing.
 		$value      = 0.0;
 		$computable = false;
 		$signups    = 0;
@@ -1932,38 +1992,6 @@ final class Conversion_Metric {
 				'denominator' => $signups,
 				'state'       => 'populated',
 			];
-		}
-
-		// Not computable: a hub proxy failure on a rate query is an error state, not
-		// "insufficient history" — surface it distinctly so the card doesn't imply the
-		// publisher just needs to wait for data. Error takes precedence over warming
-		// (NEWS-2603): if either path outright failed, that's the more actionable
-		// signal even if the other path is merely still warming up.
-		foreach ( [ $sub_rate, $don_rate ] as $rate ) {
-			if ( isset( $rate['state'] ) && 'error' === $rate['state'] ) {
-				return [
-					'value'       => 0.0,
-					'computable'  => false,
-					'denominator' => 0,
-					'error'       => $rate['error_message'] ?? __( 'Newsletter conversion data is unavailable right now.', 'newspack-plugin' ),
-					'state'       => 'error',
-				];
-			}
-		}
-
-		// Warming (NEWS-2603): the hub snapshot for at least one path is a cache
-		// miss being backfilled — a distinct, expected, transient condition, not
-		// an error and not "insufficient history" (which implies the publisher
-		// just needs more time/volume, not a rebuild already in progress).
-		foreach ( [ $sub_rate, $don_rate ] as $rate ) {
-			if ( isset( $rate['state'] ) && 'warming' === $rate['state'] ) {
-				return [
-					'value'       => 0.0,
-					'computable'  => false,
-					'denominator' => 0,
-					'state'       => 'warming',
-				];
-			}
 		}
 
 		// Genuine insufficient-history state: neither path could be modeled yet.
