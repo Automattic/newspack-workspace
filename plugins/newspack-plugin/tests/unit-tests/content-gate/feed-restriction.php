@@ -437,6 +437,22 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * The exclude filter is a no-op on comment feeds: WP queries the comments
+	 * from $posts[0] before `the_posts` runs, so dropping the post there would
+	 * not restrict anything and would only blank the feed's title/link.
+	 */
+	public function test_exclude_mode_skips_comment_feeds() {
+		$this->go_to( get_feed_link( 'comments_rss2' ) );
+		$this->assertTrue( $GLOBALS['wp_query']->is_comment_feed(), 'Sanity: should be a comment feed.' );
+
+		$posts    = [ get_post( $this->post_id ) ];
+		$filtered = Content_Gate_Advanced_Settings::exclude_restricted_posts_from_feed( $posts, $GLOBALS['wp_query'] );
+		wp_reset_postdata();
+
+		$this->assertSame( $posts, $filtered, 'Comment feeds must be left untouched by the exclude filter.' );
+	}
+
+	/**
 	 * A filter that returns an unrecognized mode fails closed: it is ignored in
 	 * favour of the resolved mode (exclude, by default) rather than disabling
 	 * restriction and leaking full content to the feed.

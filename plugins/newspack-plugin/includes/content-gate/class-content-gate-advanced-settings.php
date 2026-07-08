@@ -210,6 +210,12 @@ class Content_Gate_Advanced_Settings {
 		if ( empty( $posts ) || ! $wp_query instanceof \WP_Query || ! $wp_query->is_feed() ) {
 			return $posts;
 		}
+		// Only post feeds are handled. On a comment feed the comments are already
+		// queried from $posts[0] before this filter runs, so dropping the post
+		// would not restrict anything and would only blank the feed's title/link.
+		if ( $wp_query->is_comment_feed() ) {
+			return $posts;
+		}
 		if ( self::FEED_MODE_EXCLUDE !== self::get_feed_restriction_mode( $wp_query ) ) {
 			return $posts;
 		}
