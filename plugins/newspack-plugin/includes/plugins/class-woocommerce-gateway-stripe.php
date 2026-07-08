@@ -56,7 +56,7 @@ class WooCommerce_Gateway_Stripe {
 
 		// Disable Stripe Adaptive Pricing when modal checkout omits the billing country field.
 		add_action( 'wp_loaded', [ __CLASS__, 'maybe_disable_adaptive_pricing_on_modal_checkout_request' ], 20 );
-		add_action( 'woocommerce_stripe_updated', [ __CLASS__, 'maybe_disable_adaptive_pricing_without_country_field' ] );
+		add_action( 'woocommerce_stripe_updated', [ __CLASS__, 'maybe_disable_adaptive_pricing_without_country_field' ], 10 );
 	}
 
 	/**
@@ -373,9 +373,34 @@ class WooCommerce_Gateway_Stripe {
 	 * Disable Adaptive Pricing when modal checkout cannot provide billing country.
 	 *
 	 * Stripe Adaptive Pricing requires a billing country during Checkout Sessions
-	 * confirmation. Newspack modal checkout can be configured to omit that field.
+	 * confirmation. Newspack modal checkout can be configured to omit that field,
+	 * which makes one-time modal payments fail at confirm.
+	 *
+	 * The store-wide, persistent write is intentional, and deliberately one-way:
+	 *
+	 * - Persisting keeps the admin toggle truthful. A request-scoped filter would
+	 *   report Adaptive Pricing as enabled while checkout behaves otherwise, and
+	 *   it would have to cover every settings read path (render, wc-ajax,
+	 *   confirm), where one missed path brings the fatal back.
+	 * - It durably neutralizes the WC Stripe 10.8 migration, which force-enables
+	 *   Adaptive Pricing for existing stores regardless of a previous 'no'.
+	 * - There is no automatic re-enable path: re-enabling while donation fields
+	 *   still omit billing_country would re-break donations. The flip is logged
+	 *   (locally and via newspack_log) so support can see why the toggle does
+	 *   not stick.
+	 *
+	 * Known trade-off: the decision is keyed on the donation billing-fields
+	 * config, while a shippable modal cart keeps the full field set (country
+	 * included). Adaptive Pricing is a single store-wide setting, so per-checkout
+	 * precision is not possible with a persistent write; sites mixing
+	 * country-less donations with shippable modal carts lose Adaptive Pricing
+	 * everywhere. Accepted, since modal checkout is overwhelmingly virtual
+	 * products on Newspack sites.
 	 */
 	public static function maybe_disable_adaptive_pricing_without_country_field(): void {
+		// Relevance check, not a code dependency: without newspack-blocks there is
+		// no modal checkout, the standard checkout renders the country field, and
+		// Adaptive Pricing works, so disabling it would be over-reach.
 		if ( ! \class_exists( '\Newspack_Blocks\Modal_Checkout' ) ) {
 			return;
 		}
