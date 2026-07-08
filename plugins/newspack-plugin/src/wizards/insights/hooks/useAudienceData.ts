@@ -17,6 +17,7 @@ import type { DateRange } from '../state/useDateRange';
 import { fetchAudienceData, refreshAudienceData, type AudienceResponse } from '../api/audience';
 import { insightsCache, makeSlotKey } from '../state/insightsCache';
 import { useRegisterRefresh } from '../state/refreshRegistry';
+import usePollWhileWarming from './usePollWhileWarming';
 
 export type FetchStatus = 'idle' | 'loading' | 'success' | 'error';
 
@@ -55,9 +56,11 @@ const useAudienceData = ( range: DateRange, previousRange: DateRange | null ): U
 
 	useRegisterRefresh( 'audience', refetch );
 
+	const polledData = usePollWhileWarming( key, slot.data, refetch );
+
 	return {
 		status: slot.status,
-		data: slot.data,
+		data: polledData,
 		error: slot.error,
 		refetch,
 		computedAt: slot.computedAt,
