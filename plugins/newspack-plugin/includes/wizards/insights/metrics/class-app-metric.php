@@ -70,6 +70,11 @@ final class App_Metric {
 	const RETENTION_COHORTS = 4;
 
 	/**
+	 * Top-N rows kept for a Tier-2 KG breakdown (top sections/authors, etc.).
+	 */
+	const TOP_ROWS_LIMIT = 8;
+
+	/**
 	 * Whether this site is a Pugpig app publisher, read at runtime from the
 	 * Newspack Manager companion plugin (same PHP process on managed sites).
 	 * Guarded with class_exists so non-managed sites degrade cleanly.
@@ -368,6 +373,80 @@ final class App_Metric {
 	}
 
 	/**
+	 * Tier-2 breakdown by a Pugpig `KG` custom dimension. Runs the top-N report
+	 * through the GA4 client, whose authoritative pre-check returns a
+	 * `custom_dimension_missing` error (no Data API call) when the dimension
+	 * isn't registered on the property — that maps to the card's `not_configured`
+	 * "unlock" state. The client owns the (per-request memoized) registration
+	 * lookup, so this makes no separate Admin API round-trip.
+	 *
+	 * @param string $property   GA4 property ID.
+	 * @param array  $range      The dateRanges wrapper.
+	 * @param string $kg_param   KG parameter (without the `customEvent:` prefix).
+	 * @param string $metric     GA4 metric apiName.
+	 * @param string $dim_key    Output key for the dimension value.
+	 * @param string $metric_key Output key for the metric value.
+	 * @return array
+	 */
+	private static function kg_breakdown( string $property, array $range, string $kg_param, string $metric, string $dim_key, string $metric_key ): array {
+		$result = Client::run_report(
+			$property,
+			$range + [
+				'dimensions' => [ [ 'name' => 'customEvent:' . $kg_param ] ],
+				'metrics'    => [ [ 'name' => $metric ] ],
+				'orderBys'   => [
+					[
+						'metric' => [ 'metricName' => $metric ],
+						'desc'   => true,
+					],
+				],
+				'limit'      => self::TOP_ROWS_LIMIT,
+			]
+		);
+		return self::kg_payload_from_result( $result, $dim_key, $metric_key );
+	}
+
+	/**
+	 * Map a KG breakdown report result to a card payload. An unregistered
+	 * dimension (`custom_dimension_missing`) becomes the `not_configured` unlock
+	 * state; any other failure (auth/API outage) degrades to a generic
+	 * non-computable payload rather than falsely claiming the site is
+	 * unconfigured. A success is parsed and its `(not set)`/empty rows dropped.
+	 *
+	 * @param array|\WP_Error $result     Raw `Client::run_report` result.
+	 * @param string          $dim_key    Output key for the dimension value.
+	 * @param string          $metric_key Output key for the metric value.
+	 * @return array
+	 */
+	private static function kg_payload_from_result( $result, string $dim_key, string $metric_key ): array {
+		if ( is_wp_error( $result ) ) {
+			if ( 'custom_dimension_missing' === $result->get_error_code() ) {
+				return [
+					'rows'           => [],
+					'computable'     => false,
+					'not_configured' => true,
+					'type'           => 'breakdown',
+				];
+			}
+			return self::not_computable_rows( 'breakdown' );
+		}
+
+		$payload = self::parse_breakdown_result( $result, $dim_key, $metric_key );
+		if ( ! empty( $payload['rows'] ) ) {
+			$payload['rows'] = array_values(
+				array_filter(
+					$payload['rows'],
+					static function ( $row ) use ( $dim_key ) {
+						$value = (string) ( $row[ $dim_key ] ?? '' );
+						return '' !== $value && '(not set)' !== $value;
+					}
+				)
+			);
+		}
+		return $payload;
+	}
+
+	/**
 	 * Weekly-cohort retention curve. Uses several *complete* weekly acquisition
 	 * cohorts (each old enough that all {@see self::RETENTION_NTH_WEEKS} nth-weeks
 	 * have elapsed, so the tail isn't deflated by too-recent users) and aggregates
@@ -582,7 +661,18 @@ final class App_Metric {
 			'edition_opens'            => $ev_ok ? self::count_payload( $ev['BoltEditionOpened'] ) : self::not_computable( 'count' ),
 		];
 
-		return array_merge( $scalars, $breakdowns, $events );
+		// Tier-2: content + audience-composition breakdowns keyed on the Pugpig
+		// "KG" custom dimensions. The client's pre-check surfaces an unregistered
+		// dimension as the card's "not configured" state (auto-registration is 2b);
+		// its per-request memo means these four share one registration lookup.
+		$content = [
+			'top_sections'   => self::kg_breakdown( $property, $range, 'KGSection', 'screenPageViews', 'section', 'views' ),
+			'top_authors'    => self::kg_breakdown( $property, $range, 'KGAuthor', 'screenPageViews', 'author', 'views' ),
+			'subscriber_mix' => self::kg_breakdown( $property, $range, 'KGSubscriberStatus', 'activeUsers', 'status', 'users' ),
+			'content_cost'   => self::kg_breakdown( $property, $range, 'KGStoryCost', 'screenPageViews', 'cost', 'views' ),
+		];
+
+		return array_merge( $scalars, $breakdowns, $events, $content );
 	}
 
 
@@ -829,6 +919,93 @@ final class App_Metric {
 					[
 						'app_version'  => '1.0',
 						'active_users' => 22,
+					],
+				],
+				'computable' => true,
+				'type'       => 'breakdown',
+			],
+			// Tier-2: KG custom-dimension breakdowns. In fixture mode these render
+			// as configured; on a real property they carry `not_configured` until
+			// the dimensions are registered (auto-registration is Tier-2b).
+			'top_sections'             => [
+				'rows'       => [
+					[
+						'section' => 'News',
+						'views'   => 7078,
+					],
+					[
+						'section' => 'Life & Culture',
+						'views'   => 5417,
+					],
+					[
+						'section' => 'Obituaries',
+						'views'   => 4306,
+					],
+					[
+						'section' => 'Sports',
+						'views'   => 1223,
+					],
+					[
+						'section' => 'Opinion',
+						'views'   => 716,
+					],
+				],
+				'computable' => true,
+				'type'       => 'breakdown',
+			],
+			'top_authors'              => [
+				'rows'       => [
+					[
+						'author' => 'Alex Rivera',
+						'views'  => 3120,
+					],
+					[
+						'author' => 'Jordan Lee',
+						'views'  => 2540,
+					],
+					[
+						'author' => 'Sam Okafor',
+						'views'  => 1980,
+					],
+					[
+						'author' => 'Casey Nguyen',
+						'views'  => 1210,
+					],
+				],
+				'computable' => true,
+				'type'       => 'breakdown',
+			],
+			'subscriber_mix'           => [
+				'rows'       => [
+					[
+						'status' => 'ExistingSubscriber',
+						'users'  => 483,
+					],
+					[
+						'status' => 'None',
+						'users'  => 473,
+					],
+					[
+						'status' => 'InactiveSubscriber',
+						'users'  => 139,
+					],
+				],
+				'computable' => true,
+				'type'       => 'breakdown',
+			],
+			'content_cost'             => [
+				'rows'       => [
+					[
+						'cost'  => 'Free',
+						'views' => 52140,
+					],
+					[
+						'cost'  => 'Paid',
+						'views' => 18320,
+					],
+					[
+						'cost'  => 'Sample',
+						'views' => 2110,
 					],
 				],
 				'computable' => true,
