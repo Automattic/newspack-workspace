@@ -17,12 +17,12 @@
  */
 import { __, sprintf } from '@wordpress/i18n';
 import { useEffect, useState } from '@wordpress/element';
-import { SelectControl } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { Notice, Button } from '../../../../packages/components/src';
+import { Notice, Button, Grid, SelectControl } from '../../../../packages/components/src';
+import WizardsActionCard from '../../wizards-action-card';
 import TabSpinner from './components/TabSpinner';
 import type { TabSectionProps } from '../components/InsightsWizard';
 import { fetchAppConfig, saveAppProperty, type AppConfig, type AppProperty } from '../api/app';
@@ -73,27 +73,31 @@ const PropertyPicker = ( { config, onSaved }: { config: AppConfig; onSaved: ( ne
 	};
 
 	return (
-		<div className="newspack-insights__app-picker">
-			<p>
-				{ __(
-					'Choose the Google Analytics property that receives your app’s data. It may be in a different account than your website.',
-					'newspack-plugin'
-				) }
-			</p>
-			{ config.properties_error && <Notice isError noticeText={ config.properties_error } /> }
-			{ error && <Notice isError noticeText={ error } /> }
-			<SelectControl
-				label={ __( 'App analytics property', 'newspack-plugin' ) }
-				value={ value }
-				options={ options }
-				onChange={ setValue }
-				disabled={ saving }
-				__nextHasNoMarginBottom
-			/>
-			<Button variant="primary" onClick={ save } disabled={ saving || '' === value }>
-				{ saving ? __( 'Saving…', 'newspack-plugin' ) : __( 'Save property', 'newspack-plugin' ) }
-			</Button>
-		</div>
+		<WizardsActionCard
+			isMedium
+			title={ __( 'App analytics property', 'newspack-plugin' ) }
+			description={ __(
+				'Choose the Google Analytics property that receives your app’s data. It may be in a different account than your website.',
+				'newspack-plugin'
+			) }
+			actionContent={
+				<Button variant="primary" onClick={ save } disabled={ saving || '' === value }>
+					{ saving ? __( 'Saving…', 'newspack-plugin' ) : __( 'Save property', 'newspack-plugin' ) }
+				</Button>
+			}
+			error={ error || config.properties_error || null }
+		>
+			<Grid noMargin rowGap={ 16 }>
+				<SelectControl
+					label={ __( 'App analytics property', 'newspack-plugin' ) }
+					hideLabelFromVision
+					value={ value }
+					options={ options }
+					onChange={ setValue }
+					disabled={ saving }
+				/>
+			</Grid>
+		</WizardsActionCard>
 	);
 };
 
