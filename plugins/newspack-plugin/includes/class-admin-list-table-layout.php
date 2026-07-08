@@ -101,4 +101,53 @@ class Admin_List_Table_Layout {
 		$candidates = array_filter( $candidates );
 		return (bool) array_intersect( $keys, $candidates );
 	}
+
+	/**
+	 * Resolve the validated primary-column min-width floor.
+	 *
+	 * @return string A valid CSS length (px|ch|rem); the default on invalid input.
+	 */
+	public static function get_min_width() {
+		/**
+		 * Filters the primary (Title) column min-width floor on treated screens.
+		 *
+		 * @param string $min_width A CSS length: px, ch, or rem (default '35ch').
+		 */
+		$min_width = apply_filters( 'newspack_admin_primary_column_min_width', self::DEFAULT_MIN_WIDTH );
+		return preg_match( self::MIN_WIDTH_PATTERN, (string) $min_width ) ? (string) $min_width : self::DEFAULT_MIN_WIDTH;
+	}
+
+	/**
+	 * Build the CSS for a screen. Empty string unless the screen is treated.
+	 *
+	 * @param \WP_Screen $screen Screen to build CSS for.
+	 * @return string CSS block (no <style> wrapper); '' when not treated.
+	 */
+	public static function get_styles_for_screen( $screen ) {
+		if ( ! self::screen_matches( $screen ) ) {
+			return '';
+		}
+		$min_width = self::get_min_width();
+		return "@media screen and (min-width: 783px) {\n"
+			. "\t.wp-list-table.fixed { table-layout: auto; }\n"
+			. "\t.wp-list-table th.column-primary,\n"
+			. "\t.wp-list-table td.column-primary { min-width: " . $min_width . "; }\n"
+			. '}';
+	}
+
+	/**
+	 * Echo the scoped <style> block for the current screen.
+	 */
+	public static function render_styles() {
+		$screen = get_current_screen();
+		if ( ! $screen ) {
+			return;
+		}
+		$styles = self::get_styles_for_screen( $screen );
+		if ( '' === $styles ) {
+			return;
+		}
+		// Fixed literal CSS plus an allowlist-validated length (get_min_width) — safe.
+		echo "<style id=\"newspack-admin-list-table-layout\">\n" . $styles . "\n</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+	}
 }

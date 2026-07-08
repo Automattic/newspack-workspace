@@ -62,4 +62,45 @@ class Test_Admin_List_Table_Layout extends \WP_UnitTestCase {
 		$this->pin_screens( [ 'page' ] ); // 'post' removed
 		$this->assertFalse( Admin_List_Table_Layout::screen_matches( \WP_Screen::get( 'edit-post' ) ) );
 	}
+
+	public function test_no_emission_for_untreated_screen(): void {
+		register_post_type( 'np_test_cpt', [ 'public' => true ] );
+		$this->pin_screens( [ 'post', 'page' ] );
+		$this->assertSame( '', Admin_List_Table_Layout::get_styles_for_screen( \WP_Screen::get( 'edit-np_test_cpt' ) ) );
+		unregister_post_type( 'np_test_cpt' );
+	}
+
+	public function test_leak_guard_emits_nothing_on_term_screen(): void {
+		$this->pin_screens( [ 'post', 'page' ] );
+		$this->assertSame( '', Admin_List_Table_Layout::get_styles_for_screen( \WP_Screen::get( 'edit-category' ) ) );
+	}
+
+	public function test_emits_auto_layout_for_post_list(): void {
+		$this->pin_screens( [ 'post', 'page' ] );
+		$css = Admin_List_Table_Layout::get_styles_for_screen( \WP_Screen::get( 'edit-post' ) );
+		$this->assertStringContainsString( '@media screen and (min-width: 783px)', $css );
+		$this->assertStringContainsString( '.wp-list-table.fixed { table-layout: auto; }', $css );
+		$this->assertStringContainsString( 'column-primary', $css );
+		$this->assertStringContainsString( 'min-width: 35ch;', $css );
+	}
+
+	public function test_min_width_default(): void {
+		$this->assertSame( '35ch', Admin_List_Table_Layout::get_min_width() );
+	}
+
+	public function test_min_width_accepts_px_and_ch_and_rem(): void {
+		foreach ( [ '280px', '40ch', '20rem' ] as $value ) {
+			add_filter( 'newspack_admin_primary_column_min_width', fn() => $value );
+			$this->assertSame( $value, Admin_List_Table_Layout::get_min_width() );
+			remove_all_filters( 'newspack_admin_primary_column_min_width' );
+		}
+	}
+
+	public function test_min_width_rejects_junk_and_percentage(): void {
+		foreach ( [ '30%', '100', 'red;}', 'expression(alert(1))', '35 ch' ] as $junk ) {
+			add_filter( 'newspack_admin_primary_column_min_width', fn() => $junk );
+			$this->assertSame( '35ch', Admin_List_Table_Layout::get_min_width(), "rejected: $junk" );
+			remove_all_filters( 'newspack_admin_primary_column_min_width' );
+		}
+	}
 }
