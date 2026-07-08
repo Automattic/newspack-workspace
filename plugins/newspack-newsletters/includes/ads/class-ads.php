@@ -690,6 +690,8 @@ final class Ads {
 			}
 			$impressions++;
 			update_post_meta( $ad_id, 'tracking_impressions', $impressions );
+			// Also record a dated row so impressions can be reported over a timeframe.
+			Tracking\Ad_Stats::record_impressions( $ad_id, $newsletter_id, 1 );
 		}
 	}
 
@@ -711,6 +713,8 @@ final class Ads {
 			}
 			$impressions += $views;
 			update_post_meta( $ad_id, 'tracking_impressions', $impressions );
+			// Also record a dated row so impressions can be reported over a timeframe.
+			Tracking\Ad_Stats::record_impressions( $ad_id, $newsletter_id, $views );
 		}
 	}
 
