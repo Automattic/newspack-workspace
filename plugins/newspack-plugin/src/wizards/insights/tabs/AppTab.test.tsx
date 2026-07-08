@@ -205,6 +205,21 @@ describe( 'AppTab', () => {
 		expect( mockUseData ).toHaveBeenCalledWith( range, null );
 	} );
 
+	it( 'the Content per-publication selector re-scopes the tables', async () => {
+		mockFetch.mockResolvedValue( baseConfig( { selected_property: '533212292', selected_is_visible: true } ) );
+		renderTab();
+
+		// "All publications" initially → the app-wide top author.
+		expect( await screen.findByText( 'Top authors' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Alex Rivera' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Sam Okafor' ) ).not.toBeInTheDocument();
+
+		// Switch to Northside → its author appears and the app-wide author drops.
+		fireEvent.change( screen.getByRole( 'combobox' ), { target: { value: 'northside' } } );
+		expect( screen.getByText( 'Sam Okafor' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Alex Rivera' ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'threads the comparison window into the data hook', async () => {
 		const previousRange = { start: '2026-04-01', end: '2026-04-30', preset: 'last-30' } as unknown as DateRange;
 		mockFetch.mockResolvedValue( baseConfig( { selected_property: '533212292', selected_is_visible: true } ) );

@@ -553,8 +553,10 @@ final class App_Metric {
 						'desc'   => true,
 					],
 				],
-				// Generous: the whole collection × section matrix in one page, so the
-				// client can take top-N per collection.
+				// One page big enough to hold a realistic collection × section matrix
+				// (a handful of publications × a few dozen sections), so the client
+				// can take top-N per collection. Capped at 250 — a runaway taxonomy
+				// would be truncated, which is fine for a "top sections" view.
 				'limit'      => 250,
 			]
 		);

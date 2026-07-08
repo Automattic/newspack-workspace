@@ -16,11 +16,11 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState } from '@wordpress/element';
+import { SelectControl } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
-import { SelectControl } from '../../../../../packages/components/src';
 import type { AppMetrics } from '../../api/app';
 import ChartCard from '../components/ChartCard';
 import MetricTable from '../components/MetricTable';
@@ -34,7 +34,7 @@ export interface ContentSectionProps {
 const ALL = 'all';
 
 const ContentSection = ( { metrics }: ContentSectionProps ) => {
-	const [ filter, setFilter ] = useState( ALL );
+	const [ filter, setFilter ] = useState< string >( ALL );
 
 	// Publications present in the content matrices. Only a multi-property app
 	// (2+ collections) gets the selector; otherwise the app-wide tables render.
@@ -48,6 +48,7 @@ const ContentSection = ( { metrics }: ContentSectionProps ) => {
 
 	const selector = hasSelector ? (
 		<SelectControl
+			__nextHasNoMarginBottom
 			className="newspack-insights__app-collection-select"
 			label={ __( 'Publication', 'newspack-plugin' ) }
 			hideLabelFromVision
