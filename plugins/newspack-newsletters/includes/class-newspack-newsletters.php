@@ -889,7 +889,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => [ __CLASS__, 'api_get_layouts' ],
-				'permission_callback' => [ __CLASS__, 'api_authoring_permissions_check' ],
+				'permission_callback' => [ __CLASS__, 'api_edit_posts_permissions_check' ],
 				'args'                => [
 					'defaults_only' => [
 						'type'        => 'boolean',
@@ -1164,6 +1164,28 @@ final class Newspack_Newsletters {
 	public static function api_edit_post_permissions_check( $request ) {
 		$post_id = (int) $request->get_param( 'post_id' );
 		if ( $post_id && current_user_can( 'edit_post', $post_id ) ) {
+			return true;
+		}
+		return new \WP_Error(
+			'newspack_rest_forbidden',
+			esc_html__( 'You cannot use this resource.', 'newspack-newsletters' ),
+			[
+				'status' => 403,
+			]
+		);
+	}
+
+	/**
+	 * Permission check for non-post authoring reads needed to load the
+	 * editor (e.g. the `layouts` list). Any user who can author posts may
+	 * use them; no site-wide or audience data is exposed.
+	 *
+	 * @param WP_REST_Request $request API request object.
+	 * @return bool|WP_Error
+	 */
+	public static function api_edit_posts_permissions_check( $request ) {
+		unset( $request );
+		if ( current_user_can( 'edit_posts' ) ) {
 			return true;
 		}
 		return new \WP_Error(
