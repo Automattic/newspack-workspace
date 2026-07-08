@@ -233,4 +233,38 @@ class Newspack_Test_CTA_Intent_Classifier extends WP_UnitTestCase {
 			'support'         => [ 'https://example.org/support/' ],
 		];
 	}
+
+	/**
+	 * A dated same-host article whose slug contains a conversion token abstains to
+	 * editorial, NOT the paid intent — the strong dated-article guard (/YYYY/MM/) runs
+	 * before the donation/subscription patterns. Without it,
+	 * /2026/06/12/school-board-member-profile/ classifies as `donation` on the "member"
+	 * token, and a click on that editorial button would credit a gate for a conversion
+	 * the reader never made. (dkoo review, #575.)
+	 *
+	 * Counterpart to test_common_paywall_destinations_classify_as_donation: the guard is
+	 * scoped to the dated prefix precisely so real conversion pages (/become-a-member/,
+	 * no date) still win. The WP test home host is example.org, so these are same-host.
+	 *
+	 * @dataProvider dated_articles_with_conversion_tokens
+	 * @param string $href A same-host dated article URL containing a conversion token.
+	 */
+	public function test_dated_article_with_token_abstains_to_editorial( $href ) {
+		$hit = CTA_Intent_Classifier::classify_href( $href );
+		$this->assertSame( 'editorial', $hit['intent'], "Expected editorial for $href" );
+		$this->assertNotContains( $hit['intent'], CTA_Intent_Classifier::PAID_INTENTS, 'A dated article must never be a paid CTA.' );
+	}
+
+	/**
+	 * Same-host dated articles whose slugs contain a conversion token.
+	 *
+	 * @return array
+	 */
+	public function dated_articles_with_conversion_tokens() {
+		return [
+			'member token'    => [ 'https://example.org/2026/06/12/school-board-member-profile/' ],
+			'donate token'    => [ 'https://example.org/2026/06/12/how-to-donate-blood-locally/' ],
+			'subscribe token' => [ 'https://example.org/2026/01/03/why-i-subscribe-to-print/' ],
+		];
+	}
 }

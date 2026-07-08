@@ -15,6 +15,7 @@
  * package between them. Change one, change the other.
  *
  *   sessionStorage[ 'newspack_cta_attribution' ] = JSON.stringify( {
+ *     v:    1,                   // SCHEMA — reject records written by a drifted shape
  *     type: 'gate' | 'prompt',   // which surface
  *     id:   '123',               // gate_post_id or newspack_popup_id
  *     ts:   1751932800000,       // Date.now() at click
@@ -31,6 +32,16 @@
 
 /** Storage key. Shared with newspack-blocks. */
 export const STORAGE_KEY = 'newspack_cta_attribution';
+
+/**
+ * Storage-record schema version. The contract is duplicated across newspack-plugin and
+ * newspack-blocks (no shared JS package), so a mismatch is a real failure mode if the
+ * two ever drift — one side bumps TTL or the record shape, the other silently honors a
+ * stale record. Stamping the version and checking it on read makes drift fail safe: a
+ * record from a different version is ignored rather than trusted. Bump on any change to
+ * the record fields, the TTL semantics, or the storage key. (dkoo review, #575.)
+ */
+export const SCHEMA = 1;
 
 /**
  * Attribution lifetime, in milliseconds.
@@ -58,7 +69,7 @@ export function persistCtaAttribution( type, id ) {
 		return false;
 	}
 	try {
-		window.sessionStorage.setItem( STORAGE_KEY, JSON.stringify( { type, id: String( id ), ts: Date.now() } ) );
+		window.sessionStorage.setItem( STORAGE_KEY, JSON.stringify( { v: SCHEMA, type, id: String( id ), ts: Date.now() } ) );
 		return true;
 	} catch ( e ) {
 		return false;

@@ -2,14 +2,21 @@
  * Tests for the CTA attribution replay (NPPD-1887).
  */
 
-import { STORAGE_KEY, TTL_MS, readCtaAttribution, applyCtaAttribution } from './cta-attribution';
+import { STORAGE_KEY, SCHEMA, TTL_MS, readCtaAttribution, applyCtaAttribution } from './cta-attribution';
 
 /**
  * Write a raw value into sessionStorage.
  *
+ * Object records are stamped with the current SCHEMA unless they specify their own `v`,
+ * mirroring how persistCtaAttribution actually writes — so tests read realistic records,
+ * while the version-mismatch test can still supply a drifted `v`.
+ *
  * @param {*} value Value to store (stringified unless already a string).
  */
 function store( value ) {
+	if ( value && 'object' === typeof value && undefined === value.v ) {
+		value = { v: SCHEMA, ...value };
+	}
 	window.sessionStorage.setItem( STORAGE_KEY, 'string' === typeof value ? value : JSON.stringify( value ) );
 }
 
@@ -54,7 +61,15 @@ describe( 'cta-attribution', () => {
 
 		it( 'returns a fresh gate record', () => {
 			store( { type: 'gate', id: '42', ts: Date.now() } );
-			expect( readCtaAttribution() ).toEqual( { type: 'gate', id: '42', ts: expect.any( Number ) } );
+			expect( readCtaAttribution() ).toEqual( { v: SCHEMA, type: 'gate', id: '42', ts: expect.any( Number ) } );
+		} );
+
+		// Drift fail-safe: the storage contract is duplicated across newspack-plugin and
+		// newspack-blocks. A record written by a different schema version must be ignored,
+		// not silently honored. (dkoo review, #575.)
+		it( 'rejects a record written by a different schema version', () => {
+			store( { v: SCHEMA + 1, type: 'gate', id: '42', ts: Date.now() } );
+			expect( readCtaAttribution() ).toBeNull();
 		} );
 
 		it( 'rejects a record older than the TTL', () => {

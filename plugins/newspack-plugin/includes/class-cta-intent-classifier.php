@@ -9,9 +9,11 @@
  * Originally written for NPPD-1837 as a display-only labeller for block-less
  * button prompts, living in newspack-popups. Moved here (NPPD-1887) because
  * content gates need the same classification and must not depend on Campaigns
- * being active. `Newspack_Popups_Data_Api` now delegates to this class, and
- * degrades to "no inferred intent" when newspack-plugin is absent — the same
- * silent-degradation contract segmentation already uses for `\Newspack\Reader_Data`.
+ * being active. Once the prompts side ships (#571), `Newspack_Popups_Data_Api`
+ * delegates to this class and degrades to "no inferred intent" when newspack-plugin
+ * is absent — the same silent-degradation contract segmentation already uses for
+ * `\Newspack\Reader_Data`. On its own (this branch) the class is self-contained and
+ * used only by the content gate.
  *
  * Two distinct consumers, two very different risk profiles:
  *
@@ -279,6 +281,24 @@ final class CTA_Intent_Classifier {
 			}
 		}
 
+		// 1.5) Strong editorial short-circuit (dkoo review, #575). A dated article path on
+		// this site's own host — /YYYY/MM/ — is unambiguously editorial and can never be a
+		// conversion page, yet its slug may contain a conversion token: e.g.
+		// /2026/06/12/school-board-member-profile/ matches the donation pattern on "member"
+		// (the hyphen before it is a valid boundary for the lookbehind). Left to fall through
+		// it would be stamped as a paid CTA, and a click on it would credit a gate for a
+		// conversion the reader never made. So we abstain to editorial BEFORE the conversion
+		// patterns. Deliberately narrow: only the dated prefix, so real conversion pages like
+		// /become-a-member/ (no date) still reach the donation pattern below. Non-dated
+		// editorial slugs that contain a token (e.g. /digital-divide/) remain a known residual
+		// — rarer, and bounded by the module's precision-first, under-attribution contract.
+		if ( ! self::is_external_host( $href ) && preg_match( '#/[0-9]{4}/[0-9]{2}/#', $href ) ) {
+			return [
+				'intent' => 'editorial',
+				'source' => 'pattern',
+			];
+		}
+
 		// 2) Processor domains (empirically ranked in NPPD-1836; fundjournalism dominant).
 		$donation_processors = [ 'fundjournalism', 'donorbox', 'actblue', 'fundraiseup', 'classy.org', 'givebutter' ];
 		foreach ( $donation_processors as $needle ) {
@@ -439,6 +459,13 @@ final class CTA_Intent_Classifier {
 
 	/**
 	 * Is this href pointing off the current site's host?
+	 *
+	 * Single-host detection: compares against `home_url()`'s host only (minus `www.`).
+	 * On multisite / multibrand installs served on more than one hostname, a genuine
+	 * on-site link on a secondary brand host reads as external, so the editorial-abstain
+	 * branch won't fire for it and the link abstains (returns null). The failure mode is
+	 * *under*-attribution, which is safe under this module's precision-first contract.
+	 * (dkoo review, #575.)
 	 *
 	 * @param string $href Lowercased href.
 	 * @return bool

@@ -19,6 +19,7 @@
  * plugins ship independently and share no JS package. Change one, change the other.
  *
  *   sessionStorage[ 'newspack_cta_attribution' ] = JSON.stringify( {
+ *     v:    1,
  *     type: 'gate' | 'prompt',
  *     id:   '123',
  *     ts:   1751932800000,
@@ -27,6 +28,14 @@
 
 /** Storage key. Shared with newspack-plugin. */
 export const STORAGE_KEY = 'newspack_cta_attribution';
+
+/**
+ * Storage-record schema version. Must match the writer's in newspack-plugin. A record
+ * whose `v` differs is treated as absent rather than trusted, so a drift between the two
+ * duplicated copies (e.g. one changes the record shape or TTL) fails safe instead of
+ * silently honoring a stale record. (dkoo review, #575.)
+ */
+export const SCHEMA = 1;
 
 /** Attribution lifetime, in ms. Kept in sync with newspack-plugin. */
 export const TTL_MS = 30 * 60 * 1000;
@@ -62,7 +71,8 @@ export function readCtaAttribution() {
 	} catch ( e ) {
 		return null;
 	}
-	if ( ! record || ! FIELD_BY_TYPE[ record.type ] || ! record.id ) {
+	// Reject records written by a different schema version (drift fail-safe).
+	if ( ! record || record.v !== SCHEMA || ! FIELD_BY_TYPE[ record.type ] || ! record.id ) {
 		return null;
 	}
 	// Session-scoped AND time-bounded (NPPD-1887 product decision). A reader who clicks
