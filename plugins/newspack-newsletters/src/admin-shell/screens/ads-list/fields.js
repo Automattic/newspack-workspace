@@ -32,14 +32,14 @@ const formatTimestampAsDate = timestamp => {
 	return dateI18n( format, timestamp * 1000 );
 };
 
-const formatDate = ymd => {
-	if ( ! ymd ) {
+const formatDate = value => {
+	if ( ! value ) {
 		return '';
 	}
 	const settings = getDateSettings();
 	const format = settings.formats?.date || 'M j, Y';
-	// Append a noon UTC time so the parsed Date object lands on the
-	// intended calendar day in any reasonable site timezone.
+	// Tolerate ISO datetime meta; noon UTC keeps the parsed day timezone-safe.
+	const ymd = String( value ).slice( 0, 10 );
 	return dateI18n( format, `${ ymd }T12:00:00Z` );
 };
 
@@ -174,14 +174,16 @@ export function getFields( { advertisers = [], placements = [] } = {} ) {
 			id: 'start_date',
 			label: __( 'Start date', 'newspack-newsletters' ),
 			enableSorting: true,
-			getValue: ( { item } ) => item?.meta?.start_date || '',
+			// Slice legacy ISO datetime to Y-m-d for consistent sort/export.
+			getValue: ( { item } ) => String( item?.meta?.start_date || '' ).slice( 0, 10 ),
 			render: renderStartDate,
 		},
 		{
 			id: 'expiry_date',
 			label: __( 'Expiration date', 'newspack-newsletters' ),
 			enableSorting: true,
-			getValue: ( { item } ) => item?.meta?.expiry_date || '',
+			// Slice legacy ISO datetime to Y-m-d for consistent sort/export.
+			getValue: ( { item } ) => String( item?.meta?.expiry_date || '' ).slice( 0, 10 ),
 			render: renderExpiryDate,
 		},
 		{

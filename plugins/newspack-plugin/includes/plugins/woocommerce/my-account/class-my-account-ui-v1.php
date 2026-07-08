@@ -7,6 +7,7 @@
 
 namespace Newspack;
 
+use Newspack\Content_Gate;
 use Newspack\Group_Subscription;
 use Newspack\Memberships;
 use Newspack\Reader_Activation;
@@ -287,10 +288,11 @@ class My_Account_UI_V1 {
 			unset( $items['payment-methods'] );
 		}
 
-		// Sidebar entry for native group management. Visibility gated by manager-of-at-least-one-group
-		// AND the existing `Memberships::is_active()` suppression already used by group-subscription UI.
+		// Sidebar entry for native group management. Visibility gated by the Access Control
+		// feature flag, manager-of-at-least-one-group, AND the existing `Memberships::is_active()`
+		// suppression already used by group-subscription UI.
 		// Inserted immediately after Subscriptions so the two related entries stay adjacent.
-		if ( ! Memberships::is_active() ) {
+		if ( Content_Gate::is_newspack_feature_enabled() && ! Memberships::is_active() ) {
 			$managed = Group_Subscription::get_managed_subscriptions_for_user( \get_current_user_id() );
 			$count   = count( $managed );
 			if ( $count > 0 ) {

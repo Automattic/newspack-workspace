@@ -2,7 +2,7 @@
  * WordPress dependencies
  */
 import { useBlockProps, InspectorControls } from '@wordpress/block-editor';
-import { PanelBody, Placeholder, SelectControl } from '@wordpress/components';
+import { PanelBody, Placeholder, SelectControl, Spinner } from '@wordpress/components';
 import apiFetch from '@wordpress/api-fetch';
 import { useEffect, useState } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
@@ -99,15 +99,17 @@ export default function Edit( { attributes, setAttributes } ) {
 	}
 
 	// Selected: reuse the ad-unit block's placeholder visual so styling is identical.
+	// Fill/stroke are set inline so the mock paints correctly before the editor
+	// stylesheet loads into the canvas iframe; the stylesheet still overrides.
 	return (
 		<div { ...blockProps }>
 			{ inspector }
 			<div className="newspack-ads-ad-block-placeholder">
 				<svg className="newspack-ads-ad-block-mock" width="100%" height="100%">
-					<rect width="100%" height="100%" />
-					<line x1="0" y1="0" x2="100%" y2="100%" />
+					<rect width="100%" height="100%" fill="#fff" stroke="rgba(30, 30, 30, 0.4)" />
+					<line x1="0" y1="0" x2="100%" y2="100%" stroke="rgba(30, 30, 30, 0.4)" />
 				</svg>
-				<div className="newspack-ads-ad-block-ad-label">{ selectedLabel }</div>
+				{ isLoading ? <Spinner /> : <div className="newspack-ads-ad-block-ad-label">{ selectedLabel }</div> }
 			</div>
 		</div>
 	);
