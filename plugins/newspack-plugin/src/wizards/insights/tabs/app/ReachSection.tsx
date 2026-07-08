@@ -33,7 +33,7 @@ const ReachSection = ( { metrics }: ReachSectionProps ) => (
 			title={ __( 'Reach', 'newspack-plugin' ) }
 			description={ __( 'How many people use your app, and on what.', 'newspack-plugin' ) }
 		/>
-		<div className="newspack-insights__metric-grid">
+		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
 			<Scorecard
 				label={ __( 'Active users', 'newspack-plugin' ) }
 				description={ __( 'Distinct people who opened the app in this timeframe.', 'newspack-plugin' ) }
@@ -50,7 +50,7 @@ const ReachSection = ( { metrics }: ReachSectionProps ) => (
 				current={ metrics.sessions }
 			/>
 		</div>
-		<div className="newspack-insights__metric-grid">
+		<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-2">
 			<ChartCard
 				title={ __( 'By platform', 'newspack-plugin' ) }
 				caption={ __( 'Active users by operating system', 'newspack-plugin' ) }

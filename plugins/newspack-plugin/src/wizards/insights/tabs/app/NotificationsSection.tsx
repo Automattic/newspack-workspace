@@ -29,7 +29,7 @@ const NotificationsSection = ( { metrics }: NotificationsSectionProps ) => (
 			title={ __( 'Notifications', 'newspack-plugin' ) }
 			description={ __( 'How your push notifications perform.', 'newspack-plugin' ) }
 		/>
-		<div className="newspack-insights__metric-grid">
+		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
 			<Scorecard
 				label={ __( 'Notification open rate', 'newspack-plugin' ) }
 				description={ __( 'Share of received push notifications that were opened.', 'newspack-plugin' ) }

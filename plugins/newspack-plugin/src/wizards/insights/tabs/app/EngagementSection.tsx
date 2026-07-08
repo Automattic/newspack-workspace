@@ -30,7 +30,7 @@ const EngagementSection = ( { metrics }: EngagementSectionProps ) => (
 			title={ __( 'Engagement', 'newspack-plugin' ) }
 			description={ __( 'How deeply people use your app.', 'newspack-plugin' ) }
 		/>
-		<div className="newspack-insights__metric-grid">
+		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
 			<Scorecard
 				label={ __( 'Avg. engagement time', 'newspack-plugin' ) }
 				description={ __( 'Average time in the app per session — app readers tend to stay far longer than on the web.', 'newspack-plugin' ) }

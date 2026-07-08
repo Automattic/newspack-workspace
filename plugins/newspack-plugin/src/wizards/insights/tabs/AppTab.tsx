@@ -140,13 +140,16 @@ const AppMetricsView = ( { range }: { range: TabSectionProps[ 'range' ] } ) => {
 	}
 	return (
 		<div className="newspack-insights__app-tab">
+			{ /* Ordered as a narrative: scale (Reach) → depth (Engagement) → what
+			     they read (Content) → who they are (Audience) → loyalty (Retention)
+			     → the app-ops channels (Notifications, Editions) last. */ }
 			<ReachSection metrics={ metrics } />
 			<EngagementSection metrics={ metrics } />
+			<ContentSection metrics={ metrics } />
+			<CompositionSection metrics={ metrics } />
 			<RetentionSection metrics={ metrics } />
 			<NotificationsSection metrics={ metrics } />
 			<EditionsSection metrics={ metrics } />
-			<ContentSection metrics={ metrics } />
-			<CompositionSection metrics={ metrics } />
 		</div>
 	);
 };

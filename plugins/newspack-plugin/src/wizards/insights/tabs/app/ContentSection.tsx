@@ -31,7 +31,7 @@ const ContentSection = ( { metrics }: ContentSectionProps ) => (
 			title={ __( 'Content', 'newspack-plugin' ) }
 			description={ __( 'The sections and authors readers engage with most in the app.', 'newspack-plugin' ) }
 		/>
-		<div className="newspack-insights__metric-grid">
+		<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-2">
 			<ChartCard
 				title={ __( 'Top sections', 'newspack-plugin' ) }
 				caption={ __( 'Screen views by section', 'newspack-plugin' ) }

@@ -148,6 +148,8 @@ describe( 'AppTab', () => {
 		expect( screen.getByText( 'Top authors' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Subscriber mix' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Free vs. paid content' ) ).toBeInTheDocument();
+		// Raw KG status values are humanized for display ("ExistingSubscriber" → "Existing subscriber").
+		expect( screen.getByText( 'Existing subscriber' ) ).toBeInTheDocument();
 		await waitFor( () => expect( mockMetrics ).toHaveBeenCalledWith( '2026-05-01', '2026-05-31' ) );
 	} );
 

@@ -29,7 +29,7 @@ const EditionsSection = ( { metrics }: EditionsSectionProps ) => (
 			title={ __( 'Editions', 'newspack-plugin' ) }
 			description={ __( 'How readers download and open your editions.', 'newspack-plugin' ) }
 		/>
-		<div className="newspack-insights__metric-grid">
+		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-4">
 			<Scorecard
 				label={ __( 'Downloads started', 'newspack-plugin' ) }
 				description={ __( 'Edition downloads begun in this timeframe.', 'newspack-plugin' ) }
