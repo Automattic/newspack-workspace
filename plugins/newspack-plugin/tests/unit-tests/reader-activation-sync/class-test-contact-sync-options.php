@@ -356,7 +356,7 @@ class Test_Contact_Sync_Options extends WP_UnitTestCase {
 					'skip_lists' => true,
 					'fields'     => $this->content_access_labels,
 				],
-			] 
+			]
 		);
 
 		$pending = as_get_scheduled_actions(

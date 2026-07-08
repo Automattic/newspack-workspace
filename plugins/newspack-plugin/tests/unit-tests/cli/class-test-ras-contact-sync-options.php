@@ -45,7 +45,7 @@ class Test_RAS_Contact_Sync_Options extends WP_UnitTestCase {
 				'skip_lists' => false,
 				'fields'     => null,
 			],
-			$options 
+			$options
 		);
 	}
 
