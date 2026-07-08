@@ -511,10 +511,12 @@ class Test_Audience_REST_Controller extends WP_UnitTestCase {
 		// Core-metric-error variant (NEWS-2603 follow-up): every core Audience
 		// BigQuery query fails with an HTTP error (which BigQuery_Proxy_Client
 		// turns into a WP_Error, shaped by proxy_scalar/proxy_rows into a
-		// `computable:false` + `error` payload). The newsletter query returns a
-		// harmless empty set — the test leaves WooCommerce inactive so the
-		// newsletter metric short-circuits to `not_configured` and never calls
-		// the hub, isolating a core-metric error as the sole data_status driver.
+		// `computable:false` + `error` payload), isolating a core-metric error
+		// as the sole data_status driver. The test leaves WooCommerce inactive so
+		// the newsletter metric short-circuits to `not_configured` before calling
+		// the hub — so the newsletter branch below normally isn't reached; it
+		// returns an empty (non-error) set defensively, only in case that query
+		// is ever invoked, so it never contributes an error of its own.
 		if ( 'core_error' === $this->bq_hub_response_variant ) {
 			if ( $is_newsletter_conversion ) {
 				return [

@@ -211,4 +211,35 @@ class Test_Metric_Status extends WP_UnitTestCase {
 		];
 		$this->assertSame( 'incomplete', Metric_Status::derive( $env ) );
 	}
+
+	/**
+	 * NEWS-2603 follow-up: a not-configured setup error on the THREE-STATE path
+	 * (`state: 'error'` + the not-configured `error_code`, as `error_scalar()`
+	 * emits for an unconfigured hub — e.g. Subscribers/Donors `newsletter_conversion`)
+	 * is a setup state, not a failed fetch, and must stay 'complete' — the same
+	 * exclusion the legacy `error`-string path already gets.
+	 */
+	public function test_derive_complete_when_state_error_is_not_configured() {
+		$env = [
+			'a' => [
+				'state'      => 'error',
+				'error_code' => 'bigquery_proxy_not_configured',
+			],
+		];
+		$this->assertSame( 'complete', Metric_Status::derive( $env ) );
+	}
+
+	/**
+	 * NEWS-2603 follow-up: a genuine fetch failure on the three-state path
+	 * (`state: 'error'` with a non-setup `error_code`) still flips to 'incomplete'.
+	 */
+	public function test_derive_incomplete_when_state_error_is_a_genuine_failure() {
+		$env = [
+			'a' => [
+				'state'      => 'error',
+				'error_code' => 'bigquery_proxy_http_error',
+			],
+		];
+		$this->assertSame( 'incomplete', Metric_Status::derive( $env ) );
+	}
 }

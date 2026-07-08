@@ -79,28 +79,33 @@ class Metric_Status {
 	 * Resolve a single metric-scalar leaf to `error` | `warming` | `populated`.
 	 *
 	 * A hub/proxy failure surfaces either as an explicit `state` of `error`
-	 * (three-state metrics) or as a non-empty `error` message string alongside
-	 * `computable:false` (core BigQuery-proxy metrics, which predate the
-	 * three-state model). Either means the last data fetch for that metric
-	 * failed. A `computable:false` node with no error — an empty cohort, an
-	 * overlay, a not-configured metric — is NOT a failure and stays populated.
+	 * (three-state metrics, via `Conversion_Metric::error_scalar()`) or as a
+	 * non-empty `error` message string alongside `computable:false` (core
+	 * BigQuery-proxy metrics, which predate the three-state model). Either means
+	 * the last data fetch for that metric failed. A `computable:false` node with
+	 * no error signal — an empty cohort or an overlay — is NOT a failure and
+	 * stays populated.
 	 *
-	 * The one legacy `error` explicitly excluded is the proxy's "not
-	 * configured" code: a never-connected hub is a setup state, not a failed
-	 * fetch, so it must not read as `incomplete`.
+	 * The one exception, applied to BOTH failure paths, is the proxy's "not
+	 * configured" `error_code`: a never-connected hub is a setup state, not a
+	 * failed fetch, so it must never read as `incomplete`. Both `error_scalar()`
+	 * and the core proxy shapers carry the WP_Error code as `error_code`.
 	 *
 	 * @param array $node Metric-scalar leaf node.
 	 * @return string One of 'error' | 'warming' | 'populated'.
 	 */
 	private static function leaf_state( array $node ): string {
-		$is_error = ( isset( $node['state'] ) && 'error' === $node['state'] )
-			|| (
-				! empty( $node['error'] ) && is_string( $node['error'] )
-				&& BigQuery_Proxy_Client::ERROR_NOT_CONFIGURED !== ( $node['error_code'] ?? null )
-			);
+		// "Not configured" is a setup state, not a failed fetch — exclude it from
+		// both the three-state `state === 'error'` path and the legacy
+		// `error`-string path so a never-connected hub reads as complete on any tab.
+		$is_setup_not_configured = BigQuery_Proxy_Client::ERROR_NOT_CONFIGURED === ( $node['error_code'] ?? null );
 
-		if ( $is_error ) {
-			return 'error';
+		if ( ! $is_setup_not_configured ) {
+			$is_error = ( isset( $node['state'] ) && 'error' === $node['state'] )
+				|| ( ! empty( $node['error'] ) && is_string( $node['error'] ) );
+			if ( $is_error ) {
+				return 'error';
+			}
 		}
 
 		if ( isset( $node['state'] ) && 'warming' === $node['state'] ) {

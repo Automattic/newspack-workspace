@@ -521,12 +521,13 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 
 	/**
 	 * Audience (Tab 1) now carries its own `cache_schema_version()` override
-	 * ('2', bumped for the NEWS-2603 `data_status` envelope field — see
-	 * Audience_REST_Controller::cache_schema_version()) instead of inheriting
-	 * Cache::ENVELOPE_SCHEMA_VERSION from the trait default. This mirrors the
-	 * Subscribers/Donors tabs, which already opt out of the global version via
-	 * their own overrides, so a per-tab bump doesn't bust every other tab's
-	 * cache.
+	 * ('3' — bumped to '2' for the NEWS-2603 `data_status` envelope field, then
+	 * to '3' when core-BQ-outage discrimination changed the derived value and
+	 * added `error_code`; see Audience_REST_Controller::cache_schema_version())
+	 * instead of inheriting Cache::ENVELOPE_SCHEMA_VERSION from the trait
+	 * default. This mirrors the Subscribers/Donors tabs, which already opt out
+	 * of the global version via their own overrides, so a per-tab bump doesn't
+	 * bust every other tab's cache.
 	 */
 	public function test_audience_has_its_own_schema_version_override() {
 		$controller = new Audience_REST_Controller();
@@ -540,7 +541,7 @@ class Test_Conversion_REST_Controller extends WP_UnitTestCase {
 
 		// Five parts: tab version + start + end + null + null.
 		$this->assertCount( 5, $parts );
-		$this->assertSame( '2', $parts[0] );
+		$this->assertSame( '3', $parts[0] );
 		$this->assertNotSame( Cache::ENVELOPE_SCHEMA_VERSION, $parts[0] );
 		$this->assertSame( '2026-01-01', $parts[1] );
 		$this->assertSame( '2026-01-31', $parts[2] );
