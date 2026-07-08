@@ -14,7 +14,8 @@ export const { STATUS_KIND_LABELS, statusKindLabel } = createStatusLabelModule( 
 	active: __( 'Active', 'newspack-newsletters' ),
 	scheduled: __( 'Scheduled', 'newspack-newsletters' ),
 	expired: __( 'Expired', 'newspack-newsletters' ),
-	draft: __( 'Draft', 'newspack-newsletters' ),
+	// The `draft` kind (draft / pending ads) is the list's non-serving state; label it "Inactive" to match the Quick Edit control.
+	draft: __( 'Inactive', 'newspack-newsletters' ),
 	trash: __( 'Trash', 'newspack-newsletters' ),
 } ) );
 
