@@ -138,7 +138,7 @@ class ActiveCampaignFieldMatchingTest extends WP_UnitTestCase {
 			],
 		];
 
-		// phpcs:ignore phpcsSniffs.Newsletters.ForbiddenMethods.PossibleForbiddenContactsMethods -- this test exercises the provider method itself.
+		// phpcs:ignore phpcsSniffs.Newsletters.ForbiddenMethods.PossibleForbiddenContactsMethods, phpcsSniffs.Newsletters.ForbiddenContactsMethods.ForbiddenContactsMethods -- this test exercises the provider method itself.
 		$result = Newspack_Newsletters_Active_Campaign::instance()->add_contact(
 			[
 				'email'    => 'reader@example.net',
@@ -158,7 +158,7 @@ class ActiveCampaignFieldMatchingTest extends WP_UnitTestCase {
 	public function test_field_create_failure_does_not_block_signup() {
 		$this->remote_fields = []; // Field genuinely missing; create will fail with 422.
 
-		// phpcs:ignore phpcsSniffs.Newsletters.ForbiddenMethods.PossibleForbiddenContactsMethods -- this test exercises the provider method itself.
+		// phpcs:ignore phpcsSniffs.Newsletters.ForbiddenMethods.PossibleForbiddenContactsMethods, phpcsSniffs.Newsletters.ForbiddenContactsMethods.ForbiddenContactsMethods -- this test exercises the provider method itself.
 		$result = Newspack_Newsletters_Active_Campaign::instance()->add_contact(
 			[
 				'email'    => 'reader2@example.net',
@@ -186,7 +186,7 @@ class ActiveCampaignFieldMatchingTest extends WP_UnitTestCase {
 			],
 		];
 
-		// phpcs:ignore phpcsSniffs.Newsletters.ForbiddenMethods.PossibleForbiddenContactsMethods -- this test exercises the provider method itself.
+		// phpcs:ignore phpcsSniffs.Newsletters.ForbiddenMethods.PossibleForbiddenContactsMethods, phpcsSniffs.Newsletters.ForbiddenContactsMethods.ForbiddenContactsMethods -- this test exercises the provider method itself.
 		$result = Newspack_Newsletters_Active_Campaign::instance()->add_contact(
 			[
 				'email'    => 'reader3@example.net',
@@ -229,7 +229,7 @@ class ActiveCampaignFieldMatchingTest extends WP_UnitTestCase {
 			],
 		];
 
-		// phpcs:ignore phpcsSniffs.Newsletters.ForbiddenMethods.PossibleForbiddenContactsMethods -- this test exercises the provider method itself.
+		// phpcs:ignore phpcsSniffs.Newsletters.ForbiddenMethods.PossibleForbiddenContactsMethods, phpcsSniffs.Newsletters.ForbiddenContactsMethods.ForbiddenContactsMethods -- this test exercises the provider method itself.
 		$result = Newspack_Newsletters_Active_Campaign::instance()->add_contact(
 			[
 				'email'    => 'reader4@example.net',
