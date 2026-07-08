@@ -246,6 +246,73 @@ class Test_App_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The report envelope wraps the current window in the `{ data, cache }` shape
+	 * the shared insightsCache consumes. Without a comparison window, `previous`
+	 * is null; the cache source is `external` (live GA4). No network is hit (the
+	 * no-property gate returns before any report).
+	 */
+	public function test_get_report_envelope_shape() {
+		$report = App_Metric::get_report( '2026-06-09', '2026-07-08' );
+
+		$this->assertArrayHasKey( 'data', $report );
+		$this->assertArrayHasKey( 'cache', $report );
+		$this->assertSame( 'no_property', $report['data']['current']['tab_error'] );
+		$this->assertNull( $report['data']['previous'] );
+		$this->assertSame( 'external', $report['cache']['source'] );
+		$this->assertArrayHasKey( 'computed_at', $report['cache'] );
+		$this->assertNull( $report['cache']['cooldown_until'] );
+	}
+
+	/**
+	 * A fully specified comparison window makes the envelope carry a (non-null)
+	 * `previous` window alongside `current`.
+	 */
+	public function test_get_report_with_comparison_adds_previous_window() {
+		$report = App_Metric::get_report( '2026-06-09', '2026-07-08', '2026-05-01', '2026-05-31' );
+
+		$this->assertIsArray( $report['data']['previous'] );
+		$this->assertSame( 'no_property', $report['data']['previous']['tab_error'] );
+	}
+
+	/**
+	 * The fixture prior-window derivation scales scalar values down (so the
+	 * comparison toggle shows deltas locally) while leaving breakdown/timeseries
+	 * rows untouched.
+	 */
+	public function test_scale_previous_scales_scalars_only() {
+		$method = new \ReflectionMethod( App_Metric::class, 'scale_previous' );
+		$method->setAccessible( true );
+
+		$current  = [
+			'active_users'    => [
+				'value'      => 1000,
+				'computable' => true,
+				'type'       => 'count',
+			],
+			'engagement_rate' => [
+				'value'      => 0.8,
+				'computable' => true,
+				'type'       => 'rate',
+			],
+			'top_sections'    => [
+				'rows'       => [
+					[
+						'section' => 'News',
+						'views'   => 500,
+					],
+				],
+				'computable' => true,
+				'type'       => 'breakdown',
+			],
+		];
+		$previous = $method->invoke( null, $current );
+
+		$this->assertSame( 880, $previous['active_users']['value'] );          // 1000 * 0.88.
+		$this->assertEqualsWithDelta( 0.76, $previous['engagement_rate']['value'], 0.0001 ); // 0.8 * 0.95.
+		$this->assertSame( $current['top_sections'], $previous['top_sections'] ); // Breakdown untouched.
+	}
+
+	/**
 	 * With no Google connection (test env), the config reports not-connected with
 	 * an empty property list and a Connections URL, and never throws.
 	 */

@@ -6,11 +6,23 @@
  * layout (sections, metric grid) comes from the shared `sections` partial loaded
  * by the wizard's top-level `style.scss`.
  */
+@use "~@wordpress/base-styles/colors" as wp-colors;
 @use "../components/insights-charts";
 
-// Right-aligned "Change app property" action above the metric sections.
+// Left-aligned property-context line above the metric sections: names the GA4
+// property the tab is reading, with an inline "Change" affordance.
 .newspack-insights__app-toolbar {
 	display: flex;
-	justify-content: flex-end;
-	margin-bottom: 8px;
+	align-items: baseline;
+	gap: 6px;
+	margin-bottom: 16px;
+}
+
+.newspack-insights__app-property {
+	font-size: 13px;
+	color: wp-colors.$gray-700;
+}
+
+.newspack-insights__app-property-sep {
+	color: wp-colors.$gray-400;
 }

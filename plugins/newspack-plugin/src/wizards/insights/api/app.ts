@@ -17,6 +17,7 @@ import apiFetch from '@wordpress/api-fetch';
  * Internal dependencies
  */
 import type { MetricPayload } from '../tabs/components/metrics';
+import { type CachedEnvelope } from '../state/insightsCache';
 
 /** One selectable GA4 property (spans accounts — app data often lives in a separate account). */
 export interface AppProperty {
@@ -90,14 +91,41 @@ export interface AppMetrics {
 	content_cost?: MetricPayload;
 }
 
-export interface AppMetricsResponse {
+/** The windowed report the cache envelope wraps: current + optional prior window. */
+export interface AppReportData {
 	current: AppMetrics;
+	previous: AppMetrics | null;
+}
+
+/** Date window (+ optional comparison window) for a metrics request. */
+export interface AppMetricsQuery {
+	start: string;
+	end: string;
+	compare_start?: string;
+	compare_end?: string;
 }
 
 const METRICS_ENDPOINT = '/newspack-insights/v1/app';
 
-export const fetchAppMetrics = async ( start: string, end: string ): Promise< AppMetricsResponse > =>
-	apiFetch< AppMetricsResponse >( {
-		path: `${ METRICS_ENDPOINT }?start=${ encodeURIComponent( start ) }&end=${ encodeURIComponent( end ) }`,
+const queryString = ( query: AppMetricsQuery ): string => {
+	const params = new URLSearchParams();
+	params.set( 'start', query.start );
+	params.set( 'end', query.end );
+	if ( query.compare_start && query.compare_end ) {
+		params.set( 'compare_start', query.compare_start );
+		params.set( 'compare_end', query.compare_end );
+	}
+	return params.toString();
+};
+
+export const fetchAppMetricsData = async ( query: AppMetricsQuery ): Promise< CachedEnvelope< AppReportData > > =>
+	apiFetch< CachedEnvelope< AppReportData > >( {
+		path: `${ METRICS_ENDPOINT }?${ queryString( query ) }`,
 		method: 'GET',
+	} );
+
+export const refreshAppMetricsData = async ( query: AppMetricsQuery ): Promise< CachedEnvelope< AppReportData > > =>
+	apiFetch< CachedEnvelope< AppReportData > >( {
+		path: `${ METRICS_ENDPOINT }/refresh?${ queryString( query ) }`,
+		method: 'POST',
 	} );

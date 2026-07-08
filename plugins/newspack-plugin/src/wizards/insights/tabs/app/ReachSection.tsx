@@ -8,6 +8,11 @@
  */
 
 /**
+ * External dependencies
+ */
+import type { ReactNode } from 'react';
+
+/**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
@@ -24,30 +29,37 @@ import SectionHeading from '../components/SectionHeading';
 
 export interface ReachSectionProps {
 	metrics: AppMetrics;
+	previous?: AppMetrics | null;
+	/** The shared "Last updated" + kebab chrome, hosted in this (first) section's heading. */
+	lastUpdated?: ReactNode;
 }
 
-const ReachSection = ( { metrics }: ReachSectionProps ) => (
+const ReachSection = ( { metrics, previous, lastUpdated }: ReachSectionProps ) => (
 	<section className="newspack-insights__section" aria-labelledby="newspack-insights-app-reach-heading">
 		<SectionHeading
 			id="newspack-insights-app-reach-heading"
 			title={ __( 'Reach', 'newspack-plugin' ) }
 			description={ __( 'How many people use your app, and on what.', 'newspack-plugin' ) }
+			actions={ lastUpdated }
 		/>
 		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
 			<Scorecard
 				label={ __( 'Active users', 'newspack-plugin' ) }
 				description={ __( 'Distinct people who opened the app', 'newspack-plugin' ) }
 				current={ metrics.active_users }
+				previous={ previous?.active_users }
 			/>
 			<Scorecard
 				label={ __( 'New users', 'newspack-plugin' ) }
 				description={ __( 'First-time app users', 'newspack-plugin' ) }
 				current={ metrics.new_users }
+				previous={ previous?.new_users }
 			/>
 			<Scorecard
 				label={ __( 'Sessions', 'newspack-plugin' ) }
 				description={ __( 'Total app sessions', 'newspack-plugin' ) }
 				current={ metrics.sessions }
+				previous={ previous?.sessions }
 			/>
 		</div>
 		<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-2">

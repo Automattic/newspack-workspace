@@ -49,7 +49,7 @@ final class App_Metric {
 	/**
 	 * Metrics transient key prefix.
 	 */
-	const METRICS_CACHE_PREFIX = 'newspack_insights_app_metrics_v1:';
+	const METRICS_CACHE_PREFIX = 'newspack_insights_app_metrics_v2:';
 
 	/**
 	 * Retention transient TTL + key prefix. Retention is window-independent (its
@@ -241,34 +241,142 @@ final class App_Metric {
 		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
 			return self::get_fixture_metrics();
 		}
+		return self::get_window_report( $start_date, $end_date )['metrics'];
+	}
 
+	/**
+	 * Cache-freshness-aware envelope for the tab: the current window's metrics,
+	 * an optional comparison window, and the `cache` meta the shared insightsCache
+	 * consumes (so the "Last updated" chrome and period-over-period deltas work
+	 * like every other Insights tab).
+	 *
+	 * @param string $start_date    YYYY-MM-DD.
+	 * @param string $end_date      YYYY-MM-DD.
+	 * @param string $compare_start Optional prior-window start (YYYY-MM-DD).
+	 * @param string $compare_end   Optional prior-window end (YYYY-MM-DD).
+	 * @param bool   $force_refresh Bypass the per-window transient and recompute.
+	 * @return array{ data: array{ current: array, previous: ?array }, cache: array }
+	 */
+	public static function get_report( string $start_date, string $end_date, string $compare_start = '', string $compare_end = '', bool $force_refresh = false ): array {
+		$comparing = '' !== $compare_start && '' !== $compare_end;
+
+		// Fixture mode: canned current, plus a derived prior window when comparing
+		// so the toggle is demoable locally. Marked SOURCE_LOCAL / stamped now.
+		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
+			$current = self::get_fixture_metrics();
+			return self::envelope( $current, $comparing ? self::scale_previous( $current ) : null, 'local', self::now_timestamp() );
+		}
+
+		$current  = self::get_window_report( $start_date, $end_date, $force_refresh );
+		$previous = $comparing ? self::get_window_report( $compare_start, $compare_end, $force_refresh )['metrics'] : null;
+		return self::envelope( $current['metrics'], $previous, 'external', $current['computed_at'] );
+	}
+
+	/**
+	 * One window's metrics plus the timestamp they were computed at (for the
+	 * "Last updated" chrome). Window-dependent metrics are cached per
+	 * property+window; retention is window-independent (its own trailing
+	 * complete-week cohorts), cached per property with a daily TTL. Returns a
+	 * `tab_error` metrics map (and a null timestamp) when there's no property or
+	 * connection, so the tab surfaces a single banner instead of N failed reports.
+	 *
+	 * @param string $start_date    YYYY-MM-DD.
+	 * @param string $end_date      YYYY-MM-DD.
+	 * @param bool   $force_refresh Bypass the transient and recompute.
+	 * @return array{ metrics: array, computed_at: ?string }
+	 */
+	private static function get_window_report( string $start_date, string $end_date, bool $force_refresh = false ): array {
 		$property = self::get_selected_property_id();
 		if ( '' === $property ) {
-			return [ 'tab_error' => 'no_property' ];
+			return [
+				'metrics'     => [ 'tab_error' => 'no_property' ],
+				'computed_at' => null,
+			];
 		}
 		if ( ! self::is_connected() ) {
-			return [ 'tab_error' => 'not_connected' ];
+			return [
+				'metrics'     => [ 'tab_error' => 'not_connected' ],
+				'computed_at' => null,
+			];
 		}
 
-		// Window-dependent metrics (Reach, Engagement, Notifications, Editions),
-		// cached per property+window.
 		$window_key = self::METRICS_CACHE_PREFIX . md5( $property . '|' . $start_date . '|' . $end_date );
-		$window     = get_transient( $window_key );
-		if ( ! is_array( $window ) ) {
-			$window = self::compute_metrics( $property, $start_date, $end_date );
+		$cached     = $force_refresh ? false : get_transient( $window_key );
+		if ( is_array( $cached ) && isset( $cached['metrics'], $cached['computed_at'] ) ) {
+			$window = $cached;
+		} else {
+			$window = [
+				'metrics'     => self::compute_metrics( $property, $start_date, $end_date ),
+				'computed_at' => self::now_timestamp(),
+			];
 			set_transient( $window_key, $window, self::METRICS_CACHE_TTL );
 		}
 
-		// Retention is window-independent (its own trailing complete-week cohorts);
-		// cache it per property with a daily TTL so date-range changes reuse it.
 		$retention_key = self::RETENTION_CACHE_PREFIX . md5( $property );
-		$retention     = get_transient( $retention_key );
+		$retention     = $force_refresh ? false : get_transient( $retention_key );
 		if ( ! is_array( $retention ) ) {
 			$retention = self::compute_retention( $property );
 			set_transient( $retention_key, $retention, self::RETENTION_CACHE_TTL );
 		}
 
-		return array_merge( $window, [ 'retention' => $retention ] );
+		return [
+			'metrics'     => array_merge( $window['metrics'], [ 'retention' => $retention ] ),
+			'computed_at' => $window['computed_at'],
+		];
+	}
+
+	/**
+	 * Wrap current/previous metrics in the shared cache envelope.
+	 *
+	 * @param array       $current     Current-window metrics map.
+	 * @param array|null  $previous    Prior-window metrics map, or null.
+	 * @param string      $source      Cache source tag ('external' live GA4, 'local' fixture).
+	 * @param string|null $computed_at ISO-8601 timestamp the current window was computed at.
+	 * @return array
+	 */
+	private static function envelope( array $current, ?array $previous, string $source, ?string $computed_at ): array {
+		return [
+			'data'  => [
+				'current'  => $current,
+				'previous' => $previous,
+			],
+			'cache' => [
+				'source'         => $source,
+				'computed_at'    => $computed_at,
+				'cooldown_until' => null,
+			],
+		];
+	}
+
+	/**
+	 * Derive a plausible prior window from the fixture's current window by scaling
+	 * scalar values down (counts ~12% lower, rates a touch lower) so the
+	 * comparison toggle shows realistic deltas locally. Breakdown/timeseries
+	 * payloads pass through unchanged.
+	 *
+	 * @param array $metrics Current-window fixture metrics.
+	 * @return array
+	 */
+	private static function scale_previous( array $metrics ): array {
+		$previous = [];
+		foreach ( $metrics as $key => $payload ) {
+			if ( is_array( $payload ) && isset( $payload['value'] ) && is_numeric( $payload['value'] ) ) {
+				$payload['value'] = 'rate' === ( $payload['type'] ?? '' )
+					? round( (float) $payload['value'] * 0.95, 4 )
+					: (int) round( (float) $payload['value'] * 0.88 );
+			}
+			$previous[ $key ] = $payload;
+		}
+		return $previous;
+	}
+
+	/**
+	 * Current UTC time as an ISO-8601 `Z` timestamp for cache `computed_at`.
+	 *
+	 * @return string
+	 */
+	private static function now_timestamp(): string {
+		return gmdate( 'Y-m-d\TH:i:s\Z' );
 	}
 
 	/**
