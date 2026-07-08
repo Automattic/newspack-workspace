@@ -19,9 +19,19 @@ export interface ConfirmModalProps {
 	onCancel: () => void;
 }
 
+// Wire the warning text to the dialog's accessible description (WP Modal
+// forwards `aria.describedby` onto the dialog) so screen readers announce the
+// message, not just the title — matching the FeedbackModal convention.
+const MESSAGE_ID = 'newspack-insights-confirm-modal-message';
+
 const ConfirmModal = ( { onContinue, onCancel }: ConfirmModalProps ) => (
-	<Modal title={ __( 'Load new data?', 'newspack-plugin' ) } onRequestClose={ onCancel } className="newspack-insights__confirm-modal">
-		<p className="newspack-insights__confirm-modal-message">
+	<Modal
+		title={ __( 'Load new data?', 'newspack-plugin' ) }
+		onRequestClose={ onCancel }
+		className="newspack-insights__confirm-modal"
+		aria={ { describedby: MESSAGE_ID } }
+	>
+		<p id={ MESSAGE_ID } className="newspack-insights__confirm-modal-message">
 			{ __( 'The data for these settings may take a while to load. Continue?', 'newspack-plugin' ) }
 		</p>
 		<div className="newspack-insights__confirm-modal-actions">

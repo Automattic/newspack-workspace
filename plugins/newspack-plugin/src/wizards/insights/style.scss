@@ -40,6 +40,11 @@
 		align-items: center;
 		justify-content: flex-end;
 		gap: 16px;
+		// Full width so `justify-content` actually positions the controls: the
+		// parent column sets `align-items: flex-end`, which would otherwise
+		// shrink this row to its content and keep it right-aligned even when the
+		// media query flips `justify-content` to flex-start at <=782px.
+		width: 100%;
 
 		@media ( max-width: 782px ) {
 			justify-content: flex-start;
