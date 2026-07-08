@@ -377,8 +377,9 @@ class Audience_Content_Gates extends Wizard {
 	 */
 	public function get_config() {
 		$advanced = Content_Gate_Advanced_Settings::get_settings();
-		// Cast to bool at the REST boundary so the TS type (boolean) is satisfied.
-		// Internal storage remains as 0/1 integers — only the REST response payload is cast.
+		// Cast the boolean flags to bool at the REST boundary so the TS types
+		// (boolean) are satisfied; they are stored internally as 0/1 integers.
+		// feed_restriction_mode is stored and returned as a string.
 		$advanced_settings_response = [
 			'restrict_feeds'                 => (bool) ( $advanced['restrict_feeds'] ?? false ),
 			'feed_restriction_mode'          => (string) ( $advanced['feed_restriction_mode'] ?? Content_Gate_Advanced_Settings::FEED_MODE_EXCLUDE ),

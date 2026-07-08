@@ -313,9 +313,9 @@ class Test_Feed_Restriction extends \WP_UnitTestCase {
 	public function test_exclude_mode_backfills_feed_to_requested_length() {
 		update_option( 'posts_per_rss', 3 );
 
-		// set_up()'s $this->post_id has a current-time (2026) date, so it sorts
-		// newest of all and is restricted — it is over-fetched then dropped,
-		// never displacing a free post into the trimmed window.
+		// set_up()'s $this->post_id defaults to the current time, so it sorts
+		// newest of all (after the dated fixtures below) and is restricted — it is
+		// over-fetched then dropped, never displacing a free post into the window.
 
 		// Five older unrestricted posts (dates ascending, all before the gated ones).
 		$free_ids = [];

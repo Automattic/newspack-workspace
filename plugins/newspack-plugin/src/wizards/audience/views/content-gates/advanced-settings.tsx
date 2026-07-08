@@ -104,9 +104,7 @@ const AdvancedSettings = ( { closeModal, showModal }: { closeModal: () => void; 
 									{ label: __( 'Show a truncated preview', 'newspack-plugin' ), value: 'truncate' },
 								] as { label: string; value: FeedRestrictionMode }[]
 							}
-							onChange={ ( value: string ) =>
-								setConfig( { ...config, feed_restriction_mode: value as FeedRestrictionMode } )
-							}
+							onChange={ ( value: string ) => setConfig( { ...config, feed_restriction_mode: value as FeedRestrictionMode } ) }
 						/>
 					) }
 					{ wizardData?.config?.has_newsletters && (
