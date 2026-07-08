@@ -92,6 +92,10 @@ class Renderer_Controller {
 			\Newspack_Newsletters\Ads::reset_inserted_ads( $post->ID );
 		}
 
+		// Reset the per-render theme.json memoization — it's keyed by post ID and
+		// process-global, so a repeated render must rebuild from current meta.
+		Editor_Bootstrap::reset_theme_json_cache();
+
 		// Apply the newspack_newsletters_newsletter_content filter to inject ad blocks,
 		// mirroring what the MJML renderer does. Feed the result to the package via a
 		// render-scoped `the_content` filter rather than the object cache — the package

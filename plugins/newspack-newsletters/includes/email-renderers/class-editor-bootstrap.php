@@ -32,6 +32,19 @@ class Editor_Bootstrap {
 	const TEMPLATE_SLUG = 'newspack-newsletter';
 
 	/**
+	 * Per-render memoization of the built WP_Theme_JSON, keyed by post ID.
+	 *
+	 * merge_theme_json() fires several times per render, so the build is cached.
+	 * The cache is process-global, so Renderer_Controller::render_wc() resets it
+	 * before each render (see reset_theme_json_cache) — otherwise a second render
+	 * of a post whose colors changed would reuse the stale theme, and in the test
+	 * suite recycled post IDs would collide across tests.
+	 *
+	 * @var array<int,\WP_Theme_JSON>
+	 */
+	private static $theme_json_cache = [];
+
+	/**
 	 * Boot the package and register the editor hooks.
 	 *
 	 * @return void
@@ -87,13 +100,24 @@ class Editor_Bootstrap {
 			return $theme;
 		}
 
-		static $cache = [];
-		if ( ! isset( $cache[ $post->ID ] ) ) {
-			$cache[ $post->ID ] = new \WP_Theme_JSON( Theme_Json_Builder::build( $post ), 'default' );
+		if ( ! isset( self::$theme_json_cache[ $post->ID ] ) ) {
+			self::$theme_json_cache[ $post->ID ] = new \WP_Theme_JSON( Theme_Json_Builder::build( $post ), 'default' );
 		}
 
-		$theme->merge( $cache[ $post->ID ] );
+		$theme->merge( self::$theme_json_cache[ $post->ID ] );
 		return $theme;
+	}
+
+	/**
+	 * Clear the per-render theme.json memoization.
+	 *
+	 * Called at the start of each render so a repeated render of the same post ID
+	 * rebuilds from current meta instead of returning a stale WP_Theme_JSON.
+	 *
+	 * @return void
+	 */
+	public static function reset_theme_json_cache() {
+		self::$theme_json_cache = [];
 	}
 
 	/**
