@@ -100,9 +100,22 @@ final class App_Metric {
 		if ( is_wp_error( $summaries ) ) {
 			return $summaries;
 		}
+		return self::flatten_property_summaries( $summaries );
+	}
 
+	/**
+	 * Flatten GA Admin API `accountSummary` objects into pickable property rows.
+	 * Pure (no network) so it's unit-testable against captured summary shapes.
+	 *
+	 * @param array $summaries List of GA Admin API `accountSummary` objects.
+	 * @return array<int,array{account_id:string,account_name:string,property_id:string,property_name:string}>
+	 */
+	public static function flatten_property_summaries( array $summaries ): array {
 		$properties = [];
 		foreach ( $summaries as $account ) {
+			if ( ! is_array( $account ) ) {
+				continue;
+			}
 			$account_name = isset( $account['displayName'] ) ? (string) $account['displayName'] : '';
 			// Resource names look like "accounts/123"; keep the bare numeric ID.
 			$account_id = isset( $account['account'] ) ? self::strip_resource_prefix( (string) $account['account'] ) : '';
