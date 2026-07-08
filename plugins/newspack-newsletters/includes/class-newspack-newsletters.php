@@ -938,7 +938,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_get_mjml' ],
-				'permission_callback' => [ __CLASS__, 'api_authoring_permissions_check' ],
+				'permission_callback' => [ __CLASS__, 'api_edit_post_permissions_check' ],
 				'args'                => [
 					'post_id' => [
 						'required'          => true,
@@ -1150,6 +1150,29 @@ final class Newspack_Newsletters {
 			);
 		}
 		return true;
+	}
+
+	/**
+	 * Permission check for post-scoped authoring routes (e.g. `post-mjml`):
+	 * the current user must be able to edit the specific post the request
+	 * targets. Scoped on `post_id` only — never a generic `id`, which on
+	 * other routes refers to a different CPT (e.g. a layout).
+	 *
+	 * @param WP_REST_Request $request API request object.
+	 * @return bool|WP_Error
+	 */
+	public static function api_edit_post_permissions_check( $request ) {
+		$post_id = (int) $request->get_param( 'post_id' );
+		if ( $post_id && current_user_can( 'edit_post', $post_id ) ) {
+			return true;
+		}
+		return new \WP_Error(
+			'newspack_rest_forbidden',
+			esc_html__( 'You cannot use this resource.', 'newspack-newsletters' ),
+			[
+				'status' => 403,
+			]
+		);
 	}
 
 	/**
