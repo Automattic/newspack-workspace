@@ -53,6 +53,14 @@ const metricsMap = (): AppMetrics => ( {
 	downloads_started: { value: 35495, computable: true, type: 'count' },
 	downloads_completed: { value: 33805, computable: true, type: 'count' },
 	download_completion_rate: { value: 0.952, computable: true, type: 'rate' },
+	downloads_by_collection: {
+		rows: [
+			{ collection: 'example city', downloads: 25998 },
+			{ collection: 'northside', downloads: 4606 },
+		],
+		computable: true,
+		type: 'breakdown',
+	},
 	top_sections: { rows: [ { section: 'News', views: 7078 } ], computable: true, type: 'breakdown' },
 	top_authors: { rows: [ { author: 'Alex Rivera', views: 3120 } ], computable: true, type: 'breakdown' },
 	subscriber_mix: { rows: [ { status: 'ExistingSubscriber', users: 483 } ], computable: true, type: 'breakdown' },
@@ -170,6 +178,9 @@ describe( 'AppTab', () => {
 		expect( screen.getByText( 'Free vs. paid content' ) ).toBeInTheDocument();
 		// Raw KG status values are humanized for display ("ExistingSubscriber" → "Existing subscriber").
 		expect( screen.getByText( 'Existing subscriber' ) ).toBeInTheDocument();
+		// Multi-property apps get the downloads-by-publication table, title-cased.
+		expect( screen.getByText( 'Downloads by publication' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Example City' ) ).toBeInTheDocument();
 		// The tab reads through the shared cache hook for the current window (no comparison).
 		expect( mockUseData ).toHaveBeenCalledWith( range, null );
 	} );

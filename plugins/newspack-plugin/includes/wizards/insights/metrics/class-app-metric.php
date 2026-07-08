@@ -496,22 +496,29 @@ final class App_Metric {
 	 * @param string $metric_key Output key for the metric value.
 	 * @return array
 	 */
-	private static function kg_breakdown( string $property, array $range, string $kg_param, string $metric, string $dim_key, string $metric_key ): array {
-		$result = Client::run_report(
-			$property,
-			$range + [
-				'dimensions' => [ [ 'name' => 'customEvent:' . $kg_param ] ],
-				'metrics'    => [ [ 'name' => $metric ] ],
-				'orderBys'   => [
-					[
-						'metric' => [ 'metricName' => $metric ],
-						'desc'   => true,
-					],
+	private static function kg_breakdown( string $property, array $range, string $kg_param, string $metric, string $dim_key, string $metric_key, ?string $event_name = null ): array {
+		$body = $range + [
+			'dimensions' => [ [ 'name' => 'customEvent:' . $kg_param ] ],
+			'metrics'    => [ [ 'name' => $metric ] ],
+			'orderBys'   => [
+				[
+					'metric' => [ 'metricName' => $metric ],
+					'desc'   => true,
 				],
-				'limit'      => self::TOP_ROWS_LIMIT,
-			]
-		);
-		return self::kg_payload_from_result( $result, $dim_key, $metric_key );
+			],
+			'limit'      => self::TOP_ROWS_LIMIT,
+		];
+		// Scope the breakdown to a single event (e.g. count `BoltDownloadCompleted`
+		// per collection) when an event name is given.
+		if ( null !== $event_name ) {
+			$body['dimensionFilter'] = [
+				'filter' => [
+					'fieldName'    => 'eventName',
+					'stringFilter' => [ 'value' => $event_name ],
+				],
+			];
+		}
+		return self::kg_payload_from_result( Client::run_report( $property, $body ), $dim_key, $metric_key );
 	}
 
 	/**
@@ -774,10 +781,14 @@ final class App_Metric {
 		// dimension as the card's "not configured" state (auto-registration is 2b);
 		// its per-request memo means these four share one registration lookup.
 		$content = [
-			'top_sections'   => self::kg_breakdown( $property, $range, 'KGSection', 'screenPageViews', 'section', 'views' ),
-			'top_authors'    => self::kg_breakdown( $property, $range, 'KGAuthor', 'screenPageViews', 'author', 'views' ),
-			'subscriber_mix' => self::kg_breakdown( $property, $range, 'KGSubscriberStatus', 'activeUsers', 'status', 'users' ),
-			'content_cost'   => self::kg_breakdown( $property, $range, 'KGStoryCost', 'screenPageViews', 'cost', 'views' ),
+			'top_sections'            => self::kg_breakdown( $property, $range, 'KGSection', 'screenPageViews', 'section', 'views' ),
+			'top_authors'             => self::kg_breakdown( $property, $range, 'KGAuthor', 'screenPageViews', 'author', 'views' ),
+			'subscriber_mix'          => self::kg_breakdown( $property, $range, 'KGSubscriberStatus', 'activeUsers', 'status', 'users' ),
+			'content_cost'            => self::kg_breakdown( $property, $range, 'KGStoryCost', 'screenPageViews', 'cost', 'views' ),
+			// Multi-property apps tag downloads with the collection (publication);
+			// count completed downloads per collection. Absent/single-value on
+			// single-property apps, where the tab hides the table.
+			'downloads_by_collection' => self::kg_breakdown( $property, $range, 'KGCollectionSet', 'eventCount', 'collection', 'downloads', 'BoltDownloadCompleted' ),
 		];
 
 		return array_merge( $scalars, $breakdowns, $events, $content );
@@ -1109,6 +1120,30 @@ final class App_Metric {
 					[
 						'cost'  => 'Sample',
 						'views' => 2110,
+					],
+				],
+				'computable' => true,
+				'type'       => 'breakdown',
+			],
+			// A multi-property app: completed downloads split across the collections
+			// (publications) the shared app serves. Generic names — no real pubs.
+			'downloads_by_collection'  => [
+				'rows'       => [
+					[
+						'collection' => 'example city',
+						'downloads'  => 25998,
+					],
+					[
+						'collection' => 'northside',
+						'downloads'  => 4606,
+					],
+					[
+						'collection' => 'harbor',
+						'downloads'  => 2844,
+					],
+					[
+						'collection' => 'valley',
+						'downloads'  => 557,
 					],
 				],
 				'computable' => true,

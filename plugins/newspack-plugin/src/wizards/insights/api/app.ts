@@ -82,6 +82,8 @@ export interface AppMetrics {
 	downloads_started?: MetricPayload;
 	downloads_completed?: MetricPayload;
 	download_completion_rate?: MetricPayload;
+	/** Completed downloads per collection (publication) — multi-property apps only. */
+	downloads_by_collection?: MetricPayload;
 	// Tier-2: KG custom-dimension breakdowns. Carry `not_configured` until the
 	// dimensions are registered on the property (auto-registration is Tier-2b).
 	top_sections?: MetricPayload;
