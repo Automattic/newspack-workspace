@@ -261,20 +261,68 @@ class Test_App_Metric extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Runtime tiering: a Tier-2 KG breakdown for a dimension that isn't registered
-	 * on the property short-circuits to a `not_configured` payload (the card
-	 * renders its unlock note) — no report is run, so no network is hit.
+	 * Runtime tiering: the client's `custom_dimension_missing` error (the
+	 * dimension isn't registered on the property) maps to a `not_configured`
+	 * payload — the card renders its "unlock" note.
 	 */
-	public function test_kg_breakdown_unregistered_is_not_configured() {
-		$method = new \ReflectionMethod( App_Metric::class, 'kg_breakdown' );
+	public function test_kg_missing_dimension_is_not_configured() {
+		$method = new \ReflectionMethod( App_Metric::class, 'kg_payload_from_result' );
 		$method->setAccessible( true );
 
-		// Registered list omits KGSection → not configured.
-		$payload = $method->invoke( null, '123', [ 'dateRanges' => [] ], [ 'KGAuthor' ], 'KGSection', 'screenPageViews', 'section', 'views' );
+		$payload = $method->invoke( null, new \WP_Error( 'custom_dimension_missing', 'not registered', [ 'dimensions' => [ 'KGSection' ] ] ), 'section', 'views' );
 
 		$this->assertFalse( $payload['computable'] );
 		$this->assertTrue( $payload['not_configured'] );
 		$this->assertSame( 'breakdown', $payload['type'] );
 		$this->assertSame( [], $payload['rows'] );
+	}
+
+	/**
+	 * A transient/auth failure (any non-`custom_dimension_missing` error) degrades
+	 * to a generic non-computable payload — it must NOT falsely claim the site is
+	 * unconfigured.
+	 */
+	public function test_kg_generic_error_is_not_configured_free() {
+		$method = new \ReflectionMethod( App_Metric::class, 'kg_payload_from_result' );
+		$method->setAccessible( true );
+
+		$payload = $method->invoke( null, new \WP_Error( 'ga4_api_error', 'HTTP 503' ), 'section', 'views' );
+
+		$this->assertFalse( $payload['computable'] );
+		$this->assertArrayNotHasKey( 'not_configured', $payload );
+		$this->assertSame( 'breakdown', $payload['type'] );
+	}
+
+	/**
+	 * A successful KG breakdown parses to keyed rows and drops `(not set)`/empty
+	 * dimension rows (a data-quality gap shouldn't show as a blank slice).
+	 */
+	public function test_kg_success_parses_and_drops_not_set_rows() {
+		$method = new \ReflectionMethod( App_Metric::class, 'kg_payload_from_result' );
+		$method->setAccessible( true );
+
+		$result  = [
+			'rows' => [
+				[
+					'dimensionValues' => [ [ 'value' => 'News' ] ],
+					'metricValues'    => [ [ 'value' => '7078' ] ],
+				],
+				[
+					'dimensionValues' => [ [ 'value' => '(not set)' ] ],
+					'metricValues'    => [ [ 'value' => '12' ] ],
+				],
+			],
+		];
+		$payload = $method->invoke( null, $result, 'section', 'views' );
+
+		$this->assertTrue( $payload['computable'] );
+		$this->assertCount( 1, $payload['rows'] );
+		$this->assertSame(
+			[
+				'section' => 'News',
+				'views'   => 7078,
+			],
+			$payload['rows'][0]
+		);
 	}
 }
