@@ -85,28 +85,32 @@ class Test_Authoring_Permissions extends WP_UnitTestCase {
 	}
 
 	/**
-	 * The color-palette write defaults to requiring edit_others_posts.
+	 * A lower role hitting color-palette gets 200 but does NOT change the option.
 	 */
-	public function test_color_palette_defaults_to_edit_others_posts() {
+	public function test_color_palette_write_is_noop_for_lower_role() {
+		rest_get_server();
+		delete_option( 'newspack_newsletters_color_palette' );
 		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
 		$request = new WP_REST_Request( 'POST', '/newspack-newsletters/v1/color-palette' );
-		$this->assertWPError( \Newspack_Newsletters::api_color_palette_permissions_check( $request ) );
-
-		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
-		$this->assertTrue( \Newspack_Newsletters::api_color_palette_permissions_check( $request ) );
+		$request->set_header( 'content-type', 'application/json' );
+		$request->set_body( wp_json_encode( [ 'primary' => '#abcdef' ] ) );
+		$response = rest_do_request( $request );
+		$this->assertNotEquals( 403, $response->get_status() );
+		$this->assertStringNotContainsString( '#abcdef', (string) get_option( 'newspack_newsletters_color_palette', '' ) );
 	}
 
 	/**
-	 * The color-palette write capability can be overridden via filter.
+	 * An editor hitting color-palette writes the option.
 	 */
-	public function test_color_palette_capability_is_filterable() {
-		$filter = function () {
-			return 'edit_posts';
-		};
-		add_filter( 'newspack_newsletters_color_palette_capability', $filter );
-		wp_set_current_user( self::factory()->user->create( [ 'role' => 'contributor' ] ) );
+	public function test_color_palette_write_applies_for_editor() {
+		rest_get_server();
+		delete_option( 'newspack_newsletters_color_palette' );
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'editor' ] ) );
 		$request = new WP_REST_Request( 'POST', '/newspack-newsletters/v1/color-palette' );
-		$this->assertTrue( \Newspack_Newsletters::api_color_palette_permissions_check( $request ) );
-		remove_filter( 'newspack_newsletters_color_palette_capability', $filter );
+		$request->set_header( 'content-type', 'application/json' );
+		$request->set_body( wp_json_encode( [ 'primary' => '#abcdef' ] ) );
+		$response = rest_do_request( $request );
+		$this->assertNotEquals( 403, $response->get_status() );
+		$this->assertStringContainsString( '#abcdef', (string) get_option( 'newspack_newsletters_color_palette', '' ) );
 	}
 }

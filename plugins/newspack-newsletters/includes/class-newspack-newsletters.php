@@ -928,7 +928,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_set_color_palette' ],
-				'permission_callback' => [ __CLASS__, 'api_color_palette_permissions_check' ],
+				'permission_callback' => [ __CLASS__, 'api_edit_posts_permissions_check' ],
 			]
 		);
 
@@ -962,8 +962,18 @@ final class Newspack_Newsletters {
 	 * @param WP_REST_Request $request API request object.
 	 */
 	public static function api_set_color_palette( $request ) {
-		self::update_color_palette( json_decode( $request->get_body(), true ) );
-
+		/*
+		 * The newsletter editor auto-POSTs the palette on every editor load, including for
+		 * Contributors/Authors who can now reach the editor (via post-mjml) but must not
+		 * change this site-wide option. We deliberately return success WITHOUT writing for
+		 * those roles instead of a 403 — otherwise the editor surfaces a "You cannot use
+		 * this resource." notice on every load. So for unauthorized roles the response
+		 * reports success while the option write is a no-op. The write capability is
+		 * filterable via `newspack_newsletters_color_palette_capability`.
+		 */
+		if ( current_user_can( apply_filters( 'newspack_newsletters_color_palette_capability', 'edit_others_posts' ) ) ) {
+			self::update_color_palette( json_decode( $request->get_body(), true ) );
+		}
 		return \rest_ensure_response( [] );
 	}
 
@@ -1186,35 +1196,6 @@ final class Newspack_Newsletters {
 	public static function api_edit_posts_permissions_check( $request ) {
 		unset( $request );
 		if ( current_user_can( 'edit_posts' ) ) {
-			return true;
-		}
-		return new \WP_Error(
-			'newspack_rest_forbidden',
-			esc_html__( 'You cannot use this resource.', 'newspack-newsletters' ),
-			[
-				'status' => 403,
-			]
-		);
-	}
-
-	/**
-	 * Permission check for the site-wide color-palette write. Defaults to the
-	 * authoring bar (`edit_others_posts`) but is filterable so a publisher can
-	 * lock it down or open it up without a code change.
-	 *
-	 * @param WP_REST_Request $request API request object.
-	 * @return bool|WP_Error
-	 */
-	public static function api_color_palette_permissions_check( $request ) {
-		unset( $request );
-		/**
-		 * Capability required to write the newsletters color palette, which is
-		 * a site-wide option shared across every editor's newsletters.
-		 *
-		 * @param string $capability Capability name. Default 'edit_others_posts'.
-		 */
-		$capability = apply_filters( 'newspack_newsletters_color_palette_capability', 'edit_others_posts' );
-		if ( current_user_can( $capability ) ) {
 			return true;
 		}
 		return new \WP_Error(
