@@ -44,7 +44,7 @@ if ( file_exists( NEWSPACK_NEWSLETTERS_PLUGIN_FILE . '/vendor/autoload_packages.
 } else {
 	add_action(
 		'admin_notices',
-		function() {
+		function () {
 			echo '<div class="notice notice-error"><p>';
 			echo esc_html__( 'Newspack Newsletters is missing its Composer dependencies. Please run "composer install" in the plugin directory.', 'newspack-newsletters' );
 			echo '</p></div>';

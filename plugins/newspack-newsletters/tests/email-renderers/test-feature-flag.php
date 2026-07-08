@@ -40,6 +40,13 @@ class Test_Feature_Flag extends WP_UnitTestCase {
 
 	/**
 	 * Test that the NEWSPACK_NEWSLETTERS_WOO_RENDERER constant overrides the option.
+	 *
+	 * A constant can't be undefined once set, so run this in a separate process to
+	 * keep the forced-on flag from leaking into the rest of the suite and making
+	 * other tests order-dependent.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 */
 	public function test_constant_overrides_option() {
 		if ( ! defined( 'NEWSPACK_NEWSLETTERS_WOO_RENDERER' ) ) {
