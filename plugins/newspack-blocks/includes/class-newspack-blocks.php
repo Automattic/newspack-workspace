@@ -25,6 +25,7 @@ class Newspack_Blocks {
 	 */
 	public static function init() {
 		add_action( 'after_setup_theme', [ __CLASS__, 'add_image_sizes' ] );
+		add_filter( 'intermediate_image_sizes_advanced', [ __CLASS__, 'maybe_skip_article_block_image_subsizes' ] );
 		add_post_type_support( 'post', 'newspack_blocks' );
 		add_post_type_support( 'page', 'newspack_blocks' );
 		add_action( 'jetpack_register_gutenberg_extensions', [ __CLASS__, 'disable_jetpack_donate' ], 99 );
@@ -540,6 +541,57 @@ class Newspack_Blocks {
 		add_image_size( 'newspack-article-block-square-tiny', 200, 200, true );
 
 		add_image_size( 'newspack-article-block-uncropped', 1200, 9999, false );
+	}
+
+	/**
+	 * Optionally skip generating the physical `newspack-article-block-*` crop
+	 * files when an image is uploaded.
+	 *
+	 * These sizes stay registered (via `add_image_sizes()`) so the blocks keep
+	 * resolving correctly-cropped URLs, but on platforms where an image CDN
+	 * resizes/crops on the fly (WordPress.com Simple and Atomic), the physical
+	 * crop files are redundant. Skipping them also keeps derivative generation
+	 * consistent across upload paths: on wpcom, `newspack-blocks` is loaded via
+	 * jetpack-mu-wpcom only for editor/REST requests, so an image uploaded through
+	 * the editor's Image block (REST) would otherwise get the crops while the same
+	 * image uploaded through the Media Library (async-upload.php) would not.
+	 *
+	 * @param array $sizes Associative array of image sub-sizes to be generated,
+	 *                     keyed by size name.
+	 * @return array Filtered sizes.
+	 */
+	public static function maybe_skip_article_block_image_subsizes( $sizes ) {
+		/**
+		 * Filters whether to skip generating the physical `newspack-article-block-*`
+		 * crop files on upload. Defaults to true on WordPress.com platform sites
+		 * (Simple and Atomic), where an image CDN handles cropping on the fly.
+		 * Self-hosted sites can opt in, e.g. when using the Jetpack Image CDN.
+		 *
+		 * @param bool $skip Whether to skip physical crop generation.
+		 */
+		$skip = apply_filters( 'newspack_blocks_skip_article_image_subsizes', self::is_wpcom_platform() );
+		if ( ! $skip ) {
+			return $sizes;
+		}
+
+		foreach ( array_keys( $sizes ) as $size_name ) {
+			if ( is_string( $size_name ) && 0 === strpos( $size_name, 'newspack-article-block-' ) ) {
+				unset( $sizes[ $size_name ] );
+			}
+		}
+		return $sizes;
+	}
+
+	/**
+	 * Whether the current site runs on the WordPress.com platform (Simple or Atomic).
+	 *
+	 * @return bool
+	 */
+	private static function is_wpcom_platform() {
+		if ( ! class_exists( '\Automattic\Jetpack\Status\Host' ) ) {
+			return false;
+		}
+		return ( new \Automattic\Jetpack\Status\Host() )->is_wpcom_platform();
 	}
 
 	/**
