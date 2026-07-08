@@ -145,7 +145,21 @@ trait Content_Gate_Layout {
 		}
 		$asset = require dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/content-gate-editor.asset.php';
 		wp_enqueue_script( 'newspack-content-gate', Newspack::plugin_url() . '/dist/content-gate-editor.js', $asset['dependencies'], $asset['version'], true );
-		wp_localize_script( 'newspack-content-gate', 'newspack_content_gate', [ 'has_campaigns' => class_exists( 'Newspack_Popups' ) ] );
+		wp_localize_script(
+			'newspack-content-gate',
+			'newspack_content_gate',
+			[
+				'has_campaigns' => class_exists( 'Newspack_Popups' ),
+				// Preview is only offered for Access Control gate layouts while Access
+				// Control owns the front-end (parity: no Woo Memberships bypass). The
+				// Memberships gate layout CPT and WCM-active sites get no preview data.
+				'preview'       => (
+					Content_Gate::GATE_LAYOUT_CPT === $post_type
+					&& Content_Gate::is_newspack_feature_enabled()
+					&& ! Memberships::is_active()
+				) ? Content_Gate\Gate_Preview::get_editor_preview_data() : null,
+			]
+		);
 		wp_enqueue_style( 'newspack-content-gate', Newspack::plugin_url() . '/dist/content-gate-editor.css', [], $asset['version'] );
 	}
 
@@ -203,7 +217,15 @@ trait Content_Gate_Layout {
 		// Build gate content.
 		$gate_content = '<div style=\'content:"";clear:both;display:table;\'></div>';
 		if ( $gate_layout_post ) {
-			$gate_content        .= \get_the_content( null, false, $gate_layout_post );
+			/**
+			 * Filters the raw layout content before it is wrapped and run through
+			 * the gate content pipeline. Lets the gate preview substitute autosaved
+			 * content for the previewed layout.
+			 *
+			 * @param string $content        The layout post content.
+			 * @param int    $gate_layout_id The gate layout ID.
+			 */
+			$gate_content        .= \apply_filters( 'newspack_gate_layout_content', \get_the_content( null, false, $gate_layout_post ), $gate_layout_id );
 			$visible_paragraphs   = self::get_visible_paragraphs( $gate_layout_id );
 			$inline_fade          = \get_post_meta( $gate_layout_id, 'inline_fade', true );
 		} else {
@@ -308,7 +330,10 @@ trait Content_Gate_Layout {
 		<div class="newspack-content-gate__gate newspack-content-gate__overlay-gate" style="display:none;" data-position="<?php echo \esc_attr( $position ); ?>" data-size="<?php echo \esc_attr( $size ); ?>">
 			<div class="newspack-content-gate__overlay-gate__container">
 				<div class="newspack-content-gate__overlay-gate__content">
-					<?php echo \apply_filters( 'newspack_gate_content', \get_the_content( null, null, $gate_post_id ) );  // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<?php
+					// $gate_post_id is the layout ID here despite the name; the preview seam keys off it.
+					echo \apply_filters( 'newspack_gate_content', \apply_filters( 'newspack_gate_layout_content', \get_the_content( null, null, $gate_post_id ), $gate_post_id ) );  // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+					?>
 				</div>
 			</div>
 		</div>
