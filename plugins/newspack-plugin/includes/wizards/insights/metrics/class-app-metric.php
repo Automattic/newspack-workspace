@@ -523,6 +523,76 @@ final class App_Metric {
 	}
 
 	/**
+	 * Two-dimension KG breakdown (e.g. `KGCollectionSet` × `KGSection`) powering
+	 * the Content section's per-publication selector: one report returns the whole
+	 * matrix and the frontend pivots it client-side, so no per-collection query is
+	 * needed. An unregistered dimension (`custom_dimension_missing`, no Data API
+	 * call) becomes `not_configured` — so pubs without the collection dim pay
+	 * nothing and the selector simply doesn't render. Rows with a `(not set)`/empty
+	 * value on either axis are dropped.
+	 *
+	 * @param string $property   GA4 property ID.
+	 * @param array  $range      The dateRanges wrapper.
+	 * @param string $kg_param_a First KG parameter (grouping axis, e.g. collection).
+	 * @param string $kg_param_b Second KG parameter (e.g. section).
+	 * @param string $metric     GA4 metric apiName.
+	 * @param string $key_a      Output key for the first dimension.
+	 * @param string $key_b      Output key for the second dimension.
+	 * @param string $metric_key Output key for the metric value.
+	 * @return array
+	 */
+	private static function kg_breakdown_2d( string $property, array $range, string $kg_param_a, string $kg_param_b, string $metric, string $key_a, string $key_b, string $metric_key ): array {
+		$result = Client::run_report(
+			$property,
+			$range + [
+				'dimensions' => [ [ 'name' => 'customEvent:' . $kg_param_a ], [ 'name' => 'customEvent:' . $kg_param_b ] ],
+				'metrics'    => [ [ 'name' => $metric ] ],
+				'orderBys'   => [
+					[
+						'metric' => [ 'metricName' => $metric ],
+						'desc'   => true,
+					],
+				],
+				// One page big enough to hold a realistic collection × section matrix
+				// (a handful of publications × a few dozen sections), so the client
+				// can take top-N per collection. Capped at 250 — a runaway taxonomy
+				// would be truncated, which is fine for a "top sections" view.
+				'limit'      => 250,
+			]
+		);
+		if ( is_wp_error( $result ) ) {
+			if ( 'custom_dimension_missing' === $result->get_error_code() ) {
+				return [
+					'rows'           => [],
+					'computable'     => false,
+					'not_configured' => true,
+					'type'           => 'breakdown',
+				];
+			}
+			return self::not_computable_rows( 'breakdown' );
+		}
+
+		$rows = [];
+		foreach ( $result['rows'] ?? [] as $row ) {
+			$a = (string) ( $row['dimensionValues'][0]['value'] ?? '' );
+			$b = (string) ( $row['dimensionValues'][1]['value'] ?? '' );
+			if ( '' === $a || '(not set)' === $a || '' === $b || '(not set)' === $b ) {
+				continue;
+			}
+			$rows[] = [
+				$key_a      => $a,
+				$key_b      => $b,
+				$metric_key => (int) ( $row['metricValues'][0]['value'] ?? 0 ),
+			];
+		}
+		return [
+			'rows'       => $rows,
+			'computable' => true,
+			'type'       => 'breakdown',
+		];
+	}
+
+	/**
 	 * Map a KG breakdown report result to a card payload. An unregistered
 	 * dimension (`custom_dimension_missing`) becomes the `not_configured` unlock
 	 * state; any other failure (auth/API outage) degrades to a generic
@@ -840,6 +910,11 @@ final class App_Metric {
 			'top_authors'             => self::kg_breakdown( $property, $range, 'KGAuthor', 'screenPageViews', 'author', 'views' ),
 			'subscriber_mix'          => self::kg_breakdown( $property, $range, 'KGSubscriberStatus', 'activeUsers', 'status', 'users' ),
 			'content_cost'            => self::kg_breakdown( $property, $range, 'KGStoryCost', 'screenPageViews', 'cost', 'views' ),
+			// 2-D matrices powering the Content section's per-publication selector
+			// (multi-property apps). `not_configured` — and no Data API call — where
+			// KGCollectionSet isn't registered, so the selector just doesn't render.
+			'sections_by_collection'  => self::kg_breakdown_2d( $property, $range, 'KGCollectionSet', 'KGSection', 'screenPageViews', 'collection', 'section', 'views' ),
+			'authors_by_collection'   => self::kg_breakdown_2d( $property, $range, 'KGCollectionSet', 'KGAuthor', 'screenPageViews', 'collection', 'author', 'views' ),
 			// Multi-property apps tag downloads with the collection (publication);
 			// count completed downloads per collection. Absent/single-value on
 			// single-property apps, where the tab hides the table.
@@ -1199,6 +1274,94 @@ final class App_Metric {
 					[
 						'collection' => 'valley',
 						'downloads'  => 557,
+					],
+				],
+				'computable' => true,
+				'type'       => 'breakdown',
+			],
+			// Content × collection matrices for the per-publication selector.
+			'sections_by_collection'   => [
+				'rows'       => [
+					[
+						'collection' => 'example city',
+						'section'    => 'News',
+						'views'      => 5024,
+					],
+					[
+						'collection' => 'example city',
+						'section'    => 'Life & Culture',
+						'views'      => 4302,
+					],
+					[
+						'collection' => 'example city',
+						'section'    => 'Obituaries',
+						'views'      => 3752,
+					],
+					[
+						'collection' => 'example city',
+						'section'    => 'Sports',
+						'views'      => 594,
+					],
+					[
+						'collection' => 'northside',
+						'section'    => 'News',
+						'views'      => 1200,
+					],
+					[
+						'collection' => 'northside',
+						'section'    => 'Sports',
+						'views'      => 402,
+					],
+					[
+						'collection' => 'harbor',
+						'section'    => 'News',
+						'views'      => 900,
+					],
+					[
+						'collection' => 'harbor',
+						'section'    => 'Obituaries',
+						'views'      => 311,
+					],
+					[
+						'collection' => 'valley',
+						'section'    => 'News',
+						'views'      => 205,
+					],
+				],
+				'computable' => true,
+				'type'       => 'breakdown',
+			],
+			'authors_by_collection'    => [
+				'rows'       => [
+					[
+						'collection' => 'example city',
+						'author'     => 'Alex Rivera',
+						'views'      => 2100,
+					],
+					[
+						'collection' => 'example city',
+						'author'     => 'Jordan Lee',
+						'views'      => 1800,
+					],
+					[
+						'collection' => 'northside',
+						'author'     => 'Alex Rivera',
+						'views'      => 500,
+					],
+					[
+						'collection' => 'northside',
+						'author'     => 'Sam Okafor',
+						'views'      => 305,
+					],
+					[
+						'collection' => 'harbor',
+						'author'     => 'Casey Nguyen',
+						'views'      => 250,
+					],
+					[
+						'collection' => 'valley',
+						'author'     => 'Alex Rivera',
+						'views'      => 92,
 					],
 				],
 				'computable' => true,

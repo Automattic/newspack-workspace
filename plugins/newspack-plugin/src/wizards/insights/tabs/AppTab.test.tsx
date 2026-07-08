@@ -63,6 +63,22 @@ const metricsMap = (): AppMetrics => ( {
 	},
 	top_sections: { rows: [ { section: 'News', views: 7078 } ], computable: true, type: 'breakdown' },
 	top_authors: { rows: [ { author: 'Alex Rivera', views: 3120 } ], computable: true, type: 'breakdown' },
+	sections_by_collection: {
+		rows: [
+			{ collection: 'example city', section: 'News', views: 5024 },
+			{ collection: 'northside', section: 'News', views: 1200 },
+		],
+		computable: true,
+		type: 'breakdown',
+	},
+	authors_by_collection: {
+		rows: [
+			{ collection: 'example city', author: 'Alex Rivera', views: 2100 },
+			{ collection: 'northside', author: 'Sam Okafor', views: 305 },
+		],
+		computable: true,
+		type: 'breakdown',
+	},
 	subscriber_mix: { rows: [ { status: 'ExistingSubscriber', users: 483 } ], computable: true, type: 'breakdown' },
 	content_cost: { rows: [ { cost: 'Free', views: 52140 } ], computable: true, type: 'breakdown' },
 } );
@@ -180,9 +196,28 @@ describe( 'AppTab', () => {
 		expect( screen.getByText( 'Existing subscriber' ) ).toBeInTheDocument();
 		// Multi-property apps get the downloads-by-publication table, title-cased.
 		expect( screen.getByText( 'Downloads by publication' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Example City' ) ).toBeInTheDocument();
+		// "Example City" renders both as a downloads-table row and a selector option.
+		expect( screen.getAllByText( 'Example City' ).length ).toBeGreaterThanOrEqual( 2 );
+		// ...and the Content section's per-publication selector (2+ collections).
+		expect( screen.getByRole( 'option', { name: 'All publications' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'option', { name: 'Northside' } ) ).toBeInTheDocument();
 		// The tab reads through the shared cache hook for the current window (no comparison).
 		expect( mockUseData ).toHaveBeenCalledWith( range, null );
+	} );
+
+	it( 'the Content per-publication selector re-scopes the tables', async () => {
+		mockFetch.mockResolvedValue( baseConfig( { selected_property: '533212292', selected_is_visible: true } ) );
+		renderTab();
+
+		// "All publications" initially → the app-wide top author.
+		expect( await screen.findByText( 'Top authors' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Alex Rivera' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Sam Okafor' ) ).not.toBeInTheDocument();
+
+		// Switch to Northside → its author appears and the app-wide author drops.
+		fireEvent.change( screen.getByRole( 'combobox' ), { target: { value: 'northside' } } );
+		expect( screen.getByText( 'Sam Okafor' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Alex Rivera' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'threads the comparison window into the data hook', async () => {

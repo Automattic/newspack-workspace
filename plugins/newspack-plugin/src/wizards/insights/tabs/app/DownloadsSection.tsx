@@ -27,14 +27,12 @@ import Scorecard from '../components/Scorecard';
 import ChartCard from '../components/ChartCard';
 import MetricTable from '../components/MetricTable';
 import SectionHeading from '../components/SectionHeading';
+import { titleCase } from './collections';
 
 export interface DownloadsSectionProps {
 	metrics: AppMetrics;
 	previous?: AppMetrics | null;
 }
-
-/** Title-case a raw collection value ("example city" → "Example City"). */
-const titleCase = ( value: string ): string => value.replace( /\b\w/g, char => char.toUpperCase() );
 
 const DownloadsSection = ( { metrics, previous }: DownloadsSectionProps ) => {
 	// The per-publication table is only meaningful for a multi-property app —
