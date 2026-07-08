@@ -489,7 +489,34 @@ class Content_Restriction_Control {
 					},
 				]
 			);
+			\add_filter( "rest_pre_insert_{$post_type}", [ __CLASS__, 'strip_unauthorized_exempt_meta' ], 10, 2 );
 		}
+	}
+
+	/**
+	 * Remove the exemption meta from an incoming REST save when the current
+	 * user cannot toggle it, so a stray ride-along (Members / Custom Fields /
+	 * third-party) is silently ignored instead of 403-ing the whole save.
+	 *
+	 * Note: `WP_REST_Request` returns array params by value, so the key must be
+	 * removed on a local copy and reassigned — `unset( $request['meta'][ $k ] )`
+	 * is a no-op ("indirect modification of overloaded element").
+	 *
+	 * @param stdClass        $prepared_post Prepared post object (returned unchanged).
+	 * @param WP_REST_Request $request       Incoming request.
+	 * @return stdClass
+	 */
+	public static function strip_unauthorized_exempt_meta( $prepared_post, $request ) {
+		$meta = $request['meta'];
+		if (
+			is_array( $meta ) &&
+			array_key_exists( self::IS_EXEMPT_META_KEY, $meta ) &&
+			! current_user_can( 'edit_others_posts' )
+		) {
+			unset( $meta[ self::IS_EXEMPT_META_KEY ] );
+			$request['meta'] = $meta;
+		}
+		return $prepared_post;
 	}
 }
 Content_Restriction_Control::init();
