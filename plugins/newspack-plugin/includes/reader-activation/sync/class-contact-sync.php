@@ -206,15 +206,17 @@ class Contact_Sync extends Sync {
 	 * @return array The prepared, scoped contact.
 	 */
 	private static function prepare_contact_for_integration( $integration, $contact, $options = [] ) {
-		if ( ! empty( $options['fields'] ) ) {
-			unset( $contact['name'] );
-		}
-
 		$integration_contact = $integration->prepare_contact( $contact );
 
 		if ( empty( $options['fields'] ) ) {
 			return $integration_contact;
 		}
+
+		// Drop the reader name so a field-scoped backfill can't rewrite names (ESPs
+		// only set first/last name when a name is present). Applied to the prepared
+		// contact — after prepare_contact() — so an integration override that derives
+		// a name can't re-introduce it and defeat the guarantee.
+		unset( $integration_contact['name'] );
 
 		$prefix   = $integration->get_metadata_prefix();
 		$labels   = $options['fields'];
