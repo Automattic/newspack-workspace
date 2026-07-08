@@ -1,7 +1,5 @@
 # Newspack end-to-end testing
 
-🎥 See the latest test report at https://automattic.github.io/newspack-e2e-tests.
-
 ## Setup
 
 ### Local setup & testing
