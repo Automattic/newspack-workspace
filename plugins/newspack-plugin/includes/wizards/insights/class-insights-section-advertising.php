@@ -9,9 +9,10 @@
  *
  * The data layer (REST route + Action Scheduler refresh) registers from
  * {@see self::register_hooks()} via {@see \Newspack\Insights\Advertising_REST_Controller}
- * and {@see \Newspack\Insights\Advertising_Metric}. It is gated behind both the
- * Insights flag and {@see Insights_Wizard::is_advertising_enabled()}, so the
- * entire stack stays dormant (and Tab 8 invisible) unless explicitly enabled.
+ * and {@see \Newspack\Insights\Advertising_Metric}. It is gated behind the
+ * Insights flag; tab visibility and whether any GAM report actually runs are
+ * governed at runtime by {@see \Newspack\Insights\Advertising_Metric::is_tab_visible()}
+ * (Google Ad Manager active), so the stack stays dormant on non-GAM sites.
  *
  * @package Newspack
  */
@@ -37,11 +38,12 @@ class Insights_Section_Advertising {
 
 	/**
 	 * Initialize. Loads the Tab 8 data layer and registers its REST route +
-	 * Action Scheduler refresh handler (NPPD-1663). No-op unless both the
-	 * Insights flag and the Advertising feature constant are enabled.
+	 * Action Scheduler refresh handler (NPPD-1663). No-op unless the Insights
+	 * flag is enabled; the GAM-active runtime check governs tab visibility and
+	 * whether any report actually runs.
 	 */
 	public static function init() {
-		if ( ! Insights_Wizard::is_enabled() || ! Insights_Wizard::is_advertising_enabled() ) {
+		if ( ! Insights_Wizard::is_enabled() ) {
 			return;
 		}
 		self::load_dependencies();

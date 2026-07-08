@@ -139,6 +139,7 @@ const AppTab = ( { range }: TabSectionProps ) => {
 	const [ config, setConfig ] = useState< AppConfig | null >( null );
 	const [ loading, setLoading ] = useState( true );
 	const [ error, setError ] = useState< string | null >( null );
+	const [ changing, setChanging ] = useState( false );
 
 	useEffect( () => {
 		let active = true;
@@ -163,12 +164,30 @@ const AppTab = ( { range }: TabSectionProps ) => {
 		return <ConnectState settingsUrl={ config.settings_url } />;
 	}
 
-	// No property chosen, or the saved one is no longer visible → pick one.
-	if ( ! config.selected_property || ! config.selected_is_visible ) {
-		return <PropertyPicker config={ config } onSaved={ setConfig } />;
+	// No property chosen, the saved one is no longer visible, or the user asked
+	// to change it → show the picker.
+	if ( ! config.selected_property || ! config.selected_is_visible || changing ) {
+		return (
+			<PropertyPicker
+				config={ config }
+				onSaved={ next => {
+					setConfig( next );
+					setChanging( false );
+				} }
+			/>
+		);
 	}
 
-	return <AppMetricsView range={ range } />;
+	return (
+		<>
+			<div className="newspack-insights__app-toolbar">
+				<Button variant="link" onClick={ () => setChanging( true ) }>
+					{ __( 'Change app property', 'newspack-plugin' ) }
+				</Button>
+			</div>
+			<AppMetricsView range={ range } />
+		</>
+	);
 };
 
 export default AppTab;

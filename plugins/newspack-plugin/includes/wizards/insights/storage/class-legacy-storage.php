@@ -243,6 +243,14 @@ class Legacy_Storage implements Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * Cancelled/expired side pre-aggregated to DISTINCT customer_ids and
+	 * LEFT-JOINed against the DISTINCT active-subscriber customer_ids (also
+	 * pre-aggregated), keeping only rows where the active side is NULL — an
+	 * anti-join, not a correlated `NOT IN (subquery)` (MySQL's slowest anti-join
+	 * form) and not the unindexed `BETWEEN` string range scan's only filter.
+	 * Same approach as {@see self::get_winback_subscribers_in_window()}. DISTINCT
+	 * on both derived tables prevents JOIN fan-out from the line-item join.
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return int
@@ -254,7 +262,7 @@ class Legacy_Storage implements Storage_Interface {
 
 		$sql = $wpdb->prepare(
 			"SELECT COUNT(DISTINCT cancellations.customer_id) FROM (
-				SELECT cust.meta_value AS customer_id
+				SELECT DISTINCT cust.meta_value AS customer_id
 				FROM {$prefix}posts p
 				JOIN {$prefix}postmeta cust
 					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
@@ -270,8 +278,8 @@ class Legacy_Storage implements Storage_Interface {
 				  AND cancelled.meta_value BETWEEN %s AND %s
 				  AND cancelled.meta_value != ''
 			) AS cancellations
-			WHERE cancellations.customer_id NOT IN (
-				SELECT DISTINCT cust2.meta_value
+			LEFT JOIN (
+				SELECT DISTINCT cust2.meta_value AS customer_id
 				FROM {$prefix}posts p2
 				JOIN {$prefix}postmeta cust2
 					ON cust2.post_id = p2.ID AND cust2.meta_key = '_customer_user'
@@ -282,7 +290,8 @@ class Legacy_Storage implements Storage_Interface {
 				WHERE p2.post_type = 'shop_subscription'
 				  AND p2.post_status = 'wc-active'
 				  AND oim2.meta_value NOT IN ($donations)
-			)",
+			) AS active ON active.customer_id = cancellations.customer_id
+			WHERE active.customer_id IS NULL",
 			$this->fmt( $start ),
 			$this->fmt( $end )
 		);
@@ -1045,6 +1054,22 @@ class Legacy_Storage implements Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * Mirrors HPOS_Storage::get_stale_registered_users(). Base population and
+	 * exclusion logic are identical — the only difference is using
+	 * posts/postmeta for donation orders instead of wc_orders/wc_orders_meta,
+	 * and wc_order_product_lookup (cross-backend) for the product filter. See
+	 * the HPOS variant for the full Phase-A approximation rationale.
+	 *
+	 * Both exclusion sets (active non-donation subscribers; trailing-365-day
+	 * donors) are pre-aggregated to DISTINCT customer_ids and LEFT-JOINed
+	 * against `u.ID`, keeping only rows where both sides are NULL — an
+	 * anti-join, not a correlated `NOT IN (subquery)` (MySQL's slowest
+	 * anti-join form). Same approach as
+	 * {@see self::get_churned_subscribers_in_window()}. The base-population /
+	 * restricted-role checks stay as correlated `EXISTS` — each is a single
+	 * indexed lookup on `usermeta.user_id`, not a multi-join subquery, so they
+	 * are not a timeout risk.
+	 *
 	 * @return int
 	 */
 	public function get_stale_registered_users(): int {
@@ -1052,12 +1077,6 @@ class Legacy_Storage implements Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
-		// Mirrors HPOS_Storage::get_stale_registered_users(). Base population and
-		// exclusion logic are identical — the only difference is using
-		// posts/postmeta for donation orders instead of wc_orders/wc_orders_meta,
-		// and wc_order_product_lookup (cross-backend) for the product filter.
-		// See the HPOS variant for the full Phase-A approximation rationale.
-		//
 		// Phase-A approximation (M1): hardcodes 'subscriber'/'customer' as reader
 		// roles and 'administrator'/'editor' as restricted roles — does NOT honor
 		// the filterable newspack_reader_user_roles / newspack_reader_restricted_roles
@@ -1065,6 +1084,30 @@ class Legacy_Storage implements Storage_Interface {
 		// (acceptable upper-bound for Phase A; adjust in a later iteration).
 		$sql = "SELECT COUNT(DISTINCT u.ID)
 			FROM {$prefix}users u
+			LEFT JOIN (
+				SELECT DISTINCT CAST(cust.meta_value AS UNSIGNED) AS customer_id
+				FROM {$prefix}posts p
+				JOIN {$prefix}postmeta cust
+					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
+				JOIN {$prefix}woocommerce_order_items oi
+					ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim
+					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+				WHERE p.post_type = 'shop_subscription'
+				  AND p.post_status = 'wc-active'
+				  AND oim.meta_value NOT IN ($donations)
+			) AS active_subscribers ON active_subscribers.customer_id = u.ID
+			LEFT JOIN (
+				SELECT DISTINCT CAST(cust2.meta_value AS UNSIGNED) AS customer_id
+				FROM {$prefix}posts p2
+				JOIN {$prefix}postmeta cust2
+					ON cust2.post_id = p2.ID AND cust2.meta_key = '_customer_user'
+				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p2.ID
+				WHERE p2.post_type = 'shop_order'
+				  AND p2.post_status IN ('wc-completed', 'wc-processing')
+				  AND p2.post_date_gmt >= DATE_SUB(NOW(), INTERVAL 365 DAY)
+				  AND opl.product_id IN ($donations)
+			) AS recent_donors ON recent_donors.customer_id = u.ID
 			WHERE (
 				EXISTS (
 					SELECT 1 FROM {$prefix}usermeta um
@@ -1091,36 +1134,21 @@ class Legacy_Storage implements Storage_Interface {
 					OR um3.meta_value LIKE '%\"editor\"%'
 				  )
 			)
-			AND u.ID NOT IN (
-				SELECT DISTINCT CAST(cust.meta_value AS UNSIGNED)
-				FROM {$prefix}posts p
-				JOIN {$prefix}postmeta cust
-					ON cust.post_id = p.ID AND cust.meta_key = '_customer_user'
-				JOIN {$prefix}woocommerce_order_items oi
-					ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
-				JOIN {$prefix}woocommerce_order_itemmeta oim
-					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
-				WHERE p.post_type = 'shop_subscription'
-				  AND p.post_status = 'wc-active'
-				  AND oim.meta_value NOT IN ($donations)
-			)
-			AND u.ID NOT IN (
-				SELECT DISTINCT CAST(cust2.meta_value AS UNSIGNED)
-				FROM {$prefix}posts p2
-				JOIN {$prefix}postmeta cust2
-					ON cust2.post_id = p2.ID AND cust2.meta_key = '_customer_user'
-				JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = p2.ID
-				WHERE p2.post_type = 'shop_order'
-				  AND p2.post_status IN ('wc-completed', 'wc-processing')
-				  AND p2.post_date_gmt >= DATE_SUB(NOW(), INTERVAL 365 DAY)
-				  AND opl.product_id IN ($donations)
-			)";
+			AND active_subscribers.customer_id IS NULL
+			AND recent_donors.customer_id IS NULL";
 
 		return (int) $wpdb->get_var( $sql );
 	}
 
 	/**
 	 * {@inheritDoc}
+	 *
+	 * The non-donation filter is pre-aggregated to DISTINCT order_ids in a
+	 * derived table and INNER-JOINed against `p.ID`, instead of a `p.ID IN
+	 * (SELECT DISTINCT ...)` semi-join subquery — the DISTINCT is preserved
+	 * (so a subscription with multiple non-donation line items still counts
+	 * once) but MySQL builds the set once rather than re-evaluating it as part
+	 * of the outer scan.
 	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
@@ -1131,9 +1159,6 @@ class Legacy_Storage implements Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
-		// DISTINCT id-subselect on the non-donation filter so a sub with
-		// multiple line items doesn't get counted multiple times under the
-		// same reason.
 		$sql = $wpdb->prepare(
 			"SELECT
 				COALESCE(reason.meta_value, 'unknown') AS cancellation_reason,
@@ -1143,16 +1168,16 @@ class Legacy_Storage implements Storage_Interface {
 				ON reason.post_id = p.ID AND reason.meta_key = 'newspack_subscriptions_cancellation_reason'
 			JOIN {$prefix}postmeta cancelled
 				ON cancelled.post_id = p.ID AND cancelled.meta_key = '_schedule_cancelled'
-			WHERE p.post_type = 'shop_subscription'
-			  AND p.post_status IN ('wc-cancelled', 'wc-expired')
-			  AND p.ID IN (
+			INNER JOIN (
 				SELECT DISTINCT oi.order_id
 				FROM {$prefix}woocommerce_order_items oi
 				JOIN {$prefix}woocommerce_order_itemmeta oim
 					ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
 				WHERE oi.order_item_type = 'line_item'
 				  AND oim.meta_value NOT IN ($donations)
-			  )
+			) AS non_donation_orders ON non_donation_orders.order_id = p.ID
+			WHERE p.post_type = 'shop_subscription'
+			  AND p.post_status IN ('wc-cancelled', 'wc-expired')
 			  AND cancelled.meta_value BETWEEN %s AND %s
 			GROUP BY cancellation_reason
 			ORDER BY count DESC",
@@ -1233,6 +1258,33 @@ class Legacy_Storage implements Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * Legacy CPT equivalent of HPOS get_new_subscriber_records_in_window().
+	 * Guest orders (blank _customer_user → 0 when cast) are excluded from
+	 * source attribution — see the HPOS variant for the rationale.
+	 *
+	 * Source meta lives on the PARENT shop_order (post_parent of the
+	 * shop_subscription post), NOT on the shop_subscription post itself.
+	 * `first_sub_parents` pre-aggregates, per (customer_id, first_start) pair,
+	 * the FULL SET of post_parent ids across ALL of that pair's tied first
+	 * subscriptions (not just the lowest one) — two subscriptions can tie on
+	 * the same customer + start timestamp with DIFFERENT parent orders, and
+	 * only one of those parents may carry the gate/popup meta. Collapsing to
+	 * `MIN(post_parent)` before the meta lookup (as an earlier version of
+	 * this query did) can silently lose that attribution when the
+	 * lowest-id parent happens to be the meta-less one. Gate / legacy-gate /
+	 * popup meta are each pre-aggregated to one row per post_id (`MIN(meta_value)`
+	 * guards against a post carrying more than one non-empty value for the
+	 * same key) and LEFT-JOINed onto the full parent-id set, then re-aggregated
+	 * with `MIN(meta_value)` per (customer_id, first_start) — an arbitrary but
+	 * deterministic pick among the tied siblings that DO carry the meta,
+	 * mirroring the original correlated-subquery version's `LIMIT 1` (no
+	 * ORDER BY) semantics of "any one" of the tied rows. This avoids the three
+	 * correlated per-row subqueries that each re-execute the whole 4-table join
+	 * on every outer row. A miss across every tied parent (no such meta on any
+	 * of them, or no parent order at all) still yields '' via COALESCE, exactly
+	 * as the original — a customer with no gate/popup attribution still
+	 * appears in the result set.
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return array<int, array{customer_id:int, ts:int}>
@@ -1242,79 +1294,16 @@ class Legacy_Storage implements Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
-		// Legacy CPT equivalent of HPOS get_new_subscriber_records_in_window().
-		// Guest orders (blank _customer_user → 0 when cast) are excluded from
-		// source attribution — see the HPOS variant for the rationale.
-		//
-		// Source meta lives on the PARENT shop_order (post_parent of the
-		// shop_subscription post), NOT on the shop_subscription post itself.
-		// Correlated subqueries (MySQL 5.7-safe) read _gate_post_id /
-		// _memberships_content_gate / _newspack_popup_id from {prefix}postmeta
-		// WHERE post_id = p_sub.post_parent. LIMIT 1 resolves same-timestamp
-		// ties — any one tied first-subscription's parent-order meta is used.
 		$sql = $wpdb->prepare(
 			"SELECT
 				first_subs.customer_id,
 				first_subs.first_start,
-				COALESCE((
-					SELECT pm_gate.meta_value
-					FROM {$prefix}posts p_sub
-					JOIN {$prefix}postmeta cust_s
-						ON cust_s.post_id = p_sub.ID AND cust_s.meta_key = '_customer_user'
-					JOIN {$prefix}postmeta start_s
-						ON start_s.post_id = p_sub.ID AND start_s.meta_key = '_schedule_start'
-					JOIN {$prefix}postmeta pm_gate
-						ON pm_gate.post_id = p_sub.post_parent AND pm_gate.meta_key = '_gate_post_id'
-					JOIN {$prefix}woocommerce_order_items oi_s
-						ON oi_s.order_id = p_sub.ID AND oi_s.order_item_type = 'line_item'
-					JOIN {$prefix}woocommerce_order_itemmeta oim_s
-						ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
-					WHERE p_sub.post_type = 'shop_subscription'
-					  AND CAST(cust_s.meta_value AS UNSIGNED) = first_subs.customer_id
-					  AND oim_s.meta_value NOT IN ($donations)
-					  AND start_s.meta_value = first_subs.first_start
-					  AND pm_gate.meta_value NOT IN ('', '0')
-					LIMIT 1
-				), (
-					SELECT pm_legacy.meta_value
-					FROM {$prefix}posts p_sub
-					JOIN {$prefix}postmeta cust_s
-						ON cust_s.post_id = p_sub.ID AND cust_s.meta_key = '_customer_user'
-					JOIN {$prefix}postmeta start_s
-						ON start_s.post_id = p_sub.ID AND start_s.meta_key = '_schedule_start'
-					JOIN {$prefix}postmeta pm_legacy
-						ON pm_legacy.post_id = p_sub.post_parent AND pm_legacy.meta_key = '_memberships_content_gate'
-					JOIN {$prefix}woocommerce_order_items oi_s
-						ON oi_s.order_id = p_sub.ID AND oi_s.order_item_type = 'line_item'
-					JOIN {$prefix}woocommerce_order_itemmeta oim_s
-						ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
-					WHERE p_sub.post_type = 'shop_subscription'
-					  AND CAST(cust_s.meta_value AS UNSIGNED) = first_subs.customer_id
-					  AND oim_s.meta_value NOT IN ($donations)
-					  AND start_s.meta_value = first_subs.first_start
-					  AND pm_legacy.meta_value NOT IN ('', '0')
-					LIMIT 1
-				), '') AS gate_post_id,
-				COALESCE((
-					SELECT pm_popup.meta_value
-					FROM {$prefix}posts p_sub
-					JOIN {$prefix}postmeta cust_s
-						ON cust_s.post_id = p_sub.ID AND cust_s.meta_key = '_customer_user'
-					JOIN {$prefix}postmeta start_s
-						ON start_s.post_id = p_sub.ID AND start_s.meta_key = '_schedule_start'
-					JOIN {$prefix}postmeta pm_popup
-						ON pm_popup.post_id = p_sub.post_parent AND pm_popup.meta_key = '_newspack_popup_id'
-					JOIN {$prefix}woocommerce_order_items oi_s
-						ON oi_s.order_id = p_sub.ID AND oi_s.order_item_type = 'line_item'
-					JOIN {$prefix}woocommerce_order_itemmeta oim_s
-						ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
-					WHERE p_sub.post_type = 'shop_subscription'
-					  AND CAST(cust_s.meta_value AS UNSIGNED) = first_subs.customer_id
-					  AND oim_s.meta_value NOT IN ($donations)
-					  AND start_s.meta_value = first_subs.first_start
-					  AND pm_popup.meta_value NOT IN ('', '0')
-					LIMIT 1
-				), '') AS popup_id
+				COALESCE(
+					MIN(CASE WHEN gate.meta_value IS NOT NULL THEN gate.meta_value END),
+					MIN(CASE WHEN legacy_gate.meta_value IS NOT NULL THEN legacy_gate.meta_value END),
+					''
+				) AS gate_post_id,
+				COALESCE(MIN(CASE WHEN popup.meta_value IS NOT NULL THEN popup.meta_value END), '') AS popup_id
 			FROM (
 				SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id, MIN(start.meta_value) AS first_start
 				FROM {$prefix}posts p
@@ -1332,7 +1321,39 @@ class Legacy_Storage implements Storage_Interface {
 				  AND start.meta_value != ''
 				GROUP BY CAST(cust.meta_value AS UNSIGNED)
 			) AS first_subs
-			WHERE first_subs.first_start BETWEEN %s AND %s",
+			LEFT JOIN (
+				SELECT DISTINCT
+					CAST(cust_s.meta_value AS UNSIGNED) AS customer_id,
+					start_s.meta_value AS first_start,
+					p_sub.post_parent AS parent_id
+				FROM {$prefix}posts p_sub
+				JOIN {$prefix}postmeta cust_s
+					ON cust_s.post_id = p_sub.ID AND cust_s.meta_key = '_customer_user'
+				JOIN {$prefix}postmeta start_s
+					ON start_s.post_id = p_sub.ID AND start_s.meta_key = '_schedule_start'
+				JOIN {$prefix}woocommerce_order_items oi_s
+					ON oi_s.order_id = p_sub.ID AND oi_s.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim_s
+					ON oim_s.order_item_id = oi_s.order_item_id AND oim_s.meta_key = '_product_id'
+				WHERE p_sub.post_type = 'shop_subscription'
+				  AND oim_s.meta_value NOT IN ($donations)
+			) AS first_sub_parents
+				ON first_sub_parents.customer_id = first_subs.customer_id
+				AND first_sub_parents.first_start = first_subs.first_start
+			LEFT JOIN {$prefix}postmeta gate
+				ON gate.post_id = first_sub_parents.parent_id
+				AND gate.meta_key = '_gate_post_id'
+				AND gate.meta_value NOT IN ('', '0')
+			LEFT JOIN {$prefix}postmeta legacy_gate
+				ON legacy_gate.post_id = first_sub_parents.parent_id
+				AND legacy_gate.meta_key = '_memberships_content_gate'
+				AND legacy_gate.meta_value NOT IN ('', '0')
+			LEFT JOIN {$prefix}postmeta popup
+				ON popup.post_id = first_sub_parents.parent_id
+				AND popup.meta_key = '_newspack_popup_id'
+				AND popup.meta_value NOT IN ('', '0')
+			WHERE first_subs.first_start BETWEEN %s AND %s
+			GROUP BY first_subs.customer_id, first_subs.first_start",
 			$this->fmt( $start ),
 			$this->fmt( $end )
 		);
@@ -1622,6 +1643,20 @@ class Legacy_Storage implements Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * Legacy CPT equivalent of HPOS_Storage::get_new_subscriber_cohort_intervals().
+	 * _customer_user is cast to UNSIGNED (stored as a string) to align with the
+	 * other list-scoped legacy queries.
+	 *
+	 * Cohort membership (first-ever non-donation subscription start within the
+	 * trailing 365 days) is pre-aggregated to one row per customer_id in the
+	 * `cohort` derived table and INNER-JOINed against the outer subscription
+	 * scan, instead of a correlated `customer_id IN (SELECT ... GROUP BY ...
+	 * HAVING ...)` semi-join subquery — the INNER JOIN lets MySQL build the
+	 * cohort set once rather than re-evaluating it as part of a full outer
+	 * scan. The outer scan is otherwise unchanged: it still returns every
+	 * non-donation subscription belonging to a cohort member, not just the
+	 * qualifying first one.
+	 *
 	 * @return array<int, array{customer_id:int, start:string, cancelled:?string, end:?string}>
 	 */
 	public function get_new_subscriber_cohort_intervals(): array {
@@ -1633,9 +1668,6 @@ class Legacy_Storage implements Storage_Interface {
 		// Upper bound excludes subscriptions with a future _schedule_start (scheduled/pending).
 		$now = gmdate( 'Y-m-d H:i:s', ( new \DateTimeImmutable( 'now', new \DateTimeZone( 'UTC' ) ) )->getTimestamp() );
 
-		// Legacy CPT equivalent of HPOS_Storage::get_new_subscriber_cohort_intervals().
-		// _customer_user is cast to UNSIGNED (stored as a string) to align with the
-		// other list-scoped legacy queries.
 		$sql = $wpdb->prepare(
 			"SELECT CAST(cust.meta_value AS UNSIGNED) AS customer_id,
 				sm.meta_value AS sched_start,
@@ -1654,30 +1686,28 @@ class Legacy_Storage implements Storage_Interface {
 				ON oi.order_id = p.ID AND oi.order_item_type = 'line_item'
 			JOIN {$prefix}woocommerce_order_itemmeta oim
 				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
+			INNER JOIN (
+				SELECT CAST(cust2.meta_value AS UNSIGNED) AS customer_id, MIN(sm2.meta_value) AS first_start
+				FROM {$prefix}posts p2
+				JOIN {$prefix}postmeta cust2
+					ON cust2.post_id = p2.ID AND cust2.meta_key = '_customer_user'
+				JOIN {$prefix}postmeta sm2
+					ON sm2.post_id = p2.ID AND sm2.meta_key = '_schedule_start'
+				JOIN {$prefix}woocommerce_order_items oi2
+					ON oi2.order_id = p2.ID AND oi2.order_item_type = 'line_item'
+				JOIN {$prefix}woocommerce_order_itemmeta oim2
+					ON oim2.order_item_id = oi2.order_item_id AND oim2.meta_key = '_product_id'
+				WHERE p2.post_type = 'shop_subscription'
+				  AND CAST(cust2.meta_value AS UNSIGNED) > 0 -- exclude guest subscriptions
+				  AND oim2.meta_value NOT IN ($donations)
+				  AND sm2.meta_value != ''
+				GROUP BY CAST(cust2.meta_value AS UNSIGNED)
+				HAVING first_start >= %s AND first_start <= %s
+			) AS cohort ON cohort.customer_id = CAST(cust.meta_value AS UNSIGNED)
 			WHERE p.post_type = 'shop_subscription'
 			  AND CAST(cust.meta_value AS UNSIGNED) > 0 -- exclude guest subscriptions (mirrors get_new_subscriber_records_in_window)
 			  AND oim.meta_value NOT IN ($donations)
-			  AND sm.meta_value != ''
-			  AND CAST(cust.meta_value AS UNSIGNED) IN (
-				SELECT cohort.customer_id FROM (
-					SELECT CAST(cust2.meta_value AS UNSIGNED) AS customer_id, MIN(sm2.meta_value) AS first_start
-					FROM {$prefix}posts p2
-					JOIN {$prefix}postmeta cust2
-						ON cust2.post_id = p2.ID AND cust2.meta_key = '_customer_user'
-					JOIN {$prefix}postmeta sm2
-						ON sm2.post_id = p2.ID AND sm2.meta_key = '_schedule_start'
-					JOIN {$prefix}woocommerce_order_items oi2
-						ON oi2.order_id = p2.ID AND oi2.order_item_type = 'line_item'
-					JOIN {$prefix}woocommerce_order_itemmeta oim2
-						ON oim2.order_item_id = oi2.order_item_id AND oim2.meta_key = '_product_id'
-					WHERE p2.post_type = 'shop_subscription'
-					  AND CAST(cust2.meta_value AS UNSIGNED) > 0 -- exclude guest subscriptions
-					  AND oim2.meta_value NOT IN ($donations)
-					  AND sm2.meta_value != ''
-					GROUP BY CAST(cust2.meta_value AS UNSIGNED)
-					HAVING first_start >= %s AND first_start <= %s
-				) cohort
-			  )",
+			  AND sm.meta_value != ''",
 			$cutoff,
 			$now
 		);

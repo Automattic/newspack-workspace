@@ -95,12 +95,12 @@ describe( 'EngagementTab', () => {
 		expect( screen.getByText( 'Avg Engaged Session Duration' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Bounce Rate' ) ).toBeInTheDocument();
 		// The two remaining content tables still render.
-		expect( screen.getByText( 'Most-Engaged Articles' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Top Authors by Avg Engagement Time' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Most-engaged articles' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top authors by avg engagement time' ) ).toBeInTheDocument();
 
 		// The completion-rate card and table are hidden.
 		expect( screen.queryByText( 'Completion Rate' ) ).not.toBeInTheDocument();
-		expect( screen.queryByText( 'Articles by Completion Rate' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Articles by completion rate' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'suppresses comparison deltas when the toggle is off (no previousRange)', () => {

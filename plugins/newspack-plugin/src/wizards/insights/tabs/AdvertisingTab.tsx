@@ -2,7 +2,7 @@
  * AdvertisingTab (Tab 8, NPPD-1618).
  *
  * GAM-backed Advertising tab. Fetches the Advertising orchestrator endpoint
- * (NPPD-1663) and renders four sections. Unlike the GA4 tabs, visibility
+ * (NPPD-1663) and renders the report sections. Unlike the GA4 tabs, visibility
  * (GAM ad provider active) and reporting readiness (OAuth scope + network code)
  * are distinct signals, so this tab has an extra "finish connecting" state
  * between the hidden and ready states. Because GAM reports run asynchronously,
@@ -26,7 +26,9 @@ import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import DataLagIndicator from './components/DataLagIndicator';
 import FinishConnectingDiagnostic from './components/FinishConnectingDiagnostic';
 import ReachRevenueSection from './advertising/sections/ReachRevenueSection';
-import InventoryPerformanceSection from './advertising/sections/InventoryPerformanceSection';
+import RevenueTrendSection from './advertising/sections/RevenueTrendSection';
+import ChannelDeviceSection from './advertising/sections/ChannelDeviceSection';
+import SitePerformanceSection from './advertising/sections/SitePerformanceSection';
 import TopPerformersSection from './advertising/sections/TopPerformersSection';
 import './advertising/advertising.scss';
 
@@ -86,7 +88,12 @@ const AdvertisingTab = ( { range, previousRange }: AdvertisingTabProps ) => {
 						hasWindowActivity={ current.has_window_activity }
 						lastUpdated={ <LastUpdated tab="advertising" range={ range } previousRange={ previousRange } /> }
 					/>
-					<InventoryPerformanceSection current={ current.metrics } previous={ previous } />
+					<RevenueTrendSection current={ current.metrics } previous={ previous } />
+					{ /* Channel pie + device table: after the trend, before the per-site and
+					     top-performer tables. */ }
+					<ChannelDeviceSection current={ current.metrics } previous={ previous } />
+					{ /* Per-site breakdown (NPPD-1671): network members only; absent otherwise. */ }
+					{ current.is_network_member && <SitePerformanceSection current={ current.metrics } previous={ previous } /> }
 					<TopPerformersSection current={ current.metrics } previous={ previous } />
 				</>
 			) }

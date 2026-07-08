@@ -43,7 +43,7 @@ const GeographicSection = ( { current }: SectionProps ) => {
 			<div className="newspack-insights__table-grid newspack-insights__table-grid--cols-2">
 				<div>
 					<h3 className="newspack-insights__chart-card-title">
-						{ __( 'Top Regions / States', 'newspack-plugin' ) }
+						{ __( 'Top regions / states', 'newspack-plugin' ) }
 						{ regionsScope && <ScopePill label={ regionsScope } /> }
 					</h3>
 					<MetricTable
@@ -59,7 +59,7 @@ const GeographicSection = ( { current }: SectionProps ) => {
 				</div>
 				<div>
 					<h3 className="newspack-insights__chart-card-title">
-						{ __( 'Top Cities', 'newspack-plugin' ) }
+						{ __( 'Top cities', 'newspack-plugin' ) }
 						{ citiesScope && <ScopePill label={ citiesScope } /> }
 					</h3>
 					<MetricTable

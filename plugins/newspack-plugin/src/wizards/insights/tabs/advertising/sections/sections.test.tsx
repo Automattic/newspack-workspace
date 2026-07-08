@@ -14,8 +14,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
  */
 import type { InsightsWindow } from '../../../api/advertising';
 import ReachRevenueSection from './ReachRevenueSection';
-import InventoryPerformanceSection from './InventoryPerformanceSection';
 import TopPerformersSection from './TopPerformersSection';
+import ChannelDeviceSection from './ChannelDeviceSection';
 
 const metrics: InsightsWindow = {
 	total_impressions: { value: 2400000, computable: true, type: 'count' },
@@ -31,47 +31,113 @@ const metrics: InsightsWindow = {
 			{ label: 'programmatic', revenue: 1680, impressions: 1080000 },
 		],
 	},
+	by_channel: {
+		type: 'breakdown',
+		computable: true,
+		rows: [
+			// Shares are impressions-weighted (fractions of the 2.4M total).
+			{ channel: 'Programmatic', revenue: 2310, impressions: 1440000, share: 0.6 },
+			{ channel: 'Direct-sold', revenue: 1260, impressions: 528000, share: 0.22 },
+			{ channel: 'House', revenue: 504, impressions: 360000, share: 0.15 },
+			{ channel: 'Other', revenue: 126, impressions: 72000, share: 0.03 },
+		],
+	},
+	by_device: {
+		type: 'table',
+		computable: true,
+		rows: [
+			{ device: 'Smartphone', impressions: 1392000, revenue: 2184, ecpm: 1.57 },
+			{ device: 'Desktop', impressions: 720000, revenue: 1596, ecpm: 2.22 },
+			{ device: 'Tablet', impressions: 216000, revenue: 336, ecpm: 1.56 },
+			{ device: 'Connected TV', impressions: 0, revenue: 0, ecpm: null },
+		],
+	},
 	top_ad_units: {
 		type: 'table',
 		computable: true,
-		rows: [ { ad_unit: 'Homepage Leaderboard', impressions: 500000, revenue: 900, ecpm: 1.8 } ],
+		rows: [ { ad_unit: 'Homepage Leaderboard', impressions: 500000, clicks: 2000, ctr: 0.004, revenue: 900, ecpm: 1.8 } ],
 	},
 	top_advertisers: {
 		type: 'table',
 		computable: true,
-		rows: [ { advertiser: 'Acme Co', impressions: 300000, revenue: 600 } ],
+		rows: [ { advertiser: 'Acme Co', impressions: 300000, clicks: 900, ctr: 0.003, revenue: 600 } ],
+	},
+	top_campaigns: {
+		type: 'table',
+		computable: true,
+		rows: [
+			{
+				campaign: 'Hometown Hardware — Spring Flight',
+				advertiser: 'Hometown Hardware',
+				impressions: 120000,
+				clicks: 480,
+				ctr: 0.004,
+				revenue: 350,
+			},
+			{
+				campaign: 'Riverside Credit Union — Auto Loans',
+				advertiser: 'Riverside Credit Union',
+				impressions: 90000,
+				clicks: 0,
+				ctr: null,
+				revenue: 280,
+			},
+		],
 	},
 };
 
 describe( 'Advertising sections', () => {
-	it( 'ReachRevenueSection shows impressions, revenue, and the revenue-mix card', () => {
+	it( 'ReachRevenueSection shows impressions and revenue, without the retired revenue-mix card', () => {
 		render( <ReachRevenueSection current={ metrics } previous={ null } /> );
-		expect( screen.getByText( 'Total Impressions' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Impressions' ) ).toBeInTheDocument();
 		expect( screen.getByText( '2.4M' ) ).toBeInTheDocument(); // 7-digit impressions abbreviate (NPPD-1684)
 		expect( screen.getByText( '$4,200' ) ).toBeInTheDocument();
 		// Definitional descriptions fill the third slot (no short caption).
-		expect( screen.getByText( 'Total ad impressions served on your site in this timeframe.' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Total ad revenue earned in this timeframe, before fees.' ) ).toBeInTheDocument();
-		// Revenue Mix scorecard (60% direct of 2520/4200).
-		expect( screen.getByText( 'Revenue Mix' ) ).toBeInTheDocument();
-		expect( screen.getByText( '60%' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'from direct sales' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Total ad impressions served on your site' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Total ad revenue earned, before fees' ) ).toBeInTheDocument();
+		// The Revenue Mix card was retired in favor of Impressions by type (NPPD-1881).
+		expect( screen.queryByText( 'Revenue Mix' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'InventoryPerformanceSection shows eCPM/fill and the viewability overlay', () => {
-		render( <InventoryPerformanceSection current={ metrics } previous={ null } /> );
+	it( 'ReachRevenueSection shows the inventory-quality cards (eCPM/fill and the viewability overlay)', () => {
+		// Folded in from the former Inventory performance section.
+		render( <ReachRevenueSection current={ metrics } previous={ null } /> );
+		expect( screen.getByText( 'Average eCPM' ) ).toBeInTheDocument();
 		expect( screen.getByText( '$1.75' ) ).toBeInTheDocument();
 		expect( screen.getByText( '87%' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Not available for this site.' ) ).toBeInTheDocument();
 	} );
 
-	it( 'TopPerformersSection renders the two tables only (no device pie)', () => {
+	it( 'TopPerformersSection renders the three tables (no device pie)', () => {
 		render( <TopPerformersSection current={ metrics } previous={ null } /> );
 		expect( screen.getByText( 'Homepage Leaderboard' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Acme Co' ) ).toBeInTheDocument();
-		// Performance by Device pie is no longer rendered on Tab 8.
-		expect( screen.queryByText( 'Performance by Device' ) ).not.toBeInTheDocument();
+		expect( screen.getByText( 'Hometown Hardware — Spring Flight' ) ).toBeInTheDocument();
+		// The device breakdown lives in ChannelDeviceSection, not here.
+		expect( screen.queryByText( 'Performance by device' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Smartphone' ) ).not.toBeInTheDocument();
+		// The ad-units table no longer carries an eCPM column (payload field is
+		// still present but unrendered).
+		expect( screen.queryByText( 'eCPM' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( '$1.80' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'TopPerformersSection shows clicks and CTR on ad units and advertisers', () => {
+		render( <TopPerformersSection current={ metrics } previous={ null } /> );
+		expect( screen.getAllByText( 'Clicks' ) ).toHaveLength( 3 ); // Ad units + advertisers + campaigns.
+		expect( screen.getAllByText( 'CTR' ) ).toHaveLength( 3 );
+		expect( screen.getByText( '2,000' ) ).toBeInTheDocument(); // Ad unit clicks.
+		expect( screen.getByText( '900' ) ).toBeInTheDocument(); // Advertiser clicks.
+		expect( screen.getByText( '0.3%' ) ).toBeInTheDocument(); // Advertiser CTR.
+	} );
+
+	it( 'Top campaigns lists direct-sold orders and em-dashes a null CTR', () => {
+		render( <TopPerformersSection current={ metrics } previous={ null } /> );
+		expect( screen.getByText( 'Top campaigns' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Riverside Credit Union' ) ).toBeInTheDocument();
+		expect( screen.getByText( '$350.00' ) ).toBeInTheDocument();
+		// Null CTR (no impressions basis) renders an em-dash, never 0%.
+		expect( screen.getByText( '—' ) ).toBeInTheDocument();
 	} );
 
 	it( 'Top Advertisers collapses to 5 rows behind a See more toggle', () => {
@@ -110,6 +176,42 @@ describe( 'Advertising sections', () => {
 
 		expect( screen.getByText( 'Unit 6' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Unit 8' ) ).toBeInTheDocument();
+	} );
+
+	it( 'ChannelDeviceSection renders impressions-weighted ad-type slices with plain-number legend values', () => {
+		render( <ChannelDeviceSection current={ metrics } previous={ null } /> );
+		expect( screen.getByText( 'Impressions by type' ) ).toBeInTheDocument();
+		// One legend entry per ad-type bucket, impressions-weighted with plain
+		// numbers — no currency, since house inventory is unpaid by definition.
+		expect( screen.getByText( 'Programmatic' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Direct-sold' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'House' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Other' ) ).toBeInTheDocument();
+		expect( screen.getByText( /1,440,000/ ) ).toBeInTheDocument();
+		expect( screen.getByText( /60%/ ) ).toBeInTheDocument();
+		// The unpaid house share stays visible — the point of impressions weighting.
+		expect( screen.getByText( /360,000/ ) ).toBeInTheDocument();
+		expect( screen.queryByText( /\$2,310/ ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'ChannelDeviceSection renders the device table with eCPM (em-dash when no impressions)', () => {
+		render( <ChannelDeviceSection current={ metrics } previous={ null } /> );
+		expect( screen.getByText( 'Performance by device' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Smartphone' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Desktop' ) ).toBeInTheDocument();
+		expect( screen.getByText( '1,392,000' ) ).toBeInTheDocument();
+		expect( screen.getByText( '$2.22' ) ).toBeInTheDocument();
+		// Connected TV served nothing: its eCPM is null → em-dash, never $0.00.
+		expect( screen.getByText( '—' ) ).toBeInTheDocument();
+	} );
+
+	it( 'ChannelDeviceSection shows the pie empty state when no ad type has activity', () => {
+		const empty: InsightsWindow = {
+			...metrics,
+			by_channel: { type: 'breakdown', computable: false, rows: [] },
+		};
+		render( <ChannelDeviceSection current={ empty } previous={ null } /> );
+		expect( screen.getByText( 'No ad type activity in this timeframe.' ) ).toBeInTheDocument();
 	} );
 
 	it( 'handles a zero-impressions window without erroring', () => {

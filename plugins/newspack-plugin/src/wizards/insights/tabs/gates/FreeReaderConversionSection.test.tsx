@@ -70,8 +70,8 @@ describe( 'FreeReaderConversionSection empty states (NPPD-1702)', () => {
 		const { container } = render( <FreeReaderConversionSection current={ current } previous={ null } /> );
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
-		expect( screen.getByText( 'Regwall Conversion (Direct)' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Regwall Conversion (Influenced, 7d)' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Registered access gate Conversion (Direct)' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Registered access gate Conversion (Influenced, 7d)' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders no_opportunity when the fields are present and impressions === 0', () => {
@@ -82,7 +82,7 @@ describe( 'FreeReaderConversionSection empty states (NPPD-1702)', () => {
 		// Body asserted on the container — the Notice's speak() duplicates it into a
 		// global live-region, so a screen-level text query would match twice.
 		expect( container ).toHaveTextContent( 'No registration gate impressions in this timeframe' );
-		expect( screen.queryByText( 'Regwall Conversion (Direct)' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Registered access gate Conversion (Direct)' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'renders no_conversions with the impressions count interpolated when impressions > 0 and registrations === 0', () => {
@@ -94,7 +94,7 @@ describe( 'FreeReaderConversionSection empty states (NPPD-1702)', () => {
 		expect( container ).toHaveTextContent( 'Your registration gates reached 14,000 readers' );
 		// 7-day attribution window in the Free copy (NOT 14 — that's the Paid side).
 		expect( container ).toHaveTextContent( 'within the 7-day attribution window' );
-		expect( screen.queryByText( 'Regwall Conversion (Direct)' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Registered access gate Conversion (Direct)' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'renders the two scorecards (no empty state) when the section has data', () => {
@@ -107,8 +107,8 @@ describe( 'FreeReaderConversionSection empty states (NPPD-1702)', () => {
 		const { container } = render( <FreeReaderConversionSection current={ current } previous={ null } /> );
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
-		expect( screen.getByText( 'Regwall Conversion (Direct)' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Regwall Conversion (Influenced, 7d)' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Registered access gate Conversion (Direct)' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Registered access gate Conversion (Influenced, 7d)' ) ).toBeInTheDocument();
 	} );
 
 	it( 'applies the per-card count fallback inside a normal section render', () => {
@@ -138,6 +138,6 @@ describe( 'FreeReaderConversionSection empty states (NPPD-1702)', () => {
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
 		expect( container ).not.toHaveTextContent( 'No registration gate impressions in this timeframe' );
-		expect( screen.getByText( 'Regwall Conversion (Direct)' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Registered access gate Conversion (Direct)' ) ).toBeInTheDocument();
 	} );
 } );

@@ -7,3 +7,10 @@
  * by the wizard's top-level `style.scss`.
  */
 @use "../components/insights-charts";
+
+// Right-aligned "Change app property" action above the metric sections.
+.newspack-insights__app-toolbar {
+	display: flex;
+	justify-content: flex-end;
+	margin-bottom: 8px;
+}

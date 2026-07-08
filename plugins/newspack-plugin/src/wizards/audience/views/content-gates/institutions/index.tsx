@@ -98,6 +98,17 @@ export default function Institutions() {
 				enableSorting: false,
 			},
 			{
+				id: 'id',
+				label: __( 'ID', 'newspack-plugin' ),
+				// The integer type gives numeric sorting; suppress its default filter so ID stays a
+				// searchable, sortable column without adding a lone numeric filter to the toolbar.
+				type: 'integer',
+				filterBy: false,
+				enableGlobalSearch: true,
+				getValue: ( { item }: { item: Institution } ) => item.id,
+				render: ( { item }: { item: Institution } ) => <code>{ item.id }</code>,
+			},
+			{
 				id: 'title',
 				label: __( 'Title', 'newspack-plugin' ),
 				enableGlobalSearch: true,

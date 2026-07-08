@@ -87,6 +87,7 @@ class App_REST_Controller extends WP_REST_Controller {
 						'property_id' => [
 							'type'              => 'string',
 							'required'          => true,
+							'validate_callback' => [ $this, 'validate_property_id' ],
 							'sanitize_callback' => [ $this, 'sanitize_property_id' ],
 							'description'       => __( 'Numeric GA4 app property ID, or empty string to clear the selection.', 'newspack-plugin' ),
 						],
@@ -148,14 +149,27 @@ class App_REST_Controller extends WP_REST_Controller {
 	}
 
 	/**
-	 * Sanitize a property id: digits only, or '' to clear. Rejects anything else
-	 * to an empty string (which clears) rather than persisting garbage.
+	 * Validate a property id: only all-digits or an explicitly empty string (the
+	 * "clear selection" case) are accepted. Anything else is a 400, so a
+	 * client-side bug or a mistyped request can't silently wipe the saved
+	 * property.
+	 *
+	 * @param mixed $value Raw input.
+	 * @return bool
+	 */
+	public function validate_property_id( $value ): bool {
+		$value = is_scalar( $value ) ? trim( (string) $value ) : '';
+		return '' === $value || ctype_digit( $value );
+	}
+
+	/**
+	 * Sanitize a validated property id — just trim/cast; validation has already
+	 * guaranteed it is digits-or-empty.
 	 *
 	 * @param mixed $value Raw input.
 	 * @return string
 	 */
 	public function sanitize_property_id( $value ): string {
-		$value = is_scalar( $value ) ? trim( (string) $value ) : '';
-		return ctype_digit( $value ) ? $value : '';
+		return is_scalar( $value ) ? trim( (string) $value ) : '';
 	}
 }

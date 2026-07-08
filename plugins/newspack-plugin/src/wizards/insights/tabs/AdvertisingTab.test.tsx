@@ -117,7 +117,7 @@ describe( 'AdvertisingTab', () => {
 		expect( container.querySelector( '[data-empty-state="no_opportunity"]' ) ).toBeInTheDocument();
 		expect( container ).toHaveTextContent( 'No ad impressions in this timeframe' );
 		// The headline scorecards are gone; the other sections still render.
-		expect( screen.queryByText( 'Total Impressions' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Impressions' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'renders all sections with values when ready', () => {
@@ -195,5 +195,29 @@ describe( 'AdvertisingTab', () => {
 		// +20% vs the prior window → up arrow + magnitude.
 		expect( screen.getByText( '20%' ) ).toBeInTheDocument();
 		expect( screen.getByText( '↑' ) ).toBeInTheDocument();
+	} );
+
+	it( 'renders the per-site breakdown for network members (NPPD-1671)', () => {
+		mockData(
+			baseWindow( {
+				is_network_member: true,
+				metrics: {
+					top_sites: {
+						type: 'table',
+						computable: true,
+						rows: [ { site: 'almanacnews.com', impressions: 980000, revenue: 1720, ecpm: 1.76 } ],
+					},
+				},
+			} )
+		);
+		render( <AdvertisingTab range={ range } previousRange={ null } /> );
+		expect( screen.getByText( 'Performance by site' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'almanacnews.com' ) ).toBeInTheDocument();
+	} );
+
+	it( 'hides the per-site breakdown for non-network publishers', () => {
+		mockData( baseWindow( { is_network_member: false } ) );
+		render( <AdvertisingTab range={ range } previousRange={ null } /> );
+		expect( screen.queryByText( 'Performance by site' ) ).not.toBeInTheDocument();
 	} );
 } );

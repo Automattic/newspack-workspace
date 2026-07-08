@@ -305,6 +305,15 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * Tab 6 churn pattern scoped to donation products: customers whose
+	 * donation subscriptions cancelled/expired in window AND who currently
+	 * have no active donation subscription. Cancelled/expired side
+	 * pre-aggregated to DISTINCT customer_ids and LEFT-JOINed against the
+	 * DISTINCT active-donation-subscriber customer_ids (also pre-aggregated),
+	 * keeping only rows where the active side is NULL — an anti-join, not a
+	 * correlated `NOT IN (subquery)` (MySQL's slowest anti-join form). Same
+	 * approach as {@see HPOS_Storage::get_churned_subscribers_in_window()}.
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return int
@@ -314,12 +323,9 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 		$prefix    = $wpdb->prefix;
 		$donations = $this->id_list( $this->donation_product_ids );
 
-		// Tab 6 churn pattern scoped to donation products: customers
-		// whose donation subscriptions cancelled/expired in window AND
-		// who currently have no active donation subscription.
 		$sql = $wpdb->prepare(
 			"SELECT COUNT(DISTINCT cancellations.customer_id) FROM (
-				SELECT o.customer_id
+				SELECT DISTINCT o.customer_id
 				FROM {$prefix}wc_orders o
 				JOIN {$prefix}wc_orders_meta om
 					ON om.order_id = o.id AND om.meta_key = '_schedule_cancelled'
@@ -333,7 +339,7 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 				  AND om.meta_value BETWEEN %s AND %s
 				  AND om.meta_value != ''
 			) AS cancellations
-			WHERE cancellations.customer_id NOT IN (
+			LEFT JOIN (
 				SELECT DISTINCT o2.customer_id
 				FROM {$prefix}wc_orders o2
 				JOIN {$prefix}woocommerce_order_items oi2
@@ -343,7 +349,8 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 				WHERE o2.type = 'shop_subscription'
 				  AND o2.status = 'wc-active'
 				  AND oim2.meta_value IN ($donations)
-			)",
+			) AS active ON active.customer_id = cancellations.customer_id
+			WHERE active.customer_id IS NULL",
 			$this->fmt( $start ),
 			$this->fmt( $end )
 		);
@@ -461,6 +468,15 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
+	 * The prior-window lapsed cohort used to be pulled into a PHP array and
+	 * serialized back into an `o.customer_id IN ($lapsed_list)` filter for the
+	 * "recovered" query — slow, and a `max_allowed_packet` risk on large
+	 * cohorts. Now computed as a single reusable derived table (`lapsed`,
+	 * itself an anti-join against active donation subscribers — see
+	 * {@see self::get_lapsed_donors_in_window()}) that both the denominator
+	 * COUNT and the numerator's JOIN read from directly, eliminating the PHP
+	 * round trip entirely.
+	 *
 	 * @param DateTimeInterface $start Window start.
 	 * @param DateTimeInterface $end   Window end.
 	 * @return float
@@ -480,11 +496,15 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 		$donations = $this->id_list( $this->donation_product_ids );
 
 		// Lapsed-in-prior cohort (same shape as get_lapsed_donors_in_window
-		// but with explicit prior window bounds rather than current window).
-		$lapsed_sql = $wpdb->prepare(
+		// but with explicit prior window bounds rather than current window),
+		// reused by both the denominator and numerator queries below.
+		// Prepared once with the prior-window bounds baked in as literals;
+		// nesting a second prepare() around an interpolated %s-bearing string
+		// would double-escape / mis-count placeholders.
+		$lapsed_cte = $wpdb->prepare(
 			"SELECT DISTINCT cancellations.customer_id
 			FROM (
-				SELECT o.customer_id
+				SELECT DISTINCT o.customer_id
 				FROM {$prefix}wc_orders o
 				JOIN {$prefix}wc_orders_meta om
 					ON om.order_id = o.id AND om.meta_key = '_schedule_cancelled'
@@ -498,7 +518,7 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 				  AND om.meta_value BETWEEN %s AND %s
 				  AND om.meta_value != ''
 			) AS cancellations
-			WHERE cancellations.customer_id NOT IN (
+			LEFT JOIN (
 				SELECT DISTINCT o2.customer_id
 				FROM {$prefix}wc_orders o2
 				JOIN {$prefix}woocommerce_order_items oi2
@@ -508,33 +528,32 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 				WHERE o2.type = 'shop_subscription'
 				  AND o2.status = 'wc-active'
 				  AND oim2.meta_value IN ($donations)
-			)",
+			) AS active ON active.customer_id = cancellations.customer_id
+			WHERE active.customer_id IS NULL",
 			$prior_start_iso,
 			$prior_end_iso
 		);
 
-		$lapsed_customer_ids = $wpdb->get_col( $lapsed_sql );
-		if ( empty( $lapsed_customer_ids ) ) {
+		$lapsed_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM ({$lapsed_cte}) AS lapsed" );
+		if ( 0 === $lapsed_count ) {
 			return [
 				'value'       => 0.0,
 				'computable'  => false,
 				'denominator' => 0,
 			];
 		}
-		$lapsed_count = count( $lapsed_customer_ids );
-		$lapsed_list  = $this->id_list( array_map( 'intval', $lapsed_customer_ids ) );
 
 		// Of the lapsed cohort, who made a NEW completed donation order
 		// in the current window.
 		$recovered_sql = $wpdb->prepare(
-			"SELECT COUNT(DISTINCT o.customer_id)
-			FROM {$prefix}wc_orders o
+			"SELECT COUNT(DISTINCT lapsed.customer_id)
+			FROM ({$lapsed_cte}) AS lapsed
+			JOIN {$prefix}wc_orders o ON o.customer_id = lapsed.customer_id
 			JOIN {$prefix}wc_order_product_lookup opl ON opl.order_id = o.id
 			WHERE o.type = 'shop_order'
 			  AND o.status IN ('wc-completed', 'wc-processing')
 			  AND o.date_created_gmt BETWEEN %s AND %s
-			  AND opl.product_id IN ($donations)
-			  AND o.customer_id IN ($lapsed_list)",
+			  AND opl.product_id IN ($donations)",
 			$current_start_iso,
 			$current_end_iso
 		);
@@ -560,11 +579,18 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 		$donations = $this->id_list( $this->donation_product_ids );
 		unset( $end ); // included in cache key by orchestrator; SQL uses NOW for the "still active" check.
 
-		// Subscriptions active at :start (subscription start <= :start
-		// AND not cancelled before :start). The CTE yields one row per
-		// (customer, subscription) pair.
-		$active_at_start_sql = $wpdb->prepare(
-			"SELECT DISTINCT o.customer_id, o.id AS subscription_id, o.status
+		// Subscriptions active at :start (subscription start <= :start AND
+		// not cancelled before :start). The active-at-start cohort used to
+		// be pulled into a PHP array and serialized back into an
+		// `o.customer_id IN ($customer_list)` filter for the numerator query —
+		// slow, and a `max_allowed_packet` "MySQL server has gone away"
+		// trigger on large cohorts. Prepared once with the :start bound
+		// baked in as a literal, then reused (already-escaped) as a derived
+		// table by both the denominator COUNT and the numerator JOIN below —
+		// nesting a second prepare() around an interpolated %s-bearing
+		// string would double-escape / mis-count placeholders.
+		$active_at_start_cte = $wpdb->prepare(
+			"SELECT DISTINCT o.customer_id
 			FROM {$prefix}wc_orders o
 			JOIN {$prefix}wc_orders_meta start_meta
 				ON start_meta.order_id = o.id AND start_meta.meta_key = '_schedule_start'
@@ -587,18 +613,9 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 			$this->fmt( $start ),
 			$this->fmt( $start )
 		);
-		$rows = $wpdb->get_results( $active_at_start_sql, ARRAY_A );
-		if ( empty( $rows ) ) {
-			return [
-				'value'       => 0.0,
-				'computable'  => false,
-				'denominator' => 0,
-			];
-		}
 
 		// Denominator: distinct customers who were active at start.
-		$customers_active_at_start = array_unique( array_map( 'intval', array_column( $rows, 'customer_id' ) ) );
-		$denominator               = count( $customers_active_at_start );
+		$denominator = (int) $wpdb->get_var( "SELECT COUNT(*) FROM ({$active_at_start_cte}) AS active_at_start" );
 		if ( 0 === $denominator ) {
 			return [
 				'value'       => 0.0,
@@ -609,17 +626,16 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 
 		// Numerator: those customers who still have at least one
 		// active donation subscription right now.
-		$customer_list = $this->id_list( $customers_active_at_start );
-		$numerator_sql = "SELECT COUNT(DISTINCT o.customer_id)
-			FROM {$prefix}wc_orders o
+		$numerator_sql = "SELECT COUNT(DISTINCT active_at_start.customer_id)
+			FROM ({$active_at_start_cte}) AS active_at_start
+			JOIN {$prefix}wc_orders o ON o.customer_id = active_at_start.customer_id
 			JOIN {$prefix}woocommerce_order_items oi
 				ON oi.order_id = o.id AND oi.order_item_type = 'line_item'
 			JOIN {$prefix}woocommerce_order_itemmeta oim
 				ON oim.order_item_id = oi.order_item_id AND oim.meta_key = '_product_id'
 			WHERE o.type = 'shop_subscription'
 			  AND o.status = 'wc-active'
-			  AND oim.meta_value IN ($donations)
-			  AND o.customer_id IN ($customer_list)";
+			  AND oim.meta_value IN ($donations)";
 		$numerator     = (int) $wpdb->get_var( $numerator_sql );
 
 		return [
@@ -741,7 +757,11 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 		// product row, so SUM(lapsed_donors_in_window) across rows can
 		// exceed the scorecard. In Newspack's typical data shape a
 		// donor only has one recurring donation, so this reconciles
-		// cleanly in practice.
+		// cleanly in practice. The active-subscriber exclusion is a LEFT
+		// JOIN anti-join (`active.customer_id IS NULL`) against a
+		// pre-aggregated DISTINCT active-donation-subscriber derived table,
+		// not a correlated `NOT IN (subquery)` (MySQL's slowest anti-join
+		// form) — same approach as {@see self::get_lapsed_donors_in_window()}.
 		$lapsed_sql = $wpdb->prepare(
 			"SELECT
 				pv.ID AS variation_id,
@@ -764,12 +784,7 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 			LEFT JOIN {$prefix}posts pp ON pp.ID = pv.post_parent
 			LEFT JOIN {$prefix}postmeta period_meta
 				ON period_meta.post_id = pv.ID AND period_meta.meta_key = '_subscription_period'
-			WHERE o.type = 'shop_subscription'
-			  AND o.status IN ('wc-cancelled', 'wc-expired')
-			  AND pid_meta.meta_value IN ($donations)
-			  AND cm.meta_value BETWEEN %s AND %s
-			  AND cm.meta_value != ''
-			  AND o.customer_id NOT IN (
+			LEFT JOIN (
 				SELECT DISTINCT o2.customer_id
 				FROM {$prefix}wc_orders o2
 				JOIN {$prefix}woocommerce_order_items oi2
@@ -779,7 +794,13 @@ class HPOS_Donors_Storage implements Donors_Storage_Interface {
 				WHERE o2.type = 'shop_subscription'
 				  AND o2.status = 'wc-active'
 				  AND oim2.meta_value IN ($donations)
-			  )
+			) AS active ON active.customer_id = o.customer_id
+			WHERE o.type = 'shop_subscription'
+			  AND o.status IN ('wc-cancelled', 'wc-expired')
+			  AND pid_meta.meta_value IN ($donations)
+			  AND cm.meta_value BETWEEN %s AND %s
+			  AND cm.meta_value != ''
+			  AND active.customer_id IS NULL
 			GROUP BY pv.ID, pv.post_title, pv.post_parent, parent_name, sub_period",
 			$this->fmt( $start ),
 			$this->fmt( $end )

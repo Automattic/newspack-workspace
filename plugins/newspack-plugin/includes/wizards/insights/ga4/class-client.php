@@ -298,6 +298,16 @@ final class Client {
 					[ 'http_code' => $code ]
 				);
 			}
+			// A 2xx with a non-array body (scalar / invalid JSON, e.g. an upstream
+			// proxy error) would fatal on the offset access below; treat it as an
+			// API error rather than trusting the shape.
+			if ( ! is_array( $data ) ) {
+				return new \WP_Error(
+					'ga4_admin_api_error',
+					__( 'The GA4 Admin API returned an unexpected response.', 'newspack-plugin' ),
+					[ 'http_code' => $code ]
+				);
+			}
 			foreach ( $data['accountSummaries'] ?? [] as $account ) {
 				$summaries[] = $account;
 			}

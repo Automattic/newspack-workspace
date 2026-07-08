@@ -44,10 +44,15 @@ trait Insights_Woo_Order_Fixtures {
 		global $wpdb;
 		$p = $wpdb->prefix;
 		// HPOS authoritative store.
-		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$p}wc_orders ( id BIGINT UNSIGNED NOT NULL PRIMARY KEY, status VARCHAR(20) NULL, type VARCHAR(20) NULL, date_created_gmt DATETIME NULL, total_amount DECIMAL(26,8) NULL ) ENGINE=InnoDB" );
+		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$p}wc_orders ( id BIGINT UNSIGNED NOT NULL PRIMARY KEY, status VARCHAR(20) NULL, type VARCHAR(20) NULL, date_created_gmt DATETIME NULL, total_amount DECIMAL(26,8) NULL, customer_id BIGINT UNSIGNED NULL, parent_order_id BIGINT UNSIGNED NULL ) ENGINE=InnoDB" );
 		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$p}wc_orders_meta ( id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, order_id BIGINT UNSIGNED NULL, meta_key VARCHAR(255) NULL, meta_value LONGTEXT NULL, KEY order_id ( order_id ) ) ENGINE=InnoDB" );
 		// Product lookup (both backends maintain this).
 		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$p}wc_order_product_lookup ( order_id BIGINT UNSIGNED NOT NULL, product_id BIGINT UNSIGNED NOT NULL, PRIMARY KEY ( order_id, product_id ) ) ENGINE=InnoDB" );
+		// Line-item tables — shared by both backends (not HPOS-specific). Needed by
+		// subscription queries (churn/winback/performance), which JOIN through these
+		// rather than the shop_order-only analytics lookup (see class docblocks).
+		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$p}woocommerce_order_items ( order_item_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, order_item_name TEXT NOT NULL, order_item_type VARCHAR(200) NOT NULL DEFAULT '', order_id BIGINT UNSIGNED NOT NULL, KEY order_id ( order_id ) ) ENGINE=InnoDB" );
+		$wpdb->query( "CREATE TABLE IF NOT EXISTS {$p}woocommerce_order_itemmeta ( meta_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, order_item_id BIGINT UNSIGNED NOT NULL, meta_key VARCHAR(255) NULL, meta_value LONGTEXT NULL, KEY order_item_id ( order_item_id ) ) ENGINE=InnoDB" );
 	}
 
 	/**
@@ -61,6 +66,8 @@ trait Insights_Woo_Order_Fixtures {
 		$wpdb->query( "DROP TABLE IF EXISTS {$p}wc_orders" );
 		$wpdb->query( "DROP TABLE IF EXISTS {$p}wc_orders_meta" );
 		$wpdb->query( "DROP TABLE IF EXISTS {$p}wc_order_product_lookup" );
+		$wpdb->query( "DROP TABLE IF EXISTS {$p}woocommerce_order_items" );
+		$wpdb->query( "DROP TABLE IF EXISTS {$p}woocommerce_order_itemmeta" );
 	}
 
 	/**
@@ -192,6 +199,129 @@ trait Insights_Woo_Order_Fixtures {
 				]
 			);
 		}
+		return $order_id;
+	}
+
+	/**
+	 * Insert a `shop_subscription` line item (order_item + `_product_id` itemmeta)
+	 * against an already-created order row (legacy `posts` or HPOS `wc_orders`).
+	 * Shared by both backends — the line-item tables are backend-agnostic.
+	 *
+	 * @param int $order_id   The subscription's order/post id.
+	 * @param int $product_id Line-item product id.
+	 * @return void
+	 */
+	private function insert_subscription_line_item( int $order_id, int $product_id ): void {
+		global $wpdb;
+		$p = $wpdb->prefix;
+		$wpdb->insert(
+			"{$p}woocommerce_order_items",
+			[
+				'order_item_name' => 'Subscription',
+				'order_item_type' => 'line_item',
+				'order_id'        => $order_id,
+			]
+		);
+		$order_item_id = (int) $wpdb->insert_id;
+		$wpdb->insert(
+			"{$p}woocommerce_order_itemmeta",
+			[
+				'order_item_id' => $order_item_id,
+				'meta_key'      => '_product_id',
+				'meta_value'    => $product_id,
+			]
+		);
+	}
+
+	/**
+	 * Insert a legacy (posts/postmeta) `shop_subscription`, with its customer,
+	 * line item, and optional `_schedule_cancelled` / `_schedule_start` meta —
+	 * the exact shape {@see Legacy_Storage::get_churned_subscribers_in_window()}
+	 * and its winback counterpart query.
+	 *
+	 * @param array $args Spec: `order_id` (required), `customer_id` (required),
+	 *                    `product_id` (required), `status` (post_status, e.g.
+	 *                    'wc-cancelled' / 'wc-expired' / 'wc-active'),
+	 *                    `schedule_cancelled` (optional 'Y-m-d H:i:s'),
+	 *                    `schedule_start` (optional 'Y-m-d H:i:s'),
+	 *                    `parent_order_id` (optional int — sets `post_parent` to
+	 *                    the initiating shop_order id, the shape
+	 *                    {@see Legacy_Storage::get_new_subscriber_records_in_window()}
+	 *                    reads gate/popup attribution meta from).
+	 * @return int The created subscription's post ID.
+	 */
+	protected function insert_legacy_subscription( array $args ): int {
+		global $wpdb;
+		$order_id = wp_insert_post(
+			[
+				'import_id'   => (int) $args['order_id'],
+				'post_type'   => 'shop_subscription',
+				'post_status' => $args['status'],
+				'post_title'  => 'Subscription',
+				'post_parent' => (int) ( $args['parent_order_id'] ?? 0 ),
+			]
+		);
+		add_post_meta( $order_id, '_customer_user', (string) $args['customer_id'] );
+		if ( isset( $args['schedule_cancelled'] ) ) {
+			add_post_meta( $order_id, '_schedule_cancelled', $args['schedule_cancelled'] );
+		}
+		if ( isset( $args['schedule_start'] ) ) {
+			add_post_meta( $order_id, '_schedule_start', $args['schedule_start'] );
+		}
+		$this->insert_subscription_line_item( (int) $order_id, (int) $args['product_id'] );
+		return (int) $order_id;
+	}
+
+	/**
+	 * Insert an HPOS (`wc_orders`) `shop_subscription`, with its customer_id,
+	 * line item, and optional `_schedule_cancelled` / `_schedule_start` meta —
+	 * the exact shape {@see HPOS_Storage::get_churned_subscribers_in_window()}
+	 * and its winback counterpart query.
+	 *
+	 * @param array $args Same shape as {@see insert_legacy_subscription()};
+	 *                    `parent_order_id` (optional int) sets `parent_order_id`
+	 *                    on `wc_orders`, the shape
+	 *                    {@see HPOS_Storage::get_new_subscriber_records_in_window()}
+	 *                    reads gate/popup attribution meta from.
+	 * @return int The order ID.
+	 */
+	protected function insert_hpos_subscription( array $args ): int {
+		global $wpdb;
+		$p        = $wpdb->prefix;
+		$order_id = (int) $args['order_id'];
+		$wpdb->insert(
+			"{$p}wc_orders",
+			[
+				'id'               => $order_id,
+				'status'           => $args['status'],
+				'type'             => 'shop_subscription',
+				'date_created_gmt' => $args['date'] ?? $this->default_order_date_gmt(),
+				'total_amount'     => $args['total'] ?? 0,
+				'customer_id'      => (int) $args['customer_id'],
+				'parent_order_id'  => (int) ( $args['parent_order_id'] ?? 0 ),
+			]
+		);
+		if ( isset( $args['schedule_cancelled'] ) ) {
+			$wpdb->insert(
+				"{$p}wc_orders_meta",
+				[
+					'order_id'   => $order_id,
+					'meta_key'   => '_schedule_cancelled',
+					'meta_value' => $args['schedule_cancelled'],
+				]
+			);
+		}
+		if ( isset( $args['schedule_start'] ) ) {
+			$wpdb->insert(
+				"{$p}wc_orders_meta",
+				[
+					'order_id'   => $order_id,
+					'meta_key'   => '_schedule_start',
+					'meta_value' => $args['schedule_start'],
+				]
+			);
+		}
+		$this->insert_subscription_line_item( $order_id, (int) $args['product_id'] );
 		return $order_id;
 	}
 }

@@ -7,7 +7,7 @@
  * click, ASC on second click; the gate-name column starts ASC).
  *
  * Null cells (em-dash) always sort to the bottom regardless of
- * direction — a gate without a registration block has no Regwall
+ * direction — a gate without a registration block has no Registered access gate
  * conversion rate to compare, so a "—" should never claim the top of
  * an ascending sort.
  *
@@ -153,9 +153,9 @@ const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => 
 		{ key: 'impressions', label: __( 'Impressions', 'newspack-plugin' ), numeric: true },
 		{ key: 'unique_viewers', label: __( 'Unique viewers', 'newspack-plugin' ), numeric: true },
 		{ key: 'registrations', label: __( 'Registrations', 'newspack-plugin' ), numeric: true },
-		{ key: 'regwall_conversion_rate', label: __( 'Regwall conversion rate', 'newspack-plugin' ), numeric: true },
-		{ key: 'paywall_conversions', label: __( 'Paywall conversions', 'newspack-plugin' ), numeric: true },
-		{ key: 'paywall_conversion_rate', label: __( 'Paywall conversion rate', 'newspack-plugin' ), numeric: true },
+		{ key: 'regwall_conversion_rate', label: __( 'Registered access gate conversion rate', 'newspack-plugin' ), numeric: true },
+		{ key: 'paywall_conversions', label: __( 'Paid access gate conversions', 'newspack-plugin' ), numeric: true },
+		{ key: 'paywall_conversion_rate', label: __( 'Paid access gate conversion rate', 'newspack-plugin' ), numeric: true },
 	];
 
 	const [ sortKey, setSortKey ] = useState< SortKey >( 'impressions' );

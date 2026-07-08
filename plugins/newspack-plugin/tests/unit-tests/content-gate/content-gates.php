@@ -2502,4 +2502,266 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 
 		$this->assertSame( 'any', Content_Rules::get_gate_content_rules_match( $gate_id ), 'Stored match mode must not be reset when the field is absent from the update payload' );
 	}
+
+	/**
+	 * Updating a gate via a payload that omits status must not reset a published
+	 * gate to draft (a draft gate stops enforcing).
+	 */
+	public function test_update_gate_without_status_preserves_stored_status() {
+		$gate_id          = Content_Gate::create_gate(
+			[
+				'title'  => 'Published Gate',
+				'status' => 'publish',
+			]
+		);
+		$this->gate_ids[] = $gate_id;
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Pre-condition: gate is published' );
+
+		// Simulate a REST update that omits the status field.
+		$sanitized = Content_Gate_API::sanitize_gate(
+			[
+				'title'    => 'Published Gate',
+				'priority' => 1,
+			]
+		);
+		$this->assertArrayNotHasKey( 'status', $sanitized, 'Missing status must not be injected into the sanitized output' );
+
+		Content_Gate::update_gate_settings( $gate_id, $sanitized );
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Stored status must not be reset when the field is absent from the update payload' );
+	}
+
+	/**
+	 * A partial REST update (e.g. title/priority only) must not wipe a published
+	 * gate's content rules, registration, or custom access settings (an empty
+	 * content_rules set stops the gate from enforcing).
+	 */
+	public function test_update_gate_without_rules_preserves_stored_rules_and_status() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Rules Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate as published with content rules.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Rules Gate',
+				'priority'      => 0,
+				'status'        => 'publish',
+				'content_rules' => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+				],
+			]
+		);
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Pre-condition: gate is published' );
+		$this->assertNotEmpty( Content_Rules::get_gate_content_rules( $gate_id ), 'Pre-condition: gate has content rules' );
+
+		// Simulate a REST update that only sends title and priority.
+		$sanitized = Content_Gate_API::sanitize_gate(
+			[
+				'title'    => 'Rules Gate',
+				'priority' => 1,
+			]
+		);
+		$this->assertArrayNotHasKey( 'content_rules', $sanitized, 'Missing content_rules must not be injected into the sanitized output' );
+		$this->assertArrayNotHasKey( 'registration', $sanitized, 'Missing registration must not be injected into the sanitized output' );
+		$this->assertArrayNotHasKey( 'custom_access', $sanitized, 'Missing custom_access must not be injected into the sanitized output' );
+		$this->assertArrayNotHasKey( 'status', $sanitized, 'Missing status must not be injected into the sanitized output' );
+
+		Content_Gate::update_gate_settings( $gate_id, $sanitized );
+
+		$this->assertNotEmpty( Content_Rules::get_gate_content_rules( $gate_id ), 'Stored content rules must not be wiped when the field is absent from the update payload' );
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Stored status must not be reset when the field is absent from the update payload' );
+	}
+
+	/**
+	 * A status-only REST update payload must not clobber the gate's stored
+	 * title or priority.
+	 */
+	public function test_update_gate_status_only_preserves_title_and_priority() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Original Title' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate as published with a distinct title and priority.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'    => 'Original Title',
+				'priority' => 5,
+				'status'   => 'publish',
+			]
+		);
+		$this->assertSame( 'Original Title', get_post( $gate_id )->post_title, 'Pre-condition: gate has the expected title' );
+		$this->assertSame( '5', get_post_meta( $gate_id, 'gate_priority', true ), 'Pre-condition: gate has the expected priority' );
+
+		// Simulate a REST update that only sends status.
+		$sanitized = Content_Gate_API::sanitize_gate( [ 'status' => 'draft' ] );
+		$this->assertSame( [ 'status' => 'draft' ], $sanitized, 'Sanitized output must contain only the explicitly provided status field' );
+
+		Content_Gate::update_gate_settings( $gate_id, $sanitized );
+
+		$this->assertSame( 'Original Title', get_post( $gate_id )->post_title, 'Stored title must not be reset when the field is absent from the update payload' );
+		$this->assertSame( '5', get_post_meta( $gate_id, 'gate_priority', true ), 'Stored priority must not be reset when the field is absent from the update payload' );
+		$this->assertSame( 'draft', get_post_status( $gate_id ), 'Status must be updated to the explicitly provided value' );
+	}
+
+	/**
+	 * A sparse nested registration/custom_access update payload (e.g. only
+	 * toggling `active`) must not wipe the stored metering, verification, or
+	 * access rules for that mode.
+	 */
+	public function test_update_gate_sparse_nested_settings_preserve_stored_values() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Sparse Nested Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate with full registration and custom_access settings.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Sparse Nested Gate',
+				'priority'      => 0,
+				'registration'  => [
+					'active'               => true,
+					'metering'             => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+					'require_verification' => true,
+				],
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							'slug'  => 'email_domain',
+							'value' => 'example.com',
+						],
+					],
+				],
+			]
+		);
+
+		// Sparse update: only toggle registration.active.
+		$sanitized_registration = Content_Gate_API::sanitize_registration( [ 'active' => false ] );
+		$this->assertSame( [ 'active' => false ], $sanitized_registration, 'Sanitized registration must contain only the explicitly provided field' );
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'registration' => $sanitized_registration ] );
+
+		$registration = Content_Gate::get_registration_settings( $gate_id );
+		$this->assertFalse( $registration['active'], 'Registration active must be updated to the explicitly provided value' );
+		$this->assertTrue( $registration['metering']['enabled'], 'Stored registration metering must not be wiped by a sparse update' );
+		$this->assertSame( 3, $registration['metering']['count'], 'Stored registration metering count must not be wiped by a sparse update' );
+		$this->assertTrue( $registration['require_verification'], 'Stored require_verification must not be wiped by a sparse update' );
+
+		// Sparse update: only toggle custom_access.active.
+		$sanitized_custom_access = Content_Gate_API::sanitize_custom_access( [ 'active' => false ] );
+		$this->assertSame( [ 'active' => false ], $sanitized_custom_access, 'Sanitized custom_access must contain only the explicitly provided field' );
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'custom_access' => $sanitized_custom_access ] );
+
+		$custom_access = Content_Gate::get_custom_access_settings( $gate_id );
+		$this->assertFalse( $custom_access['active'], 'Custom access active must be updated to the explicitly provided value' );
+		$this->assertSame( 'email_domain', $custom_access['access_rules'][0][0]['slug'], 'Stored access_rules must not be wiped by a sparse update' );
+	}
+
+	/**
+	 * A sparse metering update (e.g. only toggling `enabled`) must not wipe
+	 * the stored `count`/`period`, since the storage layer's shallow merge
+	 * would otherwise replace the whole metering array wholesale.
+	 */
+	public function test_update_gate_sparse_metering_preserve_stored_values() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Sparse Metering Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate with full registration and custom_access metering.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Sparse Metering Gate',
+				'priority'      => 0,
+				'registration'  => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'week',
+					],
+				],
+				'custom_access' => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'week',
+					],
+				],
+			]
+		);
+
+		// Sparse update: only toggle registration.metering.enabled.
+		$sanitized_registration = Content_Gate_API::sanitize_registration( [ 'metering' => [ 'enabled' => false ] ] );
+		$this->assertSame( [ 'metering' => [ 'enabled' => false ] ], $sanitized_registration, 'Sanitized registration metering must contain only the explicitly provided field' );
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'registration' => $sanitized_registration ] );
+
+		$registration = Content_Gate::get_registration_settings( $gate_id );
+		$this->assertFalse( $registration['metering']['enabled'], 'Registration metering enabled must be updated to the explicitly provided value' );
+		$this->assertSame( 3, $registration['metering']['count'], 'Stored registration metering count must not be wiped by a sparse update' );
+		$this->assertSame( 'week', $registration['metering']['period'], 'Stored registration metering period must not be wiped by a sparse update' );
+
+		// Sparse update: only toggle custom_access.metering.enabled.
+		$sanitized_custom_access = Content_Gate_API::sanitize_custom_access( [ 'metering' => [ 'enabled' => false ] ] );
+		$this->assertSame( [ 'metering' => [ 'enabled' => false ] ], $sanitized_custom_access, 'Sanitized custom_access metering must contain only the explicitly provided field' );
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'custom_access' => $sanitized_custom_access ] );
+
+		$custom_access = Content_Gate::get_custom_access_settings( $gate_id );
+		$this->assertFalse( $custom_access['metering']['enabled'], 'Custom access metering enabled must be updated to the explicitly provided value' );
+		$this->assertSame( 3, $custom_access['metering']['count'], 'Stored custom_access metering count must not be wiped by a sparse update' );
+		$this->assertSame( 'week', $custom_access['metering']['period'], 'Stored custom_access metering period must not be wiped by a sparse update' );
+	}
+
+	/**
+	 * Creating a gate must fall back to a default title when the payload
+	 * omits one, since sanitize_gate() no longer guarantees a title.
+	 */
+	public function test_create_gate_without_title_uses_default_title() {
+		$gate_id          = Content_Gate::create_gate( [] );
+		$this->gate_ids[] = $gate_id;
+
+		$this->assertSame( 'Untitled Content Gate', get_post( $gate_id )->post_title );
+	}
+
+	/**
+	 * The site-wide default-status option is applied to new-gate payloads that omit
+	 * status, without overriding an explicit status, and without affecting direct
+	 * PHP callers of create_gate() (e.g. WooCommerce Memberships), which rely on
+	 * the 'publish' fallback.
+	 */
+	public function test_with_default_new_gate_status() {
+		Content_Gate::set_default_new_gate_status( 'publish' );
+
+		$defaulted = Content_Gate::with_default_new_gate_status( [ 'title' => 'New Gate' ] );
+		$this->assertSame( 'publish', $defaulted['status'], 'Omitted status must be filled from the site-wide default' );
+
+		$explicit = Content_Gate::with_default_new_gate_status(
+			[
+				'title'  => 'New Gate',
+				'status' => 'draft',
+			]
+		);
+		$this->assertSame( 'draft', $explicit['status'], 'Explicit status must not be overridden by the default' );
+
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Direct PHP Gate' ] );
+		$this->gate_ids[] = $gate_id;
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Direct create_gate() callers keep the publish fallback regardless of the option' );
+
+		Content_Gate::set_default_new_gate_status( 'draft' );
+		$gate_id_2        = Content_Gate::create_gate( [ 'title' => 'Direct PHP Gate 2' ] );
+		$this->gate_ids[] = $gate_id_2;
+		$this->assertSame( 'publish', get_post_status( $gate_id_2 ), 'Memberships-style callers must not be affected by a draft default' );
+
+		delete_option( Content_Gate::DEFAULT_STATUS_OPTION );
+	}
 }

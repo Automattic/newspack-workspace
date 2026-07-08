@@ -1,5 +1,5 @@
 /**
- * Tests for TrafficSourcesSection (NPPD): the Top Campaigns table drops only the
+ * Tests for TrafficSourcesSection (NPPD): the Top campaigns table drops only the
  * rows where source AND medium AND campaign are all "(not set)"; rows with data
  * in any column are kept (including their "(not set)" cells). The table and the
  * rest of the section always render.
@@ -27,7 +27,7 @@ const table = ( rows: unknown[] ) => ( { computable: true, type: 'table', rows }
 const windowOf = ( top_campaigns: unknown ): InsightsWindow =>
 	( { top_campaigns, traffic_sources_breakdown: breakdown } ) as unknown as InsightsWindow;
 
-describe( 'TrafficSourcesSection — Top Campaigns row filtering', () => {
+describe( 'TrafficSourcesSection — Top campaigns row filtering', () => {
 	it( 'drops fully-unattributed (all "(not set)") rows but keeps real ones', () => {
 		render(
 			<TrafficSourcesSection
@@ -72,6 +72,6 @@ describe( 'TrafficSourcesSection — Top Campaigns row filtering', () => {
 		expect( screen.getByText( 'No campaign traffic in this timeframe.' ) ).toBeInTheDocument();
 		// Section + breakdown stay visible.
 		expect( screen.getByText( 'Traffic sources' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Traffic Sources Breakdown' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Traffic sources breakdown' ) ).toBeInTheDocument();
 	} );
 } );

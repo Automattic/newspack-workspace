@@ -28,7 +28,7 @@ const ContentPerformanceSection = ( { current }: SectionProps ) => (
 		/>
 		<div className="newspack-insights__table-grid">
 			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Articles', 'newspack-plugin' ) }</h3>
+				<h3 className="newspack-insights__chart-card-title">{ __( 'Top articles', 'newspack-plugin' ) }</h3>
 				<MetricTable
 					payload={ current.top_pages }
 					emptyMessage={ __( 'No article data in this timeframe.', 'newspack-plugin' ) }
@@ -40,7 +40,7 @@ const ContentPerformanceSection = ( { current }: SectionProps ) => (
 				/>
 			</div>
 			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Authors by Reader Count', 'newspack-plugin' ) }</h3>
+				<h3 className="newspack-insights__chart-card-title">{ __( 'Top authors by reader count', 'newspack-plugin' ) }</h3>
 				<MetricTable
 					payload={ current.top_authors_by_reader_count }
 					emptyMessage={ __( 'No author data in this timeframe.', 'newspack-plugin' ) }
@@ -54,7 +54,7 @@ const ContentPerformanceSection = ( { current }: SectionProps ) => (
 			{ /* Top Categories is hidden_in_v1 (needs BQ UNNEST); it skip-renders until the BQ catalog ships. */ }
 			{ ! current.top_categories?.hidden_in_v1 && (
 				<div>
-					<h3 className="newspack-insights__chart-card-title">{ __( 'Top Categories', 'newspack-plugin' ) }</h3>
+					<h3 className="newspack-insights__chart-card-title">{ __( 'Top categories', 'newspack-plugin' ) }</h3>
 					<MetricTable
 						payload={ current.top_categories }
 						emptyMessage={ __( 'No category data in this timeframe.', 'newspack-plugin' ) }

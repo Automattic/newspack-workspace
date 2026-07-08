@@ -28,6 +28,7 @@ const FALLBACK_CONFIG: InsightsBootConfig = {
 		subscribers: true,
 		donors: true,
 		advertising: true,
+		newsletter_ads: true,
 		app: false,
 	},
 	defaultDateRange: ( () => {
