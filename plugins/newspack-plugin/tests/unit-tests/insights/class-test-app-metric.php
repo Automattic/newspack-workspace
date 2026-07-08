@@ -200,6 +200,43 @@ class Test_App_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Retention aggregates cohort active-users into an average return-rate curve:
+	 * week 0 is 100%, each later week is Σ active ÷ Σ cohort size across cohorts.
+	 * A WP_Error degrades to a non-computable empty curve.
+	 */
+	public function test_parse_retention_result() {
+		$rows = static function ( string $cohort, array $weeks ): array {
+			$out = [];
+			foreach ( $weeks as $nth => $value ) {
+				$out[] = [
+					'dimensionValues' => [ [ 'value' => $cohort ], [ 'value' => sprintf( '%04d', $nth ) ] ],
+					'metricValues'    => [ [ 'value' => (string) $value ] ],
+				];
+			}
+			return $out;
+		};
+		// c0: 100 → 60 → 30 ; c1: 100 → 50 → 20. Aggregate: 200 → 110 → 50.
+		$result  = [ 'rows' => array_merge( $rows( 'c0', [ 100, 60, 30 ] ), $rows( 'c1', [ 100, 50, 20 ] ) ) ];
+		$payload = App_Metric::parse_retention_result( $result );
+
+		$this->assertTrue( $payload['computable'] );
+		$this->assertSame( 'timeseries', $payload['type'] );
+		$this->assertSame(
+			[
+				'week'      => 0,
+				'retention' => 1.0,
+			],
+			$payload['rows'][0]
+		);
+		$this->assertEqualsWithDelta( 0.55, $payload['rows'][1]['retention'], 0.0001 );
+		$this->assertEqualsWithDelta( 0.25, $payload['rows'][2]['retention'], 0.0001 );
+
+		$err = App_Metric::parse_retention_result( new \WP_Error( 'x', 'boom' ) );
+		$this->assertFalse( $err['computable'] );
+		$this->assertSame( [], $err['rows'] );
+	}
+
+	/**
 	 * Metrics gate: no saved property → a `no_property` tab_error (single banner
 	 * instead of N failed reports). No network is hit.
 	 */

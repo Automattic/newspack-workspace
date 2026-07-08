@@ -27,6 +27,7 @@ import WizardsActionCard from '../../wizards-action-card';
 import TabSpinner from './components/TabSpinner';
 import ReachSection from './app/ReachSection';
 import EngagementSection from './app/EngagementSection';
+import RetentionSection from './app/RetentionSection';
 import NotificationsSection from './app/NotificationsSection';
 import EditionsSection from './app/EditionsSection';
 import type { TabSectionProps } from '../components/InsightsWizard';
@@ -139,6 +140,7 @@ const AppMetricsView = ( { range }: { range: TabSectionProps[ 'range' ] } ) => {
 		<div className="newspack-insights__app-tab">
 			<ReachSection metrics={ metrics } />
 			<EngagementSection metrics={ metrics } />
+			<RetentionSection metrics={ metrics } />
 			<NotificationsSection metrics={ metrics } />
 			<EditionsSection metrics={ metrics } />
 		</div>

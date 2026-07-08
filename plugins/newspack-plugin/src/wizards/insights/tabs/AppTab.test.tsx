@@ -36,6 +36,15 @@ const metricsResponse = () => ( {
 		engaged_sessions: { value: 10600, computable: true, type: 'count' },
 		screens_per_session: { value: 6.2, computable: true, type: 'decimal' },
 		screen_views: { value: 70473, computable: true, type: 'count' },
+		retention: {
+			rows: [
+				{ week: 0, retention: 1.0 },
+				{ week: 1, retention: 0.55 },
+				{ week: 2, retention: 0.32 },
+			],
+			computable: true,
+			type: 'timeseries',
+		},
 		notification_open_rate: { value: 0.228, computable: true, type: 'rate' },
 		notifications_received: { value: 614, computable: true, type: 'count' },
 		notification_opt_changes: { value: 123, computable: true, type: 'count' },
@@ -124,6 +133,7 @@ describe( 'AppTab', () => {
 		expect( screen.getByText( 'Active users' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Engagement' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Avg. engagement time' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Retention' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Notifications' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Editions' ) ).toBeInTheDocument();
 		await waitFor( () => expect( mockMetrics ).toHaveBeenCalledWith( '2026-05-01', '2026-05-31' ) );

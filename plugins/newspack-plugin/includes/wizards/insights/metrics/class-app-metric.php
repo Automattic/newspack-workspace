@@ -52,6 +52,16 @@ final class App_Metric {
 	const METRICS_CACHE_PREFIX = 'newspack_insights_app_metrics_v1:';
 
 	/**
+	 * Retention curve length — nth-weeks after first open (0..N-1).
+	 */
+	const RETENTION_NTH_WEEKS = 4;
+
+	/**
+	 * Weekly acquisition cohorts averaged into the retention curve.
+	 */
+	const RETENTION_COHORTS = 4;
+
+	/**
 	 * Whether this site is a Pugpig app publisher, read at runtime from the
 	 * Newspack Manager companion plugin (same PHP process on managed sites).
 	 * Guarded with class_exists so non-managed sites degrade cleanly.
@@ -319,6 +329,107 @@ final class App_Metric {
 	}
 
 	/**
+	 * A non-computable rows payload (graceful failure for breakdown/timeseries).
+	 *
+	 * @param string $type Payload type.
+	 * @return array
+	 */
+	private static function not_computable_rows( string $type ): array {
+		return [
+			'rows'       => [],
+			'computable' => false,
+			'type'       => $type,
+		];
+	}
+
+	/**
+	 * Weekly-cohort retention curve. Uses several *complete* weekly acquisition
+	 * cohorts (each old enough that all {@see self::RETENTION_NTH_WEEKS} nth-weeks
+	 * have elapsed, so the tail isn't deflated by too-recent users) and aggregates
+	 * them into an average return-rate curve: week 0 is 100% by definition, week N
+	 * is Σ active at nth-week N ÷ Σ cohort size. GA4 cohort reports require
+	 * absolute, Sunday-aligned dates (relative dates 400).
+	 *
+	 * @param string $property GA4 property ID.
+	 * @return array timeseries payload.
+	 */
+	private static function compute_retention( string $property ): array {
+		$last_saturday = strtotime( 'last saturday' );
+		if ( false === $last_saturday ) {
+			return self::not_computable_rows( 'timeseries' );
+		}
+
+		$cohorts = [];
+		for ( $i = 0; $i < self::RETENTION_COHORTS; $i++ ) {
+			$weeks_back = ( self::RETENTION_NTH_WEEKS - 1 ) + $i;
+			$saturday   = $last_saturday - ( $weeks_back * 7 * DAY_IN_SECONDS );
+			$sunday     = $saturday - ( 6 * DAY_IN_SECONDS );
+			$cohorts[]  = [
+				'name'      => 'c' . $i,
+				'dimension' => 'firstSessionDate',
+				'dateRange' => [
+					'startDate' => gmdate( 'Y-m-d', $sunday ),
+					'endDate'   => gmdate( 'Y-m-d', $saturday ),
+				],
+			];
+		}
+
+		$result = Client::run_report(
+			$property,
+			[
+				'cohortSpec' => [
+					'cohorts'      => $cohorts,
+					'cohortsRange' => [
+						'granularity' => 'WEEKLY',
+						'startOffset' => 0,
+						'endOffset'   => self::RETENTION_NTH_WEEKS - 1,
+					],
+				],
+				'dimensions' => [ [ 'name' => 'cohort' ], [ 'name' => 'cohortNthWeek' ] ],
+				'metrics'    => [ [ 'name' => 'cohortActiveUsers' ] ],
+			]
+		);
+		return self::parse_retention_result( $result );
+	}
+
+	/**
+	 * Aggregate a GA4 cohort result into an average retention curve. Pure, so the
+	 * math is unit-testable without the network.
+	 *
+	 * @param array|\WP_Error $result GA4 cohort runReport result.
+	 * @return array timeseries payload { rows:[{week,retention}], computable, type }.
+	 */
+	public static function parse_retention_result( $result ): array {
+		if ( is_wp_error( $result ) ) {
+			return self::not_computable_rows( 'timeseries' );
+		}
+		$by_week = [];
+		foreach ( $result['rows'] ?? [] as $row ) {
+			// dimensions are [ cohort, cohortNthWeek ]; cohortNthWeek is "0000"..
+			$nth               = (int) ( $row['dimensionValues'][1]['value'] ?? 0 );
+			$val               = (int) ( $row['metricValues'][0]['value'] ?? 0 );
+			$by_week[ $nth ]   = ( $by_week[ $nth ] ?? 0 ) + $val;
+		}
+		if ( empty( $by_week[0] ) ) {
+			return self::not_computable_rows( 'timeseries' );
+		}
+		$base = $by_week[0];
+		ksort( $by_week );
+		$rows = [];
+		foreach ( $by_week as $week => $active ) {
+			$rows[] = [
+				'week'      => $week,
+				'retention' => (float) ( $active / $base ),
+			];
+		}
+		return [
+			'rows'       => $rows,
+			'computable' => true,
+			'type'       => 'timeseries',
+		];
+	}
+
+	/**
 	 * Compose + run the GA4 reports for a property/window. Reach + Engagement
 	 * scalars batch into one runReport (GA4 caps a request at 10 metrics);
 	 * platform + app-version are one breakdown report each; Notifications +
@@ -443,7 +554,11 @@ final class App_Metric {
 			'edition_opens'            => $ev_ok ? self::count_payload( $ev['BoltEditionOpened'] ) : self::not_computable( 'count' ),
 		];
 
-		return array_merge( $scalars, $breakdowns, $events );
+		// Retention uses its own trailing complete-week cohorts, not the selected
+		// window; it's a separate cohort report.
+		$retention = [ 'retention' => self::compute_retention( $property ) ];
+
+		return array_merge( $scalars, $breakdowns, $events, $retention );
 	}
 
 
@@ -640,6 +755,28 @@ final class App_Metric {
 				'value'      => 4180,
 				'computable' => true,
 				'type'       => 'count',
+			],
+			'retention'                => [
+				'rows'       => [
+					[
+						'week'      => 0,
+						'retention' => 1.0,
+					],
+					[
+						'week'      => 1,
+						'retention' => 0.55,
+					],
+					[
+						'week'      => 2,
+						'retention' => 0.32,
+					],
+					[
+						'week'      => 3,
+						'retention' => 0.18,
+					],
+				],
+				'computable' => true,
+				'type'       => 'timeseries',
 			],
 			'platform'                 => [
 				'rows'       => [
