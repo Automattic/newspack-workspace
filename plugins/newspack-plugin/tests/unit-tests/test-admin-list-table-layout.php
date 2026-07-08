@@ -103,4 +103,15 @@ class Test_Admin_List_Table_Layout extends \WP_UnitTestCase {
 			remove_all_filters( 'newspack_admin_primary_column_min_width' );
 		}
 	}
+
+	public function test_init_registers_admin_head_hooks(): void {
+		// The class self-calls init() on require (set_up_before_class), so the
+		// hooks should already be registered.
+		$this->assertNotFalse(
+			has_action( 'admin_head-edit.php', [ Admin_List_Table_Layout::class, 'render_styles' ] )
+		);
+		$this->assertNotFalse(
+			has_action( 'admin_head-edit-tags.php', [ Admin_List_Table_Layout::class, 'render_styles' ] )
+		);
+	}
 }

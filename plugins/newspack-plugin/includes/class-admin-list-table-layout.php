@@ -46,6 +46,14 @@ class Admin_List_Table_Layout {
 	private static $registered = [];
 
 	/**
+	 * Hook style output onto list-table screens.
+	 */
+	public static function init() {
+		add_action( 'admin_head-edit.php', [ __CLASS__, 'render_styles' ] );
+		add_action( 'admin_head-edit-tags.php', [ __CLASS__, 'render_styles' ] );
+	}
+
+	/**
 	 * Register an additional screen for the auto-layout treatment.
 	 *
 	 * @param string $key A post_type, taxonomy, or screen id.
@@ -151,3 +159,4 @@ class Admin_List_Table_Layout {
 		echo "<style id=\"newspack-admin-list-table-layout\">\n" . $styles . "\n</style>\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 	}
 }
+Admin_List_Table_Layout::init();
