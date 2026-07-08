@@ -36,6 +36,13 @@ const metricsResponse = () => ( {
 		engaged_sessions: { value: 10600, computable: true, type: 'count' },
 		screens_per_session: { value: 6.2, computable: true, type: 'decimal' },
 		screen_views: { value: 70473, computable: true, type: 'count' },
+		notification_open_rate: { value: 0.228, computable: true, type: 'rate' },
+		notifications_received: { value: 614, computable: true, type: 'count' },
+		notification_opt_changes: { value: 123, computable: true, type: 'count' },
+		downloads_started: { value: 35495, computable: true, type: 'count' },
+		downloads_completed: { value: 33805, computable: true, type: 'count' },
+		download_completion_rate: { value: 0.952, computable: true, type: 'rate' },
+		edition_opens: { value: 4180, computable: true, type: 'count' },
 	},
 } );
 
@@ -117,6 +124,8 @@ describe( 'AppTab', () => {
 		expect( screen.getByText( 'Active users' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Engagement' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Avg. engagement time' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Notifications' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Editions' ) ).toBeInTheDocument();
 		await waitFor( () => expect( mockMetrics ).toHaveBeenCalledWith( '2026-05-01', '2026-05-31' ) );
 	} );
 

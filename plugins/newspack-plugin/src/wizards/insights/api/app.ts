@@ -72,6 +72,15 @@ export interface AppMetrics {
 	engaged_sessions?: MetricPayload;
 	screens_per_session?: MetricPayload;
 	screen_views?: MetricPayload;
+	// Notifications.
+	notification_open_rate?: MetricPayload;
+	notifications_received?: MetricPayload;
+	notification_opt_changes?: MetricPayload;
+	// Editions.
+	downloads_started?: MetricPayload;
+	downloads_completed?: MetricPayload;
+	download_completion_rate?: MetricPayload;
+	edition_opens?: MetricPayload;
 }
 
 export interface AppMetricsResponse {

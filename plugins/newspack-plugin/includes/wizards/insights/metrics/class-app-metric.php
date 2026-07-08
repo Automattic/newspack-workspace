@@ -232,10 +232,98 @@ final class App_Metric {
 	}
 
 	/**
+	 * Run one GA4 report counting a set of events, returning `[ ok, counts ]` where
+	 * `counts` maps every requested event name to its integer count (0 when
+	 * absent). A report failure yields `[ false, [] ]` so callers can mark their
+	 * cards non-computable rather than showing a wrong zero.
+	 *
+	 * @param string   $property GA4 property ID.
+	 * @param array    $range    The dateRanges wrapper.
+	 * @param string[] $events   Event names to count.
+	 * @return array{0:bool,1:array<string,int>}
+	 */
+	private static function event_counts_report( string $property, array $range, array $events ): array {
+		$result = Client::run_report(
+			$property,
+			$range + [
+				'dimensions'      => [ [ 'name' => 'eventName' ] ],
+				'metrics'         => [ [ 'name' => 'eventCount' ] ],
+				'dimensionFilter' => [
+					'filter' => [
+						'fieldName'    => 'eventName',
+						'inListFilter' => [ 'values' => $events ],
+					],
+				],
+			]
+		);
+		if ( is_wp_error( $result ) ) {
+			return [ false, [] ];
+		}
+		$counts = array_fill_keys( $events, 0 );
+		foreach ( $result['rows'] ?? [] as $row ) {
+			$name = $row['dimensionValues'][0]['value'] ?? '';
+			if ( array_key_exists( $name, $counts ) ) {
+				$counts[ $name ] = (int) ( $row['metricValues'][0]['value'] ?? 0 );
+			}
+		}
+		return [ true, $counts ];
+	}
+
+	/**
+	 * A computable count scorecard payload.
+	 *
+	 * @param int $value Count.
+	 * @return array
+	 */
+	private static function count_payload( int $value ): array {
+		return [
+			'value'      => $value,
+			'computable' => true,
+			'type'       => 'count',
+		];
+	}
+
+	/**
+	 * A rate scorecard payload from numerator/denominator (0–1). Non-computable
+	 * when the denominator is zero.
+	 *
+	 * @param int $numerator   Numerator.
+	 * @param int $denominator Denominator.
+	 * @return array
+	 */
+	private static function rate_payload( int $numerator, int $denominator ): array {
+		if ( $denominator <= 0 ) {
+			return self::not_computable( 'rate' );
+		}
+		return [
+			'value'       => $numerator / $denominator,
+			'computable'  => true,
+			'type'        => 'rate',
+			'numerator'   => $numerator,
+			'denominator' => $denominator,
+		];
+	}
+
+	/**
+	 * A non-computable payload of the given type (graceful failure).
+	 *
+	 * @param string $type Payload type.
+	 * @return array
+	 */
+	private static function not_computable( string $type ): array {
+		return [
+			'value'      => 0,
+			'computable' => false,
+			'type'       => $type,
+		];
+	}
+
+	/**
 	 * Compose + run the GA4 reports for a property/window. Reach + Engagement
 	 * scalars batch into one runReport (GA4 caps a request at 10 metrics);
-	 * platform + app-version are one breakdown report each. PR1 ships Reach +
-	 * Engagement; later sections add their own keys here.
+	 * platform + app-version are one breakdown report each; Notifications +
+	 * Editions come from one event-count report. Later sections add their own
+	 * keys here.
 	 *
 	 * @param string $property   GA4 property ID.
 	 * @param string $start_date YYYY-MM-DD.
@@ -327,7 +415,35 @@ final class App_Metric {
 			),
 		];
 
-		return array_merge( $scalars, $breakdowns );
+		// Notifications + Editions: one event-count report for all the event-based
+		// metrics. Missing events count as 0; a report failure marks the cards
+		// non-computable rather than showing a wrong zero.
+		[ $ev_ok, $ev ] = self::event_counts_report(
+			$property,
+			$range,
+			[
+				'notification_receive',
+				'notification_open',
+				'BoltNotificationStatusChange',
+				'BoltDownloadStarted',
+				'BoltDownloadCompleted',
+				'BoltEditionOpened',
+			]
+		);
+
+		$events = [
+			// Notifications.
+			'notification_open_rate'   => $ev_ok ? self::rate_payload( $ev['notification_open'], $ev['notification_receive'] ) : self::not_computable( 'rate' ),
+			'notifications_received'   => $ev_ok ? self::count_payload( $ev['notification_receive'] ) : self::not_computable( 'count' ),
+			'notification_opt_changes' => $ev_ok ? self::count_payload( $ev['BoltNotificationStatusChange'] ) : self::not_computable( 'count' ),
+			// Editions.
+			'downloads_started'        => $ev_ok ? self::count_payload( $ev['BoltDownloadStarted'] ) : self::not_computable( 'count' ),
+			'downloads_completed'      => $ev_ok ? self::count_payload( $ev['BoltDownloadCompleted'] ) : self::not_computable( 'count' ),
+			'download_completion_rate' => $ev_ok ? self::rate_payload( $ev['BoltDownloadCompleted'], $ev['BoltDownloadStarted'] ) : self::not_computable( 'rate' ),
+			'edition_opens'            => $ev_ok ? self::count_payload( $ev['BoltEditionOpened'] ) : self::not_computable( 'count' ),
+		];
+
+		return array_merge( $scalars, $breakdowns, $events );
 	}
 
 
@@ -446,47 +562,86 @@ final class App_Metric {
 	 */
 	private static function get_fixture_metrics(): array {
 		return [
-			'active_users'        => [
+			'active_users'             => [
 				'value'      => 892,
 				'computable' => true,
 				'type'       => 'count',
 			],
-			'new_users'           => [
+			'new_users'                => [
 				'value'      => 150,
 				'computable' => true,
 				'type'       => 'count',
 			],
-			'sessions'            => [
+			'sessions'                 => [
 				'value'      => 12790,
 				'computable' => true,
 				'type'       => 'count',
 			],
-			'avg_engagement_time' => [
+			'avg_engagement_time'      => [
 				'value'      => 1130,
 				'computable' => true,
 				'type'       => 'duration',
 			],
-			'engagement_rate'     => [
+			'engagement_rate'          => [
 				'value'      => 0.83,
 				'computable' => true,
 				'type'       => 'rate',
 			],
-			'engaged_sessions'    => [
+			'engaged_sessions'         => [
 				'value'      => 10600,
 				'computable' => true,
 				'type'       => 'count',
 			],
-			'screens_per_session' => [
+			'screens_per_session'      => [
 				'value'      => 6.2,
 				'computable' => true,
 				'type'       => 'decimal',
 			],
-			'screen_views'        => [
+			'screen_views'             => [
 				'value'      => 70473,
 				'computable' => true,
 				'type'       => 'count',
 			],
-			'platform'            => [
+			'notification_open_rate'   => [
+				'value'       => 140 / 614,
+				'computable'  => true,
+				'type'        => 'rate',
+				'numerator'   => 140,
+				'denominator' => 614,
+			],
+			'notifications_received'   => [
+				'value'      => 614,
+				'computable' => true,
+				'type'       => 'count',
+			],
+			'notification_opt_changes' => [
+				'value'      => 123,
+				'computable' => true,
+				'type'       => 'count',
+			],
+			'downloads_started'        => [
+				'value'      => 35495,
+				'computable' => true,
+				'type'       => 'count',
+			],
+			'downloads_completed'      => [
+				'value'      => 33805,
+				'computable' => true,
+				'type'       => 'count',
+			],
+			'download_completion_rate' => [
+				'value'       => 33805 / 35495,
+				'computable'  => true,
+				'type'        => 'rate',
+				'numerator'   => 33805,
+				'denominator' => 35495,
+			],
+			'edition_opens'            => [
+				'value'      => 4180,
+				'computable' => true,
+				'type'       => 'count',
+			],
+			'platform'                 => [
 				'rows'       => [
 					[
 						'platform'     => 'iOS',
@@ -500,7 +655,7 @@ final class App_Metric {
 				'computable' => true,
 				'type'       => 'breakdown',
 			],
-			'app_version'         => [
+			'app_version'              => [
 				'rows'       => [
 					[
 						'app_version'  => '1.2',
