@@ -25,16 +25,15 @@ import type { ErrorInfo, ReactNode } from 'react';
  * Internal dependencies
  */
 import { Wizard } from '../../../../packages/components/src';
-import ComparisonToggle from './ComparisonToggle';
-import DateRangePicker from './DateRangePicker';
 import CooldownNotice from './CooldownNotice';
+import HeaderControls from './HeaderControls';
 import PrintDocumentMeta from './PrintDocumentMeta';
 import TabFeedback from './TabFeedback';
 import NextSteps from './NextSteps';
 import FeedbackShipCallback from './FeedbackShipCallback';
 import TabSpinner from '../tabs/components/TabSpinner';
-import useComparisonMode from '../state/useComparisonMode';
-import useDateRange, { type DateRange } from '../state/useDateRange';
+import usePendingControls from '../state/usePendingControls';
+import type { DateRange } from '../state/useDateRange';
 import { RefreshRegistryProvider } from '../state/refreshRegistry';
 
 export type TabKey =
@@ -249,17 +248,9 @@ const TabSection = ( {
 );
 
 const InsightsWizard = ( { config }: InsightsWizardProps ) => {
-	const { range, setPreset, setCustom } = useDateRange( {
+	const controls = usePendingControls( {
 		defaultRange: config.defaultDateRange,
-	} );
-
-	const {
-		enabled: comparisonEnabled,
-		setEnabled: setComparisonEnabled,
-		previousRange,
-	} = useComparisonMode( {
-		defaultEnabled: config.defaultComparison,
-		currentRange: range,
+		defaultComparison: config.defaultComparison,
 	} );
 
 	// Backwards-compat: rewrite legacy ?tab=X URLs to #/X so existing
@@ -310,8 +301,8 @@ const InsightsWizard = ( { config }: InsightsWizardProps ) => {
 		props: {
 			tabKey: t.key,
 			tabLabel: t.label,
-			range,
-			previousRange,
+			range: controls.appliedRange,
+			previousRange: controls.appliedPreviousRange,
 			publisherName: config.publisherName,
 			nextStepsLinks: config.nextStepsLinks?.[ t.key ] ?? [],
 			feedbackBeaconUrl: config.feedbackBeaconUrl,
@@ -319,12 +310,7 @@ const InsightsWizard = ( { config }: InsightsWizardProps ) => {
 		},
 	} ) );
 
-	const renderAboveSections = () => (
-		<div className="newspack-insights__header-controls">
-			<DateRangePicker range={ range } onPresetChange={ setPreset } onCustomChange={ setCustom } />
-			<ComparisonToggle enabled={ comparisonEnabled } onChange={ setComparisonEnabled } />
-		</div>
-	);
+	const renderAboveSections = () => <HeaderControls controls={ controls } />;
 
 	return (
 		<RefreshRegistryProvider>

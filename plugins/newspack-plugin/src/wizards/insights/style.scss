@@ -24,20 +24,31 @@
 .newspack-insights {
 	color: wp-colors.$gray-900;
 
-	// Date range picker + comparison toggle row rendered via the
-	// Wizard's renderAboveSections slot. Sits above the section
-	// content, right-aligned to mirror the old header-right placement.
+	// Column: the controls row on top, the Apply / Cancel action row beneath,
+	// both right-aligned. Rendered via the Wizard's renderAboveSections slot.
 	&__header-controls {
+		align-items: flex-start;
 		display: flex;
 		flex-wrap: wrap;
-		align-items: center;
-		justify-content: flex-end;
 		gap: 16px;
 		margin-bottom: 24px;
 
-		@media ( max-width: 782px ) {
-			justify-content: flex-start;
+		@media ( min-width: 783px ) {
+			align-items: center;
+			justify-content: flex-end;
 		}
+
+		.components-button.has-icon svg {
+			fill: wp-colors.$gray-900;
+		}
+	}
+
+	&__header-controls-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: flex-start;
+		gap: 4px;
 	}
 
 	// While a tab is loading (chunk Suspense fallback OR in-tab loading view),
@@ -107,9 +118,9 @@
 		margin: 0;
 	}
 
-	// Date range picker
-
-	&__date-range-picker {
+	// Date range picker + comparison toggle
+	&__date-range-picker,
+	&__comparison-toggle {
 		display: flex;
 		align-items: center;
 		gap: 8px;
@@ -130,10 +141,11 @@
 		gap: 6px;
 
 		input[type="date"] {
-			font-size: 13px;
+			font-size: 12px;
+			min-height: 34px;
 			padding: 6px 8px;
 			border: 1px solid wp-colors.$gray-300;
-			border-radius: 4px;
+			border-radius: 2px;
 			background: #fff;
 			color: wp-colors.$gray-900;
 
@@ -256,6 +268,18 @@
 	&__info-callout-title {
 		margin: 0;
 		font-size: 14px;
+	}
+
+	&__confirm-modal-message {
+		margin: 0;
+	}
+
+	// Match the FeedbackModal action row: horizontal, right-aligned.
+	&__confirm-modal-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 8px;
+		margin-top: 24px;
 	}
 }
 
