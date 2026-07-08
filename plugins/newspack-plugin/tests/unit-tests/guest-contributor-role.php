@@ -338,4 +338,90 @@ class Newspack_Test_Guest_Contributor_Role extends WP_UnitTestCase {
 			'Should not identify real email as dummy.'
 		);
 	}
+
+	/**
+	 * Outbound mail to generated dummy addresses must be suppressed entirely.
+	 */
+	public function test_mail_to_dummy_address_is_blocked() {
+		reset_phpmailer_instance();
+		$result = wp_mail( 'someuser@example.com', 'Test subject', 'Test body' ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
+		$this->assertTrue( $result, 'Suppressed mail must still report success to callers.' );
+		$mailer = tests_retrieve_phpmailer_instance();
+		$this->assertEmpty( $mailer->get_sent(), 'No email should be dispatched to a dummy address.' );
+	}
+
+	/**
+	 * Mixed recipient lists keep real addresses and drop dummy ones.
+	 */
+	public function test_mail_to_mixed_recipients_drops_only_dummy() {
+		reset_phpmailer_instance();
+		wp_mail( [ 'real@realdomain.org', 'fake@example.com' ], 'Test subject', 'Test body' ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
+		$mailer = tests_retrieve_phpmailer_instance();
+		$sent   = $mailer->get_sent();
+		$this->assertNotEmpty( $sent, 'Mail with at least one real recipient must still send.' );
+		$recipients = array_map(
+			function ( $recipient ) {
+				return $recipient[0];
+			},
+			$sent->to
+		);
+		$this->assertContains( 'real@realdomain.org', $recipients );
+		$this->assertNotContains( 'fake@example.com', $recipients );
+	}
+
+	/**
+	 * Ordinary mail is untouched by the guard.
+	 */
+	public function test_mail_to_real_address_is_sent() {
+		reset_phpmailer_instance();
+		wp_mail( 'reader@realdomain.org', 'Test subject', 'Test body' ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
+		$mailer = tests_retrieve_phpmailer_instance();
+		$this->assertNotEmpty( $mailer->get_sent() );
+	}
+
+	/**
+	 * The dummy-domain match must be end-anchored: an address on a domain that
+	 * merely starts with "example.com" is not a dummy address.
+	 */
+	public function test_is_dummy_email_address_end_anchored() {
+		$this->assertTrue( Guest_Contributor_Role::is_dummy_email_address( 'someone@example.com' ) );
+		$this->assertFalse( Guest_Contributor_Role::is_dummy_email_address( 'user@example.company.com' ) );
+	}
+
+	/**
+	 * A trailing comma (empty list entry) must not defeat the suppression.
+	 */
+	public function test_mail_to_dummy_with_trailing_comma_is_blocked() {
+		reset_phpmailer_instance();
+		$result = wp_mail( 'someuser@example.com,', 'Test subject', 'Test body' ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
+		$this->assertTrue( $result, 'Suppressed mail must still report success despite empty list entries.' );
+		$mailer = tests_retrieve_phpmailer_instance();
+		$this->assertEmpty( $mailer->get_sent() );
+	}
+
+	/**
+	 * Mail with an all-dummy "to" but a real Cc header must NOT be suppressed —
+	 * the Cc recipient's delivery is legitimate.
+	 */
+	public function test_all_dummy_to_with_cc_header_still_sends() {
+		reset_phpmailer_instance();
+		wp_mail( 'someuser@example.com', 'Test subject', 'Test body', [ 'Cc: real-cc@realdomain.org' ] ); // phpcs:ignore WordPressVIPMinimum.Functions.RestrictedFunctions.wp_mail_wp_mail
+		$mailer = tests_retrieve_phpmailer_instance();
+		$sent   = $mailer->get_sent();
+		$this->assertNotEmpty( $sent, 'Mail with a Cc header must not be short-circuited.' );
+		$cc = array_map(
+			function ( $recipient ) {
+				return $recipient[0];
+			},
+			$sent->cc
+		);
+		$this->assertContains( 'real-cc@realdomain.org', $cc );
+		$to = array_map(
+			function ( $recipient ) {
+				return $recipient[0];
+			},
+			$sent->to
+		);
+		$this->assertNotContains( 'someuser@example.com', $to, 'The dummy to-recipient must still be stripped.' );
+	}
 }

@@ -87,6 +87,12 @@ class Guest_Contributor_Role {
 		\add_filter( 'theme_mod_show_author_email', [ __CLASS__, 'should_display_author_email' ] );
 		\add_filter( 'newspack_show_coauthor_email', [ __CLASS__, 'should_display_coauthor_email' ], 10, 2 );
 
+		// Never send email to generated placeholder addresses — they bounce and
+		// can get the site's outbound email blocked (e.g. comment notifications
+		// to Guest Contributors created without a real email).
+		\add_filter( 'pre_wp_mail', [ __CLASS__, 'short_circuit_dummy_only_email' ], 10, 2 );
+		\add_filter( 'wp_mail', [ __CLASS__, 'remove_dummy_email_recipients' ], 10, 1 );
+
 		// Make sure we check again if the site has guest authors every hour.
 		$re_check_guest_authors = 'newspack_re_check_guest_authors';
 		if ( ! \wp_next_scheduled( $re_check_guest_authors ) ) {
@@ -279,10 +285,157 @@ class Guest_Contributor_Role {
 	/**
 	 * Is a dummy email address?
 	 *
+	 * The match is end-anchored so addresses on domains that merely contain
+	 * the dummy domain as a prefix (e.g. user@example.company.com) are not
+	 * mistaken for placeholders.
+	 *
 	 * @param string $email_address Email address to check.
 	 */
 	public static function is_dummy_email_address( $email_address ) {
-		return strpos( $email_address, '@' . self::get_dummy_email_domain() ) !== false;
+		$suffix = strtolower( '@' . self::get_dummy_email_domain() );
+		return str_ends_with( strtolower( trim( (string) $email_address ) ), $suffix );
+	}
+
+	/**
+	 * Short-circuit wp_mail() when every recipient is a generated placeholder
+	 * address. Returning true reports the email as sent without dispatching
+	 * anything, so callers behave as if delivery succeeded.
+	 *
+	 * Core applies the 'wp_mail' filter before this one, so the recipient
+	 * list seen here has already been stripped by
+	 * remove_dummy_email_recipients() — which deliberately leaves an
+	 * all-dummy list intact (absent Cc/Bcc) so it can be recognized and
+	 * suppressed here.
+	 *
+	 * Scope notes: mail whose headers carry Cc/Bcc recipients is never
+	 * short-circuited — suppressing it would also suppress delivery to those
+	 * (possibly real) header recipients. Dummy addresses inside Cc/Bcc headers
+	 * are not scrubbed by this guard. Mailer plugins that take over delivery
+	 * from their own pre_wp_mail callback bypass the wp_mail filter below, so
+	 * mixed-list stripping does not apply there.
+	 *
+	 * @param null|bool $return Short-circuit return value.
+	 * @param array     $atts   wp_mail() arguments.
+	 *
+	 * @return null|bool
+	 */
+	public static function short_circuit_dummy_only_email( $return, $atts ) {
+		if ( null !== $return ) {
+			return $return;
+		}
+		if ( empty( $atts['to'] ) ) {
+			return $return;
+		}
+		if ( self::has_cc_or_bcc_headers( $atts['headers'] ?? '' ) ) {
+			return $return;
+		}
+		$recipients = self::parse_recipients( $atts['to'] );
+		if ( ! empty( $recipients ) && empty( self::remove_dummy_addresses( $recipients ) ) ) {
+			return true;
+		}
+		return $return;
+	}
+
+	/**
+	 * Remove generated placeholder addresses from a wp_mail() recipient list,
+	 * so mixed recipient lists still reach their real recipients. The value
+	 * (and its string-vs-array type) is left untouched unless a placeholder
+	 * was actually removed.
+	 *
+	 * @param array $args wp_mail() arguments.
+	 *
+	 * @return array
+	 */
+	public static function remove_dummy_email_recipients( $args ) {
+		if ( empty( $args['to'] ) ) {
+			return $args;
+		}
+		$recipients = self::parse_recipients( $args['to'] );
+		$filtered   = self::remove_dummy_addresses( $recipients );
+		if ( count( $filtered ) === count( $recipients ) ) {
+			// Nothing removed — leave the value (and its type) untouched.
+			return $args;
+		}
+		if ( ! empty( $filtered ) ) {
+			$args['to'] = $filtered;
+			return $args;
+		}
+		// Every recipient was a placeholder. Core applies this filter BEFORE
+		// pre_wp_mail, so when the mail has no other (Cc/Bcc) recipients the
+		// list must be left as-is for short_circuit_dummy_only_email() to
+		// suppress the send; emptying it here would make wp_mail() error out
+		// instead of reporting success. With Cc/Bcc present the mail proceeds
+		// to those recipients only.
+		if ( self::has_cc_or_bcc_headers( $args['headers'] ?? '' ) ) {
+			$args['to'] = [];
+		}
+		return $args;
+	}
+
+	/**
+	 * Whether a wp_mail() headers value carries Cc or Bcc recipients.
+	 *
+	 * @param string|string[] $headers Headers, as a string or array of lines.
+	 *
+	 * @return bool
+	 */
+	private static function has_cc_or_bcc_headers( $headers ): bool {
+		$lines = is_array( $headers ) ? $headers : preg_split( '/\r\n|\r|\n/', (string) $headers );
+		foreach ( $lines as $line ) {
+			if ( preg_match( '/^\s*b?cc\s*:/i', (string) $line ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Normalize a wp_mail() recipient value into a clean list: split
+	 * comma-separated strings, trim, and drop empty entries.
+	 *
+	 * @param string|string[] $to Recipients.
+	 *
+	 * @return string[]
+	 */
+	private static function parse_recipients( $to ): array {
+		$recipients = is_array( $to ) ? $to : explode( ',', (string) $to );
+		$recipients = array_map(
+			function ( $recipient ) {
+				return trim( (string) $recipient );
+			},
+			$recipients
+		);
+		return array_values(
+			array_filter(
+				$recipients,
+				function ( $recipient ) {
+					return '' !== $recipient;
+				}
+			)
+		);
+	}
+
+	/**
+	 * Filter dummy addresses out of a normalized recipient list. Entries may
+	 * be bare addresses or "Name <address>".
+	 *
+	 * @param string[] $recipients Recipients.
+	 *
+	 * @return string[] Recipients that are not dummy addresses.
+	 */
+	private static function remove_dummy_addresses( array $recipients ): array {
+		return array_values(
+			array_filter(
+				$recipients,
+				function ( $recipient ) {
+					$address = $recipient;
+					if ( preg_match( '/<([^>]+)>/', $address, $matches ) ) {
+						$address = $matches[1];
+					}
+					return ! self::is_dummy_email_address( $address );
+				}
+			)
+		);
 	}
 
 	/**
