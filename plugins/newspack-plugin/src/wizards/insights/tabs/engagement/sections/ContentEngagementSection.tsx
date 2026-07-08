@@ -35,7 +35,7 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 		     tables fill row 1 as a clean 2-up — no full-width stretch. */ }
 		<div className="newspack-insights__table-grid newspack-insights__table-grid--cols-2">
 			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Most-Engaged Articles', 'newspack-plugin' ) }</h3>
+				<h3 className="newspack-insights__chart-card-title">{ __( 'Most-engaged articles', 'newspack-plugin' ) }</h3>
 				<MetricTable
 					payload={ current.most_read_articles }
 					emptyMessage={ __( 'No article engagement data in this timeframe.', 'newspack-plugin' ) }
@@ -49,7 +49,7 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 			{ /* Completion is GA4-scroll-derived; hidden until scroll data flows. See ../constants. */ }
 			{ SHOW_COMPLETION_METRICS && (
 				<div>
-					<h3 className="newspack-insights__chart-card-title">{ __( 'Articles by Completion Rate', 'newspack-plugin' ) }</h3>
+					<h3 className="newspack-insights__chart-card-title">{ __( 'Articles by completion rate', 'newspack-plugin' ) }</h3>
 					<MetricTable
 						payload={ current.articles_by_completion_rate }
 						emptyMessage={ __( 'No scroll-completion data in this timeframe.', 'newspack-plugin' ) }
@@ -62,7 +62,7 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 				</div>
 			) }
 			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Authors by Avg Engagement Time', 'newspack-plugin' ) }</h3>
+				<h3 className="newspack-insights__chart-card-title">{ __( 'Top authors by avg engagement time', 'newspack-plugin' ) }</h3>
 				<MetricTable
 					payload={ current.top_authors_by_avg_engagement_time }
 					emptyMessage={ __( 'No author engagement data in this timeframe.', 'newspack-plugin' ) }

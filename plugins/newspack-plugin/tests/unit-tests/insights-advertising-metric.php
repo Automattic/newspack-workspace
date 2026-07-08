@@ -315,6 +315,261 @@ class Newspack_Test_Insights_Advertising_Metric extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Top ad units carry clicks and CTR = clicks / impressions.
+	 */
+	public function test_top_ad_units_clicks_and_ctr() {
+		$this->with_rows(
+			[
+				[
+					'AD_UNIT_NAME'                      => 'Leaderboard',
+					'TOTAL_IMPRESSIONS'                 => '1000',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => '5000000',
+					'TOTAL_CODE_SERVED_COUNT'           => '1000',
+					'TOTAL_LINE_ITEM_LEVEL_CLICKS'      => '4',
+				],
+			]
+		);
+		$payload = Insights_Advertising_Test_Metric::top_ad_units( '2026-01-01', '2026-01-31' );
+		$this->assertSame( 4, $payload['rows'][0]['clicks'] );
+		$this->assertSame( 0.004, $payload['rows'][0]['ctr'] );
+	}
+
+	/**
+	 * CTR is null — never 0% — when a row has no impressions.
+	 */
+	public function test_top_ad_units_ctr_null_on_zero_impressions() {
+		$this->with_rows(
+			[
+				[
+					'AD_UNIT_NAME'                      => 'Unfilled',
+					'TOTAL_IMPRESSIONS'                 => '0',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => '0',
+					'TOTAL_CODE_SERVED_COUNT'           => '0',
+					'TOTAL_LINE_ITEM_LEVEL_CLICKS'      => '0',
+				],
+			]
+		);
+		$payload = Insights_Advertising_Test_Metric::top_ad_units( '2026-01-01', '2026-01-31' );
+		$this->assertNull( $payload['rows'][0]['ctr'] );
+	}
+
+	/**
+	 * Top advertisers carry clicks and CTR (null with zero impressions).
+	 */
+	public function test_top_advertisers_clicks_and_ctr() {
+		$this->with_rows(
+			[
+				[
+					'ADVERTISER_NAME'                   => 'Acme Co',
+					'TOTAL_IMPRESSIONS'                 => '2000',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => '10000000',
+					'TOTAL_LINE_ITEM_LEVEL_CLICKS'      => '10',
+				],
+				[
+					'ADVERTISER_NAME'                   => 'No Delivery Inc',
+					'TOTAL_IMPRESSIONS'                 => '0',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => '0',
+					'TOTAL_LINE_ITEM_LEVEL_CLICKS'      => '0',
+				],
+			]
+		);
+		$payload  = Insights_Advertising_Test_Metric::top_advertisers( '2026-01-01', '2026-01-31' );
+		$by_label = array_column( $payload['rows'], null, 'advertiser' );
+		$this->assertSame( 10, $by_label['Acme Co']['clicks'] );
+		$this->assertSame( 0.005, $by_label['Acme Co']['ctr'] );
+		$this->assertNull( $by_label['No Delivery Inc']['ctr'] );
+	}
+
+	/**
+	 * By channel groups raw LINE_ITEM_TYPE values into the documented buckets,
+	 * normalizes micros, computes each bucket's share of total impressions
+	 * (house line items are unpaid, so the pie is impressions-weighted), sorts
+	 * by impressions desc, and drops fully-empty buckets.
+	 */
+	public function test_by_channel_buckets_and_shares() {
+		$this->with_rows(
+			[
+				[
+					'LINE_ITEM_TYPE'                    => 'STANDARD',
+					'TOTAL_IMPRESSIONS'                 => '100',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => '1000000000', // 1000 dollars in micros.
+				],
+				[
+					'LINE_ITEM_TYPE'                    => 'SPONSORSHIP',
+					'TOTAL_IMPRESSIONS'                 => '100',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => '500000000', // 500 dollars in micros.
+				],
+				[
+					'LINE_ITEM_TYPE'                    => 'AD_EXCHANGE',
+					'TOTAL_IMPRESSIONS'                 => '400',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => '2000000000', // 2000 dollars in micros.
+				],
+				[
+					'LINE_ITEM_TYPE'                    => 'PRICE_PRIORITY',
+					'TOTAL_IMPRESSIONS'                 => '100',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => '500000000', // 500 dollars in micros → programmatic.
+				],
+				[
+					'LINE_ITEM_TYPE'                    => 'HOUSE',
+					'TOTAL_IMPRESSIONS'                 => '250',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => '0',
+				],
+				[
+					'LINE_ITEM_TYPE'                    => 'CLICK_TRACKING',
+					'TOTAL_IMPRESSIONS'                 => '50',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => '1000000000', // 1000 dollars in micros → other.
+				],
+			]
+		);
+		$payload = Insights_Advertising_Test_Metric::by_channel( '2026-01-01', '2026-01-31' );
+
+		$this->assertTrue( $payload['computable'] );
+		$this->assertSame( 'breakdown', $payload['type'] );
+
+		$by_channel = array_column( $payload['rows'], null, 'channel' );
+		$this->assertSame( 1500.0, $by_channel['Direct-sold']['revenue'] );
+		$this->assertSame( 200, $by_channel['Direct-sold']['impressions'] );
+		$this->assertSame( 2500.0, $by_channel['Programmatic']['revenue'] );
+		$this->assertSame( 0.0, $by_channel['House']['revenue'] );
+		$this->assertSame( 250, $by_channel['House']['impressions'] );
+		$this->assertSame( 1000.0, $by_channel['Other']['revenue'] );
+
+		// Shares are fractions of total impressions (1,000) — impressions-weighted
+		// so the unpaid House bucket keeps a real share.
+		$this->assertSame( 0.2, $by_channel['Direct-sold']['share'] );
+		$this->assertSame( 0.5, $by_channel['Programmatic']['share'] );
+		$this->assertSame( 0.25, $by_channel['House']['share'] );
+
+		// Sorted by impressions desc: programmatic (500) leads, then house (250).
+		$this->assertSame( 'Programmatic', $payload['rows'][0]['channel'] );
+		$this->assertSame( 'House', $payload['rows'][1]['channel'] );
+	}
+
+	/**
+	 * Unmapped EXCHANGE-suffixed line item types fall back to programmatic;
+	 * buckets with no revenue AND no impressions are dropped.
+	 */
+	public function test_by_channel_exchange_fallback_and_empty_buckets() {
+		$this->with_rows(
+			[
+				[
+					'LINE_ITEM_TYPE'                    => 'OPEN_EXCHANGE',
+					'TOTAL_IMPRESSIONS'                 => '100',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => '1000000000',
+				],
+			]
+		);
+		$payload = Insights_Advertising_Test_Metric::by_channel( '2026-01-01', '2026-01-31' );
+		$this->assertCount( 1, $payload['rows'] );
+		$this->assertSame( 'Programmatic', $payload['rows'][0]['channel'] );
+		$this->assertSame( 1.0, $payload['rows'][0]['share'] );
+	}
+
+	/**
+	 * Performance by device sorts by impressions desc, normalizes micros, and
+	 * derives per-row eCPM (null when the device served no impressions).
+	 */
+	public function test_by_device_sorts_and_derives_ecpm() {
+		$this->with_rows(
+			[
+				[
+					'DEVICE_CATEGORY_NAME'              => 'Desktop',
+					'TOTAL_IMPRESSIONS'                 => '400000',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => (string) ( 900 * 1000000 ),
+				],
+				[
+					'DEVICE_CATEGORY_NAME'              => 'Smartphone',
+					'TOTAL_IMPRESSIONS'                 => '1200000',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => (string) ( 1800 * 1000000 ),
+				],
+				[
+					'DEVICE_CATEGORY_NAME'              => 'Connected TV',
+					'TOTAL_IMPRESSIONS'                 => '0',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => '0',
+				],
+			]
+		);
+		$payload = Insights_Advertising_Test_Metric::by_device( '2026-01-01', '2026-01-31' );
+
+		$this->assertTrue( $payload['computable'] );
+		$this->assertSame( 'table', $payload['type'] );
+		$this->assertSame( [ 'Smartphone', 'Desktop', 'Connected TV' ], array_column( $payload['rows'], 'device' ) );
+		$this->assertSame( 1800.0, $payload['rows'][0]['revenue'] );
+		$this->assertSame( ( 1800.0 / 1200000 ) * 1000, $payload['rows'][0]['ecpm'] ); // $1.50.
+		$this->assertNull( $payload['rows'][2]['ecpm'] );
+	}
+
+	/**
+	 * Top campaigns shape ORDER_NAME × ADVERTISER_NAME rows: rank by revenue,
+	 * carry clicks/CTR, and filter the order-less (programmatic) rows GAM emits
+	 * with an empty or "-" order name.
+	 */
+	public function test_top_campaigns_shapes_ranks_and_filters_orderless_rows() {
+		$this->with_rows(
+			[
+				[
+					'ORDER_NAME'                        => 'Hometown Hardware — Spring Flight',
+					'ADVERTISER_NAME'                   => 'Hometown Hardware',
+					'TOTAL_IMPRESSIONS'                 => '10000',
+					'TOTAL_LINE_ITEM_LEVEL_CLICKS'      => '40',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => (string) ( 300 * 1000000 ),
+				],
+				[
+					'ORDER_NAME'                        => 'Riverside Credit Union — Auto Loans',
+					'ADVERTISER_NAME'                   => 'Riverside Credit Union',
+					'TOTAL_IMPRESSIONS'                 => '20000',
+					'TOTAL_LINE_ITEM_LEVEL_CLICKS'      => '50',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => (string) ( 800 * 1000000 ),
+				],
+				[
+					'ORDER_NAME'                        => '-',
+					'ADVERTISER_NAME'                   => '',
+					'TOTAL_IMPRESSIONS'                 => '900000',
+					'TOTAL_LINE_ITEM_LEVEL_CLICKS'      => '100',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => (string) ( 5000 * 1000000 ),
+				],
+				[
+					'ORDER_NAME'                        => '',
+					'ADVERTISER_NAME'                   => '',
+					'TOTAL_IMPRESSIONS'                 => '100',
+					'TOTAL_LINE_ITEM_LEVEL_CLICKS'      => '0',
+					'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => '1000000',
+				],
+			]
+		);
+		$payload = Insights_Advertising_Test_Metric::top_campaigns( '2026-01-01', '2026-01-31' );
+
+		// Order-less rows filtered; direct-sold orders ranked by revenue desc.
+		$this->assertCount( 2, $payload['rows'] );
+		$top = $payload['rows'][0];
+		$this->assertSame( 'Riverside Credit Union — Auto Loans', $top['campaign'] );
+		$this->assertSame( 'Riverside Credit Union', $top['advertiser'] );
+		$this->assertSame( 800.0, $top['revenue'] );
+		$this->assertSame( 50, $top['clicks'] );
+		$this->assertSame( 0.0025, $top['ctr'] );
+	}
+
+	/**
+	 * Top campaigns cap at the top 10 by revenue.
+	 */
+	public function test_top_campaigns_respects_limit() {
+		$rows = [];
+		for ( $i = 1; $i <= 15; $i++ ) {
+			$rows[] = [
+				'ORDER_NAME'                        => "Campaign $i",
+				'ADVERTISER_NAME'                   => "Advertiser $i",
+				'TOTAL_IMPRESSIONS'                 => '100',
+				'TOTAL_LINE_ITEM_LEVEL_CLICKS'      => '1',
+				'TOTAL_LINE_ITEM_LEVEL_ALL_REVENUE' => (string) ( $i * 1000000 ),
+			];
+		}
+		$this->with_rows( $rows );
+		$payload = Insights_Advertising_Test_Metric::top_campaigns( '2026-01-01', '2026-01-31' );
+		$this->assertCount( 10, $payload['rows'] );
+		$this->assertSame( 'Campaign 15', $payload['rows'][0]['campaign'] );
+	}
+
+	/**
 	 * Per-site breakdown (NPPD-1671) humanizes the `site` URL to a domain,
 	 * normalizes revenue micros, derives eCPM, and ranks by revenue desc.
 	 */

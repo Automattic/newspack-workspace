@@ -54,7 +54,7 @@ describe( 'ReachRevenueSection empty states', () => {
 		expect( container.querySelector( '[data-empty-state="no_opportunity"]' ) ).toBeInTheDocument();
 		// Assert on the container — the Notice's speak() duplicates copy into a live-region.
 		expect( container ).toHaveTextContent( 'No ad impressions in this timeframe' );
-		expect( screen.queryByText( 'Total Impressions' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Impressions' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'renders the per-card no-revenue treatment on Total Revenue when impressions run but revenue is zero', () => {
@@ -77,10 +77,10 @@ describe( 'ReachRevenueSection empty states', () => {
 				.find( el => el.textContent === label )
 				?.closest( '.newspack-insights__metric-card' );
 		// The Total Revenue card shows $0 with the period delta suppressed.
-		expect( cardByLabel( 'Total Revenue' )?.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
+		expect( cardByLabel( 'Revenue' )?.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
 		// Special-casing the revenue card must NOT suppress the sibling impressions
 		// card's normal period comparison.
-		expect( cardByLabel( 'Total Impressions' )?.querySelector( '.newspack-insights__metric-card-delta' ) ).not.toBeNull();
+		expect( cardByLabel( 'Impressions' )?.querySelector( '.newspack-insights__metric-card-delta' ) ).not.toBeNull();
 	} );
 
 	it( 'does NOT collapse or show no-revenue when a metric errored — the card surfaces its own error', () => {
@@ -100,8 +100,8 @@ describe( 'ReachRevenueSection empty states', () => {
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
 		// 7-digit impressions abbreviate to the millions tier (NPPD-1684 rule).
-		expect( cardValueByLabel( container, 'Total Impressions' ) ).toBe( '2.4M' );
-		expect( screen.getByText( 'Total Revenue' ) ).toBeInTheDocument();
+		expect( cardValueByLabel( container, 'Impressions' ) ).toBe( '2.4M' );
+		expect( screen.getByText( 'Revenue' ) ).toBeInTheDocument();
 	} );
 } );
 

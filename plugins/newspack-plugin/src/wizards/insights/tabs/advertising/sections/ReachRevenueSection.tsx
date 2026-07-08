@@ -5,8 +5,12 @@
  * Headline scorecards for the period: impressions served, revenue earned, and
  * two cross-system derived cards — RPM (revenue per 1,000 sessions) and
  * impressions per session — that join the GAM figures with GA4 sessions. Those
- * four sit in a --cols-4 row; the revenue mix (direct share) sits in its own row
- * below, keeping the same card width.
+ * four sit in a --cols-4 row; a second --cols-4 row carries the
+ * inventory-quality cards (eCPM, fill rate, viewability — folded in from the
+ * former Inventory performance section, NPPD-1618 Section 2). The old Revenue
+ * mix card was retired in favor of Impressions by type. Viewability degrades
+ * to a `data_unavailable` overlay (rendered via the shared MetricNote) when the
+ * publisher hasn't enabled Active View — handled centrally by Scorecard.
  *
  * Empty states (NPPD-1697), mirroring Donors (NPPD-1696) / Subscribers
  * (NPPD-1695):
@@ -43,7 +47,6 @@ import MetricCard from '../../components/MetricCard';
 import Scorecard from '../../components/Scorecard';
 import SectionHeading from '../../components/SectionHeading';
 import { formatNumber } from '../../components/format';
-import RevenueMixCard from '../RevenueMixCard';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -57,7 +60,7 @@ export interface SectionProps {
 }
 
 const TITLE = __( 'Reach & revenue', 'newspack-plugin' );
-const CAPTION = __( 'Volume and revenue mix for the period.', 'newspack-plugin' );
+const CAPTION = __( 'Volume, revenue, and inventory quality for the period.', 'newspack-plugin' );
 
 const ReachRevenueSection = ( { current, previous, hasWindowActivity, lastUpdated }: SectionProps ) => {
 	// Whole-section empty: the report resolved with no ad activity. Collapse the
@@ -92,14 +95,14 @@ const ReachRevenueSection = ( { current, previous, hasWindowActivity, lastUpdate
 			     session — which join GAM figures with GA4 sessions. */ }
 			<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-4">
 				<Scorecard
-					label={ __( 'Total Impressions', 'newspack-plugin' ) }
-					description={ __( 'Total ad impressions served on your site in this timeframe.', 'newspack-plugin' ) }
+					label={ __( 'Impressions', 'newspack-plugin' ) }
+					description={ __( 'Total ad impressions served on your site', 'newspack-plugin' ) }
 					current={ current.total_impressions }
 					previous={ previous?.total_impressions }
 				/>
 				{ noRevenue ? (
 					<MetricCard
-						label={ __( 'Total Revenue', 'newspack-plugin' ) }
+						label={ __( 'Revenue', 'newspack-plugin' ) }
 						value={ 0 }
 						format="currency"
 						// No previousValue → the period delta is suppressed; a "↓ 100%" would
@@ -109,12 +112,12 @@ const ReachRevenueSection = ( { current, previous, hasWindowActivity, lastUpdate
 							__( '%s impressions, but no revenue this timeframe', 'newspack-plugin' ),
 							formatNumber( impressions?.value ?? 0 )
 						) }
-						description={ __( 'Total ad revenue earned in this timeframe, before fees.', 'newspack-plugin' ) }
+						description={ __( 'Total ad revenue earned, before fees', 'newspack-plugin' ) }
 					/>
 				) : (
 					<Scorecard
-						label={ __( 'Total Revenue', 'newspack-plugin' ) }
-						description={ __( 'Total ad revenue earned in this timeframe, before fees.', 'newspack-plugin' ) }
+						label={ __( 'Revenue', 'newspack-plugin' ) }
+						description={ __( 'Total ad revenue earned, before fees', 'newspack-plugin' ) }
 						current={ current.total_revenue }
 						previous={ previous?.total_revenue }
 					/>
@@ -127,15 +130,33 @@ const ReachRevenueSection = ( { current, previous, hasWindowActivity, lastUpdate
 				/>
 				<Scorecard
 					label={ __( 'Impressions per session', 'newspack-plugin' ) }
-					description={ __( 'Avg ad impressions each session', 'newspack-plugin' ) }
+					description={ __( 'Avg ad impressions a reader sees each session', 'newspack-plugin' ) }
 					current={ current.avg_impressions_per_session }
 					previous={ previous?.avg_impressions_per_session }
 				/>
 			</div>
-			{ /* Row 2: revenue mix sits below the headline scorecards, keeping the same
-			     card width as the row above. */ }
+			{ /* Row 2: inventory-quality scorecards (moved from the former Inventory
+			     performance section). The old Revenue mix card was retired in favor
+			     of the Impressions by type breakdown (NPPD-1881). */ }
 			<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-4">
-				<RevenueMixCard payload={ current.direct_vs_programmatic } />
+				<Scorecard
+					label={ __( 'Average eCPM', 'newspack-plugin' ) }
+					description={ __( 'Your ad rate', 'newspack-plugin' ) }
+					current={ current.avg_ecpm }
+					previous={ previous?.avg_ecpm }
+				/>
+				<Scorecard
+					label={ __( 'Fill Rate', 'newspack-plugin' ) }
+					description={ __( 'How often slots fill', 'newspack-plugin' ) }
+					current={ current.fill_rate }
+					previous={ previous?.fill_rate }
+				/>
+				<Scorecard
+					label={ __( 'Viewability Rate', 'newspack-plugin' ) }
+					description={ __( 'How often ads are seen', 'newspack-plugin' ) }
+					current={ current.viewability_rate }
+					previous={ previous?.viewability_rate }
+				/>
 			</div>
 		</section>
 	);

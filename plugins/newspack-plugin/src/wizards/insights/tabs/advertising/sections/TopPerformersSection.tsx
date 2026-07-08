@@ -1,8 +1,12 @@
 /**
  * Advertising › Top performers (NPPD-1618, Section 3).
  *
- * Top Ad Units (left) and Top Advertisers (right) tables, side by side at equal
- * width. Top Advertisers collapses to 5 rows with a "See more" toggle.
+ * Top ad units, Top advertisers, and Top campaigns (direct-sold orders), each
+ * its own top-level section (h2) stacked at full width — ad unit and advertiser
+ * names run long, so a side-by-side pair truncated badly. The first two carry
+ * clicks + CTR. All three collapse to 5 rows with a "See more" toggle. The
+ * ad-units table intentionally omits the row-level eCPM the payload still
+ * carries — Revenue next to eCPM double-counted the story.
  */
 
 /**
@@ -23,44 +27,59 @@ export interface SectionProps {
 }
 
 const TopPerformersSection = ( { current }: SectionProps ) => (
-	<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-performers">
-		<SectionHeading
-			id="newspack-insights-advertising-top-performers"
-			title={ __( 'Top performers', 'newspack-plugin' ) }
-			description={ __( 'Where your ad dollars are coming from.', 'newspack-plugin' ) }
-		/>
-		<div className="newspack-insights__table-grid newspack-insights__table-grid--cols-2">
-			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Ad Units', 'newspack-plugin' ) }</h3>
-				<MetricTable
-					payload={ current.top_ad_units }
-					emptyMessage={ __( 'No ad unit data in this timeframe.', 'newspack-plugin' ) }
-					expandable
-					defaultRowLimit={ 5 }
-					columns={ [
-						{ key: 'ad_unit', label: __( 'Ad Unit', 'newspack-plugin' ) },
-						{ key: 'impressions', label: __( 'Impr.', 'newspack-plugin' ), format: 'number', align: 'right' },
-						{ key: 'revenue', label: __( 'Revenue', 'newspack-plugin' ), format: 'currency', align: 'right' },
-						{ key: 'ecpm', label: __( 'eCPM', 'newspack-plugin' ), format: 'currency', align: 'right' },
-					] }
-				/>
-			</div>
-			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Top Advertisers', 'newspack-plugin' ) }</h3>
-				<MetricTable
-					payload={ current.top_advertisers }
-					emptyMessage={ __( 'No advertiser data in this timeframe.', 'newspack-plugin' ) }
-					expandable
-					defaultRowLimit={ 5 }
-					columns={ [
-						{ key: 'advertiser', label: __( 'Advertiser', 'newspack-plugin' ) },
-						{ key: 'impressions', label: __( 'Impr.', 'newspack-plugin' ), format: 'number', align: 'right' },
-						{ key: 'revenue', label: __( 'Revenue', 'newspack-plugin' ), format: 'currency', align: 'right' },
-					] }
-				/>
-			</div>
-		</div>
-	</section>
+	<>
+		<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-ad-units">
+			<SectionHeading id="newspack-insights-advertising-top-ad-units" title={ __( 'Top ad units', 'newspack-plugin' ) } />
+			<MetricTable
+				payload={ current.top_ad_units }
+				emptyMessage={ __( 'No ad unit data in this timeframe.', 'newspack-plugin' ) }
+				expandable
+				defaultRowLimit={ 5 }
+				columns={ [
+					{ key: 'ad_unit', label: __( 'Ad unit', 'newspack-plugin' ) },
+					{ key: 'impressions', label: __( 'Impr.', 'newspack-plugin' ), format: 'number', align: 'right' },
+					{ key: 'clicks', label: __( 'Clicks', 'newspack-plugin' ), format: 'number', align: 'right' },
+					{ key: 'ctr', label: __( 'CTR', 'newspack-plugin' ), format: 'percent', align: 'right' },
+					{ key: 'revenue', label: __( 'Revenue', 'newspack-plugin' ), format: 'currency', align: 'right' },
+				] }
+			/>
+		</section>
+		<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-advertisers">
+			<SectionHeading id="newspack-insights-advertising-top-advertisers" title={ __( 'Top advertisers', 'newspack-plugin' ) } />
+			<MetricTable
+				payload={ current.top_advertisers }
+				emptyMessage={ __( 'No advertiser data in this timeframe.', 'newspack-plugin' ) }
+				expandable
+				defaultRowLimit={ 5 }
+				columns={ [
+					{ key: 'advertiser', label: __( 'Advertiser', 'newspack-plugin' ) },
+					{ key: 'impressions', label: __( 'Impr.', 'newspack-plugin' ), format: 'number', align: 'right' },
+					{ key: 'clicks', label: __( 'Clicks', 'newspack-plugin' ), format: 'number', align: 'right' },
+					{ key: 'ctr', label: __( 'CTR', 'newspack-plugin' ), format: 'percent', align: 'right' },
+					{ key: 'revenue', label: __( 'Revenue', 'newspack-plugin' ), format: 'currency', align: 'right' },
+				] }
+			/>
+		</section>
+		<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-campaigns">
+			<SectionHeading id="newspack-insights-advertising-top-campaigns" title={ __( 'Top campaigns', 'newspack-plugin' ) } />
+			{ /* Direct-sold orders only — programmatic delivery is order-less and
+			     filtered server-side. */ }
+			<MetricTable
+				payload={ current.top_campaigns }
+				emptyMessage={ __( 'No campaign data in this timeframe.', 'newspack-plugin' ) }
+				expandable
+				defaultRowLimit={ 5 }
+				columns={ [
+					{ key: 'campaign', label: __( 'Campaign', 'newspack-plugin' ) },
+					{ key: 'advertiser', label: __( 'Advertiser', 'newspack-plugin' ) },
+					{ key: 'impressions', label: __( 'Impr.', 'newspack-plugin' ), format: 'number', align: 'right' },
+					{ key: 'clicks', label: __( 'Clicks', 'newspack-plugin' ), format: 'number', align: 'right' },
+					{ key: 'ctr', label: __( 'CTR', 'newspack-plugin' ), format: 'percent', align: 'right' },
+					{ key: 'revenue', label: __( 'Revenue', 'newspack-plugin' ), format: 'currency', align: 'right' },
+				] }
+			/>
+		</section>
+	</>
 );
 
 export default TopPerformersSection;
