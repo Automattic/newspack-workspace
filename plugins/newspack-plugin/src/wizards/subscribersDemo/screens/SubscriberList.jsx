@@ -17,7 +17,7 @@ import { __experimentalHStack as HStack, __experimentalVStack as VStack } from '
  */
 import { Badge, DataViews, Router, Waiting } from '../../../../packages/components/src';
 import './style.scss';
-import { fmtRelative, fmtDate } from '../format';
+import { fmtRelative, fmtDate, fmtCurrency } from '../format';
 import { SHOW_AVATARS, useAvatars } from '../data/use-avatars';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import { SUBSCRIBERS, DIGITAL_PLANS, PRINT_PLANS, ALL_TAGS, NEWSLETTERS } from '../data/mock-subscribers';
@@ -25,7 +25,7 @@ import { getAllGroups, ALL_GROUP_PLAN_NAMES, ROLE_LABELS } from '../data/mock-gr
 import { GROUP_LABEL } from '../labels';
 import { STATUS_LABELS, STATUS_BADGE_LEVEL, STATUS_RANK, displayStatuses } from '../status';
 
-const { useHistory } = Router;
+const { useHistory, useLocation } = Router;
 
 // Every subscription a subscriber has, group and individual alike: cohorts they
 // own or belong to (tagged by role) plus their own individual subscriptions.
@@ -65,13 +65,17 @@ const subscriberStatuses = ( item, groupEntries ) =>
 
 const ALL_PLAN_NAMES = [ ...DIGITAL_PLANS, ...PRINT_PLANS ].map( p => p.name );
 
+// Lifetime spend: sum of the reader's order amounts. Covered group members with
+// no orders of their own total zero.
+const totalSpent = subscriber => ( subscriber.orders || [] ).reduce( ( sum, order ) => sum + ( order.amount || 0 ), 0 );
+
 const DEFAULT_VIEW = {
 	type: 'table',
 	page: 1,
 	perPage: 20,
 	sort: { field: 'memberSince', direction: 'desc' },
 	search: '',
-	fields: [ 'status', 'plans', 'lastPayment', 'memberSince' ],
+	fields: [ 'status', 'plans', 'lastPayment', 'totalSpent', 'memberSince' ],
 	filters: [],
 	layout: {},
 	titleField: 'name',
@@ -79,7 +83,13 @@ const DEFAULT_VIEW = {
 
 export default function SubscriberList() {
 	const history = useHistory();
-	const [ view, setView ] = useState( DEFAULT_VIEW );
+	const location = useLocation();
+	// A "subscription" query param (from a subscription's "View subscribers"
+	// link) opens the list pre-filtered to that subscription's subscribers.
+	const [ view, setView ] = useState( () => {
+		const subscription = new URLSearchParams( location.search ).get( 'subscription' );
+		return subscription ? { ...DEFAULT_VIEW, filters: [ { field: 'plans', operator: 'isAny', value: [ subscription ] } ] } : DEFAULT_VIEW;
+	} );
 
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
@@ -235,6 +245,16 @@ export default function SubscriberList() {
 						<div className="newspack-subscribers-demo__muted">{ fmtRelative( item.memberSince ) }</div>
 					</div>
 				),
+			},
+			{
+				id: 'totalSpent',
+				label: __( 'Total spent', 'newspack-plugin' ),
+				getValue: ( { item } ) => totalSpent( item ),
+				render: ( { item } ) => {
+					const spent = totalSpent( item );
+					return <span>{ spent > 0 ? fmtCurrency( spent ) : '—' }</span>;
+				},
+				enableSorting: true,
 			},
 			{
 				id: 'lastSeen',
