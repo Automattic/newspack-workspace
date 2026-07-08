@@ -196,7 +196,7 @@ function newspack_custom_colors_css() {
 	// Set ads background color
 	if ( 'default' !== get_theme_mod( 'ads_color', 'default' ) ) {
 		$ads_color_hex = get_theme_mod( 'ads_color_hex', '#ffffff' );
-		$theme_css    .= '
+		$theme_css .= '
 			.site .entry .entry-content .scaip .newspack_global_ad,
 			.site .entry .entry-content .scaip .widget_newspack-ads-widget,
 			.newspack_global_ad,
