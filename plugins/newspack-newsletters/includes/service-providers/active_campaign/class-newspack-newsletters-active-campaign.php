@@ -1999,8 +1999,40 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			$existing_fields = $this->get_all_contact_fields();
 			foreach ( $contact['metadata'] as $field_title => $value ) {
 				$field_perstag = strtoupper( str_replace( '-', '_', sanitize_title( $field_title ) ) );
-				/** For optimization, don't add the field if it already exists. */
-				if ( is_wp_error( $existing_fields ) || false === array_search( $field_perstag, array_column( $existing_fields, 'perstag' ) ) ) {
+
+				/**
+				 * For optimization, don't add the field if it already exists.
+				 * Match by perstag first, then by title — an ActiveCampaign
+				 * admin may have renamed a field's perstag, and creating a
+				 * field with a duplicate title fails.
+				 */
+				$existing_index = false;
+				if ( ! is_wp_error( $existing_fields ) ) {
+					// Index-preserving lookups: array_column() would reindex and skip
+					// rows missing the key, mapping a match to the wrong field.
+					foreach ( $existing_fields as $index => $existing_field ) {
+						if ( isset( $existing_field['perstag'] ) && $existing_field['perstag'] === $field_perstag ) {
+							$existing_index = $index;
+							break;
+						}
+					}
+					if ( false === $existing_index ) {
+						foreach ( $existing_fields as $index => $existing_field ) {
+							if (
+								isset( $existing_field['title'], $existing_field['perstag'] ) &&
+								0 === strcasecmp( trim( $existing_field['title'] ), trim( $field_title ) )
+							) {
+								$existing_index = $index;
+								break;
+							}
+						}
+					}
+				}
+
+				if ( false !== $existing_index ) {
+					/** Use the existing field's actual perstag — it may differ from the generated one. */
+					$field_perstag = $existing_fields[ $existing_index ]['perstag'];
+				} else {
 					$field_res = $this->api_v3_request(
 						'fields',
 						'POST',
@@ -2018,7 +2050,9 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 						]
 					);
 					if ( \is_wp_error( $field_res ) ) {
-						return $field_res;
+						/** A field that can't be registered must never block the signup — sync the contact without it. */
+						Newspack_Newsletters_Logger::log( 'Error creating ActiveCampaign field "' . $field_title . '": ' . $field_res->get_error_message() );
+						continue;
 					}
 					/** Set list relation. */
 					$this->api_v3_request(
