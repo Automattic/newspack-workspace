@@ -168,28 +168,42 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Create a mock subscription holding a single product line item.
+	 * Create a mock subscription holding a single product line item, and register the
+	 * switched-to product so wc_get_product() can resolve its name-your-price flag and
+	 * billing interval.
 	 *
-	 * @param int        $user_id    Owner user ID.
-	 * @param string     $status     Subscription status.
-	 * @param int        $product_id Product ID held by the subscription.
-	 * @param float|null $amount     Recurring line total, for name-your-price checks.
+	 * @param int        $user_id      Owner user ID.
+	 * @param string     $status       Subscription status.
+	 * @param int        $product_id   Product ID held by the subscription.
+	 * @param float|null $amount       Recurring line total, for name-your-price checks.
+	 * @param array      $product_meta Meta for the registered product (e.g. `_nyp`, `_subscription_period_interval`).
+	 * @param int        $variation_id Variation ID held by the line item, if any.
 	 *
 	 * @return \WC_Subscription
 	 */
-	private function make_subscription( $user_id, $status, $product_id, $amount = null ) {
+	private function make_subscription( $user_id, $status, $product_id, $amount = null, $product_meta = [], $variation_id = 0 ) {
+		$canonical_id = $variation_id ? $variation_id : $product_id;
+		wc_create_mock_product(
+			[
+				'id'   => $canonical_id,
+				'type' => 'subscription',
+				'name' => 'Tier ' . $canonical_id,
+				'meta' => $product_meta,
+			]
+		);
 		$item = new WC_Order_Item_Product(
 			[
-				'id'         => 555,
-				'product_id' => $product_id,
-				'total'      => $amount ?? 0,
+				'id'           => 555,
+				'product_id'   => $product_id,
+				'variation_id' => $variation_id,
+				'total'        => $amount ?? 0,
 			]
 		);
 		return wcs_create_subscription(
 			[
 				'customer_id' => $user_id,
 				'status'      => $status,
-				'products'    => [ $product_id ],
+				'products'    => [ $canonical_id ],
 				'items'       => [ $item ],
 			]
 		);
@@ -268,7 +282,7 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 	public function test_prevent_switch_allows_nyp_amount_change() {
 		$user_id = self::factory()->user->create();
 		wp_set_current_user( $user_id );
-		$subscription                = $this->make_subscription( $user_id, 'active', 102, 10.00 );
+		$subscription                = $this->make_subscription( $user_id, 'active', 102, 10.00, [ '_nyp' => 'yes' ] );
 		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
 		$_REQUEST['price']               = '15';
 
@@ -281,7 +295,7 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 	public function test_prevent_switch_blocks_nyp_same_amount() {
 		$user_id = self::factory()->user->create();
 		wp_set_current_user( $user_id );
-		$subscription                = $this->make_subscription( $user_id, 'active', 102, 10.00 );
+		$subscription                = $this->make_subscription( $user_id, 'active', 102, 10.00, [ '_nyp' => 'yes' ] );
 		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
 		$_REQUEST['price']               = '10';
 
@@ -299,5 +313,182 @@ class Newspack_Test_Subscriptions_Tiers extends WP_UnitTestCase {
 		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
 
 		$this->assertTrue( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102 ) );
+	}
+
+	/**
+	 * A spurious `price` on a fixed-price tier can't slip a same-tier switch past the
+	 * backstop — the amount is only considered for name-your-price tiers.
+	 */
+	public function test_prevent_switch_blocks_fixed_product_with_spurious_price() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$subscription                    = $this->make_subscription( $user_id, 'active', 102, 50.00 );
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+		$_REQUEST['price']               = '999'; // Ignored: product 102 is not name-your-price.
+
+		$this->assertFalse( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102 ) );
+	}
+
+	/**
+	 * The variation branch: a switch onto the variation the reader already holds is
+	 * blocked (matched via the line item's variation ID).
+	 */
+	public function test_prevent_switch_blocks_same_variation() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		// Line item holds variation 202 of product 102.
+		$subscription                    = $this->make_subscription( $user_id, 'active', 102, null, [], 202 );
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+
+		$this->assertFalse( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102, 1, 202 ) );
+	}
+
+	/**
+	 * Switching to a different variation of a held product is a real switch and allowed
+	 * (pins the intended no-op behaviour for WCS-native variation switches).
+	 */
+	public function test_prevent_switch_allows_different_variation() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$subscription                    = $this->make_subscription( $user_id, 'active', 102, null, [], 202 );
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+
+		// Variation 203 is not the one held → allowed.
+		$this->assertTrue( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102, 1, 203 ) );
+	}
+
+	/**
+	 * Name-your-price billed every N>1 periods: the amount is compared per period, so an
+	 * unchanged per-period amount is blocked even though it differs from the full-cycle
+	 * line total.
+	 */
+	public function test_prevent_switch_blocks_nyp_same_amount_multi_interval() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		// $20 billed every 2 months → $10 per period.
+		$subscription                    = $this->make_subscription(
+			$user_id,
+			'active',
+			102,
+			20.00,
+			[
+				'_nyp'                          => 'yes',
+				'_subscription_period_interval' => 2,
+			] 
+		);
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+		$_REQUEST['price']               = '10'; // Unchanged per-period amount.
+
+		$this->assertFalse( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102 ) );
+	}
+
+	/**
+	 * The same multi-interval name-your-price subscription allows a genuine per-period
+	 * change.
+	 */
+	public function test_prevent_switch_allows_nyp_changed_amount_multi_interval() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$subscription                    = $this->make_subscription(
+			$user_id,
+			'active',
+			102,
+			20.00,
+			[
+				'_nyp'                          => 'yes',
+				'_subscription_period_interval' => 2,
+			] 
+		);
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+		$_REQUEST['price']               = '12'; // Changed per-period amount.
+
+		$this->assertTrue( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102 ) );
+	}
+
+	/**
+	 * With multiple tier products in one subscription, the submitted `item` targets the
+	 * specific line item being switched, so switching one tier to another the reader
+	 * also holds is treated as a real switch rather than over-blocked.
+	 */
+	public function test_prevent_switch_uses_item_to_target_line_item() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		wc_create_mock_product(
+			[
+				'id'   => 102,
+				'type' => 'subscription',
+				'name' => 'Basic',
+			] 
+		);
+		wc_create_mock_product(
+			[
+				'id'   => 103,
+				'type' => 'subscription',
+				'name' => 'Premium',
+			] 
+		);
+		$item_a       = new WC_Order_Item_Product(
+			[
+				'id'         => 555,
+				'product_id' => 102,
+				'total'      => 10,
+			] 
+		);
+		$item_b       = new WC_Order_Item_Product(
+			[
+				'id'         => 556,
+				'product_id' => 103,
+				'total'      => 20,
+			] 
+		);
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id' => $user_id,
+				'status'      => 'active',
+				'products'    => [ 102, 103 ],
+				'items'       => [ $item_a, $item_b ],
+			]
+		);
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+		$_REQUEST['item']                = '555'; // Switch the "102" line item...
+
+		// ...to product 103. 103 is also held (via item 556), but targeting the 102 line
+		// item makes this a genuine switch → allowed.
+		$this->assertTrue( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 103 ) );
+	}
+
+	/**
+	 * The submitted `item` still blocks a no-op switch onto the very product that line
+	 * item already holds.
+	 */
+	public function test_prevent_switch_item_blocks_same_line_item() {
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		wc_create_mock_product(
+			[
+				'id'   => 102,
+				'type' => 'subscription',
+				'name' => 'Basic',
+			] 
+		);
+		$item         = new WC_Order_Item_Product(
+			[
+				'id'         => 555,
+				'product_id' => 102,
+				'total'      => 10,
+			] 
+		);
+		$subscription = wcs_create_subscription(
+			[
+				'customer_id' => $user_id,
+				'status'      => 'active',
+				'products'    => [ 102 ],
+				'items'       => [ $item ],
+			]
+		);
+		$_REQUEST['switch-subscription'] = (string) $subscription->get_id();
+		$_REQUEST['item']                = '555';
+
+		$this->assertFalse( Subscriptions_Tiers::prevent_switch_to_same_subscription( true, 102 ) );
 	}
 }

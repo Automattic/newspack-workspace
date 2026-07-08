@@ -427,6 +427,14 @@ class WC_Subscription {
 	public function get_items() {
 		return $this->data['items'] ?? [];
 	}
+	public function get_item( $item_id, $load_from_db = true ) {
+		foreach ( $this->get_items() as $item ) {
+			if ( (int) $item->get_id() === (int) $item_id ) {
+				return $item;
+			}
+		}
+		return false;
+	}
 	public function get_items_sign_up_fee( $item, $tax = 'exclusive_of_tax' ) {
 		global $wcs_mock_items_sign_up_fee, $wcs_mock_last_items_sign_up_fee_tax;
 		$wcs_mock_last_items_sign_up_fee_tax = $tax;

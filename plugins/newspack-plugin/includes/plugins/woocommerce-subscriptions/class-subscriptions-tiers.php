@@ -38,7 +38,10 @@ class Subscriptions_Tiers {
 		add_filter( 'newspack_popups_assess_has_disabled_popups', [ __CLASS__, 'disable_popups' ] );
 
 		// Server-side backstop preventing a switch to the subscription the reader
-		// already owns (NPPM-2952). The front-end guard is the primary defense.
+		// already owns (NPPM-2952). The front-end guard is the primary defense. This
+		// fires on every add-to-cart carrying a WCS switch (including WCS's own native
+		// switch flow), but no-ops unless the switch targets a product the current
+		// user's own subscription already holds.
 		add_filter( 'woocommerce_add_to_cart_validation', [ __CLASS__, 'prevent_switch_to_same_subscription' ], 10, 4 );
 
 		// Unhook Upgrade/Downgrade switch direction text.
@@ -556,7 +559,7 @@ class Subscriptions_Tiers {
 				<?php
 				printf(
 					/* translators: %s: subscription product name */
-					esc_html__( 'You currently have an active subscription: %s. If you’d like to make changes, you can manage it from your subscription page.', 'newspack-plugin' ),
+					esc_html__( 'You currently have a subscription: %s. If you’d like to make changes, you can manage it from your subscription page.', 'newspack-plugin' ),
 					wp_kses_post( '<strong>' . self::get_product_title( $product, true ) . '</strong>' )
 				);
 				?>
@@ -885,7 +888,7 @@ class Subscriptions_Tiers {
 	 * disabled JavaScript (NPPM-2952).
 	 *
 	 * A no-op for anything that isn't a switch onto a product the reader's own
-	 * subscription already holds at the same amount.
+	 * subscription already holds — at the same per-period amount for name-your-price.
 	 *
 	 * @param bool $passed       Whether add-to-cart validation has passed so far.
 	 * @param int  $product_id   The product being added to the cart.
@@ -914,29 +917,53 @@ class Subscriptions_Tiers {
 			return $passed;
 		}
 		$target_id = $variation_id ? (int) $variation_id : (int) $product_id;
-		// The name-your-price amount comes from an <input type="number">, so it is
-		// always a period-decimal string; a plain (float) cast is correct here and
-		// wc_format_decimal() would misread it on comma-decimal stores.
-		$price_param   = isset( $_REQUEST['price'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['price'] ) ) : '';
-		$target_amount = '' !== $price_param ? (float) $price_param : null;
-		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
-		// Find the reader's subscription line item for the product being switched to.
-		$current_id     = null;
-		$current_amount = null;
-		foreach ( $subscription->get_items() as $line_item ) {
-			$line_product_id = $line_item->get_variation_id() ? $line_item->get_variation_id() : $line_item->get_product_id();
-			if ( (int) $line_product_id === $target_id ) {
-				$current_id     = (int) $line_product_id;
-				$current_amount = (float) $line_item->get_total();
-				break;
+		// Identify the specific line item being switched. Prefer the `item` the modal
+		// (and WCS's own switch flow) submits; fall back to scanning for the target
+		// product so a crafted request that omits `item` is still covered.
+		$line_item = null;
+		if ( ! empty( $_REQUEST['item'] ) ) {
+			$line_item = $subscription->get_item( absint( wp_unslash( $_REQUEST['item'] ) ) );
+		}
+		if ( ! $line_item ) {
+			foreach ( $subscription->get_items() as $item ) {
+				$item_product_id = $item->get_variation_id() ? $item->get_variation_id() : $item->get_product_id();
+				if ( (int) $item_product_id === $target_id ) {
+					$line_item = $item;
+					break;
+				}
 			}
 		}
 
-		// The reader's subscription doesn't hold this product: it's a real switch.
-		if ( null === $current_id ) {
+		// No such line item, or the located item holds a different product than the one
+		// being switched to: it's a real switch, not a no-op.
+		if ( ! $line_item ) {
 			return $passed;
 		}
+		$current_id = $line_item->get_variation_id() ? (int) $line_item->get_variation_id() : (int) $line_item->get_product_id();
+		if ( $current_id !== $target_id ) {
+			return $passed;
+		}
+
+		// Only name-your-price tiers have an amount to compare, and it must be read on
+		// the same per-billing-period basis the modal submits: the NYP <input> carries
+		// line_total / interval, not the full-cycle total. A fixed-price tier keeps a
+		// null amount, so re-selecting it is always a no-op — appending a spurious
+		// `price` to a fixed tier can't slip a same-tier switch past this check. The
+		// value is a plain period-decimal string from an <input type="number">, so
+		// (float) is correct; wc_format_decimal() would misread it on comma-decimal stores.
+		$target_amount  = null;
+		$current_amount = null;
+		$target_product = wc_get_product( $target_id );
+		if ( $target_product && 'yes' === $target_product->get_meta( '_nyp' ) && isset( $_REQUEST['price'] ) ) {
+			$price_param = sanitize_text_field( wp_unslash( $_REQUEST['price'] ) );
+			if ( '' !== $price_param ) {
+				$interval       = max( 1, (int) $target_product->get_meta( '_subscription_period_interval' ) );
+				$target_amount  = (float) $price_param;
+				$current_amount = (float) $line_item->get_total() / $interval;
+			}
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 		if ( self::is_same_subscription_switch( $current_id, $current_amount, $target_id, $target_amount ) ) {
 			if ( function_exists( 'wc_add_notice' ) ) {
