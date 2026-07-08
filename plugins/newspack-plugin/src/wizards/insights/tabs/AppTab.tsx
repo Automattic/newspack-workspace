@@ -134,10 +134,10 @@ const AppMetricsView = ( { range }: { range: TabSectionProps[ 'range' ] } ) => {
 		return <Notice noticeText={ __( 'App analytics aren’t available for this property yet.', 'newspack-plugin' ) } />;
 	}
 	return (
-		<>
+		<div className="newspack-insights__app-tab">
 			<ReachSection metrics={ metrics } />
 			<EngagementSection metrics={ metrics } />
-		</>
+		</div>
 	);
 };
 
