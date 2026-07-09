@@ -54,6 +54,12 @@ export interface SortableTableProps< Row > {
 	 * cap is applied after sorting, so collapsing always shows the current top N.
 	 */
 	initialRowLimit?: number;
+	/**
+	 * Freeze the first column while the rest scroll horizontally (opt-in). Use on
+	 * wide tables where a row would otherwise scroll away from its identifying
+	 * first column (e.g. Performance by prompt).
+	 */
+	stickyFirstColumn?: boolean;
 }
 
 function SortableTable< Row >( {
@@ -64,6 +70,7 @@ function SortableTable< Row >( {
 	emptyMessage,
 	errorMessage,
 	initialRowLimit,
+	stickyFirstColumn,
 }: SortableTableProps< Row > ) {
 	return (
 		<InsightsDataView< Row >
@@ -74,6 +81,7 @@ function SortableTable< Row >( {
 			emptyMessage={ errorMessage ?? emptyMessage }
 			expandable={ typeof initialRowLimit === 'number' }
 			defaultRowLimit={ initialRowLimit }
+			stickyFirstColumn={ stickyFirstColumn }
 		/>
 	);
 }

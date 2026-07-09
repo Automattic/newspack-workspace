@@ -392,12 +392,68 @@
 	}
 }
 
+// Opt-in sticky first column (Performance by prompt): a many-column table that
+// still overflows keeps its identifying first column (the prompt name) frozen
+// while the metric columns scroll, so a row is never scrolled away from its
+// label. Scoped to the modifier class so no other Insights table is affected.
+// The frozen cell needs an opaque background to cover the columns sliding under
+// it, plus a divider so the seam reads cleanly.
+.newspack-insights-dataview--sticky-first .dataviews-view-table {
+	th:first-child,
+	td:first-child {
+		position: sticky;
+		left: 0;
+		z-index: 1;
+		background: wp-colors.$white;
+		border-right: 1px solid wp-colors.$gray-200;
+	}
+
+	// Header corner sits above the body's frozen cells when both axes scroll.
+	th:first-child {
+		z-index: 2;
+	}
+
+	// Honor word boundaries in this table's cells. The shared wrap rule breaks at
+	// any character (`overflow-wrap: anywhere`) so DataViews' widest tables never
+	// force a scroll; this table already fits, and any-point breaking just chops
+	// short labels ("Registrati on"). `break-word` keeps whole words together
+	// while still wrapping long prompt titles at spaces.
+	tbody .dataviews-view-table__cell-content-wrapper {
+		overflow-wrap: break-word;
+	}
+}
+
 // Indented, de-emphasized label for a flattened child/variation row inside a
 // read-only DataViews table (e.g. the Donations-by-tier product variations),
 // which DataViews' flat table can't indent natively.
 .newspack-insights__dataview-subrow {
 	display: inline-block;
 	padding-left: 16px;
+	color: wp-colors.$gray-700;
+}
+
+// Stacked, field-driven "Conversions" cell (Performance by prompt): one line per
+// conversion type a prompt actually drove — count, plus rate in parens where a
+// rate applies. The type label disambiguates rows that convert more than one way
+// (e.g. a register-then-pay prompt logging both registrations and subscriptions).
+// Each line stays on one row; the type label and rate are de-emphasized so the
+// counts read first.
+.newspack-insights__conversions {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+}
+
+.newspack-insights__conversion-line {
+	white-space: nowrap;
+
+	& + & {
+		margin-top: 2px;
+	}
+}
+
+.newspack-insights__conversion-label,
+.newspack-insights__conversion-rate {
 	color: wp-colors.$gray-700;
 }
 
