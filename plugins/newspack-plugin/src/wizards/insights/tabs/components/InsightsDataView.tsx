@@ -77,6 +77,12 @@ export interface InsightsDataViewProps< Row > {
 	expandable?: boolean;
 	/** Rows shown while collapsed. */
 	defaultRowLimit?: number;
+	/**
+	 * Freeze the first column while the rest scroll horizontally (opt-in). Use on
+	 * wide tables where a row would otherwise scroll away from its identifying
+	 * first column (e.g. Performance by prompt). Styled in `insights/style.scss`.
+	 */
+	stickyFirstColumn?: boolean;
 }
 
 /**
@@ -112,6 +118,7 @@ const InsightsDataView = < Row, >( {
 	notConfigured,
 	expandable = false,
 	defaultRowLimit,
+	stickyFirstColumn = false,
 }: InsightsDataViewProps< Row > ) => {
 	const defaultColumn = columns.find( col => col.key === defaultSortKey );
 	const initialDirection = defaultSortDirection ?? ( defaultColumn?.numeric ? 'desc' : 'asc' );
@@ -202,7 +209,7 @@ const InsightsDataView = < Row, >( {
 	return (
 		<>
 			<DataViews
-				className="newspack-insights-dataview"
+				className={ `newspack-insights-dataview${ stickyFirstColumn ? ' newspack-insights-dataview--sticky-first' : '' }` }
 				data={ visibleRows }
 				// The Newspack DataViews wrapper collapses its item type to `unknown`;
 				// our fields/getItemId are typed against `Row`, so narrow at the boundary.
