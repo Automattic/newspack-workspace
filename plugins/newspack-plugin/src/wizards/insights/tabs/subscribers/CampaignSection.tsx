@@ -23,6 +23,8 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { SubscribersCampaignRow } from '../../api/subscribers';
+import InsightsDataView from '../components/InsightsDataView';
+import type { InsightsColumn } from '../components/InsightsDataView';
 import SectionEmpty from '../components/SectionEmpty';
 import SectionHeading from '../components/SectionHeading';
 import { formatCurrency, formatNumber } from '../components/format';
@@ -35,6 +37,29 @@ const HEADING_ID = 'newspack-insights-subscribers-campaign-heading';
 
 const CampaignSection = ( { rows }: CampaignSectionProps ) => {
 	const title = __( 'Subscriptions by campaign', 'newspack-plugin' );
+
+	// Server-ordered (ranked count desc, untagged last), so the table is not
+	// user-sortable — columns omit `sortValue`.
+	const columns: InsightsColumn< SubscribersCampaignRow >[] = [
+		{
+			key: 'value',
+			label: __( 'Campaign', 'newspack-plugin' ),
+			render: row =>
+				row.is_untagged ? <span className="newspack-insights__table-na">{ __( '(no campaign)', 'newspack-plugin' ) }</span> : row.value,
+		},
+		{
+			key: 'count',
+			label: __( 'New subscriptions', 'newspack-plugin' ),
+			numeric: true,
+			render: row => formatNumber( row.count ),
+		},
+		{
+			key: 'amount',
+			label: __( 'Revenue', 'newspack-plugin' ),
+			numeric: true,
+			render: row => formatCurrency( row.amount ).display,
+		},
+	];
 
 	// Empty when there is nothing tagged to show: no rows at all, or only the
 	// trailing "(no campaign)" untagged row.
@@ -58,33 +83,12 @@ const CampaignSection = ( { rows }: CampaignSectionProps ) => {
 					'newspack-plugin'
 				) }
 			/>
-			<div className="newspack-insights__table-wrap">
-				<table className="newspack-insights__table">
-					<thead>
-						<tr>
-							<th scope="col">{ __( 'Campaign', 'newspack-plugin' ) }</th>
-							<th scope="col" className="newspack-insights__table-num">
-								{ __( 'New subscriptions', 'newspack-plugin' ) }
-							</th>
-							<th scope="col" className="newspack-insights__table-num">
-								{ __( 'Revenue', 'newspack-plugin' ) }
-							</th>
-						</tr>
-					</thead>
-					<tbody>
-						{ rows.map( row => (
-							<tr
-								key={ row.is_untagged ? '__untagged__' : `campaign:${ row.value }` }
-								className={ row.is_untagged ? 'newspack-insights__table-row--untagged' : undefined }
-							>
-								<td>{ row.is_untagged ? __( '(no campaign)', 'newspack-plugin' ) : row.value }</td>
-								<td className="newspack-insights__table-num">{ formatNumber( row.count ) }</td>
-								<td className="newspack-insights__table-num">{ formatCurrency( row.amount ).display }</td>
-							</tr>
-						) ) }
-					</tbody>
-				</table>
-			</div>
+			<InsightsDataView< SubscribersCampaignRow >
+				columns={ columns }
+				rows={ rows }
+				getRowKey={ row => ( row.is_untagged ? '__untagged__' : `campaign:${ row.value }` ) }
+				emptyMessage={ __( 'No campaign-tagged subscriptions in this window.', 'newspack-plugin' ) }
+			/>
 		</section>
 	);
 };

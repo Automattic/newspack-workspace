@@ -1,9 +1,12 @@
 /**
- * Tests for the shared SortableTable primitive.
+ * Tests for the shared SortableTable primitive (now a thin adapter over the
+ * read-only DataViews table, NPPD-1889).
  *
- * Covers: initial render with rows, click-to-sort (header click reorders),
- * numeric-vs-string default direction, empty state, error state (shown instead
- * of emptyMessage), and initialRowLimit + "See more" toggle.
+ * Covers the contract the adapter owns: initial render with rows, the
+ * numeric-vs-string default sort direction, nulls-sort-last, the empty state,
+ * the error state (shown instead of emptyMessage), and initialRowLimit + "See
+ * more" toggle. Interactive click-to-sort is DataViews-native (a header menu,
+ * not an immediate toggle) and is exercised in the browser, not here.
  */
 
 /**
@@ -53,29 +56,21 @@ describe( 'SortableTable', () => {
 		expect( screen.getByText( 'Gamma' ) ).toBeInTheDocument();
 	} );
 
-	it( 'clicking a header sorts the rows', () => {
-		render( <SortableTable columns={ makeColumns() } rows={ rows } getRowKey={ r => r.id } defaultSortKey="name" emptyMessage="No data." /> );
-
-		// Default sort: name ASC → Alpha, Beta, Gamma.
-		const cells = () => screen.getAllByRole( 'cell' ).map( c => c.textContent );
-		const namesInitial = cells().filter( ( _, i ) => i % 2 === 0 );
-		expect( namesInitial ).toEqual( [ 'Alpha', 'Beta', 'Gamma' ] );
-
-		// Click the Score header → numeric, opens DESC (30, 20, 10).
-		fireEvent.click( screen.getByRole( 'button', { name: /score/i } ) );
-		const scoresDesc = screen
+	it( 'sorts null values to the bottom under the default sort, regardless of direction', () => {
+		const withNull: TestRow[] = [
+			{ id: 'a', name: 'Alpha', score: 10 },
+			{ id: 'b', name: 'Beta', score: null },
+			{ id: 'c', name: 'Gamma', score: 30 },
+		];
+		// Numeric defaultSortKey opens DESC → 30, 10, then the null ("—") last.
+		render(
+			<SortableTable columns={ makeColumns() } rows={ withNull } getRowKey={ r => r.id } defaultSortKey="score" emptyMessage="No data." />
+		);
+		const scores = screen
 			.getAllByRole( 'cell' )
 			.filter( ( _, i ) => i % 2 === 1 )
 			.map( c => c.textContent );
-		expect( scoresDesc ).toEqual( [ '30', '20', '10' ] );
-
-		// Click again → ASC (10, 20, 30).
-		fireEvent.click( screen.getByRole( 'button', { name: /score/i } ) );
-		const scoresAsc = screen
-			.getAllByRole( 'cell' )
-			.filter( ( _, i ) => i % 2 === 1 )
-			.map( c => c.textContent );
-		expect( scoresAsc ).toEqual( [ '10', '20', '30' ] );
+		expect( scores ).toEqual( [ '30', '10', '—' ] );
 	} );
 
 	it( 'numeric defaultSortKey opens DESC; string defaultSortKey opens ASC', () => {

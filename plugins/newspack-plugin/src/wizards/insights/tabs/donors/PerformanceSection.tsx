@@ -28,12 +28,13 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { Fragment } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
 import type { DonorsTierRow, DonorsTierVariationRow } from '../../api/donors';
+import InsightsDataView from '../components/InsightsDataView';
+import type { InsightsColumn } from '../components/InsightsDataView';
 import SectionEmpty from '../components/SectionEmpty';
 import SectionHeading from '../components/SectionHeading';
 import { getPostEditUrl } from '../components/adminLinks';
@@ -42,6 +43,15 @@ import { formatCurrency, formatNumber } from '../components/format';
 export interface PerformanceSectionProps {
 	rows: DonorsTierRow[];
 }
+
+/**
+ * The nested parent → variation table flattened into a single ordered row list
+ * for DataViews (which has no native indented-child-row layout). Parent rows keep
+ * the product link; leaf variation rows render an indented, de-emphasized label.
+ * The list is left in server order (lifetime revenue DESC, variations under their
+ * parent) and the table is intentionally not user-sortable so the grouping holds.
+ */
+type FlatRow = { kind: 'parent'; row: DonorsTierRow } | { kind: 'variation'; parentId: number; row: DonorsTierVariationRow };
 
 const NotApplicable = () => (
 	<span className="newspack-insights__table-na" aria-label={ __( 'Not applicable', 'newspack-plugin' ) }>
@@ -52,16 +62,67 @@ const NotApplicable = () => (
 const renderCount = ( applies: boolean, value: number ) => ( applies ? formatNumber( value ) : <NotApplicable /> );
 const renderCurrency = ( applies: boolean, value: number ) => ( applies ? formatCurrency( value ).display : <NotApplicable /> );
 
-const renderRowCells = ( row: DonorsTierRow | DonorsTierVariationRow ) => (
-	<>
-		<td className="newspack-insights__table-num">{ renderCount( row.has_recurring, row.active_recurring_donors ) }</td>
-		<td className="newspack-insights__table-num">{ renderCount( row.has_recurring, row.lapsed_donors_in_window ) }</td>
-		<td className="newspack-insights__table-num">{ formatNumber( row.new_donors_in_window ) }</td>
-		<td className="newspack-insights__table-num">{ renderCount( row.has_one_time, row.one_time_gifts_in_window ) }</td>
-		<td className="newspack-insights__table-num">{ renderCurrency( row.has_recurring, row.recurring_revenue_in_window ) }</td>
-		<td className="newspack-insights__table-num">{ formatCurrency( row.lifetime_donation_revenue ).display }</td>
-	</>
-);
+const flatten = ( rows: DonorsTierRow[] ): FlatRow[] => {
+	const flat: FlatRow[] = [];
+	rows.forEach( row => {
+		flat.push( { kind: 'parent', row } );
+		if ( row.is_parent ) {
+			row.variations?.forEach( v => flat.push( { kind: 'variation', parentId: row.product_id, row: v } ) );
+		}
+	} );
+	return flat;
+};
+
+// Not user-sortable (columns omit `sortValue`): the server order groups each
+// parent with its variations, which a re-sort would scramble.
+const columns: InsightsColumn< FlatRow >[] = [
+	{
+		key: 'product',
+		label: __( 'Product', 'newspack-plugin' ),
+		render: item =>
+			item.kind === 'parent' ? (
+				<a href={ getPostEditUrl( item.row.product_id ) }>{ item.row.name }</a>
+			) : (
+				<span className="newspack-insights__dataview-subrow">{ item.row.label }</span>
+			),
+	},
+	{
+		key: 'active_recurring_donors',
+		label: __( 'Active recurring donors', 'newspack-plugin' ),
+		numeric: true,
+		render: ( { row } ) => renderCount( row.has_recurring, row.active_recurring_donors ),
+	},
+	{
+		key: 'lapsed_donors',
+		label: __( 'Lapsed donors', 'newspack-plugin' ),
+		numeric: true,
+		render: ( { row } ) => renderCount( row.has_recurring, row.lapsed_donors_in_window ),
+	},
+	{
+		key: 'new_donors',
+		label: __( 'New donors', 'newspack-plugin' ),
+		numeric: true,
+		render: ( { row } ) => formatNumber( row.new_donors_in_window ),
+	},
+	{
+		key: 'one_time_gifts',
+		label: __( 'One-time gifts', 'newspack-plugin' ),
+		numeric: true,
+		render: ( { row } ) => renderCount( row.has_one_time, row.one_time_gifts_in_window ),
+	},
+	{
+		key: 'recurring_revenue',
+		label: __( 'Recurring revenue', 'newspack-plugin' ),
+		numeric: true,
+		render: ( { row } ) => renderCurrency( row.has_recurring, row.recurring_revenue_in_window ),
+	},
+	{
+		key: 'lifetime_revenue',
+		label: __( 'Lifetime revenue', 'newspack-plugin' ),
+		numeric: true,
+		render: ( { row } ) => formatCurrency( row.lifetime_donation_revenue ).display,
+	},
+];
 
 const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 	if ( rows.length === 0 ) {
@@ -89,52 +150,14 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 					'newspack-plugin'
 				) }
 			/>
-			<div className="newspack-insights__table-wrap">
-				<table className="newspack-insights__table">
-					<thead>
-						<tr>
-							<th scope="col">{ __( 'Product', 'newspack-plugin' ) }</th>
-							<th scope="col" className="newspack-insights__table-num">
-								{ __( 'Active recurring donors', 'newspack-plugin' ) }
-							</th>
-							<th scope="col" className="newspack-insights__table-num">
-								{ __( 'Lapsed donors', 'newspack-plugin' ) }
-							</th>
-							<th scope="col" className="newspack-insights__table-num">
-								{ __( 'New donors', 'newspack-plugin' ) }
-							</th>
-							<th scope="col" className="newspack-insights__table-num">
-								{ __( 'One-time gifts', 'newspack-plugin' ) }
-							</th>
-							<th scope="col" className="newspack-insights__table-num">
-								{ __( 'Recurring revenue', 'newspack-plugin' ) }
-							</th>
-							<th scope="col" className="newspack-insights__table-num">
-								{ __( 'Lifetime revenue', 'newspack-plugin' ) }
-							</th>
-						</tr>
-					</thead>
-					<tbody>
-						{ rows.map( row => (
-							<Fragment key={ row.product_id }>
-								<tr>
-									<td>
-										<a href={ getPostEditUrl( row.product_id ) }>{ row.name }</a>
-									</td>
-									{ renderRowCells( row ) }
-								</tr>
-								{ row.is_parent &&
-									row.variations?.map( v => (
-										<tr key={ `${ row.product_id }-${ v.variation_id }` } className="newspack-insights__table-row--variation">
-											<td>{ v.label }</td>
-											{ renderRowCells( v ) }
-										</tr>
-									) ) }
-							</Fragment>
-						) ) }
-					</tbody>
-				</table>
-			</div>
+			<InsightsDataView< FlatRow >
+				columns={ columns }
+				rows={ flatten( rows ) }
+				getRowKey={ item =>
+					item.kind === 'parent' ? `product:${ item.row.product_id }` : `${ item.parentId }-${ item.row.variation_id }`
+				}
+				emptyMessage={ __( 'No donation activity yet.', 'newspack-plugin' ) }
+			/>
 			<p className="newspack-insights__table-footnote">
 				{ __(
 					'“(no variation)”: Donations recorded at the product level without a specific variation — e.g. one-time or name-your-price gifts made against this product.',
