@@ -20,17 +20,34 @@ class DataApiTest extends WP_UnitTestCase {
 
 	public function set_up() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
 		parent::set_up();
+		$this->require_classifier();
 		$this->reset_conversion_cache();
 	}
 
 	/**
 	 * Reset the memoized conversion-URL cache (it is per-request; tests that change
 	 * options or permalinks after a prior call must reset before re-reading).
+	 *
+	 * The cache moved with the classifier into newspack-plugin (NPPD-1887); the
+	 * bootstrap loads that one class from the sibling checkout.
 	 */
 	private function reset_conversion_cache() {
-		$property = new \ReflectionProperty( 'Newspack_Popups_Data_Api', 'conversion_urls_cache' );
-		$property->setAccessible( true );
-		$property->setValue( null, null );
+		if ( class_exists( '\Newspack\CTA_Intent_Classifier' ) ) {
+			\Newspack\CTA_Intent_Classifier::reset_cache();
+		}
+	}
+
+	/**
+	 * Skip when the shared classifier isn't loadable.
+	 *
+	 * Data_Api then degrades to "no inferred intent" by design (NPPD-1887). That
+	 * degradation can't be asserted in the same process once the class IS loaded,
+	 * so it's covered by the class_exists guards in Data_Api rather than a test.
+	 */
+	private function require_classifier() {
+		if ( ! class_exists( '\Newspack\CTA_Intent_Classifier' ) ) {
+			$this->markTestSkipped( 'newspack-plugin (CTA_Intent_Classifier) is not available.' );
+		}
 	}
 
 	/**
