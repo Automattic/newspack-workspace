@@ -598,7 +598,7 @@
 	// Self-labeling equal-width rectangles (NEWS-2586): each band carries its label,
 	// count, and (for every step after the first) the drop-off descriptors INSIDE
 	// it. One uniform layout at every width/step-count — no side column, no legend.
-	// Each band is a full-width <li> with a solid FILL behind a flowing TEXT layer
+	// Each band is a full-width <li> with a gradient FILL behind a flowing TEXT layer
 	// that wraps and grows the band. Sections are differentiated by color (opacity)
 	// alone, not by width.
 	&__funnel {
