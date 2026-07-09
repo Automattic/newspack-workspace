@@ -64,17 +64,18 @@ function wprtt_create_cid_cookie_if_not_set() {
 }
 
 /**
- * Extract the client ID from the _ga cookie, falling back to the newspack-cid
- * cookie or a newly generated ID.
+ * Read a client ID from the _ga or newspack-cid cookies, without creating one.
  *
- * @return string Client ID.
+ * Cookies are client-controlled, so present-but-empty values are treated the
+ * same as missing.
+ *
+ * @return string Client ID, or empty string when no usable cookie value exists.
  */
-function wprtt_extract_cid_from_cookies() {
+function wprtt_read_cid_from_cookies() {
 	if ( isset( $_COOKIE['_ga'] ) ) {
 		$cookie_pieces = explode( '.', $_COOKIE['_ga'], 3 ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		// A well-formed cookie (GA1.2.<cid>) yields the third piece; malformed
-		// values with fewer pieces still yield their last piece. Empty values
-		// fall through to the newspack-cid cookie or a generated ID.
+		// values with fewer pieces still yield their last piece.
 		$cid = trim( (string) end( $cookie_pieces ) );
 		if ( '' !== $cid ) {
 			return $cid;
@@ -82,7 +83,24 @@ function wprtt_extract_cid_from_cookies() {
 	}
 
 	if ( isset( $_COOKIE['newspack-cid'] ) ) {
-		return sanitize_text_field( wp_unslash( $_COOKIE['newspack-cid'] ) ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$cid = trim( sanitize_text_field( wp_unslash( $_COOKIE['newspack-cid'] ) ) ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		if ( '' !== $cid ) {
+			return $cid;
+		}
+	}
+	return '';
+}
+
+/**
+ * Extract the client ID from the cookies, generating (and setting) one when no
+ * usable cookie value exists.
+ *
+ * @return string Client ID.
+ */
+function wprtt_extract_cid_from_cookies() {
+	$cid = wprtt_read_cid_from_cookies();
+	if ( '' !== $cid ) {
+		return $cid;
 	}
 	return wprtt_create_cid_cookie_if_not_set();
 }
@@ -99,8 +117,9 @@ function wprtt_extract_cid_from_cookies() {
  * @return string Dedup identity, or empty string when nothing is available.
  */
 function wprtt_get_dedup_identity() {
-	if ( isset( $_COOKIE['_ga'] ) || isset( $_COOKIE['newspack-cid'] ) ) {
-		return (string) wprtt_extract_cid_from_cookies();
+	$cid = wprtt_read_cid_from_cookies();
+	if ( '' !== $cid ) {
+		return $cid;
 	}
 	// phpcs:disable WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders -- The pixel response is explicitly uncacheable (no-store + batcache_cancel), and these values only feed a salted dedup hash: spoofing them merely weakens dedup for that client (fails open, same as no dedup).
 	$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';

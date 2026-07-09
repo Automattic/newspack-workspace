@@ -174,6 +174,19 @@ class PixelFunctionsTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A present-but-empty newspack-cid cookie is treated as missing: the dedup
+	 * identity falls back to IP + user agent instead of an empty string.
+	 */
+	public function test_empty_newspack_cid_cookie_falls_back_to_ip_ua() {
+		unset( $_COOKIE['_ga'] );
+		$_COOKIE['newspack-cid']    = '   ';
+		$_SERVER['REMOTE_ADDR']     = '203.0.113.9';
+		$_SERVER['HTTP_USER_AGENT'] = 'Mozilla/5.0 Test';
+		$identity                   = wprtt_get_dedup_identity();
+		self::assertStringStartsWith( 'ipua_', $identity );
+	}
+
+	/**
 	 * Without cookies (the common cross-site pixel case, where browsers withhold
 	 * them), the identity falls back to a stable IP + user agent hash.
 	 */
