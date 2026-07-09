@@ -111,6 +111,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$newspack_blocks_test_wc                 = null;
 		\Newspack\WooCommerce_My_Account::$is_from_my_account = false;
 		remove_all_filters( 'woocommerce_cart_item_removed_message' );
+		remove_all_filters( 'newspack_blocks_donate_billing_fields_keys' );
 		unset( $_POST['billing_email'], $_POST['post_data'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'] );
 		parent::tear_down();
 	}
