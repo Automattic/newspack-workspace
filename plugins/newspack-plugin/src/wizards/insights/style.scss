@@ -52,12 +52,15 @@
 	}
 
 	// While a tab is loading (chunk Suspense fallback OR in-tab loading view),
-	// hide the date range + comparison controls — they're non-interactive
-	// while data is fetching, and removing visual noise lets the tab loading
-	// animation own the user's attention.
+	// hide the date range + comparison controls, the "was this tab useful?"
+	// feedback footer, and the floating next-steps card — they're all
+	// post-data affordances that read as noise mid-load (DSGNEWS-188), and
+	// removing them lets the tab loading animation own the user's attention.
 	.newspack-wizard__content:has( .newspack-insights__tab-loading ),
 	.newspack-wizard__content:has( .newspack-insights__tab-fallback ) {
-		.newspack-insights__header-controls {
+		.newspack-insights__header-controls,
+		.newspack-insights__tab-footer,
+		.newspack-insights__next-steps {
 			display: none;
 		}
 	}

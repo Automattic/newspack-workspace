@@ -21,55 +21,8 @@
 		gap: 32px;
 	}
 
-	// Tenure card wraps the percentile callouts + narrative sentence
-	// so both share a single card chrome. The stats-summary becomes
-	// layout-only; the card itself carries the bg/border/padding.
-
-	&__tenure-card {
-		display: flex;
-		flex-direction: column;
-		gap: 16px;
-		padding: 20px 24px;
-		background-color: wp-colors.$white;
-		border: 1px solid wp-colors.$gray-200;
-		border-radius: 4px;
-	}
-
-	&__stats-summary {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 24px;
-		margin: 0;
-
-		div {
-			display: flex;
-			flex-direction: column;
-			gap: 4px;
-		}
-
-		dt {
-			font-size: 12px;
-			font-weight: 600;
-			letter-spacing: 0.05em;
-			text-transform: uppercase;
-			color: wp-colors.$gray-700;
-			margin: 0;
-		}
-
-		dd {
-			font-size: 22px;
-			font-weight: 600;
-			color: wp-colors.$gray-900;
-			font-variant-numeric: tabular-nums;
-			margin: 0;
-		}
-	}
-
-	&__tenure-narrative {
-		margin: 0;
-		font-size: 14px;
-		font-weight: 400;
-		line-height: 1.4;
-		color: wp-colors.$gray-700;
-	}
+	// Subscriber tenure renders as standard scorecard tiles (metric-grid +
+	// MetricCard) — DSGNEWS-188. The former bespoke `__tenure-card` /
+	// `__stats-summary` / `__tenure-narrative` chrome is gone; the narrative now
+	// rides in the SectionHeading description.
 }
