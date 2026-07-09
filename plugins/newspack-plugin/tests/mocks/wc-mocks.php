@@ -13,6 +13,39 @@ class WC_Payment_Token {
 	}
 }
 
+class WC_Payment_Token_CC extends WC_Payment_Token {
+	private $card_type;
+	private $last4;
+	public function __construct( $card_type = '', $last4 = '' ) {
+		$this->card_type = $card_type;
+		$this->last4     = $last4;
+	}
+	public function get_card_type() {
+		return $this->card_type;
+	}
+	public function get_last4() {
+		return $this->last4;
+	}
+}
+
+class WC_Payment_Tokens {
+	public static $tokens = [];
+	public static function get( $token_id ) {
+		return self::$tokens[ $token_id ] ?? null;
+	}
+}
+
+/**
+ * Note: real WC maps through a labels array first (amex => "American Express",
+ * jcb => "JCB") and applies the woocommerce_credit_card_type_labels filter;
+ * this mock only replicates the ucwords fallback.
+ *
+ * @param string $type Card type slug.
+ */
+function wc_get_credit_card_type_label( $type ) {
+	return ucwords( str_replace( [ '-', '_' ], ' ', (string) $type ) );
+}
+
 class WC_Install {
 	public static function create_pages() {
 		return true;
@@ -212,6 +245,22 @@ class WC_Order {
 	public $meta = [];
 	public function __construct( $data ) {
 		global $orders_database;
+		// Real WC supports `new WC_Order( $order_id )` — re-hydrate from the mock DB.
+		if ( is_numeric( $data ) ) {
+			foreach ( $orders_database as $order ) {
+				if ( $order->get_id() === (int) $data ) {
+					$this->data = $order->data;
+					$this->meta = $order->meta;
+					return;
+				}
+			}
+			$this->data = [
+				'id'     => (int) $data,
+				'status' => '',
+				'items'  => [],
+			];
+			return;
+		}
 		$data['id'] = count( $orders_database ) + 1;
 		if ( ! isset( $data['date_paid'] ) ) {
 			$data['date_paid'] = gmdate( 'Y-m-d H:i:s' );
@@ -282,6 +331,21 @@ class WC_Order {
 	}
 	public function get_currency() {
 		return $this->data['currency'] ?? '';
+	}
+	public function get_payment_method() {
+		return $this->data['payment_method'] ?? '';
+	}
+	public function get_payment_method_title() {
+		return $this->data['payment_method_title'] ?? '';
+	}
+	public function get_payment_tokens() {
+		return $this->data['payment_tokens'] ?? [];
+	}
+	public function get_billing_first_name() {
+		return $this->data['billing_first_name'] ?? '';
+	}
+	public function get_billing_last_name() {
+		return $this->data['billing_last_name'] ?? '';
 	}
 }
 

@@ -496,6 +496,50 @@ class WooCommerce_Connection {
 	}
 
 	/**
+	 * Get a human-readable payment method label for an order.
+	 *
+	 * Prefers the card brand and last four digits from a saved payment token,
+	 * which is available for saved-card and subscription orders. Falls back to
+	 * the payment gateway's customer-facing title (e.g. "Credit / Debit Card"),
+	 * since the card details of a one-time payment are not stored locally.
+	 *
+	 * @param \WC_Order $order The order.
+	 *
+	 * @return string Payment method label.
+	 */
+	public static function get_payment_method_label( $order ) {
+		if ( class_exists( 'WC_Payment_Tokens' ) && method_exists( $order, 'get_payment_tokens' ) ) {
+			foreach ( $order->get_payment_tokens() as $token_id ) {
+				$token = \WC_Payment_Tokens::get( $token_id );
+				if ( ! $token || ! is_a( $token, 'WC_Payment_Token_CC' ) ) {
+					continue;
+				}
+				$last4 = $token->get_last4();
+				$type  = $token->get_card_type();
+				// Both parts are needed for a meaningful label — some gateways store
+				// tokens without a brand or last4; fall through to the gateway title.
+				if ( ! $last4 || ! $type ) {
+					continue;
+				}
+				$brand = function_exists( 'wc_get_credit_card_type_label' ) ? \wc_get_credit_card_type_label( $type ) : ucwords( (string) $type );
+				return trim(
+					sprintf(
+						/* translators: 1: card brand, e.g. "Visa". 2: the card's last four digits. */
+						__( '%1$s ending in %2$s', 'newspack-plugin' ),
+						$brand,
+						$last4
+					)
+				);
+			}
+		}
+		$title = $order->get_payment_method_title();
+		if ( ! empty( $title ) ) {
+			return $title;
+		}
+		return __( 'Card', 'newspack-plugin' );
+	}
+
+	/**
 	 * Send the customizable receipt or welcome email instead of WooCommerce's default receipt.
 	 *
 	 * @param int $order_id The order ID.
@@ -510,7 +554,9 @@ class WooCommerce_Connection {
 		}
 
 		// If there are no donation products in the order, do not override the default WC receipt email.
-		$has_donation_product = \Newspack\Donations::get_order_donation_product_id( $order->get_id() ) !== false;
+		// Note: get_order_donation_product_id() returns null (not false) when no donation
+		// products are configured at all, so an emptiness check is required here.
+		$has_donation_product = ! empty( \Newspack\Donations::get_order_donation_product_id( $order->get_id() ) );
 		if ( ! $has_donation_product ) {
 			return false;
 		}
@@ -580,7 +626,7 @@ class WooCommerce_Connection {
 			],
 			[
 				'template' => '*PAYMENT_METHOD*',
-				'value'    => __( 'Card', 'newspack-plugin' ) . ' – ' . $order->get_payment_method(),
+				'value'    => self::get_payment_method_label( $order ),
 			],
 			[
 				'template' => '*RECEIPT_URL*',
