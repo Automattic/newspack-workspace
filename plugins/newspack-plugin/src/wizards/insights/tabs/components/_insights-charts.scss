@@ -595,11 +595,12 @@
 	}
 
 	// Funnel viz — shared across Gates, Prompts, and Conversion Journey tabs.
-	// Self-labeling stacked trapezoids (NEWS-2586): each band carries its label,
+	// Self-labeling equal-width rectangles (NEWS-2586): each band carries its label,
 	// count, and (for every step after the first) the drop-off descriptors INSIDE
 	// it. One uniform layout at every width/step-count — no side column, no legend.
-	// Each band is an <li> with a clipped trapezoid FILL behind a flowing TEXT
-	// layer that wraps, grows the band, and overflows a narrow fill without clipping.
+	// Each band is a full-width <li> with a solid FILL behind a flowing TEXT layer
+	// that wraps and grows the band. Sections are differentiated by color (opacity)
+	// alone, not by width.
 	&__funnel {
 		width: 100%;
 		max-width: 500px; // NEWS-2586 container cap; grid cells render narrower (fluid).
@@ -623,9 +624,9 @@
 			text-align: center;
 		}
 
-		// Fill: the single anchor color clipped to the per-band trapezoid (clip-path
-		// set inline). Opacity fades 1.0 → 0.6 via the inline --band-opacity. Sits
-		// BEHIND the text so the text is never clipped by the band edge.
+		// Fill: the single anchor color covering the full-width band. Opacity fades
+		// 1.0 → 0.6 via the inline --band-opacity, which is the sole differentiator
+		// between sections. Sits BEHIND the text.
 		&-fill {
 			position: absolute;
 			inset: 0;

@@ -12,56 +12,9 @@ import { render, screen } from '@testing-library/react';
 /**
  * Internal dependencies
  */
-import Funnel, { stepOpacity, dropFromPrevious, computeDisplayHalfWidths, type FunnelStage } from './Funnel';
-
-const stage = ( label: string, count: number, pctOfTop: number ) => ( { label, count, pct_of_top: pctOfTop } );
+import Funnel, { stepOpacity, dropFromPrevious, type FunnelStage } from './Funnel';
 
 describe( 'Funnel helpers', () => {
-	describe( 'computeDisplayHalfWidths', () => {
-		// Chart half-width 160; MIN_HALF_WIDTH 44.8 (28%). Max taper is per-funnel:
-		// HALF_WIDTH / stepCount (80 for 2 steps, ~53 for 3, 32 for 5).
-		it( 'keeps the top level at full half-width', () => {
-			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 500, 0.5 ) ], 1000 );
-			expect( halves[ 0 ] ).toBe( 160 );
-		} );
-		it( 'renders a moderate drop proportionally when within the clamps', () => {
-			// 2-step taper bound is 160 − 80 = 80; 900/1000 → 144 sits above it, so it passes through.
-			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 900, 0.9 ) ], 1000 );
-			expect( halves[ 1 ] ).toBeCloseTo( 144, 5 );
-		} );
-		it( 'caps a steep drop at the per-funnel max taper from the level above', () => {
-			// 2-step funnel → taper 160/2 = 80. 200/1000 raw → 32, but capped to 160 − 80 = 80.
-			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 200, 0.2 ) ], 1000 );
-			expect( halves[ 1 ] ).toBe( 80 );
-		} );
-		it( 'scales the taper to the step count so each funnel descends evenly', () => {
-			// 3-step funnel → taper 160/3. Steep tail steps 160 → ~106.7 → ~53.3.
-			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 1, 0.001 ), stage( 'c', 1, 0.001 ) ], 1000 );
-			expect( halves[ 1 ] ).toBeCloseTo( 160 - 160 / 3, 5 );
-			expect( halves[ 2 ] ).toBeCloseTo( 160 - ( 2 * 160 ) / 3, 5 );
-		} );
-		it( 'floors a tiny level at the minimum segment width', () => {
-			// 5-step funnel → taper 160/5 = 32. Steep tail walks 160 → 128 → 96 → 64 → 44.8,
-			// bottoming out at MIN_HALF_WIDTH 44.8 rather than the ~0 raw widths.
-			const halves = computeDisplayHalfWidths(
-				[ stage( 'a', 1000, 1 ), stage( 'b', 100, 0.1 ), stage( 'c', 10, 0.01 ), stage( 'd', 1, 0.001 ), stage( 'e', 1, 0.001 ) ],
-				1000
-			);
-			expect( halves[ 4 ] ).toBeCloseTo( 44.8 );
-			expect( halves.every( h => h >= 44.8 - 0.0001 ) ).toBe( true );
-		} );
-		it( 'never flares: each level is at most the level above', () => {
-			// A later stage exceeding an earlier one (data drift) must not widen.
-			const halves = computeDisplayHalfWidths( [ stage( 'a', 500, 1 ), stage( 'b', 2000, 4 ) ], 500 );
-			for ( let i = 1; i < halves.length; i++ ) {
-				expect( halves[ i ] ).toBeLessThanOrEqual( halves[ i - 1 ] );
-			}
-		} );
-		it( 'returns zeros when the top count is non-positive', () => {
-			expect( computeDisplayHalfWidths( [ stage( 'a', 0, 0 ), stage( 'b', 0, 0 ) ], 0 ) ).toEqual( [ 0, 0 ] );
-		} );
-	} );
-
 	describe( 'stepOpacity', () => {
 		it( 'runs 1.0 at the first step to 0.6 at the last', () => {
 			expect( stepOpacity( 0, 3 ) ).toBeCloseTo( 1.0, 5 );
@@ -133,5 +86,16 @@ describe( 'Funnel render', () => {
 		expect( container.querySelector( '.newspack-insights__funnel-legend' ) ).toBeNull();
 		expect( container.querySelector( '.newspack-insights__funnel-labels' ) ).toBeNull();
 		expect( container.querySelector( '.newspack-insights__funnel-svg' ) ).toBeNull();
+	} );
+
+	it( 'renders equal-width rectangular fills with no trapezoid clip-path', () => {
+		// The sections are full-width rectangles differentiated by color alone, so
+		// no band carries the old inline clip-path geometry.
+		const { container } = render( <Funnel stages={ stages( [ 'A', 1000 ], [ 'B', 100 ], [ 'C', 5 ] ) } /> );
+		const fills = container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-fill' );
+		expect( fills ).toHaveLength( 3 );
+		fills.forEach( fill => {
+			expect( fill.style.clipPath ).toBe( '' );
+		} );
 	} );
 } );

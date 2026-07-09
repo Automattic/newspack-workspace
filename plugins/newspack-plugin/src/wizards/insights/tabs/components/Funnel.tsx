@@ -6,18 +6,15 @@
  * ("X% of {top}" share + "Y% drop-off") INSIDE the section. One uniform layout at
  * every viewport and step count: no side-label/compact split, no separate legend.
  *
- * Each band is an <li> with two layers:
- *   - a clipped trapezoid FILL (CSS clip-path, insets from computeDisplayHalfWidths)
- *     behind the text, forming a continuous silhouette because adjacent band edges
- *     share width; and
- *   - a flowing TEXT layer on top that is NOT clipped, so it wraps, grows the band
- *     height, and is never cut off — when a band's fill is narrower than its text
- *     the text spills over the card (dark text on the faded lower bands keeps it
- *     legible there).
+ * The sections are equal-width rectangles (the overall silhouette is a rectangle,
+ * not a tapering funnel): the drop-off between steps is conveyed by the labels and
+ * by color alone, not by width. Each band is a full-width <li> with two layers:
+ *   - a solid FILL behind the text; and
+ *   - a flowing TEXT layer on top that wraps and grows the band height.
  *
- * Width is CSS-driven (width:100%, max-width cap); the clip-path percentages scale
- * intrinsically, so no JS measurement is needed. The single anchor color
- * (primary-500) fades 1.0 → 0.6 down the funnel; bands above
+ * Width is CSS-driven (width:100%, max-width cap), so no JS measurement is needed.
+ * The single anchor color (primary-500) fades 1.0 → 0.6 down the funnel, and that
+ * fade is the sole visual differentiator between sections; bands above
  * DARK_TEXT_OPACITY_THRESHOLD take white text, below it dark text.
  */
 
@@ -31,20 +28,11 @@ import { __, sprintf } from '@wordpress/i18n';
  */
 import { formatNumber, formatPercent } from './format';
 
-// Coordinate basis for the half-width math and the clip-path percentages.
-const VIEWBOX_WIDTH = 320;
 const FULL_OPACITY = 1;
 const TAIL_OPACITY = 0.6;
 // Above this band opacity the fill is dark enough for white text; below it the
-// faded band (and any text spilling onto the white card) needs dark text.
+// faded band needs dark text.
 const DARK_TEXT_OPACITY_THRESHOLD = 0.75;
-const HALF_WIDTH = VIEWBOX_WIDTH / 2;
-// The funnel is a rough relative-size viz: no segment is narrower than this share
-// of the chart width (avoids razor-thin bands and keeps the lowest band's fill
-// under its own text). The max per-segment taper is computed per-funnel from the
-// step count so funnels of any length descend evenly (see computeDisplayHalfWidths).
-const MIN_SEGMENT_WIDTH_RATIO = 0.28; // NEWS-2586: wider floor keeps the narrowest band's fill under its text.
-const MIN_HALF_WIDTH = ( MIN_SEGMENT_WIDTH_RATIO * VIEWBOX_WIDTH ) / 2;
 
 export interface FunnelStage {
 	label: string;
@@ -70,42 +58,6 @@ export const stepOpacity = ( index: number, stepCount: number ): number => {
  * prior one (data drift) — a negative "drop-off" is meaningless, so show 0%.
  */
 export const dropFromPrevious = ( count: number, prevCount: number ): number => ( prevCount > 0 ? Math.max( 0, 1 - count / prevCount ) : 0 );
-
-/**
- * Per-level display half-width for every stage. Raw width is proportional to the
- * stage's share of the top count, but clamped so the silhouette stays a readable
- * rough viz: never wider than the level above, never below MIN_HALF_WIDTH, and no
- * more than the per-funnel max taper (HALF_WIDTH / stepCount) narrower than the
- * level above. Counts/percentages in the labels are unaffected — only widths clamp.
- */
-export const computeDisplayHalfWidths = ( stages: FunnelStage[], topCount: number ): number[] => {
-	if ( topCount <= 0 ) {
-		return stages.map( () => 0 );
-	}
-	const maxTaperHalfWidth = HALF_WIDTH / stages.length;
-	const halves: number[] = [];
-	stages.forEach( ( stage, index ) => {
-		const raw = Math.min( HALF_WIDTH, ( stage.count / topCount ) * HALF_WIDTH );
-		if ( index === 0 ) {
-			halves.push( raw );
-			return;
-		}
-		const prev = halves[ index - 1 ];
-		const lower = Math.max( MIN_HALF_WIDTH, prev - maxTaperHalfWidth );
-		halves.push( Math.min( prev, Math.max( lower, raw ) ) );
-	} );
-	return halves;
-};
-
-/** Left inset (% of chart width) for a half-width; the right edge is 100 minus it. */
-const edgePercent = ( half: number ): number => ( ( HALF_WIDTH - half ) / VIEWBOX_WIDTH ) * 100;
-
-/** CSS clip-path polygon for a trapezoid from a top half-width to a bottom half-width. */
-const trapezoidClip = ( halfTop: number, halfBottom: number ): string => {
-	const lt = edgePercent( halfTop );
-	const lb = edgePercent( halfBottom );
-	return `polygon(${ lt }% 0, ${ 100 - lt }% 0, ${ 100 - lb }% 100%, ${ lb }% 100%)`;
-};
 
 /**
  * The two descriptive lines for every step beyond the first: what share of the top
@@ -140,7 +92,8 @@ const Funnel = ( { stages }: FunnelProps ) => {
 	const topCount = stages.length > 0 ? stages[ 0 ].count : 0;
 	const topLabel = stages.length > 0 ? stages[ 0 ].label : '';
 
-	// Proportions can't be computed without a non-zero first step.
+	// Share-of-top and drop-off percentages can't be computed without a non-zero
+	// first step.
 	if ( stages.length === 0 || topCount <= 0 ) {
 		return (
 			<div className="newspack-insights__funnel">
@@ -150,14 +103,11 @@ const Funnel = ( { stages }: FunnelProps ) => {
 	}
 
 	const stepCount = stages.length;
-	const halves = computeDisplayHalfWidths( stages, topCount );
 
 	return (
 		<ol className="newspack-insights__funnel" aria-label={ __( 'Conversion funnel', 'newspack-plugin' ) }>
 			{ stages.map( ( stage, index ) => {
 				const opacity = stepOpacity( index, stepCount );
-				const halfTop = halves[ index ];
-				const halfBottom = index < stepCount - 1 ? halves[ index + 1 ] : halfTop;
 				const isDark = opacity > DARK_TEXT_OPACITY_THRESHOLD;
 				const pctOfTop = topCount > 0 ? stage.count / topCount : 0;
 				const drop = index > 0 ? dropFromPrevious( stage.count, stages[ index - 1 ].count ) : null;
@@ -167,11 +117,7 @@ const Funnel = ( { stages }: FunnelProps ) => {
 						className={ 'newspack-insights__funnel-step ' + ( isDark ? 'is-on-dark' : 'is-on-light' ) }
 						style={ { '--band-opacity': opacity } as React.CSSProperties }
 					>
-						<span
-							className="newspack-insights__funnel-fill"
-							style={ { clipPath: trapezoidClip( halfTop, halfBottom ) } }
-							aria-hidden="true"
-						/>
+						<span className="newspack-insights__funnel-fill" aria-hidden="true" />
 						<span className="newspack-insights__funnel-content">
 							<span className="newspack-insights__funnel-label-name">{ stage.label }</span>
 							<span className="newspack-insights__funnel-label-count">{ formatNumber( stage.count ) }</span>
