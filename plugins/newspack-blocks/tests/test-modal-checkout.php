@@ -43,14 +43,73 @@ if ( ! function_exists( 'wcs_get_product_limitation' ) ) {
 	}
 }
 
+require_once __DIR__ . '/mocks/newspack-plugin-mocks.php';
+
+if ( ! function_exists( 'WC' ) ) {
+	/**
+	 * Mock WC() function returning a controllable container.
+	 *
+	 * Defining WC() makes function_exists( 'WC' ) gates pass across the whole
+	 * suite, so the container must keep previously-gated paths behaving as if
+	 * WooCommerce had no state: no cart and no registered payment gateways.
+	 *
+	 * @return object
+	 */
+	function WC() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+		global $newspack_blocks_test_wc;
+		if ( empty( $newspack_blocks_test_wc ) ) {
+			$newspack_blocks_test_wc = new class() {
+				/**
+				 * Cart double, set by tests.
+				 *
+				 * @var object|null
+				 */
+				public $cart = null;
+
+				/**
+				 * Mimic WC()->payment_gateways() with no registered gateways.
+				 *
+				 * @return object
+				 */
+				public function payment_gateways() {
+					return new class() {
+						/**
+						 * Get registered gateways.
+						 *
+						 * @return array
+						 */
+						public function payment_gateways() {
+							return [];
+						}
+					};
+				}
+			};
+		}
+		return $newspack_blocks_test_wc;
+	}
+}
+
+if ( ! function_exists( 'wc_get_checkout_url' ) ) {
+	/**
+	 * Mock WooCommerce checkout URL helper.
+	 *
+	 * @return string
+	 */
+	function wc_get_checkout_url() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Mock WooCommerce global.
+		return 'https://example.com/checkout/';
+	}
+}
+
 class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	/**
 	 * Clean up request data.
 	 */
 	public function tear_down() {
-		global $newspack_blocks_test_limited_product_id, $newspack_blocks_test_limited_user_id;
+		global $newspack_blocks_test_limited_product_id, $newspack_blocks_test_limited_user_id, $newspack_blocks_test_wc;
 		$newspack_blocks_test_limited_product_id = null;
 		$newspack_blocks_test_limited_user_id    = null;
+		$newspack_blocks_test_wc                 = null;
+		\Newspack\WooCommerce_My_Account::$is_from_my_account = false;
 		remove_all_filters( 'woocommerce_cart_item_removed_message' );
 		unset( $_POST['billing_email'], $_POST['post_data'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'] );
 		parent::tear_down();
@@ -414,6 +473,182 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 					]
 				)
 			)
+		);
+	}
+
+	/**
+	 * Set WC()->cart to a cart double with a controllable needs_shipping_address().
+	 *
+	 * @param bool $needs_shipping Whether the cart needs a shipping address.
+	 */
+	private function set_mock_checkout_cart( $needs_shipping = false ) {
+		WC()->cart = new class( $needs_shipping ) {
+			/**
+			 * Whether the cart needs a shipping address.
+			 *
+			 * @var bool
+			 */
+			private $needs_shipping;
+
+			/**
+			 * Constructor.
+			 *
+			 * @param bool $needs_shipping Whether the cart needs a shipping address.
+			 */
+			public function __construct( $needs_shipping ) {
+				$this->needs_shipping = $needs_shipping;
+			}
+
+			/**
+			 * Whether the cart needs a shipping address.
+			 *
+			 * @return bool
+			 */
+			public function needs_shipping_address() {
+				return $this->needs_shipping;
+			}
+		};
+	}
+
+	/**
+	 * Configure the billing fields returned by the config filter.
+	 *
+	 * @param string[] $billing_fields Billing field keys.
+	 */
+	private function set_configured_billing_fields( $billing_fields ) {
+		add_filter(
+			'newspack_blocks_donate_billing_fields_keys',
+			function() use ( $billing_fields ) {
+				return $billing_fields;
+			}
+		);
+	}
+
+	/**
+	 * Checkout fields fixture resembling the WooCommerce default structure.
+	 *
+	 * @return array
+	 */
+	private function get_checkout_fields_fixture() {
+		return [
+			'billing'  => [
+				'billing_first_name' => [ 'label' => 'First name' ],
+				'billing_last_name'  => [ 'label' => 'Last name' ],
+				'billing_country'    => [ 'label' => 'Country' ],
+				'billing_state'      => [ 'label' => 'State' ],
+				'billing_phone'      => [ 'label' => 'Phone' ],
+				'billing_email'      => [ 'label' => 'Email' ],
+			],
+			'shipping' => [
+				'shipping_first_name' => [ 'label' => 'First name' ],
+			],
+			'order'    => [
+				'order_comments' => [ 'label' => 'Order notes' ],
+			],
+		];
+	}
+
+	/**
+	 * Configured-off billing fields are removed on standard (non-modal) checkout
+	 * requests, so express checkout wallets cannot fail validation on fields the
+	 * buyer cannot see or edit (NPPM-2937).
+	 */
+	public function test_checkout_fields_removes_configured_off_fields_on_standard_checkout() {
+		$this->set_mock_checkout_cart();
+		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
+
+		$fields = \Newspack_Blocks\Modal_Checkout::woocommerce_checkout_fields( $this->get_checkout_fields_fixture() );
+
+		$this->assertSame(
+			[ 'billing_first_name', 'billing_email' ],
+			array_keys( $fields['billing'] ),
+			'Billing fields not in the configured list should be removed.'
+		);
+		$this->assertArrayHasKey(
+			'shipping_first_name',
+			$fields['shipping'],
+			'Shipping fields should be untouched.'
+		);
+	}
+
+	/**
+	 * With no custom billing fields configured, checkout fields are unchanged.
+	 */
+	public function test_checkout_fields_noop_when_no_fields_configured() {
+		$this->set_mock_checkout_cart();
+
+		$fields = $this->get_checkout_fields_fixture();
+
+		$this->assertSame(
+			$fields,
+			\Newspack_Blocks\Modal_Checkout::woocommerce_checkout_fields( $fields ),
+			'Fields should be unchanged when no custom billing fields are configured.'
+		);
+	}
+
+	/**
+	 * Carts that need a shipping address keep the full field set.
+	 */
+	public function test_checkout_fields_noop_when_cart_needs_shipping() {
+		$this->set_mock_checkout_cart( true );
+		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
+
+		$fields = $this->get_checkout_fields_fixture();
+
+		$this->assertSame(
+			$fields,
+			\Newspack_Blocks\Modal_Checkout::woocommerce_checkout_fields( $fields ),
+			'Fields should be unchanged when the cart needs a shipping address.'
+		);
+	}
+
+	/**
+	 * Contexts without a cart keep the full field set.
+	 */
+	public function test_checkout_fields_noop_when_cart_unavailable() {
+		WC()->cart = null;
+		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
+
+		$fields = $this->get_checkout_fields_fixture();
+
+		$this->assertSame(
+			$fields,
+			\Newspack_Blocks\Modal_Checkout::woocommerce_checkout_fields( $fields ),
+			'Fields should be unchanged when no cart is available.'
+		);
+	}
+
+	/**
+	 * My Account checkouts keep the full field set (they relax required flags
+	 * instead of removing fields).
+	 */
+	public function test_checkout_fields_noop_for_my_account_checkout() {
+		$this->set_mock_checkout_cart();
+		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
+		\Newspack\WooCommerce_My_Account::$is_from_my_account = true;
+
+		$fields = $this->get_checkout_fields_fixture();
+
+		$this->assertSame(
+			$fields,
+			\Newspack_Blocks\Modal_Checkout::woocommerce_checkout_fields( $fields ),
+			'Fields should be unchanged for My Account checkouts.'
+		);
+	}
+
+	/**
+	 * The billing phone field gets the form-row-last class when configured.
+	 */
+	public function test_checkout_fields_billing_phone_gets_form_row_last_class() {
+		$this->set_mock_checkout_cart();
+		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email', 'billing_phone' ] );
+
+		$fields = \Newspack_Blocks\Modal_Checkout::woocommerce_checkout_fields( $this->get_checkout_fields_fixture() );
+
+		$this->assertSame(
+			'form-row-last',
+			$fields['billing']['billing_phone']['class'],
+			'The billing phone field should get the form-row-last class.'
 		);
 	}
 }
