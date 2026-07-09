@@ -22,7 +22,8 @@ import {
 /**
  * Internal dependencies.
  */
-import { Badge, Button, DataViews } from '../../../../packages/components/src';
+import { Badge, Button, DataViews, Router } from '../../../../packages/components/src';
+import EmptyDiscounts from './EmptyDiscounts';
 import './style.scss';
 import { WIZARD_STORE_NAMESPACE } from '../../../../packages/components/src/wizard/store';
 import {
@@ -35,6 +36,8 @@ import {
 	excludedLabel,
 } from '../data/mock-discounts';
 import { getAllPlans } from '../data/plan-stats';
+import { TEAM_PLANS } from '../data/mock-groups';
+import { GROUP_LABEL } from '../labels';
 import { fmtDate } from '../format';
 import ConfirmFlow from '../flows/ConfirmFlow';
 import DiscountRuleFlow from '../flows/DiscountRuleFlow';
@@ -52,7 +55,17 @@ const DEFAULT_VIEW = {
 	titleField: 'audience',
 };
 
+const { useLocation } = Router;
+
+// Group (team) subscriptions are tagged "(Group)" — matching the editor and the
+// Subscribers demo — while individual ones show a plain name.
+const planLabel = name => ( TEAM_PLANS.some( p => p.name === name ) ? `${ name } (${ GROUP_LABEL })` : name );
+
 export default function DiscountList() {
+	// `?empty=1` on the discounts tab forces the onboarding for demos/screenshots
+	// without touching stored rules (nothing to restore afterwards).
+	const previewEmpty = new URLSearchParams( useLocation().search ).get( 'empty' ) !== null;
+
 	const [ view, setView ] = useState( DEFAULT_VIEW );
 	// Unlike groups, rules mutate in place on this screen (pause/resume/delete
 	// are direct storage writes), so re-reading the store is enough to refresh.
@@ -89,10 +102,10 @@ export default function DiscountList() {
 				id: 'audience',
 				label: __( 'Subscription', 'newspack-plugin' ),
 				enableGlobalSearch: true,
-				elements: getAllPlans().map( plan => ( { value: plan.name, label: plan.name } ) ),
+				elements: getAllPlans().map( plan => ( { value: plan.name, label: planLabel( plan.name ) } ) ),
 				filterBy: { operators: [ 'isAny' ] },
 				getValue: ( { item } ) => item.audience,
-				render: ( { item } ) => <span>{ item.audience }</span>,
+				render: ( { item } ) => <span>{ planLabel( item.audience ) }</span>,
 				enableSorting: true,
 			},
 			{
@@ -184,7 +197,10 @@ export default function DiscountList() {
 		}
 	};
 
-	const total = paginationInfo?.totalItems ?? 0;
+	// Onboarding shows for a genuinely empty store (or the preview param), but a
+	// search/filter that returns nothing keeps the normal DataViews "No results".
+	const isEmpty = previewEmpty || rules.length === 0;
+	const total = previewEmpty ? 0 : paginationInfo?.totalItems ?? 0;
 
 	// Surface the rule count in the header breadcrumb, e.g. "/ Discounts (5)".
 	useEffect( () => {
@@ -200,36 +216,43 @@ export default function DiscountList() {
 					</span>
 				</>
 			),
-			actions: [
-				{
-					type: 'primary',
-					label: __( 'Add discount', 'newspack-plugin' ),
-					action: () => setEditorRule( {} ),
-				},
-			],
+			// When empty, the onboarding owns the CTA — don't duplicate it in the header.
+			actions: isEmpty
+				? []
+				: [
+						{
+							type: 'primary',
+							label: __( 'Add discount', 'newspack-plugin' ),
+							action: () => setEditorRule( {} ),
+						},
+				  ],
 		} );
-	}, [ setHeaderData, total ] );
+	}, [ setHeaderData, total, isEmpty ] );
 
 	return (
 		// eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events
 		<div className="newspack-subscribers-demo__clickable-rows" onClick={ onRowClick }>
-			<DataViews
-				data={ processedData }
-				fields={ fields }
-				view={ view }
-				onChangeView={ setView }
-				actions={ actions }
-				paginationInfo={ paginationInfo }
-				defaultLayouts={ { table: {} } }
-				getItemId={ item => item.id }
-				onClickItem={ item => setEditorRule( item ) }
-				search
-				header={
-					<Button variant="secondary" size="compact" onClick={ () => setSettingsOpen( true ) }>
-						{ __( 'Settings', 'newspack-plugin' ) }
-					</Button>
-				}
-			/>
+			{ isEmpty ? (
+				<EmptyDiscounts onAdd={ () => setEditorRule( {} ) } />
+			) : (
+				<DataViews
+					data={ processedData }
+					fields={ fields }
+					view={ view }
+					onChangeView={ setView }
+					actions={ actions }
+					paginationInfo={ paginationInfo }
+					defaultLayouts={ { table: {} } }
+					getItemId={ item => item.id }
+					onClickItem={ item => setEditorRule( item ) }
+					search
+					header={
+						<Button variant="secondary" size="compact" onClick={ () => setSettingsOpen( true ) }>
+							{ __( 'Settings', 'newspack-plugin' ) }
+						</Button>
+					}
+				/>
+			) }
 
 			{ editorRule !== null && (
 				<DiscountRuleFlow
