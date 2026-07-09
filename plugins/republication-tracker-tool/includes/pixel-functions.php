@@ -71,12 +71,9 @@ function wprtt_create_cid_cookie_if_not_set() {
 function wprtt_extract_cid_from_cookies() {
 	if ( isset( $_COOKIE['_ga'] ) ) {
 		$cookie_pieces = explode( '.', $_COOKIE['_ga'], 3 ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		if ( 1 === count( $cookie_pieces ) ) {
-			$cid = reset( $cookie_pieces );
-		} else {
-			list( $version, $domain_depth, $cid ) = $cookie_pieces;
-		}
-		return $cid;
+		// A well-formed cookie (GA1.2.<cid>) yields the third piece; malformed
+		// values with fewer pieces still yield their last piece, never null.
+		return end( $cookie_pieces );
 	}
 
 	if ( isset( $_COOKIE['newspack-cid'] ) ) {

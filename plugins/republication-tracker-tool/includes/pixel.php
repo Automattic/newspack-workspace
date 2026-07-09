@@ -100,7 +100,7 @@ if ( isset( $_GET['post'] ) && isset( $_GET['ga4'] ) && ( ! $wprtt_guards_enable
 		$wprtt_client_id = wprtt_extract_cid_from_cookies();
 		// The title fetch is a blocking outbound request only the GA4 event needs,
 		// so it runs only for views that actually count.
-		$url_title = '' !== $url ? wprtt_get_referring_page_title( $url, $shared_post_id ) : '';
+		$url_title = '' !== $url ? wprtt_get_referring_page_title( $url ) : '';
 		$value = get_post_meta( $shared_post_id, 'republication_tracker_tool_sharing', true );
 		if ( $value ) {
 			if ( isset( $value[ $url ] ) ) {

@@ -151,6 +151,17 @@ class PixelFunctionsTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A malformed _ga cookie with fewer than three segments still yields a usable
+	 * client ID (never null, no notice).
+	 */
+	public function test_malformed_ga_cookie_still_yields_client_id() {
+		$_COOKIE['_ga'] = '111111.222222';
+		$identity       = wprtt_get_dedup_identity();
+		self::assertNotSame( '', (string) $identity );
+		self::assertNotNull( $identity );
+	}
+
+	/**
 	 * Without cookies (the common cross-site pixel case, where browsers withhold
 	 * them), the identity falls back to a stable IP + user agent hash.
 	 */
