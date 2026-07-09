@@ -9,8 +9,8 @@
  *   - `view.type: 'table'`, a single page (`perPage` covers the whole set), no
  *     search / filters / bulk actions / field-visibility toggle. The DataViews
  *     header actions and pagination footer are hidden in SCSS
- *     (`.newspack-insights-dataview`, see _insights-charts.scss) so the only
- *     interactive affordance is click-to-sort on the column headers.
+ *     (`.newspack-insights-dataview`, in the global `insights/style.scss`) so
+ *     the only interactive affordance is click-to-sort on the column headers.
  *   - Native DataViews sorting, with a `sort` comparator per column that keeps
  *     null / em-dash cells at the bottom regardless of direction (preserving
  *     the old SortableTable contract).

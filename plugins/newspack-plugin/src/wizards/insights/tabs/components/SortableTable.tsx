@@ -7,10 +7,12 @@
  * props (`SortableColumn`, `getRowKey`, `defaultSortKey`, `errorMessage`,
  * `initialRowLimit`) are unchanged, so the four consumers need no edits.
  *
- * Behavior preserved by the wrapper: numeric columns open DESC / string columns
- * open ASC, click-to-sort toggles direction, null cells sort last, and
- * `initialRowLimit` caps rows behind a "See more" toggle applied after sorting.
- * `errorMessage` (when set) replaces the empty-state copy.
+ * Behavior preserved by the wrapper: the default sort opens DESC for a numeric
+ * column / ASC for a string column, null cells sort last, and `initialRowLimit`
+ * caps rows behind a "See more" toggle applied after sorting. Re-sorting is now
+ * DataViews-native — via its column-header menu (Sort ascending / descending),
+ * not the old click-to-toggle header. `errorMessage` (when set) replaces the
+ * empty-state copy.
  */
 
 /**
