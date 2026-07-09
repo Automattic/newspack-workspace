@@ -16,7 +16,9 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 	 * Reset registered meta between tests.
 	 */
 	public function tear_down() {
-		unregister_meta_key( 'post', Content_Restriction_Control::IS_EXEMPT_META_KEY, 'post' );
+		foreach ( array_column( (array) Content_Restriction_Control::get_available_post_types(), 'value' ) as $subtype ) {
+			unregister_meta_key( 'post', Content_Restriction_Control::IS_EXEMPT_META_KEY, $subtype );
+		}
 		parent::tear_down();
 	}
 

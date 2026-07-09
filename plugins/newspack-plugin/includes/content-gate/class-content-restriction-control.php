@@ -59,6 +59,7 @@ class Content_Restriction_Control {
 	 */
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register_meta' ] );
+		add_action( 'init', [ __CLASS__, 'register_meta_guards' ] );
 		add_filter( 'newspack_is_post_restricted', [ __CLASS__, 'is_post_restricted' ], 10, 2 );
 	}
 
@@ -489,6 +490,19 @@ class Content_Restriction_Control {
 					},
 				]
 			);
+		}
+	}
+
+	/**
+	 * Register the REST guard that strips the exemption meta from unauthorized
+	 * saves. Registered unconditionally — independent of whether the meta itself
+	 * is registered — so its lifetime never depends on when the content-gate
+	 * feature flag resolves. It is a harmless no-op when the key is absent from
+	 * the request.
+	 */
+	public static function register_meta_guards() {
+		$post_types = array_column( (array) self::get_available_post_types(), 'value' );
+		foreach ( $post_types as $post_type ) {
 			\add_filter( "rest_pre_insert_{$post_type}", [ __CLASS__, 'strip_unauthorized_exempt_meta' ], 10, 2 );
 		}
 	}
