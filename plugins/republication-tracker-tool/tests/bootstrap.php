@@ -10,6 +10,11 @@ if ( ! $_tests_dir ) {
 	$_tests_dir = '/tmp/wordpress-tests-lib';
 }
 
+// Load the composer autoloader (provides the PHPUnit Polyfills required by the WP test suite).
+if ( file_exists( dirname( __DIR__ ) . '/vendor/autoload.php' ) ) {
+	require_once dirname( __DIR__ ) . '/vendor/autoload.php';
+}
+
 // Give access to tests_add_filter() function.
 require_once $_tests_dir . '/includes/functions.php';
 

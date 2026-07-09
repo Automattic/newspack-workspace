@@ -32,6 +32,7 @@ require plugin_dir_path( __FILE__ ) . 'includes/class-article-settings.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-widget.php';
 require plugin_dir_path( __FILE__ ) . 'includes/compatibility-co-authors-plus.php';
 require plugin_dir_path( __FILE__ ) . 'includes/class-republication-rewrite.php';
+require plugin_dir_path( __FILE__ ) . 'includes/pixel-functions.php';
 
 /**
  * Main initiation class.
