@@ -66,9 +66,14 @@ add_filter(
 	'pre_wp_mail',
 	function ( $short_circuit, $attributes ) {
 		$recipient = is_array( $attributes['to'] ?? '' ) ? ( $attributes['to'][0] ?? '' ) : ( $attributes['to'] ?? '' );
+		// No recipient: leave the value untouched so core still validates the
+		// input and returns false, rather than reporting a bogus success.
+		if ( empty( $recipient ) ) {
+			return $short_circuit;
+		}
 		// Only save emails sent to non-admin users.
-		$user = $recipient ? get_user_by( 'email', $recipient ) : false;
-		if ( $recipient && ! ( $user && in_array( 'administrator', $user->roles, true ) ) ) {
+		$user = get_user_by( 'email', $recipient );
+		if ( ! ( $user && in_array( 'administrator', $user->roles, true ) ) ) {
 			$message = preg_replace( '/<\/title>.*?<div/s', '</title><div', $attributes['message'] );
 			wp_insert_post(
 				[
