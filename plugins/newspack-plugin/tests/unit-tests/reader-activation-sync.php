@@ -634,6 +634,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 			'API Access has been disabled for this account.'                                => 'permanent_config',
 			'Payment Required'                                                              => 'permanent_config',
 			'cindy@example.com is already a list member. Use PUT to insert or update.'      => 'benign',
+			'Member Exists'                                                                 => 'benign',
 			'garcia@example.com has signed up to a lot of lists very recently'              => 'transient',
 			'Some unknown transient network error'                                          => 'transient',
 		];
@@ -832,5 +833,8 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$this->assertEquals( 'config', $data['class'] );
 		$this->assertEquals( 'delete', $data['mode'] );
 		$this->assertEquals( 'gone@test.com', $data['email'] );
+		$this->assertEquals( 'esp', $data['integration_id'] );
+		$this->assertEquals( 'Test', $data['context'] );
+		$this->assertEquals( 'API Access has been disabled for this account.', $data['reason'] );
 	}
 }
