@@ -383,6 +383,7 @@ body.newspack-newsletters-admin-screen--bundled {
 }
 
 // newspack-plugin's global commons bundle ships dataviews 10.x CSS that wrongly pins __col-first-data to 1%.
+// TODO: remove once newspack-plugin ships dataviews 16 — this override then degrades to a no-op.
 .dataviews-view-table col.dataviews-view-table__col-first-data {
 	width: auto !important;
 }
