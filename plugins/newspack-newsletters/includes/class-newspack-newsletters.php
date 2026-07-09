@@ -971,8 +971,11 @@ final class Newspack_Newsletters {
 		 * reports success while the option write is a no-op. The write capability is
 		 * filterable via `newspack_newsletters_color_palette_capability`.
 		 */
-		if ( current_user_can( apply_filters( 'newspack_newsletters_color_palette_capability', 'edit_others_posts' ) ) ) {
+		$capability = apply_filters( 'newspack_newsletters_color_palette_capability', 'edit_others_posts' );
+		if ( current_user_can( $capability ) ) {
 			self::update_color_palette( json_decode( $request->get_body(), true ) );
+		} else {
+			Newspack_Newsletters_Logger::log( 'Color palette write skipped: current user lacks the "' . $capability . '" capability.' );
 		}
 		return \rest_ensure_response( [] );
 	}
