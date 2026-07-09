@@ -93,7 +93,7 @@ class Contact_Sync extends Sync {
 	 *
 	 *   - permanent_contact: bad contact data; retrying can never succeed.
 	 *   - permanent_config:  site-level ESP account problem; actionable.
-	 *   - benign:            the contact already exists; effectively success.
+	 *   - benign:            the contact already exists; no retry needed.
 	 *
 	 * Anything not matched here is treated as 'transient' and retried.
 	 */
