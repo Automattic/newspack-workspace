@@ -59,41 +59,46 @@ describe( 'Funnel render', () => {
 		expect( screen.getByText( '400' ) ).toBeInTheDocument();
 	} );
 
-	it( 'reveals drop-off descriptors only while the funnel is hovered', () => {
+	it( 'keeps descriptors available to assistive tech and reveals the visual Popover on hover', () => {
 		const { container } = render( <Funnel stages={ stages( [ 'Impressions', 25000 ], [ 'Engaged', 2000 ] ) } /> );
 		const funnel = container.querySelector( '.newspack-insights__funnel' ) as HTMLElement;
-		// Hidden until the funnel is hovered.
-		expect( screen.queryByText( /of Impressions/ ) ).toBeNull();
+		// The drop-off text is always in the DOM as a screen-reader copy, even unhovered.
+		const srText = container.querySelector( '.screen-reader-text' );
+		expect( srText?.textContent ).toMatch( /of Impressions/ );
+		expect( srText?.textContent ).toMatch( /drop-off/ );
+		// The floating visual Popover (portaled to body) appears only on hover…
+		expect( document.querySelector( '.newspack-insights__funnel-labels' ) ).toBeNull();
 		fireEvent.mouseEnter( funnel );
-		expect( screen.getByText( /of Impressions/ ) ).toBeInTheDocument();
-		// Exactly one drop-off line: the first stage has none.
-		expect( screen.getAllByText( /drop-off/ ) ).toHaveLength( 1 );
-		// Hidden again once the pointer leaves.
+		expect( document.querySelector( '.newspack-insights__funnel-labels' ) ).not.toBeNull();
+		// …and hides again once the pointer leaves.
 		fireEvent.mouseLeave( funnel );
-		expect( screen.queryByText( /of Impressions/ ) ).toBeNull();
+		expect( document.querySelector( '.newspack-insights__funnel-labels' ) ).toBeNull();
 	} );
 
-	it( 'reveals descriptors on focus and hides them on blur', () => {
+	it( 'reveals the visual Popover on focus and hides it on blur', () => {
 		const { container } = render( <Funnel stages={ stages( [ 'Impressions', 25000 ], [ 'Engaged', 2000 ] ) } /> );
 		const funnel = container.querySelector( '.newspack-insights__funnel' ) as HTMLElement;
 		fireEvent.focus( funnel );
-		expect( screen.getByText( /drop-off/ ) ).toBeInTheDocument();
+		expect( document.querySelector( '.newspack-insights__funnel-labels' ) ).not.toBeNull();
 		fireEvent.blur( funnel );
-		expect( screen.queryByText( /drop-off/ ) ).toBeNull();
+		expect( document.querySelector( '.newspack-insights__funnel-labels' ) ).toBeNull();
 	} );
 
-	it( "reveals every section's descriptors at once on hover", () => {
+	it( "reveals every section's Popover at once on hover", () => {
 		const { container } = render( <Funnel stages={ stages( [ 'A', 1000 ], [ 'B', 500 ], [ 'C', 100 ] ) } /> );
+		// Both post-first stages carry an always-present screen-reader descriptor…
+		expect( container.querySelectorAll( '.screen-reader-text' ) ).toHaveLength( 2 );
+		// …and reveal their visual Popovers together on a single hover.
 		fireEvent.mouseEnter( container.querySelector( '.newspack-insights__funnel' ) as HTMLElement );
-		// Both post-first stages reveal their drop-off line together.
-		expect( screen.getAllByText( /drop-off/ ) ).toHaveLength( 2 );
+		expect( document.querySelectorAll( '.newspack-insights__funnel-labels' ) ).toHaveLength( 2 );
 	} );
 
 	it( 'renders a single-stage funnel without descriptors even on hover', () => {
 		const { container } = render( <Funnel stages={ stages( [ 'Only', 100 ] ) } /> );
 		expect( screen.getByText( 'Only' ) ).toBeInTheDocument();
+		expect( container.querySelector( '.screen-reader-text' ) ).toBeNull();
 		fireEvent.mouseEnter( container.querySelector( '.newspack-insights__funnel' ) as HTMLElement );
-		expect( screen.queryByText( /drop-off/ ) ).toBeNull();
+		expect( document.querySelector( '.newspack-insights__funnel-labels' ) ).toBeNull();
 	} );
 
 	it( 'shows the empty message with no stages', () => {
@@ -129,6 +134,18 @@ describe( 'Funnel render', () => {
 		} );
 	} );
 
+	it( 'sets both gradient opacity custom properties on every section', () => {
+		// These drive the SCSS gradient fill; assert they are emitted so a rename
+		// drift between the component and the stylesheet is caught here.
+		const { container } = render( <Funnel stages={ stages( [ 'A', 1000 ], [ 'B', 500 ], [ 'C', 100 ] ) } /> );
+		const steps = container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-step' );
+		expect( steps ).toHaveLength( 3 );
+		steps.forEach( step => {
+			expect( step.style.getPropertyValue( '--band-opacity-top' ) ).not.toBe( '' );
+			expect( step.style.getPropertyValue( '--band-opacity-bottom' ) ).not.toBe( '' );
+		} );
+	} );
+
 	it( 'steps section widths down from a full-width top section', () => {
 		const { container } = render( <Funnel stages={ stages( [ 'A', 1000 ], [ 'B', 500 ], [ 'C', 100 ] ) } /> );
 		const widths = Array.from( container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-step' ) ).map( step =>
@@ -137,6 +154,36 @@ describe( 'Funnel render', () => {
 		expect( widths[ 0 ] ).toBe( 100 ); // top section pinned to the full width
 		expect( widths[ 1 ] ).toBeLessThan( widths[ 0 ] );
 		expect( widths[ 2 ] ).toBeLessThan( widths[ 1 ] );
+	} );
+
+	it( 'never widens a band beyond the one above, even for long funnels or data drift', () => {
+		// A 10-stage funnel (MINIMUM_BAND_PROPORTION * 10 > 1, so the floor would
+		// otherwise flare) that also contains a drift stage (S2 > S1). Widths must
+		// still stay ≤ 100% and strictly decrease band to band.
+		const { container } = render(
+			<Funnel
+				stages={ stages(
+					[ 'S0', 1000 ],
+					[ 'S1', 900 ],
+					[ 'S2', 950 ],
+					[ 'S3', 300 ],
+					[ 'S4', 250 ],
+					[ 'S5', 200 ],
+					[ 'S6', 150 ],
+					[ 'S7', 120 ],
+					[ 'S8', 100 ],
+					[ 'S9', 90 ]
+				) }
+			/>
+		);
+		const widths = Array.from( container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-step' ) ).map( step =>
+			parseFloat( step.style.maxWidth )
+		);
+		expect( widths[ 0 ] ).toBe( 100 );
+		widths.forEach( width => expect( width ).toBeLessThanOrEqual( 100 ) );
+		for ( let i = 1; i < widths.length; i++ ) {
+			expect( widths[ i ] ).toBeLessThan( widths[ i - 1 ] );
+		}
 	} );
 
 	it( 'keeps text full size above the width threshold, then eases it down gradually', () => {

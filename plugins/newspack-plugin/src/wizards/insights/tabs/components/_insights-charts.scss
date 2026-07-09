@@ -612,7 +612,7 @@
 		padding: 20px;
 		box-sizing: border-box;
 		list-style: none;
-		background-color: #fff;
+		background-color: wp-colors.$white;
 		border: 1px solid wp-colors.$gray-200;
 		border-radius: 4px;
 
@@ -622,7 +622,7 @@
 			flex-direction: column;
 			align-items: center;
 			justify-content: center;
-			margin-bottom: 25px;
+			margin-bottom: 24px;
 			margin-left: auto;
 			margin-right: auto;
 			min-height: 75px; // baseline; grows with wrapped content.
@@ -635,7 +635,7 @@
 			}
 		}
 
-		// Transition connector filling the 25px gap below each section (except the
+		// Transition connector filling the 24px gap below each section (except the
 		// last). A filled box clipped to a trapezoid: its top edge spans the section
 		// above (this element's full width) and its bottom edge insets by the inline
 		// --separator-inset to match the narrower section below — but never so far
@@ -647,7 +647,7 @@
 			top: 100%;
 			left: 0;
 			width: 100%;
-			height: 25px;
+			height: 24px;
 			background-color: #{colors.$primary-200};
 			// Clamp the per-side inset so the bottom edge can't be narrower than the
 			// section min-width: ( 100% − min-width ) / 2 is the inset that yields
@@ -680,6 +680,10 @@
 			flex-direction: column;
 			align-items: center;
 			max-width: 160px; // wrap width for the descriptor lines.
+			// Always white text; the dark shadow keeps it legible over both the dark
+			// upper bands and the faded (light) lower ones — no per-band color switch.
+			color: wp-colors.$white;
+			text-shadow: 0 1px 2px rgba( wp-colors.$gray-900, 0.5 );
 		}
 
 		&-labels {
@@ -705,7 +709,8 @@
 			line-height: 1.15;
 		}
 
-		// Stage descriptors inherit the band's text color (white/dark); muted weight.
+		// Stage descriptors sit inside the floating Popover (its own light surface),
+		// so they use its default dark text; muted weight.
 		&-label-pct {
 			font-size: 12px;
 			line-height: 1.35;
@@ -726,18 +731,6 @@
 			font-size: 13px;
 			color: wp-colors.$gray-600;
 		}
-	}
-
-	// Contrast follows band opacity: white text on the dark upper bands (with a
-	// soft halo so any spill over the white card stays legible), dark text on the
-	// faded lower bands (reads on both the light fill and the card).
-	&__funnel-step.is-on-dark &__funnel-content {
-		color: #fff;
-		text-shadow: 0 1px 1px #{colors.$primary-500};
-	}
-
-	&__funnel-step.is-on-light &__funnel-content {
-		color: wp-colors.$gray-900;
 	}
 
 	// Sortable table affordances — shared across all tabs that embed SortableTable
