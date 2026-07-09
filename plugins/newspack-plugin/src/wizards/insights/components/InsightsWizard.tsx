@@ -19,6 +19,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { Component, lazy, Suspense, useEffect } from '@wordpress/element';
+import { Button } from '@wordpress/components';
 import type { ErrorInfo, ReactNode } from 'react';
 
 /**
@@ -167,9 +168,9 @@ class TabErrorBoundary extends Component< TabErrorBoundaryProps, TabErrorBoundar
 			return (
 				<div className="newspack-insights__tab-error" role="alert">
 					<p>{ __( 'This section could not be loaded.', 'newspack-plugin' ) }</p>
-					<button type="button" className="newspack-insights__tab-error-action" onClick={ this.handleReload }>
+					<Button variant="secondary" onClick={ this.handleReload }>
 						{ __( 'Reload the page', 'newspack-plugin' ) }
-					</button>
+					</Button>
 				</div>
 			);
 		}

@@ -47,7 +47,7 @@
 		&-detail {
 			margin-top: 8px;
 			font-size: 13px;
-			color: wp-colors.$gray-600;
+			color: wp-colors.$gray-700;
 			font-family: monospace;
 		}
 	}
@@ -61,10 +61,19 @@
 		gap: 16px;
 	}
 
+	// Hairline separator + breathing room between consecutive sections so a
+	// long tab doesn't read as one dense block (DSGNEWS-188 — "white space is
+	// very important"). The tab wrapper's 32px flex gap sits above the border;
+	// the padding balances the same space below it.
+	&__section + &__section {
+		padding-top: 32px;
+		border-top: 1px solid wp-colors.$gray-200;
+	}
+
 	&__section-empty {
 		margin: 0;
 		padding: 20px;
-		background-color: #fff;
+		background-color: wp-colors.$white;
 		border: 1px solid wp-colors.$gray-200;
 		border-radius: 4px;
 		font-size: 14px;
@@ -119,6 +128,11 @@
 	// (bumped from the old 3px) for the rare case of marking a single tile.
 
 	&__metric-card {
+		// Establish a size container so the hero value can scale to the card
+		// width (DSGNEWS-188 — long numbers overflowed the fixed 44px on narrow
+		// cards). See `&-value` below.
+		container-type: inline-size;
+
 		// Optional call-out for one specific tile; clip the 4px bar to the
 		// CoreCard's top corners so it doesn't overhang the radius.
 		&--highlighted {
@@ -188,7 +202,10 @@
 			// stack matches @wordpress/base-styles' admin body font.
 			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
 				Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-			font-size: 44px;
+			// Cap at the 44px design size, but scale down with the card width so a
+			// long formatted number (e.g. "1,392,000") can't overflow a narrow
+			// tile (DSGNEWS-188). `container-type` is set on `&__metric-card`.
+			font-size: min( 44px, 14cqi );
 			font-weight: 500;
 			font-style: normal;
 			line-height: 1.05;
@@ -245,7 +262,7 @@
 			}
 
 			&--neutral {
-				color: wp-colors.$gray-600;
+				color: wp-colors.$gray-700;
 			}
 		}
 
@@ -281,7 +298,7 @@
 	&__table-wrap {
 		overflow-x: auto;
 		min-width: 0;
-		background-color: #fff;
+		background-color: wp-colors.$white;
 		border: 1px solid wp-colors.$gray-200;
 		border-radius: 4px;
 	}
@@ -303,9 +320,14 @@
 		font-weight: 600;
 		color: var( --wp-admin-theme-color );
 
-		&:hover,
-		&:focus {
+		&:hover {
 			text-decoration: underline;
+		}
+
+		// Match the canonical focus ring on its sibling `__sortable-table-more`.
+		&:focus-visible {
+			outline: 2px solid var( --wp-admin-theme-color );
+			outline-offset: 2px;
 		}
 	}
 
@@ -363,7 +385,7 @@
 		// applicable" and is distinct from a real, default-colored zero — a zero
 		// is a tracked data point; an em-dash is "this metric doesn't apply here."
 		&-na {
-			color: wp-colors.$gray-600;
+			color: wp-colors.$gray-700;
 		}
 
 		// Nested variation/child rows sit directly under their parent.
@@ -390,7 +412,7 @@
 		// real count + revenue but muted (gray-600) so the untagged remainder reads
 		// as context rather than a ranked campaign. Backend orders it last.
 		&-row--untagged td {
-			color: wp-colors.$gray-600;
+			color: wp-colors.$gray-700;
 		}
 	}
 
@@ -401,7 +423,7 @@
 		margin: 8px 0 0;
 		font-size: 12px;
 		line-height: 1.5;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 
 		& + & {
 			margin-top: 4px;

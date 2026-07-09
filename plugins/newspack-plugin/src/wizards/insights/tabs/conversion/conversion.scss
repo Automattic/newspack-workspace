@@ -27,7 +27,7 @@
 	min-width: 0;
 	height: 100%;
 	padding: 16px;
-	background-color: #fff;
+	background-color: wp-colors.$white;
 	border: 1px solid wp-colors.$gray-200;
 	border-radius: 4px;
 }
@@ -61,7 +61,7 @@
 		padding: 16px 0;
 		font-size: 13px;
 		line-height: 1.5;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 	}
 
 	// Per-viz subheading + caption used inside the multi-cell sections.
@@ -87,7 +87,7 @@
 		padding: 32px 20px;
 		text-align: center;
 		font-size: 13px;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 	}
 
 	// Section 2 — four per-journey funnels in a 2-column grid, stacking under

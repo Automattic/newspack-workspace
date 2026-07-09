@@ -55,7 +55,7 @@
 		font-size: 13px;
 		font-weight: 400;
 		line-height: 1.4;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 	}
 
 	&__settings-link {
@@ -134,7 +134,7 @@
 			padding: 6px 8px;
 			border: 1px solid wp-colors.$gray-300;
 			border-radius: 4px;
-			background: #fff;
+			background: wp-colors.$white;
 			color: wp-colors.$gray-900;
 
 			&:focus-visible {
@@ -183,7 +183,7 @@
 	&__tab-stub-message {
 		font-size: 14px;
 		font-weight: 400;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 		margin: 0;
 	}
 
@@ -219,7 +219,7 @@
 
 		.newspack-insights__last-updated {
 			font-size: 11px;
-			color: wp-colors.$gray-600;
+			color: wp-colors.$gray-700;
 			white-space: nowrap;
 		}
 	}
