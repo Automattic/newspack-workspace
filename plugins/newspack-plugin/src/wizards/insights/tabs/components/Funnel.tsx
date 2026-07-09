@@ -43,8 +43,16 @@ const INTERNAL_GRADIENT_FRACTION = 0.5;
 // The bottom of the gradient should be a little less opaque than the top of the
 // next band, so the bands are visually distinct.
 const INTERNAL_GRADIENT_FLOOR = 0.15;
-// Each band should be no less than this fraction of the prior band's width, to
-// avoid extremely narrow funnels.
+// Each band should be no less than this fraction of the prior band's width times
+// the total number of steps, toavoid extremely narrow funnels.
+const MINIMUM_BAND_PROPORTION = 0.12;
+// Section text stays full size until a section narrows past FONT_SCALE_THRESHOLD of
+// the top width, then ramps down linearly toward FONT_SCALE_FLOOR of the top
+// section's size (reached only as the width approaches 0) — a gradual reduction
+// rather than a hard step at the threshold. Name and count share the one scale, so
+// their relative sizes stay constant as they shrink together.
+const FONT_SCALE_THRESHOLD = 0.5;
+const FONT_SCALE_FLOOR = 0.75;
 
 export interface FunnelStage {
 	label: string;
@@ -130,7 +138,7 @@ const Funnel = ( { stages }: FunnelProps ) => {
 	}
 
 	const stepCount = stages.length;
-	const minBandPct = 0.15 * stepCount;
+	const minBandPct = MINIMUM_BAND_PROPORTION * stepCount;
 	// Half the internal ramp per band, in opacity units. Derived from the step gap
 	// so the sheen scales with the funnel length (subtler on longer funnels).
 	const stepGap = stepCount > 1 ? ( FULL_OPACITY - TAIL_OPACITY ) / ( stepCount - 1 ) : 0;
@@ -160,10 +168,16 @@ const Funnel = ( { stages }: FunnelProps ) => {
 				const drop = index > 0 ? dropFromPrevious( stage.count, stages[ index - 1 ].count ) : null;
 				const bandWidth = Math.max( minBandPct * prevBandWidth, pctOfTop );
 				prevBandWidth = bandWidth;
+				// Text is full size at/above FONT_SCALE_THRESHOLD of the top width, then
+				// eases down linearly toward FONT_SCALE_FLOOR as the section narrows —
+				// a gradual ramp rather than a step at the threshold.
+				const widthRatio = Math.min( 1, bandWidth / FONT_SCALE_THRESHOLD );
+				const fontScale = FONT_SCALE_FLOOR + ( 1 - FONT_SCALE_FLOOR ) * widthRatio;
 				// The separator below this section is a trapezoid: its top edge spans
-				// this (wider) section and its bottom edge is clipped to the next
-				// (narrower) section's width. The ratio is relative to this section,
-				// since the separator spans its full width. Clamped to ≤ 1 (no flare).
+				// this (wider) section and its bottom edge insets toward the next
+				// (narrower) section's width. The inset is a % of this section (the
+				// separator spans its full width); the CSS floors it so the bottom edge
+				// never drops below the section min-width. Ratio clamped to ≤ 1 (no flare).
 				const nextBandWidth = index < stepCount - 1 ? Math.max( minBandPct * bandWidth, stages[ index + 1 ].count / topCount ) : bandWidth;
 				const separatorBottomRatio = bandWidth > 0 ? Math.min( 1, nextBandWidth / bandWidth ) : 1;
 				const separatorInsetPct = ( ( 1 - separatorBottomRatio ) / 2 ) * 100;
@@ -175,6 +189,7 @@ const Funnel = ( { stages }: FunnelProps ) => {
 							{
 								'--band-opacity-top': topOpacity,
 								'--band-opacity-bottom': bottomOpacity,
+								'--funnel-font-scale': fontScale,
 								maxWidth: `${ bandWidth * 100 }%`,
 							} as React.CSSProperties
 						}
@@ -189,10 +204,12 @@ const Funnel = ( { stages }: FunnelProps ) => {
 							<span
 								className="newspack-insights__funnel-separator"
 								aria-hidden="true"
-								style={ {
-									opacity: bandOpacity,
-									clipPath: `polygon(0 0, 100% 0, ${ 100 - separatorInsetPct }% 100%, ${ separatorInsetPct }% 100%)`,
-								} }
+								style={
+									{
+										opacity: bandOpacity,
+										'--separator-inset': `${ separatorInsetPct }%`,
+									} as React.CSSProperties
+								}
 							/>
 						) }
 					</li>

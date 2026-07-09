@@ -120,11 +120,12 @@ describe( 'Funnel render', () => {
 		fills.forEach( fill => {
 			expect( fill.style.clipPath ).toBe( '' );
 		} );
-		// One separator per adjacent pair (n − 1), each clipped to a trapezoid.
+		// One separator per adjacent pair (n − 1). The trapezoid clip-path lives in
+		// CSS; the per-band bottom inset is supplied inline as a percentage.
 		const separators = container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-separator' );
 		expect( separators ).toHaveLength( 2 );
 		separators.forEach( separator => {
-			expect( separator.style.clipPath ).toMatch( /^polygon\(/ );
+			expect( separator.style.getPropertyValue( '--separator-inset' ) ).toMatch( /%$/ );
 		} );
 	} );
 
@@ -136,5 +137,19 @@ describe( 'Funnel render', () => {
 		expect( widths[ 0 ] ).toBe( 100 ); // top section pinned to the full width
 		expect( widths[ 1 ] ).toBeLessThan( widths[ 0 ] );
 		expect( widths[ 2 ] ).toBeLessThan( widths[ 1 ] );
+	} );
+
+	it( 'keeps text full size above the width threshold, then eases it down gradually', () => {
+		const { container } = render( <Funnel stages={ stages( [ 'A', 1000 ], [ 'B', 700 ], [ 'C', 450 ], [ 'D', 100 ] ) } /> );
+		const steps = container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-step' );
+		const scale = ( step: HTMLElement ) => parseFloat( step.style.getPropertyValue( '--funnel-font-scale' ) );
+		// At or above half the top width, text stays full size.
+		expect( scale( steps[ 0 ] ) ).toBe( 1 );
+		expect( scale( steps[ 1 ] ) ).toBe( 1 );
+		// Just past the threshold the reduction is slight — a ramp, not a hard step to
+		// the floor — and it keeps easing down as sections get narrower.
+		expect( scale( steps[ 2 ] ) ).toBeLessThan( 1 );
+		expect( scale( steps[ 2 ] ) ).toBeGreaterThan( 0.9 );
+		expect( scale( steps[ 3 ] ) ).toBeLessThan( scale( steps[ 2 ] ) );
 	} );
 } );

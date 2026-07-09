@@ -602,8 +602,12 @@
 	// that wraps and grows the band. Sections are differentiated by color (opacity)
 	// alone, not by width.
 	&__funnel {
+		// Absolute minimum rendered width of any section; also the floor the
+		// transition separators clamp their bottom edge to (see &-separator), so a
+		// connector never ends up narrower than the min-width section beneath it.
+		$funnel-min-band-width: 80px;
+
 		width: 100%;
-		max-width: 600px; // NEWS-2586 container cap; grid cells render narrower (fluid).
 		margin: 0 auto;
 		padding: 20px;
 		box-sizing: border-box;
@@ -622,7 +626,7 @@
 			margin-left: auto;
 			margin-right: auto;
 			min-height: 75px; // baseline; grows with wrapped content.
-			min-width: 80px; // Absolute minimum width of any step.
+			min-width: $funnel-min-band-width; // Absolute minimum width of any step.
 			padding: 12px 8px;
 			box-sizing: border-box;
 			text-align: center;
@@ -632,10 +636,12 @@
 		}
 
 		// Transition connector filling the 25px gap below each section (except the
-		// last). A filled box clipped to a trapezoid via an inline clip-path: its top
-		// edge spans the section above (this element's full width) and its bottom edge
-		// matches the narrower section below. Opacity is set inline to track the
-		// band's shade.
+		// last). A filled box clipped to a trapezoid: its top edge spans the section
+		// above (this element's full width) and its bottom edge insets by the inline
+		// --separator-inset to match the narrower section below — but never so far
+		// that the bottom drops below the section min-width, so the connector always
+		// meets the top of the (min-width-floored) section beneath it. Opacity is set
+		// inline to track the band's shade.
 		&-separator {
 			position: absolute;
 			top: 100%;
@@ -643,6 +649,11 @@
 			width: 100%;
 			height: 25px;
 			background-color: #{colors.$primary-200};
+			// Clamp the per-side inset so the bottom edge can't be narrower than the
+			// section min-width: ( 100% − min-width ) / 2 is the inset that yields
+			// exactly min-width at the bottom.
+			--_separator-inset: min( var( --separator-inset, 0% ), calc( ( 100% - #{ $funnel-min-band-width } ) / 2 ) );
+			clip-path: polygon( 0 0, 100% 0, calc( 100% - var( --_separator-inset ) ) 100%, var( --_separator-inset ) 100% );
 		}
 
 		// Fill: the single anchor color as a vertical gradient covering the full-width
@@ -677,14 +688,18 @@
 			}
 		}
 
+		// Name and count scale together with the section width via the shared
+		// --funnel-font-scale (set inline per section, floored in JS), so narrower
+		// sections shrink their text proportionally without changing the name:count
+		// ratio. Unitless line-heights scale with the font automatically.
 		&-label-name {
-			font-size: 14px;
+			font-size: calc( 14px * var( --funnel-font-scale, 1 ) );
 			font-weight: 600;
 			line-height: 1.2;
 		}
 
 		&-label-count {
-			font-size: 22px;
+			font-size: calc( 22px * var( --funnel-font-scale, 1 ) );
 			font-weight: 700;
 			font-variant-numeric: tabular-nums;
 			line-height: 1.15;
