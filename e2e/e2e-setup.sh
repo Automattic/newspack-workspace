@@ -88,6 +88,19 @@ if [ ! -f "$SITE_SETUP" ]; then
   exit 1
 fi
 
+# Resolve the e2e helper plugin source. setupSite (tests/site-setup.ts) copies it
+# onto the target and sets E2E_PLUGIN_SRC to point at that copy; a manual
+# `bash e2e-setup.sh` leaves it unset and we fall back to the copy next to this
+# script (there $0 is a real path, unlike the piped `bash -s` flow, which always
+# sets E2E_PLUGIN_SRC). We track which case we're in so a missing shipped copy
+# fails loudly while a missing manual copy only warns (see the sync step below).
+if [ -n "${E2E_PLUGIN_SRC:-}" ]; then
+  E2E_PLUGIN_SRC_EXPLICIT=true
+else
+  E2E_PLUGIN_SRC_EXPLICIT=false
+  E2E_PLUGIN_SRC="$(dirname "$0")/e2e-plugin.php"
+fi
+
 echo "==> Running site-setup.sh (woo=$WOO)"
 SITE_SETUP_ARGS=(
   --posts-count 20      # A handful is plenty for e2e; 40 is slow to generate.
@@ -109,6 +122,24 @@ wp --skip-plugins --skip-themes config set NEWSPACK_IS_E2E true --raw
 wp --skip-plugins --skip-themes config set NEWSPACK_EMAIL_CHANGE_ENABLED true --raw
 
 wp --skip-themes option update timezone_string 'America/New_York'
+
+# Sync the e2e helper plugin from the repo copy so the running plugin always
+# matches the committed source. It's a single-file plugin that provisioning only
+# *activates*, so without this an edit to e2e-plugin.php would never reach the
+# site (it would keep running whatever was last installed there by hand).
+if [ -f "$E2E_PLUGIN_SRC" ]; then
+  E2E_PLUGINS_DIR="$(wp --skip-plugins --skip-themes plugin path)"
+  cp "$E2E_PLUGIN_SRC" "$E2E_PLUGINS_DIR/e2e-plugin.php"
+elif [ "$E2E_PLUGIN_SRC_EXPLICIT" = true ]; then
+  # The caller pointed E2E_PLUGIN_SRC at a copy it shipped onto the target, so a
+  # missing file means that copy never arrived. Fail loudly rather than silently
+  # running whatever stale plugin is already on the site - that drift is exactly
+  # what deploying from the repo is meant to eliminate.
+  echo "ERROR: E2E_PLUGIN_SRC is set to '$E2E_PLUGIN_SRC' but no file exists there - the shipped e2e-plugin.php did not arrive on the target." >&2
+  exit 1
+else
+  echo "WARNING: e2e-plugin.php source not found at $E2E_PLUGIN_SRC; relying on the copy already installed on the site." >&2
+fi
 
 # Activate the remaining Newspack plugins the suite exercises, plus the e2e helper
 # plugin (custom logout endpoint, outgoing-email log, admin-email-check bypass).

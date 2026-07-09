@@ -21,6 +21,7 @@ bin/newspack-network/nodes-keys.json
 bin/newspack-network/service-accounts.secret
 rootCA.pem
 worktrees
+worktrees-repos
 envs
 docker-compose.env-*.yml
 .claude/settings.local.json
