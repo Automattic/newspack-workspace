@@ -521,7 +521,7 @@ class WooCommerce_Connection {
 				if ( ! $last4 || ! $type ) {
 					continue;
 				}
-				$brand = function_exists( 'wc_get_credit_card_type_label' ) ? \wc_get_credit_card_type_label( $type ) : ucwords( (string) $type );
+				$brand = function_exists( 'wc_get_credit_card_type_label' ) ? \wc_get_credit_card_type_label( $type ) : ucwords( str_replace( [ '-', '_' ], ' ', (string) $type ) );
 				return trim(
 					sprintf(
 						/* translators: 1: card brand, e.g. "Visa". 2: the card's last four digits. */
