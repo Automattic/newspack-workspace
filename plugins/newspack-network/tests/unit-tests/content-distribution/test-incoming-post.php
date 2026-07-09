@@ -1077,7 +1077,7 @@ class TestIncomingPost extends \WP_UnitTestCase {
 
 		// Reload from the stored payload — the re-link / partial-update path.
 		$reloaded = new Incoming_Post( $post_id );
-		$reloaded->insert();
+		$this->assertFalse( is_wp_error( $reloaded->insert() ), 'The re-insert from the stored payload must succeed.' );
 
 		$this->assertSame( $block, get_post_field( 'post_content', $post_id ), 'Content must survive a re-insert from the stored payload.' );
 	}
