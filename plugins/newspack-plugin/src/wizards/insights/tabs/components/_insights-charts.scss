@@ -603,7 +603,7 @@
 	// alone, not by width.
 	&__funnel {
 		width: 100%;
-		max-width: 500px; // NEWS-2586 container cap; grid cells render narrower (fluid).
+		max-width: 600px; // NEWS-2586 container cap; grid cells render narrower (fluid).
 		margin: 0 auto;
 		padding: 20px;
 		box-sizing: border-box;
@@ -621,7 +621,7 @@
 			margin-bottom: 25px;
 			margin-left: auto;
 			margin-right: auto;
-			min-height: 100px; // baseline; grows with wrapped content.
+			min-height: 75px; // baseline; grows with wrapped content.
 			min-width: 80px; // Absolute minimum width of any step.
 			padding: 12px 8px;
 			box-sizing: border-box;
@@ -631,16 +631,18 @@
 			}
 		}
 
+		// Transition connector filling the 25px gap below each section (except the
+		// last). A filled box clipped to a trapezoid via an inline clip-path: its top
+		// edge spans the section above (this element's full width) and its bottom edge
+		// matches the narrower section below. Opacity is set inline to track the
+		// band's shade.
 		&-separator {
-			border-top: 25px solid #{colors.$primary-200};
-			border-left: 25px solid transparent;
-			border-right: 25px solid transparent;
-			content: '';
-			left: 0;
-			height: 0;
 			position: absolute;
 			top: 100%;
-			width: calc( 100% - 50px );
+			left: 0;
+			width: 100%;
+			height: 25px;
+			background-color: #{colors.$primary-200};
 		}
 
 		// Fill: the single anchor color as a vertical gradient covering the full-width
@@ -690,15 +692,16 @@
 
 		// Stage descriptors inherit the band's text color (white/dark); muted weight.
 		&-label-pct {
-			margin-top: 4px;
 			font-size: 12px;
 			line-height: 1.35;
+			margin: 0;
 		}
 
 		&-label-drop {
 			font-size: 12px;
 			line-height: 1.35;
 			font-variant-numeric: tabular-nums;
+			margin: 0;
 		}
 
 		&-empty {

@@ -1,13 +1,14 @@
 /**
- * Tests for the Funnel viz: the pure layout/geometry helpers (mode selection,
- * opacity interpolation, clamped drop-off) and render smoke tests covering the
- * descriptive labels and the edge cases.
+ * Tests for the Funnel viz: the pure helpers (opacity interpolation, clamped
+ * drop-off) and render smoke tests covering the hover/focus-revealed label
+ * Popovers, the stepped section widths and trapezoidal separators, and the edge
+ * cases.
  */
 
 /**
  * External dependencies
  */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 /**
  * Internal dependencies
@@ -58,16 +59,40 @@ describe( 'Funnel render', () => {
 		expect( screen.getByText( '400' ) ).toBeInTheDocument();
 	} );
 
-	it( 'shows drop-off descriptors for stages after the first only', () => {
-		render( <Funnel stages={ stages( [ 'Impressions', 25000 ], [ 'Engaged', 2000 ] ) } /> );
+	it( 'reveals drop-off descriptors only while the funnel is hovered', () => {
+		const { container } = render( <Funnel stages={ stages( [ 'Impressions', 25000 ], [ 'Engaged', 2000 ] ) } /> );
+		const funnel = container.querySelector( '.newspack-insights__funnel' ) as HTMLElement;
+		// Hidden until the funnel is hovered.
+		expect( screen.queryByText( /of Impressions/ ) ).toBeNull();
+		fireEvent.mouseEnter( funnel );
 		expect( screen.getByText( /of Impressions/ ) ).toBeInTheDocument();
 		// Exactly one drop-off line: the first stage has none.
 		expect( screen.getAllByText( /drop-off/ ) ).toHaveLength( 1 );
+		// Hidden again once the pointer leaves.
+		fireEvent.mouseLeave( funnel );
+		expect( screen.queryByText( /of Impressions/ ) ).toBeNull();
 	} );
 
-	it( 'renders a single-stage funnel without descriptors', () => {
-		render( <Funnel stages={ stages( [ 'Only', 100 ] ) } /> );
+	it( 'reveals descriptors on focus and hides them on blur', () => {
+		const { container } = render( <Funnel stages={ stages( [ 'Impressions', 25000 ], [ 'Engaged', 2000 ] ) } /> );
+		const funnel = container.querySelector( '.newspack-insights__funnel' ) as HTMLElement;
+		fireEvent.focus( funnel );
+		expect( screen.getByText( /drop-off/ ) ).toBeInTheDocument();
+		fireEvent.blur( funnel );
+		expect( screen.queryByText( /drop-off/ ) ).toBeNull();
+	} );
+
+	it( "reveals every section's descriptors at once on hover", () => {
+		const { container } = render( <Funnel stages={ stages( [ 'A', 1000 ], [ 'B', 500 ], [ 'C', 100 ] ) } /> );
+		fireEvent.mouseEnter( container.querySelector( '.newspack-insights__funnel' ) as HTMLElement );
+		// Both post-first stages reveal their drop-off line together.
+		expect( screen.getAllByText( /drop-off/ ) ).toHaveLength( 2 );
+	} );
+
+	it( 'renders a single-stage funnel without descriptors even on hover', () => {
+		const { container } = render( <Funnel stages={ stages( [ 'Only', 100 ] ) } /> );
 		expect( screen.getByText( 'Only' ) ).toBeInTheDocument();
+		fireEvent.mouseEnter( container.querySelector( '.newspack-insights__funnel' ) as HTMLElement );
 		expect( screen.queryByText( /drop-off/ ) ).toBeNull();
 	} );
 
@@ -81,21 +106,35 @@ describe( 'Funnel render', () => {
 		expect( screen.getByText( 'Not enough data to chart the funnel.' ) ).toBeInTheDocument();
 	} );
 
-	it( 'no longer renders a separate legend or side-label column', () => {
+	it( 'renders no separate legend or SVG chart', () => {
 		const { container } = render( <Funnel stages={ stages( [ 'A', 100 ], [ 'B', 50 ] ) } /> );
 		expect( container.querySelector( '.newspack-insights__funnel-legend' ) ).toBeNull();
-		expect( container.querySelector( '.newspack-insights__funnel-labels' ) ).toBeNull();
 		expect( container.querySelector( '.newspack-insights__funnel-svg' ) ).toBeNull();
 	} );
 
-	it( 'renders equal-width rectangular fills with no trapezoid clip-path', () => {
-		// The sections are full-width rectangles differentiated by color alone, so
-		// no band carries the old inline clip-path geometry.
+	it( 'renders rectangular section fills and a trapezoidal separator between each pair', () => {
 		const { container } = render( <Funnel stages={ stages( [ 'A', 1000 ], [ 'B', 100 ], [ 'C', 5 ] ) } /> );
+		// The sections themselves are rectangles — no clip-path on the fills.
 		const fills = container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-fill' );
 		expect( fills ).toHaveLength( 3 );
 		fills.forEach( fill => {
 			expect( fill.style.clipPath ).toBe( '' );
 		} );
+		// One separator per adjacent pair (n − 1), each clipped to a trapezoid.
+		const separators = container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-separator' );
+		expect( separators ).toHaveLength( 2 );
+		separators.forEach( separator => {
+			expect( separator.style.clipPath ).toMatch( /^polygon\(/ );
+		} );
+	} );
+
+	it( 'steps section widths down from a full-width top section', () => {
+		const { container } = render( <Funnel stages={ stages( [ 'A', 1000 ], [ 'B', 500 ], [ 'C', 100 ] ) } /> );
+		const widths = Array.from( container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-step' ) ).map( step =>
+			parseFloat( step.style.maxWidth )
+		);
+		expect( widths[ 0 ] ).toBe( 100 ); // top section pinned to the full width
+		expect( widths[ 1 ] ).toBeLessThan( widths[ 0 ] );
+		expect( widths[ 2 ] ).toBeLessThan( widths[ 1 ] );
 	} );
 } );
