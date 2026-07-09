@@ -280,21 +280,18 @@ class Alert_Manager {
 	}
 
 	/**
-	 * Handle a permanent (non-retryable) contact-sync failure.
+	 * Handle a permanent (non-retryable) config-level contact-sync failure.
 	 *
-	 * config-class failures (disabled/unpaid ESP account) get 'error'
-	 * severity so forward_alert_to_log() routes them to Slack; contact-class
-	 * failures (bad contact data) get 'warning' severity so they land in
-	 * logstash/Watch only and do not page on-call.
+	 * Only config-class failures (disabled/unpaid ESP account) reach here;
+	 * Contact_Sync skips permanent contact-data failures silently. These are
+	 * actionable, so they get 'error' severity and forward_alert_to_log()
+	 * routes them to Slack.
 	 *
 	 * @param array $payload Alert data from Contact_Sync.
 	 */
 	public static function handle_sync_permanent_failure( $payload ) {
-		$class = 'config' === ( $payload['class'] ?? 'contact' ) ? 'config' : 'contact';
-
 		$message = sprintf(
-			'Permanent %s sync failure for integration "%s" (no retry). Last error: %s',
-			$class,
+			'Permanent config sync failure for integration "%s" (no retry). Last error: %s',
 			$payload['integration_id'] ?? 'unknown',
 			$payload['reason'] ?? 'unknown'
 		);
@@ -304,7 +301,7 @@ class Alert_Manager {
 			'newspack_alert',
 			[
 				'type'      => 'sync_permanent_failure',
-				'severity'  => 'config' === $class ? 'error' : 'warning',
+				'severity'  => 'error',
 				'message'   => $message,
 				'context'   => $payload,
 				'timestamp' => time(),

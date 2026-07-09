@@ -626,17 +626,17 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$reflection->setAccessible( true );
 
 		$cases = [
-			'neil@example.com was permanently deleted and cannot be re-imported.'           => 'permanent_contact',
-			'asdf@example.com looks fake or invalid, please enter a real email address.'    => 'permanent_contact',
-			'Please enter a number Your merge fields were invalid.'                         => 'permanent_contact',
-			'Please provide a valid email address.'                                         => 'permanent_contact',
-			'Contact Email Address is not valid.'                                           => 'permanent_contact',
-			'API Access has been disabled for this account.'                                => 'permanent_config',
-			'Payment Required'                                                              => 'permanent_config',
-			'cindy@example.com is already a list member. Use PUT to insert or update.'      => 'benign',
-			'Member Exists'                                                                 => 'benign',
-			'garcia@example.com has signed up to a lot of lists very recently'              => 'transient',
-			'Some unknown transient network error'                                          => 'transient',
+			'neil@example.com was permanently deleted and cannot be re-imported.' => 'permanent_contact',
+			'asdf@example.com looks fake or invalid, please enter a real email address.' => 'permanent_contact',
+			'Please enter a number Your merge fields were invalid.' => 'permanent_contact',
+			'Please provide a valid email address.' => 'permanent_contact',
+			'Contact Email Address is not valid.'   => 'permanent_contact',
+			'API Access has been disabled for this account.' => 'permanent_config',
+			'Payment Required'                      => 'permanent_config',
+			'cindy@example.com is already a list member. Use PUT to insert or update.' => 'benign',
+			'Member Exists'                         => 'benign',
+			'garcia@example.com has signed up to a lot of lists very recently' => 'transient',
+			'Some unknown transient network error'  => 'transient',
 		];
 
 		foreach ( $cases as $message => $expected ) {
@@ -649,20 +649,19 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that a permanent error skips the retry and fires the permanent-failure hook.
+	 * Test that a permanent contact-data error skips the retry without firing
+	 * the permanent-failure hook (only config failures are surfaced).
 	 */
-	public function test_permanent_error_skips_retry_and_fires_action() {
+	public function test_permanent_contact_error_skips_retry_without_alert() {
 		if ( ! function_exists( 'as_schedule_single_action' ) ) {
 			$this->markTestSkipped( 'ActionScheduler not available.' );
 		}
 
 		$fired = false;
-		$data  = null;
 		add_action(
 			'newspack_sync_permanent_failure',
-			function ( $d ) use ( &$fired, &$data ) {
+			function () use ( &$fired ) {
 				$fired = true;
-				$data  = $d;
 			}
 		);
 
@@ -694,10 +693,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		);
 
 		$this->assertEmpty( $pending, 'No retry should be scheduled for a permanent error.' );
-		$this->assertTrue( $fired, 'newspack_sync_permanent_failure should fire.' );
-		$this->assertEquals( 'contact', $data['class'] );
-		$this->assertEquals( 'permanent_mock', $data['integration_id'] );
-		$this->assertEquals( $user_id, $data['user_id'] );
+		$this->assertFalse( $fired, 'Permanent contact-data failures should not fire newspack_sync_permanent_failure.' );
 	}
 
 	/**
@@ -830,7 +826,6 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		$this->assertEmpty( $pending, 'No deletion retry should be scheduled for a permanent error.' );
 		$this->assertTrue( $fired, 'newspack_sync_permanent_failure should fire.' );
-		$this->assertEquals( 'config', $data['class'] );
 		$this->assertEquals( 'delete', $data['mode'] );
 		$this->assertEquals( 'gone@test.com', $data['email'] );
 		$this->assertEquals( 'esp', $data['integration_id'] );

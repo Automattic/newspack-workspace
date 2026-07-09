@@ -59,10 +59,10 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that permanent-failure alerts get error severity for config-class
-	 * (Slack) and warning severity for contact-class (Watch only).
+	 * Test that a permanent config-level failure fires an error-severity alert
+	 * (routed to Slack).
 	 */
-	public function test_permanent_failure_severity_by_class() {
+	public function test_permanent_failure_alert() {
 		$alerts = [];
 		add_action(
 			'newspack_alert',
@@ -77,25 +77,13 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 				'integration_id' => 'esp',
 				'user_id'        => 1,
 				'context'        => 'Reader registered',
-				'class'          => 'config',
 				'reason'         => 'Payment Required',
 			]
 		);
-		do_action(
-			'newspack_sync_permanent_failure',
-			[
-				'integration_id' => 'esp',
-				'user_id'        => 2,
-				'context'        => 'Reader registered',
-				'class'          => 'contact',
-				'reason'         => 'looks fake or invalid',
-			]
-		);
 
-		$this->assertCount( 2, $alerts, 'Both permanent failures should fire newspack_alert.' );
+		$this->assertCount( 1, $alerts, 'The permanent failure should fire newspack_alert.' );
 		$this->assertEquals( 'sync_permanent_failure', $alerts[0]['type'] );
-		$this->assertEquals( 'error', $alerts[0]['severity'], 'config class should be error severity (Slack).' );
-		$this->assertEquals( 'warning', $alerts[1]['severity'], 'contact class should be warning severity (Watch only).' );
+		$this->assertEquals( 'error', $alerts[0]['severity'], 'Permanent config failure should be error severity (Slack).' );
 	}
 
 	/**

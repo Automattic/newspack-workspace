@@ -553,10 +553,12 @@ class Contact_Sync extends Sync {
 					sprintf( 'Permanent failure (%s); not retrying.', $error_class )
 				);
 			}
-			if ( 'benign' !== $error_class ) {
+			if ( 'permanent_config' === $error_class ) {
 				/**
-				 * Fires when a contact sync fails with a permanent error that can
-				 * never succeed on retry, so no further retries are scheduled.
+				 * Fires when a contact sync fails with a permanent config-level
+				 * error (disabled/unpaid ESP account) that can never succeed on
+				 * retry. Permanent contact-data errors are skipped silently; only
+				 * actionable config failures are surfaced.
 				 *
 				 * @param array $alert_data {
 				 *     Alert data.
@@ -564,7 +566,6 @@ class Contact_Sync extends Sync {
 				 *     @type string $integration_id The integration that failed.
 				 *     @type int    $user_id        The WordPress user ID.
 				 *     @type string $context        The sync context.
-				 *     @type string $class          Failure class: 'contact' or 'config'.
 				 *     @type string $reason         The final error message.
 				 * }
 				 */
@@ -574,7 +575,6 @@ class Contact_Sync extends Sync {
 						'integration_id' => $integration_id,
 						'user_id'        => $user_id,
 						'context'        => $context,
-						'class'          => 'permanent_config' === $error_class ? 'config' : 'contact',
 						'reason'         => $error_message,
 					]
 				);
@@ -812,7 +812,7 @@ class Contact_Sync extends Sync {
 					sprintf( 'Permanent failure (%s); not retrying.', $error_class )
 				);
 			}
-			if ( 'benign' !== $error_class ) {
+			if ( 'permanent_config' === $error_class ) {
 				/**
 				 * This action is documented in schedule_integration_retry(). The
 				 * deletion path substitutes `email` + `mode` for `user_id`, since
@@ -825,7 +825,6 @@ class Contact_Sync extends Sync {
 						'email'          => $email,
 						'mode'           => $mode,
 						'context'        => $context,
-						'class'          => 'permanent_config' === $error_class ? 'config' : 'contact',
 						'reason'         => $error_message,
 					]
 				);
@@ -833,7 +832,7 @@ class Contact_Sync extends Sync {
 			return;
 		}
 
-		$next_retry    = $retry_count + 1;
+		$next_retry = $retry_count + 1;
 		if ( $next_retry > self::MAX_RETRIES ) {
 			static::log(
 				sprintf(
