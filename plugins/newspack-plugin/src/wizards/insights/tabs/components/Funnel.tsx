@@ -13,7 +13,7 @@
  *   - a flowing TEXT layer on top that wraps and grows the band height.
  *
  * Width is CSS-driven (width:100%, max-width cap), so no JS measurement is needed.
- * The single anchor color (primary-500) fades 1.0 → 0.6 down the funnel — the sole
+ * The single anchor color (primary-600) fades 1.0 → 0.6 down the funnel — the sole
  * visual differentiator between sections. Each band's fill is a vertical gradient
  * ramping symmetrically around its own shade (darker top → lighter bottom); because
  * adjacent bands don't share a boundary value, a visible step keeps the sections
