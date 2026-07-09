@@ -57,8 +57,11 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 					'newspack-plugin'
 				) }
 			/>
-			<div className="newspack-insights__table-wrap">
-				<table className="newspack-insights__table">
+			{ /* Kept out of DataViews (grouped super-headers + nested variation rows
+			     DataViews can't render — NPPD-1889), but restyled via the
+			     `--dataview-look` modifier so it reads like the DataViews tables. */ }
+			<div className="newspack-insights__table-wrap newspack-insights__table-wrap--dataview-look">
+				<table className="newspack-insights__table newspack-insights__table--dataview-look">
 					<thead>
 						<tr>
 							<th scope="col" rowSpan={ 2 }>

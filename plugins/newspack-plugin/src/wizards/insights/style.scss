@@ -24,20 +24,31 @@
 .newspack-insights {
 	color: wp-colors.$gray-900;
 
-	// Date range picker + comparison toggle row rendered via the
-	// Wizard's renderAboveSections slot. Sits above the section
-	// content, right-aligned to mirror the old header-right placement.
+	// Column: the controls row on top, the Apply / Cancel action row beneath,
+	// both right-aligned. Rendered via the Wizard's renderAboveSections slot.
 	&__header-controls {
+		align-items: flex-start;
 		display: flex;
 		flex-wrap: wrap;
-		align-items: center;
-		justify-content: flex-end;
 		gap: 16px;
 		margin-bottom: 24px;
 
-		@media ( max-width: 782px ) {
-			justify-content: flex-start;
+		@media ( min-width: 783px ) {
+			align-items: center;
+			justify-content: flex-end;
 		}
+
+		.components-button.has-icon svg {
+			fill: wp-colors.$gray-900;
+		}
+	}
+
+	&__header-controls-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: flex-start;
+		gap: 4px;
 	}
 
 	// While a tab is loading (chunk Suspense fallback OR in-tab loading view),
@@ -107,9 +118,9 @@
 		margin: 0;
 	}
 
-	// Date range picker
-
-	&__date-range-picker {
+	// Date range picker + comparison toggle
+	&__date-range-picker,
+	&__comparison-toggle {
 		display: flex;
 		align-items: center;
 		gap: 8px;
@@ -130,10 +141,11 @@
 		gap: 6px;
 
 		input[type="date"] {
-			font-size: 13px;
+			font-size: 12px;
+			min-height: 34px;
 			padding: 6px 8px;
 			border: 1px solid wp-colors.$gray-300;
-			border-radius: 4px;
+			border-radius: 2px;
 			background: wp-colors.$white;
 			color: wp-colors.$gray-900;
 
@@ -257,6 +269,18 @@
 		margin: 0;
 		font-size: 14px;
 	}
+
+	&__confirm-modal-message {
+		margin: 0;
+	}
+
+	// Match the FeedbackModal action row: horizontal, right-aligned.
+	&__confirm-modal-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 8px;
+		margin-top: 24px;
+	}
 }
 
 // Suppress the generic wizard chunk-loading message ("Loading Insights…")
@@ -266,4 +290,131 @@
 // as the React mount node id — so this only affects the Insights page.
 #newspack-insights .newspack-wizard__loader {
 	display: none;
+}
+
+// NPPD-1889: read-only DataViews tables. Every Insights table renders through
+// InsightsDataView (MetricTable / SortableTable / DistributionTable / the
+// per-tab campaign tables). Defined here in the global wizard stylesheet — which
+// loads on every Insights view — rather than a per-tab partial, so the treatment
+// is identical on every tab regardless of which lazy tab-chunk CSS is loaded
+// (the same reasoning as the info-callout above; a per-tab partial only reaches
+// the tabs that `@use` it, which is how Donors/Subscribers were left unstyled).
+//
+// Locks DataViews into a single-page, read-only table: hide the interactive
+// chrome (search / filters / view-config gear / pagination footer / bulk
+// actions) so click-to-sort headers are the only affordance, frame the table
+// like the old `.newspack-insights__table-wrap`, and undo DataViews' full-bleed
+// sizing so it fits inside the section cards.
+.newspack-insights-dataview {
+	// DataViews bleeds itself out with a negative horizontal margin (wizard rule
+	// `.newspack-wizard__content … .newspack-dataviews`) to span the page gutter;
+	// inside our cards that pushes the table past the border. Pin it back.
+	margin: 0 !important;
+
+	// Single frame around the whole table (header + rows). Reset inside a
+	// chart-card, which already supplies the border (below).
+	border: 1px solid wp-colors.$gray-200;
+	border-radius: 4px;
+	overflow: hidden;
+
+	.dataviews__view-actions,
+	.dataviews-footer {
+		display: none;
+	}
+
+	// Strip the default DataViews outer padding/gap so the frame hugs the table.
+	.dataviews-wrapper {
+		padding: 0;
+		gap: 0;
+	}
+
+	// DataViews sizes each column to a ~123px min-width for its comfortable
+	// full-width layout; in our compact tables that overflows. Let columns size
+	// to their content instead.
+	.dataviews-view-table__cell-content-wrapper {
+		min-width: 0;
+	}
+
+	// Trim the 48px page-gutter edge padding so cell content aligns to the frame.
+	.dataviews-view-table {
+		th:first-child,
+		td:first-child {
+			padding-left: 16px;
+		}
+
+		th:last-child,
+		td:last-child {
+			padding-right: 16px;
+		}
+	}
+}
+
+// Table-in-card (e.g. Performance by device, Top campaigns): the chart-card
+// supplies the border, and the narrow card needs the columns to fit rather than
+// overflow at DataViews' comfortable width — so pin the layout to the container.
+.newspack-insights__chart-card .newspack-insights-dataview {
+	border: 0;
+	border-radius: 0;
+
+	.dataviews-wrapper {
+		overflow-x: visible;
+	}
+
+	.dataviews-view-table {
+		width: 100%;
+		min-width: 0;
+		table-layout: fixed;
+	}
+}
+
+// Indented, de-emphasized label for a flattened child/variation row inside a
+// read-only DataViews table (e.g. the Donations-by-tier product variations),
+// which DataViews' flat table can't indent natively.
+.newspack-insights__dataview-subrow {
+	display: inline-block;
+	padding-left: 16px;
+	color: wp-colors.$gray-700;
+}
+
+// NPPD-1889: the one Insights table kept out of DataViews — Subscribers →
+// "Subscriptions by product", which needs grouped super-headers AND nested
+// variation rows that a flat read-only DataViews table can't render — is
+// restyled to VISUALLY match the DataViews tables so the tab reads as one
+// system. Mirrors the DataViews chrome measured from `.dataviews-view-table`:
+// white header ground with dark 11px uppercase labels (not the old gray band),
+// 13px muted body cells, and faint gray-100 row dividers.
+.newspack-insights__table-wrap--dataview-look {
+	overflow: hidden; // clip the framed corners like the DataViews tables
+}
+
+.newspack-insights__table--dataview-look {
+	thead th {
+		background: #fff;
+		color: wp-colors.$gray-900;
+		font-size: 11px;
+		font-weight: 500;
+		text-transform: uppercase;
+		padding: 8px 16px;
+		border-bottom: 1px solid wp-colors.$gray-100;
+	}
+
+	// Grouped super-header ("Current" / "Selected timeframe" / "All time") has no
+	// DataViews equivalent, so treat it as a muted section label over its columns.
+	.newspack-insights__table-group {
+		color: wp-colors.$gray-600;
+		font-weight: 500;
+	}
+
+	tbody td {
+		font-size: 13px;
+		color: wp-colors.$gray-600;
+		padding: 12px 16px;
+		border-bottom: 1px solid wp-colors.$gray-100;
+	}
+
+	// The DataViews tables have no outer rule beneath the last row (the frame
+	// supplies it); drop the trailing divider to match.
+	tbody tr:last-child td {
+		border-bottom: 0;
+	}
 }

@@ -34,7 +34,10 @@ const table = ( rows: GatesPerformanceRow[] ): GatesPerformanceTable => ( {
 
 describe( 'PerformanceByGateSection paid access gate conversion columns', () => {
 	it( 'renders the conversion column headers, not the old attempt columns', () => {
-		render( <PerformanceByGateSection data={ table( [] ) } /> );
+		// The read-only DataViews table only renders its headers when there are
+		// rows (an empty table shows the shared empty-state message instead), so
+		// render one row to assert on the header set.
+		render( <PerformanceByGateSection data={ table( [ row() ] ) } /> );
 		expect( screen.getByText( 'Paid access gate conversions' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Paid access gate conversion rate' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Paid access gate attempts' ) ).not.toBeInTheDocument();

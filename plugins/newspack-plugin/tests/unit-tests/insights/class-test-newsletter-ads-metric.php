@@ -23,6 +23,7 @@
 
 namespace Newspack\Tests\Insights;
 
+use Newspack\Insights\Cache;
 use Newspack\Insights\Newsletter_Ads_Metric;
 use WP_UnitTestCase;
 
@@ -150,7 +151,11 @@ class Test_Newsletter_Ads_Metric extends WP_UnitTestCase {
 	 * @return array
 	 */
 	private function fresh_get_all( string $orchestrator, string $start, string $end ): array {
-		delete_transient( Newsletter_Ads_Metric::CACHE_KEY_PREFIX . $start . ':' . $end );
+		// Derive the key from the production builder (not an inline copy) so this
+		// helper can't drift from the real cache key on a future key-shape change.
+		$key_method = new \ReflectionMethod( Newsletter_Ads_Metric::class, 'envelope_cache_key' );
+		$key_method->setAccessible( true );
+		delete_transient( $key_method->invoke( null, $start, $end ) );
 		return call_user_func( [ $orchestrator, 'get_all' ], $start, $end );
 	}
 
@@ -427,5 +432,21 @@ class Test_Newsletter_Ads_Metric extends WP_UnitTestCase {
 		// Daily series is chronological and skips zero-recorded days.
 		$days = array_column( $metrics['performance_by_day']['rows'], 'date' );
 		$this->assertSame( [ '2026-06-10', '2026-06-12', '2026-06-13' ], $days );
+	}
+
+	/**
+	 * The envelope transient key folds in the global Cache::ENVELOPE_SCHEMA_VERSION
+	 * after its prefix. This tab uses Cached_Controller_Trait but is SOURCE_LOCAL
+	 * (so Cache::store() never consults the trait's versioned key) — this
+	 * metric-layer transient is the real cache, so it must carry the version for a
+	 * global bump to bust it.
+	 */
+	public function test_envelope_cache_key_includes_envelope_version() {
+		$method = new \ReflectionMethod( Newsletter_Ads_Metric::class, 'envelope_cache_key' );
+		$method->setAccessible( true );
+		$key = $method->invoke( null, '2026-01-01', '2026-01-31' );
+
+		$this->assertStringStartsWith( Newsletter_Ads_Metric::CACHE_KEY_PREFIX . Cache::ENVELOPE_SCHEMA_VERSION . ':', $key );
+		$this->assertStringEndsWith( '2026-01-01:2026-01-31', $key );
 	}
 }

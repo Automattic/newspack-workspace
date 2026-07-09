@@ -3,7 +3,15 @@
  *
  * Four scorecards in a single row covering paywall-gate conversion
  * (Direct attribution, Influenced 14-day lookback) plus revenue
- * from same-session paid access gate conversions.
+ * from gate-attributed paid access gate conversions.
+ *
+ * Direct here is NOT session-scoped, unlike the regwall Direct rate in the Free
+ * section. Its numerator is Woo orders carrying `_gate_post_id`, stamped by the
+ * hidden field the gate injects into its own checkout block. So a reader who
+ * clicks through to a subscription landing page and converts there is NOT
+ * counted, and a reader who converts hours later (a new GA4 session) via the
+ * gate's own checkout IS. The card copy must describe that mechanism, not a
+ * session — the two are not the same thing.
  *
  * When the section would render as a row of zeros it swaps the grid for a
  * single `<EmptyMetricSection>` (detection stays here, not in the orchestrator):
@@ -37,7 +45,7 @@ const HEADING_ID = 'newspack-insights-gates-paid-heading';
 const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversionSectionProps ) => {
 	const title = __( 'Paid reader conversion', 'newspack-plugin' );
 	const caption = __(
-		'How effectively paid access gates convert visitors into paying subscribers. Direct counts subscriptions that happened in the same session as a paid access gate impression. Influenced counts subscriptions that happened in a later session within 14 days of a paid access gate impression. Revenue is computed from actual Woo orders, not gate-event amounts.',
+		'How effectively paid access gates convert visitors into paying subscribers. Direct counts subscriptions purchased through a gate’s own checkout. Influenced counts subscriptions that happened in a later session within 14 days of a paid access gate impression. Revenue is computed from actual Woo orders, not gate-event amounts.',
 		'newspack-plugin'
 	);
 	const impressionsLabel = __( 'paid access gate impressions', 'newspack-plugin' );
@@ -95,7 +103,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 					{ ...scalarToMetricCardProps( {
 						label: __( 'Paid access gate Conversion (Direct)', 'newspack-plugin' ),
 						description: __(
-							'Sessions with a subscription after a paid access gate impression ÷ sessions with a paid access gate impression',
+							'Subscriptions purchased through a paid access gate’s own checkout ÷ impressions of gates with a checkout button',
 							'newspack-plugin'
 						),
 						current: current.paywall_conversion_direct,
@@ -127,7 +135,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 					{ ...scalarToMetricCardProps( {
 						label: __( 'Total Paid access gate Revenue (Direct)', 'newspack-plugin' ),
 						description: __(
-							'Sum of Woo order totals from subscriptions completed in the same session as a paid access gate impression',
+							'Sum of Woo order totals from subscriptions purchased through a paid access gate’s own checkout',
 							'newspack-plugin'
 						),
 						current: current.total_paywall_revenue_direct,

@@ -30,6 +30,21 @@ function _manually_load_plugin() {
 	require dirname( __DIR__ ) . '/src/blocks/custom-placement/view.php';
 	require dirname( __DIR__ ) . '/includes/class-newspack-popups-exporter.php';
 	require dirname( __DIR__ ) . '/includes/class-newspack-popups-importer.php';
+
+	// The CTA intent classifier lives in newspack-plugin (NPPD-1887), which this
+	// suite does not load. Pull in just that one dependency-free class when the
+	// sibling checkout is present (always, in the monorepo and in CI) so the
+	// block-less CTA tests exercise the real classifier.
+	//
+	// When it is absent — e.g. running this suite from a standalone newspack-popups
+	// checkout — Data_Api degrades to "no inferred intent" by design, and DataApiTest
+	// SKIPS entirely (see its require_classifier()). The degradation itself is
+	// guaranteed by the class_exists guards in Data_Api, not by a test: it cannot be
+	// asserted in the same process once the class is loaded.
+	$classifier = dirname( __DIR__, 2 ) . '/newspack-plugin/includes/class-cta-intent-classifier.php';
+	if ( file_exists( $classifier ) ) {
+		require_once $classifier;
+	}
 }
 tests_add_filter( 'muplugins_loaded', '_manually_load_plugin' );
 

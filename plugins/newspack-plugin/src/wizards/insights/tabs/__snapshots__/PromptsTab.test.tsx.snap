@@ -6,54 +6,6 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
     aria-busy="false"
     class="newspack-insights__tab-body newspack-insights__prompts-tab"
   >
-    <div
-      class="newspack-insights__info-callout components-notice is-info is-dismissible"
-    >
-      <div
-        class="components-visually-hidden css-1ragr82-PolymorphicDiv e19lxcc00"
-        data-wp-c16t="true"
-        data-wp-component="VisuallyHidden"
-        style="border: 0px; clip: rect(1px, 1px, 1px, 1px); clip-path: inset( 50% ); height: 1px; margin: -1px; overflow: hidden; padding: 0px; position: absolute; width: 1px; word-wrap: normal;"
-      >
-        Information notice
-      </div>
-      <div
-        class="components-notice__content"
-      >
-        <p
-          class="newspack-insights__info-callout-title"
-        >
-          <strong>
-            About Direct vs Influenced conversion
-          </strong>
-        </p>
-        <p>
-          <strong>
-            Direct
-          </strong>
-           
-          conversions happen in the same session as a prompt impression. The prompt is credited regardless of whether checkout happens on the same page (embedded checkout block) or after clicking through to a subscription page.
-        </p>
-        <p>
-          <strong>
-            Influenced
-          </strong>
-           
-          conversions happen after a prompt impression but in a later session, within a lookback window (7 days for free conversions, 14 days for paid).
-        </p>
-        <p>
-          Same-session is Direct. Later-session-within-lookback is Influenced. The two are mutually exclusive and together capture every prompt-touched conversion within the lookback period.
-        </p>
-        <div
-          class="components-notice__actions"
-        />
-      </div>
-      <button
-        aria-label="Close"
-        class="components-button components-notice__dismiss is-small"
-        type="button"
-      />
-    </div>
     <section
       aria-labelledby="newspack-insights-prompts-exposure-heading"
       class="newspack-insights__section newspack-insights__section--exposure"
@@ -407,7 +359,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
             </h2>
           </div>
           <p>
-            How effectively prompts convert readers into registered readers and newsletter subscribers. Direct counts conversions in the same session as a prompt impression. Influenced counts conversions in a later session within 7 days of seeing a prompt.
+            How effectively prompts convert readers into registered readers and newsletter subscribers. Direct counts conversions submitted through a prompt’s own form. Influenced counts conversions in a later session within 7 days of seeing a prompt.
           </p>
         </div>
       </div>
@@ -442,7 +394,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Sessions with a registration after a prompt impression with a registration block ÷ sessions with a prompt impression with a registration block
+                Registrations submitted through a prompt’s registration block ÷ impressions of prompts with a registration block
               </div>
             </div>
           </div>
@@ -532,7 +484,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Sessions with a newsletter signup after a prompt impression with a newsletter block ÷ sessions with a prompt impression with a newsletter block
+                Newsletter signups submitted through a prompt’s newsletter block ÷ impressions of prompts with a newsletter block
               </div>
             </div>
           </div>
@@ -615,7 +567,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
             </h2>
           </div>
           <p>
-            How effectively prompts convert readers into donors and subscribers. Direct counts conversions in the same session as a prompt impression. Influenced counts conversions in a later session within 14 days of seeing a prompt.
+            How effectively prompts convert readers into donors and subscribers. Direct counts conversions completed through a prompt’s own donation block or checkout button. Influenced counts conversions in a later session within 14 days of seeing a prompt.
           </p>
         </div>
       </div>
@@ -650,7 +602,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Sessions with a completed donation after a prompt impression with a donation block ÷ sessions with a prompt impression with a donation block
+                Donations completed through a prompt’s donation block ÷ impressions of prompts with a donation block
               </div>
             </div>
           </div>
@@ -740,7 +692,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Sessions with a completed subscription after a subscription-intent prompt impression ÷ sessions with a subscription-intent prompt impression
+                Subscriptions purchased through a prompt’s checkout button ÷ impressions of prompts with a checkout button
               </div>
             </div>
           </div>
@@ -823,7 +775,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
             </h2>
           </div>
           <p>
-            Donation and subscription revenue completed after a prompt impression. Direct totals Woo order revenue from same-session completions. Influenced totals checkout revenue from later-session completions within 14 days of seeing a prompt.
+            Donation and subscription revenue completed after a prompt impression. Direct totals Woo order revenue from conversions completed through a prompt’s own block. Influenced totals checkout revenue from later-session completions within 14 days of seeing a prompt.
           </p>
         </div>
       </div>
@@ -858,7 +810,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Sum of Woo donation order totals from same-session completions after a donation-intent prompt impression
+                Sum of Woo donation order totals from donations completed through a prompt’s donation block
               </div>
             </div>
           </div>
@@ -948,7 +900,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Sum of Woo subscription order totals from same-session completions after a subscription-intent prompt impression
+                Sum of Woo subscription order totals from subscriptions purchased through a prompt’s checkout button
               </div>
             </div>
           </div>
@@ -1089,308 +1041,11 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
         >
           Performance by prompt
         </h3>
-        <div
-          class="newspack-insights__table-wrap"
+        <p
+          class="newspack-insights__section-empty"
         >
-          <table
-            class="newspack-insights__table newspack-insights__sortable-table"
-          >
-            <thead>
-              <tr>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Prompt
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Intent
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Placement
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="descending"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort is-active"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Impressions
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Unique viewers
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      CTR
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Form submission rate
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Dismissal rate
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Registrations
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Newsletter signups
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Donation conversions
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Donation conversion rate
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Subscription conversions
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Subscription conversion rate
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td
-                  class="newspack-insights__sortable-table-empty"
-                  colspan="14"
-                >
-                  No prompt data yet. Performance metrics will appear once readers begin interacting with your prompts.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+          No prompt data yet. Performance metrics will appear once readers begin interacting with your prompts.
+        </p>
         <p
           class="newspack-insights__prompts-subsection-note"
         >
@@ -1405,148 +1060,11 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
         >
           Performance by prompt intent
         </h3>
-        <div
-          class="newspack-insights__table-wrap"
+        <p
+          class="newspack-insights__section-empty"
         >
-          <table
-            class="newspack-insights__table newspack-insights__sortable-table"
-          >
-            <thead>
-              <tr>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Intent
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="descending"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort is-active"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Impressions
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Unique viewers
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      CTR
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Form submission rate
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Dismissal rate
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td
-                  class="newspack-insights__sortable-table-empty"
-                  colspan="6"
-                >
-                  No prompt data yet. Intent performance will appear once readers begin interacting with your prompts.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+          No prompt data yet. Intent performance will appear once readers begin interacting with your prompts.
+        </p>
         <p
           class="newspack-insights__prompts-subsection-note"
         >
@@ -1561,128 +1079,11 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
         >
           Performance by prompt placement
         </h3>
-        <div
-          class="newspack-insights__table-wrap"
+        <p
+          class="newspack-insights__section-empty"
         >
-          <table
-            class="newspack-insights__table newspack-insights__sortable-table"
-          >
-            <thead>
-              <tr>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Placement
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="descending"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort is-active"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Impressions
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Unique viewers
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      CTR
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-                <th
-                  aria-sort="none"
-                  class="newspack-insights__table-num newspack-insights__sortable-table-sort-cell"
-                  scope="col"
-                >
-                  <button
-                    class="newspack-insights__sortable-table-sort"
-                    type="button"
-                  >
-                    <span
-                      class="newspack-insights__sortable-table-sort-label"
-                    >
-                      Dismissal rate
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      class="newspack-insights__sortable-table-sort-indicator"
-                    />
-                  </button>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td
-                  class="newspack-insights__sortable-table-empty"
-                  colspan="5"
-                >
-                  No prompt data yet. Placement performance will appear once readers begin interacting with your prompts.
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+          No prompt data yet. Placement performance will appear once readers begin interacting with your prompts.
+        </p>
         <p
           class="newspack-insights__prompts-subsection-note"
         >

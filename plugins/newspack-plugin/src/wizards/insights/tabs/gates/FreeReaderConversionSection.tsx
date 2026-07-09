@@ -4,6 +4,13 @@
  * Two scorecards side-by-side covering registration-gate conversion
  * (Direct attribution and Influenced 7-day lookback).
  *
+ * NOTE: regwall Direct is the only genuinely session-scoped Direct metric in
+ * Insights — the hub counts sessions with a registration after the first
+ * registration-gate impression, over sessions with such an impression. The
+ * "same session" language in this section's copy is therefore correct, and must
+ * NOT be aligned with the Paid section, whose Direct rate is Woo order-meta
+ * based and has no session bound. See PaidReaderConversionSection's docblock.
+ *
  * Mirrors the Paid section's empty-state treatment (NPPD-1694), with one
  * production-safety distinction that is the whole point of NPPD-1702: the count
  * fields this section reads (`registration_impressions_total` /

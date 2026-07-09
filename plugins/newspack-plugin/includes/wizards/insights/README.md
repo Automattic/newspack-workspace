@@ -1,6 +1,6 @@
 # Newspack Insights
 
-Native data hub for Newspack publishers. Surfaces audience, engagement, conversion, gates, prompts, subscribers, donors, and advertising data inside a single `wp-admin` wizard, replacing publisher reliance on Looker Studio dashboards.
+Native data hub for Newspack publishers. Surfaces audience, engagement, conversion, gates, campaigns, subscribers, donors, advertising, newsletter-ads, and app data across ten tabs inside a single `wp-admin` wizard, replacing publisher reliance on Looker Studio dashboards.
 
 This README documents what is actually implemented today. Keep it in sync as the code changes — there is no separate spec doc.
 
@@ -11,9 +11,10 @@ All gated by PHP constants. The wizard registers nothing when `NEWSPACK_INSIGHTS
 | Constant | Effect |
 | --- | --- |
 | `NEWSPACK_INSIGHTS_ENABLED` | Master switch. When off, no admin page, no REST routes, no asset enqueue. |
-| `NEWSPACK_INSIGHTS_FIXTURE_MODE` | REST controllers that wrap a metric with a `get_fixture()` method short-circuit to fixtures instead of live data. Used for UI smoke testing. (Conversion, Subscribers, and Donors don't implement fixtures today; see [Metric orchestrators](#metric-orchestrators-metricsclass--metricphp).) |
-| `NEWSPACK_INSIGHTS_CACHE_DISABLED` | Bypass the server-side transient cache entirely. Dev/debug only. |
-| `NEWSPACK_INSIGHTS_AUDIENCE_USE_GA4`, `NEWSPACK_INSIGHTS_ENGAGEMENT_USE_GA4` | Per-tab backend dispatch (default on). When off, the metric would route to the BigQuery proxy path — currently a stub until NPPD-1630. |
+| `NEWSPACK_INSIGHTS_FIXTURE_MODE` | REST controllers that wrap a metric with a `get_fixture()` method short-circuit to fixtures instead of live data. Used for UI smoke testing; the `_fixture_state` request param selects empty/error/edge variants where a tab defines them. |
+| `NEWSPACK_INSIGHTS_CACHE_DISABLED` | Bypass the server-side transient + durable caches entirely. Dev/debug only. |
+| `NEWSPACK_INSIGHTS_FEEDBACK_FORCE_EMAIL` | Pin the in-dashboard feedback router to the email channel instead of the Slack-via-hub default. See [Feedback](#feedback-feedback). |
+| `NEWSPACK_INSIGHTS_FEEDBACK_CHANNEL_EMAIL` | Destination address for the email feedback channel. |
 
 See [`class-insights-wizard.php`](class-insights-wizard.php) for the canonical definitions and tab-visibility rules.
 
@@ -23,12 +24,15 @@ See [`class-insights-wizard.php`](class-insights-wizard.php) for the canonical d
 includes/wizards/insights/
 ├── class-insights-wizard.php       Admin page registration, boot config, tab visibility
 ├── class-insights-section-*.php    Per-tab init: loads metric + REST controller, registers route
-├── class-cache.php                 Shared transient wrapper with per-source TTLs + BQ cooldown
+├── class-cache.php                 Transient + durable + on-demand pools, per-source TTLs, BQ cooldown
+├── class-insights-prewarm.php      Daily Action Scheduler pre-warm (fans out per tab × preset window)
+├── class-insights-preset-windows.php  The five pre-warmed preset windows
 ├── class-bigquery-proxy-client.php Hub-proxied BigQuery queries (Newspack Manager auth)
 ├── api/                            REST controllers (one per tab) + Cached_Controller_Trait
 ├── classifiers/                    Donation product classifier (cached)
+├── feedback/                       In-dashboard feedback router (Slack-via-hub default; email seam)
 ├── fixtures/                       Per-tab fixture payloads for FIXTURE_MODE
-├── ga4/                            GA4 Data API client (runReport primitives)
+├── ga4/                            GA4 Data API client (runReport primitives) — App tab only
 ├── gam/                            Google Ad Manager async SOAP reporting client
 ├── metrics/                        Per-tab orchestrators (compose clients, normalize, cache)
 └── storage/                        HPOS- and legacy-Woo storage adapters behind a shared interface
@@ -61,7 +65,7 @@ The unit of work per tab. Each metric class exposes:
 
 - `get_all( $start, $end, $compare = null )` — full tab payload (current window plus optional comparison window).
 - `connection_error()` — early gate check returning `{ tab_error, banner_text }` when preconditions (OAuth, GAM activation, etc.) fail. Returns `null` when ready.
-- `get_fixture( ... )` — deterministic mock payload used by `FIXTURE_MODE`. Implemented on Audience, Engagement, Gates, Prompts, and Advertising; not on Conversion, Subscribers, or Donors (those tabs either return inline placeholders or read from local Woo data already, so the fixture path hasn't been needed).
+- `get_fixture( ... )` — deterministic mock payload used by `FIXTURE_MODE`. Implemented on Audience, Engagement, Conversion, Gates, Campaigns (Prompts), Advertising, and Newsletter Ads; not on Subscribers, Donors, or App (those read cheap local data or aren't fixture-backed yet). Where defined, the `_fixture_state` request param selects empty/error/edge variants for smoke-testing.
 
 Internally orchestrators compose data-client calls, normalize results into payload envelopes, and cache windows via [`class-cache.php`](class-cache.php). The envelope shapes used by the React layer are:
 
@@ -73,18 +77,22 @@ Internally orchestrators compose data-client calls, normalize results into paylo
 | Overlay | `{ value: null, computable: false, overlay: { type, dimensions } }` |
 | Hidden | `{ value: null, computable: false, hidden_in_v1: true }` |
 
-Current tab status:
+Conversion's collection metrics additionally carry an explicit `state: 'populated' | 'empty' | 'error' | 'coming_soon'` (replacing the old Phase 1 `pending` flag); `coming_soon` marks deferred Phase-B metrics that render a placeholder rather than a number.
+
+Current tab status (**Source** = data origin; the cache *cost* policy is separate — see [Caching](#caching-class-cachephp-class-insights-prewarmphp)):
 
 | Tab | Source | Notes |
 | --- | --- | --- |
-| Audience (1) | GA4 Data API | Default path; BQ v1.1 path is stubbed behind `NEWSPACK_INSIGHTS_AUDIENCE_USE_GA4`. |
-| Engagement (2) | GA4 Data API | Same dispatch pattern (`NEWSPACK_INSIGHTS_ENGAGEMENT_USE_GA4`). |
-| Conversion (3) | Inline placeholders | The metric returns synthetic payloads with `pending: true` per shape until NPPD-1630 Phase 2 lands. No BigQuery calls and no fixtures wired today. |
+| Audience (1) | BigQuery (hub proxy) | Reach, composition, sources, geo, content, trends. Registered-reader counts come from local `wp_users` and render even when the BigQuery path can't. The GA4 Data API path was removed (NPPD-1729). |
+| Engagement (2) | BigQuery (hub proxy) | Quality, reader segments, content engagement. Also moved off GA4 to BigQuery (NPPD-1729). |
+| Conversion Journey (3) | BigQuery (hub proxy) + local Woo | Influenced attribution, per-journey funnels, weekly rates via BigQuery; cohort/retention from local Woo (weekly snapshot). A few deferred metrics report `state: 'coming_soon'` until Phase B (NPPD-1630). |
 | Gates (4) | BigQuery | Gate exposure, conversion funnel, per-gate breakdown. |
-| Prompts (5) | BigQuery | Conversion funnels. |
-| Subscribers (6) | Local Woo | Reads via [`storage/`](storage/). |
-| Donors (7) | Local Woo | Donation-scoped queries via the donors storage interface. |
-| Advertising (8) | GAM async SOAP | Polls async report jobs; shown when GAM is the active ad provider (runtime "GAM active" check) or fixture mode is on. |
+| Campaigns (5) | BigQuery | Prompt exposure, engagement, conversion funnels, revenue. (Internal key `prompts`.) |
+| Subscribers (6) | Local Woo | Reads via [`storage/`](storage/). Newsletter→subscription value modeled via the hub proxy. |
+| Donors (7) | Local Woo | Donation-scoped queries via the donors storage interface. Visible only on sites with donation activity. |
+| Advertising (8) | GAM async SOAP | Polls async report jobs; shown when GAM is the active ad provider or fixture mode is on. RPM / impressions-per-session are cross-system (a GAM figure ÷ GA4 sessions), joined at read time. |
+| Newsletter Ads (9) | Local | newspack-newsletters ads CPT + dated stats; computed synchronously. Visible when a published newsletter ad exists. |
+| App (10) | GA4 Data API | Reach / engagement / content / retention / notifications / downloads against a publisher-selected GA4 **app** property. Visible when the Pugpig app is enabled. The only remaining GA4 Data API consumer. |
 
 ### Data clients
 
@@ -107,17 +115,33 @@ Schematic response envelope (illustrative — actual `cache` values are populate
 
 `Cached_Controller_Trait` ([`trait-cached-controller.php`](api/trait-cached-controller.php)) wraps GET/POST in cache orchestration. Concrete controllers declare `cache_source()` (one of `SOURCE_EXTERNAL`, `SOURCE_BIGQUERY`, `SOURCE_LOCAL`) and `tab_slug()`. Cached responses set `Cache-Control: no-store, private` so the browser never caches over the server-side transient.
 
-**Exception:** Conversion (Tab 3) does *not* use `Cached_Controller_Trait` while it returns inline placeholders. It registers a single `GET /newspack-insights/v1/conversion` route, returns the metric output directly, and has no `/refresh` route or cache envelope. It will adopt the standard pattern when NPPD-1630 lands.
+**Coverage:** Every tab uses `Cached_Controller_Trait` except App, which registers its own `GET` + `/refresh` routes and manages a per-property GA4 cache. Conversion — previously the inline-placeholder exception — now conforms to the standard `GET` + `/refresh` + cache-envelope pattern.
 
-### Caching (`class-cache.php`)
+### Feedback (`feedback/`)
 
-| Source | TTL | Notes |
+A single `POST /newspack-insights/v1/feedback` endpoint (NPPD-1728) accepts a per-tab feedback submission, stamps attribution server-side (publisher domain from `get_site_url()`, never trusted from the client), and hands it to a `Feedback_Router`. [`class-feedback-router-factory.php`](feedback/class-feedback-router-factory.php) picks the channel: Slack via the Newspack Manager relay ([`class-manager-relay-router.php`](feedback/class-manager-relay-router.php)) by default, or email ([`class-channel-email-router.php`](feedback/class-channel-email-router.php)) when `NEWSPACK_INSIGHTS_FEEDBACK_FORCE_EMAIL` is set (address from `NEWSPACK_INSIGHTS_FEEDBACK_CHANNEL_EMAIL`). Routers store nothing — durable capture is a deliberate v2 decision. Permission mirrors the data tabs (`manage_options`).
+
+### Caching (`class-cache.php`, `class-insights-prewarm.php`)
+
+Two layers cooperate: a **hub-side** per-day BigQuery cache (in `newspack-manager-admin`, out of scope here — it decomposes historical results into dated per-day rows and merges cached + freshly-fetched days) and the **consumer-side** cache described below.
+
+`cache_source()` selects a **cost policy**, not the literal data origin:
+
+| Policy | TTL | Notes |
 | --- | --- | --- |
-| `SOURCE_BIGQUERY` | 1 day | Expensive; 10-minute refresh cooldown per tab via `bq_cooldown_until()`. |
-| `SOURCE_EXTERNAL` | 10 minutes | GA4. |
-| `SOURCE_LOCAL` | none | Direct pass-through; the local DB is already cheap. |
+| `SOURCE_BIGQUERY` | 1 day | Expensive; adds a 10-minute per-tab manual-refresh cooldown via `bq_cooldown_until()`. Used by Conversion, Gates, Campaigns **and** the expensive local-Woo aggregates Subscribers + Donors — the policy is about compute cost, not data source. |
+| `SOURCE_EXTERNAL` | 10 minutes | Advertising (GAM), plus Audience + Engagement (BigQuery-sourced, but cheap enough behind the hub cache to keep a short consumer TTL). |
+| `SOURCE_LOCAL` | none | Direct pass-through. Newsletter Ads. |
 
-Transient keys: `newspack_insights_<tab>_<md5(start,end,compare_start,compare_end)>`. Each tab maintains a key index (`newspack_insights_index_<tab>`, FIFO-capped at 200) so refreshes can sweep all windows for a tab; transients still expire naturally on TTL.
+The consumer keeps three pools, all keyed by tab + window (+ optional comparison window):
+
+- **Transient envelope** — the fast path, TTL per policy above. A per-tab key index (`newspack_insights_index_<tab>`, FIFO-capped at 200) lets a refresh sweep every window for a tab; transients still expire naturally on TTL.
+- **Durable pool** (`wp_options`, owned by pre-warm) — survives object-cache eviction; freshness is logical (~25h since `computed_at`).
+- **On-demand pool** (`wp_options`, ≤10 windows/tab, FIFO) — caches ad-hoc custom windows so they survive memcached eviction without unbounded growth.
+
+**Pre-warm.** [`class-insights-prewarm.php`](class-insights-prewarm.php) schedules `newspack_insights_prewarm` once per day, which fans out a `newspack_insights_warm_window` Action Scheduler job per **(tab × preset window)** — the five presets live in [`class-insights-preset-windows.php`](class-insights-preset-windows.php). Warm jobs retry with backoff (≤3 attempts) and prune orphaned durable entries on success. Conversion's cohort snapshot refreshes weekly (`newspack_insights_conversion_cohort_refresh_weekly`); Advertising schedules its own async GAM refresh (`newspack_insights_advertising_refresh`).
+
+**Manual refresh** (`POST /<tab>/refresh`) recomputes and writes through to the pools. On the `SOURCE_BIGQUERY` policy, a click inside the 10-minute cooldown re-serves the prior payload with `cooldown_until` set instead of recomputing.
 
 `NEWSPACK_INSIGHTS_CACHE_DISABLED` short-circuits the wrapper entirely.
 
@@ -138,7 +162,7 @@ Donors has its own narrower interface ([`class-donors-storage-interface.php`](st
 
 ### Fixtures (`fixtures/`)
 
-One per tab. Returned by `Metric::get_fixture()` when `NEWSPACK_INSIGHTS_FIXTURE_MODE` is on. Values are computed from `current_datetime()` so they never go stale. Fixtures only cover the happy path — error and overlay states are exercised by component tests, not fixtures.
+Returned by `Metric::get_fixture()` when `NEWSPACK_INSIGHTS_FIXTURE_MODE` is on (present for Audience, Engagement, Conversion, Gates, Campaigns, Advertising, and Newsletter Ads). Values are computed from `current_datetime()` so they never go stale. Tabs that define render variants expose them through the `_fixture_state` request param (e.g. `empty`, `error`, and tab-specific edge cases on Conversion and Gates), so empty/error/edge states are smoke-testable without a live backend.
 
 ## Frontend pieces
 
@@ -157,7 +181,7 @@ One per tab. Returned by `Metric::get_fixture()` when `NEWSPACK_INSIGHTS_FIXTURE
 
 ### Data hooks (`hooks/use*Data.ts`)
 
-Eight hooks, one per tab, all the same shape:
+Ten hooks, one per tab, all the same shape:
 
 ```ts
 const { status, data, error, refetch, computedAt, source, cooldownUntil }
@@ -166,9 +190,11 @@ const { status, data, error, refetch, computedAt, source, cooldownUntil }
 
 Each hook builds a cache key, subscribes via `useSyncExternalStore`, kicks off `ensureFetched` on mount/range change, and registers its `refetch` with the refresh registry. The API call goes through [`api/`](../../../src/wizards/insights/api/) which thinly wraps `@wordpress/api-fetch`.
 
+Tabs whose data can arrive un-warmed — a cache miss returns a `data_status: 'warming'` envelope while the value is computed asynchronously (avoiding request timeouts on heavy windows) — also use [`usePollWhileWarming.ts`](../../../src/wizards/insights/hooks/usePollWhileWarming.ts), which re-fetches every ~20s until the payload settles, then stops. This is the "un-warmed" state, distinct from a hard error, an incalculable metric (`computable: false`), and a genuinely empty result.
+
 ### Tabs (`tabs/`)
 
-Each tab is a lazy-loaded `.tsx` file that calls its data hook, hands the result to `TabStateView` for loading/error/empty chrome, and renders sections. Section layouts differ — some tabs use `sections/` + `viz/` subdirs (Audience, Engagement, Gates, Advertising), others compose inline (Subscribers, Conversion). See each tab's directory for shape.
+Each tab is a lazy-loaded `.tsx` file that calls its data hook, hands the result to `TabStateView` for loading/error/empty chrome, and renders sections. Most tabs organize their sections under a `sections/` subdir and draw on the shared chart/table atoms in [`tabs/components/`](../../../src/wizards/insights/tabs/components/); see each tab's directory for shape.
 
 ### Shared tab atoms (`tabs/components/`)
 
@@ -181,6 +207,9 @@ Each tab is a lazy-loaded `.tsx` file that calls its data hook, hands the result
 | `CooldownNotice` | Live-ticking countdown banner wired to `cooldownUntil`. Auto-dismisses on tick-out. |
 | `TabStateView` | Centralized fetch-lifecycle chrome (spinner / error / muted-refetch). |
 | `TabErrorBanner`, `ConnectBanner`, `FinishConnectingDiagnostic`, `DataLagIndicator`, `TabLoading`, `TabSpinner` | Tab-specific UI helpers. |
+| `LineChart`, `BarChart`, `PieChart` (donut), `Funnel`, `CohortHeatmap` | Dependency-free SVG/HTML charts — **no third-party charting library** (keeps the bundle light and lets "Print / Save as PDF" render crisp vectors). Responsive per component: tables/funnel reflow, line/bar scroll, scorecards/pie wrap. |
+| `SortableTable`, `DistributionTable` | Click-to-sort and read-only distribution tables. |
+| `EmptyMetricSection`, `SectionEmpty` | Whole-section and collection empty-state primitives (see [Empty-state voice](#empty-state-voice--tone-canonical-reference)). |
 | `metrics.ts` | Shared types for the payload envelopes the PHP layer emits. |
 | `format.ts` | Number / currency / percent / duration / delta formatters with tone (green/red) logic. |
 

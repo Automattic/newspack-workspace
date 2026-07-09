@@ -2,9 +2,10 @@
  * PromptExposureSection (NPPD-1607, Section 1).
  *
  * Top-of-funnel exposure scorecards. Three cards in a single row.
- * The Direct vs Influenced explainer lives at the tab top (above this
- * section) so publishers encounter the framing before any section
- * that uses the terms — see {@see PromptsTab}.
+ * The tab-level Direct vs Influenced explainer that used to sit above this
+ * section was removed: Direct means a different thing per metric (free =
+ * submitted through the prompt's own form; paid = purchased through the
+ * prompt's own block), so each card now describes its own mechanism.
  */
 
 /**

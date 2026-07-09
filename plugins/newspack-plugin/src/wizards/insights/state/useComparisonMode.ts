@@ -3,14 +3,15 @@
  *
  * Owns the "compare to previous period" toggle. When enabled, computes
  * the previous-period range as the same length immediately preceding the
- * current range. Hydrates from URL query (?compare=1) and persists on
- * change.
+ * current range. Hydrates from URL query (?compare=1). URL persistence
+ * happens at commit time via `writeComparisonUrl` (see `./controlsUrl`),
+ * not here.
  */
 
 /**
  * WordPress dependencies
  */
-import { useCallback, useEffect, useMemo, useState } from '@wordpress/element';
+import { useCallback, useMemo, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -77,21 +78,6 @@ const readUrl = (): boolean | undefined => {
 	return undefined;
 };
 
-const writeUrl = ( enabled: boolean ) => {
-	if ( typeof window === 'undefined' ) {
-		return;
-	}
-	const params = new URLSearchParams( window.location.search );
-	// Persist both states explicitly. Previously the disabled state
-	// deleted the param, which meant an explicit user choice of
-	// "disabled" would silently revert to the boot config default on
-	// refresh whenever that default is true. `readUrl` already accepts
-	// '0' so this round-trips cleanly.
-	params.set( 'compare', enabled ? '1' : '0' );
-	const next = `${ window.location.pathname }?${ params.toString() }${ window.location.hash }`;
-	window.history.replaceState( window.history.state, '', next );
-};
-
 export interface UseComparisonModeOptions {
 	defaultEnabled: boolean;
 	currentRange: DateRange;
@@ -108,10 +94,6 @@ const useComparisonMode = ( { defaultEnabled, currentRange }: UseComparisonModeO
 		const fromUrl = readUrl();
 		return fromUrl !== undefined ? fromUrl : defaultEnabled;
 	} );
-
-	useEffect( () => {
-		writeUrl( enabled );
-	}, [ enabled ] );
 
 	const setEnabled = useCallback( ( v: boolean ) => {
 		setEnabledState( v );

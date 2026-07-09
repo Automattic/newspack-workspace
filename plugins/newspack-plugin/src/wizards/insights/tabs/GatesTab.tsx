@@ -26,7 +26,6 @@ import LastUpdated from '../components/LastUpdated';
 import TabStateView from './components/TabStateView';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import TabErrorBanner from './components/TabErrorBanner';
-import DirectVsInfluencedCallout from './gates/DirectVsInfluencedCallout';
 import GateExposureSection from './gates/GateExposureSection';
 import FreeReaderConversionSection from './gates/FreeReaderConversionSection';
 import PaidReaderConversionSection from './gates/PaidReaderConversionSection';
@@ -54,7 +53,6 @@ const GatesTab = ( { range, previousRange }: GatesTabProps ) => {
 			{ data && (
 				<>
 					{ data.tab_error && <TabErrorBanner /> }
-					<DirectVsInfluencedCallout />
 					<GateExposureSection
 						current={ data.current }
 						previous={ data.previous }

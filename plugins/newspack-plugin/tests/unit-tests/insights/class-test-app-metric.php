@@ -14,6 +14,7 @@
 namespace Newspack\Tests\Insights;
 
 use Newspack\Insights\App_Metric;
+use Newspack\Insights\Cache;
 use WP_UnitTestCase;
 
 /**
@@ -458,5 +459,50 @@ class Test_App_Metric extends WP_UnitTestCase {
 		// Equal views (500) → alphabetical: News before Sports.
 		$this->assertSame( 'News', $payload['rows'][0]['section'] );
 		$this->assertSame( 'Sports', $payload['rows'][1]['section'] );
+	}
+
+	/**
+	 * The metrics transient key folds in the global Cache::ENVELOPE_SCHEMA_VERSION
+	 * after its own prefix, so a cross-tab envelope-shape bump busts this tab's
+	 * (trait-less) cache too.
+	 */
+	public function test_metrics_cache_key_includes_envelope_version() {
+		$method = new \ReflectionMethod( App_Metric::class, 'metrics_cache_key' );
+		$method->setAccessible( true );
+		$key = $method->invoke( null, '123456789', '2026-01-01', '2026-01-31' );
+
+		$this->assertStringStartsWith( App_Metric::METRICS_CACHE_PREFIX . Cache::ENVELOPE_SCHEMA_VERSION . ':', $key );
+	}
+
+	/**
+	 * The (window-independent) retention transient key is version-folded the same
+	 * way as the metrics key.
+	 */
+	public function test_retention_cache_key_includes_envelope_version() {
+		$method = new \ReflectionMethod( App_Metric::class, 'retention_cache_key' );
+		$method->setAccessible( true );
+		$key = $method->invoke( null, '123456789' );
+
+		$this->assertStringStartsWith( App_Metric::RETENTION_CACHE_PREFIX . Cache::ENVELOPE_SCHEMA_VERSION . ':', $key );
+	}
+
+	/**
+	 * The key-builders stay injective over their inputs: distinct property/window
+	 * combinations, and the two key families, never collide — guards the md5
+	 * extraction from silently collapsing distinct windows onto one entry.
+	 */
+	public function test_app_cache_keys_vary_by_inputs() {
+		$metrics   = new \ReflectionMethod( App_Metric::class, 'metrics_cache_key' );
+		$retention = new \ReflectionMethod( App_Metric::class, 'retention_cache_key' );
+		$metrics->setAccessible( true );
+		$retention->setAccessible( true );
+
+		$base       = $metrics->invoke( null, '111', '2026-01-01', '2026-01-31' );
+		$other_prop = $metrics->invoke( null, '222', '2026-01-01', '2026-01-31' );
+		$other_win  = $metrics->invoke( null, '111', '2026-02-01', '2026-02-28' );
+
+		$this->assertNotSame( $base, $other_prop );
+		$this->assertNotSame( $base, $other_win );
+		$this->assertNotSame( $base, $retention->invoke( null, '111' ) );
 	}
 }
