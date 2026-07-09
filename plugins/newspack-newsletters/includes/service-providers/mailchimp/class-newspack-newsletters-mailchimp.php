@@ -1645,7 +1645,7 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 		if ( is_wp_error( $raw_error ) && false !== strpos( $raw_error->get_error_message(), 'Member In Compliance State' ) ) {
 			// Mailchimp forbids resubscribing such contacts via its API, so the reader must be
 			// pointed elsewhere — publishers can customize the message (HTML links allowed).
-			$custom_message = get_option( 'newspack_newsletters_mailchimp_resubscribe_message', '' );
+			$custom_message = trim( (string) get_option( 'newspack_newsletters_mailchimp_resubscribe_message', '' ) );
 			if ( ! empty( $custom_message ) ) {
 				return $custom_message;
 			}

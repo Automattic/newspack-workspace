@@ -81,6 +81,18 @@ class MailchimpReaderErrorMessageTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A whitespace-only saved message counts as empty — the default message shows.
+	 */
+	public function test_whitespace_only_message_falls_back_to_default() {
+		update_option( self::OPTION_NAME, "  \n  " );
+		$message = self::get_message( new WP_Error( 'mc', 'Member In Compliance State' ) );
+		self::assertSame(
+			"We'll need to subscribe this email address manually. Please contact our support team.",
+			$message
+		);
+	}
+
+	/**
 	 * The custom message applies ONLY to compliance-state errors; other errors keep the generic default.
 	 */
 	public function test_custom_message_does_not_apply_to_other_errors() {

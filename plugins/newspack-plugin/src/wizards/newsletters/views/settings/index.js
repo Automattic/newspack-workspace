@@ -241,6 +241,7 @@ export const Settings = ( {
 						label={ props.label }
 						value={ props.value }
 						placeholder={ props.placeholder }
+						help={ config.settings[ setting.key ]?.help }
 						onChange={ props.onChange }
 						disabled={ props.disabled }
 						rows={ 3 }
