@@ -13,8 +13,6 @@ defined( 'ABSPATH' ) || exit;
  * Keeps Newspack's admin list-table screens legible when many plugins add
  * columns and over-subscribe the fixed-layout table (collapsing Title to 0).
  * Switches those screens to `table-layout: auto` and floors the primary column.
- *
- * See plans/2026-07-07-admin-column-widths-autolayout-design.md.
  */
 class Admin_List_Table_Layout {
 
@@ -31,11 +29,12 @@ class Admin_List_Table_Layout {
 	const DEFAULT_MIN_WIDTH = '35ch';
 
 	/**
-	 * Allowed min-width syntax: a positive integer plus a length unit. Percentage
-	 * is intentionally excluded (ignored on table cells); the `D` flag anchors the
+	 * Allowed min-width syntax: a positive, non-zero integer plus a length unit.
+	 * Zero is excluded so a `0px`/`0ch` filter value can't defeat the floor;
+	 * percentage is excluded (ignored on table cells); the `D` flag anchors the
 	 * end so a trailing newline is rejected too.
 	 */
-	const MIN_WIDTH_PATTERN = '/^\d+(?:px|ch|rem)$/D';
+	const MIN_WIDTH_PATTERN = '/^[1-9]\d*(?:px|ch|rem)$/D';
 
 	/**
 	 * Extra screens registered on top of DEFAULT_SCREENS.

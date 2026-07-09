@@ -25,9 +25,11 @@ class Test_Admin_List_Table_Layout extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Reset the static registry so register_screen() calls can't bleed across tests.
+	 * Reset shared state so filters and register_screen() calls can't bleed across tests.
 	 */
 	public function tear_down(): void {
+		remove_all_filters( 'newspack_admin_autolayout_screens' );
+		remove_all_filters( 'newspack_admin_primary_column_min_width' );
 		$registered = new \ReflectionProperty( Admin_List_Table_Layout::class, 'registered' );
 		$registered->setAccessible( true );
 		$registered->setValue( null, [] );
@@ -152,10 +154,10 @@ class Test_Admin_List_Table_Layout extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The min-width filter rejects junk, percentages, and trailing newlines.
+	 * The min-width filter rejects junk, percentages, zero, and trailing newlines.
 	 */
 	public function test_min_width_rejects_junk_and_percentage(): void {
-		foreach ( [ '30%', '100', 'red;}', 'expression(alert(1))', '35 ch', "35ch\n" ] as $junk ) {
+		foreach ( [ '30%', '100', 'red;}', 'expression(alert(1))', '35 ch', "35ch\n", '0px', '0ch' ] as $junk ) {
 			add_filter( 'newspack_admin_primary_column_min_width', fn() => $junk );
 			$this->assertSame( '35ch', Admin_List_Table_Layout::get_min_width(), "rejected: $junk" );
 			remove_all_filters( 'newspack_admin_primary_column_min_width' );
