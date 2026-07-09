@@ -1402,8 +1402,9 @@ final class Modal_Checkout {
 	 * Express checkout wallets submit to wc/store/v1/checkout and can supply
 	 * values the buyer never sees or corrects (e.g. Apple Pay sending a suburb
 	 * as the state), which hard-fails Store API address validation. Values the
-	 * validation would accept are left untouched. Runs on rest_pre_dispatch
-	 * because the validation happens during dispatch.
+	 * validation would accept are left untouched, and only the billing address
+	 * is scrubbed. Runs on rest_pre_dispatch because the validation happens
+	 * during dispatch.
 	 *
 	 * @param mixed            $result  Response to replace the requested version with.
 	 * @param \WP_REST_Server  $server  Server instance.
@@ -1434,17 +1435,21 @@ final class Modal_Checkout {
 			return $result;
 		}
 
-		foreach ( [ 'billing_address', 'shipping_address' ] as $param ) {
-			$address = $request->get_param( $param );
+		// Physical-goods flows are never modified. The cart is not always
+		// initialized this early in Store API requests; when it is, bail for
+		// carts that need a shipping address. Only the billing address is
+		// scrubbed, so shipping data is never touched either way.
+		if ( \WC()->cart && \WC()->cart->needs_shipping_address() ) {
+			return $result;
+		}
 
-			if ( ! is_array( $address ) ) {
-				continue;
-			}
+		$address = $request->get_param( 'billing_address' );
 
+		if ( is_array( $address ) ) {
 			$scrubbed = self::scrub_invalid_address_values( $address, $billing_fields );
 
 			if ( $scrubbed !== $address ) {
-				$request->set_param( $param, $scrubbed );
+				$request->set_param( 'billing_address', $scrubbed );
 			}
 		}
 
