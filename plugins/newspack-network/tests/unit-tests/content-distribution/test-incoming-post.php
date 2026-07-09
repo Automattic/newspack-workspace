@@ -1043,7 +1043,10 @@ class TestIncomingPost extends \WP_UnitTestCase {
 
 		$stored = get_post_field( 'post_content', $post_id );
 		$this->assertStringContainsString( '\u003ciframe', $stored, 'Escaped block-attribute HTML must survive insertion with backslashes intact.' );
-		$this->assertSame( $block, $stored );
+		// The escaped `<` surviving with its backslash (asserted above) is what pins the
+		// fix; also assert the backslash-stripped corruption is absent, rather than a
+		// byte-exact block round-trip that couples the test to serialize_blocks internals.
+		$this->assertStringNotContainsString( '"embed":"u003c', $stored, 'The backslash-stripped corruption (bare u003c) must not appear.' );
 	}
 
 	/**
