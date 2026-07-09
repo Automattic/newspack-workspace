@@ -138,7 +138,11 @@ final class Reader_Activation {
 	 */
 	public static function enqueue_scripts() {
 		$authenticated_email = \is_user_logged_in() && self::is_user_reader( \wp_get_current_user() ) ? \wp_get_current_user()->user_email : '';
-		$script_dependencies = [];
+		// `newspack_commons` holds the shared (code-split) modules these scripts
+		// depend on at runtime, so it must load first. Declaring it as a dependency
+		// (combined with `defer` instead of `async` below) guarantees the load order
+		// even when an optimization plugin (e.g. Perfmatters) delays the scripts. See NPPM-2951.
+		$script_dependencies = [ 'newspack_commons' ];
 		$script_data         = [
 			'auth_intention_cookie'        => self::AUTH_INTENTION_COOKIE,
 			'cid_cookie'                   => NEWSPACK_CLIENT_ID_COOKIE_NAME,
@@ -173,7 +177,7 @@ final class Reader_Activation {
 			$script_dependencies,
 			NEWSPACK_PLUGIN_VERSION,
 			[
-				'strategy'  => 'async',
+				'strategy'  => 'defer',
 				'in_footer' => true,
 			]
 		);
@@ -182,7 +186,7 @@ final class Reader_Activation {
 			'newspack_ras_config',
 			$script_data
 		);
-		\wp_script_add_data( self::SCRIPT_HANDLE, 'async', true );
+		\wp_script_add_data( self::SCRIPT_HANDLE, 'defer', true );
 		\wp_script_add_data( self::SCRIPT_HANDLE, 'amp-plus', true );
 
 		/**
@@ -200,12 +204,12 @@ final class Reader_Activation {
 				[ self::SCRIPT_HANDLE ],
 				NEWSPACK_PLUGIN_VERSION,
 				[
-					'strategy'  => 'async',
+					'strategy'  => 'defer',
 					'in_footer' => true,
 				]
 			);
 			\wp_localize_script( self::AUTH_SCRIPT_HANDLE, 'newspack_reader_activation_labels', self::get_reader_activation_labels() );
-			\wp_script_add_data( self::AUTH_SCRIPT_HANDLE, 'async', true );
+			\wp_script_add_data( self::AUTH_SCRIPT_HANDLE, 'defer', true );
 			\wp_script_add_data( self::AUTH_SCRIPT_HANDLE, 'amp-plus', true );
 			\wp_enqueue_style(
 				self::AUTH_SCRIPT_HANDLE,
@@ -225,7 +229,7 @@ final class Reader_Activation {
 				[ self::SCRIPT_HANDLE ],
 				NEWSPACK_PLUGIN_VERSION,
 				[
-					'strategy'  => 'async',
+					'strategy'  => 'defer',
 					'in_footer' => true,
 				]
 			);
@@ -239,7 +243,7 @@ final class Reader_Activation {
 				]
 			);
 
-			\wp_script_add_data( self::NEWSLETTERS_SCRIPT_HANDLE, 'async', true );
+			\wp_script_add_data( self::NEWSLETTERS_SCRIPT_HANDLE, 'defer', true );
 			\wp_enqueue_style(
 				self::NEWSLETTERS_SCRIPT_HANDLE,
 				Newspack::plugin_url() . '/dist/newsletters-signup.css',

@@ -1,3 +1,10 @@
+# @automattic/newspack-blocks [4.27.0](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.8...newspack-blocks@4.27.0) (2026-07-08)
+
+
+### Features
+
+* **gates:** capture gate id on landing-page conversions (NPPD-1887) ([#575](https://github.com/Automattic/newspack-workspace/issues/575)) ([20e84f8](https://github.com/Automattic/newspack-workspace/commit/20e84f87dc1be96b5575548593fd0f7e77da52e6))
+
 ## @automattic/newspack-blocks [4.26.8](https://github.com/Automattic/newspack-workspace/compare/newspack-blocks@4.26.7...newspack-blocks@4.26.8) (2026-07-02)
 
 
