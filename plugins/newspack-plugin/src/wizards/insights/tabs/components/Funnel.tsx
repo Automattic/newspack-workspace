@@ -9,12 +9,14 @@
  * The sections are equal-width rectangles (the overall silhouette is a rectangle,
  * not a tapering funnel): the drop-off between steps is conveyed by the labels and
  * by color alone, not by width. Each band is a full-width <li> with two layers:
- *   - a solid FILL behind the text; and
+ *   - a gradient FILL behind the text; and
  *   - a flowing TEXT layer on top that wraps and grows the band height.
  *
  * Width is CSS-driven (width:100%, max-width cap), so no JS measurement is needed.
- * The single anchor color (primary-500) fades 1.0 → 0.6 down the funnel, and that
- * fade is the sole visual differentiator between sections; bands above
+ * The single anchor color (primary-500) fades 1.0 → 0.6 down the funnel: each
+ * band's fill ramps from its own opacity to the next band's, so the bands meet
+ * seamlessly and the stack is one continuous gradient — the sole visual
+ * differentiator between sections. Bands whose midpoint shade is above
  * DARK_TEXT_OPACITY_THRESHOLD take white text, below it dark text.
  */
 
@@ -107,15 +109,27 @@ const Funnel = ( { stages }: FunnelProps ) => {
 	return (
 		<ol className="newspack-insights__funnel" aria-label={ __( 'Conversion funnel', 'newspack-plugin' ) }>
 			{ stages.map( ( stage, index ) => {
-				const opacity = stepOpacity( index, stepCount );
-				const isDark = opacity > DARK_TEXT_OPACITY_THRESHOLD;
+				// The fill ramps from this step's opacity at the top to the next
+				// step's at the bottom, so adjacent bands meet seamlessly and the
+				// stack reads as one continuous 1.0 → 0.6 gradient. The last band
+				// holds the floor opacity (no step below it to ramp toward).
+				const topOpacity = stepOpacity( index, stepCount );
+				const bottomOpacity = index < stepCount - 1 ? stepOpacity( index + 1, stepCount ) : topOpacity;
+				// Text contrast tracks the band's midpoint shade, since the fill now
+				// varies across the band rather than being a single flat opacity.
+				const isDark = ( topOpacity + bottomOpacity ) / 2 > DARK_TEXT_OPACITY_THRESHOLD;
 				const pctOfTop = topCount > 0 ? stage.count / topCount : 0;
 				const drop = index > 0 ? dropFromPrevious( stage.count, stages[ index - 1 ].count ) : null;
 				return (
 					<li
 						key={ index }
 						className={ 'newspack-insights__funnel-step ' + ( isDark ? 'is-on-dark' : 'is-on-light' ) }
-						style={ { '--band-opacity': opacity } as React.CSSProperties }
+						style={
+							{
+								'--band-opacity-top': topOpacity,
+								'--band-opacity-bottom': bottomOpacity,
+							} as React.CSSProperties
+						}
 					>
 						<span className="newspack-insights__funnel-fill" aria-hidden="true" />
 						<span className="newspack-insights__funnel-content">

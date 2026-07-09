@@ -624,15 +624,21 @@
 			text-align: center;
 		}
 
-		// Fill: the single anchor color covering the full-width band. Opacity fades
-		// 1.0 → 0.6 via the inline --band-opacity, which is the sole differentiator
-		// between sections. Sits BEHIND the text.
+		// Fill: the single anchor color as a vertical gradient covering the full-width
+		// band, ramping from --band-opacity-top to --band-opacity-bottom. Adjacent
+		// bands share their boundary opacity, so the stack reads as one continuous
+		// 1.0 → 0.6 gradient — the sole differentiator between sections. Alpha must
+		// live in the gradient stops (the `opacity` property can't be gradiented), so
+		// the color is expressed via the primary-500 RGB channels. Sits BEHIND text.
 		&-fill {
 			position: absolute;
 			inset: 0;
 			z-index: 0;
-			background-color: colors.$primary-500;
-			opacity: var( --band-opacity, 1 );
+			background: linear-gradient(
+				to bottom,
+				rgba( #{ colors.$primary-500--rgb }, var( --band-opacity-top, 1 ) ) 0%,
+				rgba( #{ colors.$primary-500--rgb }, var( --band-opacity-bottom, 1 ) ) 100%
+			);
 		}
 
 		&-content {
