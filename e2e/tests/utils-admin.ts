@@ -34,6 +34,23 @@ export const logIn = async (page) => {
   await page.waitForURL(/\/wp-admin/);
 };
 
+/**
+ * Opens the editor settings sidebar if it's not already open.
+ * In WP 7.0+, the sidebar is closed by default even on desktop.
+ * Scoped to the editor top bar since other "Settings" controls may exist elsewhere.
+ */
+export const openEditorSettings = async (page) => {
+  const settingsToggle = page
+    .getByRole("region", { name: "Editor top bar" })
+    .getByLabel("Settings", { exact: true });
+  if (await settingsToggle.isVisible()) {
+    const pressed = await settingsToggle.getAttribute("aria-pressed");
+    if (pressed !== "true") {
+      await settingsToggle.click();
+    }
+  }
+};
+
 export const logOut = async (page) => {
   await page.goto("/?action=logout_without_nonce");
 };

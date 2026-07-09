@@ -154,6 +154,11 @@ for plugin in newspack-ads newspack-newsletters newspack-manager e2e-plugin; do
   }
 done
 
+# newspack-sponsors backs the sponsors spec. It's a separate, tolerant step since
+# not every environment bundles it; a failure here must not abort provisioning.
+wp --skip-themes plugin activate newspack-sponsors || \
+  echo "WARNING: could not activate newspack-sponsors - the sponsors spec will be skipped/fail." >&2
+
 # Run Newspack's own setup routine (creates default pages/config the wizard would).
 wp --skip-themes newspack setup || echo "WARNING: 'wp newspack setup' failed"
 
