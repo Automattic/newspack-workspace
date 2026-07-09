@@ -99,6 +99,12 @@ export interface InsightsBootConfig {
 	 * the map and render no strip. Optional so config fixtures need not set it.
 	 */
 	nextStepsLinks?: Partial< Record< TabKey, NextStepLink[] > >;
+	/**
+	 * Site WooCommerce currency code (e.g. "USD", "CAD") — Woo revenue is
+	 * formatted in this currency (DSGNEWS-188). Optional so config fixtures need
+	 * not set it; the formatter falls back to USD.
+	 */
+	currency?: string;
 }
 
 export interface InsightsWizardProps {
