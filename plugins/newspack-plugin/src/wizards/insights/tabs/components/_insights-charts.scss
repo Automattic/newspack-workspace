@@ -618,10 +618,29 @@
 			flex-direction: column;
 			align-items: center;
 			justify-content: center;
-			min-height: 72px; // baseline; grows with wrapped content.
+			margin-bottom: 25px;
+			margin-left: auto;
+			margin-right: auto;
+			min-height: 100px; // baseline; grows with wrapped content.
+			min-width: 80px; // Absolute minimum width of any step.
 			padding: 12px 8px;
 			box-sizing: border-box;
 			text-align: center;
+			&:last-child {
+				margin-bottom: 0;
+			}
+		}
+
+		&-separator {
+			border-top: 25px solid #{colors.$primary-200};
+			border-left: 25px solid transparent;
+			border-right: 25px solid transparent;
+			content: '';
+			left: 0;
+			height: 0;
+			position: absolute;
+			top: 100%;
+			width: calc( 100% - 50px );
 		}
 
 		// Fill: the single anchor color as a vertical gradient covering the full-width
@@ -648,6 +667,12 @@
 			flex-direction: column;
 			align-items: center;
 			max-width: 160px; // wrap width for the descriptor lines.
+		}
+
+		&-labels {
+			.components-popover__content {
+				padding: 4px 8px;
+			}
 		}
 
 		&-label-name {
@@ -690,7 +715,7 @@
 	// faded lower bands (reads on both the light fill and the card).
 	&__funnel-step.is-on-dark &__funnel-content {
 		color: #fff;
-		text-shadow: 0 1px 2px rgba( 13, 53, 102, 0.45 );
+		text-shadow: 0 1px 1px #{colors.$primary-500};
 	}
 
 	&__funnel-step.is-on-light &__funnel-content {

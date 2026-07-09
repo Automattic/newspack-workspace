@@ -25,6 +25,7 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
+import { Popover } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -35,12 +36,15 @@ const FULL_OPACITY = 1;
 const TAIL_OPACITY = 0.6;
 // Above this band opacity the fill is dark enough for white text; below it the
 // faded band needs dark text.
-const DARK_TEXT_OPACITY_THRESHOLD = 0.75;
+const DARK_TEXT_OPACITY_THRESHOLD = 0.4;
 // Distinct-sections gradient: each band ramps symmetrically around its own shade
 // by this fraction of the step-to-step opacity gap (darker top → lighter bottom).
-// Kept below 0.5 so adjacent bands do NOT share a boundary value — a visible step
-// stays between them, unlike a seamless funnel-wide ramp.
-const INTERNAL_GRADIENT_FRACTION = 0.25;
+const INTERNAL_GRADIENT_FRACTION = 0.5;
+// The bottom of the gradient should be a little less opaque than the top of the
+// next band, so the bands are visually distinct.
+const INTERNAL_GRADIENT_FLOOR = 0.15;
+// Each band should be no less than this fraction of the prior band's width, to
+// avoid extremely narrow funnels.
 
 export interface FunnelStage {
 	label: string;
@@ -74,7 +78,7 @@ export const dropFromPrevious = ( count: number, prevCount: number ): number => 
  * progression, not a period comparison, so never red/green.
  */
 const StepLabels = ( { pctOfTop, drop, topLabel }: { pctOfTop: number; drop: number; topLabel: string } ) => (
-	<>
+	<Popover className="newspack-insights__funnel-labels" offset={ 16 } placement="right" shift>
 		<span className="newspack-insights__funnel-label-pct">
 			{ sprintf(
 				/* translators: 1: percentage, 2: name of the first/top funnel stage (e.g. "Impression"). */
@@ -82,18 +86,18 @@ const StepLabels = ( { pctOfTop, drop, topLabel }: { pctOfTop: number; drop: num
 				formatPercent( pctOfTop ),
 				topLabel
 			) }
-		</span>
+		</span>{ ' ' }
 		<span className="newspack-insights__funnel-label-drop">
 			<span aria-hidden="true" className="newspack-insights__funnel-label-drop-arrow">
 				↓
 			</span>{ ' ' }
 			{ sprintf(
 				/* translators: %s: percentage drop-off from the previous stage. */
-				__( '%s drop-off', 'newspack-plugin' ),
+				__( '%s drop-off from previous', 'newspack-plugin' ),
 				formatPercent( drop )
 			) }
 		</span>
-	</>
+	</Popover>
 );
 
 const Funnel = ( { stages }: FunnelProps ) => {
@@ -111,10 +115,12 @@ const Funnel = ( { stages }: FunnelProps ) => {
 	}
 
 	const stepCount = stages.length;
+	const minBandPct = 0.15 * stepCount;
 	// Half the internal ramp per band, in opacity units. Derived from the step gap
 	// so the sheen scales with the funnel length (subtler on longer funnels).
 	const stepGap = stepCount > 1 ? ( FULL_OPACITY - TAIL_OPACITY ) / ( stepCount - 1 ) : 0;
 	const halfSpan = stepGap * INTERNAL_GRADIENT_FRACTION;
+	let prevBandWidth = 1;
 
 	return (
 		<ol className="newspack-insights__funnel" aria-label={ __( 'Conversion funnel', 'newspack-plugin' ) }>
@@ -124,11 +130,13 @@ const Funnel = ( { stages }: FunnelProps ) => {
 				// visible step separates the sections. Clamped to a valid [0,1] alpha.
 				const bandOpacity = stepOpacity( index, stepCount );
 				const topOpacity = Math.min( FULL_OPACITY, bandOpacity + halfSpan );
-				const bottomOpacity = Math.max( 0, bandOpacity - halfSpan );
+				const bottomOpacity = Math.max( 0, bandOpacity - halfSpan - INTERNAL_GRADIENT_FLOOR );
 				// Contrast tracks the band's own shade (its ramp midpoint).
 				const isDark = bandOpacity > DARK_TEXT_OPACITY_THRESHOLD;
 				const pctOfTop = topCount > 0 ? stage.count / topCount : 0;
 				const drop = index > 0 ? dropFromPrevious( stage.count, stages[ index - 1 ].count ) : null;
+				const bandWidth = Math.max( minBandPct * prevBandWidth, pctOfTop );
+				prevBandWidth = bandWidth;
 				return (
 					<li
 						key={ index }
@@ -137,6 +145,7 @@ const Funnel = ( { stages }: FunnelProps ) => {
 							{
 								'--band-opacity-top': topOpacity,
 								'--band-opacity-bottom': bottomOpacity,
+								maxWidth: `${ bandWidth * 100 }%`,
 							} as React.CSSProperties
 						}
 					>
@@ -146,6 +155,14 @@ const Funnel = ( { stages }: FunnelProps ) => {
 							<span className="newspack-insights__funnel-label-count">{ formatNumber( stage.count ) }</span>
 							{ drop !== null && <StepLabels pctOfTop={ pctOfTop } drop={ drop } topLabel={ topLabel } /> }
 						</span>
+						{ index < stages.length - 1 && (
+							<span
+								className="newspack-insights__funnel-separator"
+								style={ {
+									opacity: bandOpacity,
+								} }
+							/>
+						) }
 					</li>
 				);
 			} ) }
