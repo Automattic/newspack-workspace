@@ -16,7 +16,9 @@
 import { __ } from '@wordpress/i18n';
 
 const LOCALE = 'en-US';
-const SITE_CURRENCY = ( typeof window !== 'undefined' && window.newspackInsights?.currency ) || 'USD';
+// ISO 4217 code (Intl requires uppercase); WooCommerce already returns uppercase
+// but normalize defensively.
+const SITE_CURRENCY = ( ( typeof window !== 'undefined' && window.newspackInsights?.currency ) || 'USD' ).toUpperCase();
 
 const numberFormatter = new Intl.NumberFormat( LOCALE, {
 	maximumFractionDigits: 0,
@@ -28,16 +30,16 @@ const decimalFormatter = new Intl.NumberFormat( LOCALE, {
 } );
 
 // Three tiers keep large dashboard values readable (NPPD-1684): small amounts
-// keep cents, thousands drop cents, millions+ abbreviate with the full value in
-// a tooltip. Formatted in the site's Woo currency (see file header).
-const CURRENCY_WITH_CENTS = new Intl.NumberFormat( LOCALE, {
+// show the currency's natural minor units, thousands+ round to whole units, and
+// millions+ abbreviate with the full value in a tooltip. Formatted in the site's
+// Woo currency (see file header). `CURRENCY_FULL` sets no fraction count, so Intl
+// uses each currency's default minor units — 0 (JPY), 2 (USD), 3 (BHD).
+const CURRENCY_FULL = new Intl.NumberFormat( LOCALE, {
 	style: 'currency',
 	currency: SITE_CURRENCY,
-	minimumFractionDigits: 2,
-	maximumFractionDigits: 2,
 } );
 
-const CURRENCY_NO_CENTS = new Intl.NumberFormat( LOCALE, {
+const CURRENCY_ROUNDED = new Intl.NumberFormat( LOCALE, {
 	style: 'currency',
 	currency: SITE_CURRENCY,
 	minimumFractionDigits: 0,
@@ -95,22 +97,23 @@ export interface FormattedCurrency {
 }
 
 /**
- * Tiered currency: `<1K` keeps cents, `1K–<1M` drops cents, `>=1M`
- * abbreviates (e.g. "$1.2M") and carries the full value as `title`. The sign is
- * handled by the formatter; tier is chosen by magnitude, so negatives tier the
- * same. Zero renders as "$0.00" (in the site currency).
+ * Tiered currency: below 1,000 shows the currency's natural minor units (e.g.
+ * `$89.42`, `¥523`); 1,000–<1M rounds to whole units (`$41,690`); >=1M
+ * abbreviates (`$1.2M`) and carries the full value as `title`. The sign is
+ * handled by the formatter; the tier is chosen by magnitude, so negatives tier
+ * the same. All in the site's Woo currency.
  */
 export const formatCurrency = ( value: number ): FormattedCurrency => {
 	const abs = Math.abs( value );
 	if ( abs < 1000 ) {
-		return { display: CURRENCY_WITH_CENTS.format( value ), title: null };
+		return { display: CURRENCY_FULL.format( value ), title: null };
 	}
 	if ( abs < 1_000_000 ) {
-		return { display: CURRENCY_NO_CENTS.format( value ), title: null };
+		return { display: CURRENCY_ROUNDED.format( value ), title: null };
 	}
 	return {
 		display: CURRENCY_COMPACT.format( value ),
-		title: CURRENCY_WITH_CENTS.format( value ),
+		title: CURRENCY_FULL.format( value ),
 	};
 };
 
