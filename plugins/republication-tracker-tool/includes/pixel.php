@@ -65,10 +65,10 @@ if ( $wprtt_guards_enabled ) {
 // image below, but there is nothing to count.
 $wprtt_shared_post = isset( $_GET['post'], $_GET['ga4'] ) ? get_post( absint( $_GET['post'] ) ) : null; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
-// Non-ga4 hits (bots, crawlers) skip this block entirely. No counter update, no DB writes.
-// The wp-admin referrer bailout below is therefore only needed within this block.
-// Only update share tracking when a ga4 param is present (real pixel fires from configured republishers).
-// Bot, crawler, and link-preview requests are served the image but never counted.
+// Share tracking runs only for requests carrying both a valid post and a ga4
+// param (the real pixel fires from configured republishers) — everything else
+// just gets the image below: no counter update, no DB writes. With the counting
+// guards enabled, bot/crawler/link-preview requests are also excluded here.
 if ( $wprtt_shared_post instanceof WP_Post && ( ! $wprtt_guards_enabled || ! wprtt_is_bot_request( $wprtt_user_agent ) ) ) {
 
 	// set up all of our post vars we want to track.
@@ -78,20 +78,7 @@ if ( $wprtt_shared_post instanceof WP_Post && ( ! $wprtt_guards_enabled || ! wpr
 	$shared_post_slug      = rawurlencode( $shared_post->post_name );
 	$shared_post_permalink = get_permalink( $shared_post_id );
 
-	if ( array_key_exists( 'HTTP_REFERER', $_SERVER ) ) {
-		if ( isset( $_SERVER['HTTP_REFERER'] ) ) {
-			$url = esc_url_raw( $_SERVER['HTTP_REFERER'] );
-		}
-
-		$url_host = wp_parse_url( $url, PHP_URL_HOST );
-		$url_path = wp_parse_url( $url, PHP_URL_PATH );
-
-	} else {
-
-		$url      = '';
-		$url_host = '';
-
-	}
+	$url = isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( $_SERVER['HTTP_REFERER'] ) : '';
 
 	// If the request is coming from WP Admin, bail out (when the copied content is inserted into the WP editor, the pixel will be pinged).
 	if ( false !== stripos( $url, '/wp-admin/' ) ) {
