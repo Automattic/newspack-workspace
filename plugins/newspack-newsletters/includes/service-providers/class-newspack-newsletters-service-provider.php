@@ -667,7 +667,7 @@ Error message(s) received:
 		);
 		// The message reaches reader-facing surfaces that render markup (including
 		// innerHTML in the subscribe block), so sanitize whatever any callback produced.
-		return wp_kses_post( $reader_error );
+		return wp_kses_post( (string) $reader_error );
 	}
 
 	/**

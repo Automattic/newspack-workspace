@@ -121,6 +121,16 @@ class MailchimpReaderErrorMessageTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A filter callback returning a non-string never breaks the sanitizer.
+	 */
+	public function test_non_string_filter_output_is_coerced() {
+		add_filter( 'newspack_newsletters_add_contact_reader_error_message', '__return_null', 99 );
+		$message = self::get_message( new WP_Error( 'mc', 'Invalid Resource' ) );
+		remove_filter( 'newspack_newsletters_add_contact_reader_error_message', '__return_null', 99 );
+		self::assertSame( '', $message );
+	}
+
+	/**
 	 * The setting is registered in the settings list, scoped to Mailchimp, with a kses sanitizer.
 	 */
 	public function test_setting_is_registered() {
