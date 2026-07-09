@@ -208,7 +208,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 				</div>
 				{ description && (
 					<div className="newspack-insights__metric-card-description">
-						<Tooltip delay={ 250 } placement="bottom-start" text={ description }>
+						<Tooltip delay={ 250 } hideOnClick={ false } placement="bottom-start" text={ description }>
 							<Button icon={ info } className="newspack-insights__metric-card-info-icon" variant="tertiary" />
 						</Tooltip>
 						<p className="newspack-insights__metric-card-description-text">{ description }</p>
@@ -376,7 +376,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 			     would just double the text block. */ }
 			{ description && ! notCapableMessage && ! notComputableMessage && (
 				<div className="newspack-insights__metric-card-description">
-					<Tooltip delay={ 250 } placement="bottom-start" text={ description }>
+					<Tooltip delay={ 250 } hideOnClick={ false } placement="bottom-start" text={ description }>
 						<Button icon={ info } className="newspack-insights__metric-card-info-icon" variant="tertiary" />
 					</Tooltip>
 					<p className="newspack-insights__metric-card-description-text">{ description }</p>
