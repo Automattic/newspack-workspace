@@ -68,7 +68,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Every prompt view in this timeframe
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  Every prompt view in this timeframe
+                </p>
               </div>
             </div>
           </div>
@@ -113,7 +125,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Distinct readers who saw at least one prompt
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  Distinct readers who saw at least one prompt
+                </p>
               </div>
             </div>
           </div>
@@ -158,7 +182,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                How many prompts a typical reader sees
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  How many prompts a typical reader sees
+                </p>
               </div>
             </div>
           </div>
@@ -231,7 +267,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Clicks ÷ prompt impressions
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  Clicks ÷ prompt impressions
+                </p>
               </div>
             </div>
           </div>
@@ -276,7 +324,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Form submissions ÷ impressions on form-bearing prompts
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  Form submissions ÷ impressions on form-bearing prompts
+                </p>
               </div>
             </div>
           </div>
@@ -321,7 +381,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Explicit dismissals ÷ prompt impressions
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  Explicit dismissals ÷ prompt impressions
+                </p>
               </div>
             </div>
           </div>
@@ -394,7 +466,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Registrations submitted through a prompt’s registration block ÷ impressions of prompts with a registration block
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  Registrations submitted through a prompt’s registration block ÷ impressions of prompts with a registration block
+                </p>
               </div>
             </div>
           </div>
@@ -439,7 +523,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Registrants whose registration followed a registration-prompt exposure in a prior session within 7 days ÷ all new registrations
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  Registrants whose registration followed a registration-prompt exposure in a prior session within 7 days ÷ all new registrations
+                </p>
               </div>
             </div>
           </div>
@@ -484,7 +580,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Newsletter signups submitted through a prompt’s newsletter block ÷ impressions of prompts with a newsletter block
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  Newsletter signups submitted through a prompt’s newsletter block ÷ impressions of prompts with a newsletter block
+                </p>
               </div>
             </div>
           </div>
@@ -529,7 +637,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                New newsletter subscribers whose signup followed a newsletter-prompt exposure in a prior session within 7 days ÷ all new newsletter signups
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  New newsletter subscribers whose signup followed a newsletter-prompt exposure in a prior session within 7 days ÷ all new newsletter signups
+                </p>
               </div>
             </div>
           </div>
@@ -602,7 +722,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Donations completed through a prompt’s donation block ÷ impressions of prompts with a donation block
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  Donations completed through a prompt’s donation block ÷ impressions of prompts with a donation block
+                </p>
               </div>
             </div>
           </div>
@@ -647,7 +779,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Donors whose conversion followed a donation-prompt exposure in a prior session within 14 days ÷ all new donors
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  Donors whose conversion followed a donation-prompt exposure in a prior session within 14 days ÷ all new donors
+                </p>
               </div>
             </div>
           </div>
@@ -692,7 +836,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Subscriptions purchased through a prompt’s checkout button ÷ impressions of prompts with a checkout button
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  Subscriptions purchased through a prompt’s checkout button ÷ impressions of prompts with a checkout button
+                </p>
               </div>
             </div>
           </div>
@@ -737,7 +893,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Subscribers whose conversion followed a subscription-prompt exposure in a prior session within 14 days ÷ all new subscribers
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  Subscribers whose conversion followed a subscription-prompt exposure in a prior session within 14 days ÷ all new subscribers
+                </p>
               </div>
             </div>
           </div>
@@ -810,7 +978,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Sum of Woo donation order totals from donations completed through a prompt’s donation block
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  Sum of Woo donation order totals from donations completed through a prompt’s donation block
+                </p>
               </div>
             </div>
           </div>
@@ -855,7 +1035,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Checkout revenue from donation completions in a later session within 14 days of seeing a donation-intent prompt
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  Checkout revenue from donation completions in a later session within 14 days of seeing a donation-intent prompt
+                </p>
               </div>
             </div>
           </div>
@@ -900,7 +1092,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Sum of Woo subscription order totals from subscriptions purchased through a prompt’s checkout button
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  Sum of Woo subscription order totals from subscriptions purchased through a prompt’s checkout button
+                </p>
               </div>
             </div>
           </div>
@@ -945,7 +1149,19 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               <div
                 class="newspack-insights__metric-card-description"
               >
-                Checkout revenue from subscription completions in a later session within 14 days of seeing a subscription-intent prompt
+                <button
+                  class="components-button newspack-insights__metric-card-info-icon is-tertiary has-icon"
+                  type="button"
+                >
+                  <span
+                    class="dashicon dashicons dashicons-info"
+                  />
+                </button>
+                <p
+                  class="newspack-insights__metric-card-description-text"
+                >
+                  Checkout revenue from subscription completions in a later session within 14 days of seeing a subscription-intent prompt
+                </p>
               </div>
             </div>
           </div>
