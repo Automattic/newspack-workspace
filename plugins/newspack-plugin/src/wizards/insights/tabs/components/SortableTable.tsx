@@ -1,38 +1,26 @@
 /**
- * Shared SortableTable primitive (NPPD-1607/1609, Task 5 viz-consolidation).
+ * Shared SortableTable primitive (NPPD-1607/1609; DataViews migration NPPD-1889).
  *
- * Generic click-to-sort table used by:
- *   - Tab 3 (Conversion Journey): Section 8.4 "top pages that don't convert"
- *   - Tab 5 (Prompts): three Performance breakdown tables (by prompt, by
- *     intent, by placement)
+ * Click-to-sort table used by Tab 3 (Conversion Journey) and Tab 5 (Prompts).
+ * Now a thin adapter over the shared read-only DataViews table
+ * (`InsightsDataView`) so every Insights table shares one treatment; the public
+ * props (`SortableColumn`, `getRowKey`, `defaultSortKey`, `errorMessage`,
+ * `initialRowLimit`) are unchanged, so the four consumers need no edits.
  *
- * Merged from the two tab-local copies; the prompts copy (NPPD-1607) is the
- * strict superset — it adds `errorMessage` which was absent from the
- * conversion copy. Behavior is identical to the prompts original:
- *
- *   - Click a column header to sort; numeric columns open DESC, string
- *     columns open ASC; clicking the active column toggles direction.
- *   - Null cells (em-dash) always sort to the bottom regardless of direction.
- *   - When `rows` is empty, the empty-state row is shown but the sort
- *     affordances stay visible so the chrome is identical between phases.
- *   - When `errorMessage` is set it replaces `emptyMessage` in the
- *     empty-state row.
- *   - `initialRowLimit`: when set and exceeded, only the top N rows render
- *     with a "See more" toggle that reveals the rest. The cap is applied
- *     after sorting so collapsing always shows the current top N.
+ * Behavior preserved by the wrapper: the default sort opens DESC for a numeric
+ * column / ASC for a string column, null cells sort last, and `initialRowLimit`
+ * caps rows behind a "See more" toggle applied after sorting. Re-sorting is now
+ * DataViews-native — via its column-header menu (Sort ascending / descending),
+ * not the old click-to-toggle header. `errorMessage` (when set) replaces the
+ * empty-state copy.
  */
-
-/**
- * WordPress dependencies
- */
-import { __, sprintf } from '@wordpress/i18n';
-import { useMemo, useState } from '@wordpress/element';
-import { Icon, chevronUp, chevronDown } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
+import { __ } from '@wordpress/i18n';
 import { formatNumber, formatPercent } from './format';
+import InsightsDataView from './InsightsDataView';
 
 export type SortDir = 'asc' | 'desc';
 
@@ -54,7 +42,7 @@ export interface SortableTableProps< Row > {
 	defaultSortKey: string;
 	emptyMessage: string;
 	/**
-	 * When set, replaces the empty-state row with a publisher-friendly error
+	 * When set, replaces the empty-state copy with a publisher-friendly error
 	 * message. Pass when the table's wrapper envelope reports `state === 'error'`
 	 * so a failed query renders the shared error treatment instead of the
 	 * neutral "no data yet" copy.
@@ -68,42 +56,6 @@ export interface SortableTableProps< Row > {
 	initialRowLimit?: number;
 }
 
-const ariaSortFor = ( isActive: boolean, activeDir: SortDir ): 'ascending' | 'descending' | 'none' => {
-	if ( ! isActive ) {
-		return 'none';
-	}
-	return activeDir === 'asc' ? 'ascending' : 'descending';
-};
-
-interface SortableHeaderProps< Row > {
-	column: SortableColumn< Row >;
-	activeKey: string;
-	activeDir: SortDir;
-	onSort: ( key: string ) => void;
-}
-
-function SortableHeader< Row >( { column, activeKey, activeDir, onSort }: SortableHeaderProps< Row > ) {
-	const isActive = column.key === activeKey;
-	const ariaSort = ariaSortFor( isActive, activeDir );
-	const className = column.numeric
-		? 'newspack-insights__table-num newspack-insights__sortable-table-sort-cell'
-		: 'newspack-insights__sortable-table-sort-cell';
-	return (
-		<th scope="col" className={ className } aria-sort={ ariaSort }>
-			<button
-				type="button"
-				className={ `newspack-insights__sortable-table-sort${ isActive ? ' is-active' : '' }` }
-				onClick={ () => onSort( column.key ) }
-			>
-				<span className="newspack-insights__sortable-table-sort-label">{ column.label }</span>
-				<span className="newspack-insights__sortable-table-sort-indicator" aria-hidden="true">
-					<Icon icon={ isActive && activeDir === 'asc' ? chevronUp : chevronDown } size={ 14 } />
-				</span>
-			</button>
-		</th>
-	);
-}
-
 function SortableTable< Row >( {
 	columns,
 	rows,
@@ -113,111 +65,16 @@ function SortableTable< Row >( {
 	errorMessage,
 	initialRowLimit,
 }: SortableTableProps< Row > ) {
-	const [ sortKey, setSortKey ] = useState< string >( defaultSortKey );
-	const [ sortDir, setSortDir ] = useState< SortDir >( () => {
-		const def = columns.find( c => c.key === defaultSortKey );
-		return def?.numeric ? 'desc' : 'asc';
-	} );
-	const [ expanded, setExpanded ] = useState( false );
-
-	const handleSort = ( key: string ) => {
-		if ( key === sortKey ) {
-			setSortDir( prev => ( prev === 'asc' ? 'desc' : 'asc' ) );
-			return;
-		}
-		setSortKey( key );
-		// Default direction depends on column type: numeric columns open
-		// DESC (biggest first), string columns open ASC.
-		const def = columns.find( c => c.key === key );
-		setSortDir( def?.numeric ? 'desc' : 'asc' );
-	};
-
-	const sortedRows = useMemo( () => {
-		const column = columns.find( c => c.key === sortKey );
-		if ( ! column ) {
-			return rows;
-		}
-		return [ ...rows ].sort( ( a, b ) => {
-			const av = column.sortValue( a );
-			const bv = column.sortValue( b );
-			// Nulls last (regardless of direction).
-			if ( av === null && bv === null ) {
-				return 0;
-			}
-			if ( av === null ) {
-				return 1;
-			}
-			if ( bv === null ) {
-				return -1;
-			}
-			let cmp: number;
-			if ( typeof av === 'string' && typeof bv === 'string' ) {
-				cmp = av.localeCompare( bv );
-			} else {
-				cmp = ( av as number ) - ( bv as number );
-			}
-			return sortDir === 'asc' ? cmp : -cmp;
-		} );
-	}, [ rows, columns, sortKey, sortDir ] );
-
-	const isEmpty = sortedRows.length === 0;
-
-	// Row cap + "See more" toggle (only when a limit is set and exceeded). The
-	// cap is applied to the already-sorted rows, so collapsing shows the current
-	// top N; the toggle persists across re-sorts.
-	const isCollapsible = typeof initialRowLimit === 'number' && sortedRows.length > initialRowLimit;
-	const visibleRows = isCollapsible && ! expanded ? sortedRows.slice( 0, initialRowLimit ) : sortedRows;
-	const hiddenCount = sortedRows.length - ( initialRowLimit ?? 0 );
-
 	return (
-		<>
-			<div className="newspack-insights__table-wrap">
-				<table className="newspack-insights__table newspack-insights__sortable-table">
-					<thead>
-						<tr>
-							{ columns.map( col => (
-								<SortableHeader key={ col.key } column={ col } activeKey={ sortKey } activeDir={ sortDir } onSort={ handleSort } />
-							) ) }
-						</tr>
-					</thead>
-					<tbody>
-						{ isEmpty ? (
-							<tr>
-								<td colSpan={ columns.length } className="newspack-insights__sortable-table-empty">
-									{ errorMessage ?? emptyMessage }
-								</td>
-							</tr>
-						) : (
-							visibleRows.map( row => (
-								<tr key={ getRowKey( row ) }>
-									{ columns.map( col => (
-										<td key={ col.key } className={ col.numeric ? 'newspack-insights__table-num' : undefined }>
-											{ col.render( row ) }
-										</td>
-									) ) }
-								</tr>
-							) )
-						) }
-					</tbody>
-				</table>
-			</div>
-			{ isCollapsible && (
-				<button
-					type="button"
-					className="newspack-insights__sortable-table-more"
-					aria-expanded={ expanded }
-					onClick={ () => setExpanded( prev => ! prev ) }
-				>
-					{ expanded
-						? __( 'See less', 'newspack-plugin' )
-						: sprintf(
-								/* translators: %d: number of additional rows revealed by expanding the table. */
-								__( 'See more (%d)', 'newspack-plugin' ),
-								hiddenCount
-						  ) }
-				</button>
-			) }
-		</>
+		<InsightsDataView< Row >
+			columns={ columns }
+			rows={ rows }
+			getRowKey={ row => String( getRowKey( row ) ) }
+			defaultSortKey={ defaultSortKey }
+			emptyMessage={ errorMessage ?? emptyMessage }
+			expandable={ typeof initialRowLimit === 'number' }
+			defaultRowLimit={ initialRowLimit }
+		/>
 	);
 }
 
