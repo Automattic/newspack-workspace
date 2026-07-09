@@ -13,11 +13,12 @@
  *   - a flowing TEXT layer on top that wraps and grows the band height.
  *
  * Width is CSS-driven (width:100%, max-width cap), so no JS measurement is needed.
- * The single anchor color (primary-500) fades 1.0 → 0.6 down the funnel: each
- * band's fill ramps from its own opacity to the next band's, so the bands meet
- * seamlessly and the stack is one continuous gradient — the sole visual
- * differentiator between sections. Bands whose midpoint shade is above
- * DARK_TEXT_OPACITY_THRESHOLD take white text, below it dark text.
+ * The single anchor color (primary-500) fades 1.0 → 0.6 down the funnel — the sole
+ * visual differentiator between sections. Each band's fill is a vertical gradient
+ * ramping symmetrically around its own shade (darker top → lighter bottom); because
+ * adjacent bands don't share a boundary value, a visible step keeps the sections
+ * distinct. Bands whose shade is above DARK_TEXT_OPACITY_THRESHOLD take white text,
+ * below it dark text.
  */
 
 /**
@@ -35,6 +36,11 @@ const TAIL_OPACITY = 0.6;
 // Above this band opacity the fill is dark enough for white text; below it the
 // faded band needs dark text.
 const DARK_TEXT_OPACITY_THRESHOLD = 0.75;
+// Distinct-sections gradient: each band ramps symmetrically around its own shade
+// by this fraction of the step-to-step opacity gap (darker top → lighter bottom).
+// Kept below 0.5 so adjacent bands do NOT share a boundary value — a visible step
+// stays between them, unlike a seamless funnel-wide ramp.
+const INTERNAL_GRADIENT_FRACTION = 0.25;
 
 export interface FunnelStage {
 	label: string;
@@ -105,19 +111,22 @@ const Funnel = ( { stages }: FunnelProps ) => {
 	}
 
 	const stepCount = stages.length;
+	// Half the internal ramp per band, in opacity units. Derived from the step gap
+	// so the sheen scales with the funnel length (subtler on longer funnels).
+	const stepGap = stepCount > 1 ? ( FULL_OPACITY - TAIL_OPACITY ) / ( stepCount - 1 ) : 0;
+	const halfSpan = stepGap * INTERNAL_GRADIENT_FRACTION;
 
 	return (
 		<ol className="newspack-insights__funnel" aria-label={ __( 'Conversion funnel', 'newspack-plugin' ) }>
 			{ stages.map( ( stage, index ) => {
-				// The fill ramps from this step's opacity at the top to the next
-				// step's at the bottom, so adjacent bands meet seamlessly and the
-				// stack reads as one continuous 1.0 → 0.6 gradient. The last band
-				// holds the floor opacity (no step below it to ramp toward).
-				const topOpacity = stepOpacity( index, stepCount );
-				const bottomOpacity = index < stepCount - 1 ? stepOpacity( index + 1, stepCount ) : topOpacity;
-				// Text contrast tracks the band's midpoint shade, since the fill now
-				// varies across the band rather than being a single flat opacity.
-				const isDark = ( topOpacity + bottomOpacity ) / 2 > DARK_TEXT_OPACITY_THRESHOLD;
+				// Each band ramps symmetrically around its own shade (darker top →
+				// lighter bottom). Adjacent bands do NOT share a boundary value, so a
+				// visible step separates the sections. Clamped to a valid [0,1] alpha.
+				const bandOpacity = stepOpacity( index, stepCount );
+				const topOpacity = Math.min( FULL_OPACITY, bandOpacity + halfSpan );
+				const bottomOpacity = Math.max( 0, bandOpacity - halfSpan );
+				// Contrast tracks the band's own shade (its ramp midpoint).
+				const isDark = bandOpacity > DARK_TEXT_OPACITY_THRESHOLD;
 				const pctOfTop = topCount > 0 ? stage.count / topCount : 0;
 				const drop = index > 0 ? dropFromPrevious( stage.count, stages[ index - 1 ].count ) : null;
 				return (
