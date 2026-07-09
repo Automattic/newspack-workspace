@@ -103,6 +103,7 @@ class Alert_Manager {
 		add_action( 'newspack_sync_contact_failed', [ __CLASS__, 'record_failure' ] );
 		add_action( 'newspack_data_event_handler_failed', [ __CLASS__, 'record_failure' ] );
 		add_action( 'newspack_sync_retry_exhausted', [ __CLASS__, 'handle_sync_retry_exhausted' ] );
+		add_action( 'newspack_sync_permanent_failure', [ __CLASS__, 'handle_sync_permanent_failure' ] );
 		add_action( 'newspack_data_event_retry_exhausted', [ __CLASS__, 'handle_data_event_retry_exhausted' ] );
 		add_action( 'newspack_integration_health_check_failed', [ __CLASS__, 'handle_health_check_failed' ] );
 		add_action( 'newspack_alert', [ __CLASS__, 'forward_alert_to_log' ] );
@@ -271,6 +272,39 @@ class Alert_Manager {
 			[
 				'type'      => 'sync_retry_exhausted',
 				'severity'  => 'error',
+				'message'   => $message,
+				'context'   => $payload,
+				'timestamp' => time(),
+			]
+		);
+	}
+
+	/**
+	 * Handle a permanent (non-retryable) contact-sync failure.
+	 *
+	 * config-class failures (disabled/unpaid ESP account) get 'error'
+	 * severity so forward_alert_to_log() routes them to Slack; contact-class
+	 * failures (bad contact data) get 'warning' severity so they land in
+	 * logstash/Watch only and do not page on-call.
+	 *
+	 * @param array $payload Alert data from Contact_Sync.
+	 */
+	public static function handle_sync_permanent_failure( $payload ) {
+		$class = 'config' === ( $payload['class'] ?? 'contact' ) ? 'config' : 'contact';
+
+		$message = sprintf(
+			'Permanent %s sync failure for integration "%s" (no retry). Last error: %s',
+			$class,
+			$payload['integration_id'] ?? 'unknown',
+			$payload['reason'] ?? 'unknown'
+		);
+
+		/** This action is documented in includes/class-alert-manager.php */
+		do_action(
+			'newspack_alert',
+			[
+				'type'      => 'sync_permanent_failure',
+				'severity'  => 'config' === $class ? 'error' : 'warning',
 				'message'   => $message,
 				'context'   => $payload,
 				'timestamp' => time(),
