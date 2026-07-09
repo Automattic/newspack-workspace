@@ -63,13 +63,13 @@ if ( $wprtt_guards_enabled ) {
 
 // The pixel endpoint is public: unknown or deleted post IDs still get the
 // image below, but there is nothing to count.
-$wprtt_shared_post = isset( $_GET['post'] ) ? get_post( absint( $_GET['post'] ) ) : null; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+$wprtt_shared_post = isset( $_GET['post'], $_GET['ga4'] ) ? get_post( absint( $_GET['post'] ) ) : null; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 // Non-ga4 hits (bots, crawlers) skip this block entirely. No counter update, no DB writes.
 // The wp-admin referrer bailout below is therefore only needed within this block.
 // Only update share tracking when a ga4 param is present (real pixel fires from configured republishers).
 // Bot, crawler, and link-preview requests are served the image but never counted.
-if ( $wprtt_shared_post instanceof WP_Post && isset( $_GET['ga4'] ) && ( ! $wprtt_guards_enabled || ! wprtt_is_bot_request( $wprtt_user_agent ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+if ( $wprtt_shared_post instanceof WP_Post && ( ! $wprtt_guards_enabled || ! wprtt_is_bot_request( $wprtt_user_agent ) ) ) {
 
 	// set up all of our post vars we want to track.
 	$shared_post    = $wprtt_shared_post;
@@ -120,7 +120,7 @@ if ( $wprtt_shared_post instanceof WP_Post && isset( $_GET['ga4'] ) && ( ! $wprt
 				$url => 1,
 			);
 		}
-		$update = update_post_meta( $shared_post_id, 'republication_tracker_tool_sharing', $value );
+		update_post_meta( $shared_post_id, 'republication_tracker_tool_sharing', $value );
 
 		// If we have the necessary GA4 info, let's push data to it.
 		// We need both a Measurement ID and an API secret for GA4.

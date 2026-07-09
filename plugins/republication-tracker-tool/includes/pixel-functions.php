@@ -64,9 +64,10 @@ function wprtt_create_cid_cookie_if_not_set() {
 }
 
 /**
- * Extracts the Client ID from the _ga cookie
+ * Extract the client ID from the _ga cookie, falling back to the newspack-cid
+ * cookie or a newly generated ID.
  *
- * @return ?string
+ * @return string Client ID.
  */
 function wprtt_extract_cid_from_cookies() {
 	if ( isset( $_COOKIE['_ga'] ) ) {
