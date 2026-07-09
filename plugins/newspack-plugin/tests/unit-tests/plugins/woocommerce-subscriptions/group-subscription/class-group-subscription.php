@@ -8,6 +8,7 @@
 
 use Newspack\Group_Subscription;
 use Newspack\Group_Subscription_Settings;
+use Newspack\Group_Subscription_Invite;
 
 /**
  * Test Group_Subscription member counting (managers/owner are counted as members).
@@ -108,6 +109,26 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 	 */
 	private function add_member( int $member_id, WC_Subscription $subscription ): void {
 		add_user_meta( $member_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription->get_id() );
+	}
+
+	/**
+	 * Seed a pending (non-expired) email invite on $subscription.
+	 *
+	 * @param string          $email        The invited email address.
+	 * @param WC_Subscription $subscription The group subscription.
+	 */
+	private function add_invite( string $email, WC_Subscription $subscription ): void {
+		$invites = $subscription->get_meta( Group_Subscription_Invite::META, true );
+		if ( ! is_array( $invites ) ) {
+			$invites = [];
+		}
+		// Mirror production storage: keyed by a random invite key, value carries the email + expiry.
+		$invites[ 'test-key-' . $email ] = [
+			'added_by'   => 0,
+			'email'      => $email,
+			'expiration' => time() + HOUR_IN_SECONDS,
+		];
+		$subscription->update_meta_data( Group_Subscription_Invite::META, $invites );
 	}
 
 	/**
@@ -220,5 +241,42 @@ class Test_Group_Subscription extends WP_UnitTestCase {
 			Group_Subscription::get_member_capacity( $sub ),
 			'An ownerless group should not add a phantom owner to capacity (10, not 11), keeping numerator and denominator consistent.'
 		);
+	}
+
+	/**
+	 * A pending (non-expired) invite reserves a spot, so a direct member add that would push
+	 * members + pending invites past the limit is rejected -- matching the invite path's own check.
+	 */
+	public function test_update_members_counts_pending_invites_toward_limit() {
+		$owner_id  = $this->create_reader_user();
+		$member_id = $this->create_reader_user();
+		$sub       = $this->create_group_subscription( $owner_id, 1 ); // One spot (in addition to the owner).
+		$this->add_invite( 'pending@test.com', $sub );
+
+		// The pending invite already fills the single spot, so a direct add must be rejected.
+		$result = Group_Subscription::update_members( $sub, [ $member_id ] );
+		$this->assertWPError( $result, 'A direct add should be blocked when a pending invite already fills the limit.' );
+		$this->assertSame( 409, $result->get_error_data()['status'], 'The limit rejection should carry a 409 status.' );
+		$this->assertNotContains( $member_id, Group_Subscription::get_members( $sub ), 'No member should have been added.' );
+	}
+
+	/**
+	 * Adding a user who holds a pending invite must not double-count their own invite against the
+	 * limit -- the add fulfils that invite, so it is excluded from the count. This is what lets an
+	 * invite be accepted (or the invited user be added directly) when the group is at its limit.
+	 */
+	public function test_update_members_adding_invited_user_does_not_double_count_their_invite() {
+		$owner_id = $this->create_reader_user();
+		$invitee  = $this->create_reader_user();
+		$email    = get_userdata( $invitee )->user_email;
+		$sub      = $this->create_group_subscription( $owner_id, 1 );
+		$this->add_invite( $email, $sub );
+
+		// The single spot is "reserved" by the invitee's own pending invite; adding the invitee
+		// fulfils it, so the add must succeed rather than double-count them.
+		$result = Group_Subscription::update_members( $sub, [ $invitee ] );
+		$this->assertNotWPError( $result, 'Adding a user who holds the last pending invite should succeed.' );
+		// get_members() may return IDs as strings (raw from meta), so compare after casting.
+		$this->assertContains( (int) $invitee, array_map( 'intval', Group_Subscription::get_members( $sub ) ), 'The invitee should now be a member.' );
 	}
 }

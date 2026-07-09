@@ -13,6 +13,20 @@
 			display: block;
 		}
 	}
+	// The limit warning is hidden until the group is enabled and at capacity; when it shows,
+	// the add-member form is hidden so an admin can't attempt an add the server would reject.
+	.newspack-group-subscription__limit-notice {
+		display: none;
+		margin: 0 0 16px;
+	}
+	&.enabled .newspack-group-subscription__container.is-at-limit {
+		.newspack-group-subscription__limit-notice {
+			display: block;
+		}
+		.newspack-group-subscription__add-member {
+			display: none;
+		}
+	}
 	h3 {
 		font-size: 14px;
 	}

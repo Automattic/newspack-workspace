@@ -116,6 +116,8 @@ class Group_Subscription_Settings {
 				'invalid_email_message' => __( 'Please enter a valid email address.', 'newspack-plugin' ),
 				'success_message'       => __( 'Invitation sent successfully.', 'newspack-plugin' ),
 				'pending_label'         => __( '(pending)', 'newspack-plugin' ),
+				'remove_label'          => __( 'Remove', 'newspack-plugin' ),
+				'cancel_label'          => __( 'Cancel', 'newspack-plugin' ),
 			]
 		);
 	}
@@ -419,8 +421,23 @@ class Group_Subscription_Settings {
 				$member_users[] = $member_user;
 			}
 		}
+		// A spot is consumed by each group member and each pending (non-expired) invite; the owner
+		// is excluded because the limit counts members "in addition to the owner". The count uses
+		// the raw $members set (not the display-filtered $member_users) so it matches the server-side
+		// enforcement (Group_Subscription::update_members and the invite gate) and the reader-facing
+		// My Account view (templates/v1/group-subscription-members.php) exactly, so the admin is
+		// never shown an add form the server would then reject with a 409. A limit of 0 means
+		// unlimited. The admin JS re-evaluates on add/remove/invite/cancel to keep the form and
+		// notice in sync.
+		$member_limit    = (int) $settings['limit'];
+		$pending_invites = Group_Subscription_Invite::get_invites( $subscription, false );
+		$is_at_limit     = $member_limit > 0 && ( count( $members ) + count( $pending_invites ) ) >= $member_limit;
+		// Members in the raw set but not rendered as spot-marked rows (a manager who also carries
+		// member meta, or a non-reader member) still consume a spot; the JS adds this offset to
+		// its rendered-row tally so its live count matches this server-side one.
+		$spots_offset = count( $members ) - count( $member_users );
 		?>
-		<div class="newspack-group-subscription__container" data-subscription-id="<?php echo \esc_attr( $subscription->get_id() ); ?>">
+		<div class="newspack-group-subscription__container<?php echo $is_at_limit ? ' is-at-limit' : ''; ?>" data-subscription-id="<?php echo \esc_attr( $subscription->get_id() ); ?>" data-member-limit="<?php echo \esc_attr( (string) $member_limit ); ?>" data-spots-offset="<?php echo \esc_attr( (string) $spots_offset ); ?>">
 			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled_baseline' ); ?>" value="<?php echo \esc_attr( \wc_bool_to_string( $settings['enabled'] ) ); ?>" />
 			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit_baseline' ); ?>" value="<?php echo \esc_attr( (int) $settings['limit'] ); ?>" />
 			<input type="hidden" name="<?php echo \esc_attr( self::GROUP_SUBSCRIPTION_META_PREFIX . 'name_baseline' ); ?>" value="<?php echo \esc_attr( $settings['name'] ); ?>" />
@@ -506,7 +523,7 @@ class Group_Subscription_Settings {
 					endforeach;
 					foreach ( $member_users as $user ) :
 						?>
-						<li>
+						<li data-consumes-spot="1">
 							<a class="newspack-group-subscription__member-user-link" href="<?php echo \esc_url( \get_edit_user_link( $user->ID ) ); ?>"><?php echo \esc_html( $user->user_email ); ?></a>
 							<a title="<?php \esc_attr_e( 'Remove', 'newspack-plugin' ); ?>" href="#" class="newspack-group-subscription__remove-member" data-user-id="<?php echo \esc_attr( $user->ID ); ?>">
 								&#215;
@@ -518,7 +535,7 @@ class Group_Subscription_Settings {
 					foreach ( array_values( $invites ) as $invite ) :
 						$is_expired = Group_Subscription_Invite::is_invite_expired( $invite );
 						?>
-						<li data-email="<?php echo \esc_attr( $invite['email'] ); ?>">
+						<li data-email="<?php echo \esc_attr( $invite['email'] ); ?>"<?php echo $is_expired ? '' : ' data-consumes-spot="1"'; ?>>
 							<span class="newspack-group-subscription__pending-invite"><?php echo \esc_html( $invite['email'] ); ?></span> <span class="newspack-group-subscription__pending-invite-label"><?php echo \esc_html( $is_expired ? __( '(expired)', 'newspack-plugin' ) : __( '(pending)', 'newspack-plugin' ) ); ?></span>
 							<a title="<?php \esc_attr_e( 'Cancel', 'newspack-plugin' ); ?>" href="#" class="newspack-group-subscription__cancel-invite">
 								&#215;
@@ -530,11 +547,14 @@ class Group_Subscription_Settings {
 					?>
 				</ul>
 			</div>
+			<div class="newspack-group-subscription__limit-notice notice notice-warning inline" role="status">
+				<p><?php \esc_html_e( 'This group subscription has reached its member limit. Remove a member, or raise the member limit above and save, to add more.', 'newspack-plugin' ); ?></p>
+			</div>
 			<div class="newspack-group-subscription__add-member show_if_newspack_group_subscription_enabled form-row">
 				<h3><?php \esc_html_e( 'Add new group members', 'newspack-plugin' ); ?></h3>
 				<select id="_newspack_group_subscription_member_ids" name="_newspack_group_subscription_member_ids[]">
 					<option value="">
-						<?php echo \esc_html( 'Select a reader...' ); ?>
+						<?php \esc_html_e( 'Select a reader...', 'newspack-plugin' ); ?>
 					</option>
 				</select>
 				<div class="newspack-group-subscription__invite-member">

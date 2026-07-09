@@ -367,14 +367,33 @@ class Group_Subscription {
 			}
 		}
 
-		// Removals above are persisted before this limit check, so a single call that both removes
-		// and adds past the limit would keep the removals while returning 409. No shipped caller
-		// batches add + remove in one call (the admin JS and admin-post handlers split them into
-		// separate requests), so this can't happen today. If a caller ever combines both arrays,
-		// move this check ahead of the removal loop and compute the projected count there.
-		$existing_members = self::get_members( $subscription );
-		if ( $subscription_settings['limit'] > 0 && count( $existing_members ) + count( $members_to_add ) > $subscription_settings['limit'] ) {
-			return new \WP_Error( 'newspack_group_subscription_update_members', __( 'Member limit reached. Please remove some members or increase the limit.', 'newspack-plugin' ), [ 'status' => 409 ] );
+		// The limit only bounds additions, so skip the check on removal-only calls: a removal can
+		// never push a group over its limit, and running it there would spuriously 409 an admin
+		// removing a member from an already-over-capacity group (e.g. after lowering the limit).
+		// Removals are persisted above; no shipped caller batches add + remove in one call (the admin
+		// JS and admin-post handlers split them), so a combined over-limit add can't strand a removal.
+		if ( ! empty( $members_to_add ) && $subscription_settings['limit'] > 0 ) {
+			// Pending (non-expired) invites reserve a spot, so count them alongside existing members --
+			// this matches the invite path's own limit check, so a direct add can't overfill a group
+			// that already has invites out. Exclude any invite addressed to a user being added: the
+			// add fulfils that invite (it is cancelled below), so it must not double-count against them.
+			$existing_members = self::get_members( $subscription );
+			$adding_emails    = [];
+			foreach ( $members_to_add as $add_id ) {
+				$add_user = \get_userdata( $add_id );
+				if ( $add_user ) {
+					$adding_emails[] = strtolower( $add_user->user_email );
+				}
+			}
+			$pending_invites = array_filter(
+				Group_Subscription_Invite::get_invites( $subscription, false ),
+				function ( $invite ) use ( $adding_emails ) {
+					return empty( $invite['email'] ) || ! in_array( strtolower( $invite['email'] ), $adding_emails, true );
+				}
+			);
+			if ( count( $existing_members ) + count( $pending_invites ) + count( $members_to_add ) > $subscription_settings['limit'] ) {
+				return new \WP_Error( 'newspack_group_subscription_update_members', __( 'Member limit reached. Please remove some members or increase the limit.', 'newspack-plugin' ), [ 'status' => 409 ] );
+			}
 		}
 
 		// Add new members.
@@ -396,6 +415,7 @@ class Group_Subscription {
 				];
 			}
 		}
+
 		return [
 			'members_added'   => $members_added,
 			'members_removed' => $members_removed,

@@ -40,7 +40,8 @@ import './admin.scss';
 					if ( errorMessage === 'abort' ) {
 						return;
 					}
-					$select.before( `<mark class="error"><span class="dashicons dashicons-warning"></span>${ errorMessage }</mark>` );
+					$select.before( `<mark class="error"><span class="dashicons dashicons-warning"></span><span class="message"></span></mark>` );
+					$select.prev( 'mark.error' ).find( '.message' ).text( errorMessage );
 				},
 				cache: true,
 			},
@@ -52,6 +53,26 @@ import './admin.scss';
 		$select.on( 'select2:opening', function () {
 			$select.parent().find( '.error' ).remove();
 		} );
+		$( '.newspack-group-subscription__container' ).each( function () {
+			refreshLimitState( $( this ) );
+		} );
+	}
+
+	// Toggle the at-limit state on a container: when the spots in use reach the member limit,
+	// the CSS hides the add-member form and reveals the "limit reached" notice. Spots in use =
+	// the spot-marked rendered rows (reader-members + pending invites) plus data-spots-offset,
+	// which folds in any members the server counts but that aren't rendered as rows (a non-reader
+	// member, or a manager who also carries member meta) so this matches the server-side count.
+	// A limit of 0 is unlimited.
+	function refreshLimitState( $container ) {
+		const limit = parseInt( $container.attr( 'data-member-limit' ), 10 );
+		if ( ! limit || limit < 1 ) {
+			$container.removeClass( 'is-at-limit' );
+			return;
+		}
+		const offset = parseInt( $container.attr( 'data-spots-offset' ), 10 ) || 0;
+		const used = $container.find( '.newspack-group-subscription__members-list li[data-consumes-spot]' ).length + offset;
+		$container.toggleClass( 'is-at-limit', used >= limit );
 	}
 
 	// Show or hide group subscription options based on the enabled checkbox.
@@ -93,7 +114,7 @@ import './admin.scss';
 						.closest( '.newspack-group-subscription__container' )
 						.find( '.newspack-group-subscription__members-count' );
 					$membersList.append(
-						`<li><a class="newspack-group-subscription__member-user-link" href="#"></a><a href="#" class="newspack-group-subscription__remove-member">&#215; <span class="screen-reader-text">Remove</span></a></li>`
+						`<li data-consumes-spot="1"><a class="newspack-group-subscription__member-user-link" href="#"></a><a href="#" class="newspack-group-subscription__remove-member">&#215; <span class="screen-reader-text">Remove</span></a></li>`
 					);
 					const $added = $membersList.find( 'li' ).last();
 					$added
@@ -101,7 +122,9 @@ import './admin.scss';
 						.text( data.members_added[ memberToAdd ].email )
 						.attr( 'href', data.members_added[ memberToAdd ].url );
 					$added.find( ' .newspack-group-subscription__remove-member' ).data( 'user-id', memberToAdd );
+					$added.find( '.screen-reader-text' ).text( newspackGroupSubscriptions.remove_label );
 					$membersCount.text( $membersList.find( 'li' ).length );
+					refreshLimitState( $select.closest( '.newspack-group-subscription__container' ) );
 				}
 			} )
 			.catch( error => {
@@ -140,6 +163,7 @@ import './admin.scss';
 					throw new Error( data.message );
 				}
 				if ( data.members_removed?.[ userId ] ) {
+					const $container = $listItem.closest( '.newspack-group-subscription__container' );
 					const $membersCount = $listItem
 						.closest( '.newspack-group-subscription__members' )
 						.find( '.newspack-group-subscription__members-count' );
@@ -147,6 +171,7 @@ import './admin.scss';
 					const $membersList = $( '.newspack-group-subscription__members-list' );
 					$listItem.remove();
 					$membersCount.text( $membersList.find( 'li' ).length );
+					refreshLimitState( $container );
 				}
 			} )
 			.catch( error => {
@@ -163,7 +188,9 @@ import './admin.scss';
 		}
 		e.preventDefault();
 		const $this = $( e.currentTarget );
+		const $container = $this.closest( '.newspack-group-subscription__container' );
 		$this.parent().find( '.error,.success' ).remove();
+		$container.find( '.newspack-group-subscription__members mark.success' ).remove();
 		const $email = $( '#newspack-group-subscription' ).find( 'input[name="_newspack_group_subscription_invite_email"]' );
 		const $button = $this.parent().find( 'button' );
 		$email.attr( 'disabled', true );
@@ -176,7 +203,7 @@ import './admin.scss';
 			$button.attr( 'disabled', false );
 			return;
 		}
-		const subscriptionId = $this.closest( '.newspack-group-subscription__container' ).data( 'subscription-id' );
+		const subscriptionId = $container.data( 'subscription-id' );
 		fetch( `${ newspackGroupSubscriptions.apiUrl }/invite`, {
 			method: 'POST',
 			headers: {
@@ -191,23 +218,25 @@ import './admin.scss';
 					throw new Error( data.message );
 				}
 				$email.val( '' );
-				$this
-					.parent()
-					.append( `<mark class="success"><span class="dashicons dashicons-yes-alt"></span><span class="message"></span></mark>` );
-				$this.parent().find( '.message' ).text( newspackGroupSubscriptions.success_message );
 				const $membersList = $( '.newspack-group-subscription__members-list' );
-				const $membersCount = $( '#_newspack_group_subscription_member_ids' )
-					.closest( '.newspack-group-subscription__container' )
-					.find( '.newspack-group-subscription__members-count' );
+				const $membersCount = $container.find( '.newspack-group-subscription__members-count' );
 				$membersList.find( `li[data-email="${ data.email }"]` ).remove();
 				$membersList.append(
-					`<li data-email="${ data.email }"><span class="newspack-group-subscription__pending-invite"></span> <span class="newspack-group-subscription__pending-invite-label"></span><a href="#" class="newspack-group-subscription__cancel-invite">&#215; <span class="screen-reader-text">Delete</span></a></li>`
+					`<li data-email="${ data.email }" data-consumes-spot="1"><span class="newspack-group-subscription__pending-invite"></span> <span class="newspack-group-subscription__pending-invite-label"></span><a href="#" class="newspack-group-subscription__cancel-invite">&#215; <span class="screen-reader-text">Delete</span></a></li>`
 				);
 				const $added = $membersList.find( 'li' ).last();
 				$added.data( 'email', data.email );
 				$added.find( '.newspack-group-subscription__pending-invite' ).text( data.email );
 				$added.find( '.newspack-group-subscription__pending-invite-label' ).text( newspackGroupSubscriptions.pending_label );
+				$added.find( '.screen-reader-text' ).text( newspackGroupSubscriptions.cancel_label );
 				$membersCount.text( $membersList.find( 'li' ).length );
+				refreshLimitState( $container );
+				// Show the confirmation in the members section, not the add-member form: when this
+				// invite reaches the limit the form is hidden, which would otherwise swallow its own
+				// "invitation sent" message.
+				const $members = $container.find( '.newspack-group-subscription__members' );
+				$members.append( `<mark class="success"><span class="dashicons dashicons-yes-alt"></span><span class="message"></span></mark>` );
+				$members.find( 'mark.success .message' ).text( newspackGroupSubscriptions.success_message );
 			} )
 			.catch( error => {
 				$this.parent().append( `<mark class="error"><span class="dashicons dashicons-warning"></span><span class="message"></span></mark>` );
@@ -230,7 +259,8 @@ import './admin.scss';
 			$this.parent().removeClass( 'newspack-group-subscription__to-remove' );
 			return;
 		}
-		const subscriptionId = $this.closest( '.newspack-group-subscription__container' ).data( 'subscription-id' );
+		const $container = $this.closest( '.newspack-group-subscription__container' );
+		const subscriptionId = $container.data( 'subscription-id' );
 		fetch( `${ newspackGroupSubscriptions.apiUrl }/invite`, {
 			method: 'DELETE',
 			headers: {
@@ -245,11 +275,10 @@ import './admin.scss';
 					throw new Error( data.message || 'Failed to cancel invite' );
 				}
 				const $membersList = $( '.newspack-group-subscription__members-list' );
-				const $membersCount = $( '#_newspack_group_subscription_member_ids' )
-					.closest( '.newspack-group-subscription__container' )
-					.find( '.newspack-group-subscription__members-count' );
+				const $membersCount = $container.find( '.newspack-group-subscription__members-count' );
 				$listItem.remove();
 				$membersCount.text( $membersList.find( 'li' ).length );
+				refreshLimitState( $container );
 			} )
 			.catch( error => {
 				$this.after( `<mark class="error"><span class="dashicons dashicons-warning"></span><span class="message"></span></mark>` );
