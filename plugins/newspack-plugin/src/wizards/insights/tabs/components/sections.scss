@@ -245,6 +245,14 @@
 			}
 		}
 
+		&-info-icon {
+			display: none;
+			fill: wp-colors.$gray-700;
+			@media screen and (min-width: 783px){
+				display: inline-block;
+			}
+		}
+
 		&-description {
 			margin: 16px 0 0;
 			font-size: 13px;
@@ -252,6 +260,11 @@
 			line-height: 1.4;
 			color: wp-colors.$gray-700;
 			text-align: left;
+			&-text {
+				@media screen and (min-width: 783px){
+					display: none;
+				}
+			}
 		}
 
 		// Empty-state variant: same card chrome as a populated metric

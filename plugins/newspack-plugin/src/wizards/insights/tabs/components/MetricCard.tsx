@@ -19,6 +19,8 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
+import { Icon, Tooltip } from '@wordpress/components';
+import { info } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -204,7 +206,14 @@ const MetricCard = ( props: MetricCardProps ) => {
 						warming={ warming }
 					/>
 				</div>
-				{ description && <div className="newspack-insights__metric-card-description">{ description }</div> }
+				{ description && (
+					<div className="newspack-insights__metric-card-description">
+						<Tooltip delay={ 250 } placement="bottom-start" text={ description }>
+							<Icon icon={ info } className="newspack-insights__metric-card-info-icon" />
+						</Tooltip>
+						<p className="newspack-insights__metric-card-description-text">{ description }</p>
+					</div>
+				) }
 			</Card>
 		);
 	}
@@ -366,7 +375,12 @@ const MetricCard = ( props: MetricCardProps ) => {
 			     metric is computed, which is moot when there's nothing to compute, and
 			     would just double the text block. */ }
 			{ description && ! notCapableMessage && ! notComputableMessage && (
-				<div className="newspack-insights__metric-card-description">{ description }</div>
+				<div className="newspack-insights__metric-card-description">
+					<Tooltip delay={ 250 } placement="bottom-start" text={ description }>
+						<Icon icon={ info } className="newspack-insights__metric-card-info-icon" />
+					</Tooltip>
+					<p className="newspack-insights__metric-card-description-text">{ description }</p>
+				</div>
 			) }
 		</Card>
 	);
