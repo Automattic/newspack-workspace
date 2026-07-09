@@ -596,6 +596,63 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that permanent-failure alerts forward the contact email via the
+	 * structured `user_email` param for both the contact-sync payload (top-level
+	 * `email`) and the deletion payload (keyed on `email`).
+	 *
+	 * @dataProvider permanent_failure_email_provider
+	 *
+	 * @param array $payload The newspack_sync_permanent_failure payload.
+	 */
+	public function test_permanent_failure_email_forwarded_via_user_email_param( $payload ) {
+		add_action( 'newspack_alert', [ Alert_Manager::class, 'forward_alert_to_log' ] );
+
+		$captured = null;
+		add_action(
+			'newspack_log',
+			function ( $code, $message, $params ) use ( &$captured ) {
+				$captured = compact( 'code', 'message', 'params' );
+			},
+			10,
+			3
+		);
+
+		do_action( 'newspack_sync_permanent_failure', $payload );
+
+		$this->assertNotNull( $captured );
+		$this->assertSame( 'reader@example.com', $captured['params']['user_email'] );
+		$this->assertStringNotContainsString( 'reader@example.com', $captured['message'], 'Email must not leak into the message.' );
+	}
+
+	/**
+	 * Provides the two permanent-failure payload shapes that carry an email.
+	 *
+	 * @return array
+	 */
+	public function permanent_failure_email_provider() {
+		return [
+			'contact-sync path' => [
+				[
+					'integration_id' => 'esp',
+					'user_id'        => 1,
+					'email'          => 'reader@example.com',
+					'context'        => 'Reader registered',
+					'reason'         => 'Payment Required',
+				],
+			],
+			'deletion path'     => [
+				[
+					'integration_id' => 'esp',
+					'email'          => 'reader@example.com',
+					'mode'           => 'delete',
+					'context'        => 'Reader deleted',
+					'reason'         => 'Payment Required',
+				],
+			],
+		];
+	}
+
+	/**
 	 * Test that a `same_user` failure pattern (grouped by contact email)
 	 * forwards the email via `user_email` and keeps it out of the message.
 	 */

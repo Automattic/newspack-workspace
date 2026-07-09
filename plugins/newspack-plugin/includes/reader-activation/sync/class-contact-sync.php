@@ -577,6 +577,7 @@ class Contact_Sync extends Sync {
 				 *
 				 *     @type string $integration_id The integration that failed.
 				 *     @type int    $user_id        The WordPress user ID.
+				 *     @type string $email          The contact's email address.
 				 *     @type string $context        The sync context.
 				 *     @type string $reason         The final error message.
 				 * }
@@ -586,6 +587,7 @@ class Contact_Sync extends Sync {
 					[
 						'integration_id' => $integration_id,
 						'user_id'        => $user_id,
+						'email'          => $user_email,
 						'context'        => $context,
 						'reason'         => $error_message,
 					]

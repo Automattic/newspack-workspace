@@ -182,6 +182,12 @@ class Alert_Manager {
 			return (string) $context['contact']['email'];
 		}
 
+		// Permanent-failure payloads carry the contact email at the top level
+		// (contact-sync path passes the user's email, deletion path is keyed on it).
+		if ( is_scalar( $context['email'] ?? null ) && '' !== (string) $context['email'] ) {
+			return (string) $context['email'];
+		}
+
 		return '';
 	}
 
