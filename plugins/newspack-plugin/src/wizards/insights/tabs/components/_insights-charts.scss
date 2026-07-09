@@ -14,13 +14,13 @@
 // Categorical series palette for charts. Hardcoded because a chart needs
 // distinct, stable category colors; applied via the --series-color custom
 // property so each viz element can map it to fill / stroke / background.
-.is-series-0 { --series-color: #1c5ea8; }
-.is-series-1 { --series-color: #3eb24f; }
-.is-series-2 { --series-color: #d98b27; }
-.is-series-3 { --series-color: #8a4fbd; }
-.is-series-4 { --series-color: #c0392b; }
-.is-series-5 { --series-color: #1f8a8a; }
-.is-series-6 { --series-color: #6b7785; }
+.is-series-0 { --series-color: #{colors.$primary-600}; }
+.is-series-1 { --series-color: #0891B2; }
+.is-series-2 { --series-color: #{colors.$secondary-700}; }
+.is-series-3 { --series-color: #{colors.$quaternary-600}; }
+.is-series-4 { --series-color: #B91C1C; }
+.is-series-5 { --series-color: #7E22CE; }
+.is-series-6 { --series-color: #{colors.$neutral-600}; }
 
 .newspack-insights {
 	&__chart-grid {
