@@ -1,10 +1,13 @@
 /**
- * Tab 6 formatting helpers (NPPD-1616).
+ * Insights formatting helpers (NPPD-1616).
  *
- * Lightweight wrappers around Intl.NumberFormat. Locale is taken from
- * the browser; currency code is hardcoded to USD for v1 (the publisher
- * may have multiple Woo currencies, and v1 sums them naively — a
- * multi-currency rollup is v1.1+ and is documented in the formula doc).
+ * Wrappers around Intl.NumberFormat. Everything is formatted in one fixed
+ * locale (`en-US`) so the display is consistent regardless of the admin's own
+ * browser locale — and, critically, so the currency symbol is unambiguous:
+ * en-US renders USD as "$" and non-US dollars as "CA$" / "NZ$" / "A$", whereas
+ * a non-US admin's own locale renders USD as "US$" / "$US" (DSGNEWS-188). The
+ * currency code is the site's WooCommerce currency from the boot config
+ * (`window.newspackInsights.currency`), falling back to USD.
  */
 
 /**
@@ -12,56 +15,59 @@
  */
 import { __ } from '@wordpress/i18n';
 
-const numberFormatter = new Intl.NumberFormat( undefined, {
+const LOCALE = 'en-US';
+const SITE_CURRENCY = ( typeof window !== 'undefined' && window.newspackInsights?.currency ) || 'USD';
+
+const numberFormatter = new Intl.NumberFormat( LOCALE, {
 	maximumFractionDigits: 0,
 } );
 
-const decimalFormatter = new Intl.NumberFormat( undefined, {
+const decimalFormatter = new Intl.NumberFormat( LOCALE, {
 	minimumFractionDigits: 1,
 	maximumFractionDigits: 1,
 } );
 
 // Three tiers keep large dashboard values readable (NPPD-1684): small amounts
 // keep cents, thousands drop cents, millions+ abbreviate with the full value in
-// a tooltip. All USD for v1 (see file header on multi-currency).
-const USD_WITH_CENTS = new Intl.NumberFormat( undefined, {
+// a tooltip. Formatted in the site's Woo currency (see file header).
+const CURRENCY_WITH_CENTS = new Intl.NumberFormat( LOCALE, {
 	style: 'currency',
-	currency: 'USD',
+	currency: SITE_CURRENCY,
 	minimumFractionDigits: 2,
 	maximumFractionDigits: 2,
 } );
 
-const USD_NO_CENTS = new Intl.NumberFormat( undefined, {
+const CURRENCY_NO_CENTS = new Intl.NumberFormat( LOCALE, {
 	style: 'currency',
-	currency: 'USD',
+	currency: SITE_CURRENCY,
 	minimumFractionDigits: 0,
 	maximumFractionDigits: 0,
 } );
 
-const USD_COMPACT = new Intl.NumberFormat( undefined, {
+const CURRENCY_COMPACT = new Intl.NumberFormat( LOCALE, {
 	style: 'currency',
-	currency: 'USD',
+	currency: SITE_CURRENCY,
 	notation: 'compact',
 	maximumFractionDigits: 1,
 } );
 
-const NUMBER_COMPACT = new Intl.NumberFormat( undefined, {
+const NUMBER_COMPACT = new Intl.NumberFormat( LOCALE, {
 	notation: 'compact',
 	maximumFractionDigits: 1,
 } );
 
-const percentFormatter = new Intl.NumberFormat( undefined, {
+const percentFormatter = new Intl.NumberFormat( LOCALE, {
 	style: 'percent',
 	maximumFractionDigits: 1,
 } );
 
-const signedPercentFormatter = new Intl.NumberFormat( undefined, {
+const signedPercentFormatter = new Intl.NumberFormat( LOCALE, {
 	style: 'percent',
 	signDisplay: 'exceptZero',
 	maximumFractionDigits: 1,
 } );
 
-const shortDateFormatter = new Intl.DateTimeFormat( undefined, {
+const shortDateFormatter = new Intl.DateTimeFormat( LOCALE, {
 	month: 'short',
 	day: 'numeric',
 } );
@@ -89,22 +95,22 @@ export interface FormattedCurrency {
 }
 
 /**
- * Tiered currency: `<$1K` keeps cents, `$1K–<$1M` drops cents, `>=$1M`
+ * Tiered currency: `<1K` keeps cents, `1K–<1M` drops cents, `>=1M`
  * abbreviates (e.g. "$1.2M") and carries the full value as `title`. The sign is
  * handled by the formatter; tier is chosen by magnitude, so negatives tier the
- * same. Zero renders as "$0.00".
+ * same. Zero renders as "$0.00" (in the site currency).
  */
 export const formatCurrency = ( value: number ): FormattedCurrency => {
 	const abs = Math.abs( value );
 	if ( abs < 1000 ) {
-		return { display: USD_WITH_CENTS.format( value ), title: null };
+		return { display: CURRENCY_WITH_CENTS.format( value ), title: null };
 	}
 	if ( abs < 1_000_000 ) {
-		return { display: USD_NO_CENTS.format( value ), title: null };
+		return { display: CURRENCY_NO_CENTS.format( value ), title: null };
 	}
 	return {
-		display: USD_COMPACT.format( value ),
-		title: USD_WITH_CENTS.format( value ),
+		display: CURRENCY_COMPACT.format( value ),
+		title: CURRENCY_WITH_CENTS.format( value ),
 	};
 };
 
