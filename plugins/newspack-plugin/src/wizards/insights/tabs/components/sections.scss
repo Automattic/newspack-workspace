@@ -245,9 +245,13 @@
 			}
 		}
 
-		&-info-icon {
+		&-info-icon.components-button.is-tertiary {
+			color: wp-colors.$gray-700;
 			display: none;
-			fill: wp-colors.$gray-700;
+			&:active,
+			&:hover {
+				background-color: transparent;
+			}
 			@media screen and (min-width: 783px){
 				display: inline-block;
 			}

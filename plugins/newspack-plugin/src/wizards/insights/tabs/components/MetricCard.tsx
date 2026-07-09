@@ -19,7 +19,7 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { Icon, Tooltip } from '@wordpress/components';
+import { Button, Tooltip } from '@wordpress/components';
 import { info } from '@wordpress/icons';
 
 /**
@@ -209,7 +209,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 				{ description && (
 					<div className="newspack-insights__metric-card-description">
 						<Tooltip delay={ 250 } placement="bottom-start" text={ description }>
-							<Icon icon={ info } className="newspack-insights__metric-card-info-icon" />
+							<Button icon={ info } className="newspack-insights__metric-card-info-icon" variant="tertiary" />
 						</Tooltip>
 						<p className="newspack-insights__metric-card-description-text">{ description }</p>
 					</div>
@@ -377,7 +377,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 			{ description && ! notCapableMessage && ! notComputableMessage && (
 				<div className="newspack-insights__metric-card-description">
 					<Tooltip delay={ 250 } placement="bottom-start" text={ description }>
-						<Icon icon={ info } className="newspack-insights__metric-card-info-icon" />
+						<Button icon={ info } className="newspack-insights__metric-card-info-icon" variant="tertiary" />
 					</Tooltip>
 					<p className="newspack-insights__metric-card-description-text">{ description }</p>
 				</div>
