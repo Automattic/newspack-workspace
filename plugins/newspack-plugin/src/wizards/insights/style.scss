@@ -335,6 +335,31 @@
 		min-width: 0;
 	}
 
+	// DataViews defaults both column headers and cell values to
+	// `white-space: nowrap`, so a long heading ("Paid access gate conversion
+	// rate") or a long value (article titles, author names) forces the table
+	// wider than its container and it scrolls horizontally. Let both wrap.
+	.dataviews-view-table-header-button {
+		white-space: normal;
+		height: auto;
+	}
+
+	// Numeric columns are right-aligned (`align: end`); keep the wrapped header
+	// text aligned over its values rather than defaulting to the left.
+	.dataviews-view-table__cell-align-end .dataviews-view-table-header-button {
+		justify-content: flex-end;
+		text-align: right;
+	}
+
+	// The `tbody` mirrors DataViews' own
+	// `.dataviews-view-table tbody .dataviews-view-table__cell-content-wrapper`
+	// nowrap rule so this out-specifies it and long values wrap in place
+	// instead of overflowing.
+	.dataviews-view-table tbody .dataviews-view-table__cell-content-wrapper {
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
+
 	// Trim the 48px page-gutter edge padding so cell content aligns to the frame.
 	.dataviews-view-table {
 		th:first-child,
