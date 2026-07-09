@@ -9,6 +9,7 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-insights {
 
@@ -25,19 +26,39 @@
 		gap: 6px;
 		max-width: 260px;
 		padding: 12px 16px;
-		background: #fff;
+		background: wp-colors.$white;
 		border: 1px solid wp-colors.$gray-200;
 		border-radius: 6px;
-		box-shadow: 0 2px 8px rgba( 0, 0, 0, 0.15 );
+		box-shadow: wp-vars.$elevation-small;
 
 		@media print {
 			display: none;
 		}
 	}
 
+	&__next-steps-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		width: 100%;
+	}
+
+	// WP form-label treatment (DSGNEWS-188): 11px / 500 / uppercase, matching
+	// `.components-base-control__label`.
 	&__next-steps-label {
-		font-size: 12px;
-		font-weight: 600;
+		font-size: 11px;
+		font-weight: 500;
+		line-height: 1.4;
+		text-transform: uppercase;
+		color: wp-colors.$gray-900;
+	}
+
+	// Compact close button; the WP Button supplies the focus ring + hover.
+	&__next-steps-dismiss.components-button.has-icon {
+		min-width: 24px;
+		height: 24px;
+		padding: 0;
 		color: wp-colors.$gray-700;
 	}
 
@@ -50,24 +71,11 @@
 		list-style: none;
 	}
 
-	&__next-steps-link {
-		display: inline-flex;
-		align-items: center;
-		gap: 4px;
+	// ExternalLink (`.components-external-link`) supplies the new-tab icon, the
+	// screen-reader "(opens in a new tab)" text, the correct rel, and focus
+	// styling; we only set the type scale here.
+	&__next-steps-link.components-external-link {
 		font-size: 13px;
 		font-weight: 500;
-		text-decoration: none;
-		color: var( --wp-admin-theme-color );
-
-		// Small external-link cue, since these open the help site in a new tab.
-		&::after {
-			content: "\2197";
-			font-size: 14px;
-		}
-
-		&:hover,
-		&:focus {
-			text-decoration: underline;
-		}
 	}
 }

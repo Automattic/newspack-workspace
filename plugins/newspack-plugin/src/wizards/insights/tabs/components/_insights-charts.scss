@@ -9,6 +9,7 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 @use "../../../../../packages/colors/colors.module" as colors;
 
 // Categorical series palette for charts. Hardcoded because a chart needs
@@ -26,13 +27,13 @@
 	&__chart-grid {
 		display: grid;
 		grid-template-columns: repeat( auto-fit, minmax( 280px, 1fr ) );
-		gap: 24px;
+		gap: 16px;
 	}
 
 	&__table-grid {
 		display: grid;
 		grid-template-columns: repeat( auto-fit, minmax( 320px, 1fr ) );
-		gap: 24px;
+		gap: 16px;
 	}
 
 	&__chart-card {
@@ -56,7 +57,7 @@
 
 		&-caption {
 			font-size: 13px;
-			color: wp-colors.$gray-600;
+			color: wp-colors.$gray-700;
 			margin: 0 0 12px;
 		}
 	}
@@ -83,20 +84,20 @@
 		margin: 0 0 2px;
 		font-size: 13px;
 		font-weight: 400;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 	}
 
-	// Engagement Reader Segments takeaway cards — scorecard chrome (border, top
-	// accent, padding) with a headline / sub / bottom-pinned mini-bar layout.
+	// Engagement Reader Segments takeaway cards — scorecard chrome (border,
+	// padding) with a headline / sub / bottom-pinned mini-bar layout. No top
+	// accent (DSGNEWS-188 — dropped the blanket brand-color bar).
 	&__takeaway-card {
 		display: flex;
 		flex-direction: column;
 		height: 100%;
 		min-height: 180px;
 		padding: 24px 28px;
-		background-color: #fff;
+		background-color: wp-colors.$white;
 		border: 1px solid wp-colors.$gray-200;
-		border-top: 3px solid var( --wp-admin-theme-color );
 		border-radius: 4px;
 	}
 
@@ -125,7 +126,7 @@
 	&__takeaway-empty {
 		margin: 0;
 		font-size: 13px;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 	}
 
 	// Mini bar chart pinned to the card bottom (~60px tall).
@@ -154,7 +155,7 @@
 		margin: 8px 0 0;
 		font-size: 13px;
 		line-height: 1.4;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 
 		code {
 			font-family: monospace;
@@ -171,7 +172,7 @@
 
 	&__chart-empty {
 		font-size: 13px;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 		padding: 24px 0;
 		text-align: center;
 	}
@@ -264,7 +265,7 @@
 	}
 
 	&__legend-value {
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -309,7 +310,7 @@
 
 	&__bar-label {
 		font-size: 9px;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 		margin-top: 4px;
 		white-space: nowrap;
 		overflow: hidden;
@@ -367,7 +368,7 @@
 
 	&__line-point {
 		fill: var( --series-color );
-		stroke: #fff;
+		stroke: wp-colors.$white;
 		stroke-width: 1;
 
 		&:hover {
@@ -379,7 +380,7 @@
 		display: flex;
 		justify-content: space-between;
 		font-size: 11px;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 		margin-top: 4px;
 	}
 
@@ -390,7 +391,7 @@
 	&__line-axis {
 		display: block;
 		font-size: 11px;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 
 		&--y {
 			margin-bottom: 6px;
@@ -421,7 +422,7 @@
 			margin-bottom: 6px;
 			text-align: left;
 			font-size: 11px;
-			color: wp-colors.$gray-600;
+			color: wp-colors.$gray-700;
 		}
 	}
 
@@ -464,7 +465,7 @@
 		gap: 16px;
 		margin-top: 10px;
 		font-size: 11px;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 	}
 
 	&__cohort-heatmap-scale {
@@ -495,12 +496,12 @@
 		padding: 6px 8px;
 		border-radius: 4px;
 		background: wp-colors.$gray-900;
-		color: #fff;
+		color: wp-colors.$white;
 		font-size: 11px;
 		line-height: 1.3;
 		white-space: nowrap;
 		pointer-events: none;
-		box-shadow: 0 2px 6px rgba( 0, 0, 0, 0.25 );
+		box-shadow: wp-vars.$elevation-medium;
 
 		// Bar variant: anchored above the hovered column, revealed on hover.
 		&--bar {
@@ -558,7 +559,7 @@
 		display: block;
 		margin-top: 4px;
 		font-size: 12px;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 	}
 
 	// Legend below a multi-series line chart.
@@ -607,7 +608,7 @@
 		padding: 20px;
 		box-sizing: border-box;
 		list-style: none;
-		background-color: #fff;
+		background-color: wp-colors.$white;
 		border: 1px solid wp-colors.$gray-200;
 		border-radius: 4px;
 
@@ -674,7 +675,7 @@
 			padding: 32px 20px;
 			text-align: center;
 			font-size: 13px;
-			color: wp-colors.$gray-600;
+			color: wp-colors.$gray-700;
 		}
 	}
 
@@ -682,7 +683,7 @@
 	// soft halo so any spill over the white card stays legible), dark text on the
 	// faded lower bands (reads on both the light fill and the card).
 	&__funnel-step.is-on-dark &__funnel-content {
-		color: #fff;
+		color: wp-colors.$white;
 		text-shadow: 0 1px 2px rgba( 13, 53, 102, 0.45 );
 	}
 
@@ -918,7 +919,7 @@
 	display: grid;
 	// Pie card ~35% (stacked, narrower-and-taller), campaigns table ~65%.
 	grid-template-columns: minmax( 0, 35fr ) minmax( 0, 65fr );
-	gap: 24px;
+	gap: 16px;
 	align-items: stretch;
 
 	@media ( max-width: 782px ) {
