@@ -648,6 +648,58 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that a permanent error skips the retry and fires the permanent-failure hook.
+	 */
+	public function test_permanent_error_skips_retry_and_fires_action() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$fired = false;
+		$data  = null;
+		add_action(
+			'newspack_sync_permanent_failure',
+			function ( $d ) use ( &$fired, &$data ) {
+				$fired = true;
+				$data  = $d;
+			}
+		);
+
+		Failing_Sample_Integration::reset();
+		Failing_Sample_Integration::$should_fail  = true;
+		Failing_Sample_Integration::$fail_message = 'saraeschwartz@icloud.co looks fake or invalid, please enter a real email address.';
+		$this->register_failing_integration( 'permanent_mock' );
+
+		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
+
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'perm@test.com' ] );
+
+		Contact_Sync::execute_integration_retry(
+			[
+				'integration_id' => 'permanent_mock',
+				'user_id'        => $user_id,
+				'context'        => 'Test',
+				'retry_count'    => 1,
+			]
+		);
+
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_HOOK,
+				'group'  => Integrations::get_action_group( 'permanent_mock' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+
+		$this->assertEmpty( $pending, 'No retry should be scheduled for a permanent error.' );
+		$this->assertTrue( $fired, 'newspack_sync_permanent_failure should fire.' );
+		$this->assertEquals( 'contact', $data['class'] );
+		$this->assertEquals( 'permanent_mock', $data['integration_id'] );
+		$this->assertEquals( $user_id, $data['user_id'] );
+	}
+
+	/**
 	 * Test that execute_integration_retry aborts the retry chain when the
 	 * integration becomes unconfigured between schedule and execute — drains
 	 * existing flood without scheduling further attempts.

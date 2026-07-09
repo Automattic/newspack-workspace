@@ -535,6 +535,53 @@ class Contact_Sync extends Sync {
 		$error_message = $error instanceof \WP_Error ? $error->get_error_message() : (string) $error;
 		$user_email    = $user ? $user->user_email : 'unknown';
 
+		$error_class = self::classify_error( $error );
+		if ( 'transient' !== $error_class ) {
+			static::log(
+				sprintf(
+					'Permanent %s failure for integration "%s" sync of user %d (%s); not retrying. Error: %s',
+					$error_class,
+					$integration_id,
+					$user_id,
+					$user_email,
+					$error_message
+				)
+			);
+			if ( self::$current_as_action_id ) {
+				\ActionScheduler_Logger::instance()->log(
+					self::$current_as_action_id,
+					sprintf( 'Permanent failure (%s); not retrying.', $error_class )
+				);
+			}
+			if ( 'benign' !== $error_class ) {
+				/**
+				 * Fires when a contact sync fails with a permanent error that can
+				 * never succeed on retry, so no further retries are scheduled.
+				 *
+				 * @param array $alert_data {
+				 *     Alert data.
+				 *
+				 *     @type string $integration_id The integration that failed.
+				 *     @type int    $user_id        The WordPress user ID.
+				 *     @type string $context        The sync context.
+				 *     @type string $class          Failure class: 'contact' or 'config'.
+				 *     @type string $reason         The final error message.
+				 * }
+				 */
+				do_action(
+					'newspack_sync_permanent_failure',
+					[
+						'integration_id' => $integration_id,
+						'user_id'        => $user_id,
+						'context'        => $context,
+						'class'          => 'permanent_config' === $error_class ? 'config' : 'contact',
+						'reason'         => $error_message,
+					]
+				);
+			}
+			return;
+		}
+
 		$next_retry = $retry_count + 1;
 		if ( $next_retry > self::MAX_RETRIES ) {
 			static::log(
