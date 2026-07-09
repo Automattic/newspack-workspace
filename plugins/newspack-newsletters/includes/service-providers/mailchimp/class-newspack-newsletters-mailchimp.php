@@ -1643,6 +1643,12 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 	public function reader_error_message( $reader_error, $params, $raw_error ) {
 		// Handle special case where a user is in compliance state.
 		if ( is_wp_error( $raw_error ) && false !== strpos( $raw_error->get_error_message(), 'Member In Compliance State' ) ) {
+			// Mailchimp forbids resubscribing such contacts via its API, so the reader must be
+			// pointed elsewhere — publishers can customize the message (HTML links allowed).
+			$custom_message = get_option( 'newspack_newsletters_mailchimp_resubscribe_message', '' );
+			if ( ! empty( $custom_message ) ) {
+				return $custom_message;
+			}
 			$reader_error = __( "We'll need to subscribe this email address manually. Please contact our support team.", 'newspack-newsletters' );
 		}
 		return $reader_error;

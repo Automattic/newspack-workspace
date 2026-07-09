@@ -102,6 +102,19 @@ class Newspack_Newsletters_Settings {
 				'sanitize_callback' => 'boolval',
 				'onboarding'        => true,
 			),
+			// Stored raw when saved via the wizard's REST path (update_settings() writes
+			// the option directly); sanitized with wp_kses_post at output.
+			array(
+				'description'       => esc_html__( 'Resubscribe error message', 'newspack-newsletters' ),
+				'key'               => 'newspack_newsletters_mailchimp_resubscribe_message',
+				'type'              => 'textarea',
+				'default'           => '',
+				'provider'          => 'mailchimp',
+				'placeholder'       => esc_attr__( "We'll need to subscribe this email address manually. Please contact our support team.", 'newspack-newsletters' ),
+				'sanitize_callback' => 'wp_kses_post',
+				'help'              => esc_html__( 'Shown to readers who unsubscribed from Mailchimp and try to resubscribe on the site. HTML links are allowed. Leave empty for the default message.', 'newspack-newsletters' ),
+				'onboarding'        => false,
+			),
 			array(
 				'description' => esc_html__( 'Constant Contact API Key', 'newspack-newsletters' ),
 				'key'         => 'newspack_newsletters_constant_contact_api_key',
