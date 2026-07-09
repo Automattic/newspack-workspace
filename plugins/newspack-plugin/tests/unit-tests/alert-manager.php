@@ -43,7 +43,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			'newspack_sync_retry_exhausted',
 			[
 				'integration_id' => 'esp',
-				'contact'        => [ 'email' => 'test@test.com' ],
+				'contact'        => [ 'email' => 'test@example.com' ],
 				'context'        => 'Reader registered',
 				'retry_count'    => 5,
 				'reason'         => 'Invalid API key',
@@ -171,7 +171,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			'newspack_sync_contact_failed',
 			[
 				'integration_id' => 'mailchimp',
-				'contact'        => [ 'email' => 'user@test.com' ],
+				'contact'        => [ 'email' => 'user@example.com' ],
 				'context'        => 'Reader registered',
 				'reason'         => 'Invalid API key',
 			]
@@ -180,7 +180,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 		$log = get_option( Alert_Manager::FAILURE_LOG_OPTION, [] );
 		$this->assertCount( 1, $log );
 		$this->assertEquals( 'mailchimp', $log[0]['integration_id'] );
-		$this->assertEquals( 'user@test.com', $log[0]['contact_email'] );
+		$this->assertEquals( 'user@example.com', $log[0]['contact_email'] );
 		$this->assertEquals( 'Invalid API key', $log[0]['reason'] );
 		$this->assertNull( $log[0]['action_name'] );
 	}
@@ -252,7 +252,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			$log[] = [
 				'timestamp'      => time() - 60,
 				'integration_id' => 'mailchimp',
-				'contact_email'  => "user{$i}@test.com",
+				'contact_email'  => "user{$i}@example.com",
 				'action_name'    => null,
 				'reason'         => "API timeout {$i}",
 			];
@@ -292,7 +292,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			$log[] = [
 				'timestamp'      => time() - 60,
 				'integration_id' => 'mailchimp',
-				'contact_email'  => "user{$i}@test.com",
+				'contact_email'  => "user{$i}@example.com",
 				'action_name'    => null,
 				'reason'         => "API timeout {$i}",
 			];
@@ -325,7 +325,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			$log[] = [
 				'timestamp'      => time() - 7200,
 				'integration_id' => 'mailchimp',
-				'contact_email'  => "user{$i}@test.com",
+				'contact_email'  => "user{$i}@example.com",
 				'action_name'    => null,
 				'reason'         => "API timeout {$i}",
 			];
@@ -357,7 +357,7 @@ class Newspack_Test_Alert_Manager extends WP_UnitTestCase {
 			$log[] = [
 				'timestamp'      => time() - 60,
 				'integration_id' => 'mailchimp',
-				'contact_email'  => "user{$i}@test.com",
+				'contact_email'  => "user{$i}@example.com",
 				'action_name'    => null,
 				'reason'         => "API timeout {$i}",
 			];

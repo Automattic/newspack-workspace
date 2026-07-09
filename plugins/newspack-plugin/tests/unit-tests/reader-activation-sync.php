@@ -24,7 +24,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	 */
 	public function get_sample_contact() {
 		$contact = [
-			'email'    => 'test@email.com',
+			'email'    => 'test@example.com',
 			'name'     => 'Test Contact',
 			'metadata' => [],
 		];
@@ -147,7 +147,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		// Set connected ESP to ActiveCampaign.
 		\update_option( 'newspack_newsletters_service_provider', 'active_campaign' );
 		$contact_data_with_raw_keys      = [
-			'email'    => 'test@email.com',
+			'email'    => 'test@example.com',
 			'name'     => 'Test Contact',
 			'metadata' => [
 				'account'           => 123,
@@ -156,7 +156,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 			],
 		];
 		$contact_data_with_prefixed_keys = [
-			'email'    => 'test@email.com',
+			'email'    => 'test@example.com',
 			'name'     => 'Test Contact',
 			'metadata' => [
 				'NP_Account'           => 123,
@@ -165,7 +165,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 			],
 		];
 		$contact_data_with_custom_prefix = [
-			'email'    => 'test@email.com',
+			'email'    => 'test@example.com',
 			'name'     => 'Test Contact',
 			'metadata' => [
 				'CU_Account'           => 123,
@@ -349,7 +349,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		// Clear any pending retries.
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 
-		$user_id = $this->factory()->user->create( [ 'user_email' => 'retry@test.com' ] );
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'retry@example.com' ] );
 
 		Contact_Sync::execute_integration_retry(
 			[
@@ -392,7 +392,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		// Clear any pending retries.
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 
-		$user_id = $this->factory()->user->create( [ 'user_email' => 'success@test.com' ] );
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'success@example.com' ] );
 
 		Contact_Sync::execute_integration_retry(
 			[
@@ -431,7 +431,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		// Clear any pending retries.
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 
-		$user_id = $this->factory()->user->create( [ 'user_email' => 'max@test.com' ] );
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'max@example.com' ] );
 
 		// Simulate a retry at the max count — should NOT schedule another and should throw.
 		$threw = false;
@@ -475,7 +475,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 
-		$user_id = $this->factory()->user->create( [ 'user_email' => 'log@test.com' ] );
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'log@example.com' ] );
 
 		// Schedule a dummy AS action to simulate the currently-executing action.
 		$dummy_action_id = as_schedule_single_action( time() + 3600, 'newspack_dummy_log_action' );
@@ -530,7 +530,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 
-		$user_id = $this->factory()->user->create( [ 'user_email' => 'deadletter@test.com' ] );
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'deadletter@example.com' ] );
 
 		// Schedule a dummy AS action to simulate the currently-executing action.
 		$dummy_action_id = as_schedule_single_action( time() + 3600, 'newspack_dummy_sync_action' );
@@ -595,7 +595,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 
-		$user_id = $this->factory()->user->create( [ 'user_email' => 'exhaustion@test.com' ] );
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'exhaustion@example.com' ] );
 
 		// Execute at max retry count — triggers exhaustion and throws.
 		try {
@@ -667,12 +667,12 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		Failing_Sample_Integration::reset();
 		Failing_Sample_Integration::$should_fail  = true;
-		Failing_Sample_Integration::$fail_message = 'saraeschwartz@icloud.co looks fake or invalid, please enter a real email address.';
+		Failing_Sample_Integration::$fail_message = 'saraeschwartz@example.com looks fake or invalid, please enter a real email address.';
 		$this->register_failing_integration( 'permanent_mock' );
 
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 
-		$user_id = $this->factory()->user->create( [ 'user_email' => 'perm@test.com' ] );
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'perm@example.com' ] );
 
 		Contact_Sync::execute_integration_retry(
 			[
@@ -720,7 +720,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 
-		$user_id = $this->factory()->user->create( [ 'user_email' => 'benign@test.com' ] );
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'benign@example.com' ] );
 
 		Contact_Sync::execute_integration_retry(
 			[
@@ -769,7 +769,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 
 		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
 
-		$user_id = $this->factory()->user->create( [ 'user_email' => 'retry-abort@test.com' ] );
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'retry-abort@example.com' ] );
 
 		Contact_Sync::execute_integration_retry(
 			[
@@ -857,7 +857,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 			null,
 			'esp',           // integration_id.
 			'delete',        // mode.
-			'gone@test.com', // email.
+			'gone@example.com', // email.
 			[],              // contact.
 			'Test',          // context.
 			0,               // retry_count.
@@ -875,7 +875,7 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		$this->assertEmpty( $pending, 'No deletion retry should be scheduled for a permanent error.' );
 		$this->assertTrue( $fired, 'newspack_sync_permanent_failure should fire.' );
 		$this->assertEquals( 'delete', $data['mode'] );
-		$this->assertEquals( 'gone@test.com', $data['email'] );
+		$this->assertEquals( 'gone@example.com', $data['email'] );
 		$this->assertEquals( 'esp', $data['integration_id'] );
 		$this->assertEquals( 'Test', $data['context'] );
 		$this->assertEquals( 'API Access has been disabled for this account.', $data['reason'] );
