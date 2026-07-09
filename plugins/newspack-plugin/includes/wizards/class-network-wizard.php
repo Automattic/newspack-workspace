@@ -87,7 +87,7 @@ class Network_Wizard extends Wizard {
 			// Display header.
 			$this->admin_header_init(
 				[
-					'breadcrumbs' => $this->admin_screens[ $this->get_screen_slug() ],
+					'breadcrumbs' => $this->admin_screens[ $this->get_screen_slug() ] ?? [],
 					'tabs'        => $this->get_tabs(),
 				]
 			);

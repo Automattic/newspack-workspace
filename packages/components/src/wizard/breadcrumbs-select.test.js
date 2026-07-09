@@ -1,7 +1,7 @@
 /**
  * Internal dependencies.
  */
-import { activeBreadcrumbs } from './breadcrumbs-select';
+import { activeBreadcrumbs, appendSectionName } from './breadcrumbs-select';
 
 const SECTIONS = [
 	{ path: '/', breadcrumbs: [ { label: 'Audience Management' }, { label: 'Configuration' } ] },
@@ -64,5 +64,61 @@ describe( 'activeBreadcrumbs', () => {
 
 	it( 'returns [] when the matched section has no breadcrumbs', () => {
 		expect( activeBreadcrumbs( [ { path: '/' } ], '/' ) ).toEqual( [] );
+	} );
+} );
+
+describe( 'appendSectionName', () => {
+	const base = [ { label: 'Access Control' } ];
+
+	it( 'returns the base trail unchanged when sectionName is falsy', () => {
+		expect( appendSectionName( base, undefined ) ).toBe( base );
+		expect( appendSectionName( base, '' ) ).toBe( base );
+		expect( appendSectionName( base, null ) ).toBe( base );
+	} );
+
+	it( 'appends a string sectionName as a leaf crumb', () => {
+		expect( appendSectionName( base, 'Content Gifting' ) ).toEqual( [ { label: 'Access Control' }, { label: 'Content Gifting' } ] );
+	} );
+
+	it( 'appends an array of crumbs in order', () => {
+		const sectionName = [ { label: 'Mailchimp', url: '/mailchimp' }, { label: 'Logs' } ];
+		expect( appendSectionName( base, sectionName ) ).toEqual( [
+			{ label: 'Access Control' },
+			{ label: 'Mailchimp', url: '/mailchimp' },
+			{ label: 'Logs' },
+		] );
+	} );
+
+	it( 'dedupes a string leaf that repeats the current trailing label', () => {
+		const trail = [ { label: 'Access Control' }, { label: 'Metered Countdown' } ];
+		expect( appendSectionName( trail, 'Metered Countdown' ) ).toEqual( trail );
+	} );
+
+	it( 'dedupes an array leaf that repeats the current trailing label', () => {
+		const trail = [ { label: 'Access Control' }, { label: 'Metered Countdown' } ];
+		expect( appendSectionName( trail, [ { label: 'Metered Countdown' } ] ) ).toEqual( trail );
+	} );
+
+	it( 'skips crumbs without a label', () => {
+		expect( appendSectionName( base, [ { url: '/no-label' }, { label: 'Edit' } ] ) ).toEqual( [
+			{ label: 'Access Control' },
+			{ label: 'Edit' },
+		] );
+	} );
+
+	it( 'only dedupes against the immediate predecessor, not earlier crumbs', () => {
+		const trail = [ { label: 'Access Control' }, { label: 'Institutions' } ];
+		// 'Access Control' repeats an earlier (non-adjacent) crumb, so it is kept.
+		expect( appendSectionName( trail, [ { label: 'Access Control' } ] ) ).toEqual( [
+			{ label: 'Access Control' },
+			{ label: 'Institutions' },
+			{ label: 'Access Control' },
+		] );
+	} );
+
+	it( 'does not mutate the input trail', () => {
+		const trail = [ { label: 'Access Control' } ];
+		appendSectionName( trail, 'Content Gifting' );
+		expect( trail ).toEqual( [ { label: 'Access Control' } ] );
 	} );
 } );

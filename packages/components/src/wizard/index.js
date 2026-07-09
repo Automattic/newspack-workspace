@@ -16,7 +16,7 @@ import { category, chevronLeft, moreVertical } from '@wordpress/icons';
  * Internal dependencies
  */
 import { Footer, Notice, Button, TabbedNavigation, PluginInstaller, SectionHeader, HandoffMessage, Page } from '../';
-import { activeBreadcrumbs } from './breadcrumbs-select';
+import { activeBreadcrumbs, appendSectionName } from './breadcrumbs-select';
 import Router from '../proxied-imports/router';
 import registerStore, { WIZARD_STORE_NAMESPACE } from './store';
 import WizardSnackbar from './components/WizardSnackbar';
@@ -69,20 +69,9 @@ const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, su
 	if ( ! breadcrumbItems.length && headerText ) {
 		breadcrumbItems = [ { label: headerText } ];
 	}
-	// A section can supply render-time current-page breadcrumb(s) via
-	// headerData.sectionName — either a single label (e.g. the integration name,
-	// or Add/Edit) or an ordered array of `{ label, url? }` crumbs when the leaf
-	// needs its own linked ancestors (e.g. an integration's Logs subpage). Each
-	// crumb is appended in turn, skipping one that just repeats the current
-	// trailing label so the same label never renders twice.
-	if ( sectionName ) {
-		const extraCrumbs = ( Array.isArray( sectionName ) ? sectionName : [ { label: sectionName } ] ).filter( crumb => crumb?.label );
-		extraCrumbs.forEach( crumb => {
-			if ( breadcrumbItems[ breadcrumbItems.length - 1 ]?.label !== crumb.label ) {
-				breadcrumbItems = [ ...breadcrumbItems, crumb ];
-			}
-		} );
-	}
+	// Append any render-time leaf crumb(s) the section supplied via
+	// headerData.sectionName (deduped against the current trailing label).
+	breadcrumbItems = appendSectionName( breadcrumbItems, sectionName );
 
 	return (
 		<Page breadcrumbItems={ breadcrumbItems } subTitle={ subTitle } actions={ actions }>

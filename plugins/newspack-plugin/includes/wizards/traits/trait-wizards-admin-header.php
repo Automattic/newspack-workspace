@@ -67,6 +67,11 @@ trait Admin_Header {
 			$this->breadcrumbs,
 			$screen ? $screen->id : ''
 		);
+		// The filter is public, so a misbehaving callback could return a non-array
+		// value. Fall back to the default trail so array_values() can't fatal.
+		if ( ! is_array( $breadcrumbs ) ) {
+			$breadcrumbs = $this->breadcrumbs;
+		}
 		wp_enqueue_script( 'newspack-wizards-admin-header' );
 		wp_localize_script(
 			'newspack-wizards-admin-header',

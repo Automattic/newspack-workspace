@@ -16,6 +16,12 @@ export function WizardsAdminHeader( {
 	} >;
 } ) {
 	return (
+		// The `#newspack-wizards-admin-header-actions` node is a cross-root portal
+		// target: the newsletters admin-shell (a separate React root) portals its
+		// header actions into it via `page-header.js`. This works only because this
+		// node is rendered once and never re-rendered or unmounted here — React
+		// reconciliation on a re-render would wipe the portalled children. Keep it
+		// a static, empty div; do not give this component state that could re-render.
 		<Page breadcrumbItems={ breadcrumbs } actions={ <div id="newspack-wizards-admin-header-actions" /> }>
 			{ tabs.length > 0 && (
 				<div className="newspack-tabbed-navigation">
