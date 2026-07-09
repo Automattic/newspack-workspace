@@ -8,8 +8,10 @@ Will need a local test site – set it up with [`newspack-docker`](https://githu
 
 1. One-time setup (unless the files mentioned below are updated)
    - create an `.env` file (see `.env-sample`).
-   - put `e2e-plugin.php` in the test site's plugins directory
    - set up payments - see "Payments" section below
+
+   Provisioning deploys `e2e-plugin.php` onto the site from this repo on every run,
+   so there is no separate step to install it (and no stale copy to keep in sync).
 2. Testing
    - run `npm run test:setup` for a full run that provisions the site before each phase
    - run `npm t` to run the specs against the site's current state (no provisioning)
@@ -113,12 +115,14 @@ underlying `site-setup.sh`) create it, so it's rebuilt on every run.
 
 ## Provisioning the test site manually
 
-`e2e-setup.sh` and `site-setup.sh` can be run by hand. Copy both into the site's
-WordPress root (they must sit together so `e2e-setup.sh` finds `site-setup.sh`
-next to it), then, inside the local Docker container:
+`e2e-setup.sh` and `site-setup.sh` can be run by hand. Copy them, plus
+`e2e-plugin.php`, into the site's WordPress root (they must sit together so
+`e2e-setup.sh` finds `site-setup.sh` and `e2e-plugin.php` next to it), then,
+inside the local Docker container:
 ```
-docker cp site-setup.sh <container>:/var/www/html/
-docker cp e2e-setup.sh  <container>:/var/www/html/
+docker cp site-setup.sh  <container>:/var/www/html/
+docker cp e2e-setup.sh   <container>:/var/www/html/
+docker cp e2e-plugin.php <container>:/var/www/html/
 docker exec -i <container> bash /var/www/html/e2e-setup.sh --woo --allow-root \
   --url <site-url> --admin-user admin --admin-password password
 ```
