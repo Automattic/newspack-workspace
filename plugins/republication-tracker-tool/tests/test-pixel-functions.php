@@ -5,6 +5,8 @@
  * @package Republication_Tracker_Tool
  */
 
+// phpcs:disable WordPressVIPMinimum.Variables.RestrictedVariables, WordPressVIPMinimum.Variables.ServerVariables -- Tests simulate pixel requests by manipulating $_COOKIE / $_SERVER directly.
+
 /**
  * Test bot filtering and per-client view deduplication for the tracking pixel.
  *
@@ -159,6 +161,16 @@ class PixelFunctionsTest extends WP_UnitTestCase {
 		$identity       = wprtt_get_dedup_identity();
 		self::assertNotSame( '', (string) $identity );
 		self::assertNotNull( $identity );
+	}
+
+	/**
+	 * An empty _ga cookie value falls through to the newspack-cid cookie instead
+	 * of producing an empty client ID (which would disable dedup).
+	 */
+	public function test_empty_ga_cookie_falls_through_to_newspack_cid() {
+		$_COOKIE['_ga']          = '';
+		$_COOKIE['newspack-cid'] = '424242424';
+		self::assertSame( '424242424', wprtt_get_dedup_identity() );
 	}
 
 	/**

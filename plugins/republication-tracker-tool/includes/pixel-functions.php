@@ -72,8 +72,12 @@ function wprtt_extract_cid_from_cookies() {
 	if ( isset( $_COOKIE['_ga'] ) ) {
 		$cookie_pieces = explode( '.', $_COOKIE['_ga'], 3 ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		// A well-formed cookie (GA1.2.<cid>) yields the third piece; malformed
-		// values with fewer pieces still yield their last piece, never null.
-		return end( $cookie_pieces );
+		// values with fewer pieces still yield their last piece. Empty values
+		// fall through to the newspack-cid cookie or a generated ID.
+		$cid = trim( (string) end( $cookie_pieces ) );
+		if ( '' !== $cid ) {
+			return $cid;
+		}
 	}
 
 	if ( isset( $_COOKIE['newspack-cid'] ) ) {
@@ -97,7 +101,7 @@ function wprtt_get_dedup_identity() {
 	if ( isset( $_COOKIE['_ga'] ) || isset( $_COOKIE['newspack-cid'] ) ) {
 		return (string) wprtt_extract_cid_from_cookies();
 	}
-	// phpcs:disable WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__ -- The pixel response is explicitly uncacheable (no-store + batcache_cancel), so per-client logic is safe here.
+	// phpcs:disable WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders -- The pixel response is explicitly uncacheable (no-store + batcache_cancel), and these values only feed a salted dedup hash: spoofing them merely weakens dedup for that client (fails open, same as no dedup).
 	$ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
 	$ua = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
 	// phpcs:enable

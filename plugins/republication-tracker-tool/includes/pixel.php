@@ -55,18 +55,25 @@ if ( $wprtt_guards_enabled ) {
 	header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
 }
 
-// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__ -- Only used when the guards are on, which makes the pixel response uncacheable (no-store + batcache_cancel above).
-$wprtt_user_agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
+$wprtt_user_agent = '';
+if ( $wprtt_guards_enabled ) {
+	// phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__HTTP_USER_AGENT__, WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders -- Only read when the guards are on, which makes the pixel response uncacheable (no-store + batcache_cancel above).
+	$wprtt_user_agent = isset( $_SERVER['HTTP_USER_AGENT'] ) ? sanitize_text_field( wp_unslash( $_SERVER['HTTP_USER_AGENT'] ) ) : '';
+}
+
+// The pixel endpoint is public: unknown or deleted post IDs still get the
+// image below, but there is nothing to count.
+$wprtt_shared_post = isset( $_GET['post'] ) ? get_post( absint( $_GET['post'] ) ) : null; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 // Non-ga4 hits (bots, crawlers) skip this block entirely. No counter update, no DB writes.
 // The wp-admin referrer bailout below is therefore only needed within this block.
 // Only update share tracking when a ga4 param is present (real pixel fires from configured republishers).
 // Bot, crawler, and link-preview requests are served the image but never counted.
-if ( isset( $_GET['post'] ) && isset( $_GET['ga4'] ) && ( ! $wprtt_guards_enabled || ! wprtt_is_bot_request( $wprtt_user_agent ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+if ( $wprtt_shared_post instanceof WP_Post && isset( $_GET['ga4'] ) && ( ! $wprtt_guards_enabled || ! wprtt_is_bot_request( $wprtt_user_agent ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 	// set up all of our post vars we want to track.
-	$shared_post_id = absint( $_GET['post'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-	$shared_post    = get_post( $shared_post_id );
+	$shared_post    = $wprtt_shared_post;
+	$shared_post_id = $shared_post->ID;
 
 	$shared_post_slug      = rawurlencode( $shared_post->post_name );
 	$shared_post_permalink = get_permalink( $shared_post_id );
