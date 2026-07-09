@@ -84,6 +84,38 @@ class Contact_Sync extends Sync {
 	const RETRY_BACKOFF = [ 30, 120, 480, 1800, 7200 ];
 
 	/**
+	 * Substring signatures (lowercase) that classify an ESP error message.
+	 *
+	 * Matched in order against the lowercased error message. The HTTP status
+	 * code that would identify these cleanly is discarded upstream by the ESP
+	 * layer (only a "{Title}: {detail}" string survives), so classification is
+	 * necessarily string-based. Extend the lists as ESP error copy evolves.
+	 *
+	 *   - permanent_contact: bad contact data; retrying can never succeed.
+	 *   - permanent_config:  site-level ESP account problem; actionable.
+	 *   - benign:            the contact already exists; effectively success.
+	 *
+	 * Anything not matched here is treated as 'transient' and retried.
+	 */
+	const ERROR_SIGNATURES = [
+		'permanent_contact' => [
+			'was permanently deleted',
+			'looks fake or invalid',
+			'merge fields were invalid',
+			'please provide a valid email',
+			'contact email address is not valid',
+		],
+		'permanent_config'  => [
+			'api access has been disabled',
+			'payment required',
+		],
+		'benign'            => [
+			'member exists',
+			'already a list member',
+		],
+	];
+
+	/**
 	 * Initialize hooks.
 	 */
 	public static function init_hooks() {
@@ -456,6 +488,27 @@ class Contact_Sync extends Sync {
 			return new \WP_Error( 'newspack_esp_delete_failed', implode( '; ', $errors ) );
 		}
 		return true;
+	}
+
+	/**
+	 * Classify an ESP sync error to decide retry behavior.
+	 *
+	 * @param string|\WP_Error $error The error from a failed push.
+	 * @return string One of 'permanent_contact', 'permanent_config', 'benign', or 'transient'.
+	 */
+	private static function classify_error( $error ) {
+		$message  = $error instanceof \WP_Error ? $error->get_error_message() : (string) $error;
+		$haystack = strtolower( $message );
+
+		foreach ( self::ERROR_SIGNATURES as $class => $signatures ) {
+			foreach ( $signatures as $signature ) {
+				if ( str_contains( $haystack, $signature ) ) {
+					return $class;
+				}
+			}
+		}
+
+		return 'transient';
 	}
 
 	/**

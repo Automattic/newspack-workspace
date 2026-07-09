@@ -619,6 +619,35 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that classify_error sorts ESP error messages into the right class.
+	 */
+	public function test_classify_error_signatures() {
+		$reflection = new \ReflectionMethod( Contact_Sync::class, 'classify_error' );
+		$reflection->setAccessible( true );
+
+		$cases = [
+			'neil@example.com was permanently deleted and cannot be re-imported.'           => 'permanent_contact',
+			'asdf@example.com looks fake or invalid, please enter a real email address.'    => 'permanent_contact',
+			'Please enter a number Your merge fields were invalid.'                         => 'permanent_contact',
+			'Please provide a valid email address.'                                         => 'permanent_contact',
+			'Contact Email Address is not valid.'                                           => 'permanent_contact',
+			'API Access has been disabled for this account.'                                => 'permanent_config',
+			'Payment Required'                                                              => 'permanent_config',
+			'cindy@example.com is already a list member. Use PUT to insert or update.'      => 'benign',
+			'garcia@example.com has signed up to a lot of lists very recently'              => 'transient',
+			'Some unknown transient network error'                                          => 'transient',
+		];
+
+		foreach ( $cases as $message => $expected ) {
+			$this->assertEquals(
+				$expected,
+				$reflection->invoke( null, new \WP_Error( 'esp_error', $message ) ),
+				sprintf( 'Message "%s" should classify as %s.', $message, $expected )
+			);
+		}
+	}
+
+	/**
 	 * Test that execute_integration_retry aborts the retry chain when the
 	 * integration becomes unconfigured between schedule and execute — drains
 	 * existing flood without scheduling further attempts.
