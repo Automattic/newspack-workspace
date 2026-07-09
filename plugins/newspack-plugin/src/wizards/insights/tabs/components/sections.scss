@@ -113,14 +113,18 @@
 	//            + body padding.
 	//   description — pinned to the bottom edge, left-aligned
 	//
-	// Every card carries the brand-color top accent so a row reads as
-	// a single coherent unit.
+	// Cards carry no blanket top accent (DSGNEWS-188 — a brand-color bar on
+	// every tile in a row added no value). The CoreCard's own border + 4px
+	// radius are the chrome; the `--highlighted` modifier adds a 4px accent
+	// (bumped from the old 3px) for the rare case of marking a single tile.
 
 	&__metric-card {
-		border-top: 3px solid var(--wp-admin-theme-color);
-		// Clip the top accent to the CoreCard's rounded corners so the
-		// 3px colored bar doesn't visually overhang the radius.
-		border-radius: 4px 4px 0 0;
+		// Optional call-out for one specific tile; clip the 4px bar to the
+		// CoreCard's top corners so it doesn't overhang the radius.
+		&--highlighted {
+			border-top: 4px solid var(--wp-admin-theme-color);
+			border-radius: 4px 4px 0 0;
+		}
 
 		// CoreCard wraps children in a `.newspack-card--core__body` div, so
 		// the flex layout that pins description to the bottom (and the
