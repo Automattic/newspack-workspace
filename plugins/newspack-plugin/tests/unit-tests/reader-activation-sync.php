@@ -785,4 +785,52 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		);
 		$this->assertEmpty( $pending, 'No retry should be scheduled for invalid data.' );
 	}
+
+	/**
+	 * Test that a permanent deletion error skips the retry and fires the hook.
+	 */
+	public function test_permanent_deletion_error_skips_retry() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$fired = false;
+		$data  = null;
+		add_action(
+			'newspack_sync_permanent_failure',
+			function ( $d ) use ( &$fired, &$data ) {
+				$fired = true;
+				$data  = $d;
+			}
+		);
+
+		as_unschedule_all_actions( Contact_Sync::RETRY_DELETION_HOOK );
+
+		$reflection = new \ReflectionMethod( Contact_Sync::class, 'schedule_deletion_retry' );
+		$reflection->setAccessible( true );
+		$reflection->invoke(
+			null,
+			'esp',           // integration_id.
+			'delete',        // mode.
+			'gone@test.com', // email.
+			[],              // contact.
+			'Test',          // context.
+			0,               // retry_count.
+			new \WP_Error( 'esp_error', 'API Access has been disabled for this account.' )
+		);
+
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_DELETION_HOOK,
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+
+		$this->assertEmpty( $pending, 'No deletion retry should be scheduled for a permanent error.' );
+		$this->assertTrue( $fired, 'newspack_sync_permanent_failure should fire.' );
+		$this->assertEquals( 'config', $data['class'] );
+		$this->assertEquals( 'delete', $data['mode'] );
+		$this->assertEquals( 'gone@test.com', $data['email'] );
+	}
 }

@@ -793,6 +793,46 @@ class Contact_Sync extends Sync {
 		}
 
 		$error_message = $error instanceof \WP_Error ? $error->get_error_message() : (string) $error;
+
+		$error_class = self::classify_error( $error );
+		if ( 'transient' !== $error_class ) {
+			static::log(
+				sprintf(
+					'Permanent %s failure for deletion (%s) sync of %s in integration "%s"; not retrying. Error: %s',
+					$error_class,
+					$mode,
+					$email,
+					$integration_id,
+					$error_message
+				)
+			);
+			if ( self::$current_as_action_id ) {
+				\ActionScheduler_Logger::instance()->log(
+					self::$current_as_action_id,
+					sprintf( 'Permanent failure (%s); not retrying.', $error_class )
+				);
+			}
+			if ( 'benign' !== $error_class ) {
+				/**
+				 * This action is documented in schedule_integration_retry(). The
+				 * deletion path substitutes `email` + `mode` for `user_id`, since
+				 * the WP user is already gone.
+				 */
+				do_action(
+					'newspack_sync_permanent_failure',
+					[
+						'integration_id' => $integration_id,
+						'email'          => $email,
+						'mode'           => $mode,
+						'context'        => $context,
+						'class'          => 'permanent_config' === $error_class ? 'config' : 'contact',
+						'reason'         => $error_message,
+					]
+				);
+			}
+			return;
+		}
+
 		$next_retry    = $retry_count + 1;
 		if ( $next_retry > self::MAX_RETRIES ) {
 			static::log(
