@@ -536,6 +536,18 @@ class Contact_Sync extends Sync {
 		$user_email    = $user ? $user->user_email : 'unknown';
 
 		$error_class = self::classify_error( $error );
+		if ( 'benign' === $error_class ) {
+			static::log(
+				sprintf(
+					'Skipping retry for integration "%s" sync of user %d (%s); ESP reports contact already synced. Detail: %s',
+					$integration_id,
+					$user_id,
+					$user_email,
+					$error_message
+				)
+			);
+			return;
+		}
 		if ( 'transient' !== $error_class ) {
 			static::log(
 				sprintf(
@@ -795,6 +807,18 @@ class Contact_Sync extends Sync {
 		$error_message = $error instanceof \WP_Error ? $error->get_error_message() : (string) $error;
 
 		$error_class = self::classify_error( $error );
+		if ( 'benign' === $error_class ) {
+			static::log(
+				sprintf(
+					'Skipping retry for deletion (%s) sync of %s in integration "%s"; ESP reports contact already synced. Detail: %s',
+					$mode,
+					$email,
+					$integration_id,
+					$error_message
+				)
+			);
+			return;
+		}
 		if ( 'transient' !== $error_class ) {
 			static::log(
 				sprintf(

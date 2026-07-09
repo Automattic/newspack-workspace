@@ -697,6 +697,54 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that a benign error (contact already synced) skips the retry without
+	 * firing the permanent-failure hook.
+	 */
+	public function test_benign_error_skips_retry_without_alert() {
+		if ( ! function_exists( 'as_schedule_single_action' ) ) {
+			$this->markTestSkipped( 'ActionScheduler not available.' );
+		}
+
+		$fired = false;
+		add_action(
+			'newspack_sync_permanent_failure',
+			function () use ( &$fired ) {
+				$fired = true;
+			}
+		);
+
+		Failing_Sample_Integration::reset();
+		Failing_Sample_Integration::$should_fail  = true;
+		Failing_Sample_Integration::$fail_message = 'cindy@example.com is already a list member. Use PUT to insert or update.';
+		$this->register_failing_integration( 'benign_mock' );
+
+		as_unschedule_all_actions( Contact_Sync::RETRY_HOOK );
+
+		$user_id = $this->factory()->user->create( [ 'user_email' => 'benign@test.com' ] );
+
+		Contact_Sync::execute_integration_retry(
+			[
+				'integration_id' => 'benign_mock',
+				'user_id'        => $user_id,
+				'context'        => 'Test',
+				'retry_count'    => 1,
+			]
+		);
+
+		$pending = as_get_scheduled_actions(
+			[
+				'hook'   => Contact_Sync::RETRY_HOOK,
+				'group'  => Integrations::get_action_group( 'benign_mock' ),
+				'status' => \ActionScheduler_Store::STATUS_PENDING,
+			],
+			'ARRAY_A'
+		);
+
+		$this->assertEmpty( $pending, 'No retry should be scheduled for a benign result.' );
+		$this->assertFalse( $fired, 'Benign results should not fire newspack_sync_permanent_failure.' );
+	}
+
+	/**
 	 * Test that execute_integration_retry aborts the retry chain when the
 	 * integration becomes unconfigured between schedule and execute — drains
 	 * existing flood without scheduling further attempts.
