@@ -544,28 +544,21 @@ class Newspack_Blocks {
 	}
 
 	/**
-	 * Optionally skip generating the physical `newspack-article-block-*` crop
-	 * files when an image is uploaded.
+	 * Skip generating the physical `newspack-article-block-*` crop files on upload.
 	 *
-	 * These sizes stay registered (via `add_image_sizes()`) so the blocks keep
-	 * resolving correctly-cropped URLs, but on platforms where an image CDN
-	 * resizes/crops on the fly (WordPress.com Simple and Atomic), the physical
-	 * crop files are redundant. Skipping them also keeps derivative generation
-	 * consistent across upload paths: on wpcom, `newspack-blocks` is loaded via
-	 * jetpack-mu-wpcom only for editor/REST requests, so an image uploaded through
-	 * the editor's Image block (REST) would otherwise get the crops while the same
-	 * image uploaded through the Media Library (async-upload.php) would not.
+	 * The sizes stay registered, so blocks still resolve correctly-cropped URLs;
+	 * we only skip writing the files where an image CDN crops on the fly (wpcom).
+	 * This also makes the Image block (REST) and Media Library upload paths behave
+	 * the same on wpcom, where they otherwise differ.
 	 *
-	 * @param array $sizes Associative array of image sub-sizes to be generated,
-	 *                     keyed by size name.
+	 * @param array $sizes Image sub-sizes to generate, keyed by size name.
 	 * @return array Filtered sizes.
 	 */
 	public static function maybe_skip_article_block_image_subsizes( $sizes ) {
 		/**
-		 * Filters whether to skip generating the physical `newspack-article-block-*`
-		 * crop files on upload. Defaults to true on WordPress.com platform sites
-		 * (Simple and Atomic), where an image CDN handles cropping on the fly.
-		 * Self-hosted sites can opt in, e.g. when using the Jetpack Image CDN.
+		 * Filters whether to skip physical `newspack-article-block-*` crop generation.
+		 * Defaults to true on WordPress.com (Simple/Atomic); self-hosted sites can
+		 * opt in, e.g. when using the Jetpack Image CDN.
 		 *
 		 * @param bool $skip Whether to skip physical crop generation.
 		 */

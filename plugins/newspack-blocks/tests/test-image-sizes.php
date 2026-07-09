@@ -11,9 +11,8 @@
 class ImageSizesTest extends WP_UnitTestCase { // phpcs:ignore
 
 	/**
-	 * A representative set of sub-sizes as passed to
-	 * `intermediate_image_sizes_advanced`: core sizes plus the Newspack article
-	 * block crops.
+	 * Sample sub-sizes as passed to `intermediate_image_sizes_advanced`:
+	 * core sizes plus the Newspack article block crops.
 	 *
 	 * @return array
 	 */
@@ -75,8 +74,7 @@ class ImageSizesTest extends WP_UnitTestCase { // phpcs:ignore
 	}
 
 	/**
-	 * By default (self-hosted, not skipping) the article block sub-sizes are
-	 * generated as physical files, i.e. left untouched by the filter.
+	 * Default (not skipping): all article block crops are left in place.
 	 */
 	public function test_article_block_subsizes_kept_by_default() {
 		add_filter( 'newspack_blocks_skip_article_image_subsizes', '__return_false' );
@@ -87,8 +85,8 @@ class ImageSizesTest extends WP_UnitTestCase { // phpcs:ignore
 	}
 
 	/**
-	 * When skipping is enabled (wpcom / image CDN), the article block sub-sizes
-	 * are removed from physical generation while core sizes are retained.
+	 * Skipping enabled (wpcom / image CDN): article block crops are removed,
+	 * core sizes are retained.
 	 */
 	public function test_article_block_subsizes_removed_when_skipping() {
 		add_filter( 'newspack_blocks_skip_article_image_subsizes', '__return_true' );
