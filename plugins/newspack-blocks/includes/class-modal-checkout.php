@@ -30,6 +30,17 @@ final class Modal_Checkout {
 	const CHECKOUT_REGISTRATION_ORDER_META_KEY = '_newspack_checkout_registration_meta';
 
 	/**
+	 * Billing fields with server-side format validation in the Store API,
+	 * mapped from their classic checkout keys to Store API address keys.
+	 *
+	 * @var string[]
+	 */
+	const STORE_API_VALIDATED_ADDRESS_FIELDS = [
+		'billing_state'    => 'state',
+		'billing_postcode' => 'postcode',
+	];
+
+	/**
 	 * Whether the modal checkout has been enqueued.
 	 *
 	 * @var boolean
@@ -157,6 +168,8 @@ final class Modal_Checkout {
 		add_filter( 'woocommerce_get_checkout_order_received_url', [ __CLASS__, 'woocommerce_get_return_url' ], 10, 2 );
 		add_filter( 'wc_get_template', [ __CLASS__, 'wc_get_template' ], 10, 2 );
 		add_filter( 'woocommerce_checkout_fields', [ __CLASS__, 'woocommerce_checkout_fields' ] );
+		add_filter( 'rest_pre_dispatch', [ __CLASS__, 'scrub_store_api_checkout_address' ], 10, 3 );
+		add_filter( 'woocommerce_get_country_locale', [ __CLASS__, 'relax_configured_off_locale_fields' ] );
 		add_filter( 'woocommerce_update_order_review_fragments', [ __CLASS__, 'order_review_fragments' ] );
 		add_filter( 'woocommerce_cart_needs_payment', [ __CLASS__, 'cart_needs_payment' ] );
 		add_filter( 'newspack_recaptcha_verify_captcha', [ __CLASS__, 'recaptcha_verify_captcha' ], 10, 3 );
@@ -1380,6 +1393,148 @@ final class Modal_Checkout {
 		}
 
 		return $fields;
+	}
+
+	/**
+	 * Scrub invalid address values from Store API checkout requests when the
+	 * corresponding billing fields are configured off (NPPM-2937).
+	 *
+	 * Express checkout wallets submit to wc/store/v1/checkout and can supply
+	 * values the buyer never sees or corrects (e.g. Apple Pay sending a suburb
+	 * as the state), which hard-fails Store API address validation. Values the
+	 * validation would accept are left untouched. Runs on rest_pre_dispatch
+	 * because the validation happens during dispatch.
+	 *
+	 * @param mixed            $result  Response to replace the requested version with.
+	 * @param \WP_REST_Server  $server  Server instance.
+	 * @param \WP_REST_Request $request Request used to generate the response.
+	 *
+	 * @return mixed
+	 */
+	public static function scrub_store_api_checkout_address( $result, $server, $request ) {
+		if ( null !== $result ) {
+			return $result;
+		}
+
+		if (
+			! $request instanceof \WP_REST_Request ||
+			'POST' !== $request->get_method() ||
+			0 !== strpos( $request->get_route(), '/wc/store/v1/checkout' )
+		) {
+			return $result;
+		}
+
+		if ( ! function_exists( 'WC' ) || ! class_exists( 'WC_Validation' ) ) {
+			return $result;
+		}
+
+		$billing_fields = apply_filters( 'newspack_blocks_donate_billing_fields_keys', [] );
+
+		if ( empty( $billing_fields ) ) {
+			return $result;
+		}
+
+		foreach ( [ 'billing_address', 'shipping_address' ] as $param ) {
+			$address = $request->get_param( $param );
+
+			if ( ! is_array( $address ) ) {
+				continue;
+			}
+
+			$scrubbed = self::scrub_invalid_address_values( $address, $billing_fields );
+
+			if ( $scrubbed !== $address ) {
+				$request->set_param( $param, $scrubbed );
+			}
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Drop configured-off address values that would fail Store API validation.
+	 *
+	 * @param array    $address        Store API address (billing or shipping).
+	 * @param string[] $billing_fields Configured billing field keys.
+	 *
+	 * @return array Scrubbed address.
+	 */
+	private static function scrub_invalid_address_values( $address, $billing_fields ) {
+		$country = isset( $address['country'] ) ? $address['country'] : '';
+
+		if (
+			! in_array( 'billing_state', $billing_fields, true ) &&
+			! empty( $address['state'] ) &&
+			$country
+		) {
+			$states = \WC()->countries->get_states( $country );
+
+			if ( is_array( $states ) && ! empty( $states ) ) {
+				$code_match = array_key_exists( strtoupper( $address['state'] ), array_change_key_case( $states, CASE_UPPER ) );
+				$name_match = in_array( strtolower( $address['state'] ), array_map( 'strtolower', $states ), true );
+
+				if ( ! $code_match && ! $name_match ) {
+					$address['state'] = '';
+				}
+			}
+		}
+
+		if (
+			! in_array( 'billing_postcode', $billing_fields, true ) &&
+			! empty( $address['postcode'] ) &&
+			! \WC_Validation::is_postcode( $address['postcode'], $country )
+		) {
+			$address['postcode'] = '';
+		}
+
+		return $address;
+	}
+
+	/**
+	 * Relax locale-required flags for configured-off billing fields (NPPM-2937).
+	 *
+	 * After an invalid wallet value is scrubbed (see
+	 * scrub_store_api_checkout_address), the Store API order validation would
+	 * still reject the checkout when the country locale marks the field as
+	 * required. A field the site is configured not to collect cannot be
+	 * required.
+	 *
+	 * @param array $locale Country locale field settings.
+	 *
+	 * @return array
+	 */
+	public static function relax_configured_off_locale_fields( $locale ) {
+		$billing_fields = apply_filters( 'newspack_blocks_donate_billing_fields_keys', [] );
+
+		if ( empty( $billing_fields ) ) {
+			return $locale;
+		}
+
+		// Never relax requirements when the cart needs a shipping address:
+		// physical-goods flows keep the full locale rules.
+		if ( function_exists( 'WC' ) && \WC()->cart && \WC()->cart->needs_shipping_address() ) {
+			return $locale;
+		}
+
+		$off = [];
+
+		foreach ( self::STORE_API_VALIDATED_ADDRESS_FIELDS as $config_key => $address_key ) {
+			if ( ! in_array( $config_key, $billing_fields, true ) ) {
+				$off[] = $address_key;
+			}
+		}
+
+		if ( empty( $off ) ) {
+			return $locale;
+		}
+
+		foreach ( array_keys( $locale ) as $country ) {
+			foreach ( $off as $address_key ) {
+				$locale[ $country ][ $address_key ]['required'] = false;
+			}
+		}
+
+		return $locale;
 	}
 
 	/**
