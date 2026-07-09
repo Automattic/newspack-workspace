@@ -135,7 +135,7 @@ class Advertising_Sponsors extends Wizard {
 			$this->parent_menu,
 			Newspack::plugin_url() . '/dist/billboard.css',
 			$this->get_style_dependencies(),
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'billboard' )
 		);
 		wp_style_add_data( $this->parent_menu, 'rtl', 'replace' );
 		wp_enqueue_style( $this->parent_menu );

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Newspack Story Budget
  * Description: Story budgeting by Newspack.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Author: Automattic
  * Author URI: https://newspack.com/
  * License: GPL2
@@ -14,7 +14,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'NEWSPACK_STORY_BUDGET_VERSION', '1.0.1' );
+define( 'NEWSPACK_STORY_BUDGET_VERSION', '1.0.2' );
 
 // Define NEWSPACK_STORY_BUDGET_PLUGIN_DIR.
 if ( ! defined( 'NEWSPACK_STORY_BUDGET_PLUGIN_DIR' ) ) {

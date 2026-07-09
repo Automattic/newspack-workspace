@@ -13,6 +13,10 @@ import { addQueryArgs } from '@wordpress/url';
 import { WebPreview } from 'newspack-components';
 
 const PreviewSetting = ( { autosavePost, isSavingPost, postId, metaFields } ) => {
+	if ( ! postId || ! metaFields ) {
+		return null;
+	}
+
 	const previewQueryKeys = window.newspack_popups_data?.preview_query_keys || {};
 	const frontendUrl = window?.newspack_popups_data?.frontend_url || '/';
 	const abbreviatedKeys = {};

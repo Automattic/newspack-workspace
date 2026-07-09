@@ -48,15 +48,8 @@ class Audience_Donations extends Wizard {
 
 	/**
 	 * Add Donations page.
-	 *
-	 * The Donations wizard manages Newspack-platform (WooCommerce-backed) donations.
-	 * Other platforms (NRH, "other") are configured elsewhere, so the submenu entry
-	 * is hidden unless the reader revenue platform is Newspack.
 	 */
 	public function add_page() {
-		if ( ! Donations::is_platform_wc() ) {
-			return;
-		}
 		add_submenu_page(
 			$this->parent_slug,
 			$this->get_name(),
@@ -130,16 +123,6 @@ class Audience_Donations extends Wizard {
 				],
 			]
 		);
-
-		register_rest_route(
-			NEWSPACK_API_NAMESPACE,
-			'/wizard/' . $this->slug . '/emails/(?P<id>\d+)',
-			[
-				'methods'             => \WP_REST_Server::DELETABLE,
-				'callback'            => [ $this, 'api_reset_donation_email' ],
-				'permission_callback' => [ $this, 'api_permissions_check' ],
-			]
-		);
 	}
 
 	/**
@@ -174,17 +157,11 @@ class Audience_Donations extends Wizard {
 	public function fetch_all_data() {
 		$platform = Donations::get_platform_slug();
 
-		// get_donation_settings() returns a WP_Error when the WooCommerce suite isn't
-		// fully active (e.g. platform is 'wc' but Subscriptions is missing). Surface an
-		// empty array in that case so the response doesn't carry a serialized WP_Error;
-		// missing plugins are reported separately via plugin_status below.
-		$donation_settings = Donations::get_donation_settings();
-
 		$args = [
 			'platform_data'      => [
 				'platform' => $platform,
 			],
-			'donation_data'      => is_wp_error( $donation_settings ) ? [] : $donation_settings,
+			'donation_data'      => Donations::get_donation_settings(),
 			'donation_page'      => Donations::get_donation_page_info(),
 			'product_validation' => $this->validate_donation_products(),
 		];
@@ -227,46 +204,6 @@ class Audience_Donations extends Wizard {
 		}
 
 		return rest_ensure_response( $this->fetch_all_data() );
-	}
-
-	/**
-	 * Reset donation email template.
-	 * We acheive this by trashing the email template post.
-	 *
-	 * @param WP_REST_Request $request Request object.
-	 *
-	 * @return WP_Error|WP_REST_Response
-	 */
-	public function api_reset_donation_email( $request ) {
-		$params = $request->get_params();
-		$id     = $params['id'];
-		$email  = get_post( $id );
-
-		if ( $email === null || $email->post_type !== Emails::POST_TYPE ) {
-			return new WP_Error(
-				'newspack_reset_donation_email_invalid_arg',
-				esc_html__( 'Invalid argument: no email template matches the provided id.', 'newspack-plugin' ),
-				[
-					'status' => 400,
-					'level'  => 'notice',
-				]
-			);
-		}
-
-		if ( ! wp_trash_post( $id ) ) {
-			return new WP_Error(
-				'newspack_reset_donation_email_reset_failed',
-				esc_html__( 'Reset failed: unable to reset email template.', 'newspack-plugin' ),
-				[
-					'status' => 400,
-					'level'  => 'notice',
-				]
-			);
-		}
-
-		return rest_ensure_response(
-			Emails::get_emails( Reader_Activation::is_enabled() ? [] : array_values( Reader_Revenue_Emails::EMAIL_TYPES ), false )
-		);
 	}
 
 	/**

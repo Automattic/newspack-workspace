@@ -36,6 +36,34 @@ class Sync {
 	}
 
 	/**
+	 * Whether reader data syncing is allowed.
+	 *
+	 * @return bool True if reader data syncing is allowed, false otherwise.
+	 */
+	public static function is_syncing_allowed() {
+		/**
+		 * Enables reader data syncing to ESP on staging or non-production sites.
+		 * By default, syncing is disabled on staging sites to prevent test data
+		 * from being sent to production ESP lists.
+		 *
+		 * @constant NEWSPACK_ALLOW_READER_SYNC
+		 * @type     bool
+		 * @default  Sync disabled on staging/non-production sites
+		 * @status   draft
+		 *
+		 * @example define( 'NEWSPACK_ALLOW_READER_SYNC', true );
+		 */
+		$is_allowed = defined( 'NEWSPACK_ALLOW_READER_SYNC' ) && NEWSPACK_ALLOW_READER_SYNC;
+
+		/**
+		 * Filter whether reader data syncing is allowed.
+		 *
+		 * @param bool $is_allowed Whether reader data syncing is allowed. Default false.
+		 */
+		return apply_filters( 'newspack_reader_activation_is_syncing_allowed', $is_allowed );
+	}
+
+	/**
 	 * Whether reader data can be synced.
 	 *
 	 * @param bool $return_errors Optional. Whether to return a WP_Error object. Default false.
@@ -60,25 +88,13 @@ class Sync {
 		}
 
 		$site_url = strtolower( \untrailingslashit( \get_site_url() ) );
-		/**
-		 * Enables reader data syncing to ESP on staging or non-production sites.
-		 * By default, syncing is disabled on staging sites to prevent test data
-		 * from being sent to production ESP lists.
-		 *
-		 * @constant NEWSPACK_ALLOW_READER_SYNC
-		 * @type     bool
-		 * @default  Sync disabled on staging/non-production sites
-		 * @status   draft
-		 *
-		 * @example define( 'NEWSPACK_ALLOW_READER_SYNC', true );
-		 */
 		if (
 			(
 				false !== stripos( $site_url, '.newspackstaging.com' ) ||
 				! method_exists( 'Newspack_Manager', 'is_connected_to_production_manager' ) ||
 				! \Newspack_Manager::is_connected_to_production_manager()
 			) &&
-			( ! defined( 'NEWSPACK_ALLOW_READER_SYNC' ) || ! NEWSPACK_ALLOW_READER_SYNC )
+			( ! self::is_syncing_allowed() )
 		) {
 			$errors->add(
 				'esp_sync_not_allowed',

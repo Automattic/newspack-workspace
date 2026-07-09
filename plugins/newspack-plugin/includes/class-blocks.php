@@ -41,6 +41,8 @@ final class Blocks {
 			require_once NEWSPACK_ABSPATH . 'src/blocks/overlay-menu/trigger/class-overlay-menu-trigger-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/overlay-menu/panel/class-overlay-menu-panel-block.php';
 			require_once NEWSPACK_ABSPATH . 'src/blocks/overlay-search/class-overlay-search-block.php';
+			require_once NEWSPACK_ABSPATH . 'src/blocks/responsive-container/class-responsive-container-block.php';
+			require_once NEWSPACK_ABSPATH . 'src/blocks/responsive-container/breakpoint/class-responsive-container-breakpoint-block.php';
 			Social_Icons::init();
 		}
 		if ( Collections::is_module_active() ) {
@@ -61,7 +63,7 @@ final class Blocks {
 			'newspack-blocks',
 			Newspack::plugin_url() . '/dist/blocks.js',
 			[],
-			NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'blocks' ),
 			true
 		);
 		$script_data = [
@@ -97,7 +99,7 @@ final class Blocks {
 			'newspack-blocks',
 			Newspack::plugin_url() . '/dist/blocks.css',
 			[],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'blocks' )
 		);
 	}
 
@@ -111,7 +113,7 @@ final class Blocks {
 				'newspack-blocks-frontend',
 				Newspack::plugin_url() . '/dist/blocks.css',
 				[],
-				NEWSPACK_PLUGIN_VERSION
+				Newspack::asset_version( 'blocks' )
 			);
 		}
 	}

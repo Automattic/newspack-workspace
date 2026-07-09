@@ -136,6 +136,7 @@ export default function AdsListScreen() {
 			/>
 			{ quickEditItem && (
 				<AdsQuickEditPanel
+					key={ quickEditItem.id }
 					item={ quickEditItem }
 					advertisers={ filterTerms.advertisers }
 					placements={ filterTerms.placements }
