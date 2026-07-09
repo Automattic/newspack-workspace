@@ -95,8 +95,9 @@ class Test_Authoring_Permissions extends WP_UnitTestCase {
 		$request->set_header( 'content-type', 'application/json' );
 		$request->set_body( wp_json_encode( [ 'primary' => '#abcdef' ] ) );
 		$response = rest_do_request( $request );
-		$this->assertNotEquals( 403, $response->get_status() );
-		$this->assertStringNotContainsString( '#abcdef', (string) get_option( 'newspack_newsletters_color_palette', '' ) );
+		$this->assertSame( 200, $response->get_status() );
+		$stored = json_decode( (string) get_option( 'newspack_newsletters_color_palette', '{}' ), true );
+		$this->assertNotSame( '#abcdef', $stored['primary'] ?? null, 'A lower role must not have written the palette.' );
 	}
 
 	/**
@@ -110,7 +111,8 @@ class Test_Authoring_Permissions extends WP_UnitTestCase {
 		$request->set_header( 'content-type', 'application/json' );
 		$request->set_body( wp_json_encode( [ 'primary' => '#abcdef' ] ) );
 		$response = rest_do_request( $request );
-		$this->assertNotEquals( 403, $response->get_status() );
-		$this->assertStringContainsString( '#abcdef', (string) get_option( 'newspack_newsletters_color_palette', '' ) );
+		$this->assertSame( 200, $response->get_status() );
+		$stored = json_decode( (string) get_option( 'newspack_newsletters_color_palette', '{}' ), true );
+		$this->assertSame( '#abcdef', $stored['primary'] ?? null );
 	}
 }

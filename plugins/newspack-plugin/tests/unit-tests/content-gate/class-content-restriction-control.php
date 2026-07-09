@@ -70,7 +70,7 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 		);
 		$response = rest_do_request( $request );
 
-		$this->assertNotEquals( 403, $response->get_status() );
+		$this->assertSame( 200, $response->get_status() );
 		$this->assertEmpty(
 			get_post_meta( $post_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true ),
 			'The exempt meta must not have been written by a lower role.'
@@ -93,7 +93,7 @@ class Test_Content_Restriction_Control extends WP_UnitTestCase {
 		);
 		$response = rest_do_request( $request );
 
-		$this->assertNotEquals( 403, $response->get_status() );
+		$this->assertSame( 200, $response->get_status() );
 		$this->assertTrue(
 			(bool) get_post_meta( $post_id, Content_Restriction_Control::IS_EXEMPT_META_KEY, true )
 		);

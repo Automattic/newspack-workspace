@@ -1187,8 +1187,9 @@ final class Newspack_Newsletters {
 
 	/**
 	 * Permission check for non-post authoring reads needed to load the
-	 * editor (e.g. the `layouts` list). Any user who can author posts may
-	 * use them; no site-wide or audience data is exposed.
+	 * editor (e.g. the `layouts` list of saved templates). Any user who can
+	 * author posts may use them; they expose editor-support content, not
+	 * send/audience configuration.
 	 *
 	 * @param WP_REST_Request $request API request object.
 	 * @return bool|WP_Error
