@@ -147,6 +147,9 @@ final class Newspack {
 		include_once NEWSPACK_ABSPATH . 'includes/bylines/class-bylines.php';
 		include_once NEWSPACK_ABSPATH . 'includes/class-post-date.php';
 		include_once NEWSPACK_ABSPATH . 'includes/lite-site/class-lite-site.php';
+		// Classifies CTA link targets by conversion intent; used by the content gate
+		// (below) to stamp landing-page CTAs for order-meta attribution (NPPD-1887).
+		include_once NEWSPACK_ABSPATH . 'includes/class-cta-intent-classifier.php';
 		include_once NEWSPACK_ABSPATH . 'includes/content-gate/trait-content-gate-layout.php';
 		include_once NEWSPACK_ABSPATH . 'includes/content-gate/class-content-gate.php';
 
