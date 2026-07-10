@@ -46,10 +46,12 @@ describe( 'Subscribers CampaignSection', () => {
 
 		const bodyRows = container.querySelectorAll( 'tbody tr' );
 		expect( bodyRows ).toHaveLength( 2 );
+		// Untagged row is last; its "(no campaign)" label is muted via the shared
+		// N/A treatment (DataViews rows carry no per-row modifier class).
 		const last = bodyRows[ bodyRows.length - 1 ];
-		expect( last ).toHaveClass( 'newspack-insights__table-row--untagged' );
 		expect( last ).toHaveTextContent( '(no campaign)' );
-		expect( bodyRows[ 0 ] ).not.toHaveClass( 'newspack-insights__table-row--untagged' );
+		expect( last.querySelector( '.newspack-insights__table-na' ) ).toBeInTheDocument();
+		expect( bodyRows[ 0 ].querySelector( '.newspack-insights__table-na' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'shows the campaign-tagged empty state when there are no rows', () => {

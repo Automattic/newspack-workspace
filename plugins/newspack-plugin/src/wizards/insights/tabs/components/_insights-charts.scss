@@ -9,30 +9,37 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 @use "../../../../../packages/colors/colors.module" as colors;
 
-// Categorical series palette for charts. Hardcoded because a chart needs
-// distinct, stable category colors; applied via the --series-color custom
-// property so each viz element can map it to fill / stroke / background.
-.is-series-0 { --series-color: #1c5ea8; }
-.is-series-1 { --series-color: #3eb24f; }
-.is-series-2 { --series-color: #d98b27; }
-.is-series-3 { --series-color: #8a4fbd; }
-.is-series-4 { --series-color: #c0392b; }
-.is-series-5 { --series-color: #1f8a8a; }
-.is-series-6 { --series-color: #6b7785; }
+// Categorical series palette for charts (8 series): two monochrome families —
+// primary (blue) and orange, each a dark→light triad — then two neutral grays for
+// the tail. Every shade clears WCAG 1.4.11 non-text contrast (>=3:1) against the
+// white card, so thin line strokes and small legend swatches stay perceivable;
+// light tints are deliberately avoided. Blue↔orange is the colorblind-robust
+// pairing. The orange shades are hardcoded hex (no Newspack orange token clears
+// contrast on white) and are designer-approved. Applied via the --series-color
+// custom property; keep the count in sync with PieChart.tsx's modulo.
+.is-series-0 { --series-color: #{colors.$primary-700}; }
+.is-series-1 { --series-color: #{colors.$primary-500}; }
+.is-series-2 { --series-color: #{colors.$primary-300}; }
+.is-series-3 { --series-color: #9a3412; }
+.is-series-4 { --series-color: #c2410c; }
+.is-series-5 { --series-color: #ea580c; }
+.is-series-6 { --series-color: #{colors.$neutral-600}; }
+.is-series-7 { --series-color: #{colors.$neutral-800}; }
 
 .newspack-insights {
 	&__chart-grid {
 		display: grid;
 		grid-template-columns: repeat( auto-fit, minmax( 280px, 1fr ) );
-		gap: 24px;
+		gap: 16px;
 	}
 
 	&__table-grid {
 		display: grid;
 		grid-template-columns: repeat( auto-fit, minmax( 320px, 1fr ) );
-		gap: 24px;
+		gap: 16px;
 	}
 
 	&__chart-card {
@@ -56,7 +63,7 @@
 
 		&-caption {
 			font-size: 13px;
-			color: wp-colors.$gray-600;
+			color: wp-colors.$gray-700;
 			margin: 0 0 12px;
 		}
 	}
@@ -83,20 +90,20 @@
 		margin: 0 0 2px;
 		font-size: 13px;
 		font-weight: 400;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 	}
 
-	// Engagement Reader Segments takeaway cards — scorecard chrome (border, top
-	// accent, padding) with a headline / sub / bottom-pinned mini-bar layout.
+	// Engagement Reader Segments takeaway cards — scorecard chrome (border,
+	// padding) with a headline / sub / bottom-pinned mini-bar layout. No top
+	// accent (DSGNEWS-188 — dropped the blanket brand-color bar).
 	&__takeaway-card {
 		display: flex;
 		flex-direction: column;
 		height: 100%;
 		min-height: 180px;
 		padding: 24px 28px;
-		background-color: #fff;
+		background-color: wp-colors.$white;
 		border: 1px solid wp-colors.$gray-200;
-		border-top: 3px solid var( --wp-admin-theme-color );
 		border-radius: 4px;
 	}
 
@@ -125,7 +132,7 @@
 	&__takeaway-empty {
 		margin: 0;
 		font-size: 13px;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 	}
 
 	// Mini bar chart pinned to the card bottom (~60px tall).
@@ -154,7 +161,7 @@
 		margin: 8px 0 0;
 		font-size: 13px;
 		line-height: 1.4;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 
 		code {
 			font-family: monospace;
@@ -171,7 +178,7 @@
 
 	&__chart-empty {
 		font-size: 13px;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 		padding: 24px 0;
 		text-align: center;
 	}
@@ -264,7 +271,7 @@
 	}
 
 	&__legend-value {
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -309,7 +316,7 @@
 
 	&__bar-label {
 		font-size: 9px;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 		margin-top: 4px;
 		white-space: nowrap;
 		overflow: hidden;
@@ -367,7 +374,7 @@
 
 	&__line-point {
 		fill: var( --series-color );
-		stroke: #fff;
+		stroke: wp-colors.$white;
 		stroke-width: 1;
 
 		&:hover {
@@ -379,7 +386,7 @@
 		display: flex;
 		justify-content: space-between;
 		font-size: 11px;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 		margin-top: 4px;
 	}
 
@@ -390,7 +397,7 @@
 	&__line-axis {
 		display: block;
 		font-size: 11px;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 
 		&--y {
 			margin-bottom: 6px;
@@ -421,7 +428,7 @@
 			margin-bottom: 6px;
 			text-align: left;
 			font-size: 11px;
-			color: wp-colors.$gray-600;
+			color: wp-colors.$gray-700;
 		}
 	}
 
@@ -464,7 +471,7 @@
 		gap: 16px;
 		margin-top: 10px;
 		font-size: 11px;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 	}
 
 	&__cohort-heatmap-scale {
@@ -495,12 +502,12 @@
 		padding: 6px 8px;
 		border-radius: 4px;
 		background: wp-colors.$gray-900;
-		color: #fff;
+		color: wp-colors.$white;
 		font-size: 11px;
 		line-height: 1.3;
 		white-space: nowrap;
 		pointer-events: none;
-		box-shadow: 0 2px 6px rgba( 0, 0, 0, 0.25 );
+		box-shadow: wp-vars.$elevation-medium;
 
 		// Bar variant: anchored above the hovered column, revealed on hover.
 		&--bar {
@@ -558,7 +565,7 @@
 		display: block;
 		margin-top: 4px;
 		font-size: 12px;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 	}
 
 	// Legend below a multi-series line chart.
@@ -595,21 +602,26 @@
 	}
 
 	// Funnel viz — shared across Gates, Prompts, and Conversion Journey tabs.
-	// Self-labeling stacked trapezoids (NEWS-2586): each band carries its label,
+	// Self-labeling equal-width rectangles (NEWS-2586): each band carries its label,
 	// count, and (for every step after the first) the drop-off descriptors INSIDE
 	// it. One uniform layout at every width/step-count — no side column, no legend.
-	// Each band is an <li> with a clipped trapezoid FILL behind a flowing TEXT
-	// layer that wraps, grows the band, and overflows a narrow fill without clipping.
+	// Each band is a full-width <li> with a gradient FILL behind a flowing TEXT layer
+	// that wraps and grows the band. Sections are differentiated by color (opacity)
+	// alone, not by width.
 	&__funnel {
+		// Absolute minimum rendered width of any section; also the floor the
+		// transition separators clamp their bottom edge to (see &-separator), so a
+		// connector never ends up narrower than the min-width section beneath it.
+		$funnel-min-band-width: 80px;
+
 		width: 100%;
-		max-width: 500px; // NEWS-2586 container cap; grid cells render narrower (fluid).
 		margin: 0 auto;
-		padding: 20px;
+		padding: wp-vars.$grid-unit-10;
 		box-sizing: border-box;
 		list-style: none;
-		background-color: #fff;
+		background-color: wp-colors.$white;
 		border: 1px solid wp-colors.$gray-200;
-		border-radius: 4px;
+		border-radius: wp-vars.$radius-medium;
 
 		&-step {
 			position: relative;
@@ -617,21 +629,51 @@
 			flex-direction: column;
 			align-items: center;
 			justify-content: center;
-			min-height: 72px; // baseline; grows with wrapped content.
+			margin-bottom: 24px;
+			margin-left: auto;
+			margin-right: auto;
+			min-height: 75px; // baseline; grows with wrapped content.
+			min-width: $funnel-min-band-width; // Absolute minimum width of any step.
 			padding: 12px 8px;
 			box-sizing: border-box;
 			text-align: center;
+			&:last-child {
+				margin-bottom: 0;
+			}
 		}
 
-		// Fill: the single anchor color clipped to the per-band trapezoid (clip-path
-		// set inline). Opacity fades 1.0 → 0.6 via the inline --band-opacity. Sits
-		// BEHIND the text so the text is never clipped by the band edge.
+		// Transition connector filling the 24px gap below each section (except the
+		// last). A filled box clipped to a trapezoid: its top edge spans the section
+		// above (this element's full width) and its bottom edge insets by the inline
+		// --separator-inset to match the narrower section below — but never so far
+		// that the bottom drops below the section min-width, so the connector always
+		// meets the top of the (min-width-floored) section beneath it. Opacity is set
+		// inline to track the band's shade.
+		&-separator {
+			position: absolute;
+			top: 100%;
+			left: 0;
+			width: 100%;
+			height: 24px;
+			background-color: var( --band-separator, #{colors.$primary-000} );
+			// Clamp the per-side inset so the bottom edge can't be narrower than the
+			// section min-width: ( 100% − min-width ) / 2 is the inset that yields
+			// exactly min-width at the bottom.
+			--_separator-inset: min( var( --separator-inset, 0% ), calc( ( 100% - #{ $funnel-min-band-width } ) / 2 ) );
+			clip-path: polygon( 0 0, 100% 0, calc( 100% - var( --_separator-inset ) ) 100%, var( --_separator-inset ) 100% );
+		}
+
+		// Fill: the single anchor color as a vertical gradient covering the full-width
+		// band, ramping from --band-opacity-top to --band-opacity-bottom (both set
+		// inline per band). Color fading is the sole differentiator between sections.
+		// Alpha must live in the gradient stops (the `opacity` property can't be
+		// gradiented), so the color is expressed via the primary-600 RGB channels.
+		// Sits BEHIND text.
 		&-fill {
 			position: absolute;
 			inset: 0;
 			z-index: 0;
-			background-color: colors.$primary-500;
-			opacity: var( --band-opacity, 1 );
+			background-color: var( --band-fill, #{colors.$primary-300} );
 		}
 
 		&-content {
@@ -641,54 +683,56 @@
 			flex-direction: column;
 			align-items: center;
 			max-width: 160px; // wrap width for the descriptor lines.
+			color: wp-colors.$white;
 		}
 
+		&-labels {
+			.components-popover__content {
+				padding: 4px 8px;
+			}
+		}
+
+		// Name and count scale together with the section width via the shared
+		// --funnel-font-scale (set inline per section, floored in JS), so narrower
+		// sections shrink their text proportionally without changing the name:count
+		// ratio. Line-heights run through the same calc so they scale with the font.
 		&-label-name {
-			font-size: 14px;
+			font-size: calc( #{wp-vars.$font-size-medium} * var( --funnel-font-scale, 1 ) );
 			font-weight: 600;
-			line-height: 1.2;
+			line-height: calc( #{wp-vars.$font-line-height-medium} * var( --funnel-font-scale, 1 ) );
 		}
 
 		&-label-count {
-			font-size: 22px;
+			font-size: calc( #{wp-vars.$font-size-x-large} * var( --funnel-font-scale, 1 ) );
 			font-weight: 700;
 			font-variant-numeric: tabular-nums;
-			line-height: 1.15;
+			line-height: calc( #{wp-vars.$font-line-height-x-large} * var( --funnel-font-scale, 1 ) );
 		}
 
-		// Stage descriptors inherit the band's text color (white/dark); muted weight.
+		// Stage descriptors sit inside the floating Popover (its own light surface),
+		// so they use its default dark text; muted weight.
 		&-label-pct {
-			margin-top: 4px;
-			font-size: 12px;
-			line-height: 1.35;
+			font-size: wp-vars.$font-size-small;
+			line-height: wp-vars.$font-line-height-small;
+			margin: 0;
 		}
 
 		&-label-drop {
-			font-size: 12px;
-			line-height: 1.35;
+			font-size: wp-vars.$font-size-small;
+			line-height: wp-vars.$font-line-height-small;
 			font-variant-numeric: tabular-nums;
+			margin: 0;
 		}
 
 		&-empty {
 			margin: 0;
 			padding: 32px 20px;
 			text-align: center;
-			font-size: 13px;
-			color: wp-colors.$gray-600;
+			font-size: wp-vars.$font-size-medium;
+			color: wp-colors.$gray-700;
 		}
 	}
 
-	// Contrast follows band opacity: white text on the dark upper bands (with a
-	// soft halo so any spill over the white card stays legible), dark text on the
-	// faded lower bands (reads on both the light fill and the card).
-	&__funnel-step.is-on-dark &__funnel-content {
-		color: #fff;
-		text-shadow: 0 1px 2px rgba( 13, 53, 102, 0.45 );
-	}
-
-	&__funnel-step.is-on-light &__funnel-content {
-		color: wp-colors.$gray-900;
-	}
 
 	// Sortable table affordances — shared across all tabs that embed SortableTable
 	// (Conversion Journey Section 8.4, Prompts Tab 5 performance breakdowns).
@@ -918,7 +962,7 @@
 	display: grid;
 	// Pie card ~35% (stacked, narrower-and-taller), campaigns table ~65%.
 	grid-template-columns: minmax( 0, 35fr ) minmax( 0, 65fr );
-	gap: 24px;
+	gap: 16px;
 	align-items: stretch;
 
 	@media ( max-width: 782px ) {

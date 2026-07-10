@@ -1,5 +1,5 @@
 /**
- * EngagementTab (Tab 2, NPPD-1649).
+ * EngagementTab (Tab 2).
  *
  * GA4-backed Engagement tab. Fetches the Engagement orchestrator endpoint and
  * renders three sections — Overall engagement quality, Reader segments, Content
@@ -20,6 +20,7 @@ import useEngagementData from '../hooks/useEngagementData';
 import LastUpdated from '../components/LastUpdated';
 import ConnectBanner from './components/ConnectBanner';
 import TabStateView from './components/TabStateView';
+import TabSections from './components/TabSections';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import QualitySection from './engagement/sections/QualitySection';
 import ContentEngagementSection from './engagement/sections/ContentEngagementSection';
@@ -52,7 +53,7 @@ const EngagementTab = ( { range, previousRange }: EngagementTabProps ) => {
 				( data.tab_error || ! current ? (
 					<ConnectBanner text={ data.banner_text } />
 				) : (
-					<>
+					<TabSections>
 						<QualitySection
 							current={ current }
 							previous={ previous }
@@ -60,7 +61,7 @@ const EngagementTab = ( { range, previousRange }: EngagementTabProps ) => {
 						/>
 						<ReaderSegmentsSection current={ current } previous={ previous } />
 						<ContentEngagementSection current={ current } previous={ previous } />
-					</>
+					</TabSections>
 				) ) }
 		</TabStateView>
 	);

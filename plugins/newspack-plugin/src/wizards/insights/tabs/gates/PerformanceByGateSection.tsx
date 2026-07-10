@@ -1,35 +1,29 @@
 /**
- * PerformanceByGateSection (NPPD-1604, Section 5).
+ * PerformanceByGateSection (NPPD-1604, Section 5; DataViews migration NPPD-1889).
  *
- * Full-width per-gate breakdown table. Sortable on every column;
- * default sort is impressions descending per spec. Click a column
- * header to toggle direction (numeric columns flip to DESC on first
- * click, ASC on second click; the gate-name column starts ASC).
+ * Full-width per-gate breakdown table, rendered through the shared read-only
+ * DataViews table (`InsightsDataView`). Sortable on every column; default sort
+ * is impressions descending per spec. Numeric columns open DESC, the gate-name
+ * column opens ASC, and null cells (em-dash) always sort to the bottom — all
+ * handled by the wrapper.
  *
- * Null cells (em-dash) always sort to the bottom regardless of
- * direction — a gate without a registration block has no Registered access gate
- * conversion rate to compare, so a "—" should never claim the top of
- * an ascending sort.
- *
- * Phase 1 always renders the empty-state copy from spec since
- * `rows` is empty. The sort affordances stay visible so the chrome
- * is identical between phases — Phase 2 (NPPD-1630) populates
- * `performance_by_gate.rows` from BQ + a server-side
- * `wp_posts.post_title` enrichment, at which point the click-to-sort
- * UI starts shuffling rows.
+ * Phase 1 renders the shared empty-state copy since `rows` is empty (the
+ * read-only DataViews table shows its column headers only once there are rows).
+ * Phase 2 (NPPD-1630) populates `performance_by_gate.rows` from BQ, at which
+ * point the table and click-to-sort appear.
  */
 
 /**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { useMemo, useState } from '@wordpress/element';
-import { Icon, chevronUp, chevronDown } from '@wordpress/icons';
 
 /**
  * Internal dependencies
  */
 import type { GatesPerformanceRow, GatesPerformanceTable } from '../../api/gates';
+import InsightsDataView from '../components/InsightsDataView';
+import type { InsightsColumn } from '../components/InsightsDataView';
 import { getPostEditUrl } from '../components/adminLinks';
 import { formatNumber, formatPercent } from '../components/format';
 import SectionHeading from '../components/SectionHeading';
@@ -37,27 +31,6 @@ import { SECTION_ERROR_MESSAGE } from './SectionState';
 
 export interface PerformanceByGateSectionProps {
 	data: GatesPerformanceTable;
-}
-
-/**
- * The columns we expose for sorting. Matches the visible column set
- * one-for-one.
- */
-type SortKey =
-	| 'gate_name'
-	| 'impressions'
-	| 'unique_viewers'
-	| 'registrations'
-	| 'regwall_conversion_rate'
-	| 'paywall_conversions'
-	| 'paywall_conversion_rate';
-
-type SortDir = 'asc' | 'desc';
-
-interface ColumnDef {
-	key: SortKey;
-	label: string;
-	numeric: boolean;
 }
 
 const NotApplicable = () => (
@@ -72,108 +45,65 @@ const renderPercent = ( v: number | null ) => ( v === null ? <NotApplicable /> :
 // an em-dash, matching the rate columns; a real 0 still renders as "0".
 const renderCount = ( v: number | null ) => ( v === null ? <NotApplicable /> : formatNumber( v ) );
 
-const renderRow = ( row: GatesPerformanceRow ) => (
-	<tr key={ row.gate_post_id }>
-		<td>
-			<a href={ getPostEditUrl( row.gate_post_id ) }>{ row.gate_name }</a>
-		</td>
-		<td className="newspack-insights__table-num">{ formatNumber( row.impressions ) }</td>
-		<td className="newspack-insights__table-num">{ formatNumber( row.unique_viewers ) }</td>
-		<td className="newspack-insights__table-num">{ formatNumber( row.registrations ) }</td>
-		<td className="newspack-insights__table-num">{ renderPercent( row.regwall_conversion_rate ) }</td>
-		<td className="newspack-insights__table-num">{ renderCount( row.paywall_conversions ) }</td>
-		<td className="newspack-insights__table-num">{ renderPercent( row.paywall_conversion_rate ) }</td>
-	</tr>
-);
-
-/**
- * Compare two rows on a given column. Nulls always sort last
- * regardless of direction. String compare for `gate_name` uses the
- * browser locale.
- */
-const compareRows = ( a: GatesPerformanceRow, b: GatesPerformanceRow, key: SortKey, dir: SortDir ): number => {
-	const av = a[ key ];
-	const bv = b[ key ];
-	// Nulls last (regardless of direction).
-	if ( av === null && bv === null ) {
-		return 0;
-	}
-	if ( av === null ) {
-		return 1;
-	}
-	if ( bv === null ) {
-		return -1;
-	}
-	let cmp: number;
-	if ( typeof av === 'string' && typeof bv === 'string' ) {
-		cmp = av.localeCompare( bv );
-	} else {
-		cmp = ( av as number ) - ( bv as number );
-	}
-	return dir === 'asc' ? cmp : -cmp;
-};
-
-interface SortableHeaderProps {
-	column: ColumnDef;
-	activeKey: SortKey;
-	activeDir: SortDir;
-	onSort: ( key: SortKey ) => void;
-}
-
-const ariaSortFor = ( isActive: boolean, activeDir: SortDir ): 'ascending' | 'descending' | 'none' => {
-	if ( ! isActive ) {
-		return 'none';
-	}
-	return activeDir === 'asc' ? 'ascending' : 'descending';
-};
-
-const SortableHeader = ( { column, activeKey, activeDir, onSort }: SortableHeaderProps ) => {
-	const isActive = column.key === activeKey;
-	const ariaSort = ariaSortFor( isActive, activeDir );
-	const className = column.numeric ? 'newspack-insights__table-num newspack-insights__table-sort-cell' : 'newspack-insights__table-sort-cell';
-	return (
-		<th scope="col" className={ className } aria-sort={ ariaSort }>
-			<button
-				type="button"
-				className={ `newspack-insights__table-sort${ isActive ? ' is-active' : '' }` }
-				onClick={ () => onSort( column.key ) }
-			>
-				<span className="newspack-insights__table-sort-label">{ column.label }</span>
-				<span className="newspack-insights__table-sort-indicator" aria-hidden="true">
-					<Icon icon={ isActive && activeDir === 'asc' ? chevronUp : chevronDown } size={ 14 } />
-				</span>
-			</button>
-		</th>
-	);
-};
+const columns: InsightsColumn< GatesPerformanceRow >[] = [
+	{
+		key: 'gate_name',
+		label: __( 'Gate name', 'newspack-plugin' ),
+		render: row => <a href={ getPostEditUrl( row.gate_post_id ) }>{ row.gate_name }</a>,
+		sortValue: row => row.gate_name,
+	},
+	{
+		key: 'impressions',
+		label: __( 'Impressions', 'newspack-plugin' ),
+		numeric: true,
+		render: row => formatNumber( row.impressions ),
+		sortValue: row => row.impressions,
+	},
+	{
+		key: 'unique_viewers',
+		label: __( 'Unique viewers', 'newspack-plugin' ),
+		numeric: true,
+		render: row => formatNumber( row.unique_viewers ),
+		sortValue: row => row.unique_viewers,
+	},
+	{
+		key: 'registrations',
+		label: __( 'Registrations', 'newspack-plugin' ),
+		numeric: true,
+		render: row => formatNumber( row.registrations ),
+		sortValue: row => row.registrations,
+	},
+	{
+		key: 'regwall_conversion_rate',
+		label: __( 'Registered access gate conversion rate', 'newspack-plugin' ),
+		numeric: true,
+		render: row => renderPercent( row.regwall_conversion_rate ),
+		sortValue: row => row.regwall_conversion_rate,
+	},
+	{
+		key: 'paywall_conversions',
+		label: __( 'Paid access gate conversions', 'newspack-plugin' ),
+		numeric: true,
+		render: row => renderCount( row.paywall_conversions ),
+		sortValue: row => row.paywall_conversions,
+	},
+	{
+		key: 'paywall_conversion_rate',
+		label: __( 'Paid access gate conversion rate', 'newspack-plugin' ),
+		numeric: true,
+		render: row => renderPercent( row.paywall_conversion_rate ),
+		sortValue: row => row.paywall_conversion_rate,
+	},
+];
 
 const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => {
-	const columns: ColumnDef[] = [
-		{ key: 'gate_name', label: __( 'Gate name', 'newspack-plugin' ), numeric: false },
-		{ key: 'impressions', label: __( 'Impressions', 'newspack-plugin' ), numeric: true },
-		{ key: 'unique_viewers', label: __( 'Unique viewers', 'newspack-plugin' ), numeric: true },
-		{ key: 'registrations', label: __( 'Registrations', 'newspack-plugin' ), numeric: true },
-		{ key: 'regwall_conversion_rate', label: __( 'Registered access gate conversion rate', 'newspack-plugin' ), numeric: true },
-		{ key: 'paywall_conversions', label: __( 'Paid access gate conversions', 'newspack-plugin' ), numeric: true },
-		{ key: 'paywall_conversion_rate', label: __( 'Paid access gate conversion rate', 'newspack-plugin' ), numeric: true },
-	];
-
-	const [ sortKey, setSortKey ] = useState< SortKey >( 'impressions' );
-	const [ sortDir, setSortDir ] = useState< SortDir >( 'desc' );
-
-	const handleSort = ( key: SortKey ) => {
-		if ( key === sortKey ) {
-			setSortDir( prev => ( prev === 'asc' ? 'desc' : 'asc' ) );
-			return;
-		}
-		setSortKey( key );
-		// Default direction depends on column type: numeric columns
-		// open DESC (biggest first), string columns open ASC.
-		const def = columns.find( c => c.key === key );
-		setSortDir( def?.numeric ? 'desc' : 'asc' );
-	};
-
-	const sortedRows = useMemo( () => [ ...data.rows ].sort( ( a, b ) => compareRows( a, b, sortKey, sortDir ) ), [ data.rows, sortKey, sortDir ] );
+	// A failed query surfaces the shared error copy in place of the neutral
+	// "no data yet" empty state (both render through the wrapper's empty slot,
+	// since Phase 1 rows are empty).
+	const emptyMessage =
+		data.state === 'error'
+			? SECTION_ERROR_MESSAGE
+			: __( 'No gate data yet. Performance metrics will appear once readers begin interacting with your gates.', 'newspack-plugin' );
 
 	return (
 		<section
@@ -185,37 +115,13 @@ const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => 
 				title={ __( 'Performance by gate', 'newspack-plugin' ) }
 				description={ __( 'Per-gate breakdown for the selected timeframe. Click any column to re-sort.', 'newspack-plugin' ) }
 			/>
-			<div className="newspack-insights__table-wrap">
-				<table className="newspack-insights__table newspack-insights__table--sortable">
-					<thead>
-						<tr>
-							{ columns.map( col => (
-								<SortableHeader key={ col.key } column={ col } activeKey={ sortKey } activeDir={ sortDir } onSort={ handleSort } />
-							) ) }
-						</tr>
-					</thead>
-					<tbody>
-						{ 'error' === data.state && (
-							<tr>
-								<td colSpan={ columns.length } className="newspack-insights__gates-performance-empty">
-									{ SECTION_ERROR_MESSAGE }
-								</td>
-							</tr>
-						) }
-						{ 'empty' === data.state && (
-							<tr>
-								<td colSpan={ columns.length } className="newspack-insights__gates-performance-empty">
-									{ __(
-										'No gate data yet. Performance metrics will appear once readers begin interacting with your gates.',
-										'newspack-plugin'
-									) }
-								</td>
-							</tr>
-						) }
-						{ 'populated' === data.state && sortedRows.map( renderRow ) }
-					</tbody>
-				</table>
-			</div>
+			<InsightsDataView< GatesPerformanceRow >
+				columns={ columns }
+				rows={ data.state === 'populated' ? data.rows : [] }
+				getRowKey={ row => String( row.gate_post_id ) }
+				defaultSortKey="impressions"
+				emptyMessage={ emptyMessage }
+			/>
 		</section>
 	);
 };

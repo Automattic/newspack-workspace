@@ -1,25 +1,20 @@
 /**
- * MetricTable (NPPD-1649).
+ * MetricTable (NPPD-1649, DataViews migration NPPD-1889).
  *
- * Renders a rows-shaped metric payload (`type: 'table'`) using the canonical
- * Insights table chrome (`.newspack-insights__table-wrap` + `.newspack-insights__table`
- * from sections.scss), and routes every graceful-failure state through the
- * shared MetricNote / section-empty treatments. Hidden-in-v1 payloads are
- * skipped by the caller.
+ * Renders a rows-shaped metric payload (`type: 'table'`) through the shared
+ * read-only DataViews table (`InsightsDataView`), routing every graceful-failure
+ * state through the shared MetricNote / section-empty treatments. The public
+ * props are unchanged, so the ~9 consumers across the Advertising, App,
+ * Audience, Engagement and Newsletter Ads tabs need no edits — only the table
+ * rendering moved to DataViews.
  */
-
-/**
- * WordPress dependencies
- */
-import { __ } from '@wordpress/i18n';
-import { useState } from '@wordpress/element';
 
 /**
  * Internal dependencies
  */
 import { formatCurrency, formatDecimal, formatDuration, formatNumber, formatPercent } from './format';
-import MetricNote from './MetricNote';
-import SectionEmpty from './SectionEmpty';
+import InsightsDataView from './InsightsDataView';
+import type { InsightsColumn } from './InsightsDataView';
 import { uniformValue } from './metrics';
 import type { MetricPayload, MetricRow } from './metrics';
 
@@ -76,74 +71,34 @@ const formatCell = ( value: string | number | null, format?: MetricTableColumn[ 
 };
 
 const MetricTable = ( { payload, columns, emptyMessage, rowLimit = 10, collapseColumn, defaultRowLimit, expandable = false }: MetricTableProps ) => {
-	// Hook must run unconditionally, before any early return.
-	const [ expanded, setExpanded ] = useState( false );
-
-	if ( payload?.overlay ) {
-		return <MetricNote overlay={ payload.overlay } />;
-	}
-	if ( payload?.error ) {
-		return <MetricNote error />;
-	}
-	if ( payload?.not_configured ) {
-		return <MetricNote notConfigured />;
-	}
-
 	const rows: MetricRow[] = payload && Array.isArray( payload.rows ) ? payload.rows.slice( 0, rowLimit ) : [];
 
-	if ( rows.length === 0 ) {
-		return <SectionEmpty>{ emptyMessage }</SectionEmpty>;
-	}
-
-	// Collapse to `defaultRowLimit` rows behind a toggle when there are more.
-	const collapsible = expandable && typeof defaultRowLimit === 'number' && rows.length > defaultRowLimit;
-	const visibleRows = collapsible && ! expanded ? rows.slice( 0, defaultRowLimit ) : rows;
-
 	// Hide a uniform column (e.g. country) — the consumer surfaces the value as a
-	// scope pill next to the title. Computed over the full set so the column set
-	// stays stable when expanding.
+	// scope pill next to the title. Computed over the full displayed set so the
+	// column set stays stable when expanding.
 	const collapsedValue = collapseColumn ? uniformValue( rows, collapseColumn ) : null;
 	const displayColumns = collapsedValue !== null ? columns.filter( col => col.key !== collapseColumn ) : columns;
 
-	const numClass = ( col: MetricTableColumn ) => ( col.align === 'right' ? 'newspack-insights__table-num' : undefined );
+	const dataViewColumns: InsightsColumn< MetricRow >[] = displayColumns.map( col => ( {
+		key: col.key,
+		label: col.label,
+		numeric: col.align === 'right',
+		render: ( row: MetricRow ) => formatCell( row[ col.key ] ?? null, col.format ),
+		sortValue: ( row: MetricRow ) => row[ col.key ] ?? null,
+	} ) );
 
 	return (
-		<>
-			<div className="newspack-insights__table-wrap">
-				<table className="newspack-insights__table">
-					<thead>
-						<tr>
-							{ displayColumns.map( col => (
-								<th key={ col.key } className={ numClass( col ) }>
-									{ col.label }
-								</th>
-							) ) }
-						</tr>
-					</thead>
-					<tbody>
-						{ visibleRows.map( ( row, i ) => (
-							<tr key={ i }>
-								{ displayColumns.map( col => (
-									<td key={ col.key } className={ numClass( col ) }>
-										{ formatCell( row[ col.key ] ?? null, col.format ) }
-									</td>
-								) ) }
-							</tr>
-						) ) }
-					</tbody>
-				</table>
-			</div>
-			{ collapsible && (
-				<button
-					type="button"
-					className="newspack-insights__table-toggle"
-					aria-expanded={ expanded }
-					onClick={ () => setExpanded( ! expanded ) }
-				>
-					{ expanded ? __( 'See less', 'newspack-plugin' ) : __( 'See more', 'newspack-plugin' ) }
-				</button>
-			) }
-		</>
+		<InsightsDataView< MetricRow >
+			columns={ dataViewColumns }
+			rows={ rows }
+			getRowKey={ ( _row, index ) => String( index ) }
+			emptyMessage={ emptyMessage }
+			overlay={ payload?.overlay }
+			error={ Boolean( payload?.error ) }
+			notConfigured={ payload?.not_configured }
+			expandable={ expandable }
+			defaultRowLimit={ defaultRowLimit }
+		/>
 	);
 };
 

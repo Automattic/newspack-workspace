@@ -63,7 +63,7 @@ const PieChart = ( { segments, centerLabel, emptyMessage, formatValue = formatNu
 						const circle = (
 							<circle
 								key={ segment.label }
-								className={ `newspack-insights__pie-segment is-series-${ i % 7 }` }
+								className={ `newspack-insights__pie-segment is-series-${ i % 8 }` }
 								cx="21"
 								cy="21"
 								r={ RADIUS }
@@ -84,7 +84,7 @@ const PieChart = ( { segments, centerLabel, emptyMessage, formatValue = formatNu
 			<ul className="newspack-insights__pie-legend">
 				{ segments.map( ( segment, i ) => (
 					<li key={ segment.label }>
-						<span className={ `newspack-insights__legend-swatch is-series-${ i % 7 }` } aria-hidden="true" />
+						<span className={ `newspack-insights__legend-swatch is-series-${ i % 8 }` } aria-hidden="true" />
 						<span className="newspack-insights__legend-label">{ segment.label }</span>
 						<span className="newspack-insights__legend-value">
 							{ formatValue( segment.value ) } ({ formatPercent( segment.value / total ) })

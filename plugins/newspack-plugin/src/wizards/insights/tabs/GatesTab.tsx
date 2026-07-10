@@ -1,5 +1,5 @@
 /**
- * GatesTab (NPPD-1604).
+ * GatesTab.
  *
  * Tab 4 orchestrator. Mirrors the SubscribersTab / DonorsTab
  * loading / error / success lifecycle and composes the five Gates
@@ -24,6 +24,7 @@ import type { DateRange } from '../state/useDateRange';
 import useGatesData from '../hooks/useGatesData';
 import LastUpdated from '../components/LastUpdated';
 import TabStateView from './components/TabStateView';
+import TabSections from './components/TabSections';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import TabErrorBanner from './components/TabErrorBanner';
 import GateExposureSection from './gates/GateExposureSection';
@@ -53,15 +54,17 @@ const GatesTab = ( { range, previousRange }: GatesTabProps ) => {
 			{ data && (
 				<>
 					{ data.tab_error && <TabErrorBanner /> }
-					<GateExposureSection
-						current={ data.current }
-						previous={ data.previous }
-						lastUpdated={ <LastUpdated tab="gates" range={ range } previousRange={ previousRange } /> }
-					/>
-					<FreeReaderConversionSection current={ data.current } previous={ data.previous } />
-					<PaidReaderConversionSection current={ data.current } previous={ data.previous } />
-					<HowReadersConvertSection current={ data.current } />
-					<PerformanceByGateSection data={ data.current.performance_by_gate } />
+					<TabSections>
+						<GateExposureSection
+							current={ data.current }
+							previous={ data.previous }
+							lastUpdated={ <LastUpdated tab="gates" range={ range } previousRange={ previousRange } /> }
+						/>
+						<FreeReaderConversionSection current={ data.current } previous={ data.previous } />
+						<PaidReaderConversionSection current={ data.current } previous={ data.previous } />
+						<HowReadersConvertSection current={ data.current } />
+						<PerformanceByGateSection data={ data.current.performance_by_gate } />
+					</TabSections>
 				</>
 			) }
 		</TabStateView>

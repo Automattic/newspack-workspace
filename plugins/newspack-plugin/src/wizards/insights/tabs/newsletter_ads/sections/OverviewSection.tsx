@@ -23,6 +23,7 @@ import type { ReactNode } from 'react';
  * WordPress dependencies
  */
 import { __, _n, sprintf } from '@wordpress/i18n';
+import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
@@ -31,6 +32,7 @@ import type { InsightsWindow } from '../../../api/newsletter_ads';
 import EmptyMetricSection from '../../components/EmptyMetricSection';
 import Scorecard from '../../components/Scorecard';
 import SectionHeading from '../../components/SectionHeading';
+import { Grid } from '../../../../../../packages/components/src';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -77,71 +79,73 @@ const OverviewSection = ( { current, previous, hasWindowActivity, lastUpdated }:
 	return (
 		<section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-overview">
 			<SectionHeading id="newspack-insights-newsletter-ads-overview" title={ TITLE } description={ CAPTION } actions={ lastUpdated } />
-			{ /* Row 1: the four timeframe headline scorecards. */ }
-			<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-4">
-				<Scorecard
-					label={ __( 'Impressions', 'newspack-plugin' ) }
-					description={ __( 'How many times your ads were seen', 'newspack-plugin' ) }
-					current={ current.total_impressions }
-					previous={ previous?.total_impressions }
-					// Timeframe counts are non-computable only when dated tracking is
-					// unavailable (not-ready) — an em-dash there, not a fake 0.
-					notComputableMessage={ NOT_TRACKED_MESSAGE }
-				/>
-				<Scorecard
-					label={ __( 'Clicks', 'newspack-plugin' ) }
-					description={ __( 'How many times your ads were clicked', 'newspack-plugin' ) }
-					current={ current.total_clicks }
-					previous={ previous?.total_clicks }
-					notComputableMessage={ NOT_TRACKED_MESSAGE }
-				/>
-				<Scorecard
-					label={ __( 'CTR', 'newspack-plugin' ) }
-					description={ __( 'Clicks per impression', 'newspack-plugin' ) }
-					current={ current.ctr }
-					previous={ previous?.ctr }
-					// A non-computable rate renders the em-dash treatment — never "0%".
-					notComputableMessage={ __( 'No impressions in this timeframe to calculate a click-through rate.', 'newspack-plugin' ) }
-				/>
-				<Scorecard
-					label={ __( 'Revenue', 'newspack-plugin' ) }
-					description={ __( 'What your ads earned', 'newspack-plugin' ) }
-					current={ current.total_revenue }
-					previous={ previous?.total_revenue }
-					notComputableMessage={ NOT_TRACKED_MESSAGE }
-				/>
-			</div>
-			{ /* Row 2: remaining timeframe cards + the all-time lifetime counters.
+			<VStack spacing={ 4 }>
+				{ /* Row 1: the four timeframe headline scorecards. */ }
+				<Grid columns={ 4 } gutter={ 16 } noMargin>
+					<Scorecard
+						label={ __( 'Impressions', 'newspack-plugin' ) }
+						description={ __( 'How many times your ads were seen', 'newspack-plugin' ) }
+						current={ current.total_impressions }
+						previous={ previous?.total_impressions }
+						// Timeframe counts are non-computable only when dated tracking is
+						// unavailable (not-ready) — an em-dash there, not a fake 0.
+						notComputableMessage={ NOT_TRACKED_MESSAGE }
+					/>
+					<Scorecard
+						label={ __( 'Clicks', 'newspack-plugin' ) }
+						description={ __( 'How many times your ads were clicked', 'newspack-plugin' ) }
+						current={ current.total_clicks }
+						previous={ previous?.total_clicks }
+						notComputableMessage={ NOT_TRACKED_MESSAGE }
+					/>
+					<Scorecard
+						label={ __( 'CTR', 'newspack-plugin' ) }
+						description={ __( 'Clicks per impression', 'newspack-plugin' ) }
+						current={ current.ctr }
+						previous={ previous?.ctr }
+						// A non-computable rate renders the em-dash treatment — never "0%".
+						notComputableMessage={ __( 'No impressions in this timeframe to calculate a click-through rate.', 'newspack-plugin' ) }
+					/>
+					<Scorecard
+						label={ __( 'Revenue', 'newspack-plugin' ) }
+						description={ __( 'What your ads earned', 'newspack-plugin' ) }
+						current={ current.total_revenue }
+						previous={ previous?.total_revenue }
+						notComputableMessage={ NOT_TRACKED_MESSAGE }
+					/>
+				</Grid>
+				{ /* Row 2: remaining timeframe cards + the all-time lifetime counters.
 			     Lifetime cards deliberately pass no `previous` — they're cumulative,
 			     so a period delta is meaningless. */ }
-			<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-4">
-				<Scorecard
-					label={ __( 'eCPM', 'newspack-plugin' ) }
-					description={ __( 'Revenue per 1,000 impressions', 'newspack-plugin' ) }
-					current={ current.ecpm }
-					previous={ previous?.ecpm }
-					// eCPM is an undefined division without both revenue and impressions —
-					// em-dash, never a misleading "$0.00".
-					notComputableMessage={ __( 'Requires both revenue and impressions in this timeframe to calculate.', 'newspack-plugin' ) }
-				/>
-				<Scorecard
-					label={ __( 'Active ads', 'newspack-plugin' ) }
-					description={ __( 'Ads that ran in newsletters', 'newspack-plugin' ) }
-					current={ current.active_ads }
-					previous={ previous?.active_ads }
-					notComputableMessage={ NOT_TRACKED_MESSAGE }
-				/>
-				<Scorecard
-					label={ __( 'All-time impressions', 'newspack-plugin' ) }
-					description={ __( 'Cumulative total since tracking began', 'newspack-plugin' ) }
-					current={ current.lifetime_impressions }
-				/>
-				<Scorecard
-					label={ __( 'All-time clicks', 'newspack-plugin' ) }
-					description={ __( 'Cumulative total since tracking began', 'newspack-plugin' ) }
-					current={ current.lifetime_clicks }
-				/>
-			</div>
+				<Grid columns={ 4 } gutter={ 16 } noMargin>
+					<Scorecard
+						label={ __( 'eCPM', 'newspack-plugin' ) }
+						description={ __( 'Revenue per 1,000 impressions', 'newspack-plugin' ) }
+						current={ current.ecpm }
+						previous={ previous?.ecpm }
+						// eCPM is an undefined division without both revenue and impressions —
+						// em-dash, never a misleading "$0.00".
+						notComputableMessage={ __( 'Requires both revenue and impressions in this timeframe to calculate.', 'newspack-plugin' ) }
+					/>
+					<Scorecard
+						label={ __( 'Active ads', 'newspack-plugin' ) }
+						description={ __( 'Ads that ran in newsletters', 'newspack-plugin' ) }
+						current={ current.active_ads }
+						previous={ previous?.active_ads }
+						notComputableMessage={ NOT_TRACKED_MESSAGE }
+					/>
+					<Scorecard
+						label={ __( 'All-time impressions', 'newspack-plugin' ) }
+						description={ __( 'Cumulative total since tracking began', 'newspack-plugin' ) }
+						current={ current.lifetime_impressions }
+					/>
+					<Scorecard
+						label={ __( 'All-time clicks', 'newspack-plugin' ) }
+						description={ __( 'Cumulative total since tracking began', 'newspack-plugin' ) }
+						current={ current.lifetime_clicks }
+					/>
+				</Grid>
+			</VStack>
 			{ excludedAds > 0 && (
 				<p className="newspack-insights__table-footnote">
 					{ sprintf(

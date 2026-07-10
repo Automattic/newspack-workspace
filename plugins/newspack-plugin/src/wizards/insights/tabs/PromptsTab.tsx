@@ -1,5 +1,5 @@
 /**
- * PromptsTab (NPPD-1607).
+ * PromptsTab.
  *
  * Tab 5 orchestrator. Mirrors the GatesTab loading / error / success
  * lifecycle and composes the seven Prompts sections, plus a tab-level
@@ -24,6 +24,7 @@ import type { DateRange } from '../state/useDateRange';
 import usePromptsData from '../hooks/usePromptsData';
 import LastUpdated from '../components/LastUpdated';
 import TabStateView from './components/TabStateView';
+import TabSections from './components/TabSections';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import TabErrorBanner from './components/TabErrorBanner';
 import PromptExposureSection from './prompts/PromptExposureSection';
@@ -55,17 +56,19 @@ const PromptsTab = ( { range, previousRange }: PromptsTabProps ) => {
 			{ data && (
 				<>
 					{ data.tab_error && <TabErrorBanner /> }
-					<PromptExposureSection
-						current={ data.current }
-						previous={ data.previous }
-						lastUpdated={ <LastUpdated tab="prompts" range={ range } previousRange={ previousRange } /> }
-					/>
-					<PromptEngagementSection current={ data.current } previous={ data.previous } />
-					<FreeReaderConversionSection current={ data.current } previous={ data.previous } />
-					<PaidReaderConversionSection current={ data.current } previous={ data.previous } />
-					<RevenueFromPromptsSection current={ data.current } previous={ data.previous } />
-					<HowReadersConvertSection current={ data.current } />
-					<PerformanceBreakdownSection current={ data.current } />
+					<TabSections>
+						<PromptExposureSection
+							current={ data.current }
+							previous={ data.previous }
+							lastUpdated={ <LastUpdated tab="prompts" range={ range } previousRange={ previousRange } /> }
+						/>
+						<PromptEngagementSection current={ data.current } previous={ data.previous } />
+						<FreeReaderConversionSection current={ data.current } previous={ data.previous } />
+						<PaidReaderConversionSection current={ data.current } previous={ data.previous } />
+						<RevenueFromPromptsSection current={ data.current } previous={ data.previous } />
+						<HowReadersConvertSection current={ data.current } />
+						<PerformanceBreakdownSection current={ data.current } />
+					</TabSections>
 				</>
 			) }
 		</TabStateView>

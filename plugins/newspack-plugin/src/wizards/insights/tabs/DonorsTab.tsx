@@ -1,5 +1,5 @@
 /**
- * DonorsTab (NPPD-1617).
+ * DonorsTab.
  *
  * Orchestrates the Tab 7 view: fetches data for the active range +
  * comparison range, then composes the four sections (scorecard,
@@ -22,6 +22,7 @@ import type { DateRange } from '../state/useDateRange';
 import useDonorsData from '../hooks/useDonorsData';
 import LastUpdated from '../components/LastUpdated';
 import TabStateView from './components/TabStateView';
+import TabSections from './components/TabSections';
 import TabStatusBanner from './components/TabStatusBanner';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import ScorecardSection from './donors/ScorecardSection';
@@ -51,19 +52,21 @@ const DonorsTab = ( { range, previousRange }: DonorsTabProps ) => {
 			{ data && (
 				<>
 					<TabStatusBanner status={ data.data_status } />
-					<ScorecardSection
-						snapshot={ data.snapshot }
-						lastUpdated={ <LastUpdated tab="donors" range={ range } previousRange={ previousRange } /> }
-					/>
-					<WindowedSection
-						range={ range }
-						current={ data.current }
-						previous={ data.previous }
-						activeDonors={ data.snapshot.active_donors }
-					/>
-					<RetentionSection current={ data.current } previous={ data.previous } />
-					<PerformanceSection rows={ data.current.donations_by_tier } />
-					<CampaignSection rows={ data.current.donations_by_campaign } />
+					<TabSections>
+						<ScorecardSection
+							snapshot={ data.snapshot }
+							lastUpdated={ <LastUpdated tab="donors" range={ range } previousRange={ previousRange } /> }
+						/>
+						<WindowedSection
+							range={ range }
+							current={ data.current }
+							previous={ data.previous }
+							activeDonors={ data.snapshot.active_donors }
+						/>
+						<RetentionSection current={ data.current } previous={ data.previous } />
+						<PerformanceSection rows={ data.current.donations_by_tier } />
+						<CampaignSection rows={ data.current.donations_by_campaign } />
+					</TabSections>
 				</>
 			) }
 		</TabStateView>

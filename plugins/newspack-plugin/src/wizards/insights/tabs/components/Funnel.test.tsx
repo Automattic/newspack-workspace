@@ -1,78 +1,21 @@
 /**
- * Tests for the Funnel viz: the pure layout/geometry helpers (mode selection,
- * opacity interpolation, clamped drop-off) and render smoke tests covering the
- * descriptive labels and the edge cases.
+ * Tests for the Funnel viz: the pure helpers (clamped drop-off) and render smoke
+ * tests covering the hover/focus-revealed label Popovers, the stepped section
+ * widths and trapezoidal separators, the primary-scale fill/separator colors, and
+ * the edge cases.
  */
 
 /**
  * External dependencies
  */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 /**
  * Internal dependencies
  */
-import Funnel, { stepOpacity, dropFromPrevious, computeDisplayHalfWidths, type FunnelStage } from './Funnel';
-
-const stage = ( label: string, count: number, pctOfTop: number ) => ( { label, count, pct_of_top: pctOfTop } );
+import Funnel, { dropFromPrevious, type FunnelStage } from './Funnel';
 
 describe( 'Funnel helpers', () => {
-	describe( 'computeDisplayHalfWidths', () => {
-		// Chart half-width 160; MIN_HALF_WIDTH 44.8 (28%). Max taper is per-funnel:
-		// HALF_WIDTH / stepCount (80 for 2 steps, ~53 for 3, 32 for 5).
-		it( 'keeps the top level at full half-width', () => {
-			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 500, 0.5 ) ], 1000 );
-			expect( halves[ 0 ] ).toBe( 160 );
-		} );
-		it( 'renders a moderate drop proportionally when within the clamps', () => {
-			// 2-step taper bound is 160 − 80 = 80; 900/1000 → 144 sits above it, so it passes through.
-			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 900, 0.9 ) ], 1000 );
-			expect( halves[ 1 ] ).toBeCloseTo( 144, 5 );
-		} );
-		it( 'caps a steep drop at the per-funnel max taper from the level above', () => {
-			// 2-step funnel → taper 160/2 = 80. 200/1000 raw → 32, but capped to 160 − 80 = 80.
-			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 200, 0.2 ) ], 1000 );
-			expect( halves[ 1 ] ).toBe( 80 );
-		} );
-		it( 'scales the taper to the step count so each funnel descends evenly', () => {
-			// 3-step funnel → taper 160/3. Steep tail steps 160 → ~106.7 → ~53.3.
-			const halves = computeDisplayHalfWidths( [ stage( 'a', 1000, 1 ), stage( 'b', 1, 0.001 ), stage( 'c', 1, 0.001 ) ], 1000 );
-			expect( halves[ 1 ] ).toBeCloseTo( 160 - 160 / 3, 5 );
-			expect( halves[ 2 ] ).toBeCloseTo( 160 - ( 2 * 160 ) / 3, 5 );
-		} );
-		it( 'floors a tiny level at the minimum segment width', () => {
-			// 5-step funnel → taper 160/5 = 32. Steep tail walks 160 → 128 → 96 → 64 → 44.8,
-			// bottoming out at MIN_HALF_WIDTH 44.8 rather than the ~0 raw widths.
-			const halves = computeDisplayHalfWidths(
-				[ stage( 'a', 1000, 1 ), stage( 'b', 100, 0.1 ), stage( 'c', 10, 0.01 ), stage( 'd', 1, 0.001 ), stage( 'e', 1, 0.001 ) ],
-				1000
-			);
-			expect( halves[ 4 ] ).toBeCloseTo( 44.8 );
-			expect( halves.every( h => h >= 44.8 - 0.0001 ) ).toBe( true );
-		} );
-		it( 'never flares: each level is at most the level above', () => {
-			// A later stage exceeding an earlier one (data drift) must not widen.
-			const halves = computeDisplayHalfWidths( [ stage( 'a', 500, 1 ), stage( 'b', 2000, 4 ) ], 500 );
-			for ( let i = 1; i < halves.length; i++ ) {
-				expect( halves[ i ] ).toBeLessThanOrEqual( halves[ i - 1 ] );
-			}
-		} );
-		it( 'returns zeros when the top count is non-positive', () => {
-			expect( computeDisplayHalfWidths( [ stage( 'a', 0, 0 ), stage( 'b', 0, 0 ) ], 0 ) ).toEqual( [ 0, 0 ] );
-		} );
-	} );
-
-	describe( 'stepOpacity', () => {
-		it( 'runs 1.0 at the first step to 0.6 at the last', () => {
-			expect( stepOpacity( 0, 3 ) ).toBeCloseTo( 1.0, 5 );
-			expect( stepOpacity( 1, 3 ) ).toBeCloseTo( 0.8, 5 );
-			expect( stepOpacity( 2, 3 ) ).toBeCloseTo( 0.6, 5 );
-		} );
-		it( 'is full opacity for a single step', () => {
-			expect( stepOpacity( 0, 1 ) ).toBe( 1 );
-		} );
-	} );
-
 	describe( 'dropFromPrevious', () => {
 		it( 'computes 1 - count/prev', () => {
 			expect( dropFromPrevious( 2000, 25000 ) ).toBeCloseTo( 0.92, 3 ); // Mid-size publisher engagement step.
@@ -105,17 +48,46 @@ describe( 'Funnel render', () => {
 		expect( screen.getByText( '400' ) ).toBeInTheDocument();
 	} );
 
-	it( 'shows drop-off descriptors for stages after the first only', () => {
-		render( <Funnel stages={ stages( [ 'Impressions', 25000 ], [ 'Engaged', 2000 ] ) } /> );
-		expect( screen.getByText( /of Impressions/ ) ).toBeInTheDocument();
-		// Exactly one drop-off line: the first stage has none.
-		expect( screen.getAllByText( /drop-off/ ) ).toHaveLength( 1 );
+	it( 'keeps descriptors available to assistive tech and reveals the visual Popover on hover', () => {
+		const { container } = render( <Funnel stages={ stages( [ 'Impressions', 25000 ], [ 'Engaged', 2000 ] ) } /> );
+		const funnel = container.querySelector( '.newspack-insights__funnel' ) as HTMLElement;
+		// The drop-off text is always in the DOM as a screen-reader copy, even unhovered.
+		const srText = container.querySelector( '.screen-reader-text' );
+		expect( srText?.textContent ).toMatch( /of Impressions/ );
+		expect( srText?.textContent ).toMatch( /drop-off/ );
+		// The floating visual Popover (portaled to body) appears only on hover…
+		expect( document.querySelector( '.newspack-insights__funnel-labels' ) ).toBeNull();
+		fireEvent.mouseEnter( funnel );
+		expect( document.querySelector( '.newspack-insights__funnel-labels' ) ).not.toBeNull();
+		// …and hides again once the pointer leaves.
+		fireEvent.mouseLeave( funnel );
+		expect( document.querySelector( '.newspack-insights__funnel-labels' ) ).toBeNull();
 	} );
 
-	it( 'renders a single-stage funnel without descriptors', () => {
-		render( <Funnel stages={ stages( [ 'Only', 100 ] ) } /> );
+	it( 'reveals the visual Popover on focus and hides it on blur', () => {
+		const { container } = render( <Funnel stages={ stages( [ 'Impressions', 25000 ], [ 'Engaged', 2000 ] ) } /> );
+		const funnel = container.querySelector( '.newspack-insights__funnel' ) as HTMLElement;
+		fireEvent.focus( funnel );
+		expect( document.querySelector( '.newspack-insights__funnel-labels' ) ).not.toBeNull();
+		fireEvent.blur( funnel );
+		expect( document.querySelector( '.newspack-insights__funnel-labels' ) ).toBeNull();
+	} );
+
+	it( "reveals every section's Popover at once on hover", () => {
+		const { container } = render( <Funnel stages={ stages( [ 'A', 1000 ], [ 'B', 500 ], [ 'C', 100 ] ) } /> );
+		// Both post-first stages carry an always-present screen-reader descriptor…
+		expect( container.querySelectorAll( '.screen-reader-text' ) ).toHaveLength( 2 );
+		// …and reveal their visual Popovers together on a single hover.
+		fireEvent.mouseEnter( container.querySelector( '.newspack-insights__funnel' ) as HTMLElement );
+		expect( document.querySelectorAll( '.newspack-insights__funnel-labels' ) ).toHaveLength( 2 );
+	} );
+
+	it( 'renders a single-stage funnel without descriptors even on hover', () => {
+		const { container } = render( <Funnel stages={ stages( [ 'Only', 100 ] ) } /> );
 		expect( screen.getByText( 'Only' ) ).toBeInTheDocument();
-		expect( screen.queryByText( /drop-off/ ) ).toBeNull();
+		expect( container.querySelector( '.screen-reader-text' ) ).toBeNull();
+		fireEvent.mouseEnter( container.querySelector( '.newspack-insights__funnel' ) as HTMLElement );
+		expect( document.querySelector( '.newspack-insights__funnel-labels' ) ).toBeNull();
 	} );
 
 	it( 'shows the empty message with no stages', () => {
@@ -128,10 +100,96 @@ describe( 'Funnel render', () => {
 		expect( screen.getByText( 'Not enough data to chart the funnel.' ) ).toBeInTheDocument();
 	} );
 
-	it( 'no longer renders a separate legend or side-label column', () => {
+	it( 'renders no separate legend or SVG chart', () => {
 		const { container } = render( <Funnel stages={ stages( [ 'A', 100 ], [ 'B', 50 ] ) } /> );
 		expect( container.querySelector( '.newspack-insights__funnel-legend' ) ).toBeNull();
-		expect( container.querySelector( '.newspack-insights__funnel-labels' ) ).toBeNull();
 		expect( container.querySelector( '.newspack-insights__funnel-svg' ) ).toBeNull();
+	} );
+
+	it( 'renders rectangular section fills and a trapezoidal separator between each pair', () => {
+		const { container } = render( <Funnel stages={ stages( [ 'A', 1000 ], [ 'B', 100 ], [ 'C', 5 ] ) } /> );
+		// The sections themselves are rectangles — no clip-path on the fills.
+		const fills = container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-fill' );
+		expect( fills ).toHaveLength( 3 );
+		fills.forEach( fill => {
+			expect( fill.style.clipPath ).toBe( '' );
+		} );
+		// One separator per adjacent pair (n − 1). The trapezoid clip-path lives in
+		// CSS; the per-band bottom inset is supplied inline as a percentage.
+		const separators = container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-separator' );
+		expect( separators ).toHaveLength( 2 );
+		separators.forEach( separator => {
+			expect( separator.style.getPropertyValue( '--separator-inset' ) ).toMatch( /%$/ );
+		} );
+	} );
+
+	it( 'sets a primary-scale fill on every section and a separator color on every connector', () => {
+		// These drive the SCSS `background-color`; assert they are emitted so a
+		// rename drift between the component and the stylesheet is caught here.
+		const { container } = render( <Funnel stages={ stages( [ 'A', 1000 ], [ 'B', 500 ], [ 'C', 100 ] ) } /> );
+		const steps = container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-step' );
+		expect( steps ).toHaveLength( 3 );
+		steps.forEach( step => {
+			expect( step.style.getPropertyValue( '--band-fill' ) ).not.toBe( '' );
+		} );
+		const separators = container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-separator' );
+		expect( separators ).toHaveLength( 2 );
+		separators.forEach( separator => {
+			expect( separator.style.getPropertyValue( '--band-separator' ) ).not.toBe( '' );
+		} );
+	} );
+
+	it( 'steps section widths down from a full-width top section', () => {
+		const { container } = render( <Funnel stages={ stages( [ 'A', 1000 ], [ 'B', 500 ], [ 'C', 100 ] ) } /> );
+		const widths = Array.from( container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-step' ) ).map( step =>
+			parseFloat( step.style.maxWidth )
+		);
+		expect( widths[ 0 ] ).toBe( 100 ); // top section pinned to the full width
+		expect( widths[ 1 ] ).toBeLessThan( widths[ 0 ] );
+		expect( widths[ 2 ] ).toBeLessThan( widths[ 1 ] );
+	} );
+
+	it( 'never widens a band beyond the one above, even for long funnels or data drift', () => {
+		// A 10-stage funnel (MINIMUM_BAND_PROPORTION * 10 > 1, so the floor would
+		// otherwise flare) that also contains a drift stage (S2 > S1). Widths must
+		// still stay ≤ 100% and strictly decrease band to band.
+		const { container } = render(
+			<Funnel
+				stages={ stages(
+					[ 'S0', 1000 ],
+					[ 'S1', 900 ],
+					[ 'S2', 950 ],
+					[ 'S3', 300 ],
+					[ 'S4', 250 ],
+					[ 'S5', 200 ],
+					[ 'S6', 150 ],
+					[ 'S7', 120 ],
+					[ 'S8', 100 ],
+					[ 'S9', 90 ]
+				) }
+			/>
+		);
+		const widths = Array.from( container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-step' ) ).map( step =>
+			parseFloat( step.style.maxWidth )
+		);
+		expect( widths[ 0 ] ).toBe( 100 );
+		widths.forEach( width => expect( width ).toBeLessThanOrEqual( 100 ) );
+		for ( let i = 1; i < widths.length; i++ ) {
+			expect( widths[ i ] ).toBeLessThan( widths[ i - 1 ] );
+		}
+	} );
+
+	it( 'keeps text full size above the width threshold, then eases it down gradually', () => {
+		const { container } = render( <Funnel stages={ stages( [ 'A', 1000 ], [ 'B', 700 ], [ 'C', 450 ], [ 'D', 100 ] ) } /> );
+		const steps = container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-step' );
+		const scale = ( step: HTMLElement ) => parseFloat( step.style.getPropertyValue( '--funnel-font-scale' ) );
+		// At or above half the top width, text stays full size.
+		expect( scale( steps[ 0 ] ) ).toBe( 1 );
+		expect( scale( steps[ 1 ] ) ).toBe( 1 );
+		// Just past the threshold the reduction is slight — a ramp, not a hard step to
+		// the floor — and it keeps easing down as sections get narrower.
+		expect( scale( steps[ 2 ] ) ).toBeLessThan( 1 );
+		expect( scale( steps[ 2 ] ) ).toBeGreaterThan( 0.9 );
+		expect( scale( steps[ 3 ] ) ).toBeLessThan( scale( steps[ 2 ] ) );
 	} );
 } );

@@ -1,5 +1,5 @@
 /**
- * ConversionTab (NPPD-1609, Phase 2).
+ * ConversionTab (Phase 2).
  *
  * Tab 3 orchestrator. Mirrors the PromptsTab loading / error / success
  * lifecycle and composes the eight Conversion Journey sections.
@@ -31,6 +31,7 @@ import LastUpdated from '../components/LastUpdated';
 import CooldownNotice from '../components/CooldownNotice';
 import TabStateView from './components/TabStateView';
 import TabErrorBanner from './components/TabErrorBanner';
+import TabSections from './components/TabSections';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import ReaderLifecycleSection from './conversion/ReaderLifecycleSection';
 import PerJourneyConversionFunnelsSection from './conversion/PerJourneyConversionFunnelsSection';
@@ -63,17 +64,19 @@ const ConversionTab = ( { range, previousRange }: ConversionTabProps ) => {
 				<>
 					{ data.tab_error && <TabErrorBanner /> }
 					<CooldownNotice tab="conversion" range={ range } previousRange={ previousRange } />
-					<ReaderLifecycleSection
-						current={ data.current }
-						lastUpdated={ <LastUpdated tab="conversion" range={ range } previousRange={ previousRange } /> }
-					/>
-					<PerJourneyConversionFunnelsSection current={ data.current } />
-					<WhereConversionsComeFromSection current={ data.current } />
-					<HowLongConversionsTakeSection current={ data.current } />
-					<CohortRetentionSection current={ data.current } />
-					<ConversionRateTrendsSection current={ data.current } />
-					<CrossTabInfluencedAttributionSection current={ data.current } previous={ data.previous } />
-					<OpportunityBucketsSection current={ data.current } />
+					<TabSections>
+						<ReaderLifecycleSection
+							current={ data.current }
+							lastUpdated={ <LastUpdated tab="conversion" range={ range } previousRange={ previousRange } /> }
+						/>
+						<PerJourneyConversionFunnelsSection current={ data.current } />
+						<WhereConversionsComeFromSection current={ data.current } />
+						<HowLongConversionsTakeSection current={ data.current } />
+						<CohortRetentionSection current={ data.current } />
+						<ConversionRateTrendsSection current={ data.current } />
+						<CrossTabInfluencedAttributionSection current={ data.current } previous={ data.previous } />
+						<OpportunityBucketsSection current={ data.current } />
+					</TabSections>
 				</>
 			) }
 		</TabStateView>

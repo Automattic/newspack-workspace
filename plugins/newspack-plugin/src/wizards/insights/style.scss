@@ -52,12 +52,15 @@
 	}
 
 	// While a tab is loading (chunk Suspense fallback OR in-tab loading view),
-	// hide the date range + comparison controls — they're non-interactive
-	// while data is fetching, and removing visual noise lets the tab loading
-	// animation own the user's attention.
+	// hide the date range + comparison controls, the "was this tab useful?"
+	// feedback footer, and the floating next-steps card — they're all
+	// post-data affordances that read as noise mid-load (DSGNEWS-188), and
+	// removing them lets the tab loading animation own the user's attention.
 	.newspack-wizard__content:has( .newspack-insights__tab-loading ),
 	.newspack-wizard__content:has( .newspack-insights__tab-fallback ) {
-		.newspack-insights__header-controls {
+		.newspack-insights__header-controls,
+		.newspack-insights__tab-footer,
+		.newspack-insights__next-steps {
 			display: none;
 		}
 	}
@@ -66,7 +69,7 @@
 		font-size: 13px;
 		font-weight: 400;
 		line-height: 1.4;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 	}
 
 	&__settings-link {
@@ -146,7 +149,7 @@
 			padding: 6px 8px;
 			border: 1px solid wp-colors.$gray-300;
 			border-radius: 2px;
-			background: #fff;
+			background: wp-colors.$white;
 			color: wp-colors.$gray-900;
 
 			&:focus-visible {
@@ -195,7 +198,7 @@
 	&__tab-stub-message {
 		font-size: 14px;
 		font-weight: 400;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 		margin: 0;
 	}
 
@@ -231,7 +234,7 @@
 
 		.newspack-insights__last-updated {
 			font-size: 11px;
-			color: wp-colors.$gray-600;
+			color: wp-colors.$gray-700;
 			white-space: nowrap;
 		}
 	}
@@ -290,4 +293,212 @@
 // as the React mount node id — so this only affects the Insights page.
 #newspack-insights .newspack-wizard__loader {
 	display: none;
+}
+
+// NPPD-1889: read-only DataViews tables. Every Insights table renders through
+// InsightsDataView (MetricTable / SortableTable / DistributionTable / the
+// per-tab campaign tables). Defined here in the global wizard stylesheet — which
+// loads on every Insights view — rather than a per-tab partial, so the treatment
+// is identical on every tab regardless of which lazy tab-chunk CSS is loaded
+// (the same reasoning as the info-callout above; a per-tab partial only reaches
+// the tabs that `@use` it, which is how Donors/Subscribers were left unstyled).
+//
+// Locks DataViews into a single-page, read-only table: hide the interactive
+// chrome (search / filters / view-config gear / pagination footer / bulk
+// actions) so click-to-sort headers are the only affordance, frame the table
+// like the old `.newspack-insights__table-wrap`, and undo DataViews' full-bleed
+// sizing so it fits inside the section cards.
+.newspack-insights-dataview {
+	// DataViews bleeds itself out with a negative horizontal margin (wizard rule
+	// `.newspack-wizard__content … .newspack-dataviews`) to span the page gutter;
+	// inside our cards that pushes the table past the border. Pin it back.
+	margin: 0 !important;
+
+	// Single frame around the whole table (header + rows). Reset inside a
+	// chart-card, which already supplies the border (below).
+	border: 1px solid wp-colors.$gray-200;
+	border-radius: 4px;
+	overflow: hidden;
+
+	.dataviews__view-actions,
+	.dataviews-footer {
+		display: none;
+	}
+
+	// Strip the default DataViews outer padding/gap so the frame hugs the table.
+	.dataviews-wrapper {
+		padding: 0;
+		gap: 0;
+	}
+
+	// DataViews sizes each column to a ~123px min-width for its comfortable
+	// full-width layout; in our compact tables that overflows. Let columns size
+	// to their content instead.
+	.dataviews-view-table__cell-content-wrapper {
+		min-width: 0;
+	}
+
+	// DataViews defaults both column headers and cell values to
+	// `white-space: nowrap`, so a long heading ("Paid access gate conversion
+	// rate") or a long value (article titles, author names) forces the table
+	// wider than its container and it scrolls horizontally. Let both wrap.
+	.dataviews-view-table-header-button {
+		white-space: normal;
+		height: auto;
+	}
+
+	// Numeric columns are right-aligned (`align: end`); keep the wrapped header
+	// text aligned over its values rather than defaulting to the left.
+	.dataviews-view-table__cell-align-end .dataviews-view-table-header-button {
+		justify-content: flex-end;
+		text-align: right;
+	}
+
+	// The `tbody` mirrors DataViews' own
+	// `.dataviews-view-table tbody .dataviews-view-table__cell-content-wrapper`
+	// nowrap rule so this out-specifies it and long values wrap in place
+	// instead of overflowing.
+	.dataviews-view-table tbody .dataviews-view-table__cell-content-wrapper {
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
+
+	// Trim the 48px page-gutter edge padding so cell content aligns to the frame.
+	.dataviews-view-table {
+		th:first-child,
+		td:first-child {
+			padding-left: 16px;
+		}
+
+		th:last-child,
+		td:last-child {
+			padding-right: 16px;
+		}
+	}
+}
+
+// Table-in-card (e.g. Performance by device, Top campaigns): the chart-card
+// supplies the border, and the narrow card needs the columns to fit rather than
+// overflow at DataViews' comfortable width — so pin the layout to the container.
+.newspack-insights__chart-card .newspack-insights-dataview {
+	border: 0;
+	border-radius: 0;
+
+	.dataviews-wrapper {
+		overflow-x: visible;
+	}
+
+	.dataviews-view-table {
+		width: 100%;
+		min-width: 0;
+		table-layout: fixed;
+	}
+}
+
+// Opt-in sticky first column (Performance by prompt): a many-column table that
+// still overflows keeps its identifying first column (the prompt name) frozen
+// while the metric columns scroll, so a row is never scrolled away from its
+// label. Scoped to the modifier class so no other Insights table is affected.
+// The frozen cell needs an opaque background to cover the columns sliding under
+// it, plus a divider so the seam reads cleanly.
+.newspack-insights-dataview--sticky-first .dataviews-view-table {
+	th:first-child,
+	td:first-child {
+		position: sticky;
+		left: 0;
+		z-index: 1;
+		background: wp-colors.$white;
+		border-right: 1px solid wp-colors.$gray-200;
+	}
+
+	// Header corner sits above the body's frozen cells when both axes scroll.
+	th:first-child {
+		z-index: 2;
+	}
+
+	// Honor word boundaries in this table's cells. The shared wrap rule breaks at
+	// any character (`overflow-wrap: anywhere`) so DataViews' widest tables never
+	// force a scroll; this table already fits, and any-point breaking just chops
+	// short labels ("Registrati on"). `break-word` keeps whole words together
+	// while still wrapping long prompt titles at spaces.
+	tbody .dataviews-view-table__cell-content-wrapper {
+		overflow-wrap: break-word;
+	}
+}
+
+// Indented, de-emphasized label for a flattened child/variation row inside a
+// read-only DataViews table (e.g. the Donations-by-tier product variations),
+// which DataViews' flat table can't indent natively.
+.newspack-insights__dataview-subrow {
+	display: inline-block;
+	padding-left: 16px;
+	color: wp-colors.$gray-700;
+}
+
+// Stacked, field-driven "Conversions" cell (Performance by prompt): one line per
+// conversion type a prompt actually drove — count, plus rate in parens where a
+// rate applies. The type label disambiguates rows that convert more than one way
+// (e.g. a register-then-pay prompt logging both registrations and subscriptions).
+// Each line stays on one row; the type label and rate are de-emphasized so the
+// counts read first.
+.newspack-insights__conversions {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+}
+
+.newspack-insights__conversion-line {
+	white-space: nowrap;
+
+	& + & {
+		margin-top: 2px;
+	}
+}
+
+.newspack-insights__conversion-label,
+.newspack-insights__conversion-rate {
+	color: wp-colors.$gray-700;
+}
+
+// NPPD-1889: the one Insights table kept out of DataViews — Subscribers →
+// "Subscriptions by product", which needs grouped super-headers AND nested
+// variation rows that a flat read-only DataViews table can't render — is
+// restyled to VISUALLY match the DataViews tables so the tab reads as one
+// system. Mirrors the DataViews chrome measured from `.dataviews-view-table`:
+// white header ground with dark 11px uppercase labels (not the old gray band),
+// 13px muted body cells, and faint gray-100 row dividers.
+.newspack-insights__table-wrap--dataview-look {
+	overflow: hidden; // clip the framed corners like the DataViews tables
+}
+
+.newspack-insights__table--dataview-look {
+	thead th {
+		background: #fff;
+		color: wp-colors.$gray-900;
+		font-size: 11px;
+		font-weight: 500;
+		text-transform: uppercase;
+		padding: 8px 16px;
+		border-bottom: 1px solid wp-colors.$gray-100;
+	}
+
+	// Grouped super-header ("Current" / "Selected timeframe" / "All time") has no
+	// DataViews equivalent, so treat it as a muted section label over its columns.
+	.newspack-insights__table-group {
+		color: wp-colors.$gray-600;
+		font-weight: 500;
+	}
+
+	tbody td {
+		font-size: 13px;
+		color: wp-colors.$gray-600;
+		padding: 12px 16px;
+		border-bottom: 1px solid wp-colors.$gray-100;
+	}
+
+	// The DataViews tables have no outer rule beneath the last row (the frame
+	// supplies it); drop the trailing divider to match.
+	tbody tr:last-child td {
+		border-bottom: 0;
+	}
 }

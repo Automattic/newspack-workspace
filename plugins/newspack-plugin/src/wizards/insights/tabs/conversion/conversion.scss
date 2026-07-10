@@ -27,7 +27,7 @@
 	min-width: 0;
 	height: 100%;
 	padding: 16px;
-	background-color: #fff;
+	background-color: wp-colors.$white;
 	border: 1px solid wp-colors.$gray-200;
 	border-radius: 4px;
 }
@@ -61,7 +61,7 @@
 		padding: 16px 0;
 		font-size: 13px;
 		line-height: 1.5;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 	}
 
 	// Per-viz subheading + caption used inside the multi-cell sections.
@@ -87,20 +87,28 @@
 		padding: 32px 20px;
 		text-align: center;
 		font-size: 13px;
-		color: wp-colors.$gray-600;
+		color: wp-colors.$gray-700;
 	}
 
 	// Section 2 — four per-journey funnels in a 2-column grid, stacking under
-	// ~720px container width.
+	// ~720px container width. Cells stretch so a shorter funnel (e.g. the 2-stage
+	// cross-upsell) matches the height of its taller row-mate.
 	&__conversion-journey-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 		gap: 24px;
-		align-items: start;
+		align-items: stretch;
 	}
 
 	&__conversion-journey-cell {
+		display: flex;
+		flex-direction: column;
 		min-width: 0;
+
+		// The funnel is the cell's last child; grow it to fill the stretched cell.
+		.newspack-insights__funnel {
+			flex: 1 1 auto;
+		}
 	}
 
 	// Section 3 — three source-mix pies side by side.
@@ -127,14 +135,13 @@
 		@include conversion-chart-card;
 	}
 
-	// Section 5 — two cohort heatmaps side by side (wrapping to one column when
-	// the container is narrow). The heatmaps are compact, so stacking them left a
-	// lot of empty space to the right.
+	// Section 5 — two cohort heatmaps, each on its own full-width row.
+	// (DSGNEWS-188: side-by-side cut off the rightmost month columns on the
+	// wider heatmaps — full width gives each room to show every column.)
 	&__conversion-cohort-stack {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-		gap: 24px;
-		align-items: stretch;
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
 	}
 
 	&__conversion-cohort-cell {

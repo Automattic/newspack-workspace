@@ -1,5 +1,5 @@
 /**
- * NewsletterAdsTab (NPPD-1861).
+ * NewsletterAdsTab.
  *
  * Newsletter Ads tab. Fetches the newsletter-ads orchestrator endpoint and
  * renders three sections. Lifecycle mirrors {@see AdvertisingTab} with one
@@ -23,6 +23,7 @@ import type { DateRange } from '../state/useDateRange';
 import useNewsletterAdsData from '../hooks/useNewsletterAdsData';
 import LastUpdated from '../components/LastUpdated';
 import TabStateView from './components/TabStateView';
+import TabSections from './components/TabSections';
 import FinishConnectingDiagnostic from './components/FinishConnectingDiagnostic';
 import OverviewSection from './newsletter_ads/sections/OverviewSection';
 import TrendSection from './newsletter_ads/sections/TrendSection';
@@ -102,22 +103,20 @@ const NewsletterAdsTab = ( { range, previousRange }: NewsletterAdsTabProps ) => 
 							) }
 						</Notice>
 					) ) }
-					<OverviewSection
-						current={ current.metrics }
-						previous={ previous }
-						// The whole-section empty collapse only applies to a resolved report:
-						// while not ready, the lifetime cards must stay on screen, so the
-						// signal is withheld (undefined never collapses).
-						hasWindowActivity={ isReportReady ? current.has_window_activity : undefined }
-						lastUpdated={ <LastUpdated tab="newsletter_ads" range={ range } previousRange={ previousRange } /> }
-					/>
-					{ /* Timeframe-scoped sections need the stats table; withheld until ready. */ }
-					{ isReportReady && (
-						<>
-							<TrendSection current={ current.metrics } previous={ previous } />
-							<TablesSection current={ current.metrics } />
-						</>
-					) }
+					<TabSections>
+						<OverviewSection
+							current={ current.metrics }
+							previous={ previous }
+							// The whole-section empty collapse only applies to a resolved report:
+							// while not ready, the lifetime cards must stay on screen, so the
+							// signal is withheld (undefined never collapses).
+							hasWindowActivity={ isReportReady ? current.has_window_activity : undefined }
+							lastUpdated={ <LastUpdated tab="newsletter_ads" range={ range } previousRange={ previousRange } /> }
+						/>
+						{ /* Timeframe-scoped sections need the stats table; withheld until ready. */ }
+						{ isReportReady && <TrendSection current={ current.metrics } previous={ previous } /> }
+						{ isReportReady && <TablesSection current={ current.metrics } /> }
+					</TabSections>
 				</>
 			) }
 		</TabStateView>
