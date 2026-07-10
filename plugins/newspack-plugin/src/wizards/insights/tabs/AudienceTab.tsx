@@ -1,5 +1,5 @@
 /**
- * AudienceTab (Tab 1, NPPD-1649).
+ * AudienceTab (Tab 1).
  *
  * GA4-backed Audience tab. Fetches the Audience orchestrator endpoint and
  * renders six sections. When GA4 isn't connected the orchestrator returns a
@@ -20,6 +20,7 @@ import useAudienceData from '../hooks/useAudienceData';
 import LastUpdated from '../components/LastUpdated';
 import ConnectBanner from './components/ConnectBanner';
 import TabStateView from './components/TabStateView';
+import TabSections from './components/TabSections';
 import TabStatusBanner from './components/TabStatusBanner';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import ReachSection from './audience/sections/ReachSection';
@@ -45,10 +46,10 @@ const AudienceTab = ( { range, previousRange }: AudienceTabProps ) => {
 	// Fixture mode returns a `previous` window unconditionally, so gate on the
 	// toggle here rather than on the response — matches Gates/Subscribers/Donors.
 	const previous = previousRange ? data?.previous ?? null : null;
-	// Registered readers (NPPD-1733) come from local wp_users, so they render even
+	// Registered readers come from local wp_users, so they render even
 	// when GA4 isn't connected — present in both the banner and the normal branch.
 	const registeredReaders = data?.registered_readers ?? null;
-	// Modeled newsletter-subscriber value (NEWS-2603): GA4-independent, like
+	// Modeled newsletter-subscriber value: GA4-independent, like
 	// registered readers — rendered in both branches.
 	const newsletterSubscriberValue = data?.newsletter_subscriber_value ?? null;
 	const showComparison = !! previousRange;
@@ -66,28 +67,32 @@ const AudienceTab = ( { range, previousRange }: AudienceTabProps ) => {
 				( data.tab_error || ! current ? (
 					<>
 						<ConnectBanner text={ data.banner_text } />
-						{ registeredReaders && (
-							<RegisteredReadersSection registeredReaders={ registeredReaders } showComparison={ showComparison } />
-						) }
-						{ newsletterSubscriberValue && <NewsletterValueSection value={ newsletterSubscriberValue } /> }
+						<TabSections>
+							{ registeredReaders && (
+								<RegisteredReadersSection registeredReaders={ registeredReaders } showComparison={ showComparison } />
+							) }
+							{ newsletterSubscriberValue && <NewsletterValueSection value={ newsletterSubscriberValue } /> }
+						</TabSections>
 					</>
 				) : (
 					<>
 						<TabStatusBanner status={ data.data_status } />
-						<ReachSection
-							current={ current }
-							previous={ previous }
-							lastUpdated={ <LastUpdated tab="audience" range={ range } previousRange={ previousRange } /> }
-						/>
-						{ registeredReaders && (
-							<RegisteredReadersSection registeredReaders={ registeredReaders } showComparison={ showComparison } />
-						) }
-						{ newsletterSubscriberValue && <NewsletterValueSection value={ newsletterSubscriberValue } /> }
-						<CompositionSection current={ current } previous={ previous } />
-						<TrafficSourcesSection current={ current } previous={ previous } />
-						<GeographicSection current={ current } previous={ previous } />
-						<ContentPerformanceSection current={ current } previous={ previous } />
-						<TimeTrendsSection current={ current } previous={ previous } />
+						<TabSections>
+							<ReachSection
+								current={ current }
+								previous={ previous }
+								lastUpdated={ <LastUpdated tab="audience" range={ range } previousRange={ previousRange } /> }
+							/>
+							{ registeredReaders && (
+								<RegisteredReadersSection registeredReaders={ registeredReaders } showComparison={ showComparison } />
+							) }
+							{ newsletterSubscriberValue && <NewsletterValueSection value={ newsletterSubscriberValue } /> }
+							<CompositionSection current={ current } previous={ previous } />
+							<TrafficSourcesSection current={ current } previous={ previous } />
+							<GeographicSection current={ current } previous={ previous } />
+							<ContentPerformanceSection current={ current } previous={ previous } />
+							<TimeTrendsSection current={ current } previous={ previous } />
+						</TabSections>
 					</>
 				) ) }
 		</TabStateView>

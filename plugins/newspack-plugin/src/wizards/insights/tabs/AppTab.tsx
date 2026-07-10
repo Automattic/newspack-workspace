@@ -1,5 +1,5 @@
 /**
- * AppTab (Tab 10, NPPD-1882).
+ * AppTab (Tab 10).
  *
  * Mobile-app analytics for Pugpig app publishers, live from the GA4 Data API
  * against a publisher-selected app property. Drives the connect → select → render
@@ -25,6 +25,7 @@ import { useEffect, useState } from '@wordpress/element';
 import { Notice, Button, Grid, SelectControl } from '../../../../packages/components/src';
 import WizardsActionCard from '../../wizards-action-card';
 import TabSpinner from './components/TabSpinner';
+import TabSections from './components/TabSections';
 import LastUpdated from '../components/LastUpdated';
 import useAppMetricsData from '../hooks/useAppMetricsData';
 import ReachSection from './app/ReachSection';
@@ -139,16 +140,15 @@ const AppMetricsView = ( { range, previousRange }: Pick< TabSectionProps, 'range
 
 	return (
 		<div className="newspack-insights__app-tab">
-			{ /* Ordered as a narrative: scale (Reach) → depth (Engagement) → what
-			     they read (Content) → who they are (Audience) → loyalty (Retention)
-			     → the app-ops channels (Notifications, Editions) last. */ }
-			<ReachSection metrics={ current } previous={ previous } lastUpdated={ lastUpdated } />
-			<EngagementSection metrics={ current } previous={ previous } />
-			<ContentSection metrics={ current } />
-			<CompositionSection metrics={ current } />
-			<RetentionSection metrics={ current } />
-			<NotificationsSection metrics={ current } previous={ previous } />
-			<DownloadsSection metrics={ current } previous={ previous } />
+			<TabSections>
+				<ReachSection metrics={ current } previous={ previous } lastUpdated={ lastUpdated } />
+				<EngagementSection metrics={ current } previous={ previous } />
+				<ContentSection metrics={ current } />
+				<CompositionSection metrics={ current } />
+				<RetentionSection metrics={ current } />
+				<NotificationsSection metrics={ current } previous={ previous } />
+				<DownloadsSection metrics={ current } previous={ previous } />
+			</TabSections>
 		</div>
 	);
 };

@@ -1,5 +1,5 @@
 /**
- * Advertising › Top performers (NPPD-1618, Section 3).
+ * Advertising › Top performers (Section 3).
  *
  * Top ad units, Top advertisers, and Top campaigns (direct-sold orders), each
  * its own top-level section (h2) stacked at full width — ad unit and advertiser
@@ -20,6 +20,7 @@ import { __ } from '@wordpress/i18n';
 import type { InsightsWindow } from '../../../api/advertising';
 import MetricTable from '../../components/MetricTable';
 import SectionHeading from '../../components/SectionHeading';
+import TabSections from '../../components/TabSections';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -27,7 +28,7 @@ export interface SectionProps {
 }
 
 const TopPerformersSection = ( { current }: SectionProps ) => (
-	<>
+	<TabSections>
 		<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-ad-units">
 			<SectionHeading id="newspack-insights-advertising-top-ad-units" title={ __( 'Top ad units', 'newspack-plugin' ) } />
 			<MetricTable
@@ -79,7 +80,7 @@ const TopPerformersSection = ( { current }: SectionProps ) => (
 				] }
 			/>
 		</section>
-	</>
+	</TabSections>
 );
 
 export default TopPerformersSection;

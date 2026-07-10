@@ -1,8 +1,8 @@
 /**
- * AdvertisingTab (Tab 8, NPPD-1618).
+ * AdvertisingTab (Tab 8).
  *
  * GAM-backed Advertising tab. Fetches the Advertising orchestrator endpoint
- * (NPPD-1663) and renders the report sections. Unlike the GA4 tabs, visibility
+ * and renders the report sections. Unlike the GA4 tabs, visibility
  * (GAM ad provider active) and reporting readiness (OAuth scope + network code)
  * are distinct signals, so this tab has an extra "finish connecting" state
  * between the hidden and ready states. Because GAM reports run asynchronously,
@@ -21,6 +21,7 @@ import type { DateRange } from '../state/useDateRange';
 import useAdvertisingData from '../hooks/useAdvertisingData';
 import LastUpdated from '../components/LastUpdated';
 import TabStateView from './components/TabStateView';
+import TabSections from './components/TabSections';
 import TabLoading from './components/TabLoading';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import DataLagIndicator from './components/DataLagIndicator';
@@ -82,19 +83,21 @@ const AdvertisingTab = ( { range, previousRange }: AdvertisingTabProps ) => {
 			{ current && (
 				<>
 					<DataLagIndicator dataAsOf={ current.data_as_of } hasEstimatedData={ current.has_estimated_data } />
-					<ReachRevenueSection
-						current={ current.metrics }
-						previous={ previous }
-						hasWindowActivity={ current.has_window_activity }
-						lastUpdated={ <LastUpdated tab="advertising" range={ range } previousRange={ previousRange } /> }
-					/>
-					<RevenueTrendSection current={ current.metrics } previous={ previous } />
-					{ /* Channel pie + device table: after the trend, before the per-site and
-					     top-performer tables. */ }
-					<ChannelDeviceSection current={ current.metrics } previous={ previous } />
-					{ /* Per-site breakdown (NPPD-1671): network members only; absent otherwise. */ }
-					{ current.is_network_member && <SitePerformanceSection current={ current.metrics } previous={ previous } /> }
-					<TopPerformersSection current={ current.metrics } previous={ previous } />
+					<TabSections>
+						<ReachRevenueSection
+							current={ current.metrics }
+							previous={ previous }
+							hasWindowActivity={ current.has_window_activity }
+							lastUpdated={ <LastUpdated tab="advertising" range={ range } previousRange={ previousRange } /> }
+						/>
+						<RevenueTrendSection current={ current.metrics } previous={ previous } />
+						{ /* Channel pie + device table: after the trend, before the per-site and
+						     top-performer tables. */ }
+						<ChannelDeviceSection current={ current.metrics } previous={ previous } />
+						{ /* Per-site breakdown: network members only; absent otherwise. */ }
+						{ current.is_network_member && <SitePerformanceSection current={ current.metrics } previous={ previous } /> }
+						<TopPerformersSection current={ current.metrics } previous={ previous } />
+					</TabSections>
 				</>
 			) }
 		</TabStateView>
