@@ -60,6 +60,22 @@ class WC_Stripe_Feature_Flags {
 	}
 }
 
+class WC_Stripe_Helper {
+	public static $settings     = [];
+	public static $update_calls = 0;
+	public static function get_stripe_settings() {
+		return self::$settings;
+	}
+	public static function update_main_stripe_settings( $options ) {
+		self::$settings = $options;
+		self::$update_calls++;
+	}
+	public static function reset_testing_settings() {
+		self::$settings     = [];
+		self::$update_calls = 0;
+	}
+}
+
 class WC_Payment_Gateways {
 	private static $gateways = [];
 	public static function instance() {
