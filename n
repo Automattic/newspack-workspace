@@ -20,25 +20,26 @@ fi
 # file's actual mount lines and picks the LONGEST absolute path that PWD
 # starts with — unambiguous regardless of branch-name shape.
 get_target_container() {
-    if [[ "$PWD" == "$NABSPATH/worktrees/"* ]]; then
+    if [[ "$PWD" == "$NABSPATH/worktrees/"* || "$PWD" == "$NABSPATH/worktrees-repos/"* ]]; then
         local best_match="" best_env=""
         for f in "$NABSPATH"/docker-compose.env-*.yml; do
             [[ -f "$f" ]] || continue
             while IFS= read -r mount; do
-                # Mounts can take two shapes — pre-monorepo per-plugin worktrees
-                # (./worktrees/<repo>/<branch>:/newspack-repos/<repo>) and
-                # monorepo workspace worktrees (./worktrees/<safe_branch>/plugins/<name>:/newspack-plugins/<name>,
-                # or .../themes/<name>:/newspack-themes/<name>). For the
-                # monorepo shape, the env mounts a per-plugin subdir but we
+                # Mounts can take three shapes — pre-monorepo per-plugin worktrees
+                # (./worktrees/<repo>/<branch>:/newspack-repos/<repo>), monorepo
+                # workspace worktrees (./worktrees/<safe_branch>/plugins/<name>:/newspack-plugins/<name>,
+                # or .../themes/<name>:/newspack-themes/<name>), and standalone
+                # repos/ worktrees (./worktrees-repos/<name>/<safe_branch>:/newspack-repos/<kind>/<name>).
+                # For the monorepo shape, the env mounts a per-plugin subdir but we
                 # also want to route correctly from elsewhere inside the
                 # worktree (its root, bin/, packages/, sibling plugins). Match
                 # by the enclosing worktree root instead of only the mounted
                 # subdir. Regex extraction tolerates tabs/multi-space and cuts
                 # cleanly at the next `:` so mount-mode suffixes (`:ro`) and
                 # trailing comments don't corrupt the captured paths.
-                [[ "$mount" =~ ^[[:space:]]*-[[:space:]]+\./worktrees/([^[:space:]:]+):/newspack-(repos|plugins|themes)/[^[:space:]:]+ ]] || continue
-                local rel="worktrees/${BASH_REMATCH[1]}"
-                local container_type="${BASH_REMATCH[2]}"
+                [[ "$mount" =~ ^[[:space:]]*-[[:space:]]+\./worktrees(-repos)?/([^[:space:]:]+):/newspack-(repos|plugins|themes)/[^[:space:]:]+ ]] || continue
+                local rel="worktrees${BASH_REMATCH[1]}/${BASH_REMATCH[2]}"
+                local container_type="${BASH_REMATCH[3]}"
                 local abs="$NABSPATH/$rel"
                 local worktree_root="$abs"
                 case "$container_type" in
@@ -59,7 +60,7 @@ get_target_container() {
                     best_match="$worktree_root"
                     best_env=$(basename "$f" | sed 's/docker-compose\.env-//;s/\.yml//')
                 fi
-            done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$f" 2>/dev/null)
+            done < <(grep -E '^[[:space:]]*-[[:space:]]+\./worktrees(-repos)?/[^[:space:]:]+:/newspack-(repos|plugins|themes)/[^[:space:]:]+' "$f" 2>/dev/null)
         done
         if [ -n "$best_env" ]; then
             echo "newspack_env_${best_env}" | tr '-' '_'
@@ -97,6 +98,12 @@ if [[ -z "$target_folder" && "$PWD" == *"/repos/plugins/"* ]]; then
     target_folder="${rest%%/*}"
 elif [[ -z "$target_folder" && "$PWD" == *"/repos/themes/"* ]]; then
     rest="${PWD##*/repos/themes/}"
+    target_folder="${rest%%/*}"
+elif [[ -z "$target_folder" && "$PWD" == *"/worktrees-repos/"* ]]; then
+    # Inside a standalone-repo worktree (worktrees-repos/<name>/<branch>/…): the
+    # project is <name>, so `n build`/`composer`/`watch` target it (and route to
+    # the env container via get_target_container above).
+    rest="${PWD##*/worktrees-repos/}"
     target_folder="${rest%%/*}"
 fi
 

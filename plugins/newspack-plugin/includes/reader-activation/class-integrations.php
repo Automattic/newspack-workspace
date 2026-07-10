@@ -9,6 +9,7 @@ namespace Newspack\Reader_Activation;
 
 use Newspack\Data_Events;
 use Newspack\Logger;
+use Newspack\My_Account;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -91,6 +92,13 @@ class Integrations {
 		add_action( 'init', [ __CLASS__, 'register_my_account_endpoints' ], 6 );
 		add_filter( 'woocommerce_account_menu_items', [ __CLASS__, 'filter_my_account_menu_items' ] );
 		add_filter( 'query_vars', [ __CLASS__, 'filter_my_account_query_vars' ] );
+
+		// When WooCommerce is absent, route integration My Account tabs through
+		// the native My_Account shell instead of the WooCommerce account page.
+		if ( ! ( class_exists( 'WooCommerce' ) && function_exists( 'wc_get_page_permalink' ) ) ) {
+			add_filter( 'newspack_my_account_endpoints', [ __CLASS__, 'filter_native_my_account_endpoints' ] );
+			add_action( 'newspack_my_account_content', [ __CLASS__, 'render_native_my_account_content' ] );
+		}
 		add_action( 'newspack_frontend_registration_existing_user', [ __CLASS__, 'handle_existing_user_registration' ], 10, 3 );
 		add_action( 'init', [ __CLASS__, 'schedule_health_check' ] );
 		add_action( self::HEALTH_CHECK_CRON_HOOK, [ __CLASS__, 'run_health_checks' ] );
@@ -623,6 +631,17 @@ class Integrations {
 	public static function register_my_account_endpoints() {
 		self::$my_account_endpoints = [];
 
+		// When WooCommerce owns the My Account shell, this method owns the rewrite
+		// registration (and flush) for integration slugs on the WooCommerce
+		// account page. When WooCommerce is absent, the native My_Account shell
+		// owns rewrite registration for the entire endpoint set — it already
+		// includes these integration slugs via the `newspack_my_account_endpoints`
+		// filter — so registering and flushing here too would double-register the
+		// endpoints and double-track the flush. In that case we only populate the
+		// slug => integration map (used for native dispatch and the menu) and skip
+		// the rewrite work.
+		$woo_owns_shell = My_Account::woocommerce_owns_shell();
+
 		foreach ( self::get_active_integrations() as $integration ) {
 			$item = $integration->get_my_account_menu_item();
 			if ( ! is_array( $item ) || empty( $item['slug'] ) || empty( $item['label'] ) ) {
@@ -637,6 +656,10 @@ class Integrations {
 				continue;
 			}
 			self::$my_account_endpoints[ $slug ] = $integration->get_id();
+
+			if ( ! $woo_owns_shell ) {
+				continue;
+			}
 
 			add_rewrite_endpoint( $slug, EP_PAGES );
 
@@ -654,6 +677,10 @@ class Integrations {
 					$integration->render_my_account_page( $value );
 				}
 			);
+		}
+
+		if ( ! $woo_owns_shell ) {
+			return;
 		}
 
 		// Flush rewrite rules only when the set of slugs changes.
@@ -766,6 +793,52 @@ class Integrations {
 			$vars[] = $slug;
 		}
 		return $vars;
+	}
+
+	/**
+	 * Contribute integration-declared endpoints to the native My Account shell.
+	 *
+	 * @param array<string,string> $endpoints slug => label.
+	 * @return array<string,string>
+	 */
+	public static function filter_native_my_account_endpoints( $endpoints ) {
+		if ( empty( self::$my_account_endpoints ) ) {
+			self::register_my_account_endpoints();
+		}
+		foreach ( self::$my_account_endpoints as $slug => $integration_id ) {
+			if ( isset( $endpoints[ $slug ] ) ) {
+				continue;
+			}
+			$integration = self::get_integration( $integration_id );
+			if ( ! $integration ) {
+				continue;
+			}
+			$item = $integration->get_my_account_menu_item();
+			if ( is_array( $item ) && ! empty( $item['label'] ) ) {
+				$endpoints[ $slug ] = $item['label'];
+			}
+		}
+		return $endpoints;
+	}
+
+	/**
+	 * Dispatch the current native My Account endpoint to its integration.
+	 *
+	 * @param string $endpoint Current endpoint slug.
+	 */
+	public static function render_native_my_account_content( $endpoint ) {
+		// This dispatcher renders only slugs owned by a registered RAS
+		// integration. Slugs owned by another plugin's My Account bridge (e.g.
+		// `newsletters`, owned by newspack-newsletters) are not in
+		// self::$my_account_endpoints, so they are not handled here — each slug
+		// must have a single owner to avoid rendering two tab bodies.
+		if ( '' === $endpoint || empty( self::$my_account_endpoints[ $endpoint ] ) ) {
+			return;
+		}
+		$integration = self::get_integration( self::$my_account_endpoints[ $endpoint ] );
+		if ( $integration ) {
+			$integration->render_my_account_page( '' );
+		}
 	}
 
 	/**

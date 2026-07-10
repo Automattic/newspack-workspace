@@ -10,6 +10,8 @@ namespace Newspack\CLI;
 use WP_CLI;
 use Newspack\Woocommerce_Subscriptions as WooCommerce_Subscriptions_Integration;
 use Newspack\On_Hold_Duration;
+use Newspack\Card_Expiry_Warning;
+use Newspack\Emails;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -228,6 +230,185 @@ class WooCommerce_Subscriptions {
 			WP_CLI::warning( 'Dry run. Use --live flag to process live subscriptions.' );
 		}
 		WP_CLI::line( '' );
+	}
+
+	/**
+	 * Backfill card-expiry warning emails for subscriptions currently in
+	 * the warning window.
+	 *
+	 * Companion to the first-deploy seed mechanism in
+	 * `Newspack\Card_Expiry_Warning::scan_expiring_cards()`. The seed
+	 * marks every currently-in-window (subscription, token) pair as
+	 * already-warned WITHOUT sending — protecting publishers from a
+	 * Day 0 burst — and the seed log entry references this command as
+	 * the explicit opt-in path to actually send those deferred warnings.
+	 *
+	 * Calls `Card_Expiry_Warning::maybe_send_warning(..., true)` so the
+	 * seeded SENT_META doesn't block the send.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--dry-run]
+	 * : If passed, print what would be sent without actually sending. No
+	 *   confirmation prompt; safe to re-run.
+	 *
+	 * [--limit=<n>]
+	 * : Cap sends per invocation. Default: no cap. The cron path's
+	 *   per-pass cap (`newspack_card_expiry_warning_limit_per_pass`,
+	 *   default 100) bounds the number of SENDS per cron pass on
+	 *   migration / burst days — it does NOT bound discovery, which runs
+	 *   unbounded (PHP_INT_MAX, no SQL LIMIT) and filters already-processed
+	 *   pairs via the idempotency gate. This command is a
+	 *   publisher-initiated explicit action where no cap is the expected
+	 *   default.
+	 *
+	 * [--days=<n>]
+	 * : Window in days. Defaults to the value of
+	 *   `Card_Expiry_Warning::get_days_before_expiry()` (14 unless
+	 *   filtered via `newspack_card_expiry_warning_days`).
+	 *
+	 * [--yes]
+	 * : Skip the confirmation prompt. Auto-handled by WP_CLI::confirm.
+	 *
+	 * @param array $args       Positional args (unused).
+	 * @param array $assoc_args Associative args.
+	 */
+	public function card_expiry_warning_backfill( $args, $assoc_args ) {
+		if ( ! WooCommerce_Subscriptions_Integration::is_enabled() ) {
+			WP_CLI::error( 'WooCommerce Subscriptions Integration is not enabled.' );
+			return;
+		}
+		if ( ! class_exists( '\\Newspack\\Card_Expiry_Warning' ) ) {
+			WP_CLI::error( 'Card_Expiry_Warning class is not loaded.' );
+			return;
+		}
+
+		// Gate the prompt on the send-precondition so the operator
+		// doesn't confirm "send to N readers" only to discover the email
+		// post is in draft and nothing actually went out. Skip the
+		// guard for --dry-run so publishers can still preview what
+		// would send even with the email unpublished.
+		$is_dry_run = ! empty( $assoc_args['dry-run'] );
+		if ( ! $is_dry_run && ! Emails::can_send_email( Card_Expiry_Warning::EMAIL_TYPE ) ) {
+			WP_CLI::error(
+				'The card-expiry-warning email is not currently sendable. The email post may be in draft status, or Newspack Newsletters is not active. Publish the email and try again.'
+			);
+			return;
+		}
+		$days = isset( $assoc_args['days'] )
+			? max( 1, (int) $assoc_args['days'] )
+			: Card_Expiry_Warning::get_days_before_expiry();
+
+		// --limit caps ACTUAL SENDS per invocation, not SQL discovery —
+		// applied in the foreach loop below after the idempotency gate.
+		// Applying it as a SQL LIMIT (the legacy shape) would cause the
+		// same starvation as scan_expiring_cards had: ORDER BY token_id
+		// ASC + LIMIT N means the same first-N tokens surface each run,
+		// and once those N are gated (SENT, unattached, etc.) every
+		// subsequent run no-ops and the unprocessed remainder is never
+		// reached. Caught in Copilot review on #155.
+		$limit = isset( $assoc_args['limit'] )
+			? max( 1, (int) $assoc_args['limit'] )
+			: PHP_INT_MAX;
+
+		// Discovery uses PHP_INT_MAX (no SQL LIMIT) — already-processed
+		// pairs filter out in the loop via is_already_processed, and
+		// only actual sends count toward $limit.
+		$pairs = Card_Expiry_Warning::get_in_window_pairs( $days, PHP_INT_MAX );
+
+		// Filter to the pairs that would actually send (skip pairs the
+		// idempotency gate would block, even with bypass=true — i.e.,
+		// pairs with SENT meta from a prior real send). This makes the
+		// --dry-run output accurate (no false-positive "Would send to"
+		// reports for pairs that wouldn't fire) and gives the confirm
+		// prompt's count the same meaning as the post-run "Sent N" total.
+		$pairs = array_values(
+			array_filter(
+				$pairs,
+				function ( $pair ) {
+					$token      = $pair['token'];
+					$token_id   = $token->get_id();
+					$expiry_key = $token_id . ':' . $token->get_expiry_month() . '/' . $token->get_expiry_year();
+					return ! Card_Expiry_Warning::is_already_processed( $pair['subscription'], $token_id, $expiry_key, true );
+				}
+			)
+		);
+		$count = count( $pairs );
+
+		if ( 0 === $count ) {
+			WP_CLI::success( 'No (subscription, token) pairs in the warning window that would send. (Already-processed pairs are filtered out.)' );
+			return;
+		}
+
+		// Confirmation gate (dry-run skips because no harmful action).
+		// $assoc_args is passed so `--yes` is auto-handled by WP_CLI.
+		// $count above already reflects only the pairs that WOULD send;
+		// the prompt is honest about scope.
+		if ( ! $is_dry_run ) {
+			$prompt_count = min( $count, $limit );
+			WP_CLI::confirm(
+				sprintf( 'This will send card-expiry warning emails to %d reader(s). Continue?', $prompt_count ),
+				$assoc_args
+			);
+		}
+
+		$sent     = 0;
+		$failures = 0;
+		foreach ( $pairs as $pair ) {
+			if ( $sent >= $limit ) {
+				break;
+			}
+			$subscription = $pair['subscription'];
+			$token        = $pair['token'];
+			$line         = sprintf(
+				'%s %s (sub #%d, card ...%s, expires %s/%s)',
+				$is_dry_run ? 'Would send to' : 'Sent to',
+				$subscription->get_billing_email(),
+				$subscription->get_id(),
+				$token->get_last4(),
+				$token->get_expiry_month(),
+				$token->get_expiry_year()
+			);
+			if ( $is_dry_run ) {
+				WP_CLI::log( $line );
+				++$sent;
+				continue;
+			}
+			// Isolate per-pair failures: one throwing pair (a bad address, a
+			// third-party hook throwing on save) must not abort the backfill
+			// and block every later valid pair across operator re-runs.
+			try {
+				if ( Card_Expiry_Warning::maybe_send_warning( $subscription, $token, true ) ) {
+					WP_CLI::log( $line );
+					++$sent;
+				}
+			} catch ( \Throwable $e ) {
+				++$failures;
+				WP_CLI::warning(
+					sprintf(
+						'Failed for sub #%d (card ...%s): %s',
+						$subscription->get_id(),
+						$token->get_last4(),
+						$e->getMessage()
+					)
+				);
+			}
+		}
+
+		$summary = sprintf(
+			'%s %d email(s).',
+			$is_dry_run ? 'Would send' : 'Sent',
+			$sent
+		);
+
+		// Exit non-zero when any pair failed so cron/automation wrappers
+		// notice a partial backfill instead of treating it as a clean run.
+		// WP_CLI::error halts with a non-zero status.
+		if ( $failures > 0 ) {
+			WP_CLI::error( sprintf( '%s %d pair(s) failed — see warnings above.', $summary, $failures ) );
+		}
+
+		WP_CLI::success( $summary );
 	}
 
 	/**

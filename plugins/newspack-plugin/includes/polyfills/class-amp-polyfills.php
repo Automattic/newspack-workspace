@@ -176,14 +176,14 @@ class AMP_Polyfills {
 				'newspack-image-lightbox',
 				\Newspack\Newspack::plugin_url() . '/dist/other-scripts/lightbox.js',
 				[],
-				NEWSPACK_PLUGIN_VERSION,
+				\Newspack\Newspack::asset_version( 'other-scripts/lightbox' ),
 				true
 			);
 			\wp_enqueue_style(
 				'newspack-image-lightbox',
 				Newspack::plugin_url() . '/dist/other-scripts/lightbox.css',
 				[],
-				NEWSPACK_PLUGIN_VERSION
+				\Newspack\Newspack::asset_version( 'other-scripts/lightbox' )
 			);
 		}
 	}

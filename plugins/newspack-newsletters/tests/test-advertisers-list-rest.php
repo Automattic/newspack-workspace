@@ -108,4 +108,112 @@ class Advertisers_List_REST_Test extends WP_UnitTestCase {
 		$this->assertSame( 'Top-level advertiser', $data['name'] );
 		$this->assertSame( 0, $data['parent'] );
 	}
+
+	/**
+	 * The advertiser count must match the Ads list, which shows non-publish
+	 * ads too — so a draft ad should count, not leave the advertiser at `0`.
+	 */
+	public function test_advertiser_count_includes_non_publish_ads() {
+		$term = wp_insert_term( 'Acme', Ads::ADVERTISER_TAX );
+		$this->assertIsArray( $term );
+
+		$ad = self::factory()->post->create(
+			[
+				'post_type'   => Ads::CPT,
+				'post_status' => 'draft',
+			]
+		);
+		wp_set_object_terms( $ad, [ (int) $term['term_id'] ], Ads::ADVERTISER_TAX );
+
+		$fresh = get_term( $term['term_id'], Ads::ADVERTISER_TAX );
+		$this->assertSame( 1, (int) $fresh->count );
+	}
+
+	/**
+	 * The Ads list `draft` bucket also surfaces `auto-draft` ads, so the
+	 * advertiser count must include them too — otherwise the count and the
+	 * list disagree by any auto-draft rows.
+	 */
+	public function test_advertiser_count_includes_auto_draft_ads() {
+		$term = wp_insert_term( 'Auto-draft Advertiser', Ads::ADVERTISER_TAX );
+		$this->assertIsArray( $term );
+		$term_id = (int) $term['term_id'];
+
+		$ad = self::factory()->post->create(
+			[
+				'post_type'   => Ads::CPT,
+				'post_status' => 'auto-draft',
+			]
+		);
+		wp_set_object_terms( $ad, [ $term_id ], Ads::ADVERTISER_TAX );
+
+		clean_term_cache( [ $term_id ], Ads::ADVERTISER_TAX );
+		$fresh = get_term( $term_id, Ads::ADVERTISER_TAX );
+		$this->assertSame( 1, (int) $fresh->count );
+	}
+
+	/**
+	 * A site that already ran the prior one-time recount must still pick up
+	 * the new auto-draft semantics: the bumped sentinel re-runs the recount
+	 * and refreshes stale term counts.
+	 */
+	public function test_recount_refreshes_stale_counts_after_sentinel_bump() {
+		update_option( 'newspack_nl_advertiser_count_recounted_v2', 1 );
+		delete_option( 'newspack_nl_advertiser_count_recounted_v3' );
+
+		$term = wp_insert_term( 'Stale-count Advertiser', Ads::ADVERTISER_TAX );
+		$this->assertIsArray( $term );
+		$term_id = (int) $term['term_id'];
+
+		$ad = self::factory()->post->create(
+			[
+				'post_type'   => Ads::CPT,
+				'post_status' => 'auto-draft',
+			]
+		);
+		wp_set_object_terms( $ad, [ $term_id ], Ads::ADVERTISER_TAX );
+
+		// Force a stale count as if it predated the auto-draft semantics.
+		global $wpdb;
+		$tt_id = (int) get_term( $term_id, Ads::ADVERTISER_TAX )->term_taxonomy_id;
+		$wpdb->update( $wpdb->term_taxonomy, [ 'count' => 0 ], [ 'term_taxonomy_id' => $tt_id ] ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+		clean_term_cache( [ $term_id ], Ads::ADVERTISER_TAX );
+		$this->assertSame( 0, (int) get_term( $term_id, Ads::ADVERTISER_TAX )->count );
+
+		Ads::maybe_recount_advertiser_terms();
+
+		clean_term_cache( [ $term_id ], Ads::ADVERTISER_TAX );
+		$this->assertSame( 1, (int) get_term( $term_id, Ads::ADVERTISER_TAX )->count );
+		$this->assertEquals( 1, get_option( 'newspack_nl_advertiser_count_recounted_v3' ) );
+	}
+
+	/**
+	 * A newsletter tagged with an advertiser must not inflate the count —
+	 * only ads (Ads::CPT) should be counted.
+	 */
+	public function test_advertiser_count_excludes_newsletters() {
+		$term = wp_insert_term( 'Newsletter-free Advertiser', Ads::ADVERTISER_TAX );
+		$this->assertIsArray( $term );
+		$term_id = (int) $term['term_id'];
+
+		$ad = self::factory()->post->create(
+			[
+				'post_type'   => Ads::CPT,
+				'post_status' => 'publish',
+			]
+		);
+		wp_set_object_terms( $ad, [ $term_id ], Ads::ADVERTISER_TAX );
+
+		$newsletter = self::factory()->post->create(
+			[
+				'post_type'   => \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT,
+				'post_status' => 'publish',
+			]
+		);
+		wp_set_object_terms( $newsletter, [ $term_id ], Ads::ADVERTISER_TAX );
+
+		clean_term_cache( [ $term_id ], Ads::ADVERTISER_TAX );
+		$fresh = get_term( $term_id, Ads::ADVERTISER_TAX );
+		$this->assertSame( 1, (int) $fresh->count );
+	}
 }
