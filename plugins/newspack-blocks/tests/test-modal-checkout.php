@@ -159,7 +159,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		}
 		remove_all_filters( 'woocommerce_cart_item_removed_message' );
 		remove_all_filters( 'newspack_blocks_donate_billing_fields_keys' );
-		unset( $_POST['billing_email'], $_POST['post_data'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'] );
+		unset( $_POST['billing_email'], $_POST['post_data'], $_REQUEST['modal_checkout'], $_REQUEST['post_data'], $_SERVER['HTTP_REFERER'] );
 		parent::tear_down();
 	}
 
@@ -573,6 +573,21 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Mark the current request as a modal checkout request.
+	 */
+	private function set_modal_checkout_request() {
+		$_REQUEST['modal_checkout'] = '1';
+	}
+
+	/**
+	 * Set a referer pointing at the modal checkout iframe, as express checkout
+	 * Store API requests carry.
+	 */
+	private function set_modal_checkout_referer() {
+		$_SERVER['HTTP_REFERER'] = 'https://example.com/checkout/?modal_checkout=1';
+	}
+
+	/**
 	 * Checkout fields fixture resembling the WooCommerce default structure.
 	 *
 	 * @return array
@@ -597,11 +612,10 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * Configured-off billing fields are removed on standard (non-modal) checkout
-	 * requests, so express checkout wallets cannot fail validation on fields the
-	 * buyer cannot see or edit (NPPM-2937).
+	 * Configured-off billing fields are removed on modal checkout requests.
 	 */
-	public function test_checkout_fields_removes_configured_off_fields_on_standard_checkout() {
+	public function test_checkout_fields_removes_configured_off_fields_on_modal_requests() {
+		$this->set_modal_checkout_request();
 		$this->set_mock_checkout_cart();
 		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
 
@@ -620,9 +634,27 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Standard (non-modal) Woo checkouts keep the stock field set, by design:
+	 * publisher flows that predate Audience Management must not change.
+	 */
+	public function test_checkout_fields_noop_on_standard_checkout() {
+		$this->set_mock_checkout_cart();
+		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
+
+		$fields = $this->get_checkout_fields_fixture();
+
+		$this->assertSame(
+			$fields,
+			\Newspack_Blocks\Modal_Checkout::woocommerce_checkout_fields( $fields ),
+			'Fields should be unchanged on standard checkout requests.'
+		);
+	}
+
+	/**
 	 * With no custom billing fields configured, checkout fields are unchanged.
 	 */
 	public function test_checkout_fields_noop_when_no_fields_configured() {
+		$this->set_modal_checkout_request();
 		$this->set_mock_checkout_cart();
 
 		$fields = $this->get_checkout_fields_fixture();
@@ -638,6 +670,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * Carts that need a shipping address keep the full field set.
 	 */
 	public function test_checkout_fields_noop_when_cart_needs_shipping() {
+		$this->set_modal_checkout_request();
 		$this->set_mock_checkout_cart( true );
 		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
 
@@ -654,6 +687,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * Contexts without a cart keep the full field set.
 	 */
 	public function test_checkout_fields_noop_when_cart_unavailable() {
+		$this->set_modal_checkout_request();
 		WC()->cart = null;
 		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
 
@@ -675,6 +709,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 			$this->markTestSkipped( 'The WooCommerce_My_Account mock is not in use.' );
 		}
 
+		$this->set_modal_checkout_request();
 		$this->set_mock_checkout_cart();
 		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
 		\Newspack\WooCommerce_My_Account::$is_from_my_account = true;
@@ -692,6 +727,7 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * The billing phone field gets the form-row-last class when configured.
 	 */
 	public function test_checkout_fields_billing_phone_gets_form_row_last_class() {
+		$this->set_modal_checkout_request();
 		$this->set_mock_checkout_cart();
 		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email', 'billing_phone' ] );
 
@@ -712,6 +748,8 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	 * @return WP_REST_Request
 	 */
 	private function get_store_api_checkout_request( $billing_address ) {
+		$this->set_modal_checkout_referer();
+
 		$request = new WP_REST_Request( 'POST', '/wc/store/v1/checkout' );
 		$request->set_param( 'billing_address', $billing_address );
 
@@ -842,9 +880,30 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Requests not originating from the modal checkout are never scrubbed,
+	 * keeping standard Woo and blocks checkout flows stock.
+	 */
+	public function test_store_api_scrub_noop_without_modal_referer() {
+		$this->set_mock_checkout_cart();
+		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
+
+		$address = [
+			'country' => 'US',
+			'state'   => 'REMUERA',
+		];
+		$request = $this->get_store_api_checkout_request( $address );
+		unset( $_SERVER['HTTP_REFERER'] );
+
+		\Newspack_Blocks\Modal_Checkout::scrub_store_api_checkout_address( null, null, $request );
+
+		$this->assertSame( $address, $request->get_param( 'billing_address' ), 'Requests without a modal checkout referer should never be scrubbed.' );
+	}
+
+	/**
 	 * Locale required flags are relaxed for configured-off state and postcode.
 	 */
 	public function test_locale_relaxation_for_configured_off_fields() {
+		$this->set_modal_checkout_referer();
 		$this->set_mock_checkout_cart();
 		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
 
@@ -864,16 +923,23 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * Locale required flags are untouched for shipping carts, configured-on
-	 * fields, and the default configuration.
+	 * Locale required flags are untouched outside modal requests and, within
+	 * them, for shipping carts, configured-on fields, and the default
+	 * configuration.
 	 */
 	public function test_locale_relaxation_noop_cases() {
 		$locale = [
 			'US' => [ 'state' => [ 'required' => true ] ],
 		];
 
-		// Default (empty) configuration.
+		// No modal checkout referer or request param.
 		$this->set_mock_checkout_cart();
+		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
+		$this->assertSame( $locale, \Newspack_Blocks\Modal_Checkout::relax_configured_off_locale_fields( $locale ), 'Non-modal requests should not relax locale fields.' );
+		remove_all_filters( 'newspack_blocks_donate_billing_fields_keys' );
+
+		// Default (empty) configuration.
+		$this->set_modal_checkout_referer();
 		$this->assertSame( $locale, \Newspack_Blocks\Modal_Checkout::relax_configured_off_locale_fields( $locale ), 'Default configuration should not relax locale fields.' );
 
 		// Configured-on fields.

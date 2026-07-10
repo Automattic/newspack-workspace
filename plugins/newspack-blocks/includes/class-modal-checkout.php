@@ -1345,21 +1345,20 @@ final class Modal_Checkout {
 	}
 
 	/**
-	 * Remove the configured-off billing fields from checkout.
+	 * Remove the configured-off billing fields from modal checkout requests.
 	 *
-	 * Not limited to modal checkout requests (NPPM-2937): the fields must be
-	 * unregistered wherever WooCommerce renders or validates them. When they were
-	 * only removed from the modal render, they stayed registered on the standard
-	 * checkout page, and express checkout wallets (e.g. Apple Pay) would populate
-	 * and fail validation on fields the buyer could not see or edit.
+	 * Deliberately scoped to modal checkout: some publishers rely on standard
+	 * Woo checkout flows that predate Audience Management, so those keep the
+	 * stock field set. The express checkout gap this leaves (wallets submitting
+	 * values for fields the buyer cannot see) is handled for modal-originated
+	 * requests by scrub_store_api_checkout_address() below.
 	 *
 	 * @param array $fields Checkout fields.
 	 *
 	 * @return array
 	 */
 	public static function woocommerce_checkout_fields( $fields ) {
-		// My Account checkouts relax required flags instead of removing fields.
-		if ( method_exists( 'Newspack\WooCommerce_My_Account', 'is_from_my_account' ) && \Newspack\WooCommerce_My_Account::is_from_my_account() ) {
+		if ( ! self::is_modal_checkout() ) {
 			return $fields;
 		}
 		$cart = \WC()->cart;
@@ -1397,7 +1396,7 @@ final class Modal_Checkout {
 
 	/**
 	 * Scrub invalid address values from Store API checkout requests when the
-	 * corresponding billing fields are configured off (NPPM-2937).
+	 * corresponding billing fields are configured off.
 	 *
 	 * Express checkout wallets submit to wc/store/v1/checkout and can supply
 	 * values the buyer never sees or corrects (e.g. Apple Pay sending a suburb
@@ -1405,6 +1404,10 @@ final class Modal_Checkout {
 	 * validation would accept are left untouched, and only the billing address
 	 * is scrubbed. Runs on rest_pre_dispatch because the validation happens
 	 * during dispatch.
+	 *
+	 * Scoped to requests originating from the modal checkout, so any Store API
+	 * checkout outside the modal (e.g. the blocks checkout page or express
+	 * buttons on product pages) keeps stock behavior.
 	 *
 	 * @param mixed            $result  Response to replace the requested version with.
 	 * @param \WP_REST_Server  $server  Server instance.
@@ -1422,6 +1425,10 @@ final class Modal_Checkout {
 			'POST' !== $request->get_method() ||
 			0 !== strpos( $request->get_route(), '/wc/store/v1/checkout' )
 		) {
+			return $result;
+		}
+
+		if ( ! self::is_modal_checkout_referer() ) {
 			return $result;
 		}
 
@@ -1454,6 +1461,23 @@ final class Modal_Checkout {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Whether the current request originates from the modal checkout, based on
+	 * the referer.
+	 *
+	 * Express checkout submissions go to the Store API as JSON, so the usual
+	 * modal_checkout request params are absent. The requests are made from the
+	 * modal checkout iframe, whose URL carries modal_checkout=1, so it shows up
+	 * as the (same-origin) referer.
+	 *
+	 * @return bool
+	 */
+	private static function is_modal_checkout_referer() {
+		$referer = isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		return false !== strpos( $referer, 'modal_checkout=1' );
 	}
 
 	/**
@@ -1496,7 +1520,7 @@ final class Modal_Checkout {
 	}
 
 	/**
-	 * Relax locale-required flags for configured-off billing fields (NPPM-2937).
+	 * Relax locale-required flags for configured-off billing fields.
 	 *
 	 * After an invalid wallet value is scrubbed (see
 	 * scrub_store_api_checkout_address), the Store API order validation would
@@ -1504,11 +1528,18 @@ final class Modal_Checkout {
 	 * required. A field the site is configured not to collect cannot be
 	 * required.
 	 *
+	 * Scoped to modal-originated requests so standard Woo flows keep the stock
+	 * locale rules.
+	 *
 	 * @param array $locale Country locale field settings.
 	 *
 	 * @return array
 	 */
 	public static function relax_configured_off_locale_fields( $locale ) {
+		if ( ! self::is_modal_checkout_referer() && ! self::is_modal_checkout() ) {
+			return $locale;
+		}
+
 		$billing_fields = apply_filters( 'newspack_blocks_donate_billing_fields_keys', [] );
 
 		if ( empty( $billing_fields ) ) {
