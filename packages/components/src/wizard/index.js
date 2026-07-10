@@ -211,7 +211,7 @@ const Wizard = (
 				{ mainActions.map( ( action, index ) => (
 					<Button
 						key={ index }
-						className="newspack-wizard__header__actions__main"
+						className="newspack-wizard__actions__main"
 						href={ action.href }
 						icon={ resolveIcon( action.icon ) }
 						variant={ action.type }
@@ -223,10 +223,10 @@ const Wizard = (
 					</Button>
 				) ) }
 				<DropdownMenu
-					className={ moreActions?.length === 0 ? 'newspack-wizard__header__actions__more--primary-only' : '' }
+					className={ moreActions?.length === 0 ? 'newspack-wizard__actions__more--primary-only' : '' }
 					icon={ moreVertical }
 					label={ __( 'More', 'newspack-plugin' ) }
-					popoverProps={ { className: 'newspack-wizard__header__actions__more' } }
+					popoverProps={ { className: 'newspack-wizard__actions__more' } }
 				>
 					{ () =>
 						// Split actions into groups whenever an action opts in via `separator: true`.
@@ -246,8 +246,8 @@ const Wizard = (
 											key={ index }
 											className={
 												action.type === 'primary' || action.type === 'secondary'
-													? 'newspack-wizard__header__actions__more__main'
-													: 'newspack-wizard__header__actions__more__more'
+													? 'newspack-wizard__actions__more__main'
+													: 'newspack-wizard__actions__more__more'
 											}
 											icon={ action.icon }
 											href={ action.href }

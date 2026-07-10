@@ -117,8 +117,8 @@
  * viewports.
  */
 @media only screen and ( min-width: 782px ) {
-	.newspack-wizard__header__actions__more--primary-only,
-	.newspack-wizard__header__actions__more .newspack-wizard__header__actions__more__main {
+	.newspack-wizard__actions__more--primary-only,
+	.newspack-wizard__actions__more .newspack-wizard__actions__more__main {
 		display: none;
 	}
 }
