@@ -11,16 +11,22 @@
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "../../../../../packages/colors/colors.module" as colors;
 
-// Categorical series palette for charts. Hardcoded because a chart needs
-// distinct, stable category colors; applied via the --series-color custom
-// property so each viz element can map it to fill / stroke / background.
-.is-series-0 { --series-color: #{colors.$primary-600}; }
-.is-series-1 { --series-color: #0891B2; }
-.is-series-2 { --series-color: #{colors.$secondary-700}; }
-.is-series-3 { --series-color: #{colors.$quaternary-600}; }
-.is-series-4 { --series-color: #B91C1C; }
-.is-series-5 { --series-color: #7E22CE; }
+// Categorical series palette for charts (8 series): two monochrome families —
+// primary (blue) and orange, each a dark→light triad — then two neutral grays for
+// the tail. Every shade clears WCAG 1.4.11 non-text contrast (>=3:1) against the
+// white card, so thin line strokes and small legend swatches stay perceivable;
+// light tints are deliberately avoided. Blue↔orange is the colorblind-robust
+// pairing. The orange shades are hardcoded hex (no Newspack orange token clears
+// contrast on white) and are designer-approved. Applied via the --series-color
+// custom property; keep the count in sync with PieChart.tsx's modulo.
+.is-series-0 { --series-color: #{colors.$primary-700}; }
+.is-series-1 { --series-color: #{colors.$primary-500}; }
+.is-series-2 { --series-color: #{colors.$primary-300}; }
+.is-series-3 { --series-color: #9a3412; }
+.is-series-4 { --series-color: #c2410c; }
+.is-series-5 { --series-color: #ea580c; }
 .is-series-6 { --series-color: #{colors.$neutral-600}; }
+.is-series-7 { --series-color: #{colors.$neutral-800}; }
 
 .newspack-insights {
 	&__chart-grid {
