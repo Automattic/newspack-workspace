@@ -19,7 +19,7 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { Button, Tooltip } from '@wordpress/components';
+import { Button, Tooltip, __experimentalHStack as HStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { info } from '@wordpress/icons';
 
 /**
@@ -192,32 +192,6 @@ const MetricCard = ( props: MetricCardProps ) => {
 		notComputableMessage,
 	} = props;
 
-	// Shared graceful-failure state (missing dimension / not configured / error / data missing / warming).
-	if ( overlay || error || notConfigured || dataMissing || warming ) {
-		return (
-			<Card __experimentalCoreCard className="newspack-insights__metric-card newspack-insights__metric-card--note">
-				<div className="newspack-insights__metric-card-label">{ label }</div>
-				<div className="newspack-insights__metric-card-body">
-					<MetricNote
-						overlay={ overlay }
-						error={ !! error }
-						notConfigured={ notConfigured }
-						dataMissing={ dataMissing }
-						warming={ warming }
-					/>
-				</div>
-				{ description && (
-					<div className="newspack-insights__metric-card-description">
-						<Tooltip delay={ 250 } hideOnClick={ false } placement="bottom-start" text={ description }>
-							<Button icon={ info } className="newspack-insights__metric-card-info-icon" variant="tertiary" />
-						</Tooltip>
-						<p className="newspack-insights__metric-card-description-text">{ description }</p>
-					</div>
-				) }
-			</Card>
-		);
-	}
-
 	// --- Zero-state count fallback (NPPD-1694) -----------------------------
 	// Resolve a count-based hero/secondary before the normal value+delta path.
 	// Driven by the conversions (numerator) and opportunity (denominator) counts
@@ -277,6 +251,36 @@ const MetricCard = ( props: MetricCardProps ) => {
 				fallbackSecondary = noneInWindow( conversionsNoun );
 			}
 		}
+	}
+
+	// Shared graceful-failure state (missing dimension / not configured / error / data missing / warming).
+	if ( overlay || error || notConfigured || dataMissing || warming ) {
+		return (
+			<Card __experimentalCoreCard className="newspack-insights__metric-card newspack-insights__metric-card--note">
+				<HStack className="newspack-insights__metric-card-label" alignment="top" justify="space-between" spacing={ 2 }>
+					<span>{ label }</span>
+					{ ( fallbackSecondary ?? secondary ) && (
+						<Tooltip delay={ 250 } hideOnClick={ false } placement="bottom-start" text={ fallbackSecondary ?? secondary }>
+							<Button icon={ info } className="newspack-insights__metric-card-info-icon" variant="tertiary" />
+						</Tooltip>
+					) }
+				</HStack>
+				<div className="newspack-insights__metric-card-body">
+					<MetricNote
+						overlay={ overlay }
+						error={ !! error }
+						notConfigured={ notConfigured }
+						dataMissing={ dataMissing }
+						warming={ warming }
+					/>
+				</div>
+				{ description && (
+					<div className="newspack-insights__metric-card-description">
+						<p>{ description }</p>
+					</div>
+				) }
+			</Card>
+		);
 	}
 
 	// Suppress the period-over-period delta whenever a fallback hero is shown — a
@@ -342,7 +346,14 @@ const MetricCard = ( props: MetricCardProps ) => {
 
 	return (
 		<Card __experimentalCoreCard className="newspack-insights__metric-card">
-			<div className="newspack-insights__metric-card-label">{ label }</div>
+			<HStack className="newspack-insights__metric-card-label" alignment="top" justify="space-between" spacing={ 2 }>
+				<span>{ label }</span>
+				{ ( fallbackSecondary ?? secondary ) && (
+					<Tooltip delay={ 250 } hideOnClick={ false } placement="bottom-start" text={ fallbackSecondary ?? secondary }>
+						<Button icon={ info } className="newspack-insights__metric-card-info-icon" variant="tertiary" />
+					</Tooltip>
+				) }
+			</HStack>
 			<div className="newspack-insights__metric-card-body">
 				<div
 					className={
@@ -353,9 +364,6 @@ const MetricCard = ( props: MetricCardProps ) => {
 				>
 					{ heroContent }
 				</div>
-				{ ( fallbackSecondary ?? secondary ) && (
-					<div className="newspack-insights__metric-card-secondary">{ fallbackSecondary ?? secondary }</div>
-				) }
 				{ magnitude !== null && (
 					<div
 						className={ `newspack-insights__metric-card-delta newspack-insights__metric-card-delta--${ tone }` }
@@ -376,10 +384,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 			     would just double the text block. */ }
 			{ description && ! notCapableMessage && ! notComputableMessage && (
 				<div className="newspack-insights__metric-card-description">
-					<Tooltip delay={ 250 } hideOnClick={ false } placement="bottom-start" text={ description }>
-						<Button icon={ info } className="newspack-insights__metric-card-info-icon" variant="tertiary" />
-					</Tooltip>
-					<p className="newspack-insights__metric-card-description-text">{ description }</p>
+					<p>{ description }</p>
 				</div>
 			) }
 		</Card>

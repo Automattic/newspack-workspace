@@ -273,6 +273,8 @@
 		&-info-icon.components-button.is-tertiary {
 			color: wp-colors.$gray-700;
 			display: none;
+			margin-right: -14px;
+			padding: 0;
 			&:active,
 			&:hover {
 				background-color: transparent;
@@ -289,7 +291,7 @@
 			line-height: 1.4;
 			color: wp-colors.$gray-700;
 			text-align: left;
-			&-text {
+			&--long {
 				@media screen and (min-width: 783px){
 					display: none;
 				}
