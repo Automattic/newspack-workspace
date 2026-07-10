@@ -187,10 +187,9 @@
 	}
 
 	// --- Watch item: Funnel (in-band HTML layout) ----------------------------
-	// The funnel renders as stacked HTML bands (clip-path trapezoid fills behind
-	// flowing label/count/descriptor text), sized by CSS. Pin a deterministic max
-	// width so it lays out predictably on the narrower print page rather than
-	// overflowing.
+	// The funnel renders as equal-width HTML bands (gradient fills behind flowing
+	// label/count/descriptor text), sized by CSS. Pin a deterministic max width so
+	// it lays out predictably on the narrower print page rather than overflowing.
 	.newspack-insights__funnel {
 		max-width: 17cm;
 	}

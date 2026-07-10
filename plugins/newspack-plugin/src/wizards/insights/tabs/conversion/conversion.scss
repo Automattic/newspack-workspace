@@ -91,16 +91,24 @@
 	}
 
 	// Section 2 — four per-journey funnels in a 2-column grid, stacking under
-	// ~720px container width.
+	// ~720px container width. Cells stretch so a shorter funnel (e.g. the 2-stage
+	// cross-upsell) matches the height of its taller row-mate.
 	&__conversion-journey-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
 		gap: 24px;
-		align-items: start;
+		align-items: stretch;
 	}
 
 	&__conversion-journey-cell {
+		display: flex;
+		flex-direction: column;
 		min-width: 0;
+
+		// The funnel is the cell's last child; grow it to fill the stretched cell.
+		.newspack-insights__funnel {
+			flex: 1 1 auto;
+		}
 	}
 
 	// Section 3 — three source-mix pies side by side.
