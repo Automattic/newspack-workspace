@@ -15,6 +15,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { __experimentalHStack as HStack, FlexBlock } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
@@ -51,14 +52,18 @@ const TrendSection = ( { current, previous }: SectionProps ) => (
 			title={ __( 'Performance trend', 'newspack-plugin' ) }
 			description={ __( 'Daily impressions and clicks across the selected timeframe.', 'newspack-plugin' ) }
 		/>
-		<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-2">
-			<ChartCard title={ __( 'Impressions', 'newspack-plugin' ) } payload={ current.performance_by_day }>
-				<LineChart series={ buildSeries( current, previous, 'impressions' ) } formatLabel={ formatDateLabel } />
-			</ChartCard>
-			<ChartCard title={ __( 'Clicks', 'newspack-plugin' ) } payload={ current.performance_by_day }>
-				<LineChart series={ buildSeries( current, previous, 'clicks' ) } formatLabel={ formatDateLabel } />
-			</ChartCard>
-		</div>
+		<HStack spacing={ 4 } alignment="stretch">
+			<FlexBlock>
+				<ChartCard title={ __( 'Impressions', 'newspack-plugin' ) } payload={ current.performance_by_day }>
+					<LineChart series={ buildSeries( current, previous, 'impressions' ) } formatLabel={ formatDateLabel } />
+				</ChartCard>
+			</FlexBlock>
+			<FlexBlock>
+				<ChartCard title={ __( 'Clicks', 'newspack-plugin' ) } payload={ current.performance_by_day }>
+					<LineChart series={ buildSeries( current, previous, 'clicks' ) } formatLabel={ formatDateLabel } />
+				</ChartCard>
+			</FlexBlock>
+		</HStack>
 	</section>
 );
 

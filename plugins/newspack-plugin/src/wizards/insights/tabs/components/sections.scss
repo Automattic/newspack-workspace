@@ -1,5 +1,5 @@
 /**
- * Newspack Insights — shared tab chrome (NPPD-1602/1616)
+ * Newspack Insights — shared tab chrome
  *
  * Generic visuals that every Insights tab inherits: section wrappers
  * and headings, the metric card chrome + responsive grid, the table
@@ -63,13 +63,12 @@
 		gap: 16px;
 	}
 
-	// Hairline separator + breathing room between consecutive sections so a
-	// long tab doesn't read as one dense block (DSGNEWS-188 — "white space is
-	// very important"). The tab wrapper's 32px flex gap sits above the border;
-	// the padding balances the same space below it.
-	&__section + &__section {
-		padding-top: 32px;
-		border-top: 1px solid wp-colors.$gray-200;
+	// Wraps a tab's sections; the interleaved full-width Dividers supply all the
+	// inter-section spacing via their own margins, so no gap here (a gap would
+	// stack with the divider margins).
+	&__tab-sections {
+		display: flex;
+		flex-direction: column;
 	}
 
 	&__section-empty {
@@ -124,14 +123,14 @@
 	//            + body padding.
 	//   description — pinned to the bottom edge, left-aligned
 	//
-	// Cards carry no blanket top accent (DSGNEWS-188 — a brand-color bar on
+	// Cards carry no blanket top accent (a brand-color bar on
 	// every tile in a row added no value). The CoreCard's own border + 4px
 	// radius are the chrome; the `--highlighted` modifier adds a 4px accent
 	// (bumped from the old 3px) for the rare case of marking a single tile.
 
 	&__metric-card {
 		// Establish a size container so the hero value can scale to the card
-		// width (DSGNEWS-188 — long numbers overflowed the fixed 44px on narrow
+		// width (long numbers overflowed the fixed 44px on narrow
 		// cards). See `&-value` below.
 		container-type: inline-size;
 
@@ -208,7 +207,7 @@
 			font-family: wp-vars.$default-font;
 			// Cap at the 44px design size, but scale down with the card width so a
 			// long formatted number (e.g. "1,392,000") can't overflow a narrow
-			// tile (DSGNEWS-188). `container-type` is set on `&__metric-card`.
+			// tile. `container-type` is set on `&__metric-card`.
 			font-size: 44px; // fallback where container-query units aren't supported.
 			font-size: min( 44px, 14cqi );
 			font-weight: 500;
@@ -223,8 +222,8 @@
 		}
 
 		// Count-fallback heroes ("0 of 17", "0 conversions") are short phrases,
-		// not single numbers — the 44px number scale overflows the narrow card
-		// (NPPD-1694). Render them smaller and let them wrap so they stay inside
+		// not single numbers — the 44px number scale overflows the narrow card.
+		// Render them smaller and let them wrap so they stay inside
 		// the border. The em-dash null glyph keeps the full hero scale.
 		&-value--count {
 			font-size: 24px;
@@ -413,7 +412,7 @@
 			}
 		}
 
-		// The trailing "(no campaign)" denominator row (NEWS-2580): renders its
+		// The trailing "(no campaign)" denominator row: renders its
 		// real count + revenue but muted (gray-600) so the untagged remainder reads
 		// as context rather than a ranked campaign. Backend orders it last.
 		&-row--untagged td {

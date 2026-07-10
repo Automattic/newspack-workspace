@@ -1,5 +1,5 @@
 /**
- * Newsletter Ads › performance tables (NPPD-1861).
+ * Newsletter Ads › performance tables.
  *
  * Three MetricTables (static, not sortable), each rendered as its own
  * full-width H2 section — Top ads, Top advertisers, and Ad performance by
@@ -22,6 +22,7 @@ import type { MetricPayload } from '../../components/metrics';
 import { formatShortDate } from '../../components/format';
 import MetricTable from '../../components/MetricTable';
 import SectionHeading from '../../components/SectionHeading';
+import TabSections from '../../components/TabSections';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -46,7 +47,7 @@ const withDisplayDates = ( payload?: MetricPayload ): MetricPayload | undefined 
 };
 
 const TablesSection = ( { current }: SectionProps ) => (
-	<>
+	<TabSections>
 		<section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-top-ads">
 			<SectionHeading id="newspack-insights-newsletter-ads-top-ads" title={ __( 'Top ads', 'newspack-plugin' ) } />
 			<MetricTable
@@ -96,7 +97,7 @@ const TablesSection = ( { current }: SectionProps ) => (
 				] }
 			/>
 		</section>
-	</>
+	</TabSections>
 );
 
 export default TablesSection;

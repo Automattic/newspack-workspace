@@ -37,11 +37,13 @@ import type { ReactNode } from 'react';
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
+import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
 import type { InsightsWindow } from '../../../api/advertising';
+import { Grid } from '../../../../../../packages/components/src';
 import EmptyMetricSection from '../../components/EmptyMetricSection';
 import MetricCard from '../../components/MetricCard';
 import Scorecard from '../../components/Scorecard';
@@ -90,74 +92,76 @@ const ReachRevenueSection = ( { current, previous, hasWindowActivity, lastUpdate
 	return (
 		<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-reach-revenue">
 			<SectionHeading id="newspack-insights-advertising-reach-revenue" title={ TITLE } description={ CAPTION } actions={ lastUpdated } />
-			{ /* Row 1: the four headline scorecards. Volume + revenue (raw), then the
+			<VStack spacing={ 4 }>
+				{ /* Row 1: the four headline scorecards. Volume + revenue (raw), then the
 			     two cross-system derived cards (NPPD-1675) — RPM and impressions per
 			     session — which join GAM figures with GA4 sessions. */ }
-			<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-4">
-				<Scorecard
-					label={ __( 'Impressions', 'newspack-plugin' ) }
-					description={ __( 'Total ad impressions served on your site', 'newspack-plugin' ) }
-					current={ current.total_impressions }
-					previous={ previous?.total_impressions }
-				/>
-				{ noRevenue ? (
-					<MetricCard
-						label={ __( 'Revenue', 'newspack-plugin' ) }
-						value={ 0 }
-						format="currency"
-						// No previousValue → the period delta is suppressed; a "↓ 100%" would
-						// misread the honest zero against a prior window that had revenue.
-						secondary={ sprintf(
-							/* translators: %s: count of ad impressions in this timeframe */
-							__( '%s impressions, but no revenue this timeframe', 'newspack-plugin' ),
-							formatNumber( impressions?.value ?? 0 )
-						) }
-						description={ __( 'Total ad revenue earned, before fees', 'newspack-plugin' ) }
-					/>
-				) : (
+				<Grid columns={ 4 } gutter={ 16 } noMargin>
 					<Scorecard
-						label={ __( 'Revenue', 'newspack-plugin' ) }
-						description={ __( 'Total ad revenue earned, before fees', 'newspack-plugin' ) }
-						current={ current.total_revenue }
-						previous={ previous?.total_revenue }
+						label={ __( 'Impressions', 'newspack-plugin' ) }
+						description={ __( 'Total ad impressions served on your site', 'newspack-plugin' ) }
+						current={ current.total_impressions }
+						previous={ previous?.total_impressions }
 					/>
-				) }
-				<Scorecard
-					label={ __( 'RPM', 'newspack-plugin' ) }
-					description={ __( 'Revenue per 1,000 sessions', 'newspack-plugin' ) }
-					current={ current.rpm }
-					previous={ previous?.rpm }
-				/>
-				<Scorecard
-					label={ __( 'Impressions per session', 'newspack-plugin' ) }
-					description={ __( 'Avg ad impressions a reader sees each session', 'newspack-plugin' ) }
-					current={ current.avg_impressions_per_session }
-					previous={ previous?.avg_impressions_per_session }
-				/>
-			</div>
-			{ /* Row 2: inventory-quality scorecards (moved from the former Inventory
+					{ noRevenue ? (
+						<MetricCard
+							label={ __( 'Revenue', 'newspack-plugin' ) }
+							value={ 0 }
+							format="currency"
+							// No previousValue → the period delta is suppressed; a "↓ 100%" would
+							// misread the honest zero against a prior window that had revenue.
+							secondary={ sprintf(
+								/* translators: %s: count of ad impressions in this timeframe */
+								__( '%s impressions, but no revenue this timeframe', 'newspack-plugin' ),
+								formatNumber( impressions?.value ?? 0 )
+							) }
+							description={ __( 'Total ad revenue earned, before fees', 'newspack-plugin' ) }
+						/>
+					) : (
+						<Scorecard
+							label={ __( 'Revenue', 'newspack-plugin' ) }
+							description={ __( 'Total ad revenue earned, before fees', 'newspack-plugin' ) }
+							current={ current.total_revenue }
+							previous={ previous?.total_revenue }
+						/>
+					) }
+					<Scorecard
+						label={ __( 'RPM', 'newspack-plugin' ) }
+						description={ __( 'Revenue per 1,000 sessions', 'newspack-plugin' ) }
+						current={ current.rpm }
+						previous={ previous?.rpm }
+					/>
+					<Scorecard
+						label={ __( 'Impressions per session', 'newspack-plugin' ) }
+						description={ __( 'Avg ad impressions a reader sees each session', 'newspack-plugin' ) }
+						current={ current.avg_impressions_per_session }
+						previous={ previous?.avg_impressions_per_session }
+					/>
+				</Grid>
+				{ /* Row 2: inventory-quality scorecards (moved from the former Inventory
 			     performance section). The old Revenue mix card was retired in favor
 			     of the Impressions by type breakdown (NPPD-1881). */ }
-			<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-4">
-				<Scorecard
-					label={ __( 'Average eCPM', 'newspack-plugin' ) }
-					description={ __( 'Your ad rate', 'newspack-plugin' ) }
-					current={ current.avg_ecpm }
-					previous={ previous?.avg_ecpm }
-				/>
-				<Scorecard
-					label={ __( 'Fill Rate', 'newspack-plugin' ) }
-					description={ __( 'How often slots fill', 'newspack-plugin' ) }
-					current={ current.fill_rate }
-					previous={ previous?.fill_rate }
-				/>
-				<Scorecard
-					label={ __( 'Viewability Rate', 'newspack-plugin' ) }
-					description={ __( 'How often ads are seen', 'newspack-plugin' ) }
-					current={ current.viewability_rate }
-					previous={ previous?.viewability_rate }
-				/>
-			</div>
+				<Grid columns={ 4 } gutter={ 16 } noMargin>
+					<Scorecard
+						label={ __( 'Average eCPM', 'newspack-plugin' ) }
+						description={ __( 'Your ad rate', 'newspack-plugin' ) }
+						current={ current.avg_ecpm }
+						previous={ previous?.avg_ecpm }
+					/>
+					<Scorecard
+						label={ __( 'Fill Rate', 'newspack-plugin' ) }
+						description={ __( 'How often slots fill', 'newspack-plugin' ) }
+						current={ current.fill_rate }
+						previous={ previous?.fill_rate }
+					/>
+					<Scorecard
+						label={ __( 'Viewability Rate', 'newspack-plugin' ) }
+						description={ __( 'How often ads are seen', 'newspack-plugin' ) }
+						current={ current.viewability_rate }
+						previous={ previous?.viewability_rate }
+					/>
+				</Grid>
+			</VStack>
 		</section>
 	);
 };

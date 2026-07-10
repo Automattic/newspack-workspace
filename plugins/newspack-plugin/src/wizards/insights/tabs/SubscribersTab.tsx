@@ -1,5 +1,5 @@
 /**
- * SubscribersTab (NPPD-1616).
+ * SubscribersTab.
  *
  * Orchestrates the Tab 6 view: fetches data for the active range +
  * comparison range, then composes the four sections (scorecard,
@@ -26,6 +26,7 @@ import type { DateRange } from '../state/useDateRange';
 import useSubscribersData from '../hooks/useSubscribersData';
 import LastUpdated from '../components/LastUpdated';
 import TabStateView from './components/TabStateView';
+import TabSections from './components/TabSections';
 import TabStatusBanner from './components/TabStatusBanner';
 import { TAB_LOADING_MESSAGES } from './components/loading-messages';
 import ScorecardSection from './subscribers/ScorecardSection';
@@ -55,19 +56,21 @@ const SubscribersTab = ( { range, previousRange }: SubscribersTabProps ) => {
 			{ data && (
 				<>
 					<TabStatusBanner status={ data.data_status } />
-					<ScorecardSection
-						snapshot={ data.snapshot }
-						lastUpdated={ <LastUpdated tab="subscribers" range={ range } previousRange={ previousRange } /> }
-					/>
-					<WindowedSection
-						range={ range }
-						current={ data.current }
-						previous={ data.previous }
-						activeSubscribers={ data.snapshot.active_subscribers }
-					/>
-					<TenureSection rows={ data.snapshot.tenure_distribution } />
-					<PerformanceSection rows={ data.current.subscriptions_by_product } />
-					<CampaignSection rows={ data.current.subscriptions_by_campaign } />
+					<TabSections>
+						<ScorecardSection
+							snapshot={ data.snapshot }
+							lastUpdated={ <LastUpdated tab="subscribers" range={ range } previousRange={ previousRange } /> }
+						/>
+						<WindowedSection
+							range={ range }
+							current={ data.current }
+							previous={ data.previous }
+							activeSubscribers={ data.snapshot.active_subscribers }
+						/>
+						<TenureSection rows={ data.snapshot.tenure_distribution } />
+						<PerformanceSection rows={ data.current.subscriptions_by_product } />
+						<CampaignSection rows={ data.current.subscriptions_by_campaign } />
+					</TabSections>
 				</>
 			) }
 		</TabStateView>
