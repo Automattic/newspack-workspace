@@ -12,6 +12,7 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 
 .newspack-insights {
 
@@ -180,10 +181,9 @@
 			// inherited font from flipping between cards (the bug was: digits
 			// in "35" rendered slim, "$738.33" rendered heavier with a slight
 			// optical slant — different chars resolving in different
-			// fallback fonts because no explicit family was declared). The
-			// stack matches @wordpress/base-styles' admin body font.
-			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-				Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+			// fallback fonts because no explicit family was declared). Uses
+			// @wordpress/base-styles' admin body font token.
+			font-family: wp-vars.$default-font;
 			font-size: 44px;
 			font-weight: 500;
 			font-style: normal;

@@ -615,7 +615,7 @@
 		list-style: none;
 		background-color: wp-colors.$white;
 		border: 1px solid wp-colors.$gray-200;
-		border-radius: 4px;
+		border-radius: wp-vars.$radius-medium;
 
 		&-step {
 			position: relative;
@@ -689,31 +689,31 @@
 		// Name and count scale together with the section width via the shared
 		// --funnel-font-scale (set inline per section, floored in JS), so narrower
 		// sections shrink their text proportionally without changing the name:count
-		// ratio. Unitless line-heights scale with the font automatically.
+		// ratio. Line-heights run through the same calc so they scale with the font.
 		&-label-name {
-			font-size: calc( 14px * var( --funnel-font-scale, 1 ) );
+			font-size: calc( #{wp-vars.$font-size-medium} * var( --funnel-font-scale, 1 ) );
 			font-weight: 600;
-			line-height: 1.2;
+			line-height: calc( #{wp-vars.$font-line-height-medium} * var( --funnel-font-scale, 1 ) );
 		}
 
 		&-label-count {
-			font-size: calc( 22px * var( --funnel-font-scale, 1 ) );
+			font-size: calc( #{wp-vars.$font-size-x-large} * var( --funnel-font-scale, 1 ) );
 			font-weight: 700;
 			font-variant-numeric: tabular-nums;
-			line-height: 1.15;
+			line-height: calc( #{wp-vars.$font-line-height-x-large} * var( --funnel-font-scale, 1 ) );
 		}
 
 		// Stage descriptors sit inside the floating Popover (its own light surface),
 		// so they use its default dark text; muted weight.
 		&-label-pct {
-			font-size: 12px;
-			line-height: 1.35;
+			font-size: wp-vars.$font-size-small;
+			line-height: wp-vars.$font-line-height-small;
 			margin: 0;
 		}
 
 		&-label-drop {
-			font-size: 12px;
-			line-height: 1.35;
+			font-size: wp-vars.$font-size-small;
+			line-height: wp-vars.$font-line-height-small;
 			font-variant-numeric: tabular-nums;
 			margin: 0;
 		}
@@ -722,7 +722,7 @@
 			margin: 0;
 			padding: 32px 20px;
 			text-align: center;
-			font-size: 13px;
+			font-size: wp-vars.$font-size-medium;
 			color: wp-colors.$gray-600;
 		}
 	}
