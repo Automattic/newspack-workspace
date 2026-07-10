@@ -41,7 +41,7 @@ function newspack_jetpack_setup() {
 			'post-details'    => array(
 				'stylesheet' => 'newspack-style',
 				'date'       => '.posted-on',
-				'categories' => '.cat-links:not(.sponsor-label)',
+				'categories' => '.cat-links:not(.sponsor-label):not(.tag-labels)',
 				'tags'       => '.tags-links',
 				'author'     => '.byline:not(.sponsor-byline), .author-avatar',
 			),

@@ -146,7 +146,7 @@
 		}
 	}
 
-	.cat-links:not(.sponsor-label) {
+	.cat-links:not(.sponsor-label):not(.tag-labels) {
 		display: none;
 	}
 

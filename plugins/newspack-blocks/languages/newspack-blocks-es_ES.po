@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Newspack Blocks 1.0.0-alpha.20\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/newspack-blocks\n"
-"POT-Creation-Date: 2026-05-27T09:15:53+00:00\n"
+"POT-Creation-Date: 2026-06-25T00:38:06+00:00\n"
 "PO-Revision-Date: 2025-08-12T14:56:45+00:00\n"
 "Last-Translator: \n"
 "Language-Team: \n"
@@ -283,31 +283,31 @@ msgstr " y "
 msgid ", "
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1314
+#: includes/class-newspack-blocks.php:1343
 msgid "Jetpack donations is disabled in favour of Newspack donations."
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1347 dist/editor.js:5
+#: includes/class-newspack-blocks.php:1376 dist/editor.js:5
 #: src/shared/js/utils.js:48
 msgid "Draft"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1348 dist/editor.js:5
+#: includes/class-newspack-blocks.php:1377 dist/editor.js:5
 #: src/shared/js/utils.js:48
 msgid "Scheduled"
 msgstr ""
 
 #. Translators: %s is the %s is the frequency.
-#: includes/class-newspack-blocks.php:1506 dist/editor.js:39
+#: includes/class-newspack-blocks.php:1535 dist/editor.js:39
 #, php-format
 msgid "per %s"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1537
+#: includes/class-newspack-blocks.php:1566
 msgid " once"
 msgstr ""
 
-#: includes/class-newspack-blocks.php:1540
+#: includes/class-newspack-blocks.php:1569
 msgid " per "
 msgstr ""
 
@@ -1798,6 +1798,10 @@ msgstr ""
 msgid ""
 "Sets a minimum height for the block, using a percentage of the screen's "
 "current height."
+msgstr ""
+
+#: dist/editor.js:51
+msgid "Show tag labels"
 msgstr ""
 
 #: dist/editor.js:51

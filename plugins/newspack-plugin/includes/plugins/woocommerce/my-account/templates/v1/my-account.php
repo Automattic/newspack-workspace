@@ -43,7 +43,11 @@
 						 * See My_Account_UI_V1::render_content_around_shortcode() for more
 						 * details.
 						 */
-						echo do_shortcode( '[woocommerce_my_account]' );
+						if ( class_exists( 'WooCommerce' ) && function_exists( 'wc_get_page_permalink' ) ) {
+							echo do_shortcode( '[woocommerce_my_account]' );
+						} else {
+							echo do_shortcode( '[newspack_my_account]' );
+						}
 						?>
 					</div>
 

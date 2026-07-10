@@ -1167,4 +1167,238 @@ class Ads_List_REST_Test extends WP_UnitTestCase {
 		$this->assertNotContains( $scheduled, $query->posts );
 		$this->assertNotContains( $draft, $query->posts );
 	}
+
+	/**
+	 * `sanitize_ad_date` keeps a bare date and trims the time component
+	 * off ISO datetime values without shifting the calendar day. Non-ISO
+	 * parseable strings (e.g. natural language or US-format dates) are
+	 * rejected so PHP and SQL classification stays in sync.
+	 */
+	public function test_sanitize_ad_date_normalizes_datetime_to_date() {
+		$this->assertSame( '2026-06-29', Ads::sanitize_ad_date( '2026-06-29' ) );
+		$this->assertSame( '2026-06-29', Ads::sanitize_ad_date( '2026-06-29T00:00:00' ) );
+		$this->assertSame( '2026-06-29', Ads::sanitize_ad_date( '2026-06-29T23:59:59.000Z' ) );
+		$this->assertSame( '', Ads::sanitize_ad_date( '' ) );
+		$this->assertSame( '', Ads::sanitize_ad_date( 'not-a-date' ) );
+		$this->assertSame( '', Ads::sanitize_ad_date( 'June 30, 2026' ) );
+		$this->assertSame( '', Ads::sanitize_ad_date( '06/29/2026' ) );
+	}
+
+	/**
+	 * A published ad whose dates were stored as ISO datetime still reports
+	 * the right kind and a clean `starts_at` (the "Invalid Date" cause).
+	 *
+	 * Because `sanitize_ad_date` is registered as a `sanitize_callback`,
+	 * `meta_input` normalises the value on insert. Write the raw datetime
+	 * directly into postmeta via $wpdb to exercise the legacy path.
+	 */
+	public function test_get_status_tolerates_iso_datetime_meta() {
+		global $wpdb;
+
+		$future  = gmdate( 'Y-m-d', strtotime( '+10 days' ) ) . 'T00:00:00';
+		$post_id = $this->make_ad( [ 'post_status' => 'publish' ] );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->insert(
+			$wpdb->postmeta,
+			[
+				'post_id'    => $post_id,
+				'meta_key'   => 'start_date',
+				'meta_value' => $future, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			]
+		);
+		clean_post_cache( $post_id );
+		wp_cache_delete( $post_id, 'post_meta' );
+
+		$status = Ads_List_REST::get_status_for_post( get_post( $post_id ) );
+
+		$this->assertSame( 'scheduled', $status['kind'] );
+		$this->assertIsInt( $status['starts_at'] );
+	}
+
+	/**
+	 * A published ad with a legacy ISO datetime `start_date` stored today
+	 * must agree between `get_status_for_post` (kind=active) and the REST
+	 * filter (appears in active bucket, not in scheduled bucket).
+	 */
+	public function test_active_filter_matches_status_for_legacy_datetime_meta() {
+		global $wpdb;
+
+		$today_iso = gmdate( 'Y-m-d' ) . 'T00:00:00';
+		$post_id   = $this->make_ad( [ 'post_status' => 'publish' ] );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->insert(
+			$wpdb->postmeta,
+			[
+				'post_id'    => $post_id,
+				'meta_key'   => 'start_date',
+				'meta_value' => $today_iso, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			]
+		);
+		clean_post_cache( $post_id );
+		wp_cache_delete( $post_id, 'post_meta' );
+
+		$status = Ads_List_REST::get_status_for_post( get_post( $post_id ) );
+		$this->assertSame( 'active', $status['kind'] );
+
+		$active_query = new WP_Query(
+			array_merge(
+				Ads_List_REST::filter_rest_query(
+					[],
+					$this->rest_request( [ Ads_List_REST::STATUS_QUERY_PARAM => 'active' ] )
+				),
+				[
+					'post_type'      => Ads::CPT,
+					'fields'         => 'ids',
+					'posts_per_page' => -1,
+				]
+			)
+		);
+		$this->assertContains( $post_id, $active_query->posts );
+
+		$scheduled_query = new WP_Query(
+			array_merge(
+				Ads_List_REST::filter_rest_query(
+					[],
+					$this->rest_request( [ Ads_List_REST::STATUS_QUERY_PARAM => 'scheduled' ] )
+				),
+				[
+					'post_type'      => Ads::CPT,
+					'fields'         => 'ids',
+					'posts_per_page' => -1,
+				]
+			)
+		);
+		$this->assertNotContains( $post_id, $scheduled_query->posts );
+	}
+
+	/**
+	 * Impossible calendar dates (month 13, day 30 of February) must
+	 * normalise to '' — they pass the regex but fail `checkdate`.
+	 */
+	public function test_sanitize_ad_date_rejects_impossible_dates() {
+		$this->assertSame( '', Ads::sanitize_ad_date( '2026-13-01' ) );
+		$this->assertSame( '', Ads::sanitize_ad_date( '2026-02-30' ) );
+	}
+
+	/**
+	 * An impossible date stored raw in postmeta (bypassing sanitize_ad_date)
+	 * must be treated as "no constraint" by both get_status_for_post and the
+	 * SQL filter — the ad is active, not expired.
+	 *
+	 * STR_TO_DATE returns NULL for an impossible calendar date like 2026-02-30,
+	 * so the SQL bucket ignores it, matching what sanitize_ad_date returns ''.
+	 */
+	public function test_filter_matches_status_for_impossible_date_meta() {
+		global $wpdb;
+
+		$post_id = $this->make_ad( [ 'post_status' => 'publish' ] );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$wpdb->insert(
+			$wpdb->postmeta,
+			[
+				'post_id'    => $post_id,
+				'meta_key'   => 'expiry_date',
+				'meta_value' => '2026-02-30', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+			]
+		);
+		clean_post_cache( $post_id );
+		wp_cache_delete( $post_id, 'post_meta' );
+
+		$this->assertSame( 'active', Ads_List_REST::get_status_for_post( get_post( $post_id ) )['kind'] );
+
+		$active_query = new WP_Query(
+			array_merge(
+				Ads_List_REST::filter_rest_query(
+					[],
+					$this->rest_request( [ Ads_List_REST::STATUS_QUERY_PARAM => 'active' ] )
+				),
+				[
+					'post_type'      => Ads::CPT,
+					'fields'         => 'ids',
+					'posts_per_page' => -1,
+				]
+			)
+		);
+		$this->assertContains( $post_id, $active_query->posts );
+
+		$expired_query = new WP_Query(
+			array_merge(
+				Ads_List_REST::filter_rest_query(
+					[],
+					$this->rest_request( [ Ads_List_REST::STATUS_QUERY_PARAM => 'expired' ] )
+				),
+				[
+					'post_type'      => Ads::CPT,
+					'fields'         => 'ids',
+					'posts_per_page' => -1,
+				]
+			)
+		);
+		$this->assertNotContains( $post_id, $expired_query->posts );
+	}
+
+	/**
+	 * A REST write with an invalid date format returns 400 and leaves
+	 * existing meta unchanged. A valid ISO datetime is accepted and
+	 * normalized to a bare Y-m-d date.
+	 */
+	public function test_rest_write_rejects_invalid_date_and_preserves_existing() {
+		Ads::register_meta();
+
+		global $wp_rest_server;
+		$wp_rest_server = new \WP_REST_Server();
+		do_action( 'rest_api_init' );
+
+		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin_id );
+
+		$post_id = $this->make_ad(
+			[
+				'post_status' => 'publish',
+				'meta_input'  => [ 'start_date' => '2026-01-01' ],
+			]
+		);
+
+		// Invalid US-format date: must be rejected with 400.
+		$request = new WP_REST_Request( 'POST', '/wp/v2/' . Ads::CPT . '/' . $post_id );
+		$request->set_param( 'meta', [ 'start_date' => '06/29/2026' ] );
+		$response = rest_do_request( $request );
+
+		$this->assertSame( 400, $response->get_status() );
+		$this->assertSame( '2026-01-01', get_post_meta( $post_id, 'start_date', true ) );
+
+		// Valid ISO datetime: must be accepted and stored as a bare date.
+		$request2 = new WP_REST_Request( 'POST', '/wp/v2/' . Ads::CPT . '/' . $post_id );
+		$request2->set_param( 'meta', [ 'start_date' => '2026-06-29T00:00:00' ] );
+		$response2 = rest_do_request( $request2 );
+
+		$this->assertSame( 200, $response2->get_status() );
+		wp_cache_delete( $post_id, 'post_meta' );
+		$this->assertSame( '2026-06-29', get_post_meta( $post_id, 'start_date', true ) );
+
+		$wp_rest_server = null;
+	}
+
+	/**
+	 * `ad_default_fields` seeds the read-only counters on a new ad so the
+	 * editor's round-trip is an unchanged no-op, not a denied meta insert.
+	 */
+	public function test_new_ad_seeds_tracking_counter_rows() {
+		Ads_List_REST::register_meta();
+
+		$post_id = self::factory()->post->create(
+			[
+				'post_type'   => Ads::CPT,
+				'post_status' => 'auto-draft',
+				'post_title'  => 'Seed test ad',
+			]
+		);
+
+		$this->assertSame( '0', get_post_meta( $post_id, 'tracking_impressions', true ) );
+		$this->assertSame( '0', get_post_meta( $post_id, 'tracking_clicks', true ) );
+		$this->assertNotEmpty( get_post_meta( $post_id, 'tracking_impressions', false ) );
+	}
 }
