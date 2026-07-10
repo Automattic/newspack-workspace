@@ -52,7 +52,7 @@ const TrendSection = ( { current, previous }: SectionProps ) => (
 			title={ __( 'Performance trend', 'newspack-plugin' ) }
 			description={ __( 'Daily impressions and clicks across the selected timeframe.', 'newspack-plugin' ) }
 		/>
-		<HStack spacing={ 4 } alignment="stretch">
+		<HStack spacing={ 4 } alignment="stretch" wrap>
 			<FlexBlock>
 				<ChartCard title={ __( 'Impressions', 'newspack-plugin' ) } payload={ current.performance_by_day }>
 					<LineChart series={ buildSeries( current, previous, 'impressions' ) } formatLabel={ formatDateLabel } />
