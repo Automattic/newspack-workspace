@@ -43,9 +43,13 @@ export const activeBreadcrumbs = ( sections = [], pathname ) => {
  * A section can supply a leaf via `headerData.sectionName` — either a single
  * label (e.g. an integration name, or Add/Edit) or an ordered array of
  * `{ label, url? }` crumbs when the leaf needs its own linked ancestors. Each
- * crumb is appended in turn, skipping one whose label just repeats the current
- * trailing label so the same leaf never renders twice (some routes author the
- * leaf both statically and via `sectionName`).
+ * crumb is appended in turn.
+ *
+ * Convention: a route authors its current-page leaf in exactly ONE place —
+ * the static `breadcrumbs` array for a constant label, or `sectionName` for a
+ * render-time label (e.g. Add/Edit) whose static trail then holds ancestors
+ * only. Never both. The trailing-label skip below is a defensive guard against
+ * a route accidentally doing both; it is not a supported pattern to rely on.
  *
  * @param {Array}                  breadcrumbItems Base trail `{ label, url? }[]`.
  * @param {string|Array|undefined} sectionName     A label, an array of crumbs, or falsy.

@@ -62,7 +62,6 @@ export default function Institutions() {
 			} );
 		}
 		setHeaderData( {
-			sectionName: __( 'Institutions', 'newspack-plugin' ),
 			actions,
 		} );
 	}, [ setHeaderData, data, isLoading ] );

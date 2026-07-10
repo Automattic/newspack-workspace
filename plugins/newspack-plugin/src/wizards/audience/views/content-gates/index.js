@@ -26,6 +26,7 @@ import { AUDIENCE_CONTENT_GATES_WIZARD_SLUG, BASE_HEADER_TEXT } from './consts';
 
 const ROOT = [ { label: __( 'Audience Management', 'newspack-plugin' ) } ];
 const ACCESS_CONTROL = [ ...ROOT, { label: __( 'Access Control', 'newspack-plugin' ), url: '#/content-gates' } ];
+const ACCESS_CONTROL_INSTITUTIONS = [ ...ACCESS_CONTROL, { label: __( 'Institutions', 'newspack-plugin' ), url: '#/institutions' } ];
 
 const AudienceContentGates = ( props, ref ) => {
 	const { updateWizardSettings } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -101,7 +102,7 @@ const AudienceContentGates = ( props, ref ) => {
 					exact: true,
 					backNav: '#/institutions',
 					title: __( 'Add Institution', 'newspack-plugin' ),
-					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Add Institution', 'newspack-plugin' ) } ],
+					breadcrumbs: ACCESS_CONTROL_INSTITUTIONS,
 				},
 				{
 					path: '/institutions/:id',
@@ -110,7 +111,7 @@ const AudienceContentGates = ( props, ref ) => {
 					exact: true,
 					backNav: '#/institutions',
 					title: __( 'Edit Institution', 'newspack-plugin' ),
-					breadcrumbs: [ ...ACCESS_CONTROL, { label: __( 'Edit Institution', 'newspack-plugin' ) } ],
+					breadcrumbs: ACCESS_CONTROL_INSTITUTIONS,
 				},
 			] }
 		/>

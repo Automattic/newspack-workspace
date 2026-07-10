@@ -115,7 +115,6 @@ const CountdownBannerSettings = () => {
 					type: 'more',
 				},
 			],
-			sectionName: __( 'Metered Countdown', 'newspack-plugin' ),
 		} );
 	}, [ config, isDirty, setHeaderData ] );
 
