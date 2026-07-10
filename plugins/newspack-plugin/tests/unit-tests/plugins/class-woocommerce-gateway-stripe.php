@@ -27,8 +27,16 @@ class Newspack_Test_WooCommerce_Gateway_Stripe extends WP_UnitTestCase {
 		$orders_database        = [];
 		$subscriptions_database = [];
 		WC_Stripe_Helper::reset_testing_settings();
-		\Newspack_Blocks\Modal_Checkout::$is_modal_checkout = false;
+		unset( $_REQUEST['modal_checkout'] );
 		delete_option( Donations::DONATION_BILLING_FIELDS_OPTION );
+	}
+
+	/**
+	 * Clean up request data.
+	 */
+	public function tear_down() {
+		unset( $_REQUEST['modal_checkout'] );
+		parent::tear_down();
 	}
 
 	// -------------------------------------------------------------------------
@@ -524,7 +532,7 @@ class Newspack_Test_WooCommerce_Gateway_Stripe extends WP_UnitTestCase {
 		update_option( Donations::DONATION_BILLING_FIELDS_OPTION, [ 'billing_first_name', 'billing_email' ] );
 		WC_Stripe_Helper::$settings = [ 'adaptive_pricing' => 'yes' ];
 
-		\Newspack_Blocks\Modal_Checkout::$is_modal_checkout = false;
+		unset( $_REQUEST['modal_checkout'] );
 		WooCommerce_Gateway_Stripe::maybe_disable_adaptive_pricing_on_modal_checkout_request();
 		$this->assertSame(
 			'yes',
@@ -532,7 +540,7 @@ class Newspack_Test_WooCommerce_Gateway_Stripe extends WP_UnitTestCase {
 			'The wrapper should not act outside modal checkout requests.'
 		);
 
-		\Newspack_Blocks\Modal_Checkout::$is_modal_checkout = true;
+		$_REQUEST['modal_checkout'] = '1';
 		WooCommerce_Gateway_Stripe::maybe_disable_adaptive_pricing_on_modal_checkout_request();
 		$this->assertSame(
 			'no',

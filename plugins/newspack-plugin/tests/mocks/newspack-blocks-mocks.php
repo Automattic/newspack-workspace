@@ -1,19 +1,14 @@
-<?php // phpcs:disable WordPress.Files.FileName.InvalidClassFileName, Squiz.Commenting.ClassComment.Missing, Squiz.Commenting.FunctionComment.Missing, Squiz.Commenting.VariableComment.Missing, Squiz.Commenting.FileComment.Missing
-
-namespace Newspack_Blocks;
+<?php // phpcs:disable WordPress.Files.FileName.InvalidClassFileName, Squiz.Commenting.FileComment.Missing
 
 /**
- * Minimal mock of Newspack_Blocks\Modal_Checkout, used when newspack-blocks is
- * not loaded in the test environment.
- *
- * The $is_modal_checkout flag defaults to false so that unrelated code paths
- * guarded by method_exists + is_modal_checkout() behave the same as when the
- * class is absent. Tests that need a modal checkout request set the flag and
- * the shared set_up() resets it.
+ * Provide Newspack_Blocks\Modal_Checkout when newspack-blocks is not loaded in
+ * the test environment, by aliasing the shared Newspack_Test_Modal_Checkout
+ * double. A single suite-wide implementation avoids competing doubles: the
+ * WooCommerce Subscriptions tests alias the same class when it does not exist
+ * yet, and both consumers get the full is_modal_checkout() +
+ * get_user_id_from_email() surface, driven by request superglobals.
  */
-class Modal_Checkout {
-	public static $is_modal_checkout = false;
-	public static function is_modal_checkout() {
-		return self::$is_modal_checkout;
-	}
+if ( ! class_exists( 'Newspack_Blocks\Modal_Checkout', false ) ) {
+	require_once __DIR__ . '/../unit-tests/plugins/woocommerce-subscriptions/class-newspack-test-modal-checkout.php';
+	class_alias( 'Newspack_Test_Modal_Checkout', 'Newspack_Blocks\Modal_Checkout' );
 }
