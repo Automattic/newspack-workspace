@@ -1,8 +1,8 @@
 /**
- * Tests for the Funnel viz: the pure helpers (opacity interpolation, clamped
- * drop-off) and render smoke tests covering the hover/focus-revealed label
- * Popovers, the stepped section widths and trapezoidal separators, and the edge
- * cases.
+ * Tests for the Funnel viz: the pure helpers (clamped drop-off) and render smoke
+ * tests covering the hover/focus-revealed label Popovers, the stepped section
+ * widths and trapezoidal separators, the primary-scale fill/separator colors, and
+ * the edge cases.
  */
 
 /**
@@ -13,20 +13,9 @@ import { fireEvent, render, screen } from '@testing-library/react';
 /**
  * Internal dependencies
  */
-import Funnel, { stepOpacity, dropFromPrevious, type FunnelStage } from './Funnel';
+import Funnel, { dropFromPrevious, type FunnelStage } from './Funnel';
 
 describe( 'Funnel helpers', () => {
-	describe( 'stepOpacity', () => {
-		it( 'runs 1.0 at the first step to 0.6 at the last', () => {
-			expect( stepOpacity( 0, 3 ) ).toBeCloseTo( 1.0, 5 );
-			expect( stepOpacity( 1, 3 ) ).toBeCloseTo( 0.8, 5 );
-			expect( stepOpacity( 2, 3 ) ).toBeCloseTo( 0.6, 5 );
-		} );
-		it( 'is full opacity for a single step', () => {
-			expect( stepOpacity( 0, 1 ) ).toBe( 1 );
-		} );
-	} );
-
 	describe( 'dropFromPrevious', () => {
 		it( 'computes 1 - count/prev', () => {
 			expect( dropFromPrevious( 2000, 25000 ) ).toBeCloseTo( 0.92, 3 ); // Mid-size publisher engagement step.
@@ -134,15 +123,19 @@ describe( 'Funnel render', () => {
 		} );
 	} );
 
-	it( 'sets both gradient opacity custom properties on every section', () => {
-		// These drive the SCSS gradient fill; assert they are emitted so a rename
-		// drift between the component and the stylesheet is caught here.
+	it( 'sets a primary-scale fill on every section and a separator color on every connector', () => {
+		// These drive the SCSS `background-color`; assert they are emitted so a
+		// rename drift between the component and the stylesheet is caught here.
 		const { container } = render( <Funnel stages={ stages( [ 'A', 1000 ], [ 'B', 500 ], [ 'C', 100 ] ) } /> );
 		const steps = container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-step' );
 		expect( steps ).toHaveLength( 3 );
 		steps.forEach( step => {
-			expect( step.style.getPropertyValue( '--band-opacity-top' ) ).not.toBe( '' );
-			expect( step.style.getPropertyValue( '--band-opacity-bottom' ) ).not.toBe( '' );
+			expect( step.style.getPropertyValue( '--band-fill' ) ).not.toBe( '' );
+		} );
+		const separators = container.querySelectorAll< HTMLElement >( '.newspack-insights__funnel-separator' );
+		expect( separators ).toHaveLength( 2 );
+		separators.forEach( separator => {
+			expect( separator.style.getPropertyValue( '--band-separator' ) ).not.toBe( '' );
 		} );
 	} );
 

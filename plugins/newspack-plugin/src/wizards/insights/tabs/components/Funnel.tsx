@@ -32,16 +32,29 @@ import { useState } from '@wordpress/element';
 /**
  * Internal dependencies
  */
+import colors from '../../../../../packages/colors/colors.module.scss';
 import { formatNumber, formatPercent } from './format';
 
-const FULL_OPACITY = 1;
-const TAIL_OPACITY = 0.6;
-// Distinct-sections gradient: each band ramps symmetrically around its own shade
-// by this fraction of the step-to-step opacity gap (darker top → lighter bottom).
-const INTERNAL_GRADIENT_FRACTION = 0.5;
-// The bottom of the gradient should be a little less opaque than the top of the
-// next band, so the bands are visually distinct.
-const INTERNAL_GRADIENT_FLOOR = 0.15;
+// Sections and their trapezoidal separators step through discrete stops of the
+// primary color scale (top = darkest, bottom = lightest) rather than fading by
+// opacity. Each band takes the next stop down from the top anchor by its position:
+// fills run primary-700, 600, 500, … ; separators run primary-200, 100, 050, … .
+// A short funnel simply stops early (a 3-step funnel is 700/600/500), and the
+// scales are sized for the 5-stage maximum so the index never runs off the end.
+const FUNNEL_FILL_SCALE = [ 'primary-700', 'primary-600', 'primary-500', 'primary-400', 'primary-300' ];
+const FUNNEL_SEPARATOR_SCALE = [ 'primary-200', 'primary-100', 'primary-050', 'primary-000' ];
+
+/**
+ * The scale stop for a band at `index`: one adjacent stop down from the top anchor
+ * per position, clamped to the last stop. Resolves the token to its hex via the
+ * color map, falling back to the token name if the map can't resolve it (e.g. under
+ * the test env's scss stub).
+ */
+const pickScale = ( scale: string[], index: number ): string => {
+	const token = scale[ Math.min( index, scale.length - 1 ) ];
+	return colors[ token ] ?? token;
+};
+
 // Each band's minimum width, as this fraction of the prior band's width times the
 // total number of steps, to avoid extremely narrow funnels. Capped by
 // MAX_BAND_TAPER below so the floor can never make a band as wide as the one above.
@@ -68,14 +81,6 @@ export interface FunnelStage {
 export interface FunnelProps {
 	stages: FunnelStage[];
 }
-
-/** Linear opacity from 1.0 at the first step to 0.6 at the last. */
-export const stepOpacity = ( index: number, stepCount: number ): number => {
-	if ( stepCount <= 1 ) {
-		return FULL_OPACITY;
-	}
-	return FULL_OPACITY + ( TAIL_OPACITY - FULL_OPACITY ) * ( index / ( stepCount - 1 ) );
-};
 
 /**
  * Drop-off from the previous step as a fraction in [0, 1]. Clamped at 0: funnel
@@ -169,10 +174,6 @@ const Funnel = ( { stages }: FunnelProps ) => {
 		const share = topCount > 0 ? stage.count / topCount : 0;
 		bandWidths.push( Math.max( minBandPct * prev, Math.min( MAX_BAND_TAPER * prev, share ) ) );
 	} );
-	// Half the internal ramp per band, in opacity units. Derived from the step gap
-	// so the sheen scales with the funnel length (subtler on longer funnels).
-	const stepGap = stepCount > 1 ? ( FULL_OPACITY - TAIL_OPACITY ) / ( stepCount - 1 ) : 0;
-	const halfSpan = stepGap * INTERNAL_GRADIENT_FRACTION;
 
 	return (
 		<ol
@@ -185,12 +186,12 @@ const Funnel = ( { stages }: FunnelProps ) => {
 			onBlur={ handleBlur }
 		>
 			{ stages.map( ( stage, index ) => {
-				// Each band ramps symmetrically around its own shade (darker top →
-				// lighter bottom). Adjacent bands do NOT share a boundary value, so a
-				// visible step separates the sections. Clamped to a valid [0,1] alpha.
-				const bandOpacity = stepOpacity( index, stepCount );
-				const topOpacity = Math.min( FULL_OPACITY, bandOpacity + halfSpan );
-				const bottomOpacity = Math.max( 0, bandOpacity - halfSpan - INTERNAL_GRADIENT_FLOOR );
+				// Each band takes a discrete stop of the primary scale (darkest at the
+				// top, lightest at the bottom); the separator below it steps through a
+				// lighter companion scale. Sampled evenly so a short funnel spans the
+				// same endpoints as the 5-stage maximum.
+				const fillColor = pickScale( FUNNEL_FILL_SCALE, index );
+				const separatorColor = pickScale( FUNNEL_SEPARATOR_SCALE, index );
 				const pctOfTop = topCount > 0 ? stage.count / topCount : 0;
 				const drop = index > 0 ? dropFromPrevious( stage.count, stages[ index - 1 ].count ) : null;
 				// Descriptor strings for steps after the first; rendered both as an
@@ -216,8 +217,7 @@ const Funnel = ( { stages }: FunnelProps ) => {
 						className="newspack-insights__funnel-step"
 						style={
 							{
-								'--band-opacity-top': topOpacity,
-								'--band-opacity-bottom': bottomOpacity,
+								'--band-fill': fillColor,
 								'--funnel-font-scale': fontScale,
 								maxWidth: `${ bandWidth * 100 }%`,
 							} as React.CSSProperties
@@ -240,7 +240,7 @@ const Funnel = ( { stages }: FunnelProps ) => {
 								aria-hidden="true"
 								style={
 									{
-										opacity: bandOpacity,
+										'--band-separator': separatorColor,
 										'--separator-inset': `${ separatorInsetPct }%`,
 									} as React.CSSProperties
 								}

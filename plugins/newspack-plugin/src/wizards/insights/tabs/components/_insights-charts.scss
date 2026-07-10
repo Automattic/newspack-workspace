@@ -9,6 +9,7 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 @use "../../../../../packages/colors/colors.module" as colors;
 
 // Categorical series palette for charts. Hardcoded because a chart needs
@@ -609,7 +610,7 @@
 
 		width: 100%;
 		margin: 0 auto;
-		padding: 20px;
+		padding: wp-vars.$grid-unit-10;
 		box-sizing: border-box;
 		list-style: none;
 		background-color: wp-colors.$white;
@@ -648,7 +649,7 @@
 			left: 0;
 			width: 100%;
 			height: 24px;
-			background-color: #{colors.$primary-200};
+			background-color: var( --band-separator, #{colors.$primary-000} );
 			// Clamp the per-side inset so the bottom edge can't be narrower than the
 			// section min-width: ( 100% − min-width ) / 2 is the inset that yields
 			// exactly min-width at the bottom.
@@ -666,11 +667,7 @@
 			position: absolute;
 			inset: 0;
 			z-index: 0;
-			background: linear-gradient(
-				to bottom,
-				rgba( #{ colors.$primary-600--rgb }, var( --band-opacity-top, 1 ) ) 0%,
-				rgba( #{ colors.$primary-600--rgb }, var( --band-opacity-bottom, 1 ) ) 100%
-			);
+			background-color: var( --band-fill, #{colors.$primary-300} );
 		}
 
 		&-content {
@@ -680,10 +677,7 @@
 			flex-direction: column;
 			align-items: center;
 			max-width: 160px; // wrap width for the descriptor lines.
-			// Always white text; the dark shadow keeps it legible over both the dark
-			// upper bands and the faded (light) lower ones — no per-band color switch.
 			color: wp-colors.$white;
-			text-shadow: 0 1px 2px rgba( wp-colors.$gray-900, 0.5 );
 		}
 
 		&-labels {
