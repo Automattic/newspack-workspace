@@ -259,8 +259,8 @@ const MetricCard = ( props: MetricCardProps ) => {
 			<Card __experimentalCoreCard className="newspack-insights__metric-card newspack-insights__metric-card--note">
 				<HStack className="newspack-insights__metric-card-label" alignment="top" justify="space-between" spacing={ 2 }>
 					<span>{ label }</span>
-					{ ( fallbackSecondary ?? secondary ) && (
-						<Tooltip delay={ 250 } hideOnClick={ false } placement="bottom-start" text={ fallbackSecondary ?? secondary }>
+					{ secondary && (
+						<Tooltip delay={ 250 } hideOnClick={ false } placement="bottom-start" text={ secondary }>
 							<Button icon={ info } className="newspack-insights__metric-card-info-icon" variant="tertiary" />
 						</Tooltip>
 					) }
@@ -273,6 +273,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 						dataMissing={ dataMissing }
 						warming={ warming }
 					/>
+					{ secondary && <div className="newspack-insights__metric-card-secondary">{ secondary }</div> }
 				</div>
 				{ description && (
 					<div className="newspack-insights__metric-card-description">
