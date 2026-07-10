@@ -364,6 +364,9 @@ const MetricCard = ( props: MetricCardProps ) => {
 				>
 					{ heroContent }
 				</div>
+				{ ( fallbackSecondary ?? secondary ) && (
+					<div className="newspack-insights__metric-card-secondary">{ fallbackSecondary ?? secondary }</div>
+				) }
 				{ magnitude !== null && (
 					<div
 						className={ `newspack-insights__metric-card-delta newspack-insights__metric-card-delta--${ tone }` }

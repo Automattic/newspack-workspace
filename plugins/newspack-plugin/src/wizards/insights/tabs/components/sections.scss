@@ -239,6 +239,9 @@
 			line-height: 1.4;
 			color: wp-colors.$gray-700;
 			font-variant-numeric: tabular-nums;
+			@media screen and (min-width: 783px){
+				display: none;
+			}
 		}
 
 		&-delta {
@@ -291,11 +294,6 @@
 			line-height: 1.4;
 			color: wp-colors.$gray-700;
 			text-align: left;
-			&--long {
-				@media screen and (min-width: 783px){
-					display: none;
-				}
-			}
 		}
 
 		// Empty-state variant: same card chrome as a populated metric
