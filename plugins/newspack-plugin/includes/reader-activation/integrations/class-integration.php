@@ -18,6 +18,11 @@ abstract class Integration {
 	/**
 	 * Map of ESP setting keys to their legacy option names.
 	 *
+	 * The account-deletion settings (`sync_account_deletion`, `account_deletion_handling`)
+	 * are intentionally absent: they derive from the single legacy `sync_esp_delete`
+	 * boolean with per-field logic rather than a straight value copy, so they are
+	 * migrated by migrate_account_deletion_setting() instead.
+	 *
 	 * @var array<string, string>
 	 */
 	private static $legacy_option_map = [
@@ -25,8 +30,14 @@ abstract class Integration {
 		'mailchimp_reader_default_status' => 'newspack_reader_activation_mailchimp_reader_default_status',
 		'active_campaign_master_list'     => 'newspack_reader_activation_active_campaign_master_list',
 		'constant_contact_list_id'        => 'newspack_reader_activation_constant_contact_list_id',
-		'sync_esp_delete'                 => 'newspack_reader_activation_sync_esp_delete',
 	];
+
+	/**
+	 * Legacy global option that the account-deletion settings migrate from.
+	 *
+	 * @var string
+	 */
+	const LEGACY_SYNC_DELETE_OPTION = 'newspack_reader_activation_sync_esp_delete';
 
 	/**
 	 * Option name prefix for storing enabled incoming metadata fields per integration.
@@ -259,6 +270,36 @@ abstract class Integration {
 	 * @return true|\WP_Error True on success or WP_Error on failure.
 	 */
 	abstract public function push_contact_data( $contact, $context = '', $existing_contact = null );
+
+	/**
+	 * Whether this integration can hard-delete a contact from its external system.
+	 *
+	 * When false, the account-deletion settings UI hides the "delete immediately"
+	 * option and falls back to `flag` mode by default — so third-party integrations
+	 * that only implement `push_contact_data()` aren't exposed as a delete-mode
+	 * option that would just return `not_implemented` on every deletion.
+	 *
+	 * Override and return true alongside a `delete_contact()` implementation.
+	 *
+	 * @return bool True if the integration implements delete_contact().
+	 */
+	public function supports_hard_delete(): bool {
+		return false;
+	}
+
+	/**
+	 * Delete a contact from the integration's external system.
+	 *
+	 * Integrations that support hard deletion should override this AND
+	 * `supports_hard_delete()`. The default returns a "not implemented" WP_Error
+	 * so the dispatcher can log and skip.
+	 *
+	 * @param string $email Email address of the contact to delete.
+	 * @return true|\WP_Error True on success, WP_Error otherwise.
+	 */
+	public function delete_contact( string $email ) {
+		return new \WP_Error( 'not_implemented', __( 'This integration does not support hard deletion.', 'newspack-plugin' ) );
+	}
 
 	/**
 	 * Handle a logged-in user attempting to register again via the frontend registration flow.
@@ -677,6 +718,61 @@ abstract class Integration {
 	}
 
 	/**
+	 * Get the account-deletion fields declared by this integration.
+	 *
+	 * Auto-appended to every integration's settings. The first field is a top-level
+	 * toggle; the second field is gated by the first via the `condition` predicate
+	 * honored by the frontend renderer.
+	 *
+	 * @return array Array of settings field declarations.
+	 */
+	public function get_account_deletion_fields() {
+		$supports_hard_delete = $this->supports_hard_delete();
+
+		// When the integration supports hard delete, expose both options and default
+		// to `delete` (matches the historical sync_esp_delete=true default for ESP).
+		// Otherwise expose only `flag` and default to it — no point letting publishers
+		// pick a mode that will just return `not_implemented` on every deletion.
+		$handling_options = [
+			[
+				'value' => 'flag',
+				'label' => __( 'Sync deletion metadata', 'newspack-plugin' ),
+			],
+		];
+		if ( $supports_hard_delete ) {
+			array_unshift(
+				$handling_options,
+				[
+					'value' => 'delete',
+					'label' => __( 'Delete contact immediately', 'newspack-plugin' ),
+				]
+			);
+		}
+
+		return [
+			[
+				'key'         => 'sync_account_deletion',
+				'type'        => 'checkbox',
+				'label'       => __( 'Sync user account deletion', 'newspack-plugin' ),
+				'description' => __( 'When a reader account is deleted, propagate the deletion to this integration.', 'newspack-plugin' ),
+				'default'     => true,
+			],
+			[
+				'key'         => 'account_deletion_handling',
+				'type'        => 'select',
+				'label'       => __( 'How to sync deletion', 'newspack-plugin' ),
+				'description' => __( 'Choose whether to delete the contact from the integration immediately, or sync reader data with deletion metadata to be handled at the integration level.', 'newspack-plugin' ),
+				'default'     => $supports_hard_delete ? 'delete' : 'flag',
+				'options'     => $handling_options,
+				'condition'   => [
+					'field'  => 'sync_account_deletion',
+					'equals' => true,
+				],
+			],
+		];
+	}
+
+	/**
 	 * Get the metadata fields declared by this integration.
 	 *
 	 * @return array Array of settings field declarations.
@@ -792,6 +888,7 @@ abstract class Integration {
 	public function get_settings_fields() {
 		return array_merge(
 			$this->settings_fields,
+			$this->get_account_deletion_fields(),
 			$this->get_metadata_fields()
 		);
 	}
@@ -852,6 +949,14 @@ abstract class Integration {
 		if ( null !== $value ) {
 			return $value;
 		}
+
+		// Account-deletion settings derive from the single legacy `sync_esp_delete`
+		// boolean with per-field logic, so they can't use the straight value-copy map.
+		if ( 'sync_account_deletion' === $key || 'account_deletion_handling' === $key ) {
+			$migrated = $this->migrate_account_deletion_setting( $key, $option_name );
+			return null !== $migrated ? $migrated : ( $field['default'] ?? '' );
+		}
+
 		// Attempt to migrate old setting if the field is found in the key map.
 		if ( isset( self::$legacy_option_map[ $key ] ) ) {
 			// Lazy migrate from legacy option.
@@ -863,6 +968,43 @@ abstract class Integration {
 			}
 		}
 		return $field['default'] ?? '';
+	}
+
+	/**
+	 * Lazily migrate an account-deletion setting from the legacy `sync_esp_delete` option.
+	 *
+	 * The legacy flag was effectively three-way in behavior:
+	 *   - `true`  → hard-delete the contact from the ESP.
+	 *   - `false` → keep the contact but remove it from every list (still a deletion signal).
+	 * Because *both* states propagated a deletion, a migrated site keeps deletion sync
+	 * enabled (`sync_account_deletion = true`) regardless of the legacy value; the legacy
+	 * boolean only selects the handling mode: `true → delete`, `false → flag`. Mapping
+	 * legacy `false` to `flag` (rather than disabling sync) preserves the old
+	 * "don't hard-delete, but still signal the deletion" posture for opted-out sites.
+	 *
+	 * The `delete` target is additionally gated on `supports_hard_delete()` — mirroring
+	 * the field default in get_account_deletion_fields() — so a legacy `true` value never
+	 * migrates an integration that can't hard-delete into a mode that would just return
+	 * `not_implemented` on every deletion. Such integrations fall through to `flag`.
+	 *
+	 * Returns null when the legacy option was never set, so the caller falls back to the
+	 * field default. The derived value is persisted so this runs once, not on every read.
+	 *
+	 * @param string $key         The account-deletion field key.
+	 * @param string $option_name The option name to persist the migrated value to.
+	 * @return mixed|null The migrated value, or null if there is no legacy option to migrate.
+	 */
+	private function migrate_account_deletion_setting( $key, $option_name ) {
+		$legacy_value = \get_option( self::LEGACY_SYNC_DELETE_OPTION, null );
+		if ( null === $legacy_value ) {
+			return null;
+		}
+		$migrated = 'sync_account_deletion' === $key
+			? true
+			: ( \wp_validate_boolean( $legacy_value ) && $this->supports_hard_delete() ? 'delete' : 'flag' );
+		// Persist directly to avoid re-running the migration on every read.
+		\update_option( $option_name, $migrated );
+		return $migrated;
 	}
 
 	/**
@@ -891,6 +1033,17 @@ abstract class Integration {
 		}
 
 		$option_name = self::SETTINGS_OPTION_PREFIX . $this->id . '_' . $key;
+		// WP's update_option() short-circuits when the new value equals the implicit
+		// missing-option default of false. For a checkbox like sync_account_deletion
+		// (default `true`), that means unchecking it on a fresh site never persists —
+		// the option is never created, and the next read falls through to the
+		// declared `true` default. Detect a missing option via a null sentinel and
+		// create it with add_option in that case. Either way, keep these
+		// per-integration settings out of the autoload cache (they aren't needed on
+		// every request).
+		if ( null === \get_option( $option_name, null ) ) {
+			return \add_option( $option_name, $sanitized, '', false );
+		}
 		return \update_option( $option_name, $sanitized, false );
 	}
 

@@ -131,7 +131,7 @@ class My_Integration extends Integration {
 | `handle_logged_in_user_registration( $user, $request )` | Called when a logged-in user attempts to register again via the frontend. Use to update user data, link the account, record a new event, etc. Default is a no-op. |
 | `get_my_account_menu_item()` | Return `[ 'slug' => ..., 'label' => ..., 'position' => ... ]` to add a tab to the WooCommerce My Account page. Default returns `null` (no tab). |
 | `render_my_account_page( $value )` | Echo markup for the integration's My Account page. Called inside the WooCommerce account template. |
-| `get_required_plugins()` | Declare third-party plugins this integration depends on. Return an array of `[ 'slug' => ..., 'name' => ..., 'is_active' => ..., 'is_installed' => ... ]` entries. The Integrations UI uses this to gate the card: when every missing dependency is at least installed, it offers an **Activate** action; when any dependency is uninstalled, the card stays disabled with a "Requires …" affordance. Default `[]`. |
+| `delete_contact( $email )` | Remove the contact identified by `$email` from the external system. Default returns a `not_implemented` WP_Error. Required only if the integration declares it can be set to `delete` mode for account-deletion handling. |
 
 ---
 
@@ -198,6 +198,33 @@ Every integration automatically gets three additional fields appended to its set
 | `metadata_prefix` | `text` | String prepended to every outgoing metadata field name (default `NP_`). Stored at `newspack_integration_metadata_prefix_{id}`. Required so outgoing field names are unique on the external system. |
 | `outgoing_metadata_fields` | `metadata` | Subset of Newspack metadata fields to push. Stored at `newspack_integration_outgoing_fields_{id}`. |
 | `incoming_metadata_fields` | `metadata` | Subset of external fields to pull and store on the Newspack user. Stored at `newspack_integration_incoming_fields_{id}` as a `key => raw_data` map. |
+
+### Built-in account-deletion fields
+
+In addition to the metadata fields, every integration automatically gets two account-deletion settings:
+
+| Field key | Type | Purpose |
+| --- | --- | --- |
+| `sync_account_deletion` | `checkbox` | Whether to propagate WordPress reader-account deletions to this integration. Default `true`. Stored at `newspack_integration_settings_{id}_sync_account_deletion`. Migrated lazily from the legacy `newspack_reader_activation_sync_esp_delete` option (see migration note below). |
+| `account_deletion_handling` | `select` | When sync is on, choose between `delete` (call `$integration->delete_contact()`) and `flag` (push the contact with an `Account_Deleted` metadata field — a `Y-m-d H:i:s` timestamp matching peer datetime fields — plus a `Membership_Status` field set to `user-deleted` for backward compatibility). Default `'delete'` for integrations that support hard delete, otherwise `'flag'`. Stored at `newspack_integration_settings_{id}_account_deletion_handling`. Declares a `condition` on `sync_account_deletion` so the configure UI hides it when sync is off. |
+
+**Legacy migration.** Both fields derive from the single legacy `sync_esp_delete` boolean, which was effectively three-way in behavior: `true` hard-deleted the contact, while `false` kept the contact but removed it from every list (still a deletion signal). Because *both* states propagated a deletion, a migrated site always keeps `sync_account_deletion = true`; the legacy boolean only picks the handling mode — `true → delete`, `false → flag`. Mapping legacy `false` to `flag` (rather than disabling sync) preserves the old "don't hard-delete, but still signal the deletion" posture. Sites that never set the legacy option fall through to the field defaults. See `Integration::migrate_account_deletion_setting()`.
+
+The dispatcher lives at `Contact_Sync::handle_account_deletion()` and is called from the v1 `reader_delete_sync` data event handler. Legacy-mode sites continue to use the older `reader_deleted` handler that calls Newspack Newsletters directly.
+
+### Conditional fields
+
+A settings field can declare an optional `condition` so the frontend hides it when another field's current value doesn't match:
+
+```php
+[
+    'key'       => 'dependent_field',
+    'type'      => 'text',
+    'condition' => [ 'field' => 'controlling_field', 'equals' => true ],
+],
+```
+
+The configure-view in `src/wizards/audience/views/integrations/` honors this predicate. Conditions are single-level only (no nesting, no array of conditions).
 
 ---
 
