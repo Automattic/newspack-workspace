@@ -10,12 +10,18 @@
  * more"; the wording is the whole point of the affordance. The mapping is
  * product-owned and arrives via the boot config (see get_next_steps_links()
  * in class-insights-wizard.php).
+ *
+ * Dismissible (DSGNEWS-188): a close button hides the card and persists the
+ * choice in localStorage so it stays dismissed across tabs and reloads.
  */
 
 /**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { useState } from '@wordpress/element';
+import { Button, ExternalLink } from '@wordpress/components';
+import { close } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -25,6 +31,16 @@ import type { NextStepLink } from './InsightsWizard';
 export interface NextStepsProps {
 	links: NextStepLink[];
 }
+
+const DISMISS_KEY = 'newspack-insights-next-steps-dismissed';
+
+const readDismissed = (): boolean => {
+	try {
+		return window.localStorage.getItem( DISMISS_KEY ) === '1';
+	} catch ( e ) {
+		return false; // localStorage unavailable (e.g. privacy mode) — show the card.
+	}
+};
 
 /**
  * Defense in depth: the links originate from a PHP filter
@@ -36,19 +52,40 @@ export interface NextStepsProps {
 const isSafeUrl = ( url: string ): boolean => /^https?:\/\//i.test( url );
 
 const NextSteps = ( { links }: NextStepsProps ) => {
+	const [ dismissed, setDismissed ] = useState( readDismissed );
+
 	const safeLinks = links.filter( link => isSafeUrl( link.url ) );
-	if ( ! safeLinks.length ) {
+	if ( ! safeLinks.length || dismissed ) {
 		return null;
 	}
+
+	const dismiss = () => {
+		try {
+			window.localStorage.setItem( DISMISS_KEY, '1' );
+		} catch ( e ) {
+			// localStorage unavailable — dismiss for this render at least.
+		}
+		setDismissed( true );
+	};
+
 	return (
 		<nav className="newspack-insights__next-steps" aria-label={ __( 'Next steps', 'newspack-plugin' ) }>
-			<span className="newspack-insights__next-steps-label">{ __( 'Next steps', 'newspack-plugin' ) }</span>
+			<div className="newspack-insights__next-steps-header">
+				<span className="newspack-insights__next-steps-label">{ __( 'Next steps', 'newspack-plugin' ) }</span>
+				<Button
+					className="newspack-insights__next-steps-dismiss"
+					icon={ close }
+					label={ __( 'Dismiss next steps', 'newspack-plugin' ) }
+					onClick={ dismiss }
+					size="small"
+				/>
+			</div>
 			<ul className="newspack-insights__next-steps-list">
 				{ safeLinks.map( link => (
 					<li key={ link.url }>
-						<a className="newspack-insights__next-steps-link" href={ link.url } target="_blank" rel="noreferrer">
+						<ExternalLink className="newspack-insights__next-steps-link" href={ link.url }>
 							{ link.label }
-						</a>
+						</ExternalLink>
 					</li>
 				) ) }
 			</ul>

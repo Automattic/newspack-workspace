@@ -455,6 +455,11 @@ class Insights_Wizard extends Wizard {
 			// to the matching help-site Playbooks flow, rendered as a strip in the
 			// tab footer. Product-owned mapping; see get_next_steps_links().
 			'nextStepsLinks'      => self::get_next_steps_links(),
+			// Site WooCommerce currency code (DSGNEWS-188). The client formats Woo
+			// revenue in this currency (in an en-US locale, so the symbol reads
+			// unambiguously: USD → "$", CAD → "CA$", …, rather than the
+			// viewer-locale "US$"). Falls back to USD when WooCommerce is inactive.
+			'currency'            => function_exists( 'get_woocommerce_currency' ) ? get_woocommerce_currency() : 'USD',
 		];
 	}
 
