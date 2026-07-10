@@ -9,6 +9,7 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 @use "../../../../../packages/colors/colors.module" as colors;
 
 // Categorical series palette for charts. Hardcoded because a chart needs
@@ -598,19 +599,23 @@
 	// Self-labeling equal-width rectangles (NEWS-2586): each band carries its label,
 	// count, and (for every step after the first) the drop-off descriptors INSIDE
 	// it. One uniform layout at every width/step-count — no side column, no legend.
-	// Each band is a full-width <li> with a solid FILL behind a flowing TEXT layer
+	// Each band is a full-width <li> with a gradient FILL behind a flowing TEXT layer
 	// that wraps and grows the band. Sections are differentiated by color (opacity)
 	// alone, not by width.
 	&__funnel {
+		// Absolute minimum rendered width of any section; also the floor the
+		// transition separators clamp their bottom edge to (see &-separator), so a
+		// connector never ends up narrower than the min-width section beneath it.
+		$funnel-min-band-width: 80px;
+
 		width: 100%;
-		max-width: 500px; // NEWS-2586 container cap; grid cells render narrower (fluid).
 		margin: 0 auto;
-		padding: 20px;
+		padding: wp-vars.$grid-unit-10;
 		box-sizing: border-box;
 		list-style: none;
-		background-color: #fff;
+		background-color: wp-colors.$white;
 		border: 1px solid wp-colors.$gray-200;
-		border-radius: 4px;
+		border-radius: wp-vars.$radius-medium;
 
 		&-step {
 			position: relative;
@@ -618,10 +623,38 @@
 			flex-direction: column;
 			align-items: center;
 			justify-content: center;
-			min-height: 72px; // baseline; grows with wrapped content.
+			margin-bottom: 24px;
+			margin-left: auto;
+			margin-right: auto;
+			min-height: 75px; // baseline; grows with wrapped content.
+			min-width: $funnel-min-band-width; // Absolute minimum width of any step.
 			padding: 12px 8px;
 			box-sizing: border-box;
 			text-align: center;
+			&:last-child {
+				margin-bottom: 0;
+			}
+		}
+
+		// Transition connector filling the 24px gap below each section (except the
+		// last). A filled box clipped to a trapezoid: its top edge spans the section
+		// above (this element's full width) and its bottom edge insets by the inline
+		// --separator-inset to match the narrower section below — but never so far
+		// that the bottom drops below the section min-width, so the connector always
+		// meets the top of the (min-width-floored) section beneath it. Opacity is set
+		// inline to track the band's shade.
+		&-separator {
+			position: absolute;
+			top: 100%;
+			left: 0;
+			width: 100%;
+			height: 24px;
+			background-color: var( --band-separator, #{colors.$primary-000} );
+			// Clamp the per-side inset so the bottom edge can't be narrower than the
+			// section min-width: ( 100% − min-width ) / 2 is the inset that yields
+			// exactly min-width at the bottom.
+			--_separator-inset: min( var( --separator-inset, 0% ), calc( ( 100% - #{ $funnel-min-band-width } ) / 2 ) );
+			clip-path: polygon( 0 0, 100% 0, calc( 100% - var( --_separator-inset ) ) 100%, var( --_separator-inset ) 100% );
 		}
 
 		// Fill: the single anchor color as a vertical gradient covering the full-width
@@ -634,11 +667,7 @@
 			position: absolute;
 			inset: 0;
 			z-index: 0;
-			background: linear-gradient(
-				to bottom,
-				rgba( #{ colors.$primary-600--rgb }, var( --band-opacity-top, 1 ) ) 0%,
-				rgba( #{ colors.$primary-600--rgb }, var( --band-opacity-bottom, 1 ) ) 100%
-			);
+			background-color: var( --band-fill, #{colors.$primary-300} );
 		}
 
 		&-content {
@@ -648,53 +677,54 @@
 			flex-direction: column;
 			align-items: center;
 			max-width: 160px; // wrap width for the descriptor lines.
+			color: wp-colors.$white;
 		}
 
+		&-labels {
+			.components-popover__content {
+				padding: 4px 8px;
+			}
+		}
+
+		// Name and count scale together with the section width via the shared
+		// --funnel-font-scale (set inline per section, floored in JS), so narrower
+		// sections shrink their text proportionally without changing the name:count
+		// ratio. Line-heights run through the same calc so they scale with the font.
 		&-label-name {
-			font-size: 14px;
+			font-size: calc( #{wp-vars.$font-size-medium} * var( --funnel-font-scale, 1 ) );
 			font-weight: 600;
-			line-height: 1.2;
+			line-height: calc( #{wp-vars.$font-line-height-medium} * var( --funnel-font-scale, 1 ) );
 		}
 
 		&-label-count {
-			font-size: 22px;
+			font-size: calc( #{wp-vars.$font-size-x-large} * var( --funnel-font-scale, 1 ) );
 			font-weight: 700;
 			font-variant-numeric: tabular-nums;
-			line-height: 1.15;
+			line-height: calc( #{wp-vars.$font-line-height-x-large} * var( --funnel-font-scale, 1 ) );
 		}
 
-		// Stage descriptors inherit the band's text color (white/dark); muted weight.
+		// Stage descriptors sit inside the floating Popover (its own light surface),
+		// so they use its default dark text; muted weight.
 		&-label-pct {
-			margin-top: 4px;
-			font-size: 12px;
-			line-height: 1.35;
+			font-size: wp-vars.$font-size-small;
+			line-height: wp-vars.$font-line-height-small;
+			margin: 0;
 		}
 
 		&-label-drop {
-			font-size: 12px;
-			line-height: 1.35;
+			font-size: wp-vars.$font-size-small;
+			line-height: wp-vars.$font-line-height-small;
 			font-variant-numeric: tabular-nums;
+			margin: 0;
 		}
 
 		&-empty {
 			margin: 0;
 			padding: 32px 20px;
 			text-align: center;
-			font-size: 13px;
+			font-size: wp-vars.$font-size-medium;
 			color: wp-colors.$gray-600;
 		}
-	}
-
-	// Contrast follows band opacity: white text on the dark upper bands (with a
-	// soft halo so any spill over the white card stays legible), dark text on the
-	// faded lower bands (reads on both the light fill and the card).
-	&__funnel-step.is-on-dark &__funnel-content {
-		color: #fff;
-		text-shadow: 0 1px 2px rgba( 13, 53, 102, 0.45 );
-	}
-
-	&__funnel-step.is-on-light &__funnel-content {
-		color: wp-colors.$gray-900;
 	}
 
 	// Sortable table affordances — shared across all tabs that embed SortableTable

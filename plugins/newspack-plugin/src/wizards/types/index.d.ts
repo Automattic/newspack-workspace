@@ -7,6 +7,15 @@ declare module '*.png' {
 }
 
 /**
+ * Allow SCSS modules (e.g. the color token map) to be imported as a keyed record
+ * of string values.
+ */
+declare module '*.scss' {
+	const classes: { readonly [ key: string ]: string };
+	export default classes;
+}
+
+/**
  * Wizard API fetch function
  */
 type WizardApiFetch< T = {} > = (
