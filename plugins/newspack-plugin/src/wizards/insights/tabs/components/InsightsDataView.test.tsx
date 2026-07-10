@@ -93,6 +93,16 @@ describe( 'InsightsDataView', () => {
 		expect( scores ).toEqual( [ '30', '10', '—' ] );
 	} );
 
+	it( 'offers sorting but not "Move left/right" reordering in the column header menu', async () => {
+		renderView( { defaultSortKey: 'score' } );
+		// Open the "Score" column header dropdown.
+		fireEvent.click( screen.getByRole( 'button', { name: /score/i } ) );
+		// Sort affordance stays; the read-only table drops column reordering.
+		expect( await screen.findByText( 'Sort descending' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Move left' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Move right' ) ).not.toBeInTheDocument();
+	} );
+
 	it( 'caps rows behind a "See more" toggle when expandable', () => {
 		const many: Row[] = Array.from( { length: 5 }, ( _, i ) => ( { id: String( i ), name: `Row ${ i }`, score: i } ) );
 		render(
