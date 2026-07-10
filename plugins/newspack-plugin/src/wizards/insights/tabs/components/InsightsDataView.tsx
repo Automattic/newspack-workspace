@@ -179,6 +179,11 @@ const InsightsDataView = < Row, >( {
 				...view,
 				fields: columns.map( col => col.key ),
 				layout: {
+					// Read-only: keep click-to-sort but drop the column-header
+					// "Move left/right" reordering. Its onChangeView field reorder is
+					// discarded here anyway (fields is re-derived from columns above),
+					// so without this it's a dead affordance.
+					enableMoving: false,
 					styles: Object.fromEntries( columns.filter( col => col.numeric ).map( col => [ col.key, { align: 'end' as const } ] ) ),
 				},
 			} ) as View,
