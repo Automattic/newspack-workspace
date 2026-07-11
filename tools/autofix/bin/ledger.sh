@@ -21,8 +21,9 @@ drop_lock() { rm -f "$lockdir/owner"; rmdir "$lockdir" 2>/dev/null || true; }
 
 mutate() { # jq-program [extra jq args...]
   local prog="$1"; shift
-  take_lock; trap drop_lock EXIT
-  local tmp; tmp="$(mktemp)"
+  take_lock
+  local tmp; tmp="$(mktemp "$dir/.ledger.XXXXXX")"
+  trap 'rm -f "$tmp"; drop_lock' EXIT
   jq "$@" "$prog" "$file" > "$tmp"
   mv "$tmp" "$file"
   drop_lock; trap - EXIT
