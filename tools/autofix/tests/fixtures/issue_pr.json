@@ -1,0 +1,10 @@
+{ "data": { "issue": {
+  "id": "abc-123", "identifier": "NPPM-2993",
+  "title": "Bug: Jetpack overrides Brand Front page in certain conditions",
+  "branchName": "nppm-2993-bug-jetpack-overrides-brand-front-page-in-certain-conditions",
+  "team": { "id": "f3cbdbf8-e7f1-45dd-aa44-31ebd35b2485" },
+  "state": { "id": "7fad47f0-3b4a-42ca-bf01-41a979e4cbbe", "name": "Backlog", "type": "backlog" },
+  "assignee": null,
+  "labels": { "nodes": [ { "id": "l1", "name": "Bug" } ] },
+  "attachments": { "nodes": [ { "url": "https://github.com/Automattic/newspack-workspace/pull/123", "title": "existing fix" } ] }
+} } }

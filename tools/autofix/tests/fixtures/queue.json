@@ -1,0 +1,5 @@
+{ "data": { "issues": { "nodes": [
+  { "identifier": "NPPM-100", "title": "older low-pri", "priority": 4, "createdAt": "2026-01-01T00:00:00Z" },
+  { "identifier": "NPPM-200", "title": "urgent new",   "priority": 1, "createdAt": "2026-07-01T00:00:00Z" },
+  { "identifier": "NPPM-150", "title": "urgent old",   "priority": 1, "createdAt": "2026-03-01T00:00:00Z" }
+] } } }
