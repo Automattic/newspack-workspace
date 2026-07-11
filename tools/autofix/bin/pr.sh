@@ -3,6 +3,8 @@ set -euo pipefail
 BIN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$BIN/lib/common.sh"
 require jq
+require git
+require gh
 LEDGER="$BIN/ledger.sh"
 
 [ "${1:-}" = "create" ] || die "usage: pr.sh create <run_id> --title <t> --body-file <f>"
@@ -26,14 +28,30 @@ if [ "$attempts" -ge "$AUTOFIX_MAX_ATTEMPTS" ]; then
 fi
 "$LEDGER" set "$run_id" '.attempts.pr += 1'
 
-branch="$("$LEDGER" get "$run_id" .branch)"
+branch="$("$LEDGER" get "$run_id" '.branch // empty')"
+[ -n "$branch" ] || die "no branch recorded in ledger for $run_id"
 wt="$WORKSPACE_ROOT/worktrees/$branch"
-cd "$wt" 2>/dev/null || cd "$WORKSPACE_ROOT"
+[ -d "$wt" ] || die "worktree missing: $wt"
+cd "$wt"
 
-# 3–4. push + draft PR
+# 3. push (idempotent — branch may carry new commits even when a PR exists)
 git push -u origin "$branch"
-url="$(gh pr create --draft --title "$title" --body-file "$body_file" --base main --head "$branch")"
-num="$(printf '%s' "$url" | awk -F/ '{print $NF}')"
+
+# 4. adopt an existing open PR for this branch, or create a draft PR
+existing="$(gh pr list --head "$branch" --state open --json url,number,isDraft --jq '.[0]' 2>/dev/null || true)"
+if [ -n "$existing" ] && [ "$existing" != "null" ]; then
+  url="$(printf '%s' "$existing" | jq -r '.url // empty')"
+  num="$(printf '%s' "$existing" | jq -r '.number // empty')"
+  [ -n "$url" ] && [ -n "$num" ] || die "could not parse existing PR from: $existing"
+  log "adopting existing open PR #$num for $branch"
+  history_note="adopted existing PR $url"
+else
+  create_out="$(gh pr create --draft --title "$title" --body-file "$body_file" --base main --head "$branch")"
+  url="$(printf '%s\n' "$create_out" | grep -Eo 'https://[^[:space:]]+/pull/[0-9]+' | tail -1)"
+  [ -n "$url" ] || die "could not parse PR URL from gh pr create output: $create_out"
+  num="${url##*/}"
+  history_note="$url"
+fi
 
 # 5. Copilot request (advisory; REST because gh pr view misses the bot)
 gh api "repos/{owner}/{repo}/pulls/$num/requested_reviewers" \
@@ -43,5 +61,5 @@ gh api "repos/{owner}/{repo}/pulls/$num/requested_reviewers" \
 # 6. record
 "$LEDGER" set "$run_id" '.pr = {url:$u, number:($n|tonumber)} | .terminal = "delivered"' \
   --arg u "$url" --arg n "$num"
-"$LEDGER" history "$run_id" pr delivered "$url"
+"$LEDGER" history "$run_id" pr delivered "$history_note"
 echo "$url"
