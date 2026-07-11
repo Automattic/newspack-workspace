@@ -1,0 +1,69 @@
+#!/bin/bash
+set -euo pipefail
+BIN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$BIN/lib/common.sh"
+require jq
+
+sweep() {
+  local lf rid term envname num state age_days
+  for lf in "$RUNS_DIR"/*/ledger.json; do
+    [ -f "$lf" ] || continue
+    rid="$(jq -r .run_id "$lf")"; term="$(jq -r '.terminal // empty' "$lf")"
+    envname="$(jq -r '.env.name // empty' "$lf")"
+    [ -n "$term" ] || continue
+    case "$term" in
+      bailed-*)
+        [ -n "$envname" ] && { log "sweep: destroying env of bailed run $rid"; \
+          bash "$BIN/env.sh" destroy "$rid" --waive-push-check || true; } \
+          || log "sweep: $rid ($term) — no env to clean" ;;
+      delivered)
+        num="$(jq -r '.pr.number // empty' "$lf")"
+        [ -n "$num" ] && [ -n "$envname" ] || continue
+        state="$(gh pr view "$num" --json state -q .state 2>/dev/null || echo OPEN)"
+        case "$state" in MERGED|CLOSED)
+          log "sweep: PR #$num $state — destroying env of $rid"
+          bash "$BIN/env.sh" destroy "$rid" || log "sweep: destroy blocked for $rid (push check)"
+        esac ;;
+      escalated)
+        [ -n "$envname" ] || continue
+        age_days=$(( ( $(date +%s) - $(date -j -f "%Y-%m-%dT%H:%M:%SZ" \
+          "$(jq -r '.stage_history[-1].at' "$lf")" +%s 2>/dev/null || date +%s) ) / 86400 ))
+        [ "$age_days" -ge "$AUTOFIX_ESCALATED_ENV_TTL_DAYS" ] && \
+          log "sweep: ESCALATED run $rid env $envname is ${age_days}d old — operator decision needed (autofix env destroy $rid)" ;;
+    esac
+  done
+}
+
+mint_run_id() { # issue-id
+  local issue hex cand
+  issue="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  while :; do
+    hex="$(openssl rand -hex 2)"
+    cand="autofix-$issue-$(date +%Y%m%d)-$hex"
+    [ -e "$RUNS_DIR/$cand" ] || { echo "$cand"; return; }
+  done
+}
+
+cmd="${1:?usage: autofix intake|run|resume|cleanup ...}"; shift
+case "$cmd" in
+  intake) exec bash "$BIN/intake.sh" queue "$@" ;;
+  run)
+    issue="${1:?issue id}"; shift
+    sweep
+    summary="$(bash "$BIN/intake.sh" check "$issue" "$@")" || exit $?
+    rid="$(mint_run_id "$issue")"
+    bash "$BIN/ledger.sh" init "$rid" "$issue" operator-named >/dev/null
+    stem="$(printf '%s' "$summary" | jq -r .branchName)"
+    bash "$BIN/ledger.sh" set "$rid" '.decisions += [{key:"branch_stem", value:$v}]' --arg v "$stem"
+    bash "$BIN/claim.sh" claim "$issue" "$rid"
+    echo "RUN_ID=$rid"
+    echo "NEXT: stages 1-7 are orchestrated by the autofix skill (see .claude/skills/autofix/SKILL.md)" ;;
+  resume)
+    rid="${1:?run id}"
+    bash "$BIN/ledger.sh" reclaim "$rid" || true
+    log "stage: $(bash "$BIN/ledger.sh" get "$rid" .stage) terminal: $(bash "$BIN/ledger.sh" get "$rid" '.terminal // "none"')"
+    echo "RUN_ID=$rid"
+    echo "NEXT: reconcile against Linear/GitHub/env state, then continue from the recorded stage (autofix skill)" ;;
+  cleanup) sweep ;;
+  *) die "unknown command: $cmd" ;;
+esac
