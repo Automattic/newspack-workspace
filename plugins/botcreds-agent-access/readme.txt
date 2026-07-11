@@ -78,6 +78,8 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 
 = 2.3.3 =
 * Scope: literal REST route patterns (starting with /) now pass through as valid allowed routes, enabling custom namespace support (e.g. /botcreds-memory/v1/mcp)
+* Scope UI: Agent Memory integration checkbox (auto-detected when BotCreds Agent Memory is active)
+* Scope: collect_scope_from_post() preserves literal route patterns instead of stripping slashes via sanitize_key()
 
 = 2.3.2 =
 * Fix: content policy now hooks all public REST-enabled CPTs, not just core post/attachment — custom post types like newspack_nl_cpt were completely ungoverned

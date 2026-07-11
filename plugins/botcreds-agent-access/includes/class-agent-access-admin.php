@@ -527,7 +527,13 @@ class Agent_Access_Admin {
 
 		$clean = array();
 		foreach ( $raw_types as $slug ) {
-			$s = sanitize_key( (string) $slug );
+			$slug = (string) $slug;
+			// Literal route patterns (start with /) — preserve as-is; sanitize_key() strips slashes.
+			if ( isset( $slug[0] ) && '/' === $slug[0] ) {
+				$clean[] = $slug;
+				continue;
+			}
+			$s = sanitize_key( $slug );
 			if ( '' !== $s ) {
 				$clean[] = $s;
 			}
@@ -719,6 +725,35 @@ class Agent_Access_Admin {
 											<span class="description" style="font-size:11px;color:#777;">(<?php echo esc_html( $type['slug'] ); ?>)</span>
 										</label>
 									<?php endforeach; ?>
+									<?php
+									// Plugin integrations — auto-detected.
+									if ( ! function_exists( 'is_plugin_active' ) ) {
+										require_once ABSPATH . 'wp-admin/includes/plugin.php';
+									}
+									$aa_integrations = array();
+									if ( is_plugin_active( 'botcreds-agent-memory/botcreds-agent-memory.php' ) ) {
+										$aa_integrations[] = array(
+											'slug'  => '/botcreds-memory/v1/*',
+											'label' => __( 'Agent Memory', 'botcreds-agent-access' ),
+											'hint'  => 'botcreds-memory/v1/*',
+										);
+									}
+									if ( ! empty( $aa_integrations ) ) : ?>
+										<hr style="margin:6px 0;">
+										<p style="margin:4px 0 4px;font-size:12px;font-weight:600;color:#555;"><?php esc_html_e( 'Plugin integrations', 'botcreds-agent-access' ); ?></p>
+										<?php foreach ( $aa_integrations as $aa_integ ) : ?>
+											<label style="display:block;margin-bottom:3px;">
+												<input type="checkbox"
+													name="scope_types[]"
+													class="agent-access-scope-type"
+													value="<?php echo esc_attr( $aa_integ['slug'] ); ?>"
+													<?php checked( $is_wildcard_scope || in_array( $aa_integ['slug'], $checked_slugs, true ) ); ?>
+													<?php echo $is_read_only_scope ? 'disabled' : ''; ?>>
+												<?php echo esc_html( $aa_integ['label'] ); ?> <span style="font-size:11px;color:#2271b1;">(BotCreds)</span>
+												<span class="description" style="font-size:11px;color:#777;">(<?php echo esc_html( $aa_integ['hint'] ); ?>)</span>
+											</label>
+										<?php endforeach; ?>
+									<?php endif; ?>
 								</div>
 							</td>
 						</tr>
@@ -803,6 +838,34 @@ class Agent_Access_Admin {
 											<span class="description" style="font-size:11px;color:#777;">(<?php echo esc_html( $type['slug'] ); ?>)</span>
 										</label>
 									<?php endforeach; ?>
+									<?php
+									// Plugin integrations — auto-detected.
+									if ( ! function_exists( 'is_plugin_active' ) ) {
+										require_once ABSPATH . 'wp-admin/includes/plugin.php';
+									}
+									$aa_create_integrations = array();
+									if ( is_plugin_active( 'botcreds-agent-memory/botcreds-agent-memory.php' ) ) {
+										$aa_create_integrations[] = array(
+											'slug'  => '/botcreds-memory/v1/*',
+											'label' => __( 'Agent Memory', 'botcreds-agent-access' ),
+											'hint'  => 'botcreds-memory/v1/*',
+										);
+									}
+									if ( ! empty( $aa_create_integrations ) ) : ?>
+										<hr style="margin:6px 0;">
+										<p style="margin:4px 0 4px;font-size:12px;font-weight:600;color:#555;"><?php esc_html_e( 'Plugin integrations', 'botcreds-agent-access' ); ?></p>
+										<?php foreach ( $aa_create_integrations as $aa_integ ) : ?>
+											<label style="display:block;margin-bottom:3px;">
+												<input type="checkbox"
+													name="scope_types[]"
+													class="agent-access-scope-type"
+													value="<?php echo esc_attr( $aa_integ['slug'] ); ?>"
+													<?php checked( false ); ?>>
+												<?php echo esc_html( $aa_integ['label'] ); ?> <span style="font-size:11px;color:#2271b1;">(BotCreds)</span>
+												<span class="description" style="font-size:11px;color:#777;">(<?php echo esc_html( $aa_integ['hint'] ); ?>)</span>
+											</label>
+										<?php endforeach; ?>
+									<?php endif; ?>
 								</div>
 							</td>
 						</tr>
