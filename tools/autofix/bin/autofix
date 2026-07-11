@@ -5,17 +5,35 @@ BIN="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 require jq
 
 sweep() {
-  local lf rid term envname num state age_days
+  local lf rid term envname branch num state age_days
   for lf in "$RUNS_DIR"/*/ledger.json; do
     [ -f "$lf" ] || continue
-    rid="$(jq -r .run_id "$lf")"; term="$(jq -r '.terminal // empty' "$lf")"
+    # a single malformed ledger must not abort the sweep (which would also
+    # block `run`, since it sweeps first) — skip it and keep going
+    jq -e 'type == "object"' "$lf" >/dev/null 2>&1 \
+      || { log "sweep: skipping unparsable ledger $lf"; continue; }
+    rid="$(jq -r '.run_id // empty' "$lf")"; term="$(jq -r '.terminal // empty' "$lf")"
     envname="$(jq -r '.env.name // empty' "$lf")"
     [ -n "$term" ] || continue
     case "$term" in
       bailed-*)
-        [ -n "$envname" ] && { log "sweep: destroying env of bailed run $rid"; \
-          bash "$BIN/env.sh" destroy "$rid" --waive-push-check || true; } \
-          || log "sweep: $rid ($term) — no env to clean" ;;
+        if [ -z "$envname" ]; then
+          log "sweep: $rid ($term) — no env to clean"
+        else
+          branch="$(jq -r '.branch // empty' "$lf")"
+          if [ -z "$branch" ]; then
+            # no branch was ever created — nothing unpushed to lose, waive
+            log "sweep: destroying env of bailed run $rid (no branch recorded)"
+            bash "$BIN/env.sh" destroy "$rid" --waive-push-check || true
+          else
+            # a branch exists (e.g. bailed-no-repro after Stage 2 provisioned a
+            # worktree with unpushed evidence commits) — let env.sh's fail-closed
+            # push-check/anchor-tag safeguards govern; log and continue if refused
+            log "sweep: destroying env of bailed run $rid (branch $branch — push check governs)"
+            bash "$BIN/env.sh" destroy "$rid" \
+              || log "sweep: destroy refused for bailed run $rid (push check) — leaving env $envname"
+          fi
+        fi ;;
       delivered)
         num="$(jq -r '.pr.number // empty' "$lf")"
         [ -n "$num" ] && [ -n "$envname" ] || continue
@@ -28,8 +46,11 @@ sweep() {
         [ -n "$envname" ] || continue
         age_days=$(( ( $(date +%s) - $(date -j -f "%Y-%m-%dT%H:%M:%SZ" \
           "$(jq -r '.stage_history[-1].at' "$lf")" +%s 2>/dev/null || date +%s) ) / 86400 ))
-        [ "$age_days" -ge "$AUTOFIX_ESCALATED_ENV_TTL_DAYS" ] && \
-          log "sweep: ESCALATED run $rid env $envname is ${age_days}d old — operator decision needed (autofix env destroy $rid)" ;;
+        # if-guarded: a trailing failed `[ ... ] && log` would abort the whole
+        # sweep under set -e when the run is younger than the TTL
+        if [ "$age_days" -ge "$AUTOFIX_ESCALATED_ENV_TTL_DAYS" ]; then
+          log "sweep: ESCALATED run $rid env $envname is ${age_days}d old — operator decision needed (autofix env destroy $rid)"
+        fi ;;
     esac
   done
 }

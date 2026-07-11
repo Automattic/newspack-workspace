@@ -41,6 +41,10 @@ case "$cmd" in
     # same-issue guard (spec magi #4): another non-terminal run on this issue?
     for lf in "$RUNS_DIR"/*/ledger.json; do
       [ -f "$lf" ] || continue
+      # skip unparsable ledgers: under set -e a jq parse failure would abort the
+      # claim outright; a corrupt ledger can't testify to an active run anyway
+      jq -e 'type == "object"' "$lf" >/dev/null 2>&1 \
+        || { log "same-issue guard: skipping unparsable ledger $lf"; continue; }
       other="$(jq -r --arg i "$issue_id" 'select(.issue==$i and .terminal==null) | .run_id' "$lf")"
       if [ -n "$other" ] && [ "$other" != "$run_id" ]; then
         log "SAME-ISSUE: non-terminal run $other already targets $issue_id"; exit 4
