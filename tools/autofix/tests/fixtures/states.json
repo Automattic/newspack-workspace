@@ -1,0 +1,4 @@
+{ "data": { "team": { "states": { "nodes": [
+  { "id": "f00ac312-3e9b-4fc2-a119-1a7cd68ece00", "name": "In Progress" },
+  { "id": "7fad47f0-3b4a-42ca-bf01-41a979e4cbbe", "name": "Backlog" }
+] } } } }

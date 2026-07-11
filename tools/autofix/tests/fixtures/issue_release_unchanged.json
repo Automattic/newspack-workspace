@@ -1,0 +1,7 @@
+{ "data": { "issue": {
+  "id": "abc-123", "identifier": "NPPM-2993",
+  "assignee": { "id": "56b3262a-bf16-4c9f-8c0f-8580fc5f6fea" },
+  "state": { "id": "f00ac312-3e9b-4fc2-a119-1a7cd68ece00", "name": "In Progress" },
+  "labels": { "nodes": [] },
+  "comments": { "nodes": [ { "body": "🤖 autofix run run1 started" } ] }
+} } }
