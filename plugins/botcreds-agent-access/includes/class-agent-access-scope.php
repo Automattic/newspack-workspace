@@ -183,6 +183,16 @@ class Agent_Access_Scope {
 		$all_types = get_post_types( array(), 'objects' );
 
 		foreach ( $slugs as $slug ) {
+			// Literal route pattern (starts with /) — pass through as-is.
+			if ( '/' === $slug[0] ) {
+				$routes[] = $slug;
+				// Also allow sub-routes if the pattern doesn't already end in /*
+				if ( substr( $slug, -2 ) !== '/*' ) {
+					$routes[] = $slug . '/*';
+				}
+				continue;
+			}
+
 			if ( '*' === $slug || '__read_only__' === $slug ) {
 				continue;
 			}
@@ -270,6 +280,11 @@ class Agent_Access_Scope {
 		// Sanitise each slug.
 		$clean = array();
 		foreach ( $post_types as $slug ) {
+			// Literal route patterns start with / — preserve them as-is.
+			if ( is_string( $slug ) && isset( $slug[0] ) && '/' === $slug[0] ) {
+				$clean[] = $slug;
+				continue;
+			}
 			$s = sanitize_key( $slug );
 			if ( '' !== $s ) {
 				$clean[] = $s;

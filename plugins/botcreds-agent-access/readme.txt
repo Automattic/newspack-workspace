@@ -76,6 +76,9 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 
 == Changelog ==
 
+= 2.3.3 =
+* Scope: literal REST route patterns (starting with /) now pass through as valid allowed routes, enabling custom namespace support (e.g. /botcreds-memory/v1/mcp)
+
 = 2.3.2 =
 * Fix: content policy now hooks all public REST-enabled CPTs, not just core post/attachment — custom post types like newspack_nl_cpt were completely ungoverned
 
