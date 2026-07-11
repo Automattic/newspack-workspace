@@ -5,7 +5,7 @@ set -o pipefail
 
 AUTOFIX_ROOT="${AUTOFIX_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 RUNS_DIR="$AUTOFIX_ROOT/runs"
-WORKSPACE_ROOT="${AUTOFIX_WORKSPACE_ROOT:-$(cd "$AUTOFIX_ROOT/.." && pwd)}"
+WORKSPACE_ROOT="${AUTOFIX_WORKSPACE_ROOT:-$(cd "$AUTOFIX_ROOT/../.." && pwd)}"
 
 : "${AUTOFIX_TEAM:=Product Maintenance}"
 : "${AUTOFIX_ELIGIBLE_STATUSES:=Backlog}"

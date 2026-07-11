@@ -9,4 +9,7 @@ assert_contains() { # haystack needle label
   case "$1" in *"$2"*) printf 'ok    %s\n' "$3" ;;
   *) printf 'FAIL  %s\n  missing: %s\n  in: %s\n' "$3" "$2" "$1"; FAILURES=$((FAILURES+1)) ;; esac
 }
+assert_fail() { # label
+  printf 'FAIL  %s\n' "$1"; FAILURES=$((FAILURES+1))
+}
 finish() { [ "$FAILURES" -eq 0 ] || { printf '%d failure(s)\n' "$FAILURES"; exit 1; }; }
