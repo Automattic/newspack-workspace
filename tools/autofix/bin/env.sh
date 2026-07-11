@@ -27,6 +27,7 @@ case "$cmd" in
     name="autofix-$issue-$(hex4)"
     branch="$stem-$(hex4)"
     n env create "$name" --worktree "$repo:$branch" --up || die "n env create failed (attempt $((attempts+1)))"
+    [ -d "$(wt_dir "$branch")" ] || log "warning: expected worktree dir not found: $(wt_dir "$branch")"
     n setup --env "$name" --yes "$@" || die "n setup failed (attempt $((attempts+1)))"
     "$LEDGER" set "$run_id" '.env = {name:$n, worktrees:[$w]} | .branch = $b' \
       --arg n "$name" --arg w "$repo:$branch" --arg b "$branch"
@@ -37,7 +38,7 @@ case "$cmd" in
     name="$("$LEDGER" get "$run_id" '.env.name // empty')"
     [ -n "$name" ] || { log "no env recorded for $run_id"; exit 0; }
     branch="$("$LEDGER" get "$run_id" '.branch // empty')"
-    wt="$WORKSPACE_ROOT/worktrees/$branch"
+    wt="$(wt_dir "$branch")"
     if [ -n "$branch" ]; then
       if [ -d "$wt" ]; then
         if ! git -C "$wt" tag -a "autofix-anchor-$run_id" -m "pre-destroy anchor for $run_id" 2>/dev/null; then

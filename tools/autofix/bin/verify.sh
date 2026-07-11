@@ -7,7 +7,7 @@ LEDGER="$BIN/ledger.sh"
 
 cmd="${1:?usage: verify.sh signal|lint|suite <run_id> [flags]}"; run_id="${2:?}"; shift 2
 branch="$("$LEDGER" get "$run_id" '.branch // empty')"
-wt="$WORKSPACE_ROOT/worktrees/$branch"
+wt="$(wt_dir "$branch")"
 
 case "$cmd" in
   signal)

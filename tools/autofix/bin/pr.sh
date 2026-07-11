@@ -30,7 +30,7 @@ fi
 
 branch="$("$LEDGER" get "$run_id" '.branch // empty')"
 [ -n "$branch" ] || die "no branch recorded in ledger for $run_id"
-wt="$WORKSPACE_ROOT/worktrees/$branch"
+wt="$(wt_dir "$branch")"
 [ -d "$wt" ] || die "worktree missing: $wt"
 cd "$wt"
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -uo pipefail
 cd "$(dirname "$0")"; . ./helpers.sh
-C=../bin/claim.sh; L=../bin/ledger.sh
+C=../bin/claim.sh; L=../bin/ledger.sh; A=../bin/autofix
 setup() { # $1 = postclaim fixture, $2 = run id
   export AUTOFIX_ROOT; AUTOFIX_ROOT="$(mktemp -d)"
   M="$(mktemp -d)"; export AUTOFIX_LINEAR_MOCK_DIR="$M"
@@ -31,6 +31,24 @@ bash "$L" init run4 NPPM-2993 operator-named >/dev/null
 bash "$C" claim NPPM-2993 run4 >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 4 "$rc" "same-issue guard exits 4"
 
+# IMPORTANT 2 regression: the guard must terminalize run4's OWN ledger
+# (bailed-superseded) rather than leaving it terminal:null forever — a
+# null-terminal ledger would itself trip the guard for every future run
+# against this issue, wedging it permanently.
+assert_eq bailed-superseded "$(bash "$L" get run4 '.terminal // "none"')" \
+  "same-issue guard records terminal=bailed-superseded on the superseded run"
+
+bash "$A" cleanup >/dev/null 2>&1
+assert_eq 0 $? "cleanup sweep processes the bailed-superseded ledger cleanly (no env to clean, no crash)"
+
+# terminalize run3 too (simulating it finishing normally) so a fresh claim
+# isolates whether run4's ledger — now fixed — still wedges the issue
+bash "$L" set run3 '.terminal = "delivered"'
+sed "s/RUNID/run4c/" "fixtures/issue_postclaim_ok.json" > "$AUTOFIX_LINEAR_MOCK_DIR/issue_postclaim.json"
+bash "$L" init run4c NPPM-2993 operator-named >/dev/null
+bash "$C" claim NPPM-2993 run4c
+assert_eq 0 $? "guard no longer trips once prior runs are terminal — run4's fixed ledger doesn't wedge future claims"
+
 # conditional release: human took over mid-run → no restore, drift logged
 setup issue_postclaim_ok.json run5
 bash "$C" claim NPPM-2993 run5 >/dev/null
@@ -53,4 +71,16 @@ bash "$C" release NPPM-2993 run7 >/dev/null 2>&1
 last_update="$(grep issueUpdate "$AUTOFIX_LINEAR_MOCK_DIR/requests.log" | tail -1)"
 assert_eq 0 "$(printf '%s' "$last_update" | grep -c stateId)" "moved state not re-forced on release"
 assert_contains "$(bash "$L" get run7 '.drift_log[0].field')" stateId "moved state → drift logged"
+
+# IMPORTANT 3 regression: release --comment is redaction-gated BEFORE any
+# Linear read/write — a finding must leave Linear completely untouched
+# (no partial release), not just gate the eventual comment body.
+setup issue_postclaim_ok.json run8
+bash "$C" claim NPPM-2993 run8 >/dev/null
+log_before="$(cat "$AUTOFIX_LINEAR_MOCK_DIR/requests.log")"
+bash "$C" release NPPM-2993 run8 --comment "see https://mc.a8c.com/secret-store/?secret_id=1 for creds" \
+  >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 1 "$rc" "redacted release comment aborts"
+assert_eq "$log_before" "$(cat "$AUTOFIX_LINEAR_MOCK_DIR/requests.log")" \
+  "requests.log unchanged after the failed release — redaction gate runs before any Linear read/write"
 finish

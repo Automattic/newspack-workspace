@@ -47,7 +47,12 @@ case "$cmd" in
         || { log "same-issue guard: skipping unparsable ledger $lf"; continue; }
       other="$(jq -r --arg i "$issue_id" 'select(.issue==$i and .terminal==null) | .run_id' "$lf")"
       if [ -n "$other" ] && [ "$other" != "$run_id" ]; then
-        log "SAME-ISSUE: non-terminal run $other already targets $issue_id"; exit 4
+        log "SAME-ISSUE: non-terminal run $other already targets $issue_id"
+        # mark THIS run's own ledger terminal now — otherwise it stays
+        # terminal:null forever (never swept, and itself trips this same
+        # guard for every future run against this issue).
+        "$LEDGER" set "$run_id" '.terminal = "bailed-superseded"'
+        exit 4
       fi
     done
     me="$(linear_viewer_id)"
@@ -103,6 +108,17 @@ case "$cmd" in
       --comment) note="$2"; shift 2 ;;
       *) die "unknown flag: $1" ;;
     esac; done
+    # redaction gate FIRST — before any Linear read/write — so a finding
+    # leaves Linear untouched (no partial release) rather than gating only
+    # the PR body while a no-go/cannot-reproduce comment ships unredacted.
+    if [ -n "$note" ]; then
+      note_file="$(mktemp)"
+      trap 'rm -f "$note_file"' EXIT
+      printf '%s\n' "$note" > "$note_file"
+      bash "$BIN/redact.sh" scan "$note_file" \
+        || die "redaction findings in release comment — redact and retry (no Linear write performed)"
+      rm -f "$note_file"; trap - EXIT
+    fi
     me="$(linear_viewer_id)"
     cur="$(fetch_issue issue_release "$issue_id")"
     uuid="$(printf '%s' "$cur" | jq -r .id)"

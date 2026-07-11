@@ -8,7 +8,7 @@ mkdir -p "$AUTOFIX_WORKSPACE_ROOT/worktrees/br-2"
 STUB="$(mktemp -d)"; export PATH="$STUB:$PATH"
 cat > "$STUB/git" <<'EOF'
 #!/bin/bash
-echo "git $*" >> "${STUB_LOG:?}"; exit 0
+echo "git $* (pwd=$PWD)" >> "${STUB_LOG:?}"; exit 0
 EOF
 cat > "$STUB/gh" <<'EOF'
 #!/bin/bash
@@ -74,4 +74,20 @@ bash "$L" set runt '.branch = "br-gone"'
 bash "$P" create runt --title t --body-file "$BODY" >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 1 "$rc" "missing worktree dies"
 assert_eq "" "$(grep push "$STUB_LOG" || true)" "missing worktree: nothing pushed"
+
+# CRITICAL 1 regression: a slashed branch's worktree lives at the SANITIZED
+# path on disk (n's safe_branch=$(tr '/' '-')), but the push/PR ops must
+# still carry the RAW branch ref
+SLASH_WT="$AUTOFIX_WORKSPACE_ROOT/worktrees/jason-nppm-1-fix"
+mkdir -p "$SLASH_WT"
+bash "$L" init runslash NPPM-6 operator-named >/dev/null
+bash "$L" set runslash '.branch = "jason/nppm-1-fix"'
+: > "$STUB_LOG"
+echo "Fixes the bug. Evidence attached." > "$BODY"
+bash "$P" create runslash --title t --body-file "$BODY" >/dev/null
+assert_contains "$(cat "$STUB_LOG")" "push -u origin jason/nppm-1-fix" \
+  "slashed branch: push carries the RAW branch ref, not the sanitized dir name"
+assert_contains "$(cat "$STUB_LOG")" "(pwd=$SLASH_WT)" \
+  "slashed branch: cd landed in the sanitized worktree dir"
+assert_eq delivered "$(bash "$L" get runslash .terminal)" "slashed branch: create reaches delivered"
 finish

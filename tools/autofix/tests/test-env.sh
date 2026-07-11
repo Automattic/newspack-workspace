@@ -3,6 +3,7 @@ set -uo pipefail
 cd "$(dirname "$0")"; . ./helpers.sh
 E=../bin/env.sh; L=../bin/ledger.sh
 export AUTOFIX_ROOT; AUTOFIX_ROOT="$(mktemp -d)"
+export AUTOFIX_WORKSPACE_ROOT; AUTOFIX_WORKSPACE_ROOT="$(mktemp -d)"
 STUB="$(mktemp -d)"; export PATH="$STUB:$PATH"
 cat > "$STUB/n" <<'EOF'
 #!/bin/bash
@@ -44,4 +45,27 @@ log_before="$(cat "$N_LOG")"
 bash "$E" destroy run-a >/dev/null 2>&1 && rc=0 || rc=$?
 assert_eq 1 "$rc" "destroy dies when worktree dir missing for recorded branch"
 assert_eq "$log_before" "$(cat "$N_LOG")" "missing-worktree destroy runs no n command"
+
+# CRITICAL 1 regression: a slashed branch's worktree lives at the SANITIZED
+# path (n's safe_branch=$(tr '/' '-')) — destroy must find it there and run
+# the anchor-tag + push-check safeguard (RAW branch ref for ls-remote), not
+# take the missing-worktree death path.
+ORIGIN="$(mktemp -d)"; git init --bare -q "$ORIGIN"
+SLASH_WT="$AUTOFIX_WORKSPACE_ROOT/worktrees/jason-nppm-1-fix"
+mkdir -p "$SLASH_WT"
+( cd "$SLASH_WT" && git init -q \
+    && git -c user.email=t@example.com -c user.name=t commit --allow-empty -qm init \
+    && git remote add origin "$ORIGIN" \
+    && git push -q origin HEAD:refs/heads/jason/nppm-1-fix )
+
+bash "$L" init run-slash NPPM-9 operator-named >/dev/null
+bash "$L" set run-slash '.env = {name:"autofix-env-slash"}'
+bash "$L" set run-slash '.branch = "jason/nppm-1-fix"'
+log_before="$(cat "$N_LOG")"
+bash "$E" destroy run-slash >/dev/null 2>&1 && rc=0 || rc=$?
+assert_eq 0 "$rc" "slashed branch: destroy succeeds (worktree found at sanitized path)"
+assert_contains "$(git -C "$SLASH_WT" tag -l)" "autofix-anchor-run-slash" \
+  "slashed branch: anchor tag created in the sanitized worktree dir"
+assert_contains "$(cat "$N_LOG")" "env destroy autofix-env-slash --yes" \
+  "slashed branch: n env destroy invoked (push-check passed via RAW branch ls-remote)"
 finish

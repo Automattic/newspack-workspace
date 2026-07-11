@@ -54,7 +54,7 @@ around any of these except where a specific override is named:**
 | `0` | Claimed | stdout has `RUN_ID=<rid>`; proceed to Stage 1 | — |
 | `2` | Security-labeled | nothing written; no ledger created | **never bypassable, in any mode** |
 | `3` | Issue already has an open PR attachment | nothing written | re-invoke with `--allow-existing-pr` |
-| `4` | Same-issue guard: another non-terminal run already targets this issue | a ledger *was* minted for this invocation (stage `intake`, `terminal: null`) but the claim never ran — leave that ledger alone, don't resume it | none |
+| `4` | Same-issue guard: another non-terminal run already targets this issue | a ledger *was* minted for this invocation (stage `intake`) but the claim never ran — `claim.sh` records `terminal: bailed-superseded` on this run's own ledger before exiting, so it's swept automatically by the next sweep; don't resume it | none |
 | `5` | Lost claim race | claim briefly succeeded, then a competing claim was detected; `claim.sh` already conditionally backed off the Linear fields it had set and recorded `terminal: bailed-lost-claim-race` on this run's own ledger | none |
 
 `tools/autofix/bin/autofix resume <RUN_ID>` reclaims a dead run's lock
@@ -102,6 +102,10 @@ failed, what a human would need to do), then:
 tools/autofix/bin/claim.sh release <ISSUE-ID> <RUN_ID> --fail-label --comment "<triage brief text>"
 tools/autofix/bin/ledger.sh set <RUN_ID> '.terminal = "bailed-no-go"'
 ```
+
+`release --comment` is redaction-gated: `claim.sh` scans the comment text
+before any Linear write and refuses (no partial release) if it finds
+anything — redact and retry.
 
 Stop. This is a *successful* run of the workflow — the team gets triage
 knowledge either way.
@@ -164,6 +168,9 @@ tools/autofix/bin/claim.sh release <ISSUE-ID> <RUN_ID> --fail-label --comment "<
 tools/autofix/bin/env.sh destroy <RUN_ID>
 tools/autofix/bin/ledger.sh set <RUN_ID> '.terminal = "bailed-no-repro"'
 ```
+
+Same redaction gate applies here: `release --comment` refuses (no Linear
+write) on a finding — redact and retry.
 
 ## Stage 3 — Fix
 
@@ -362,6 +369,7 @@ once it reaches a terminal state.
 | `bailed-no-go` | Stage 1 | `claim.sh release <ISSUE-ID> <RUN_ID> --fail-label --comment "<brief>"` | env never created |
 | `bailed-no-repro` | Stage 2 | `claim.sh release <ISSUE-ID> <RUN_ID> --fail-label --comment "<...>"` | `env.sh destroy <RUN_ID>` |
 | `bailed-lost-claim-race` | Stage 0 (inside `claim.sh claim`) | conditional back-off + comment, done automatically by `claim.sh` | no env yet |
+| `bailed-superseded` | Stage 0 (inside `claim.sh claim`, same-issue guard, exit 4) | none — this run never touched Linear | no env yet |
 | `escalated` | Stage 2/3/4/5/6, on attempts/loop/scope exhaustion or unresolved drift | none automatic — findings/state left for the operator; a fresh Linear comment noting the escalation is good practice but not scripted for you | env/worktree retained until the TTL sweep (`AUTOFIX_ESCALATED_ENV_TTL_DAYS`) |
 | `delivered` | Stage 6 (`pr.sh create`) | closeout comment via Linear MCP (PR link + evidence) | env retained until the PR merges/closes, then swept |
 

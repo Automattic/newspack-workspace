@@ -21,3 +21,11 @@ die() { log "ERROR: $*"; exit 1; }
 now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 require() { command -v "$1" >/dev/null 2>&1 || die "missing dependency: $1"; }
 json_escape() { printf '%s' "$1" | jq -Rs .; }
+# wt_dir <branch> — derive the on-disk worktree dir for a branch. `n`
+# sanitizes slashes to dashes when it names the worktree dir (safe_branch=
+# $(tr '/' '-')), so any raw branch containing '/' (e.g. a Linear branchName
+# like "jason/nppm-1-fix") lives at a different path than a naive
+# WORKSPACE_ROOT/worktrees/<branch> join. Callers must still use the RAW
+# branch for git-ref operations (push, --head, ls-remote, tag) — only the
+# on-disk path needs sanitizing.
+wt_dir() { printf '%s/worktrees/%s' "$WORKSPACE_ROOT" "$(printf '%s' "$1" | tr '/' '-')"; }

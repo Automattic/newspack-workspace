@@ -61,4 +61,15 @@ bash "$V" suite runv >/dev/null 2>&1
 assert_eq 0 $? "suite exits 0"
 assert_contains "$(cat "$N_LOG")" "plugins/my-plugin n test-php" "n test-php runs from plugin dir"
 assert_eq 0 "$(grep -c 'test-js' "$N_LOG")" "n test-js not invoked without test:js script"
+
+# CRITICAL 1 regression: a branch containing '/' (a Linear branchName like
+# "jason/nppm-1-fix") lives at the SANITIZED path on disk — `n` runs
+# safe_branch=$(tr '/' '-') when it names the worktree dir — not at a naive
+# WORKSPACE_ROOT/worktrees/<raw-branch> join.
+mkdir -p "$AUTOFIX_WORKSPACE_ROOT/worktrees/jason-nppm-1-fix"
+bash "$L" init runslash NPPM-9 operator-named >/dev/null
+bash "$L" set runslash '.branch = "jason/nppm-1-fix"'
+bash "$L" evidence runslash failing-test t.php 'exit 1'
+bash "$V" signal runslash --expect fail
+assert_eq 0 $? "slashed branch: signal finds worktree at the sanitized (dash) path"
 finish
