@@ -56,18 +56,19 @@ case "$cmd" in
     in_progress="$(linear_gql states "$STATES_Q" "$(jq -nc --arg teamId "$team" '{teamId:$teamId}')" \
       | jq -r '.data.team.states.nodes[] | select(.name=="In Progress") | .id')"
     [ -n "$in_progress" ] || die "no 'In Progress' state on team $team"
+    # remember the state id THIS RUN set, so release can tell "still where we
+    # put it" apart from "a human moved it mid-run" (conditional restore).
+    "$LEDGER" set "$run_id" '.linear_prior.claimed_state_id = $s' --arg s "$in_progress"
     update_issue "$uuid" "$(jq -nc --arg a "$me" --arg s "$in_progress" '{assigneeId:$a, stateId:$s}')"
     comment "$uuid" "🤖 autofix run $run_id started"
     # verify the claim held (spec codex #1): assignee is us AND our comment exists
     post="$(fetch_issue issue_postclaim "$issue_id")"
     got_assignee="$(printf '%s' "$post" | jq -r '.assignee.id // ""')"
-    # NOTE: matches the generic claim-comment marker, not this run's literal
-    # RUN_ID — the mock transport returns one static fixture per opname
-    # regardless of the vars a given run sent, so a fixture can't echo back
-    # a run-specific body. Ownership is still assignee-scoped; this check
-    # only confirms *a* claim comment landed and stuck.
-    has_comment="$(printf '%s' "$post" | jq -r \
-      '[.comments.nodes[].body | select(contains("🤖 autofix run") and contains("started"))] | length')"
+    # Ownership = assignee-match AND *this run's* claim comment. Assignee
+    # alone is not run-specific — two concurrent runs under the same operator
+    # identity would both see a match — so the comment must carry our RUN_ID.
+    has_comment="$(printf '%s' "$post" | jq -r --arg r "$run_id" \
+      '[.comments.nodes[].body | select(contains($r))] | length')"
     if [ "$got_assignee" != "$me" ] || [ "$has_comment" = "0" ]; then
       log "LOST-RACE: claim did not hold (assignee=$got_assignee); backing off"
       prior_state="$("$LEDGER" get "$run_id" '.linear_prior.stateId')"
@@ -103,23 +104,37 @@ case "$cmd" in
     uuid="$(printf '%s' "$cur" | jq -r .id)"
     prior_assignee="$("$LEDGER" get "$run_id" '.linear_prior.assigneeId')"
     prior_state="$("$LEDGER" get "$run_id" '.linear_prior.stateId')"
+    claimed_state="$("$LEDGER" get "$run_id" '.linear_prior.claimed_state_id')"
     cur_assignee="$(printf '%s' "$cur" | jq -r '.assignee.id // ""')"
+    cur_state="$(printf '%s' "$cur" | jq -r '.state.id // ""')"
+    restored=""; drifted=""
     input='{}'
     if [ "$cur_assignee" = "$me" ]; then
       input="$(printf '%s' "$input" | jq --arg a "$prior_assignee" \
         '.assigneeId = (if $a == "null" or $a == "" then null else $a end)')"
+      restored="$restored assigneeId"
     else
       "$LEDGER" drift "$run_id" assigneeId "$me" "$cur_assignee"
+      drifted="$drifted assigneeId"
     fi
-    input="$(printf '%s' "$input" | jq --arg s "$prior_state" '.stateId = $s')"
+    # restore state ONLY if it still sits where this run put it; a human
+    # moving it mid-run (e.g. to In Review) must not be silently undone.
+    if [ "$cur_state" = "$claimed_state" ]; then
+      input="$(printf '%s' "$input" | jq --arg s "$prior_state" '.stateId = $s')"
+      restored="$restored stateId"
+    else
+      "$LEDGER" drift "$run_id" stateId "$claimed_state" "$cur_state"
+      drifted="$drifted stateId"
+    fi
     if [ -n "$fail_label" ]; then
       cur_labels="$(printf '%s' "$cur" | jq '[.labels.nodes[].id]')"
       input="$(printf '%s' "$input" | jq --argjson l "$cur_labels" --arg f "$AUTOFIX_FAILED_LABEL_ID" \
         '.labelIds = ($l + [$f] | unique)')"
     fi
-    update_issue "$uuid" "$input"
+    [ "$input" = "{}" ] || update_issue "$uuid" "$input"
     [ -n "$note" ] && comment "$uuid" "$note"
-    "$LEDGER" history "$run_id" release restored "conditional restore applied"
+    "$LEDGER" history "$run_id" release restored \
+      "restored:[${restored# }] drifted:[${drifted# }]"
     log "released $issue_id" ;;
   *) die "unknown subcommand: $cmd" ;;
 esac
