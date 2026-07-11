@@ -731,7 +731,7 @@ class Agent_Access_Admin {
 										require_once ABSPATH . 'wp-admin/includes/plugin.php';
 									}
 									$aa_integrations = array();
-									if ( is_plugin_active( 'botcreds-agent-memory/botcreds-agent-memory.php' ) ) {
+									if ( class_exists( 'Botcreds_Memory_MCP' ) ) {
 										$aa_integrations[] = array(
 											'slug'  => '/botcreds-memory/v1/*',
 											'label' => __( 'Agent Memory', 'botcreds-agent-access' ),
@@ -844,7 +844,7 @@ class Agent_Access_Admin {
 										require_once ABSPATH . 'wp-admin/includes/plugin.php';
 									}
 									$aa_create_integrations = array();
-									if ( is_plugin_active( 'botcreds-agent-memory/botcreds-agent-memory.php' ) ) {
+									if ( class_exists( 'Botcreds_Memory_MCP' ) ) {
 										$aa_create_integrations[] = array(
 											'slug'  => '/botcreds-memory/v1/*',
 											'label' => __( 'Agent Memory', 'botcreds-agent-access' ),

@@ -76,6 +76,9 @@ BotCreds manages one Application Password per user. Revoke the existing one befo
 
 == Changelog ==
 
+= 2.3.4 =
+* Scope UI: Agent Memory integration detection uses class_exists() instead of is_plugin_active() — works regardless of plugin folder name
+
 = 2.3.3 =
 * Scope: literal REST route patterns (starting with /) now pass through as valid allowed routes, enabling custom namespace support (e.g. /botcreds-memory/v1/mcp)
 * Scope UI: Agent Memory integration checkbox (auto-detected when BotCreds Agent Memory is active)
