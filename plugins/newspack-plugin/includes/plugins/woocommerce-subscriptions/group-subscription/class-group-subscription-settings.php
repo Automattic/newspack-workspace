@@ -397,26 +397,27 @@ class Group_Subscription_Settings {
 		}
 		$settings = self::get_subscription_settings( $subscription );
 		$product  = \wc_get_product( WooCommerce_Subscriptions::get_subscription_product_id( $subscription ) );
-		$members  = Group_Subscription::get_members( $subscription );
-		$managers = Group_Subscription::get_managers( $subscription );
-		$invites  = Group_Subscription_Invite::get_invites( $subscription );
+		$members   = array_map( 'intval', Group_Subscription::get_members( $subscription ) );
+		$managers  = array_map( 'intval', Group_Subscription::get_managers( $subscription ) );
+		$invites   = Group_Subscription_Invite::get_invites( $subscription );
+		$owner_id  = (int) $subscription->get_user_id();
 		// Resolve the rows once, applying the same guards used when rendering below, so the
 		// header count always matches the rendered list (and the admin JS, which re-tallies the
-		// list items on add/remove/invite). The owner/manager(s) render as non-removable rows;
-		// members exclude any manager that also carries member meta (avoiding a duplicate row)
-		// and must be readers.
-		$manager_users = [];
-		foreach ( array_map( 'intval', $managers ) as $manager_id ) {
-			$manager_user = get_user_by( 'id', $manager_id );
-			if ( $manager_user ) {
-				$manager_users[] = $manager_user;
+		// list items on add/remove/invite). The owner is the only non-removable row. Promoted
+		// managers keep their member meta, so they render as removable member rows below, flagged
+		// so the row can show a "(manager)" label instead of being mislabelled as the owner.
+		$owner_user = $owner_id ? get_user_by( 'id', $owner_id ) : null;
+		$member_rows = [];
+		foreach ( $members as $member_id ) {
+			if ( $member_id === $owner_id ) {
+				continue;
 			}
-		}
-		$member_users = [];
-		foreach ( array_diff( array_map( 'intval', $members ), array_map( 'intval', $managers ) ) as $member_id ) {
 			$member_user = get_user_by( 'id', $member_id );
 			if ( $member_user && Reader_Activation::is_user_reader( $member_user ) ) {
-				$member_users[] = $member_user;
+				$member_rows[] = [
+					'user'       => $member_user,
+					'is_manager' => in_array( $member_id, $managers, true ),
+				];
 			}
 		}
 		?>
@@ -485,29 +486,35 @@ class Group_Subscription_Settings {
 						sprintf(
 							// translators: %d: The number of group members.
 							__( 'Group members (<span class="newspack-group-subscription__members-count">%d</span>)', 'newspack-plugin' ),
-							// Count exactly the rows rendered below (owner(s) + reader-members + invites)
+							// Count exactly the rows rendered below (owner + reader-members + invites)
 							// so the header never drifts from the list.
-							count( $manager_users ) + count( $member_users ) + count( $invites )
+							( $owner_user ? 1 : 0 ) + count( $member_rows ) + count( $invites )
 						)
 					);
 					?>
 				</h3>
 				<ul class="newspack-group-subscription__members-list">
 					<?php
-					// The owner counts as a member of the group, so render the manager(s) first
-					// as non-removable rows. The JS keeps the count in sync by tallying list items.
-					foreach ( $manager_users as $manager_user ) :
+					// The owner counts as a member of the group and is rendered first as a
+					// non-removable row. The JS keeps the count in sync by tallying list items.
+					if ( $owner_user ) :
 						?>
 						<li>
-							<a class="newspack-group-subscription__member-user-link" href="<?php echo \esc_url( \get_edit_user_link( $manager_user->ID ) ); ?>"><?php echo \esc_html( $manager_user->user_email ); ?></a>
+							<a class="newspack-group-subscription__member-user-link" href="<?php echo \esc_url( \get_edit_user_link( $owner_user->ID ) ); ?>"><?php echo \esc_html( $owner_user->user_email ); ?></a>
 							<span class="newspack-group-subscription__member-role"><?php \esc_html_e( '(owner)', 'newspack-plugin' ); ?></span>
 						</li>
 						<?php
-					endforeach;
-					foreach ( $member_users as $user ) :
+					endif;
+					// Members and promoted managers are removable rows; a manager row carries a
+					// "(manager)" label so it isn't confused with a plain member or the owner.
+					foreach ( $member_rows as $member_row ) :
+						$user = $member_row['user'];
 						?>
 						<li>
 							<a class="newspack-group-subscription__member-user-link" href="<?php echo \esc_url( \get_edit_user_link( $user->ID ) ); ?>"><?php echo \esc_html( $user->user_email ); ?></a>
+							<?php if ( $member_row['is_manager'] ) : ?>
+								<span class="newspack-group-subscription__member-role"><?php \esc_html_e( '(manager)', 'newspack-plugin' ); ?></span>
+							<?php endif; ?>
 							<a title="<?php \esc_attr_e( 'Remove', 'newspack-plugin' ); ?>" href="#" class="newspack-group-subscription__remove-member" data-user-id="<?php echo \esc_attr( $user->ID ); ?>">
 								&#215;
 								<span class="screen-reader-text"><?php \esc_html_e( 'Remove', 'newspack-plugin' ); ?></span>
