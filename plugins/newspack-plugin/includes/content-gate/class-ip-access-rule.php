@@ -461,6 +461,29 @@ class IP_Access_Rule {
 	}
 
 	/**
+	 * Build the host-relative URL for the institutional-access check endpoint.
+	 *
+	 * The loading page's fetch must resolve against the document origin rather
+	 * than an absolute canonical host. When the page is served through a
+	 * rewriting reverse proxy (e.g. a library EZproxy), that origin is the
+	 * proxy host, so a host-relative URL stays proxied and the origin sees the
+	 * proxy's whitelisted IP. An absolute URL is left unrewritten inside the
+	 * inline script, so the browser fetches it directly from the reader's real
+	 * IP — bypassing the proxy and defeating institutional IP access. See NPPD-2039.
+	 *
+	 * @param int|null $institution_id Optional. Institution post ID to scope the check.
+	 *
+	 * @return string Host-relative REST URL (path and query, without scheme or host).
+	 */
+	private static function get_check_url( $institution_id = null ) {
+		$url = rest_url( NEWSPACK_API_NAMESPACE . self::REST_ROUTE );
+		if ( $institution_id ) {
+			$url = add_query_arg( 'institution_id', $institution_id, $url );
+		}
+		return wp_make_link_relative( $url );
+	}
+
+	/**
 	 * Render the loading page for access verification.
 	 *
 	 * Outputs a standalone HTML page with a loading spinner that performs
@@ -473,10 +496,7 @@ class IP_Access_Rule {
 	 */
 	public static function render_loading_page( $institution_id = null ) {
 		$redirect_url = self::get_dedicated_redirect_url();
-		$rest_url     = rest_url( NEWSPACK_API_NAMESPACE . self::REST_ROUTE );
-		if ( $institution_id ) {
-			$rest_url = add_query_arg( 'institution_id', $institution_id, $rest_url );
-		}
+		$rest_url     = self::get_check_url( $institution_id );
 		$result_param = self::RESULT_PARAM;
 		$site_name    = get_bloginfo( 'name' );
 		$timeout_ms   = 10000;
