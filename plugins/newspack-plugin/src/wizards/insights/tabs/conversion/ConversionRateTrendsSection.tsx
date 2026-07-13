@@ -16,6 +16,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Card } from '../../../../../packages/components/src';
 import type { ConversionWeekPoint, ConversionWeeklyTrendsData } from '../../api/conversion';
 import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
@@ -69,7 +70,7 @@ const ConversionRateTrendsSection = ( { current }: ConversionRateTrendsSectionPr
 				'newspack-plugin'
 			) }
 		/>
-		<div className="newspack-insights__conversion-rate-trends-cell">
+		<Card __experimentalCoreCard className="newspack-insights__chart-card">
 			<SectionState
 				state={ current.weekly_conversion_rates.state }
 				emptyMessage={ __( 'Weekly trends will appear once the timeframe contains at least 4 weeks of data.', 'newspack-plugin' ) }
@@ -83,7 +84,7 @@ const ConversionRateTrendsSection = ( { current }: ConversionRateTrendsSectionPr
 					emptyMessage={ __( 'Weekly trends will appear once the timeframe contains at least 4 weeks of data.', 'newspack-plugin' ) }
 				/>
 			</SectionState>
-		</div>
+		</Card>
 	</Section>
 );
 

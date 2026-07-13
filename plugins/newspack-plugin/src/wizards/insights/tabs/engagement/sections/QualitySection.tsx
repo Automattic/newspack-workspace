@@ -15,6 +15,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../../packages/components/src';
 import type { InsightsWindow } from '../../../api/audience';
 import Scorecard from '../../components/Scorecard';
 import Section from '../../components/Section';
@@ -37,7 +38,7 @@ const QualitySection = ( { current, previous, lastUpdated }: SectionProps ) => (
 		/>
 		{ /* Drop to 3 even columns when the completion card is hidden so the row
 		     doesn't leave a trailing gap under the base auto-fill grid. */ }
-		<div className={ `newspack-insights__metric-grid${ SHOW_COMPLETION_METRICS ? '' : ' newspack-insights__metric-grid--cols-3' }` }>
+		<Grid columns={ 4 } gutter={ 16 } noMargin>
 			<Scorecard
 				label={ __( 'Avg Pages per Session', 'newspack-plugin' ) }
 				description={ __( 'Pages viewed per visit', 'newspack-plugin' ) }
@@ -70,7 +71,7 @@ const QualitySection = ( { current, previous, lastUpdated }: SectionProps ) => (
 					previous={ previous?.article_completion_rate }
 				/>
 			) }
-		</div>
+		</Grid>
 	</Section>
 );
 

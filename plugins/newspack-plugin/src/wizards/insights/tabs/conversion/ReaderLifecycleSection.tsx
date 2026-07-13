@@ -19,6 +19,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Card } from '../../../../../packages/components/src';
 import type { ConversionWindow } from '../../api/conversion';
 import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
@@ -44,12 +45,14 @@ const ReaderLifecycleSection = ( { current, lastUpdated }: ReaderLifecycleSectio
 			) }
 			actions={ lastUpdated }
 		/>
-		<SectionState
-			state={ current.reader_lifecycle_funnel.state }
-			emptyMessage={ __( 'No funnel data yet. The funnel will populate once readers begin moving through your site.', 'newspack-plugin' ) }
-		>
-			<Funnel stages={ current.reader_lifecycle_funnel.stages } />
-		</SectionState>
+		<Card __experimentalCoreCard className="newspack-insights__chart-card">
+			<SectionState
+				state={ current.reader_lifecycle_funnel.state }
+				emptyMessage={ __( 'No funnel data yet. The funnel will populate once readers begin moving through your site.', 'newspack-plugin' ) }
+			>
+				<Funnel stages={ current.reader_lifecycle_funnel.stages } />
+			</SectionState>
+		</Card>
 	</Section>
 );
 

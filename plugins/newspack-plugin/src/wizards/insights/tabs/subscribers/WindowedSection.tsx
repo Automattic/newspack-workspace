@@ -38,6 +38,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../packages/components/src';
 import type { SubscribersRateValue, SubscribersWindow } from '../../api/subscribers';
 import type { DateRange } from '../../state/useDateRange';
 import EmptyMetricSection from '../components/EmptyMetricSection';
@@ -165,7 +166,7 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 	return (
 		<Section className="newspack-insights__section newspack-insights__section--windowed" aria-labelledby="newspack-insights-windowed-heading">
 			<SectionHeading id="newspack-insights-windowed-heading" title={ getHeading( range ) } />
-			<div className="newspack-insights__metric-grid">
+			<Grid columns={ 4 } gutter={ 16 } noMargin>
 				<MetricCard
 					label={ __( 'New subscribers', 'newspack-plugin' ) }
 					value={ current.new_subscribers }
@@ -234,7 +235,7 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 					notComputableMessage={ retryEmptyMessage }
 					description={ __( 'Recovered retries ÷ retry attempts', 'newspack-plugin' ) }
 				/>
-			</div>
+			</Grid>
 		</Section>
 	);
 };

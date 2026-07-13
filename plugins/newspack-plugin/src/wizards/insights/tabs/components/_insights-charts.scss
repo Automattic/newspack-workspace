@@ -218,15 +218,22 @@
 		padding: 0 0 wp-vars.$grid-unit-30;
 	}
 
+	// Positioning context for the svg + the HTML center label overlaid on it,
+	// capped to the donut's rendered width so the label centers on the hole.
+	&__pie-donut {
+		position: relative;
+		width: 100%;
+		max-width: calc(#{wp-vars.$grid-unit} * 25);
+	}
+
 	&__pie-svg {
 		display: block; // kill the inline baseline gap so the svg sits flush
 		width: 100%;
-		max-width: calc(#{wp-vars.$grid-unit} * 25);
 		height: auto;
 		aspect-ratio: 1 / 1;
 		// No rotate: segments already start at 12 o'clock via the component's
 		// stroke-dashoffset (CIRCUMFERENCE / 4). Rotating the <svg> here would
-		// re-offset every segment and turn the center-label text sideways.
+		// re-offset every segment.
 	}
 
 	// Donut band thickness. The chart is a stroked circle (r=16 in a 42 viewBox),
@@ -244,11 +251,17 @@
 		stroke-width: 8;
 	}
 
-	// Center label text inside the donut (e.g. the window total — NPPD-1609).
+	// Center label inside the donut (e.g. the window total — NPPD-1609): an HTML
+	// element absolutely centered over the svg hole, so it renders at the real
+	// heading scale in the admin accent color rather than in svg user units.
 	&__pie-center {
-		font-size: 6px;
-		font-weight: 600;
-		fill: wp-colors.$gray-900;
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		@include wp-mixins.heading-x-large();
+		color: var( --wp-admin-theme-color );
 	}
 
 	// Bottom slot: legend anchored to the card bottom, left-aligned.
@@ -490,6 +503,9 @@
 		border-radius: 4px;
 		text-align: center;
 		font-variant-numeric: tabular-nums;
+		// Sequential ramp off the admin accent: mix the darker-20 base with white
+		// by the cell's normalized value (--cell-t, set inline in [0, 1]).
+		background-color: color-mix( in srgb, var( --wp-admin-theme-color ) calc( var( --cell-t, 0 ) * 100% ), #{ wp-colors.$white } );
 
 		&.is-empty {
 			background: transparent;
@@ -517,6 +533,7 @@
 		span {
 			width: 18px;
 			height: 12px;
+			background-color: color-mix( in srgb, var( --wp-admin-theme-color ) calc( var( --cell-t, 0 ) * 100% ), #{ wp-colors.$white } );
 		}
 	}
 
@@ -648,14 +665,12 @@
 		// connector never ends up narrower than the min-width section beneath it.
 		$funnel-min-band-width: 80px;
 
+		// Chrome (border, background, radius, padding) is supplied by the enclosing
+		// chart-card CoreCard — the funnel itself is just the stepped layout.
 		width: 100%;
 		margin: 0 auto;
-		padding: wp-vars.$grid-unit-10;
 		box-sizing: border-box;
 		list-style: none;
-		background-color: wp-colors.$white;
-		border: 1px solid wp-colors.$gray-200;
-		border-radius: wp-vars.$radius-medium;
 
 		&-step {
 			position: relative;
@@ -937,16 +952,4 @@
 // is intentionally NOT defined in this per-tab partial so the callout can't
 // look different depending on which tab-chunk CSS happens to be loaded.
 
-// Section grid column modifier — the only fixed-column grid still authored in
-// CSS. QualitySection drops to 3 even columns when the completion card is
-// hidden (see QualitySection.tsx); every other fixed-column grid now uses the
-// shared <Grid> component. Compound selector (0,2,0) so it wins over the
-// single-class base rule regardless of stylesheet load order.
-.newspack-insights__metric-grid.newspack-insights__metric-grid--cols-3 {
-	grid-template-columns: repeat( 3, minmax( 0, 1fr ) );
-
-	@media ( max-width: 782px ) {
-		grid-template-columns: 1fr;
-	}
-}
 

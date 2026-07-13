@@ -17,6 +17,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Card, Grid } from '../../../../../packages/components/src';
 import type { ConversionSourceMixData } from '../../api/conversion';
 import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
@@ -40,16 +41,18 @@ interface SourcePieProps {
 }
 
 const SourcePie = ( { title, data, emptyMessage }: SourcePieProps ) => (
-	<div className="newspack-insights__conversion-pie-cell">
-		<h3 className="newspack-insights__conversion-subheading">{ title }</h3>
-		<SectionState state={ data.state } emptyMessage={ emptyMessage }>
-			<PieChart
-				segments={ data.slices.map( slice => ( { label: sourceLabel( slice.source ), value: slice.count } ) ) }
-				centerLabel={ formatNumber( data.total ) }
-				emptyMessage={ emptyMessage }
-			/>
-		</SectionState>
-	</div>
+	<Card __experimentalCoreCard className="newspack-insights__chart-card">
+		<h3 className="newspack-insights__chart-card-title">{ title }</h3>
+		<div className="newspack-insights__chart-card-body">
+			<SectionState state={ data.state } emptyMessage={ emptyMessage }>
+				<PieChart
+					segments={ data.slices.map( slice => ( { label: sourceLabel( slice.source ), value: slice.count } ) ) }
+					centerLabel={ formatNumber( data.total ) }
+					emptyMessage={ emptyMessage }
+				/>
+			</SectionState>
+		</div>
+	</Card>
 );
 
 const WhereConversionsComeFromSection = ( { current }: WhereConversionsComeFromSectionProps ) => (
@@ -65,7 +68,7 @@ const WhereConversionsComeFromSection = ( { current }: WhereConversionsComeFromS
 				'newspack-plugin'
 			) }
 		/>
-		<div className="newspack-insights__conversion-pie-row">
+		<Grid columns={ 3 } gutter={ 16 } noMargin>
 			<SourcePie
 				title={ __( 'New registrations', 'newspack-plugin' ) }
 				data={ current.source_mix_registrations }
@@ -81,7 +84,7 @@ const WhereConversionsComeFromSection = ( { current }: WhereConversionsComeFromS
 				data={ current.source_mix_donors }
 				emptyMessage={ __( 'Source data will appear once donations occur in this timeframe.', 'newspack-plugin' ) }
 			/>
-		</div>
+		</Grid>
 	</Section>
 );
 

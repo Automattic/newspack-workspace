@@ -18,6 +18,7 @@ import { useMemo } from '@wordpress/element';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../packages/components/src';
 import type { TenureDistributionRow } from '../../api/subscribers';
 import MetricCard from '../components/MetricCard';
 import Section from '../components/Section';
@@ -98,7 +99,7 @@ const TenureSection = ( { rows }: TenureSectionProps ) => {
 	return (
 		<Section className="newspack-insights__section newspack-insights__section--tenure" aria-labelledby="newspack-insights-tenure-heading">
 			<SectionHeading id="newspack-insights-tenure-heading" title={ __( 'Subscriber tenure', 'newspack-plugin' ) } description={ narrative } />
-			<div className="newspack-insights__metric-grid">
+			<Grid columns={ 4 } gutter={ 16 } noMargin>
 				<MetricCard
 					label={ __( 'Median tenure', 'newspack-plugin' ) }
 					value={ stats.median }
@@ -117,7 +118,7 @@ const TenureSection = ( { rows }: TenureSectionProps ) => {
 					format="number"
 					secondary={ _n( 'day', 'days', stats.p75, 'newspack-plugin' ) }
 				/>
-			</div>
+			</Grid>
 		</Section>
 	);
 };

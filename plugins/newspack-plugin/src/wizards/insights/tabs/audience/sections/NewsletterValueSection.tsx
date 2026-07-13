@@ -17,6 +17,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../../packages/components/src';
 import type { MetricPayload } from '../../components/metrics';
 import MetricCard from '../../components/MetricCard';
 import Section from '../../components/Section';
@@ -45,7 +46,7 @@ const NewsletterValueSection = ( { value }: NewsletterValueSectionProps ) => {
 				title={ __( 'Newsletter subscriber value', 'newspack-plugin' ) }
 				description={ __( 'What your newsletter audience is worth as future reader revenue.', 'newspack-plugin' ) }
 			/>
-			<div className="newspack-insights__metric-grid">
+			<Grid columns={ 4 } gutter={ 16 } noMargin>
 				<MetricCard
 					label={ __( 'Value per newsletter subscriber', 'newspack-plugin' ) }
 					value={ amount ?? 0 }
@@ -63,7 +64,7 @@ const NewsletterValueSection = ( { value }: NewsletterValueSectionProps ) => {
 						'newspack-plugin'
 					) }
 				/>
-			</div>
+			</Grid>
 		</Section>
 	);
 };

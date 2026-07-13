@@ -35,6 +35,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Card, Grid, Notice } from '../../../../../packages/components/src';
 import type { ConversionGatedFunnelData, ConversionWindow } from '../../api/conversion';
 import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
@@ -54,11 +55,11 @@ interface JourneyFunnelProps {
 }
 
 const JourneyFunnel = ( { title, caption, children }: JourneyFunnelProps ) => (
-	<div className="newspack-insights__conversion-journey-cell">
-		<h3 className="newspack-insights__conversion-subheading">{ title }</h3>
-		<p className="newspack-insights__conversion-subcaption">{ caption }</p>
-		{ children }
-	</div>
+	<Card __experimentalCoreCard className="newspack-insights__chart-card">
+		<h3 className="newspack-insights__chart-card-title">{ title }</h3>
+		<p className="newspack-insights__chart-card-caption">{ caption }</p>
+		<div className="newspack-insights__chart-card-body">{ children }</div>
+	</Card>
 );
 
 interface GatedFunnelCellProps {
@@ -70,12 +71,14 @@ interface GatedFunnelCellProps {
 const GatedFunnelCell = ( { data, emptyMessage }: GatedFunnelCellProps ) => {
 	if ( data.visibility === 'hidden' ) {
 		return (
-			<p className="newspack-insights__conversion-gated-note">
-				{ __(
+			<Notice
+				isWarning
+				className="newspack-insights__conversion-notice"
+				noticeText={ __(
 					'Cross-upsell view appears when both subscription and donation programs have at least 50 active participants.',
 					'newspack-plugin'
 				) }
-			</p>
+			/>
 		);
 	}
 	return (
@@ -131,7 +134,11 @@ const ConversionLegCell = ( { data, emptyMessage, noOpportunityMessage, noConver
 			return (
 				<>
 					<Funnel stages={ data.stages } />
-					<p className="newspack-insights__conversion-gated-note">{ interpolateCount( noConversionsBody, priorStage ) }</p>
+					<Notice
+						isWarning
+						className="newspack-insights__conversion-notice"
+						noticeText={ interpolateCount( noConversionsBody, priorStage ) }
+					/>
 				</>
 			);
 		}
@@ -166,7 +173,7 @@ const PerJourneyConversionFunnelsSection = ( { current }: PerJourneyConversionFu
 					'newspack-plugin'
 				) }
 			/>
-			<div className="newspack-insights__conversion-journey-grid">
+			<Grid columns={ 2 } gutter={ 16 } noMargin>
 				<JourneyFunnel
 					title={ __( 'Anonymous → Registered', 'newspack-plugin' ) }
 					caption={ __(
@@ -246,7 +253,7 @@ const PerJourneyConversionFunnelsSection = ( { current }: PerJourneyConversionFu
 						emptyMessage={ __( 'No cross-upsell data yet. This will populate once cross-upsell conversions occur.', 'newspack-plugin' ) }
 					/>
 				</JourneyFunnel>
-			</div>
+			</Grid>
 		</Section>
 	);
 };

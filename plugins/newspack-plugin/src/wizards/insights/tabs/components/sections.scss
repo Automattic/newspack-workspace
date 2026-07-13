@@ -74,14 +74,8 @@
 		color: wp-colors.$gray-700;
 	}
 
-	// Scorecard grid — responsive: auto-fill with a 220px minimum per
-	// column. Each card stretches to fill its column.
-
-	&__metric-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-		gap: 16px;
-	}
+	// Scorecards now lay out with the shared <Grid columns={ 4 }>; the metric
+	// card chrome + internal layout below still applies to each tile.
 
 	// Card chrome (white background, gray-200 border, 4px radius) is
 	// provided by the newspack Card component (rendered via
@@ -152,6 +146,7 @@
 		&-label {
 			@include wp-mixins.heading-large();
 			color: wp-colors.$gray-900;
+			text-wrap: pretty;
 		}
 
 		&-body {
@@ -264,6 +259,7 @@
 				// admin default paragraph size.
 				font: inherit;
 				color: inherit;
+				text-wrap: balance;
 			}
 		}
 

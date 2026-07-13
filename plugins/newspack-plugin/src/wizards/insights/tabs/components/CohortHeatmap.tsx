@@ -43,15 +43,12 @@ export interface CohortHeatmapProps {
 	emptyMessage?: string;
 }
 
-// Sequential blue ramp endpoints (light → dark), matching the tab's chart palette.
-const LIGHT: [ number, number, number ] = [ 230, 241, 251 ]; // #E6F1FB
-const DARK: [ number, number, number ] = [ 24, 95, 165 ]; // #185FA5
-
-const lerp = ( a: number, b: number, t: number ): number => Math.round( a + ( b - a ) * t );
-
-/** Cell background for a normalized value `t` in [0, 1]. */
-const cellColor = ( t: number ): string =>
-	`rgb(${ lerp( LIGHT[ 0 ], DARK[ 0 ], t ) }, ${ lerp( LIGHT[ 1 ], DARK[ 1 ], t ) }, ${ lerp( LIGHT[ 2 ], DARK[ 2 ], t ) })`;
+// The sequential ramp keys off the admin accent: each cell mixes
+// `--wp-admin-theme-color` with white by its normalized value `t` (in [0, 1])
+// via color-mix in the stylesheet. Cells expose `t` as the `--cell-t` custom
+// property and dark cells flip to white text.
+const cellStyle = ( t: number ): React.CSSProperties =>
+	( { '--cell-t': t, color: t > 0.55 ? '#fff' : 'var(--wp-admin-theme-color)' } ) as React.CSSProperties;
 
 const CohortHeatmap = ( {
 	cohorts,
@@ -110,7 +107,7 @@ const CohortHeatmap = ( {
 										<td
 											key={ `${ cohort.label }-${ period }` }
 											className="newspack-insights__cohort-heatmap-cell"
-											style={ { backgroundColor: cellColor( t ), color: t > 0.55 ? '#fff' : '#0c447c' } }
+											style={ cellStyle( t ) }
 										>
 											{ formatValue( value ) }
 										</td>
@@ -126,7 +123,7 @@ const CohortHeatmap = ( {
 					{ __( 'Lower', 'newspack-plugin' ) }
 					<span className="newspack-insights__cohort-heatmap-swatches" aria-hidden="true">
 						{ [ 0, 0.25, 0.5, 0.75, 1 ].map( t => (
-							<span key={ `sw-${ t }` } style={ { backgroundColor: cellColor( t ) } } />
+							<span key={ `sw-${ t }` } style={ cellStyle( t ) } />
 						) ) }
 					</span>
 					{ __( 'Higher', 'newspack-plugin' ) }

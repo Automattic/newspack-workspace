@@ -27,13 +27,6 @@
 	// different thing for regwall (same-session) than for paywall (checkout
 	// through the gate), so the mechanism is described per-metric instead.
 
-	// Two-card row (Section 2). The shared metric-grid is auto-fill
-	// with a 220px minimum; for the dedicated two-card sections we
-	// cap at two equal columns instead of letting more squeeze in.
-	&__metric-grid--pair {
-		grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-	}
-
 	// Section 4 — funnel + distribution side-by-side at equal width,
 	// stacking under 720px container width.
 	&__gates-convert-grid {
