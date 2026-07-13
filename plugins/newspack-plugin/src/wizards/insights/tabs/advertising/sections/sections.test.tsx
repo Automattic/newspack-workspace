@@ -224,3 +224,93 @@ describe( 'Advertising sections', () => {
 		expect( screen.getByText( '$0.00' ) ).toBeInTheDocument();
 	} );
 } );
+
+describe( 'Advertising Broadstreet variant (NPPD-2045)', () => {
+	const broadstreetMetrics: InsightsWindow = {
+		total_impressions: { value: 2400000, computable: true, type: 'count' },
+		avg_impressions_per_session: { value: 3, computable: true, type: 'count' },
+		// Overall CTR + mobile share are rate cards derived from the single network call.
+		overall_ctr: { value: 0.0018, computable: true, type: 'rate', numerator: 4320, denominator: 2400000 },
+		mobile_share: { value: 0.63, computable: true, type: 'rate', numerator: 1512000, denominator: 2400000 },
+		top_advertisers: {
+			type: 'table',
+			computable: true,
+			rows: [ { advertiser: 'Hometown Hardware', impressions: 120000, clicks: 480, ctr: 0.004 } ],
+		},
+		top_zones: {
+			type: 'table',
+			computable: true,
+			rows: [
+				{ zone: 'Homepage Leaderboard', impressions: 90000, clicks: 360, ctr: 0.004 },
+				{ zone: 'Article Sidebar', impressions: 40000, clicks: 0, ctr: null },
+			],
+		},
+		top_campaigns: {
+			type: 'table',
+			computable: true,
+			rows: [
+				{ campaign: 'Riverside Credit Union — Summer', impressions: 70000, clicks: 280, ctr: 0.004 },
+				{ campaign: 'Bluebird Books — Summer Reading', impressions: 20000, clicks: 0, ctr: null },
+			],
+		},
+	};
+
+	it( 'ReachRevenueSection renders the four Reach cards — impressions, per session, CTR, mobile share — and no revenue/RPM/eCPM', () => {
+		render( <ReachRevenueSection current={ broadstreetMetrics } previous={ null } hasWindowActivity activeProvider="broadstreet" /> );
+
+		expect( screen.getByText( 'Impressions' ) ).toBeInTheDocument();
+		expect( screen.getByText( '2.4M' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Impressions per session' ) ).toBeInTheDocument();
+		expect( screen.getByText( '3' ) ).toBeInTheDocument();
+		// The two new rate cards render as percents.
+		expect( screen.getByText( 'Overall CTR' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Mobile share' ) ).toBeInTheDocument();
+		expect( screen.getByText( '63%' ) ).toBeInTheDocument();
+
+		// Revenue-derived cards are omitted entirely (Broadstreet has no revenue).
+		expect( screen.queryByText( 'Revenue' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'RPM' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Average eCPM' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Viewability Rate' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'Overall CTR and Mobile share em-dash (never 0%) when there are no impressions', () => {
+		const noImpressions: InsightsWindow = {
+			...broadstreetMetrics,
+			overall_ctr: { value: 0, computable: false, type: 'rate', numerator: 0, denominator: 0 },
+			mobile_share: { value: 0, computable: false, type: 'rate', numerator: 0, denominator: 0 },
+		};
+		render( <ReachRevenueSection current={ noImpressions } previous={ null } hasWindowActivity activeProvider="broadstreet" /> );
+		expect( screen.getByText( 'Overall CTR' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Mobile share' ) ).toBeInTheDocument();
+		// Non-computable rate → em-dash, never a misleading 0%.
+		expect( screen.queryByText( '0%' ) ).not.toBeInTheDocument();
+		expect( screen.getAllByText( '—' ).length ).toBeGreaterThanOrEqual( 2 );
+	} );
+
+	it( 'ReachRevenueSection collapses to no_opportunity when Broadstreet has no impressions', () => {
+		const { container } = render(
+			<ReachRevenueSection current={ broadstreetMetrics } previous={ null } hasWindowActivity={ false } activeProvider="broadstreet" />
+		);
+		expect( container.querySelector( '[data-empty-state="no_opportunity"]' ) ).toBeInTheDocument();
+		expect( screen.queryByText( 'Impressions per session' ) ).not.toBeInTheDocument();
+	} );
+
+	it( 'TopPerformersSection renders Top advertisers + Top zones + Top campaigns, no revenue column or GAM ad-units table', () => {
+		render( <TopPerformersSection current={ broadstreetMetrics } previous={ null } activeProvider="broadstreet" /> );
+
+		expect( screen.getByText( 'Top advertisers' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Hometown Hardware' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top zones' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Homepage Leaderboard' ) ).toBeInTheDocument();
+		// Top campaigns is a first-class Broadstreet table (impressions/clicks/CTR, no revenue).
+		expect( screen.getByText( 'Top campaigns' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Riverside Credit Union — Summer' ) ).toBeInTheDocument();
+		// Null CTR (no impressions basis) renders an em-dash, never 0%.
+		expect( screen.getAllByText( '—' ).length ).toBeGreaterThanOrEqual( 1 );
+
+		// No revenue column, and the GAM-only ad-units table is absent.
+		expect( screen.queryByText( 'Revenue' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Top ad units' ) ).not.toBeInTheDocument();
+	} );
+} );

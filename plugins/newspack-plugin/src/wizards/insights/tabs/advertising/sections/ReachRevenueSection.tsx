@@ -42,7 +42,7 @@ import { __experimentalVStack as VStack } from '@wordpress/components'; // eslin
 /**
  * Internal dependencies
  */
-import type { InsightsWindow } from '../../../api/advertising';
+import type { AdvertisingProvider, InsightsWindow } from '../../../api/advertising';
 import { Grid } from '../../../../../../packages/components/src';
 import EmptyMetricSection from '../../components/EmptyMetricSection';
 import MetricCard from '../../components/MetricCard';
@@ -60,12 +60,75 @@ export interface SectionProps {
 	 */
 	hasWindowActivity?: boolean;
 	lastUpdated?: ReactNode;
+	/** Ad server backing the tab. Broadstreet is impressions-only (NPPD-2045). */
+	activeProvider?: AdvertisingProvider | null;
 }
 
 const TITLE = __( 'Reach & revenue', 'newspack-plugin' );
 const CAPTION = __( 'Volume, revenue, and inventory quality for the period.', 'newspack-plugin' );
 
-const ReachRevenueSection = ( { current, previous, hasWindowActivity, lastUpdated }: SectionProps ) => {
+// Broadstreet has no revenue in its API (NPPD-2045), so its variant is impressions-only.
+const BROADSTREET_TITLE = __( 'Reach', 'newspack-plugin' );
+const BROADSTREET_CAPTION = __( 'Ad impressions in this timeframe', 'newspack-plugin' );
+
+const ReachRevenueSection = ( { current, previous, hasWindowActivity, lastUpdated, activeProvider }: SectionProps ) => {
+	// Broadstreet variant (NPPD-2045): impressions-only. Broadstreet's API carries no
+	// revenue, so this renders four doable cards — total impressions, impressions per
+	// session, overall CTR, and mobile share — with no revenue / RPM / eCPM / fill /
+	// viewability. Overall CTR and mobile share are rate cards (percent, em-dash when
+	// there were no impressions to divide by).
+	if ( 'broadstreet' === activeProvider ) {
+		if ( hasWindowActivity === false ) {
+			return (
+				<EmptyMetricSection
+					title={ BROADSTREET_TITLE }
+					caption={ BROADSTREET_CAPTION }
+					state="no_opportunity"
+					body={ __(
+						'No ad impressions in this timeframe. Worth expanding the date range or checking your Broadstreet zone setup.',
+						'newspack-plugin'
+					) }
+				/>
+			);
+		}
+		return (
+			<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-reach-revenue">
+				<SectionHeading
+					id="newspack-insights-advertising-reach-revenue"
+					title={ BROADSTREET_TITLE }
+					description={ BROADSTREET_CAPTION }
+					actions={ lastUpdated }
+				/>
+				<Grid columns={ 4 } gutter={ 16 } noMargin>
+					<Scorecard
+						label={ __( 'Impressions', 'newspack-plugin' ) }
+						description={ __( 'Total ad impressions served on your site', 'newspack-plugin' ) }
+						current={ current.total_impressions }
+						previous={ previous?.total_impressions }
+					/>
+					<Scorecard
+						label={ __( 'Impressions per session', 'newspack-plugin' ) }
+						description={ __( 'Avg ad impressions a reader sees each session', 'newspack-plugin' ) }
+						current={ current.avg_impressions_per_session }
+						previous={ previous?.avg_impressions_per_session }
+					/>
+					<Scorecard
+						label={ __( 'Overall CTR', 'newspack-plugin' ) }
+						description={ __( 'Clicks per impression across all ads', 'newspack-plugin' ) }
+						current={ current.overall_ctr }
+						previous={ previous?.overall_ctr }
+					/>
+					<Scorecard
+						label={ __( 'Mobile share', 'newspack-plugin' ) }
+						description={ __( 'Share of impressions served to mobile', 'newspack-plugin' ) }
+						current={ current.mobile_share }
+						previous={ previous?.mobile_share }
+					/>
+				</Grid>
+			</Section>
+		);
+	}
+
 	// Whole-section empty: the report resolved with no ad activity. Collapse the
 	// grid to a single callout. Strict `=== false` so the absent-while-loading /
 	// absent-on-error cases fall through to the normal render.

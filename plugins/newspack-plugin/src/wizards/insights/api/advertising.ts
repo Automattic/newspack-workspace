@@ -30,11 +30,16 @@ export interface ReadinessIssue {
 	remediation_url: string;
 }
 
+/** The ad server backing this tab. Broadstreet omits revenue-based metrics (NPPD-2045). */
+export type AdvertisingProvider = 'gam' | 'broadstreet';
+
 /**
  * One window's full Advertising envelope (the orchestrator's `get_all()` shape).
  */
 export interface AdvertisingWindow {
 	window?: { start: string; end: string };
+	/** Which ad server produced this envelope, or null when neither is active. */
+	active_provider?: AdvertisingProvider | null;
 	is_tab_visible: boolean;
 	is_report_ready: boolean;
 	/** Newspack Network member (NPPD-1671): gates the per-site breakdown (`metrics.top_sites`). */
@@ -88,9 +93,16 @@ const queryString = ( query: InsightsQuery ): string => {
 	// A no-op in production: the server ignores it unless
 	// NEWSPACK_INSIGHTS_FIXTURE_MODE is enabled.
 	if ( typeof window !== 'undefined' ) {
-		const fixtureState = new URLSearchParams( window.location.search ).get( '_fixture_state' );
+		const search = new URLSearchParams( window.location.search );
+		const fixtureState = search.get( '_fixture_state' );
 		if ( fixtureState ) {
 			params.set( '_fixture_state', fixtureState );
+		}
+		// Provider variant (NPPD-2045): `_fixture_provider=broadstreet` renders the
+		// impressions-only Broadstreet envelope for smoke testing. No-op in production.
+		const fixtureProvider = search.get( '_fixture_provider' );
+		if ( fixtureProvider ) {
+			params.set( '_fixture_provider', fixtureProvider );
 		}
 	}
 	return params.toString();

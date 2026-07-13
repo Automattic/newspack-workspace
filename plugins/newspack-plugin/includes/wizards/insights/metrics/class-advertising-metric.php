@@ -40,6 +40,7 @@ namespace Newspack\Insights;
 use Newspack\Insights\GAM\Client;
 use Newspack\Insights\GAM\Report_Query;
 use Newspack\Insights\GAM\Report_Job_Status;
+use Newspack\Insights\Broadstreet\Client as Broadstreet_Client;
 use Newspack\Insights\Derived\Cross_System_Metrics;
 use Newspack\Logger;
 
@@ -59,6 +60,14 @@ class Advertising_Metric {
 	const CACHE_FRESH_TTL  = 15 * MINUTE_IN_SECONDS;
 	const CACHE_HARD_TTL   = DAY_IN_SECONDS;
 	const CACHE_RETRY_TTL  = 5 * MINUTE_IN_SECONDS;
+
+	/**
+	 * Broadstreet window cache. The Broadstreet rollup is synchronous and cheap, so
+	 * unlike GAM there's no stale-while-revalidate / Action Scheduler machinery — the
+	 * envelope is simply computed on a miss and cached for a short window.
+	 */
+	const BROADSTREET_CACHE_KEY_PREFIX = 'newspack_insights_advertising_broadstreet_v1:';
+	const BROADSTREET_CACHE_TTL        = 15 * MINUTE_IN_SECONDS;
 
 	const REFRESH_ACTION = 'newspack_insights_advertising_refresh';
 	const REFRESH_GROUP  = 'newspack-insights';
@@ -160,12 +169,44 @@ class Advertising_Metric {
 	 */
 
 	/**
-	 * Whether Tab 8 should be visible: Google Ad Manager active on the site.
+	 * The active ad-server provider backing Tab 8, or null when neither is
+	 * configured. GAM wins when both are active (a placement-count tiebreaker is a
+	 * later concern). Detection is local/cheap — no remote calls — so it's safe to
+	 * call repeatedly per request.
+	 *
+	 * @return string|null 'gam' | 'broadstreet' | null.
+	 */
+	public static function active_provider(): ?string {
+		if ( Client::is_gam_active() ) {
+			return 'gam';
+		}
+		if ( static::is_broadstreet_active() ) {
+			return 'broadstreet';
+		}
+		return null;
+	}
+
+	/**
+	 * Whether Broadstreet is the site's active ad server. A `protected` seam over
+	 * {@see \Newspack\Insights\Broadstreet\Client::is_active()} (plugin present +
+	 * API key + network id) so tests can force it without stubbing the optional
+	 * Broadstreet plugin. Called via `static::` from {@see self::active_provider()}
+	 * so a test subclass's override takes effect.
+	 *
+	 * @return bool
+	 */
+	protected static function is_broadstreet_active(): bool {
+		return Broadstreet_Client::is_active();
+	}
+
+	/**
+	 * Whether Tab 8 should be visible: a supported ad server (Google Ad Manager or
+	 * Broadstreet) is active on the site.
 	 *
 	 * @return bool
 	 */
 	public static function is_tab_visible(): bool {
-		return Client::is_gam_active();
+		return null !== static::active_provider();
 	}
 
 	/**
@@ -191,6 +232,20 @@ class Advertising_Metric {
 	 * @return bool
 	 */
 	public static function is_report_ready(): bool {
+		$provider = static::active_provider();
+
+		// Broadstreet reporting is a synchronous REST rollup (no OAuth scope, no
+		// network-code readiness dance, no async job): if Broadstreet is the active
+		// provider it's immediately ready to report.
+		if ( 'broadstreet' === $provider ) {
+			return true;
+		}
+
+		// Any non-GAM provider (including none) can't run a GAM report.
+		if ( 'gam' !== $provider ) {
+			return false;
+		}
+
 		if ( null === self::$can_run_memo ) {
 			self::$can_run_memo = Client::can_run_reports();
 		}
@@ -288,11 +343,13 @@ class Advertising_Metric {
 	 * @return array
 	 */
 	public static function get_all( string $start_date, string $end_date, bool $compare = false ): array {
+		$provider = self::active_provider();
 		$envelope = [
 			'window'            => [
 				'start' => $start_date,
 				'end'   => $end_date,
 			],
+			'active_provider'   => $provider,
 			'is_tab_visible'    => self::is_tab_visible(),
 			'is_report_ready'   => self::is_report_ready(),
 			'is_network_member' => self::is_network_member(),
@@ -304,6 +361,18 @@ class Advertising_Metric {
 		// schedule a refresh that would just be skipped.
 		if ( ! $envelope['is_tab_visible'] || ! $envelope['is_report_ready'] ) {
 			return array_merge( $envelope, self::empty_window( $start_date, $end_date ), [ 'is_report_ready' => $envelope['is_report_ready'] ] );
+		}
+
+		// Broadstreet: a synchronous, impressions-only rollup (no revenue in the v1
+		// API, no async job). Computed inline and transient-cached — never through the
+		// GAM stale-while-revalidate / Action Scheduler path.
+		if ( 'broadstreet' === $provider ) {
+			$envelope = array_merge( $envelope, self::read_broadstreet_window( $start_date, $end_date ) );
+			if ( $compare ) {
+				[ $prior_start, $prior_end ] = self::prior_period( $start_date, $end_date );
+				$envelope['compare']         = self::read_broadstreet_window( $prior_start, $prior_end );
+			}
+			return $envelope;
 		}
 
 		$window = self::read_window( $start_date, $end_date );
@@ -326,11 +395,13 @@ class Advertising_Metric {
 	 * @param string $end_date   YYYY-MM-DD.
 	 * @param bool   $compare    Whether to attach the comparison payload.
 	 * @param string $variant    Render-path variant: populated|not_ready|zero|no_viewability.
+	 * @param string $provider   Ad-server variant: gam|broadstreet (NPPD-2045). Broadstreet
+	 *                           renders the impressions-only envelope (no revenue/RPM).
 	 * @return array
 	 */
-	public static function get_fixture( string $start_date, string $end_date, bool $compare = false, string $variant = 'populated' ): array {
+	public static function get_fixture( string $start_date, string $end_date, bool $compare = false, string $variant = 'populated', string $provider = 'gam' ): array {
 		$fixture = require NEWSPACK_ABSPATH . 'includes/wizards/insights/fixtures/advertising-fixture.php';
-		return $fixture( $start_date, $end_date, $compare, $variant );
+		return $fixture( $start_date, $end_date, $compare, $variant, $provider );
 	}
 
 	/**
@@ -1186,6 +1257,248 @@ class Advertising_Metric {
 			$host = preg_replace( '#^https?://#', '', $value );
 		}
 		return (string) preg_replace( '#^www\.#', '', (string) $host );
+	}
+
+	/*
+	 * Broadstreet (NPPD-2045) — synchronous, impressions-only window.
+	 *
+	 * Broadstreet's v1 API has no revenue/RPM/eCPM/cost, so this path emits only
+	 * impressions-side metrics: total impressions, overall CTR, mobile share, top
+	 * advertisers, top zones, top campaigns, plus the provider-agnostic avg
+	 * impressions/session cross-system join (added at the read layer). Every
+	 * revenue/inventory metric GAM produces is deliberately absent.
+	 */
+
+	/**
+	 * Read a Broadstreet window: transient-cached synchronous compute (no Action
+	 * Scheduler). The avg-impressions-per-session cross-system scorecard and the
+	 * derived empty-state signal are layered on AFTER the cache — matching the GAM
+	 * read layer — so sessions track the Audience cache rather than the ad cache.
+	 *
+	 * @param string $start_date YYYY-MM-DD.
+	 * @param string $end_date   YYYY-MM-DD.
+	 * @return array Window payload.
+	 */
+	private static function read_broadstreet_window( string $start_date, string $end_date ): array {
+		$cache_key = self::broadstreet_cache_key( $start_date, $end_date );
+		$cached    = get_transient( $cache_key );
+		if ( is_array( $cached ) && isset( $cached['metrics'] ) && is_array( $cached['metrics'] ) ) {
+			$window = $cached;
+		} else {
+			$window = self::compute_broadstreet_window( $start_date, $end_date );
+			set_transient( $cache_key, $window, self::BROADSTREET_CACHE_TTL );
+		}
+
+		// Cross-system derived scorecard (provider-agnostic): impressions per session,
+		// joining this window's Broadstreet impressions with fresh GA4 sessions.
+		$metrics  = $window['metrics'] ?? [];
+		$sessions = Cross_System_Metrics::sessions_for_window( $start_date, $end_date );
+		$window['metrics']['avg_impressions_per_session'] = Cross_System_Metrics::avg_impressions_per_session(
+			$metrics['total_impressions'] ?? [],
+			$sessions
+		);
+
+		// Derived empty-state signal (NPPD-1697): Broadstreet has no revenue, so
+		// impressions are the only activity signal. Set only when the volume metric is
+		// computable, so an errored/absent metric doesn't collapse the section.
+		$imp = $metrics['total_impressions'] ?? [];
+		if ( ! empty( $imp['computable'] ) ) {
+			$window['has_window_activity'] = self::window_activity_signal( (int) ( $imp['value'] ?? 0 ), 0.0 );
+		}
+
+		return $window;
+	}
+
+	/**
+	 * Compute a Broadstreet window's metrics (the report-touching path). Cheap and
+	 * synchronous — a single rollup call per metric, no fan-out.
+	 *
+	 * @param string $start_date YYYY-MM-DD.
+	 * @param string $end_date   YYYY-MM-DD.
+	 * @return array Window payload (window + metrics + minimal lag info).
+	 */
+	private static function compute_broadstreet_window( string $start_date, string $end_date ): array {
+		// A SINGLE group=network call yields three scorecards (impressions, CTR,
+		// mobile share); the advertiser/zone/campaign groups are one call each.
+		$network = self::broadstreet_network_metrics( $start_date, $end_date );
+		return [
+			'window'                      => [
+				'start' => $start_date,
+				'end'   => $end_date,
+			],
+			'metrics'                     => [
+				'total_impressions' => $network['total_impressions'],
+				'overall_ctr'       => $network['overall_ctr'],
+				'mobile_share'      => $network['mobile_share'],
+				'top_advertisers'   => self::broadstreet_top_advertisers( $start_date, $end_date ),
+				'top_zones'         => self::broadstreet_top_zones( $start_date, $end_date ),
+				'top_campaigns'     => self::broadstreet_top_campaigns( $start_date, $end_date ),
+			],
+			// Broadstreet reports settle without GAM's multi-day AdX estimate lag, so
+			// there's no estimated-data window; the UI hides the lag indicator anyway.
+			'data_as_of'                  => ( new \DateTimeImmutable( 'today', wp_timezone() ) )->modify( '-1 day' )->format( 'Y-m-d' ),
+			'has_estimated_data'          => false,
+			'estimated_window_start_date' => null,
+		];
+	}
+
+	/**
+	 * Broadstreet network-rollup scorecards — a SINGLE `group=network` call
+	 * selecting `count(view)`, `count(click)`, and `count(mobile_view)`, from which
+	 * three scorecards are derived without any extra requests:
+	 *   - total_impressions : sum of `count(view)`.
+	 *   - overall_ctr       : clicks ÷ impressions (rate).
+	 *   - mobile_share      : mobile views ÷ impressions (rate).
+	 *
+	 * `count(mobile_view)` is Broadstreet's ONLY device signal — a mobile-vs-total
+	 * split, not a full device breakdown (desktop/tablet counts don't exist in the
+	 * v1 API), so there's deliberately no device table.
+	 *
+	 * @param string $s Start date.
+	 * @param string $e End date.
+	 * @return array{total_impressions:array,overall_ctr:array,mobile_share:array}
+	 */
+	public static function broadstreet_network_metrics( string $s, string $e ): array {
+		$rows        = static::run_broadstreet_report( 'network', [ 'count(view)', 'count(click)', 'count(mobile_view)' ], $s, $e );
+		$impressions = 0.0;
+		$clicks      = 0.0;
+		$mobile      = 0.0;
+		foreach ( $rows as $row ) {
+			$impressions += self::cell_number( $row, 'count(view)' );
+			$clicks      += self::cell_number( $row, 'count(click)' );
+			$mobile      += self::cell_number( $row, 'count(mobile_view)' );
+		}
+		return [
+			'total_impressions' => self::scalar_count( $impressions ),
+			'overall_ctr'       => self::broadstreet_rate( $clicks, $impressions ),
+			'mobile_share'      => self::broadstreet_rate( $mobile, $impressions ),
+		];
+	}
+
+	/**
+	 * Shape a Broadstreet rate scorecard: numerator ÷ denominator, carrying the raw
+	 * counts. Not computable (→ em-dash, never a misleading 0%) when the denominator
+	 * is zero, so an empty/degraded rollup reads as "no data", not a real zero rate.
+	 *
+	 * @param float $numerator   Rate numerator (clicks, or mobile views).
+	 * @param float $denominator Rate denominator (impressions).
+	 * @return array
+	 */
+	private static function broadstreet_rate( float $numerator, float $denominator ): array {
+		return [
+			'value'       => $denominator > 0 ? $numerator / $denominator : 0.0,
+			'computable'  => $denominator > 0,
+			'type'        => 'rate',
+			'numerator'   => (int) $numerator,
+			'denominator' => (int) $denominator,
+		];
+	}
+
+	/**
+	 * Broadstreet top advertisers by impressions — `group=advertiser`. Rows carry
+	 * impressions, clicks, and CTR (clicks / impressions, null when impressions are
+	 * zero). Top 10 by impressions. No revenue — the Broadstreet API has none.
+	 *
+	 * @param string $s     Start date.
+	 * @param string $e     End date.
+	 * @param int    $limit Max rows.
+	 * @return array
+	 */
+	public static function broadstreet_top_advertisers( string $s, string $e, int $limit = 10 ): array {
+		$rows = static::run_broadstreet_report( 'advertiser', [ 'advertiser.name', 'count(view)', 'count(click)' ], $s, $e );
+		$out  = [];
+		foreach ( $rows as $row ) {
+			$impressions = (int) self::cell_number( $row, 'count(view)' );
+			$clicks      = (int) self::cell_number( $row, 'count(click)' );
+			$out[]       = [
+				'advertiser'  => (string) self::cell( $row, 'advertiser.name' ),
+				'impressions' => $impressions,
+				'clicks'      => $clicks,
+				'ctr'         => self::ctr( $clicks, $impressions ),
+			];
+		}
+		return self::rank_table( $out, 'impressions', $limit );
+	}
+
+	/**
+	 * Broadstreet top zones by impressions — `group=zone`. Rows carry impressions,
+	 * clicks, and CTR (null when impressions are zero). Top 10 by impressions.
+	 *
+	 * @param string $s     Start date.
+	 * @param string $e     End date.
+	 * @param int    $limit Max rows.
+	 * @return array
+	 */
+	public static function broadstreet_top_zones( string $s, string $e, int $limit = 10 ): array {
+		$rows = static::run_broadstreet_report( 'zone', [ 'zone.name', 'count(view)', 'count(click)' ], $s, $e );
+		$out  = [];
+		foreach ( $rows as $row ) {
+			$impressions = (int) self::cell_number( $row, 'count(view)' );
+			$clicks      = (int) self::cell_number( $row, 'count(click)' );
+			$out[]       = [
+				'zone'        => (string) self::cell( $row, 'zone.name' ),
+				'impressions' => $impressions,
+				'clicks'      => $clicks,
+				'ctr'         => self::ctr( $clicks, $impressions ),
+			];
+		}
+		return self::rank_table( $out, 'impressions', $limit );
+	}
+
+	/**
+	 * Broadstreet top campaigns by impressions — `group=campaign`. Rows carry
+	 * impressions, clicks, and CTR (clicks / impressions, null when impressions are
+	 * zero). Top 10 by impressions. No revenue — the Broadstreet API has none. Unlike
+	 * the GAM top-campaigns metric (direct-sold ORDER_NAME rows), Broadstreet's
+	 * `campaign` group is a first-class reporting dimension with real named campaigns.
+	 *
+	 * @param string $s     Start date.
+	 * @param string $e     End date.
+	 * @param int    $limit Max rows.
+	 * @return array
+	 */
+	public static function broadstreet_top_campaigns( string $s, string $e, int $limit = 10 ): array {
+		$rows = static::run_broadstreet_report( 'campaign', [ 'campaign.name', 'count(view)', 'count(click)' ], $s, $e );
+		$out  = [];
+		foreach ( $rows as $row ) {
+			$impressions = (int) self::cell_number( $row, 'count(view)' );
+			$clicks      = (int) self::cell_number( $row, 'count(click)' );
+			$out[]       = [
+				'campaign'    => (string) self::cell( $row, 'campaign.name' ),
+				'impressions' => $impressions,
+				'clicks'      => $clicks,
+				'ctr'         => self::ctr( $clicks, $impressions ),
+			];
+		}
+		return self::rank_table( $out, 'impressions', $limit );
+	}
+
+	/**
+	 * Run a Broadstreet rollup report. The mockable seam (mirrors GAM's
+	 * {@see self::run_gam_report()}): tests subclass and override this to inject
+	 * canned `records` rows without touching the network. Returns the raw rows, or
+	 * [] on any degrade.
+	 *
+	 * @param string   $group  Grouping dimension (network|advertiser|zone|campaign).
+	 * @param string[] $select Fields to select.
+	 * @param string   $s      Start date, YYYY-MM-DD.
+	 * @param string   $e      End date, YYYY-MM-DD.
+	 * @return array<int,array<string,mixed>>
+	 */
+	protected static function run_broadstreet_report( string $group, array $select, string $s, string $e ): array {
+		return Broadstreet_Client::report( $group, $select, $s, $e );
+	}
+
+	/**
+	 * Broadstreet window cache key, scoped to the network id so a reconnect to a
+	 * different Broadstreet network never serves a stale payload.
+	 *
+	 * @param string $start_date YYYY-MM-DD.
+	 * @param string $end_date   YYYY-MM-DD.
+	 * @return string
+	 */
+	private static function broadstreet_cache_key( string $start_date, string $end_date ): string {
+		return self::BROADSTREET_CACHE_KEY_PREFIX . md5( Broadstreet_Client::get_network_id() . '|' . $start_date . '|' . $end_date );
 	}
 
 	/*
