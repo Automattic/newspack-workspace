@@ -194,9 +194,13 @@ class Google_OAuth {
 				);
 			}
 			// Remember the client id the proxy issues tokens for, so received tokens can be
-			// confirmed to have been issued to this app.
-			if ( isset( $response_body->client_id ) ) {
+			// confirmed to have been issued to this app. Only a usable value may replace a stored
+			// one: sanitize_text_field() flattens an array to '', and an empty expected client id
+			// is what makes validate_token_and_get_email_address() skip the audience check.
+			if ( ! empty( $response_body->client_id ) && is_string( $response_body->client_id ) ) {
 				update_option( self::CLIENT_ID_OPTION_NAME, sanitize_text_field( $response_body->client_id ), false );
+			} elseif ( isset( $response_body->client_id ) ) {
+				Logger::error( 'OAuth proxy /start returned an unusable client id; keeping the stored value.' );
 			}
 			return $response_body->url;
 		} catch ( \Exception $e ) {
