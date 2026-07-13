@@ -38,7 +38,7 @@ const TimeTrendsSection = ( { current }: SectionProps ) => (
 		{ /* New vs Returning takes the full width; the two day/hour bar charts share the row below. */ }
 		<VStack spacing={ 4 }>
 			<ChartCard
-				subhead={ __( 'Day to day', 'newspack-plugin' ) }
+				caption={ __( 'Day to day', 'newspack-plugin' ) }
 				title={ __( 'New vs returning over time', 'newspack-plugin' ) }
 				payload={ current.new_vs_returning_over_time }
 			>
@@ -48,21 +48,15 @@ const TimeTrendsSection = ( { current }: SectionProps ) => (
 						{ name: __( 'Returning', 'newspack-plugin' ), points: toSeries( current.new_vs_returning_over_time, 'date', 'returning' ) },
 					] }
 					formatLabel={ formatShortDate }
+					height={ 260 }
+					seriesColorIndices={ [ 0, 3 ] }
 				/>
 			</ChartCard>
 			<Grid columns={ 2 } gutter={ 16 } noMargin>
-				<ChartCard
-					subhead={ __( 'Day of week', 'newspack-plugin' ) }
-					title={ __( 'Readership by day of week', 'newspack-plugin' ) }
-					payload={ current.readership_by_day_of_week }
-				>
+				<ChartCard title={ __( 'Readership by day of week', 'newspack-plugin' ) } payload={ current.readership_by_day_of_week }>
 					<BarChart bars={ toSeries( current.readership_by_day_of_week, 'day_of_week', 'active_readers' ) } />
 				</ChartCard>
-				<ChartCard
-					subhead={ __( 'Hour of day', 'newspack-plugin' ) }
-					title={ __( 'Readership by hour of day', 'newspack-plugin' ) }
-					payload={ current.readership_by_hour_of_day }
-				>
+				<ChartCard title={ __( 'Readership by hour of day', 'newspack-plugin' ) } payload={ current.readership_by_hour_of_day }>
 					<BarChart bars={ toSeries( current.readership_by_hour_of_day, 'hour', 'active_readers' ) } />
 				</ChartCard>
 			</Grid>

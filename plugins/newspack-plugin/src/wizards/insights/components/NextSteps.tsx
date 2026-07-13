@@ -21,7 +21,7 @@
 import { __ } from '@wordpress/i18n';
 import { useState } from '@wordpress/element';
 import { Button, ExternalLink } from '@wordpress/components';
-import { close } from '@wordpress/icons';
+import { closeSmall } from '@wordpress/icons';
 
 /**
  * Internal dependencies
@@ -74,7 +74,7 @@ const NextSteps = ( { links }: NextStepsProps ) => {
 				<span className="newspack-insights__next-steps-label">{ __( 'Next steps', 'newspack-plugin' ) }</span>
 				<Button
 					className="newspack-insights__next-steps-dismiss"
-					icon={ close }
+					icon={ closeSmall }
 					label={ __( 'Dismiss next steps', 'newspack-plugin' ) }
 					onClick={ dismiss }
 					size="small"

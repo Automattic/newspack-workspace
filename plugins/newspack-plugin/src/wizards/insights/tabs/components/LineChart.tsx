@@ -73,10 +73,17 @@ export interface LineChartProps {
 	yMax?: number;
 	/** Empty-state copy shown when there's no data. Defaults to the generic line. */
 	emptyMessage?: string;
+	/** Plot height in px. Defaults to 160; full-width cards can go taller. */
+	height?: number;
+	/**
+	 * Map each series position to a palette index (`.is-series-N`). Defaults to
+	 * the series' own index. Use it to skip adjacent same-family shades that read
+	 * as one colour — e.g. `[ 0, 3 ]` pairs blue with orange for two series.
+	 */
+	seriesColorIndices?: number[];
 }
 
 const W = 600;
-const H = 160;
 const PAD = 8;
 
 const LineChart = ( {
@@ -89,7 +96,11 @@ const LineChart = ( {
 	referenceLine,
 	yMax,
 	emptyMessage,
+	height = 160,
+	seriesColorIndices,
 }: LineChartProps ) => {
+	const H = height;
+	const colorIndex = ( si: number ) => seriesColorIndices?.[ si ] ?? si;
 	const [ active, setActive ] = useState< number | null >( null );
 
 	const allSeries: LineSeries[] = series && series.length ? series : [ { name: '', points: points ?? [] } ];
@@ -139,6 +150,7 @@ const LineChart = ( {
 				<svg
 					viewBox={ `0 0 ${ W } ${ H }` }
 					className="newspack-insights__line-svg"
+					style={ { height: `${ H }px` } }
 					role="img"
 					aria-label={ __( 'Time-series chart', 'newspack-plugin' ) }
 					preserveAspectRatio="none"
@@ -168,17 +180,42 @@ const LineChart = ( {
 						const area = `${ PAD },${ H - PAD } ${ linePts } ${ xAt( n - 1 ).toFixed( 1 ) },${ H - PAD }`;
 						return (
 							<g key={ `series-${ si }` }>
-								{ ! isMulti && <polygon className={ `newspack-insights__line-area is-series-${ si }` } points={ area } /> }
-								<polyline className={ `newspack-insights__line-stroke is-series-${ si }` } points={ linePts } fill="none" />
-								{ coords.map( ( [ x, y ], i ) => (
-									<circle
-										key={ `pt-${ si }-${ i }` }
-										className={ `newspack-insights__line-point is-series-${ si }` }
-										cx={ x }
-										cy={ y }
-										r={ active === i ? 4.5 : 3 }
-									/>
-								) ) }
+								{ ! isMulti && (
+									<polygon className={ `newspack-insights__line-area is-series-${ colorIndex( si ) }` } points={ area } />
+								) }
+								<polyline
+									className={ `newspack-insights__line-stroke is-series-${ colorIndex( si ) }` }
+									points={ linePts }
+									fill="none"
+								/>
+								{ coords.map( ( [ x, y ], i ) => {
+									// Points are drawn as zero-length round-capped strokes with a
+									// non-scaling stroke width, so they stay perfectly circular even
+									// though the viewBox is stretched horizontally to fill the card
+									// (a plain <circle> fill would render as an oval). The white halo
+									// is a wider stroke behind the coloured dot.
+									const dot = active === i ? 9 : 6;
+									return (
+										<g key={ `pt-${ si }-${ i }` }>
+											<line
+												className="newspack-insights__line-point-halo"
+												x1={ x }
+												y1={ y }
+												x2={ x }
+												y2={ y }
+												strokeWidth={ dot + 2 }
+											/>
+											<line
+												className={ `newspack-insights__line-point is-series-${ colorIndex( si ) }` }
+												x1={ x }
+												y1={ y }
+												x2={ x }
+												y2={ y }
+												strokeWidth={ dot }
+											/>
+										</g>
+									);
+								} ) }
 							</g>
 						);
 					} ) }
@@ -204,7 +241,12 @@ const LineChart = ( {
 						<span className="newspack-insights__chart-tooltip-label">{ formatLabel( base[ active ].label ) }</span>
 						{ allSeries.map( ( s, si ) => (
 							<span key={ `tt-${ si }` } className="newspack-insights__chart-tooltip-row">
-								{ isMulti && <span className={ `newspack-insights__chart-tooltip-swatch is-series-${ si }` } aria-hidden="true" /> }
+								{ isMulti && (
+									<span
+										className={ `newspack-insights__chart-tooltip-swatch is-series-${ colorIndex( si ) }` }
+										aria-hidden="true"
+									/>
+								) }
 								{ isMulti && <span className="newspack-insights__chart-tooltip-name">{ s.name }</span> }
 								<span className="newspack-insights__chart-tooltip-value">{ formatValue( s.points[ active ]?.value ?? 0 ) }</span>
 							</span>
@@ -216,7 +258,7 @@ const LineChart = ( {
 				<div className="newspack-insights__line-legend">
 					{ allSeries.map( ( s, si ) => (
 						<span key={ `lg-${ si }` } className="newspack-insights__line-legend-item">
-							<span className={ `newspack-insights__legend-swatch is-series-${ si }` } aria-hidden="true" />
+							<span className={ `newspack-insights__legend-swatch is-series-${ colorIndex( si ) }` } aria-hidden="true" />
 							<span>{ s.name }</span>
 						</span>
 					) ) }

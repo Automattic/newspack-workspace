@@ -6,6 +6,11 @@
  */
 
 /**
+ * External dependencies
+ */
+import classnames from 'classnames';
+
+/**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
@@ -32,9 +37,26 @@ const BarChart = ( { bars, formatValue = formatNumber }: BarChartProps ) => {
 	}
 	const max = Math.max( ...bars.map( b => b.value || 0 ), 1 );
 
+	// Colour encodes magnitude only for small categorical sets (<= 3 bars): the
+	// tallest takes the primary series colour, each shorter steps down the scale
+	// (8 shades, cycling to match PieChart). Larger sets (day-of-week, hour-of-day)
+	// stay a single series colour so the scale doesn't read as noise.
+	const seriesByIndex: number[] = bars.map( () => 0 );
+	if ( bars.length <= 3 ) {
+		bars.map( ( bar, index ) => ( { index, value: bar.value || 0 } ) )
+			.sort( ( a, b ) => b.value - a.value )
+			.forEach( ( item, rank ) => {
+				seriesByIndex[ item.index ] = rank % 8;
+			} );
+	}
+
 	return (
-		<div className="newspack-insights__bars" role="img" aria-label={ __( 'Bar chart', 'newspack-plugin' ) }>
-			{ bars.map( bar => (
+		<div
+			className={ classnames( 'newspack-insights__bars', { 'is-dense': bars.length > 3 } ) }
+			role="img"
+			aria-label={ __( 'Bar chart', 'newspack-plugin' ) }
+		>
+			{ bars.map( ( bar, index ) => (
 				<div className="newspack-insights__bar-col" key={ bar.label }>
 					{ /* Dark hover panel (NPPD-1649 fix #5), shown on column hover via CSS. */ }
 					<div className="newspack-insights__chart-tooltip newspack-insights__chart-tooltip--bar">
@@ -43,7 +65,7 @@ const BarChart = ( { bars, formatValue = formatNumber }: BarChartProps ) => {
 					</div>
 					<div className="newspack-insights__bar-track">
 						<div
-							className="newspack-insights__bar-fill is-series-0"
+							className={ `newspack-insights__bar-fill is-series-${ seriesByIndex[ index ] }` }
 							style={ { height: `${ Math.round( ( ( bar.value || 0 ) / max ) * 100 ) }%` } }
 						/>
 					</div>

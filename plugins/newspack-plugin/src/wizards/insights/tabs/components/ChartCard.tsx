@@ -21,8 +21,6 @@ export interface ChartCardProps {
 	 * already names it (e.g. Revenue trend) omits this to avoid a duplicate title.
 	 */
 	title?: string;
-	/** Small temporal-scope subhead above the title (e.g. "Day to day"). */
-	subhead?: string;
 	caption?: string;
 	payload?: MetricPayload;
 	children: React.ReactNode;
@@ -30,7 +28,7 @@ export interface ChartCardProps {
 	style?: React.CSSProperties;
 }
 
-const ChartCard = ( { title, subhead, caption, payload, children, style }: ChartCardProps ) => {
+const ChartCard = ( { title, caption, payload, children, style }: ChartCardProps ) => {
 	if ( ! payload || payload.hidden_in_v1 ) {
 		return null;
 	}
@@ -48,7 +46,6 @@ const ChartCard = ( { title, subhead, caption, payload, children, style }: Chart
 
 	return (
 		<Card __experimentalCoreCard className="newspack-insights__chart-card" style={ style }>
-			{ subhead && <p className="newspack-insights__chart-card-subhead">{ subhead }</p> }
 			{ title && <h3 className="newspack-insights__chart-card-title">{ title }</h3> }
 			{ caption && <p className="newspack-insights__chart-card-caption">{ caption }</p> }
 			<div className="newspack-insights__chart-card-body">{ body }</div>
