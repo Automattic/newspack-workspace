@@ -6,10 +6,12 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
+import { Card } from '../../../../../../packages/components/src';
 import type { InsightsWindow } from '../../../api/audience';
 import MetricTable from '../../components/MetricTable';
 import Section from '../../components/Section';
@@ -27,47 +29,53 @@ const ContentPerformanceSection = ( { current }: SectionProps ) => (
 			title={ __( 'Content performance', 'newspack-plugin' ) }
 			description={ __( "What's getting read.", 'newspack-plugin' ) }
 		/>
-		<div className="newspack-insights__table-grid">
-			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Top articles', 'newspack-plugin' ) }</h3>
-				<MetricTable
-					payload={ current.top_pages }
-					emptyMessage={ __( 'No article data in this timeframe.', 'newspack-plugin' ) }
-					columns={ [
-						{ key: 'page_title', label: __( 'Article', 'newspack-plugin' ) },
-						{ key: 'unique_readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
-						{ key: 'pageviews', label: __( 'Pageviews', 'newspack-plugin' ), format: 'number', align: 'right' },
-					] }
-				/>
-			</div>
-			<div>
-				<h3 className="newspack-insights__chart-card-title">{ __( 'Top authors by reader count', 'newspack-plugin' ) }</h3>
-				<MetricTable
-					payload={ current.top_authors_by_reader_count }
-					emptyMessage={ __( 'No author data in this timeframe.', 'newspack-plugin' ) }
-					columns={ [
-						{ key: 'author', label: __( 'Author', 'newspack-plugin' ) },
-						{ key: 'unique_readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
-						{ key: 'pageviews', label: __( 'Pageviews', 'newspack-plugin' ), format: 'number', align: 'right' },
-					] }
-				/>
-			</div>
-			{ /* Top Categories is hidden_in_v1 (needs BQ UNNEST); it skip-renders until the BQ catalog ships. */ }
-			{ ! current.top_categories?.hidden_in_v1 && (
-				<div>
-					<h3 className="newspack-insights__chart-card-title">{ __( 'Top categories', 'newspack-plugin' ) }</h3>
+		<VStack spacing={ 4 }>
+			<Card __experimentalCoreCard className="newspack-insights__chart-card">
+				<VStack spacing={ 6 }>
+					<h3 className="newspack-insights__chart-card-title">{ __( 'Top articles', 'newspack-plugin' ) }</h3>
 					<MetricTable
-						payload={ current.top_categories }
-						emptyMessage={ __( 'No category data in this timeframe.', 'newspack-plugin' ) }
+						payload={ current.top_pages }
+						emptyMessage={ __( 'No article data in this timeframe.', 'newspack-plugin' ) }
 						columns={ [
-							{ key: 'category', label: __( 'Category', 'newspack-plugin' ) },
+							{ key: 'page_title', label: __( 'Article', 'newspack-plugin' ) },
 							{ key: 'unique_readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
 							{ key: 'pageviews', label: __( 'Pageviews', 'newspack-plugin' ), format: 'number', align: 'right' },
 						] }
 					/>
-				</div>
+				</VStack>
+			</Card>
+			<Card __experimentalCoreCard className="newspack-insights__chart-card">
+				<VStack spacing={ 6 }>
+					<h3 className="newspack-insights__chart-card-title">{ __( 'Top authors by reader count', 'newspack-plugin' ) }</h3>
+					<MetricTable
+						payload={ current.top_authors_by_reader_count }
+						emptyMessage={ __( 'No author data in this timeframe.', 'newspack-plugin' ) }
+						columns={ [
+							{ key: 'author', label: __( 'Author', 'newspack-plugin' ) },
+							{ key: 'unique_readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
+							{ key: 'pageviews', label: __( 'Pageviews', 'newspack-plugin' ), format: 'number', align: 'right' },
+						] }
+					/>
+				</VStack>
+			</Card>
+			{ /* Top Categories is hidden_in_v1 (needs BQ UNNEST); it skip-renders until the BQ catalog ships. */ }
+			{ ! current.top_categories?.hidden_in_v1 && (
+				<Card __experimentalCoreCard className="newspack-insights__chart-card">
+					<VStack spacing={ 6 }>
+						<h3 className="newspack-insights__chart-card-title">{ __( 'Top categories', 'newspack-plugin' ) }</h3>
+						<MetricTable
+							payload={ current.top_categories }
+							emptyMessage={ __( 'No category data in this timeframe.', 'newspack-plugin' ) }
+							columns={ [
+								{ key: 'category', label: __( 'Category', 'newspack-plugin' ) },
+								{ key: 'unique_readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
+								{ key: 'pageviews', label: __( 'Pageviews', 'newspack-plugin' ), format: 'number', align: 'right' },
+							] }
+						/>
+					</VStack>
+				</Card>
 			) }
-		</div>
+		</VStack>
 	</Section>
 );
 

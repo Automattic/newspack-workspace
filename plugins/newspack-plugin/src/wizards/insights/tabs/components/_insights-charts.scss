@@ -10,6 +10,7 @@
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
 @use "../../../../../packages/colors/colors.module" as colors;
 
 // Categorical series palette for charts (8 series): two monochrome families —
@@ -36,12 +37,6 @@
 		gap: 16px;
 	}
 
-	&__table-grid {
-		display: grid;
-		grid-template-columns: repeat( auto-fit, minmax( 320px, 1fr ) );
-		gap: 16px;
-	}
-
 	// Chart cell — CoreCard chrome (border + radius) to match the scorecards.
 	// Layout mirrors the metric card: title-as-label at the top, chart body
 	// grows, caption-as-description pinned to the bottom.
@@ -63,13 +58,15 @@
 			}
 		}
 
-		// Title matches the metric-card label (Core BaseControl label 1:1).
+		// Title matches the metric-card label. HStack so an optional scope note
+		// sits opposite the title text.
 		&-title {
+			@include wp-mixins.heading-large();
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: wp-vars.$grid-unit-10;
 			margin: 0;
-			font-size: wp-vars.$font-size-x-small;
-			font-weight: wp-vars.$font-weight-medium;
-			line-height: wp-vars.$default-line-height;
-			text-transform: uppercase;
 			color: wp-colors.$gray-900;
 		}
 
@@ -98,36 +95,36 @@
 		border-radius: 0;
 	}
 
-	// Inline scope pill next to a table title (e.g. "Showing: United States").
-	// Visual treatment is provided by the wrapped <Badge>; this wrapper only
-	// supplies positional rules so the pill flows inline with the title text.
+	// Inline scope note next to a table title (e.g. "Showing: United States").
+	// Muted, normal-case text opposite the uppercase title in the HStack.
 	&__scope-pill {
-		display: inline-block;
-		margin-left: 8px;
-		vertical-align: middle;
+		flex-shrink: 0;
 		white-space: nowrap;
-	}
-
-	// Temporal-scope subhead above a chart title (e.g. "Day to day").
-	&__chart-card-subhead {
-		margin: 0 0 2px;
-		font-size: 13px;
-		font-weight: 400;
+		font-size: inherit;
+		font-weight: wp-vars.$font-weight-regular;
+		text-transform: none;
 		color: wp-colors.$gray-700;
 	}
 
-	// Engagement Reader Segments takeaway cards — scorecard chrome (border,
-	// padding) with a headline / sub / bottom-pinned mini-bar layout. No top
-	// accent (DSGNEWS-188 — dropped the blanket brand-color bar).
+	// Engagement Reader Segments takeaway cards — shared CoreCard chrome (border,
+	// radius) with a headline / sub / bottom-pinned mini-bar layout. The layout
+	// lives on the inner body wrapper, matching the chart card.
 	&__takeaway-card {
-		display: flex;
-		flex-direction: column;
-		height: 100%;
-		min-height: 180px;
-		padding: 24px 28px;
-		background-color: wp-colors.$white;
-		border: 1px solid wp-colors.$gray-200;
-		border-radius: 4px;
+		height: 100%; // stretch to the row's tallest card
+		min-width: 0;
+
+		.newspack-card--core__body {
+			display: flex;
+			flex-direction: column;
+			height: 100%;
+			min-height: 180px;
+			padding: wp-vars.$grid-unit-30;
+
+			// Zero CoreCard's default 16px 24px grandchild-div padding.
+			> div:not(.components-card__body):not(.components-card__media):not(.components-card__divider) {
+				padding: 0;
+			}
+		}
 	}
 
 	// Takeaway card title: persists across populated / empty / failure states so
@@ -135,21 +132,19 @@
 	// two-line min-height reservation (takeaway titles are single-line).
 	&__takeaway-title {
 		min-height: 0;
-		margin: 0 0 12px;
+		margin: 0 0 wp-vars.$grid-unit-10;
 	}
 
 	&__takeaway-headline {
+		@include wp-mixins.heading-x-large();
 		margin: 0;
-		font-size: 18px;
-		font-weight: 500;
-		line-height: 1.35;
-		color: wp-colors.$gray-900;
+		color: var(--wp-admin-theme-color);
 	}
 
 	&__takeaway-sub {
-		margin: 6px 0 0;
-		font-size: 13px;
-		color: wp-colors.$gray-700;
+		margin: calc(#{wp-vars.$grid-unit} / 2) 0 0;
+		font-size: inherit;
+		color: var(--wp-admin-theme-color);
 	}
 
 	&__takeaway-empty {
@@ -161,17 +156,12 @@
 	// Mini bar chart pinned to the card bottom (~60px tall).
 	&__takeaway-chart {
 		margin-top: auto;
-		padding-top: 16px;
+		// !important beats the CoreCard grandchild-div padding reset on the body.
+		padding-top: wp-vars.$grid-unit-30 !important;
 	}
 
 	&__takeaway-chart &__bars {
-		height: 60px;
-	}
-
-	// Standalone table heading (Geographic / Content performance, where each
-	// table has its own title above the canonical table-wrap).
-	&__table-grid &__chart-card-title {
-		margin-bottom: 8px;
+		height: calc(#{wp-vars.$grid-unit} * 16);
 	}
 
 	// Shared graceful-failure note: informational, not code — muted sans-serif
@@ -229,8 +219,9 @@
 	}
 
 	&__pie-svg {
+		display: block; // kill the inline baseline gap so the svg sits flush
 		width: 100%;
-		max-width: calc(#{wp-vars.$grid-unit} * 32);
+		max-width: calc(#{wp-vars.$grid-unit} * 25);
 		height: auto;
 		aspect-ratio: 1 / 1;
 		// No rotate: segments already start at 12 o'clock via the component's
@@ -260,16 +251,11 @@
 		fill: wp-colors.$gray-900;
 	}
 
-	// Bottom slot: legend anchored to the card bottom, left-aligned, full width.
+	// Bottom slot: legend anchored to the card bottom, left-aligned.
+	// `margin-top: auto` pins it to the bottom edge of the card body.
 	&__pie-legend {
 		list-style: none;
-		// Full-bleed top divider: stretch past the card's 24px body padding so
-		// the hairline spans edge to edge, then re-inset the legend content.
-		// `margin-top: auto` pins the legend to the card bottom.
-		width: calc(100% + #{wp-vars.$grid-unit-60});
-		margin: auto 0 0 -#{wp-vars.$grid-unit-30};
-		padding: wp-vars.$grid-unit-30 wp-vars.$grid-unit-30 0;
-		border-top: 1px solid wp-colors.$gray-100;
+		margin: auto 0 0;
 
 		li {
 			display: flex;
@@ -309,8 +295,8 @@
 	&__bars {
 		display: flex;
 		align-items: flex-end;
-		gap: 3px;
-		height: 160px;
+		gap: calc(#{wp-vars.$grid-unit} / 2);
+		height: calc(#{wp-vars.$grid-unit} * 20);
 		// flex:1 1 0 + min-width:0 on the columns keeps the 24 hour-of-day bars
 		// inside the card; overflow stays visible so hover tooltips aren't clipped.
 	}
@@ -345,13 +331,21 @@
 	}
 
 	&__bar-label {
-		font-size: 9px;
-		color: wp-colors.$gray-700;
-		margin-top: 4px;
+		font-size: wp-vars.$font-size-small;
+		line-height: wp-vars.$default-line-height;
+		color: wp-colors.$gray-900;
+		margin-top: wp-vars.$grid-unit-10;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		max-width: 100%;
+	}
+
+	// Dense sets (day-of-week, hour-of-day) get a smaller label so the tightly
+	// packed columns don't crowd.
+	&__bars.is-dense &__bar-label {
+		font-size: wp-vars.$font-size-x-small;
+		line-height: wp-vars.$font-line-height-x-small;
 	}
 
 	// Line.
@@ -367,7 +361,7 @@
 
 	&__line-svg {
 		width: 100%;
-		height: 160px;
+		height: calc(#{wp-vars.$grid-unit} * 20);
 		display: block;
 	}
 
@@ -402,14 +396,21 @@
 		vector-effect: non-scaling-stroke;
 	}
 
+	// Points are zero-length round-capped strokes (see LineChart.tsx) so they stay
+	// circular under the stretched viewBox. Stroke width (the dot diameter) is set
+	// inline; the halo is a wider white stroke drawn behind.
 	&__line-point {
-		fill: var( --series-color );
-		stroke: wp-colors.$white;
-		stroke-width: 1;
+		fill: none;
+		stroke: var( --series-color );
+		stroke-linecap: round;
+		vector-effect: non-scaling-stroke;
+	}
 
-		&:hover {
-			stroke-width: 2;
-		}
+	&__line-point-halo {
+		fill: none;
+		stroke: wp-colors.$white;
+		stroke-linecap: round;
+		vector-effect: non-scaling-stroke;
 	}
 
 	&__line-meta {
@@ -599,19 +600,22 @@
 	}
 
 	// Legend below a multi-series line chart.
+	// Match the pie legend: Core help-text type, 20px circular swatches, and a
+	// 24px gap above the plot.
 	&__line-legend {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 16px;
-		margin-top: 8px;
-		font-size: 12px;
+		gap: wp-vars.$grid-unit-20;
+		margin-top: wp-vars.$grid-unit-30;
+		font-size: wp-vars.$font-size-small;
+		line-height: wp-vars.$default-line-height;
 		color: wp-colors.$gray-700;
 	}
 
 	&__line-legend-item {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: wp-vars.$grid-unit-10;
 	}
 
 	// Distribution viz — shared across Gates (Tab 4) and Prompts (Tab 5).

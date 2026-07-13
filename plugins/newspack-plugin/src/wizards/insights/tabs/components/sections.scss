@@ -13,6 +13,7 @@
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
 @use "~@wordpress/base-styles/variables" as wp-vars;
+@use "~@wordpress/base-styles/mixins" as wp-mixins;
 
 .newspack-insights {
 
@@ -131,6 +132,7 @@
 			display: flex;
 			flex-direction: column;
 			height: 100%;
+			min-height: 167px;
 			padding: wp-vars.$grid-unit-30;
 
 			// Match CoreCard's own selector to win the cascade — it
@@ -148,12 +150,7 @@
 		}
 
 		&-label {
-			// Match Core's BaseControl label typography 1:1 (baseLabelTypography):
-			// 11px / medium (499) / 1.4 line-height / uppercase, no letter-spacing.
-			font-size: wp-vars.$font-size-x-small;
-			font-weight: wp-vars.$font-weight-medium;
-			line-height: wp-vars.$default-line-height;
-			text-transform: uppercase;
+			@include wp-mixins.heading-large();
 			color: wp-colors.$gray-900;
 		}
 
@@ -171,23 +168,15 @@
 
 		&-value {
 			margin: 0;
-			// Explicit font stack + lockdown to prevent the wp-admin chrome's
-			// inherited font from flipping between cards (the bug was: digits
-			// in "35" rendered slim, "$738.33" rendered heavier with a slight
-			// optical slant — different chars resolving in different
-			// fallback fonts because no explicit family was declared). Uses
-			// @wordpress/base-styles' admin body font token.
-			font-family: wp-vars.$default-font;
 			// Cap at the 44px design size, but scale down with the card width so a
 			// long formatted number (e.g. "1,392,000") can't overflow a narrow
 			// tile. `container-type` is set on `&__metric-card`.
 			font-size: 44px; // fallback where container-query units aren't supported.
 			font-size: min( 44px, 14cqi );
-			font-weight: 500;
+			font-weight: wp-vars.$font-weight-medium;
 			font-style: normal;
-			line-height: 1.05;
-			letter-spacing: -0.01em;
-			color: wp-colors.$gray-900;
+			line-height: 1;
+			color: var(--wp-admin-theme-color);
 			font-variant-numeric: tabular-nums;
 			font-feature-settings: "tnum" 1;
 			font-synthesis: none;

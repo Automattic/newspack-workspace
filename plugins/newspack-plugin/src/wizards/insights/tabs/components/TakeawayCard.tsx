@@ -3,9 +3,10 @@
  *
  * Replaces a dense comparison table with a scannable card: a one-line headline
  * comparison, a muted sub-line with the raw figures, and a small inline bar
- * chart. Matches the scorecard chrome (border, padding, top accent). Routes the
- * orchestrator payload's graceful-failure states through MetricNote, and shows a
- * muted note when there isn't enough data to compute a comparison.
+ * chart. Uses the shared CoreCard chrome (border, padding), same as the chart /
+ * metric cards. Routes the orchestrator payload's graceful-failure states
+ * through MetricNote, and shows a muted note when there isn't enough data to
+ * compute a comparison.
  */
 
 /**
@@ -16,6 +17,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Card } from '../../../../../packages/components/src';
 import MetricNote from './MetricNote';
 import type { MetricPayload } from './metrics';
 import BarChart from './BarChart';
@@ -61,10 +63,10 @@ const TakeawayCard = ( { title, payload, headline, sub, bars, formatValue }: Tak
 	}
 
 	return (
-		<div className="newspack-insights__takeaway-card">
+		<Card __experimentalCoreCard className="newspack-insights__takeaway-card">
 			<h3 className="newspack-insights__chart-card-title newspack-insights__takeaway-title">{ title }</h3>
 			{ body }
-		</div>
+		</Card>
 	);
 };
 

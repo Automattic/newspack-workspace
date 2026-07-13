@@ -53,7 +53,8 @@ const PieChart = ( { segments, centerLabel, emptyMessage, formatValue = formatNu
 		<div className="newspack-insights__pie">
 			{ /* Pie centered in the middle slot; legend anchored to the bottom (NPPD-1649 alignment). */ }
 			<div className="newspack-insights__pie-figure">
-				<svg viewBox="0 0 42 42" className="newspack-insights__pie-svg" role="img" aria-label={ __( 'Breakdown chart', 'newspack-plugin' ) }>
+				{ /* viewBox tightened to the ring's outer extent (r16 + strokeWidth8/2 = 20, centered at 21 → spans 1–41) so the donut sits flush to the svg box. */ }
+				<svg viewBox="1 1 40 40" className="newspack-insights__pie-svg" role="img" aria-label={ __( 'Breakdown chart', 'newspack-plugin' ) }>
 					<circle className="newspack-insights__pie-track" cx="21" cy="21" r={ RADIUS } />
 					{ segments.map( ( segment, i ) => {
 						const fraction = segment.value / total;

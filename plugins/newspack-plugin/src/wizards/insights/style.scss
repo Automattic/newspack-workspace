@@ -16,6 +16,7 @@
  */
 
 @use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
 @use "tabs/components/sections";
 @use "components/feedback";
 @use "components/next-steps";
@@ -363,16 +364,17 @@
 		overflow-wrap: anywhere;
 	}
 
-	// Trim the 48px page-gutter edge padding so cell content aligns to the frame.
+	// Drop the page-gutter edge padding so cell content aligns flush to the frame
+	// (and, in a card, to the card's body padding and title).
 	.dataviews-view-table {
 		th:first-child,
 		td:first-child {
-			padding-left: 16px;
+			padding-left: 0;
 		}
 
 		th:last-child,
 		td:last-child {
-			padding-right: 16px;
+			padding-right: 0;
 		}
 	}
 }
@@ -381,6 +383,13 @@
 // supplies the border, and the narrow card needs the columns to fit rather than
 // overflow at DataViews' comfortable width — so pin the layout to the container.
 .newspack-insights__chart-card .newspack-insights-dataview {
+	// Full-bleed the table past the card's 24px body padding on both sides so the
+	// row hover/borders span edge to edge; the edge cells are re-inset below so
+	// text stays aligned to the title. !important beats the shared DataViews
+	// margin rule that otherwise wins on specificity.
+	width: calc(100% + #{wp-vars.$grid-unit-60});
+	margin-left: -#{wp-vars.$grid-unit-30} !important;
+	margin-right: -#{wp-vars.$grid-unit-30} !important;
 	border: 0;
 	border-radius: 0;
 
@@ -392,6 +401,29 @@
 		width: 100%;
 		min-width: 0;
 		table-layout: fixed;
+
+		// Re-inset the edge cells to the card body padding so content lines up
+		// with the title while the table frame stays full-bleed.
+		th:first-child,
+		td:first-child {
+			padding-left: wp-vars.$grid-unit-30;
+		}
+
+		th:last-child,
+		td:last-child {
+			padding-right: wp-vars.$grid-unit-30;
+		}
+	}
+}
+
+// When a dataview is the last thing in a card, drop the card body's bottom
+// padding so the table's final row sits flush at the card's bottom edge, and
+// clip the full-bleed table to the card's rounded corners.
+.newspack-insights__chart-card:has( .newspack-insights-dataview:last-child ) {
+	overflow: hidden;
+
+	.newspack-card--core__body {
+		padding-bottom: 0;
 	}
 }
 
