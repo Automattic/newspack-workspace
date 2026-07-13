@@ -14,12 +14,13 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { useLayoutEffect, useRef, useState } from '@wordpress/element';
 import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
-import { Card } from '../../../../../packages/components/src';
+import { Card, Grid } from '../../../../../packages/components/src';
 import type { ConversionCohortData } from '../../api/conversion';
 import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
@@ -67,20 +68,43 @@ const CohortChart = ( { title, data, caption, referenceLabel }: CohortChartProps
 	</Card>
 );
 
-const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => (
-	<Section
-		className="newspack-insights__section newspack-insights__section--cohort-retention"
-		aria-labelledby="newspack-insights-conversion-cohort-heading"
-	>
-		<SectionHeading
-			id="newspack-insights-conversion-cohort-heading"
-			title={ __( 'Cohort retention', 'newspack-plugin' ) }
-			description={ __(
-				'Each row is a monthly cohort; each column is months since that cohort started. Read down a column to compare cohorts at the same age, and across a row to watch one cohort over time. Updated weekly.',
-				'newspack-plugin'
-			) }
-		/>
-		<VStack spacing={ 4 }>
+const GRID_GUTTER = 16;
+
+const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => {
+	const layoutRef = useRef< HTMLDivElement >( null );
+	// Two-up by default; drop to a full-width stack only when a heatmap is wider
+	// than the half-width a 2-column grid would give it — otherwise its month axis
+	// gets clipped/scrolled (the reason these were originally stacked, DSGNEWS-188).
+	const [ stacked, setStacked ] = useState( false );
+
+	useLayoutEffect( () => {
+		const el = layoutRef.current;
+		if ( ! el ) {
+			return;
+		}
+		const measure = () => {
+			const tables = el.querySelectorAll< HTMLElement >( '.newspack-insights__cohort-heatmap-table' );
+			if ( ! tables.length ) {
+				return;
+			}
+			// Widest heatmap's intrinsic width. Its wrapper is overflow-x: auto, so a
+			// table always renders at content width regardless of the active layout —
+			// keeping this measurement stable across the grid/stack switch (no flip-flop).
+			const widest = Math.max( ...Array.from( tables, table => table.scrollWidth ) );
+			const perColumn = ( el.clientWidth - GRID_GUTTER ) / 2;
+			setStacked( widest > perColumn );
+		};
+		measure();
+		if ( typeof ResizeObserver === 'undefined' ) {
+			return;
+		}
+		const observer = new ResizeObserver( measure );
+		observer.observe( el );
+		return () => observer.disconnect();
+	}, [ current ] );
+
+	const cards = (
+		<>
 			<CohortChart
 				/*
 				 * TODO: default a self-relative reference callout here — the median
@@ -105,8 +129,33 @@ const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => (
 				data={ current.subscriber_retention_cohort }
 				referenceLabel={ current.subscriber_retention_cohort.reference_line?.label }
 			/>
-		</VStack>
-	</Section>
-);
+		</>
+	);
+
+	return (
+		<Section
+			className="newspack-insights__section newspack-insights__section--cohort-retention"
+			aria-labelledby="newspack-insights-conversion-cohort-heading"
+		>
+			<SectionHeading
+				id="newspack-insights-conversion-cohort-heading"
+				title={ __( 'Cohort retention', 'newspack-plugin' ) }
+				description={ __(
+					'Each row is a monthly cohort; each column is months since that cohort started. Read down a column to compare cohorts at the same age, and across a row to watch one cohort over time. Updated weekly.',
+					'newspack-plugin'
+				) }
+			/>
+			<div ref={ layoutRef }>
+				{ stacked ? (
+					<VStack spacing={ 4 }>{ cards }</VStack>
+				) : (
+					<Grid columns={ 2 } gutter={ GRID_GUTTER } noMargin>
+						{ cards }
+					</Grid>
+				) }
+			</div>
+		</Section>
+	);
+};
 
 export default CohortRetentionSection;
