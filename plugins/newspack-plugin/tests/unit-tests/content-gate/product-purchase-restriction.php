@@ -598,4 +598,26 @@ class Test_Product_Purchase_Restriction extends \WP_UnitTestCase {
 		$this->assertSame( [], $legacy_settings['restricted_products'] );
 		$this->assertSame( [], $legacy_settings['restricted_product_categories'] );
 	}
+
+	/**
+	 * Meta written outside the REST API — a migration script, WP-CLI — doesn't pass
+	 * through the sanitizer, so the read path normalizes the IDs too. A stray 0 would
+	 * otherwise be compared against a real product ID.
+	 */
+	public function test_malformed_meta_is_normalized_on_read() {
+		$gate_id = $this->factory->post->create( [ 'post_type' => Content_Gate::GATE_CPT ] );
+		update_post_meta(
+			$gate_id,
+			'custom_access',
+			[
+				'active'                        => true,
+				'restricted_products'           => [ '12', 12, 0, -5, '', 'not-an-id', 34 ],
+				'restricted_product_categories' => [ '7', 7 ],
+			]
+		);
+
+		$settings = Content_Gate::get_custom_access_settings( $gate_id );
+		$this->assertSame( [ 12, 34 ], $settings['restricted_products'], 'Zeros, negatives, empties and duplicates should be dropped on read.' );
+		$this->assertSame( [ 7 ], $settings['restricted_product_categories'] );
+	}
 }

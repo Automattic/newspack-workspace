@@ -202,6 +202,9 @@ class Content_Gate_API {
 	/**
 	 * Sanitize a list of object IDs (products, terms) into unique positive integers.
 	 *
+	 * Non-positive values are dropped rather than coerced: `absint()` would turn a
+	 * negative into a positive ID, quietly pointing the rule at some other object.
+	 *
 	 * @param array $ids The IDs.
 	 *
 	 * @return int[] The sanitized IDs.
@@ -210,7 +213,17 @@ class Content_Gate_API {
 		if ( ! is_array( $ids ) ) {
 			return [];
 		}
-		return array_values( array_unique( array_filter( array_map( 'absint', $ids ) ) ) );
+		$ids = array_map( 'intval', $ids );
+		return array_values(
+			array_unique(
+				array_filter(
+					$ids,
+					function( $id ) {
+						return $id > 0;
+					}
+				)
+			)
+		);
 	}
 
 	/**

@@ -1180,8 +1180,10 @@ class Content_Gate {
 			'access_rules'                  => $access_rules,
 			'gate_layout_id'                => isset( $custom_access['gate_layout_id'] ) ? (int) $custom_access['gate_layout_id'] : 0,
 			// Products whose *purchase* is restricted to readers passing the access rules above.
-			'restricted_products'           => isset( $custom_access['restricted_products'] ) ? array_map( 'intval', (array) $custom_access['restricted_products'] ) : [],
-			'restricted_product_categories' => isset( $custom_access['restricted_product_categories'] ) ? array_map( 'intval', (array) $custom_access['restricted_product_categories'] ) : [],
+			// Normalized on read, not just on save: meta written outside the REST API (a migration
+			// script, WP-CLI) could otherwise smuggle in zeros, negatives or duplicates.
+			'restricted_products'           => isset( $custom_access['restricted_products'] ) ? Content_Gate_API::sanitize_ids( $custom_access['restricted_products'] ) : [],
+			'restricted_product_categories' => isset( $custom_access['restricted_product_categories'] ) ? Content_Gate_API::sanitize_ids( $custom_access['restricted_product_categories'] ) : [],
 		];
 	}
 
