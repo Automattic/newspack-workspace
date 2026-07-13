@@ -14,6 +14,8 @@ defined( 'ABSPATH' ) || exit;
  */
 class Audience_Content_Gates extends Wizard {
 
+	use Wizards\Traits\Content_Gate_Preferences;
+
 	/**
 	 * Admin page slug.
 	 *
@@ -97,6 +99,8 @@ class Audience_Content_Gates extends Wizard {
 				'available_access_rules'  => Access_Rules::get_access_rules(),
 				'available_content_rules' => Content_Rules::get_content_rules(),
 				'edit_gate_layout_url'    => Content_Gate::get_edit_gate_layout_url(),
+				'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
+				'default_gate_status'     => Content_Gate::get_default_new_gate_status(),
 			]
 		);
 
@@ -114,7 +118,7 @@ class Audience_Content_Gates extends Wizard {
 		);
 
 		// Enqueue content banner CSS for previews.
-		wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], NEWSPACK_PLUGIN_VERSION );
+		wp_enqueue_style( 'newspack-content-banner', Newspack::plugin_url() . '/dist/content-banner.css', [], Newspack::asset_version( 'content-banner' ) );
 	}
 
 	/**
@@ -174,6 +178,7 @@ class Audience_Content_Gates extends Wizard {
 						'type'       => 'object',
 						'properties' => [
 							'restrict_feeds' => [ 'type' => 'boolean' ],
+							'newsletter_link_bypass_enabled' => [ 'type' => 'boolean' ],
 						],
 					],
 				],
@@ -357,6 +362,8 @@ class Audience_Content_Gates extends Wizard {
 				],
 			]
 		);
+
+		$this->register_preferences_route();
 	}
 
 	/**
@@ -365,12 +372,20 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response
 	 */
 	public function get_config() {
+		$advanced = Content_Gate_Advanced_Settings::get_settings();
+		// Cast to bool at the REST boundary so the TS type (boolean) is satisfied.
+		// Internal storage remains as 0/1 integers — only the REST response payload is cast.
+		$advanced_settings_response = [
+			'restrict_feeds'                 => (bool) ( $advanced['restrict_feeds'] ?? false ),
+			'newsletter_link_bypass_enabled' => (bool) ( $advanced['newsletter_link_bypass_enabled'] ?? false ),
+		];
 		$config = [
 			'gates'  => Content_Gate::get_gates(),
 			'config' => [
 				'countdown_banner'  => Metering_Countdown::get_settings(),
 				'content_gifting'   => Content_Gifting::get_settings(),
-				'advanced_settings' => Content_Gate_Advanced_Settings::get_settings(),
+				'advanced_settings' => $advanced_settings_response,
+				'has_newsletters'   => Reader_Activation::is_esp_configured(),
 			],
 		];
 		return rest_ensure_response( $config );
@@ -455,7 +470,7 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response|\WP_Error
 	 */
 	public function create_gate( $request ) {
-		$gate = Content_Gate::create_gate( $request->get_param( 'gate' ) );
+		$gate = Content_Gate::create_gate( Content_Gate::with_default_new_gate_status( $request->get_param( 'gate' ) ) );
 		if ( is_wp_error( $gate ) ) {
 			return $gate;
 		}

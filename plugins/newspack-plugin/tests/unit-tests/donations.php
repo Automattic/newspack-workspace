@@ -31,6 +31,25 @@ class Newspack_Test_Donations extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Saving the WC platform while WooCommerce is not active must not fatal by
+	 * attempting to write WooCommerce donation products. Regression: the platform
+	 * chooser saves the 'wc' platform before WooCommerce is installed.
+	 */
+	public function test_update_payment_settings_wc_without_woocommerce() {
+		$wizard  = new \Newspack\Audience_Wizard();
+		$request = new \WP_REST_Request( 'POST', '/newspack/v1/wizard/newspack-audience/payment' );
+		$request->set_param( 'platform', 'wc' );
+
+		$response = $wizard->api_update_payment_settings( $request );
+
+		self::assertInstanceOf(
+			'WP_REST_Response',
+			$response,
+			'Saving the WC platform without WooCommerce active should return a response, not fatal.'
+		);
+	}
+
+	/**
 	 * Test that is_donation_product returns false for unflagged products.
 	 *
 	 * @group donations

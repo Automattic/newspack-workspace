@@ -598,6 +598,11 @@ class Plugin_Manager {
 			}
 		}
 
+		// State changed: drop the memoized status so a status read later in this
+		// request (e.g. the configure endpoint's response) reflects the new state
+		// instead of the value cached before activation.
+		self::reset_managed_plugin_status_cache();
+
 		return true;
 	}
 
@@ -627,6 +632,11 @@ class Plugin_Manager {
 		if ( \is_plugin_active( $plugin_file ) ) {
 			return new WP_Error( 'newspack_plugin_failed_deactivation', __( 'Failed to deactivate plugin.', 'newspack-plugin' ) );
 		}
+
+		// State changed: drop the memoized status so subsequent reads in this
+		// request reflect the deactivation.
+		self::reset_managed_plugin_status_cache();
+
 		return true;
 	}
 

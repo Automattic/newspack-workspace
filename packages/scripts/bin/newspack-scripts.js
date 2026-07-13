@@ -14,13 +14,9 @@ const [ scriptName, ...nodeArgs ] = process.argv.slice( 2 );
  * @param {string} name Script name.
  * @return {string} Resolved script path.
  */
-const resolveScript = ( name ) => {
+const resolveScript = name => {
 	if ( process.env.GITHUB_ACTIONS ) {
-		const githubScriptPath = path.resolve(
-			__dirname,
-			'../scripts/github/',
-			name + '.js'
-		);
+		const githubScriptPath = path.resolve( __dirname, '../scripts/github/', name + '.js' );
 		if ( fs.existsSync( githubScriptPath ) ) {
 			return githubScriptPath;
 		}
@@ -28,22 +24,8 @@ const resolveScript = ( name ) => {
 	return require.resolve( '../scripts/' + name );
 };
 
-if (
-	[
-		'test',
-		'commit',
-		'commitlint',
-		'release',
-		'semantic-release',
-		'typescript-check',
-		'wp-scripts',
-	].includes( scriptName )
-) {
-	const result = spawn.sync(
-		process.execPath,
-		[ resolveScript( scriptName ), ...nodeArgs ],
-		{ stdio: 'inherit' }
-	);
+if ( [ 'test', 'commit', 'commitlint', 'release', 'semantic-release', 'typescript-check', 'wp-scripts' ].includes( scriptName ) ) {
+	const result = spawn.sync( process.execPath, [ resolveScript( scriptName ), ...nodeArgs ], { stdio: 'inherit' } );
 	if ( result.signal ) {
 		if ( result.signal === 'SIGKILL' ) {
 			utils.log(

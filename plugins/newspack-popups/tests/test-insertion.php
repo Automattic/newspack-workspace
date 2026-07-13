@@ -51,12 +51,23 @@ class InsertionTest extends WP_UnitTestCase_PageWithPopups {
 		$overlay_id          = self::createPopup( $overlay_content, [ 'placement' => 'center' ] );
 		$page_with_shortcode = '[newspack-popups id="' . $overlay_id . '"]';
 		self::renderPost( '', $page_with_shortcode, [], [], 'page' );
-		$overlay_text_content = self::$dom_xpath->query( '//*[contains(@class,"newspack-popup-container")]' )->item( 0 )->textContent;
 
-		self::assertStringContainsString(
-			$overlay_content,
-			$overlay_text_content,
-			'Inserts the overlay prompt on a page.'
+		// Overlays are portaled to wp_footer, so the inline default popup
+		// (from set_up) is item(0) and the overlay sits later in the combined
+		// content+footer markup. Locate the overlay by its content instead of
+		// by DOM position.
+		$popup_elements    = self::$dom_xpath->query( '//*[contains(@class,"newspack-popup-container")]' );
+		$found_overlay     = false;
+		foreach ( $popup_elements as $popup_element ) {
+			if ( false !== strpos( $popup_element->textContent, $overlay_content ) ) { // phpcs:ignore WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- DOMNode property.
+				$found_overlay = true;
+				break;
+			}
+		}
+
+		self::assertTrue(
+			$found_overlay,
+			'Inserts the overlay prompt on a page (portaled to footer, located via content).'
 		);
 	}
 

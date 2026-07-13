@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-var-requires */
+const { gitCommitStep } = require( '../../config/release-helpers' );
+
 module.exports = {
 	branches: [
 		'release',
@@ -23,11 +25,7 @@ module.exports = {
 				callback: 'npm run release:archive',
 			},
 		],
-		{
-			path: '@semantic-release/git',
-			assets: [ 'CHANGELOG.md', 'src/scss/_theme-description.scss', 'functions.php' ],
-			message: 'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
-		},
+		...gitCommitStep( [ 'CHANGELOG.md', 'src/scss/_theme-description.scss', 'functions.php' ] ),
 	],
 	plugins: [
 		'@semantic-release/commit-analyzer',

@@ -1,0 +1,57 @@
+name: Dependabot branch auto-update
+
+# When main moves, Dependabot PRs that already have auto-merge enabled fall
+# behind. Branch protection on main requires branches to be up to date, and
+# GitHub's auto-merge does not self-update a behind branch, so those PRs stall
+# with a green CI run that no longer matches the new base.
+#
+# This updates the branch of every open Dependabot PR that has auto-merge
+# enabled and is behind main, so it re-tests against the new base and its
+# standing auto-merge can complete. Approvals survive the update because main
+# does not dismiss stale reviews.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# A push that lands while an update run is in flight supersedes it: the newer
+# run re-derives the behind set from the latest main, so cancelling is safe.
+concurrency:
+  group: dependabot-branch-auto-update
+  cancel-in-progress: true
+
+jobs:
+  update-behind-dependabot-prs:
+    name: Update behind Dependabot PRs
+    runs-on: ubuntu-latest
+    steps:
+      # GH_TOKEN is a PAT, not GITHUB_TOKEN, on purpose: a branch update pushed
+      # with GITHUB_TOKEN would not trigger ci.yml, leaving "CI OK" pending for
+      # the new head forever. A PAT-authored push fires CI normally.
+      - name: Update branches of behind, auto-merge-enabled Dependabot PRs
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          prs=$(gh pr list --repo "$REPO" \
+            --author 'app/dependabot' \
+            --state open \
+            --json number,mergeStateStatus,autoMergeRequest \
+            --jq '.[] | select(.autoMergeRequest != null and .mergeStateStatus == "BEHIND") | .number')
+
+          if [ -z "$prs" ]; then
+            echo "No behind, auto-merge-enabled Dependabot PRs to update."
+            exit 0
+          fi
+
+          for pr in $prs; do
+            echo "Updating branch for PR #$pr"
+            if ! gh api "repos/$REPO/pulls/$pr/update-branch" -X PUT; then
+              echo "::warning::Could not update PR #$pr (it may have just merged, or the branch has conflicts)."
+            fi
+          done

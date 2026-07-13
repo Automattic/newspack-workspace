@@ -387,6 +387,102 @@ class TestIncomingPost extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPM-2871: An origin `publish` re-sync must not unschedule a node post
+	 * that has been locally rescheduled to `future`. Content still flows.
+	 */
+	public function test_origin_publish_preserves_node_future_schedule() {
+		// Linked post arrives and is created (sample payload is post_status=publish, status_on_publish=draft → draft).
+		$post_id = $this->incoming_post->insert();
+		$this->assertSame( 'draft', get_post_status( $post_id ) );
+
+		// Node editor reschedules locally to a future date.
+		$future_gmt = '2099-12-31 10:16:00';
+		wp_update_post(
+			[
+				'ID'            => $post_id,
+				'post_status'   => 'future',
+				'post_date'     => $future_gmt,
+				'post_date_gmt' => $future_gmt,
+			]
+		);
+		$this->assertSame( 'future', get_post_status( $post_id ) );
+
+		// Origin edits and re-syncs as `publish` with its own (past) date_gmt.
+		$payload = $this->get_sample_payload();
+		$payload['post_data']['post_status'] = 'publish';
+		$payload['post_data']['title']       = 'Edited By Origin';
+		$payload['post_data']['date_gmt']    = '2021-01-01 00:00:00';
+		$this->incoming_post->insert( $payload );
+
+		// Node schedule must be preserved (status + both date fields coherent).
+		$this->assertSame( 'future', get_post_status( $post_id ), 'Node post must stay scheduled.' );
+		$this->assertSame( $future_gmt, get_post_field( 'post_date_gmt', $post_id ), 'Node GMT date must be preserved.' );
+		$this->assertSame( $future_gmt, get_post_field( 'post_date', $post_id ), 'Node local date must be preserved.' );
+
+		// Content still flows through.
+		$this->assertSame( 'Edited By Origin', get_the_title( $post_id ) );
+	}
+
+	/**
+	 * NPPM-2871: The future-schedule guard is scoped to incoming `publish`.
+	 * An origin-side removal (`trash`) must still propagate to a locally
+	 * scheduled node post — a retracted story must not stay scheduled.
+	 */
+	public function test_origin_trash_still_propagates_to_scheduled_node() {
+		$post_id = $this->incoming_post->insert();
+
+		// Node editor reschedules locally to a future date.
+		$future_gmt = '2099-12-31 10:16:00';
+		wp_update_post(
+			[
+				'ID'            => $post_id,
+				'post_status'   => 'future',
+				'post_date'     => $future_gmt,
+				'post_date_gmt' => $future_gmt,
+			]
+		);
+		$this->assertSame( 'future', get_post_status( $post_id ) );
+
+		// Origin trashes the story.
+		$payload = $this->get_sample_payload();
+		$payload['post_data']['post_status'] = 'trash';
+		$this->incoming_post->insert( $payload );
+
+		// Removal propagates despite the local schedule.
+		$this->assertSame( 'trash', get_post_status( $post_id ) );
+	}
+
+	/**
+	 * NPPM-2871: An origin-side unpublish to `draft` must also reach a locally
+	 * scheduled node post. `draft` takes a different WP path than `trash`
+	 * (a `future`→`draft` transition through `wp_update_post`), so cover it
+	 * explicitly to lock the guard's `publish`-only scope.
+	 */
+	public function test_origin_draft_unpublish_propagates_to_scheduled_node() {
+		$post_id = $this->incoming_post->insert();
+
+		// Node editor reschedules locally to a future date.
+		$future_gmt = '2099-12-31 10:16:00';
+		wp_update_post(
+			[
+				'ID'            => $post_id,
+				'post_status'   => 'future',
+				'post_date'     => $future_gmt,
+				'post_date_gmt' => $future_gmt,
+			]
+		);
+		$this->assertSame( 'future', get_post_status( $post_id ) );
+
+		// Origin unpublishes the story back to draft.
+		$payload = $this->get_sample_payload();
+		$payload['post_data']['post_status'] = 'draft';
+		$this->incoming_post->insert( $payload );
+
+		// Unpublish propagates despite the local schedule.
+		$this->assertSame( 'draft', get_post_status( $post_id ) );
+	}
+
+	/**
 	 * Test delete.
 	 */
 	public function test_delete() {
@@ -911,5 +1007,78 @@ class TestIncomingPost extends \WP_UnitTestCase {
 		$tags = wp_get_post_terms( $post_id, 'post_tag' );
 		$this->assertEmpty( $categories );
 		$this->assertEmpty( $tags );
+	}
+
+	/**
+	 * Test that block attributes containing HTML survive insertion intact.
+	 *
+	 * Block-comment attribute JSON escapes `<`, `>`, `&` and `"` as \uXXXX
+	 * sequences with literal backslashes. wp_insert_post() expects slashed
+	 * input, so an unslashed insert strips those backslashes and corrupts
+	 * the attributes (e.g. Everlit player embeds rendering as
+	 * "u003ciframe title=u0022...").
+	 */
+	public function test_insert_preserves_escaped_block_attributes() {
+		$iframe = '<iframe title="Everlit Audio Player" src="https://everlit.audio/embeds/test?client=wp&amp;v=1" height="136px"></iframe>';
+		$block  = serialize_block(
+			[
+				'blockName'    => 'everlit/audio-player',
+				'attrs'        => [ 'embed' => $iframe ],
+				'innerBlocks'  => [],
+				'innerHTML'    => '',
+				'innerContent' => [],
+			]
+		);
+
+		$payload                             = $this->get_sample_payload();
+		$payload['post_id']                  = 99;
+		$payload['network_post_id']          = '99999999990abcdef1234567890abcde';
+		$payload['post_data']['raw_content'] = $block;
+		$payload['post_data']['content']     = $iframe;
+
+		$incoming_post = new Incoming_Post( $payload );
+		$post_id       = $incoming_post->insert();
+
+		$this->assertFalse( is_wp_error( $post_id ) );
+
+		$stored = get_post_field( 'post_content', $post_id );
+		$this->assertStringContainsString( '\u003ciframe', $stored, 'Escaped block-attribute HTML must survive insertion with backslashes intact.' );
+		// The escaped `<` surviving with its backslash (asserted above) is what pins the
+		// fix; also assert the backslash-stripped corruption is absent, rather than a
+		// byte-exact block round-trip that couples the test to serialize_blocks internals.
+		$this->assertStringNotContainsString( '"embed":"u003c', $stored, 'The backslash-stripped corruption (bare u003c) must not appear.' );
+	}
+
+	/**
+	 * The stored payload must survive storage intact: meta functions unslash
+	 * their input, and re-links / partial updates rebuild post_content from
+	 * the stored payload — a corrupted copy re-introduces the corruption.
+	 */
+	public function test_stored_payload_preserves_escaped_block_attributes_on_reinsert() {
+		$iframe = '<iframe title="Everlit Audio Player" src="https://everlit.audio/embeds/test?client=wp&amp;v=1"></iframe>';
+		$block  = serialize_block(
+			[
+				'blockName'    => 'everlit/audio-player',
+				'attrs'        => [ 'embed' => $iframe ],
+				'innerBlocks'  => [],
+				'innerHTML'    => '',
+				'innerContent' => [],
+			]
+		);
+
+		$payload                             = $this->get_sample_payload();
+		$payload['post_id']                  = 98;
+		$payload['network_post_id']          = '88888888880abcdef1234567890abcde';
+		$payload['post_data']['raw_content'] = $block;
+		$payload['post_data']['content']     = $iframe;
+
+		$post_id = ( new Incoming_Post( $payload ) )->insert();
+		$this->assertSame( $block, get_post_field( 'post_content', $post_id ) );
+
+		// Reload from the stored payload — the re-link / partial-update path.
+		$reloaded = new Incoming_Post( $post_id );
+		$this->assertFalse( is_wp_error( $reloaded->insert() ), 'The re-insert from the stored payload must succeed.' );
+
+		$this->assertSame( $block, get_post_field( 'post_content', $post_id ), 'Content must survive a re-insert from the stored payload.' );
 	}
 }

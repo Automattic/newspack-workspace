@@ -46,9 +46,10 @@ export const ADVANCED_SETTINGS_DEFAULTS = {
 	show_author_bio: true,
 	show_author_email: false,
 	author_bio_length: 200,
-	// Default Featured Image and Post Template.
+	// Default Featured Image and Post/Page Template.
 	featured_image_default: 'large',
 	post_template_default: 'default',
+	page_template_default: 'default',
 	// Featured Image and Post Template for All Posts.
 	featured_image_all_posts: 'none',
 	post_template_all_posts: 'none',
@@ -67,7 +68,7 @@ export const ADVANCED_SETTINGS_DEFAULTS = {
 	pwa_display_mode: 'minimal-ui',
 	// Post content fallback image.
 	newspack_default_image_url: undefined,
-	// Private Tags settings (populated from server when NEWSPACK_PRIVATE_TAGS_ENABLED is active).
+	// Private Tags settings (populated from the server unless the feature is opted out via the NEWSPACK_PRIVATE_TAGS_DISABLED constant or the newspack_private_tags_enabled filter).
 	newspack_private_tags_settings: undefined,
 };
 

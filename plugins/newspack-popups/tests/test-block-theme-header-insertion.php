@@ -255,13 +255,20 @@ class BlockThemeHeaderInsertionTest extends WP_UnitTestCase_PageWithPopups {
 
 		$block_content = '<div class="wp-block-template-part">header content</div>';
 		$block         = $this->get_header_template_part_block();
-		$result        = Newspack_Popups_Inserter::insert_before_header_in_template_part( $block_content, $block );
+		Newspack_Popups_Inserter::insert_before_header_in_template_part( $block_content, $block );
 
-		$segment_pos = strpos( $result, 'Segment overlay' );
-		$generic_pos = strpos( $result, 'Generic overlay' );
+		// Overlays are portaled to wp_footer rather than inlined into the
+		// header template-part output; assert ordering against the queued
+		// flush, which is what gets emitted before </body>.
+		ob_start();
+		Newspack_Popups_Inserter::print_queued_overlays();
+		$footer_output = ob_get_clean();
 
-		$this->assertNotFalse( $segment_pos, 'Segment-specific overlay should be rendered.' );
-		$this->assertNotFalse( $generic_pos, 'Generic overlay should be rendered.' );
-		$this->assertLessThan( $generic_pos, $segment_pos, 'Segment-specific overlay should render before generic overlay.' );
+		$segment_pos = strpos( $footer_output, 'Segment overlay' );
+		$generic_pos = strpos( $footer_output, 'Generic overlay' );
+
+		$this->assertNotFalse( $segment_pos, 'Segment-specific overlay should be queued for footer rendering.' );
+		$this->assertNotFalse( $generic_pos, 'Generic overlay should be queued for footer rendering.' );
+		$this->assertLessThan( $generic_pos, $segment_pos, 'Segment-specific overlay should be emitted before generic overlay.' );
 	}
 }

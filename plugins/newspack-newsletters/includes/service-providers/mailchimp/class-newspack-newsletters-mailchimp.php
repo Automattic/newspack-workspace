@@ -170,12 +170,15 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 		} catch ( Exception $e ) {
 			$ping = null;
 		}
-		return $ping ?
-			update_option( 'newspack_mailchimp_api_key', $api_key ) :
-			new WP_Error(
+		if ( ! $ping ) {
+			return new WP_Error(
 				'newspack_newsletters_invalid_keys',
 				__( 'Please input a valid Mailchimp API key.', 'newspack-newsletters' )
 			);
+		}
+		$updated = update_option( 'newspack_mailchimp_api_key', $api_key );
+		do_action( 'newspack_newsletters_provider_credentials_changed', 'mailchimp' );
+		return $updated;
 	}
 
 	/**
@@ -1211,9 +1214,117 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			$payload = apply_filters( 'newspack_newsletters_mc_payload_sync', $payload, $post, $mc_campaign_id );
 
 			if ( $mc_campaign_id ) {
-				$campaign_result = $this->validate(
-					$mc->patch( "campaigns/$mc_campaign_id", $payload )
-				);
+				// Mailchimp snapshots ad-hoc "advanced segments"
+				// (segment_opts.conditions, as opposed to a saved segment
+				// referenced by ID) at PATCH time and does not refresh the
+				// campaign's `recipient_count` when a populated segment_opts is
+				// swapped for another populated segment_opts in a subsequent
+				// PATCH — the campaign keeps the prior snapshot's recipient
+				// count even though its stored conditions are correctly updated.
+				// Empirically the only PATCH shape that triggers a fresh
+				// snapshot is the transition from "no segment" to "populated
+				// segment". So before PATCHing a populated segment_opts onto an
+				// existing campaign, first PATCH segment_opts to an empty
+				// object to force Mailchimp through that transition.
+				//
+				// The reset PATCH lands a transient "send to the entire
+				// audience" state on Mailchimp's side. To make sure a failed
+				// main PATCH below can't leave the campaign stuck in that
+				// state (which any subsequent scheduled-send retry,
+				// hub-driven sync, or parallel actions/send would otherwise
+				// blast to the full list), capture the campaign's existing
+				// recipients first and roll back to them if the main PATCH
+				// throws.
+				//
+				// References:
+				// - https://mailchimp.com/help/troubleshooting-advanced-segments.
+				// - https://mailchimp.com/help/schedule-or-pause-a-regular-email-campaign.
+				$rollback_recipients = null;
+				if (
+					isset( $payload['recipients']['segment_opts'], $payload['recipients']['list_id'] ) &&
+					! empty( (array) $payload['recipients']['segment_opts'] )
+				) {
+					// Capture the existing recipients so we can roll back
+					// if the main PATCH below fails. Missing/empty
+					// segment_opts on the existing campaign is fine — we'll
+					// rollback to (object) [] (whole audience) which is the
+					// state the reset left us in anyway.
+					try {
+						$existing = $this->validate( $mc->get( "campaigns/$mc_campaign_id", [ 'fields' => 'recipients' ] ) );
+						if ( is_array( $existing ) && ! empty( $existing['recipients']['list_id'] ) ) {
+							$prior_segment_opts  = $existing['recipients']['segment_opts'] ?? [];
+							$rollback_recipients = [
+								'list_id'      => $existing['recipients']['list_id'],
+								'segment_opts' => empty( $prior_segment_opts ) ? (object) [] : $prior_segment_opts,
+							];
+						}
+					} catch ( Exception $capture_error ) {
+						// Without a prior snapshot we can't safely roll
+						// back. Log so operators can correlate if the main
+						// PATCH then also fails; sync continues.
+						Newspack_Newsletters_Logger::log(
+							'Mailchimp prior recipients capture failed for campaign ' . $mc_campaign_id . ': ' . $capture_error->getMessage() . ' — proceeding without rollback safety.'
+						);
+					}
+
+					// Reset PATCH is best-effort: if Mailchimp rejects it
+					// (e.g. the campaign is already sent or otherwise
+					// locked), let the main PATCH below produce the
+					// canonical error.
+					try {
+						if ( null !== $rollback_recipients ) {
+							$this->validate(
+								$mc->patch(
+									"campaigns/$mc_campaign_id",
+									[
+										'recipients' => [
+											'list_id'      => $payload['recipients']['list_id'],
+											'segment_opts' => (object) [],
+										],
+									]
+								)
+							);
+						}
+					} catch ( Exception $reset_error ) {
+						Newspack_Newsletters_Logger::log(
+							'Mailchimp segment_opts reset failed for campaign ' . $mc_campaign_id . ': ' . $reset_error->getMessage() . ' — proceeding with main PATCH.'
+						);
+						// The reset didn't apply, so the campaign is
+						// still in its prior recipients state and there's
+						// nothing to roll back if the main PATCH also
+						// fails.
+						$rollback_recipients = null;
+					}
+				}
+
+				try {
+					$campaign_result = $this->validate(
+						$mc->patch( "campaigns/$mc_campaign_id", $payload )
+					);
+				} catch ( Exception $main_error ) {
+					// The reset PATCH already neutered segment_opts;
+					// without restoring the prior state the Mailchimp
+					// campaign is now configured to send to the entire
+					// audience. Attempt a rollback PATCH. Rollback
+					// failures are logged but cannot be propagated
+					// further — we re-throw the original main-PATCH
+					// error so callers see the canonical sync error.
+					if ( null !== $rollback_recipients ) {
+						try {
+							$this->validate(
+								$mc->patch( "campaigns/$mc_campaign_id", [ 'recipients' => $rollback_recipients ] )
+							);
+							Newspack_Newsletters_Logger::log(
+								'Mailchimp main PATCH failed after segment_opts reset — rolled back recipients for campaign ' . $mc_campaign_id . '.'
+							);
+						} catch ( Exception $rollback_error ) {
+							Newspack_Newsletters_Logger::log(
+								'Mailchimp rollback PATCH failed for campaign ' . $mc_campaign_id . ': ' . $rollback_error->getMessage() . ' — campaign may be left in an inconsistent recipients state.'
+							);
+						}
+					}
+					throw $main_error;
+				}
 			} else {
 				$campaign_result = $this->validate(
 					$mc->post( 'campaigns', $payload )
@@ -1270,6 +1381,12 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			return;
 		}
 		if ( Newspack_Newsletters::EMAIL_HTML_META !== $meta_key ) {
+			return;
+		}
+		// Layouts share the email editor (so the bundle, MJML refresh, and
+		// editor chrome all load) but must never create or update an ESP
+		// campaign — the post type is the boundary.
+		if ( $this->is_layout_post( $post_id ) ) {
 			return;
 		}
 		$post = get_post( $post_id );
@@ -2293,6 +2410,230 @@ final class Newspack_Newsletters_Mailchimp extends \Newspack_Newsletters_Service
 			$labels['list_explanation'] = __( 'Mailchimp Tag', 'newspack-newsletters' );
 		}
 		return $labels;
+	}
+
+	/**
+	 * Mailchimp merge-tag dictionary for the editor autocomplete.
+	 *
+	 * @return array
+	 */
+	public static function get_merge_tags() {
+		return [
+			'label'          => __( 'merge tag', 'newspack-newsletters' ),
+			'trigger_prefix' => '*|',
+			'tags'           => [
+				/* Campaigns. */
+				[
+					'tag'   => '*|ARCHIVE|*',
+					'label' => __( 'Creates a "View this email in your browser link" to your campaign page.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|CAMPAIGN_UID|*',
+					'label' => __( 'Displays the unique ID for your campaign.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|REWARDS|*',
+					'label' => __( 'Adds the Referral badge to your campaign.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|REWARDS_TEXT|*',
+					'label' => __( 'Adds a text-only version of the Rewards link.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|MC:TRANSLATE|*',
+					'label' => __( 'Inserts links to translate your sent campaign into different languages.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|TRANSLATE:xx|*',
+					'label' => __( "Adds a list of links to translate the content in your campaign. Replace xx with the code for the language your campaign is written in, and we'll display other available languages.", 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|MC_LANGUAGE|*',
+					'label' => __( "Displays the language code for a particular subscriber. For example, if your subscriber's language is set to English, the merge tag output will display the code en.", 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|MC_LANGUAGE_LABEL|*',
+					'label' => __( 'Displays the plain-text language for a particular subscriber. All languages are written English, so if your subscriber\'s language is set to German we\'ll display "German" instead of Deutsch.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|DATE:X|*',
+					'label' => __( 'Use to show the current date in a given format. Replace X with the format of your choice.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|LIST:RECENTX|*',
+					'label' => __( 'Displays a list of links to recent campaigns sent to the audience indicated. Replace X with the number of campaigns to show.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|MC:TOC|*',
+					'label' => __( 'Creates a linked table of contents in your campaign.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|MC:TOC_TEXT|*',
+					'label' => __( 'Creates a table of contents in your campaigns as plain-text.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|MC_PREVIEW_TEXT|*',
+					'label' => __( 'Use this merge tag to generate preview text in a custom-coded campaign.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|POLL:RATING:x|* *|END:POLL|*',
+					'label' => __( 'Creates a poll to record subscriber ratings of 1–10.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|SURVEY|* *|END:|*',
+					'label' => __( 'Creates a one-question survey with a set number of responses that subscribers can choose from.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|PROMO_CODE:[$store_id=x, $rule_id=x, $code_id=x]|*',
+					'label' => __( 'Use this tag to include a promo code in a campaign. Replace the "x" variables in your Promo Code merge tag to specify what promo code to display.', 'newspack-newsletters' ),
+				],
+				/* Personalization. */
+				[
+					'tag'      => '*|FNAME|*',
+					'label'    => __( "Inserts your subscriber's first name if it's available in your audience.", 'newspack-newsletters' ),
+					'keywords' => [ 'first name' ],
+				],
+				[
+					'tag'      => '*|LNAME|*',
+					'label'    => __( "Inserts your subscriber's last name if it's available in your audience.", 'newspack-newsletters' ),
+					'keywords' => [ 'last name' ],
+				],
+				[
+					'tag'   => '*|EMAIL|*',
+					'label' => __( "Inserts your subscriber's email address.", 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|PHONE|*',
+					'label' => __( 'Inserts your subscriber’s phone number if it’s available in your audience.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|ADDRESS|*',
+					'label' => __( 'Inserts your subscriber’s address if it’s available in your audience.', 'newspack-newsletters' ),
+				],
+				/* Email subject lines. */
+				[
+					'tag'   => '*|LIST:NAME|*',
+					'label' => __( 'Inserts the name of your audience.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|LIST:COMPANY|*',
+					'label' => __( "Inserts the name of your company or organization that's listed in the required email footer content for your audience.", 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|LIST:SUBSCRIBERS|*',
+					'label' => __( 'Inserts the number of subscribers in your audience in plain-text.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|USER:COMPANY|*',
+					'label' => __( 'Inserts the company or organization name listed under Primary Account Contact info in your Mailchimp account.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|MC:DATE|*',
+					'label' => __( 'Displays MM/DD/YYYY or DD/MM/YYYY based on your settings in your account Details.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|CURRENT_YEAR|*',
+					'label' => __( 'Displays the current year. This is great if you include a copyright date in your campaign, because it will update automatically every year.', 'newspack-newsletters' ),
+				],
+				/* Email footers. */
+				[
+					'tag'   => '*|UNSUB|*',
+					'label' => __( "Gives your subscribers the opportunity to unsubscribe from your emails. (Required by law and Mailchimp's Terms of Use.)", 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|LIST:DESCRIPTION|*',
+					'label' => __( "Inserts your audience's permission reminder", 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|HTML:LIST_ADDRESS_HTML|*',
+					'label' => __( 'Inserts in your mailing address and the "Add us to your address book" link that points to the vcard (.vcf) file with your address details.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|LIST:ADDRESS_VCARD|*',
+					'label' => __( 'Inserts an "Add us to your address book" link to your campaign.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|LIST:ADDRESS_VCARD_HREF|*',
+					'label' => __( "Inserts a text URL that points to your vcard (.vcf) file of your address details. Use this as a link's Web Address to create a linked version.", 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|ABOUT_LIST|*',
+					'label' => __( 'Creates a link to the About Your List page.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|LIST:UID|*',
+					'label' => __( "Inserts your audience's unique ID from your audience's hosted forms.", 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|LIST:URL|*',
+					'label' => __( 'Inserts the website URL set in the Required Email Footer Content for this audience.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|LIST:ADDRESS|*',
+					'label' => __( 'Inserts your company or organization postal mailing address or P.O. Box as plain text.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|LIST:ADDRESSLINE|*',
+					'label' => __( 'Inserts your mailing address as plain text on a single line.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|LIST:PHONE|*',
+					'label' => __( 'Inserts your company or organization telephone number.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|ABUSE_EMAIL|*',
+					'label' => __( 'Inserts the email address located in the Required Email Footer Content for this audience.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|LIST:SUBSCRIBE|*',
+					'label' => __( "Inserts the URL for your audience's hosted signup form.", 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|UPDATE_PROFILE|*',
+					'label' => __( "Inserts a link to the contact's update profile page.", 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '*|FORWARD|*',
+					'label' => __( "Inserts the URL to your audience's Forward to a Friend form.", 'newspack-newsletters' ),
+				],
+				/* Social share — X (formerly Twitter). */
+				[
+					'tag'      => '*|TWITTER:FULLPROFILE|*',
+					'label'    => __( 'Inserts your X (formerly Twitter) avatar, follower, post, and following counts; a follow link; and your latest posts.', 'newspack-newsletters' ),
+					'keywords' => [ 'x', 'twitter' ],
+				],
+				[
+					'tag'      => '*|TWITTER:PROFILE|*',
+					'label'    => __( 'Inserts your X (formerly Twitter) avatar, follower, post, and following counts, and a follow link. Excludes your latest posts.', 'newspack-newsletters' ),
+					'keywords' => [ 'x', 'twitter' ],
+				],
+				[
+					'tag'      => '*|TWITTER:PROFILEURL|*',
+					'label'    => __( 'Displays your X (formerly Twitter) profile URL.', 'newspack-newsletters' ),
+					'keywords' => [ 'x', 'twitter' ],
+				],
+				[
+					'tag'      => '*|TWITTER:TWEETS2|*',
+					'label'    => __( "Sets the number of X (formerly Twitter) posts to show. Replace 2 with the number you'd like to display.", 'newspack-newsletters' ),
+					'keywords' => [ 'x', 'twitter' ],
+				],
+				[
+					'tag'      => '*|TWITTER:PROFILE:TWITTERUSERNAME|*',
+					'label'    => __( "Inserts another user's X (formerly Twitter) profile. Replace TWITTERUSERNAME with their handle.", 'newspack-newsletters' ),
+					'keywords' => [ 'x', 'twitter' ],
+				],
+				[
+					'tag'      => '*|TWITTER:TWEET|*',
+					'label'    => __( 'Adds a Share button that lets subscribers post a link to your campaign on X (formerly Twitter).', 'newspack-newsletters' ),
+					'keywords' => [ 'x', 'twitter' ],
+				],
+				[
+					'tag'      => '*|TWITTER:TWEET [$text=my custom text here]|*',
+					'label'    => __( 'Posts custom text (instead of your subject line) alongside a link to your campaign on X (formerly Twitter).', 'newspack-newsletters' ),
+					'keywords' => [ 'x', 'twitter' ],
+				],
+			],
+		];
 	}
 
 	/**

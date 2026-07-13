@@ -24,6 +24,18 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	protected $user_ids = [];
 
 	/**
+	 * Setup before each test.
+	 */
+	public function set_up() {
+		parent::set_up();
+		// The group subscription REST routes and invite flows are gated behind the
+		// Access Control feature flag; turn it on so the surfaces under test are wired.
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
+	}
+
+	/**
 	 * Teardown after tests.
 	 */
 	public function tear_down() {
@@ -494,30 +506,16 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	// -------------------------------------------------------------------------
 
 	/**
-	 * Test get_subscription_settings() returns a default name based on the
-	 * subscription owner's billing name when no custom name is set.
+	 * Test get_subscription_settings() falls back to the publisher singular group label
+	 * when no name meta and no product item are set.
 	 */
-	public function test_group_name_defaults_to_owner_name() {
+	public function test_group_name_defaults_to_singular_label() {
 		$owner_id  = $this->create_reader_user();
 		$group_sub = $this->create_group_subscription( $owner_id );
 
-		// Set billing name on the subscription so get_formatted_billing_full_name() returns a real name.
-		$group_sub->data['billing_first_name'] = 'Jane';
-		$group_sub->data['billing_last_name']  = 'Doe';
-
 		$settings = Group_Subscription_Settings::get_subscription_settings( $group_sub );
 
-		$this->assertNotEmpty( $settings['name'], 'Default name should not be empty' );
-		$this->assertStringContainsString(
-			'Jane',
-			$settings['name'],
-			'Default name should contain the owner first name'
-		);
-		$this->assertStringContainsString(
-			"\u{2019}s Group",
-			$settings['name'],
-			'Default name should end with the possessive Group suffix'
-		);
+		$this->assertSame( Group_Subscription::get_label( 'singular' ), $settings['name'], 'Default name should fall back to the publisher singular group label when neither a name meta nor a product name is available.' );
 	}
 
 	/**
@@ -554,15 +552,11 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	/**
 	 * Test that an empty name in update_subscription_settings() stores an
 	 * empty string, which causes get_subscription_settings() to fall back
-	 * to the default owner-based name.
+	 * to the publisher singular group label when no product name is available.
 	 */
 	public function test_group_name_empty_falls_back_to_default() {
 		$owner_id  = $this->create_reader_user();
 		$group_sub = $this->create_group_subscription( $owner_id, [ 'name' => 'Temp Name' ] );
-
-		// Set billing name on the subscription so the fallback name is based on the actual owner name.
-		$group_sub->data['billing_first_name'] = 'Jane';
-		$group_sub->data['billing_last_name']  = 'Doe';
 
 		Group_Subscription_Settings::update_subscription_settings(
 			$group_sub,
@@ -571,17 +565,7 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 
 		$settings = Group_Subscription_Settings::get_subscription_settings( $group_sub );
 
-		// After clearing the custom name, it should revert to the default.
-		$this->assertStringContainsString(
-			'Jane',
-			$settings['name'],
-			'Clearing the name should revert to the default owner-based name'
-		);
-		$this->assertStringContainsString(
-			"\u{2019}s Group",
-			$settings['name'],
-			'Default name should end with the possessive Group suffix'
-		);
+		$this->assertSame( Group_Subscription::get_label( 'singular' ), $settings['name'], 'Clearing the name should revert to the publisher singular group label when no product name is available.' );
 	}
 
 	// -------------------------------------------------------------------------
@@ -1305,7 +1289,7 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 			Group_Subscription_Invite::LINK_META,
 			[
 				$owner_id => [
-					'key'        => 'k',
+					'key'        => 'key',
 					'created_at' => time(),
 				],
 			]
@@ -1322,9 +1306,9 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$url = Group_Subscription_Invite::get_link_invite_url( 42, 7, 'thekey' );
 
 		$this->assertStringContainsString( 'action=' . Group_Subscription_Invite::LINK_QUERY_ARG, $url );
-		$this->assertStringContainsString( 's=42', $url );
-		$this->assertStringContainsString( 'm=7', $url );
-		$this->assertStringContainsString( 'k=thekey', $url );
+		$this->assertStringContainsString( 'subscription=42', $url );
+		$this->assertStringContainsString( 'manager=7', $url );
+		$this->assertStringContainsString( 'key=thekey', $url );
 	}
 
 	/**
@@ -1466,7 +1450,7 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 	 * Test validate_link_invite() rejects an unknown subscription.
 	 */
 	public function test_validate_link_invite_unknown_subscription() {
-		$result = Group_Subscription_Invite::validate_link_invite( 99999, 1, 'k' );
+		$result = Group_Subscription_Invite::validate_link_invite( 99999, 1, 'key' );
 		$this->assertWPError( $result );
 	}
 
@@ -1477,7 +1461,7 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$owner_id = $this->create_reader_user();
 		$regular  = $this->create_regular_subscription( $owner_id );
 
-		$result = Group_Subscription_Invite::validate_link_invite( $regular, $owner_id, 'k' );
+		$result = Group_Subscription_Invite::validate_link_invite( $regular, $owner_id, 'key' );
 		$this->assertWPError( $result );
 	}
 
@@ -1488,7 +1472,7 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		$owner_id  = $this->create_reader_user();
 		$group_sub = $this->create_group_subscription( $owner_id );
 
-		$result = Group_Subscription_Invite::validate_link_invite( $group_sub, $owner_id, 'k' );
+		$result = Group_Subscription_Invite::validate_link_invite( $group_sub, $owner_id, 'key' );
 		$this->assertWPError( $result );
 	}
 
@@ -1744,10 +1728,10 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		wp_set_current_user( $non_member_id );
 
 		$_GET = [
-			'action' => Group_Subscription_Invite::LINK_QUERY_ARG,
-			's'      => $group_sub->get_id(),
-			'm'      => $owner_id,
-			'k'      => $invite['key'],
+			'action'       => Group_Subscription_Invite::LINK_QUERY_ARG,
+			'subscription' => $group_sub->get_id(),
+			'manager'      => $owner_id,
+			'key'          => $invite['key'],
 		];
 
 		// Hook wp_redirect to capture the URL and abort before exit.
@@ -1806,10 +1790,10 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		wp_set_current_user( $non_member_id );
 
 		$_GET = [
-			'action' => Group_Subscription_Invite::LINK_QUERY_ARG,
-			's'      => $group_sub->get_id(),
-			'm'      => $owner_id,
-			'k'      => 'bogus-key',
+			'action'       => Group_Subscription_Invite::LINK_QUERY_ARG,
+			'subscription' => $group_sub->get_id(),
+			'manager'      => $owner_id,
+			'key'          => 'bogus-key',
 		];
 
 		$captured_url = null;
@@ -1871,10 +1855,10 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		wp_set_current_user( 0 );
 
 		$_GET = [
-			'action' => Group_Subscription_Invite::LINK_QUERY_ARG,
-			's'      => $group_sub->get_id(),
-			'm'      => $owner_id,
-			'k'      => $invite['key'],
+			'action'       => Group_Subscription_Invite::LINK_QUERY_ARG,
+			'subscription' => $group_sub->get_id(),
+			'manager'      => $owner_id,
+			'key'          => $invite['key'],
 		];
 
 		$captured_url = null;
@@ -1911,10 +1895,10 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 				$captured_url,
 				'Logged-out redirect should carry a redirect= query arg'
 			);
-			// The inner link URL's `&s=` must appear rawurlencoded as `%26s%3D` so the
+			// The inner link URL's `&subscription=` must appear rawurlencoded as `%26subscription%3D` so the
 			// link URL is preserved as a single value rather than leaking into outer args.
 			$this->assertStringContainsString(
-				'%26s%3D',
+				'%26subscription%3D',
 				$captured_url,
 				'Logged-out redirect should rawurlencode the inner link URL'
 			);
@@ -1953,10 +1937,10 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		wp_set_current_user( $member_id );
 
 		$_GET = [
-			'action' => Group_Subscription_Invite::LINK_QUERY_ARG,
-			's'      => $group_sub->get_id(),
-			'm'      => $owner_id,
-			'k'      => $invite['key'],
+			'action'       => Group_Subscription_Invite::LINK_QUERY_ARG,
+			'subscription' => $group_sub->get_id(),
+			'manager'      => $owner_id,
+			'key'          => $invite['key'],
 		];
 
 		$captured_url = null;
@@ -2034,10 +2018,10 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		wp_set_current_user( $visitor_id );
 
 		$_GET = [
-			'action' => Group_Subscription_Invite::LINK_QUERY_ARG,
-			's'      => $group_sub->get_id(),
-			'm'      => $owner_id,
-			'k'      => $invite['key'],
+			'action'       => Group_Subscription_Invite::LINK_QUERY_ARG,
+			'subscription' => $group_sub->get_id(),
+			'manager'      => $owner_id,
+			'key'          => $invite['key'],
 		];
 
 		$captured_url = null;
@@ -2091,10 +2075,10 @@ class Test_Group_Subscriptions extends \WP_UnitTestCase {
 		wp_set_current_user( $visitor_id );
 
 		$_GET = [
-			'action' => Group_Subscription_Invite::LINK_QUERY_ARG,
-			's'      => 999999, // Non-existent.
-			'm'      => $visitor_id,
-			'k'      => 'whatever',
+			'action'       => Group_Subscription_Invite::LINK_QUERY_ARG,
+			'subscription' => 999999, // Non-existent.
+			'manager'      => $visitor_id,
+			'key'          => 'whatever',
 		];
 
 		$captured_url = null;

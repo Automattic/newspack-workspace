@@ -415,13 +415,13 @@ class Incoming_Post {
 		foreach ( $data as $meta_key => $meta_value ) {
 			if ( ! in_array( $meta_key, $ignored_keys, true ) ) {
 				if ( 1 === count( $meta_value ) ) {
-					update_post_meta( $this->ID, $meta_key, $meta_value[0] );
+					update_post_meta( $this->ID, $meta_key, wp_slash( $meta_value[0] ) );
 				} else {
 					$value = get_post_meta( $this->ID, $meta_key, false );
 					if ( $value !== $meta_value ) {
 						delete_post_meta( $this->ID, $meta_key );
 						foreach ( $meta_value as $item ) {
-							add_post_meta( $this->ID, $meta_key, $item );
+							add_post_meta( $this->ID, $meta_key, wp_slash( $item ) );
 						}
 					}
 				}
@@ -489,20 +489,22 @@ class Incoming_Post {
 				$meta = array_shift( $meta );
 				if ( ! empty( $meta['caption'] ) ) {
 					wp_update_post(
-						[
-							'ID'           => $attachment_id,
-							'post_excerpt' => $meta['caption'],
-						]
+						wp_slash(
+							[
+								'ID'           => $attachment_id,
+								'post_excerpt' => $meta['caption'],
+							]
+						)
 					);
 				}
 				if ( ! empty( $meta['alt'] ) ) {
-					update_post_meta( $attachment_id, '_wp_attachment_image_alt', $meta['alt'] );
+					update_post_meta( $attachment_id, '_wp_attachment_image_alt', wp_slash( $meta['alt'] ) );
 				}
 				if ( ! empty( $meta['credit'] ) ) {
-					update_post_meta( $attachment_id, '_media_credit', $meta['credit'] );
+					update_post_meta( $attachment_id, '_media_credit', wp_slash( $meta['credit'] ) );
 				}
 				if ( ! empty( $meta['credit_url'] ) ) {
-					update_post_meta( $attachment_id, '_media_credit_url', $meta['credit_url'] );
+					update_post_meta( $attachment_id, '_media_credit_url', wp_slash( $meta['credit_url'] ) );
 				}
 			}
 		}
@@ -722,6 +724,36 @@ class Incoming_Post {
 				$postarr['post_status'] = $post_data['post_status'];
 			}
 
+			/**
+			 * Preserve a node's local future schedule.
+			 *
+			 * If the linked node post has been locally scheduled (`future`) and
+			 * the origin re-syncs an edit while still `publish`, do not let the
+			 * sync overwrite the node's schedule. Overwriting `post_date_gmt`
+			 * with the origin's (past) date trips WP core's future-with-past-date
+			 * check and auto-publishes the node post ahead of its intended time,
+			 * while the public permalink keeps the future local `post_date`.
+			 * Content/title/taxonomy/meta still flow.
+			 *
+			 * Scoped to incoming `publish` only: origin-side removal or
+			 * unpublishing (`trash`/`draft`/`pending`/`private`) still propagates
+			 * so a retracted story doesn't stay scheduled to publish on the node.
+			 *
+			 * A node's local schedule deliberately takes precedence over any
+			 * `status_on_publish` hold applied above: manually scheduling the
+			 * node post is the more recent, explicit editor intent.
+			 */
+			if (
+				! $is_new_post
+				&& $this->post instanceof WP_Post
+				&& 'future' === $this->post->post_status
+				&& 'publish' === $post_data['post_status']
+			) {
+				$postarr['post_status']   = 'future';
+				$postarr['post_date']     = $this->post->post_date;
+				$postarr['post_date_gmt'] = $this->post->post_date_gmt;
+			}
+
 			$postarr['post_author'] = 0;
 			if ( ! empty( $post_data['author'] ) ) {
 				$post_author = self::get_incoming_wp_user_author( $this->get_original_site_url(), $post_data['author'] );
@@ -744,10 +776,14 @@ class Incoming_Post {
 			// Remove filters that may alter content updates.
 			remove_all_filters( 'content_save_pre' );
 
+			// wp_insert_post()/wp_update_post() expect slashed data and unslash it
+			// internally. Serialized block markup carries literal backslashes in
+			// attribute JSON escapes (backslash-u003c for `<` etc.), which an
+			// unslashed insert would strip, corrupting block attributes.
 			if ( $this->ID ) {
-				$post_id = wp_update_post( $postarr, true );
+				$post_id = wp_update_post( wp_slash( $postarr ), true );
 			} else {
-				$post_id = wp_insert_post( $postarr, true );
+				$post_id = wp_insert_post( wp_slash( $postarr ), true );
 			}
 
 			if ( is_wp_error( $post_id ) ) {
@@ -817,7 +853,10 @@ class Incoming_Post {
 			$this->update_post_modified_date();
 		}
 
-		update_post_meta( $this->ID, self::PAYLOAD_META, $this->payload );
+		// Meta functions unslash their input like the post functions above do;
+		// the stored payload feeds partial updates and re-links, so its escaped
+		// block attributes must survive storage intact.
+		update_post_meta( $this->ID, self::PAYLOAD_META, wp_slash( $this->payload ) );
 		update_post_meta( $this->ID, self::NETWORK_POST_ID_META, $this->network_post_id );
 
 		/**

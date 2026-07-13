@@ -52,12 +52,11 @@ trait Admin_Header {
 		Newspack::load_common_assets();
 		
 		// JS.
-		$wizards_admin_header = include dirname( NEWSPACK_PLUGIN_FILE ) . '/dist/admin-header.asset.php';
 		wp_register_script(
 			'newspack-wizards-admin-header',
 			Newspack::plugin_url() . '/dist/admin-header.js',
 			[ 'wp-components' ],
-			$wizards_admin_header['version'] ?? NEWSPACK_PLUGIN_VERSION,
+			Newspack::asset_version( 'admin-header' ),
 			true
 		);
 
@@ -77,7 +76,7 @@ trait Admin_Header {
 			'newspack-wizards-admin-header',
 			Newspack::plugin_url() . '/dist/admin-header.css',
 			[],
-			NEWSPACK_PLUGIN_VERSION
+			Newspack::asset_version( 'admin-header' )
 		);
 		wp_style_add_data( 'newspack-wizards-admin-header', 'rtl', 'replace' );
 		wp_enqueue_style( 'newspack-wizards-admin-header' );

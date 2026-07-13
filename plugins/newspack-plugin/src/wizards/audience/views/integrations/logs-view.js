@@ -8,31 +8,15 @@ import apiFetch from '@wordpress/api-fetch';
 import { addQueryArgs } from '@wordpress/url';
 import { Spinner } from '@wordpress/components';
 import { DataViews as WPDataViews } from '@wordpress/dataviews';
-import { dateI18n, getSettings } from '@wordpress/date';
 
 /**
  * Internal dependencies
  */
 import { Badge, DataViews } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
+import { API_BASE, STATUS_MAP, formatTimestamp } from './constants';
+import { LogDetailsModal } from './log-details-modal';
 import './style.scss';
-
-const API_BASE = '/newspack/v1/wizard/newspack-audience-integrations/settings';
-
-const STATUS_MAP = {
-	complete: { label: __( 'Success', 'newspack-plugin' ), level: 'success' },
-	failed: { label: __( 'Failed', 'newspack-plugin' ), level: 'error' },
-	pending: { label: __( 'Pending', 'newspack-plugin' ), level: 'info' },
-	canceled: { label: __( 'Canceled', 'newspack-plugin' ), level: 'warning' },
-};
-
-function formatTimestamp( gmt ) {
-	if ( ! gmt ) {
-		return '';
-	}
-	const dateFormat = getSettings().formats.datetime || 'F j, Y, g:i a';
-	return dateI18n( dateFormat, `${ gmt }+00:00` );
-}
 
 const DEFAULT_VIEW = {
 	type: 'table',
@@ -40,13 +24,14 @@ const DEFAULT_VIEW = {
 	perPage: 25,
 	sort: { field: 'timestamp', direction: 'desc' },
 	search: '',
-	fields: [ 'timestamp', 'event', 'status' ],
+	fields: [ 'timestamp', 'email', 'event', 'status' ],
 	filters: [],
 	layout: {
 		styles: {
-			timestamp: { width: '75%' },
-			event: { width: '15%' },
-			status: { width: '10%' },
+			timestamp: { width: '35%' },
+			email: { width: '30%' },
+			event: { width: '20%' },
+			status: { width: '15%' },
 		},
 	},
 };
@@ -54,13 +39,14 @@ const DEFAULT_VIEW = {
 export const LogsView = ( { integrations, match } ) => {
 	const integrationId = match?.params?.integrationId;
 	const integration = integrationId ? integrations[ integrationId ] : null;
-	const { addNotice, setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { addNotice, removeNotice, setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	const [ data, setData ] = useState( [] );
 	const [ total, setTotal ] = useState( 0 );
 	const [ isLoading, setIsLoading ] = useState( true );
 	const [ hasLoadedOnce, setHasLoadedOnce ] = useState( false );
 	const [ view, setView ] = useState( DEFAULT_VIEW );
+	const [ runningActionIds, setRunningActionIds ] = useState( () => new Set() );
 
 	useEffect( () => {
 		if ( integration ) {
@@ -131,6 +117,12 @@ export const LogsView = ( { integrations, match } ) => {
 				enableSorting: true,
 			},
 			{
+				id: 'email',
+				label: __( 'Email', 'newspack-plugin' ),
+				render: ( { item } ) => item.email || '—',
+				enableSorting: false,
+			},
+			{
 				id: 'event',
 				label: __( 'Event', 'newspack-plugin' ),
 				getValue: ( { item } ) => item.event,
@@ -145,9 +137,10 @@ export const LogsView = ( { integrations, match } ) => {
 				},
 				enableSorting: true,
 				elements: [
-					{ value: 'complete', label: __( 'Success', 'newspack-plugin' ) },
+					{ value: 'complete', label: __( 'Complete', 'newspack-plugin' ) },
 					{ value: 'failed', label: __( 'Failed', 'newspack-plugin' ) },
 					{ value: 'pending', label: __( 'Pending', 'newspack-plugin' ) },
+					{ value: 'in-progress', label: __( 'In progress', 'newspack-plugin' ) },
 					{ value: 'canceled', label: __( 'Canceled', 'newspack-plugin' ) },
 				],
 				filterBy: {
@@ -156,6 +149,81 @@ export const LogsView = ( { integrations, match } ) => {
 			},
 		],
 		[]
+	);
+
+	const runAction = useCallback(
+		actionId => {
+			setRunningActionIds( prev => {
+				const next = new Set( prev );
+				next.add( actionId );
+				return next;
+			} );
+			// Synchronous "running" notice. addNotice appends without deduping by
+			// id, so the final success/failure notice removes this one first
+			// (see removeNotice calls below) to replace it in place.
+			const noticeId = `integration-action-run-${ actionId }`;
+			addNotice( {
+				message: __( 'Running action…', 'newspack-plugin' ),
+				type: 'info',
+				id: noticeId,
+			} );
+			apiFetch( {
+				path: `${ API_BASE }/${ integrationId }/logs/${ actionId }/run`,
+				method: 'POST',
+			} )
+				.then( response => {
+					let message;
+					if ( response.status === 'complete' ) {
+						message = __( 'Action completed.', 'newspack-plugin' );
+					} else if ( response.status === 'failed' ) {
+						message = response.message || __( 'Action failed.', 'newspack-plugin' );
+					} else {
+						message = response.message || __( 'Action processed.', 'newspack-plugin' );
+					}
+					removeNotice( noticeId );
+					addNotice( {
+						message,
+						type: response.status === 'failed' ? 'error' : 'success',
+						id: noticeId,
+					} );
+				} )
+				.catch( err => {
+					const message = err && err.message ? err.message : __( 'Could not run action.', 'newspack-plugin' );
+					removeNotice( noticeId );
+					addNotice( {
+						message,
+						type: 'error',
+						id: noticeId,
+					} );
+				} )
+				.finally( () => {
+					setRunningActionIds( prev => {
+						const next = new Set( prev );
+						next.delete( actionId );
+						return next;
+					} );
+					fetchLogs();
+				} );
+		},
+		[ integrationId, addNotice, removeNotice, fetchLogs ]
+	);
+
+	const actions = useMemo(
+		() => [
+			{
+				id: 'view-details',
+				label: __( 'View details', 'newspack-plugin' ),
+				modalHeader: __( 'Action details', 'newspack-plugin' ),
+				RenderModal: ( { items } ) => <LogDetailsModal integrationId={ integrationId } actionId={ items[ 0 ].id } />,
+			},
+			{
+				id: 'run-now',
+				label: __( 'Run now', 'newspack-plugin' ),
+				isEligible: item => item.status === 'pending' && ! runningActionIds.has( item.id ),
+				callback: items => runAction( items[ 0 ].id ),
+			},
+		],
+		[ integrationId, runAction, runningActionIds ]
 	);
 
 	const paginationInfo = useMemo(
@@ -183,6 +251,7 @@ export const LogsView = ( { integrations, match } ) => {
 			className="newspack-integration-logs"
 			data={ data }
 			fields={ fields }
+			actions={ actions }
 			view={ view }
 			onChangeView={ setView }
 			paginationInfo={ paginationInfo }

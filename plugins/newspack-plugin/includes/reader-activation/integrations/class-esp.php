@@ -37,14 +37,28 @@ class ESP extends Integration {
 	/**
 	 * Whether the ESP integration is ready to sync.
 	 *
-	 * Mirrors the readiness gate used by get_settings_config() so the configure
-	 * UI never advertises a card as set up while the underlying settings call
-	 * short-circuits to an empty config.
+	 * Checks STORED configuration only — provider option set + master list
+	 * option set. Does NOT call the live provider API. A live `get_lists()`
+	 * call here would mean: every gate that consults `is_set_up()`
+	 * (`Integrations::get_active_configured_integrations()`, the retry-time
+	 * guards in `Contact_Sync` / `Contact_Pull`) would silently skip and
+	 * lose data on any transient provider failure — exactly the failure
+	 * mode the AS retry system was built to survive. The setup question
+	 * "did the admin finish configuring this?" must be answered from local
+	 * state; "is the provider reachable right now?" is `health_check()`'s
+	 * job.
 	 *
-	 * @return bool True if an ESP provider is selected and at least one list is active.
+	 * @return bool True if a provider is selected and a master list ID is stored.
 	 */
 	public function is_set_up() {
-		return Reader_Activation::is_esp_configured();
+		$newsletters_configuration_manager = Configuration_Managers::configuration_manager_class_for_plugin_slug( 'newspack-newsletters' );
+		if ( ! $newsletters_configuration_manager || is_wp_error( $newsletters_configuration_manager ) ) {
+			return false;
+		}
+		if ( ! $newsletters_configuration_manager->is_esp_set_up() ) {
+			return false;
+		}
+		return (bool) $this->get_master_list_id();
 	}
 
 	/**
@@ -130,13 +144,6 @@ class ESP extends Integration {
 				'label'       => __( 'Constant Contact Master List', 'newspack-plugin' ),
 				'description' => __( 'Choose a master list to which all registered readers will be added.', 'newspack-plugin' ),
 			],
-			[
-				'key'         => 'sync_esp_delete',
-				'type'        => 'checkbox',
-				'default'     => true,
-				'label'       => __( 'Sync user account deletion', 'newspack-plugin' ),
-				'description' => __( 'When a reader account is deleted, also remove the contact from the ESP.', 'newspack-plugin' ),
-			],
 		];
 	}
 
@@ -189,10 +196,12 @@ class ESP extends Integration {
 				);
 				break;
 		}
-		$enriched[]    = $config['sync_esp_delete'];
-		$metadata_keys = array_column( $this->get_metadata_fields(), 'key' );
+		$auto_keys = array_merge(
+			array_column( $this->get_account_deletion_fields(), 'key' ),
+			array_column( $this->get_metadata_fields(), 'key' )
+		);
 		foreach ( $config as $field ) {
-			if ( in_array( $field['key'], $metadata_keys ) ) {
+			if ( in_array( $field['key'], $auto_keys, true ) ) {
 				$enriched[] = $config[ $field['key'] ];
 			}
 		}
@@ -372,6 +381,29 @@ class ESP extends Integration {
 		$master_list_id = $this->get_master_list_id();
 
 		return Newspack_Newsletters_Contacts::upsert( $contact, $master_list_id, $context, $existing_contact );
+	}
+
+	/**
+	 * ESP supports hard-deleting contacts via Newspack_Newsletters_Contacts::delete().
+	 *
+	 * @return bool
+	 */
+	public function supports_hard_delete(): bool {
+		return true;
+	}
+
+	/**
+	 * Delete a contact from the connected ESP.
+	 *
+	 * @param string $email Email address.
+	 * @return true|\WP_Error
+	 */
+	public function delete_contact( string $email ) {
+		$can_sync = $this->can_sync( true );
+		if ( $can_sync->has_errors() ) {
+			return $can_sync;
+		}
+		return \Newspack_Newsletters_Contacts::delete( $email, 'RAS Reader deleted' );
 	}
 
 	/**
