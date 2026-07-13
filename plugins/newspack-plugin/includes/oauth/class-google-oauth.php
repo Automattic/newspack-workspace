@@ -202,7 +202,7 @@ class Google_OAuth {
 				return new WP_Error(
 					'newspack_google_oauth',
 					$error_text,
-					[ 'proxy_status' => $response_code ]
+					[ 'status' => $response_code ]
 				);
 			}
 			$response_body = json_decode( $response_raw );

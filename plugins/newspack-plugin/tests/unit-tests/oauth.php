@@ -498,8 +498,8 @@ class Newspack_Test_OAuth extends WP_UnitTestCase {
 		);
 		self::assertSame(
 			502,
-			$result->get_error_data()['proxy_status'],
-			'The proxy status code should be preserved on the error for diagnosis.'
+			$result->get_error_data()['status'],
+			'The proxy status code should be preserved on the error, and become the REST response status.'
 		);
 	}
 
