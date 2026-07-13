@@ -17,6 +17,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { InsightsWindow } from '../../../api/audience';
 import Scorecard from '../../components/Scorecard';
+import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 import { SHOW_COMPLETION_METRICS } from '../constants';
 
@@ -27,7 +28,7 @@ export interface SectionProps {
 }
 
 const QualitySection = ( { current, previous, lastUpdated }: SectionProps ) => (
-	<section className="newspack-insights__section" aria-labelledby="newspack-insights-engagement-quality">
+	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-engagement-quality">
 		<SectionHeading
 			id="newspack-insights-engagement-quality"
 			title={ __( 'Overall engagement quality', 'newspack-plugin' ) }
@@ -70,7 +71,7 @@ const QualitySection = ( { current, previous, lastUpdated }: SectionProps ) => (
 				/>
 			) }
 		</div>
-	</section>
+	</Section>
 );
 
 export default QualitySection;

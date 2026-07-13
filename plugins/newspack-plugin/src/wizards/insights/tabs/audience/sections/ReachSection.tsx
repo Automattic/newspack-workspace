@@ -17,8 +17,10 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../../packages/components/src';
 import type { InsightsWindow } from '../../../api/audience';
 import Scorecard from '../../components/Scorecard';
+import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 
 export interface SectionProps {
@@ -28,14 +30,14 @@ export interface SectionProps {
 }
 
 const ReachSection = ( { current, previous, lastUpdated }: SectionProps ) => (
-	<section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-reach">
+	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-reach">
 		<SectionHeading
 			id="newspack-insights-audience-reach"
 			title={ __( 'Reach', 'newspack-plugin' ) }
 			description={ __( 'Your reach this period.', 'newspack-plugin' ) }
 			actions={ lastUpdated }
 		/>
-		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-4">
+		<Grid columns={ 4 } gutter={ 16 } noMargin>
 			<Scorecard
 				label={ __( 'Active Readers', 'newspack-plugin' ) }
 				description={ __( 'How many people read you', 'newspack-plugin' ) }
@@ -60,8 +62,8 @@ const ReachSection = ( { current, previous, lastUpdated }: SectionProps ) => (
 				current={ current.newsletter_signups }
 				previous={ previous?.newsletter_signups }
 			/>
-		</div>
-	</section>
+		</Grid>
+	</Section>
 );
 
 export default ReachSection;

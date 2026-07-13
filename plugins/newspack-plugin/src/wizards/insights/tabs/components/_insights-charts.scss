@@ -42,29 +42,52 @@
 		gap: 16px;
 	}
 
+	// Chart cell — CoreCard chrome (border + radius) to match the scorecards.
+	// Layout mirrors the metric card: title-as-label at the top, chart body
+	// grows, caption-as-description pinned to the bottom.
 	&__chart-card {
-		display: flex;
-		flex-direction: column;
 		height: 100%; // stretch to the row's tallest card so pies can center
-		border: 1px solid wp-colors.$gray-200;
-		border-radius: 4px;
-		padding: 16px;
 		min-width: 0; // let charts shrink inside grid cells instead of overflowing
 
-		&-title {
-			font-size: 14px;
-			font-weight: 600;
-			line-height: 1.3;
-			margin: 0 0 4px;
-			color: wp-colors.$gray-900;
-			// Reserve two lines so single- and two-line titles align across a row.
-			min-height: calc( 14px * 1.3 * 2 );
+		// CoreCard wraps children in `.newspack-card--core__body`; the flex
+		// column and the 24px padding live there, matching the metric card.
+		.newspack-card--core__body {
+			display: flex;
+			flex-direction: column;
+			height: 100%;
+			padding: wp-vars.$grid-unit-30;
+
+			// Zero CoreCard's default 16px 24px grandchild-div padding.
+			> div:not(.components-card__body):not(.components-card__media):not(.components-card__divider) {
+				padding: 0;
+			}
 		}
 
+		// Title matches the metric-card label (Core BaseControl label 1:1).
+		&-title {
+			margin: 0;
+			font-size: wp-vars.$font-size-x-small;
+			font-weight: wp-vars.$font-weight-medium;
+			line-height: wp-vars.$default-line-height;
+			text-transform: uppercase;
+			color: wp-colors.$gray-900;
+		}
+
+		// Caption matches the metric-card description (Core help text), sitting
+		// directly under the title.
 		&-caption {
-			font-size: 13px;
+			margin: wp-vars.$grid-unit-10 0 0;
+			font-size: wp-vars.$font-size-small;
+			font-style: normal;
 			color: wp-colors.$gray-700;
-			margin: 0 0 12px;
+		}
+
+		// Chart body grows to fill the card; 24px separates it from the
+		// title/caption above.
+		&-body {
+			flex: 1 1 auto;
+			min-width: 0;
+			margin-top: wp-vars.$grid-unit-30;
 		}
 	}
 
@@ -192,21 +215,22 @@
 		flex: 1;
 		flex-direction: column;
 		min-height: 0;
+		height: 100%;
 	}
 
 	// Middle slot: pie centered both axes in the remaining space.
 	&__pie-figure {
-		flex: 1;
+		flex: 0 0 auto;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		min-height: 0;
-		padding: 12px 0;
+		padding: 0 0 wp-vars.$grid-unit-30;
 	}
 
 	&__pie-svg {
 		width: 100%;
-		max-width: 150px;
+		max-width: calc(#{wp-vars.$grid-unit} * 32);
 		height: auto;
 		aspect-ratio: 1 / 1;
 		// No rotate: segments already start at 12 o'clock via the component's
@@ -239,16 +263,22 @@
 	// Bottom slot: legend anchored to the card bottom, left-aligned, full width.
 	&__pie-legend {
 		list-style: none;
-		margin: auto 0 0;
-		padding: 0;
-		width: 100%;
+		// Full-bleed top divider: stretch past the card's 24px body padding so
+		// the hairline spans edge to edge, then re-inset the legend content.
+		// `margin-top: auto` pins the legend to the card bottom.
+		width: calc(100% + #{wp-vars.$grid-unit-60});
+		margin: auto 0 0 -#{wp-vars.$grid-unit-30};
+		padding: wp-vars.$grid-unit-30 wp-vars.$grid-unit-30 0;
+		border-top: 1px solid wp-colors.$gray-100;
 
 		li {
 			display: flex;
 			align-items: center;
-			gap: 8px;
-			font-size: 12px;
-			margin-bottom: 6px;
+			gap: wp-vars.$grid-unit-10;
+			// Match Core's help text: 12px with the shared 1.4 line-height.
+			font-size: wp-vars.$font-size-small;
+			line-height: wp-vars.$default-line-height;
+			margin-bottom: wp-vars.$grid-unit-10;
 		}
 
 		li:last-child {
@@ -258,9 +288,9 @@
 
 	&__legend-swatch {
 		display: inline-block;
-		width: 12px;
-		height: 12px;
-		border-radius: 2px;
+		width: 20px;
+		height: 20px;
+		border-radius: wp-vars.$radius-full;
 		background: var( --series-color );
 		flex-shrink: 0;
 	}
@@ -903,37 +933,11 @@
 // is intentionally NOT defined in this per-tab partial so the callout can't
 // look different depending on which tab-chunk CSS happens to be loaded.
 
-// Per-section grid column modifiers. Compound selectors (0,2,0) so they win
-// over the single-class base rules regardless of stylesheet load order. Max 4
-// cards per row anywhere (NPPD-1649 fix #1).
-// Shared column patterns. cols-2 and cols-4 use the same breakpoints across
-// every grid variant; cols-3 differs (metric collapses at 782px, chart at
-// 1100px) so it stays per-grid.
-%insights-grid-cols-2 {
-	grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
-
-	@media ( max-width: 782px ) {
-		grid-template-columns: 1fr;
-	}
-}
-
-%insights-grid-cols-4 {
-	grid-template-columns: repeat( 4, minmax( 0, 1fr ) );
-
-	@media ( max-width: 1100px ) {
-		grid-template-columns: repeat( 2, minmax( 0, 1fr ) );
-	}
-
-	@media ( max-width: 600px ) {
-		grid-template-columns: 1fr;
-	}
-}
-
-.newspack-insights__metric-grid.newspack-insights__metric-grid--cols-4,
-.newspack-insights__chart-grid.newspack-insights__chart-grid--cols-4 {
-	@extend %insights-grid-cols-4;
-}
-
+// Section grid column modifier — the only fixed-column grid still authored in
+// CSS. QualitySection drops to 3 even columns when the completion card is
+// hidden (see QualitySection.tsx); every other fixed-column grid now uses the
+// shared <Grid> component. Compound selector (0,2,0) so it wins over the
+// single-class base rule regardless of stylesheet load order.
 .newspack-insights__metric-grid.newspack-insights__metric-grid--cols-3 {
 	grid-template-columns: repeat( 3, minmax( 0, 1fr ) );
 
@@ -942,30 +946,3 @@
 	}
 }
 
-.newspack-insights__chart-grid.newspack-insights__chart-grid--cols-3 {
-	grid-template-columns: repeat( 3, minmax( 0, 1fr ) );
-
-	@media ( max-width: 1100px ) {
-		grid-template-columns: 1fr;
-	}
-}
-
-.newspack-insights__metric-grid.newspack-insights__metric-grid--cols-2,
-.newspack-insights__chart-grid.newspack-insights__chart-grid--cols-2,
-.newspack-insights__table-grid.newspack-insights__table-grid--cols-2 {
-	@extend %insights-grid-cols-2;
-}
-
-// Traffic sources: channel-breakdown pie (~40%) reads as a unit with the
-// campaigns table (~60%) — NPPD-1649 fix #3.
-.newspack-insights__traffic-grid {
-	display: grid;
-	// Pie card ~35% (stacked, narrower-and-taller), campaigns table ~65%.
-	grid-template-columns: minmax( 0, 35fr ) minmax( 0, 65fr );
-	gap: 16px;
-	align-items: stretch;
-
-	@media ( max-width: 782px ) {
-		grid-template-columns: 1fr;
-	}
-}

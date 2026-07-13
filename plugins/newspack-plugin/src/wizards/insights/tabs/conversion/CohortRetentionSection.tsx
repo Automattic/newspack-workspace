@@ -19,6 +19,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { ConversionCohortData } from '../../api/conversion';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import CohortHeatmap from '../components/CohortHeatmap';
 import { formatPercent } from '../components/format';
@@ -63,7 +64,7 @@ const CohortChart = ( { title, data, caption, referenceLabel }: CohortChartProps
 );
 
 const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => (
-	<section
+	<Section
 		className="newspack-insights__section newspack-insights__section--cohort-retention"
 		aria-labelledby="newspack-insights-conversion-cohort-heading"
 	>
@@ -101,7 +102,7 @@ const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => (
 				referenceLabel={ current.subscriber_retention_cohort.reference_line?.label }
 			/>
 		</div>
-	</section>
+	</Section>
 );
 
 export default CohortRetentionSection;

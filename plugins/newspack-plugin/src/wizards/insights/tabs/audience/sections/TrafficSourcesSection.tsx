@@ -10,10 +10,12 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../../packages/components/src';
 import type { InsightsWindow } from '../../../api/audience';
 import type { MetricPayload } from '../../components/metrics';
 import ChartCard from '../../components/ChartCard';
 import MetricTable from '../../components/MetricTable';
+import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 import { toSeries, isNotSet } from '../../components/metrics';
 import PieChart from '../../components/PieChart';
@@ -48,19 +50,19 @@ const TrafficSourcesSection = ( { current }: SectionProps ) => {
 	const campaigns = withoutUnattributedRows( current.top_campaigns );
 
 	return (
-		<section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-traffic">
+		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-traffic">
 			<SectionHeading
 				id="newspack-insights-audience-traffic"
 				title={ __( 'Traffic sources', 'newspack-plugin' ) }
 				description={ __( 'Where your readers come from.', 'newspack-plugin' ) }
 			/>
-			{ /* Channel breakdown (left ~35%) reads as a unit with the campaigns
-			     driving each channel (right ~65%) — NPPD-1649 fix #3. */ }
-			<div className="newspack-insights__traffic-grid">
+			{ /* Channel breakdown (1 column) reads as a unit with the campaigns
+			     driving each channel (spans the other 2 columns) — NPPD-1649 fix #3. */ }
+			<Grid columns={ 3 } gutter={ 16 } noMargin>
 				<ChartCard title={ __( 'Traffic sources breakdown', 'newspack-plugin' ) } payload={ current.traffic_sources_breakdown }>
 					<PieChart segments={ toSeries( current.traffic_sources_breakdown, 'channel', 'readers' ) } />
 				</ChartCard>
-				<ChartCard title={ __( 'Top campaigns', 'newspack-plugin' ) } payload={ campaigns }>
+				<ChartCard title={ __( 'Top campaigns', 'newspack-plugin' ) } payload={ campaigns } style={ { gridColumn: 'span 2' } }>
 					<MetricTable
 						payload={ campaigns }
 						emptyMessage={ __( 'No campaign traffic in this timeframe.', 'newspack-plugin' ) }
@@ -73,8 +75,8 @@ const TrafficSourcesSection = ( { current }: SectionProps ) => {
 						] }
 					/>
 				</ChartCard>
-			</div>
-		</section>
+			</Grid>
+		</Section>
 	);
 };
 

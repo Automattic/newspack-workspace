@@ -19,6 +19,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { InsightsWindow } from '../../../api/advertising';
 import MetricTable from '../../components/MetricTable';
+import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 import TabSections from '../../components/TabSections';
 
@@ -29,7 +30,7 @@ export interface SectionProps {
 
 const TopPerformersSection = ( { current }: SectionProps ) => (
 	<TabSections>
-		<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-ad-units">
+		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-ad-units">
 			<SectionHeading id="newspack-insights-advertising-top-ad-units" title={ __( 'Top ad units', 'newspack-plugin' ) } />
 			<MetricTable
 				payload={ current.top_ad_units }
@@ -44,8 +45,8 @@ const TopPerformersSection = ( { current }: SectionProps ) => (
 					{ key: 'revenue', label: __( 'Revenue', 'newspack-plugin' ), format: 'currency', align: 'right' },
 				] }
 			/>
-		</section>
-		<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-advertisers">
+		</Section>
+		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-advertisers">
 			<SectionHeading id="newspack-insights-advertising-top-advertisers" title={ __( 'Top advertisers', 'newspack-plugin' ) } />
 			<MetricTable
 				payload={ current.top_advertisers }
@@ -60,8 +61,8 @@ const TopPerformersSection = ( { current }: SectionProps ) => (
 					{ key: 'revenue', label: __( 'Revenue', 'newspack-plugin' ), format: 'currency', align: 'right' },
 				] }
 			/>
-		</section>
-		<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-campaigns">
+		</Section>
+		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-campaigns">
 			<SectionHeading id="newspack-insights-advertising-top-campaigns" title={ __( 'Top campaigns', 'newspack-plugin' ) } />
 			{ /* Direct-sold orders only — programmatic delivery is order-less and
 			     filtered server-side. */ }
@@ -79,7 +80,7 @@ const TopPerformersSection = ( { current }: SectionProps ) => (
 					{ key: 'revenue', label: __( 'Revenue', 'newspack-plugin' ), format: 'currency', align: 'right' },
 				] }
 			/>
-		</section>
+		</Section>
 	</TabSections>
 );
 

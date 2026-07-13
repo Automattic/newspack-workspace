@@ -17,6 +17,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { InsightsWindow } from '../../../api/advertising';
 import MetricTable from '../../components/MetricTable';
+import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 
 export interface SectionProps {
@@ -25,7 +26,7 @@ export interface SectionProps {
 }
 
 const SitePerformanceSection = ( { current }: SectionProps ) => (
-	<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-site-performance">
+	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-site-performance">
 		<SectionHeading
 			id="newspack-insights-advertising-site-performance"
 			title={ __( 'Performance by site', 'newspack-plugin' ) }
@@ -44,7 +45,7 @@ const SitePerformanceSection = ( { current }: SectionProps ) => (
 				{ key: 'ecpm', label: __( 'eCPM', 'newspack-plugin' ), format: 'currency', align: 'right' },
 			] }
 		/>
-	</section>
+	</Section>
 );
 
 export default SitePerformanceSection;

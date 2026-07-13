@@ -22,6 +22,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { PromptsWindow } from '../../api/prompts';
 import MetricCard from '../components/MetricCard';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { NOT_CAPABLE_COPY } from './notCapableCopy';
 import { NOT_COMPUTABLE_COPY } from './notComputableCopy';
@@ -33,7 +34,7 @@ export interface FreeReaderConversionSectionProps {
 }
 
 const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversionSectionProps ) => (
-	<section className="newspack-insights__section newspack-insights__section--free-reader" aria-labelledby="newspack-insights-prompts-free-heading">
+	<Section className="newspack-insights__section newspack-insights__section--free-reader" aria-labelledby="newspack-insights-prompts-free-heading">
 		<SectionHeading
 			id="newspack-insights-prompts-free-heading"
 			title={ __( 'Free reader conversion', 'newspack-plugin' ) }
@@ -96,7 +97,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 				} ) }
 			/>
 		</div>
-	</section>
+	</Section>
 );
 
 export default FreeReaderConversionSection;

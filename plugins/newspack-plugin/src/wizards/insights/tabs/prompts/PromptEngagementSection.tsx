@@ -15,10 +15,12 @@ import { __ } from '@wordpress/i18n';
  */
 import type { PromptsWindow } from '../../api/prompts';
 import MetricCard from '../components/MetricCard';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { NOT_CAPABLE_COPY } from './notCapableCopy';
 import { NOT_COMPUTABLE_COPY } from './notComputableCopy';
 import { scalarToMetricCardProps } from './scalarToCard';
+import { Grid } from '../../../../../packages/components/src';
 
 export interface PromptEngagementSectionProps {
 	current: PromptsWindow;
@@ -26,7 +28,7 @@ export interface PromptEngagementSectionProps {
 }
 
 const PromptEngagementSection = ( { current, previous }: PromptEngagementSectionProps ) => (
-	<section
+	<Section
 		className="newspack-insights__section newspack-insights__section--engagement"
 		aria-labelledby="newspack-insights-prompts-engagement-heading"
 	>
@@ -38,7 +40,7 @@ const PromptEngagementSection = ( { current, previous }: PromptEngagementSection
 				'newspack-plugin'
 			) }
 		/>
-		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
+		<Grid columns={ 3 } gutter={ 16 } noMargin>
 			<MetricCard
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Click-Through Rate', 'newspack-plugin' ),
@@ -65,8 +67,8 @@ const PromptEngagementSection = ( { current, previous }: PromptEngagementSection
 					previous: previous?.dismissal_rate,
 				} ) }
 			/>
-		</div>
-	</section>
+		</Grid>
+	</Section>
 );
 
 export default PromptEngagementSection;

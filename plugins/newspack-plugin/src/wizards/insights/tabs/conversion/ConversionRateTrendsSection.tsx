@@ -17,6 +17,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { ConversionWeekPoint, ConversionWeeklyTrendsData } from '../../api/conversion';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import LineChart, { type LineSeries } from '../components/LineChart';
 import { formatPercent } from '../components/format';
@@ -56,7 +57,7 @@ const toTrendSeries = ( data: ConversionWeeklyTrendsData ): LineSeries[] =>
 		} ) );
 
 const ConversionRateTrendsSection = ( { current }: ConversionRateTrendsSectionProps ) => (
-	<section
+	<Section
 		className="newspack-insights__section newspack-insights__section--rate-trends"
 		aria-labelledby="newspack-insights-conversion-rate-trends-heading"
 	>
@@ -83,7 +84,7 @@ const ConversionRateTrendsSection = ( { current }: ConversionRateTrendsSectionPr
 				/>
 			</SectionState>
 		</div>
-	</section>
+	</Section>
 );
 
 export default ConversionRateTrendsSection;

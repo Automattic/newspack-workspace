@@ -22,9 +22,11 @@ import { __ } from '@wordpress/i18n';
 import type { InsightsWindow } from '../../../api/advertising';
 import ChartCard from '../../components/ChartCard';
 import MetricTable from '../../components/MetricTable';
+import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 import { toSeries } from '../../components/metrics';
 import PieChart from '../../components/PieChart';
+import { Grid } from '../../../../../../packages/components/src';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -32,13 +34,13 @@ export interface SectionProps {
 }
 
 const ChannelDeviceSection = ( { current }: SectionProps ) => (
-	<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-channel-device">
+	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-channel-device">
 		<SectionHeading
 			id="newspack-insights-advertising-channel-device"
 			title={ __( 'Ad types & devices', 'newspack-plugin' ) }
 			description={ __( 'How inventory and revenue split across ad types and devices.', 'newspack-plugin' ) }
 		/>
-		<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-2">
+		<Grid columns={ 2 } gutter={ 16 } noMargin>
 			<ChartCard
 				title={ __( 'Impressions by type', 'newspack-plugin' ) }
 				caption={ __( 'How your ad inventory is allocated — including unpaid house ads', 'newspack-plugin' ) }
@@ -65,8 +67,8 @@ const ChannelDeviceSection = ( { current }: SectionProps ) => (
 					] }
 				/>
 			</ChartCard>
-		</div>
-	</section>
+		</Grid>
+	</Section>
 );
 
 export default ChannelDeviceSection;

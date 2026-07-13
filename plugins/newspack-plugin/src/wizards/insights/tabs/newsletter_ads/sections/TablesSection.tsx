@@ -21,6 +21,7 @@ import type { ByNewsletterRow, InsightsWindow } from '../../../api/newsletter_ad
 import type { MetricPayload } from '../../components/metrics';
 import { formatShortDate } from '../../components/format';
 import MetricTable from '../../components/MetricTable';
+import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 import TabSections from '../../components/TabSections';
 
@@ -48,7 +49,7 @@ const withDisplayDates = ( payload?: MetricPayload ): MetricPayload | undefined 
 
 const TablesSection = ( { current }: SectionProps ) => (
 	<TabSections>
-		<section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-top-ads">
+		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-top-ads">
 			<SectionHeading id="newspack-insights-newsletter-ads-top-ads" title={ __( 'Top ads', 'newspack-plugin' ) } />
 			<MetricTable
 				payload={ current.top_ads }
@@ -63,8 +64,8 @@ const TablesSection = ( { current }: SectionProps ) => (
 					{ key: 'revenue', label: __( 'Revenue', 'newspack-plugin' ), format: 'currency', align: 'right' },
 				] }
 			/>
-		</section>
-		<section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-top-advertisers">
+		</Section>
+		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-top-advertisers">
 			<SectionHeading id="newspack-insights-newsletter-ads-top-advertisers" title={ __( 'Top advertisers', 'newspack-plugin' ) } />
 			<MetricTable
 				payload={ current.top_advertisers }
@@ -79,8 +80,8 @@ const TablesSection = ( { current }: SectionProps ) => (
 					{ key: 'revenue', label: __( 'Revenue', 'newspack-plugin' ), format: 'currency', align: 'right' },
 				] }
 			/>
-		</section>
-		<section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-by-newsletter">
+		</Section>
+		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-by-newsletter">
 			<SectionHeading id="newspack-insights-newsletter-ads-by-newsletter" title={ __( 'Ad performance by newsletter', 'newspack-plugin' ) } />
 			<MetricTable
 				payload={ withDisplayDates( current.by_newsletter ) }
@@ -96,7 +97,7 @@ const TablesSection = ( { current }: SectionProps ) => (
 					{ key: 'ctr', label: __( 'CTR', 'newspack-plugin' ), format: 'percent', align: 'right' },
 				] }
 			/>
-		</section>
+		</Section>
 	</TabSections>
 );
 

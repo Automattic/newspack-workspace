@@ -19,6 +19,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { MetricPayload } from '../../components/metrics';
 import MetricCard from '../../components/MetricCard';
+import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 
 export interface NewsletterValueSectionProps {
@@ -38,7 +39,7 @@ const NewsletterValueSection = ( { value }: NewsletterValueSectionProps ) => {
 	const warming = value?.state === 'warming';
 
 	return (
-		<section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-newsletter-value">
+		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-newsletter-value">
 			<SectionHeading
 				id="newspack-insights-audience-newsletter-value"
 				title={ __( 'Newsletter subscriber value', 'newspack-plugin' ) }
@@ -63,7 +64,7 @@ const NewsletterValueSection = ( { value }: NewsletterValueSectionProps ) => {
 					) }
 				/>
 			</div>
-		</section>
+		</Section>
 	);
 };
 

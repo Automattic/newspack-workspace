@@ -22,6 +22,7 @@ import { Fragment } from '@wordpress/element';
  * Internal dependencies
  */
 import type { PerformanceRow } from '../../api/subscribers';
+import Section from '../components/Section';
 import SectionEmpty from '../components/SectionEmpty';
 import SectionHeading from '../components/SectionHeading';
 import { getPostEditUrl } from '../components/adminLinks';
@@ -34,18 +35,18 @@ export interface PerformanceSectionProps {
 const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 	if ( rows.length === 0 ) {
 		return (
-			<section
+			<Section
 				className="newspack-insights__section newspack-insights__section--performance"
 				aria-labelledby="newspack-insights-performance-heading"
 			>
 				<SectionHeading id="newspack-insights-performance-heading" title={ __( 'Subscriptions by product', 'newspack-plugin' ) } />
 				<SectionEmpty>{ __( 'No subscription products configured yet.', 'newspack-plugin' ) }</SectionEmpty>
-			</section>
+			</Section>
 		);
 	}
 
 	return (
-		<section
+		<Section
 			className="newspack-insights__section newspack-insights__section--performance"
 			aria-labelledby="newspack-insights-performance-heading"
 		>
@@ -136,7 +137,7 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 					'newspack-plugin'
 				) }
 			</p>
-		</section>
+		</Section>
 	);
 };
 

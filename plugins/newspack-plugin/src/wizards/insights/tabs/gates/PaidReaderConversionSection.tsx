@@ -31,6 +31,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { GatesWindow } from '../../api/gates';
 import MetricCard from '../components/MetricCard';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import EmptyMetricSection from '../components/EmptyMetricSection';
 import { scalarToMetricCardProps } from './scalarToCard';
@@ -96,7 +97,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 	}
 
 	return (
-		<section className="newspack-insights__section newspack-insights__section--paid-reader" aria-labelledby={ HEADING_ID }>
+		<Section className="newspack-insights__section newspack-insights__section--paid-reader" aria-labelledby={ HEADING_ID }>
 			<SectionHeading id={ HEADING_ID } title={ title } description={ caption } />
 			<div className="newspack-insights__metric-grid">
 				<MetricCard
@@ -170,7 +171,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 					} ) }
 				/>
 			</div>
-		</section>
+		</Section>
 	);
 };
 

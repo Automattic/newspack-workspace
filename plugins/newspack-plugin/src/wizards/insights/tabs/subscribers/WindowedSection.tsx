@@ -42,6 +42,7 @@ import type { SubscribersRateValue, SubscribersWindow } from '../../api/subscrib
 import type { DateRange } from '../../state/useDateRange';
 import EmptyMetricSection from '../components/EmptyMetricSection';
 import MetricCard from '../components/MetricCard';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { formatNumber } from '../components/format';
 
@@ -162,7 +163,7 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 	const retryPrevious = previous?.failed_payment_retry_rate?.computable ? previous.failed_payment_retry_rate.value : null;
 
 	return (
-		<section className="newspack-insights__section newspack-insights__section--windowed" aria-labelledby="newspack-insights-windowed-heading">
+		<Section className="newspack-insights__section newspack-insights__section--windowed" aria-labelledby="newspack-insights-windowed-heading">
 			<SectionHeading id="newspack-insights-windowed-heading" title={ getHeading( range ) } />
 			<div className="newspack-insights__metric-grid">
 				<MetricCard
@@ -234,7 +235,7 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 					description={ __( 'Recovered retries ÷ retry attempts', 'newspack-plugin' ) }
 				/>
 			</div>
-		</section>
+		</Section>
 	);
 };
 

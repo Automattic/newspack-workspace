@@ -20,6 +20,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { ConversionWindow } from '../../api/conversion';
 import MetricCard from '../components/MetricCard';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { scalarToMetricCardProps } from './scalarToCard';
 
@@ -29,7 +30,7 @@ export interface CrossTabInfluencedAttributionSectionProps {
 }
 
 const CrossTabInfluencedAttributionSection = ( { current, previous }: CrossTabInfluencedAttributionSectionProps ) => (
-	<section
+	<Section
 		className="newspack-insights__section newspack-insights__section--influenced-attribution"
 		aria-labelledby="newspack-insights-conversion-influenced-heading"
 	>
@@ -78,7 +79,7 @@ const CrossTabInfluencedAttributionSection = ( { current, previous }: CrossTabIn
 				} ) }
 			/>
 		</div>
-	</section>
+	</Section>
 );
 
 export default CrossTabInfluencedAttributionSection;

@@ -21,6 +21,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { ConversionCumulativeMulti, ConversionCumulativePoint, ConversionWindow } from '../../api/conversion';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { sourceLabel, dayLabel } from './labels';
 import { formatPercent } from '../components/format';
@@ -57,7 +58,7 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 	const lag = current.subscriber_to_donor_lag_distribution;
 	const snapshotCaption = __( 'This view always uses all available history, regardless of the selected date range.', 'newspack-plugin' );
 	return (
-		<section
+		<Section
 			className="newspack-insights__section newspack-insights__section--time-to-convert"
 			aria-labelledby="newspack-insights-conversion-time-to-convert-heading"
 		>
@@ -145,7 +146,7 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 					) }
 				</CurveCell>
 			</div>
-		</section>
+		</Section>
 	);
 };
 

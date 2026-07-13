@@ -22,6 +22,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { PromptsWindow } from '../../api/prompts';
 import MetricCard from '../components/MetricCard';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { NOT_CAPABLE_COPY } from './notCapableCopy';
 import { NOT_COMPUTABLE_COPY } from './notComputableCopy';
@@ -33,7 +34,7 @@ export interface RevenueFromPromptsSectionProps {
 }
 
 const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSectionProps ) => (
-	<section className="newspack-insights__section newspack-insights__section--revenue" aria-labelledby="newspack-insights-prompts-revenue-heading">
+	<Section className="newspack-insights__section newspack-insights__section--revenue" aria-labelledby="newspack-insights-prompts-revenue-heading">
 		<SectionHeading
 			id="newspack-insights-prompts-revenue-heading"
 			title={ __( 'Revenue from prompts', 'newspack-plugin' ) }
@@ -99,7 +100,7 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 				} ) }
 			/>
 		</div>
-	</section>
+	</Section>
 );
 
 export default RevenueFromPromptsSection;

@@ -23,8 +23,10 @@ import { __ } from '@wordpress/i18n';
  */
 import type { PromptsWindow } from '../../api/prompts';
 import MetricCard from '../components/MetricCard';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { scalarToMetricCardProps } from './scalarToCard';
+import { Grid } from '../../../../../packages/components/src';
 
 export interface PromptExposureSectionProps {
 	current: PromptsWindow;
@@ -33,14 +35,14 @@ export interface PromptExposureSectionProps {
 }
 
 const PromptExposureSection = ( { current, previous, lastUpdated }: PromptExposureSectionProps ) => (
-	<section className="newspack-insights__section newspack-insights__section--exposure" aria-labelledby="newspack-insights-prompts-exposure-heading">
+	<Section className="newspack-insights__section newspack-insights__section--exposure" aria-labelledby="newspack-insights-prompts-exposure-heading">
 		<SectionHeading
 			id="newspack-insights-prompts-exposure-heading"
 			title={ __( 'Prompt exposure', 'newspack-plugin' ) }
 			description={ __( 'Top of the funnel. How many readers see prompts in this timeframe.', 'newspack-plugin' ) }
 			actions={ lastUpdated }
 		/>
-		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
+		<Grid columns={ 3 } gutter={ 16 } noMargin>
 			<MetricCard
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Total Prompt Impressions', 'newspack-plugin' ),
@@ -65,8 +67,8 @@ const PromptExposureSection = ( { current, previous, lastUpdated }: PromptExposu
 					previous: previous?.avg_prompts_per_reader,
 				} ) }
 			/>
-		</div>
-	</section>
+		</Grid>
+	</Section>
 );
 
 export default PromptExposureSection;

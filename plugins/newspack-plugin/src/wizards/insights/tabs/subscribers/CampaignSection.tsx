@@ -25,6 +25,7 @@ import { __ } from '@wordpress/i18n';
 import type { SubscribersCampaignRow } from '../../api/subscribers';
 import InsightsDataView from '../components/InsightsDataView';
 import type { InsightsColumn } from '../components/InsightsDataView';
+import Section from '../components/Section';
 import SectionEmpty from '../components/SectionEmpty';
 import SectionHeading from '../components/SectionHeading';
 import { formatCurrency, formatNumber } from '../components/format';
@@ -66,15 +67,15 @@ const CampaignSection = ( { rows }: CampaignSectionProps ) => {
 	const hasTagged = rows.some( row => ! row.is_untagged );
 	if ( ! hasTagged ) {
 		return (
-			<section className="newspack-insights__section newspack-insights__section--performance" aria-labelledby={ HEADING_ID }>
+			<Section className="newspack-insights__section newspack-insights__section--performance" aria-labelledby={ HEADING_ID }>
 				<SectionHeading id={ HEADING_ID } title={ title } />
 				<SectionEmpty>{ __( 'No campaign-tagged subscriptions in this window.', 'newspack-plugin' ) }</SectionEmpty>
-			</section>
+			</Section>
 		);
 	}
 
 	return (
-		<section className="newspack-insights__section newspack-insights__section--performance" aria-labelledby={ HEADING_ID }>
+		<Section className="newspack-insights__section newspack-insights__section--performance" aria-labelledby={ HEADING_ID }>
 			<SectionHeading
 				id={ HEADING_ID }
 				title={ title }
@@ -89,7 +90,7 @@ const CampaignSection = ( { rows }: CampaignSectionProps ) => {
 				getRowKey={ row => ( row.is_untagged ? '__untagged__' : `campaign:${ row.value }` ) }
 				emptyMessage={ __( 'No campaign-tagged subscriptions in this window.', 'newspack-plugin' ) }
 			/>
-		</section>
+		</Section>
 	);
 };
 

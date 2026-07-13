@@ -20,6 +20,7 @@ import { useMemo } from '@wordpress/element';
  */
 import type { TenureDistributionRow } from '../../api/subscribers';
 import MetricCard from '../components/MetricCard';
+import Section from '../components/Section';
 import SectionEmpty from '../components/SectionEmpty';
 import SectionHeading from '../components/SectionHeading';
 
@@ -59,10 +60,10 @@ const TenureSection = ( { rows }: TenureSectionProps ) => {
 
 	if ( ! stats ) {
 		return (
-			<section className="newspack-insights__section newspack-insights__section--tenure" aria-labelledby="newspack-insights-tenure-heading">
+			<Section className="newspack-insights__section newspack-insights__section--tenure" aria-labelledby="newspack-insights-tenure-heading">
 				<SectionHeading id="newspack-insights-tenure-heading" title={ __( 'Subscriber tenure', 'newspack-plugin' ) } />
 				<SectionEmpty>{ __( 'No subscribers yet — tenure data will appear once subscriptions exist.', 'newspack-plugin' ) }</SectionEmpty>
-			</section>
+			</Section>
 		);
 	}
 
@@ -95,7 +96,7 @@ const TenureSection = ( { rows }: TenureSectionProps ) => {
 	const narrative = showSecondSentence ? `${ medianSentence } ${ p75Sentence }` : medianSentence;
 
 	return (
-		<section className="newspack-insights__section newspack-insights__section--tenure" aria-labelledby="newspack-insights-tenure-heading">
+		<Section className="newspack-insights__section newspack-insights__section--tenure" aria-labelledby="newspack-insights-tenure-heading">
 			<SectionHeading id="newspack-insights-tenure-heading" title={ __( 'Subscriber tenure', 'newspack-plugin' ) } description={ narrative } />
 			<div className="newspack-insights__metric-grid">
 				<MetricCard
@@ -117,7 +118,7 @@ const TenureSection = ( { rows }: TenureSectionProps ) => {
 					secondary={ _n( 'day', 'days', stats.p75, 'newspack-plugin' ) }
 				/>
 			</div>
-		</section>
+		</Section>
 	);
 };
 

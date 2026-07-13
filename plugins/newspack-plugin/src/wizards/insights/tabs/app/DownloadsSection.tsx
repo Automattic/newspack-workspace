@@ -23,9 +23,11 @@ import { __ } from '@wordpress/i18n';
  */
 import type { AppMetrics } from '../../api/app';
 import type { MetricPayload } from '../components/metrics';
+import { Grid } from '../../../../../packages/components/src';
 import Scorecard from '../components/Scorecard';
 import ChartCard from '../components/ChartCard';
 import MetricTable from '../components/MetricTable';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { titleCase } from './collections';
 
@@ -45,13 +47,13 @@ const DownloadsSection = ( { metrics, previous }: DownloadsSectionProps ) => {
 			: null;
 
 	return (
-		<section className="newspack-insights__section" aria-labelledby="newspack-insights-app-downloads-heading">
+		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-app-downloads-heading">
 			<SectionHeading
 				id="newspack-insights-app-downloads-heading"
 				title={ __( 'Downloads', 'newspack-plugin' ) }
 				description={ __( 'How readers download your stories to read offline.', 'newspack-plugin' ) }
 			/>
-			<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
+			<Grid columns={ 3 } gutter={ 16 } noMargin>
 				<Scorecard
 					label={ __( 'Downloads started', 'newspack-plugin' ) }
 					description={ __( 'Downloads readers began', 'newspack-plugin' ) }
@@ -70,7 +72,7 @@ const DownloadsSection = ( { metrics, previous }: DownloadsSectionProps ) => {
 					current={ metrics.download_completion_rate }
 					previous={ previous?.download_completion_rate }
 				/>
-			</div>
+			</Grid>
 			{ byPublication && (
 				<div className="newspack-insights__chart-grid">
 					<ChartCard
@@ -89,7 +91,7 @@ const DownloadsSection = ( { metrics, previous }: DownloadsSectionProps ) => {
 					</ChartCard>
 				</div>
 			) }
-		</section>
+		</Section>
 	);
 };
 

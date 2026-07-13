@@ -12,8 +12,10 @@ import { __ } from '@wordpress/i18n';
  */
 import type { InsightsWindow } from '../../../api/audience';
 import MetricTable from '../../components/MetricTable';
+import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 import { SHOW_COMPLETION_METRICS } from '../constants';
+import { Grid } from '../../../../../../packages/components/src';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -23,7 +25,7 @@ export interface SectionProps {
 const ARTICLE_COL = { key: 'page_title', label: __( 'Article', 'newspack-plugin' ) };
 
 const ContentEngagementSection = ( { current }: SectionProps ) => (
-	<section className="newspack-insights__section" aria-labelledby="newspack-insights-engagement-content">
+	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-engagement-content">
 		<SectionHeading
 			id="newspack-insights-engagement-content"
 			title={ __( 'Content engagement', 'newspack-plugin' ) }
@@ -33,7 +35,7 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 		     and Top Authors wraps to row 2 (one column, ~50%, left-aligned). With
 		     completion hidden (SHOW_COMPLETION_METRICS=false) the two remaining
 		     tables fill row 1 as a clean 2-up — no full-width stretch. */ }
-		<div className="newspack-insights__table-grid newspack-insights__table-grid--cols-2">
+		<Grid columns={ 2 } gutter={ 16 } noMargin>
 			<div>
 				<h3 className="newspack-insights__chart-card-title">{ __( 'Most-engaged articles', 'newspack-plugin' ) }</h3>
 				<MetricTable
@@ -73,8 +75,8 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 					] }
 				/>
 			</div>
-		</div>
-	</section>
+		</Grid>
+	</Section>
 );
 
 export default ContentEngagementSection;

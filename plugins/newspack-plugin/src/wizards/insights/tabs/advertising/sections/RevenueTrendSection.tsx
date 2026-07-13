@@ -18,6 +18,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { InsightsWindow } from '../../../api/advertising';
 import ChartCard from '../../components/ChartCard';
+import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 import LineChart from '../../components/LineChart';
 import { toSeries } from '../../components/metrics';
@@ -42,7 +43,7 @@ const RevenueTrendSection = ( { current, previous }: SectionProps ) => {
 	];
 
 	return (
-		<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-revenue-trend">
+		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-revenue-trend">
 			<SectionHeading
 				id="newspack-insights-advertising-revenue-trend"
 				title={ __( 'Revenue trend', 'newspack-plugin' ) }
@@ -56,7 +57,7 @@ const RevenueTrendSection = ( { current, previous }: SectionProps ) => {
 					yAxisLabel={ __( 'Revenue', 'newspack-plugin' ) }
 				/>
 			</ChartCard>
-		</section>
+		</Section>
 	);
 };
 

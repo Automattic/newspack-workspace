@@ -47,6 +47,7 @@ import { Grid } from '../../../../../../packages/components/src';
 import EmptyMetricSection from '../../components/EmptyMetricSection';
 import MetricCard from '../../components/MetricCard';
 import Scorecard from '../../components/Scorecard';
+import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 import { formatNumber } from '../../components/format';
 
@@ -90,7 +91,7 @@ const ReachRevenueSection = ( { current, previous, hasWindowActivity, lastUpdate
 	const noRevenue = !! impressions?.computable && !! revenue?.computable && ( impressions?.value ?? 0 ) > 0 && ( revenue?.value ?? 0 ) === 0;
 
 	return (
-		<section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-reach-revenue">
+		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-reach-revenue">
 			<SectionHeading id="newspack-insights-advertising-reach-revenue" title={ TITLE } description={ CAPTION } actions={ lastUpdated } />
 			<VStack spacing={ 4 }>
 				{ /* Row 1: the four headline scorecards. Volume + revenue (raw), then the
@@ -162,7 +163,7 @@ const ReachRevenueSection = ( { current, previous, hasWindowActivity, lastUpdate
 					/>
 				</Grid>
 			</VStack>
-		</section>
+		</Section>
 	);
 };
 

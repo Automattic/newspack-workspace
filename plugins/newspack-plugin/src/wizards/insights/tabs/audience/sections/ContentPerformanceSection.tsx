@@ -12,6 +12,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { InsightsWindow } from '../../../api/audience';
 import MetricTable from '../../components/MetricTable';
+import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 
 export interface SectionProps {
@@ -20,7 +21,7 @@ export interface SectionProps {
 }
 
 const ContentPerformanceSection = ( { current }: SectionProps ) => (
-	<section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-content">
+	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-content">
 		<SectionHeading
 			id="newspack-insights-audience-content"
 			title={ __( 'Content performance', 'newspack-plugin' ) }
@@ -67,7 +68,7 @@ const ContentPerformanceSection = ( { current }: SectionProps ) => (
 				</div>
 			) }
 		</div>
-	</section>
+	</Section>
 );
 
 export default ContentPerformanceSection;

@@ -35,6 +35,7 @@ import { __ } from '@wordpress/i18n';
 import type { DonorsTierRow, DonorsTierVariationRow } from '../../api/donors';
 import InsightsDataView from '../components/InsightsDataView';
 import type { InsightsColumn } from '../components/InsightsDataView';
+import Section from '../components/Section';
 import SectionEmpty from '../components/SectionEmpty';
 import SectionHeading from '../components/SectionHeading';
 import { getPostEditUrl } from '../components/adminLinks';
@@ -127,18 +128,18 @@ const columns: InsightsColumn< FlatRow >[] = [
 const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 	if ( rows.length === 0 ) {
 		return (
-			<section
+			<Section
 				className="newspack-insights__section newspack-insights__section--performance"
 				aria-labelledby="newspack-insights-donors-performance-heading"
 			>
 				<SectionHeading id="newspack-insights-donors-performance-heading" title={ __( 'Donations by tier', 'newspack-plugin' ) } />
 				<SectionEmpty>{ __( 'No donation activity yet.', 'newspack-plugin' ) }</SectionEmpty>
-			</section>
+			</Section>
 		);
 	}
 
 	return (
-		<section
+		<Section
 			className="newspack-insights__section newspack-insights__section--performance"
 			aria-labelledby="newspack-insights-donors-performance-heading"
 		>
@@ -164,7 +165,7 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 					'newspack-plugin'
 				) }
 			</p>
-		</section>
+		</Section>
 	);
 };
 

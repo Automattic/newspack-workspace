@@ -22,6 +22,7 @@ import { __, sprintf } from '@wordpress/i18n';
  */
 import type { ConversionTopPageRow, ConversionWindow } from '../../api/conversion';
 import MetricCard from '../components/MetricCard';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { formatNumber, formatPercent } from '../components/format';
 import { scalarToMetricCardProps } from './scalarToCard';
@@ -77,7 +78,7 @@ const TOP_PAGES_COLUMNS: SortableColumn< ConversionTopPageRow >[] = [
 ];
 
 const OpportunityBucketsSection = ( { current }: OpportunityBucketsSectionProps ) => (
-	<section
+	<Section
 		className="newspack-insights__section newspack-insights__section--opportunity-buckets"
 		aria-labelledby="newspack-insights-conversion-opportunity-heading"
 	>
@@ -148,7 +149,7 @@ const OpportunityBucketsSection = ( { current }: OpportunityBucketsSectionProps 
 				) }
 			</p>
 		</div>
-	</section>
+	</Section>
 );
 
 export default OpportunityBucketsSection;

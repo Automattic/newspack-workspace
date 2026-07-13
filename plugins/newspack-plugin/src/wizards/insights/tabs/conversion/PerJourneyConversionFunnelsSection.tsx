@@ -36,6 +36,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { ConversionGatedFunnelData, ConversionWindow } from '../../api/conversion';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import SectionEmpty from '../components/SectionEmpty';
 import { formatNumber } from '../components/format';
@@ -153,7 +154,7 @@ const PerJourneyConversionFunnelsSection = ( { current }: PerJourneyConversionFu
 	const donationVisible = current.registered_to_donor_funnel.visibility !== 'hidden';
 
 	return (
-		<section
+		<Section
 			className="newspack-insights__section newspack-insights__section--per-journey-funnels"
 			aria-labelledby="newspack-insights-conversion-per-journey-heading"
 		>
@@ -246,7 +247,7 @@ const PerJourneyConversionFunnelsSection = ( { current }: PerJourneyConversionFu
 					/>
 				</JourneyFunnel>
 			</div>
-		</section>
+		</Section>
 	);
 };
 

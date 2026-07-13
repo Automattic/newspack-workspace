@@ -11,6 +11,7 @@
 /**
  * Internal dependencies
  */
+import { Card } from '../../../../../packages/components/src';
 import MetricNote from './MetricNote';
 import type { MetricPayload } from './metrics';
 
@@ -25,9 +26,11 @@ export interface ChartCardProps {
 	caption?: string;
 	payload?: MetricPayload;
 	children: React.ReactNode;
+	/** Inline style forwarded to the underlying CoreCard (e.g. a grid-column span). */
+	style?: React.CSSProperties;
 }
 
-const ChartCard = ( { title, subhead, caption, payload, children }: ChartCardProps ) => {
+const ChartCard = ( { title, subhead, caption, payload, children, style }: ChartCardProps ) => {
 	if ( ! payload || payload.hidden_in_v1 ) {
 		return null;
 	}
@@ -44,12 +47,12 @@ const ChartCard = ( { title, subhead, caption, payload, children }: ChartCardPro
 	}
 
 	return (
-		<div className="newspack-insights__chart-card">
+		<Card __experimentalCoreCard className="newspack-insights__chart-card" style={ style }>
 			{ subhead && <p className="newspack-insights__chart-card-subhead">{ subhead }</p> }
 			{ title && <h3 className="newspack-insights__chart-card-title">{ title }</h3> }
 			{ caption && <p className="newspack-insights__chart-card-caption">{ caption }</p> }
-			{ body }
-		</div>
+			<div className="newspack-insights__chart-card-body">{ body }</div>
+		</Card>
 	);
 };
 

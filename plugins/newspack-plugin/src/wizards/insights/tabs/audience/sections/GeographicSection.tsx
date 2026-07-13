@@ -10,11 +10,13 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../../packages/components/src';
 import type { InsightsWindow } from '../../../api/audience';
 import type { MetricPayload } from '../../components/metrics';
 import { uniformValue } from '../../components/metrics';
 import MetricTable from '../../components/MetricTable';
 import ScopePill from '../../components/ScopePill';
+import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 
 export interface SectionProps {
@@ -34,13 +36,13 @@ const GeographicSection = ( { current }: SectionProps ) => {
 	const citiesScope = countryScope( current.top_cities );
 
 	return (
-		<section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-geo">
+		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-geo">
 			<SectionHeading
 				id="newspack-insights-audience-geo"
 				title={ __( 'Geographic', 'newspack-plugin' ) }
 				description={ __( 'Where your readers are.', 'newspack-plugin' ) }
 			/>
-			<div className="newspack-insights__table-grid newspack-insights__table-grid--cols-2">
+			<Grid columns={ 2 } gutter={ 16 } noMargin>
 				<div>
 					<h3 className="newspack-insights__chart-card-title">
 						{ __( 'Top regions / states', 'newspack-plugin' ) }
@@ -74,8 +76,8 @@ const GeographicSection = ( { current }: SectionProps ) => {
 						] }
 					/>
 				</div>
-			</div>
-		</section>
+			</Grid>
+		</Section>
 	);
 };
 
