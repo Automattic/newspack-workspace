@@ -101,6 +101,8 @@ class Audience_Content_Gates extends Wizard {
 				'edit_gate_layout_url'    => Content_Gate::get_edit_gate_layout_url(),
 				'presave_checks_enabled'  => Content_Gate::get_presave_checks_enabled(),
 				'default_gate_status'     => Content_Gate::get_default_new_gate_status(),
+				// Purchase restriction only makes sense with a store to restrict.
+				'has_woocommerce'         => class_exists( 'WooCommerce' ),
 			]
 		);
 
@@ -335,6 +337,25 @@ class Audience_Content_Gates extends Wizard {
 			]
 		);
 
+		$search_args = [
+			'search'   => [
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_text_field',
+			],
+			'include'  => [
+				'type'              => 'string',
+				'sanitize_callback' => 'sanitize_text_field',
+			],
+			'per_page' => [
+				'type'              => 'integer',
+				'default'           => 10,
+				'minimum'           => 1,
+				'maximum'           => 100,
+				'sanitize_callback' => 'absint',
+				'validate_callback' => 'rest_validate_request_arg',
+			],
+		];
+
 		register_rest_route(
 			NEWSPACK_API_NAMESPACE,
 			'/wizard/' . $this->slug . '/posts-search',
@@ -342,24 +363,31 @@ class Audience_Content_Gates extends Wizard {
 				'methods'             => 'GET',
 				'callback'            => [ $this, 'posts_search' ],
 				'permission_callback' => [ $this, 'api_permissions_check' ],
-				'args'                => [
-					'search'   => [
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-					'include'  => [
-						'type'              => 'string',
-						'sanitize_callback' => 'sanitize_text_field',
-					],
-					'per_page' => [
-						'type'              => 'integer',
-						'default'           => 10,
-						'minimum'           => 1,
-						'maximum'           => 100,
-						'sanitize_callback' => 'absint',
-						'validate_callback' => 'rest_validate_request_arg',
-					],
-				],
+				'args'                => $search_args,
+			]
+		);
+
+		// Products and product categories back the gate's purchase restriction.
+		// Without WooCommerce there are no products to find, and both routes return an empty list.
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/products-search',
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'products_search' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => $search_args,
+			]
+		);
+
+		register_rest_route(
+			NEWSPACK_API_NAMESPACE,
+			'/wizard/' . $this->slug . '/product-categories-search',
+			[
+				'methods'             => 'GET',
+				'callback'            => [ $this, 'product_categories_search' ],
+				'permission_callback' => [ $this, 'api_permissions_check' ],
+				'args'                => $search_args,
 			]
 		);
 
@@ -543,11 +571,103 @@ class Audience_Content_Gates extends Wizard {
 	 * @return \WP_REST_Response
 	 */
 	public function posts_search( $request ) {
-		$post_types = array_column( Content_Restriction_Control::get_available_post_types(), 'value' );
+		return rest_ensure_response( $this->search_posts( $request, array_column( Content_Restriction_Control::get_available_post_types(), 'value' ) ) );
+	}
+
+	/**
+	 * REST callback: search WooCommerce products, for the gate's purchase restriction.
+	 *
+	 * Returns an empty list when WooCommerce is not active.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response
+	 */
+	public function products_search( $request ) {
+		// Unlike posts, products are routinely private or held as drafts before launch,
+		// and the restriction binds as soon as they go live — so let publishers pick them.
+		return rest_ensure_response( $this->search_posts( $request, [ 'product' ], [ 'publish', 'private', 'draft' ] ) );
+	}
+
+	/**
+	 * REST callback: search WooCommerce product categories, for the gate's purchase restriction.
+	 *
+	 * Returns items in the shape consumed by ContentRuleControlTokenField:
+	 * `[{ id, name, type_label }]`. Returns an empty list when WooCommerce is not active.
+	 *
+	 * @param \WP_REST_Request $request The request object.
+	 * @return \WP_REST_Response
+	 */
+	public function product_categories_search( $request ) {
+		if ( ! taxonomy_exists( Product_Purchase_Restriction::PRODUCT_CATEGORY_TAXONOMY ) ) {
+			return rest_ensure_response( [] );
+		}
+
+		$args = [
+			'taxonomy'   => Product_Purchase_Restriction::PRODUCT_CATEGORY_TAXONOMY,
+			'hide_empty' => false,
+			'number'     => (int) $request->get_param( 'per_page' ),
+			'orderby'    => 'name',
+			'order'      => 'ASC',
+		];
+
+		$include = $request->get_param( 'include' );
+		if ( ! empty( $include ) ) {
+			$ids = array_filter( array_map( 'absint', explode( ',', $include ) ) );
+			if ( empty( $ids ) ) {
+				return rest_ensure_response( [] );
+			}
+			$args['include'] = $ids;
+			$args['number']  = min( count( $ids ), 100 );
+			$args['orderby'] = 'include';
+		}
+
+		$search = $request->get_param( 'search' );
+		if ( ! empty( $search ) ) {
+			// Numeric search: treat as a term ID lookup.
+			if ( is_numeric( $search ) ) {
+				$args['include'] = [ absint( $search ) ];
+			} else {
+				$args['search'] = $search;
+			}
+		}
+
+		$terms = get_terms( $args );
+		if ( is_wp_error( $terms ) ) {
+			return rest_ensure_response( [] );
+		}
+
+		$data = array_map(
+			function( $term ) {
+				return [
+					'id'         => (int) $term->term_id,
+					'name'       => $term->name,
+					'type_label' => __( 'Product category', 'newspack-plugin' ),
+				];
+			},
+			$terms
+		);
+
+		return rest_ensure_response( $data );
+	}
+
+	/**
+	 * Search posts of the given post types.
+	 *
+	 * @param \WP_REST_Request $request      The request object.
+	 * @param string[]         $post_types   The post types to search.
+	 * @param string[]         $post_statuses Statuses to search. Defaults to published only.
+	 *
+	 * @return array Items in the shape `[{ id, name, type_label }]`.
+	 */
+	private function search_posts( $request, $post_types, $post_statuses = [ 'publish' ] ) {
+		$post_types = array_values( array_filter( $post_types, 'post_type_exists' ) );
+		if ( empty( $post_types ) ) {
+			return [];
+		}
 
 		$args = [
 			'post_type'      => $post_types,
-			'post_status'    => 'publish',
+			'post_status'    => $post_statuses,
 			'posts_per_page' => (int) $request->get_param( 'per_page' ),
 			'orderby'        => 'title',
 			'order'          => 'ASC',
@@ -558,7 +678,7 @@ class Audience_Content_Gates extends Wizard {
 		if ( ! empty( $include ) ) {
 			$ids = array_filter( array_map( 'absint', explode( ',', $include ) ) );
 			if ( empty( $ids ) ) {
-				return rest_ensure_response( [] );
+				return [];
 			}
 			// Broader status filter when hydrating saved tokens so the editor
 			// keeps showing items whose status changed since the gate was saved.
@@ -586,7 +706,7 @@ class Audience_Content_Gates extends Wizard {
 			$labels[ $pt ] = $obj && isset( $obj->labels->singular_name ) ? $obj->labels->singular_name : $pt;
 		}
 
-		$data = array_map(
+		return array_map(
 			function( $post ) use ( $labels ) {
 				return [
 					'id'         => (int) $post->ID,
@@ -596,7 +716,5 @@ class Audience_Content_Gates extends Wizard {
 			},
 			$query->posts
 		);
-
-		return rest_ensure_response( $data );
 	}
 }

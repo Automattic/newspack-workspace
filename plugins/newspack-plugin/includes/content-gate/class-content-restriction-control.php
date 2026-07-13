@@ -286,22 +286,24 @@ class Content_Restriction_Control {
 	 * Expand a set of taxonomy term IDs to include descendant terms when the
 	 * taxonomy is hierarchical.
 	 *
-	 * A content rule targeting a parent term should also match content assigned
-	 * only to that term's descendants, mirroring WooCommerce Memberships' cascade
-	 * behavior. Expansion happens at evaluation time so newly-added child terms
-	 * are covered without re-saving the rule. Non-hierarchical taxonomies (e.g.
-	 * tags) have no descendants and are returned as integer-cast IDs unchanged.
+	 * A rule targeting a parent term should also match content assigned only to
+	 * that term's descendants, mirroring WooCommerce Memberships' cascade
+	 * behavior. Used by content rules and by the gate's product-category purchase
+	 * restriction (Product_Purchase_Restriction), which cascades the same way.
+	 * Expansion happens at evaluation time so newly-added child terms are covered
+	 * without re-saving the rule. Non-hierarchical taxonomies (e.g. tags) have no
+	 * descendants and are returned as integer-cast IDs unchanged.
 	 *
 	 * Descendant lookups are memoised per (taxonomy, term) for the request so the
 	 * tree is walked at most once per term, even across many rules and posts (e.g.
 	 * the Premium Newsletters cron loop).
 	 *
-	 * @param array        $term_ids Term IDs from a content rule's value (may be stored as strings).
+	 * @param array        $term_ids Term IDs from a rule's value (may be stored as strings).
 	 * @param \WP_Taxonomy $taxonomy Taxonomy object the term IDs belong to.
 	 *
 	 * @return int[] De-duplicated term IDs including descendants.
 	 */
-	private static function expand_hierarchical_terms( array $term_ids, \WP_Taxonomy $taxonomy ): array {
+	public static function expand_hierarchical_terms( array $term_ids, \WP_Taxonomy $taxonomy ): array {
 		$term_ids = array_map( 'intval', $term_ids );
 		if ( ! $taxonomy->hierarchical ) {
 			return $term_ids;

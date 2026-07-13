@@ -81,7 +81,14 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 		content_rules: isNewsletter ? [ { slug: 'newsletters', value: [] } ] : [ { slug: 'post_types', value: [ 'post' ] } ],
 		content_rules_match: 'all',
 		registration: { active: false, metering: { enabled: false, count: 1, period: 'month' }, require_verification: false, gate_layout_id: 0 },
-		custom_access: { active: false, metering: { enabled: false, count: 1, period: 'month' }, gate_layout_id: 0, access_rules: [] },
+		custom_access: {
+			active: false,
+			metering: { enabled: false, count: 1, period: 'month' },
+			gate_layout_id: 0,
+			access_rules: [],
+			restricted_products: [],
+			restricted_product_categories: [],
+		},
 	};
 
 	const history = useHistory();
@@ -116,6 +123,22 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 			gatesRef.current = gates;
 		}
 	}, [ gates ] );
+
+	// An access rule with no value grants access to everyone, so it gates nothing.
+	const hasPopulatedAccessRules = customAccess.access_rules.some( ruleGroup =>
+		ruleGroup.some(
+			rule =>
+				( Array.isArray( rule.value ) && rule.value?.length > 0 ) ||
+				( ! Array.isArray( rule.value ) && rule.hasOwnProperty( 'value' ) )
+		)
+	);
+
+	// Purchase restriction is enforced only for an active paid-access gate whose access rules
+	// can actually exclude someone — matching Product_Purchase_Restriction::get_restricting_gates().
+	const restrictsPurchasing =
+		customAccess.active &&
+		hasPopulatedAccessRules &&
+		Boolean( customAccess.restricted_products?.length || customAccess.restricted_product_categories?.length );
 
 	const isDirty =
 		isNew ||
@@ -420,16 +443,12 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 					isFetching ||
 					! isDirty ||
 					! title ||
-					! contentRules.length ||
+					// A gate with no content rules gates no content, but it can still restrict
+					// purchasing of the products it lists (Content_Restriction_Control::get_post_gates()
+					// skips gates without content rules).
+					( ! contentRules.length && ! restrictsPurchasing ) ||
 					( ! registration.active && ! customAccess.active ) ||
-					( ! registration.active &&
-						! customAccess.access_rules.some( ruleGroup =>
-							ruleGroup.some(
-								rule =>
-									( Array.isArray( rule.value ) && rule.value?.length > 0 ) ||
-									( ! Array.isArray( rule.value ) && rule.hasOwnProperty( 'value' ) )
-							)
-						) ),
+					( ! registration.active && ! hasPopulatedAccessRules ),
 			},
 		];
 		if ( ! isNew ) {
@@ -479,6 +498,8 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	}, [
 		contentRules.length,
 		customAccess.active,
+		hasPopulatedAccessRules,
+		restrictsPurchasing,
 		gate.id,
 		gate.status,
 		handleCreate,

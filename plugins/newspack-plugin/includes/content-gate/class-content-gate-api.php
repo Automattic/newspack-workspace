@@ -69,8 +69,8 @@ class Content_Gate_API {
 		'custom_access'       => [
 			'type'       => 'object',
 			'properties' => [
-				'active'         => [ 'type' => 'boolean' ],
-				'metering'       => [
+				'active'                        => [ 'type' => 'boolean' ],
+				'metering'                      => [
 					'type'       => 'object',
 					'properties' => [
 						'enabled' => [ 'type' => 'boolean' ],
@@ -78,11 +78,11 @@ class Content_Gate_API {
 						'period'  => [ 'type' => 'string' ],
 					],
 				],
-				'gate_layout_id' => [
+				'gate_layout_id'                => [
 					'type'     => 'integer',
 					'required' => false,
 				],
-				'access_rules'   => [
+				'access_rules'                  => [
 					'type'  => 'array',
 					'items' => [
 						'type'  => 'array',
@@ -94,6 +94,14 @@ class Content_Gate_API {
 							],
 						],
 					],
+				],
+				'restricted_products'           => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'integer' ],
+				],
+				'restricted_product_categories' => [
+					'type'  => 'array',
+					'items' => [ 'type' => 'integer' ],
 				],
 			],
 		],
@@ -182,7 +190,27 @@ class Content_Gate_API {
 		if ( isset( $custom_access['gate_layout_id'] ) ) {
 			$sanitized['gate_layout_id'] = absint( $custom_access['gate_layout_id'] );
 		}
+		if ( isset( $custom_access['restricted_products'] ) ) {
+			$sanitized['restricted_products'] = self::sanitize_ids( $custom_access['restricted_products'] );
+		}
+		if ( isset( $custom_access['restricted_product_categories'] ) ) {
+			$sanitized['restricted_product_categories'] = self::sanitize_ids( $custom_access['restricted_product_categories'] );
+		}
 		return $sanitized;
+	}
+
+	/**
+	 * Sanitize a list of object IDs (products, terms) into unique positive integers.
+	 *
+	 * @param array $ids The IDs.
+	 *
+	 * @return int[] The sanitized IDs.
+	 */
+	public static function sanitize_ids( $ids ) {
+		if ( ! is_array( $ids ) ) {
+			return [];
+		}
+		return array_values( array_unique( array_filter( array_map( 'absint', $ids ) ) ) );
 	}
 
 	/**

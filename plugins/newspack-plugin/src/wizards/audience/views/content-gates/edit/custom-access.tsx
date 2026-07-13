@@ -9,6 +9,10 @@ import { useCallback } from '@wordpress/element';
  */
 import Metering from './metering';
 import AccessRules from './access-rules';
+import RestrictedProducts from './restricted-products';
+
+// wp_localize_script() stringifies booleans ('1'/'').
+const hasWooCommerce = Boolean( window.newspackAudienceContentGates.has_woocommerce );
 
 interface CustomAccessProps {
 	customAccess: CustomAccess;
@@ -51,6 +55,16 @@ export default function CustomAccess( { customAccess, onChange, isNewsletter = f
 				</>
 			) }
 			<AccessRules rules={ currentRules } onChange={ handleRulesChange } />
+			{ ! isNewsletter && hasWooCommerce && (
+				<>
+					<CardDivider />
+					<RestrictedProducts
+						products={ customAccess.restricted_products || [] }
+						productCategories={ customAccess.restricted_product_categories || [] }
+						onChange={ handleChange }
+					/>
+				</>
+			) }
 		</>
 	);
 }

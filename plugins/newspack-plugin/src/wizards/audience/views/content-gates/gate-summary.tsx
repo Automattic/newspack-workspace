@@ -6,7 +6,7 @@
 /**
  * WordPress dependencies.
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies.
@@ -121,6 +121,37 @@ export const getGateSummarySections = ( gate: Gate, isNewsletter = false ): Gate
 			</>
 		),
 	} );
+
+	// A gate can restrict purchasing without gating any content, so surface it — otherwise
+	// such a gate reads as doing nothing at all.
+	const restrictedProducts = gate.custom_access?.restricted_products?.length || 0;
+	const restrictedCategories = gate.custom_access?.restricted_product_categories?.length || 0;
+	if ( gate.custom_access?.active && restrictedProducts + restrictedCategories > 0 ) {
+		const restrictedCounts = [];
+		if ( restrictedProducts > 0 ) {
+			restrictedCounts.push(
+				sprintf(
+					// translators: %d: number of restricted products.
+					_n( '%d product', '%d products', restrictedProducts, 'newspack-plugin' ),
+					restrictedProducts
+				)
+			);
+		}
+		if ( restrictedCategories > 0 ) {
+			restrictedCounts.push(
+				sprintf(
+					// translators: %d: number of restricted product categories.
+					_n( '%d product category', '%d product categories', restrictedCategories, 'newspack-plugin' ),
+					restrictedCategories
+				)
+			);
+		}
+		sections.push( {
+			key: 'restricted_products',
+			label: __( 'Member-only purchasing', 'newspack-plugin' ),
+			content: <p>{ restrictedCounts.join( ', ' ) }</p>,
+		} );
+	}
 
 	return sections;
 };

@@ -118,6 +118,7 @@ class Content_Gate {
 		include __DIR__ . '/class-institution.php';
 		include __DIR__ . '/class-newsletters-access.php';
 		include __DIR__ . '/class-user-gate-access.php';
+		include __DIR__ . '/class-product-purchase-restriction.php';
 		include __DIR__ . '/class-premium-newsletters.php';
 		include __DIR__ . '/class-block-visibility.php';
 	}
@@ -1174,10 +1175,13 @@ class Content_Gate {
 		];
 
 		return [
-			'active'         => isset( $custom_access['active'] ) ? (bool) $custom_access['active'] : false,
-			'metering'       => isset( $custom_access['metering'] ) && is_array( $custom_access['metering'] ) ? wp_parse_args( $custom_access['metering'], $default_metering ) : $default_metering,
-			'access_rules'   => $access_rules,
-			'gate_layout_id' => isset( $custom_access['gate_layout_id'] ) ? (int) $custom_access['gate_layout_id'] : 0,
+			'active'                        => isset( $custom_access['active'] ) ? (bool) $custom_access['active'] : false,
+			'metering'                      => isset( $custom_access['metering'] ) && is_array( $custom_access['metering'] ) ? wp_parse_args( $custom_access['metering'], $default_metering ) : $default_metering,
+			'access_rules'                  => $access_rules,
+			'gate_layout_id'                => isset( $custom_access['gate_layout_id'] ) ? (int) $custom_access['gate_layout_id'] : 0,
+			// Products whose *purchase* is restricted to readers passing the access rules above.
+			'restricted_products'           => isset( $custom_access['restricted_products'] ) ? array_map( 'intval', (array) $custom_access['restricted_products'] ) : [],
+			'restricted_product_categories' => isset( $custom_access['restricted_product_categories'] ) ? array_map( 'intval', (array) $custom_access['restricted_product_categories'] ) : [],
 		];
 	}
 

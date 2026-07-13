@@ -21,8 +21,27 @@ const debounce = ( func: ( search?: string ) => void, wait: number ) => {
 	};
 };
 
-export default function ContentRuleControlTokenField( { slug, value, exclusion, onChange, isStatic = false }: GateRuleControlProps ) {
-	const rule = useMemo( () => window.newspackAudienceContentGates.available_content_rules[ slug ], [ slug ] );
+type ContentRuleControlTokenFieldProps = GateRuleControlProps & {
+	// Token fields that aren't a content rule (e.g. purchase-restricted products) pass their own
+	// config instead of being looked up in `available_content_rules`.
+	config?: { name: string; endpoint: string };
+	// Content rules are labelled by their own toggle, so they render the field unlabelled.
+	label?: string;
+};
+
+export default function ContentRuleControlTokenField( {
+	slug,
+	value,
+	exclusion,
+	onChange,
+	isStatic = false,
+	config,
+	label = '',
+}: ContentRuleControlTokenFieldProps ) {
+	const rule = useMemo(
+		() => config ?? window.newspackAudienceContentGates.available_content_rules[ slug ],
+		[ slug, config ]
+	);
 
 	const [ savedItems, setSavedItems ] = useState< { value: string; label: string }[] >( [] );
 	const [ suggestions, setSuggestions ] = useState< { value: string; label: string }[] >( [] );
@@ -42,7 +61,7 @@ export default function ContentRuleControlTokenField( { slug, value, exclusion, 
 				_endpoint = slug;
 		}
 		return 'wp/v2/' + _endpoint;
-	}, [ slug ] );
+	}, [ slug, rule ] );
 
 	const fetchSuggestions = useCallback(
 		( search: string = '' ) => {
@@ -171,7 +190,7 @@ export default function ContentRuleControlTokenField( { slug, value, exclusion, 
 	return (
 		<>
 			<FormTokenField
-				label={ '' }
+				label={ label }
 				suggestions={ suggestions.map( s => s.label ) }
 				onInputChange={ handleInputChange }
 				value={ tokens }

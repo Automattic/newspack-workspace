@@ -119,6 +119,9 @@ type CustomAccess = {
 	metering: Metering;
 	gate_layout_id: number;
 	access_rules: GateAccessRuleGroup[];
+	// Products (and product categories) that only readers passing the access rules above may purchase.
+	restricted_products: number[];
+	restricted_product_categories: number[];
 };
 
 type ContentGiftingConfig = {
