@@ -1,3 +1,10 @@
+# newspack-newsletters [3.36.0](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.35.2...newspack-newsletters@3.36.0) (2026-07-08)
+
+
+### Features
+
+* **newsletters:** dated per-ad impression/click stats (NPPD-1861) ([#543](https://github.com/Automattic/newspack-workspace/issues/543)) ([078271d](https://github.com/Automattic/newspack-workspace/commit/078271d892d8c787027a6fcc037c761a3e26246b))
+
 ## newspack-newsletters [3.35.2](https://github.com/Automattic/newspack-workspace/compare/newspack-newsletters@3.35.1...newspack-newsletters@3.35.2) (2026-07-01)
 
 
