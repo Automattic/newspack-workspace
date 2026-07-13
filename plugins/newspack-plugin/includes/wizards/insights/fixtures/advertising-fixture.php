@@ -27,11 +27,131 @@
 
 defined( 'ABSPATH' ) || exit;
 
-return function ( string $start_date, string $end_date, bool $compare = false, string $variant = 'populated' ): array {
+return function ( string $start_date, string $end_date, bool $compare = false, string $variant = 'populated', string $provider = 'gam' ): array {
 	$tz         = wp_timezone();
 	$today      = new DateTimeImmutable( 'today', $tz );
 	$data_as_of = $today->modify( '-7 days' )->format( 'Y-m-d' );
 	$est_start  = $today->modify( '-7 days' )->format( 'Y-m-d' );
+
+	// Broadstreet variant (NPPD-2045): impressions-only envelope. Broadstreet's API
+	// carries no revenue, so this variant omits RPM / revenue / eCPM / fill /
+	// viewability / revenue-mix entirely and surfaces only the doable signals —
+	// total impressions, impressions per session (the provider-agnostic cross-system
+	// join), overall CTR, mobile share, and top advertisers / top zones / top
+	// campaigns (impressions + clicks + CTR, no revenue). Fake advertiser/zone/
+	// campaign names only. Sessions are held flat across windows so the comparison
+	// toggle produces a visible impressions-per-session delta.
+	if ( 'broadstreet' === $provider ) {
+		$bs_sessions   = 800000;
+		$bs_data_as_of = $today->modify( '-1 day' )->format( 'Y-m-d' );
+
+		$bs_table = function ( array $names, string $label_key, float $scale ): array {
+			$rows  = [];
+			$count = count( $names );
+			foreach ( $names as $i => $name ) {
+				$weight      = $count - $i;
+				$impressions = (int) round( ( 2400000 / 55 ) * $weight * $scale );
+				$ctr         = round( 0.004 - ( $i * 0.0002 ), 4 );
+				$rows[]      = [
+					$label_key    => $name,
+					'impressions' => $impressions,
+					'clicks'      => (int) round( $impressions * $ctr ),
+					'ctr'         => $impressions > 0 ? $ctr : null,
+				];
+			}
+			return $rows;
+		};
+
+		$bs_advertisers = [ 'Hometown Hardware', 'Riverside Credit Union', 'Maple & Main Bistro', 'Cedar Grove Realty', 'Bluebird Books', 'Sunrise Dental', 'Prairie Wind Outfitters', 'Lakeside Auto Care' ];
+		$bs_zones       = [ 'Homepage Leaderboard', 'Article Sidebar', 'In-Content Rectangle', 'Footer Banner', 'Newsletter Sponsor', 'Mobile Sticky' ];
+		$bs_campaigns   = [ 'Hometown Hardware — Spring Flight', 'Riverside Credit Union — Summer', 'Maple & Main Bistro — Weekend Brunch', 'Cedar Grove Realty — Open House Push', 'Bluebird Books — Summer Reading', 'Sunrise Dental — New Patient Special' ];
+
+		// A rate scorecard mirroring Advertising_Metric::broadstreet_rate(): non-computable
+		// (→ em-dash, never a fake 0%) when there are no impressions to divide by.
+		$bs_rate = function ( int $numerator, int $denominator ): array {
+			return [
+				'value'       => $denominator > 0 ? $numerator / $denominator : 0.0,
+				'computable'  => $denominator > 0,
+				'type'        => 'rate',
+				'numerator'   => $numerator,
+				'denominator' => $denominator,
+			];
+		};
+
+		$bs_window = function ( float $scale ) use ( $bs_sessions, $bs_data_as_of, $bs_table, $bs_rate, $bs_advertisers, $bs_zones, $bs_campaigns ): array {
+			$impressions  = (int) round( 2400000 * $scale );
+			$impr_payload = [
+				'value'      => $impressions,
+				'computable' => true,
+				'type'       => 'count',
+			];
+			// Live-shaped ratios (Richland network): ~0.18% overall CTR, ~63% mobile share.
+			$clicks = (int) round( $impressions * 0.0018 );
+			$mobile = (int) round( $impressions * 0.63 );
+			return [
+				'window'                      => null,
+				'active_provider'             => 'broadstreet',
+				'is_tab_visible'              => true,
+				'is_report_ready'             => true,
+				'is_network_member'           => false,
+				'readiness_issues'            => [],
+				'metrics'                     => [
+					'total_impressions'           => $impr_payload,
+					'avg_impressions_per_session' => \Newspack\Insights\Derived\Cross_System_Metrics::avg_impressions_per_session( $impr_payload, $bs_sessions ),
+					'overall_ctr'                 => $bs_rate( $clicks, $impressions ),
+					'mobile_share'                => $bs_rate( $mobile, $impressions ),
+					'top_advertisers'             => [
+						'rows'       => $bs_table( $bs_advertisers, 'advertiser', $scale ),
+						'computable' => true,
+						'type'       => 'table',
+					],
+					'top_zones'                   => [
+						'rows'       => $bs_table( $bs_zones, 'zone', $scale ),
+						'computable' => true,
+						'type'       => 'table',
+					],
+					'top_campaigns'               => [
+						'rows'       => $bs_table( $bs_campaigns, 'campaign', $scale ),
+						'computable' => true,
+						'type'       => 'table',
+					],
+				],
+				'has_window_activity'         => $impressions > 0,
+				'data_as_of'                  => $bs_data_as_of,
+				'has_estimated_data'          => false,
+				'estimated_window_start_date' => null,
+			];
+		};
+
+		$current           = $bs_window( 1.0 );
+		$current['window'] = [
+			'start' => $start_date,
+			'end'   => $end_date,
+		];
+		$previous = null;
+		if ( $compare ) {
+			try {
+				$bs_start  = new DateTimeImmutable( $start_date, $tz );
+				$bs_end    = new DateTimeImmutable( $end_date, $tz );
+				$bs_len    = (int) $bs_start->diff( $bs_end )->format( '%a' ) + 1;
+				$bs_pend   = $bs_start->modify( '-1 day' );
+				$bs_pstart = $bs_pend->modify( '-' . ( $bs_len - 1 ) . ' days' );
+			} catch ( Exception $e ) {
+				$bs_pstart = $start_date;
+				$bs_pend   = $end_date;
+			}
+			$previous           = $bs_window( 0.85 );
+			$previous['window'] = [
+				'start' => $bs_pstart instanceof DateTimeImmutable ? $bs_pstart->format( 'Y-m-d' ) : $bs_pstart,
+				'end'   => $bs_pend instanceof DateTimeImmutable ? $bs_pend->format( 'Y-m-d' ) : $bs_pend,
+			];
+		}
+
+		return [
+			'current'  => $current,
+			'previous' => $previous,
+		];
+	}
 
 	/**
 	 * Build a single window's metric set, scaled so comparison windows can
@@ -466,6 +586,7 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 				'start' => $start_date,
 				'end'   => $end_date,
 			],
+			'active_provider'             => 'gam',
 			'is_tab_visible'              => true,
 			'is_report_ready'             => false,
 			'is_network_member'           => false,
@@ -503,6 +624,7 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 					'start' => $start_date,
 					'end'   => $end_date,
 				],
+				'active_provider'   => 'gam',
 				'is_tab_visible'    => true,
 				'is_report_ready'   => true,
 				'is_network_member' => false,
@@ -583,6 +705,7 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 			'start' => $start_date,
 			'end'   => $end_date,
 		],
+		'active_provider'             => 'gam',
 		'is_tab_visible'              => true,
 		'is_report_ready'             => true,
 		'is_network_member'           => $is_network,
@@ -640,6 +763,7 @@ return function ( string $start_date, string $end_date, bool $compare = false, s
 				'start' => $prior_start instanceof DateTimeImmutable ? $prior_start->format( 'Y-m-d' ) : $prior_start,
 				'end'   => $prior_end instanceof DateTimeImmutable ? $prior_end->format( 'Y-m-d' ) : $prior_end,
 			],
+			'active_provider'             => 'gam',
 			'is_tab_visible'              => true,
 			'is_report_ready'             => true,
 			'is_network_member'           => $is_network,

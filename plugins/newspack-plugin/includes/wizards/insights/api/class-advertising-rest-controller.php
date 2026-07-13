@@ -119,6 +119,9 @@ class Advertising_REST_Controller extends WP_REST_Controller {
 		if ( defined( 'NEWSPACK_INSIGHTS_FIXTURE_MODE' ) && NEWSPACK_INSIGHTS_FIXTURE_MODE ) {
 			$compare  = $compare_start && $compare_end;
 			$variant  = (string) ( $request->get_param( '_fixture_state' ) ?? 'populated' );
+			// Provider variant (NPPD-2045): _fixture_provider=broadstreet renders the
+			// impressions-only Broadstreet envelope; defaults to the GAM shape.
+			$provider = 'broadstreet' === $request->get_param( '_fixture_provider' ) ? 'broadstreet' : 'gam';
 			$response = rest_ensure_response(
 				[
 					'cache' => [
@@ -126,7 +129,7 @@ class Advertising_REST_Controller extends WP_REST_Controller {
 						'computed_at'    => gmdate( 'Y-m-d\TH:i:s\Z' ),
 						'cooldown_until' => null,
 					],
-					'data'  => Advertising_Metric::get_fixture( $start->format( 'Y-m-d' ), $end->format( 'Y-m-d' ), $compare, $variant ),
+					'data'  => Advertising_Metric::get_fixture( $start->format( 'Y-m-d' ), $end->format( 'Y-m-d' ), $compare, $variant, $provider ),
 				]
 			);
 			$response->header( 'Cache-Control', 'no-store, private' );

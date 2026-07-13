@@ -220,4 +220,58 @@ describe( 'AdvertisingTab', () => {
 		render( <AdvertisingTab range={ range } previousRange={ null } /> );
 		expect( screen.queryByText( 'Performance by site' ) ).not.toBeInTheDocument();
 	} );
+
+	it( 'renders the impressions-only Broadstreet variant, hiding every revenue/GAM section (NPPD-2045)', () => {
+		mockData(
+			baseWindow( {
+				active_provider: 'broadstreet',
+				metrics: {
+					total_impressions: { value: 2400000, computable: true, type: 'count' },
+					avg_impressions_per_session: { value: 3, computable: true, type: 'count' },
+					overall_ctr: { value: 0.0018, computable: true, type: 'rate', numerator: 4320, denominator: 2400000 },
+					mobile_share: { value: 0.63, computable: true, type: 'rate', numerator: 1512000, denominator: 2400000 },
+					top_advertisers: {
+						type: 'table',
+						computable: true,
+						rows: [ { advertiser: 'Hometown Hardware', impressions: 120000, clicks: 480, ctr: 0.004 } ],
+					},
+					top_zones: {
+						type: 'table',
+						computable: true,
+						rows: [ { zone: 'Homepage Leaderboard', impressions: 90000, clicks: 360, ctr: 0.004 } ],
+					},
+					top_campaigns: {
+						type: 'table',
+						computable: true,
+						rows: [ { campaign: 'Riverside Credit Union — Summer', impressions: 70000, clicks: 280, ctr: 0.004 } ],
+					},
+				},
+			} )
+		);
+		const { container } = render( <AdvertisingTab range={ range } previousRange={ null } /> );
+
+		// Impressions-side sections render.
+		expect( screen.getByText( 'Reach' ) ).toBeInTheDocument();
+		expect( screen.getByText( '2.4M' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Impressions per session' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top advertisers' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Hometown Hardware' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top zones' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Homepage Leaderboard' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top campaigns' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Riverside Credit Union — Summer' ) ).toBeInTheDocument();
+
+		// GAM-only sections + the revenue card are absent (no revenue in Broadstreet).
+		expect( screen.queryByText( 'Reach & revenue' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Revenue' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'RPM' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Average eCPM' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Impressions by type' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Performance by device' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Top ad units' ) ).not.toBeInTheDocument();
+		// The GAM data-lag note is hidden for Broadstreet. Scope to the render
+		// container — the global a11y-speak region (document.body) can retain stale
+		// announcements from earlier tests in this suite.
+		expect( container ).not.toHaveTextContent( /Data as of/ );
+	} );
 } );

@@ -59,6 +59,7 @@ class Insights_Section_Advertising {
 	private static function load_dependencies(): void {
 		$base = NEWSPACK_ABSPATH . 'includes/wizards/insights/';
 		include_once $base . 'derived/class-cross-system-metrics.php';
+		include_once $base . 'broadstreet/class-client.php';
 		include_once $base . 'metrics/class-advertising-metric.php';
 		include_once $base . 'api/class-advertising-rest-controller.php';
 	}

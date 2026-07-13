@@ -32,6 +32,31 @@ class Insights_Advertising_Test_Metric extends Advertising_Metric {
 	public static $next_site_key_id = 42;
 
 	/**
+	 * Canned Broadstreet rollup rows keyed by group (NPPD-2045), so the
+	 * network/advertiser/zone reports each get their own injected rows.
+	 *
+	 * @var array<string,array>
+	 */
+	public static $next_broadstreet = [];
+
+	/**
+	 * Force Broadstreet to read as the active ad server (NPPD-2045), without
+	 * stubbing the optional Broadstreet plugin.
+	 *
+	 * @var bool
+	 */
+	public static $broadstreet_active = false;
+
+	/**
+	 * Override the Broadstreet active-server detection with the injected flag.
+	 *
+	 * @return bool
+	 */
+	protected static function is_broadstreet_active(): bool {
+		return static::$broadstreet_active;
+	}
+
+	/**
 	 * Override the GAM-touching seam with the injected result.
 	 *
 	 * @param Report_Query $query The query (ignored).
@@ -48,6 +73,20 @@ class Insights_Advertising_Test_Metric extends Advertising_Metric {
 	 */
 	protected static function resolve_site_key_id(): ?int {
 		return static::$next_site_key_id;
+	}
+
+	/**
+	 * Override the Broadstreet HTTP seam with canned rows for the given group
+	 * (NPPD-2045) — no network is touched.
+	 *
+	 * @param string   $group  Grouping dimension.
+	 * @param string[] $select Selected fields (ignored).
+	 * @param string   $s      Start date (ignored).
+	 * @param string   $e      End date (ignored).
+	 * @return array
+	 */
+	protected static function run_broadstreet_report( string $group, array $select, string $s, string $e ): array {
+		return static::$next_broadstreet[ $group ] ?? [];
 	}
 }
 
@@ -77,6 +116,8 @@ class Newspack_Test_Insights_Advertising_Metric extends WP_UnitTestCase {
 	public function tear_down() {
 		Insights_Advertising_Test_Metric::$next_report      = [ 'rows' => [] ];
 		Insights_Advertising_Test_Metric::$next_site_key_id = 42;
+		Insights_Advertising_Test_Metric::$next_broadstreet   = [];
+		Insights_Advertising_Test_Metric::$broadstreet_active = false;
 		Advertising_Metric::reset_readiness_cache();
 		parent::tear_down();
 	}
@@ -885,5 +926,271 @@ class Newspack_Test_Insights_Advertising_Metric extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'previous', $payload );
 		$this->assertSame( '2026-01-31', $payload['previous']['window']['end'] );
 		$this->assertNotSame( $payload['current']['window']['start'], $payload['previous']['window']['start'] );
+	}
+
+	/*
+	 * Provider detection + Broadstreet reporting (NPPD-2045).
+	 */
+
+	/**
+	 * With no ad server configured (clean test env: GAM inactive, Broadstreet
+	 * inactive), there's no active provider and the tab stays hidden.
+	 */
+	public function test_no_provider_hides_tab() {
+		$this->assertNull( Insights_Advertising_Test_Metric::active_provider() );
+		$this->assertFalse( Insights_Advertising_Test_Metric::is_tab_visible() );
+		$this->assertFalse( Insights_Advertising_Test_Metric::is_report_ready() );
+	}
+
+	/**
+	 * When Broadstreet is the active provider, it wins tab visibility and is
+	 * immediately report-ready (synchronous rollup — no OAuth/network-code dance).
+	 */
+	public function test_broadstreet_only_is_visible_and_ready() {
+		Insights_Advertising_Test_Metric::$broadstreet_active = true;
+
+		$this->assertSame( 'broadstreet', Insights_Advertising_Test_Metric::active_provider() );
+		$this->assertTrue( Insights_Advertising_Test_Metric::is_tab_visible() );
+		$this->assertTrue( Insights_Advertising_Test_Metric::is_report_ready() );
+	}
+
+	/**
+	 * GAM wins when both providers are active. GAM is inactive in the test env
+	 * (newspack-ads absent), so with Broadstreet forced active the resolved
+	 * provider is Broadstreet; the GAM-precedence leg is exercised via the fixture,
+	 * whose GAM envelope always declares 'gam' — the field the UI branches on.
+	 */
+	public function test_gam_fixture_declares_provider() {
+		$fixture = Advertising_Metric::get_fixture( '2026-06-01', '2026-06-30', false, 'populated', 'gam' );
+		$this->assertSame( 'gam', $fixture['current']['active_provider'] );
+	}
+
+	/**
+	 * The single network rollup yields three scorecards from one call: total
+	 * impressions (sum of `count(view)`), overall CTR (clicks ÷ impressions), and
+	 * mobile share (mobile views ÷ impressions), each carrying its raw counts.
+	 */
+	public function test_broadstreet_network_metrics_derives_three_scorecards() {
+		Insights_Advertising_Test_Metric::$next_broadstreet = [
+			'network' => [
+				[
+					'count(view)'        => 2400000,
+					'count(click)'       => 12000,
+					'count(mobile_view)' => 1512000,
+				],
+			],
+		];
+		$metrics = Insights_Advertising_Test_Metric::broadstreet_network_metrics( '2026-01-01', '2026-01-31' );
+
+		$this->assertSame( 2400000, $metrics['total_impressions']['value'] );
+		$this->assertTrue( $metrics['total_impressions']['computable'] );
+		$this->assertSame( 'count', $metrics['total_impressions']['type'] );
+
+		// Overall CTR = clicks / impressions, carrying numerator/denominator.
+		$this->assertSame( 'rate', $metrics['overall_ctr']['type'] );
+		$this->assertTrue( $metrics['overall_ctr']['computable'] );
+		$this->assertSame( 12000 / 2400000, $metrics['overall_ctr']['value'] );
+		$this->assertSame( 12000, $metrics['overall_ctr']['numerator'] );
+		$this->assertSame( 2400000, $metrics['overall_ctr']['denominator'] );
+
+		// Mobile share = mobile views / impressions.
+		$this->assertSame( 'rate', $metrics['mobile_share']['type'] );
+		$this->assertSame( 1512000 / 2400000, $metrics['mobile_share']['value'] );
+		$this->assertSame( 1512000, $metrics['mobile_share']['numerator'] );
+	}
+
+	/**
+	 * Overall CTR / mobile share are NOT computable (→ em-dash, never a fake 0%)
+	 * when the window served no impressions to divide by.
+	 */
+	public function test_broadstreet_rates_not_computable_on_zero_impressions() {
+		Insights_Advertising_Test_Metric::$next_broadstreet = [
+			'network' => [
+				[
+					'count(view)'        => 0,
+					'count(click)'       => 0,
+					'count(mobile_view)' => 0,
+				],
+			],
+		];
+		$metrics = Insights_Advertising_Test_Metric::broadstreet_network_metrics( '2026-01-01', '2026-01-31' );
+		$this->assertFalse( $metrics['overall_ctr']['computable'] );
+		$this->assertFalse( $metrics['mobile_share']['computable'] );
+	}
+
+	/**
+	 * Broadstreet top advertisers shape rows with impressions/clicks/CTR (null CTR
+	 * on zero views), rank by impressions desc, and carry NO revenue.
+	 */
+	public function test_broadstreet_top_advertisers_shape_and_ctr() {
+		Insights_Advertising_Test_Metric::$next_broadstreet = [
+			'advertiser' => [
+				[
+					'advertiser.name' => 'Hometown Hardware',
+					'count(view)'     => 1000,
+					'count(click)'    => 4,
+				],
+				[
+					'advertiser.name' => 'Riverside Credit Union',
+					'count(view)'     => 5000,
+					'count(click)'    => 25,
+				],
+				[
+					'advertiser.name' => 'No Delivery Inc',
+					'count(view)'     => 0,
+					'count(click)'    => 0,
+				],
+			],
+		];
+		$payload = Insights_Advertising_Test_Metric::broadstreet_top_advertisers( '2026-01-01', '2026-01-31' );
+
+		$this->assertSame( 'table', $payload['type'] );
+		// Ranked by impressions desc: Riverside (5000) first.
+		$this->assertSame( 'Riverside Credit Union', $payload['rows'][0]['advertiser'] );
+		$this->assertSame( 5000, $payload['rows'][0]['impressions'] );
+		$this->assertSame( 25, $payload['rows'][0]['clicks'] );
+		$this->assertSame( 0.005, $payload['rows'][0]['ctr'] );
+
+		$by_name = array_column( $payload['rows'], null, 'advertiser' );
+		$this->assertSame( 0.004, $by_name['Hometown Hardware']['ctr'] );
+		// CTR is null — never 0% — when the advertiser served no impressions.
+		$this->assertNull( $by_name['No Delivery Inc']['ctr'] );
+
+		// No revenue anywhere in the Broadstreet API.
+		foreach ( $payload['rows'] as $row ) {
+			$this->assertArrayNotHasKey( 'revenue', $row );
+		}
+	}
+
+	/**
+	 * Broadstreet top zones shape rows with impressions/clicks/CTR and rank by
+	 * impressions.
+	 */
+	public function test_broadstreet_top_zones_shape() {
+		Insights_Advertising_Test_Metric::$next_broadstreet = [
+			'zone' => [
+				[
+					'zone.name'    => 'Article Sidebar',
+					'count(view)'  => 200,
+					'count(click)' => 1,
+				],
+				[
+					'zone.name'    => 'Homepage Leaderboard',
+					'count(view)'  => 900,
+					'count(click)' => 9,
+				],
+			],
+		];
+		$payload = Insights_Advertising_Test_Metric::broadstreet_top_zones( '2026-01-01', '2026-01-31' );
+		$this->assertSame( 'Homepage Leaderboard', $payload['rows'][0]['zone'] );
+		$this->assertSame( 900, $payload['rows'][0]['impressions'] );
+		$this->assertSame( 0.01, $payload['rows'][0]['ctr'] );
+	}
+
+	/**
+	 * A degraded (empty) Broadstreet rollup yields zero impressions, computably —
+	 * the graceful-degrade contract (an outage reads as no activity, not an error) —
+	 * while the derived rates stay non-computable rather than reading as 0%.
+	 */
+	public function test_broadstreet_network_metrics_degrades_to_zero() {
+		Insights_Advertising_Test_Metric::$next_broadstreet = [ 'network' => [] ];
+		$metrics = Insights_Advertising_Test_Metric::broadstreet_network_metrics( '2026-01-01', '2026-01-31' );
+		$this->assertSame( 0, $metrics['total_impressions']['value'] );
+		$this->assertTrue( $metrics['total_impressions']['computable'] );
+		$this->assertFalse( $metrics['overall_ctr']['computable'] );
+		$this->assertFalse( $metrics['mobile_share']['computable'] );
+	}
+
+	/**
+	 * Broadstreet top campaigns shape rows with impressions/clicks/CTR (null CTR on
+	 * zero views), rank by impressions desc, and carry NO revenue.
+	 */
+	public function test_broadstreet_top_campaigns_shape_and_ctr() {
+		Insights_Advertising_Test_Metric::$next_broadstreet = [
+			'campaign' => [
+				[
+					'campaign.name' => 'Hometown Hardware — Spring Flight',
+					'count(view)'   => 1000,
+					'count(click)'  => 4,
+				],
+				[
+					'campaign.name' => 'Riverside Credit Union — Summer',
+					'count(view)'   => 5000,
+					'count(click)'  => 25,
+				],
+				[
+					'campaign.name' => 'Bluebird Books — Summer Reading',
+					'count(view)'   => 0,
+					'count(click)'  => 0,
+				],
+			],
+		];
+		$payload = Insights_Advertising_Test_Metric::broadstreet_top_campaigns( '2026-01-01', '2026-01-31' );
+
+		$this->assertSame( 'table', $payload['type'] );
+		// Ranked by impressions desc: Riverside (5000) first.
+		$this->assertSame( 'Riverside Credit Union — Summer', $payload['rows'][0]['campaign'] );
+		$this->assertSame( 5000, $payload['rows'][0]['impressions'] );
+		$this->assertSame( 25, $payload['rows'][0]['clicks'] );
+		$this->assertSame( 0.005, $payload['rows'][0]['ctr'] );
+
+		$by_name = array_column( $payload['rows'], null, 'campaign' );
+		$this->assertSame( 0.004, $by_name['Hometown Hardware — Spring Flight']['ctr'] );
+		// CTR is null — never 0% — when the campaign served no impressions.
+		$this->assertNull( $by_name['Bluebird Books — Summer Reading']['ctr'] );
+
+		// No revenue anywhere in the Broadstreet API.
+		foreach ( $payload['rows'] as $row ) {
+			$this->assertArrayNotHasKey( 'revenue', $row );
+		}
+	}
+
+	/**
+	 * The Broadstreet fixture envelope is impressions-only: it declares the
+	 * provider, carries total impressions + a computable impressions-per-session +
+	 * top advertisers/zones, and omits every revenue-derived metric.
+	 */
+	public function test_broadstreet_fixture_is_impressions_only() {
+		$fixture = Advertising_Metric::get_fixture( '2026-06-01', '2026-06-30', false, 'populated', 'broadstreet' );
+		$current = $fixture['current'];
+		$metrics = $current['metrics'];
+
+		$this->assertSame( 'broadstreet', $current['active_provider'] );
+		$this->assertTrue( $current['is_report_ready'] );
+
+		$this->assertArrayHasKey( 'total_impressions', $metrics );
+		$this->assertTrue( $metrics['total_impressions']['computable'] );
+		$this->assertArrayHasKey( 'avg_impressions_per_session', $metrics );
+		$this->assertTrue( $metrics['avg_impressions_per_session']['computable'] );
+		$this->assertSame( 'count', $metrics['avg_impressions_per_session']['type'] );
+		// Overall CTR + mobile share are computable rate scorecards (NPPD-2045 add 1).
+		$this->assertArrayHasKey( 'overall_ctr', $metrics );
+		$this->assertSame( 'rate', $metrics['overall_ctr']['type'] );
+		$this->assertTrue( $metrics['overall_ctr']['computable'] );
+		$this->assertArrayHasKey( 'mobile_share', $metrics );
+		$this->assertSame( 'rate', $metrics['mobile_share']['type'] );
+		$this->assertTrue( $metrics['mobile_share']['computable'] );
+		$this->assertArrayHasKey( 'top_advertisers', $metrics );
+		$this->assertArrayHasKey( 'top_zones', $metrics );
+		// Top campaigns is a first-class Broadstreet table (NPPD-2045 add 2).
+		$this->assertArrayHasKey( 'top_campaigns', $metrics );
+		$this->assertTrue( $metrics['top_campaigns']['computable'] );
+
+		// No revenue in the Broadstreet API → none of these render.
+		foreach ( [ 'total_revenue', 'rpm', 'avg_ecpm', 'fill_rate', 'viewability_rate', 'direct_vs_programmatic', 'by_channel', 'by_device', 'top_ad_units', 'revenue_by_day' ] as $absent ) {
+			$this->assertArrayNotHasKey( $absent, $metrics, "$absent must be absent on the Broadstreet variant" );
+		}
+	}
+
+	/**
+	 * The Broadstreet comparison window holds sessions flat, so impressions per
+	 * session differs between windows and the delta renders.
+	 */
+	public function test_broadstreet_fixture_comparison_has_impressions_delta() {
+		$fixture = Advertising_Metric::get_fixture( '2026-06-01', '2026-06-30', true, 'populated', 'broadstreet' );
+		$this->assertNotNull( $fixture['previous'] );
+		$current = $fixture['current']['metrics']['avg_impressions_per_session']['value'];
+		$prior   = $fixture['previous']['metrics']['avg_impressions_per_session']['value'];
+		$this->assertGreaterThan( $prior, $current );
 	}
 }
