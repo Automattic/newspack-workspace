@@ -135,7 +135,9 @@ class Test_Group_Subscription_Managers extends WP_UnitTestCase {
 		$_SERVER['REQUEST_METHOD'] = 'POST';
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
 
-		$capture    = function () {
+		// Accept the $location the wp_redirect filter passes, matching the hook
+		// signature; the destination isn't asserted, only that a redirect happened.
+		$capture    = function ( $location ) {
 			throw new \Exception( 'redirect_intercepted' );
 		};
 		$allow_host = fn( $hosts ) => array_merge( $hosts, [ 'example.com' ] );
@@ -181,7 +183,9 @@ class Test_Group_Subscription_Managers extends WP_UnitTestCase {
 		$_SERVER['REQUEST_METHOD'] = 'POST';
 		// phpcs:enable WordPress.Security.NonceVerification.Missing
 
-		$capture    = function () {
+		// Accept the $location the wp_redirect filter passes, matching the hook
+		// signature; the destination isn't asserted, only that a redirect happened.
+		$capture    = function ( $location ) {
 			throw new \Exception( 'redirect_intercepted' );
 		};
 		$allow_host = fn( $hosts ) => array_merge( $hosts, [ 'example.com' ] );
