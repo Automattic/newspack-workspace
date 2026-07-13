@@ -32,6 +32,7 @@ import { __, sprintf } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../packages/components/src';
 import type { DonorsWindow } from '../../api/donors';
 import type { DateRange } from '../../state/useDateRange';
 import EmptyMetricSection from '../components/EmptyMetricSection';
@@ -149,7 +150,7 @@ const WindowedSection = ( { range, current, previous, activeDonors }: WindowedSe
 			aria-labelledby="newspack-insights-donors-windowed-heading"
 		>
 			<SectionHeading id="newspack-insights-donors-windowed-heading" title={ getHeading( range ) } />
-			<div className="newspack-insights__metric-grid">
+			<Grid columns={ 4 } gutter={ 16 } noMargin>
 				<MetricCard
 					label={ __( 'New donors', 'newspack-plugin' ) }
 					value={ current.new_donors }
@@ -202,7 +203,7 @@ const WindowedSection = ( { range, current, previous, activeDonors }: WindowedSe
 					}
 					description={ __( 'Mean order total across one-time donation orders in this timeframe', 'newspack-plugin' ) }
 				/>
-			</div>
+			</Grid>
 		</Section>
 	);
 };

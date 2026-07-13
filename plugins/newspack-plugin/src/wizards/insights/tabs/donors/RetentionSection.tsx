@@ -33,6 +33,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../packages/components/src';
 import type { DonorsRateValue, DonorsWindow } from '../../api/donors';
 import MetricCard from '../components/MetricCard';
 import Section from '../components/Section';
@@ -90,7 +91,7 @@ const RetentionSection = ( { current, previous }: RetentionSectionProps ) => {
 	return (
 		<Section { ...sectionProps }>
 			{ heading }
-			<div className="newspack-insights__metric-grid">
+			<Grid columns={ 4 } gutter={ 16 } noMargin>
 				{ recovery.computable ? (
 					<MetricCard
 						label={ RECOVERY_LABEL() }
@@ -125,7 +126,7 @@ const RetentionSection = ( { current, previous }: RetentionSectionProps ) => {
 						</p>
 					</div>
 				) }
-			</div>
+			</Grid>
 		</Section>
 	);
 };

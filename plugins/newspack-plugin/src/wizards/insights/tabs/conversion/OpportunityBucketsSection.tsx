@@ -16,10 +16,12 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
+import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
+import { Card, Grid } from '../../../../../packages/components/src';
 import type { ConversionTopPageRow, ConversionWindow } from '../../api/conversion';
 import MetricCard from '../components/MetricCard';
 import Section from '../components/Section';
@@ -90,65 +92,69 @@ const OpportunityBucketsSection = ( { current }: OpportunityBucketsSectionProps 
 				'newspack-plugin'
 			) }
 		/>
-		<div className="newspack-insights__metric-grid">
-			<MetricCard
-				{ ...scalarToMetricCardProps( {
-					label: __( 'Stale Registered Readers', 'newspack-plugin' ),
-					description: __( 'Registered but never converted, no activity in 90 days', 'newspack-plugin' ),
-					current: current.stale_registered_count,
-				} ) }
-			/>
-			<MetricCard
-				{ ...scalarToMetricCardProps( {
-					label: __( 'At-Risk Subscribers', 'newspack-plugin' ),
-					description: __( 'Active subscribers with a failed-payment retry scheduled', 'newspack-plugin' ),
-					current: current.at_risk_subscriber_count,
-				} ) }
-			/>
-			<MetricCard
-				{ ...scalarToMetricCardProps( {
-					label: __( 'Lapsed Donors', 'newspack-plugin' ),
-					description: __( 'Donors with no donation in the last 365 days', 'newspack-plugin' ),
-					current: current.lapsed_donor_count,
-				} ) }
-			/>
-		</div>
-		<div className="newspack-insights__conversion-top-pages">
-			<h3 className="newspack-insights__conversion-subheading">{ __( 'Top articles that don’t convert', 'newspack-plugin' ) }</h3>
-			<SectionState
-				state={ current.top_pages_no_conversion.state }
-				emptyMessage={ sprintf(
-					/* translators: %s: minimum pageview count for an article to qualify (formatted). */
-					__(
-						'No qualifying articles yet. Articles with at least %s pageviews and a measurable conversion rate will appear here.',
-						'newspack-plugin'
-					),
-					formatNumber( current.top_pages_no_conversion.threshold_pageviews )
-				) }
-			>
-				<SortableTable
-					columns={ TOP_PAGES_COLUMNS }
-					rows={ current.top_pages_no_conversion.rows }
-					getRowKey={ row => row.post_id }
-					defaultSortKey="pageviews"
-					initialRowLimit={ TOP_PAGES_ROW_LIMIT }
-					emptyMessage={ sprintf(
-						/* translators: %s: minimum pageview count for an article to qualify (formatted). */
-						__(
-							'No qualifying articles yet. Articles with at least %s pageviews and a measurable conversion rate will appear here.',
-							'newspack-plugin'
-						),
-						formatNumber( current.top_pages_no_conversion.threshold_pageviews )
-					) }
+		<VStack spacing={ 4 }>
+			<Grid columns={ 4 } gutter={ 16 } noMargin>
+				<MetricCard
+					{ ...scalarToMetricCardProps( {
+						label: __( 'Stale Registered Readers', 'newspack-plugin' ),
+						description: __( 'Registered but never converted, no activity in 90 days', 'newspack-plugin' ),
+						current: current.stale_registered_count,
+					} ) }
 				/>
-			</SectionState>
-			<p className="newspack-insights__conversion-top-pages-note">
-				{ __(
-					'These articles get traffic but don’t drive registrations. Consider adding a gate or prompt where engagement is high but conversion is low.',
-					'newspack-plugin'
-				) }
-			</p>
-		</div>
+				<MetricCard
+					{ ...scalarToMetricCardProps( {
+						label: __( 'At-Risk Subscribers', 'newspack-plugin' ),
+						description: __( 'Active subscribers with a failed-payment retry scheduled', 'newspack-plugin' ),
+						current: current.at_risk_subscriber_count,
+					} ) }
+				/>
+				<MetricCard
+					{ ...scalarToMetricCardProps( {
+						label: __( 'Lapsed Donors', 'newspack-plugin' ),
+						description: __( 'Donors with no donation in the last 365 days', 'newspack-plugin' ),
+						current: current.lapsed_donor_count,
+					} ) }
+				/>
+			</Grid>
+			<Card __experimentalCoreCard className="newspack-insights__chart-card">
+				<h3 className="newspack-insights__chart-card-title">{ __( 'Top articles that don’t convert', 'newspack-plugin' ) }</h3>
+				<p className="newspack-insights__chart-card-caption">
+					{ __(
+						'These articles get traffic but don’t drive registrations. Consider adding a gate or prompt where engagement is high but conversion is low.',
+						'newspack-plugin'
+					) }
+				</p>
+				<div className="newspack-insights__chart-card-body">
+					<SectionState
+						state={ current.top_pages_no_conversion.state }
+						emptyMessage={ sprintf(
+							/* translators: %s: minimum pageview count for an article to qualify (formatted). */
+							__(
+								'No qualifying articles yet. Articles with at least %s pageviews and a measurable conversion rate will appear here.',
+								'newspack-plugin'
+							),
+							formatNumber( current.top_pages_no_conversion.threshold_pageviews )
+						) }
+					>
+						<SortableTable
+							columns={ TOP_PAGES_COLUMNS }
+							rows={ current.top_pages_no_conversion.rows }
+							getRowKey={ row => row.post_id }
+							defaultSortKey="pageviews"
+							initialRowLimit={ TOP_PAGES_ROW_LIMIT }
+							emptyMessage={ sprintf(
+								/* translators: %s: minimum pageview count for an article to qualify (formatted). */
+								__(
+									'No qualifying articles yet. Articles with at least %s pageviews and a measurable conversion rate will appear here.',
+									'newspack-plugin'
+								),
+								formatNumber( current.top_pages_no_conversion.threshold_pageviews )
+							) }
+						/>
+					</SectionState>
+				</div>
+			</Card>
+		</VStack>
 	</Section>
 );
 

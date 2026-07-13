@@ -22,6 +22,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../packages/components/src';
 import type { GatesWindow } from '../../api/gates';
 import MetricCard from '../components/MetricCard';
 import Section from '../components/Section';
@@ -42,7 +43,7 @@ const GateExposureSection = ( { current, previous, lastUpdated }: GateExposureSe
 			description={ __( 'Top of the funnel. How many readers see gates in this timeframe.', 'newspack-plugin' ) }
 			actions={ lastUpdated }
 		/>
-		<div className="newspack-insights__metric-grid">
+		<Grid columns={ 4 } gutter={ 16 } noMargin>
 			<MetricCard
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Total Gate Impressions', 'newspack-plugin' ),
@@ -75,7 +76,7 @@ const GateExposureSection = ( { current, previous, lastUpdated }: GateExposureSe
 					previous: previous?.sessions_with_gate,
 				} ) }
 			/>
-		</div>
+		</Grid>
 	</Section>
 );
 

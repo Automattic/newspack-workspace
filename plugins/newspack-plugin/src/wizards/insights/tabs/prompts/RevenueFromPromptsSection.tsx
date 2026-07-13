@@ -20,6 +20,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../packages/components/src';
 import type { PromptsWindow } from '../../api/prompts';
 import MetricCard from '../components/MetricCard';
 import Section from '../components/Section';
@@ -43,7 +44,7 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 				'newspack-plugin'
 			) }
 		/>
-		<div className="newspack-insights__metric-grid">
+		<Grid columns={ 4 } gutter={ 16 } noMargin>
 			<MetricCard
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Donation Revenue (Direct)', 'newspack-plugin' ),
@@ -99,7 +100,7 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 					notComputableMessage: NOT_COMPUTABLE_COPY.subscription,
 				} ) }
 			/>
-		</div>
+		</Grid>
 	</Section>
 );
 

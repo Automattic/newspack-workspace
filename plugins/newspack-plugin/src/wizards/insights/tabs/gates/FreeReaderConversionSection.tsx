@@ -37,6 +37,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../packages/components/src';
 import type { GatesWindow } from '../../api/gates';
 import MetricCard from '../components/MetricCard';
 import Section from '../components/Section';
@@ -114,7 +115,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 	return (
 		<Section className="newspack-insights__section newspack-insights__section--free-reader" aria-labelledby={ HEADING_ID }>
 			<SectionHeading id={ HEADING_ID } title={ title } description={ caption } />
-			<div className="newspack-insights__metric-grid newspack-insights__metric-grid--pair">
+			<Grid columns={ 4 } gutter={ 16 } noMargin>
 				<MetricCard
 					{ ...scalarToMetricCardProps( {
 						label: __( 'Registered access gate Conversion (Direct)', 'newspack-plugin' ),
@@ -151,7 +152,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 						},
 					} ) }
 				/>
-			</div>
+			</Grid>
 		</Section>
 	);
 };

@@ -14,10 +14,12 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
  */
+import { Card } from '../../../../../packages/components/src';
 import type { ConversionCohortData } from '../../api/conversion';
 import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
@@ -41,26 +43,28 @@ interface CohortChartProps {
 }
 
 const CohortChart = ( { title, data, caption, referenceLabel }: CohortChartProps ) => (
-	<div className="newspack-insights__conversion-cohort-cell">
-		<h3 className="newspack-insights__conversion-subheading">{ title }</h3>
-		<p className="newspack-insights__conversion-subcaption">{ caption }</p>
-		<SectionState
-			state={ data.state }
-			comingSoonMessage={ __(
-				'Cohort data is being prepared. Check back in a few minutes, then click Refresh now to load it.',
-				'newspack-plugin'
-			) }
-			emptyMessage={ __( 'No cohort data available yet.', 'newspack-plugin' ) }
-		>
-			<CohortHeatmap
-				cohorts={ data.cohorts }
-				formatValue={ formatPercent }
-				columnsLabel={ __( 'Months since cohort start', 'newspack-plugin' ) }
-				referenceLabel={ referenceLabel }
+	<Card __experimentalCoreCard className="newspack-insights__chart-card">
+		<h3 className="newspack-insights__chart-card-title">{ title }</h3>
+		<p className="newspack-insights__chart-card-caption">{ caption }</p>
+		<div className="newspack-insights__chart-card-body">
+			<SectionState
+				state={ data.state }
+				comingSoonMessage={ __(
+					'Cohort data is being prepared. Check back in a few minutes, then click Refresh now to load it.',
+					'newspack-plugin'
+				) }
 				emptyMessage={ __( 'No cohort data available yet.', 'newspack-plugin' ) }
-			/>
-		</SectionState>
-	</div>
+			>
+				<CohortHeatmap
+					cohorts={ data.cohorts }
+					formatValue={ formatPercent }
+					columnsLabel={ __( 'Months since cohort start', 'newspack-plugin' ) }
+					referenceLabel={ referenceLabel }
+					emptyMessage={ __( 'No cohort data available yet.', 'newspack-plugin' ) }
+				/>
+			</SectionState>
+		</div>
+	</Card>
 );
 
 const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => (
@@ -76,7 +80,7 @@ const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => (
 				'newspack-plugin'
 			) }
 		/>
-		<div className="newspack-insights__conversion-cohort-stack">
+		<VStack spacing={ 4 }>
 			<CohortChart
 				/*
 				 * TODO: default a self-relative reference callout here — the median
@@ -101,7 +105,7 @@ const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => (
 				data={ current.subscriber_retention_cohort }
 				referenceLabel={ current.subscriber_retention_cohort.reference_line?.label }
 			/>
-		</div>
+		</VStack>
 	</Section>
 );
 

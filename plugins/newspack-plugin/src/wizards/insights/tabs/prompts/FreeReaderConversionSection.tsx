@@ -20,6 +20,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../packages/components/src';
 import type { PromptsWindow } from '../../api/prompts';
 import MetricCard from '../components/MetricCard';
 import Section from '../components/Section';
@@ -43,7 +44,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 				'newspack-plugin'
 			) }
 		/>
-		<div className="newspack-insights__metric-grid">
+		<Grid columns={ 4 } gutter={ 16 } noMargin>
 			<MetricCard
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Registration Conversion (Direct)', 'newspack-plugin' ),
@@ -96,7 +97,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 					notComputableMessage: NOT_COMPUTABLE_COPY.newsletterInfluenced,
 				} ) }
 			/>
-		</div>
+		</Grid>
 	</Section>
 );
 

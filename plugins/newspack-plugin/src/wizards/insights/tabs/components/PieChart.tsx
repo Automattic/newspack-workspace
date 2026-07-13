@@ -53,34 +53,40 @@ const PieChart = ( { segments, centerLabel, emptyMessage, formatValue = formatNu
 		<div className="newspack-insights__pie">
 			{ /* Pie centered in the middle slot; legend anchored to the bottom (NPPD-1649 alignment). */ }
 			<div className="newspack-insights__pie-figure">
-				{ /* viewBox tightened to the ring's outer extent (r16 + strokeWidth8/2 = 20, centered at 21 → spans 1–41) so the donut sits flush to the svg box. */ }
-				<svg viewBox="1 1 40 40" className="newspack-insights__pie-svg" role="img" aria-label={ __( 'Breakdown chart', 'newspack-plugin' ) }>
-					<circle className="newspack-insights__pie-track" cx="21" cy="21" r={ RADIUS } />
-					{ segments.map( ( segment, i ) => {
-						const fraction = segment.value / total;
-						const dash = fraction * CIRCUMFERENCE;
-						// No hover tooltip on pie segments — the legend already shows
-						// label + value + percent (NPPD-1649 fix #6).
-						const circle = (
-							<circle
-								key={ segment.label }
-								className={ `newspack-insights__pie-segment is-series-${ i % 8 }` }
-								cx="21"
-								cy="21"
-								r={ RADIUS }
-								strokeDasharray={ `${ dash } ${ CIRCUMFERENCE - dash }` }
-								strokeDashoffset={ CIRCUMFERENCE / 4 - offset }
-							/>
-						);
-						offset += dash;
-						return circle;
-					} ) }
-					{ centerLabel && (
-						<text className="newspack-insights__pie-center" x="21" y="21" textAnchor="middle" dominantBaseline="central">
-							{ centerLabel }
-						</text>
-					) }
-				</svg>
+				{ /* The donut wraps the svg and the HTML center label so the label
+				     can be a real HTML element (heading-scale px), overlaid on the
+				     svg center rather than sized in svg user units. */ }
+				<div className="newspack-insights__pie-donut">
+					{ /* viewBox tightened to the ring's outer extent (r16 + strokeWidth8/2 = 20, centered at 21 → spans 1–41) so the donut sits flush to the svg box. */ }
+					<svg
+						viewBox="1 1 40 40"
+						className="newspack-insights__pie-svg"
+						role="img"
+						aria-label={ __( 'Breakdown chart', 'newspack-plugin' ) }
+					>
+						<circle className="newspack-insights__pie-track" cx="21" cy="21" r={ RADIUS } />
+						{ segments.map( ( segment, i ) => {
+							const fraction = segment.value / total;
+							const dash = fraction * CIRCUMFERENCE;
+							// No hover tooltip on pie segments — the legend already shows
+							// label + value + percent (NPPD-1649 fix #6).
+							const circle = (
+								<circle
+									key={ segment.label }
+									className={ `newspack-insights__pie-segment is-series-${ i % 8 }` }
+									cx="21"
+									cy="21"
+									r={ RADIUS }
+									strokeDasharray={ `${ dash } ${ CIRCUMFERENCE - dash }` }
+									strokeDashoffset={ CIRCUMFERENCE / 4 - offset }
+								/>
+							);
+							offset += dash;
+							return circle;
+						} ) }
+					</svg>
+					{ centerLabel && <span className="newspack-insights__pie-center">{ centerLabel }</span> }
+				</div>
 			</div>
 			<ul className="newspack-insights__pie-legend">
 				{ segments.map( ( segment, i ) => (

@@ -21,6 +21,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../packages/components/src';
 import type { PromptsWindow } from '../../api/prompts';
 import MetricCard from '../components/MetricCard';
 import Section from '../components/Section';
@@ -44,7 +45,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				'newspack-plugin'
 			) }
 		/>
-		<div className="newspack-insights__metric-grid">
+		<Grid columns={ 4 } gutter={ 16 } noMargin>
 			<MetricCard
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Donation Conversion (Direct)', 'newspack-plugin' ),
@@ -100,7 +101,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 					notComputableMessage: NOT_COMPUTABLE_COPY.subscriptionInfluenced,
 				} ) }
 			/>
-		</div>
+		</Grid>
 	</Section>
 );
 

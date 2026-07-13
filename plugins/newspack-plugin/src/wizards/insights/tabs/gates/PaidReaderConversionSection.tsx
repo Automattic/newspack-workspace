@@ -29,6 +29,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../packages/components/src';
 import type { GatesWindow } from '../../api/gates';
 import MetricCard from '../components/MetricCard';
 import Section from '../components/Section';
@@ -99,7 +100,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 	return (
 		<Section className="newspack-insights__section newspack-insights__section--paid-reader" aria-labelledby={ HEADING_ID }>
 			<SectionHeading id={ HEADING_ID } title={ title } description={ caption } />
-			<div className="newspack-insights__metric-grid">
+			<Grid columns={ 4 } gutter={ 16 } noMargin>
 				<MetricCard
 					{ ...scalarToMetricCardProps( {
 						label: __( 'Paid access gate Conversion (Direct)', 'newspack-plugin' ),
@@ -170,7 +171,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 						},
 					} ) }
 				/>
-			</div>
+			</Grid>
 		</Section>
 	);
 };

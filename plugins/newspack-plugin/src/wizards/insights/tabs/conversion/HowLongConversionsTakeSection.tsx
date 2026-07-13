@@ -20,6 +20,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Card, Grid, Notice } from '../../../../../packages/components/src';
 import type { ConversionCumulativeMulti, ConversionCumulativePoint, ConversionWindow } from '../../api/conversion';
 import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
@@ -47,11 +48,11 @@ interface CurveCellProps {
 }
 
 const CurveCell = ( { title, caption, children }: CurveCellProps ) => (
-	<div className="newspack-insights__conversion-curve-cell">
-		<h3 className="newspack-insights__conversion-subheading">{ title }</h3>
-		{ caption && <p className="newspack-insights__conversion-subcaption">{ caption }</p> }
-		{ children }
-	</div>
+	<Card __experimentalCoreCard className="newspack-insights__chart-card">
+		<h3 className="newspack-insights__chart-card-title">{ title }</h3>
+		{ caption && <p className="newspack-insights__chart-card-caption">{ caption }</p> }
+		<div className="newspack-insights__chart-card-body">{ children }</div>
+	</Card>
 );
 
 const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSectionProps ) => {
@@ -70,7 +71,7 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 					'newspack-plugin'
 				) }
 			/>
-			<div className="newspack-insights__conversion-curve-grid">
+			<Grid columns={ 2 } gutter={ 16 } noMargin>
 				{ /* 4.1 — time to register: Phase A, state-gated */ }
 				<CurveCell title={ __( 'Time to register', 'newspack-plugin' ) }>
 					<SectionState
@@ -125,9 +126,14 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 				{ /* 4.4 — subscriber → donor lag: Phase B, coming_soon + visibility gate */ }
 				<CurveCell title={ __( 'Subscriber → donor lag', 'newspack-plugin' ) } caption={ snapshotCaption }>
 					{ lag.visibility === 'hidden' ? (
-						<p className="newspack-insights__conversion-gated-note">
-							{ __( 'Subscriber-to-donor lag appears when at least 50 readers have both subscribed and donated.', 'newspack-plugin' ) }
-						</p>
+						<Notice
+							isWarning
+							className="newspack-insights__conversion-notice"
+							noticeText={ __(
+								'Subscriber-to-donor lag appears when at least 50 readers have both subscribed and donated.',
+								'newspack-plugin'
+							) }
+						/>
 					) : (
 						<SectionState
 							state={ lag.state }
@@ -145,7 +151,7 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 						</SectionState>
 					) }
 				</CurveCell>
-			</div>
+			</Grid>
 		</Section>
 	);
 };

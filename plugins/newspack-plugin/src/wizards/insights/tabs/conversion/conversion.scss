@@ -17,21 +17,6 @@
 @use "../../../../../packages/colors/colors.module" as colors;
 @use "../components/insights-charts";
 
-// Shared card chrome for this tab's chart cells (pie / curve / cohort / rate
-// trends). Matches the funnel + scorecard + Audience-tab chart-card treatment
-// (white fill, gray-200 hairline, 4px radius, 16px padding) so every section
-// reads as the same bounded card instead of a chart floating on the page.
-// `height: 100%` lets cards in a row stretch to the tallest, keeping row edges
-// aligned.
-@mixin conversion-chart-card {
-	min-width: 0;
-	height: 100%;
-	padding: 16px;
-	background-color: wp-colors.$white;
-	border: 1px solid wp-colors.$gray-200;
-	border-radius: 4px;
-}
-
 .newspack-insights {
 	&__conversion-tab {
 		display: flex;
@@ -64,7 +49,14 @@
 		color: wp-colors.$gray-700;
 	}
 
-	// Per-viz subheading + caption used inside the multi-cell sections.
+	// Gate/no-conversion warning notices sit flush inside a funnel card — drop the
+	// notice's default block margins. Compound selector to beat the base rule.
+	&__conversion-notice.newspack-notice {
+		margin-top: 0;
+		margin-bottom: 0;
+	}
+
+	// Per-viz subheading still used by the Opportunity buckets section (Section 7).
 	&__conversion-subheading {
 		margin: 0 0 4px;
 		font-size: 15px;
@@ -72,102 +64,8 @@
 		color: wp-colors.$gray-900;
 	}
 
-	&__conversion-subcaption {
-		margin: 0 0 12px;
-		font-size: 13px;
-		font-weight: 400;
-		line-height: 1.5;
-		color: wp-colors.$gray-700;
-	}
-
-	// Empty-state note shown when a visibility-gated viz (Section 2.4 funnel,
-	// Section 4.4 lag curve) is hidden.
-	&__conversion-gated-note {
-		margin: 0;
-		padding: 32px 20px;
-		text-align: center;
-		font-size: 13px;
-		color: wp-colors.$gray-700;
-	}
-
-	// Section 2 — four per-journey funnels in a 2-column grid, stacking under
-	// ~720px container width. Cells stretch so a shorter funnel (e.g. the 2-stage
-	// cross-upsell) matches the height of its taller row-mate.
-	&__conversion-journey-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-		gap: 24px;
-		align-items: stretch;
-	}
-
-	&__conversion-journey-cell {
-		display: flex;
-		flex-direction: column;
-		min-width: 0;
-
-		// The funnel is the cell's last child; grow it to fill the stretched cell.
-		.newspack-insights__funnel {
-			flex: 1 1 auto;
-		}
-	}
-
-	// Section 3 — three source-mix pies side by side.
-	&__conversion-pie-row {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-		gap: 24px;
-		align-items: stretch;
-	}
-
-	&__conversion-pie-cell {
-		@include conversion-chart-card;
-	}
-
-	// Section 4 — 2×2 grid of cumulative-distribution curves.
-	&__conversion-curve-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-		gap: 24px;
-		align-items: stretch;
-	}
-
-	&__conversion-curve-cell {
-		@include conversion-chart-card;
-	}
-
-	// Section 5 — two cohort heatmaps, each on its own full-width row.
-	// (DSGNEWS-188: side-by-side cut off the rightmost month columns on the
-	// wider heatmaps — full width gives each room to show every column.)
-	&__conversion-cohort-stack {
-		display: flex;
-		flex-direction: column;
-		gap: 16px;
-	}
-
-	&__conversion-cohort-cell {
-		@include conversion-chart-card;
-	}
-
-	// Section 6 — single full-width weekly rate-trends curve.
-	&__conversion-rate-trends-cell {
-		@include conversion-chart-card;
-	}
-
-	// Section 8.4 — top-pages table block.
-	&__conversion-top-pages {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		margin-top: 24px;
-	}
-
-	&__conversion-top-pages-note {
-		margin: 0;
-		font-size: 13px;
-		font-weight: 400;
-		line-height: 1.5;
-		color: wp-colors.$gray-700;
-	}
+	// Section 8.4 — top-pages table now sits in a chart-card CoreCard; the
+	// explanatory line moved to the card caption (chart-card-caption).
 
 }
 // Sortable-table sort affordances (See more/less toggle, empty row, sort chrome)

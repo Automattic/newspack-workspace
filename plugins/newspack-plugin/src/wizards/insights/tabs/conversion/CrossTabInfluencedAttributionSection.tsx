@@ -18,6 +18,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../packages/components/src';
 import type { ConversionWindow } from '../../api/conversion';
 import MetricCard from '../components/MetricCard';
 import Section from '../components/Section';
@@ -42,7 +43,7 @@ const CrossTabInfluencedAttributionSection = ( { current, previous }: CrossTabIn
 				'newspack-plugin'
 			) }
 		/>
-		<div className="newspack-insights__metric-grid">
+		<Grid columns={ 4 } gutter={ 16 } noMargin>
 			<MetricCard
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Influenced Registration Rate', 'newspack-plugin' ),
@@ -78,7 +79,7 @@ const CrossTabInfluencedAttributionSection = ( { current, previous }: CrossTabIn
 					previous: previous?.influenced_newsletter_rate_7d,
 				} ) }
 			/>
-		</div>
+		</Grid>
 	</Section>
 );
 

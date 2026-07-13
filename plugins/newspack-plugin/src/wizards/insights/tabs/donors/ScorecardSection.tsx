@@ -22,6 +22,7 @@ import { __, sprintf } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../packages/components/src';
 import type { DonorsSnapshot } from '../../api/donors';
 import MetricCard from '../components/MetricCard';
 import Section from '../components/Section';
@@ -44,7 +45,7 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 			description={ __( 'Current state and recurring revenue, independent of selected timeframe.', 'newspack-plugin' ) }
 			actions={ lastUpdated }
 		/>
-		<div className="newspack-insights__metric-grid">
+		<Grid columns={ 4 } gutter={ 16 } noMargin>
 			<MetricCard
 				label={ __( 'Active donors', 'newspack-plugin' ) }
 				value={ snapshot.active_donors }
@@ -114,7 +115,7 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 				lowerIsBetter
 				description={ __( 'Donation subscriptions set to end in the next 30 days', 'newspack-plugin' ) }
 			/>
-		</div>
+		</Grid>
 	</Section>
 );
 
