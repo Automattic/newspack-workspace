@@ -239,6 +239,9 @@
 			line-height: 1.4;
 			color: wp-colors.$gray-700;
 			font-variant-numeric: tabular-nums;
+			@media screen and (min-width: 783px){
+				display: none;
+			}
 		}
 
 		&-delta {
@@ -267,6 +270,21 @@
 
 			&--neutral {
 				color: wp-colors.$gray-700;
+			}
+		}
+
+		&-info-icon.components-button.is-tertiary {
+			color: wp-colors.$gray-700;
+			display: none;
+			margin-right: -14px;
+			margin-top: -8px;
+			padding: 0;
+			&:active,
+			&:hover {
+				background-color: transparent;
+			}
+			@media screen and (min-width: 783px){
+				display: inline-block;
 			}
 		}
 

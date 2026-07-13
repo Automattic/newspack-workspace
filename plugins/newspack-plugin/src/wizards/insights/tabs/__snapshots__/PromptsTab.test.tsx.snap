@@ -55,9 +55,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Total Prompt Impressions
+                  <span>
+                    Total Prompt Impressions
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -71,7 +75,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  Every prompt view in this timeframe
+                  <p>
+                    Every prompt view in this timeframe
+                  </p>
                 </div>
               </div>
             </div>
@@ -100,9 +106,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Unique Readers Reached
+                  <span>
+                    Unique Readers Reached
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -116,7 +126,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  Distinct readers who saw at least one prompt
+                  <p>
+                    Distinct readers who saw at least one prompt
+                  </p>
                 </div>
               </div>
             </div>
@@ -145,9 +157,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Avg Prompts per Reader
+                  <span>
+                    Avg Prompts per Reader
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -161,7 +177,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  How many prompts a typical reader sees
+                  <p>
+                    How many prompts a typical reader sees
+                  </p>
                 </div>
               </div>
             </div>
@@ -222,9 +240,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Click-Through Rate
+                  <span>
+                    Click-Through Rate
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -238,7 +260,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  Clicks ÷ prompt impressions
+                  <p>
+                    Clicks ÷ prompt impressions
+                  </p>
                 </div>
               </div>
             </div>
@@ -267,9 +291,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Form Submission Rate
+                  <span>
+                    Form Submission Rate
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -283,7 +311,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  Form submissions ÷ impressions on form-bearing prompts
+                  <p>
+                    Form submissions ÷ impressions on form-bearing prompts
+                  </p>
                 </div>
               </div>
             </div>
@@ -312,9 +342,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Dismissal Rate
+                  <span>
+                    Dismissal Rate
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -328,7 +362,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  Explicit dismissals ÷ prompt impressions
+                  <p>
+                    Explicit dismissals ÷ prompt impressions
+                  </p>
                 </div>
               </div>
             </div>
@@ -389,9 +425,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Registration Conversion (Direct)
+                  <span>
+                    Registration Conversion (Direct)
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -405,7 +445,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  Registrations submitted through a prompt’s registration block ÷ impressions of prompts with a registration block
+                  <p>
+                    Registrations submitted through a prompt’s registration block ÷ impressions of prompts with a registration block
+                  </p>
                 </div>
               </div>
             </div>
@@ -434,9 +476,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Registration Conversion (Influenced, 7d)
+                  <span>
+                    Registration Conversion (Influenced, 7d)
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -450,7 +496,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  Registrants whose registration followed a registration-prompt exposure in a prior session within 7 days ÷ all new registrations
+                  <p>
+                    Registrants whose registration followed a registration-prompt exposure in a prior session within 7 days ÷ all new registrations
+                  </p>
                 </div>
               </div>
             </div>
@@ -479,9 +527,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Newsletter Signup Conversion (Direct)
+                  <span>
+                    Newsletter Signup Conversion (Direct)
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -495,7 +547,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  Newsletter signups submitted through a prompt’s newsletter block ÷ impressions of prompts with a newsletter block
+                  <p>
+                    Newsletter signups submitted through a prompt’s newsletter block ÷ impressions of prompts with a newsletter block
+                  </p>
                 </div>
               </div>
             </div>
@@ -524,9 +578,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Newsletter Signup Conversion (Influenced, 7d)
+                  <span>
+                    Newsletter Signup Conversion (Influenced, 7d)
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -540,7 +598,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  New newsletter subscribers whose signup followed a newsletter-prompt exposure in a prior session within 7 days ÷ all new newsletter signups
+                  <p>
+                    New newsletter subscribers whose signup followed a newsletter-prompt exposure in a prior session within 7 days ÷ all new newsletter signups
+                  </p>
                 </div>
               </div>
             </div>
@@ -601,9 +661,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Donation Conversion (Direct)
+                  <span>
+                    Donation Conversion (Direct)
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -617,7 +681,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  Donations completed through a prompt’s donation block ÷ impressions of prompts with a donation block
+                  <p>
+                    Donations completed through a prompt’s donation block ÷ impressions of prompts with a donation block
+                  </p>
                 </div>
               </div>
             </div>
@@ -646,9 +712,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Donation Conversion (Influenced, 14d)
+                  <span>
+                    Donation Conversion (Influenced, 14d)
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -662,7 +732,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  Donors whose conversion followed a donation-prompt exposure in a prior session within 14 days ÷ all new donors
+                  <p>
+                    Donors whose conversion followed a donation-prompt exposure in a prior session within 14 days ÷ all new donors
+                  </p>
                 </div>
               </div>
             </div>
@@ -691,9 +763,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Subscription Conversion (Direct)
+                  <span>
+                    Subscription Conversion (Direct)
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -707,7 +783,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  Subscriptions purchased through a prompt’s checkout button ÷ impressions of prompts with a checkout button
+                  <p>
+                    Subscriptions purchased through a prompt’s checkout button ÷ impressions of prompts with a checkout button
+                  </p>
                 </div>
               </div>
             </div>
@@ -736,9 +814,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Subscription Conversion (Influenced, 14d)
+                  <span>
+                    Subscription Conversion (Influenced, 14d)
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -752,7 +834,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  Subscribers whose conversion followed a subscription-prompt exposure in a prior session within 14 days ÷ all new subscribers
+                  <p>
+                    Subscribers whose conversion followed a subscription-prompt exposure in a prior session within 14 days ÷ all new subscribers
+                  </p>
                 </div>
               </div>
             </div>
@@ -813,9 +897,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Donation Revenue (Direct)
+                  <span>
+                    Donation Revenue (Direct)
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -829,7 +917,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  Sum of Woo donation order totals from donations completed through a prompt’s donation block
+                  <p>
+                    Sum of Woo donation order totals from donations completed through a prompt’s donation block
+                  </p>
                 </div>
               </div>
             </div>
@@ -858,9 +948,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Donation Revenue (Influenced, 14d)
+                  <span>
+                    Donation Revenue (Influenced, 14d)
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -874,7 +968,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  Checkout revenue from donation completions in a later session within 14 days of seeing a donation-intent prompt
+                  <p>
+                    Checkout revenue from donation completions in a later session within 14 days of seeing a donation-intent prompt
+                  </p>
                 </div>
               </div>
             </div>
@@ -903,9 +999,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Subscription Revenue (Direct)
+                  <span>
+                    Subscription Revenue (Direct)
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -919,7 +1019,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  Sum of Woo subscription order totals from subscriptions purchased through a prompt’s checkout button
+                  <p>
+                    Sum of Woo subscription order totals from subscriptions purchased through a prompt’s checkout button
+                  </p>
                 </div>
               </div>
             </div>
@@ -948,9 +1050,13 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 class="newspack-card--core__body"
               >
                 <div
-                  class="newspack-insights__metric-card-label"
+                  class="components-flex components-h-stack newspack-insights__metric-card-label css-txkh1g-PolymorphicDiv-Flex-base-ItemsRow e19lxcc00"
+                  data-wp-c16t="true"
+                  data-wp-component="HStack"
                 >
-                  Subscription Revenue (Influenced, 14d)
+                  <span>
+                    Subscription Revenue (Influenced, 14d)
+                  </span>
                 </div>
                 <div
                   class="newspack-insights__metric-card-body"
@@ -964,7 +1070,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                 <div
                   class="newspack-insights__metric-card-description"
                 >
-                  Checkout revenue from subscription completions in a later session within 14 days of seeing a subscription-intent prompt
+                  <p>
+                    Checkout revenue from subscription completions in a later session within 14 days of seeing a subscription-intent prompt
+                  </p>
                 </div>
               </div>
             </div>
