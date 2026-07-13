@@ -52,7 +52,9 @@ if ( $wprtt_guards_enabled ) {
 	if ( ! defined( 'DONOTCACHEPAGE' ) ) {
 		define( 'DONOTCACHEPAGE', true );
 	}
-	header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
+	if ( ! headers_sent() ) {
+		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0' );
+	}
 }
 
 $wprtt_user_agent = '';
@@ -93,8 +95,10 @@ if ( $wprtt_shared_post instanceof WP_Post && ( ! $wprtt_guards_enabled || ! wpr
 	if ( ! $wprtt_guards_enabled || wprtt_should_count_view( $shared_post_id, wprtt_get_dedup_identity() ) ) {
 		$wprtt_client_id = wprtt_extract_cid_from_cookies();
 		// The title fetch is a blocking outbound request only the GA4 event needs,
-		// so it runs only for views that actually count.
-		$url_title = '' !== $url ? wprtt_get_referring_page_title( $url ) : '';
+		// so it runs only for views that actually count. The referrer is
+		// client-controlled: validate it (blocks non-http(s) and local/private
+		// targets) before fetching anything server-side.
+		$url_title = '' !== $url && wp_http_validate_url( $url ) ? wprtt_get_referring_page_title( $url ) : '';
 		$value = get_post_meta( $shared_post_id, 'republication_tracker_tool_sharing', true );
 		if ( $value ) {
 			if ( isset( $value[ $url ] ) ) {
