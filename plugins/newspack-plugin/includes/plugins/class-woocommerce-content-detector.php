@@ -341,7 +341,7 @@ class WooCommerce_Content_Detector {
 		// Guard the empty/unset case (a classic/hybrid route on a block theme may
 		// leave it empty): treat as a clean miss, not an error.
 		// NOTE: underscore-prefixed core internal; re-verify on WP upgrades.
-		if ( empty( $GLOBALS['_wp_current_template_content'] ) ) {
+		if ( ! isset( $GLOBALS['_wp_current_template_content'] ) || '' === $GLOBALS['_wp_current_template_content'] ) {
 			return false;
 		}
 		return self::markup_has_woocommerce( $GLOBALS['_wp_current_template_content'], $visited );
