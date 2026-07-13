@@ -8,9 +8,14 @@ gates). The full design is in the spec — see **Docs** below.
 ## Prerequisites
 
 - `LINEAR_API_KEY` set in the environment, or in the workspace root `.env`
-  (`cp default.env .env` and add it there). Required for any live Linear
-  call; not required when `AUTOFIX_LINEAR_MOCK_DIR` is set (tests only —
-  see below).
+  (`cp default.env .env` if you don't have one, then add a line
+  `LINEAR_API_KEY=lin_api_...` — docker-env format: one `KEY=value` per
+  line, no quotes, no `export`). A real environment variable takes
+  precedence; only this one key is extracted from `.env` (the file is
+  never sourced as shell, since docker-env values have no shell quoting
+  semantics). Personal keys: linear.app → Settings → Security & access →
+  API keys. Required for any live Linear call; not required when
+  `AUTOFIX_LINEAR_MOCK_DIR` is set (tests only — see below).
 - `gh auth status` — authenticated GitHub CLI with push access to this repo
   (branch push + draft PR creation + Copilot review request).
 - `jq` on `PATH`.

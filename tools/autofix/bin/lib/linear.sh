@@ -9,7 +9,11 @@ linear_gql() { # opname query [variables-json]
     cat "$AUTOFIX_LINEAR_MOCK_DIR/$op.json" 2>/dev/null || { log "no mock fixture: $op"; return 1; }
     return 0
   fi
-  [ -n "${LINEAR_API_KEY:-}" ] || die "LINEAR_API_KEY not set (and not in mock mode)"
+  if [ -z "${LINEAR_API_KEY:-}" ] && [ -f "$WORKSPACE_ROOT/.env" ]; then
+    # Docker-style .env has no shell quoting semantics — extract only this key.
+    LINEAR_API_KEY="$(sed -n 's/^LINEAR_API_KEY=//p' "$WORKSPACE_ROOT/.env" | tail -1)"
+  fi
+  [ -n "${LINEAR_API_KEY:-}" ] || die "LINEAR_API_KEY not set (env or workspace .env; not in mock mode)"
   require curl; require jq
   local attempt=1 max="${AUTOFIX_MAX_ATTEMPTS:-3}" resp code body payload
   payload="$(jq -n --arg q "$q" --argjson v "$vars" '{query:$q, variables:$v}')"
