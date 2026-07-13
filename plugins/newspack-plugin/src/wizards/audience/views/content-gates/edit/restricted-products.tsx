@@ -38,10 +38,7 @@ export default function RestrictedProducts( { products, productCategories, onCha
 	const productTokens = useMemo( () => products.map( String ), [ products ] );
 	const productCategoryTokens = useMemo( () => productCategories.map( String ), [ productCategories ] );
 
-	const handleProductsChange = useCallback(
-		( value: string[] ) => onChange( { restricted_products: value.map( Number ) } ),
-		[ onChange ]
-	);
+	const handleProductsChange = useCallback( ( value: string[] ) => onChange( { restricted_products: value.map( Number ) } ), [ onChange ] );
 	const handleProductCategoriesChange = useCallback(
 		( value: string[] ) => onChange( { restricted_product_categories: value.map( Number ) } ),
 		[ onChange ]

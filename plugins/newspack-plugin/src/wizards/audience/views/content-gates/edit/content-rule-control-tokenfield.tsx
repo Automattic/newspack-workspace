@@ -38,10 +38,7 @@ export default function ContentRuleControlTokenField( {
 	config,
 	label = '',
 }: ContentRuleControlTokenFieldProps ) {
-	const rule = useMemo(
-		() => config ?? window.newspackAudienceContentGates.available_content_rules[ slug ],
-		[ slug, config ]
-	);
+	const rule = useMemo( () => config ?? window.newspackAudienceContentGates.available_content_rules[ slug ], [ slug, config ] );
 
 	const [ savedItems, setSavedItems ] = useState< { value: string; label: string }[] >( [] );
 	const [ suggestions, setSuggestions ] = useState< { value: string; label: string }[] >( [] );
@@ -146,7 +143,7 @@ export default function ContentRuleControlTokenField( {
 			? '-'
 			: tokens
 					.map( token => token.split( ':' ).slice( 1 ).join( ':' ).trim() )
-					.filter( label => label.length > 0 )
+					.filter( tokenLabel => tokenLabel.length > 0 )
 					.join( ', ' );
 	}, [ tokens ] );
 

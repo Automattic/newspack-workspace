@@ -127,9 +127,7 @@ const Edit = ( { match, updateGatesData, slug = AUDIENCE_CONTENT_GATES_WIZARD_SL
 	// An access rule with no value grants access to everyone, so it gates nothing.
 	const hasPopulatedAccessRules = customAccess.access_rules.some( ruleGroup =>
 		ruleGroup.some(
-			rule =>
-				( Array.isArray( rule.value ) && rule.value?.length > 0 ) ||
-				( ! Array.isArray( rule.value ) && rule.hasOwnProperty( 'value' ) )
+			rule => ( Array.isArray( rule.value ) && rule.value?.length > 0 ) || ( ! Array.isArray( rule.value ) && rule.hasOwnProperty( 'value' ) )
 		)
 	);
 
