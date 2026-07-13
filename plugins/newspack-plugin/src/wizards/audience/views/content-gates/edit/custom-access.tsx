@@ -12,7 +12,7 @@ import AccessRules from './access-rules';
 import RestrictedProducts from './restricted-products';
 
 // wp_localize_script() stringifies booleans ('1'/'').
-const hasWooCommerce = Boolean( window.newspackAudienceContentGates.has_woocommerce );
+const hasWooCommerce = Boolean( window.newspackAudienceContentGates?.has_woocommerce );
 
 interface CustomAccessProps {
 	customAccess: CustomAccess;

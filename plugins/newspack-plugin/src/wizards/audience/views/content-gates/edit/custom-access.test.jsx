@@ -21,14 +21,22 @@ describe( 'CustomAccess gate settings', () => {
 			metering: { enabled: false },
 			access_rules: [],
 			gate_layout_id: 456,
+			restricted_products: [ 12 ],
+			restricted_product_categories: [],
 		};
 
 		render( <CustomAccess customAccess={ customAccess } onChange={ onChange } isNewsletter /> );
 
 		fireEvent.click( screen.getByTestId( 'set-rules' ) );
 
+		// The purchase restriction is one of those unmanaged fields: editing the access
+		// rules must not drop the products the gate restricts.
 		expect( onChange ).toHaveBeenCalledWith(
-			expect.objectContaining( { access_rules: [ [ { name: 'active_subscription' } ] ], gate_layout_id: 456 } )
+			expect.objectContaining( {
+				access_rules: [ [ { name: 'active_subscription' } ] ],
+				gate_layout_id: 456,
+				restricted_products: [ 12 ],
+			} )
 		);
 	} );
 } );

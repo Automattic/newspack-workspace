@@ -16,13 +16,14 @@ import ContentRuleControlTokenField from './content-rule-control-tokenfield';
 
 // Defined at module scope so their identity is stable: the token field memoizes its
 // fetching on the config it receives, and a new object each render would refetch in a loop.
+const wizardApi = window.newspackAudienceContentGates?.api ?? '';
 const PRODUCTS_CONFIG = {
 	name: __( 'Products', 'newspack-plugin' ),
-	endpoint: `${ window.newspackAudienceContentGates.api }/products-search`,
+	endpoint: `${ wizardApi }/products-search`,
 };
 const PRODUCT_CATEGORIES_CONFIG = {
 	name: __( 'Product categories', 'newspack-plugin' ),
-	endpoint: `${ window.newspackAudienceContentGates.api }/product-categories-search`,
+	endpoint: `${ wizardApi }/product-categories-search`,
 };
 
 interface RestrictedProductsProps {
