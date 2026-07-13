@@ -15,7 +15,9 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { AppMetrics } from '../../api/app';
+import { Grid } from '../../../../../packages/components/src';
 import Scorecard from '../components/Scorecard';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 
 export interface NotificationsSectionProps {
@@ -24,13 +26,13 @@ export interface NotificationsSectionProps {
 }
 
 const NotificationsSection = ( { metrics, previous }: NotificationsSectionProps ) => (
-	<section className="newspack-insights__section" aria-labelledby="newspack-insights-app-notifications-heading">
+	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-app-notifications-heading">
 		<SectionHeading
 			id="newspack-insights-app-notifications-heading"
 			title={ __( 'Notifications', 'newspack-plugin' ) }
 			description={ __( 'How your push notifications perform.', 'newspack-plugin' ) }
 		/>
-		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
+		<Grid columns={ 3 } gutter={ 16 } noMargin>
 			<Scorecard
 				label={ __( 'Notification open rate', 'newspack-plugin' ) }
 				description={ __( 'Share of received push notifications that were opened', 'newspack-plugin' ) }
@@ -49,8 +51,8 @@ const NotificationsSection = ( { metrics, previous }: NotificationsSectionProps 
 				current={ metrics.notification_opt_changes }
 				previous={ previous?.notification_opt_changes }
 			/>
-		</div>
-	</section>
+		</Grid>
+	</Section>
 );
 
 export default NotificationsSection;

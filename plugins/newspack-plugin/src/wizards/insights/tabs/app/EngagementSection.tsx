@@ -16,7 +16,9 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { AppMetrics } from '../../api/app';
+import { Grid } from '../../../../../packages/components/src';
 import Scorecard from '../components/Scorecard';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 
 export interface EngagementSectionProps {
@@ -25,13 +27,13 @@ export interface EngagementSectionProps {
 }
 
 const EngagementSection = ( { metrics, previous }: EngagementSectionProps ) => (
-	<section className="newspack-insights__section" aria-labelledby="newspack-insights-app-engagement-heading">
+	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-app-engagement-heading">
 		<SectionHeading
 			id="newspack-insights-app-engagement-heading"
 			title={ __( 'Engagement', 'newspack-plugin' ) }
 			description={ __( 'How deeply people use your app.', 'newspack-plugin' ) }
 		/>
-		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
+		<Grid columns={ 3 } gutter={ 16 } noMargin>
 			<Scorecard
 				label={ __( 'Avg. engagement time', 'newspack-plugin' ) }
 				description={ __( 'Average time in the app per session — app readers tend to stay far longer than on the web', 'newspack-plugin' ) }
@@ -62,8 +64,8 @@ const EngagementSection = ( { metrics, previous }: EngagementSectionProps ) => (
 				current={ metrics.screen_views }
 				previous={ previous?.screen_views }
 			/>
-		</div>
-	</section>
+		</Grid>
+	</Section>
 );
 
 export default EngagementSection;

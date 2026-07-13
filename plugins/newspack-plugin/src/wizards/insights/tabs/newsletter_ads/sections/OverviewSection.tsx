@@ -31,6 +31,7 @@ import { __experimentalVStack as VStack } from '@wordpress/components'; // eslin
 import type { InsightsWindow } from '../../../api/newsletter_ads';
 import EmptyMetricSection from '../../components/EmptyMetricSection';
 import Scorecard from '../../components/Scorecard';
+import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 import { Grid } from '../../../../../../packages/components/src';
 
@@ -77,7 +78,7 @@ const OverviewSection = ( { current, previous, hasWindowActivity, lastUpdated }:
 	const excludedAds = current.revenue_excluded_ads?.computable ? current.revenue_excluded_ads?.value ?? 0 : 0;
 
 	return (
-		<section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-overview">
+		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-overview">
 			<SectionHeading id="newspack-insights-newsletter-ads-overview" title={ TITLE } description={ CAPTION } actions={ lastUpdated } />
 			<VStack spacing={ 4 }>
 				{ /* Row 1: the four timeframe headline scorecards. */ }
@@ -160,7 +161,7 @@ const OverviewSection = ( { current, previous, hasWindowActivity, lastUpdated }:
 					) }
 				</p>
 			) }
-		</section>
+		</Section>
 	);
 };
 

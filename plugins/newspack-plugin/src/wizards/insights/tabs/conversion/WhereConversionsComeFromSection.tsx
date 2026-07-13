@@ -18,6 +18,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { ConversionSourceMixData } from '../../api/conversion';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { formatNumber } from '../components/format';
 import { sourceLabel } from './labels';
@@ -52,7 +53,7 @@ const SourcePie = ( { title, data, emptyMessage }: SourcePieProps ) => (
 );
 
 const WhereConversionsComeFromSection = ( { current }: WhereConversionsComeFromSectionProps ) => (
-	<section
+	<Section
 		className="newspack-insights__section newspack-insights__section--source-mix"
 		aria-labelledby="newspack-insights-conversion-source-mix-heading"
 	>
@@ -81,7 +82,7 @@ const WhereConversionsComeFromSection = ( { current }: WhereConversionsComeFromS
 				emptyMessage={ __( 'Source data will appear once donations occur in this timeframe.', 'newspack-plugin' ) }
 			/>
 		</div>
-	</section>
+	</Section>
 );
 
 export default WhereConversionsComeFromSection;

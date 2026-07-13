@@ -36,6 +36,7 @@ import type { DonorsWindow } from '../../api/donors';
 import type { DateRange } from '../../state/useDateRange';
 import EmptyMetricSection from '../components/EmptyMetricSection';
 import MetricCard from '../components/MetricCard';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { formatCurrency, formatNumber } from '../components/format';
 
@@ -143,7 +144,7 @@ const WindowedSection = ( { range, current, previous, activeDonors }: WindowedSe
 	const oneTimeGiftsLabel = __( 'one-time gifts', 'newspack-plugin' );
 
 	return (
-		<section
+		<Section
 			className="newspack-insights__section newspack-insights__section--windowed"
 			aria-labelledby="newspack-insights-donors-windowed-heading"
 		>
@@ -202,7 +203,7 @@ const WindowedSection = ( { range, current, previous, activeDonors }: WindowedSe
 					description={ __( 'Mean order total across one-time donation orders in this timeframe', 'newspack-plugin' ) }
 				/>
 			</div>
-		</section>
+		</Section>
 	);
 };
 

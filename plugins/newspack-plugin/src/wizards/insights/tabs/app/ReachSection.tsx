@@ -21,10 +21,12 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { AppMetrics } from '../../api/app';
+import { Grid } from '../../../../../packages/components/src';
 import { toSeries } from '../components/metrics';
 import Scorecard from '../components/Scorecard';
 import ChartCard from '../components/ChartCard';
 import PieChart from '../components/PieChart';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 
 export interface ReachSectionProps {
@@ -35,14 +37,14 @@ export interface ReachSectionProps {
 }
 
 const ReachSection = ( { metrics, previous, lastUpdated }: ReachSectionProps ) => (
-	<section className="newspack-insights__section" aria-labelledby="newspack-insights-app-reach-heading">
+	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-app-reach-heading">
 		<SectionHeading
 			id="newspack-insights-app-reach-heading"
 			title={ __( 'Reach', 'newspack-plugin' ) }
 			description={ __( 'How many people use your app, and on what.', 'newspack-plugin' ) }
 			actions={ lastUpdated }
 		/>
-		<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3">
+		<Grid columns={ 3 } gutter={ 16 } noMargin>
 			<Scorecard
 				label={ __( 'Active users', 'newspack-plugin' ) }
 				description={ __( 'Distinct people who opened the app', 'newspack-plugin' ) }
@@ -61,8 +63,8 @@ const ReachSection = ( { metrics, previous, lastUpdated }: ReachSectionProps ) =
 				current={ metrics.sessions }
 				previous={ previous?.sessions }
 			/>
-		</div>
-		<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-2">
+		</Grid>
+		<Grid columns={ 2 } gutter={ 16 } noMargin>
 			<ChartCard
 				title={ __( 'By platform', 'newspack-plugin' ) }
 				caption={ __( 'Active users by operating system', 'newspack-plugin' ) }
@@ -77,8 +79,8 @@ const ReachSection = ( { metrics, previous, lastUpdated }: ReachSectionProps ) =
 			>
 				<PieChart segments={ toSeries( metrics.app_version, 'app_version', 'active_users' ) } />
 			</ChartCard>
-		</div>
-	</section>
+		</Grid>
+	</Section>
 );
 
 export default ReachSection;

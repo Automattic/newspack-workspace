@@ -26,6 +26,7 @@ import InsightsDataView from '../components/InsightsDataView';
 import type { InsightsColumn } from '../components/InsightsDataView';
 import { getPostEditUrl } from '../components/adminLinks';
 import { formatNumber, formatPercent } from '../components/format';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { SECTION_ERROR_MESSAGE } from './SectionState';
 
@@ -106,7 +107,7 @@ const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => 
 			: __( 'No gate data yet. Performance metrics will appear once readers begin interacting with your gates.', 'newspack-plugin' );
 
 	return (
-		<section
+		<Section
 			className="newspack-insights__section newspack-insights__section--performance"
 			aria-labelledby="newspack-insights-gates-performance-heading"
 		>
@@ -122,7 +123,7 @@ const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => 
 				defaultSortKey="impressions"
 				emptyMessage={ emptyMessage }
 			/>
-		</section>
+		</Section>
 	);
 };
 

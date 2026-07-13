@@ -24,6 +24,7 @@ import { __, sprintf } from '@wordpress/i18n';
  */
 import type { DonorsSnapshot } from '../../api/donors';
 import MetricCard from '../components/MetricCard';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { formatCurrency, formatNumber } from '../components/format';
 
@@ -33,7 +34,7 @@ export interface ScorecardSectionProps {
 }
 
 const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) => (
-	<section
+	<Section
 		className="newspack-insights__section newspack-insights__section--scorecard"
 		aria-labelledby="newspack-insights-donors-scorecard-heading"
 	>
@@ -114,7 +115,7 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 				description={ __( 'Donation subscriptions set to end in the next 30 days', 'newspack-plugin' ) }
 			/>
 		</div>
-	</section>
+	</Section>
 );
 
 export default ScorecardSection;

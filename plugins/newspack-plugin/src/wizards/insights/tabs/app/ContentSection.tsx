@@ -22,8 +22,10 @@ import { SelectControl } from '@wordpress/components';
  * Internal dependencies
  */
 import type { AppMetrics } from '../../api/app';
+import { Grid } from '../../../../../packages/components/src';
 import ChartCard from '../components/ChartCard';
 import MetricTable from '../components/MetricTable';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { collectionValues, titleCase, topByCollection } from './collections';
 
@@ -62,14 +64,14 @@ const ContentSection = ( { metrics }: ContentSectionProps ) => {
 	) : undefined;
 
 	return (
-		<section className="newspack-insights__section" aria-labelledby="newspack-insights-app-content-heading">
+		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-app-content-heading">
 			<SectionHeading
 				id="newspack-insights-app-content-heading"
 				title={ __( 'Content', 'newspack-plugin' ) }
 				description={ __( 'The sections and authors readers engage with most in the app.', 'newspack-plugin' ) }
 				actions={ selector }
 			/>
-			<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-2">
+			<Grid columns={ 2 } gutter={ 16 } noMargin>
 				<ChartCard
 					title={ __( 'Top sections', 'newspack-plugin' ) }
 					caption={ __( 'Screen views by section', 'newspack-plugin' ) }
@@ -98,8 +100,8 @@ const ContentSection = ( { metrics }: ContentSectionProps ) => {
 						emptyMessage={ __( 'No author data for this timeframe.', 'newspack-plugin' ) }
 					/>
 				</ChartCard>
-			</div>
-		</section>
+			</Grid>
+		</Section>
 	);
 };
 

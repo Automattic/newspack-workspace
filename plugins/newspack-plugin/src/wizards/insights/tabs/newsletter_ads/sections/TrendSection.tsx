@@ -22,6 +22,7 @@ import { __experimentalHStack as HStack, FlexBlock } from '@wordpress/components
  */
 import type { InsightsWindow } from '../../../api/newsletter_ads';
 import ChartCard from '../../components/ChartCard';
+import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 import LineChart from '../../components/LineChart';
 import { toSeries } from '../../components/metrics';
@@ -46,7 +47,7 @@ const buildSeries = ( current: InsightsWindow, previous: InsightsWindow | null, 
 };
 
 const TrendSection = ( { current, previous }: SectionProps ) => (
-	<section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-trend">
+	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-trend">
 		<SectionHeading
 			id="newspack-insights-newsletter-ads-trend"
 			title={ __( 'Performance trend', 'newspack-plugin' ) }
@@ -64,7 +65,7 @@ const TrendSection = ( { current, previous }: SectionProps ) => (
 				</ChartCard>
 			</FlexBlock>
 		</HStack>
-	</section>
+	</Section>
 );
 
 export default TrendSection;

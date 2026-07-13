@@ -35,6 +35,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
  */
 import type { DonorsRateValue, DonorsWindow } from '../../api/donors';
 import MetricCard from '../components/MetricCard';
+import Section from '../components/Section';
 import SectionEmpty from '../components/SectionEmpty';
 import SectionHeading from '../components/SectionHeading';
 import { formatNumber } from '../components/format';
@@ -74,7 +75,7 @@ const RetentionSection = ( { current, previous }: RetentionSectionProps ) => {
 
 	if ( ! recovery.computable && ! retention.computable ) {
 		return (
-			<section { ...sectionProps }>
+			<Section { ...sectionProps }>
 				{ heading }
 				<SectionEmpty>
 					{ __(
@@ -82,12 +83,12 @@ const RetentionSection = ( { current, previous }: RetentionSectionProps ) => {
 						'newspack-plugin'
 					) }
 				</SectionEmpty>
-			</section>
+			</Section>
 		);
 	}
 
 	return (
-		<section { ...sectionProps }>
+		<Section { ...sectionProps }>
 			{ heading }
 			<div className="newspack-insights__metric-grid">
 				{ recovery.computable ? (
@@ -125,7 +126,7 @@ const RetentionSection = ( { current, previous }: RetentionSectionProps ) => {
 					</div>
 				) }
 			</div>
-		</section>
+		</Section>
 	);
 };
 

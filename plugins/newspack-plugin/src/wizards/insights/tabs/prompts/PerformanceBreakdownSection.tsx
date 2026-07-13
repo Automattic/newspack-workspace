@@ -16,6 +16,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { PromptsWindow } from '../../api/prompts';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import PerformanceByPromptTable from './viz/PerformanceByPromptTable';
 import PerformanceByIntentTable from './viz/PerformanceByIntentTable';
@@ -26,7 +27,7 @@ export interface PerformanceBreakdownSectionProps {
 }
 
 const PerformanceBreakdownSection = ( { current }: PerformanceBreakdownSectionProps ) => (
-	<section
+	<Section
 		className="newspack-insights__section newspack-insights__section--performance"
 		aria-labelledby="newspack-insights-prompts-performance-heading"
 	>
@@ -41,7 +42,7 @@ const PerformanceBreakdownSection = ( { current }: PerformanceBreakdownSectionPr
 		<PerformanceByPromptTable data={ current.performance_by_prompt } />
 		<PerformanceByIntentTable data={ current.performance_by_intent } />
 		<PerformanceByPlacementTable data={ current.performance_by_placement } />
-	</section>
+	</Section>
 );
 
 export default PerformanceBreakdownSection;

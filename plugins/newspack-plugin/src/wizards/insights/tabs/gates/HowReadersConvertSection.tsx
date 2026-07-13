@@ -19,6 +19,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { GatesWindow } from '../../api/gates';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import Funnel from '../components/Funnel';
 import DistributionTable from '../components/DistributionTable';
@@ -29,7 +30,7 @@ export interface HowReadersConvertSectionProps {
 }
 
 const HowReadersConvertSection = ( { current }: HowReadersConvertSectionProps ) => (
-	<section className="newspack-insights__section newspack-insights__section--convert" aria-labelledby="newspack-insights-gates-convert-heading">
+	<Section className="newspack-insights__section newspack-insights__section--convert" aria-labelledby="newspack-insights-gates-convert-heading">
 		<SectionHeading
 			id="newspack-insights-gates-convert-heading"
 			title={ __( 'How readers convert', 'newspack-plugin' ) }
@@ -62,7 +63,7 @@ const HowReadersConvertSection = ( { current }: HowReadersConvertSectionProps ) 
 				</SectionState>
 			</div>
 		</div>
-	</section>
+	</Section>
 );
 
 export default HowReadersConvertSection;

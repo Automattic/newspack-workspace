@@ -23,6 +23,7 @@ import { __ } from '@wordpress/i18n';
  */
 import type { PromptsWindow } from '../../api/prompts';
 import MetricCard from '../components/MetricCard';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { NOT_CAPABLE_COPY } from './notCapableCopy';
 import { NOT_COMPUTABLE_COPY } from './notComputableCopy';
@@ -34,7 +35,7 @@ export interface PaidReaderConversionSectionProps {
 }
 
 const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversionSectionProps ) => (
-	<section className="newspack-insights__section newspack-insights__section--paid-reader" aria-labelledby="newspack-insights-prompts-paid-heading">
+	<Section className="newspack-insights__section newspack-insights__section--paid-reader" aria-labelledby="newspack-insights-prompts-paid-heading">
 		<SectionHeading
 			id="newspack-insights-prompts-paid-heading"
 			title={ __( 'Paid reader conversion', 'newspack-plugin' ) }
@@ -100,7 +101,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 				} ) }
 			/>
 		</div>
-	</section>
+	</Section>
 );
 
 export default PaidReaderConversionSection;

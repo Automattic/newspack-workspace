@@ -26,6 +26,7 @@ import { Notice } from '@wordpress/components';
 /**
  * Internal dependencies
  */
+import Section from './Section';
 import SectionHeading from './SectionHeading';
 import { formatNumber } from './format';
 
@@ -69,12 +70,12 @@ const interpolate = ( body: string, signalCount?: number ): string =>
 const EmptyMetricSection = ( { title, caption, state, body, signalCount }: EmptyMetricSectionProps ) => {
 	const id = headingId( title );
 	return (
-		<section className="newspack-insights__section newspack-insights__empty-metric-section" aria-labelledby={ id } data-empty-state={ state }>
+		<Section className="newspack-insights__section newspack-insights__empty-metric-section" aria-labelledby={ id } data-empty-state={ state }>
 			<SectionHeading id={ id } title={ title } description={ caption } />
 			<Notice status="info" isDismissible={ false } className="newspack-insights__empty-metric-section-callout">
 				<p>{ interpolate( body, signalCount ) }</p>
 			</Notice>
-		</section>
+		</Section>
 	);
 };
 

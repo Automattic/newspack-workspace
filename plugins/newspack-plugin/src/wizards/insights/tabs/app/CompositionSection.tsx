@@ -17,9 +17,11 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { AppMetrics } from '../../api/app';
+import { Grid } from '../../../../../packages/components/src';
 import { toSeries } from '../components/metrics';
 import ChartCard from '../components/ChartCard';
 import PieChart from '../components/PieChart';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 
 export interface CompositionSectionProps {
@@ -41,13 +43,13 @@ const humanizeStatus = ( label: string ): string => {
 };
 
 const CompositionSection = ( { metrics }: CompositionSectionProps ) => (
-	<section className="newspack-insights__section" aria-labelledby="newspack-insights-app-composition-heading">
+	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-app-composition-heading">
 		<SectionHeading
 			id="newspack-insights-app-composition-heading"
 			title={ __( 'Audience & access', 'newspack-plugin' ) }
 			description={ __( 'The subscriber mix of your app audience and the free-vs-paid content they read.', 'newspack-plugin' ) }
 		/>
-		<div className="newspack-insights__chart-grid newspack-insights__chart-grid--cols-2">
+		<Grid columns={ 2 } gutter={ 16 } noMargin>
 			<ChartCard
 				title={ __( 'Subscriber mix', 'newspack-plugin' ) }
 				caption={ __( 'Active users by subscriber status', 'newspack-plugin' ) }
@@ -67,8 +69,8 @@ const CompositionSection = ( { metrics }: CompositionSectionProps ) => (
 			>
 				<PieChart segments={ toSeries( metrics.content_cost, 'cost', 'views' ) } />
 			</ChartCard>
-		</div>
-	</section>
+		</Grid>
+	</Section>
 );
 
 export default CompositionSection;

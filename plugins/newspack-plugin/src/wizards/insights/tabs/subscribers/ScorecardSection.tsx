@@ -27,6 +27,7 @@ import { __, sprintf } from '@wordpress/i18n';
  */
 import type { SubscribersSnapshot } from '../../api/subscribers';
 import MetricCard from '../components/MetricCard';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { formatCurrency } from '../components/format';
 
@@ -36,7 +37,7 @@ export interface ScorecardSectionProps {
 }
 
 const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) => (
-	<section className="newspack-insights__section newspack-insights__section--scorecard" aria-labelledby="newspack-insights-scorecard-heading">
+	<Section className="newspack-insights__section newspack-insights__section--scorecard" aria-labelledby="newspack-insights-scorecard-heading">
 		<SectionHeading
 			id="newspack-insights-scorecard-heading"
 			title={ __( 'Subscribers at a glance', 'newspack-plugin' ) }
@@ -109,7 +110,7 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 				description={ __( 'Subscriptions set to end in the next 30 days', 'newspack-plugin' ) }
 			/>
 		</div>
-	</section>
+	</Section>
 );
 
 export default ScorecardSection;

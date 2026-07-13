@@ -20,6 +20,7 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import type { ConversionWindow } from '../../api/conversion';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import Funnel from '../components/Funnel';
 import SectionState from './SectionState';
@@ -30,7 +31,7 @@ export interface ReaderLifecycleSectionProps {
 }
 
 const ReaderLifecycleSection = ( { current, lastUpdated }: ReaderLifecycleSectionProps ) => (
-	<section
+	<Section
 		className="newspack-insights__section newspack-insights__section--reader-lifecycle"
 		aria-labelledby="newspack-insights-conversion-lifecycle-heading"
 	>
@@ -49,7 +50,7 @@ const ReaderLifecycleSection = ( { current, lastUpdated }: ReaderLifecycleSectio
 		>
 			<Funnel stages={ current.reader_lifecycle_funnel.stages } />
 		</SectionState>
-	</section>
+	</Section>
 );
 
 export default ReaderLifecycleSection;

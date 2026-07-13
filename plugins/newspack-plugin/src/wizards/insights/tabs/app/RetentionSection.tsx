@@ -16,6 +16,7 @@ import { __, sprintf } from '@wordpress/i18n';
  */
 import type { AppMetrics } from '../../api/app';
 import type { MetricPayload } from '../components/metrics';
+import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import ChartCard from '../components/ChartCard';
 import LineChart from '../components/LineChart';
@@ -33,7 +34,7 @@ export interface RetentionSectionProps {
 }
 
 const RetentionSection = ( { metrics }: RetentionSectionProps ) => (
-	<section className="newspack-insights__section" aria-labelledby="newspack-insights-app-retention-heading">
+	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-app-retention-heading">
 		<SectionHeading
 			id="newspack-insights-app-retention-heading"
 			title={ __( 'Retention', 'newspack-plugin' ) }
@@ -60,7 +61,7 @@ const RetentionSection = ( { metrics }: RetentionSectionProps ) => (
 				emptyMessage={ __( 'Retention will appear once there are enough weekly cohorts of data.', 'newspack-plugin' ) }
 			/>
 		</ChartCard>
-	</section>
+	</Section>
 );
 
 export default RetentionSection;

@@ -29,8 +29,10 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Grid } from '../../../../../../packages/components/src';
 import type { MetricPayload, RegisteredReaders } from '../../../api/audience';
 import MetricCard from '../../components/MetricCard';
+import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 
 export interface RegisteredReadersSectionProps {
@@ -56,13 +58,13 @@ const RegisteredReadersSection = ( { registeredReaders, showComparison }: Regist
 	const previousNew = showComparison && newCount !== 0 ? readCount( newReaders.previous ) : null;
 
 	return (
-		<section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-registered-readers">
+		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-registered-readers">
 			<SectionHeading
 				id="newspack-insights-audience-registered-readers"
 				title={ __( 'Registered readers', 'newspack-plugin' ) }
 				description={ __( 'People who registered on your site — the known-reader population behind the segments below.', 'newspack-plugin' ) }
 			/>
-			<div className="newspack-insights__metric-grid newspack-insights__metric-grid--cols-2">
+			<Grid columns={ 4 } gutter={ 16 } noMargin>
 				<MetricCard
 					label={ __( 'Total registered readers', 'newspack-plugin' ) }
 					value={ totalCount ?? 0 }
@@ -79,8 +81,8 @@ const RegisteredReadersSection = ( { registeredReaders, showComparison }: Regist
 					notComputableMessage={ newCount === null ? UNAVAILABLE_MESSAGE : undefined }
 					description={ __( 'Registrations created in this timeframe', 'newspack-plugin' ) }
 				/>
-			</div>
-		</section>
+			</Grid>
+		</Section>
 	);
 };
 

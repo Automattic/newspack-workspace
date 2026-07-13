@@ -11,7 +11,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
     >
       <section
         aria-labelledby="newspack-insights-prompts-exposure-heading"
-        class="newspack-insights__section newspack-insights__section--exposure"
+        class="components-flex components-h-stack components-v-stack newspack-insights__section newspack-insights__section--exposure css-tovjn5-PolymorphicDiv-Flex-base-ItemsColumn e19lxcc00"
+        data-wp-c16t="true"
+        data-wp-component="VStack"
       >
         <div
           class="newspack-insights__section-header-container"
@@ -41,7 +43,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
           </div>
         </div>
         <div
-          class="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3"
+          class="newspack-grid newspack-grid--no-margin newspack-grid__columns-3 newspack-grid__gutter-16"
         >
           <div
             class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
@@ -204,7 +206,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
       />
       <section
         aria-labelledby="newspack-insights-prompts-engagement-heading"
-        class="newspack-insights__section newspack-insights__section--engagement"
+        class="components-flex components-h-stack components-v-stack newspack-insights__section newspack-insights__section--engagement css-tovjn5-PolymorphicDiv-Flex-base-ItemsColumn e19lxcc00"
+        data-wp-c16t="true"
+        data-wp-component="VStack"
       >
         <div
           class="newspack-section-header__container newspack-insights__section-heading"
@@ -226,7 +230,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
           </div>
         </div>
         <div
-          class="newspack-insights__metric-grid newspack-insights__metric-grid--cols-3"
+          class="newspack-grid newspack-grid--no-margin newspack-grid__columns-3 newspack-grid__gutter-16"
         >
           <div
             class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
@@ -389,7 +393,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
       />
       <section
         aria-labelledby="newspack-insights-prompts-free-heading"
-        class="newspack-insights__section newspack-insights__section--free-reader"
+        class="components-flex components-h-stack components-v-stack newspack-insights__section newspack-insights__section--free-reader css-tovjn5-PolymorphicDiv-Flex-base-ItemsColumn e19lxcc00"
+        data-wp-c16t="true"
+        data-wp-component="VStack"
       >
         <div
           class="newspack-section-header__container newspack-insights__section-heading"
@@ -625,7 +631,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
       />
       <section
         aria-labelledby="newspack-insights-prompts-paid-heading"
-        class="newspack-insights__section newspack-insights__section--paid-reader"
+        class="components-flex components-h-stack components-v-stack newspack-insights__section newspack-insights__section--paid-reader css-tovjn5-PolymorphicDiv-Flex-base-ItemsColumn e19lxcc00"
+        data-wp-c16t="true"
+        data-wp-component="VStack"
       >
         <div
           class="newspack-section-header__container newspack-insights__section-heading"
@@ -861,7 +869,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
       />
       <section
         aria-labelledby="newspack-insights-prompts-revenue-heading"
-        class="newspack-insights__section newspack-insights__section--revenue"
+        class="components-flex components-h-stack components-v-stack newspack-insights__section newspack-insights__section--revenue css-tovjn5-PolymorphicDiv-Flex-base-ItemsColumn e19lxcc00"
+        data-wp-c16t="true"
+        data-wp-component="VStack"
       >
         <div
           class="newspack-section-header__container newspack-insights__section-heading"
@@ -1097,7 +1107,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
       />
       <section
         aria-labelledby="newspack-insights-prompts-convert-heading"
-        class="newspack-insights__section newspack-insights__section--convert"
+        class="components-flex components-h-stack components-v-stack newspack-insights__section newspack-insights__section--convert css-tovjn5-PolymorphicDiv-Flex-base-ItemsColumn e19lxcc00"
+        data-wp-c16t="true"
+        data-wp-component="VStack"
       >
         <div
           class="newspack-section-header__container newspack-insights__section-heading"
@@ -1147,7 +1159,9 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
       />
       <section
         aria-labelledby="newspack-insights-prompts-performance-heading"
-        class="newspack-insights__section newspack-insights__section--performance"
+        class="components-flex components-h-stack components-v-stack newspack-insights__section newspack-insights__section--performance css-tovjn5-PolymorphicDiv-Flex-base-ItemsColumn e19lxcc00"
+        data-wp-c16t="true"
+        data-wp-component="VStack"
       >
         <div
           class="newspack-section-header__container newspack-insights__section-heading"

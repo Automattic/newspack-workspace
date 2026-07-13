@@ -54,15 +54,6 @@
 		}
 	}
 
-	// Sections are pure spacing — no background, no border. The cards
-	// inside them carry the chrome (per spec).
-
-	&__section {
-		display: flex;
-		flex-direction: column;
-		gap: 16px;
-	}
-
 	// Wraps a tab's sections; the interleaved full-width Dividers supply all the
 	// inter-section spacing via their own margins, so no gap here (a gap would
 	// stack with the divider margins).
@@ -89,20 +80,6 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 		gap: 16px;
-	}
-
-	// The Prompts conversion sections carry longer scorecard titles (e.g.
-	// "Registration Conversion (Influenced, 7d)") that wrap to three lines, while
-	// the default label reserves two — so cards with a 3-line title push their
-	// hero value/em-dash down and the row reads as staggered. Reserve a third line
-	// in just these sections so every hero aligns; exposure/engagement titles fit
-	// in two lines and keep the tighter default.
-	&__section--free-reader,
-	&__section--paid-reader,
-	&__section--revenue {
-		.newspack-insights__metric-card-label {
-			min-height: calc(12px * 1.4 * 3);
-		}
 	}
 
 	// Card chrome (white background, gray-200 border, 4px radius) is
@@ -153,35 +130,31 @@
 		.newspack-card--core__body {
 			display: flex;
 			flex-direction: column;
-			padding: 24px 28px;
-			min-height: 180px;
+			height: 100%;
+			padding: wp-vars.$grid-unit-30;
 
 			// Match CoreCard's own selector to win the cascade — it
 			// pads non-CardBody/Media/Divider grandchild divs at
 			// 16px 24px by default; our outer padding above already
 			// owns the spacing. The body sub-region gets its own
-			// 16px top padding re-applied at matching specificity.
+			// 8px top padding re-applied at matching specificity.
 			> div:not(.components-card__body):not(.components-card__media):not(.components-card__divider) {
 				padding: 0;
 
 				&.newspack-insights__metric-card-body {
-					padding: 16px 0 0;
+					padding: wp-vars.$grid-unit-10 0 0;
 				}
 			}
 		}
 
 		&-label {
-			font-size: 12px;
-			font-weight: 600;
-			line-height: 1.4;
-			letter-spacing: 0.05em;
+			// Match Core's BaseControl label typography 1:1 (baseLabelTypography):
+			// 11px / medium (499) / 1.4 line-height / uppercase, no letter-spacing.
+			font-size: wp-vars.$font-size-x-small;
+			font-weight: wp-vars.$font-weight-medium;
+			line-height: wp-vars.$default-line-height;
 			text-transform: uppercase;
-			color: wp-colors.$gray-700;
-			// Reserve two lines of vertical space so a long label that
-			// wraps ("MONTHLY RECURRING REVENUE") doesn't push its hero
-			// number down relative to neighboring cards whose labels fit
-			// on one line. 12px font × 1.4 line-height × 2 lines.
-			min-height: calc(12px * 1.4 * 2);
+			color: wp-colors.$gray-900;
 		}
 
 		&-body {
@@ -289,12 +262,20 @@
 		}
 
 		&-description {
-			margin: 16px 0 0;
-			font-size: 13px;
-			font-weight: 400;
-			line-height: 1.4;
+			margin: wp-vars.$grid-unit-30 0 0;
+			// Match Core's help text (StyledHelp): 12px / normal style / gray-700.
+			font-size: wp-vars.$font-size-small;
+			font-style: normal;
 			color: wp-colors.$gray-700;
 			text-align: left;
+
+			p {
+				margin: 0;
+				// Inherit the description's help-text typography instead of the
+				// admin default paragraph size.
+				font: inherit;
+				color: inherit;
+			}
 		}
 
 		// Empty-state variant: same card chrome as a populated metric
