@@ -118,15 +118,23 @@ const OpportunityBucketsSection = ( { current }: OpportunityBucketsSectionProps 
 			</Grid>
 			<Card __experimentalCoreCard className="newspack-insights__chart-card">
 				<h3 className="newspack-insights__chart-card-title">{ __( 'Top articles that don’t convert', 'newspack-plugin' ) }</h3>
-				<p className="newspack-insights__chart-card-caption">
-					{ __(
-						'These articles get traffic but don’t drive registrations. Consider adding a gate or prompt where engagement is high but conversion is low.',
-						'newspack-plugin'
+				<SectionState
+					state={ current.top_pages_no_conversion.state }
+					emptyMessage={ sprintf(
+						/* translators: %s: minimum pageview count for an article to qualify (formatted). */
+						__(
+							'No qualifying articles yet. Articles with at least %s pageviews and a measurable conversion rate will appear here.',
+							'newspack-plugin'
+						),
+						formatNumber( current.top_pages_no_conversion.threshold_pageviews )
 					) }
-				</p>
-				<div className="newspack-insights__chart-card-body">
-					<SectionState
-						state={ current.top_pages_no_conversion.state }
+				>
+					<SortableTable
+						columns={ TOP_PAGES_COLUMNS }
+						rows={ current.top_pages_no_conversion.rows }
+						getRowKey={ row => row.post_id }
+						defaultSortKey="pageviews"
+						initialRowLimit={ TOP_PAGES_ROW_LIMIT }
 						emptyMessage={ sprintf(
 							/* translators: %s: minimum pageview count for an article to qualify (formatted). */
 							__(
@@ -135,24 +143,14 @@ const OpportunityBucketsSection = ( { current }: OpportunityBucketsSectionProps 
 							),
 							formatNumber( current.top_pages_no_conversion.threshold_pageviews )
 						) }
-					>
-						<SortableTable
-							columns={ TOP_PAGES_COLUMNS }
-							rows={ current.top_pages_no_conversion.rows }
-							getRowKey={ row => row.post_id }
-							defaultSortKey="pageviews"
-							initialRowLimit={ TOP_PAGES_ROW_LIMIT }
-							emptyMessage={ sprintf(
-								/* translators: %s: minimum pageview count for an article to qualify (formatted). */
-								__(
-									'No qualifying articles yet. Articles with at least %s pageviews and a measurable conversion rate will appear here.',
-									'newspack-plugin'
-								),
-								formatNumber( current.top_pages_no_conversion.threshold_pageviews )
-							) }
-						/>
-					</SectionState>
-				</div>
+					/>
+				</SectionState>
+				<p className="newspack-insights__table-footnote">
+					{ __(
+						'These articles get traffic but don’t drive registrations. Consider adding a gate or prompt where engagement is high but conversion is low.',
+						'newspack-plugin'
+					) }
+				</p>
 			</Card>
 		</VStack>
 	</Section>

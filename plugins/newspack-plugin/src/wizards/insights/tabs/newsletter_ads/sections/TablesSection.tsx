@@ -24,6 +24,7 @@ import MetricTable from '../../components/MetricTable';
 import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 import TabSections from '../../components/TabSections';
+import { Card } from '../../../../../../packages/components/src';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -51,52 +52,58 @@ const TablesSection = ( { current }: SectionProps ) => (
 	<TabSections>
 		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-top-ads">
 			<SectionHeading id="newspack-insights-newsletter-ads-top-ads" title={ __( 'Top ads', 'newspack-plugin' ) } />
-			<MetricTable
-				payload={ current.top_ads }
-				emptyMessage={ __( 'No ad data in this timeframe.', 'newspack-plugin' ) }
-				expandable
-				defaultRowLimit={ 5 }
-				columns={ [
-					{ key: 'title', label: __( 'Ad', 'newspack-plugin' ) },
-					{ key: 'impressions', label: __( 'Impr.', 'newspack-plugin' ), format: 'number', align: 'right' },
-					{ key: 'clicks', label: __( 'Clicks', 'newspack-plugin' ), format: 'number', align: 'right' },
-					{ key: 'ctr', label: __( 'CTR', 'newspack-plugin' ), format: 'percent', align: 'right' },
-					{ key: 'revenue', label: __( 'Revenue', 'newspack-plugin' ), format: 'currency', align: 'right' },
-				] }
-			/>
+			<Card __experimentalCoreCard className="newspack-insights__chart-card">
+				<MetricTable
+					payload={ current.top_ads }
+					emptyMessage={ __( 'No ad data in this timeframe.', 'newspack-plugin' ) }
+					expandable
+					defaultRowLimit={ 5 }
+					columns={ [
+						{ key: 'title', label: __( 'Ad', 'newspack-plugin' ) },
+						{ key: 'impressions', label: __( 'Impr.', 'newspack-plugin' ), format: 'number', align: 'right' },
+						{ key: 'clicks', label: __( 'Clicks', 'newspack-plugin' ), format: 'number', align: 'right' },
+						{ key: 'ctr', label: __( 'CTR', 'newspack-plugin' ), format: 'percent', align: 'right' },
+						{ key: 'revenue', label: __( 'Revenue', 'newspack-plugin' ), format: 'currency', align: 'right' },
+					] }
+				/>
+			</Card>
 		</Section>
 		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-top-advertisers">
 			<SectionHeading id="newspack-insights-newsletter-ads-top-advertisers" title={ __( 'Top advertisers', 'newspack-plugin' ) } />
-			<MetricTable
-				payload={ current.top_advertisers }
-				emptyMessage={ __( 'No advertiser data in this timeframe.', 'newspack-plugin' ) }
-				expandable
-				defaultRowLimit={ 5 }
-				columns={ [
-					{ key: 'advertiser', label: __( 'Advertiser', 'newspack-plugin' ) },
-					{ key: 'ads', label: __( 'Ads', 'newspack-plugin' ), format: 'number', align: 'right' },
-					{ key: 'impressions', label: __( 'Impr.', 'newspack-plugin' ), format: 'number', align: 'right' },
-					{ key: 'clicks', label: __( 'Clicks', 'newspack-plugin' ), format: 'number', align: 'right' },
-					{ key: 'revenue', label: __( 'Revenue', 'newspack-plugin' ), format: 'currency', align: 'right' },
-				] }
-			/>
+			<Card __experimentalCoreCard className="newspack-insights__chart-card">
+				<MetricTable
+					payload={ current.top_advertisers }
+					emptyMessage={ __( 'No advertiser data in this timeframe.', 'newspack-plugin' ) }
+					expandable
+					defaultRowLimit={ 5 }
+					columns={ [
+						{ key: 'advertiser', label: __( 'Advertiser', 'newspack-plugin' ) },
+						{ key: 'ads', label: __( 'Ads', 'newspack-plugin' ), format: 'number', align: 'right' },
+						{ key: 'impressions', label: __( 'Impr.', 'newspack-plugin' ), format: 'number', align: 'right' },
+						{ key: 'clicks', label: __( 'Clicks', 'newspack-plugin' ), format: 'number', align: 'right' },
+						{ key: 'revenue', label: __( 'Revenue', 'newspack-plugin' ), format: 'currency', align: 'right' },
+					] }
+				/>
+			</Card>
 		</Section>
 		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-by-newsletter">
 			<SectionHeading id="newspack-insights-newsletter-ads-by-newsletter" title={ __( 'Ad performance by newsletter', 'newspack-plugin' ) } />
-			<MetricTable
-				payload={ withDisplayDates( current.by_newsletter ) }
-				emptyMessage={ __( 'No newsletters carried ads in this timeframe.', 'newspack-plugin' ) }
-				expandable
-				defaultRowLimit={ 5 }
-				columns={ [
-					{ key: 'title', label: __( 'Newsletter', 'newspack-plugin' ) },
-					{ key: 'sent_date', label: __( 'Sent date', 'newspack-plugin' ) },
-					{ key: 'ads', label: __( 'Ads carried', 'newspack-plugin' ), format: 'number', align: 'right' },
-					{ key: 'impressions', label: __( 'Impr.', 'newspack-plugin' ), format: 'number', align: 'right' },
-					{ key: 'clicks', label: __( 'Clicks', 'newspack-plugin' ), format: 'number', align: 'right' },
-					{ key: 'ctr', label: __( 'CTR', 'newspack-plugin' ), format: 'percent', align: 'right' },
-				] }
-			/>
+			<Card __experimentalCoreCard className="newspack-insights__chart-card">
+				<MetricTable
+					payload={ withDisplayDates( current.by_newsletter ) }
+					emptyMessage={ __( 'No newsletters carried ads in this timeframe.', 'newspack-plugin' ) }
+					expandable
+					defaultRowLimit={ 5 }
+					columns={ [
+						{ key: 'title', label: __( 'Newsletter', 'newspack-plugin' ) },
+						{ key: 'sent_date', label: __( 'Sent date', 'newspack-plugin' ) },
+						{ key: 'ads', label: __( 'Ads carried', 'newspack-plugin' ), format: 'number', align: 'right' },
+						{ key: 'impressions', label: __( 'Impr.', 'newspack-plugin' ), format: 'number', align: 'right' },
+						{ key: 'clicks', label: __( 'Clicks', 'newspack-plugin' ), format: 'number', align: 'right' },
+						{ key: 'ctr', label: __( 'CTR', 'newspack-plugin' ), format: 'percent', align: 'right' },
+					] }
+				/>
+			</Card>
 		</Section>
 	</TabSections>
 );

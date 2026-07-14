@@ -16,6 +16,7 @@ import { __ } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
+import { Card } from '../../../../../../packages/components/src';
 import type { PromptsPerformanceByPlacementRow, PromptsPerformanceByPlacementTable as TableData } from '../../../api/prompts';
 import { formatNumber } from '../../components/format';
 import SortableTable, { renderRate, type SortableColumn } from '../../components/SortableTable';
@@ -59,8 +60,8 @@ const columns: SortableColumn< PromptsPerformanceByPlacementRow >[] = [
 ];
 
 const PerformanceByPlacementTable = ( { data }: PerformanceByPlacementTableProps ) => (
-	<div className="newspack-insights__prompts-subsection">
-		<h3 className="newspack-insights__prompts-subsection-heading">{ __( 'Performance by prompt placement', 'newspack-plugin' ) }</h3>
+	<Card __experimentalCoreCard className="newspack-insights__chart-card">
+		<h3 className="newspack-insights__chart-card-title">{ __( 'Performance by prompt placement', 'newspack-plugin' ) }</h3>
 		<SortableTable
 			columns={ columns }
 			rows={ data.rows }
@@ -72,10 +73,10 @@ const PerformanceByPlacementTable = ( { data }: PerformanceByPlacementTableProps
 			) }
 			errorMessage={ 'error' === data.state ? SECTION_ERROR_MESSAGE : undefined }
 		/>
-		<p className="newspack-insights__prompts-subsection-note">
+		<p className="newspack-insights__table-footnote">
 			{ __( "Answers 'do my overlay prompts perform better than inline?' Useful for choosing placement defaults.", 'newspack-plugin' ) }
 		</p>
-	</div>
+	</Card>
 );
 
 export default PerformanceByPlacementTable;

@@ -29,6 +29,7 @@ import Section from '../components/Section';
 import SectionEmpty from '../components/SectionEmpty';
 import SectionHeading from '../components/SectionHeading';
 import { formatCurrency, formatNumber } from '../components/format';
+import { Card } from '../../../../../packages/components/src';
 
 export interface CampaignSectionProps {
 	rows: SubscribersCampaignRow[];
@@ -84,12 +85,14 @@ const CampaignSection = ( { rows }: CampaignSectionProps ) => {
 					'newspack-plugin'
 				) }
 			/>
-			<InsightsDataView< SubscribersCampaignRow >
-				columns={ columns }
-				rows={ rows }
-				getRowKey={ row => ( row.is_untagged ? '__untagged__' : `campaign:${ row.value }` ) }
-				emptyMessage={ __( 'No campaign-tagged subscriptions in this window.', 'newspack-plugin' ) }
-			/>
+			<Card __experimentalCoreCard className="newspack-insights__chart-card">
+				<InsightsDataView< SubscribersCampaignRow >
+					columns={ columns }
+					rows={ rows }
+					getRowKey={ row => ( row.is_untagged ? '__untagged__' : `campaign:${ row.value }` ) }
+					emptyMessage={ __( 'No campaign-tagged subscriptions in this window.', 'newspack-plugin' ) }
+				/>
+			</Card>
 		</Section>
 	);
 };

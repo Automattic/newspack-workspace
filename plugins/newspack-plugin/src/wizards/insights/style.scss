@@ -355,6 +355,21 @@
 		text-align: right;
 	}
 
+	// Core pulls the first column's header button left by 8px so its label sits
+	// flush to the cell edge, but ships no mirror for the last column — so a
+	// right-aligned (numeric) last header lands 8px shy of the edge, out of line
+	// with the values below it. Add the missing margin.
+	.dataviews-view-table tr th:last-child .dataviews-view-table-header-button,
+	.dataviews-view-table tr td:last-child .dataviews-view-table-header-button {
+		margin-right: -#{wp-vars.$grid-unit};
+	}
+
+	// The card (or wizard surface) supplies the background; keep the DataViews
+	// header cells transparent so it shows through instead of an opaque fill.
+	.dataviews-view-table thead th {
+		background: transparent;
+	}
+
 	// The `tbody` mirrors DataViews' own
 	// `.dataviews-view-table tbody .dataviews-view-table__cell-content-wrapper`
 	// nowrap rule so this out-specifies it and long values wrap in place
@@ -416,15 +431,35 @@
 	}
 }
 
-// When a dataview is the last thing in a card, drop the card body's bottom
-// padding so the table's final row sits flush at the card's bottom edge, and
-// clip the full-bleed table to the card's rounded corners.
-.newspack-insights__chart-card:has( .newspack-insights-dataview:last-child ) {
+// When a dataview is the last thing directly in a card body (a table-only card),
+// drop the body's bottom padding so the table's final row sits flush at the
+// card's bottom edge, and clip the full-bleed table to the rounded corners. The
+// direct-child guard keeps this off cards where the table is nested below a
+// title/caption (e.g. "Top articles that don't convert").
+.newspack-insights__chart-card:has( .newspack-card--core__body > .newspack-insights-dataview:last-child ) {
 	overflow: hidden;
 
 	.newspack-card--core__body {
 		padding-bottom: 0;
 	}
+}
+
+// Mirror of the above for a dataview that is the first thing directly in the
+// card body: drop the body's top padding so the header row sits flush at the
+// card's top edge, and clip to the rounded corners.
+.newspack-insights__chart-card:has( .newspack-card--core__body > .newspack-insights-dataview:first-child ) {
+	overflow: hidden;
+
+	.newspack-card--core__body {
+		padding-top: wp-vars.$grid-unit-20;
+	}
+}
+
+// A dataview that follows a title (i.e. not the card body's first child)
+// needs the 24px separation the removed body wrapper used to supply. The
+// dataview base rule locks `margin: 0 !important`, so this overrides in kind.
+.newspack-insights__chart-card .newspack-card--core__body > .newspack-insights-dataview:not(:first-child) {
+	margin-top: wp-vars.$grid-unit-20 !important;
 }
 
 // Opt-in sticky first column (Performance by prompt): a many-column table that

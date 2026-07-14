@@ -79,12 +79,12 @@
 			color: wp-colors.$gray-700;
 		}
 
-		// Chart body grows to fill the card; 24px separates it from the
+		// Chart body grows to fill the card; 16px separates it from the
 		// title/caption above.
 		&-body {
 			flex: 1 1 auto;
 			min-width: 0;
-			margin-top: wp-vars.$grid-unit-30;
+			margin-top: wp-vars.$grid-unit-20;
 		}
 	}
 
@@ -287,16 +287,15 @@
 
 	&__legend-swatch {
 		display: inline-block;
-		width: 20px;
-		height: 20px;
-		border-radius: wp-vars.$radius-full;
+		width: wp-vars.$grid-unit-20;
+		height: wp-vars.$grid-unit-15;
 		background: var( --series-color );
 		flex-shrink: 0;
 	}
 
 	// Label and value sit next to each other (not justified to opposite edges).
 	&__legend-label {
-		color: wp-colors.$gray-800;
+		color: wp-colors.$gray-700;
 	}
 
 	&__legend-value {
@@ -346,7 +345,7 @@
 	&__bar-label {
 		font-size: wp-vars.$font-size-small;
 		line-height: wp-vars.$default-line-height;
-		color: wp-colors.$gray-900;
+		color: wp-colors.$gray-700;
 		margin-top: wp-vars.$grid-unit-10;
 		white-space: nowrap;
 		overflow: hidden;
@@ -429,9 +428,10 @@
 	&__line-meta {
 		display: flex;
 		justify-content: space-between;
-		font-size: 11px;
+		font-size: wp-vars.$font-size-x-small;
+		line-height: wp-vars.$font-line-height-x-small;
 		color: wp-colors.$gray-700;
-		margin-top: 4px;
+		margin-top: calc(wp-vars.$grid-unit / 2);
 	}
 
 	// Axis titles naming what each axis represents (e.g. "Days since first
@@ -440,15 +440,16 @@
 	// text that would stretch.
 	&__line-axis {
 		display: block;
-		font-size: 11px;
+		font-size: wp-vars.$font-size-x-small;
+		line-height: wp-vars.$font-line-height-x-small;
 		color: wp-colors.$gray-700;
 
 		&--y {
-			margin-bottom: 6px;
+			margin-bottom: calc(wp-vars.$grid-unit / 2);
 		}
 
 		&--x {
-			margin-top: 6px;
+			margin-top: calc(wp-vars.$grid-unit / 2);
 			text-align: center;
 		}
 	}
@@ -458,20 +459,27 @@
 	// the value range); these rules own only structure. Horizontal scroll keeps a
 	// wide period axis from overflowing the card.
 	&__cohort-heatmap {
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+		gap: wp-vars.$grid-unit-30;
+		height: 100%;
 		overflow-x: auto;
 	}
 
 	&__cohort-heatmap-table {
 		border-collapse: separate;
-		border-spacing: 3px;
-		font-size: 12px;
+		border-spacing: wp-vars.$grid-unit-05;
+		font-size: wp-vars.$font-size-x-small;
+		line-height: wp-vars.$font-line-height-x-small;
 		font-variant-numeric: tabular-nums;
 
 		caption {
 			caption-side: top;
-			margin-bottom: 6px;
+			margin-bottom: calc(wp-vars.$grid-unit / 2);
 			text-align: left;
-			font-size: 11px;
+			font-size: wp-vars.$font-size-x-small;
+			line-height: wp-vars.$font-line-height-x-small;
 			color: wp-colors.$gray-700;
 		}
 	}
@@ -479,7 +487,7 @@
 	&__cohort-heatmap-corner,
 	&__cohort-heatmap-colhead {
 		padding: 0 6px 4px;
-		font-weight: 500;
+		font-weight: wp-vars.$font-weight-medium;
 		color: wp-colors.$gray-700;
 		text-align: center;
 	}
@@ -498,9 +506,8 @@
 	}
 
 	&__cohort-heatmap-cell {
-		min-width: 40px;
-		padding: 6px 10px;
-		border-radius: 4px;
+		min-width: calc(wp-vars.$grid-unit * 9);
+		padding: calc(wp-vars.$grid-unit / 2);
 		text-align: center;
 		font-variant-numeric: tabular-nums;
 		// Sequential ramp off the admin accent: mix the darker-20 base with white
@@ -510,30 +517,41 @@
 		&.is-empty {
 			background: transparent;
 		}
+
+		// A white cell (lowest value, no accent mix) would float against the
+		// white card; an inset hairline defines it without shifting the grid.
+		&.is-white {
+			box-shadow: inset 0 0 0 1px wp-colors.$gray-100;
+		}
 	}
 
 	&__cohort-heatmap-footer {
 		display: flex;
 		align-items: center;
-		gap: 16px;
-		margin-top: 10px;
-		font-size: 11px;
+		gap: wp-vars.$grid-unit;
+		margin: 0;
+		font-size: wp-vars.$font-size-x-small;
+		line-height: wp-vars.$font-line-height-x-small;
 		color: wp-colors.$gray-700;
 	}
 
 	&__cohort-heatmap-scale {
 		display: inline-flex;
 		align-items: center;
-		gap: 6px;
+		gap: wp-vars.$grid-unit;
 	}
 
 	&__cohort-heatmap-swatches {
 		display: inline-flex;
 
 		span {
-			width: 18px;
-			height: 12px;
+			width: wp-vars.$grid-unit-20;
+			height: wp-vars.$grid-unit-15;
 			background-color: color-mix( in srgb, var( --wp-admin-theme-color ) calc( var( --cell-t, 0 ) * 100% ), #{ wp-colors.$white } );
+
+			&.is-white {
+				box-shadow: inset 0 0 0 1px wp-colors.$gray-100;
+			}
 		}
 	}
 
@@ -622,10 +640,10 @@
 	&__line-legend {
 		display: flex;
 		flex-wrap: wrap;
-		gap: wp-vars.$grid-unit-20;
+		gap: wp-vars.$grid-unit-30;
 		margin-top: wp-vars.$grid-unit-30;
-		font-size: wp-vars.$font-size-small;
-		line-height: wp-vars.$default-line-height;
+		font-size: wp-vars.$font-size-x-small;
+		line-height: wp-vars.$font-line-height-x-small;
 		color: wp-colors.$gray-700;
 	}
 
@@ -633,23 +651,6 @@
 		display: flex;
 		align-items: center;
 		gap: wp-vars.$grid-unit-10;
-	}
-
-	// Distribution viz — shared across Gates (Tab 4) and Prompts (Tab 5).
-	// Wraps the canonical table chrome (`__table-wrap` / `__table`) and pins
-	// an optional caption below the table.
-	&__distribution {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-
-		&-caption {
-			margin: 0;
-			font-size: 13px;
-			font-weight: 400;
-			line-height: 1.5;
-			color: wp-colors.$gray-700;
-		}
 	}
 
 	// Funnel viz — shared across Gates, Prompts, and Conversion Journey tabs.

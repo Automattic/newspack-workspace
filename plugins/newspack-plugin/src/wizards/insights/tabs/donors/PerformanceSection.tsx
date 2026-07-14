@@ -40,6 +40,7 @@ import SectionEmpty from '../components/SectionEmpty';
 import SectionHeading from '../components/SectionHeading';
 import { getPostEditUrl } from '../components/adminLinks';
 import { formatCurrency, formatNumber } from '../components/format';
+import { Card } from '../../../../../packages/components/src';
 
 export interface PerformanceSectionProps {
 	rows: DonorsTierRow[];
@@ -151,20 +152,22 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 					'newspack-plugin'
 				) }
 			/>
-			<InsightsDataView< FlatRow >
-				columns={ columns }
-				rows={ flatten( rows ) }
-				getRowKey={ item =>
-					item.kind === 'parent' ? `product:${ item.row.product_id }` : `${ item.parentId }-${ item.row.variation_id }`
-				}
-				emptyMessage={ __( 'No donation activity yet.', 'newspack-plugin' ) }
-			/>
-			<p className="newspack-insights__table-footnote">
-				{ __(
-					'“(no variation)”: Donations recorded at the product level without a specific variation — e.g. one-time or name-your-price gifts made against this product.',
-					'newspack-plugin'
-				) }
-			</p>
+			<Card __experimentalCoreCard className="newspack-insights__chart-card">
+				<InsightsDataView< FlatRow >
+					columns={ columns }
+					rows={ flatten( rows ) }
+					getRowKey={ item =>
+						item.kind === 'parent' ? `product:${ item.row.product_id }` : `${ item.parentId }-${ item.row.variation_id }`
+					}
+					emptyMessage={ __( 'No donation activity yet.', 'newspack-plugin' ) }
+				/>
+				<p className="newspack-insights__table-footnote">
+					{ __(
+						'“(no variation)”: Donations recorded at the product level without a specific variation — e.g. one-time or name-your-price gifts made against this product.',
+						'newspack-plugin'
+					) }
+				</p>
+			</Card>
 		</Section>
 	);
 };

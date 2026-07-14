@@ -11,6 +11,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
@@ -39,9 +40,11 @@ const PerformanceBreakdownSection = ( { current }: PerformanceBreakdownSectionPr
 				'newspack-plugin'
 			) }
 		/>
-		<PerformanceByPromptTable data={ current.performance_by_prompt } />
-		<PerformanceByIntentTable data={ current.performance_by_intent } />
-		<PerformanceByPlacementTable data={ current.performance_by_placement } />
+		<VStack spacing={ 4 }>
+			<PerformanceByPromptTable data={ current.performance_by_prompt } />
+			<PerformanceByIntentTable data={ current.performance_by_intent } />
+			<PerformanceByPlacementTable data={ current.performance_by_placement } />
+		</VStack>
 	</Section>
 );
 

@@ -19,10 +19,12 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { ExternalLink } from '@wordpress/components';
 
 /**
  * Internal dependencies
  */
+import { Card } from '../../../../../../packages/components/src';
 import type { PromptsPerformanceByPromptRow, PromptsPerformanceByPromptTable as TableData } from '../../../api/prompts';
 import { getPostEditUrl } from '../../components/adminLinks';
 import { formatNumber, formatPercent } from '../../components/format';
@@ -96,7 +98,7 @@ const columns: SortableColumn< PromptsPerformanceByPromptRow >[] = [
 		key: 'prompt_title',
 		label: __( 'Prompt', 'newspack-plugin' ),
 		numeric: false,
-		render: r => <a href={ getPostEditUrl( r.popup_id ) }>{ r.prompt_title }</a>,
+		render: r => <ExternalLink href={ getPostEditUrl( r.popup_id ) }>{ r.prompt_title }</ExternalLink>,
 		sortValue: r => r.prompt_title,
 	},
 	{
@@ -158,8 +160,8 @@ const columns: SortableColumn< PromptsPerformanceByPromptRow >[] = [
 ];
 
 const PerformanceByPromptTable = ( { data }: PerformanceByPromptTableProps ) => (
-	<div className="newspack-insights__prompts-subsection">
-		<h3 className="newspack-insights__prompts-subsection-heading">{ __( 'Performance by prompt', 'newspack-plugin' ) }</h3>
+	<Card __experimentalCoreCard className="newspack-insights__chart-card">
+		<h3 className="newspack-insights__chart-card-title">{ __( 'Performance by prompt', 'newspack-plugin' ) }</h3>
 		<SortableTable
 			columns={ columns }
 			rows={ data.rows }
@@ -173,13 +175,13 @@ const PerformanceByPromptTable = ( { data }: PerformanceByPromptTableProps ) => 
 			) }
 			errorMessage={ 'error' === data.state ? SECTION_ERROR_MESSAGE : undefined }
 		/>
-		<p className="newspack-insights__prompts-subsection-note">
+		<p className="newspack-insights__table-footnote">
 			{ __(
 				'Showing the top 10 prompts by the sorted column; use “See more” to reveal the rest. Capped at the top 50 prompts by impressions — lower-traffic prompts beyond that may not appear.',
 				'newspack-plugin'
 			) }
 		</p>
-	</div>
+	</Card>
 );
 
 export default PerformanceByPromptTable;

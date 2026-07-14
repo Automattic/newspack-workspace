@@ -17,6 +17,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { ExternalLink } from '@wordpress/components';
 
 /**
  * Internal dependencies
@@ -29,6 +30,7 @@ import { formatNumber, formatPercent } from '../components/format';
 import Section from '../components/Section';
 import SectionHeading from '../components/SectionHeading';
 import { SECTION_ERROR_MESSAGE } from './SectionState';
+import { Card } from '../../../../../packages/components/src';
 
 export interface PerformanceByGateSectionProps {
 	data: GatesPerformanceTable;
@@ -50,7 +52,7 @@ const columns: InsightsColumn< GatesPerformanceRow >[] = [
 	{
 		key: 'gate_name',
 		label: __( 'Gate name', 'newspack-plugin' ),
-		render: row => <a href={ getPostEditUrl( row.gate_post_id ) }>{ row.gate_name }</a>,
+		render: row => <ExternalLink href={ getPostEditUrl( row.gate_post_id ) }>{ row.gate_name }</ExternalLink>,
 		sortValue: row => row.gate_name,
 	},
 	{
@@ -116,13 +118,15 @@ const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => 
 				title={ __( 'Performance by gate', 'newspack-plugin' ) }
 				description={ __( 'Per-gate breakdown for the selected timeframe. Click any column to re-sort.', 'newspack-plugin' ) }
 			/>
-			<InsightsDataView< GatesPerformanceRow >
-				columns={ columns }
-				rows={ data.state === 'populated' ? data.rows : [] }
-				getRowKey={ row => String( row.gate_post_id ) }
-				defaultSortKey="impressions"
-				emptyMessage={ emptyMessage }
-			/>
+			<Card __experimentalCoreCard className="newspack-insights__chart-card">
+				<InsightsDataView< GatesPerformanceRow >
+					columns={ columns }
+					rows={ data.state === 'populated' ? data.rows : [] }
+					getRowKey={ row => String( row.gate_post_id ) }
+					defaultSortKey="impressions"
+					emptyMessage={ emptyMessage }
+				/>
+			</Card>
 		</Section>
 	);
 };

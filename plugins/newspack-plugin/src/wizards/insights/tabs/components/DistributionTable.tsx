@@ -55,15 +55,15 @@ const DistributionTable = ( { buckets, caption }: DistributionTableProps ) => {
 	];
 
 	return (
-		<div className="newspack-insights__distribution">
+		<>
 			<InsightsDataView< DistributionBucket >
 				columns={ columns }
 				rows={ buckets }
 				getRowKey={ bucket => bucket.label }
 				emptyMessage={ __( 'No conversion distribution data in this timeframe.', 'newspack-plugin' ) }
 			/>
-			{ caption && <p className="newspack-insights__distribution-caption">{ caption }</p> }
-		</div>
+			{ caption && <p className="newspack-insights__table-footnote">{ caption }</p> }
+		</>
 	);
 };
 

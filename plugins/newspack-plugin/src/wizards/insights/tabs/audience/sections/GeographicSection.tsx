@@ -6,7 +6,6 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 
 /**
  * Internal dependencies
@@ -45,41 +44,37 @@ const GeographicSection = ( { current }: SectionProps ) => {
 			/>
 			<Grid columns={ 2 } gutter={ 16 } noMargin>
 				<Card __experimentalCoreCard className="newspack-insights__chart-card">
-					<VStack spacing={ 6 }>
-						<h3 className="newspack-insights__chart-card-title">
-							{ __( 'Top regions / states', 'newspack-plugin' ) }
-							{ regionsScope && <ScopePill label={ regionsScope } /> }
-						</h3>
-						<MetricTable
-							payload={ current.top_regions }
-							emptyMessage={ __( 'No data in this timeframe.', 'newspack-plugin' ) }
-							collapseColumn="country"
-							columns={ [
-								{ key: 'country', label: __( 'Country', 'newspack-plugin' ) },
-								{ key: 'region', label: __( 'Region', 'newspack-plugin' ) },
-								READERS_COL,
-							] }
-						/>
-					</VStack>
+					<h3 className="newspack-insights__chart-card-title">
+						{ __( 'Top regions / states', 'newspack-plugin' ) }
+						{ regionsScope && <ScopePill label={ regionsScope } /> }
+					</h3>
+					<MetricTable
+						payload={ current.top_regions }
+						emptyMessage={ __( 'No data in this timeframe.', 'newspack-plugin' ) }
+						collapseColumn="country"
+						columns={ [
+							{ key: 'country', label: __( 'Country', 'newspack-plugin' ) },
+							{ key: 'region', label: __( 'Region', 'newspack-plugin' ) },
+							READERS_COL,
+						] }
+					/>
 				</Card>
 				<Card __experimentalCoreCard className="newspack-insights__chart-card">
-					<VStack spacing={ 6 }>
-						<h3 className="newspack-insights__chart-card-title">
-							{ __( 'Top cities', 'newspack-plugin' ) }
-							{ citiesScope && <ScopePill label={ citiesScope } /> }
-						</h3>
-						<MetricTable
-							payload={ current.top_cities }
-							emptyMessage={ __( 'No data in this timeframe.', 'newspack-plugin' ) }
-							collapseColumn="country"
-							columns={ [
-								{ key: 'country', label: __( 'Country', 'newspack-plugin' ) },
-								{ key: 'region', label: __( 'Region', 'newspack-plugin' ) },
-								{ key: 'city', label: __( 'City', 'newspack-plugin' ) },
-								READERS_COL,
-							] }
-						/>
-					</VStack>
+					<h3 className="newspack-insights__chart-card-title">
+						{ __( 'Top cities', 'newspack-plugin' ) }
+						{ citiesScope && <ScopePill label={ citiesScope } /> }
+					</h3>
+					<MetricTable
+						payload={ current.top_cities }
+						emptyMessage={ __( 'No data in this timeframe.', 'newspack-plugin' ) }
+						collapseColumn="country"
+						columns={ [
+							{ key: 'country', label: __( 'Country', 'newspack-plugin' ) },
+							{ key: 'region', label: __( 'Region', 'newspack-plugin' ) },
+							{ key: 'city', label: __( 'City', 'newspack-plugin' ) },
+							READERS_COL,
+						] }
+					/>
 				</Card>
 			</Grid>
 		</Section>

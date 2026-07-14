@@ -40,7 +40,7 @@ const PromptEngagementSection = ( { current, previous }: PromptEngagementSection
 				'newspack-plugin'
 			) }
 		/>
-		<Grid columns={ 3 } gutter={ 16 } noMargin>
+		<Grid columns={ 4 } gutter={ 16 } noMargin>
 			<MetricCard
 				{ ...scalarToMetricCardProps( {
 					label: __( 'Click-Through Rate', 'newspack-plugin' ),

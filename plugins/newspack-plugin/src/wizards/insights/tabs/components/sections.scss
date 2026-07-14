@@ -291,32 +291,15 @@
 		border-radius: 4px;
 	}
 
-	// "See more" / "See less" toggle below an expandable MetricTable.
-	&__table-toggle {
-		display: inline-block;
-		// Hug the start when the toggle is a direct flex child (e.g. a full-width
-		// table rendered straight into a flex-column section) — otherwise it
-		// stretches full width and the button's default centered text drifts to
-		// the middle. A no-op where the toggle isn't a flex item.
-		align-self: flex-start;
-		margin-top: 8px;
-		padding: 0;
-		background: transparent;
-		border: 0;
-		cursor: pointer;
-		font-size: 13px;
-		font-weight: 600;
-		color: var( --wp-admin-theme-color );
-
-		&:hover {
-			text-decoration: underline;
-		}
-
-		// Match the canonical focus ring on its sibling `__sortable-table-more`.
-		&:focus-visible {
-			outline: 2px solid var( --wp-admin-theme-color );
-			outline-offset: 2px;
-		}
+	// "See more" / "See less" toggle below an expandable MetricTable. Rendered as
+	// a `Button variant="link"`, which supplies the link look, hover underline, and
+	// focus ring — only the layout is ours. Force block (the button is inline-flex,
+	// and its parent is often a plain block where a top margin wouldn't hold) and
+	// hug the content so it sits on its own line under the table.
+	&__table-toggle.components-button {
+		display: block;
+		width: fit-content;
+		margin-top: wp-vars.$grid-unit;
 	}
 
 	&__table {

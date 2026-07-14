@@ -24,6 +24,7 @@ import SectionHeading from '../components/SectionHeading';
 import Funnel from '../components/Funnel';
 import DistributionTable from '../components/DistributionTable';
 import SectionState from './SectionState';
+import { Card } from '../../../../../packages/components/src';
 
 export interface HowReadersConvertSectionProps {
 	current: GatesWindow;
@@ -40,7 +41,7 @@ const HowReadersConvertSection = ( { current }: HowReadersConvertSectionProps ) 
 			) }
 		/>
 		<div className="newspack-insights__gates-convert-grid">
-			<div className="newspack-insights__gates-convert-col">
+			<Card __experimentalCoreCard className="newspack-insights__chart-card newspack-insights__gates-convert-col">
 				<SectionState
 					state={ current.conversion_funnel.state }
 					emptyMessage={ __(
@@ -50,8 +51,8 @@ const HowReadersConvertSection = ( { current }: HowReadersConvertSectionProps ) 
 				>
 					<Funnel stages={ current.conversion_funnel.stages } />
 				</SectionState>
-			</div>
-			<div className="newspack-insights__gates-convert-col">
+			</Card>
+			<Card __experimentalCoreCard className="newspack-insights__chart-card newspack-insights__gates-convert-col">
 				<SectionState
 					state={ current.exposures_distribution.state }
 					emptyMessage={ __( 'No distribution data yet. This will populate once readers begin converting.', 'newspack-plugin' ) }
@@ -61,7 +62,7 @@ const HowReadersConvertSection = ( { current }: HowReadersConvertSectionProps ) 
 						caption={ __( 'Of readers who converted, this is how many gates they saw first.', 'newspack-plugin' ) }
 					/>
 				</SectionState>
-			</div>
+			</Card>
 		</div>
 	</Section>
 );

@@ -19,6 +19,7 @@ import type { InsightsWindow } from '../../../api/advertising';
 import MetricTable from '../../components/MetricTable';
 import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
+import { Card } from '../../../../../../packages/components/src';
 
 export interface SectionProps {
 	current: InsightsWindow;
@@ -32,19 +33,21 @@ const SitePerformanceSection = ( { current }: SectionProps ) => (
 			title={ __( 'Performance by site', 'newspack-plugin' ) }
 			description={ __( 'How each site in your network is performing.', 'newspack-plugin' ) }
 		/>
-		<MetricTable
-			payload={ current.top_sites }
-			emptyMessage={ __( 'No per-site data in this timeframe.', 'newspack-plugin' ) }
-			expandable
-			defaultRowLimit={ 10 }
-			rowLimit={ 25 }
-			columns={ [
-				{ key: 'site', label: __( 'Site', 'newspack-plugin' ) },
-				{ key: 'impressions', label: __( 'Impr.', 'newspack-plugin' ), format: 'number', align: 'right' },
-				{ key: 'revenue', label: __( 'Revenue', 'newspack-plugin' ), format: 'currency', align: 'right' },
-				{ key: 'ecpm', label: __( 'eCPM', 'newspack-plugin' ), format: 'currency', align: 'right' },
-			] }
-		/>
+		<Card __experimentalCoreCard className="newspack-insights__chart-card">
+			<MetricTable
+				payload={ current.top_sites }
+				emptyMessage={ __( 'No per-site data in this timeframe.', 'newspack-plugin' ) }
+				expandable
+				defaultRowLimit={ 10 }
+				rowLimit={ 25 }
+				columns={ [
+					{ key: 'site', label: __( 'Site', 'newspack-plugin' ) },
+					{ key: 'impressions', label: __( 'Impr.', 'newspack-plugin' ), format: 'number', align: 'right' },
+					{ key: 'revenue', label: __( 'Revenue', 'newspack-plugin' ), format: 'currency', align: 'right' },
+					{ key: 'ecpm', label: __( 'eCPM', 'newspack-plugin' ), format: 'currency', align: 'right' },
+				] }
+			/>
+		</Card>
 	</Section>
 );
 

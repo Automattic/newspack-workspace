@@ -43,7 +43,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
           </div>
         </div>
         <div
-          class="newspack-grid newspack-grid--no-margin newspack-grid__columns-3 newspack-grid__gutter-16"
+          class="newspack-grid newspack-grid--no-margin newspack-grid__columns-4 newspack-grid__gutter-16"
         >
           <div
             class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
@@ -230,7 +230,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
           </div>
         </div>
         <div
-          class="newspack-grid newspack-grid--no-margin newspack-grid__columns-3 newspack-grid__gutter-16"
+          class="newspack-grid newspack-grid--no-margin newspack-grid__columns-4 newspack-grid__gutter-16"
         >
           <div
             class="components-surface components-card newspack-card--core newspack-insights__metric-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
@@ -1134,22 +1134,66 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
           class="newspack-insights__prompts-convert-grid"
         >
           <div
-            class="newspack-insights__prompts-convert-col"
+            class="components-surface components-card newspack-card--core newspack-insights__chart-card newspack-insights__prompts-convert-col newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Card"
           >
-            <p
-              class="newspack-insights__section-empty"
+            <div
+              class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
             >
-              No funnel data yet. The funnel will populate once readers begin moving through your prompts.
-            </p>
+              <div
+                class="newspack-card--core__body"
+              >
+                <p
+                  class="newspack-insights__section-empty"
+                >
+                  No funnel data yet. The funnel will populate once readers begin moving through your prompts.
+                </p>
+              </div>
+            </div>
+            <div
+              aria-hidden="true"
+              class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+              data-wp-c16t="true"
+              data-wp-component="Elevation"
+            />
+            <div
+              aria-hidden="true"
+              class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+              data-wp-c16t="true"
+              data-wp-component="Elevation"
+            />
           </div>
           <div
-            class="newspack-insights__prompts-convert-col"
+            class="components-surface components-card newspack-card--core newspack-insights__chart-card newspack-insights__prompts-convert-col newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Card"
           >
-            <p
-              class="newspack-insights__section-empty"
+            <div
+              class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
             >
-              No distribution data yet. This will populate once readers begin converting.
-            </p>
+              <div
+                class="newspack-card--core__body"
+              >
+                <p
+                  class="newspack-insights__section-empty"
+                >
+                  No distribution data yet. This will populate once readers begin converting.
+                </p>
+              </div>
+            </div>
+            <div
+              aria-hidden="true"
+              class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+              data-wp-c16t="true"
+              data-wp-component="Elevation"
+            />
+            <div
+              aria-hidden="true"
+              class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+              data-wp-c16t="true"
+              data-wp-component="Elevation"
+            />
           </div>
         </div>
       </section>
@@ -1183,61 +1227,133 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
           </div>
         </div>
         <div
-          class="newspack-insights__prompts-subsection"
+          class="components-flex components-h-stack components-v-stack css-j05iml-PolymorphicDiv-Flex-base-ItemsColumn e19lxcc00"
+          data-wp-c16t="true"
+          data-wp-component="VStack"
         >
-          <h3
-            class="newspack-insights__prompts-subsection-heading"
+          <div
+            class="components-surface components-card newspack-card--core newspack-insights__chart-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Card"
           >
-            Performance by prompt
-          </h3>
-          <p
-            class="newspack-insights__section-empty"
+            <div
+              class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+            >
+              <div
+                class="newspack-card--core__body"
+              >
+                <h3
+                  class="newspack-insights__chart-card-title"
+                >
+                  Performance by prompt
+                </h3>
+                <p
+                  class="newspack-insights__section-empty"
+                >
+                  No prompt data yet. Performance metrics will appear once readers begin interacting with your prompts.
+                </p>
+                <p
+                  class="newspack-insights__table-footnote"
+                >
+                  Showing the top 10 prompts by the sorted column; use “See more” to reveal the rest. Capped at the top 50 prompts by impressions — lower-traffic prompts beyond that may not appear.
+                </p>
+              </div>
+            </div>
+            <div
+              aria-hidden="true"
+              class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+              data-wp-c16t="true"
+              data-wp-component="Elevation"
+            />
+            <div
+              aria-hidden="true"
+              class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+              data-wp-c16t="true"
+              data-wp-component="Elevation"
+            />
+          </div>
+          <div
+            class="components-surface components-card newspack-card--core newspack-insights__chart-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Card"
           >
-            No prompt data yet. Performance metrics will appear once readers begin interacting with your prompts.
-          </p>
-          <p
-            class="newspack-insights__prompts-subsection-note"
+            <div
+              class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+            >
+              <div
+                class="newspack-card--core__body"
+              >
+                <h3
+                  class="newspack-insights__chart-card-title"
+                >
+                  Performance by prompt intent
+                </h3>
+                <p
+                  class="newspack-insights__section-empty"
+                >
+                  No prompt data yet. Intent performance will appear once readers begin interacting with your prompts.
+                </p>
+                <p
+                  class="newspack-insights__table-footnote"
+                >
+                  Answers 'are my donation prompts working better than my registration prompts?' at a glance.
+                </p>
+              </div>
+            </div>
+            <div
+              aria-hidden="true"
+              class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+              data-wp-c16t="true"
+              data-wp-component="Elevation"
+            />
+            <div
+              aria-hidden="true"
+              class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+              data-wp-c16t="true"
+              data-wp-component="Elevation"
+            />
+          </div>
+          <div
+            class="components-surface components-card newspack-card--core newspack-insights__chart-card newspack-card--core__has-children css-1dj5kxo-PolymorphicDiv-Surface-getBorders-primary-Card-rounded e19lxcc00"
+            data-wp-c16t="true"
+            data-wp-component="Card"
           >
-            Showing the top 10 prompts by the sorted column; use “See more” to reveal the rest. Capped at the top 50 prompts by impressions — lower-traffic prompts beyond that may not appear.
-          </p>
-        </div>
-        <div
-          class="newspack-insights__prompts-subsection"
-        >
-          <h3
-            class="newspack-insights__prompts-subsection-heading"
-          >
-            Performance by prompt intent
-          </h3>
-          <p
-            class="newspack-insights__section-empty"
-          >
-            No prompt data yet. Intent performance will appear once readers begin interacting with your prompts.
-          </p>
-          <p
-            class="newspack-insights__prompts-subsection-note"
-          >
-            Answers 'are my donation prompts working better than my registration prompts?' at a glance.
-          </p>
-        </div>
-        <div
-          class="newspack-insights__prompts-subsection"
-        >
-          <h3
-            class="newspack-insights__prompts-subsection-heading"
-          >
-            Performance by prompt placement
-          </h3>
-          <p
-            class="newspack-insights__section-empty"
-          >
-            No prompt data yet. Placement performance will appear once readers begin interacting with your prompts.
-          </p>
-          <p
-            class="newspack-insights__prompts-subsection-note"
-          >
-            Answers 'do my overlay prompts perform better than inline?' Useful for choosing placement defaults.
-          </p>
+            <div
+              class="css-7epkyb-PolymorphicDiv-Content e19lxcc00"
+            >
+              <div
+                class="newspack-card--core__body"
+              >
+                <h3
+                  class="newspack-insights__chart-card-title"
+                >
+                  Performance by prompt placement
+                </h3>
+                <p
+                  class="newspack-insights__section-empty"
+                >
+                  No prompt data yet. Placement performance will appear once readers begin interacting with your prompts.
+                </p>
+                <p
+                  class="newspack-insights__table-footnote"
+                >
+                  Answers 'do my overlay prompts perform better than inline?' Useful for choosing placement defaults.
+                </p>
+              </div>
+            </div>
+            <div
+              aria-hidden="true"
+              class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+              data-wp-c16t="true"
+              data-wp-component="Elevation"
+            />
+            <div
+              aria-hidden="true"
+              class="components-elevation css-d8yggo-PolymorphicDiv-Elevation-sx-Base-sx-Base-elevationClassName e19lxcc00"
+              data-wp-c16t="true"
+              data-wp-component="Elevation"
+            />
+          </div>
         </div>
       </section>
     </div>
