@@ -7,7 +7,7 @@
 [![Node](https://img.shields.io/badge/Node-22-339933?logo=nodedotjs&logoColor=white)](.nvmrc)
 [![pnpm](https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&logoColor=white)](package.json)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](Dockerfile)
-[![code style: Prettier](https://img.shields.io/badge/code_style-prettier-F7B93E?logo=prettier&logoColor=black)](https://prettier.io)
+[![code style: Prettier](https://img.shields.io/badge/code_style-prettier-F7B93E?logo=prettier&logoColor=black)](.prettierrc.js)
 
 The Newspack monorepo. All product [plugins](plugins), [themes](themes), and shared [packages](packages) live here. It also ships a Docker-based local development environment, so the dependencies needed to run the projects and their tests live inside the container, independent of your local machine.
 
