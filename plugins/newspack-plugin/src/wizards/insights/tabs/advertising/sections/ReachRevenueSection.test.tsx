@@ -112,8 +112,8 @@ describe( 'ReachRevenueSection cross-system scorecards (NPPD-1675)', () => {
 		expect( screen.getByText( 'RPM' ) ).toBeInTheDocument();
 		expect( cardValueByLabel( container, 'RPM' ) ).toBe( '$5.25' );
 
-		expect( screen.getByText( 'Impressions per session' ) ).toBeInTheDocument();
-		expect( cardValueByLabel( container, 'Impressions per session' ) ).toBe( '3' );
+		expect( screen.getByText( 'Impressions per Session' ) ).toBeInTheDocument();
+		expect( cardValueByLabel( container, 'Impressions per Session' ) ).toBe( '3' );
 	} );
 
 	it( 'shows period deltas on the derived scorecards under comparison', () => {
@@ -130,7 +130,7 @@ describe( 'ReachRevenueSection cross-system scorecards (NPPD-1675)', () => {
 				?.querySelector( '.newspack-insights__metric-card-delta' );
 
 		expect( deltaByLabel( 'RPM' ) ).not.toBeNull();
-		expect( deltaByLabel( 'Impressions per session' ) ).not.toBeNull();
+		expect( deltaByLabel( 'Impressions per Session' ) ).not.toBeNull();
 	} );
 
 	it( 'renders the data-unavailable overlay when sessions are missing', () => {

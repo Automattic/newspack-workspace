@@ -79,12 +79,12 @@
 			color: wp-colors.$gray-700;
 		}
 
-		// Chart body grows to fill the card; 16px separates it from the
+		// Chart body grows to fill the card; 24px separates it from the
 		// title/caption above.
 		&-body {
 			flex: 1 1 auto;
 			min-width: 0;
-			margin-top: wp-vars.$grid-unit-20;
+			margin-top: wp-vars.$grid-unit-30;
 		}
 	}
 

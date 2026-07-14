@@ -40,7 +40,7 @@ describe( 'EngagementTab', () => {
 		render( <EngagementTab range={ range } previousRange={ null } /> );
 
 		expect( screen.getByText( 'Connect Google Analytics.' ) ).toBeInTheDocument();
-		expect( screen.queryByText( 'Overall engagement quality' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Overall Engagement Quality' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'renders sections with values on success', () => {
@@ -61,7 +61,7 @@ describe( 'EngagementTab', () => {
 
 		render( <EngagementTab range={ range } previousRange={ null } /> );
 
-		expect( screen.getByText( 'Overall engagement quality' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Overall Engagement Quality' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Avg Pages per Session' ) ).toBeInTheDocument();
 		expect( screen.getByText( '3.2' ) ).toBeInTheDocument();
 	} );
@@ -92,7 +92,7 @@ describe( 'EngagementTab', () => {
 
 		// The three non-completion quality cards still render.
 		expect( screen.getByText( 'Avg Pages per Session' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Avg Engaged Session Duration' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Avg Engaged Time' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Bounce Rate' ) ).toBeInTheDocument();
 		// The two remaining content tables still render.
 		expect( screen.getByText( 'Most-engaged articles' ) ).toBeInTheDocument();

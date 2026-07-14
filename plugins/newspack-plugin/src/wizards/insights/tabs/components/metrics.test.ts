@@ -98,10 +98,10 @@ describe( 'payloadToCard', () => {
 
 	it( 'renders a warming metric as { warming: true }, not a value card (NEWS-2603)', () => {
 		const card = payloadToCard( {
-			label: 'Newsletter → subscription',
+			label: 'Newsletter → Subscription',
 			current: { state: 'warming', computable: false },
 		} );
-		expect( card ).toEqual( { label: 'Newsletter → subscription', description: undefined, warming: true } );
+		expect( card ).toEqual( { label: 'Newsletter → Subscription', description: undefined, warming: true } );
 		expect( card ).not.toHaveProperty( 'value' );
 	} );
 
@@ -155,12 +155,13 @@ describe( 'toSeries', () => {
 } );
 
 describe( 'formatDuration', () => {
-	it( 'formats seconds as m:ss', () => {
-		expect( formatDuration( 142 ) ).toBe( '2:22' );
-		expect( formatDuration( 5 ) ).toBe( '0:05' );
+	it( 'formats seconds with m/s suffixes', () => {
+		expect( formatDuration( 142 ) ).toBe( '2m 22s' );
+		expect( formatDuration( 5 ) ).toBe( '5s' );
 	} );
 
-	it( 'formats past an hour as h:mm:ss', () => {
-		expect( formatDuration( 3661 ) ).toBe( '1:01:01' );
+	it( 'formats past an hour with h/m/s suffixes', () => {
+		expect( formatDuration( 3661 ) ).toBe( '1h 1m 1s' );
+		expect( formatDuration( 9573 ) ).toBe( '2h 39m 33s' );
 	} );
 } );

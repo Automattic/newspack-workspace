@@ -87,7 +87,7 @@ const PropertyPicker = ( { config, onSaved }: { config: AppConfig; onSaved: ( ne
 	return (
 		<WizardsActionCard
 			isMedium
-			title={ __( 'App analytics property', 'newspack-plugin' ) }
+			title={ __( 'App Analytics Property', 'newspack-plugin' ) }
 			description={ __(
 				'Choose the Google Analytics property that receives your app’s data. It may be in a different account than your website.',
 				'newspack-plugin'
@@ -101,7 +101,7 @@ const PropertyPicker = ( { config, onSaved }: { config: AppConfig; onSaved: ( ne
 		>
 			<Grid noMargin rowGap={ 16 }>
 				<SelectControl
-					label={ __( 'App analytics property', 'newspack-plugin' ) }
+					label={ __( 'App Analytics Property', 'newspack-plugin' ) }
 					hideLabelFromVision
 					value={ value }
 					options={ options }

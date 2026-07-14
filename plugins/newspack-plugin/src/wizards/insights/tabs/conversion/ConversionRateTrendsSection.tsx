@@ -64,7 +64,7 @@ const ConversionRateTrendsSection = ( { current }: ConversionRateTrendsSectionPr
 	>
 		<SectionHeading
 			id="newspack-insights-conversion-rate-trends-heading"
-			title={ __( 'Conversion rate trends', 'newspack-plugin' ) }
+			title={ __( 'Conversion Rate Trends', 'newspack-plugin' ) }
 			description={ __(
 				'Weekly conversion rates across the selected timeframe. Useful for spotting acceleration, plateaus, or seasonality.',
 				'newspack-plugin'

@@ -100,16 +100,16 @@ const AdvertisingTab = ( { range, previousRange }: AdvertisingTabProps ) => {
 							lastUpdated={ <LastUpdated tab="advertising" range={ range } previousRange={ previousRange } /> }
 						/>
 						{ /* Revenue/inventory sections are GAM-only — Broadstreet's API has no
-						     revenue, channels, devices, or per-site custom dimension. */ }
-						{ ! isBroadstreet && (
-							<>
-								<RevenueTrendSection current={ current.metrics } previous={ previous } />
-								{ /* Channel pie + device table: after the trend, before the per-site and
-								     top-performer tables. */ }
-								<ChannelDeviceSection current={ current.metrics } previous={ previous } />
-								{ /* Per-site breakdown: network members only; absent otherwise. */ }
-								{ current.is_network_member && <SitePerformanceSection current={ current.metrics } previous={ previous } /> }
-							</>
+						     revenue, channels, devices, or per-site custom dimension. Kept as
+						     direct TabSections children (not wrapped in a Fragment) so a
+						     full-width divider is drawn between each rendered section. */ }
+						{ ! isBroadstreet && <RevenueTrendSection current={ current.metrics } previous={ previous } /> }
+						{ /* Channel pie + device table: after the trend, before the per-site and
+						     top-performer tables. */ }
+						{ ! isBroadstreet && <ChannelDeviceSection current={ current.metrics } previous={ previous } /> }
+						{ /* Per-site breakdown: network members only; absent otherwise. */ }
+						{ ! isBroadstreet && current.is_network_member && (
+							<SitePerformanceSection current={ current.metrics } previous={ previous } />
 						) }
 						<TopPerformersSection current={ current.metrics } previous={ previous } activeProvider={ current.active_provider } />
 					</TabSections>

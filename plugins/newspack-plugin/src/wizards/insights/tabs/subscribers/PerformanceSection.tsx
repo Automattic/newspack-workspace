@@ -39,7 +39,11 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 				className="newspack-insights__section newspack-insights__section--performance"
 				aria-labelledby="newspack-insights-performance-heading"
 			>
-				<SectionHeading id="newspack-insights-performance-heading" title={ __( 'Subscriptions by product', 'newspack-plugin' ) } />
+				<SectionHeading
+					id="newspack-insights-performance-heading"
+					title={ __( 'Subscriptions by Product', 'newspack-plugin' ) }
+					description={ __( 'Active subscribers and revenue broken out by subscription product.', 'newspack-plugin' ) }
+				/>
 				<SectionEmpty>{ __( 'No subscription products configured yet.', 'newspack-plugin' ) }</SectionEmpty>
 			</Section>
 		);
@@ -52,7 +56,7 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 		>
 			<SectionHeading
 				id="newspack-insights-performance-heading"
-				title={ __( 'Subscriptions by product', 'newspack-plugin' ) }
+				title={ __( 'Subscriptions by Product', 'newspack-plugin' ) }
 				description={ __(
 					'Active subscriptions per product (subscriptions, not unique customers). New and churned subs reflect the selected timeframe; active counts and value are current, and lifetime revenue is the all-time total per product.',
 					'newspack-plugin'

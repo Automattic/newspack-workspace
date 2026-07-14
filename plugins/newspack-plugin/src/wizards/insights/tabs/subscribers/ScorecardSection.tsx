@@ -41,13 +41,13 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 	<Section className="newspack-insights__section newspack-insights__section--scorecard" aria-labelledby="newspack-insights-scorecard-heading">
 		<SectionHeading
 			id="newspack-insights-scorecard-heading"
-			title={ __( 'Subscribers at a glance', 'newspack-plugin' ) }
+			title={ __( 'Subscribers at a Glance', 'newspack-plugin' ) }
 			description={ __( 'Current state and recurring revenue, independent of selected timeframe.', 'newspack-plugin' ) }
 			actions={ lastUpdated }
 		/>
 		<Grid columns={ 4 } gutter={ 16 } noMargin>
 			<MetricCard
-				label={ __( 'Active subscribers', 'newspack-plugin' ) }
+				label={ __( 'Active Subscribers', 'newspack-plugin' ) }
 				value={ snapshot.active_subscribers }
 				format="number"
 				description={ __( 'Distinct readers with at least one active subscription', 'newspack-plugin' ) }
@@ -64,7 +64,7 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 				description={ __( 'Normalized across billing periods', 'newspack-plugin' ) }
 			/>
 			<MetricCard
-				label={ __( '3-year supporter value', 'newspack-plugin' ) }
+				label={ __( '3-Year Supporter Value', 'newspack-plugin' ) }
 				value={ snapshot.supporter_clv_3yr.value }
 				format="currency"
 				notComputableMessage={
@@ -76,7 +76,7 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 				) }
 			/>
 			<MetricCard
-				label={ __( 'Newsletter → subscription', 'newspack-plugin' ) }
+				label={ __( 'Newsletter → Subscription', 'newspack-plugin' ) }
 				value={ snapshot.newsletter_conversion.value }
 				format="percent"
 				// A hub proxy failure is an error state, not "insufficient history" —
@@ -98,13 +98,13 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 				description={ __( 'Share of newsletter signups who became a paid subscriber within 12 months.', 'newspack-plugin' ) }
 			/>
 			<MetricCard
-				label={ __( 'Upcoming renewals (30d)', 'newspack-plugin' ) }
+				label={ __( 'Upcoming Renewals (30d)', 'newspack-plugin' ) }
 				value={ snapshot.upcoming_renewals_30d.count }
 				format="number"
 				description={ __( 'Active subscriptions due to renew in the next 30 days', 'newspack-plugin' ) }
 			/>
 			<MetricCard
-				label={ __( 'Upcoming endings (30d)', 'newspack-plugin' ) }
+				label={ __( 'Upcoming Endings (30d)', 'newspack-plugin' ) }
 				value={ snapshot.upcoming_cancellations_30d.count }
 				format="number"
 				lowerIsBetter

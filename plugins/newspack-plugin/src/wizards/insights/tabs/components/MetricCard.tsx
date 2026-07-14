@@ -171,6 +171,13 @@ const tieredFormat = ( v: number, fmt: MetricFormat ): FormattedCurrency | null 
 // card renders it in the value region's own type scale.
 const EM_DASH = '—';
 
+// A trailing "(qualifier)" — e.g. "(Direct)", "(Influenced, 7d)", "(30d)" — is
+// dropped to its own line so the metric name reads first and its scope sits
+// beneath it. Done at render time (not in the copy) so each label stays a
+// single translatable string; the newline renders via `white-space: pre-line`
+// on the label and normalizes back to a space for the accessible name.
+const dropQualifierToNewLine = ( label: string ): string => label.replace( / (\([^)]*\))$/, '\n$1' );
+
 const MetricCard = ( props: MetricCardProps ) => {
 	const {
 		label,
@@ -258,7 +265,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 		return (
 			<Card __experimentalCoreCard className="newspack-insights__metric-card newspack-insights__metric-card--note">
 				<HStack className="newspack-insights__metric-card-label" alignment="top" justify="space-between" spacing={ 2 }>
-					<span>{ label }</span>
+					<span>{ dropQualifierToNewLine( label ) }</span>
 					{ secondary && (
 						<Tooltip delay={ 250 } hideOnClick={ false } placement="bottom-start" text={ secondary }>
 							<Button icon={ info } className="newspack-insights__metric-card-info-icon" variant="tertiary" />
@@ -348,7 +355,7 @@ const MetricCard = ( props: MetricCardProps ) => {
 	return (
 		<Card __experimentalCoreCard className="newspack-insights__metric-card">
 			<HStack className="newspack-insights__metric-card-label" alignment="top" justify="space-between" spacing={ 2 }>
-				<span>{ label }</span>
+				<span>{ dropQualifierToNewLine( label ) }</span>
 				{ ( fallbackSecondary ?? secondary ) && (
 					<Tooltip delay={ 250 } hideOnClick={ false } placement="bottom-start" text={ fallbackSecondary ?? secondary }>
 						<Button icon={ info } className="newspack-insights__metric-card-info-icon" variant="tertiary" />

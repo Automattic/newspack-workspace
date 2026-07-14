@@ -34,19 +34,19 @@ const NotificationsSection = ( { metrics, previous }: NotificationsSectionProps 
 		/>
 		<Grid columns={ 3 } gutter={ 16 } noMargin>
 			<Scorecard
-				label={ __( 'Notification open rate', 'newspack-plugin' ) }
+				label={ __( 'Notification Open Rate', 'newspack-plugin' ) }
 				description={ __( 'Share of received push notifications that were opened', 'newspack-plugin' ) }
 				current={ metrics.notification_open_rate }
 				previous={ previous?.notification_open_rate }
 			/>
 			<Scorecard
-				label={ __( 'Notifications received', 'newspack-plugin' ) }
+				label={ __( 'Notifications Received', 'newspack-plugin' ) }
 				description={ __( 'Push notifications delivered to app users', 'newspack-plugin' ) }
 				current={ metrics.notifications_received }
 				previous={ previous?.notifications_received }
 			/>
 			<Scorecard
-				label={ __( 'Opt-in changes', 'newspack-plugin' ) }
+				label={ __( 'Opt-in Changes', 'newspack-plugin' ) }
 				description={ __( 'Times users changed their push-notification permission', 'newspack-plugin' ) }
 				current={ metrics.notification_opt_changes }
 				previous={ previous?.notification_opt_changes }

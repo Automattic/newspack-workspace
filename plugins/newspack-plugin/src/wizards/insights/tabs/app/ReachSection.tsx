@@ -46,13 +46,13 @@ const ReachSection = ( { metrics, previous, lastUpdated }: ReachSectionProps ) =
 		/>
 		<Grid columns={ 3 } gutter={ 16 } noMargin>
 			<Scorecard
-				label={ __( 'Active users', 'newspack-plugin' ) }
+				label={ __( 'Active Users', 'newspack-plugin' ) }
 				description={ __( 'Distinct people who opened the app', 'newspack-plugin' ) }
 				current={ metrics.active_users }
 				previous={ previous?.active_users }
 			/>
 			<Scorecard
-				label={ __( 'New users', 'newspack-plugin' ) }
+				label={ __( 'New Users', 'newspack-plugin' ) }
 				description={ __( 'First-time app users', 'newspack-plugin' ) }
 				current={ metrics.new_users }
 				previous={ previous?.new_users }
@@ -66,14 +66,14 @@ const ReachSection = ( { metrics, previous, lastUpdated }: ReachSectionProps ) =
 		</Grid>
 		<Grid columns={ 2 } gutter={ 16 } noMargin>
 			<ChartCard
-				title={ __( 'By platform', 'newspack-plugin' ) }
+				title={ __( 'By Platform', 'newspack-plugin' ) }
 				caption={ __( 'Active users by operating system', 'newspack-plugin' ) }
 				payload={ metrics.platform }
 			>
 				<PieChart segments={ toSeries( metrics.platform, 'platform', 'active_users' ) } />
 			</ChartCard>
 			<ChartCard
-				title={ __( 'By app version', 'newspack-plugin' ) }
+				title={ __( 'By App Version', 'newspack-plugin' ) }
 				caption={ __( 'Active users by app version', 'newspack-plugin' ) }
 				payload={ metrics.app_version }
 			>

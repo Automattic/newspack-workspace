@@ -178,24 +178,24 @@ describe( 'AppTab', () => {
 		expect( await screen.findByText( 'Reach' ) ).toBeInTheDocument();
 		// The property-context line names the property the tab is reading.
 		expect( screen.getByText( /App property: YubaNet → yubanetapp \(533212292\)/ ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Active users' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Active Users' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Engagement' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Avg. engagement time' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Avg. Engagement Time' ) ).toBeInTheDocument();
 		// Assert later sections by a unique card label (the section titles like
-		// "Notifications" collide with card labels such as "Notifications received"
+		// "Notifications" collide with card labels such as "Notifications Received"
 		// under the text matcher).
-		expect( screen.getByText( 'Weekly retention' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Notification open rate' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Download completion rate' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Weekly Retention' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Notification Open Rate' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Download Completion Rate' ) ).toBeInTheDocument();
 		// Tier-2a content + composition sections (unique card titles).
-		expect( screen.getByText( 'Top sections' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Top authors' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Subscriber mix' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Free vs. paid content' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top Sections' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top Authors' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Subscriber Mix' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Free vs. Paid Content' ) ).toBeInTheDocument();
 		// Raw KG status values are humanized for display ("ExistingSubscriber" → "Existing subscriber").
 		expect( screen.getByText( 'Existing subscriber' ) ).toBeInTheDocument();
 		// Multi-property apps get the downloads-by-publication table, title-cased.
-		expect( screen.getByText( 'Downloads by publication' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Downloads by Publication' ) ).toBeInTheDocument();
 		// "Example City" renders both as a downloads-table row and a selector option.
 		expect( screen.getAllByText( 'Example City' ).length ).toBeGreaterThanOrEqual( 2 );
 		// ...and the Content section's per-publication selector (2+ collections).
@@ -210,7 +210,7 @@ describe( 'AppTab', () => {
 		renderTab();
 
 		// "All publications" initially → the app-wide top author.
-		expect( await screen.findByText( 'Top authors' ) ).toBeInTheDocument();
+		expect( await screen.findByText( 'Top Authors' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Alex Rivera' ) ).toBeInTheDocument();
 		expect( screen.queryByText( 'Sam Okafor' ) ).not.toBeInTheDocument();
 
@@ -251,8 +251,8 @@ describe( 'AppTab', () => {
 		renderTab();
 
 		// The section titles still render (the cards are present, just gated).
-		expect( await screen.findByText( 'Top sections' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Subscriber mix' ) ).toBeInTheDocument();
+		expect( await screen.findByText( 'Top Sections' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Subscriber Mix' ) ).toBeInTheDocument();
 		expect( screen.getAllByText( /Not configured for this site/i ).length ).toBeGreaterThanOrEqual( 2 );
 	} );
 

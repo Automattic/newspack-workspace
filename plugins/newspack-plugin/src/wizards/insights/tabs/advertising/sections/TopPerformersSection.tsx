@@ -39,7 +39,11 @@ export interface SectionProps {
 const BroadstreetTopPerformers = ( { current }: SectionProps ) => (
 	<TabSections>
 		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-zones">
-			<SectionHeading id="newspack-insights-advertising-top-zones" title={ __( 'Top zones', 'newspack-plugin' ) } />
+			<SectionHeading
+				id="newspack-insights-advertising-top-zones"
+				title={ __( 'Top Zones', 'newspack-plugin' ) }
+				description={ __( 'Your ad placements ranked by impressions and clicks.', 'newspack-plugin' ) }
+			/>
 			<Card __experimentalCoreCard className="newspack-insights__chart-card">
 				<MetricTable
 					payload={ current.top_zones }
@@ -56,7 +60,11 @@ const BroadstreetTopPerformers = ( { current }: SectionProps ) => (
 			</Card>
 		</Section>
 		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-advertisers">
-			<SectionHeading id="newspack-insights-advertising-top-advertisers" title={ __( 'Top advertisers', 'newspack-plugin' ) } />
+			<SectionHeading
+				id="newspack-insights-advertising-top-advertisers"
+				title={ __( 'Top Advertisers', 'newspack-plugin' ) }
+				description={ __( 'The advertisers delivering the most impressions on your site.', 'newspack-plugin' ) }
+			/>
 			<Card __experimentalCoreCard className="newspack-insights__chart-card">
 				<MetricTable
 					payload={ current.top_advertisers }
@@ -73,7 +81,11 @@ const BroadstreetTopPerformers = ( { current }: SectionProps ) => (
 			</Card>
 		</Section>
 		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-campaigns">
-			<SectionHeading id="newspack-insights-advertising-top-campaigns" title={ __( 'Top campaigns', 'newspack-plugin' ) } />
+			<SectionHeading
+				id="newspack-insights-advertising-top-campaigns"
+				title={ __( 'Top Campaigns', 'newspack-plugin' ) }
+				description={ __( 'Direct-sold orders ranked by delivery.', 'newspack-plugin' ) }
+			/>
 			<Card __experimentalCoreCard className="newspack-insights__chart-card">
 				<MetricTable
 					payload={ current.top_campaigns }
@@ -99,7 +111,11 @@ const TopPerformersSection = ( { current, previous, activeProvider }: SectionPro
 	return (
 		<TabSections>
 			<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-ad-units">
-				<SectionHeading id="newspack-insights-advertising-top-ad-units" title={ __( 'Top ad units', 'newspack-plugin' ) } />
+				<SectionHeading
+					id="newspack-insights-advertising-top-ad-units"
+					title={ __( 'Top Ad Units', 'newspack-plugin' ) }
+					description={ __( 'Your highest-earning ad units this timeframe.', 'newspack-plugin' ) }
+				/>
 				<Card __experimentalCoreCard className="newspack-insights__chart-card">
 					<MetricTable
 						payload={ current.top_ad_units }
@@ -117,7 +133,11 @@ const TopPerformersSection = ( { current, previous, activeProvider }: SectionPro
 				</Card>
 			</Section>
 			<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-advertisers">
-				<SectionHeading id="newspack-insights-advertising-top-advertisers" title={ __( 'Top advertisers', 'newspack-plugin' ) } />
+				<SectionHeading
+					id="newspack-insights-advertising-top-advertisers"
+					title={ __( 'Top Advertisers', 'newspack-plugin' ) }
+					description={ __( 'The advertisers delivering the most impressions on your site.', 'newspack-plugin' ) }
+				/>
 				<Card __experimentalCoreCard className="newspack-insights__chart-card">
 					<MetricTable
 						payload={ current.top_advertisers }
@@ -135,7 +155,11 @@ const TopPerformersSection = ( { current, previous, activeProvider }: SectionPro
 				</Card>
 			</Section>
 			<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-top-campaigns">
-				<SectionHeading id="newspack-insights-advertising-top-campaigns" title={ __( 'Top campaigns', 'newspack-plugin' ) } />
+				<SectionHeading
+					id="newspack-insights-advertising-top-campaigns"
+					title={ __( 'Top Campaigns', 'newspack-plugin' ) }
+					description={ __( 'Direct-sold orders ranked by delivery.', 'newspack-plugin' ) }
+				/>
 				{ /* Direct-sold orders only — programmatic delivery is order-less and
 				     filtered server-side. */ }
 				<Card __experimentalCoreCard className="newspack-insights__chart-card">

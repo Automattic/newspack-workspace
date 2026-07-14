@@ -20,7 +20,7 @@
  */
 import { __ } from '@wordpress/i18n';
 import { useState } from '@wordpress/element';
-import { Button, ExternalLink } from '@wordpress/components';
+import { Button, ExternalLink, __experimentalHStack as HStack, __experimentalVStack as VStack } from '@wordpress/components'; // eslint-disable-line @wordpress/no-unsafe-wp-apis
 import { closeSmall } from '@wordpress/icons';
 
 /**
@@ -69,27 +69,36 @@ const NextSteps = ( { links }: NextStepsProps ) => {
 	};
 
 	return (
-		<nav className="newspack-insights__next-steps" aria-label={ __( 'Next steps', 'newspack-plugin' ) }>
-			<div className="newspack-insights__next-steps-header">
-				<span className="newspack-insights__next-steps-label">{ __( 'Next steps', 'newspack-plugin' ) }</span>
-				<Button
-					className="newspack-insights__next-steps-dismiss"
-					icon={ closeSmall }
-					label={ __( 'Dismiss next steps', 'newspack-plugin' ) }
-					onClick={ dismiss }
-					size="small"
-				/>
-			</div>
-			<ul className="newspack-insights__next-steps-list">
-				{ safeLinks.map( link => (
-					<li key={ link.url }>
-						<ExternalLink className="newspack-insights__next-steps-link" href={ link.url }>
-							{ link.label }
-						</ExternalLink>
-					</li>
-				) ) }
-			</ul>
-		</nav>
+		<HStack
+			as="nav"
+			className="newspack-insights__next-steps"
+			aria-label={ __( 'Next steps', 'newspack-plugin' ) }
+			spacing={ 4 }
+			alignment="center"
+			justify="space-between"
+		>
+			<VStack spacing={ 2 }>
+				<div className="newspack-insights__next-steps-header">
+					<span className="newspack-insights__next-steps-label">{ __( 'Next steps', 'newspack-plugin' ) }</span>
+				</div>
+				<ul className="newspack-insights__next-steps-list">
+					{ safeLinks.map( link => (
+						<li key={ link.url }>
+							<ExternalLink className="newspack-insights__next-steps-link" href={ link.url }>
+								{ link.label }
+							</ExternalLink>
+						</li>
+					) ) }
+				</ul>
+			</VStack>
+			<Button
+				className="newspack-insights__next-steps-dismiss"
+				icon={ closeSmall }
+				label={ __( 'Dismiss next steps', 'newspack-plugin' ) }
+				onClick={ dismiss }
+				size="small"
+			/>
+		</HStack>
 	);
 };
 

@@ -38,7 +38,7 @@ const ReaderLifecycleSection = ( { current, lastUpdated }: ReaderLifecycleSectio
 	>
 		<SectionHeading
 			id="newspack-insights-conversion-lifecycle-heading"
-			title={ __( 'The reader lifecycle', 'newspack-plugin' ) }
+			title={ __( 'The Reader Lifecycle', 'newspack-plugin' ) }
 			description={ __(
 				'The marquee view. How readers progress from first-time visitor through engagement, registration, and newsletter signup to becoming a supporter.',
 				'newspack-plugin'

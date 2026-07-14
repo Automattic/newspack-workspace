@@ -150,17 +150,19 @@ export const formatPercent = ( fraction: number ): string => {
 	return percentFormatter.format( fraction );
 };
 
-/** Format a duration in seconds as m:ss (or h:mm:ss past an hour): 142 -> "2:22". */
+/** Format a duration in seconds with unit suffixes: 142 -> "2m 22s", 9573 -> "2h 39m 33s", 5 -> "5s". */
 export const formatDuration = ( seconds: number ): string => {
 	const total = Math.max( 0, Math.round( seconds ) );
 	const hrs = Math.floor( total / 3600 );
 	const mins = Math.floor( ( total % 3600 ) / 60 );
 	const secs = total % 60;
-	const pad = ( n: number ): string => String( n ).padStart( 2, '0' );
 	if ( hrs > 0 ) {
-		return `${ hrs }:${ pad( mins ) }:${ pad( secs ) }`;
+		return `${ hrs }h ${ mins }m ${ secs }s`;
 	}
-	return `${ mins }:${ pad( secs ) }`;
+	if ( mins > 0 ) {
+		return `${ mins }m ${ secs }s`;
+	}
+	return `${ secs }s`;
 };
 
 /**

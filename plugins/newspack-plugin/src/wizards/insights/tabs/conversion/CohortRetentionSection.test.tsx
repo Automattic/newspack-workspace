@@ -37,9 +37,9 @@ const populatedCohort = ( referenceLine: ConversionReferenceLine | null ): Conve
 describe( 'CohortRetentionSection', () => {
 	it( 'renders the heading and both cohort titles', () => {
 		render( <CohortRetentionSection current={ makeConversionWindow() } /> );
-		expect( screen.getByRole( 'heading', { name: 'Cohort retention' } ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Registration → conversion' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Subscriber retention' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Cohort Retention' } ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Registration → Conversion' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Subscriber Retention' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders the cohort coming_soon message for both charts', () => {

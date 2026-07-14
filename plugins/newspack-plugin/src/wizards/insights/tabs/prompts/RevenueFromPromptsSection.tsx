@@ -38,7 +38,7 @@ const RevenueFromPromptsSection = ( { current, previous }: RevenueFromPromptsSec
 	<Section className="newspack-insights__section newspack-insights__section--revenue" aria-labelledby="newspack-insights-prompts-revenue-heading">
 		<SectionHeading
 			id="newspack-insights-prompts-revenue-heading"
-			title={ __( 'Revenue from prompts', 'newspack-plugin' ) }
+			title={ __( 'Revenue From Prompts', 'newspack-plugin' ) }
 			description={ __(
 				'Donation and subscription revenue completed after a prompt impression. Direct totals Woo order revenue from conversions completed through a prompt’s own block. Influenced totals checkout revenue from later-session completions within 14 days of seeing a prompt.',
 				'newspack-plugin'

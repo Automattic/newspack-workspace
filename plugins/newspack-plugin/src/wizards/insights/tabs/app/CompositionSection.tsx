@@ -46,12 +46,12 @@ const CompositionSection = ( { metrics }: CompositionSectionProps ) => (
 	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-app-composition-heading">
 		<SectionHeading
 			id="newspack-insights-app-composition-heading"
-			title={ __( 'Audience & access', 'newspack-plugin' ) }
+			title={ __( 'Audience & Access', 'newspack-plugin' ) }
 			description={ __( 'The subscriber mix of your app audience and the free-vs-paid content they read.', 'newspack-plugin' ) }
 		/>
 		<Grid columns={ 2 } gutter={ 16 } noMargin>
 			<ChartCard
-				title={ __( 'Subscriber mix', 'newspack-plugin' ) }
+				title={ __( 'Subscriber Mix', 'newspack-plugin' ) }
 				caption={ __( 'Active users by subscriber status', 'newspack-plugin' ) }
 				payload={ metrics.subscriber_mix }
 			>
@@ -63,7 +63,7 @@ const CompositionSection = ( { metrics }: CompositionSectionProps ) => (
 				/>
 			</ChartCard>
 			<ChartCard
-				title={ __( 'Free vs. paid content', 'newspack-plugin' ) }
+				title={ __( 'Free vs. Paid Content', 'newspack-plugin' ) }
 				caption={ __( 'Screen views by content access level', 'newspack-plugin' ) }
 				payload={ metrics.content_cost }
 			>

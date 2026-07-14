@@ -130,16 +130,16 @@ describe( 'NewsletterAdsTab', () => {
 		expect( screen.getByText( 'Newsletter ad statistics have not been recorded yet.' ) ).toBeInTheDocument();
 		// …but — unlike AdvertisingTab — the tab body is NOT replaced: the Overview
 		// section renders with the all-time lifetime cards.
-		expect( screen.getByText( 'Reach & revenue' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'All-time impressions' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Reach & Revenue' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'All-Time Impressions' ) ).toBeInTheDocument();
 		expect( screen.getByText( '950,000' ) ).toBeInTheDocument();
 		expect( screen.getByText( '12,400' ) ).toBeInTheDocument();
 		// The non-computable timeframe cards render the em-dash treatment with the
 		// remediation copy — never fake zeros.
 		expect( screen.getAllByText( 'Requires the latest Newspack Newsletters plugin.' ).length ).toBeGreaterThan( 0 );
 		// The timeframe-scoped sections stay withheld…
-		expect( screen.queryByText( 'Performance trend' ) ).not.toBeInTheDocument();
-		expect( screen.queryByText( 'Top ads' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Performance Trend' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Top Ads' ) ).not.toBeInTheDocument();
 		// …and the absent has_window_activity signal must NOT collapse the
 		// Overview into the empty state (the lifetime cards carry the signal).
 		expect( document.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
@@ -163,20 +163,20 @@ describe( 'NewsletterAdsTab', () => {
 		// Not presented as a "finish connecting" blocker…
 		expect( screen.queryByText( 'Finish setting up newsletter ad tracking to see timeframe data' ) ).not.toBeInTheDocument();
 		// …and every section still renders.
-		expect( screen.getByText( 'Reach & revenue' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Performance trend' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Top ads' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Ad performance by newsletter' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Reach & Revenue' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Performance Trend' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top Ads' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Ad Performance by Newsletter' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders all sections with values when ready', () => {
 		mockData( baseWindow() );
 		render( <NewsletterAdsTab range={ range } previousRange={ null } /> );
 
-		expect( screen.getByText( 'Reach & revenue' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Reach & Revenue' ) ).toBeInTheDocument();
 		expect( screen.getByText( '84,000' ) ).toBeInTheDocument();
 		expect( screen.getByText( '$4,200' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Performance trend' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Performance Trend' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Summer Sale' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Weekly Digest' ) ).toBeInTheDocument();
 		// No "About this data / data as of" callout: this tab reads local data

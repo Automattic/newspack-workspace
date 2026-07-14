@@ -31,7 +31,7 @@ const windowOf = ( engagement_by_traffic_source: unknown ): InsightsWindow => ( 
 
 /** The card body is a sibling of the title within the same takeaway card. */
 const trafficSourceCard = (): HTMLElement => {
-	const title = screen.getByText( 'Engagement by traffic source' );
+	const title = screen.getByText( 'Engagement by Traffic Source' );
 	return title.closest( '.newspack-insights__takeaway-card' ) as HTMLElement;
 };
 
@@ -41,7 +41,7 @@ describe( 'ReaderSegmentsSection — traffic source card', () => {
 		const card = trafficSourceCard();
 		// 98s vs 49s → newsletter leads by 100%.
 		expect( within( card ).getByText( 'Newsletter traffic engages 100% longer than other sources' ) ).toBeInTheDocument();
-		expect( within( card ).getByText( '1:38 per session vs 0:49' ) ).toBeInTheDocument();
+		expect( within( card ).getByText( '1m 38s per session vs 49s' ) ).toBeInTheDocument();
 		expect( within( card ).queryByText( 'Not enough data in this timeframe.' ) ).not.toBeInTheDocument();
 		// Bar-hover values carry the "seconds" unit.
 		expect( within( card ).getByText( '98 seconds' ) ).toBeInTheDocument();
@@ -54,7 +54,7 @@ describe( 'ReaderSegmentsSection — traffic source card', () => {
 		// 98s vs 49s → other leads by 100%; phrased as "longer" with other as the subject.
 		expect( within( card ).getByText( 'Other sources engage 100% longer than newsletter traffic' ) ).toBeInTheDocument();
 		// Sub leads with the subject (other) too.
-		expect( within( card ).getByText( '1:38 per session vs 0:49' ) ).toBeInTheDocument();
+		expect( within( card ).getByText( '1m 38s per session vs 49s' ) ).toBeInTheDocument();
 	} );
 
 	it( 'shows the needs-data state when the newsletter cohort is below the floor', () => {

@@ -119,13 +119,13 @@ describe( 'PromptsTab', () => {
 		// The tab-level Direct vs Influenced explainer was removed: Direct means a
 		// different thing per metric, so each card describes its own mechanism.
 		expect( screen.queryByText( 'About Direct vs Influenced conversion' ) ).not.toBeInTheDocument();
-		expect( screen.getByText( 'Prompt exposure' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Prompt engagement' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Free reader conversion' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Paid reader conversion' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Revenue from prompts' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'How readers convert' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Performance breakdown' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Prompt Exposure' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Prompt Engagement' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Free Reader Conversion' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Paid Reader Conversion' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Revenue From Prompts' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'How Readers Convert' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Performance Breakdown' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders scorecard titles across the four format types', () => {

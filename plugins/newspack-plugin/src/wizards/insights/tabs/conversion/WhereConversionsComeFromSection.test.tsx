@@ -18,10 +18,10 @@ import { makeConversionWindow } from './fixtures';
 describe( 'WhereConversionsComeFromSection', () => {
 	it( 'renders the heading and the three pie titles', () => {
 		render( <WhereConversionsComeFromSection current={ makeConversionWindow() } /> );
-		expect( screen.getByRole( 'heading', { name: 'Where conversions come from' } ) ).toBeInTheDocument();
-		expect( screen.getByText( 'New registrations' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'New subscribers' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'New donors' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Where Conversions Come From' } ) ).toBeInTheDocument();
+		expect( screen.getByText( 'New Registrations' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'New Subscribers' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'New Donors' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders the empty treatment when state is empty', () => {

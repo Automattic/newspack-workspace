@@ -34,7 +34,7 @@ const PerformanceBreakdownSection = ( { current }: PerformanceBreakdownSectionPr
 	>
 		<SectionHeading
 			id="newspack-insights-prompts-performance-heading"
-			title={ __( 'Performance breakdown', 'newspack-plugin' ) }
+			title={ __( 'Performance Breakdown', 'newspack-plugin' ) }
 			description={ __(
 				'Per-prompt, per-intent, and per-placement breakdowns for the selected timeframe. Click any column to re-sort.',
 				'newspack-plugin'

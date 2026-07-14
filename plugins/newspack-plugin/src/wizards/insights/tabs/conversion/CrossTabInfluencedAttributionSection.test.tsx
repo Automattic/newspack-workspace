@@ -32,7 +32,7 @@ const errorScalar = (): ConversionScalarMetric => ( {
 describe( 'CrossTabInfluencedAttributionSection', () => {
 	it( 'renders the heading and the four influenced-rate scorecards', () => {
 		render( <CrossTabInfluencedAttributionSection current={ makeConversionWindow() } previous={ null } /> );
-		expect( screen.getByRole( 'heading', { name: 'Cross-tab influenced attribution' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Cross-Tab Influenced Attribution' } ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Influenced Registration Rate' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Influenced Subscription Rate' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Influenced Donation Rate' ) ).toBeInTheDocument();

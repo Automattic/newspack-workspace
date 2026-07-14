@@ -50,7 +50,7 @@ const TrendSection = ( { current, previous }: SectionProps ) => (
 	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-trend">
 		<SectionHeading
 			id="newspack-insights-newsletter-ads-trend"
-			title={ __( 'Performance trend', 'newspack-plugin' ) }
+			title={ __( 'Performance Trend', 'newspack-plugin' ) }
 			description={ __( 'Daily impressions and clicks across the selected timeframe.', 'newspack-plugin' ) }
 		/>
 		<HStack spacing={ 4 } alignment="stretch" wrap>

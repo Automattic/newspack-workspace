@@ -35,31 +35,31 @@ const EngagementSection = ( { metrics, previous }: EngagementSectionProps ) => (
 		/>
 		<Grid columns={ 3 } gutter={ 16 } noMargin>
 			<Scorecard
-				label={ __( 'Avg. engagement time', 'newspack-plugin' ) }
+				label={ __( 'Avg. Engagement Time', 'newspack-plugin' ) }
 				description={ __( 'Average time in the app per session — app readers tend to stay far longer than on the web', 'newspack-plugin' ) }
 				current={ metrics.avg_engagement_time }
 				previous={ previous?.avg_engagement_time }
 			/>
 			<Scorecard
-				label={ __( 'Engagement rate', 'newspack-plugin' ) }
+				label={ __( 'Engagement Rate', 'newspack-plugin' ) }
 				description={ __( 'Share of sessions that were engaged (meaningful time, a conversion, or multiple screens)', 'newspack-plugin' ) }
 				current={ metrics.engagement_rate }
 				previous={ previous?.engagement_rate }
 			/>
 			<Scorecard
-				label={ __( 'Engaged sessions', 'newspack-plugin' ) }
+				label={ __( 'Engaged Sessions', 'newspack-plugin' ) }
 				description={ __( 'Sessions that lasted 10+ seconds, had a key event, or viewed 2+ screens', 'newspack-plugin' ) }
 				current={ metrics.engaged_sessions }
 				previous={ previous?.engaged_sessions }
 			/>
 			<Scorecard
-				label={ __( 'Screens per session', 'newspack-plugin' ) }
+				label={ __( 'Screens per Session', 'newspack-plugin' ) }
 				description={ __( 'Average screens viewed per app session', 'newspack-plugin' ) }
 				current={ metrics.screens_per_session }
 				previous={ previous?.screens_per_session }
 			/>
 			<Scorecard
-				label={ __( 'Screen views', 'newspack-plugin' ) }
+				label={ __( 'Screen Views', 'newspack-plugin' ) }
 				description={ __( 'Total app screens viewed', 'newspack-plugin' ) }
 				current={ metrics.screen_views }
 				previous={ previous?.screen_views }

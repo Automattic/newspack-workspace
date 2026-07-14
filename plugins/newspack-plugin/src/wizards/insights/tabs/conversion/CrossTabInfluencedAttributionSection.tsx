@@ -37,7 +37,7 @@ const CrossTabInfluencedAttributionSection = ( { current, previous }: CrossTabIn
 	>
 		<SectionHeading
 			id="newspack-insights-conversion-influenced-heading"
-			title={ __( 'Cross-tab influenced attribution', 'newspack-plugin' ) }
+			title={ __( 'Cross-Tab Influenced Attribution', 'newspack-plugin' ) }
 			description={ __(
 				'Influenced conversion rates from your Gates and Prompts tabs, centralized so you don’t have to bounce between tabs to compare. Influenced means the reader saw a gate or prompt in the lookback window before converting in a later session.',
 				'newspack-plugin'

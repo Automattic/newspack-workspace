@@ -32,7 +32,7 @@ const QualitySection = ( { current, previous, lastUpdated }: SectionProps ) => (
 	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-engagement-quality">
 		<SectionHeading
 			id="newspack-insights-engagement-quality"
-			title={ __( 'Overall engagement quality', 'newspack-plugin' ) }
+			title={ __( 'Overall Engagement Quality', 'newspack-plugin' ) }
 			description={ __( 'How deeply readers engage.', 'newspack-plugin' ) }
 			actions={ lastUpdated }
 		/>
@@ -46,7 +46,7 @@ const QualitySection = ( { current, previous, lastUpdated }: SectionProps ) => (
 				previous={ previous?.avg_pages_per_session }
 			/>
 			<Scorecard
-				label={ __( 'Avg Engaged Session Duration', 'newspack-plugin' ) }
+				label={ __( 'Avg Engaged Time', 'newspack-plugin' ) }
 				description={ __( 'Time spent per visit', 'newspack-plugin' ) }
 				current={ current.avg_engaged_session_duration }
 				previous={ previous?.avg_engaged_session_duration }

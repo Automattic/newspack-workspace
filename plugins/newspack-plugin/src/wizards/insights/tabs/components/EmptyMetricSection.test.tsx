@@ -26,20 +26,20 @@ describe( 'EmptyMetricSection', () => {
 		// normalization (NPPD-1698). Don't "sync" them.
 		const { container } = render(
 			<EmptyMetricSection
-				title="Paid reader conversion"
+				title="Paid Reader Conversion"
 				caption="How effectively paid access gates convert visitors."
 				state="no_opportunity"
 				body="No paid access gate attempts in this window."
 			/>
 		);
-		expect( container ).toHaveTextContent( 'Paid reader conversion' );
+		expect( container ).toHaveTextContent( 'Paid Reader Conversion' );
 		expect( container ).toHaveTextContent( 'How effectively paid access gates convert visitors.' );
 		expect( container ).toHaveTextContent( 'No paid access gate attempts in this window.' );
 	} );
 
 	it( 'omits the caption when none is passed', () => {
 		const { container } = render(
-			<EmptyMetricSection title="Free reader conversion" state="no_opportunity" body="No registration impressions." />
+			<EmptyMetricSection title="Free Reader Conversion" state="no_opportunity" body="No registration impressions." />
 		);
 		expect( container ).not.toHaveTextContent( 'How effectively paid access gates convert visitors.' );
 	} );

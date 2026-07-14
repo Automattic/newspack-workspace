@@ -72,7 +72,13 @@ const RetentionSection = ( { current, previous }: RetentionSectionProps ) => {
 		'aria-labelledby': 'newspack-insights-donors-retention-heading',
 	};
 
-	const heading = <SectionHeading id="newspack-insights-donors-retention-heading" title={ __( 'Retention', 'newspack-plugin' ) } />;
+	const heading = (
+		<SectionHeading
+			id="newspack-insights-donors-retention-heading"
+			title={ __( 'Retention', 'newspack-plugin' ) }
+			description={ __( 'Whether donors keep giving, and where they lapse.', 'newspack-plugin' ) }
+		/>
+	);
 
 	if ( ! recovery.computable && ! retention.computable ) {
 		return (

@@ -78,7 +78,7 @@ describe( 'AdvertisingTab', () => {
 		expect( screen.getByText( 'Reconnect Google to grant the Ad Manager scope.' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'No Google Ad Manager network is configured.' ) ).toBeInTheDocument();
 		// No section content while not ready.
-		expect( screen.queryByText( 'Reach & revenue' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Reach & Revenue' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'shows the progressive GAM messages while a ready window is still being cached', () => {
@@ -98,10 +98,10 @@ describe( 'AdvertisingTab', () => {
 
 		expect( screen.getByText( 'Loading ad performance…' ) ).toBeInTheDocument();
 		expect( screen.queryByText( /No ad impressions in this timeframe/ ) ).not.toBeInTheDocument();
-		expect( screen.queryByText( 'Reach & revenue' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Reach & Revenue' ) ).not.toBeInTheDocument();
 	} );
 
-	it( 'collapses the Reach & revenue section to no_opportunity on a resolved zero window', () => {
+	it( 'collapses the Reach & Revenue section to no_opportunity on a resolved zero window', () => {
 		mockData(
 			baseWindow( {
 				has_window_activity: false,
@@ -133,7 +133,7 @@ describe( 'AdvertisingTab', () => {
 		);
 		render( <AdvertisingTab range={ range } previousRange={ null } /> );
 
-		expect( screen.getByText( 'Reach & revenue' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Reach & Revenue' ) ).toBeInTheDocument();
 		expect( screen.getByText( '2.4M' ) ).toBeInTheDocument(); // 7-digit impressions abbreviate (NPPD-1684)
 		expect( screen.getByText( '$4,200' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Sidebar' ) ).toBeInTheDocument();
@@ -211,14 +211,14 @@ describe( 'AdvertisingTab', () => {
 			} )
 		);
 		render( <AdvertisingTab range={ range } previousRange={ null } /> );
-		expect( screen.getByText( 'Performance by site' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Performance by Site' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'almanacnews.com' ) ).toBeInTheDocument();
 	} );
 
 	it( 'hides the per-site breakdown for non-network publishers', () => {
 		mockData( baseWindow( { is_network_member: false } ) );
 		render( <AdvertisingTab range={ range } previousRange={ null } /> );
-		expect( screen.queryByText( 'Performance by site' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Performance by Site' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'renders the impressions-only Broadstreet variant, hiding every revenue/GAM section (NPPD-2045)', () => {
@@ -253,22 +253,22 @@ describe( 'AdvertisingTab', () => {
 		// Impressions-side sections render.
 		expect( screen.getByText( 'Reach' ) ).toBeInTheDocument();
 		expect( screen.getByText( '2.4M' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Impressions per session' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Top advertisers' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Impressions per Session' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top Advertisers' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Hometown Hardware' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Top zones' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top Zones' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Homepage Leaderboard' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Top campaigns' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top Campaigns' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Riverside Credit Union — Summer' ) ).toBeInTheDocument();
 
 		// GAM-only sections + the revenue card are absent (no revenue in Broadstreet).
-		expect( screen.queryByText( 'Reach & revenue' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Reach & Revenue' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Revenue' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'RPM' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Average eCPM' ) ).not.toBeInTheDocument();
-		expect( screen.queryByText( 'Impressions by type' ) ).not.toBeInTheDocument();
-		expect( screen.queryByText( 'Performance by device' ) ).not.toBeInTheDocument();
-		expect( screen.queryByText( 'Top ad units' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Impressions by Type' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Performance by Device' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Top Ad Units' ) ).not.toBeInTheDocument();
 		// The GAM data-lag note is hidden for Broadstreet. Scope to the render
 		// container — the global a11y-speak region (document.body) can retain stale
 		// announcements from earlier tests in this suite.

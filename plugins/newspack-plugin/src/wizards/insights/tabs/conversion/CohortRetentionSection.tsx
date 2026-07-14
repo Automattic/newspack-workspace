@@ -113,7 +113,7 @@ const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => {
 				 * For now 5.1 shows no target; the hardcoded 15% was removed because no
 				 * fixed-% default fits the network (publisher models diverge widely).
 				 */
-				title={ __( 'Registration → conversion', 'newspack-plugin' ) }
+				title={ __( 'Registration → Conversion', 'newspack-plugin' ) }
 				caption={ __(
 					'Of the readers who registered each month, the share who had become a paying subscriber or donor by that many months later. Starts at 0% and climbs.',
 					'newspack-plugin'
@@ -121,7 +121,7 @@ const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => {
 				data={ current.registration_to_conversion_cohort }
 			/>
 			<CohortChart
-				title={ __( 'Subscriber retention', 'newspack-plugin' ) }
+				title={ __( 'Subscriber Retention', 'newspack-plugin' ) }
 				caption={ __(
 					'Of the subscribers who started each month, the share still subscribed that many months later. Starts at 100% and declines.',
 					'newspack-plugin'
@@ -139,7 +139,7 @@ const CohortRetentionSection = ( { current }: CohortRetentionSectionProps ) => {
 		>
 			<SectionHeading
 				id="newspack-insights-conversion-cohort-heading"
-				title={ __( 'Cohort retention', 'newspack-plugin' ) }
+				title={ __( 'Cohort Retention', 'newspack-plugin' ) }
 				description={ __(
 					'Each row is a monthly cohort; each column is months since that cohort started. Read down a column to compare cohorts at the same age, and across a row to watch one cohort over time. Updated weekly.',
 					'newspack-plugin'

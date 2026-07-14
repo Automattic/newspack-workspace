@@ -55,19 +55,19 @@ const DownloadsSection = ( { metrics, previous }: DownloadsSectionProps ) => {
 			/>
 			<Grid columns={ 3 } gutter={ 16 } noMargin>
 				<Scorecard
-					label={ __( 'Downloads started', 'newspack-plugin' ) }
+					label={ __( 'Downloads Started', 'newspack-plugin' ) }
 					description={ __( 'Downloads readers began', 'newspack-plugin' ) }
 					current={ metrics.downloads_started }
 					previous={ previous?.downloads_started }
 				/>
 				<Scorecard
-					label={ __( 'Downloads completed', 'newspack-plugin' ) }
+					label={ __( 'Downloads Completed', 'newspack-plugin' ) }
 					description={ __( 'Downloads that finished successfully', 'newspack-plugin' ) }
 					current={ metrics.downloads_completed }
 					previous={ previous?.downloads_completed }
 				/>
 				<Scorecard
-					label={ __( 'Download completion rate', 'newspack-plugin' ) }
+					label={ __( 'Download Completion Rate', 'newspack-plugin' ) }
 					description={ __( 'Share of started downloads that completed', 'newspack-plugin' ) }
 					current={ metrics.download_completion_rate }
 					previous={ previous?.download_completion_rate }
@@ -76,7 +76,7 @@ const DownloadsSection = ( { metrics, previous }: DownloadsSectionProps ) => {
 			{ byPublication && (
 				<div className="newspack-insights__chart-grid">
 					<ChartCard
-						title={ __( 'Downloads by publication', 'newspack-plugin' ) }
+						title={ __( 'Downloads by Publication', 'newspack-plugin' ) }
 						caption={ __( 'Completed downloads across the titles your app serves', 'newspack-plugin' ) }
 						payload={ byPublication }
 					>

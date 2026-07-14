@@ -53,16 +53,16 @@ const TrafficSourcesSection = ( { current }: SectionProps ) => {
 		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-traffic">
 			<SectionHeading
 				id="newspack-insights-audience-traffic"
-				title={ __( 'Traffic sources', 'newspack-plugin' ) }
+				title={ __( 'Traffic Sources', 'newspack-plugin' ) }
 				description={ __( 'Where your readers come from.', 'newspack-plugin' ) }
 			/>
 			{ /* Channel breakdown (1 column) reads as a unit with the campaigns
 			     driving each channel (spans the other 2 columns) — NPPD-1649 fix #3. */ }
 			<Grid columns={ 3 } gutter={ 16 } noMargin>
-				<ChartCard title={ __( 'Traffic sources breakdown', 'newspack-plugin' ) } payload={ current.traffic_sources_breakdown }>
+				<ChartCard title={ __( 'Traffic Sources Breakdown', 'newspack-plugin' ) } payload={ current.traffic_sources_breakdown }>
 					<PieChart segments={ toSeries( current.traffic_sources_breakdown, 'channel', 'readers' ) } />
 				</ChartCard>
-				<ChartCard title={ __( 'Top campaigns', 'newspack-plugin' ) } payload={ campaigns } style={ { gridColumn: 'span 2' } }>
+				<ChartCard title={ __( 'Top Campaigns', 'newspack-plugin' ) } payload={ campaigns } style={ { gridColumn: 'span 2' } }>
 					<MetricTable
 						payload={ campaigns }
 						emptyMessage={ __( 'No campaign traffic in this timeframe.', 'newspack-plugin' ) }

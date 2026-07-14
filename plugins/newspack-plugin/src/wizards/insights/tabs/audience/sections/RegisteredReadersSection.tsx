@@ -24,19 +24,22 @@
 /**
  * WordPress dependencies
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 /**
  * Internal dependencies
  */
 import { Grid } from '../../../../../../packages/components/src';
 import type { MetricPayload, RegisteredReaders } from '../../../api/audience';
+import { rangeWhenPhrase, type DateRange } from '../../../state/useDateRange';
 import MetricCard from '../../components/MetricCard';
 import Section from '../../components/Section';
 import SectionHeading from '../../components/SectionHeading';
 
 export interface RegisteredReadersSectionProps {
 	registeredReaders: RegisteredReaders;
+	/** Active date range — drives the "new" card's timeframe-aware description. */
+	range: DateRange;
 	/** Whether the comparison toggle is on — gates the "new" card's period delta. */
 	showComparison: boolean;
 }
@@ -47,7 +50,7 @@ const readCount = ( payload: MetricPayload | null | undefined ): number | null =
 
 const UNAVAILABLE_MESSAGE = __( 'Registered reader count is unavailable right now.', 'newspack-plugin' );
 
-const RegisteredReadersSection = ( { registeredReaders, showComparison }: RegisteredReadersSectionProps ) => {
+const RegisteredReadersSection = ( { registeredReaders, range, showComparison }: RegisteredReadersSectionProps ) => {
 	const { total, new: newReaders } = registeredReaders;
 
 	const totalCount = readCount( total );
@@ -61,12 +64,12 @@ const RegisteredReadersSection = ( { registeredReaders, showComparison }: Regist
 		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-registered-readers">
 			<SectionHeading
 				id="newspack-insights-audience-registered-readers"
-				title={ __( 'Registered readers', 'newspack-plugin' ) }
+				title={ __( 'Registered Readers', 'newspack-plugin' ) }
 				description={ __( 'People who registered on your site — the known-reader population behind the segments below.', 'newspack-plugin' ) }
 			/>
 			<Grid columns={ 4 } gutter={ 16 } noMargin>
 				<MetricCard
-					label={ __( 'Total registered readers', 'newspack-plugin' ) }
+					label={ __( 'Total Registered Readers', 'newspack-plugin' ) }
 					value={ totalCount ?? 0 }
 					format="number"
 					// Window-independent snapshot: never a period delta.
@@ -74,12 +77,16 @@ const RegisteredReadersSection = ( { registeredReaders, showComparison }: Regist
 					description={ __( 'All-time registrations on your site', 'newspack-plugin' ) }
 				/>
 				<MetricCard
-					label={ __( 'New registered readers', 'newspack-plugin' ) }
+					label={ __( 'New Registered Readers', 'newspack-plugin' ) }
 					value={ newCount ?? 0 }
 					format="number"
 					previousValue={ previousNew }
 					notComputableMessage={ newCount === null ? UNAVAILABLE_MESSAGE : undefined }
-					description={ __( 'Registrations created in this timeframe', 'newspack-plugin' ) }
+					description={ sprintf(
+						/* translators: %s is a timeframe phrase, e.g. "in the last 30 days" or "this month". */
+						__( 'Registrations created %s', 'newspack-plugin' ),
+						rangeWhenPhrase( range )
+					) }
 				/>
 			</Grid>
 		</Section>

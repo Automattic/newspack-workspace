@@ -30,7 +30,7 @@ const SitePerformanceSection = ( { current }: SectionProps ) => (
 	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-site-performance">
 		<SectionHeading
 			id="newspack-insights-advertising-site-performance"
-			title={ __( 'Performance by site', 'newspack-plugin' ) }
+			title={ __( 'Performance by Site', 'newspack-plugin' ) }
 			description={ __( 'How each site in your network is performing.', 'newspack-plugin' ) }
 		/>
 		<Card __experimentalCoreCard className="newspack-insights__chart-card">

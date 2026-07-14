@@ -62,7 +62,11 @@ const TenureSection = ( { rows }: TenureSectionProps ) => {
 	if ( ! stats ) {
 		return (
 			<Section className="newspack-insights__section newspack-insights__section--tenure" aria-labelledby="newspack-insights-tenure-heading">
-				<SectionHeading id="newspack-insights-tenure-heading" title={ __( 'Subscriber tenure', 'newspack-plugin' ) } />
+				<SectionHeading
+					id="newspack-insights-tenure-heading"
+					title={ __( 'Subscriber Tenure', 'newspack-plugin' ) }
+					description={ __( 'Median subscription length, plus the 25th and 75th percentiles.', 'newspack-plugin' ) }
+				/>
 				<SectionEmpty>{ __( 'No subscribers yet — tenure data will appear once subscriptions exist.', 'newspack-plugin' ) }</SectionEmpty>
 			</Section>
 		);
@@ -98,22 +102,22 @@ const TenureSection = ( { rows }: TenureSectionProps ) => {
 
 	return (
 		<Section className="newspack-insights__section newspack-insights__section--tenure" aria-labelledby="newspack-insights-tenure-heading">
-			<SectionHeading id="newspack-insights-tenure-heading" title={ __( 'Subscriber tenure', 'newspack-plugin' ) } description={ narrative } />
+			<SectionHeading id="newspack-insights-tenure-heading" title={ __( 'Subscriber Tenure', 'newspack-plugin' ) } description={ narrative } />
 			<Grid columns={ 4 } gutter={ 16 } noMargin>
 				<MetricCard
-					label={ __( 'Median tenure', 'newspack-plugin' ) }
+					label={ __( 'Median Tenure', 'newspack-plugin' ) }
 					value={ stats.median }
 					format="number"
 					secondary={ _n( 'day', 'days', stats.median, 'newspack-plugin' ) }
 				/>
 				<MetricCard
-					label={ __( '25th percentile', 'newspack-plugin' ) }
+					label={ __( '25th Percentile', 'newspack-plugin' ) }
 					value={ stats.p25 }
 					format="number"
 					secondary={ _n( 'day', 'days', stats.p25, 'newspack-plugin' ) }
 				/>
 				<MetricCard
-					label={ __( '75th percentile', 'newspack-plugin' ) }
+					label={ __( '75th Percentile', 'newspack-plugin' ) }
 					value={ stats.p75 }
 					format="number"
 					secondary={ _n( 'day', 'days', stats.p75, 'newspack-plugin' ) }
