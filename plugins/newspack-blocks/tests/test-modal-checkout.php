@@ -900,6 +900,26 @@ class ModalCheckoutTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
+	 * Array-valued state/postcode do not trigger a fatal on the string transforms;
+	 * the schema is left to reject them with its own clean error.
+	 */
+	public function test_store_api_scrub_ignores_non_string_values() {
+		$this->set_mock_checkout_cart();
+		$this->set_configured_billing_fields( [ 'billing_first_name', 'billing_email' ] );
+
+		$address = [
+			'country'  => 'US',
+			'state'    => [ 'REMUERA' ],
+			'postcode' => [ 'INVALID' ],
+		];
+		$request = $this->get_store_api_checkout_request( $address );
+
+		\Newspack_Blocks\Modal_Checkout::scrub_store_api_checkout_address( null, null, $request );
+
+		$this->assertSame( $address, $request->get_param( 'billing_address' ), 'Non-string address values should be left for the schema to reject.' );
+	}
+
+	/**
 	 * Locale required flags are relaxed for configured-off state and postcode.
 	 */
 	public function test_locale_relaxation_for_configured_off_fields() {

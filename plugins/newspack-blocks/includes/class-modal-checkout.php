@@ -1405,6 +1405,11 @@ final class Modal_Checkout {
 	 * is scrubbed. Runs on rest_pre_dispatch because the validation happens
 	 * during dispatch.
 	 *
+	 * The shipping address is intentionally out of scope. Carts that need a
+	 * shipping address bail below, and wallets return only billing contact when
+	 * shipping is not requested, so a virtual-cart request carries no shipping
+	 * address to scrub.
+	 *
 	 * Scoped to requests originating from the modal checkout, so any Store API
 	 * checkout outside the modal (e.g. the blocks checkout page or express
 	 * buttons on product pages) keeps stock behavior.
@@ -1477,7 +1482,14 @@ final class Modal_Checkout {
 	private static function is_modal_checkout_referer() {
 		$referer = isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
-		return false !== strpos( $referer, 'modal_checkout=1' );
+		if ( ! $referer ) {
+			return false;
+		}
+
+		$query_string = \wp_parse_url( $referer, PHP_URL_QUERY );
+		\wp_parse_str( (string) $query_string, $query_params );
+
+		return ! empty( $query_params['modal_checkout'] );
 	}
 
 	/**
@@ -1494,6 +1506,7 @@ final class Modal_Checkout {
 		if (
 			! in_array( 'billing_state', $billing_fields, true ) &&
 			! empty( $address['state'] ) &&
+			is_string( $address['state'] ) &&
 			$country
 		) {
 			$states = \WC()->countries->get_states( $country );
@@ -1511,6 +1524,7 @@ final class Modal_Checkout {
 		if (
 			! in_array( 'billing_postcode', $billing_fields, true ) &&
 			! empty( $address['postcode'] ) &&
+			is_string( $address['postcode'] ) &&
 			! \WC_Validation::is_postcode( $address['postcode'], $country )
 		) {
 			$address['postcode'] = '';
