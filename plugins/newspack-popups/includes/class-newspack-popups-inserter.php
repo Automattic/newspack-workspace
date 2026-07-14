@@ -345,6 +345,11 @@ final class Newspack_Popups_Inserter {
 		 */
 		$inner_text_blocks = apply_filters( 'newspack_popups_inner_text_blocks', self::INNER_TEXT_BLOCKS );
 
+		// Filters are untyped: a non-array return must not fatal the front end.
+		if ( ! is_array( $inner_text_blocks ) ) {
+			$inner_text_blocks = [];
+		}
+
 		if ( in_array( $block['blockName'], $inner_text_blocks, true ) ) {
 			$block_content .= self::get_inner_block_content( $block );
 		}

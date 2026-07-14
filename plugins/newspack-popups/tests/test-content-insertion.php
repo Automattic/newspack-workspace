@@ -635,6 +635,35 @@ Paragraph 2
 	}
 
 	/**
+	 * Filters are untyped, so a site can return anything from
+	 * `newspack_popups_inner_text_blocks`. A non-array return must not take the front
+	 * end down with a TypeError out of in_array().
+	 */
+	public function test_inner_text_blocks_filter_tolerates_a_non_array_return() {
+		$return_null = '__return_null';
+		add_filter( 'newspack_popups_inner_text_blocks', $return_null );
+
+		$actual = Newspack_Popups_Inserter::insert_popups_in_post_content(
+			self::list_heavy_content(),
+			[ self::create_inline_popup( 'scroll', '50' ) ]
+		);
+
+		remove_filter( 'newspack_popups_inner_text_blocks', $return_null );
+
+		// Degrades to counting nothing — i.e. the pre-NPPM-596 placement — but does not fatal.
+		self::assertEqualBlockNames(
+			[
+				'core/paragraph',
+				'core/list',
+				'core/paragraph',
+				'core/shortcode',
+			],
+			$actual,
+			'A filter returning a non-array degrades safely instead of raising a TypeError.'
+		);
+	}
+
+	/**
 	 * Guard test. Layout containers (`core/columns`, `core/group`) are NOT counted
 	 * towards the insertion cursor, so prompts fall to the end of container-heavy
 	 * layouts – which is what homepages are built from, and what publishers have
