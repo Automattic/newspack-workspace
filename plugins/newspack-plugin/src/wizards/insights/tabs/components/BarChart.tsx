@@ -29,9 +29,14 @@ export interface BarChartProps {
 	bars: Bar[];
 	/** Render the hover value, e.g. "98 seconds". Defaults to a plain number. */
 	formatValue?: ( value: number ) => string;
+	/**
+	 * Abbreviate the visible label (e.g. "Monday" → "Mon"); the full label stays
+	 *  the accessible name and the hover tooltip. Defaults to the label as-is.
+	 */
+	formatLabel?: ( label: string ) => string;
 }
 
-const BarChart = ( { bars, formatValue = formatNumber }: BarChartProps ) => {
+const BarChart = ( { bars, formatValue = formatNumber, formatLabel }: BarChartProps ) => {
 	if ( bars.length === 0 ) {
 		return <p className="newspack-insights__chart-empty">{ __( 'No data in this timeframe.', 'newspack-plugin' ) }</p>;
 	}
@@ -69,7 +74,9 @@ const BarChart = ( { bars, formatValue = formatNumber }: BarChartProps ) => {
 							style={ { height: `${ Math.round( ( ( bar.value || 0 ) / max ) * 100 ) }%` } }
 						/>
 					</div>
-					<div className="newspack-insights__bar-label">{ bar.label }</div>
+					<div className="newspack-insights__bar-label" aria-label={ formatLabel ? bar.label : undefined }>
+						{ formatLabel ? formatLabel( bar.label ) : bar.label }
+					</div>
 				</div>
 			) ) }
 		</div>
