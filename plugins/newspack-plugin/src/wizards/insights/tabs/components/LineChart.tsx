@@ -254,6 +254,7 @@ const LineChart = ( {
 					</div>
 				) }
 			</div>
+			{ xAxisLabel && <span className="newspack-insights__line-axis newspack-insights__line-axis--x">{ xAxisLabel }</span> }
 			{ isMulti ? (
 				<div className="newspack-insights__line-legend">
 					{ allSeries.map( ( s, si ) => (
@@ -272,7 +273,6 @@ const LineChart = ( {
 					<span>{ formatLabel( base[ n - 1 ].label ) }</span>
 				</div>
 			) }
-			{ xAxisLabel && <span className="newspack-insights__line-axis newspack-insights__line-axis--x">{ xAxisLabel }</span> }
 		</div>
 	);
 };

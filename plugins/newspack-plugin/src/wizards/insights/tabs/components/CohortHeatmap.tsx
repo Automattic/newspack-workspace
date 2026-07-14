@@ -15,6 +15,11 @@
  */
 
 /**
+ * External dependencies
+ */
+import classnames from 'classnames';
+
+/**
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
@@ -106,7 +111,7 @@ const CohortHeatmap = ( {
 									return (
 										<td
 											key={ `${ cohort.label }-${ period }` }
-											className="newspack-insights__cohort-heatmap-cell"
+											className={ classnames( 'newspack-insights__cohort-heatmap-cell', { 'is-white': 0 === t } ) }
 											style={ cellStyle( t ) }
 										>
 											{ formatValue( value ) }
@@ -123,7 +128,7 @@ const CohortHeatmap = ( {
 					{ __( 'Lower', 'newspack-plugin' ) }
 					<span className="newspack-insights__cohort-heatmap-swatches" aria-hidden="true">
 						{ [ 0, 0.25, 0.5, 0.75, 1 ].map( t => (
-							<span key={ `sw-${ t }` } style={ cellStyle( t ) } />
+							<span key={ `sw-${ t }` } className={ classnames( { 'is-white': 0 === t } ) } style={ cellStyle( t ) } />
 						) ) }
 					</span>
 					{ __( 'Higher', 'newspack-plugin' ) }

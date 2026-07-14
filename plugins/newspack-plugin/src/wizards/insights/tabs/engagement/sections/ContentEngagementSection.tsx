@@ -34,49 +34,43 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 		/>
 		<VStack spacing={ 4 }>
 			<Card __experimentalCoreCard className="newspack-insights__chart-card">
-				<VStack spacing={ 6 }>
-					<h3 className="newspack-insights__chart-card-title">{ __( 'Most-engaged articles', 'newspack-plugin' ) }</h3>
-					<MetricTable
-						payload={ current.most_read_articles }
-						emptyMessage={ __( 'No article engagement data in this timeframe.', 'newspack-plugin' ) }
-						columns={ [
-							ARTICLE_COL,
-							{ key: 'unique_readers', label: __( 'Engaged readers', 'newspack-plugin' ), format: 'number', align: 'right' },
-							{ key: 'avg_engagement_seconds', label: __( 'Avg time', 'newspack-plugin' ), format: 'duration', align: 'right' },
-						] }
-					/>
-				</VStack>
+				<h3 className="newspack-insights__chart-card-title">{ __( 'Most-engaged articles', 'newspack-plugin' ) }</h3>
+				<MetricTable
+					payload={ current.most_read_articles }
+					emptyMessage={ __( 'No article engagement data in this timeframe.', 'newspack-plugin' ) }
+					columns={ [
+						ARTICLE_COL,
+						{ key: 'unique_readers', label: __( 'Engaged readers', 'newspack-plugin' ), format: 'number', align: 'right' },
+						{ key: 'avg_engagement_seconds', label: __( 'Avg time', 'newspack-plugin' ), format: 'duration', align: 'right' },
+					] }
+				/>
 			</Card>
 			{ /* Completion is GA4-scroll-derived; hidden until scroll data flows. See ../constants. */ }
 			{ SHOW_COMPLETION_METRICS && (
 				<Card __experimentalCoreCard className="newspack-insights__chart-card">
-					<VStack spacing={ 6 }>
-						<h3 className="newspack-insights__chart-card-title">{ __( 'Articles by completion rate', 'newspack-plugin' ) }</h3>
-						<MetricTable
-							payload={ current.articles_by_completion_rate }
-							emptyMessage={ __( 'No scroll-completion data in this timeframe.', 'newspack-plugin' ) }
-							columns={ [
-								ARTICLE_COL,
-								{ key: 'readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
-								{ key: 'completion_rate', label: __( 'Read to end', 'newspack-plugin' ), format: 'percent', align: 'right' },
-							] }
-						/>
-					</VStack>
+					<h3 className="newspack-insights__chart-card-title">{ __( 'Articles by completion rate', 'newspack-plugin' ) }</h3>
+					<MetricTable
+						payload={ current.articles_by_completion_rate }
+						emptyMessage={ __( 'No scroll-completion data in this timeframe.', 'newspack-plugin' ) }
+						columns={ [
+							ARTICLE_COL,
+							{ key: 'readers', label: __( 'Readers', 'newspack-plugin' ), format: 'number', align: 'right' },
+							{ key: 'completion_rate', label: __( 'Read to end', 'newspack-plugin' ), format: 'percent', align: 'right' },
+						] }
+					/>
 				</Card>
 			) }
 			<Card __experimentalCoreCard className="newspack-insights__chart-card">
-				<VStack spacing={ 6 }>
-					<h3 className="newspack-insights__chart-card-title">{ __( 'Top authors by avg engagement time', 'newspack-plugin' ) }</h3>
-					<MetricTable
-						payload={ current.top_authors_by_avg_engagement_time }
-						emptyMessage={ __( 'No author engagement data in this timeframe.', 'newspack-plugin' ) }
-						columns={ [
-							{ key: 'author', label: __( 'Author', 'newspack-plugin' ) },
-							{ key: 'unique_readers', label: __( 'Engaged readers', 'newspack-plugin' ), format: 'number', align: 'right' },
-							{ key: 'avg_engagement_seconds', label: __( 'Avg time', 'newspack-plugin' ), format: 'duration', align: 'right' },
-						] }
-					/>
-				</VStack>
+				<h3 className="newspack-insights__chart-card-title">{ __( 'Top authors by avg engagement time', 'newspack-plugin' ) }</h3>
+				<MetricTable
+					payload={ current.top_authors_by_avg_engagement_time }
+					emptyMessage={ __( 'No author engagement data in this timeframe.', 'newspack-plugin' ) }
+					columns={ [
+						{ key: 'author', label: __( 'Author', 'newspack-plugin' ) },
+						{ key: 'unique_readers', label: __( 'Engaged readers', 'newspack-plugin' ), format: 'number', align: 'right' },
+						{ key: 'avg_engagement_seconds', label: __( 'Avg time', 'newspack-plugin' ), format: 'duration', align: 'right' },
+					] }
+				/>
 			</Card>
 		</VStack>
 	</Section>

@@ -52,6 +52,6 @@ describe( 'DistributionTable', () => {
 
 	it( 'omits the caption element when caption is not provided', () => {
 		const { container } = render( <DistributionTable buckets={ buckets } /> );
-		expect( container.querySelector( '.newspack-insights__distribution-caption' ) ).not.toBeInTheDocument();
+		expect( container.querySelector( '.newspack-insights__table-footnote' ) ).not.toBeInTheDocument();
 	} );
 } );

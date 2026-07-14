@@ -31,6 +31,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
+import { Button } from '@wordpress/components';
 import { useMemo, useState } from '@wordpress/element';
 import { filterSortAndPaginate } from '@wordpress/dataviews';
 import type { Field, View } from '@wordpress/dataviews';
@@ -227,14 +228,14 @@ const InsightsDataView = < Row, >( {
 				search={ false }
 			/>
 			{ collapsible && (
-				<button
-					type="button"
+				<Button
+					variant="link"
 					className="newspack-insights__table-toggle"
 					aria-expanded={ expanded }
 					onClick={ () => setExpanded( ! expanded ) }
 				>
 					{ expanded ? __( 'See less', 'newspack-plugin' ) : __( 'See more', 'newspack-plugin' ) }
-				</button>
+				</Button>
 			) }
 		</>
 	);
