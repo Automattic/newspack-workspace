@@ -4,18 +4,36 @@ class WC_Memberships_User_Membership {
 	private $id;
 	private $user_id;
 
-	public function __construct( $id, $user_id ) {
-		$this->id   = $id;
-		$this->user_id   = $user_id;
+	// $user_id is optional so this can be constructed the way the plugin does it
+	// internally ( `new WC_Memberships_User_Membership( $id )` ); when omitted it is
+	// derived from the membership post's author, matching WC Memberships behavior.
+	public function __construct( $id, $user_id = null ) {
+		$this->id      = $id;
+		$this->user_id = null !== $user_id ? $user_id : (int) get_post( $id )->post_author;
 	}
 	public function get_user() {
 		return get_user_by( 'id', $this->user_id );
+	}
+	public function get_user_id() {
+		return (int) $this->user_id;
 	}
 	public function get_id() {
 		return $this->id;
 	}
 	public function get_status() {
 		return str_replace( 'wcm-', '', get_post( $this->id )->post_status );
+	}
+	// Resolve the plan for this membership from the test's registered plans
+	// ( global $test_wc_memberships ), matched on the `_membership_plan_id` meta.
+	public function get_plan() {
+		global $test_wc_memberships;
+		$plan_id = (int) get_post_meta( $this->id, '_membership_plan_id', true );
+		foreach ( (array) $test_wc_memberships as $plan ) {
+			if ( is_object( $plan ) && method_exists( $plan, 'get_id' ) && (int) $plan->get_id() === $plan_id ) {
+				return $plan;
+			}
+		}
+		return null;
 	}
 }
 
@@ -86,6 +104,28 @@ function wc_memberships_get_membership_plans() {
 		return [];
 	}
 	return $test_wc_memberships;
+}
+
+// Returns the user's active memberships across all registered test plans.
+function wc_memberships_get_user_active_memberships( $user_id ) {
+	global $test_wc_memberships;
+	$active_statuses = wc_memberships()->get_user_memberships_instance()->get_active_access_membership_statuses();
+	$result          = [];
+	foreach ( (array) $test_wc_memberships as $plan ) {
+		if ( ! is_object( $plan ) || ! method_exists( $plan, 'get_memberships' ) ) {
+			continue;
+		}
+		foreach ( $plan->get_memberships() as $membership ) {
+			if ( (int) $membership->get_user_id() !== (int) $user_id ) {
+				continue;
+			}
+			if ( ! in_array( $membership->get_status(), $active_statuses, true ) ) {
+				continue;
+			}
+			$result[] = $membership;
+		}
+	}
+	return $result;
 }
 
 function wc_memberships() {

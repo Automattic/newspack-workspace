@@ -214,6 +214,16 @@ class Woocommerce_Memberships {
 			}
 		}
 
+		// Don't remove lists the reader still has access to via another active
+		// membership. When switching between plans that share a Subscription List
+		// (e.g. monthly and annual premium newsletters that share a "member" list),
+		// deactivating the old plan must not strip a list the new, still-active plan
+		// also grants — otherwise the shared list is lost. See NPPM-3000.
+		$lists_still_granted = self::get_lists_granted_by_other_active_memberships( $user->ID, $user_membership->get_id() );
+		if ( ! empty( $lists_still_granted ) ) {
+			$lists_to_remove = array_values( array_diff( $lists_to_remove, $lists_still_granted ) );
+		}
+
 		// Bail if there are no lists we need to remove.
 		if ( empty( $lists_to_remove ) ) {
 			return;
@@ -238,6 +248,51 @@ class Woocommerce_Memberships {
 
 		Newspack_Newsletters_Contacts::add_and_remove_lists( $user_email, [], $lists_to_remove, 'Removing user from lists tied to Memberships being marked as inactive' );
 		Newspack_Newsletters_Logger::log( 'Reader ' . $user_email . ' removed from the following lists: ' . implode( ', ', $lists_to_remove ) );
+	}
+
+	/**
+	 * Get the public IDs of all Subscription Lists granted by the user's OTHER
+	 * active memberships (i.e. excluding the membership being deactivated).
+	 *
+	 * Used to avoid removing a reader from a list they still qualify for through a
+	 * different active membership — e.g. when switching between two plans that share
+	 * a list. See NPPM-3000.
+	 *
+	 * @param int $user_id               The user ID.
+	 * @param int $exclude_membership_id The membership ID being deactivated (excluded from the scan).
+	 * @return string[] Public list IDs still granted by the user's other active memberships.
+	 */
+	private static function get_lists_granted_by_other_active_memberships( $user_id, $exclude_membership_id ) {
+		if ( ! function_exists( 'wc_memberships_get_user_active_memberships' ) ) {
+			return [];
+		}
+		$active_memberships = wc_memberships_get_user_active_memberships( $user_id );
+		if ( empty( $active_memberships ) || ! is_array( $active_memberships ) ) {
+			return [];
+		}
+		$lists = [];
+		foreach ( $active_memberships as $membership ) {
+			if ( (int) $membership->get_id() === (int) $exclude_membership_id ) {
+				continue;
+			}
+			$plan = $membership->get_plan();
+			if ( ! $plan instanceof \WC_Memberships_Membership_Plan ) {
+				continue;
+			}
+			foreach ( $plan->get_content_restriction_rules() as $rule ) {
+				if ( Subscription_Lists::CPT !== $rule->get_content_type_name() ) {
+					continue;
+				}
+				foreach ( $rule->get_object_ids() as $object_id ) {
+					try {
+						$lists[] = ( new Subscription_List( $object_id ) )->get_public_id();
+					} catch ( \InvalidArgumentException $e ) {
+						continue;
+					}
+				}
+			}
+		}
+		return array_values( array_unique( $lists ) );
 	}
 
 	/**
