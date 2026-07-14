@@ -77,7 +77,7 @@ class Newspack_Test_Reader_Registration_Block extends WP_Ajax_UnitTestCase {
 	 */
 	public function test_non_reader_email_returns_account_not_found() {
 		$admin_email = 'admin-nonreader@example.com';
-		$this->factory()->user->create(
+		$admin_id    = $this->factory()->user->create(
 			[
 				'role'       => 'administrator',
 				'user_email' => $admin_email,
@@ -87,6 +87,8 @@ class Newspack_Test_Reader_Registration_Block extends WP_Ajax_UnitTestCase {
 		$response = $this->submit_registration( $admin_email );
 
 		$this->assertSame( 'Account not found.', $response['message'] );
+
+		wp_delete_user( $admin_id );
 	}
 
 	/**
@@ -95,13 +97,15 @@ class Newspack_Test_Reader_Registration_Block extends WP_Ajax_UnitTestCase {
 	 */
 	public function test_existing_reader_email_is_not_account_not_found() {
 		$reader_email = 'existing-reader@example.com';
-		Reader_Activation::register_reader( $reader_email, 'Existing Reader', false );
+		$reader_id    = Reader_Activation::register_reader( $reader_email, 'Existing Reader', false );
 
 		$response = $this->submit_registration( $reader_email );
 
 		$this->assertNotSame( 'Account not found.', $response['message'] ?? '' );
 		$this->assertNotEmpty( $response['data']['existing_user'] );
 		$this->assertArrayHasKey( 'action', $response['data'] );
+
+		wp_delete_user( $reader_id );
 	}
 
 	/**

@@ -261,6 +261,9 @@ window.newspackRAS.push( function ( readerActivation ) {
 								form.style.opacity = 1;
 								submitButtons.forEach( submitButton => {
 									submitButton.disabled = false;
+									// Keep the loading class in lockstep with the disabled attribute, as at
+									// the other re-enable sites; harmless if it was never added on this path.
+									submitButton.classList.remove( 'newspack-ui__button--loading' );
 								} );
 							} );
 					} );

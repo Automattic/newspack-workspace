@@ -543,8 +543,9 @@ function process_form() {
 		} elseif ( $existing_user ) {
 			// The email belongs to an existing non-reader account (e.g. an admin or editor).
 			// register_reader() has already sent the non-reader login reminder; surface the same
-			// "Account not found." error the auth modal returns instead of a silent success response.
-			// "Account not found." does not confirm the account exists, so it stays privacy-preserving.
+			// generic "Account not found." error the auth modal returns instead of a silent success
+			// response. The message text deliberately does not name the account, though (as with the
+			// auth modal) the error response is distinguishable from the new-account success flow.
 			return send_form_response( new \WP_Error( 'unauthorized', __( 'Account not found.', 'newspack-plugin' ) ) );
 		}
 	}
