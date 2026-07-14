@@ -293,6 +293,50 @@ final class Newspack_Popups_Inserter {
 	}
 
 	/**
+	 * Blocks that read as a single run of text but hold that text in inner blocks.
+	 * Gutenberg moved these to inner blocks in WP 6.0 (`core/list-item`, and the
+	 * paragraphs inside `core/quote`); before that their text lived in the block's
+	 * own innerHTML and was counted when positioning prompts.
+	 *
+	 * Layout containers (`core/columns`, `core/group`, …) are deliberately absent.
+	 * They are treated as atomic for insertion, and counting their inner text moves
+	 * prompts on existing container-heavy layouts such as homepages — which is why
+	 * https://github.com/Automattic/newspack-popups/pull/855 was reverted a day
+	 * after it shipped. See test_insertion_leaves_container_heavy_layouts_alone.
+	 *
+	 * Other text-in-inner-block types are knowingly deferred rather than overlooked:
+	 * `core/details` keeps its body collapsed until the reader opens it, so counting
+	 * text they cannot see would push prompts too late, and `core/media-text` reads
+	 * as a layout container. Both want their own decision, not inclusion by analogy.
+	 *
+	 * @var string[]
+	 */
+	const INNER_TEXT_BLOCKS = [ 'core/list', 'core/quote' ];
+
+	/**
+	 * Get the length of a block, as counted by the prompt insertion cursor.
+	 *
+	 * Inner-block text is counted only for self::INNER_TEXT_BLOCKS; see that
+	 * constant for why layout containers are excluded. The two sources are mutually
+	 * exclusive, so no text is counted twice: a legacy list holds its items in its
+	 * own innerHTML and has no inner blocks, while a modern one holds them in inner
+	 * blocks and has an empty innerHTML.
+	 *
+	 * @param array $block A block, as returned by parse_blocks().
+	 *
+	 * @return int The block's length, in stripped-of-tags bytes.
+	 */
+	public static function get_block_length( $block ) {
+		$block_content = $block['innerHTML'];
+
+		if ( in_array( $block['blockName'], self::INNER_TEXT_BLOCKS, true ) ) {
+			$block_content .= self::get_inner_block_content( $block );
+		}
+
+		return strlen( wp_strip_all_tags( $block_content ) );
+	}
+
+	/**
 	 * Get content from given block, including content from the block's inner blocks, if any.
 	 *
 	 * @param object $block A block.
@@ -455,7 +499,7 @@ final class Newspack_Popups_Inserter {
 					// Give length-ignored blocks a length of 1 so that prompts at 0% can still be inserted before them.
 					$pos++;
 				} else {
-					$pos += strlen( wp_strip_all_tags( $block['innerHTML'] ) );
+					$pos += self::get_block_length( $block );
 				}
 			}
 
