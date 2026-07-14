@@ -19,6 +19,35 @@ WORKSPACE_ROOT="${AUTOFIX_WORKSPACE_ROOT:-$(cd "$AUTOFIX_ROOT/../.." && pwd)}"
 log() { printf '[autofix] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+
+# GNU and BSD date disagree on how to parse and offset dates, and they disagree
+# *unsafely*: on BSD, `-d` is a daylight-saving flag, not a parse flag. So detect
+# the implementation rather than trying one and falling back on error.
+date_is_gnu() { date --version >/dev/null 2>&1; }
+
+# iso8601_to_epoch <ts> — parse "%Y-%m-%dT%H:%M:%SZ" (UTC) to epoch seconds.
+# Returns non-zero and prints nothing if the timestamp is empty or unparseable;
+# callers must NOT paper over that with a default, or a run's age silently
+# becomes 0 and TTL sweeps stop reaping.
+iso8601_to_epoch() {
+  local ts="${1:-}"
+  [ -n "$ts" ] || return 1
+  if date_is_gnu; then
+    date -u -d "$ts" +%s 2>/dev/null
+  else
+    date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$ts" +%s 2>/dev/null
+  fi
+}
+
+# iso8601_days_ago <days> — an ISO-8601 UTC timestamp N days in the past.
+iso8601_days_ago() {
+  local days="${1:?days required}"
+  if date_is_gnu; then
+    date -u -d "-${days} days" +%Y-%m-%dT%H:%M:%SZ
+  else
+    date -u -v-"${days}"d +%Y-%m-%dT%H:%M:%SZ
+  fi
+}
 require() { command -v "$1" >/dev/null 2>&1 || die "missing dependency: $1"; }
 json_escape() { printf '%s' "$1" | jq -Rs .; }
 # wt_dir <branch> — derive the on-disk worktree dir for a branch. `n`

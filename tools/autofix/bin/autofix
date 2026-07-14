@@ -44,8 +44,16 @@ sweep() {
         esac ;;
       escalated)
         [ -n "$envname" ] || continue
-        age_days=$(( ( $(date +%s) - $(date -j -f "%Y-%m-%dT%H:%M:%SZ" \
-          "$(jq -r '.stage_history[-1].at' "$lf")" +%s 2>/dev/null || date +%s) ) / 86400 ))
+        stamped="$(jq -r '.stage_history[-1].at // empty' "$lf")"
+        # An unparseable timestamp must be loud. The previous `|| date +%s`
+        # fallback substituted *now*, making age_days 0 for every run — so on any
+        # platform where the parse failed (e.g. GNU date, which rejects BSD's
+        # -j -f) the TTL sweep silently never reaped anything.
+        if ! epoch="$(iso8601_to_epoch "$stamped")"; then
+          log "sweep: ESCALATED run $rid has an unusable timestamp ('$stamped') — cannot age it; skipping TTL check"
+          continue
+        fi
+        age_days=$(( ( $(date +%s) - epoch ) / 86400 ))
         # if-guarded: a trailing failed `[ ... ] && log` would abort the whole
         # sweep under set -e when the run is younger than the TTL
         if [ "$age_days" -ge "$AUTOFIX_ESCALATED_ENV_TTL_DAYS" ]; then

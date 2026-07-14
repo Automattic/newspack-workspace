@@ -3,6 +3,7 @@ set -uo pipefail
 cd "$(dirname "$0")"; . ./helpers.sh
 A=../bin/autofix; L=../bin/ledger.sh
 export AUTOFIX_ROOT; AUTOFIX_ROOT="$(mktemp -d)"
+. ../bin/lib/common.sh  # iso8601_days_ago (sourced after AUTOFIX_ROOT so paths resolve to the temp root)
 M="$(mktemp -d)"; export AUTOFIX_LINEAR_MOCK_DIR="$M"
 cp fixtures/viewer.json fixtures/states.json fixtures/issueUpdate.json fixtures/commentCreate.json "$M/"
 cp fixtures/issue_ok.json "$M/issue.json"
@@ -92,7 +93,7 @@ bash "$L" set escyoung '.stage_history=[{stage:"reproduce", outcome:"ok", at:$t}
 bash "$L" init escold NPPM-4 operator-named >/dev/null
 bash "$L" set escold '.terminal="escalated"'
 bash "$L" set escold '.env={name:"autofix-env-escold"}'
-old_ts="$(date -u -v-30d +%Y-%m-%dT%H:%M:%SZ)"
+old_ts="$(iso8601_days_ago 30)"
 bash "$L" set escold '.stage_history=[{stage:"reproduce", outcome:"ok", at:$t}]' --arg t "$old_ts"
 
 out="$(bash "$A" cleanup 2>&1)" && rc=0 || rc=$?
