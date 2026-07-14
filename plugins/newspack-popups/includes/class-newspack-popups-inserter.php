@@ -293,25 +293,28 @@ final class Newspack_Popups_Inserter {
 	}
 
 	/**
-	 * Blocks that read as a single run of text but hold that text in inner blocks.
-	 * Gutenberg moved these to inner blocks in WP 6.0 (`core/list-item`, and the
-	 * paragraphs inside `core/quote`); before that their text lived in the block's
-	 * own innerHTML and was counted when positioning prompts.
+	 * Blocks whose text USED to be counted when positioning a prompt, until Gutenberg
+	 * moved that text out of the block's own innerHTML and into inner blocks:
 	 *
-	 * Layout containers (`core/columns`, `core/group`, …) are deliberately absent.
-	 * They are treated as atomic for insertion, and counting their inner text moves
-	 * prompts on existing container-heavy layouts such as homepages — which is why
-	 * https://github.com/Automattic/newspack-popups/pull/855 was reverted a day
-	 * after it shipped. See test_insertion_leaves_container_heavy_layouts_alone.
+	 * - `core/list`    WP 6.0 — items became `core/list-item` inner blocks.
+	 * - `core/quote`   WP 6.0 — quoted prose became `core/paragraph` inner blocks.
+	 * - `core/gallery` WP 5.9 — captions moved into `core/image` inner blocks.
 	 *
-	 * Other text-in-inner-block types are knowingly deferred rather than overlooked:
-	 * `core/details` keeps its body collapsed until the reader opens it, so counting
-	 * text they cannot see would push prompts too late, and `core/media-text` reads
-	 * as a layout container. Both want their own decision, not inclusion by analogy.
+	 * Counting these again restores the pre-refactor calculation, so it is a repair
+	 * rather than a change of behaviour. See NPPM-596.
+	 *
+	 * Blocks that were NEVER counted are deliberately absent, even though their text
+	 * also lives in inner blocks — `core/media-text` and `core/buttons` (inner blocks
+	 * since introduction), `core/details` (WP 6.3, and its body stays collapsed until
+	 * the reader opens it), and the layout containers `core/group` / `core/columns` /
+	 * `core/cover`. Counting those would MOVE prompts on existing content rather than
+	 * restore them, which is why https://github.com/Automattic/newspack-popups/pull/855
+	 * was reverted a day after it shipped. They are tracked in NPPM-3013 as a product
+	 * decision, not an oversight. See test_insertion_leaves_container_heavy_layouts_alone.
 	 *
 	 * @var string[]
 	 */
-	const INNER_TEXT_BLOCKS = [ 'core/list', 'core/quote' ];
+	const INNER_TEXT_BLOCKS = [ 'core/list', 'core/quote', 'core/gallery' ];
 
 	/**
 	 * Get the length of a block, as counted by the prompt insertion cursor.

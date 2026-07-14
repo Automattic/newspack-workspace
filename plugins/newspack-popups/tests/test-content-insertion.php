@@ -550,6 +550,63 @@ Paragraph 2
 	}
 
 	/**
+	 * Post content whose bulk sits in gallery captions.
+	 *
+	 * @param bool $is_legacy Build a pre-WP-5.9 gallery (captions in the block's own
+	 *                        innerHTML) rather than a modern one (captions inside
+	 *                        `core/image` inner blocks).
+	 *
+	 * @return string
+	 */
+	private static function gallery_heavy_content( $is_legacy = false ) {
+		$images = '';
+		for ( $i = 1; $i <= 4; $i++ ) {
+			$caption = self::filler( "Caption {$i}" );
+			$images .= $is_legacy
+				? "<li class=\"blocks-gallery-item\"><figure><img src=\"{$i}.jpg\"/><figcaption>{$caption}</figcaption></figure></li>"
+				: "<!-- wp:image --><figure class=\"wp-block-image\"><img src=\"{$i}.jpg\"/><figcaption class=\"wp-element-caption\">{$caption}</figcaption></figure><!-- /wp:image -->";
+		}
+
+		$gallery = $is_legacy
+			? "<!-- wp:gallery --><figure class=\"wp-block-gallery\"><ul class=\"blocks-gallery-grid\">{$images}</ul></figure><!-- /wp:gallery -->"
+			: "<!-- wp:gallery --><figure class=\"wp-block-gallery has-nested-images\">{$images}</figure><!-- /wp:gallery -->";
+
+		return '<!-- wp:paragraph --><p>' . self::filler( 'Paragraph 1' ) . '</p><!-- /wp:paragraph -->'
+			. $gallery
+			. '<!-- wp:paragraph --><p>' . self::filler( 'Paragraph 2' ) . '</p><!-- /wp:paragraph -->';
+	}
+
+	/**
+	 * Gallery captions moved into `core/image` inner blocks in WP 5.9, so they stopped
+	 * counting towards a prompt's position — the same regression as lists, two releases
+	 * earlier. A prompt must land in the same place for both gallery vintages.
+	 */
+	public function test_insertion_accounts_for_gallery_inner_blocks() {
+		$expected = [
+			'core/paragraph',
+			'core/shortcode', // Prompt – at the halfway mark, which falls inside the gallery.
+			'core/gallery',
+			'core/paragraph',
+		];
+
+		$vintages = [
+			'legacy' => true,
+			'modern' => false,
+		];
+
+		foreach ( $vintages as $vintage => $is_legacy ) {
+			self::assertEqualBlockNames(
+				$expected,
+				Newspack_Popups_Inserter::insert_popups_in_post_content(
+					self::gallery_heavy_content( $is_legacy ),
+					[ self::create_inline_popup( 'scroll', '50' ) ]
+				),
+				"A prompt at 50% lands in the expected position for a {$vintage} gallery."
+			);
+		}
+	}
+
+	/**
 	 * Escape hatch: a site that tuned its prompt percentages against the old,
 	 * inaccurate calculation can restore the previous behaviour by filtering the
 	 * list of counted blocks to empty, rather than re-tuning every prompt.
