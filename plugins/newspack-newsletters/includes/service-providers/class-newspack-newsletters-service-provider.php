@@ -1015,4 +1015,32 @@ Error message(s) received:
 	public function get_contact_fields_for_integrations( $list_id = null ) {
 		return [];
 	}
+
+	/**
+	 * Fetch send lists, falling back to an untargeted fetch when a targeted
+	 * lookup fails because the stored id belongs to a previously-connected ESP.
+	 *
+	 * When $args carries targeting keys ('ids' and/or 'parent_id') and the
+	 * targeted fetch returns a WP_Error, retry once with those keys removed. A
+	 * successful retry proves the ESP is reachable and the failure was a stale
+	 * or foreign id, so the untargeted result is returned (the stale id simply
+	 * is not present, and the editor clears it). If the retry also fails, the
+	 * ESP is genuinely unreachable, so the WP_Error is returned for the caller
+	 * to surface (e.g. as the editor's retry notice).
+	 *
+	 * @param array $args     Args for get_send_lists(). See Send_Lists::get_default_args().
+	 * @param bool  $to_array Whether to return arrays instead of Send_List objects.
+	 * @return array|WP_Error
+	 */
+	public function get_send_lists_with_fallback( $args, $to_array = false ) {
+		$result = $this->get_send_lists( $args, $to_array );
+		if ( ! is_wp_error( $result ) ) {
+			return $result;
+		}
+		if ( empty( $args['ids'] ) && empty( $args['parent_id'] ) ) {
+			return $result;
+		}
+		unset( $args['ids'], $args['parent_id'] );
+		return $this->get_send_lists( $args, $to_array );
+	}
 }
