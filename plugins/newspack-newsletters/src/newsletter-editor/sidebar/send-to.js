@@ -152,7 +152,7 @@ const SendTo = () => {
 			<hr />
 			<strong className="newspack-newsletters__label">{ __( 'Send to', 'newspack-newsletters' ) }</strong>
 			{ error && (
-				<Notice status="error" isDismissible={ false }>
+				<Notice status="warning" isDismissible={ false }>
 					{ error }
 				</Notice>
 			) }
