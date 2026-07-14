@@ -78,7 +78,10 @@ case $1 in
             fi
             mkdir -p "$(dirname "$worktree_dir")"
             cd "$standalone_dir" || exit 1
-            git fetch origin "$branch" 2>/dev/null
+            # Forced refspec so a remote-only branch lands in refs/remotes/origin;
+            # plain `fetch origin <branch>` only writes FETCH_HEAD, so the show-ref
+            # check below would miss it and wrongly create a new branch from HEAD.
+            git fetch origin "+$branch:refs/remotes/origin/$branch" 2>/dev/null
             if git show-ref --verify --quiet "refs/heads/$branch" || git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
                 git worktree add "$worktree_dir" "$branch" || exit 1
             else
@@ -97,7 +100,10 @@ case $1 in
         fi
         mkdir -p "$(dirname "$worktree_dir")"
         cd "$NABSPATH" || exit 1
-        git fetch origin "$branch" 2>/dev/null
+        # Forced refspec so a remote-only branch lands in refs/remotes/origin;
+        # plain `fetch origin <branch>` only writes FETCH_HEAD, so the show-ref
+        # check below would miss it and wrongly create a new branch from HEAD.
+        git fetch origin "+$branch:refs/remotes/origin/$branch" 2>/dev/null
         if git show-ref --verify --quiet "refs/heads/$branch" || git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
             git worktree add "$worktree_dir" "$branch" || exit 1
         else
