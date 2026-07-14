@@ -577,6 +577,13 @@ class Newspack_Newsletters_Settings {
 					<?php endif; ?>
 				/>
 			<?php
+		} elseif ( 'textarea' === $type ) {
+			printf(
+				'<textarea id="%s" name="%s" rows="4" class="widefat">%s</textarea>',
+				esc_attr( $key ),
+				esc_attr( $key ),
+				esc_textarea( $value )
+			);
 		} else {
 			printf(
 				'<input type="text" id="%s" name="%s" value="%s" class="widefat" />',
