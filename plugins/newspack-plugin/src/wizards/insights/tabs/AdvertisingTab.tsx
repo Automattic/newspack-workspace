@@ -72,6 +72,13 @@ const AdvertisingTab = ( { range, previousRange }: AdvertisingTabProps ) => {
 	// Fixture mode returns a `previous` window unconditionally, so gate here.
 	const previous = previousRange ? data?.previous?.metrics ?? null : null;
 
+	// Broadstreet has no revenue in its API (NPPD-2045), so its variant is
+	// impressions-only: a provider-aware Reach section and a Top performers section
+	// with zones + advertisers + campaigns. The GAM-only sections (revenue/inventory
+	// scorecards, revenue trend, channel/device, per-site) and the GAM data-lag note
+	// are hidden.
+	const isBroadstreet = current?.active_provider === 'broadstreet';
+
 	return (
 		<TabStateView
 			status={ status }
@@ -82,21 +89,29 @@ const AdvertisingTab = ( { range, previousRange }: AdvertisingTabProps ) => {
 		>
 			{ current && (
 				<>
-					<DataLagIndicator dataAsOf={ current.data_as_of } hasEstimatedData={ current.has_estimated_data } />
+					{ /* GAM-specific AdX data-lag note; Broadstreet has no estimate lag. */ }
+					{ ! isBroadstreet && <DataLagIndicator dataAsOf={ current.data_as_of } hasEstimatedData={ current.has_estimated_data } /> }
 					<TabSections>
 						<ReachRevenueSection
 							current={ current.metrics }
 							previous={ previous }
 							hasWindowActivity={ current.has_window_activity }
+							activeProvider={ current.active_provider }
 							lastUpdated={ <LastUpdated tab="advertising" range={ range } previousRange={ previousRange } /> }
 						/>
-						<RevenueTrendSection current={ current.metrics } previous={ previous } />
-						{ /* Channel pie + device table: after the trend, before the per-site and
-						     top-performer tables. */ }
-						<ChannelDeviceSection current={ current.metrics } previous={ previous } />
-						{ /* Per-site breakdown: network members only; absent otherwise. */ }
-						{ current.is_network_member && <SitePerformanceSection current={ current.metrics } previous={ previous } /> }
-						<TopPerformersSection current={ current.metrics } previous={ previous } />
+						{ /* Revenue/inventory sections are GAM-only — Broadstreet's API has no
+						     revenue, channels, devices, or per-site custom dimension. */ }
+						{ ! isBroadstreet && (
+							<>
+								<RevenueTrendSection current={ current.metrics } previous={ previous } />
+								{ /* Channel pie + device table: after the trend, before the per-site and
+								     top-performer tables. */ }
+								<ChannelDeviceSection current={ current.metrics } previous={ previous } />
+								{ /* Per-site breakdown: network members only; absent otherwise. */ }
+								{ current.is_network_member && <SitePerformanceSection current={ current.metrics } previous={ previous } /> }
+							</>
+						) }
+						<TopPerformersSection current={ current.metrics } previous={ previous } activeProvider={ current.active_provider } />
 					</TabSections>
 				</>
 			) }
