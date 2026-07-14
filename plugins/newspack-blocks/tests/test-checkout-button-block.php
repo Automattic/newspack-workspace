@@ -141,16 +141,28 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * Return the container <div> node from rendered output, or null.
+	 * Load rendered block output into a DOMDocument, leaving the libxml error
+	 * buffer clean so parse errors do not leak into later tests.
 	 *
 	 * @param string $output Rendered HTML.
-	 * @return DOMElement|null The container element.
+	 * @return DOMDocument The parsed document.
 	 */
-	private function get_container( $output ) {
+	private function load_dom( $output ) {
 		$dom      = new DOMDocument();
 		$previous = libxml_use_internal_errors( true );
 		$dom->loadHTML( '<!DOCTYPE html><html><body>' . $output . '</body></html>' );
+		libxml_clear_errors();
 		libxml_use_internal_errors( $previous );
+		return $dom;
+	}
+
+	/**
+	 * Find the checkout-button container <div> within a parsed document.
+	 *
+	 * @param DOMDocument $dom Parsed document.
+	 * @return DOMElement|null The container element, or null if absent.
+	 */
+	private function find_container( DOMDocument $dom ) {
 		foreach ( $dom->getElementsByTagName( 'div' ) as $div ) {
 			if ( false !== strpos( $div->getAttribute( 'class' ), 'wp-block-newspack-blocks-checkout-button' ) ) {
 				return $div;
@@ -160,42 +172,52 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 	}
 
 	/**
-	 * A block-supplied className must not break out of the container's class
-	 * attribute. The className is output-escaped, so a value crafted to close
-	 * the attribute and add an event handler is neutralized: the container
-	 * <div> exposes only its class attribute, with no injected handler or style.
+	 * Return the container <div> node from rendered output, or null.
+	 *
+	 * @param string $output Rendered HTML.
+	 * @return DOMElement|null The container element.
+	 */
+	private function get_container( $output ) {
+		return $this->find_container( $this->load_dom( $output ) );
+	}
+
+	/**
+	 * The className is rendered inside the container's class attribute and must
+	 * stay there: it cannot introduce a separate attribute on the container. A
+	 * value crafted to close the attribute is escaped, so no style or
+	 * event-handler attribute appears and the value remains part of the class.
 	 */
 	public function test_container_classname_cannot_inject_attributes() {
-		$payload   = 'x" style="position:fixed;inset:0" onmouseover="window.__xss=1" data-x="';
-		$output    = $this->render( [ 'className' => $payload ] );
+		$output    = $this->render( [ 'className' => 'x" style="position:fixed;inset:0" onmouseover="window.__x=1" data-x="' ] );
 		$container = $this->get_container( $output );
 
 		$this->assertNotNull( $container, 'Checkout-button container should render.' );
-
-		$attribute_names = [];
-		foreach ( $container->attributes as $attribute ) {
-			$attribute_names[] = $attribute->name;
-		}
-
-		$this->assertSame(
-			[ 'class' ],
-			$attribute_names,
-			'Container must expose only a class attribute; a className must not add style, onmouseover, etc.'
+		$this->assertFalse( $container->hasAttribute( 'style' ), 'className must not introduce a style attribute.' );
+		$this->assertFalse( $container->hasAttribute( 'onmouseover' ), 'className must not introduce an event handler.' );
+		$this->assertFalse( $container->hasAttribute( 'data-x' ), 'className must not introduce arbitrary attributes.' );
+		$this->assertStringContainsString(
+			'style=',
+			$container->getAttribute( 'class' ),
+			'The className value should remain inside the class attribute.'
 		);
 	}
 
 	/**
-	 * A className carrying angle brackets must not escape the tag and inject a
-	 * new element; the brackets are entity-escaped inside the class value.
+	 * The className must stay inside the class attribute even when it carries
+	 * angle brackets: it cannot escape the container tag to add an element.
 	 */
 	public function test_container_classname_cannot_inject_elements() {
-		$output = $this->render( [ 'className' => 'x"><img src=x onerror="window.__xss=1">' ] );
-
-		$dom      = new DOMDocument();
-		$previous = libxml_use_internal_errors( true );
-		$dom->loadHTML( '<!DOCTYPE html><html><body>' . $output . '</body></html>' );
-		libxml_use_internal_errors( $previous );
+		$output = $this->render( [ 'className' => 'x"><img src=x onerror="window.__x=1">' ] );
+		$dom    = $this->load_dom( $output );
 
 		$this->assertSame( 0, $dom->getElementsByTagName( 'img' )->length, 'className must not inject an element.' );
+
+		$container = $this->find_container( $dom );
+		$this->assertNotNull( $container, 'Checkout-button container should render.' );
+		$this->assertStringContainsString(
+			'<img',
+			$container->getAttribute( 'class' ),
+			'The bracketed className value should remain inside the class attribute.'
+		);
 	}
 }
