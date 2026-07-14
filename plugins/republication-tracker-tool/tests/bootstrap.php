@@ -11,9 +11,9 @@ if ( ! $_tests_dir ) {
 }
 
 // Load the composer autoloader (provides the PHPUnit Polyfills required by the WP test suite).
-if ( file_exists( dirname( __DIR__ ) . '/vendor/autoload.php' ) ) {
-	require_once dirname( __DIR__ ) . '/vendor/autoload.php';
-}
+// Required unconditionally so a missing vendor/ fails loudly instead of surfacing as a
+// confusing "class not found" later in the run.
+require_once dirname( __DIR__ ) . '/vendor/autoload.php';
 
 // Give access to tests_add_filter() function.
 require_once $_tests_dir . '/includes/functions.php';

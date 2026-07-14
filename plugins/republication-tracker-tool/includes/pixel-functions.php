@@ -73,10 +73,11 @@ function wprtt_create_cid_cookie_if_not_set() {
  */
 function wprtt_read_cid_from_cookies() {
 	if ( isset( $_COOKIE['_ga'] ) ) {
-		$cookie_pieces = explode( '.', $_COOKIE['_ga'], 3 ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$ga_cookie = sanitize_text_field( wp_unslash( $_COOKIE['_ga'] ) ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		// A well-formed cookie (GA1.2.<cid>) yields the third piece; malformed
 		// values with fewer pieces still yield their last piece.
-		$cid = trim( (string) end( $cookie_pieces ) );
+		$cookie_pieces = explode( '.', $ga_cookie, 3 );
+		$cid           = trim( (string) end( $cookie_pieces ) );
 		if ( '' !== $cid ) {
 			return $cid;
 		}

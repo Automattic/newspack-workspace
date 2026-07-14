@@ -80,7 +80,7 @@ if ( $wprtt_shared_post instanceof WP_Post && ( ! $wprtt_guards_enabled || ! wpr
 	$shared_post_slug      = rawurlencode( $shared_post->post_name );
 	$shared_post_permalink = get_permalink( $shared_post_id );
 
-	$url = isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( $_SERVER['HTTP_REFERER'] ) : '';
+	$url = isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : '';
 
 	// If the request is coming from WP Admin, bail out (when the copied content is inserted into the WP editor, the pixel will be pinged).
 	if ( false !== stripos( $url, '/wp-admin/' ) ) {
