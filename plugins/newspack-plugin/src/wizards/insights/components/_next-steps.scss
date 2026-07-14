@@ -71,12 +71,4 @@
 			margin: 0;
 		}
 	}
-
-	// ExternalLink (`.components-external-link`) supplies the new-tab icon, the
-	// screen-reader "(opens in a new tab)" text, the correct rel, and focus
-	// styling; we only set the type scale here.
-	&__next-steps-link.components-external-link {
-		font-size: 13px; // No 13px token; $font-size-small is 12px.
-		font-weight: wp-vars.$font-weight-medium;
-	}
 }

@@ -84,9 +84,7 @@ const NextSteps = ( { links }: NextStepsProps ) => {
 				<ul className="newspack-insights__next-steps-list">
 					{ safeLinks.map( link => (
 						<li key={ link.url }>
-							<ExternalLink className="newspack-insights__next-steps-link" href={ link.url }>
-								{ link.label }
-							</ExternalLink>
+							<ExternalLink href={ link.url }>{ link.label }</ExternalLink>
 						</li>
 					) ) }
 				</ul>
