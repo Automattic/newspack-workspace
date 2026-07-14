@@ -252,6 +252,7 @@ class Experimental_Tools {
 				'label'           => $tool['label'] ?? $slug,
 				'description'     => $tool['description'] ?? '',
 				'disclosure'      => $tool['disclosure'] ?? '',
+				'location_hint'   => $tool['location_hint'] ?? '',
 				'llm'             => $tool['llm'] ?? null,
 				'constant'        => $tool['constant'] ?? null,
 				'constant_active' => $constant_active,

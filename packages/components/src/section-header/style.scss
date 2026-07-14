@@ -12,6 +12,9 @@
 
 	&__container {
 		position: relative;
+		p {
+			text-wrap: balance;
+		}
 		&:not(:first-child) {
 			margin-top: 48px;
 		}

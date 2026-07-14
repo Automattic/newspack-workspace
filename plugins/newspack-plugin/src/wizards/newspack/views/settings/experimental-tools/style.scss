@@ -164,3 +164,11 @@
 		overflow-y: auto;
 	}
 }
+
+.experimental-tools__location-hint {
+	margin: 16px 0 0;
+}
+
+.experimental-tools__configure .experimental-tools__location-hint {
+	margin-bottom: 24px;
+}

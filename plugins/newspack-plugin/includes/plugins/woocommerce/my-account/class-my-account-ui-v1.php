@@ -572,8 +572,6 @@ class My_Account_UI_V1 {
 				__( 'Your account has been deleted.', 'newspack-plugin' ),
 				[
 					'id'       => 'after-delete-account',
-					'type'     => 'success',
-					'corner'   => 'top-right',
 					'autohide' => true,
 				]
 			);

@@ -1,3 +1,10 @@
+## newspack-network [2.20.6](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.5...newspack-network@2.20.6) (2026-07-13)
+
+
+### Bug Fixes
+
+* **network:** preserve block content in distributed posts ([#569](https://github.com/Automattic/newspack-workspace/issues/569)) ([d7e193e](https://github.com/Automattic/newspack-workspace/commit/d7e193edac7df0cc3454d53c5badb7244d18cd6c))
+
 ## newspack-network [2.20.5](https://github.com/Automattic/newspack-workspace/compare/newspack-network@2.20.4...newspack-network@2.20.5) (2026-06-29)
 
 
