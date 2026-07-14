@@ -329,7 +329,20 @@ final class Newspack_Popups_Inserter {
 	public static function get_block_length( $block ) {
 		$block_content = $block['innerHTML'];
 
-		if ( in_array( $block['blockName'], self::INNER_TEXT_BLOCKS, true ) ) {
+		/**
+		 * Filters the blocks whose inner-block text counts towards a prompt's position.
+		 *
+		 * Returning an empty array restores the pre-NPPM-596 behaviour, in which no
+		 * inner-block text was counted and prompts drifted towards the end of posts
+		 * containing lists or quotes. That is an escape hatch for a site that had tuned
+		 * its prompt percentages against the old, inaccurate calculation and would
+		 * rather keep them where they are than re-tune.
+		 *
+		 * @param string[] $inner_text_blocks Block names whose inner text is counted.
+		 */
+		$inner_text_blocks = apply_filters( 'newspack_popups_inner_text_blocks', self::INNER_TEXT_BLOCKS );
+
+		if ( in_array( $block['blockName'], $inner_text_blocks, true ) ) {
 			$block_content .= self::get_inner_block_content( $block );
 		}
 

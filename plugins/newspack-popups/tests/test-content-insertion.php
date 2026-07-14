@@ -550,6 +550,34 @@ Paragraph 2
 	}
 
 	/**
+	 * Escape hatch: a site that tuned its prompt percentages against the old,
+	 * inaccurate calculation can restore the previous behaviour by filtering the
+	 * list of counted blocks to empty, rather than re-tuning every prompt.
+	 */
+	public function test_inner_text_blocks_filter_can_restore_previous_behaviour() {
+		$restore_old_behaviour = '__return_empty_array';
+		add_filter( 'newspack_popups_inner_text_blocks', $restore_old_behaviour );
+
+		$actual = Newspack_Popups_Inserter::insert_popups_in_post_content(
+			self::list_heavy_content(),
+			[ self::create_inline_popup( 'scroll', '50' ) ]
+		);
+
+		remove_filter( 'newspack_popups_inner_text_blocks', $restore_old_behaviour );
+
+		self::assertEqualBlockNames(
+			[
+				'core/paragraph',
+				'core/list',
+				'core/paragraph',
+				'core/shortcode', // Prompt – back at the end, as it was before NPPM-596.
+			],
+			$actual,
+			'Filtering the counted blocks to empty restores the pre-NPPM-596 placement.'
+		);
+	}
+
+	/**
 	 * Guard test. Layout containers (`core/columns`, `core/group`) are NOT counted
 	 * towards the insertion cursor, so prompts fall to the end of container-heavy
 	 * layouts – which is what homepages are built from, and what publishers have
