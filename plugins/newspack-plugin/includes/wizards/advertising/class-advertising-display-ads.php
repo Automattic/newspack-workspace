@@ -70,7 +70,7 @@ class Advertising_Display_Ads extends Wizard {
 	 *
 	 * @var int
 	 */
-	public $parent_menu_order = 5;
+	public $parent_menu_order = 4;
 
 	/**
 	 * Use a high priorty so that the Advertising parent menu will be created
