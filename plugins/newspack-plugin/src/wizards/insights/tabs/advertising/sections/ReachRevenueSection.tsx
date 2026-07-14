@@ -64,7 +64,7 @@ export interface SectionProps {
 	activeProvider?: AdvertisingProvider | null;
 }
 
-const TITLE = __( 'Reach & revenue', 'newspack-plugin' );
+const TITLE = __( 'Reach & Revenue', 'newspack-plugin' );
 const CAPTION = __( 'Volume, revenue, and inventory quality for the period.', 'newspack-plugin' );
 
 // Broadstreet has no revenue in its API (NPPD-2045), so its variant is impressions-only.
@@ -107,7 +107,7 @@ const ReachRevenueSection = ( { current, previous, hasWindowActivity, lastUpdate
 						previous={ previous?.total_impressions }
 					/>
 					<Scorecard
-						label={ __( 'Impressions per session', 'newspack-plugin' ) }
+						label={ __( 'Impressions per Session', 'newspack-plugin' ) }
 						description={ __( 'Avg ad impressions a reader sees each session', 'newspack-plugin' ) }
 						current={ current.avg_impressions_per_session }
 						previous={ previous?.avg_impressions_per_session }
@@ -119,7 +119,7 @@ const ReachRevenueSection = ( { current, previous, hasWindowActivity, lastUpdate
 						previous={ previous?.overall_ctr }
 					/>
 					<Scorecard
-						label={ __( 'Mobile share', 'newspack-plugin' ) }
+						label={ __( 'Mobile Share', 'newspack-plugin' ) }
 						description={ __( 'Share of impressions served to mobile', 'newspack-plugin' ) }
 						current={ current.mobile_share }
 						previous={ previous?.mobile_share }
@@ -196,7 +196,7 @@ const ReachRevenueSection = ( { current, previous, hasWindowActivity, lastUpdate
 						previous={ previous?.rpm }
 					/>
 					<Scorecard
-						label={ __( 'Impressions per session', 'newspack-plugin' ) }
+						label={ __( 'Impressions per Session', 'newspack-plugin' ) }
 						description={ __( 'Avg ad impressions a reader sees each session', 'newspack-plugin' ) }
 						current={ current.avg_impressions_per_session }
 						previous={ previous?.avg_impressions_per_session }

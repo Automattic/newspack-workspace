@@ -198,12 +198,12 @@ const ReaderSegmentsSection = ( { current }: SectionProps ) => {
 		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-engagement-segments">
 			<SectionHeading
 				id="newspack-insights-engagement-segments"
-				title={ __( 'Reader segments', 'newspack-plugin' ) }
+				title={ __( 'Reader Segments', 'newspack-plugin' ) }
 				description={ __( 'How engagement varies by segment.', 'newspack-plugin' ) }
 			/>
 			<Grid columns={ 3 } gutter={ 16 } noMargin>
 				<TakeawayCard
-					title={ __( 'Engagement by device', 'newspack-plugin' ) }
+					title={ __( 'Engagement by Device', 'newspack-plugin' ) }
 					payload={ current.engagement_by_device_type }
 					headline={ device.headline }
 					sub={ device.sub }
@@ -211,7 +211,7 @@ const ReaderSegmentsSection = ( { current }: SectionProps ) => {
 					formatValue={ formatSeconds }
 				/>
 				<TakeawayCard
-					title={ __( 'New vs returning readers', 'newspack-plugin' ) }
+					title={ __( 'New vs Returning Readers', 'newspack-plugin' ) }
 					payload={ current.engagement_by_returning_vs_new }
 					headline={ returning.headline }
 					sub={ returning.sub }
@@ -219,7 +219,7 @@ const ReaderSegmentsSection = ( { current }: SectionProps ) => {
 					formatValue={ formatPages }
 				/>
 				<TakeawayCard
-					title={ __( 'Engagement by traffic source', 'newspack-plugin' ) }
+					title={ __( 'Engagement by Traffic Source', 'newspack-plugin' ) }
 					payload={ current.engagement_by_traffic_source }
 					headline={ trafficSource.headline }
 					sub={ trafficSource.sub }

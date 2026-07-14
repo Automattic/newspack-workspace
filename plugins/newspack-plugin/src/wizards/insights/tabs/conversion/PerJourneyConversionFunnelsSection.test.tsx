@@ -22,11 +22,11 @@ const heading = ( name: string ) => screen.queryByRole( 'heading', { name } );
 describe( 'PerJourneyConversionFunnelsSection', () => {
 	it( 'renders the heading and all four journey funnel titles', () => {
 		render( <PerJourneyConversionFunnelsSection current={ makeConversionWindow() } /> );
-		expect( screen.getByRole( 'heading', { name: 'Per-journey conversion funnels' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Per-Journey Conversion Funnels' } ) ).toBeInTheDocument();
 		expect( heading( 'Anonymous → Registered' ) ).toBeInTheDocument();
 		expect( heading( 'Registered → Subscriber' ) ).toBeInTheDocument();
 		expect( heading( 'Registered → Donor' ) ).toBeInTheDocument();
-		expect( heading( 'Subscriber → Donor (cross-upsell)' ) ).toBeInTheDocument();
+		expect( heading( 'Subscriber → Donor (Cross-Upsell)' ) ).toBeInTheDocument();
 	} );
 
 	it( 'shows the cross-upsell gated note when 2.4 visibility is hidden', () => {

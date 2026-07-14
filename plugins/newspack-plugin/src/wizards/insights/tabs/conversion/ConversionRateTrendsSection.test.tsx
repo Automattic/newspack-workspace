@@ -18,7 +18,7 @@ import { makeConversionWindow } from './fixtures';
 describe( 'ConversionRateTrendsSection', () => {
 	it( 'renders the heading', () => {
 		render( <ConversionRateTrendsSection current={ makeConversionWindow() } /> );
-		expect( screen.getByRole( 'heading', { name: 'Conversion rate trends' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Conversion Rate Trends' } ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders the empty treatment when state is empty', () => {

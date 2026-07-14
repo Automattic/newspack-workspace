@@ -59,8 +59,8 @@ describe( 'Subscribers WindowedSection empty states', () => {
 		expect( container.querySelector( '[data-empty-state="no_opportunity"]' ) ).toBeInTheDocument();
 		// Assert on the container — the Notice's speak() duplicates copy into a live-region.
 		expect( container ).toHaveTextContent( 'No subscription activity in this timeframe' );
-		expect( screen.queryByText( 'Churned subscribers' ) ).not.toBeInTheDocument();
-		expect( screen.queryByText( 'Gross revenue' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Churned Subscribers' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Gross Revenue' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'renders the per-card no-acquisition state on New subscribers without collapsing the section', () => {
@@ -72,12 +72,12 @@ describe( 'Subscribers WindowedSection empty states', () => {
 		// The misleading period delta is suppressed even though `previous` has a real
 		// prior count — a "↓ 100%" would misread an honest zero.
 		const newCard = Array.from( container.querySelectorAll( '.newspack-insights__metric-card-label' ) )
-			.find( el => el.textContent === 'New subscribers' )
+			.find( el => el.textContent === 'New Subscribers' )
 			?.closest( '.newspack-insights__metric-card' );
 		expect( newCard?.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
 		// Real cards still render.
-		expect( screen.getByText( 'Churned subscribers' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Gross revenue' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Churned Subscribers' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Gross Revenue' ) ).toBeInTheDocument();
 	} );
 
 	it( 'does NOT show the no-acquisition line when there are no active subscribers either', () => {
@@ -94,8 +94,8 @@ describe( 'Subscribers WindowedSection empty states', () => {
 
 		// Section is NOT collapsed and the churn card is a real card showing 0.
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
-		expect( screen.getByText( 'Churned subscribers' ) ).toBeInTheDocument();
-		expect( cardValueByLabel( container, 'Churned subscribers' ) ).toBe( '0' );
+		expect( screen.getByText( 'Churned Subscribers' ) ).toBeInTheDocument();
+		expect( cardValueByLabel( container, 'Churned Subscribers' ) ).toBe( '0' );
 	} );
 
 	it( 'GOOD ZERO: zero failed payments reframes positively (NPPD-1726), section intact', () => {
@@ -118,7 +118,7 @@ describe( 'Subscribers WindowedSection empty states', () => {
 		expect( screen.getByText( 'No refund requests in this timeframe.' ) ).toBeInTheDocument();
 		// Distinct from the no-orders message, and the hero is the em-dash, not "0%".
 		expect( screen.queryByText( 'No subscription orders in this timeframe.' ) ).not.toBeInTheDocument();
-		expect( cardValueByLabel( container, 'Refund rate' ) ).toBe( '—' );
+		expect( cardValueByLabel( container, 'Refund Rate' ) ).toBe( '—' );
 	} );
 
 	it( 'D5: Refund rate and Failed payment recovery good-zeros share the em-dash treatment', () => {
@@ -135,8 +135,8 @@ describe( 'Subscribers WindowedSection empty states', () => {
 		} );
 		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeSubscribers={ 200 } /> );
 
-		expect( cardValueByLabel( container, 'Refund rate' ) ).toBe( '—' );
-		expect( cardValueByLabel( container, 'Failed payment recovery' ) ).toBe( '—' );
+		expect( cardValueByLabel( container, 'Refund Rate' ) ).toBe( '—' );
+		expect( cardValueByLabel( container, 'Failed Payment Recovery' ) ).toBe( '—' );
 		expect( screen.getByText( 'No failed payments in this timeframe.' ) ).toBeInTheDocument();
 		// The old bespoke empty-note element no longer renders for these cards.
 		expect( container.querySelectorAll( '.newspack-insights__metric-card--empty' ).length ).toBe( 0 );
@@ -162,9 +162,9 @@ describe( 'Subscribers WindowedSection empty states', () => {
 		const { container } = render( <WindowedSection range={ RANGE } current={ makeWindow() } previous={ null } activeSubscribers={ 200 } /> );
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
-		expect( screen.getByText( 'New subscribers' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Churned subscribers' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Refund rate' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Failed payment recovery' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'New Subscribers' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Churned Subscribers' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Refund Rate' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Failed Payment Recovery' ) ).toBeInTheDocument();
 	} );
 } );

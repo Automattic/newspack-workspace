@@ -41,13 +41,13 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 	>
 		<SectionHeading
 			id="newspack-insights-donors-scorecard-heading"
-			title={ __( 'Donors at a glance', 'newspack-plugin' ) }
+			title={ __( 'Donors at a Glance', 'newspack-plugin' ) }
 			description={ __( 'Current state and recurring revenue, independent of selected timeframe.', 'newspack-plugin' ) }
 			actions={ lastUpdated }
 		/>
 		<Grid columns={ 4 } gutter={ 16 } noMargin>
 			<MetricCard
-				label={ __( 'Active donors', 'newspack-plugin' ) }
+				label={ __( 'Active Donors', 'newspack-plugin' ) }
 				value={ snapshot.active_donors }
 				format="number"
 				secondary={ sprintf(
@@ -69,7 +69,7 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 				description={ __( 'Active recurring donations normalized to a monthly rate', 'newspack-plugin' ) }
 			/>
 			<MetricCard
-				label={ __( '3-year supporter value', 'newspack-plugin' ) }
+				label={ __( '3-Year Supporter Value', 'newspack-plugin' ) }
 				value={ snapshot.supporter_clv_3yr.value }
 				format="currency"
 				notComputableMessage={
@@ -81,7 +81,7 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 				) }
 			/>
 			<MetricCard
-				label={ __( 'Newsletter → donation', 'newspack-plugin' ) }
+				label={ __( 'Newsletter → Donation', 'newspack-plugin' ) }
 				value={ snapshot.newsletter_conversion.value }
 				format="percent"
 				// A hub proxy failure is an error state, not "insufficient history" —
@@ -103,13 +103,13 @@ const ScorecardSection = ( { snapshot, lastUpdated }: ScorecardSectionProps ) =>
 				description={ __( 'Share of newsletter signups who became a donor within 12 months.', 'newspack-plugin' ) }
 			/>
 			<MetricCard
-				label={ __( 'Upcoming renewals (30d)', 'newspack-plugin' ) }
+				label={ __( 'Upcoming Renewals (30d)', 'newspack-plugin' ) }
 				value={ snapshot.upcoming_donation_renewals_30d.count }
 				format="number"
 				description={ __( 'Active recurring donations due to renew in the next 30 days', 'newspack-plugin' ) }
 			/>
 			<MetricCard
-				label={ __( 'Upcoming endings (30d)', 'newspack-plugin' ) }
+				label={ __( 'Upcoming Endings (30d)', 'newspack-plugin' ) }
 				value={ snapshot.upcoming_donation_cancellations_30d.count }
 				format="number"
 				lowerIsBetter

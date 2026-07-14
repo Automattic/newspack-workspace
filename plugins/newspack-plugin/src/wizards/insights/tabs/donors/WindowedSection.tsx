@@ -149,10 +149,14 @@ const WindowedSection = ( { range, current, previous, activeDonors }: WindowedSe
 			className="newspack-insights__section newspack-insights__section--windowed"
 			aria-labelledby="newspack-insights-donors-windowed-heading"
 		>
-			<SectionHeading id="newspack-insights-donors-windowed-heading" title={ getHeading( range ) } />
+			<SectionHeading
+				id="newspack-insights-donors-windowed-heading"
+				title={ getHeading( range ) }
+				description={ __( 'New donors, lapsed donors, and the revenue they generated.', 'newspack-plugin' ) }
+			/>
 			<Grid columns={ 4 } gutter={ 16 } noMargin>
 				<MetricCard
-					label={ __( 'New donors', 'newspack-plugin' ) }
+					label={ __( 'New Donors', 'newspack-plugin' ) }
 					value={ current.new_donors }
 					format="number"
 					// Drop the period delta when there are no new donors: a "↓ 100%" against
@@ -171,7 +175,7 @@ const WindowedSection = ( { range, current, previous, activeDonors }: WindowedSe
 					description={ __( 'First-time donors in selected timeframe', 'newspack-plugin' ) }
 				/>
 				<MetricCard
-					label={ __( 'Lapsed donors', 'newspack-plugin' ) }
+					label={ __( 'Lapsed Donors', 'newspack-plugin' ) }
 					value={ current.lapsed_donors }
 					format="number"
 					previousValue={ previous?.lapsed_donors }
@@ -179,7 +183,7 @@ const WindowedSection = ( { range, current, previous, activeDonors }: WindowedSe
 					description={ __( 'Donors who stopped recurring giving in this timeframe', 'newspack-plugin' ) }
 				/>
 				<MetricCard
-					label={ __( 'Total donation revenue', 'newspack-plugin' ) }
+					label={ __( 'Total Donation Revenue', 'newspack-plugin' ) }
 					value={ current.total_revenue }
 					format="currency"
 					previousValue={ previous?.total_revenue }
@@ -192,7 +196,7 @@ const WindowedSection = ( { range, current, previous, activeDonors }: WindowedSe
 					description={ __( 'One-time gifts + recurring renewals in this timeframe', 'newspack-plugin' ) }
 				/>
 				<MetricCard
-					label={ __( 'Average one-time gift', 'newspack-plugin' ) }
+					label={ __( 'Average One-Time Gift', 'newspack-plugin' ) }
 					value={ current.average_gift }
 					format="currency"
 					previousValue={ previous?.average_gift }

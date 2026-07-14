@@ -34,7 +34,7 @@ const HowReadersConvertSection = ( { current }: HowReadersConvertSectionProps ) 
 	<Section className="newspack-insights__section newspack-insights__section--convert" aria-labelledby="newspack-insights-gates-convert-heading">
 		<SectionHeading
 			id="newspack-insights-gates-convert-heading"
-			title={ __( 'How readers convert', 'newspack-plugin' ) }
+			title={ __( 'How Readers Convert', 'newspack-plugin' ) }
 			description={ __(
 				'The journey from gate impression to conversion. The funnel shows where readers drop off; the distribution shows how many touches it typically takes before conversion.',
 				'newspack-plugin'

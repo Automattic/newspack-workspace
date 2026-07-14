@@ -37,12 +37,12 @@ const ChannelDeviceSection = ( { current }: SectionProps ) => (
 	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-channel-device">
 		<SectionHeading
 			id="newspack-insights-advertising-channel-device"
-			title={ __( 'Ad types & devices', 'newspack-plugin' ) }
+			title={ __( 'Ad Types & Devices', 'newspack-plugin' ) }
 			description={ __( 'How inventory and revenue split across ad types and devices.', 'newspack-plugin' ) }
 		/>
 		<Grid columns={ 2 } gutter={ 16 } noMargin>
 			<ChartCard
-				title={ __( 'Impressions by type', 'newspack-plugin' ) }
+				title={ __( 'Impressions by Type', 'newspack-plugin' ) }
 				caption={ __( 'How your ad inventory is allocated — including unpaid house ads', 'newspack-plugin' ) }
 				payload={ current.by_channel }
 			>
@@ -52,7 +52,7 @@ const ChannelDeviceSection = ( { current }: SectionProps ) => (
 				/>
 			</ChartCard>
 			<ChartCard
-				title={ __( 'Performance by device', 'newspack-plugin' ) }
+				title={ __( 'Performance by Device', 'newspack-plugin' ) }
 				caption={ __( 'Where your impressions and revenue land', 'newspack-plugin' ) }
 				payload={ current.by_device }
 			>

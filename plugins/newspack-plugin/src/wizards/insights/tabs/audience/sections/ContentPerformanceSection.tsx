@@ -26,7 +26,7 @@ const ContentPerformanceSection = ( { current }: SectionProps ) => (
 	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-content">
 		<SectionHeading
 			id="newspack-insights-audience-content"
-			title={ __( 'Content performance', 'newspack-plugin' ) }
+			title={ __( 'Content Performance', 'newspack-plugin' ) }
 			description={ __( "What's getting read.", 'newspack-plugin' ) }
 		/>
 		<VStack spacing={ 4 }>

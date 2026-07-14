@@ -69,7 +69,11 @@ const CampaignSection = ( { rows }: CampaignSectionProps ) => {
 	if ( ! hasTagged ) {
 		return (
 			<Section className="newspack-insights__section newspack-insights__section--performance" aria-labelledby={ HEADING_ID }>
-				<SectionHeading id={ HEADING_ID } title={ title } />
+				<SectionHeading
+					id={ HEADING_ID }
+					title={ title }
+					description={ __( 'Which campaigns bring in the most donations.', 'newspack-plugin' ) }
+				/>
 				<SectionEmpty>{ __( 'No campaign-tagged donations in this window.', 'newspack-plugin' ) }</SectionEmpty>
 			</Section>
 		);

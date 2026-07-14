@@ -86,7 +86,7 @@ const OpportunityBucketsSection = ( { current }: OpportunityBucketsSectionProps 
 	>
 		<SectionHeading
 			id="newspack-insights-conversion-opportunity-heading"
-			title={ __( 'Opportunity buckets', 'newspack-plugin' ) }
+			title={ __( 'Opportunity Buckets', 'newspack-plugin' ) }
 			description={ __(
 				'Where the funnel has slack. These are diagnostic counts and underperforming articles — readers and content that could move with attention.',
 				'newspack-plugin'

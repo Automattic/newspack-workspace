@@ -69,14 +69,14 @@ describe( 'ConversionTab', () => {
 		mockSuccess();
 		render( <ConversionTab range={ range } previousRange={ null } /> );
 
-		expect( screen.getByText( 'The reader lifecycle' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Per-journey conversion funnels' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Where conversions come from' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'How long conversions take' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Cohort retention' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Conversion rate trends' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Cross-tab influenced attribution' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Opportunity buckets' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'The Reader Lifecycle' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Per-Journey Conversion Funnels' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Where Conversions Come From' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'How Long Conversions Take' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Cohort Retention' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Conversion Rate Trends' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Cross-Tab Influenced Attribution' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Opportunity Buckets' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders the LastUpdated chrome stub in the first section', () => {

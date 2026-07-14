@@ -29,7 +29,7 @@ describe( 'RevenueTrendSection', () => {
 	it( 'renders the revenue trend section with a chart', () => {
 		const { container } = render( <RevenueTrendSection current={ metrics() } previous={ null } /> );
 
-		expect( screen.getByText( 'Revenue trend' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Revenue Trend' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Daily revenue across the selected period.' ) ).toBeInTheDocument();
 		// One series → one line stroke.
 		expect( container.querySelectorAll( '.newspack-insights__line-stroke' ) ).toHaveLength( 1 );

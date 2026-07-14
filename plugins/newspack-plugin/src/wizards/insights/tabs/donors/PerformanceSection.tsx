@@ -133,7 +133,11 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 				className="newspack-insights__section newspack-insights__section--performance"
 				aria-labelledby="newspack-insights-donors-performance-heading"
 			>
-				<SectionHeading id="newspack-insights-donors-performance-heading" title={ __( 'Donations by tier', 'newspack-plugin' ) } />
+				<SectionHeading
+					id="newspack-insights-donors-performance-heading"
+					title={ __( 'Donations by Tier', 'newspack-plugin' ) }
+					description={ __( 'Recurring, one-time, and lifetime revenue broken out by donation tier.', 'newspack-plugin' ) }
+				/>
 				<SectionEmpty>{ __( 'No donation activity yet.', 'newspack-plugin' ) }</SectionEmpty>
 			</Section>
 		);
@@ -146,7 +150,7 @@ const PerformanceSection = ( { rows }: PerformanceSectionProps ) => {
 		>
 			<SectionHeading
 				id="newspack-insights-donors-performance-heading"
-				title={ __( 'Donations by tier', 'newspack-plugin' ) }
+				title={ __( 'Donations by Tier', 'newspack-plugin' ) }
 				description={ __(
 					'Current state plus activity in the selected timeframe. Lifetime revenue is the all-time total per product.',
 					'newspack-plugin'

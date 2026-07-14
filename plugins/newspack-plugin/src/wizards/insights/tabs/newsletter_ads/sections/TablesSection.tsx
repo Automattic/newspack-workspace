@@ -51,7 +51,11 @@ const withDisplayDates = ( payload?: MetricPayload ): MetricPayload | undefined 
 const TablesSection = ( { current }: SectionProps ) => (
 	<TabSections>
 		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-top-ads">
-			<SectionHeading id="newspack-insights-newsletter-ads-top-ads" title={ __( 'Top ads', 'newspack-plugin' ) } />
+			<SectionHeading
+				id="newspack-insights-newsletter-ads-top-ads"
+				title={ __( 'Top Ads', 'newspack-plugin' ) }
+				description={ __( 'Your best-performing newsletter ads by clicks and revenue.', 'newspack-plugin' ) }
+			/>
 			<Card __experimentalCoreCard className="newspack-insights__chart-card">
 				<MetricTable
 					payload={ current.top_ads }
@@ -69,7 +73,11 @@ const TablesSection = ( { current }: SectionProps ) => (
 			</Card>
 		</Section>
 		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-top-advertisers">
-			<SectionHeading id="newspack-insights-newsletter-ads-top-advertisers" title={ __( 'Top advertisers', 'newspack-plugin' ) } />
+			<SectionHeading
+				id="newspack-insights-newsletter-ads-top-advertisers"
+				title={ __( 'Top Advertisers', 'newspack-plugin' ) }
+				description={ __( 'The advertisers buying the most newsletter inventory.', 'newspack-plugin' ) }
+			/>
 			<Card __experimentalCoreCard className="newspack-insights__chart-card">
 				<MetricTable
 					payload={ current.top_advertisers }
@@ -87,7 +95,11 @@ const TablesSection = ( { current }: SectionProps ) => (
 			</Card>
 		</Section>
 		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-newsletter-ads-by-newsletter">
-			<SectionHeading id="newspack-insights-newsletter-ads-by-newsletter" title={ __( 'Ad performance by newsletter', 'newspack-plugin' ) } />
+			<SectionHeading
+				id="newspack-insights-newsletter-ads-by-newsletter"
+				title={ __( 'Ad Performance by Newsletter', 'newspack-plugin' ) }
+				description={ __( 'How ad performance compares across your newsletters.', 'newspack-plugin' ) }
+			/>
 			<Card __experimentalCoreCard className="newspack-insights__chart-card">
 				<MetricTable
 					payload={ withDisplayDates( current.by_newsletter ) }

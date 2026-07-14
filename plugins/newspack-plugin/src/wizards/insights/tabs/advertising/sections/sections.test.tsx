@@ -114,7 +114,7 @@ describe( 'Advertising sections', () => {
 		expect( screen.getByText( 'Acme Co' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Hometown Hardware — Spring Flight' ) ).toBeInTheDocument();
 		// The device breakdown lives in ChannelDeviceSection, not here.
-		expect( screen.queryByText( 'Performance by device' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Performance by Device' ) ).not.toBeInTheDocument();
 		expect( screen.queryByText( 'Smartphone' ) ).not.toBeInTheDocument();
 		// The ad-units table no longer carries an eCPM column (payload field is
 		// still present but unrendered).
@@ -133,7 +133,7 @@ describe( 'Advertising sections', () => {
 
 	it( 'Top campaigns lists direct-sold orders and em-dashes a null CTR', () => {
 		render( <TopPerformersSection current={ metrics } previous={ null } /> );
-		expect( screen.getByText( 'Top campaigns' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top Campaigns' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Riverside Credit Union' ) ).toBeInTheDocument();
 		expect( screen.getByText( '$350.00' ) ).toBeInTheDocument();
 		// Null CTR (no impressions basis) renders an em-dash, never 0%.
@@ -180,7 +180,7 @@ describe( 'Advertising sections', () => {
 
 	it( 'ChannelDeviceSection renders impressions-weighted ad-type slices with plain-number legend values', () => {
 		render( <ChannelDeviceSection current={ metrics } previous={ null } /> );
-		expect( screen.getByText( 'Impressions by type' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Impressions by Type' ) ).toBeInTheDocument();
 		// One legend entry per ad-type bucket, impressions-weighted with plain
 		// numbers — no currency, since house inventory is unpaid by definition.
 		expect( screen.getByText( 'Programmatic' ) ).toBeInTheDocument();
@@ -196,7 +196,7 @@ describe( 'Advertising sections', () => {
 
 	it( 'ChannelDeviceSection renders the device table with eCPM (em-dash when no impressions)', () => {
 		render( <ChannelDeviceSection current={ metrics } previous={ null } /> );
-		expect( screen.getByText( 'Performance by device' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Performance by Device' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Smartphone' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Desktop' ) ).toBeInTheDocument();
 		expect( screen.getByText( '1,392,000' ) ).toBeInTheDocument();
@@ -260,11 +260,11 @@ describe( 'Advertising Broadstreet variant (NPPD-2045)', () => {
 
 		expect( screen.getByText( 'Impressions' ) ).toBeInTheDocument();
 		expect( screen.getByText( '2.4M' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Impressions per session' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Impressions per Session' ) ).toBeInTheDocument();
 		expect( screen.getByText( '3' ) ).toBeInTheDocument();
 		// The two new rate cards render as percents.
 		expect( screen.getByText( 'Overall CTR' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Mobile share' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Mobile Share' ) ).toBeInTheDocument();
 		expect( screen.getByText( '63%' ) ).toBeInTheDocument();
 
 		// Revenue-derived cards are omitted entirely (Broadstreet has no revenue).
@@ -282,7 +282,7 @@ describe( 'Advertising Broadstreet variant (NPPD-2045)', () => {
 		};
 		render( <ReachRevenueSection current={ noImpressions } previous={ null } hasWindowActivity activeProvider="broadstreet" /> );
 		expect( screen.getByText( 'Overall CTR' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Mobile share' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Mobile Share' ) ).toBeInTheDocument();
 		// Non-computable rate → em-dash, never a misleading 0%.
 		expect( screen.queryByText( '0%' ) ).not.toBeInTheDocument();
 		expect( screen.getAllByText( '—' ).length ).toBeGreaterThanOrEqual( 2 );
@@ -293,24 +293,24 @@ describe( 'Advertising Broadstreet variant (NPPD-2045)', () => {
 			<ReachRevenueSection current={ broadstreetMetrics } previous={ null } hasWindowActivity={ false } activeProvider="broadstreet" />
 		);
 		expect( container.querySelector( '[data-empty-state="no_opportunity"]' ) ).toBeInTheDocument();
-		expect( screen.queryByText( 'Impressions per session' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Impressions per Session' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'TopPerformersSection renders Top advertisers + Top zones + Top campaigns, no revenue column or GAM ad-units table', () => {
 		render( <TopPerformersSection current={ broadstreetMetrics } previous={ null } activeProvider="broadstreet" /> );
 
-		expect( screen.getByText( 'Top advertisers' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top Advertisers' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Hometown Hardware' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Top zones' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top Zones' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Homepage Leaderboard' ) ).toBeInTheDocument();
 		// Top campaigns is a first-class Broadstreet table (impressions/clicks/CTR, no revenue).
-		expect( screen.getByText( 'Top campaigns' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Top Campaigns' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Riverside Credit Union — Summer' ) ).toBeInTheDocument();
 		// Null CTR (no impressions basis) renders an em-dash, never 0%.
 		expect( screen.getAllByText( '—' ).length ).toBeGreaterThanOrEqual( 1 );
 
 		// No revenue column, and the GAM-only ad-units table is absent.
 		expect( screen.queryByText( 'Revenue' ) ).not.toBeInTheDocument();
-		expect( screen.queryByText( 'Top ad units' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Top Ad Units' ) ).not.toBeInTheDocument();
 	} );
 } );

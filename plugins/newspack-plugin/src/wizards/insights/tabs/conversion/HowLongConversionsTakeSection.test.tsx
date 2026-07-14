@@ -23,11 +23,11 @@ import { makeConversionWindow } from './fixtures';
 describe( 'HowLongConversionsTakeSection', () => {
 	it( 'renders the heading and all four curve titles', () => {
 		render( <HowLongConversionsTakeSection current={ makeConversionWindow() } /> );
-		expect( screen.getByRole( 'heading', { name: 'How long conversions take' } ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Time to register' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Time to subscribe' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Time to donate' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Subscriber → donor lag' ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'How Long Conversions Take' } ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Time to Register' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Time to Subscribe' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Time to Donate' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Subscriber → Donor Lag' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders 4.1 empty treatment when time-to-register state is empty', () => {

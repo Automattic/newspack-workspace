@@ -34,7 +34,7 @@ const PromptEngagementSection = ( { current, previous }: PromptEngagementSection
 	>
 		<SectionHeading
 			id="newspack-insights-prompts-engagement-heading"
-			title={ __( 'Prompt engagement', 'newspack-plugin' ) }
+			title={ __( 'Prompt Engagement', 'newspack-plugin' ) }
 			description={ __(
 				'How readers respond to prompts they see. Engagement is any interaction beyond just seeing the prompt.',
 				'newspack-plugin'

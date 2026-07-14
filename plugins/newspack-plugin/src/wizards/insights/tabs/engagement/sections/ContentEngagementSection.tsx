@@ -29,7 +29,7 @@ const ContentEngagementSection = ( { current }: SectionProps ) => (
 	<Section className="newspack-insights__section" aria-labelledby="newspack-insights-engagement-content">
 		<SectionHeading
 			id="newspack-insights-engagement-content"
-			title={ __( 'Content engagement', 'newspack-plugin' ) }
+			title={ __( 'Content Engagement', 'newspack-plugin' ) }
 			description={ __( 'What holds reader attention.', 'newspack-plugin' ) }
 		/>
 		<VStack spacing={ 4 }>

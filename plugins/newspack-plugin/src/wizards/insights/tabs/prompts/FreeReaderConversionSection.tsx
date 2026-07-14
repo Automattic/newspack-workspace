@@ -38,7 +38,7 @@ const FreeReaderConversionSection = ( { current, previous }: FreeReaderConversio
 	<Section className="newspack-insights__section newspack-insights__section--free-reader" aria-labelledby="newspack-insights-prompts-free-heading">
 		<SectionHeading
 			id="newspack-insights-prompts-free-heading"
-			title={ __( 'Free reader conversion', 'newspack-plugin' ) }
+			title={ __( 'Free Reader Conversion', 'newspack-plugin' ) }
 			description={ __(
 				'How effectively prompts convert readers into registered readers and newsletter subscribers. Direct counts conversions submitted through a prompt’s own form. Influenced counts conversions in a later session within 7 days of seeing a prompt.',
 				'newspack-plugin'

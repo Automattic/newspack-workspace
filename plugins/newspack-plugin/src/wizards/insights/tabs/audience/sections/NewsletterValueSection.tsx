@@ -43,12 +43,12 @@ const NewsletterValueSection = ( { value }: NewsletterValueSectionProps ) => {
 		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-audience-newsletter-value">
 			<SectionHeading
 				id="newspack-insights-audience-newsletter-value"
-				title={ __( 'Newsletter subscriber value', 'newspack-plugin' ) }
+				title={ __( 'Newsletter Subscriber Value', 'newspack-plugin' ) }
 				description={ __( 'What your newsletter audience is worth as future reader revenue.', 'newspack-plugin' ) }
 			/>
 			<Grid columns={ 4 } gutter={ 16 } noMargin>
 				<MetricCard
-					label={ __( 'Value per newsletter subscriber', 'newspack-plugin' ) }
+					label={ __( 'Value per Newsletter Subscriber', 'newspack-plugin' ) }
 					value={ amount ?? 0 }
 					format="currency"
 					error={ value?.error }

@@ -46,16 +46,16 @@ describe( 'FinishConnectingDiagnostic', () => {
 } );
 
 describe( 'DataLagIndicator', () => {
-	// `@wordpress/components` Notice (via InfoCallout) renders both visible
-	// content and a hidden a11y-speak region with the same text. Scope queries
-	// to the visible notice element to avoid duplicate matches.
+	// `@wordpress/components` Notice renders both visible content and a hidden
+	// a11y-speak region with the same text. Scope queries to the visible notice
+	// element to avoid duplicate matches.
 	const getCallout = ( container: HTMLElement ): HTMLElement | null => container.querySelector( '.components-notice' );
 
-	it( 'renders the as-of date in an info callout, not dismissible', () => {
+	it( 'renders the as-of date in a warning notice, not dismissible', () => {
 		const { container } = render( <DataLagIndicator dataAsOf="2026-05-30" hasEstimatedData={ false } /> );
 		const callout = getCallout( container );
 		expect( callout ).not.toBeNull();
-		expect( callout ).toHaveTextContent( 'About this data' );
+		expect( callout ).toHaveClass( 'is-warning' );
 		expect( callout ).toHaveTextContent( /Data as of/ );
 		// Not dismissible — no close button.
 		expect( callout!.querySelector( 'button' ) ).toBeNull();

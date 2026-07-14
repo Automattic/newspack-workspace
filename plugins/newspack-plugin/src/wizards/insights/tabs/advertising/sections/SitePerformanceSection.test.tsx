@@ -28,7 +28,7 @@ describe( 'SitePerformanceSection', () => {
 	it( 'renders the per-site table with one row per network site', () => {
 		render( <SitePerformanceSection current={ metrics() } previous={ null } /> );
 
-		expect( screen.getByText( 'Performance by site' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Performance by Site' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'almanacnews.com' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'mv-voice.com' ) ).toBeInTheDocument();
 	} );

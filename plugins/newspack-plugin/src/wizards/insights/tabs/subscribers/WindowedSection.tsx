@@ -165,10 +165,14 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 
 	return (
 		<Section className="newspack-insights__section newspack-insights__section--windowed" aria-labelledby="newspack-insights-windowed-heading">
-			<SectionHeading id="newspack-insights-windowed-heading" title={ getHeading( range ) } />
+			<SectionHeading
+				id="newspack-insights-windowed-heading"
+				title={ getHeading( range ) }
+				description={ __( 'New subscribers, win-backs, churn, and the revenue behind them.', 'newspack-plugin' ) }
+			/>
 			<Grid columns={ 4 } gutter={ 16 } noMargin>
 				<MetricCard
-					label={ __( 'New subscribers', 'newspack-plugin' ) }
+					label={ __( 'New Subscribers', 'newspack-plugin' ) }
 					value={ current.new_subscribers }
 					format="number"
 					// Drop the period delta when there are no new subscribers: a "↓ 100%"
@@ -186,14 +190,14 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 					description={ __( 'First-time subscribers', 'newspack-plugin' ) }
 				/>
 				<MetricCard
-					label={ __( 'Win-backs', 'newspack-plugin' ) }
+					label={ __( 'Win-Backs', 'newspack-plugin' ) }
 					value={ current.winback_subscribers }
 					format="number"
 					previousValue={ previous?.winback_subscribers }
 					description={ __( 'Previously churned subscribers who resubscribed', 'newspack-plugin' ) }
 				/>
 				<MetricCard
-					label={ __( 'Churned subscribers', 'newspack-plugin' ) }
+					label={ __( 'Churned Subscribers', 'newspack-plugin' ) }
 					value={ current.churned_subscribers }
 					format="number"
 					previousValue={ previous?.churned_subscribers }
@@ -201,7 +205,7 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 					description={ __( 'Subscribers who churned in this timeframe', 'newspack-plugin' ) }
 				/>
 				<MetricCard
-					label={ __( 'Gross revenue', 'newspack-plugin' ) }
+					label={ __( 'Gross Revenue', 'newspack-plugin' ) }
 					value={ current.revenue_gross }
 					format="currency"
 					previousValue={ previous?.revenue_gross }
@@ -209,7 +213,7 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 					description={ __( 'Subscription orders before refunds', 'newspack-plugin' ) }
 				/>
 				<MetricCard
-					label={ __( 'Net revenue', 'newspack-plugin' ) }
+					label={ __( 'Net Revenue', 'newspack-plugin' ) }
 					value={ current.revenue_net }
 					format="currency"
 					previousValue={ previous?.revenue_net }
@@ -217,7 +221,7 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 					description={ __( 'Gross minus refunds processed', 'newspack-plugin' ) }
 				/>
 				<MetricCard
-					label={ __( 'Refund rate', 'newspack-plugin' ) }
+					label={ __( 'Refund Rate', 'newspack-plugin' ) }
 					value={ refund.computable ? refund.value : 0 }
 					format="percent"
 					previousValue={ refundEmptyMessage ? undefined : refundPrevious }
@@ -227,7 +231,7 @@ const WindowedSection = ( { range, current, previous, activeSubscribers }: Windo
 					description={ __( 'Refunds ÷ subscription orders', 'newspack-plugin' ) }
 				/>
 				<MetricCard
-					label={ __( 'Failed payment recovery', 'newspack-plugin' ) }
+					label={ __( 'Failed Payment Recovery', 'newspack-plugin' ) }
 					value={ retry.computable ? retry.value : 0 }
 					format="percent"
 					previousValue={ retryEmptyMessage ? undefined : retryPrevious }

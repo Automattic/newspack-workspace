@@ -38,7 +38,7 @@ const PromptExposureSection = ( { current, previous, lastUpdated }: PromptExposu
 	<Section className="newspack-insights__section newspack-insights__section--exposure" aria-labelledby="newspack-insights-prompts-exposure-heading">
 		<SectionHeading
 			id="newspack-insights-prompts-exposure-heading"
-			title={ __( 'Prompt exposure', 'newspack-plugin' ) }
+			title={ __( 'Prompt Exposure', 'newspack-plugin' ) }
 			description={ __( 'Top of the funnel. How many readers see prompts in this timeframe.', 'newspack-plugin' ) }
 			actions={ lastUpdated }
 		/>

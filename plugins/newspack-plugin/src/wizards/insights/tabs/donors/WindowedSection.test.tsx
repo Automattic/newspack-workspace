@@ -46,7 +46,7 @@ const makeWindow = ( over: Partial< DonorsWindow > = {} ): DonorsWindow => ( {
  */
 const revenueBreakdownText = ( container: HTMLElement ): string => {
 	const label = Array.from( container.querySelectorAll( '.newspack-insights__metric-card-label' ) ).find(
-		el => el.textContent === 'Total donation revenue'
+		el => el.textContent === 'Total Donation Revenue'
 	);
 	const card = label?.closest( '.newspack-insights__metric-card' );
 	return card?.querySelector( '.newspack-insights__metric-card-secondary' )?.textContent ?? '';
@@ -70,8 +70,8 @@ describe( 'WindowedSection empty states', () => {
 		// global live-region, so a screen-level text query would match twice.
 		expect( container ).toHaveTextContent( 'No donations in this timeframe' );
 		// The grid (and its cards) is gone.
-		expect( screen.queryByText( 'Lapsed donors' ) ).not.toBeInTheDocument();
-		expect( screen.queryByText( 'Total donation revenue' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Lapsed Donors' ) ).not.toBeInTheDocument();
+		expect( screen.queryByText( 'Total Donation Revenue' ) ).not.toBeInTheDocument();
 	} );
 
 	it( 'renders the per-card no-acquisition state on New donors without collapsing the section', () => {
@@ -84,8 +84,8 @@ describe( 'WindowedSection empty states', () => {
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
 		expect( screen.getByText( '42 active donors, but none new this timeframe' ) ).toBeInTheDocument();
 		// The real revenue cards are still present.
-		expect( screen.getByText( 'Total donation revenue' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Lapsed donors' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Total Donation Revenue' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Lapsed Donors' ) ).toBeInTheDocument();
 	} );
 
 	it( 'does NOT show the no-acquisition line when there are no active donors either', () => {
@@ -103,7 +103,7 @@ describe( 'WindowedSection empty states', () => {
 		const { container } = render( <WindowedSection range={ RANGE } current={ current } previous={ null } activeDonors={ 200 } /> );
 
 		expect( container.querySelector( '[data-empty-state]' ) ).not.toBeInTheDocument();
-		expect( screen.getByText( 'New donors' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'New Donors' ) ).toBeInTheDocument();
 
 		const breakdown = revenueBreakdownText( container );
 		expect( breakdown ).toMatch( /one-time/ );

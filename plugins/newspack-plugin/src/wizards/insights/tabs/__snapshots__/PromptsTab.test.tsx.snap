@@ -32,7 +32,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                   class="newspack-section-header__title-container"
                 >
                   <h2>
-                    Prompt exposure
+                    Prompt Exposure
                   </h2>
                 </div>
                 <p>
@@ -221,7 +221,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               class="newspack-section-header__title-container"
             >
               <h2>
-                Prompt engagement
+                Prompt Engagement
               </h2>
             </div>
             <p>
@@ -408,7 +408,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               class="newspack-section-header__title-container"
             >
               <h2>
-                Free reader conversion
+                Free Reader Conversion
               </h2>
             </div>
             <p>
@@ -436,7 +436,8 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                   data-wp-component="HStack"
                 >
                   <span>
-                    Registration Conversion (Direct)
+                    Registration Conversion
+(Direct)
                   </span>
                 </div>
                 <div
@@ -487,7 +488,8 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                   data-wp-component="HStack"
                 >
                   <span>
-                    Registration Conversion (Influenced, 7d)
+                    Registration Conversion
+(Influenced, 7d)
                   </span>
                 </div>
                 <div
@@ -538,7 +540,8 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                   data-wp-component="HStack"
                 >
                   <span>
-                    Newsletter Signup Conversion (Direct)
+                    Newsletter Signup Conversion
+(Direct)
                   </span>
                 </div>
                 <div
@@ -589,7 +592,8 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                   data-wp-component="HStack"
                 >
                   <span>
-                    Newsletter Signup Conversion (Influenced, 7d)
+                    Newsletter Signup Conversion
+(Influenced, 7d)
                   </span>
                 </div>
                 <div
@@ -646,7 +650,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               class="newspack-section-header__title-container"
             >
               <h2>
-                Paid reader conversion
+                Paid Reader Conversion
               </h2>
             </div>
             <p>
@@ -674,7 +678,8 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                   data-wp-component="HStack"
                 >
                   <span>
-                    Donation Conversion (Direct)
+                    Donation Conversion
+(Direct)
                   </span>
                 </div>
                 <div
@@ -725,7 +730,8 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                   data-wp-component="HStack"
                 >
                   <span>
-                    Donation Conversion (Influenced, 14d)
+                    Donation Conversion
+(Influenced, 14d)
                   </span>
                 </div>
                 <div
@@ -776,7 +782,8 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                   data-wp-component="HStack"
                 >
                   <span>
-                    Subscription Conversion (Direct)
+                    Subscription Conversion
+(Direct)
                   </span>
                 </div>
                 <div
@@ -827,7 +834,8 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                   data-wp-component="HStack"
                 >
                   <span>
-                    Subscription Conversion (Influenced, 14d)
+                    Subscription Conversion
+(Influenced, 14d)
                   </span>
                 </div>
                 <div
@@ -884,7 +892,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               class="newspack-section-header__title-container"
             >
               <h2>
-                Revenue from prompts
+                Revenue From Prompts
               </h2>
             </div>
             <p>
@@ -912,7 +920,8 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                   data-wp-component="HStack"
                 >
                   <span>
-                    Donation Revenue (Direct)
+                    Donation Revenue
+(Direct)
                   </span>
                 </div>
                 <div
@@ -963,7 +972,8 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                   data-wp-component="HStack"
                 >
                   <span>
-                    Donation Revenue (Influenced, 14d)
+                    Donation Revenue
+(Influenced, 14d)
                   </span>
                 </div>
                 <div
@@ -1014,7 +1024,8 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                   data-wp-component="HStack"
                 >
                   <span>
-                    Subscription Revenue (Direct)
+                    Subscription Revenue
+(Direct)
                   </span>
                 </div>
                 <div
@@ -1065,7 +1076,8 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
                   data-wp-component="HStack"
                 >
                   <span>
-                    Subscription Revenue (Influenced, 14d)
+                    Subscription Revenue
+(Influenced, 14d)
                   </span>
                 </div>
                 <div
@@ -1122,7 +1134,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               class="newspack-section-header__title-container"
             >
               <h2>
-                How readers convert
+                How Readers Convert
               </h2>
             </div>
             <p>
@@ -1218,7 +1230,7 @@ exports[`PromptsTab matches the full-tab placeholder snapshot 1`] = `
               class="newspack-section-header__title-container"
             >
               <h2>
-                Performance breakdown
+                Performance Breakdown
               </h2>
             </div>
             <p>

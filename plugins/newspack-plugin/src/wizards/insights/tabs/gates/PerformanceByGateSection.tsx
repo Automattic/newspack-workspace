@@ -115,7 +115,7 @@ const PerformanceByGateSection = ( { data }: PerformanceByGateSectionProps ) => 
 		>
 			<SectionHeading
 				id="newspack-insights-gates-performance-heading"
-				title={ __( 'Performance by gate', 'newspack-plugin' ) }
+				title={ __( 'Performance by Gate', 'newspack-plugin' ) }
 				description={ __( 'Per-gate breakdown for the selected timeframe. Click any column to re-sort.', 'newspack-plugin' ) }
 			/>
 			<Card __experimentalCoreCard className="newspack-insights__chart-card">

@@ -167,7 +167,7 @@ const PerJourneyConversionFunnelsSection = ( { current }: PerJourneyConversionFu
 		>
 			<SectionHeading
 				id="newspack-insights-conversion-per-journey-heading"
-				title={ __( 'Per-journey conversion funnels', 'newspack-plugin' ) }
+				title={ __( 'Per-Journey Conversion Funnels', 'newspack-plugin' ) }
 				description={ __(
 					'Focused conversion paths. Each funnel shows where readers drop off within a specific journey — anonymous to registered, registered to paid, paid to donor.',
 					'newspack-plugin'
@@ -245,7 +245,7 @@ const PerJourneyConversionFunnelsSection = ( { current }: PerJourneyConversionFu
 					</JourneyFunnel>
 				) }
 				<JourneyFunnel
-					title={ __( 'Subscriber → Donor (cross-upsell)', 'newspack-plugin' ) }
+					title={ __( 'Subscriber → Donor (Cross-Upsell)', 'newspack-plugin' ) }
 					caption={ __( 'Cross-upsell visibility for publishers running both subscriptions and donations.', 'newspack-plugin' ) }
 				>
 					<GatedFunnelCell

@@ -39,7 +39,7 @@ const GateExposureSection = ( { current, previous, lastUpdated }: GateExposureSe
 	<Section className="newspack-insights__section newspack-insights__section--exposure" aria-labelledby="newspack-insights-gates-exposure-heading">
 		<SectionHeading
 			id="newspack-insights-gates-exposure-heading"
-			title={ __( 'Gate exposure', 'newspack-plugin' ) }
+			title={ __( 'Gate Exposure', 'newspack-plugin' ) }
 			description={ __( 'Top of the funnel. How many readers see gates in this timeframe.', 'newspack-plugin' ) }
 			actions={ lastUpdated }
 		/>

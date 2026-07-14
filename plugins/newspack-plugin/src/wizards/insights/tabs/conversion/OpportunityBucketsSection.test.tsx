@@ -19,7 +19,7 @@ import { makeConversionWindow } from './fixtures';
 describe( 'OpportunityBucketsSection', () => {
 	it( 'renders the heading and the three opportunity scorecards', () => {
 		render( <OpportunityBucketsSection current={ makeConversionWindow() } /> );
-		expect( screen.getByRole( 'heading', { name: 'Opportunity buckets' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'Opportunity Buckets' } ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Stale Registered Readers' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'At-Risk Subscribers' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Lapsed Donors' ) ).toBeInTheDocument();

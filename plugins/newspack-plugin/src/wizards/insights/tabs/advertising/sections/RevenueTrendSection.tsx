@@ -46,7 +46,7 @@ const RevenueTrendSection = ( { current, previous }: SectionProps ) => {
 		<Section className="newspack-insights__section" aria-labelledby="newspack-insights-advertising-revenue-trend">
 			<SectionHeading
 				id="newspack-insights-advertising-revenue-trend"
-				title={ __( 'Revenue trend', 'newspack-plugin' ) }
+				title={ __( 'Revenue Trend', 'newspack-plugin' ) }
 				description={ __( 'Daily revenue across the selected period.', 'newspack-plugin' ) }
 			/>
 			<ChartCard payload={ current.revenue_by_day }>

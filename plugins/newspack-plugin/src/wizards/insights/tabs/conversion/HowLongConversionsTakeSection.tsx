@@ -65,7 +65,7 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 		>
 			<SectionHeading
 				id="newspack-insights-conversion-time-to-convert-heading"
-				title={ __( 'How long conversions take', 'newspack-plugin' ) }
+				title={ __( 'How Long Conversions Take', 'newspack-plugin' ) }
 				description={ __(
 					'Cumulative conversion curves per cohort. Each line shows what percentage of readers had converted by day N. Steeper early curves mean faster conversion; flatter curves mean longer tails. Median is where the line crosses 50%.',
 					'newspack-plugin'
@@ -73,7 +73,7 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 			/>
 			<Grid columns={ 2 } gutter={ 16 } noMargin>
 				{ /* 4.1 — time to register: Phase A, state-gated */ }
-				<CurveCell title={ __( 'Time to register', 'newspack-plugin' ) }>
+				<CurveCell title={ __( 'Time to Register', 'newspack-plugin' ) }>
 					<SectionState
 						state={ current.time_to_register_distribution.state }
 						emptyMessage={ __( 'Time-to-register data will appear once registrations occur in this timeframe.', 'newspack-plugin' ) }
@@ -90,7 +90,7 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 					</SectionState>
 				</CurveCell>
 				{ /* 4.2 — time to subscribe: Phase B, coming_soon */ }
-				<CurveCell title={ __( 'Time to subscribe', 'newspack-plugin' ) } caption={ snapshotCaption }>
+				<CurveCell title={ __( 'Time to Subscribe', 'newspack-plugin' ) } caption={ snapshotCaption }>
 					<SectionState
 						state={ current.time_to_subscribe_distribution.state }
 						emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this timeframe.', 'newspack-plugin' ) }
@@ -107,7 +107,7 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 					</SectionState>
 				</CurveCell>
 				{ /* 4.3 — time to donate: Phase B, coming_soon */ }
-				<CurveCell title={ __( 'Time to donate', 'newspack-plugin' ) } caption={ snapshotCaption }>
+				<CurveCell title={ __( 'Time to Donate', 'newspack-plugin' ) } caption={ snapshotCaption }>
 					<SectionState
 						state={ current.time_to_donate_distribution.state }
 						emptyMessage={ __( 'Time-to-convert data will appear once conversions occur in this timeframe.', 'newspack-plugin' ) }
@@ -124,7 +124,7 @@ const HowLongConversionsTakeSection = ( { current }: HowLongConversionsTakeSecti
 					</SectionState>
 				</CurveCell>
 				{ /* 4.4 — subscriber → donor lag: Phase B, coming_soon + visibility gate */ }
-				<CurveCell title={ __( 'Subscriber → donor lag', 'newspack-plugin' ) } caption={ snapshotCaption }>
+				<CurveCell title={ __( 'Subscriber → Donor Lag', 'newspack-plugin' ) } caption={ snapshotCaption }>
 					{ lag.visibility === 'hidden' ? (
 						<Notice
 							isWarning

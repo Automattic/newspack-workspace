@@ -20,7 +20,7 @@ describe( 'TakeawayCard', () => {
 	it( 'renders the title alongside the headline when populated', () => {
 		render(
 			<TakeawayCard
-				title="Engagement by device"
+				title="Engagement by Device"
 				payload={ populated }
 				headline="Desktop readers spend 40% longer per session"
 				sub="than mobile readers (2:00 vs 1:25)"
@@ -30,19 +30,19 @@ describe( 'TakeawayCard', () => {
 				] }
 			/>
 		);
-		expect( screen.getByText( 'Engagement by device' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Engagement by Device' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Desktop readers spend 40% longer per session' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders the title even in the empty state (no headline / no bars)', () => {
-		render( <TakeawayCard title="Engagement by traffic source" payload={ { computable: true, type: 'table', rows: [] } } bars={ [] } /> );
-		expect( screen.getByText( 'Engagement by traffic source' ) ).toBeInTheDocument();
+		render( <TakeawayCard title="Engagement by Traffic Source" payload={ { computable: true, type: 'table', rows: [] } } bars={ [] } /> );
+		expect( screen.getByText( 'Engagement by Traffic Source' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Not enough data in this timeframe.' ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders nothing for a hidden_in_v1 metric', () => {
 		const { container } = render(
-			<TakeawayCard title="Engagement by device" payload={ { value: null, computable: false, hidden_in_v1: true } } bars={ [] } />
+			<TakeawayCard title="Engagement by Device" payload={ { value: null, computable: false, hidden_in_v1: true } } bars={ [] } />
 		);
 		expect( container ).toBeEmptyDOMElement();
 	} );

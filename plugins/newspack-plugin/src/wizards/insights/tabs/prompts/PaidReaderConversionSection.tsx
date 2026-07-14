@@ -39,7 +39,7 @@ const PaidReaderConversionSection = ( { current, previous }: PaidReaderConversio
 	<Section className="newspack-insights__section newspack-insights__section--paid-reader" aria-labelledby="newspack-insights-prompts-paid-heading">
 		<SectionHeading
 			id="newspack-insights-prompts-paid-heading"
-			title={ __( 'Paid reader conversion', 'newspack-plugin' ) }
+			title={ __( 'Paid Reader Conversion', 'newspack-plugin' ) }
 			description={ __(
 				'How effectively prompts convert readers into donors and subscribers. Direct counts conversions completed through a prompt’s own donation block or checkout button. Influenced counts conversions in a later session within 14 days of seeing a prompt.',
 				'newspack-plugin'

@@ -44,8 +44,8 @@ describe( 'OverviewSection', () => {
 		expect( screen.getByText( '$50.00' ) ).toBeInTheDocument(); // eCPM keeps cents below $1K.
 		expect( screen.getByText( '1.4%' ) ).toBeInTheDocument(); // CTR as a percent.
 		// All-time cards, clearly labeled, values from the lifetime counters.
-		expect( cardByLabel( container, 'All-time impressions' ) ).toHaveTextContent( '950,000' );
-		expect( cardByLabel( container, 'All-time clicks' ) ).toHaveTextContent( '12,400' );
+		expect( cardByLabel( container, 'All-Time Impressions' ) ).toHaveTextContent( '950,000' );
+		expect( cardByLabel( container, 'All-Time Clicks' ) ).toHaveTextContent( '12,400' );
 	} );
 
 	it( 'never renders a delta on the lifetime cards, even under comparison', () => {
@@ -55,8 +55,8 @@ describe( 'OverviewSection', () => {
 		// The timeframe impressions card compares normally…
 		expect( cardByLabel( container, 'Impressions' )?.querySelector( '.newspack-insights__metric-card-delta' ) ).not.toBeNull();
 		// …but the cumulative all-time cards never carry a delta.
-		expect( cardByLabel( container, 'All-time impressions' )?.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
-		expect( cardByLabel( container, 'All-time clicks' )?.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
+		expect( cardByLabel( container, 'All-Time Impressions' )?.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
+		expect( cardByLabel( container, 'All-Time Clicks' )?.querySelector( '.newspack-insights__metric-card-delta' ) ).toBeNull();
 	} );
 
 	it( 'renders the em-dash treatment for a non-computable CTR — never 0%', () => {

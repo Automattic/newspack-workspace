@@ -30,7 +30,7 @@ describe( 'TrendSection', () => {
 	it( 'renders impressions and clicks as two separate charts', () => {
 		const { container } = render( <TrendSection current={ metrics() } previous={ null } /> );
 
-		expect( screen.getByText( 'Performance trend' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Performance Trend' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Impressions' ) ).toBeInTheDocument();
 		expect( screen.getByText( 'Clicks' ) ).toBeInTheDocument();
 		// One series per chart without comparison → two line strokes total.

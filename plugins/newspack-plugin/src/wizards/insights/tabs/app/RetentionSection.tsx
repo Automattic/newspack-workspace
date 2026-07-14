@@ -41,7 +41,7 @@ const RetentionSection = ( { metrics }: RetentionSectionProps ) => (
 			description={ __( 'How many new app users come back in the weeks after their first open.', 'newspack-plugin' ) }
 		/>
 		<ChartCard
-			title={ __( 'Weekly retention', 'newspack-plugin' ) }
+			title={ __( 'Weekly Retention', 'newspack-plugin' ) }
 			caption={ __( 'Share of new users still active N weeks after first open', 'newspack-plugin' ) }
 			payload={ metrics.retention }
 		>

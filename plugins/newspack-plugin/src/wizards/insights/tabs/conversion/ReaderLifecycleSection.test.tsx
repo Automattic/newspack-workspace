@@ -18,7 +18,7 @@ import { makeConversionWindow } from './fixtures';
 describe( 'ReaderLifecycleSection', () => {
 	it( 'renders the heading', () => {
 		render( <ReaderLifecycleSection current={ makeConversionWindow() } /> );
-		expect( screen.getByRole( 'heading', { name: 'The reader lifecycle' } ) ).toBeInTheDocument();
+		expect( screen.getByRole( 'heading', { name: 'The Reader Lifecycle' } ) ).toBeInTheDocument();
 	} );
 
 	it( 'renders the funnel when state is populated', () => {

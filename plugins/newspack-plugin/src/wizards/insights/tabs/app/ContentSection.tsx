@@ -73,7 +73,7 @@ const ContentSection = ( { metrics }: ContentSectionProps ) => {
 			/>
 			<Grid columns={ 2 } gutter={ 16 } noMargin>
 				<ChartCard
-					title={ __( 'Top sections', 'newspack-plugin' ) }
+					title={ __( 'Top Sections', 'newspack-plugin' ) }
 					caption={ __( 'Screen views by section', 'newspack-plugin' ) }
 					payload={ sections }
 				>
@@ -87,7 +87,7 @@ const ContentSection = ( { metrics }: ContentSectionProps ) => {
 					/>
 				</ChartCard>
 				<ChartCard
-					title={ __( 'Top authors', 'newspack-plugin' ) }
+					title={ __( 'Top Authors', 'newspack-plugin' ) }
 					caption={ __( 'Screen views by author', 'newspack-plugin' ) }
 					payload={ authors }
 				>

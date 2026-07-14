@@ -51,7 +51,7 @@ export interface SectionProps {
 // section mixes timeframe cards with the two all-time cards, so a windowed
 // "In the last N days" heading would sit above cards it doesn't describe. The
 // page-level date picker carries the timeframe.
-const TITLE = __( 'Reach & revenue', 'newspack-plugin' );
+const TITLE = __( 'Reach & Revenue', 'newspack-plugin' );
 const CAPTION = __( 'Newsletter ad volume and revenue, plus all-time totals.', 'newspack-plugin' );
 // Timeframe metrics are non-computable only when dated ad tracking is
 // unavailable (the not-ready state) — mirror the diagnostic's remediation.
@@ -129,38 +129,38 @@ const OverviewSection = ( { current, previous, hasWindowActivity, lastUpdated }:
 						notComputableMessage={ __( 'Requires both revenue and impressions in this timeframe to calculate.', 'newspack-plugin' ) }
 					/>
 					<Scorecard
-						label={ __( 'Active ads', 'newspack-plugin' ) }
+						label={ __( 'Active Ads', 'newspack-plugin' ) }
 						description={ __( 'Ads that ran in newsletters', 'newspack-plugin' ) }
 						current={ current.active_ads }
 						previous={ previous?.active_ads }
 						notComputableMessage={ NOT_TRACKED_MESSAGE }
 					/>
 					<Scorecard
-						label={ __( 'All-time impressions', 'newspack-plugin' ) }
+						label={ __( 'All-Time Impressions', 'newspack-plugin' ) }
 						description={ __( 'Cumulative total since tracking began', 'newspack-plugin' ) }
 						current={ current.lifetime_impressions }
 					/>
 					<Scorecard
-						label={ __( 'All-time clicks', 'newspack-plugin' ) }
+						label={ __( 'All-Time Clicks', 'newspack-plugin' ) }
 						description={ __( 'Cumulative total since tracking began', 'newspack-plugin' ) }
 						current={ current.lifetime_clicks }
 					/>
 				</Grid>
+				{ excludedAds > 0 && (
+					<p className="newspack-insights__table-footnote">
+						{ sprintf(
+							/* translators: %d: count of ads excluded from the revenue totals. */
+							_n(
+								'%d ad excluded from revenue (missing price or flight dates)',
+								'%d ads excluded from revenue (missing price or flight dates)',
+								excludedAds,
+								'newspack-plugin'
+							),
+							excludedAds
+						) }
+					</p>
+				) }
 			</VStack>
-			{ excludedAds > 0 && (
-				<p className="newspack-insights__table-footnote">
-					{ sprintf(
-						/* translators: %d: count of ads excluded from the revenue totals. */
-						_n(
-							'%d ad excluded from revenue (missing price or flight dates)',
-							'%d ads excluded from revenue (missing price or flight dates)',
-							excludedAds,
-							'newspack-plugin'
-						),
-						excludedAds
-					) }
-				</p>
-			) }
 		</Section>
 	);
 };

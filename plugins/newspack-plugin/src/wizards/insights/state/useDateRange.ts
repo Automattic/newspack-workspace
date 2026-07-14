@@ -35,6 +35,29 @@ export const DATE_RANGE_PRESETS: DateRangePresetDef[] = [
 	{ key: 'custom', label: __( 'Custom', 'newspack-plugin' ) },
 ];
 
+/**
+ * Human "when" phrase for a range, for embedding in metric descriptions
+ * (e.g. `Registrations created {phrase}` → "…in the last 30 days"). Each preset
+ * reads naturally in that slot with its preposition baked in where one is
+ * needed; custom falls back to the generic "in this timeframe".
+ */
+export const rangeWhenPhrase = ( range: DateRange ): string => {
+	switch ( range.preset ) {
+		case 'last-7':
+			return __( 'in the last 7 days', 'newspack-plugin' );
+		case 'last-30':
+			return __( 'in the last 30 days', 'newspack-plugin' );
+		case 'last-90':
+			return __( 'in the last 90 days', 'newspack-plugin' );
+		case 'this-month':
+			return __( 'this month', 'newspack-plugin' );
+		case 'last-month':
+			return __( 'last month', 'newspack-plugin' );
+		default:
+			return __( 'in this timeframe', 'newspack-plugin' );
+	}
+};
+
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**

@@ -71,7 +71,7 @@ describe( 'TrafficSourcesSection — Top campaigns row filtering', () => {
 		);
 		expect( screen.getByText( 'No campaign traffic in this timeframe.' ) ).toBeInTheDocument();
 		// Section + breakdown stay visible.
-		expect( screen.getByText( 'Traffic sources' ) ).toBeInTheDocument();
-		expect( screen.getByText( 'Traffic sources breakdown' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Traffic Sources' ) ).toBeInTheDocument();
+		expect( screen.getByText( 'Traffic Sources Breakdown' ) ).toBeInTheDocument();
 	} );
 } );

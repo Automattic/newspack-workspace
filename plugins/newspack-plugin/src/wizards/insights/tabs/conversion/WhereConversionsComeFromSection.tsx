@@ -62,7 +62,7 @@ const WhereConversionsComeFromSection = ( { current }: WhereConversionsComeFromS
 	>
 		<SectionHeading
 			id="newspack-insights-conversion-source-mix-heading"
-			title={ __( 'Where conversions come from', 'newspack-plugin' ) }
+			title={ __( 'Where Conversions Come From', 'newspack-plugin' ) }
 			description={ __(
 				'Source attribution for new conversions in this timeframe. Gate, prompt, or direct (standalone form) — which surfaces drive your registrations, subscriptions, and donations?',
 				'newspack-plugin'
@@ -70,17 +70,17 @@ const WhereConversionsComeFromSection = ( { current }: WhereConversionsComeFromS
 		/>
 		<Grid columns={ 3 } gutter={ 16 } noMargin>
 			<SourcePie
-				title={ __( 'New registrations', 'newspack-plugin' ) }
+				title={ __( 'New Registrations', 'newspack-plugin' ) }
 				data={ current.source_mix_registrations }
 				emptyMessage={ __( 'Source data will appear once registrations occur in this timeframe.', 'newspack-plugin' ) }
 			/>
 			<SourcePie
-				title={ __( 'New subscribers', 'newspack-plugin' ) }
+				title={ __( 'New Subscribers', 'newspack-plugin' ) }
 				data={ current.source_mix_subscribers }
 				emptyMessage={ __( 'Source data will appear once subscriptions occur in this timeframe.', 'newspack-plugin' ) }
 			/>
 			<SourcePie
-				title={ __( 'New donors', 'newspack-plugin' ) }
+				title={ __( 'New Donors', 'newspack-plugin' ) }
 				data={ current.source_mix_donors }
 				emptyMessage={ __( 'Source data will appear once donations occur in this timeframe.', 'newspack-plugin' ) }
 			/>

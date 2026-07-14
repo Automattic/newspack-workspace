@@ -69,7 +69,7 @@ const AudienceTab = ( { range, previousRange }: AudienceTabProps ) => {
 						<ConnectBanner text={ data.banner_text } />
 						<TabSections>
 							{ registeredReaders && (
-								<RegisteredReadersSection registeredReaders={ registeredReaders } showComparison={ showComparison } />
+								<RegisteredReadersSection registeredReaders={ registeredReaders } range={ range } showComparison={ showComparison } />
 							) }
 							{ newsletterSubscriberValue && <NewsletterValueSection value={ newsletterSubscriberValue } /> }
 						</TabSections>
@@ -84,7 +84,7 @@ const AudienceTab = ( { range, previousRange }: AudienceTabProps ) => {
 								lastUpdated={ <LastUpdated tab="audience" range={ range } previousRange={ previousRange } /> }
 							/>
 							{ registeredReaders && (
-								<RegisteredReadersSection registeredReaders={ registeredReaders } showComparison={ showComparison } />
+								<RegisteredReadersSection registeredReaders={ registeredReaders } range={ range } showComparison={ showComparison } />
 							) }
 							{ newsletterSubscriberValue && <NewsletterValueSection value={ newsletterSubscriberValue } /> }
 							<CompositionSection current={ current } previous={ previous } />
