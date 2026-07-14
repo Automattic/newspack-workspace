@@ -109,10 +109,9 @@ import './admin.scss';
 					throw new Error( data.message );
 				}
 				if ( data.members_added?.[ memberToAdd ] ) {
-					const $membersList = $( '.newspack-group-subscription__members-list' );
-					const $membersCount = $select
-						.closest( '.newspack-group-subscription__container' )
-						.find( '.newspack-group-subscription__members-count' );
+					const $container = $select.closest( '.newspack-group-subscription__container' );
+					const $membersList = $container.find( '.newspack-group-subscription__members-list' );
+					const $membersCount = $container.find( '.newspack-group-subscription__members-count' );
 					$membersList.append(
 						`<li data-consumes-spot="1"><a class="newspack-group-subscription__member-user-link" href="#"></a><a href="#" class="newspack-group-subscription__remove-member">&#215; <span class="screen-reader-text">Remove</span></a></li>`
 					);
@@ -124,7 +123,7 @@ import './admin.scss';
 					$added.find( ' .newspack-group-subscription__remove-member' ).data( 'user-id', memberToAdd );
 					$added.find( '.screen-reader-text' ).text( newspackGroupSubscriptions.remove_label );
 					$membersCount.text( $membersList.find( 'li' ).length );
-					refreshLimitState( $select.closest( '.newspack-group-subscription__container' ) );
+					refreshLimitState( $container );
 				}
 			} )
 			.catch( error => {
@@ -164,11 +163,8 @@ import './admin.scss';
 				}
 				if ( data.members_removed?.[ userId ] ) {
 					const $container = $listItem.closest( '.newspack-group-subscription__container' );
-					const $membersCount = $listItem
-						.closest( '.newspack-group-subscription__members' )
-						.find( '.newspack-group-subscription__members-count' );
-
-					const $membersList = $( '.newspack-group-subscription__members-list' );
+					const $membersList = $container.find( '.newspack-group-subscription__members-list' );
+					const $membersCount = $container.find( '.newspack-group-subscription__members-count' );
 					$listItem.remove();
 					$membersCount.text( $membersList.find( 'li' ).length );
 					refreshLimitState( $container );
@@ -191,7 +187,7 @@ import './admin.scss';
 		const $container = $this.closest( '.newspack-group-subscription__container' );
 		$this.parent().find( '.error,.success' ).remove();
 		$container.find( '.newspack-group-subscription__members mark.success' ).remove();
-		const $email = $( '#newspack-group-subscription' ).find( 'input[name="_newspack_group_subscription_invite_email"]' );
+		const $email = $container.find( 'input[name="_newspack_group_subscription_invite_email"]' );
 		const $button = $this.parent().find( 'button' );
 		$email.attr( 'disabled', true );
 		$button.attr( 'disabled', true );
@@ -218,7 +214,7 @@ import './admin.scss';
 					throw new Error( data.message );
 				}
 				$email.val( '' );
-				const $membersList = $( '.newspack-group-subscription__members-list' );
+				const $membersList = $container.find( '.newspack-group-subscription__members-list' );
 				const $membersCount = $container.find( '.newspack-group-subscription__members-count' );
 				$membersList.find( `li[data-email="${ data.email }"]` ).remove();
 				$membersList.append(
@@ -274,7 +270,7 @@ import './admin.scss';
 				if ( data === false || ( data && data.code && data.message && data.message !== 'abort' ) ) {
 					throw new Error( data.message || 'Failed to cancel invite' );
 				}
-				const $membersList = $( '.newspack-group-subscription__members-list' );
+				const $membersList = $container.find( '.newspack-group-subscription__members-list' );
 				const $membersCount = $container.find( '.newspack-group-subscription__members-count' );
 				$listItem.remove();
 				$membersCount.text( $membersList.find( 'li' ).length );
