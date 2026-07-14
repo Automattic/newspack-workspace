@@ -4,33 +4,31 @@ const utils = require( './utils/index.js' );
 
 const semanticRelease = require( 'semantic-release' );
 
-const { files, ...otherArgs } = require( 'yargs/yargs' )(
-	process.argv.slice( 2 )
-).parse();
+const { files, ...otherArgs } = require( 'yargs/yargs' )( process.argv.slice( 2 ) ).parse();
 
 const filesList = files.split( ',' );
 
 utils.log( `Releasing ${ process.env.CIRCLE_PROJECT_REPONAME }…` );
 
-const getConfig = ({ gitBranchName }) => {
-	const branchType = gitBranchName.split("/")[0];
+const getConfig = ( { gitBranchName } ) => {
+	const branchType = gitBranchName.split( '/' )[ 0 ];
 	const githubConfig = {
 		assets: [
 			{
-				path: `./release/${process.env.CIRCLE_PROJECT_REPONAME}.zip`,
-				label: `${process.env.CIRCLE_PROJECT_REPONAME}.zip`,
+				path: `./release/${ process.env.CIRCLE_PROJECT_REPONAME }.zip`,
+				label: `${ process.env.CIRCLE_PROJECT_REPONAME }.zip`,
 			},
 		],
 	};
 
 	// Only post GH PR comments for alpha, hotfix/*, and release branches.
-	if ( ! ["alpha", "hotfix", "release"].includes(branchType) ) {
+	if ( ! [ 'alpha', 'hotfix', 'release' ].includes( branchType ) ) {
 		githubConfig.successComment = false;
 		githubConfig.failComment = false;
 	}
 
 	// Only publish alpha and release branches to NPM.
-	const shouldPublishOnNPM = Boolean( process.env.NPM_TOKEN ) && ["alpha", "release"].includes(branchType);
+	const shouldPublishOnNPM = Boolean( process.env.NPM_TOKEN ) && [ 'alpha', 'release' ].includes( branchType );
 	if ( shouldPublishOnNPM ) {
 		utils.log( `Will publish to npm.` );
 	}
@@ -42,44 +40,41 @@ const getConfig = ({ gitBranchName }) => {
 
 		branches: [
 			// `release` branch is published on the main distribution channel (a new version on GH).
-			"release",
+			'release',
 			// `alpha` branch – for regular pre-releases.
 			{
-				name: "alpha",
+				name: 'alpha',
 				prerelease: true,
 			},
 			// `hotfix/*` branches – for releases outside of the release schedule.
 			{
-				name: "hotfix/*",
+				name: 'hotfix/*',
 				// With `prerelease: true`, the `name` would be used for the pre-release tag. A name with a `/`
 				// is not valid, though. See https://semver.org/#spec-item-9.
 				prerelease: '${name.replace(/\\//g, "-")}',
 			},
 			// `epic/*` branches – for beta testing/QA pre-release builds.
 			{
-				name: "epic/*",
+				name: 'epic/*',
 				// With `prerelease: true`, the `name` would be used for the pre-release tag. A name with a `/`
 				// is not valid, though. See https://semver.org/#spec-item-9.
 				prerelease: '${name.replace(/\\//g, "-")}',
 			},
 		],
-		prepare: ["@semantic-release/changelog", "@semantic-release/npm"],
+		prepare: [ '@semantic-release/changelog', '@semantic-release/npm' ],
 		plugins: [
-			"@semantic-release/commit-analyzer",
-			"@semantic-release/release-notes-generator",
+			'@semantic-release/commit-analyzer',
+			'@semantic-release/release-notes-generator',
 			[
 				// Whether to publish on npm.
-				"@semantic-release/npm",
+				'@semantic-release/npm',
 				{
 					npmPublish: shouldPublishOnNPM,
 				},
 			],
-			"semantic-release-version-bump",
+			'semantic-release-version-bump',
 			// Add the built ZIP archive to GH release.
-			[
-				"@semantic-release/github",
-				githubConfig,
-			],
+			[ '@semantic-release/github', githubConfig ],
 		],
 	};
 
@@ -98,28 +93,16 @@ const getConfig = ({ gitBranchName }) => {
 		let assets = filesList;
 		// These assets should be added to source control after a release.
 		if ( branchType === 'release' ) {
-			assets = [
-				...filesList,
-				'package.json',
-				'package-lock.json',
-				'CHANGELOG.md',
-			];
+			assets = [ ...filesList, 'package.json', 'package-lock.json', 'CHANGELOG.md' ];
 		}
-		utils.log(
-			`On ${ branchType } branch, following files will be updated: ${ assets.join(
-				', '
-			) }`
-		);
+		utils.log( `On ${ branchType } branch, following files will be updated: ${ assets.join( ', ' ) }` );
 		config.prepare.push( {
 			path: '@semantic-release/git',
 			assets,
-			message:
-				'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
+			message: 'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
 		} );
 	} else {
-		utils.log(
-			`This branch is ${ branchType }, plugin files and the changelog will *not* be updated.`
-		);
+		utils.log( `This branch is ${ branchType }, plugin files and the changelog will *not* be updated.` );
 	}
 
 	return config;
@@ -129,25 +112,19 @@ const run = async () => {
 	try {
 		const gitBranch = await utils.getGitBranch();
 
-		const result = await semanticRelease.default(
-			getConfig( { gitBranchName: gitBranch } )
-		);
+		const result = await semanticRelease.default( getConfig( { gitBranchName: gitBranch } ) );
 
 		if ( result ) {
 			const { lastRelease, commits, nextRelease, releases } = result;
 
-			utils.log(
-				`Published ${ nextRelease.type } release version ${ nextRelease.version } containing ${ commits.length } commits.`
-			);
+			utils.log( `Published ${ nextRelease.type } release version ${ nextRelease.version } containing ${ commits.length } commits.` );
 
 			if ( lastRelease.version ) {
 				utils.log( `The last release was "${ lastRelease.version }".` );
 			}
 
 			for ( const release of releases ) {
-				utils.log(
-					`The release was published with plugin "${ release.pluginName }".`
-				);
+				utils.log( `The release was published with plugin "${ release.pluginName }".` );
 			}
 		} else {
 			utils.log( 'No release published.' );

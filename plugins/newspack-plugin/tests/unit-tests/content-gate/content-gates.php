@@ -11,6 +11,7 @@ use Newspack\Reader_Activation;
 use Newspack\Access_Rules;
 use Newspack\Content_Rules;
 use Newspack\Content_Gate;
+use Newspack\Content_Gate_API;
 use Newspack\Content_Restriction_Control;
 use Newspack\Content_Gate\IP_Access_Rule;
 use Newspack\Institution;
@@ -184,6 +185,9 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 			wp_delete_post( $post_id, true );
 		}
 		$this->reset_restriction_cache();
+		// Statics persist across tests (they are not rolled back with the DB), so
+		// reset them here — including after an assertion failure leaves them dirty.
+		$this->reset_gate_render_state();
 		// phpcs:disable WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		if ( null === $this->original_remote_addr ) {
 			unset( $_SERVER['REMOTE_ADDR'] );
@@ -259,6 +263,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				],
 			]
 		);
+		$this->reset_restriction_cache();
 
 		$gates = Content_Restriction_Control::get_post_gates( $post1 );
 		$this->assertCount( 1, $gates, 'One gate for the post in category 1' );
@@ -285,6 +290,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				],
 			]
 		);
+		$this->reset_restriction_cache();
 		$gates = Content_Restriction_Control::get_post_gates( $post1 );
 		$this->assertCount( 1, $gates, 'One gate for the post in category 1' );
 		$this->assertEquals( $this->gate_ids[2], $gates[0]['id'], 'Rule with an empty array-like value is ignored; category rule still matches' );
@@ -300,6 +306,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 				],
 			]
 		);
+		$this->reset_restriction_cache();
 
 		$gates = Content_Restriction_Control::get_post_gates( $post1 );
 		$this->assertCount( 0, $gates, 'No gates for the post in category 1' );
@@ -311,6 +318,156 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$gates = Content_Restriction_Control::get_post_gates( $post3 );
 		$this->assertCount( 1, $gates, 'One gate for the post with no categories' );
 		$this->assertEquals( $this->gate_ids[2], $gates[0]['id'], 'Gate with publish status and matching rules configuration is included' );
+	}
+
+	/**
+	 * Test that a content rule targeting a parent term in a hierarchical
+	 * taxonomy cascades to descendant terms, matching WooCommerce Memberships.
+	 */
+	public function test_content_rules_hierarchical_child_terms() {
+		// Build a category tree: parent > child > grandchild.
+		$parent_cat = $this->factory->term->create(
+			[
+				'taxonomy' => 'category',
+				'name'     => 'Parent Category',
+			]
+		);
+		$child_cat = $this->factory->term->create(
+			[
+				'taxonomy' => 'category',
+				'name'     => 'Child Category',
+				'parent'   => $parent_cat,
+			]
+		);
+		$grandchild_cat = $this->factory->term->create(
+			[
+				'taxonomy' => 'category',
+				'name'     => 'Grandchild Category',
+				'parent'   => $child_cat,
+			]
+		);
+		// An unrelated category outside the parent's subtree.
+		$other_cat = $this->factory->term->create(
+			[
+				'taxonomy' => 'category',
+				'name'     => 'Other Category',
+			]
+		);
+
+		// Posts assigned only to a descendant term, never directly to the parent.
+		$parent_post     = $this->factory->post->create( [ 'post_category' => [ $parent_cat ] ] );
+		$child_post      = $this->factory->post->create( [ 'post_category' => [ $child_cat ] ] );
+		$grandchild_post = $this->factory->post->create( [ 'post_category' => [ $grandchild_cat ] ] );
+		$other_post      = $this->factory->post->create( [ 'post_category' => [ $other_cat ] ] );
+		$this->post_ids  = array_merge( $this->post_ids, [ $parent_post, $child_post, $grandchild_post, $other_post ] );
+
+		// Inclusion rule targeting only the parent term.
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'  => 'category',
+					'value' => [ $parent_cat ],
+				],
+			]
+		);
+		$this->reset_restriction_cache();
+
+		$gates = Content_Restriction_Control::get_post_gates( $child_post );
+		$this->assertCount( 1, $gates, 'Post in a child of the targeted parent category is gated' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $grandchild_post );
+		$this->assertCount( 1, $gates, 'Post in a grandchild of the targeted parent category is gated' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $other_post );
+		$this->assertCount( 0, $gates, 'Post outside the targeted subtree is not gated' );
+
+		// Exclusion rule targeting the parent term: descendants are excluded too.
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'      => 'category',
+					'value'     => [ $parent_cat ],
+					'exclusion' => true,
+				],
+			]
+		);
+		$this->reset_restriction_cache();
+
+		$gates = Content_Restriction_Control::get_post_gates( $child_post );
+		$this->assertCount( 0, $gates, 'Post in a child of an excluded parent category is not gated' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $grandchild_post );
+		$this->assertCount( 0, $gates, 'Post in a grandchild of an excluded parent category is not gated' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $other_post );
+		$this->assertCount( 1, $gates, 'Post outside the excluded subtree is still gated' );
+
+		// The cascade is one-directional: a rule targeting a child term does NOT
+		// pull in posts that only carry the parent term.
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'  => 'category',
+					'value' => [ $child_cat ],
+				],
+			]
+		);
+		$this->reset_restriction_cache();
+
+		$gates = Content_Restriction_Control::get_post_gates( $parent_post );
+		$this->assertCount( 0, $gates, 'Post in the parent term is not gated by a rule targeting a child term' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $child_post );
+		$this->assertCount( 1, $gates, 'Post in the targeted child term is gated' );
+
+		// Stored rule values may be strings; the cascade must still match because the
+		// helper normalizes term IDs to integers before intersecting.
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'  => 'category',
+					'value' => [ (string) $parent_cat ],
+				],
+			]
+		);
+		$this->reset_restriction_cache();
+
+		$gates = Content_Restriction_Control::get_post_gates( $child_post );
+		$this->assertCount( 1, $gates, 'Stringified parent term ID still cascades to gate a child-category post' );
+	}
+
+	/**
+	 * Test that a content rule on a non-hierarchical taxonomy (tags) matches
+	 * only the targeted term, with no descendant expansion.
+	 */
+	public function test_content_rules_non_hierarchical_terms() {
+		$tag         = $this->factory->term->create( [ 'taxonomy' => 'post_tag' ] );
+		$other_tag   = $this->factory->term->create( [ 'taxonomy' => 'post_tag' ] );
+		$tagged_post = $this->factory->post->create();
+		$other_post  = $this->factory->post->create();
+		wp_set_post_terms( $tagged_post, [ $tag ], 'post_tag' );
+		wp_set_post_terms( $other_post, [ $other_tag ], 'post_tag' );
+		$this->post_ids = array_merge( $this->post_ids, [ $tagged_post, $other_post ] );
+
+		Content_Rules::update_gate_content_rules(
+			$this->gate_ids[2],
+			[
+				[
+					'slug'  => 'post_tag',
+					'value' => [ $tag ],
+				],
+			]
+		);
+
+		$gates = Content_Restriction_Control::get_post_gates( $tagged_post );
+		$this->assertCount( 1, $gates, 'Post with the targeted tag is gated' );
+
+		$gates = Content_Restriction_Control::get_post_gates( $other_post );
+		$this->assertCount( 0, $gates, 'Post with a different tag is not gated' );
 	}
 
 	/**
@@ -882,7 +1039,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	 * tests to prevent cross-test contamination.
 	 */
 	private function reset_restriction_cache() {
-		foreach ( [ 'post_gate_id_map', 'post_gate_layout_id_map' ] as $prop ) {
+		foreach ( [ 'post_gate_id_map', 'post_gate_layout_id_map', 'post_gates_map', 'term_descendants_map' ] as $prop ) {
 			$reflection = new \ReflectionProperty( Content_Restriction_Control::class, $prop );
 			$reflection->setAccessible( true );
 			$reflection->setValue( null, [] );
@@ -890,45 +1047,55 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * Test comment filters on fully gated posts.
+	 * Reset the render-time static flags on Content_Gate so a test driving
+	 * restrict_post() starts from a clean slate, independent of test ordering
+	 * (restrict_post() short-circuits on has_rendered()).
 	 */
-	public function test_comments_closed_on_gated_post() {
-		$post_id = $this->post_ids[0];
-
-		$this->set_content_gate_property( 'is_gated', true );
-		$this->set_content_gate_property( 'is_metered', false );
-
-		// Simulate queried object.
-		$this->go_to( get_permalink( $post_id ) );
-
-		$this->assertFalse( Content_Gate::filter_comments_open( true, $post_id ), 'Comments should be closed on gated post' );
-		$this->assertEmpty( Content_Gate::filter_comments_array( [ 'comment1', 'comment2' ], $post_id ), 'Comments array should be empty on gated post' );
-		$this->assertSame( 0, Content_Gate::filter_comments_number( 5, $post_id ), 'Comment count should be 0 on gated post' );
-
-		// Reset.
+	private function reset_gate_render_state() {
+		$this->set_content_gate_property( 'gate_rendered', false );
 		$this->set_content_gate_property( 'is_gated', false );
+		$this->set_content_gate_property( 'is_content_locked', false );
 	}
 
 	/**
-	 * Test comment filters on metered posts.
+	 * Test comment filters gate a fully locked post (reader has no access).
 	 */
-	public function test_comments_closed_but_visible_on_metered_post() {
+	public function test_comments_closed_on_locked_post() {
 		$post_id = $this->post_ids[0];
 
-		$this->set_content_gate_property( 'is_gated', false );
-		$this->set_content_gate_property( 'is_metered', true );
+		$this->set_content_gate_property( 'is_content_locked', true );
 
 		// Simulate queried object.
 		$this->go_to( get_permalink( $post_id ) );
 
-		$this->assertFalse( Content_Gate::filter_comments_open( true, $post_id ), 'Comments should be closed on metered post' );
+		$this->assertFalse( Content_Gate::filter_comments_open( true, $post_id ), 'Comments should be closed on a locked post' );
+		$this->assertEmpty( Content_Gate::filter_comments_array( [ 'comment1', 'comment2' ], $post_id ), 'Comments array should be empty on a locked post' );
+		$this->assertSame( 0, Content_Gate::filter_comments_number( 5, $post_id ), 'Comment count should be 0 on a locked post' );
+	}
 
+	/**
+	 * Test comment filters pass through when the content is not locked.
+	 *
+	 * This covers metered (still-readable) and unrestricted posts alike: neither
+	 * locks the content, so commenting is left to the site's Discussion Settings.
+	 * Critically, the filters key off the access decision ($is_content_locked),
+	 * not the render-time $is_gated flag, which is also raised while rendering an
+	 * overlay gate for a metered post (NPPD-1829).
+	 */
+	public function test_comments_pass_through_when_not_locked() {
+		$post_id = $this->post_ids[0];
+
+		$this->set_content_gate_property( 'is_content_locked', false );
+		// $is_gated may be raised by overlay/excerpt rendering on a readable post;
+		// it must not gate comments on its own.
+		$this->set_content_gate_property( 'is_gated', true );
+
+		$this->go_to( get_permalink( $post_id ) );
+
+		$this->assertTrue( Content_Gate::filter_comments_open( true, $post_id ), 'Comments should remain open when the content is not locked' );
 		$comments = [ 'comment1', 'comment2' ];
-		$this->assertSame( $comments, Content_Gate::filter_comments_array( $comments, $post_id ), 'Existing comments should remain visible on metered post' );
-		$this->assertSame( 5, Content_Gate::filter_comments_number( 5, $post_id ), 'Comment count should be unchanged on metered post' );
-
-		// Reset.
-		$this->set_content_gate_property( 'is_metered', false );
+		$this->assertSame( $comments, Content_Gate::filter_comments_array( $comments, $post_id ), 'Existing comments should remain visible when the content is not locked' );
+		$this->assertSame( 5, Content_Gate::filter_comments_number( 5, $post_id ), 'Comment count should be unchanged when the content is not locked' );
 	}
 
 	/**
@@ -939,37 +1106,95 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$other_post_id = $this->factory->post->create();
 		$this->post_ids[] = $other_post_id;
 
-		$this->set_content_gate_property( 'is_gated', true );
-		$this->set_content_gate_property( 'is_metered', false );
+		$this->set_content_gate_property( 'is_content_locked', true );
 
-		// Simulate queried object as the gated post.
+		// Simulate queried object as the locked post.
 		$this->go_to( get_permalink( $post_id ) );
 
 		// Filters should not affect the other post.
-		$this->assertTrue( Content_Gate::filter_comments_open( true, $other_post_id ), 'Comments should remain open on non-gated post' );
+		$this->assertTrue( Content_Gate::filter_comments_open( true, $other_post_id ), 'Comments should remain open on the non-locked post' );
 		$comments = [ 'comment1' ];
-		$this->assertSame( $comments, Content_Gate::filter_comments_array( $comments, $other_post_id ), 'Comments array should be unchanged on non-gated post' );
-		$this->assertSame( 3, Content_Gate::filter_comments_number( 3, $other_post_id ), 'Comment count should be unchanged on non-gated post' );
-
-		// Reset.
-		$this->set_content_gate_property( 'is_gated', false );
+		$this->assertSame( $comments, Content_Gate::filter_comments_array( $comments, $other_post_id ), 'Comments array should be unchanged on the non-locked post' );
+		$this->assertSame( 3, Content_Gate::filter_comments_number( 3, $other_post_id ), 'Comment count should be unchanged on the non-locked post' );
 	}
 
 	/**
-	 * Test comment filters pass through on unrestricted posts.
+	 * Metered (currently-accessible) content must leave commenting governed by
+	 * the site's Discussion Settings, not force it closed.
+	 *
+	 * Regression test for NPPD-1829: a Paid Access gate left logged-out readers
+	 * unable to comment on posts they could still read via metering, even on a
+	 * site that allows unauthenticated commenting.
 	 */
-	public function test_comments_unaffected_on_unrestricted_post() {
+	public function test_metered_post_keeps_commenting_per_discussion_settings() {
 		$post_id = $this->post_ids[0];
 
-		$this->set_content_gate_property( 'is_gated', false );
-		$this->set_content_gate_property( 'is_metered', false );
+		$this->reset_gate_render_state();
 
+		// Site allows logged-out commenting (name + email), per Discussion Settings.
+		update_option( 'comment_registration', 0 );
+		wp_update_post(
+			[
+				'ID'             => $post_id,
+				'comment_status' => 'open',
+			]
+		);
+
+		// Logged-out reader.
+		wp_set_current_user( 0 );
+
+		// The published gate restricts this post for the anonymous reader...
+		$this->assertNotFalse( Content_Gate::is_post_restricted( $post_id ), 'Post should be restricted for the logged-out reader' );
+
+		// ...but metering grants read access for this view. The Metering class
+		// signals that by returning false from this filter.
+		add_filter( 'newspack_content_gate_restrict_post', '__return_false' );
+
+		// Render the post through the gate's restriction logic.
 		$this->go_to( get_permalink( $post_id ) );
+		$post = get_post( $post_id );
+		Content_Gate::restrict_post( $post, $GLOBALS['wp_query'] );
 
-		$this->assertTrue( Content_Gate::filter_comments_open( true, $post_id ), 'Comments should remain open on unrestricted post' );
-		$comments = [ 'comment1', 'comment2' ];
-		$this->assertSame( $comments, Content_Gate::filter_comments_array( $comments, $post_id ), 'Comments array should be unchanged on unrestricted post' );
-		$this->assertSame( 5, Content_Gate::filter_comments_number( 5, $post_id ), 'Comment count should be unchanged on unrestricted post' );
+		remove_filter( 'newspack_content_gate_restrict_post', '__return_false' );
+
+		$this->assertSame( 'open', $post->comment_status, 'Metered post must not have its comment status force-closed' );
+		// Assert the gate filter directly (not only via comments_open()) so the
+		// pass/fail hinge is explicit and does not depend on the filter being
+		// registered through init() at runtime.
+		$this->assertTrue( Content_Gate::filter_comments_open( true, $post_id ), 'Gate filter must not close comments on a metered post' );
+		$this->assertTrue( comments_open( $post_id ), 'Logged-out reader must be able to comment on a metered post when Discussion Settings allow it' );
+	}
+
+	/**
+	 * The companion invariant to NPPD-1829: a fully gated post (reader has no
+	 * access, no metering grace) must still lock commenting end-to-end.
+	 */
+	public function test_gated_post_locks_commenting() {
+		$post_id = $this->post_ids[0];
+
+		$this->reset_gate_render_state();
+
+		update_option( 'comment_registration', 0 );
+		wp_update_post(
+			[
+				'ID'             => $post_id,
+				'comment_status' => 'open',
+			]
+		);
+
+		// Logged-out reader with no access and no metering grace (default filter).
+		wp_set_current_user( 0 );
+		$this->assertNotFalse( Content_Gate::is_post_restricted( $post_id ), 'Post should be restricted for the logged-out reader' );
+
+		// Render the post through the gate's restriction logic (gated branch).
+		$this->go_to( get_permalink( $post_id ) );
+		$post = get_post( $post_id );
+		Content_Gate::restrict_post( $post, $GLOBALS['wp_query'] );
+
+		$this->assertSame( 'closed', $post->comment_status, 'Gated post should have its comment status closed' );
+		$this->assertFalse( comments_open( $post_id ), 'Gated post must not accept comments' );
+		$this->assertFalse( Content_Gate::filter_comments_open( true, $post_id ), 'Comment filter should report closed on a gated post' );
+		$this->assertSame( 0, Content_Gate::filter_comments_number( 5, $post_id ), 'Comment count should be 0 on a gated post' );
 	}
 
 	/**
@@ -1075,7 +1300,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		$this->assertSame( [], $rule['default'] );
 		$this->assertTrue( $rule['include_only'], 'specific_posts is include-only (no exclusion mode)' );
 		$this->assertSame( '/' . NEWSPACK_API_NAMESPACE . '/wizard/newspack-audience-access-control/posts-search', $rule['endpoint'], 'endpoint matches the registered REST route' );
-		$this->assertStringContainsString( 'restrict specific posts', $rule['description'], 'description signals override behavior' );
+		$this->assertStringContainsStringIgnoringCase( 'restrict specific posts', $rule['description'], 'description signals override behavior' );
 	}
 
 	/**
@@ -1492,7 +1717,7 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		// phpcs:disable WordPressVIPMinimum.Variables.ServerVariables.UserControlledHeaders, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___SERVER__REMOTE_ADDR__, WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		$_SERVER['REMOTE_ADDR'] = $ip;
 		if ( $with_cookie ) {
-			$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = '1';
+			$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
 		} else {
 			unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] );
 		}
@@ -2052,5 +2277,491 @@ class Test_Content_Gates extends \WP_UnitTestCase {
 		wp_delete_user( $queue_user );
 		wp_delete_user( $page_user );
 		$this->reset_visitor_state();
+	}
+
+	/**
+	 * The sanitize_gate() method passes content_rules_match through and defaults invalid values to 'all'.
+	 */
+	public function test_sanitize_gate_preserves_content_rules_match() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Sanitize Test Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		$sanitized = Content_Gate_API::sanitize_gate(
+			[
+				'id'                  => $gate_id,
+				'title'               => 'Sanitize Test Gate',
+				'status'              => 'draft',
+				'content_rules_match' => 'any',
+			]
+		);
+		$this->assertArrayHasKey( 'content_rules_match', $sanitized, 'sanitize_gate() must include content_rules_match in output' );
+		$this->assertSame( 'any', $sanitized['content_rules_match'], 'Valid value "any" must be preserved' );
+
+		$sanitized_invalid = Content_Gate_API::sanitize_gate(
+			[
+				'id'                  => $gate_id,
+				'title'               => 'Sanitize Test Gate',
+				'status'              => 'draft',
+				'content_rules_match' => 'garbage',
+			]
+		);
+		$this->assertSame( 'all', $sanitized_invalid['content_rules_match'], 'Invalid value must fall back to "all"' );
+
+		$sanitized_missing = Content_Gate_API::sanitize_gate(
+			[
+				'id'    => $gate_id,
+				'title' => 'Sanitize Test Gate',
+			]
+		);
+		$this->assertArrayNotHasKey( 'content_rules_match', $sanitized_missing, 'Missing field must not be injected into the sanitized output' );
+	}
+
+	/**
+	 * 'any' mode restricts a post matching only one of several rule types;
+	 * 'all' mode does not. Reproduces the The Assembly leak.
+	 */
+	public function test_content_rules_match_any() {
+		$cat_id  = self::factory()->category->create( [ 'name' => 'All Access' ] );
+		$post_id = self::factory()->post->create();
+		wp_set_post_terms( $post_id, [ $cat_id ], 'category' );
+		$this->post_ids[] = $post_id;
+
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'AND/OR Gate' ] );
+		$this->gate_ids[] = $gate_id;
+		$rules   = [
+			[
+				'slug'  => 'category',
+				'value' => [ $cat_id ],
+			],
+			[
+				'slug'  => 'newsletters',
+				'value' => [ 999999 ],
+			], // A list this post can never belong to.
+		];
+
+		// AND (default): post fails the newsletters rule -> gate does NOT apply.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'               => 'AND/OR Gate',
+				'priority'            => 0,
+				'content_rules'       => $rules,
+				'content_rules_match' => 'all',
+				'registration'        => [ 'active' => true ],
+			]
+		);
+		$this->reset_restriction_cache();
+		$gate_ids = wp_list_pluck( Content_Restriction_Control::get_post_gates( $post_id ), 'id' );
+		$this->assertNotContains( $gate_id, $gate_ids, 'AND should not gate a category-only post' );
+
+		// OR: post matches the category rule -> gate applies.
+		Content_Gate::update_gate_setting( $gate_id, 'content_rules_match', 'any' );
+		$this->reset_restriction_cache();
+		$gate_ids = wp_list_pluck( Content_Restriction_Control::get_post_gates( $post_id ), 'id' );
+		$this->assertContains( $gate_id, $gate_ids, 'OR should gate a post matching any one rule' );
+	}
+
+	/**
+	 * Exclusion rules are always-applied carve-outs: in 'any' (OR) mode a post that
+	 * matches an inclusion rule is still NOT gated when an exclusion rule covers it.
+	 * Without this, OR mode would gate the very content the publisher excluded.
+	 */
+	public function test_exclusion_rule_carves_out_under_or() {
+		$free_cat = self::factory()->category->create( [ 'name' => 'Free' ] );
+
+		// A post that matches the inclusion rule (post_types) and is not excluded.
+		$gated_post = self::factory()->post->create();
+		$this->post_ids[] = $gated_post;
+
+		// A post that matches the inclusion rule but is carved out by the exclusion.
+		$carved_post = self::factory()->post->create();
+		wp_set_post_terms( $carved_post, [ $free_cat ], 'category' );
+		$this->post_ids[] = $carved_post;
+
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Carve-out Gate' ] );
+		$this->gate_ids[] = $gate_id;
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'               => 'Carve-out Gate',
+				'priority'            => 0,
+				'content_rules'       => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+					[
+						'slug'      => 'category',
+						'value'     => [ $free_cat ],
+						'exclusion' => true,
+					],
+				],
+				'content_rules_match' => 'any',
+				'registration'        => [ 'active' => true ],
+			]
+		);
+
+		$this->reset_restriction_cache();
+		$gated = wp_list_pluck( Content_Restriction_Control::get_post_gates( $gated_post ), 'id' );
+		$this->assertContains( $gate_id, $gated, 'OR should gate a post matching the inclusion rule' );
+
+		$this->reset_restriction_cache();
+		$carved = wp_list_pluck( Content_Restriction_Control::get_post_gates( $carved_post ), 'id' );
+		$this->assertNotContains( $gate_id, $carved, 'An excluded post is carved out under OR even though it matches the inclusion rule' );
+
+		// "Match all" is unchanged: the exclusion still carves the post out, and a
+		// non-excluded post matching the inclusion is still gated.
+		Content_Gate::update_gate_setting( $gate_id, 'content_rules_match', 'all' );
+		$this->reset_restriction_cache();
+		$gated_all = wp_list_pluck( Content_Restriction_Control::get_post_gates( $gated_post ), 'id' );
+		$this->assertContains( $gate_id, $gated_all, 'AND should gate a post matching the inclusion rule and not excluded' );
+		$this->reset_restriction_cache();
+		$carved_all = wp_list_pluck( Content_Restriction_Control::get_post_gates( $carved_post ), 'id' );
+		$this->assertNotContains( $gate_id, $carved_all, 'An excluded post is carved out under AND too' );
+	}
+
+	/**
+	 * A gate's match mode persists and defaults to 'all'.
+	 */
+	public function test_content_rules_match_persistence() {
+		$gate_id = Content_Gate::create_gate( [ 'title' => 'Match Mode Gate' ] );
+
+		// Defaults to 'all' when never set.
+		$gate = Content_Gate::get_gate( $gate_id );
+		$this->assertSame( 'all', $gate['content_rules_match'] );
+
+		// Persists via update_gate_settings.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'               => 'Match Mode Gate',
+				'priority'            => 0,
+				'content_rules'       => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+				],
+				'content_rules_match' => 'any',
+			]
+		);
+		$this->assertSame( 'any', Content_Gate::get_gate( $gate_id )['content_rules_match'] );
+
+		// Persists via single-setting update.
+		Content_Gate::update_gate_setting( $gate_id, 'content_rules_match', 'all' );
+		$this->assertSame( 'all', Content_Gate::get_gate( $gate_id )['content_rules_match'] );
+	}
+
+	/**
+	 * A gate created with a match mode persists it immediately.
+	 */
+	public function test_create_gate_persists_content_rules_match() {
+		$gate_id = Content_Gate::create_gate(
+			[
+				'title'               => 'Created Match Mode Gate',
+				'content_rules_match' => 'any',
+			]
+		);
+		$this->gate_ids[] = $gate_id;
+
+		$this->assertSame( 'any', Content_Gate::get_gate( $gate_id )['content_rules_match'] );
+	}
+
+	/**
+	 * Updating a gate via a payload that omits content_rules_match must not reset
+	 * an existing 'any' (OR) gate back to the 'all' (AND) default.
+	 */
+	public function test_update_gate_without_match_field_preserves_stored_mode() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'OR Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate with OR mode.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'               => 'OR Gate',
+				'priority'            => 0,
+				'content_rules'       => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+				],
+				'content_rules_match' => 'any',
+			]
+		);
+		$this->assertSame( 'any', Content_Rules::get_gate_content_rules_match( $gate_id ), 'Pre-condition: stored mode is any' );
+
+		// Simulate a REST update that omits the content_rules_match field.
+		$raw_payload  = [
+			'title'    => 'OR Gate',
+			'priority' => 1,
+		];
+		$sanitized    = Content_Gate_API::sanitize_gate( $raw_payload );
+		Content_Gate::update_gate_settings( $gate_id, $sanitized );
+
+		$this->assertSame( 'any', Content_Rules::get_gate_content_rules_match( $gate_id ), 'Stored match mode must not be reset when the field is absent from the update payload' );
+	}
+
+	/**
+	 * Updating a gate via a payload that omits status must not reset a published
+	 * gate to draft (a draft gate stops enforcing).
+	 */
+	public function test_update_gate_without_status_preserves_stored_status() {
+		$gate_id          = Content_Gate::create_gate(
+			[
+				'title'  => 'Published Gate',
+				'status' => 'publish',
+			]
+		);
+		$this->gate_ids[] = $gate_id;
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Pre-condition: gate is published' );
+
+		// Simulate a REST update that omits the status field.
+		$sanitized = Content_Gate_API::sanitize_gate(
+			[
+				'title'    => 'Published Gate',
+				'priority' => 1,
+			]
+		);
+		$this->assertArrayNotHasKey( 'status', $sanitized, 'Missing status must not be injected into the sanitized output' );
+
+		Content_Gate::update_gate_settings( $gate_id, $sanitized );
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Stored status must not be reset when the field is absent from the update payload' );
+	}
+
+	/**
+	 * A partial REST update (e.g. title/priority only) must not wipe a published
+	 * gate's content rules, registration, or custom access settings (an empty
+	 * content_rules set stops the gate from enforcing).
+	 */
+	public function test_update_gate_without_rules_preserves_stored_rules_and_status() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Rules Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate as published with content rules.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Rules Gate',
+				'priority'      => 0,
+				'status'        => 'publish',
+				'content_rules' => [
+					[
+						'slug'  => 'post_types',
+						'value' => [ 'post' ],
+					],
+				],
+			]
+		);
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Pre-condition: gate is published' );
+		$this->assertNotEmpty( Content_Rules::get_gate_content_rules( $gate_id ), 'Pre-condition: gate has content rules' );
+
+		// Simulate a REST update that only sends title and priority.
+		$sanitized = Content_Gate_API::sanitize_gate(
+			[
+				'title'    => 'Rules Gate',
+				'priority' => 1,
+			]
+		);
+		$this->assertArrayNotHasKey( 'content_rules', $sanitized, 'Missing content_rules must not be injected into the sanitized output' );
+		$this->assertArrayNotHasKey( 'registration', $sanitized, 'Missing registration must not be injected into the sanitized output' );
+		$this->assertArrayNotHasKey( 'custom_access', $sanitized, 'Missing custom_access must not be injected into the sanitized output' );
+		$this->assertArrayNotHasKey( 'status', $sanitized, 'Missing status must not be injected into the sanitized output' );
+
+		Content_Gate::update_gate_settings( $gate_id, $sanitized );
+
+		$this->assertNotEmpty( Content_Rules::get_gate_content_rules( $gate_id ), 'Stored content rules must not be wiped when the field is absent from the update payload' );
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Stored status must not be reset when the field is absent from the update payload' );
+	}
+
+	/**
+	 * A status-only REST update payload must not clobber the gate's stored
+	 * title or priority.
+	 */
+	public function test_update_gate_status_only_preserves_title_and_priority() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Original Title' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate as published with a distinct title and priority.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'    => 'Original Title',
+				'priority' => 5,
+				'status'   => 'publish',
+			]
+		);
+		$this->assertSame( 'Original Title', get_post( $gate_id )->post_title, 'Pre-condition: gate has the expected title' );
+		$this->assertSame( '5', get_post_meta( $gate_id, 'gate_priority', true ), 'Pre-condition: gate has the expected priority' );
+
+		// Simulate a REST update that only sends status.
+		$sanitized = Content_Gate_API::sanitize_gate( [ 'status' => 'draft' ] );
+		$this->assertSame( [ 'status' => 'draft' ], $sanitized, 'Sanitized output must contain only the explicitly provided status field' );
+
+		Content_Gate::update_gate_settings( $gate_id, $sanitized );
+
+		$this->assertSame( 'Original Title', get_post( $gate_id )->post_title, 'Stored title must not be reset when the field is absent from the update payload' );
+		$this->assertSame( '5', get_post_meta( $gate_id, 'gate_priority', true ), 'Stored priority must not be reset when the field is absent from the update payload' );
+		$this->assertSame( 'draft', get_post_status( $gate_id ), 'Status must be updated to the explicitly provided value' );
+	}
+
+	/**
+	 * A sparse nested registration/custom_access update payload (e.g. only
+	 * toggling `active`) must not wipe the stored metering, verification, or
+	 * access rules for that mode.
+	 */
+	public function test_update_gate_sparse_nested_settings_preserve_stored_values() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Sparse Nested Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate with full registration and custom_access settings.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Sparse Nested Gate',
+				'priority'      => 0,
+				'registration'  => [
+					'active'               => true,
+					'metering'             => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'month',
+					],
+					'require_verification' => true,
+				],
+				'custom_access' => [
+					'active'       => true,
+					'access_rules' => [
+						[
+							'slug'  => 'email_domain',
+							'value' => 'example.com',
+						],
+					],
+				],
+			]
+		);
+
+		// Sparse update: only toggle registration.active.
+		$sanitized_registration = Content_Gate_API::sanitize_registration( [ 'active' => false ] );
+		$this->assertSame( [ 'active' => false ], $sanitized_registration, 'Sanitized registration must contain only the explicitly provided field' );
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'registration' => $sanitized_registration ] );
+
+		$registration = Content_Gate::get_registration_settings( $gate_id );
+		$this->assertFalse( $registration['active'], 'Registration active must be updated to the explicitly provided value' );
+		$this->assertTrue( $registration['metering']['enabled'], 'Stored registration metering must not be wiped by a sparse update' );
+		$this->assertSame( 3, $registration['metering']['count'], 'Stored registration metering count must not be wiped by a sparse update' );
+		$this->assertTrue( $registration['require_verification'], 'Stored require_verification must not be wiped by a sparse update' );
+
+		// Sparse update: only toggle custom_access.active.
+		$sanitized_custom_access = Content_Gate_API::sanitize_custom_access( [ 'active' => false ] );
+		$this->assertSame( [ 'active' => false ], $sanitized_custom_access, 'Sanitized custom_access must contain only the explicitly provided field' );
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'custom_access' => $sanitized_custom_access ] );
+
+		$custom_access = Content_Gate::get_custom_access_settings( $gate_id );
+		$this->assertFalse( $custom_access['active'], 'Custom access active must be updated to the explicitly provided value' );
+		$this->assertSame( 'email_domain', $custom_access['access_rules'][0][0]['slug'], 'Stored access_rules must not be wiped by a sparse update' );
+	}
+
+	/**
+	 * A sparse metering update (e.g. only toggling `enabled`) must not wipe
+	 * the stored `count`/`period`, since the storage layer's shallow merge
+	 * would otherwise replace the whole metering array wholesale.
+	 */
+	public function test_update_gate_sparse_metering_preserve_stored_values() {
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Sparse Metering Gate' ] );
+		$this->gate_ids[] = $gate_id;
+
+		// Establish the gate with full registration and custom_access metering.
+		Content_Gate::update_gate_settings(
+			$gate_id,
+			[
+				'title'         => 'Sparse Metering Gate',
+				'priority'      => 0,
+				'registration'  => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'week',
+					],
+				],
+				'custom_access' => [
+					'active'   => true,
+					'metering' => [
+						'enabled' => true,
+						'count'   => 3,
+						'period'  => 'week',
+					],
+				],
+			]
+		);
+
+		// Sparse update: only toggle registration.metering.enabled.
+		$sanitized_registration = Content_Gate_API::sanitize_registration( [ 'metering' => [ 'enabled' => false ] ] );
+		$this->assertSame( [ 'metering' => [ 'enabled' => false ] ], $sanitized_registration, 'Sanitized registration metering must contain only the explicitly provided field' );
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'registration' => $sanitized_registration ] );
+
+		$registration = Content_Gate::get_registration_settings( $gate_id );
+		$this->assertFalse( $registration['metering']['enabled'], 'Registration metering enabled must be updated to the explicitly provided value' );
+		$this->assertSame( 3, $registration['metering']['count'], 'Stored registration metering count must not be wiped by a sparse update' );
+		$this->assertSame( 'week', $registration['metering']['period'], 'Stored registration metering period must not be wiped by a sparse update' );
+
+		// Sparse update: only toggle custom_access.metering.enabled.
+		$sanitized_custom_access = Content_Gate_API::sanitize_custom_access( [ 'metering' => [ 'enabled' => false ] ] );
+		$this->assertSame( [ 'metering' => [ 'enabled' => false ] ], $sanitized_custom_access, 'Sanitized custom_access metering must contain only the explicitly provided field' );
+
+		Content_Gate::update_gate_settings( $gate_id, [ 'custom_access' => $sanitized_custom_access ] );
+
+		$custom_access = Content_Gate::get_custom_access_settings( $gate_id );
+		$this->assertFalse( $custom_access['metering']['enabled'], 'Custom access metering enabled must be updated to the explicitly provided value' );
+		$this->assertSame( 3, $custom_access['metering']['count'], 'Stored custom_access metering count must not be wiped by a sparse update' );
+		$this->assertSame( 'week', $custom_access['metering']['period'], 'Stored custom_access metering period must not be wiped by a sparse update' );
+	}
+
+	/**
+	 * Creating a gate must fall back to a default title when the payload
+	 * omits one, since sanitize_gate() no longer guarantees a title.
+	 */
+	public function test_create_gate_without_title_uses_default_title() {
+		$gate_id          = Content_Gate::create_gate( [] );
+		$this->gate_ids[] = $gate_id;
+
+		$this->assertSame( 'Untitled Content Gate', get_post( $gate_id )->post_title );
+	}
+
+	/**
+	 * The site-wide default-status option is applied to new-gate payloads that omit
+	 * status, without overriding an explicit status, and without affecting direct
+	 * PHP callers of create_gate() (e.g. WooCommerce Memberships), which rely on
+	 * the 'publish' fallback.
+	 */
+	public function test_with_default_new_gate_status() {
+		Content_Gate::set_default_new_gate_status( 'publish' );
+
+		$defaulted = Content_Gate::with_default_new_gate_status( [ 'title' => 'New Gate' ] );
+		$this->assertSame( 'publish', $defaulted['status'], 'Omitted status must be filled from the site-wide default' );
+
+		$explicit = Content_Gate::with_default_new_gate_status(
+			[
+				'title'  => 'New Gate',
+				'status' => 'draft',
+			]
+		);
+		$this->assertSame( 'draft', $explicit['status'], 'Explicit status must not be overridden by the default' );
+
+		$gate_id          = Content_Gate::create_gate( [ 'title' => 'Direct PHP Gate' ] );
+		$this->gate_ids[] = $gate_id;
+		$this->assertSame( 'publish', get_post_status( $gate_id ), 'Direct create_gate() callers keep the publish fallback regardless of the option' );
+
+		Content_Gate::set_default_new_gate_status( 'draft' );
+		$gate_id_2        = Content_Gate::create_gate( [ 'title' => 'Direct PHP Gate 2' ] );
+		$this->gate_ids[] = $gate_id_2;
+		$this->assertSame( 'publish', get_post_status( $gate_id_2 ), 'Memberships-style callers must not be affected by a draft default' );
+
+		delete_option( Content_Gate::DEFAULT_STATUS_OPTION );
 	}
 }

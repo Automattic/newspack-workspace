@@ -8,6 +8,7 @@
 use Newspack\Teams_For_Memberships;
 
 require_once __DIR__ . '/../../mocks/teams-for-memberships-mocks.php';
+require_once __DIR__ . '/../../mocks/teams-for-memberships-membership-mocks.php';
 
 /**
  * Test Teams_For_Memberships helpers.
@@ -155,5 +156,127 @@ class Test_Teams_For_Memberships extends WP_UnitTestCase {
 
 		$this->assertSame( 'create', $result, 'Action should be unchanged for unrelated product items.' );
 		$this->assertArrayNotHasKey( $item_id, $GLOBALS['teams_mock_item_meta'], 'No meta should be written for unrelated items.' );
+	}
+
+	/**
+	 * The member end-date sync must be registered on member-add at priority 20,
+	 * after Teams' own subscription integration (priority 10).
+	 */
+	public function test_sync_member_end_date_hook_is_registered() {
+		$this->assertSame(
+			20,
+			has_action(
+				'wc_memberships_for_teams_add_team_member',
+				[ Teams_For_Memberships::class, 'sync_member_end_date_to_team' ]
+			),
+			'sync_member_end_date_to_team should be hooked at priority 20.'
+		);
+	}
+
+	/**
+	 * The core bug: a member with no end date on a team that has a future end
+	 * date should inherit the team's end date.
+	 */
+	public function test_sync_stamps_team_end_when_member_has_none() {
+		$team_end = time() + ( 30 * DAY_IN_SECONDS );
+		$team     = new \SkyVerge\WooCommerce\Memberships\Teams\Team( 101, $team_end );
+		$um       = new \WC_Memberships_User_Membership( 0, 'active' );
+
+		Teams_For_Memberships::sync_member_end_date_to_team( null, $team, $um );
+
+		$this->assertSame(
+			[ gmdate( 'Y-m-d H:i:s', $team_end ) ],
+			$um->set_end_calls,
+			'The member end date should be set to the team end date (as a UTC string).'
+		);
+		$this->assertSame( [], $um->status_calls, 'An already-active membership needs no status change.' );
+	}
+
+	/**
+	 * A membership that already has an end date is left untouched -- whatever the
+	 * plan or upstream Team::add_member() set is owned by them. This is true even
+	 * when that date is shorter than the team end (we only fill missing dates).
+	 */
+	public function test_sync_skips_member_with_existing_end_date() {
+		$team_end   = time() + ( 60 * DAY_IN_SECONDS );
+		$member_end = time() + ( 10 * DAY_IN_SECONDS );
+		$team       = new \SkyVerge\WooCommerce\Memberships\Teams\Team( 102, $team_end );
+		$um         = new \WC_Memberships_User_Membership( $member_end, 'active' );
+
+		Teams_For_Memberships::sync_member_end_date_to_team( null, $team, $um );
+
+		$this->assertSame( [], $um->set_end_calls, 'An existing end date must not be overwritten.' );
+		$this->assertSame( [], $um->status_calls );
+	}
+
+	/**
+	 * A member who already holds a longer end date (e.g. a separately purchased
+	 * individual membership) must keep it -- the sync never shortens.
+	 */
+	public function test_sync_preserves_longer_member_end() {
+		$team_end   = time() + ( 30 * DAY_IN_SECONDS );
+		$member_end = time() + ( 365 * DAY_IN_SECONDS );
+		$team       = new \SkyVerge\WooCommerce\Memberships\Teams\Team( 103, $team_end );
+		$um         = new \WC_Memberships_User_Membership( $member_end, 'active' );
+
+		Teams_For_Memberships::sync_member_end_date_to_team( null, $team, $um );
+
+		$this->assertSame( [], $um->set_end_calls, 'A longer existing end date must not be overwritten.' );
+		$this->assertSame( [], $um->status_calls );
+	}
+
+	/**
+	 * Unlimited team (no end date): the sync must be a no-op.
+	 */
+	public function test_sync_is_noop_for_unlimited_team() {
+		$team = new \SkyVerge\WooCommerce\Memberships\Teams\Team( 104, 0 );
+		$um   = new \WC_Memberships_User_Membership( 0, 'active' );
+
+		Teams_For_Memberships::sync_member_end_date_to_team( null, $team, $um );
+
+		$this->assertSame( [], $um->set_end_calls, 'Nothing should be written for an unlimited team.' );
+	}
+
+	/**
+	 * The hook only fills the end date; it never changes membership status, so it
+	 * triggers no synchronous ESP list mutations. Upstream Team::add_member()
+	 * already reconciles status, and is_active() handles lazy expiry.
+	 */
+	public function test_sync_does_not_change_status_when_filling_date() {
+		$team_end = time() + ( 30 * DAY_IN_SECONDS );
+		$team     = new \SkyVerge\WooCommerce\Memberships\Teams\Team( 105, $team_end );
+		$um       = new \WC_Memberships_User_Membership( 0, 'expired' );
+
+		Teams_For_Memberships::sync_member_end_date_to_team( null, $team, $um );
+
+		$this->assertSame( [ gmdate( 'Y-m-d H:i:s', $team_end ) ], $um->set_end_calls );
+		$this->assertSame( [], $um->status_calls, 'The hook must not change membership status.' );
+	}
+
+	/**
+	 * A member added to an already-lapsed team gets the past end date but must
+	 * NOT be force-expired here -- that would synchronously fire the ESP
+	 * list-removal side effect. is_active() expires it lazily instead.
+	 */
+	public function test_sync_does_not_force_expire_for_lapsed_team() {
+		$team_end = time() - ( 30 * DAY_IN_SECONDS );
+		$team     = new \SkyVerge\WooCommerce\Memberships\Teams\Team( 106, $team_end );
+		$um       = new \WC_Memberships_User_Membership( 0, 'active' );
+
+		Teams_For_Memberships::sync_member_end_date_to_team( null, $team, $um );
+
+		$this->assertSame( [ gmdate( 'Y-m-d H:i:s', $team_end ) ], $um->set_end_calls, 'The past team end date should still be applied.' );
+		$this->assertSame( [], $um->status_calls, 'The membership must not be force-expired on add.' );
+	}
+
+	/**
+	 * Defensive guards: a non-Team object must be a no-op (safe when Teams is absent).
+	 */
+	public function test_sync_ignores_non_team_object() {
+		$um = new \WC_Memberships_User_Membership( 0, 'active' );
+
+		Teams_For_Memberships::sync_member_end_date_to_team( null, new \stdClass(), $um );
+
+		$this->assertSame( [], $um->set_end_calls, 'A non-Team object should be ignored.' );
 	}
 }

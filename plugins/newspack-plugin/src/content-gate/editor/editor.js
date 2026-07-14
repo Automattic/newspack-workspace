@@ -66,7 +66,11 @@ function GateEdit() {
 					<p>{ __( "Newspack Campaign prompts won't be displayed when rendering gated content.", 'newspack-plugin' ) }</p>
 				</PluginPostStatusInfo>
 			) }
-			<PluginDocumentSettingPanel name="content-gate-styles-panel" title={ __( 'Styles', 'newspack-plugin' ) }>
+			<PluginDocumentSettingPanel
+				name="content-gate-styles-panel"
+				className="newspack-content-gate-panel"
+				title={ __( 'Styles', 'newspack-plugin' ) }
+			>
 				<div className="newspack-content-gate-style-selector">
 					{ styles.map( style => (
 						<Button
@@ -111,7 +115,11 @@ function GateEdit() {
 					</Fragment>
 				) }
 			</PluginDocumentSettingPanel>
-			<PluginDocumentSettingPanel name="content-gate-settings-panel" title={ __( 'Settings', 'newspack-plugin' ) }>
+			<PluginDocumentSettingPanel
+				name="content-gate-settings-panel"
+				className="newspack-content-gate-panel"
+				title={ __( 'Settings', 'newspack-plugin' ) }
+			>
 				<TextControl
 					type="number"
 					min="0"

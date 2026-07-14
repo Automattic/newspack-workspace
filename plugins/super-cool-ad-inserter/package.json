@@ -1,0 +1,24 @@
+{
+	"name": "super-cool-ad-inserter",
+	"version": "0.7.4",
+	"author": "Automattic",
+	"scripts": {
+		"start": "npm ci",
+		"cm": "newspack-scripts commit",
+		"semantic-release": "newspack-scripts release --files=super-cool-ad-inserter-plugin.php",
+		"release:archive": "rm -rf release && mkdir -p release && rsync -r . ./release/super-cool-ad-inserter --exclude-from='./.distignore' && cd release && zip -r super-cool-ad-inserter.zip super-cool-ad-inserter",
+		"release": "npm run semantic-release"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Automattic/newspack-workspace.git",
+		"directory": "plugins/super-cool-ad-inserter"
+	},
+	"license": "GPL-2.0-or-later",
+	"bugs": {
+		"url": "https://github.com/Automattic/super-cool-ad-inserter-plugin/issues"
+	},
+	"devDependencies": {
+		"newspack-scripts": "workspace:*"
+	}
+}

@@ -3,6 +3,11 @@
  */
 
 /**
+ * External dependencies
+ */
+import classNames from 'classnames';
+
+/**
  * Internal dependencies
  */
 import { Card } from '../';
@@ -11,16 +16,20 @@ import './style.scss';
 const CardSettingsGroup = ( {
 	actionType = 'none',
 	children,
+	className,
+	disabled = false,
 	icon = null,
 	headerAction,
 	title = '',
 	description = '',
 	isActive = false,
 	onEnable = () => {},
-	onHeaderClick = () => {},
+	onHeaderClick,
 }: {
 	actionType?: 'chevron' | 'toggle' | 'button' | 'link' | 'none';
 	children?: React.ReactNode;
+	className?: string;
+	disabled?: boolean;
 	icon?: React.ReactNode;
 	title: string;
 	headerAction?: {
@@ -40,7 +49,7 @@ const CardSettingsGroup = ( {
 } ) => {
 	return (
 		<Card
-			className="newspack-card--core--settings-group"
+			className={ classNames( 'newspack-card--core--settings-group', className ) }
 			actionType={ actionType }
 			isSmall
 			__experimentalCoreCard
@@ -54,6 +63,7 @@ const CardSettingsGroup = ( {
 				headerAction,
 				onHeaderClick,
 				onToggle: onEnable,
+				disabled,
 				icon,
 				iconBackgroundColor: true,
 				isActive,

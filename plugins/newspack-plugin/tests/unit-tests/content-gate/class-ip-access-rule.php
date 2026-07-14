@@ -89,6 +89,15 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test the bypass cookie lifetime is long enough to keep institutional
+	 * access persistent (see the COOKIE_EXPIRATION docblock).
+	 */
+	public function test_bypass_cookie_lifetime_is_at_least_thirty_days() {
+		$thirty_days_in_seconds = 30 * DAY_IN_SECONDS;
+		$this->assertGreaterThanOrEqual( $thirty_days_in_seconds, IP_Access_Rule::COOKIE_EXPIRATION );
+	}
+
+	/**
 	 * Test that the REST route is registered.
 	 */
 	public function test_rest_route_registered() {
@@ -644,6 +653,23 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.0/foo' ) );
 		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.0/' ) );
 		$this->assertFalse( IP_Access_Rule::ip_matches_ranges( '10.0.0.5', '10.0.0.0/-1' ) );
+	}
+
+	/**
+	 * Test that a presence cookie ('1') is recognized by is_cookie_set().
+	 */
+	public function test_is_cookie_set_accepts_presence_value() {
+		$_COOKIE[ IP_Access_Rule::COOKIE_NAME ] = '1'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->assertTrue( IP_Access_Rule::is_cookie_set() );
+		unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
+	 * Test that an absent cookie returns false from is_cookie_set().
+	 */
+	public function test_is_cookie_set_returns_false_when_absent() {
+		unset( $_COOKIE[ IP_Access_Rule::COOKIE_NAME ] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		$this->assertFalse( IP_Access_Rule::is_cookie_set() );
 	}
 
 	/**

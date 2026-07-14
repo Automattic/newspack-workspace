@@ -10,6 +10,17 @@ import { __ } from '@wordpress/i18n';
  * Internal dependencies
  */
 import { getServiceProvider } from '../service-providers';
+import { LAYOUT_CPT_SLUG } from '../utils/consts';
+
+/**
+ * Is the current editor session editing a layout post?
+ *
+ * Reads WP's `post-type-{cpt}` body class so the check is independent
+ * of script load order (the localised global races on some loads).
+ *
+ * @return {boolean} True if editing a layout.
+ */
+export const isLayoutEditor = () => typeof document !== 'undefined' && !! document.body?.classList?.contains( `post-type-${ LAYOUT_CPT_SLUG }` );
 
 /**
  * Is the current ESP a supported ESP?

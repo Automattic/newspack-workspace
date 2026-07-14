@@ -60,6 +60,13 @@ class Group_Subscription_Invite {
 	 * Initialize hooks.
 	 */
 	public static function init() {
+		// Invite acceptance and the invite email config are part of the group
+		// management UX, gated behind the Access Control feature flag. The
+		// static invite helpers remain available regardless; only the hooks are
+		// gated.
+		if ( ! Content_Gate::is_newspack_feature_enabled() ) {
+			return;
+		}
 		add_filter( 'newspack_email_configs', [ __CLASS__, 'add_email_config' ] );
 		add_action( 'template_redirect', [ __CLASS__, 'process_invite_request' ] );
 		add_action( 'template_redirect', [ __CLASS__, 'process_link_invite_request' ] );
@@ -75,11 +82,16 @@ class Group_Subscription_Invite {
 	public static function add_email_config( $configs ) {
 		$configs[ self::EMAIL_TYPE ] = [
 			'name'                   => self::EMAIL_TYPE,
-			'category'               => 'reader-activation',
+			// Reader-revenue category: this is a paid-product email, not
+			// an auth/account flow. The chip is derived from category in
+			// Emails::apply_config_defaults(), and `recipient` defaults to
+			// 'reader' there, so neither needs to be declared here.
+			'category'               => 'reader-revenue',
 			'label'                  => __( 'Group Subscription Invitation', 'newspack-plugin' ),
 			'description'            => __( 'Email sent to invite a reader to join a group subscription.', 'newspack-plugin' ),
 			'template'               => dirname( NEWSPACK_PLUGIN_FILE ) . '/includes/templates/reader-activation-emails/group-subscription-invite.php',
 			'editor_notice'          => __( 'This email will be sent when a reader is invited to join a group subscription.', 'newspack-plugin' ),
+			'trigger_description'    => __( 'Sent to invite a reader to join a group subscription.', 'newspack-plugin' ),
 			'available_placeholders' => [
 				[
 					'label'    => __( 'the site title', 'newspack-plugin' ),
@@ -230,10 +242,10 @@ class Group_Subscription_Invite {
 	public static function get_link_invite_url( $subscription_id, $user_id, $key ) {
 		return add_query_arg(
 			[
-				'action' => self::LINK_QUERY_ARG,
-				's'      => (int) $subscription_id,
-				'm'      => (int) $user_id,
-				'k'      => rawurlencode( $key ),
+				'action'       => self::LINK_QUERY_ARG,
+				'subscription' => (int) $subscription_id,
+				'manager'      => (int) $user_id,
+				'key'          => rawurlencode( $key ),
 			],
 			home_url()
 		);
@@ -339,7 +351,7 @@ class Group_Subscription_Invite {
 				__( 'Invalid subscription.', 'newspack-plugin' )
 			);
 		}
-		if ( ! $subscription->has_status( 'active' ) ) {
+		if ( ! $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
 			return new \WP_Error(
 				'newspack_group_subscription_link_invite_invalid_subscription',
 				__( 'Subscription is not active.', 'newspack-plugin' )
@@ -374,6 +386,16 @@ class Group_Subscription_Invite {
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
 		if ( ! $subscription || ! Group_Subscription::is_group_subscription( $subscription ) ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_subscription', __( 'Invalid subscription.', 'newspack-plugin' ) );
+		}
+		if ( ! $subscription->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
+			return new \WP_Error(
+				'newspack_group_subscription_invite_inactive',
+				sprintf(
+					/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+					__( 'This %s is no longer active.', 'newspack-plugin' ),
+					Group_Subscription::get_label_lower( 'singular' )
+				)
+			);
 		}
 		if ( ! $email ) {
 			return new \WP_Error( 'newspack_group_subscription_invite_invalid_email', __( 'Invalid email address.', 'newspack-plugin' ) );
@@ -483,6 +505,17 @@ class Group_Subscription_Invite {
 	 * @return true|\WP_Error True on success, or a WP_Error on failure.
 	 */
 	public static function accept_invite( $subscription, $key, $email ) {
+		$subscription_obj = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription_obj || ! $subscription_obj->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
+			return new \WP_Error(
+				'newspack_group_subscription_invite_inactive',
+				sprintf(
+					/* translators: %s: lowercase singular group label (e.g. "group", "team"). */
+					__( 'This %s is no longer active.', 'newspack-plugin' ),
+					Group_Subscription::get_label_lower( 'singular' )
+				)
+			);
+		}
 		$invite = self::get_invite_by_key( $subscription, $key );
 		if ( ! $invite || $invite['email'] !== $email ) {
 			// No need to display an error if the user is already a member: just give a success message.
@@ -508,8 +541,44 @@ class Group_Subscription_Invite {
 		if ( is_wp_error( $result ) ) {
 			return $result;
 		}
+		// update_members() returns an empty members_added both when the user could not be added
+		// (e.g. a non-reader account) AND when they are already a member (it skips the duplicate).
+		// Only the genuine non-add is a failure: leave the invite intact so it can be retried.
+		// An already-member is a fulfilled invite, so fall through to cancel it (it would otherwise
+		// keep counting toward the member limit).
+		// user_is_member() returns bool here (the invite always targets a group subscription, so the
+		// null "not a group subscription" case can't occur); a falsy result means "not a member".
+		if ( empty( $result['members_added'][ $user->ID ] ) && ! Group_Subscription::user_is_member( $user->ID, $subscription ) ) {
+			return new \WP_Error(
+				'newspack_group_subscription_invite_not_added',
+				__( 'Could not add this user to the group.', 'newspack-plugin' )
+			);
+		}
 
 		self::cancel_invite( $subscription, $email );
+		return true;
+	}
+
+	/**
+	 * Whether an invite key is valid for the given subscription and email.
+	 *
+	 * Mirrors the invite checks in accept_invite(), for use as a gate before an
+	 * account is created for a new invitee.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 * @param string               $key          The invite key.
+	 * @param string               $email        The invited email address.
+	 * @return bool
+	 */
+	private static function is_valid_invite( $subscription, $key, $email ) {
+		$subscription_obj = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription_obj || ! $subscription_obj->has_status( WooCommerce_Connection::ACTIVE_SUBSCRIPTION_STATUSES ) ) {
+			return false;
+		}
+		$invite = self::get_invite_by_key( $subscription_obj, $key );
+		if ( ! $invite || $invite['email'] !== $email || self::is_invite_expired( $invite ) ) {
+			return false;
+		}
 		return true;
 	}
 
@@ -568,7 +637,7 @@ class Group_Subscription_Invite {
 			return;
 		}
 
-		$myaccount_url = function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'myaccount' ) : home_url();
+		$myaccount_url = function_exists( 'wc_get_account_endpoint_url' ) ? wc_get_account_endpoint_url( 'edit-account' ) : home_url();
 
 		// Case 1: User is logged in.
 		$current_user = wp_get_current_user();
@@ -627,6 +696,12 @@ class Group_Subscription_Invite {
 		}
 
 		// Case 3: New user — auto-create account, verify email, and accept.
+		// Validate the invite first, so an invalid key cannot force account
+		// creation, email verification, and login for an arbitrary address.
+		if ( ! self::is_valid_invite( $subscription_id, $key, $email ) ) {
+			self::redirect_with_result( 'error_invite_invalid' );
+			return;
+		}
 		$user_id = Reader_Activation::register_reader( $email, false );
 		if ( is_wp_error( $user_id ) || ! $user_id ) {
 			do_action(
@@ -683,16 +758,16 @@ class Group_Subscription_Invite {
 			return;
 		}
 
-		$subscription_id = isset( $_GET['s'] ) ? absint( $_GET['s'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$user_id         = isset( $_GET['m'] ) ? absint( $_GET['m'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$key             = isset( $_GET['k'] ) ? sanitize_text_field( wp_unslash( $_GET['k'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$subscription_id = isset( $_GET['subscription'] ) ? absint( $_GET['subscription'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$user_id         = isset( $_GET['manager'] ) ? absint( $_GET['manager'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$key             = isset( $_GET['key'] ) ? sanitize_text_field( wp_unslash( $_GET['key'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 
 		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription_id );
 
 		// Compute "where do we send them on errors" for both auth states.
 		$current_user      = wp_get_current_user();
 		$is_logged_in      = (bool) $current_user->ID;
-		$myaccount_url     = function_exists( 'wc_get_page_permalink' ) ? wc_get_page_permalink( 'myaccount' ) : home_url();
+		$myaccount_url     = function_exists( 'wc_get_account_endpoint_url' ) ? wc_get_account_endpoint_url( 'edit-account' ) : home_url();
 		$error_target_url  = $is_logged_in ? $myaccount_url : home_url();
 
 		// Validate the link.
@@ -747,10 +822,17 @@ class Group_Subscription_Invite {
 		// Attempt to add the current user as a member.
 		$result = Group_Subscription::update_members( $subscription, [ $current_user->ID ] );
 		if ( is_wp_error( $result ) || empty( $result['members_added'][ $current_user->ID ] ) ) {
+			// update_members() returns either a WP_Error (subscription invalid, limit reached) or
+			// an array that can legitimately have an empty members_added (e.g. the current user is
+			// not a Reader Activation reader, so the per-member loop skipped them). Only WP_Error
+			// has get_error_message(); the array path needs its own message.
+			$error_message = is_wp_error( $result )
+				? $result->get_error_message()
+				: __( 'Could not add the current user to the group.', 'newspack-plugin' );
 			do_action(
 				'newspack_log',
 				'newspack_group_subscription_invite_link_failed',
-				$result->get_error_message(),
+				$error_message,
 				[
 					'type' => 'error',
 					'data' => [
@@ -781,49 +863,26 @@ class Group_Subscription_Invite {
 		}
 
 		$messages = [
-			'link_invalid'              => [
-				'message' => __( 'This link is no longer valid. Please contact the group manager.', 'newspack-plugin' ),
-				'type'    => 'error',
-			],
-			'link_full'                 => [
-				'message' => __( 'This group already has the maximum number of members. Please contact the group manager.', 'newspack-plugin' ),
-				'type'    => 'error',
-			],
-			'link_failed'               => [
-				'message' => __( "We couldn't add you to the group. Please contact the group manager.", 'newspack-plugin' ),
-				'type'    => 'error',
-			],
-			'login_needed'              => [
-				'message' => __( 'Please log in or register an account to join the group.', 'newspack-plugin' ),
-				'type'    => 'notice',
-			],
-			'error_invalid_link'        => [
-				'message' => __( 'Invalid invitation link.', 'newspack-plugin' ),
-				'type'    => 'error',
-			],
-			'error_email_mismatch'      => [
-				'message' => __( 'This invitation is for a different email address.', 'newspack-plugin' ),
-				'type'    => 'error',
-			],
-			'error_invite_invalid'      => [
-				'message' => __( 'Invalid or expired invitation.', 'newspack-plugin' ),
-				'type'    => 'error',
-			],
-			'error_registration_failed' => [
-				'message' => __( 'Could not create your account. Please try again.', 'newspack-plugin' ),
-				'type'    => 'error',
-			],
+			'link_invalid'              => __( 'This link is no longer valid. Please contact the group manager.', 'newspack-plugin' ),
+			'link_full'                 => __( 'This group already has the maximum number of members. Please contact the group manager.', 'newspack-plugin' ),
+			'link_failed'               => __( "We couldn't add you to the group. Please contact the group manager.", 'newspack-plugin' ),
+			'login_needed'              => __( 'Please log in or register an account to join the group.', 'newspack-plugin' ),
+			'error_invalid_link'        => __( 'Invalid invitation link.', 'newspack-plugin' ),
+			'error_email_mismatch'      => __( 'This invitation is for a different email address.', 'newspack-plugin' ),
+			'error_invite_invalid'      => __( 'Invalid or expired invitation.', 'newspack-plugin' ),
+			'error_registration_failed' => __( 'Could not create your account. Please try again.', 'newspack-plugin' ),
 		];
 
 		if ( 'success' === $result ) {
 			$message = __( 'You have successfully joined the group!', 'newspack-plugin' );
 			$type    = 'success';
 		} else {
-			$message = ! empty( $messages[ $result ]['message'] ) ? $messages[ $result ]['message'] : __( 'There was a problem with your invitation.', 'newspack-plugin' );
-			$type = ! empty( $messages[ $result ]['type'] ) ? $messages[ $result ]['type'] : 'error';
+			$message = ! empty( $messages[ $result ] ) ? $messages[ $result ] : __( 'There was a problem with your invitation.', 'newspack-plugin' );
+			// 'login_needed' is an informational call to action, not an error, so it announces politely.
+			$type = 'login_needed' === $result ? 'success' : 'error';
 		}
 
-		Newspack_UI::add_notice( $message, $type );
+		Newspack_UI::add_notice( $message, [ 'type' => $type ] );
 	}
 
 	/**
@@ -837,7 +896,7 @@ class Group_Subscription_Invite {
 	private static function redirect_with_result( $status, $target_url = null ) {
 		$args = [ self::RESULT_QUERY_ARG => $status ];
 		if ( null === $target_url ) {
-			$target_url = is_user_logged_in() && function_exists( 'wc_get_account_endpoint_url' ) ? \wc_get_account_endpoint_url( 'edit-account' ) : home_url();
+			$target_url = is_user_logged_in() && function_exists( 'wc_get_account_endpoint_url' ) ? wc_get_account_endpoint_url( 'edit-account' ) : home_url();
 		}
 		wp_safe_redirect( add_query_arg( $args, $target_url ) );
 		exit;

@@ -21,25 +21,6 @@ domReady( function () {
 			? newspackUI.notices.createNotice
 			: ( msg, type ) => console.warn( '[group-subscriptions]', type, msg ); // eslint-disable-line no-console
 
-	// Swap each tab badge between --outline (default) and --secondary (selected).
-	const segmentedControl = content.querySelector( '.newspack-my-account__group_subscription__segmented-control' );
-	if ( segmentedControl ) {
-		const syncBadgeVariants = () => {
-			segmentedControl.querySelectorAll( '.newspack-ui__segmented-control__tabs > .newspack-ui__button' ).forEach( button => {
-				const badge = button.querySelector( '.newspack-ui__badge' );
-				if ( ! badge ) {
-					return;
-				}
-				const isSelected = button.classList.contains( 'selected' );
-				badge.classList.toggle( 'newspack-ui__badge--secondary', isSelected );
-				badge.classList.toggle( 'newspack-ui__badge--outline', ! isSelected );
-			} );
-		};
-		syncBadgeVariants();
-		// `content-selected` fires after `.selected` is toggled, avoiding a click-handler ordering race.
-		segmentedControl.addEventListener( 'content-selected', syncBadgeVariants );
-	}
-
 	// Handle invite modal.
 	const inviteModal = document.getElementById( 'newspack-my-account__group_subscription--invite-member' );
 	const openInviteModal = [ ...document.querySelectorAll( '.newspack-my-account__subscription--invite-member' ) ];
@@ -49,6 +30,28 @@ domReady( function () {
 				event.preventDefault();
 				inviteModal.setAttribute( 'data-state', 'open' );
 			} );
+		} );
+	}
+
+	// Handle remove-member confirm modal via event delegation.
+	const removeMemberModal = document.getElementById( 'newspack-my-account__group_subscription--confirm-remove-member' );
+	if ( removeMemberModal ) {
+		const memberIdInput = removeMemberModal.querySelector( '[data-remove-member-id]' );
+		const memberNameSlot = removeMemberModal.querySelector( '[data-member-name]' );
+		document.addEventListener( 'click', event => {
+			const trigger = event.target.closest( '.newspack-my-account__group_subscription__remove-member' );
+			if ( ! trigger ) {
+				return;
+			}
+			event.preventDefault();
+			if ( memberIdInput ) {
+				memberIdInput.value = trigger.getAttribute( 'data-member-id' ) || '';
+			}
+			if ( memberNameSlot ) {
+				memberNameSlot.textContent = trigger.getAttribute( 'data-member-name' ) || '';
+			}
+			trigger.closest( '.newspack-ui__dropdown' )?.classList.remove( 'active' );
+			removeMemberModal.setAttribute( 'data-state', 'open' );
 		} );
 	}
 

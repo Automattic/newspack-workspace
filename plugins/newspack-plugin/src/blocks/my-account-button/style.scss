@@ -1,4 +1,10 @@
 .wp-block-newspack-my-account-button {
+	white-space: nowrap;
+
+	.block-editor-rich-text__editable {
+		white-space: nowrap !important;
+	}
+
 	&__icon {
 		display: grid;
 		place-items: center;

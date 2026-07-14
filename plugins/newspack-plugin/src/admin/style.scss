@@ -199,7 +199,7 @@ h1 {
 	}
 }
 
-.newspack-wizard__content > .newspack-wizard__section-header {
+.newspack-wizard__content > .newspack-wizard__section-header:not(:first-child) {
 	margin-top: 48px;
 }
 

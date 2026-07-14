@@ -19,9 +19,16 @@ find_project() {
 }
 
 # Translate a container path under /newspack-{plugins,themes}/<name> to the
-# pnpm filter selector (the workspace package's directory name).
+# pnpm filter selector for a workspace package: the package's actual `name`
+# read from its package.json. We can't derive this from the folder, because a
+# package's name often differs from its directory (plugins/newspack-plugin is
+# named "newspack", plugins/newspack-blocks is "@automattic/newspack-blocks").
+# A bare `--filter <dirname>` matches no projects there, so pnpm silently builds
+# nothing and exits 0. Falls back to the basename if no name is found.
 package_filter_for_dir() {
-    basename "$1"
+    local name
+    name=$(sed -n 's/.*"name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$1/package.json" 2>/dev/null | head -n1)
+    if [ -n "$name" ]; then echo "$name"; else basename "$1"; fi
 }
 
 # Build a standalone repos/ checkout with its own toolchain. These live outside
@@ -66,6 +73,13 @@ fi
 
 case $WHAT_TO_BUILD in
     all)
+        # Root composer install provisions the shared PHP dev tooling
+        # (PHP_CodeSniffer + the WP coding standards in ./vendor) that the
+        # pre-commit hook's PHP check and `composer phpcs` depend on -- the
+        # counterpart to the root `pnpm install` above that provisions the JS
+        # linters. The monorepo root is bind-mounted (.:/newspack-monorepo), so
+        # this lands on the host ./vendor where the git hook runs.
+        composer install --working-dir "$MONOREPO_ROOT"
         # Composer install per monorepo project (each plugin still has its own
         # composer.json for production deps; dev deps are hoisted to the root).
         # Standalone repos/ checkouts are not built here -- they're external and

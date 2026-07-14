@@ -16,6 +16,58 @@ use Newspack\Newsletters\Send_List;
 final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_Service_Provider {
 
 	/**
+	 * Default timeout, in seconds, for ActiveCampaign API requests.
+	 *
+	 * @var int
+	 */
+	const DEFAULT_REQUEST_TIMEOUT = 45;
+
+	/**
+	 * Timeout, in seconds, for best-effort cleanup requests (deleting a
+	 * previously-created campaign before a new send). ActiveCampaign
+	 * occasionally stops responding to calls that reference a particular
+	 * campaign; when that happens the campaign_list/campaign_delete cleanup must
+	 * fail fast instead of consuming the whole request budget and stranding the
+	 * send behind a stuck campaign it was only trying to tidy up.
+	 *
+	 * This bound is also reused for the safety-critical status check in
+	 * get_campaign_dispatch_state(): a fast failure there is desirable, since a
+	 * slow/unresponsive ActiveCampaign correctly routes to the fail-safe
+	 * "unverified" branch that blocks the resend. Don't lower it on the
+	 * assumption it only affects disposable cleanup calls.
+	 *
+	 * @var int
+	 */
+	const CLEANUP_REQUEST_TIMEOUT = 15;
+
+	/**
+	 * Dispatch states for a stored campaign, returned by
+	 * get_campaign_dispatch_state(): a confirmed fresh draft that is safe to
+	 * (re)send, a campaign that has already been dispatched and must never be
+	 * resent, or an indeterminate state that needs manual review before resending.
+	 */
+	const CAMPAIGN_DRAFT              = 'draft';
+	const CAMPAIGN_ALREADY_DISPATCHED = 'dispatched';
+	const CAMPAIGN_NEEDS_REVIEW       = 'needs_review';
+
+	/**
+	 * ActiveCampaign V1 campaign status codes (the `status` field on a campaign).
+	 * See https://www.activecampaign.com/api/example.php?call=campaign_status.
+	 */
+	const STATUS_DRAFT     = '0';
+	const STATUS_SCHEDULED = '1';
+	const STATUS_SENDING   = '2';
+	const STATUS_PAUSED    = '3';
+	const STATUS_STOPPED   = '4';
+	const STATUS_COMPLETED = '5';
+	const STATUS_DISABLED  = '6';
+
+	/**
+	 * Campaign statuses that can be safely deleted (not mid- or post-send).
+	 */
+	const DELETABLE_STATUSES = [ self::STATUS_DRAFT, self::STATUS_SCHEDULED, self::STATUS_DISABLED ];
+
+	/**
 	 * Provider name.
 	 *
 	 * @var string
@@ -88,6 +140,323 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	}
 
 	/**
+	 * ActiveCampaign personalization-tag dictionary for the editor autocomplete.
+	 *
+	 * Sourced from: https://help.activecampaign.com/hc/en-us/articles/220709307-Personalization-Tags-overview
+	 *
+	 * @return array
+	 */
+	public static function get_merge_tags() {
+		return [
+			'label'          => __( 'personalization tag', 'newspack-newsletters' ),
+			'trigger_prefix' => '',
+			'tags'           => [
+				/* Contact personalization. */
+				[
+					'tag'   => '%EMAIL%',
+					'label' => __( "Inserts the contact's email address.", 'newspack-newsletters' ),
+				],
+				[
+					'tag'      => '%FIRSTNAME%',
+					'label'    => __( "Inserts the contact's first name.", 'newspack-newsletters' ),
+					'keywords' => [ 'first name' ],
+				],
+				[
+					'tag'      => '%LASTNAME%',
+					'label'    => __( "Inserts the contact's last name.", 'newspack-newsletters' ),
+					'keywords' => [ 'last name' ],
+				],
+				[
+					'tag'      => '%FULLNAME%',
+					'label'    => __( "Inserts the contact's full name.", 'newspack-newsletters' ),
+					'keywords' => [ 'full name' ],
+				],
+				[
+					'tag'      => '%PHONE%',
+					'label'    => __( "Inserts the contact's phone number.", 'newspack-newsletters' ),
+					'keywords' => [ 'telephone' ],
+				],
+				[
+					'tag'      => '%ORGANIZATION%',
+					'label'    => __( "Inserts the contact's organization name.", 'newspack-newsletters' ),
+					'keywords' => [ 'company', 'organization' ],
+				],
+				/* Subscription metadata. */
+				[
+					'tag'   => '%SUBDATE%',
+					'label' => __( 'Inserts the date the contact subscribed to the list.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%SUBTIME%',
+					'label' => __( 'Inserts the time the contact subscribed to the list.', 'newspack-newsletters' ),
+				],
+				/* Campaign links. */
+				[
+					'tag'   => '%UNSUBSCRIBELINK%',
+					'label' => __( 'Inserts the unsubscribe link required in every email.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'      => '%WEBCOPY%',
+					'label'    => __( 'Inserts a link to view this campaign in a web browser (web copy link).', 'newspack-newsletters' ),
+					'keywords' => [ 'web copy', 'view in browser' ],
+				],
+				[
+					'tag'   => '%WEBCOPY-NOSOCIAL%',
+					'label' => __( 'Inserts a web copy link without social-share links.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'      => '%UPDATELINK%',
+					'label'    => __( "Inserts a link to the contact's subscription preferences page.", 'newspack-newsletters' ),
+					'keywords' => [ 'preferences', 'update profile' ],
+				],
+				[
+					'tag'      => '%FORWARD2FRIEND%',
+					'label'    => __( 'Inserts a link that lets the contact forward this email to a friend.', 'newspack-newsletters' ),
+					'keywords' => [ 'forward' ],
+				],
+				/* Deals (most recent deal). */
+				[
+					'tag'   => '%DEAL_OWNER_FIRST_NAME%',
+					'label' => __( "Inserts the deal owner's first name.", 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%DEAL_OWNER_LAST_NAME%',
+					'label' => __( "Inserts the deal owner's last name.", 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%DEAL_OWNER_EMAIL%',
+					'label' => __( "Inserts the deal owner's email address.", 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%DEAL_TITLE%',
+					'label' => __( 'Inserts the deal title.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%DEAL_DESCRIPTION%',
+					'label' => __( 'Inserts the deal description.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%DEAL_VALUE%',
+					'label' => __( 'Inserts the deal value.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%DEAL_STATUS%',
+					'label' => __( 'Inserts the deal status.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%DEAL_PIPELINE%',
+					'label' => __( 'Inserts the deal pipeline.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%DEAL_STAGE%',
+					'label' => __( 'Inserts the deal stage.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%DEAL_CREATED_DATE%',
+					'label' => __( 'Inserts the deal created date.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%DEAL_UPDATED_DATE%',
+					'label' => __( 'Inserts the deal last-updated date.', 'newspack-newsletters' ),
+				],
+				/* Account fields. */
+				[
+					'tag'      => '%ACCT_NAME%',
+					'label'    => __( 'Inserts the account name.', 'newspack-newsletters' ),
+					'keywords' => [ 'account' ],
+				],
+				[
+					'tag'   => '%ACCT_URL%',
+					'label' => __( 'Inserts the account URL.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%ACCT_CREATED_DATE%',
+					'label' => __( 'Inserts the account created date.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%ACCT_UPDATED_DATE%',
+					'label' => __( 'Inserts the account last-updated date.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%ACCT_ADDRESS_1%',
+					'label' => __( 'Inserts the account address line 1.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%ACCT_ADDRESS_2%',
+					'label' => __( 'Inserts the account address line 2.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%ACCT_CITY%',
+					'label' => __( 'Inserts the account city.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'      => '%ACCT_STATE_PROVIDENCE%',
+					'label'    => __( 'Inserts the account state or province.', 'newspack-newsletters' ),
+					'keywords' => [ 'state', 'province' ],
+				],
+				[
+					'tag'      => '%ACCT_POSTAL_CODE%',
+					'label'    => __( 'Inserts the account postal code.', 'newspack-newsletters' ),
+					'keywords' => [ 'zip', 'postcode' ],
+				],
+				[
+					'tag'   => '%ACCT_NUMBER_OF_EMPLOYEES%',
+					'label' => __( 'Inserts the account number of employees.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%ACCT_ANNUAL_REVENUE%',
+					'label' => __( 'Inserts the account annual revenue.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%ACCT_INDUSTRY_VERTICAL%',
+					'label' => __( 'Inserts the account industry or vertical.', 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%ACCT_COUNTRY%',
+					'label' => __( 'Inserts the account country.', 'newspack-newsletters' ),
+				],
+				/* Social share. */
+				[
+					'tag'      => '%SOCIALSHARE%',
+					'label'    => __( 'Inserts the full set of social-share submit links.', 'newspack-newsletters' ),
+					'keywords' => [ 'social' ],
+				],
+				[
+					'tag'      => '%SOCIAL-FACEBOOK-LIKE%',
+					'label'    => __( 'Inserts a Facebook Like button.', 'newspack-newsletters' ),
+					'keywords' => [ 'facebook' ],
+				],
+				[
+					'tag'      => '%SOCIALSHARE-FACEBOOK%',
+					'label'    => __( 'Inserts a Share on Facebook link/icon.', 'newspack-newsletters' ),
+					'keywords' => [ 'facebook' ],
+				],
+				[
+					'tag'      => '%SOCIALSHARE-FACEBOOK-LINK%',
+					'label'    => __( 'Inserts a Share on Facebook link (no icon).', 'newspack-newsletters' ),
+					'keywords' => [ 'facebook' ],
+				],
+				[
+					'tag'      => '%SOCIALSHARE-TWITTER%',
+					'label'    => __( 'Inserts a Share on X (formerly Twitter) link/icon.', 'newspack-newsletters' ),
+					'keywords' => [ 'x', 'twitter' ],
+				],
+				[
+					'tag'      => '%SOCIALSHARE-TWITTER-LINK%',
+					'label'    => __( 'Inserts a Share on X (formerly Twitter) link (no icon).', 'newspack-newsletters' ),
+					'keywords' => [ 'x', 'twitter' ],
+				],
+				[
+					'tag'      => '%SOCIALSHARE-DIGG%',
+					'label'    => __( 'Inserts a Share on Digg link/icon.', 'newspack-newsletters' ),
+					'keywords' => [ 'digg' ],
+				],
+				[
+					'tag'      => '%SOCIALSHARE-DIGG-LINK%',
+					'label'    => __( 'Inserts a Share on Digg link (no icon).', 'newspack-newsletters' ),
+					'keywords' => [ 'digg' ],
+				],
+				[
+					'tag'      => '%SOCIALSHARE-REDDIT%',
+					'label'    => __( 'Inserts a Share on Reddit link/icon.', 'newspack-newsletters' ),
+					'keywords' => [ 'reddit' ],
+				],
+				[
+					'tag'      => '%SOCIALSHARE-REDDIT-LINK%',
+					'label'    => __( 'Inserts a Share on Reddit link (no icon).', 'newspack-newsletters' ),
+					'keywords' => [ 'reddit' ],
+				],
+				[
+					'tag'      => '%SOCIALSHARE-DELICIOUS%',
+					'label'    => __( 'Inserts a Share on del.icio.us link/icon.', 'newspack-newsletters' ),
+					'keywords' => [ 'delicious' ],
+				],
+				[
+					'tag'      => '%SOCIALSHARE-DELICIOUS-LINK%',
+					'label'    => __( 'Inserts a Share on del.icio.us link (no icon).', 'newspack-newsletters' ),
+					'keywords' => [ 'delicious' ],
+				],
+				[
+					'tag'      => '%SOCIALSHARE-GPLUS%',
+					'label'    => __( 'Inserts a Share on Google+ link/icon.', 'newspack-newsletters' ),
+					'keywords' => [ 'google plus', 'gplus' ],
+				],
+				[
+					'tag'      => '%SOCIALSHARE-GPLUS-LINK%',
+					'label'    => __( 'Inserts a Share on Google+ link (no icon).', 'newspack-newsletters' ),
+					'keywords' => [ 'google plus', 'gplus' ],
+				],
+				[
+					'tag'      => '%SOCIALSHARE-STUMBLEUPON%',
+					'label'    => __( 'Inserts a Share on StumbleUpon link/icon.', 'newspack-newsletters' ),
+					'keywords' => [ 'stumbleupon' ],
+				],
+				[
+					'tag'      => '%SOCIALSHARE-STUMBLEUPON-LINK%',
+					'label'    => __( 'Inserts a Share on StumbleUpon link (no icon).', 'newspack-newsletters' ),
+					'keywords' => [ 'stumbleupon' ],
+				],
+				/* Date and time. */
+				[
+					'tag'      => '%TODAY%',
+					'label'    => __( "Inserts today's date.", 'newspack-newsletters' ),
+					'keywords' => [ 'date', 'today' ],
+				],
+				[
+					'tag'      => '%TODAY+1%',
+					'label'    => __( "Inserts today's date plus N days. Replace 1 with the number of days you want to add.", 'newspack-newsletters' ),
+					'keywords' => [ 'date', 'tomorrow', 'future' ],
+				],
+				[
+					'tag'      => '%TODAY-1%',
+					'label'    => __( "Inserts today's date minus N days. Replace 1 with the number of days you want to subtract.", 'newspack-newsletters' ),
+					'keywords' => [ 'date', 'yesterday', 'past' ],
+				],
+				/* Sender info. */
+				[
+					'tag'      => '%SENDER-INFO%',
+					'label'    => __( 'Inserts the sender / list contact info.', 'newspack-newsletters' ),
+					'keywords' => [ 'sender', 'address' ],
+				],
+				[
+					'tag'      => '%SENDER-INFO-SINGLELINE%',
+					'label'    => __( 'Inserts the sender / list contact info on a single line.', 'newspack-newsletters' ),
+					'keywords' => [ 'sender', 'address' ],
+				],
+				[
+					'tag'      => '%SENDER-LIST-REMINDER%',
+					'label'    => __( "Inserts the list's permission reminder.", 'newspack-newsletters' ),
+					'keywords' => [ 'reminder' ],
+				],
+				/* Contact and list metadata. */
+				[
+					'tag'      => '%CONTACTIP%',
+					'label'    => __( "Inserts the contact's IP address.", 'newspack-newsletters' ),
+					'keywords' => [ 'ip' ],
+				],
+				[
+					'tag'      => '%LISTNAME%',
+					'label'    => __( "Inserts the name of the contact's list.", 'newspack-newsletters' ),
+					'keywords' => [ 'list' ],
+				],
+				[
+					'tag'      => '%SUBSCRIBERID%',
+					'label'    => __( "Inserts the contact's unique ID.", 'newspack-newsletters' ),
+					'keywords' => [ 'id', 'subscriber' ],
+				],
+				[
+					'tag'   => '%CAMPAIGNID%',
+					'label' => __( "Inserts the campaign's unique ID.", 'newspack-newsletters' ),
+				],
+				[
+					'tag'   => '%MESSAGEID%',
+					'label' => __( "Inserts the message's unique ID.", 'newspack-newsletters' ),
+				],
+			],
+		];
+	}
+
+	/**
 	 * Test the ActiveCampaign API connection.
 	 *
 	 * @return true|WP_Error True if the connection is successful, WP_Error otherwise.
@@ -119,13 +488,15 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		$credentials = $this->api_credentials();
 		$api_path    = '/api/3/';
 		$query       = isset( $options['query'] ) ? $options['query'] : [];
+		$timeout     = isset( $options['timeout'] ) ? (int) $options['timeout'] : self::DEFAULT_REQUEST_TIMEOUT;
+		unset( $options['timeout'] );
 		$url         = add_query_arg(
 			$query,
 			rtrim( $credentials['url'], '/' ) . $api_path . $resource
 		);
 		$args        = [
 			'method'  => $method,
-			'timeout' => 45, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
+			'timeout' => $timeout, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
 			'headers' => [
 				'Content-Type' => 'application/json',
 				'Accept'       => 'application/json',
@@ -134,13 +505,16 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		];
 		$response    = wp_safe_remote_request( $url, $args + $options );
 		if ( is_wp_error( $response ) ) {
-			return $response;
+			return $this->humanize_transport_error( $response );
 		}
 		$response_code = wp_remote_retrieve_response_code( $response );
 		$response_body = json_decode( wp_remote_retrieve_body( $response ), true );
 		$response_message = wp_remote_retrieve_response_message( $response );
 
-		if ( 400 < $response_code || ! empty( $response_body['errors'] ) ) {
+		// Treat HTTP 400 (Bad Request) as an error, not just 401+: a bare 400 with
+		// no `errors` array would otherwise slip through as a valid response and
+		// feed bad data into callers (including the dispatch-state reasoning).
+		if ( 400 <= $response_code || ! empty( $response_body['errors'] ) ) {
 			$errors = new WP_Error();
 			if ( isset( $response_body['errors'] ) && is_array( $response_body['errors'] ) ) {
 				foreach ( $response_body['errors'] as $error ) {
@@ -153,6 +527,49 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			return $errors;
 		}
 		return $response_body;
+	}
+
+	/**
+	 * Translate a low-level HTTP transport failure into a publisher-friendly error.
+	 *
+	 * ActiveCampaign sometimes stops responding to calls that reference a
+	 * particular campaign, which surfaces from wp_safe_remote_request as a cURL
+	 * timeout (error 28, "0 bytes received"). That raw message is meaningless to
+	 * a publisher, so timeouts are rephrased into actionable guidance. Every
+	 * other transport error is returned unchanged so genuine failures keep their
+	 * original, more specific message.
+	 *
+	 * The substring match is for the publisher-facing *message* only; it is not
+	 * relied on for send-safety. get_campaign_dispatch_state() fails safe on
+	 * ANY error, so a timeout that this match ever missed would still block a
+	 * resend rather than slip through.
+	 *
+	 * The 'cURL error 28' token is locale-stable (cURL error numbers aren't
+	 * translated), so the important case is always caught. The 'timed out'
+	 * fallback is locale/transport-fragile (cron/CLI or non-English builds may
+	 * phrase it differently); when it misses, the publisher sees the raw message.
+	 * That is a residual UX gap only, never a safety issue.
+	 *
+	 * @param WP_Error $error A WP_Error returned by wp_safe_remote_request.
+	 *
+	 * @return WP_Error The original error, or a friendlier one for timeouts.
+	 */
+	private function humanize_transport_error( $error ) {
+		$message = $error->get_error_message();
+		if ( false !== stripos( $message, 'timed out' ) || false !== stripos( $message, 'cURL error 28' ) ) {
+			return new \WP_Error(
+				'newspack_newsletters_active_campaign_timeout',
+				__( 'ActiveCampaign did not respond in time. This is usually a temporary issue on ActiveCampaign\'s end. Please wait a few minutes and try again; if the problem continues, try sending a fresh copy of the newsletter.', 'newspack-newsletters' ),
+				// Preserve the original transport failure for logging and support
+				// tooling; the publisher sees the friendly message above.
+				[
+					'original_error_code'    => $error->get_error_code(),
+					'original_error_message' => $message,
+					'original_error_data'    => $error->get_error_data(),
+				]
+			);
+		}
+		return $error;
 	}
 
 	/**
@@ -183,6 +600,8 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			$options_query = $options['query'];
 			unset( $options['query'] );
 		}
+		$timeout = isset( $options['timeout'] ) ? (int) $options['timeout'] : self::DEFAULT_REQUEST_TIMEOUT;
+		unset( $options['timeout'] );
 		$content_type = 'application/json';
 		$url          = rtrim( $credentials['url'], '/' ) . $api_path;
 		$body         = null;
@@ -198,7 +617,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		}
 		$args     = [
 			'method'  => $method,
-			'timeout' => 45, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
+			'timeout' => $timeout, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout
 			'headers' => [
 				'Content-Type' => $content_type,
 				'Accept'       => 'application/json',
@@ -208,7 +627,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		];
 		$response = wp_safe_remote_request( $url, $args + $options );
 		if ( is_wp_error( $response ) ) {
-			return $response;
+			return $this->humanize_transport_error( $response );
 		}
 		$body = json_decode( $response['body'], true );
 
@@ -551,6 +970,7 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		} else {
 			$updated_url = update_option( 'newspack_newsletters_active_campaign_url', $credentials['url'] );
 			$updated_key = update_option( 'newspack_newsletters_active_campaign_key', $credentials['key'] );
+			do_action( 'newspack_newsletters_provider_credentials_changed', 'active_campaign' );
 			return $updated_url && $updated_key;
 		}
 	}
@@ -1267,22 +1687,42 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	 * @return array|WP_Error API response data or error.
 	 */
 	private function delete_campaign( $campaign_id, $force = false ) {
-		$campaigns = $this->api_v1_request( 'campaign_list', 'GET', [ 'query' => [ 'ids' => $campaign_id ] ] );
-		if ( is_wp_error( $campaigns ) ) {
-			return $campaigns;
-		}
-		$deletable_statuses = [
-			'0', // Draft.
-			'1', // Scheduled.
-			'6', // Disabled.
-		];
-		if ( true !== $force && ! in_array( $campaigns[0]['status'], $deletable_statuses ) ) {
-			return new \WP_Error(
-				'newspack_newsletters_active_campaign_campaign_not_deletable',
-				__( 'Campaign is not deletable.', 'newspack-newsletters' )
+		// Deleting a previous campaign is best-effort cleanup, never the operation
+		// the publisher is waiting on, so it must fail fast: a campaign stuck in
+		// ActiveCampaign would otherwise hang this call for the full request
+		// timeout and strand the new send behind it.
+		//
+		// The status look-up only exists to enforce the deletable-status guard,
+		// so it is skipped entirely when forcing — saving a round-trip (the
+		// callers that pass $force already know the campaign is disposable).
+		if ( true !== $force ) {
+			$campaigns = $this->api_v1_request(
+				'campaign_list',
+				'GET',
+				[
+					'query'   => [ 'ids' => $campaign_id ],
+					'timeout' => self::CLEANUP_REQUEST_TIMEOUT,
+				]
 			);
+			if ( is_wp_error( $campaigns ) ) {
+				return $campaigns;
+			}
+			$status = isset( $campaigns[0]['status'] ) ? (string) $campaigns[0]['status'] : '';
+			if ( ! in_array( $status, self::DELETABLE_STATUSES, true ) ) {
+				return new \WP_Error(
+					'newspack_newsletters_active_campaign_campaign_not_deletable',
+					__( 'Campaign is not deletable.', 'newspack-newsletters' )
+				);
+			}
 		}
-		return $this->api_v1_request( 'campaign_delete', 'GET', [ 'query' => [ 'id' => $campaign_id ] ] );
+		return $this->api_v1_request(
+			'campaign_delete',
+			'GET',
+			[
+				'query'   => [ 'id' => $campaign_id ],
+				'timeout' => self::CLEANUP_REQUEST_TIMEOUT,
+			]
+		);
 	}
 
 	/**
@@ -1299,6 +1739,12 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 		if ( Newspack_Newsletters::EMAIL_HTML_META !== $meta_key ) {
 			return;
 		}
+		// Layouts share the email editor (so the bundle, MJML refresh, and
+		// editor chrome all load) but must never create or update an ESP
+		// campaign — the post type is the boundary.
+		if ( $this->is_layout_post( $post_id ) ) {
+			return;
+		}
 		$post = get_post( $post_id );
 		if ( ! Newspack_Newsletters_Editor::is_editing_email( $post_id ) ) {
 			return;
@@ -1307,6 +1753,78 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 			return;
 		}
 		$this->sync( $post );
+	}
+
+	/**
+	 * Determine whether a stored campaign has already been dispatched, so send()
+	 * can avoid sending the same newsletter twice.
+	 *
+	 * A send attempt can time out *after* ActiveCampaign has begun dispatching the
+	 * campaign, so the campaign's own status — not the success of our last
+	 * request — is the source of truth for whether the newsletter already went
+	 * out. Only a confirmed draft is safe to recreate and (re)send.
+	 *
+	 * @param string $campaign_id The ActiveCampaign campaign ID.
+	 *
+	 * @return string|WP_Error One of the CAMPAIGN_* dispatch states, or a WP_Error
+	 *                         when the status could not be verified (a timeout),
+	 *                         in which case the caller must not resend.
+	 */
+	private function get_campaign_dispatch_state( $campaign_id ) {
+		$campaigns = $this->api_v1_request(
+			'campaign_list',
+			'GET',
+			[
+				'query'   => [ 'ids' => $campaign_id ],
+				'timeout' => self::CLEANUP_REQUEST_TIMEOUT,
+			]
+		);
+		if ( is_wp_error( $campaigns ) ) {
+			// ANY error (timeout, HTTP 5xx, auth, malformed) means we cannot
+			// confirm whether the campaign already started sending, so fail safe
+			// and refuse to resend rather than risk a duplicate send to the full
+			// list. A campaign that genuinely no longer exists does NOT arrive
+			// here: ActiveCampaign returns it as a successful empty list, handled
+			// below. The error code is deliberately not inspected — an HTTP 5xx
+			// during an AC incident (exactly when this matters) carries the
+			// generic api_error code, not the timeout code, and must still block.
+			return new \WP_Error(
+				'newspack_newsletters_active_campaign_unverified_campaign',
+				__( 'Newspack could not confirm with ActiveCampaign whether this newsletter had already started sending, so it was not resent (to avoid a duplicate). Please wait a few minutes and try again, or check the campaign status in ActiveCampaign.', 'newspack-newsletters' )
+			);
+		}
+		// A successful response with no campaign means it no longer exists in
+		// ActiveCampaign: nothing was dispatched, so it is safe to recreate.
+		//
+		// This is the only branch that defaults toward recreate-and-send on an
+		// absent row, and its safety rests on an ActiveCampaign behavior: AC is
+		// documented never to return an empty *success* for a campaign that was
+		// dispatched and then deleted (it returns result_code=0, which lands in
+		// the is_wp_error() fail-safe branch above). If that assumption ever
+		// broke, the cost would be a duplicate send to the full list, so do not
+		// widen this default without re-verifying that AC behavior.
+		$status = isset( $campaigns[0]['status'] ) ? (string) $campaigns[0]['status'] : self::STATUS_DRAFT;
+		switch ( $status ) {
+			case self::STATUS_DRAFT: // Never dispatched.
+				return self::CAMPAIGN_DRAFT;
+			case self::STATUS_SCHEDULED:
+			case self::STATUS_SENDING:
+			case self::STATUS_COMPLETED:
+				return self::CAMPAIGN_ALREADY_DISPATCHED;
+			default:
+				// Paused (3) and stopped (4) are campaigns that were sending and
+				// got halted, so they have likely already delivered to part of
+				// the list; an unknown status is equally indeterminate. None are
+				// safe to recreate-and-resend, so route them to manual review.
+				//
+				// Disabled (6) reaches this default too. It is intentionally NOT
+				// treated as a fresh draft here even though it appears in
+				// DELETABLE_STATUSES: "deletable" only means the cleanup path may
+				// remove it, not that its dispatch state is known to be safe to
+				// resend. A disabled campaign is genuinely indeterminate, so it
+				// belongs in needs-review, not the recreate-and-send path.
+				return self::CAMPAIGN_NEEDS_REVIEW;
+		}
 	}
 
 	/**
@@ -1319,11 +1837,30 @@ final class Newspack_Newsletters_Active_Campaign extends \Newspack_Newsletters_S
 	public function send( $post ) {
 		$post_id = $post->ID;
 
-		$error = null;
-
-		/** Clean up existing campaign. */
+		// A campaign created by a previous attempt may already have been
+		// dispatched even if that attempt ended in a timeout: ActiveCampaign can
+		// begin sending before the HTTP response returns. So before doing
+		// anything destructive, verify the stored campaign's state. Never delete,
+		// recreate, or re-trigger a campaign we cannot confirm is still a fresh
+		// draft, or the newsletter could go out twice.
 		$campaign_id = get_post_meta( $post_id, 'ac_campaign_id', true );
 		if ( $campaign_id ) {
+			$dispatch_state = $this->get_campaign_dispatch_state( $campaign_id );
+			if ( is_wp_error( $dispatch_state ) ) {
+				return $dispatch_state;
+			}
+			if ( self::CAMPAIGN_ALREADY_DISPATCHED === $dispatch_state ) {
+				// A prior attempt already started the send; its response was just
+				// lost. Treat as success so it is marked sent, not resent.
+				return true;
+			}
+			if ( self::CAMPAIGN_NEEDS_REVIEW === $dispatch_state ) {
+				return new \WP_Error(
+					'newspack_newsletters_active_campaign_send_needs_review',
+					__( "This newsletter's ActiveCampaign campaign is in an unexpected state (paused or stopped) and may have already partially sent. To avoid sending it twice, Newspack did not resend it. Please review the campaign in ActiveCampaign before trying again.", 'newspack-newsletters' )
+				);
+			}
+			// Confirmed draft: safe to clean up and recreate below.
 			$this->delete_campaign( $campaign_id, true );
 		}
 		/** Clean up existing test campaigns. */

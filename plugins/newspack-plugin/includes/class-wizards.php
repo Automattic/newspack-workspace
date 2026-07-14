@@ -49,7 +49,6 @@ class Wizards {
 				[
 					'sections' => [
 						'custom-events'    => 'Newspack\Wizards\Newspack\Custom_Events_Section',
-						'emails'           => 'Newspack\Wizards\Newspack\Emails_Section',
 						'social-pixels'    => 'Newspack\Wizards\Newspack\Pixels_Section',
 						'recirculation'    => 'Newspack\Wizards\Newspack\Recirculation_Section',
 						'syndication'      => 'Newspack\Wizards\Newspack\Syndication_Section',
@@ -64,7 +63,13 @@ class Wizards {
 			),
 			'advertising-display-ads' => new Advertising_Display_Ads(),
 			'advertising-sponsors'    => new Advertising_Sponsors(),
-			'audience'                => new Audience_Wizard(),
+			'audience'                => new Audience_Wizard(
+				[
+					'sections' => [
+						'emails' => 'Newspack\Wizards\Newspack\Emails_Section',
+					],
+				]
+			),
 			'audience-campaigns'      => new Audience_Campaigns(),
 			'audience-content-gates'  => new Audience_Content_Gates(),
 			'audience-donations'      => new Audience_Donations(),

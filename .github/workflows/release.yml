@@ -30,7 +30,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GH_TOKEN }}
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v4
@@ -38,7 +38,7 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@7c071dfe9dc99bdf297fa79cb49ea005b9fcadbc # 2.37.1
         with:
           php-version: '8.3'
           tools: composer
@@ -63,6 +63,11 @@ jobs:
               composer install --no-dev --no-interaction --no-scripts --working-dir="${dir}"
             fi
           done
+      # Snapshot existing tags so the post-release Slack step can diff them
+      # against the tags multi-semantic-release creates and report exactly which
+      # packages were published.
+      - name: Snapshot existing tags
+        run: git tag > "$RUNNER_TEMP/tags-before.txt"
       - name: Release
         run: pnpm exec multi-semantic-release --sequential-init
         env:
@@ -83,7 +88,17 @@ jobs:
       # reverts the internal deps back to workspace:*, and commits them once.
       # The [skip ci] commit won't re-trigger this workflow, and post-release.sh's
       # ancestry check is unaffected by the extra commit.
+      #
+      # Runs only on the `release` branch. Version/changelog stamps are authored
+      # on a single channel (see config/release-helpers.js): prerelease channels
+      # (alpha, hotfix/*, epic/*) build their zip/tag from the working-tree bump
+      # but never commit it, so only `release` ever edits the version-stamp
+      # lines. That keeps the committed CHANGELOG free of prerelease noise and
+      # stops post-release.sh's release -> alpha / default-branch sync from
+      # colliding on version headers. The prerelease zip is built from the
+      # working tree regardless, so nothing downstream needs this commit.
       - name: Sync package.json versions
+        if: ${{ github.ref_name == 'release' }}
         run: |
           node .github/scripts/finalize-package-versions.cjs
           # The release is already published by this point, so the branch must not
@@ -93,6 +108,26 @@ jobs:
             git pull --rebase origin "${GITHUB_REF_NAME}"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           }
+
+      # Post a release-success summary to Slack: stable releases (release branch)
+      # go to the a8c workspace, alpha releases to the Newspack workspace. Only
+      # these two branches notify; hotfix/* and epic/* publish silently.
+      # Only the workspace for this branch's release type gets its token, so an
+      # alpha run never sees the a8c token and vice versa (the empty fallback is
+      # fine: the script skips when its token/channel is unset). continue-on-error
+      # is a backstop so a notification hiccup can never fail an already-published
+      # release; the script also traps errors and exits 0 on its own.
+      - name: Notify Slack of release
+        if: ${{ success() && ( github.ref_name == 'release' || github.ref_name == 'alpha' ) }}
+        continue-on-error: true
+        env:
+          TAGS_BEFORE_FILE: ${{ runner.temp }}/tags-before.txt
+          SLACK_AUTH_TOKEN: ${{ github.ref_name == 'release' && secrets.SLACK_AUTH_TOKEN || '' }}
+          SLACK_NEWSPACK_BOT_TOKEN: ${{ github.ref_name == 'alpha' && secrets.SLACK_NEWSPACK_BOT_TOKEN || '' }}
+          SLACK_A8C_RELEASE_CHANNEL_ID: ${{ secrets.SLACK_A8C_RELEASE_CHANNEL_ID }}
+          SLACK_NEWSPACK_RELEASE_CHANNEL_ID: ${{ secrets.SLACK_NEWSPACK_RELEASE_CHANNEL_ID }}
+          SLACK_SUPPORT_TEAM_SUBTEAM_ID: ${{ github.ref_name == 'release' && secrets.SLACK_SUPPORT_TEAM_SUBTEAM_ID || '' }}
+        run: ./.github/scripts/notify-release.sh
 
   # Branch maintenance after a stable release: reset alpha and sync release into
   # the default branch. Only runs on the release branch (not alpha/hotfix/epic).
@@ -130,14 +165,13 @@ jobs:
       WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}
 
   release-wporg-scaip:
-    name: WP.org / super-cool-ad-inserter-plugin
+    name: WP.org / super-cool-ad-inserter
     if: github.ref == 'refs/heads/release'
     needs: release
     uses: ./.github/workflows/_release-wporg.yml
     with:
-      plugin-name: super-cool-ad-inserter-plugin
-      plugin-path: plugins/super-cool-ad-inserter-plugin
-      wporg-slug: super-cool-ad-inserter
+      plugin-name: super-cool-ad-inserter
+      plugin-path: plugins/super-cool-ad-inserter
     secrets:
       WP_ORG_USERNAME: ${{ secrets.WP_ORG_USERNAME }}
       WP_ORG_PASSWORD: ${{ secrets.WP_ORG_PASSWORD }}

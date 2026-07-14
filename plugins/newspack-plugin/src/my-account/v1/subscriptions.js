@@ -21,4 +21,15 @@ domReady( function () {
 			cancelButton.addEventListener( 'click', confirmCancel );
 		}
 	} );
+
+	// Show a confirmation modal before leaving a group subscription.
+	const leaveGroupModal = document.getElementById( 'newspack-my-account__confirm-leave-group' );
+	if ( leaveGroupModal ) {
+		document.querySelectorAll( '.newspack-my-account__subscription--leave-group' ).forEach( trigger => {
+			trigger.addEventListener( 'click', event => {
+				event.preventDefault();
+				leaveGroupModal.setAttribute( 'data-state', 'open' );
+			} );
+		} );
+	}
 } );

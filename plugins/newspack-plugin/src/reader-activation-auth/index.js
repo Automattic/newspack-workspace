@@ -3,6 +3,8 @@
  * Internal dependencies
  */
 import { SIGN_IN_MODAL_HASHES, getModalContainer, openAuthModal } from './auth-modal.js';
+import { openVerificationModal as openVerificationModalImpl } from './verification-modal.js';
+import { maybeConfirmRegistration as maybeConfirmRegistrationImpl } from './confirmation-modal.js';
 
 import { domReady } from '../utils';
 
@@ -13,6 +15,22 @@ window.newspackRAS.push( readerActivation => {
 	domReady( function () {
 		/** Expose the openAuthModal function to the RAS scope */
 		readerActivation._openAuthModal = openAuthModal;
+		/**
+		 * Expose the openVerificationModal helper on the RAS scope (consumed cross-plugin
+		 * by registration entry points like the newspack-newsletters subscribe block).
+		 * Injects readerActivation.setOTPTimer so the helper doesn't reach back through
+		 * the window global.
+		 */
+		readerActivation.openVerificationModal = config =>
+			openVerificationModalImpl( {
+				setOTPTimer: readerActivation.setOTPTimer,
+				...config,
+			} );
+		/**
+		 * Expose the maybeConfirmRegistration helper on the RAS scope (consumed
+		 * cross-plugin by registration entry points).
+		 */
+		readerActivation.maybeConfirmRegistration = maybeConfirmRegistrationImpl;
 
 		/**
 		 * Handle hash change.
@@ -26,12 +44,15 @@ window.newspackRAS.push( readerActivation => {
 			}
 
 			const currentHash = window.location.hash.replace( '#', '' );
+			// Both #signin_modal and #register_modal open the unified form. The form decides
+			// signin vs register server-side based on whether the submitted email already
+			// belongs to an account, so the two hashes are functionally equivalent here.
 			if ( SIGN_IN_MODAL_HASHES.includes( currentHash ) ) {
 				if ( ev ) {
 					ev.preventDefault();
 				}
 
-				container.setFormAction( currentHash === 'register_modal' ? 'register' : 'signin' );
+				container.setFormAction( 'signin' );
 				openAuthModal( { closeOnSuccess: true } );
 			}
 		}
