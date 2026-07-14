@@ -38,13 +38,6 @@ class Premium_Newsletters_Wizard extends Wizard {
 	public $parent_menu = 'edit.php?post_type=newspack_nl_cpt';
 
 	/**
-	 * Order relative to the Newspack Dashboard menu item.
-	 *
-	 * @var int
-	 */
-	public $parent_menu_order = 4;
-
-	/**
 	 * Run add_page() at priority 9 so our submenu entries are inserted before
 	 * Newsletters_Wizard::add_page() (priority 10) appends "Settings".
 	 *
