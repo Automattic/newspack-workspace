@@ -19,6 +19,14 @@ html {
 	border-radius: 100%;
 }
 
+// Gutenberg's inline text-color format wraps text in mark.has-inline-color.
+// That mark is a color carrier, not a highlight, so it must not get the
+// browser's default yellow highlight background. Explicitly-set inline
+// background colors still win over this rule.
+mark.has-inline-color {
+	background-color: transparent;
+}
+
 figcaption {
 	color: var(--wp--preset--color--contrast-3);
 	font-size: var(--wp--preset--font-size--x-small);

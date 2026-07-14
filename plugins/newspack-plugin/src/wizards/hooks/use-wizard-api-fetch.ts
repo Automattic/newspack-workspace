@@ -88,23 +88,20 @@ export function useWizardApiFetch( slug: string ) {
 		( select: ( namespace: string ) => WizardSelector ) => select( WIZARD_STORE_NAMESPACE ).getWizardData( slug ),
 		[ slug ]
 	);
-	const [ error, setError ] = useState< WizardApiError | null >( wizardData.error ?? null );
+	const [ error, setError ] = useState< WizardApiError | null >( null );
 
 	const requests = useRef< string[] >( [] );
 
+	// Errors live in local component state only, never in the wizard store. Two
+	// effects used to sync `error` to and from the store; because the store
+	// deep-clones on every write (breaking reference equality), that store->local
+	// / local->store pair raced into a flickering render loop on any fetch failure
+	// (NPPM-2733). The effect below only clears the local error when the slug
+	// changes, so an error from a previous slug can't leak into a new one. It is
+	// loop-free: it touches local state, never the store.
 	useEffect( () => {
-		if ( wizardData?.error !== error ) {
-			setError( wizardData?.error ?? null );
-		}
-	}, [ wizardData?.error, error ] );
-
-	useEffect( () => {
-		updateWizardSettings( {
-			slug,
-			path: [ 'error' ],
-			value: error,
-		} );
-	}, [ error, updateWizardSettings, slug ] );
+		setError( null );
+	}, [ slug ] );
 
 	function resetError() {
 		setError( null );
@@ -153,7 +150,7 @@ export function useWizardApiFetch( slug: string ) {
 			const cacheKeyPath = removeQueryArgs( path ?? '' );
 			const { isCached = method === 'GET', updateCacheKey = null, updateCacheMethods = [], ...options } = opts;
 
-			const { error: cachedError, [ cacheKeyPath ]: { [ method ]: cachedMethod = null } = {} }: WizardData = wizardData;
+			const { [ cacheKeyPath ]: { [ method ]: cachedMethod = null } = {} }: WizardData = wizardData;
 
 			function thenCallback( response: T ) {
 				if ( isCached ) {
@@ -210,8 +207,7 @@ export function useWizardApiFetch( slug: string ) {
 			}
 
 			// Cache exists and is not empty, return it.
-			if ( isCached && ( cachedError || cachedMethod ) ) {
-				setError( cachedError );
+			if ( isCached && cachedMethod ) {
 				on( 'onSuccess', cachedMethod );
 				return cachedMethod;
 			}
