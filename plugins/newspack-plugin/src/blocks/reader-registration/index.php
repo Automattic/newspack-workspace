@@ -540,6 +540,12 @@ function process_form() {
 		if ( $existing_user && Reader_Activation::is_user_reader( $existing_user ) ) {
 			// Return the action type - frontend will check OTP hash validity and request fresh OTP if needed.
 			$response['action'] = Reader_Activation::is_reader_without_password( $existing_user ) ? 'otp' : 'pwd';
+		} elseif ( $existing_user ) {
+			// The email belongs to an existing non-reader account (e.g. an admin or editor).
+			// register_reader() has already sent the non-reader login reminder; surface the same
+			// "Account not found." error the auth modal returns instead of a silent success response.
+			// "Account not found." does not confirm the account exists, so it stays privacy-preserving.
+			return send_form_response( new \WP_Error( 'unauthorized', __( 'Account not found.', 'newspack-plugin' ) ) );
 		}
 	}
 

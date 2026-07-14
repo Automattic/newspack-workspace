@@ -295,6 +295,10 @@ window.newspackRAS.push( function ( readerActivation ) {
 						messageContentElement.querySelectorAll( '[data-set-action]' ).forEach( setActionListener );
 						submitButtons.forEach( button => {
 							button.disabled = false;
+							// Clear the loading class in lockstep with the disabled attribute. It's added
+							// by the modal-submit handler in newspack-ui/js/modals.js (which assumes a page
+							// navigation); this flow is AJAX, so the button would otherwise stay spinning.
+							button.classList.remove( 'newspack-ui__button--loading' );
 						} );
 					}
 				}
@@ -375,6 +379,10 @@ window.newspackRAS.push( function ( readerActivation ) {
 						// back to it in OTP state on Send code.
 						submitButtons.forEach( button => {
 							button.disabled = false;
+							// Clear the loading class in lockstep with the disabled attribute. It's added
+							// by the modal-submit handler in newspack-ui/js/modals.js (which assumes a page
+							// navigation); this flow is AJAX, so the button would otherwise stay spinning.
+							button.classList.remove( 'newspack-ui__button--loading' );
 						} );
 						form.style.opacity = 1;
 
@@ -544,6 +552,10 @@ window.newspackRAS.push( function ( readerActivation ) {
 										}
 										submitButtons.forEach( button => {
 											button.disabled = false;
+											// Clear the loading class (added on submit by newspack-ui/js/modals.js)
+											// in lockstep with the disabled attribute so the button doesn't stay
+											// spinning once we switch to the OTP/password state.
+											button.classList.remove( 'newspack-ui__button--loading' );
 										} );
 									} else {
 										form.endLoginFlow( message, status, data );
