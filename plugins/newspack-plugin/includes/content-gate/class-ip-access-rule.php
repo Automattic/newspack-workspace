@@ -439,8 +439,13 @@ class IP_Access_Rule {
 	 * Get the URL to redirect to from the dedicated endpoint.
 	 *
 	 * Checks redirect_to param, then Referer header, then falls back to homepage.
+	 * Returned host-relative (see get_check_url()) so the loading page's
+	 * client-side redirect resolves against the document (proxy) origin. Under a
+	 * rewriting proxy (e.g. a library EZproxy) an absolute URL would send the
+	 * just-verified reader back to the canonical host — off the proxy, without
+	 * the proxied IP — and re-lock the content. See NPPD-2039.
 	 *
-	 * @return string The redirect URL.
+	 * @return string Host-relative redirect URL (path and query, without scheme or host).
 	 */
 	private static function get_dedicated_redirect_url() {
 		$home = home_url( '/' );
@@ -448,16 +453,16 @@ class IP_Access_Rule {
 		if ( ! empty( $_GET['redirect_to'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput
 			$url = esc_url_raw( wp_unslash( $_GET['redirect_to'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput
 			if ( wp_validate_redirect( $url, $home ) !== $home || $url === $home ) {
-				return $url;
+				return wp_make_link_relative( $url );
 			}
 		}
 
 		$referer = wp_get_referer();
 		if ( $referer && wp_validate_redirect( $referer, $home ) !== $home ) {
-			return $referer;
+			return wp_make_link_relative( $referer );
 		}
 
-		return $home;
+		return wp_make_link_relative( $home );
 	}
 
 	/**

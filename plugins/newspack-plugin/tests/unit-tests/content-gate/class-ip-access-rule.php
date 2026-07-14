@@ -186,7 +186,7 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$method->setAccessible( true );
 		$url = $method->invoke( null );
 
-		$this->assertSame( home_url( '/target-page/' ), $url );
+		$this->assertSame( '/target-page/', $url );
 
 		$_GET = [];
 	}
@@ -201,7 +201,7 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$method->setAccessible( true );
 		$url = $method->invoke( null );
 
-		$this->assertSame( home_url( '/' ), $url );
+		$this->assertSame( '/', $url );
 
 		$_GET = [];
 	}
@@ -216,7 +216,7 @@ class Newspack_Test_IP_Access_Rule extends WP_UnitTestCase {
 		$method->setAccessible( true );
 		$url = $method->invoke( null );
 
-		$this->assertSame( home_url( '/' ), $url );
+		$this->assertSame( '/', $url );
 	}
 
 	/**
