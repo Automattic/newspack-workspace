@@ -110,7 +110,10 @@ class Newspack_Newsletters_Settings {
 				'type'              => 'textarea',
 				'default'           => '',
 				'provider'          => 'mailchimp',
-				'placeholder'       => esc_attr__( "We'll need to subscribe this email address manually. Please contact our support team.", 'newspack-newsletters' ),
+				// Plain __() — the value is delivered over REST and set as a React attribute
+				// (placeholder={ props.placeholder }); React escapes attributes at render, so
+				// PHP-side esc_attr/esc_html here would only encode the apostrophe (We&#039;ll).
+				'placeholder'       => __( "We'll need to subscribe this email address manually. Please contact our support team.", 'newspack-newsletters' ),
 				'sanitize_callback' => 'wp_kses_post',
 				'help'              => esc_html__( 'Shown to readers who unsubscribed from Mailchimp and try to resubscribe on the site. HTML links are allowed. Leave empty for the default message.', 'newspack-newsletters' ),
 				'onboarding'        => false,
