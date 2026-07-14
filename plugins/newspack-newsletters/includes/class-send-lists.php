@@ -170,6 +170,6 @@ class Send_Lists {
 		foreach ( $defaults as $key => $value ) {
 			$args[ $key ] = $request[ $key ] ?? $value;
 		}
-		return \rest_ensure_response( $provider->get_send_lists( $args, true ) );
+		return \rest_ensure_response( $provider->get_send_lists_with_fallback( $args, true ) );
 	}
 }
