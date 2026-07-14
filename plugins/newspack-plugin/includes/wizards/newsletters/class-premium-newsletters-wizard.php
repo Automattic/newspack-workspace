@@ -42,7 +42,7 @@ class Premium_Newsletters_Wizard extends Wizard {
 	 *
 	 * @var int
 	 */
-	public $parent_menu_order = 3;
+	public $parent_menu_order = 4;
 
 	/**
 	 * Run add_page() at priority 9 so our submenu entries are inserted before

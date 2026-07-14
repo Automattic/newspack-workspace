@@ -38,12 +38,19 @@ class Insights_Wizard extends Wizard {
 	protected $capability = 'manage_options';
 
 	/**
-	 * Parent menu item slug. Nests under the top-level Newspack admin menu,
-	 * matching the Setup wizard's precedent.
+	 * The parent menu item name. Self-referential: Insights is its own
+	 * top-level admin menu item, like Audience.
 	 *
 	 * @var string
 	 */
-	public $parent_menu = 'newspack-dashboard';
+	public $parent_menu = 'newspack-insights';
+
+	/**
+	 * Parent menu order relative to the Newspack Dashboard menu item.
+	 *
+	 * @var int
+	 */
+	public $parent_menu_order = 1;
 
 	/**
 	 * Checks if the feature is enabled.
@@ -112,6 +119,25 @@ class Insights_Wizard extends Wizard {
 	 */
 	public function get_name() {
 		return esc_html__( 'Insights', 'newspack-plugin' );
+	}
+
+	/**
+	 * Add the Insights top-level menu page.
+	 */
+	public function add_page() {
+		$icon = sprintf(
+			'data:image/svg+xml;base64,%s',
+			base64_encode( Newspack_UI_Icons::get_svg( 'chartReport' ) )
+		);
+
+		add_menu_page(
+			$this->get_name(),
+			$this->get_name(),
+			$this->capability,
+			$this->slug,
+			[ $this, 'render_wizard' ],
+			$icon
+		);
 	}
 
 	/**

@@ -41,7 +41,7 @@ class Audience_Wizard extends Wizard {
 	 *
 	 * @var int
 	 */
-	public $parent_menu_order = 1;
+	public $parent_menu_order = 2;
 
 	/**
 	 * Audience Configuration Constructor.
