@@ -139,4 +139,63 @@ class CheckoutButtonBlockTest extends WP_UnitTestCase_Blocks { // phpcs:ignore
 		$this->assertSame( trim( $class ), $class, 'Class list should have no leading or trailing whitespace.' );
 		$this->assertStringNotContainsString( '  ', $class, 'Class list should not contain double spaces.' );
 	}
+
+	/**
+	 * Return the container <div> node from rendered output, or null.
+	 *
+	 * @param string $output Rendered HTML.
+	 * @return DOMElement|null The container element.
+	 */
+	private function get_container( $output ) {
+		$dom      = new DOMDocument();
+		$previous = libxml_use_internal_errors( true );
+		$dom->loadHTML( '<!DOCTYPE html><html><body>' . $output . '</body></html>' );
+		libxml_use_internal_errors( $previous );
+		foreach ( $dom->getElementsByTagName( 'div' ) as $div ) {
+			if ( false !== strpos( $div->getAttribute( 'class' ), 'wp-block-newspack-blocks-checkout-button' ) ) {
+				return $div;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * A block-supplied className must not break out of the container's class
+	 * attribute. The className is output-escaped, so a value crafted to close
+	 * the attribute and add an event handler is neutralized: the container
+	 * <div> exposes only its class attribute, with no injected handler or style.
+	 */
+	public function test_container_classname_cannot_inject_attributes() {
+		$payload   = 'x" style="position:fixed;inset:0" onmouseover="window.__xss=1" data-x="';
+		$output    = $this->render( [ 'className' => $payload ] );
+		$container = $this->get_container( $output );
+
+		$this->assertNotNull( $container, 'Checkout-button container should render.' );
+
+		$attribute_names = [];
+		foreach ( $container->attributes as $attribute ) {
+			$attribute_names[] = $attribute->name;
+		}
+
+		$this->assertSame(
+			[ 'class' ],
+			$attribute_names,
+			'Container must expose only a class attribute; a className must not add style, onmouseover, etc.'
+		);
+	}
+
+	/**
+	 * A className carrying angle brackets must not escape the tag and inject a
+	 * new element; the brackets are entity-escaped inside the class value.
+	 */
+	public function test_container_classname_cannot_inject_elements() {
+		$output = $this->render( [ 'className' => 'x"><img src=x onerror="window.__xss=1">' ] );
+
+		$dom      = new DOMDocument();
+		$previous = libxml_use_internal_errors( true );
+		$dom->loadHTML( '<!DOCTYPE html><html><body>' . $output . '</body></html>' );
+		libxml_use_internal_errors( $previous );
+
+		$this->assertSame( 0, $dom->getElementsByTagName( 'img' )->length, 'className must not inject an element.' );
+	}
 }

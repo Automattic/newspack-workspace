@@ -177,7 +177,7 @@ function render_callback( $attributes ) {
 	);
 	return sprintf(
 		'<div class="%1$s">%2$s</div>',
-		$container_classes,
+		esc_attr( $container_classes ),
 		$form
 	);
 }
