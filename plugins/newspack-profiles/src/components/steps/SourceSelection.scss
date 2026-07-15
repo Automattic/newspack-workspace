@@ -1,0 +1,108 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+.newspack-profiles__source-selection {
+
+	&__header {
+		flex-wrap: wrap;
+		margin-bottom: 0.5rem;
+
+		h3 {
+			margin-top: 0;
+		}
+	}
+
+	&__refresh {
+		flex-shrink: 0;
+	}
+
+	&__fieldset {
+		border: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	&__options--disabled {
+		pointer-events: none;
+		opacity: 0.5;
+	}
+}
+
+.newspack-profiles__source-grid {
+	margin-top: 1.5rem;
+}
+
+.newspack-profiles__source-option {
+	display: flex;
+	align-items: center;
+	border: 1px solid wp-colors.$gray-300;
+	border-radius: 4px;
+	padding: 0.5rem;
+	cursor: pointer;
+	transition: border-color 0.1s ease, background-color 0.1s ease;
+
+	&:hover {
+		border-color: var(--wp-admin-theme-color);
+	}
+
+	&.is-selected {
+		border-color: var(--wp-admin-theme-color);
+		background-color: color-mix(in srgb, var(--wp-admin-theme-color) 5%, transparent);
+	}
+
+	&__input {
+		position: absolute;
+		opacity: 0;
+		width: 0;
+		height: 0;
+		pointer-events: none;
+	}
+
+	&__icon {
+		margin-right: 1rem;
+		flex-shrink: 0;
+	}
+
+	&__content {
+		flex: 1;
+		min-width: 0;
+	}
+
+	&__name {
+		display: flex;
+		align-items: center;
+		font-weight: 600;
+		color: wp-colors.$gray-700;
+		font-size: wp-vars.$font-size-medium;
+		line-height: wp-vars.$font-line-height-medium;
+	}
+
+	&__details {
+		font-size: wp-vars.$font-size-small;
+		line-height: wp-vars.$font-line-height-small;
+		color: wp-colors.$gray-600;
+		margin-top: 0.25rem;
+	}
+
+	&__detail {
+		margin-right: 1rem;
+	}
+}
+
+.newspack-profiles__source-add {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: wp-vars.$font-size-medium;
+	line-height: wp-vars.$font-line-height-medium;
+	color: wp-colors.$gray-600;
+	border-radius: 4px;
+	padding: 2.5rem;
+	margin: 0;
+	border: 1px dashed wp-colors.$gray-300;
+
+	&:hover {
+		border-color: var(--wp-admin-theme-color);
+		background-color: color-mix(in srgb, var(--wp-admin-theme-color) 5%, transparent);
+	}
+}

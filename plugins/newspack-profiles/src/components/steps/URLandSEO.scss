@@ -1,0 +1,25 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+.newspack-profiles__url-seo {
+	padding: 8px 24px;
+}
+
+.newspack-profiles__seo-group {
+	max-width: 32rem;
+
+	&--top {
+		margin-top: 1.5rem;
+	}
+
+	&--bottom {
+		margin-bottom: 5rem;
+	}
+}
+
+.newspack-profiles__help-text {
+	font-size: wp-vars.$font-size-small;
+	line-height: wp-vars.$font-line-height-small;
+	color: wp-colors.$gray-700;
+	margin-top: 0.25rem;
+}

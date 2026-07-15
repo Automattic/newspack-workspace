@@ -1,0 +1,36 @@
+<!-- wp:remote-data-blocks/{{slug}}
+{
+  "remoteData": {
+    "enabledOverrides": ["slug_override"],
+    "blockName": "remote-data-blocks/{{slug}}",
+    "pagination": [],
+    "queryKey": "display",
+    "queryInputs": [{ "slug": "{{profile_slug}}" }],
+    "resultId": "5538d1a2-31ff-4e1a-a937-4d99b75612b4",
+    "results": [
+      {
+        "result": {},
+        "uuid": "a73852e1-9e83-44bb-a023-a7f6e4b10db0"
+      }
+    ]
+  }
+}
+-->
+<div class="wp-block-remote-data-blocks-{{slug}} rdb-container">
+
+<!-- wp:remote-data-blocks/template -->
+{{pattern}}
+<!-- /wp:remote-data-blocks/template -->
+
+
+<!-- wp:remote-data-blocks/no-results -->
+
+<!-- wp:paragraph -->
+<p>No results found.</p>
+<!-- /wp:paragraph -->
+
+<!-- /wp:remote-data-blocks/no-results -->
+
+
+</div>
+<!-- /wp:remote-data-blocks/{{slug}} -->

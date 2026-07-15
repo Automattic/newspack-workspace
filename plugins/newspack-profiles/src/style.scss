@@ -1,0 +1,57 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "../../../packages/colors/colors.module" as colors;
+@import "@wordpress/dataviews/build-style/style.css";
+
+// Match the Newspack brand admin color (primary-600), like newspack-plugin.
+// Target `body`: the block editor (loaded in the wizard) sets these vars on
+// `body`, and a direct declaration there beats an inherited `:root` value.
+body {
+	--wp-admin-theme-color: #{colors.$primary-600} !important;
+	--wp-admin-theme-color--rgb: #{colors.$primary-600--rgb} !important;
+	--wp-admin-theme-color-darker-10: #{colors.$primary-700} !important;
+	--wp-admin-theme-color-darker-10--rgb: #{colors.$primary-700--rgb} !important;
+	--wp-admin-theme-color-darker-20: #{colors.$primary-800} !important;
+	--wp-admin-theme-color-darker-20--rgb: #{colors.$primary-800--rgb} !important;
+	--wp-admin-theme-color-lighter-10: #{colors.$primary-000} !important;
+	--wp-admin-theme-color-lighter-10--rgb: #{colors.$primary-000--rgb} !important;
+}
+
+.toplevel_page_newspack-profiles-settings,
+.profile-collections_page_newspack-profiles-add {
+
+	#wpcontent {
+		padding: 0;
+		background: wp-colors.$white;
+		min-height: 100vh;
+	}
+
+	#wpbody-content {
+		padding-bottom: 0;
+	}
+
+	.dataviews-view-table__actions-column .components-button {
+		color: wp-colors.$black !important;
+		background: transparent !important;
+		opacity: 1 !important;
+	}
+}
+
+.newspack-profile-pattern-selection-step {
+
+	.dataviews-title-field {
+		white-space: wrap;
+	}
+
+	.block-editor-block-preview__content {
+		transform-origin: top left;
+	}
+}
+
+.components-text-control__input:disabled,
+.components-form-token-field__input-container.is-disabled {
+	background-color: wp-colors.$gray-100;
+	color: wp-colors.$gray-900;
+	cursor: not-allowed;
+	opacity: 0.6;
+	border-color: wp-colors.$gray-600;
+}

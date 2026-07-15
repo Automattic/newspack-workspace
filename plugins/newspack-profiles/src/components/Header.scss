@@ -1,0 +1,47 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-profiles__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	border-bottom: 1px solid wp-colors.$gray-200;
+
+	&__title {
+		display: flex;
+		align-items: center;
+	}
+
+	&__brand {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 3.5rem;
+		height: 3.5rem;
+
+		.newspack-icon {
+			background: var(--wp-admin-theme-color);
+			fill: wp-colors.$white;
+		}
+	}
+
+	&__heading {
+		padding: 0 24px;
+
+		h2 {
+			margin: 0;
+		}
+	}
+
+	&__add.components-button {
+		flex-shrink: 0;
+		margin: 0 2rem;
+		white-space: nowrap;
+		background: var(--wp-admin-theme-color);
+		color: wp-colors.$white;
+
+		&:hover {
+			background: var(--wp-admin-theme-color-darker-20);
+			color: wp-colors.$white;
+		}
+	}
+}

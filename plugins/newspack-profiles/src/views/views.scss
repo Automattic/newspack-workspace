@@ -1,0 +1,78 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+/* View shell: full-height grid for Add and List views */
+.newspack-profiles__view {
+	height: 100%;
+	display: grid;
+	position: relative;
+
+	&--add {
+		grid-template-rows: 1fr auto;
+	}
+
+	&--list {
+		grid-template-rows: auto 1fr auto;
+	}
+}
+
+/* Full-screen wizard modal: let the wizard fill to the edges */
+.newspack-profiles__wizard-modal .components-modal__content {
+	margin-block-end: 0;
+	padding: 0;
+	border-top: 1px solid wp-colors.$gray-300;
+}
+
+/* Notices overlay wrapper (Add view) */
+.newspack-profiles__notices-overlay {
+	position: fixed;
+	bottom: 0;
+	left: 160px;
+	right: 0;
+	z-index: 50;
+}
+
+/* Onboarding shell */
+.newspack-profiles__onboarding {
+	height: 100%;
+	background: wp-colors.$white;
+
+	&__content {
+		display: flex;
+		flex-direction: column;
+		padding: wp-vars.$grid-unit-30;
+
+		/* Step roots carry no padding of their own; spacing comes from above. */
+		> * {
+			padding: 0;
+		}
+	}
+}
+
+/* Wizard footer */
+.newspack-profiles__wizard-footer {
+	display: flex;
+	justify-content: flex-end;
+	padding: wp-vars.$grid-unit-15 wp-vars.$grid-unit-30;
+	margin: 0;
+	border-top: 1px solid wp-colors.$gray-300;
+	position: sticky;
+	bottom: 0;
+	background: wp-colors.$white;
+	z-index: 4;
+
+	/* Content-sized grid: equal columns size to the widest button label */
+	&__actions {
+		display: grid;
+		grid-auto-flow: column;
+		grid-auto-columns: 1fr;
+		gap: wp-vars.$grid-unit-10;
+		width: fit-content;
+	}
+}
+
+/* Wizard footer button: fills its equal grid cell, centered label */
+.newspack-profiles__wizard-footer-button.components-button {
+	width: 100%;
+	justify-content: center;
+}

@@ -1,0 +1,101 @@
+{
+	"name": "newspack-profiles",
+	"version": "1.0.0",
+	"description": "Newspack Profiles Plugin",
+	"author": "Newspack",
+	"license": "GPL-2.0-or-later",
+	"keywords": [
+		"newspack",
+		"profiles",
+		"wordpress",
+		"plugin"
+	],
+	"homepage": "https://newspack.com/",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/Automattic/newspack-workspace.git",
+		"directory": "plugins/newspack-profiles"
+	},
+	"bugs": {
+		"url": "https://github.com/Automattic/newspack-workspace/issues"
+	},
+	"files": [
+		"dist/",
+		"includes/",
+		"vendor/",
+		"patterns/",
+		"templates/",
+		"assets/",
+		"languages/",
+		"newspack-profiles.php",
+		"composer.json"
+	],
+	"dependencies": {
+		"@dnd-kit/helpers": "^0.3.2",
+		"@dnd-kit/react": "^0.3.2",
+		"classnames": "^2.5.1",
+		"newspack-components": "workspace:*",
+		"newspack-icons": "workspace:*"
+	},
+	"devDependencies": {
+		"@typescript-eslint/eslint-plugin": "^8.53.0",
+		"@wordpress/api-fetch": "^7.37.0",
+		"@wordpress/block-editor": "^15.10.0",
+		"@wordpress/block-library": "^9.38.0",
+		"@wordpress/blocks": "^15.10.0",
+		"@wordpress/components": "^32.0.0",
+		"@wordpress/compose": "^7.37.0",
+		"@wordpress/data": "^10.37.0",
+		"@wordpress/dataviews": "16.0.0",
+		"@wordpress/edit-site": "^6.37.0",
+		"@wordpress/element": "^6.37.0",
+		"@wordpress/escape-html": "^3.41.0",
+		"@wordpress/hooks": "^4.37.0",
+		"@wordpress/i18n": "^6.10.0",
+		"@wordpress/icons": "^11.4.0",
+		"@wordpress/notices": "^5.37.0",
+		"@wordpress/primitives": "^4.37.0",
+		"@wordpress/scripts": "^31.6.0",
+		"newspack-scripts": "workspace:*"
+	},
+	"scripts": {
+		"cm": "newspack-scripts commit",
+		"semantic-release": "newspack-scripts release --files=newspack-profiles.php",
+		"clean": "rm -rf dist",
+		"build": "npm run clean && newspack-scripts wp-scripts build",
+		"start": "npm ci && npm run watch",
+		"watch": "npm run clean && newspack-scripts wp-scripts start",
+		"test": "echo \"No tests specified\" && exit 0",
+		"tsc": "tsc --watch",
+		"lint": "npm run lint:scss && npm run lint:js",
+		"lint:js": "newspack-scripts wp-scripts lint-js '**/{src,includes}/**/*.{js,jsx,ts,tsx}'",
+		"lint:js:staged": "newspack-scripts wp-scripts lint-js --ext .js,.jsx,.ts,.tsx",
+		"fix:js": "newspack-scripts wp-scripts lint-js --fix '**/{src,includes}/**/*.{js,jsx,ts,tsx}'",
+		"format:js": "newspack-scripts wp-scripts format '**/{src,includes}/**/*.{js,jsx,ts,tsx}'",
+		"lint:php": "./vendor/bin/phpcs",
+		"lint:php:staged": "./vendor/bin/phpcs --filter=GitStaged",
+		"fix:php": "./vendor/bin/phpcbf",
+		"lint:scss": "newspack-scripts wp-scripts lint-style '**/{src,includes}/**/*.scss' --customSyntax postcss-scss",
+		"lint:scss:staged": "newspack-scripts wp-scripts lint-style --customSyntax postcss-scss",
+		"format:scss": "newspack-scripts wp-scripts lint-style '**/{src,includes}/**/*.scss' --customSyntax postcss-scss --fix",
+		"lint:pkg-json": "wp-scripts lint-pkg-json",
+		"plugin-zip": "wp-scripts plugin-zip",
+		"release": "npm run build && npm run semantic-release",
+		"release:archive": "rm -rf release && mkdir -p release && rsync -r . ./release/newspack-profiles --exclude-from='./.distignore' && cd release && zip -r newspack-profiles.zip newspack-profiles"
+	},
+	"overrides": {
+		"@wordpress/scripts": {
+			"webpack-dev-server": "5.2.3",
+			"axios": "1.13.5",
+			"ajv": "6.14.0",
+			"qs": "6.14.2"
+		},
+		"diff": "4.0.4"
+	},
+	"lint-staged": {
+		"*.{js,jsx,ts,tsx}": "npm run lint:js:staged",
+		"*.scss": "npm run lint:scss:staged",
+		"*.php": "npm run lint:php:staged",
+		"package.json": "npm run lint:pkg-json"
+	}
+}

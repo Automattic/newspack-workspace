@@ -1,0 +1,32 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+.newspack-profiles__import-tag {
+	background-color: wp-colors.$gray-100;
+	border-radius: 2px;
+	font-size: wp-vars.$font-size-small;
+	line-height: wp-vars.$font-line-height-small;
+	padding: 0.125rem 0.25rem;
+}
+
+.newspack-profiles__empty-state {
+	padding: 1.5rem;
+	text-align: center;
+
+	&__heading {
+		font-size: wp-vars.$font-size-large;
+		line-height: wp-vars.$font-line-height-large;
+		font-weight: 600;
+		margin-bottom: 1rem;
+	}
+
+	&__description {
+		color: wp-colors.$gray-700;
+		margin-bottom: 1.5rem;
+	}
+}
+
+.newspack-profiles__notices {
+	bottom: 1rem;
+	inset-inline-start: 1rem;
+}

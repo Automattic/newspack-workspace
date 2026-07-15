@@ -1,0 +1,10 @@
+@use "~@wordpress/base-styles/variables" as wp-vars;
+
+.newspack-profiles__modal-body {
+	font-size: wp-vars.$font-size-small;
+	line-height: wp-vars.$font-line-height-small;
+}
+
+.newspack-profiles__modal-footer {
+	margin-top: 1rem;
+}

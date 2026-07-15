@@ -1,0 +1,15 @@
+@use "~@wordpress/base-styles/colors" as wp-colors;
+
+.newspack-profiles__pattern-selection {
+	padding-top: 0.5rem;
+	padding-bottom: 0.5rem;
+
+	&__section {
+		padding-left: 24px;
+		padding-right: 24px;
+	}
+
+	&__list-section {
+		margin-top: 1.5rem;
+	}
+}
