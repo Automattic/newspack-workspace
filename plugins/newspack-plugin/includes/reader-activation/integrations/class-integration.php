@@ -642,6 +642,10 @@ abstract class Integration {
 	 * @return bool True if updated, false otherwise.
 	 */
 	public function update_enabled_incoming_fields( $fields ) {
+		if ( ! is_array( $fields ) ) {
+			$fields = [];
+		}
+
 		$available = $this->get_available_incoming_fields();
 		if ( is_wp_error( $available ) ) {
 			$available = [];
@@ -1167,9 +1171,11 @@ abstract class Integration {
 					$sanitized                  = [];
 					// PHP 8.0-safe array_is_list(): the array is a list iff re-indexing is a no-op.
 					if ( $value === array_values( $value ) ) {
-						// Legacy: a plain list of enabled keys, no operator override.
+						// Legacy plain list of enabled keys: keep it a list so
+						// update_enabled_incoming_fields() preserves each field's provider-default
+						// matching_function (no forced 'default' override).
 						foreach ( $value as $key ) {
-							$sanitized[ \sanitize_text_field( (string) $key ) ] = 'default';
+							$sanitized[] = \sanitize_text_field( (string) $key );
 						}
 					} else {
 						foreach ( $value as $key => $operator ) {

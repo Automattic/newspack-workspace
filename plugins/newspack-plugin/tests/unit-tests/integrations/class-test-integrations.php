@@ -415,6 +415,17 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Non-array input to update_enabled_incoming_fields() no-ops instead of fataling.
+	 *
+	 * @group integrations
+	 */
+	public function test_update_enabled_incoming_fields_tolerates_non_array() {
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+		$integration->update_enabled_incoming_fields( 'not-an-array' );
+		$this->assertSame( [], $integration->get_enabled_incoming_fields() );
+	}
+
+	/**
 	 * The incoming-fields settings value is a map of key => matching_function.
 	 *
 	 * @group integrations
@@ -1668,6 +1679,26 @@ class Test_Integrations extends \WP_UnitTestCase {
 			'default' => [],
 		];
 		$this->assertSame( [ 'a', 'b' ], $method->invoke( $integration, $outgoing_field, [ 'a', 'b' ] ) );
+	}
+
+	/**
+	 * A legacy plain-list incoming payload is sanitized back into a list (not a
+	 * key=>'default' map), so provider-default operators are preserved on save.
+	 *
+	 * @group integrations
+	 */
+	public function test_sanitize_incoming_metadata_keeps_legacy_list() {
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+		$method      = new \ReflectionMethod( $integration, 'sanitize_settings_field_value' );
+		$method->setAccessible( true );
+
+		$field = [
+			'key'     => 'incoming_metadata_fields',
+			'type'    => 'metadata',
+			'default' => [],
+		];
+		$out = $method->invoke( $integration, $field, [ 'FIELD_A', 'FIELD_B' ] );
+		$this->assertSame( [ 'FIELD_A', 'FIELD_B' ], $out );
 	}
 
 	/**
