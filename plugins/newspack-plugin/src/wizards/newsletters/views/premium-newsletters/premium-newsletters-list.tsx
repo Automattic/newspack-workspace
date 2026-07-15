@@ -24,8 +24,8 @@ import '../../../audience/views/content-gates/style.scss';
 
 const PremiumNewslettersList = ( { updateGatesData }: { updateGatesData: ( gates: Gate[] ) => void } ) => {
 	const wizardData = useWizardData( PREMIUM_NEWSLETTERS_WIZARD_SLUG ) as WizardData;
-	const { isFetching, errorMessage } = useWizardApiFetch( PREMIUM_NEWSLETTERS_WIZARD_SLUG );
-	const { addNotice, resetHeaderData, setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
+	const { isFetching } = useWizardApiFetch( PREMIUM_NEWSLETTERS_WIZARD_SLUG );
+	const { resetHeaderData, setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 	const [ showAdvancedSettings, setShowAdvancedSettings ] = useState( false );
 
 	const ref = useRef( null );
@@ -57,16 +57,6 @@ const PremiumNewslettersList = ( { updateGatesData }: { updateGatesData: ( gates
 			],
 		} );
 	}, [ isFetching, gates ] );
-
-	useEffect( () => {
-		if ( errorMessage ) {
-			addNotice( {
-				message: errorMessage,
-				type: 'error',
-				id: 'premium-newsletter-error',
-			} );
-		}
-	}, [ errorMessage ] );
 
 	if ( ! gates?.length ) {
 		return <ContentGateOnboarding isNewsletter />;
