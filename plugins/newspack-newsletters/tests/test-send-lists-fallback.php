@@ -29,7 +29,7 @@ class Send_Lists_Fallback_Test extends WP_UnitTestCase {
 	 * only the real get_send_lists_with_fallback() logic.
 	 *
 	 * @param callable $get_send_lists Callback( array $args, bool $to_array ): array|WP_Error.
-	 * @return Newspack_Newsletters_Service_Provider&PHPUnit\Framework\MockObject\MockObjec
+	 * @return Newspack_Newsletters_Service_Provider&PHPUnit\Framework\MockObject\MockObject
 	 */
 	private function make_provider( callable $get_send_lists ) {
 		$provider = $this->getMockBuilder( Newspack_Newsletters_Service_Provider::class )
