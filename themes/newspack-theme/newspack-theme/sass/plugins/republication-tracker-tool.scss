@@ -171,14 +171,14 @@
 
 	#republication-tracker-tool-modal-content {
 		border-radius: var(--newspack-ui-border-radius-m, 6px);
-		box-shadow: 0 3px 30px var(--newspack-ui-color-neutral-70, #000000b3);
+		box-shadow: 0 3px 30px var(--newspack-ui-color-overlay-70, #000000b3);
 		color: var(--newspack-ui-color-neutral-90, #1e1e1e);
 		display: grid;
 		gap: var(--newspack-ui-spacer-5, 24px);
 		font-family: var(--newspack-ui-font-family, system-ui);
 		font-size: var(--newspack-ui-font-size-s, 16px);
 		line-height: var(--newspack-ui-line-height-s, 1.5);
-		max-width: var(--newspack-ui-modal-width-m, 632px);
+		max-width: var(--newspack-ui-width-m, 632px);
 		padding: var(--newspack-ui-spacer-5, 24px);
 
 		.republication-tracker-tool-close {

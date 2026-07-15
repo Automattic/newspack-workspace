@@ -288,12 +288,31 @@ trait Content_Gate_Layout {
 	}
 
 	/**
+	 * Stamp `data-newspack-cta` on paid-intent button anchors in rendered gate HTML.
+	 *
+	 * NPPD-1887. Applied at the two gate-HTML producers rather than as a filter on
+	 * `newspack_gate_content`, because that filter ALSO runs over the restricted
+	 * article excerpt (see get_visible_content() above and Metering::…). Stamping
+	 * there would let a reader clicking a button in the article body attribute a
+	 * later subscription to the gate. Gate content only.
+	 *
+	 * @param string $html Rendered gate HTML.
+	 * @return string
+	 */
+	private static function annotate_gate_ctas( $html ) {
+		if ( ! class_exists( '\Newspack\CTA_Intent_Classifier' ) ) {
+			return $html;
+		}
+		return \Newspack\CTA_Intent_Classifier::annotate_button_anchors( $html );
+	}
+
+	/**
 	 * Get the inline gate HTML for rendering.
 	 *
 	 * @return string
 	 */
 	public static function get_inline_gate_html() {
-		return apply_filters( 'newspack_gate_content', self::get_inline_gate_content() );
+		return self::annotate_gate_ctas( apply_filters( 'newspack_gate_content', self::get_inline_gate_content() ) );
 	}
 
 	/**
@@ -304,11 +323,12 @@ trait Content_Gate_Layout {
 	public static function render_overlay_gate_html( $gate_post_id ) {
 		$position = \get_post_meta( $gate_post_id, 'overlay_position', true );
 		$size     = \get_post_meta( $gate_post_id, 'overlay_size', true );
+		$content  = self::annotate_gate_ctas( \apply_filters( 'newspack_gate_content', \get_the_content( null, null, $gate_post_id ) ) );
 		?>
 		<div class="newspack-content-gate__gate newspack-content-gate__overlay-gate" style="display:none;" data-position="<?php echo \esc_attr( $position ); ?>" data-size="<?php echo \esc_attr( $size ); ?>">
 			<div class="newspack-content-gate__overlay-gate__container">
 				<div class="newspack-content-gate__overlay-gate__content">
-					<?php echo \apply_filters( 'newspack_gate_content', \get_the_content( null, null, $gate_post_id ) );  // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+					<?php echo $content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 				</div>
 			</div>
 		</div>

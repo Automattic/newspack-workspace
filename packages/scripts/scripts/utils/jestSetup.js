@@ -1,4 +1,15 @@
+import { TextEncoder, TextDecoder } from 'util';
 import '@testing-library/jest-dom';
+
+// TextEncoder/TextDecoder are Node/web globals that JSDOM does not provide, but
+// some @wordpress modules (e.g. @wordpress/sync) reference them at import time.
+// Polyfill from Node's util so those modules load under the jsdom environment.
+if ( typeof global.TextEncoder === 'undefined' ) {
+	global.TextEncoder = TextEncoder;
+}
+if ( typeof global.TextDecoder === 'undefined' ) {
+	global.TextDecoder = TextDecoder;
+}
 
 // matchMedia does not exist in JSDOM, see https://jestjs.io/docs/manual-mocks#mocking-methods-which-are-not-implemented-in-jsdom
 Object.defineProperty( window, 'matchMedia', {

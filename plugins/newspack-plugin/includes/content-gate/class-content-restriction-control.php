@@ -28,6 +28,26 @@ class Content_Restriction_Control {
 	private static $post_gate_layout_id_map = [];
 
 	/**
+	 * Request-scoped cache of the gates that apply to a post, keyed by post ID.
+	 * The gate set a post matches depends only on the post and the (request-stable)
+	 * gate configuration, so it is safe to memoise for the request lifetime. Caches
+	 * the empty (no-gates) result too, which matters for the Premium Newsletters
+	 * cron loop that evaluates the same post for many readers.
+	 *
+	 * @var array<int,array>
+	 */
+	private static $post_gates_map = [];
+
+	/**
+	 * Request-scoped cache of a hierarchical term's descendant IDs, keyed by
+	 * "{taxonomy}:{term_id}". The term hierarchy is request-stable, so this avoids
+	 * re-walking the tree across content rules and across get_post_gates() calls.
+	 *
+	 * @var array<string,int[]>
+	 */
+	private static $term_descendants_map = [];
+
+	/**
 	 * Post meta key for exempting a post from access control restrictions.
 	 *
 	 * @var string
@@ -121,6 +141,9 @@ class Content_Restriction_Control {
 		if ( ! $post_id ) {
 			return [];
 		}
+		if ( array_key_exists( $post_id, self::$post_gates_map ) ) {
+			return self::$post_gates_map[ $post_id ];
+		}
 		$is_newsletter = false;
 		if ( class_exists( 'Newspack\Newsletters\Subscription_Lists' ) && Subscription_Lists::CPT && get_post_type( $post_id ) === Subscription_Lists::CPT ) {
 			$is_newsletter = true;
@@ -128,7 +151,8 @@ class Content_Restriction_Control {
 
 		$gates = Content_Gate::get_gates( Content_Gate::GATE_CPT, 'publish', $is_newsletter );
 		if ( empty( $gates ) ) {
-			return [];
+			self::$post_gates_map[ $post_id ] = [];
+			return self::$post_gates_map[ $post_id ];
 		}
 
 		$post_gates = [];
@@ -161,49 +185,137 @@ class Content_Restriction_Control {
 				continue;
 			}
 
-			// Standard AND evaluation across remaining rules.
+			// Exclusion rules are always-applied carve-outs: content matching an
+			// exclusion is never gated, regardless of the match mode. The match mode
+			// (default AND) only governs how inclusion rules combine. A gate with no
+			// inclusion rules applies to everything that isn't carved out.
+			$match                 = 'any' === ( $gate['content_rules_match'] ?? 'all' ) ? 'any' : 'all';
 			$has_non_specific_rule = false;
+			$has_inclusion_rule    = false;
+			$inclusion_satisfied   = 'all' === $match; // AND starts satisfied; OR needs a hit.
+			$is_excluded           = false;
 			foreach ( $content_rules as $content_rule ) {
 				if ( 'specific_posts' === $content_rule['slug'] ) {
-					// Skip — already evaluated above as an override-only rule.
+					// Override-only; already evaluated above.
 					continue;
 				}
 				$has_non_specific_rule = true;
+				$matches               = self::rule_matches_post( $content_rule, $post_id );
 				$is_exclusion          = isset( $content_rule['exclusion'] ) && $content_rule['exclusion'];
-				if ( $content_rule['slug'] === 'post_types' ) {
-					$post_type = get_post_type( $post_id );
-					if ( $is_exclusion ? in_array( $post_type, $content_rule['value'], true ) : ! in_array( $post_type, $content_rule['value'], true ) ) {
-						continue 2;
+
+				if ( $is_exclusion ) {
+					// rule_matches_post() returns false for an exclusion when the post
+					// IS in the excluded set; such a post is carved out entirely.
+					if ( ! $matches ) {
+						$is_excluded = true;
+						break;
 					}
-				} elseif ( $content_rule['slug'] === 'newsletters' ) {
-					$newsletter_lists = array_map( 'intval', $content_rule['value'] );
-					if ( ! in_array( $post_id, $newsletter_lists, true ) ) {
-						continue 2;
+					continue; // A non-applying exclusion neither gates nor carves out.
+				}
+
+				// Inclusion rule: fold into the AND/OR combination.
+				$has_inclusion_rule = true;
+				if ( 'all' === $match ) {
+					if ( ! $matches ) {
+						$inclusion_satisfied = false;
 					}
-				} else {
-					$taxonomy = get_taxonomy( $content_rule['slug'] );
-					if ( ! $taxonomy ) {
-						continue 2;
-					}
-					$terms = wp_get_post_terms( $post_id, $content_rule['slug'], [ 'fields' => 'ids' ] );
-					if ( ( ! $is_exclusion && ! $terms ) || is_wp_error( $terms ) ) {
-						continue 2;
-					}
-					if ( $is_exclusion ? ! empty( array_intersect( $terms, $content_rule['value'] ) ) : empty( array_intersect( $terms, $content_rule['value'] ) ) ) {
-						continue 2;
-					}
+				} elseif ( $matches ) {
+					$inclusion_satisfied = true;
 				}
 			}
 
-			// If the gate ONLY had a specific_posts rule and we got here, it means the
-			// override didn't match — don't include this gate.
+			// If the gate ONLY had a specific_posts rule and we got here, the override
+			// didn't match — don't include this gate.
 			if ( ! $has_non_specific_rule ) {
+				continue;
+			}
+
+			// Carved out by an exclusion rule — never gated, regardless of match mode.
+			if ( $is_excluded ) {
+				continue;
+			}
+
+			// With inclusion rules present, the post must satisfy their combination.
+			if ( $has_inclusion_rule && ! $inclusion_satisfied ) {
 				continue;
 			}
 
 			$post_gates[] = $gate;
 		}
+		self::$post_gates_map[ $post_id ] = $post_gates;
 		return $post_gates;
+	}
+
+	/**
+	 * Whether a single (non specific_posts) content rule matches the post.
+	 *
+	 * @param array $content_rule Rule with 'slug', 'value', optional 'exclusion'.
+	 * @param int   $post_id      Post ID.
+	 *
+	 * @return bool
+	 */
+	private static function rule_matches_post( $content_rule, $post_id ) {
+		$is_exclusion = isset( $content_rule['exclusion'] ) && $content_rule['exclusion'];
+
+		if ( 'post_types' === $content_rule['slug'] ) {
+			$in = in_array( get_post_type( $post_id ), $content_rule['value'], true );
+			return $is_exclusion ? ! $in : $in;
+		}
+
+		if ( 'newsletters' === $content_rule['slug'] ) {
+			return in_array( $post_id, array_map( 'intval', $content_rule['value'] ), true );
+		}
+
+		$taxonomy = get_taxonomy( $content_rule['slug'] );
+		if ( ! $taxonomy ) {
+			return false;
+		}
+		$terms = wp_get_post_terms( $post_id, $content_rule['slug'], [ 'fields' => 'ids' ] );
+		if ( is_wp_error( $terms ) ) {
+			return false;
+		}
+		if ( ! $is_exclusion && ! $terms ) {
+			return false;
+		}
+		$target_terms = self::expand_hierarchical_terms( (array) $content_rule['value'], $taxonomy );
+		$overlap      = ! empty( array_intersect( $terms, $target_terms ) );
+		return $is_exclusion ? ! $overlap : $overlap;
+	}
+
+	/**
+	 * Expand a set of taxonomy term IDs to include descendant terms when the
+	 * taxonomy is hierarchical.
+	 *
+	 * A content rule targeting a parent term should also match content assigned
+	 * only to that term's descendants, mirroring WooCommerce Memberships' cascade
+	 * behavior. Expansion happens at evaluation time so newly-added child terms
+	 * are covered without re-saving the rule. Non-hierarchical taxonomies (e.g.
+	 * tags) have no descendants and are returned as integer-cast IDs unchanged.
+	 *
+	 * Descendant lookups are memoised per (taxonomy, term) for the request so the
+	 * tree is walked at most once per term, even across many rules and posts (e.g.
+	 * the Premium Newsletters cron loop).
+	 *
+	 * @param array        $term_ids Term IDs from a content rule's value (may be stored as strings).
+	 * @param \WP_Taxonomy $taxonomy Taxonomy object the term IDs belong to.
+	 *
+	 * @return int[] De-duplicated term IDs including descendants.
+	 */
+	private static function expand_hierarchical_terms( array $term_ids, \WP_Taxonomy $taxonomy ): array {
+		$term_ids = array_map( 'intval', $term_ids );
+		if ( ! $taxonomy->hierarchical ) {
+			return $term_ids;
+		}
+		$expanded = $term_ids;
+		foreach ( $term_ids as $term_id ) {
+			$cache_key = $taxonomy->name . ':' . $term_id;
+			if ( ! isset( self::$term_descendants_map[ $cache_key ] ) ) {
+				$children = get_term_children( $term_id, $taxonomy->name );
+				self::$term_descendants_map[ $cache_key ] = is_wp_error( $children ) ? [] : array_map( 'intval', $children );
+			}
+			$expanded = array_merge( $expanded, self::$term_descendants_map[ $cache_key ] );
+		}
+		return array_values( array_unique( $expanded ) );
 	}
 
 	/**
