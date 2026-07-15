@@ -160,7 +160,7 @@ const StoryBudget = () => {
 			</div>
 			<div className="newspack-story-budget__notices">
 				{ notices.map( notice => (
-					<Snackbar key={ notice.id } onDismiss={ notice.onDismiss }>
+					<Snackbar key={ notice.id } onDismiss={ notice.onDismiss } politeness={ 'error' === notice.status ? 'assertive' : 'polite' }>
 						{ notice.content }
 					</Snackbar>
 				) ) }

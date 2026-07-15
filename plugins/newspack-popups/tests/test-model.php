@@ -256,6 +256,84 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A preview should only load the prompts CPT, not arbitrary post types.
+	 */
+	public function test_retrieve_preview_popup_denies_non_prompt_post_type() {
+		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin_id );
+		$draft_id = self::factory()->post->create(
+			[
+				'post_type'    => 'post',
+				'post_status'  => 'draft',
+				'post_content' => 'Unpublished draft body.',
+			]
+		);
+		self::assertNull(
+			Newspack_Popups_Model::retrieve_preview_popup( $draft_id ),
+			'A preview must not load a non-prompt post, even for an admin.'
+		);
+	}
+
+	/**
+	 * A user who can manage prompts can still preview a prompt draft.
+	 */
+	public function test_retrieve_preview_popup_allows_admin_for_prompt() {
+		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin_id );
+		$popup_id = self::factory()->post->create(
+			[
+				'post_type'    => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'  => 'draft',
+				'post_content' => 'Prompt draft body.',
+			]
+		);
+		self::assertNotNull(
+			Newspack_Popups_Model::retrieve_preview_popup( $popup_id ),
+			'A user who can manage prompts must be able to preview a prompt draft.'
+		);
+	}
+
+	/**
+	 * A logged-out visitor must not preview an unpublished prompt.
+	 *
+	 * Isolates the capability gate: the post is the prompts CPT, so only the
+	 * capability check (not the post-type check) can deny it.
+	 */
+	public function test_retrieve_preview_popup_denies_logged_out_user_for_prompt() {
+		wp_set_current_user( 0 );
+		$prompt_id = self::factory()->post->create(
+			[
+				'post_type'    => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'  => 'draft',
+				'post_content' => 'Unpublished prompt body.',
+			]
+		);
+		self::assertNull(
+			Newspack_Popups_Model::retrieve_preview_popup( $prompt_id ),
+			'A logged-out visitor must not be able to preview an unpublished prompt.'
+		);
+	}
+
+	/**
+	 * A non-admin-role user who can manage prompts can still preview a prompt draft.
+	 */
+	public function test_retrieve_preview_popup_allows_non_admin_prompt_manager() {
+		$editor_id = self::factory()->user->create( [ 'role' => 'editor' ] );
+		wp_set_current_user( $editor_id );
+		$prompt_id = self::factory()->post->create(
+			[
+				'post_type'    => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_status'  => 'draft',
+				'post_content' => 'Prompt draft body.',
+			]
+		);
+		self::assertNotNull(
+			Newspack_Popups_Model::retrieve_preview_popup( $prompt_id ),
+			'A non-admin user who can manage prompts must be able to preview a prompt draft.'
+		);
+	}
+
+	/**
 	 * Tests that an invalid `pp` query param does not produce a popup list with null entries,
 	 * which would cascade to "Trying to access array offset on null" warnings downstream.
 	 */

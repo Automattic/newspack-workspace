@@ -1,3 +1,43 @@
+## newspack-popups [3.14.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.14.0...newspack-popups@3.14.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* **popups:** restrict prompt preview to prompt managers ([c763c38](https://github.com/Automattic/newspack-workspace/commit/c763c38eda03c99159a764995a44c9136ce9aa23))
+
+# newspack-popups [3.14.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.13.1...newspack-popups@3.14.0) (2026-06-29)
+
+
+### Features
+
+* **criteria:** treat utm_medium=email as newsletter subscriber (NPPM-2921, [#312](https://github.com/Automattic/newspack-workspace/issues/312)) ([f2b41c3](https://github.com/Automattic/newspack-workspace/commit/f2b41c365032e086949133704b168fcb6890ffba))
+
+
+### Dependencies
+
+* **newspack-components:** upgraded to 4.4.0
+
+## newspack-popups [3.13.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.13.0...newspack-popups@3.13.1) (2026-06-25)
+
+
+### Bug Fixes
+
+* **popups:** prevent stale prompt settings saves ([#266](https://github.com/Automattic/newspack-workspace/issues/266)) ([#427](https://github.com/Automattic/newspack-workspace/issues/427)) ([2f5e8cf](https://github.com/Automattic/newspack-workspace/commit/2f5e8cfa81b130d72eb175b2e4961d5fe2f9d7a3))
+
+# newspack-popups [3.13.0](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.12.2...newspack-popups@3.13.0) (2026-06-23)
+
+
+### Features
+
+* **popups:** emit prompt_has_checkout on prompt interaction event ([#398](https://github.com/Automattic/newspack-workspace/issues/398)) ([c7472f7](https://github.com/Automattic/newspack-workspace/commit/c7472f763747872d14b553afa1771491a5312f65))
+
+## newspack-popups [3.12.2](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.12.1...newspack-popups@3.12.2) (2026-06-18)
+
+
+### Bug Fixes
+
+* **popups:** drop disabled criteria from segment criteria array ([#209](https://github.com/Automattic/newspack-workspace/issues/209)) ([5b5d092](https://github.com/Automattic/newspack-workspace/commit/5b5d092af473c7ee0604d0d90e69f0eeb4fbd52c))
+
 ## newspack-popups [3.12.1](https://github.com/Automattic/newspack-workspace/compare/newspack-popups@3.12.0...newspack-popups@3.12.1) (2026-06-02)
 
 

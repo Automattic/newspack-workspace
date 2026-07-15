@@ -26,6 +26,20 @@ final class Newspack_Popups_Segmentation {
 	const SEGMENTS_OPTION_NAME = 'newspack_popups_segments';
 
 	/**
+	 * Query param appended to newsletter links carrying the reader's donor
+	 * status. Its value is the ESP merge tag for the configured donor merge
+	 * field (e.g. Mailchimp's *|HUB-MEMBER|*), which the ESP substitutes with
+	 * the recipient's actual value at send time. The view script reads the
+	 * substituted value on the inbound click to flag the reader as a donor for
+	 * segmentation — no login required.
+	 *
+	 * This is an unsigned, reader-visible, forgeable signal: it must only ever
+	 * drive prompt segmentation, never content access. Restricted content stays
+	 * behind the HMAC-signed newsletter pass (see Newspack\Newsletters_Access).
+	 */
+	const DONOR_SEGMENT_QUERY_PARAM = 'np_seg_donor';
+
+	/**
 	 * Installed version number of the custom table.
 	 */
 	const TABLE_VERSION = '1.0';
@@ -66,6 +80,12 @@ final class Newspack_Popups_Segmentation {
 		) {
 			\Newspack\Data_Events::register_handler( [ __CLASS__, 'reader_logged_in' ], 'reader_logged_in' );
 		}
+
+		// Append the donor-status segment param to newsletter links so readers
+		// arriving from a newsletter are segmented as donors without a login.
+		// The handler self-guards on the donor merge field being configured and
+		// the ESP being supported, so it's cheap to register unconditionally.
+		add_filter( 'newspack_newsletters_process_link', [ __CLASS__, 'append_donor_segment_param' ], 30, 3 );
 	}
 
 	/**
@@ -183,6 +203,102 @@ final class Newspack_Popups_Segmentation {
 	 */
 	public static function reindex_segments( $segments ) {
 		return Newspack_Segments_Model::reindex_segments( $segments );
+	}
+
+	/**
+	 * Filter callback: append the donor-status segment param to first-party
+	 * newsletter links.
+	 *
+	 * The appended value is the ESP merge tag for the configured donor merge
+	 * field; the ESP substitutes the recipient's value at send time so the
+	 * inbound click carries e.g. `?np_seg_donor=true`. Skips when the Newsletters
+	 * tracking helper is unavailable, the post isn't a newsletter (ad links are
+	 * proxied separately and wouldn't forward the param), the link is
+	 * third-party, no donor merge field is configured, or the ESP is unsupported.
+	 *
+	 * @param string        $url          Processed URL (may already carry other params).
+	 * @param string        $original_url Original URL before processing.
+	 * @param \WP_Post|null $post         Newsletter post object, or null.
+	 *
+	 * @return string
+	 */
+	public static function append_donor_segment_param( $url, $original_url, $post ) {
+		// Guard on the method, not just the class: the Tracking\Utils class predates
+		// get_merge_tag(), so an older newspack-newsletters can satisfy a class_exists()
+		// check while lacking the method — calling it would fatal mid-render, breaking
+		// every newsletter on the site. method_exists() also returns false when the
+		// class is absent, so this covers both the missing-class and version-skew cases.
+		if ( ! method_exists( '\Newspack_Newsletters\Tracking\Utils', 'get_merge_tag' ) ) {
+			return $url;
+		}
+		if ( ! self::is_newsletter_post( $post ) ) {
+			return $url;
+		}
+		if ( ! self::is_first_party_url( $url ) ) {
+			return $url;
+		}
+		// Read the option directly rather than via Newspack_Popups_Settings::get_setting(),
+		// which builds the whole settings array (including a WP_Query over all pages)
+		// on every call — wasteful here since this filter fires once per newsletter link.
+		$donor_merge_field = get_option( 'newspack_popups_mc_donor_merge_field', Newspack_Popups_Settings::DEFAULT_DONOR_MERGE_FIELD );
+		// This setting is a comma-delimited list of name fragments used for substring
+		// matching at login (see reader_logged_in()). Building a query-param merge tag
+		// instead needs a single exact ESP merge tag — a multi-value list can't map to
+		// one — so use the first entry. The value must be the exact merge tag (not a
+		// display label or partial name) for the ESP to substitute it.
+		$donor_merge_field = trim( explode( ',', (string) $donor_merge_field )[0] );
+		if ( empty( $donor_merge_field ) ) {
+			return $url;
+		}
+		$merge_tag = \Newspack_Newsletters\Tracking\Utils::get_merge_tag( $donor_merge_field );
+		if ( empty( $merge_tag ) ) {
+			return $url;
+		}
+		$url = add_query_arg( self::DONOR_SEGMENT_QUERY_PARAM, $merge_tag, $url );
+		// add_query_arg() URL-encodes the value, but ESPs substitute only the raw
+		// merge-tag syntax: Mailchimp leaves the percent-encoded form (%2A%7C...%7C%2A)
+		// untouched, as verified against a live send, so the tag would never resolve.
+		// Restore the raw tag so the ESP substitutes the recipient's value at send
+		// time. An unsubstituted literal is ignored client-side, so this stays fail-safe.
+		return str_replace( urlencode( $merge_tag ), $merge_tag, $url );
+	}
+
+	/**
+	 * Whether the given post is a Newspack newsletter.
+	 *
+	 * @param \WP_Post|null $post Post object.
+	 *
+	 * @return bool
+	 */
+	private static function is_newsletter_post( $post ) {
+		if ( ! $post instanceof \WP_Post ) {
+			return false;
+		}
+		if ( ! defined( '\Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT' ) ) {
+			return false;
+		}
+		return \Newspack_Newsletters::NEWSPACK_NEWSLETTERS_CPT === $post->post_type;
+	}
+
+	/**
+	 * Whether the given URL points to this site, by host comparison.
+	 *
+	 * The donor flag is appended only to first-party links: pushing it onto
+	 * third-party URLs would leak the reader's donor status into external logs,
+	 * analytics, and Referer headers for no benefit, since only this site reads
+	 * the param. Relative URLs are first-party by definition.
+	 *
+	 * @param string $url URL to test.
+	 *
+	 * @return bool
+	 */
+	private static function is_first_party_url( $url ) {
+		$url_host = wp_parse_url( $url, PHP_URL_HOST );
+		if ( empty( $url_host ) ) {
+			return true;
+		}
+		$site_host = wp_parse_url( home_url(), PHP_URL_HOST );
+		return strcasecmp( $url_host, (string) $site_host ) === 0;
 	}
 
 	/**

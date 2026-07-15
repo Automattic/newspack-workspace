@@ -58,10 +58,23 @@ jobs:
           # otherwise spawn a job that just fails.
           CHANGED=$(pnpm --silent --filter "...[$BASE_REF]" exec node -e 'console.log(process.env.PNPM_PACKAGE_NAME)' 2>/dev/null | grep -v '^newspack-workspace$' | sort -u || true)
 
+          # Root-level dependency files don't appear in pnpm's --filter graph
+          # (no source package owns them), so a Dependabot PR that only bumps
+          # entries in pnpm-lock.yaml or root package.json would otherwise skip
+          # the install job and let a lockfile/package.json mismatch land on
+          # main unchecked. Force install to run when these files change.
+          # No `2>/dev/null` here: surface the diagnostic if BASE_REF can't be
+          # resolved so the failure is loud rather than a silent fail-open.
+          ROOT_DEPS_CHANGED=false
+          if git diff --name-only "$BASE_REF...HEAD" \
+            | grep -qxE 'pnpm-lock\.yaml|package\.json|pnpm-workspace\.yaml'; then
+            ROOT_DEPS_CHANGED=true
+          fi
+
           if [ -z "$CHANGED" ]; then
             echo "js-matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
             echo "php-matrix={\"include\":[]}" >> "$GITHUB_OUTPUT"
-            echo "any=false" >> "$GITHUB_OUTPUT"
+            echo "any=$ROOT_DEPS_CHANGED" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -105,7 +118,7 @@ jobs:
   js:
     name: JS / ${{ matrix.package }}
     needs: [changed-packages, install]
-    if: needs.changed-packages.outputs.any == 'true'
+    if: needs.changed-packages.outputs.any == 'true' && needs.changed-packages.outputs.js-matrix != '{"include":[]}'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -275,9 +288,100 @@ jobs:
   # ----------------------------------------------------------------------------
   # Summary gate: fail the workflow if any needed job failed.
   # ----------------------------------------------------------------------------
+  # Build installable ZIPs for each affected plugin/theme, so a branch can be
+  # installed on a site via newspack-manager's release channels. One job per
+  # affected package; packages without a `release:archive` script (shared
+  # packages) produce nothing and are skipped.
+  # ----------------------------------------------------------------------------
+  build-zips:
+    name: Build ZIP / ${{ matrix.package }}
+    needs: [changed-packages, install]
+    if: needs.changed-packages.outputs.any == 'true' && needs.changed-packages.outputs.js-matrix != '{"include":[]}'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.changed-packages.outputs.js-matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer
+          coverage: none
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Resolve package directory
+        id: pkg
+        run: echo "dir=$(pnpm --silent --filter '${{ matrix.package }}' exec pwd)" >> "$GITHUB_OUTPUT"
+      - name: Build assets
+        run: pnpm --filter "${{ matrix.package }}" run --if-present build
+      # The distributable ZIP includes vendor/ (see each plugin's .distignore),
+      # so production composer deps must be present before archiving.
+      - name: Install production composer deps
+        run: |
+          dir="${{ steps.pkg.outputs.dir }}"
+          if [ -f "$dir/composer.json" ]; then
+            composer install -d "$dir" --no-interaction --no-progress --prefer-dist --no-dev
+          fi
+      - name: Archive distributable
+        run: |
+          dir="${{ steps.pkg.outputs.dir }}"
+          rm -rf "$dir/release"
+          pnpm --filter "${{ matrix.package }}" run --if-present release:archive
+          mkdir -p "$GITHUB_WORKSPACE/branch-zips"
+          if compgen -G "$dir/release/*.zip" > /dev/null; then
+            cp "$dir"/release/*.zip "$GITHUB_WORKSPACE/branch-zips/"
+          fi
+      # job-index keeps the staging artifact name valid: matrix package names
+      # like `@automattic/newspack-blocks` contain characters artifacts reject.
+      - name: Stage built ZIPs
+        uses: actions/upload-artifact@v4
+        with:
+          name: branch-zips-staging-${{ strategy.job-index }}
+          path: branch-zips/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ----------------------------------------------------------------------------
+  # Bundle every package's `<slug>.zip` into one artifact that newspack-manager
+  # downloads to install a branch. Change detection keeps the bundle small.
+  # ----------------------------------------------------------------------------
+  bundle-zips:
+    name: Bundle branch ZIPs
+    needs: build-zips
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: branch-zips-staging-*
+          path: staging
+          merge-multiple: true
+      - name: Collect ZIPs
+        run: |
+          mkdir -p bundle
+          find staging -name '*.zip' -exec cp {} bundle/ \; 2>/dev/null || true
+          ls -la bundle 2>/dev/null || true
+      - name: Upload branch bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: newspack-branch-zips
+          path: bundle/*.zip
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ----------------------------------------------------------------------------
   ci-ok:
     name: CI OK
-    needs: [js, php-lint, php-test]
+    # `install` is in the needs list so a `--frozen-lockfile` failure on a
+    # root-deps-only PR (empty js/php matrices) is treated as a CI failure
+    # rather than masked by the skipped matrix jobs.
+    needs: [install, js, php-lint, php-test, build-zips, bundle-zips]
     if: always()
     runs-on: ubuntu-latest
     steps:
