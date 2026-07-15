@@ -155,9 +155,7 @@ describe( 'TabbedNavigation with routed items', () => {
 		const history = renderTabs();
 		act( () => history.push( '/budgets' ) );
 		expect( getTab( 'Budgets' ) ).toHaveAttribute( 'aria-selected', 'true' );
-		expect( screen.getByText( 'Routed content' ).closest( '[role="tabpanel"]' ).id ).toBe(
-			getTab( 'Budgets' ).getAttribute( 'aria-controls' )
-		);
+		expect( screen.getByText( 'Routed content' ).closest( '[role="tabpanel"]' ).id ).toBe( getTab( 'Budgets' ).getAttribute( 'aria-controls' ) );
 	} );
 } );
 
