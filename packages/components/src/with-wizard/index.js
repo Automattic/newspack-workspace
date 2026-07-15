@@ -234,7 +234,7 @@ export default function withWizard( WrappedComponent, requiredPlugins ) {
 		confirmAction = options => {
 			const modalOptions = {
 				title: null,
-				message: __( 'Are you sure?', 'newpack-plugin' ),
+				message: __( 'Are you sure?', 'newspack-plugin' ),
 				confirmText: __( 'OK', 'newspack-plugin' ),
 				cancelText: __( 'Cancel', 'newspack-plugin' ),
 				callback: null,

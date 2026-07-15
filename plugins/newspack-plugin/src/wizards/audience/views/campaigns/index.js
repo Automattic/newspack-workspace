@@ -35,19 +35,19 @@ const ROOT = [ { label: __( 'Audience Management', 'newspack-plugin' ) } ];
 
 const tabbedNavigation = [
 	{
-		label: __( 'Campaigns', 'newpack-plugin' ),
+		label: __( 'Campaigns', 'newspack-plugin' ),
 		path: '/campaigns',
 		exact: true,
 		breadcrumbs: [ ...ROOT, { label: __( 'Campaigns', 'newspack-plugin' ) } ],
 	},
 	{
-		label: __( 'Segments', 'newpack-plugin' ),
+		label: __( 'Segments', 'newspack-plugin' ),
 		path: '/segments',
 		exact: false,
 		breadcrumbs: [ ...ROOT, { label: __( 'Segments', 'newspack-plugin' ) } ],
 	},
 	{
-		label: __( 'Settings', 'newpack-plugin' ),
+		label: __( 'Settings', 'newspack-plugin' ),
 		path: '/settings',
 		exact: true,
 		breadcrumbs: [ ...ROOT, { label: __( 'Settings', 'newspack-plugin' ) } ],
