@@ -8,7 +8,7 @@ import classnames from 'classnames';
  */
 import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { useEffect, useState, forwardRef } from '@wordpress/element';
+import { cloneElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 
@@ -62,12 +62,12 @@ const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, su
 	const { pathname } = useLocation();
 
 	if ( hideHeader ) {
-		return (
-			<>
-				{ tabbedNavigation }
-				{ children }
-			</>
-		);
+		// Without the Page shell the tabs still own the content: it renders
+		// inside the active tab's panel.
+		if ( isValidElement( tabbedNavigation ) ) {
+			return cloneElement( tabbedNavigation, { content: children } );
+		}
+		return children;
 	}
 
 	let breadcrumbItems = activeBreadcrumbs( sections, pathname );

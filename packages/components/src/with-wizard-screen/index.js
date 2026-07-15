@@ -1,4 +1,9 @@
 /**
+ * WordPress dependencies
+ */
+import { cloneElement } from '@wordpress/element';
+
+/**
  * Internal dependencies
  */
 import { Button, Handoff, Notice, HandoffMessage, TabbedNavigation, Page } from '../';
@@ -109,10 +114,9 @@ export default function withWizardScreen( WrappedComponent, { hidePrimaryButton,
 				<>
 					{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
 					{ hideHeader ? (
-						<>
-							{ tabbedNavigationRegion }
-							{ content }
-						</>
+						// Without the Page shell the tabs still own the content: it
+						// renders inside the active tab's panel.
+						<>{ tabbedNavigationRegion ? cloneElement( tabbedNavigationRegion, { content } ) : content }</>
 					) : (
 						<Page
 							breadcrumbItems={ pageBreadcrumbs }
