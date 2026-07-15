@@ -82,6 +82,10 @@ parse_worktree_mount() {
     case "$container_type" in
         repos)
             # Legacy: host = ./worktrees/<repo>/<branch> (slashes preserved in directory name).
+            # NB: this legacy pre-monorepo mount is still emitted with kind
+            # "monorepo" below, so on destroy it routes through `worktree.sh
+            # remove` and no-ops (no monorepo worktrees/<branch> dir exists),
+            # orphaning very old envs. Matches upstream; flagged for awareness.
             branch="${host_rel#worktrees/$repo/}"
             ;;
         plugins|themes)
@@ -841,18 +845,21 @@ MIGRATE
         # remove the worktree directory the env was bound to, not whatever
         # branch is currently checked out there.
         #
-        # Known follow-up: for monorepo worktrees the safe form (e.g. feat-foo)
+        # For monorepo worktrees the mount-derived safe form (e.g. feat-foo)
         # won't match the real branch (feat/foo) in worktree.sh's final
-        # `git branch -D`, so the local branch ref is left dangling after the
-        # worktree dir is removed. Harmless (re-create reuses it) but accrues
-        # across create/destroy cycles. A proper fix removes the dir by safe
-        # name and deletes the branch by its resolved real name separately.
+        # `git branch -D`, so passing the safe form leaves the local branch ref
+        # dangling after the worktree dir is removed. Resolve the real branch
+        # first and pass THAT: worktree.sh remove re-sanitizes the branch to
+        # locate worktrees/<safe> (so dir lookup still works with the real name)
+        # and then deletes the real branch. Standalone (repos) worktrees keep
+        # the branch by design, so they pass the safe form unchanged.
         for entry in "${worktree_entries[@]}"; do
             IFS='|' read -r wt_repo wt_branch wt_kind <<< "$entry"
             if [[ "$wt_kind" == "repos" ]]; then
                 "$NABSPATH/bin/worktree.sh" remove-repos --yes "$wt_repo" "$wt_branch"
             else
-                "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
+                real_branch=$(resolve_unsanitized_branch "$wt_branch" "")
+                "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$real_branch"
             fi
         done
         echo "Destroyed environment '$env_name'"

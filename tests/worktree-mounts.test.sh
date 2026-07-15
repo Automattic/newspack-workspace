@@ -23,4 +23,15 @@ C="$FIX/c.yml"; cat > "$C" <<'EOF'
 EOF
 ok "each_worktree_in_env yields 2 triples" "$(each_worktree_in_env "$C" | grep -c '|')" "2"
 
+# resolve_unsanitized_branch recovers the real git branch (feat/x) from a
+# worktree dir named by its safe form (feat-x). This underpins the env-destroy
+# real-branch resolution: pass the resolved name to `worktree.sh remove` so its
+# `git branch -D` targets the real branch, not the dangling safe form.
+export NABSPATH="$FIX"
+git init -q "$FIX/src"
+( cd "$FIX/src" && git commit -q --allow-empty -m init && \
+  git worktree add -q -b feat/x "$FIX/worktrees/feat-x" ) >/dev/null 2>&1
+ok "resolve_unsanitized_branch recovers real branch" "$(resolve_unsanitized_branch feat-x "")" "feat/x"
+ok "resolve_unsanitized_branch falls back to safe form when dir absent" "$(resolve_unsanitized_branch nope "")" "nope"
+
 echo ""; echo "RESULT: $pass passed, $fail failed"; [ "$fail" -eq 0 ]
