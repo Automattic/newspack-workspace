@@ -658,7 +658,8 @@ abstract class Integration {
 		// Normalize input to a map of key => chosen matching function. Accept both a
 		// sequential list of keys (legacy callers) and an associative map (typed UI).
 		$key_operator_map = [];
-		if ( array_is_list( $fields ) ) {
+		// PHP 8.0-safe array_is_list(): the array is a list iff re-indexing is a no-op.
+		if ( $fields === array_values( $fields ) ) {
 			foreach ( $fields as $key ) {
 				$key_operator_map[ (string) $key ] = null;
 			}
@@ -1164,7 +1165,8 @@ abstract class Integration {
 				if ( 'incoming_metadata_fields' === ( $field['key'] ?? '' ) ) {
 					$allowed_matching_functions = [ 'default', 'range', 'list__in', 'list__not_in' ];
 					$sanitized                  = [];
-					if ( array_is_list( $value ) ) {
+					// PHP 8.0-safe array_is_list(): the array is a list iff re-indexing is a no-op.
+					if ( $value === array_values( $value ) ) {
 						// Legacy: a plain list of enabled keys, no operator override.
 						foreach ( $value as $key ) {
 							$sanitized[ \sanitize_text_field( (string) $key ) ] = 'default';
