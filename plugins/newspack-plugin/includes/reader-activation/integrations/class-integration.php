@@ -657,25 +657,27 @@ abstract class Integration {
 
 		// Normalize input to a map of key => chosen matching function. Accept both a
 		// sequential list of keys (legacy callers) and an associative map (typed UI).
-		$selection = [];
-		foreach ( $fields as $index => $value ) {
-			if ( is_int( $index ) ) {
-				$selection[ (string) $value ] = null;
-			} else {
-				$selection[ (string) $index ] = is_string( $value ) ? $value : null;
+		$key_operator_map = [];
+		if ( array_is_list( $fields ) ) {
+			foreach ( $fields as $key ) {
+				$key_operator_map[ (string) $key ] = null;
+			}
+		} else {
+			foreach ( $fields as $key => $matching_function ) {
+				$key_operator_map[ (string) $key ] = is_string( $matching_function ) ? $matching_function : null;
 			}
 		}
 
-		$allowed = [ 'default', 'range', 'list__in', 'list__not_in' ];
+		$allowed_matching_functions = [ 'default', 'range', 'list__in', 'list__not_in' ];
 
 		// Store as key => raw_data map, overriding matching_function when chosen.
 		$fields_to_store = [];
-		foreach ( $selection as $key => $matching_function ) {
+		foreach ( $key_operator_map as $key => $matching_function ) {
 			$raw_data = [];
 			if ( isset( $available_by_key[ $key ] ) ) {
 				$raw_data = $available_by_key[ $key ]->get_raw_data();
 			}
-			if ( null !== $matching_function && in_array( $matching_function, $allowed, true ) ) {
+			if ( null !== $matching_function && in_array( $matching_function, $allowed_matching_functions, true ) ) {
 				$raw_data['matching_function'] = $matching_function;
 			}
 			$fields_to_store[ $key ] = $raw_data;

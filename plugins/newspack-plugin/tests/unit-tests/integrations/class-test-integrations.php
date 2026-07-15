@@ -406,7 +406,7 @@ class Test_Integrations extends \WP_UnitTestCase {
 		// Rejects an operator not on the allowlist (never stores the bogus value).
 		$integration->update_enabled_incoming_fields( [ 'amount' => 'bogus' ] );
 		$stored = \get_option( 'newspack_integration_incoming_fields_test-id' );
-		$this->assertNotSame( 'bogus', $stored['amount']['matching_function'] ?? null );
+		$this->assertArrayNotHasKey( 'matching_function', $stored['amount'] );
 
 		// Backward compatibility: a sequential key list still works.
 		$integration->update_enabled_incoming_fields( [ 'first_name', 'last_name' ] );
