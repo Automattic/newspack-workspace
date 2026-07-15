@@ -53,6 +53,15 @@ const SETTINGS_FIXTURE = {
 	},
 };
 
+// GET /lists is fetched with `parse: false` so the component can read the
+// warming header, so its mock must be a Response-like object, not a plain array.
+const LISTS_WARMING_HEADER = 'x-newspack-newsletters-lists-warming';
+const listsResponse = ( data = SUBSCRIPTION_LISTS_FIXTURE, { warming = false } = {} ) => ( {
+	ok: true,
+	headers: { get: name => ( name === LISTS_WARMING_HEADER && warming ? '1' : null ) },
+	json: async () => data,
+} );
+
 beforeAll( () => {
 	global.newspack_newsletters_wizard = {
 		new_subscription_lists_url: 'https://example.test/wp-admin/post-new.php?post_type=newspack_nl_list',
@@ -61,7 +70,9 @@ beforeAll( () => {
 
 beforeEach( () => {
 	apiFetch.mockReset();
-	apiFetch.mockResolvedValue( SUBSCRIPTION_LISTS_FIXTURE );
+	// Route the parse:false GET /lists to a Response-like; everything else
+	// (PATCH toggles, etc.) keeps returning the plain fixture.
+	apiFetch.mockImplementation( opts => Promise.resolve( opts?.parse === false ? listsResponse() : SUBSCRIPTION_LISTS_FIXTURE ) );
 	// Mark the bridge ready so the fallback timer doesn't navigate the test window.
 	window.newspackNewslettersBridgeReady = true;
 } );
@@ -135,6 +146,40 @@ describe( 'SubscriptionLists — wizard-bridge wiring', () => {
 				data: { active: true },
 			} )
 		);
+	} );
+
+	it( 'polls for warming sublists, then stops once the provider reports complete', async () => {
+		jest.useFakeTimers();
+		apiFetch.mockReset();
+		// Fallback for any stray call, then: first load warming (audiences only),
+		// second load complete (audiences + sublists).
+		apiFetch.mockResolvedValue( listsResponse( SUBSCRIPTION_LISTS_FIXTURE, { warming: false } ) );
+		apiFetch
+			.mockResolvedValueOnce( listsResponse( [ SUBSCRIPTION_LISTS_FIXTURE[ 1 ] ], { warming: true } ) )
+			.mockResolvedValueOnce( listsResponse( SUBSCRIPTION_LISTS_FIXTURE, { warming: false } ) );
+
+		const listCalls = () => apiFetch.mock.calls.filter( ( [ c ] ) => c?.path === '/newspack-newsletters/v1/lists' ).length;
+
+		render( <SubscriptionLists lockedLists={ false } provider="mailchimp" /> );
+
+		// Initial load: audiences only, a warming poll is queued.
+		await act( async () => {
+			await jest.advanceTimersByTimeAsync( 0 );
+		} );
+		expect( listCalls() ).toBe( 1 );
+
+		// Poll fires, sublists arrive, polling stops.
+		await act( async () => {
+			await jest.advanceTimersByTimeAsync( 3000 );
+		} );
+		expect( listCalls() ).toBe( 2 );
+
+		// No further polling once complete.
+		await act( async () => {
+			await jest.advanceTimersByTimeAsync( 12000 );
+		} );
+		expect( listCalls() ).toBe( 2 );
+		jest.useRealTimers();
 	} );
 
 	it( 'does not render the bulk Save Subscription Lists button', async () => {
@@ -452,7 +497,7 @@ describe( 'NewslettersSettings — dirty tracking, save flow, snackbar', () => {
 		const unconfiguredFixture = { ...configuredFixture, esp_connected: false };
 		apiFetch.mockImplementation( config => {
 			if ( config?.path === '/newspack-newsletters/v1/lists' ) {
-				return Promise.resolve( SUBSCRIPTION_LISTS_FIXTURE );
+				return Promise.resolve( config?.parse === false ? listsResponse() : SUBSCRIPTION_LISTS_FIXTURE );
 			}
 			if ( config?.method === 'POST' ) {
 				return Promise.resolve( unconfiguredFixture );
@@ -496,7 +541,7 @@ describe( 'NewslettersSettings — dirty tracking, save flow, snackbar', () => {
 		};
 		apiFetch.mockImplementation( config => {
 			if ( config?.path === '/newspack-newsletters/v1/lists' ) {
-				return Promise.resolve( SUBSCRIPTION_LISTS_FIXTURE );
+				return Promise.resolve( config?.parse === false ? listsResponse() : SUBSCRIPTION_LISTS_FIXTURE );
 			}
 			return Promise.resolve( configuredFixture );
 		} );

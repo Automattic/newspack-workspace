@@ -70,6 +70,14 @@ import Tracking from './tracking';
 
 import './style.scss';
 
+// When the ESP's sublists (groups/tags/segments) are still warming asynchronously
+// on a cold cache, GET /lists returns the audiences only and sets this header.
+// We re-poll a bounded number of times so the sublists appear on their own,
+// without the user having to reload the page after saving their ESP key.
+const LISTS_WARMING_HEADER = 'x-newspack-newsletters-lists-warming';
+const LISTS_WARMING_POLL_INTERVAL_MS = 3000;
+const LISTS_WARMING_MAX_POLLS = 10;
+
 const LETTERHEAD_KEY = 'newspack_newsletters_letterhead_api_key';
 
 // Signature over a provider's settings (keys sourced from the settings
@@ -421,6 +429,11 @@ export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {
 	const [ togglingIds, setTogglingIds ] = useState( () => new Set() );
 	const [ lists, setLists ] = useState( [] );
 	const fallbackTimerRef = useRef( null );
+	// Warming-poll bookkeeping: while the ESP sublists warm asynchronously, we
+	// re-fetch on a bounded timer until the warming header clears.
+	const pollTimerRef = useRef( null );
+	const pollCountRef = useRef( 0 );
+	const mountedRef = useRef( true );
 	// When the bridge isn't ready at click time, we queue the dispatch here
 	// instead of firing it into the void. The bridge-mounted handler
 	// (registered below) flushes this; the fallback timer navigates to the
@@ -441,15 +454,59 @@ export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {
 			return nextLists;
 		} );
 	};
-	const fetchLists = () => {
-		setError( false );
-		setInFlight( true );
+	const clearListsPoll = () => {
+		if ( pollTimerRef.current ) {
+			clearTimeout( pollTimerRef.current );
+			pollTimerRef.current = null;
+		}
+	};
+	const fetchLists = ( isPoll = false ) => {
+		if ( ! isPoll ) {
+			clearListsPoll();
+			pollCountRef.current = 0;
+			setError( false );
+			setInFlight( true );
+		}
 		apiFetch( {
 			path: '/newspack-newsletters/v1/lists',
+			parse: false,
 		} )
-			.then( updateLists )
-			.catch( setError )
-			.finally( () => setInFlight( false ) );
+			.then( async response => {
+				if ( ! response.ok ) {
+					let body = null;
+					try {
+						body = await response.json();
+					} catch ( e ) {
+						body = null;
+					}
+					throw body || new Error( __( 'Could not load subscription lists.', 'newspack-plugin' ) );
+				}
+				const warming = response?.headers?.get?.( LISTS_WARMING_HEADER ) === '1';
+				const payload = await response.json();
+				if ( ! mountedRef.current ) {
+					return;
+				}
+				updateLists( Array.isArray( payload ) ? payload : [] );
+				// Sublists are still warming: re-poll (bounded) so they appear in
+				// place, then stop once the provider reports a complete set.
+				if ( warming && pollCountRef.current < LISTS_WARMING_MAX_POLLS ) {
+					pollCountRef.current += 1;
+					clearListsPoll();
+					pollTimerRef.current = setTimeout( () => fetchLists( true ), LISTS_WARMING_POLL_INTERVAL_MS );
+				} else {
+					clearListsPoll();
+				}
+			} )
+			.catch( err => {
+				if ( mountedRef.current ) {
+					setError( err );
+				}
+			} )
+			.finally( () => {
+				if ( mountedRef.current && ! isPoll ) {
+					setInFlight( false );
+				}
+			} );
 	};
 	const handleToggleActive = async ( list, next ) => {
 		if ( ! list?.db_id ) {
@@ -576,6 +633,15 @@ export const SubscriptionLists = ( { lockedLists, onUpdate, provider, labels = {
 	// would fire after the component is gone, navigating the user away
 	// unexpectedly.
 	useEffect( () => () => clearTimeout( fallbackTimerRef.current ), [] );
+
+	// Stop any in-flight warming poll when the component unmounts.
+	useEffect( () => {
+		mountedRef.current = true;
+		return () => {
+			mountedRef.current = false;
+			clearListsPoll();
+		};
+	}, [] );
 
 	// Dispatch a bridge event, or queue it for replay if the bridge isn't
 	// ready yet. Dispatching while the bridge has no listeners installed
