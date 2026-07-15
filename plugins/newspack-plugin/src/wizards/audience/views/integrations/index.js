@@ -1,14 +1,16 @@
 /**
  * WordPress dependencies.
  */
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import apiFetch from '@wordpress/api-fetch';
+import { useDispatch } from '@wordpress/data';
 import { forwardRef, useState, useEffect, useCallback } from '@wordpress/element';
 
 /**
  * Internal dependencies.
  */
 import { Wizard, withWizard } from '../../../../../packages/components/src';
+import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import { SettingsSection } from './settings-section';
 import { ConfigureView } from './configure-view';
 import { LogsView } from './logs-view';
@@ -22,6 +24,22 @@ const AudienceIntegrations = ( props, ref ) => {
 	const [ toggling, setToggling ] = useState( {} );
 	const [ activating, setActivating ] = useState( {} );
 	const [ loading, setLoading ] = useState( true );
+
+	const { addNotice } = useDispatch( WIZARD_STORE_NAMESPACE );
+
+	const addEnabledNotice = useCallback(
+		( integrationId, enabled, data ) => {
+			const name = data?.[ integrationId ]?.name || integrationId;
+			addNotice( {
+				id: `integration-enabled-${ integrationId }`,
+				type: 'success',
+				message: enabled
+					? sprintf( /* translators: %s: integration name. */ __( '%s enabled.', 'newspack-plugin' ), name )
+					: sprintf( /* translators: %s: integration name. */ __( '%s disabled.', 'newspack-plugin' ), name ),
+			} );
+		},
+		[ addNotice ]
+	);
 
 	const fetchSettings = useCallback( () => {
 		setLoading( true );
@@ -74,24 +92,33 @@ const AudienceIntegrations = ( props, ref ) => {
 		} );
 	}, [] );
 
-	const handleToggleEnabled = useCallback( ( integrationId, enabled ) => {
-		setToggling( prev => ( { ...prev, [ integrationId ]: true } ) );
-		apiFetch( {
-			path: `${ API_PATH }/${ integrationId }/enabled`,
-			method: 'POST',
-			data: { enabled },
-		} )
-			.then( data => {
-				setIntegrations( data );
+	const handleToggleEnabled = useCallback(
+		( integrationId, enabled ) => {
+			setToggling( prev => ( { ...prev, [ integrationId ]: true } ) );
+			apiFetch( {
+				path: `${ API_PATH }/${ integrationId }/enabled`,
+				method: 'POST',
+				data: { enabled },
 			} )
-			.catch( () => {
-				// Leave the integration in its previous state; apiFetch already
-				// logs the underlying error to the console and the user can retry.
-			} )
-			.finally( () => {
-				setToggling( prev => ( { ...prev, [ integrationId ]: false } ) );
-			} );
-	}, [] );
+				.then( data => {
+					setIntegrations( data );
+					addEnabledNotice( integrationId, enabled, data );
+				} )
+				.catch( () => {
+					// Leave the integration in its previous state; apiFetch already
+					// logs the underlying error to the console and the user can retry.
+					addNotice( {
+						id: `integration-enabled-${ integrationId }`,
+						type: 'error',
+						message: __( 'Something went wrong. Please try again.', 'newspack-plugin' ),
+					} );
+				} )
+				.finally( () => {
+					setToggling( prev => ( { ...prev, [ integrationId ]: false } ) );
+				} );
+		},
+		[ addEnabledNotice, addNotice ]
+	);
 
 	const handleSetupAndEnable = useCallback(
 		( integrationId, settings ) =>
@@ -114,6 +141,7 @@ const AudienceIntegrations = ( props, ref ) => {
 					} )
 					.then( data => {
 						setIntegrations( data );
+						addEnabledNotice( integrationId, true, data );
 						return data;
 					} )
 					.finally( () => {
@@ -124,7 +152,7 @@ const AudienceIntegrations = ( props, ref ) => {
 						} );
 					} )
 			),
-		[]
+		[ addEnabledNotice ]
 	);
 
 	const handleActivatePlugin = useCallback(
