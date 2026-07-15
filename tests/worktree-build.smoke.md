@@ -16,4 +16,4 @@
    re-running `up` does not add it again (idempotent).
 5. **Tier-2 unchanged:** a standalone-repo worktree env still shows only its single
    `/newspack-plugins/<repo>` mount and still gets the `cp -al` assets.
-6. `bash -n bin/env.sh bin/worktree-mounts.sh` clean; `bash tests/worktree-mounts.test.sh` → 9 passed.
+6. `bash -n bin/env.sh` clean (`bin/worktree-mounts.sh` was removed; its parsers now live inline in `env.sh`); `bash tests/worktree-mounts.test.sh` → 5 passed (sources `env.sh` and drives `parse_worktree_mount`/`each_worktree_in_env` directly).
