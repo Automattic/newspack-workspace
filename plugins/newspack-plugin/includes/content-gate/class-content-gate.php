@@ -690,12 +690,13 @@ class Content_Gate {
 	 * list — and priority is what orders overlapping gates, so a tie leaves an arbitrary gate
 	 * deciding what a reader sees.
 	 *
-	 * @param bool $is_newsletter Whether the new gate is a premium newsletter gate.
+	 * @param string $post_type     Post type whose bucket the new gate belongs to. Defaults to self::GATE_CPT.
+	 * @param bool   $is_newsletter Whether the new gate is a premium newsletter gate.
 	 *
 	 * @return int
 	 */
-	public static function get_next_gate_priority( $is_newsletter = false ) {
-		$bucket_gates = self::get_gates( self::GATE_CPT, null, $is_newsletter );
+	public static function get_next_gate_priority( $post_type = self::GATE_CPT, $is_newsletter = false ) {
+		$bucket_gates = self::get_gates( $post_type, null, $is_newsletter );
 		return $bucket_gates ? max( wp_list_pluck( $bucket_gates, 'priority' ) ) + 1 : 0;
 	}
 
@@ -715,7 +716,7 @@ class Content_Gate {
 			'post_status'  => isset( $gate['status'] ) && in_array( $gate['status'], self::get_post_statuses(), true ) ? $gate['status'] : 'publish',
 			'post_content' => '',
 			'meta_input'   => [
-				'gate_priority' => self::get_next_gate_priority( $is_newsletter ),
+				'gate_priority' => self::get_next_gate_priority( $post_type, $is_newsletter ),
 			],
 		];
 		if ( $is_newsletter ) {
