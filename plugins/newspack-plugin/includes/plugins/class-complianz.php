@@ -37,6 +37,15 @@ class Complianz {
 	const EDGE_COUNTRY_HEADERS = [ 'GEOIP_COUNTRY_CODE' ];
 
 	/**
+	 * Transient that rate-limits the "GeoIP filter swap failed" log to once per
+	 * day, so a broken Complianz coupling is reported without flooding the log on
+	 * every uncached request.
+	 *
+	 * @var string
+	 */
+	const SWAP_FAILED_TRANSIENT = 'newspack_complianz_geoip_swap_failed';
+
+	/**
 	 * Memoized edge country code for the current request. `null` before it is
 	 * first resolved; afterwards the resolved value (a country code, or '' when
 	 * the edge supplied nothing usable). The edge value is fixed per request, and
@@ -133,11 +142,33 @@ class Complianz {
 		// Only take over a filter we actually removed. If Complianz ever renames or
 		// re-prioritizes its GeoIP callbacks, remove_filter() no-ops and we leave its
 		// native behaviour in place rather than running both filters in parallel.
-		if ( remove_filter( 'cmplz_user_region', 'cmplz_user_region', 20 ) ) {
+		$region_swapped = remove_filter( 'cmplz_user_region', 'cmplz_user_region', 20 );
+		if ( $region_swapped ) {
 			add_filter( 'cmplz_user_region', [ __CLASS__, 'edge_user_region' ], 20 );
 		}
-		if ( remove_filter( 'cmplz_user_consenttype', 'cmplz_user_consenttype', 10 ) ) {
+		$consenttype_swapped = remove_filter( 'cmplz_user_consenttype', 'cmplz_user_consenttype', 10 );
+		if ( $consenttype_swapped ) {
 			add_filter( 'cmplz_user_consenttype', [ __CLASS__, 'edge_user_consenttype' ], 10 );
+		}
+
+		// At this point GeoIP is active and a valid edge country is present, so the
+		// swap should have taken. If either callback was not found at its expected
+		// priority, Complianz changed how it registers them: the swap silently
+		// declines and every visitor resumes the MaxMind lookup this integration
+		// exists to avoid. Surface that (rate-limited to once per day) so a Complianz
+		// update that breaks the coupling is observable rather than rediscovered as a
+		// load regression on a high-traffic site.
+		if ( ( ! $region_swapped || ! $consenttype_swapped ) && false === get_transient( self::SWAP_FAILED_TRANSIENT ) ) {
+			set_transient( self::SWAP_FAILED_TRANSIENT, 1, DAY_IN_SECONDS );
+			Logger::newspack_log(
+				'newspack_complianz_geoip_swap_failed',
+				'Complianz GeoIP filter swap failed: the cmplz_user_region/cmplz_user_consenttype callbacks were not found at their expected priorities, so per-visitor MaxMind lookups continue. Complianz likely changed how it registers these filters.',
+				[
+					'region_swapped'      => (bool) $region_swapped,
+					'consenttype_swapped' => (bool) $consenttype_swapped,
+				],
+				'error'
+			);
 		}
 	}
 
@@ -202,6 +233,13 @@ class Complianz {
 		if ( '' !== $country_code ) {
 			// cmplz_get_consenttype_for_country() is a pure config lookup (no database read).
 			$user_consenttype = cmplz_get_consenttype_for_country( $country_code );
+			// Gate against the site's configured-region consent types and fall back to
+			// 'other', exactly as Complianz's own cmplz_user_consenttype callback does.
+			// This deliberately mirrors native behaviour rather than the wider
+			// cmplz_sanitize_consenttype() type list: a type valid for a region the site
+			// does not use resolves to 'other' both here and in stock Complianz, so the
+			// swap stays behaviour-preserving. Do not widen this to the full type list --
+			// that would diverge from what a non-optimized site would show.
 			if ( in_array( $user_consenttype, cmplz_get_used_consenttypes(), true ) ) {
 				$consenttype = $user_consenttype;
 			} else {

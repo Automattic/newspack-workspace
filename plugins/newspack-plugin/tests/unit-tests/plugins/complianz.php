@@ -39,14 +39,16 @@ class Newspack_Test_Complianz extends WP_UnitTestCase {
 	];
 
 	/**
-	 * Mock map of country code => Complianz consent type, used by the cmplz_get_consenttype_for_country mock.
+	 * Mock map of Complianz region => consent type, used by the
+	 * cmplz_get_consenttype_for_country mock. Mirrors real Complianz, which derives
+	 * the consent type from the (filterable) region's configured type, not directly
+	 * from the country.
 	 *
 	 * @var array<string,string>
 	 */
-	public static $consenttype_map = [
-		'US' => 'optout',
-		'NL' => 'optin',
-		'DE' => 'optin',
+	public static $region_consenttype_map = [
+		'us' => 'optout',
+		'eu' => 'optin',
 	];
 
 	/**
@@ -70,6 +72,9 @@ class Newspack_Test_Complianz extends WP_UnitTestCase {
 		$edge_country_cache->setAccessible( true );
 		$edge_country_cache->setValue( null, null );
 
+		// Clear the swap-failure log rate-limit so each test starts fresh.
+		delete_transient( Complianz::SWAP_FAILED_TRANSIENT );
+
 		// Simulate Complianz cookie blocker settings.
 		if ( ! function_exists( 'cmplz_can_run_cookie_blocker' ) ) {
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
@@ -86,8 +91,12 @@ class Newspack_Test_Complianz extends WP_UnitTestCase {
 			}
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
 			function cmplz_get_consenttype_for_country( $country_code ) { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
-				// Real Complianz returns false (not 'other') for an unmapped country.
-				return Newspack_Test_Complianz::$consenttype_map[ $country_code ] ?? false; // phpcs:ignore Squiz.Classes.SelfMemberReference.NotUsed
+				// Mirror real Complianz: re-derive the region while re-applying the
+				// cmplz_user_region filter (so a manual ?cmplz_user_region= override or the
+				// edge swap changes the result), then map that region to its consent type.
+				// Real Complianz returns false (not 'other') when the region has no type.
+				$region = apply_filters( 'cmplz_user_region', cmplz_get_region_for_country( $country_code ) );
+				return Newspack_Test_Complianz::$region_consenttype_map[ $region ] ?? false; // phpcs:ignore Squiz.Classes.SelfMemberReference.NotUsed
 			}
 			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound
 			function cmplz_get_regions() { // phpcs:ignore Squiz.Commenting.FunctionComment.Missing
@@ -445,9 +454,28 @@ class Newspack_Test_Complianz extends WP_UnitTestCase {
 	 * A country whose consent type is not configured falls back to 'other'.
 	 */
 	public function test_edge_consenttype_falls_back_to_other() {
-		// 'FR' is not mapped, so cmplz_get_consenttype_for_country returns 'other'.
+		// 'FR' maps to no region, so cmplz_get_consenttype_for_country returns false;
+		// the 'other' comes from edge_user_consenttype()'s own else branch, not the helper.
 		$_SERVER['GEOIP_COUNTRY_CODE'] = 'FR';
 		$this->assertSame( 'other', Complianz::edge_user_consenttype( 'optin' ) );
+	}
+
+	/**
+	 * A manual ?cmplz_user_region= override drives the consent type through the
+	 * re-entrant path: after the swap, cmplz_get_consenttype_for_country() re-applies
+	 * cmplz_user_region (now edge_user_region), where the override wins, so the consent
+	 * type follows the override region (US -> optout) rather than the edge country
+	 * (NL -> optin). This locks in the trickiest behaviour called out in the docblock.
+	 */
+	public function test_edge_consenttype_follows_override_region_through_reentrant_path() {
+		self::$geoip_enabled           = true;
+		$_SERVER['GEOIP_COUNTRY_CODE'] = 'NL';
+		$_GET['cmplz_user_region']     = 'us';
+		$this->register_premium_geoip_filters();
+
+		Complianz::maybe_use_edge_geolocation();
+
+		$this->assertSame( 'optout', apply_filters( 'cmplz_user_consenttype', 'optin' ) );
 	}
 
 	// -------------------------------------------------------------------------
@@ -529,6 +557,49 @@ class Newspack_Test_Complianz extends WP_UnitTestCase {
 
 		$this->assertFalse( has_filter( 'cmplz_user_region', [ Complianz::class, 'edge_user_region' ] ) );
 		$this->assertFalse( has_filter( 'cmplz_user_consenttype', [ Complianz::class, 'edge_user_consenttype' ] ) );
+	}
+
+	/**
+	 * When the swap cannot take (Complianz's callbacks are absent from their
+	 * expected priorities), the broken coupling is reported via newspack_log -- but
+	 * only once, since the transient rate-limits repeat reports on uncached requests.
+	 */
+	public function test_logs_once_when_swap_fails() {
+		self::$geoip_enabled           = true;
+		$_SERVER['GEOIP_COUNTRY_CODE'] = 'NL';
+		// Deliberately do NOT register Complianz's filters: remove_filter() no-ops.
+		$logged = [];
+		add_action(
+			'newspack_log',
+			function ( $code ) use ( &$logged ) {
+				$logged[] = $code;
+			}
+		);
+
+		Complianz::maybe_use_edge_geolocation();
+		Complianz::maybe_use_edge_geolocation();
+
+		$this->assertSame( [ 'newspack_complianz_geoip_swap_failed' ], $logged );
+	}
+
+	/**
+	 * A successful swap emits no failure log.
+	 */
+	public function test_no_log_when_swap_succeeds() {
+		self::$geoip_enabled           = true;
+		$_SERVER['GEOIP_COUNTRY_CODE'] = 'NL';
+		$this->register_premium_geoip_filters();
+		$logged = [];
+		add_action(
+			'newspack_log',
+			function ( $code ) use ( &$logged ) {
+				$logged[] = $code;
+			}
+		);
+
+		Complianz::maybe_use_edge_geolocation();
+
+		$this->assertNotContains( 'newspack_complianz_geoip_swap_failed', $logged );
 	}
 
 	/**
