@@ -202,6 +202,114 @@ case $1 in
         rmdir "$NABSPATH/worktrees-repos/$name" 2>/dev/null || true
         echo "Removed worktree worktrees-repos/$name/$safe_branch"
         ;;
+    add-repos)
+        # Usage: worktree.sh add-repos <name> <branch>
+        # Creates a worktree of a *standalone* checkout under repos/ (its own git
+        # repo, e.g. newspack-manager), stored at worktrees-repos/<name>/<safe_branch>
+        # so it never lands under repos/ itself (link-repos.sh would otherwise
+        # symlink it as a second plugin). The env system mounts it over the
+        # canonical container path (/newspack-repos/{plugins,themes}/<name>).
+        name="$2"
+        branch="$3"
+        if [[ -z "$name" || -z "$branch" ]]; then
+            echo "Usage: n worktree add-repos <name> <branch>"
+            exit 1
+        fi
+        validate_name "$name" "repo"
+        validate_name "$(sanitize_branch "$branch")" "branch"
+        host_path=$(get_standalone_repo_host_path "$name")
+        if [[ -z "$host_path" ]]; then
+            echo "Error: no standalone checkout 'repos/plugins/$name' or 'repos/themes/$name' found."
+            echo "Clone or unzip it into repos/ first."
+            exit 1
+        fi
+        if ! is_standalone_git_repo "$host_path"; then
+            echo "Error: $host_path is not its own git repository, so it can't be worktree'd."
+            echo "(Its git lookups resolve to the monorepo. Standalone worktrees need a separate repo with its own .git.)"
+            exit 1
+        fi
+        repos_dir="$NABSPATH/$host_path"
+        safe_branch=$(sanitize_branch "$branch")
+        worktree_dir="$NABSPATH/worktrees-repos/$name/$safe_branch"
+        if [[ -d "$worktree_dir" ]]; then
+            echo "Worktree already exists at worktrees-repos/$name/$safe_branch"
+            exit 0
+        fi
+        _worktree_create "$repos_dir" "$worktree_dir" "$branch" || exit 1
+        echo "Created worktree at worktrees-repos/$name/$safe_branch"
+        ;;
+    remove-repos)
+        # Usage: worktree.sh remove-repos <name> <safe_branch> [--yes]
+        # Removes a standalone-repo worktree created by add-repos. Unlike the
+        # monorepo `remove`, this does NOT delete the branch: standalone repos
+        # carry long-lived feature branches the user still wants, and the worktree
+        # is the only disposable artifact. Re-creating reuses the existing branch.
+        skip_confirm=false
+        shift  # consume "remove-repos"
+        args=()
+        for arg in "$@"; do
+            if [[ "$arg" == "--yes" ]]; then
+                skip_confirm=true
+            else
+                args+=("$arg")
+            fi
+        done
+        name="${args[0]}"
+        safe_branch="${args[1]}"
+        if [[ -z "$name" || -z "$safe_branch" ]]; then
+            echo "Usage: n worktree remove-repos <name> <safe_branch> [--yes]"
+            exit 1
+        fi
+        # Reject '..'/leading-'/' etc. before these reach the rm target below --
+        # otherwise a direct call like `remove-repos ../.. x` would delete outside
+        # worktrees-repos. (The add path validates too; the destructive path must.)
+        validate_name "$name" "repo"
+        validate_name "$safe_branch" "branch"
+        worktree_dir="$NABSPATH/worktrees-repos/$name/$safe_branch"
+        host_path=$(get_standalone_repo_host_path "$name")
+        if [[ ! -d "$worktree_dir" ]]; then
+            # Dir already gone; prune any stale registration the source repo keeps.
+            if [[ -n "$host_path" ]] && is_standalone_git_repo "$host_path"; then
+                git -C "$NABSPATH/$host_path" worktree prune 2>/dev/null || true
+            fi
+            echo "Nothing to remove: no worktree at worktrees-repos/$name/$safe_branch."
+            exit 0
+        fi
+        # Block removal if an environment mounts this worktree (host path anchored
+        # with a trailing ':' so branch 'feat' isn't matched inside 'feature').
+        env_name=$(_worktree_env_using "worktrees-repos/$name/$safe_branch:")
+        if [[ -n "$env_name" ]]; then
+            echo "Error: worktree $name/$safe_branch is used by environment '$env_name'."
+            echo "Destroy the environment first: n env destroy $env_name"
+            exit 1
+        fi
+        echo "Worktree: $worktree_dir"
+        changes=$(cd "$worktree_dir" && git status --porcelain 2>/dev/null)
+        if [[ -n "$changes" ]]; then
+            echo ""
+            echo "WARNING: Worktree has uncommitted changes:"
+            echo "$changes" | head -10
+        fi
+        if [[ "$skip_confirm" != true ]]; then
+            echo ""
+            read -p "Remove worktree? (branch is kept) (y/N): " confirm
+            if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+                echo "Aborted."
+                exit 0
+            fi
+        fi
+        if [[ -n "$host_path" ]] && is_standalone_git_repo "$host_path"; then
+            git -C "$NABSPATH/$host_path" worktree remove --force "$worktree_dir" || rm -rf "$worktree_dir"
+            # Clear the registration if the remove failed and we rm'd the dir instead.
+            git -C "$NABSPATH/$host_path" worktree prune 2>/dev/null || true
+        else
+            # Source repo is gone; drop the directory directly.
+            rm -rf "$worktree_dir"
+        fi
+        # Tidy the per-repo parent dir when it holds no more worktrees.
+        rmdir "$NABSPATH/worktrees-repos/$name" 2>/dev/null || true
+        echo "Removed worktree worktrees-repos/$name/$safe_branch"
+        ;;
     list)
         cd "$NABSPATH" || exit 1
         git worktree list

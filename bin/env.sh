@@ -44,12 +44,13 @@ ip_for_env() {
     grep -o '127\.0\.0\.[0-9]*' "$1" | head -1
 }
 
-# Parse a single compose volume line into "<repo>|<branch>|<kind>".
-# kind is "monorepo" (workspace plugin/theme worktree) or "repos" (standalone
-# repos/ checkout worktree). Returns non-zero for lines that aren't worktree
-# mounts. The emitted branch is the mount-derived (safe) identifier — the
-# directory name as it appears in the host path; use resolve_unsanitized_branch
-# to recover the friendly display form for monorepo worktrees.
+# Parse a docker-compose volume line for a worktree mount and emit
+# "repo|branch|kind" (kind ∈ monorepo|repos). Handles three shapes:
+#   legacy (pre-monorepo): "- ./worktrees/<repo>/<branch>:/newspack-repos/<repo>"
+#   monorepo:              "- ./worktrees/<safe_branch>/plugins/<repo>:/newspack-plugins/<repo>"
+#                          "- ./worktrees/<safe_branch>/themes/<repo>:/newspack-themes/<repo>"
+#   repos (standalone):    "- ./worktrees-repos/<repo>/<safe_branch>:/newspack-repos/{plugins,themes}/<repo>"
+# Returns non-zero for lines that don't match any shape.
 parse_worktree_mount() {
     local line="$1"
     # Standalone repos/ worktree. Both fields come from the host path, which is
@@ -116,9 +117,8 @@ resolve_unsanitized_branch() {
     [[ -n "$resolved" ]] && echo "$resolved" || echo "$safe_branch"
 }
 
-# Emit "<repo>|<branch>|<kind>" for each worktree mount in a compose file.
-# Anchored grep (start-of-line "- ") so commented-out volume lines can't
-# false-match.
+# Iterate worktree mount lines in a compose file and yield "repo|branch|kind"
+# triples (kind ∈ monorepo|repos), as emitted by parse_worktree_mount.
 each_worktree_in_env() {
     local file="$1"
     while IFS= read -r line; do

@@ -123,6 +123,20 @@ n stop            # Stop containers
 n restart         # Stop and start
 ```
 
+#### Customizing the main dev stack (docker-compose.override.yml)
+
+`n start` invokes Compose with an explicit `-f`, which disables Compose's automatic loading of an override file. To customize the **main** dev container (extra bind mounts, env vars, ports, etc.) without editing the tracked `docker-compose.yml`, create a `docker-compose.override.yml` at the workspace root. When present, `n start` appends it (`-f docker-compose.override.yml`) so its settings merge over the base stack; when absent, nothing changes. The file is gitignored, so it stays a per-developer customization.
+
+Example – add a host directory as a bind mount on the `wordpress` service:
+```yaml
+services:
+  wordpress:
+    volumes:
+      - /Users/me/some-local-dir:/var/www/extra
+```
+
+This override applies only to the main stack (`newspack_dev`). Isolated environments (`n env`) do **not** load it; they layer their own generated `docker-compose.env-*.yml` files instead, so a root override can't clobber env-specific config.
+
 ### First-Time Setup
 ```bash
 cp default.env .env           # Create local config
@@ -152,6 +166,14 @@ n test-php --filter test_name       # Run a specific test method
 n test-php --list-groups            # List available test groups
 n test-js                           # Run JS tests
 ```
+
+#### End-to-end (Playwright) tests
+The Playwright end-to-end suite lives in [`e2e/`](e2e/) — a self-contained npm
+project deliberately kept out of the pnpm workspace, so the per-package lint/build/
+test CI never tries to run it (it needs a live site). It runs nightly on TeamCity
+against a staging site and can also run against a local env. See
+[`e2e/README.md`](e2e/README.md) and [`e2e/AGENTS.md`](e2e/AGENTS.md) for setup and
+the from-scratch provisioning model (`site-setup.sh` / `e2e-setup.sh`).
 
 ### Development
 ```bash
@@ -258,7 +280,12 @@ n setup --env myenv --yes     # fully configured Newspack site
 ### Environment Commands
 ```bash
 n env create <name> [options]  # Create environment config
-  --worktree <repo>:<branch>   #   Mount a worktree (repeatable for multiple repos)
+  --worktree <repo>:<branch>   #   Mount a worktree (repeatable for multiple repos).
+                               #   <repo> may be a monorepo plugin/theme OR a standalone
+                               #   checkout under repos/ that is its own git repo (e.g.
+                               #   newspack-manager); the latter is worktree'd from that repo
+                               #   and mounted over just its /newspack-repos/<kind>/<name> path,
+                               #   so other envs keep the base checkout.
   --domain <domain>            #   Custom domain (default: <name>.test)
   --isolated-db                #   Use a private MariaDB sidecar with lower_case_table_names=1
                                #     (needed for envs that create pyrobase tables via $wpdb at runtime; see NEWS-2286)
@@ -308,7 +335,7 @@ n sh <name>                    # Shell into environment container
 - Each env mounts `envs/<name>/html/` as `/var/www/html` (isolated from `./html/`)
 - Each env gets its own database (`wordpress_<name>`) in the shared MariaDB server
 - Each env gets a unique `WP_CACHE_KEY_SALT` to prevent memcached key collisions
-- Worktrees override specific plugins (e.g., `newspack-plugin`) while sharing the rest from `./plugins/`. A tier-1 (monorepo) worktree is mounted both at its serving path and at the pnpm workspace-member path (`/newspack-monorepo/<plugins|themes>/<name>`), so `n build <plugin>` builds the *worktree* copy in place (with `--build`, `n env up` builds it for you). Older envs gain this mount automatically on the next `n env up`.
+- Worktrees override specific plugins (e.g., `newspack-plugin`) while sharing the rest from `./plugins/`. Monorepo worktrees live in `worktrees/<safe_branch>/` (a worktree of the whole workspace repo) and are mounted both at their serving path and at the pnpm workspace-member path (`/newspack-monorepo/<plugins|themes>/<name>`), so `n build <plugin>` builds the *worktree* copy in place (with `--build`, `n env up` builds it for you; older envs gain the workspace-member mount automatically on the next `n env up`). Standalone `repos/` worktrees live in `worktrees-repos/<name>/<safe_branch>/` (a worktree of that repo) and are mounted over just their `/newspack-repos/<kind>/<name>` subpath, leaving the base `repos/` checkout intact for other envs. Destroying a monorepo worktree deletes its branch; destroying a `repos/` worktree keeps the branch (standalone repos carry long-lived branches).
 - An env's auto-provisioned plugin `vendor/` is **runtime-only** (`composer install --no-dev`), which is all plugin activation needs. To get dev dependencies (PHPUnit etc.) for running a plugin's tests *inside* the container, run `n build <plugin>` or `n ci-build`. (`n test-php` itself is unaffected — it uses the container's global `phpunit`.)
 - All env containers join a shared `newspack_envs` Docker bridge network with their domain as a DNS alias, enabling inter-container communication (e.g., hub/node setups)
 - `n env destroy` cleans up everything: container, DB, html dir, hosts entry, and worktrees

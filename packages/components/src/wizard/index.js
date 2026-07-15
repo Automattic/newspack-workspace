@@ -277,12 +277,15 @@ const Wizard = (
 						</Switch>
 					</div>
 				</HashRouter>
-				{ notices?.length > 0 &&
-					notices.map( ( notice, index ) => (
-						<WizardSnackbar key={ notice.id || index } type={ notice.type } id={ notice.id } actions={ notice.actions }>
-							{ notice.message }
-						</WizardSnackbar>
-					) ) }
+				{ notices?.length > 0 && (
+					<div className="newspack-wizard__snackbar-list">
+						{ notices.map( ( notice, index ) => (
+							<WizardSnackbar key={ notice.id || index } id={ notice.id } type={ notice.type } actions={ notice.actions }>
+								{ notice.message }
+							</WizardSnackbar>
+						) ) }
+					</div>
+				) }
 			</div>
 			{ ! isLoading && <Footer simple={ hasSimpleFooter } /> }
 		</div>
