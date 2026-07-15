@@ -90,6 +90,8 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 										data: {
 											destinationUrl: setup_url,
 											handoffReturnUrl: window.location.href,
+											bannerText: __( 'Return to Integrations after completing configuration', 'newspack-plugin' ),
+											bannerButtonText: __( 'Back to Integrations', 'newspack-plugin' ),
 										},
 									} )
 										.then( response => {

@@ -114,6 +114,8 @@ describe( 'Audience Integrations settings section card action', () => {
 			data: {
 				destinationUrl: SETUP_URL,
 				handoffReturnUrl: RETURN_URL,
+				bannerText: 'Return to Integrations after completing configuration',
+				bannerButtonText: 'Back to Integrations',
 			},
 		} );
 		expect( history.push ).not.toHaveBeenCalled();
