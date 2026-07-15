@@ -1935,4 +1935,28 @@ class Test_Integrations extends \WP_UnitTestCase {
 
 		delete_option( 'newspack_newsletters_service_provider' );
 	}
+
+	/**
+	 * The get_unsupported_action_label() default flows through to the settings payload.
+	 */
+	public function test_unsupported_action_label_defaults_in_settings_payload() {
+		Integrations::register( new Sample_Integration( 'unsupported_label_default_test', 'Unsupported Label Default Test' ) );
+		$settings = Integrations::get_all_integration_settings();
+		$this->assertArrayHasKey( 'unsupported_label_default_test', $settings );
+		$this->assertArrayHasKey( 'unsupported_action_label', $settings['unsupported_label_default_test'] );
+		$this->assertSame( 'Open settings', $settings['unsupported_label_default_test']['unsupported_action_label'] );
+	}
+
+	/**
+	 * The ESP integration names its remedy: swap the manual provider for an API-based one.
+	 */
+	public function test_esp_unsupported_action_label_is_change_provider() {
+		$esp = new \Newspack\Reader_Activation\Integrations\ESP();
+
+		update_option( 'newspack_newsletters_service_provider', 'manual' );
+		$this->assertSame( 'Requires an API-based ESP', $esp->get_unsupported_reason() );
+		$this->assertSame( 'Change provider', $esp->get_unsupported_action_label() );
+
+		delete_option( 'newspack_newsletters_service_provider' );
+	}
 }

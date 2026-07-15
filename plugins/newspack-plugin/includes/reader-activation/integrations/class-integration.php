@@ -186,6 +186,19 @@ abstract class Integration {
 	}
 
 	/**
+	 * The primary action label to offer when get_unsupported_reason() returns a reason.
+	 *
+	 * Child classes that report an unsupported reason should override this to name
+	 * the remedy, so the integrations UI does not have to carry per-integration copy.
+	 * Only read when get_unsupported_reason() is non-null.
+	 *
+	 * @return string The action label.
+	 */
+	public function get_unsupported_action_label() {
+		return __( 'Open settings', 'newspack-plugin' );
+	}
+
+	/**
 	 * Get the URL where the user can set up this integration.
 	 *
 	 * Child classes should override this to return the admin page where

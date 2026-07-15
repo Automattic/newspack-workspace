@@ -65,6 +65,18 @@ class ESP extends Integration {
 	}
 
 	/**
+	 * The remedy for the manual provider: swap it for an API-based one.
+	 *
+	 * "Connect" would be wrong here — the site is connected, just to a provider
+	 * that exposes no contact-sync API.
+	 *
+	 * @return string The action label.
+	 */
+	public function get_unsupported_action_label() {
+		return __( 'Change provider', 'newspack-plugin' );
+	}
+
+	/**
 	 * Whether the ESP integration is ready to sync.
 	 *
 	 * Checks STORED configuration only — provider option set + master list
