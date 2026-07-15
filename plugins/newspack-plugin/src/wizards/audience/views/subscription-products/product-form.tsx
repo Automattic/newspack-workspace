@@ -10,7 +10,7 @@
  * WordPress dependencies
  */
 import { __, sprintf } from '@wordpress/i18n';
-import { useState, useEffect, useCallback } from '@wordpress/element';
+import { useState, useEffect, useCallback, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import {
@@ -30,7 +30,7 @@ import {
 /**
  * Internal dependencies
  */
-import { Badge, Grid, SectionHeader, Divider } from '../../../../../packages/components/src';
+import { Badge, Grid, SectionHeader, Divider, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 
 const BASE_PATH = '/newspack/v1/wizard/newspack-audience-subscription-products/products';
@@ -119,6 +119,29 @@ export default function ProductForm( {
 	const removePlan = ( index: number ) => setPlans( current => current.filter( ( _, i ) => i !== index ) );
 	const toggleBundled = ( id: number, checked: boolean ) =>
 		setBundled( current => ( checked ? [ ...current, id ] : current.filter( existing => existing !== id ) ) );
+
+	// Prompt before discarding unsaved edits when navigating away (mirrors the Access Control
+	// UI). The baseline is captured once, on first render; the form is "dirty" whenever the
+	// current field values differ from it, and the guard stands down while a save is in flight.
+	const snapshot = JSON.stringify( {
+		name,
+		type,
+		status,
+		isDonation,
+		availability,
+		categoryNames,
+		price,
+		period,
+		interval,
+		plans,
+		groupEnabled,
+		groupLimit,
+		bundled,
+	} );
+	const initialSnapshot = useRef( snapshot ).current;
+	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( {
+		when: snapshot !== initialSnapshot && ! isSaving,
+	} );
 
 	const submit = useCallback( () => {
 		setError( '' );
@@ -236,6 +259,7 @@ export default function ProductForm( {
 
 	return (
 		<div className="newspack-subscription-products__edit">
+			{ navBlockDialog }
 			{ error && (
 				<Notice status="error" isDismissible={ false }>
 					{ error }
