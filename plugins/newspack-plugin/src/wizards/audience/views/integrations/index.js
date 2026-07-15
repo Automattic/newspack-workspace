@@ -89,6 +89,32 @@ const AudienceIntegrations = ( props, ref ) => {
 			} );
 	}, [] );
 
+	const handleSetupAndEnable = useCallback(
+		( integrationId, settings ) =>
+			apiFetch( {
+				path: `${ API_PATH }/${ integrationId }`,
+				method: 'POST',
+				data: { settings },
+			} )
+				.then( () =>
+					apiFetch( {
+						path: `${ API_PATH }/${ integrationId }/enabled`,
+						method: 'POST',
+						data: { enabled: true },
+					} )
+				)
+				.then( data => {
+					setIntegrations( data );
+					setPendingChanges( prev => {
+						const next = { ...prev };
+						delete next[ integrationId ];
+						return next;
+					} );
+					return data;
+				} ),
+		[]
+	);
+
 	const handleActivatePlugin = useCallback(
 		pluginSlugs => {
 			const slugs = ( Array.isArray( pluginSlugs ) ? pluginSlugs : [ pluginSlugs ] ).filter( Boolean );
@@ -147,6 +173,7 @@ const AudienceIntegrations = ( props, ref ) => {
 		onSave: handleSave,
 		onToggleEnabled: handleToggleEnabled,
 		onActivatePlugin: handleActivatePlugin,
+		onSetupAndEnable: handleSetupAndEnable,
 	};
 
 	return (

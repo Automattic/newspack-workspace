@@ -1,7 +1,12 @@
 /**
  * External dependencies
  */
-import { render } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
+
+/**
+ * WordPress dependencies
+ */
+import apiFetch from '@wordpress/api-fetch';
 
 /**
  * Internal dependencies
@@ -9,7 +14,9 @@ import { render } from '@testing-library/react';
 import { SettingsSection } from './settings-section';
 
 const mockCardFeatureProps = [];
+const mockEnableModalProps = [];
 
+jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Card: ( { children } ) => children,
 	Grid: ( { children } ) => children,
@@ -18,6 +25,16 @@ jest.mock( '../../../../../packages/components/src', () => ( {
 		return null;
 	},
 } ) );
+jest.mock( './enable-modal', () => {
+	const actual = jest.requireActual( './enable-modal' );
+	return {
+		...actual,
+		EnableModal: props => {
+			mockEnableModalProps.push( props );
+			return null;
+		},
+	};
+} );
 jest.mock(
 	'../../../wizards-tab',
 	() =>
@@ -32,6 +49,20 @@ jest.mock(
 );
 
 const SETUP_URL = 'https://example.com/wp-admin/admin.php?page=newspack-newsletters';
+const RETURN_URL = 'https://example.com/wp-admin/admin.php?page=newspack-audience-integrations#/settings';
+const HANDOFF_LINK = SETUP_URL + '&newspack_handoff=1';
+
+const requiredAudienceField = {
+	key: 'mailchimp_audience_id',
+	type: 'select',
+	label: 'Mailchimp Audience',
+	required: true,
+	value: '',
+	options: [
+		{ label: 'None', value: '' },
+		{ label: 'Weekly', value: 'abc123' },
+	],
+};
 
 const baseIntegration = {
 	id: 'esp',
@@ -48,42 +79,69 @@ const baseIntegration = {
 const renderSection = ( integrationOverrides = {} ) => {
 	const history = { push: jest.fn() };
 	const onToggleEnabled = jest.fn();
+	const onSetupAndEnable = jest.fn( () => Promise.resolve() );
 	render(
 		<SettingsSection
 			integrations={ { esp: { ...baseIntegration, ...integrationOverrides } } }
 			loading={ false }
 			onToggleEnabled={ onToggleEnabled }
 			onActivatePlugin={ jest.fn() }
+			onSetupAndEnable={ onSetupAndEnable }
 			history={ history }
 		/>
 	);
-	return { history, onToggleEnabled, cardProps: mockCardFeatureProps[ 0 ] };
+	return { history, onToggleEnabled, onSetupAndEnable, cardProps: mockCardFeatureProps[ 0 ] };
 };
 
 describe( 'Audience Integrations settings section card action', () => {
 	beforeEach( () => {
 		mockCardFeatureProps.length = 0;
+		mockEnableModalProps.length = 0;
+		apiFetch.mockReset();
+		apiFetch.mockResolvedValue( { HandoffLink: HANDOFF_LINK } );
 		delete window.location;
-		window.location = { href: '' };
+		window.location = { href: RETURN_URL };
 	} );
 
-	it( 'offers "Connect" linking to the setup URL when the provider is not connected', () => {
-		const { history, cardProps } = renderSection( { is_connected: false, is_set_up: false } );
+	it( 'offers "Connect" performing a handoff to the setup URL when the provider is not connected', async () => {
+		const { history, cardProps } = renderSection( { is_connected: false } );
 		expect( cardProps.enableLabel ).toBe( 'Connect' );
 		cardProps.onEnable();
-		expect( window.location.href ).toBe( SETUP_URL );
+		await waitFor( () => expect( window.location.href ).toBe( HANDOFF_LINK ) );
+		expect( apiFetch ).toHaveBeenCalledWith( {
+			path: '/newspack/v1/handoff',
+			method: 'POST',
+			data: {
+				destinationUrl: SETUP_URL,
+				handoffReturnUrl: RETURN_URL,
+			},
+		} );
 		expect( history.push ).not.toHaveBeenCalled();
 	} );
 
-	it( 'offers "Finish setup" routing to the configure view when connected but not fully set up', () => {
-		const { history, cardProps } = renderSection( { is_connected: true, is_set_up: false } );
-		expect( cardProps.enableLabel ).toBe( 'Finish setup' );
-		cardProps.onEnable();
-		expect( history.push ).toHaveBeenCalledWith( '/settings/esp' );
+	it( 'offers "Enable" opening the enable modal when connected with a missing required field', () => {
+		const { onToggleEnabled, cardProps } = renderSection( { is_connected: true, settings: [ requiredAudienceField ] } );
+		expect( cardProps.enableLabel ).toBe( 'Enable' );
+		act( () => cardProps.onEnable() );
+		expect( onToggleEnabled ).not.toHaveBeenCalled();
+		expect( mockEnableModalProps.length ).toBeGreaterThan( 0 );
+		expect( mockEnableModalProps[ 0 ].integration.id ).toBe( 'esp' );
 	} );
 
-	it( 'offers "Enable" toggling the integration when fully set up but not enabled', () => {
-		const { onToggleEnabled, cardProps } = renderSection( { is_connected: true, is_set_up: true } );
+	it( 'forwards the modal enable action to onSetupAndEnable', async () => {
+		const { onSetupAndEnable, cardProps } = renderSection( { is_connected: true, settings: [ requiredAudienceField ] } );
+		act( () => cardProps.onEnable() );
+		const modalProps = mockEnableModalProps[ mockEnableModalProps.length - 1 ];
+		await act( () => modalProps.onEnable( { mailchimp_audience_id: 'abc123' } ) );
+		expect( onSetupAndEnable ).toHaveBeenCalledWith( 'esp', { mailchimp_audience_id: 'abc123' } );
+	} );
+
+	it( 'offers "Enable" toggling the integration directly when required settings are satisfied', () => {
+		const { onToggleEnabled, cardProps } = renderSection( {
+			is_connected: true,
+			is_set_up: true,
+			settings: [ { ...requiredAudienceField, value: 'abc123' } ],
+		} );
 		expect( cardProps.enableLabel ).toBe( 'Enable' );
 		cardProps.onEnable();
 		expect( onToggleEnabled ).toHaveBeenCalledWith( 'esp', true );
@@ -95,10 +153,10 @@ describe( 'Audience Integrations settings section card action', () => {
 		expect( history.push ).toHaveBeenCalledWith( '/settings/esp' );
 	} );
 
-	it( 'routes the configure action to the setup URL while the provider is not connected', () => {
-		const { history, cardProps } = renderSection( { is_connected: false, is_set_up: false, enabled: true } );
+	it( 'routes the configure action through the handoff while the provider is not connected', async () => {
+		const { history, cardProps } = renderSection( { is_connected: false, enabled: true } );
 		cardProps.onConfigure();
-		expect( window.location.href ).toBe( SETUP_URL );
+		await waitFor( () => expect( window.location.href ).toBe( HANDOFF_LINK ) );
 		expect( history.push ).not.toHaveBeenCalled();
 	} );
 } );
