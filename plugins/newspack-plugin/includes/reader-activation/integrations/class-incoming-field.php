@@ -162,8 +162,7 @@ class Incoming_Field {
 	/**
 	 * Set the matching function.
 	 *
-	 * @param string $matching_function One of 'default', 'list__in', 'list__not_in'.
-	 *                                  Note: 'range' is supported in evaluation but has no UI yet.
+	 * @param string $matching_function One of 'default', 'list__in', 'list__not_in', 'range'.
 	 * @return self
 	 */
 	public function set_matching_function( $matching_function ) {
