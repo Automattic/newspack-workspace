@@ -1102,6 +1102,7 @@ abstract class Integration {
 						return [
 							'value'             => $key,
 							'label'             => '' !== $name ? $name : $key,
+							'value_type'        => $incoming_field->get_value_type(),
 							'matching_function' => $incoming_field->get_matching_function(),
 							'has_options'       => ! empty( $options ),
 						];

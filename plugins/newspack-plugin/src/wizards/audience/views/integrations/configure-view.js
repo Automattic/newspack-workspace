@@ -19,24 +19,47 @@ import './configure-view.scss';
 /**
  * Build the operator dropdown options for an incoming metadata field.
  *
- * Enumerated fields (those the ESP returns with a fixed option set) can be
- * matched against a single value or any of several; free-form fields are
- * matched as text or as a numeric range.
+ * Options are primarily driven by the field's `value_type`, which the
+ * integration declares (e.g. a date field shouldn't offer the "Number"
+ * range operator, and a single-select field shouldn't offer it either).
+ * For `value_type: 'string'` (or an unrecognized value_type, e.g. the
+ * legacy 'boolean'), fall back to the has-options heuristic so the
+ * built-in ESP integration — which only ever declares 'string' or
+ * 'boolean' — is unchanged: enumerated fields (those the ESP returns
+ * with a fixed option set) can be matched against a single value or any
+ * of several; free-form fields are matched as text or as a numeric range.
  *
- * @param {Object}  field             The incoming field option object.
- * @param {boolean} field.has_options Whether the field is enumerated.
+ * @param {Object}  field              The incoming field option object.
+ * @param {string}  [field.value_type] The field's declared value type.
+ * @param {boolean} field.has_options  Whether the field is enumerated.
  * @return {{label: string, value: string}[]} Operator options for a SelectControl.
  */
-export const operatorOptionsForField = field =>
-	field?.has_options
-		? [
+export const operatorOptionsForField = field => {
+	switch ( field?.value_type ) {
+		case 'number':
+			return [ { label: __( 'Number', 'newspack-plugin' ), value: 'range' } ];
+		case 'date':
+			return [ { label: __( 'Text', 'newspack-plugin' ), value: 'default' } ];
+		case 'multiselect':
+			return [ { label: __( 'Multiple values', 'newspack-plugin' ), value: 'list__in' } ];
+		case 'select':
+			return [
 				{ label: __( 'Single value', 'newspack-plugin' ), value: 'default' },
 				{ label: __( 'Multiple values', 'newspack-plugin' ), value: 'list__in' },
-		  ]
-		: [
-				{ label: __( 'Text', 'newspack-plugin' ), value: 'default' },
-				{ label: __( 'Number', 'newspack-plugin' ), value: 'range' },
-		  ];
+			];
+		default:
+			// 'string' / 'boolean' / unknown: fall back to the options-presence heuristic.
+			return field?.has_options
+				? [
+						{ label: __( 'Single value', 'newspack-plugin' ), value: 'default' },
+						{ label: __( 'Multiple values', 'newspack-plugin' ), value: 'list__in' },
+				  ]
+				: [
+						{ label: __( 'Text', 'newspack-plugin' ), value: 'default' },
+						{ label: __( 'Number', 'newspack-plugin' ), value: 'range' },
+				  ];
+	}
+};
 
 /**
  * Toggle an incoming field in or out of the enabled operator map.

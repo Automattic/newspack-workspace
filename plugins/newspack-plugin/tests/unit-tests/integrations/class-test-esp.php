@@ -569,6 +569,8 @@ class Test_ESP extends \WP_UnitTestCase {
 		$this->assertSame( 'list__in', $by_value['FAVS']['matching_function'] );
 		$this->assertTrue( $by_value['FAVS']['has_options'] );
 		$this->assertFalse( $by_value['AMOUNT']['has_options'] );
+		$this->assertSame( 'string', $by_value['FAVS']['value_type'] );
+		$this->assertSame( 'string', $by_value['AMOUNT']['value_type'] );
 	}
 
 	/**

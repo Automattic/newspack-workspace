@@ -9,6 +9,15 @@ describe( 'incoming-field operators', () => {
 		expect( operatorOptionsForField( { has_options: true } ).map( o => o.value ) ).toEqual( [ 'default', 'list__in' ] );
 	} );
 
+	it( 'constrains operator options by value_type', () => {
+		expect( operatorOptionsForField( { value_type: 'number' } ).map( o => o.value ) ).toEqual( [ 'range' ] );
+		expect( operatorOptionsForField( { value_type: 'date' } ).map( o => o.value ) ).toEqual( [ 'default' ] );
+		expect( operatorOptionsForField( { value_type: 'multiselect' } ).map( o => o.value ) ).toEqual( [ 'list__in' ] );
+		expect( operatorOptionsForField( { value_type: 'select' } ).map( o => o.value ) ).toEqual( [ 'default', 'list__in' ] );
+		expect( operatorOptionsForField( { value_type: 'string', has_options: false } ).map( o => o.value ) ).toEqual( [ 'default', 'range' ] );
+		expect( operatorOptionsForField( { value_type: 'string', has_options: true } ).map( o => o.value ) ).toEqual( [ 'default', 'list__in' ] );
+	} );
+
 	it( 'toggles a field in/out of the operator map using the field default', () => {
 		const option = { value: 'AMOUNT', has_options: false, matching_function: 'default' };
 		expect( toggleField( {}, option, true ) ).toEqual( { AMOUNT: 'default' } );
