@@ -148,7 +148,10 @@ class Teams_Migration {
 			$start_date = self::normalise_date( $team->post_date_gmt );
 			$start_date = '' !== $start_date ? $start_date : gmdate( 'Y-m-d H:i:s' );
 
-			// _member_id is repeatable meta — one entry per member, including the owner.
+			// _member_id is repeatable meta — one entry per seat-holding member. The owner
+			// is present only when they take a seat (governed by WC Teams' global
+			// owners_must_take_seat option and the per-order team_owner_takes_seat flag);
+			// an owner who takes no seat holds no _member_id entry.
 			$member_ids = array_values(
 				array_unique(
 					array_filter(
@@ -156,6 +159,13 @@ class Teams_Migration {
 					)
 				)
 			);
+
+			// Map the Teams seat count to the owner-inclusive group limit. Whether
+			// _seat_count already counts the owner depends on WC Teams' "owner takes a
+			// seat" configuration, recorded exactly by whether the owner holds a _member_id
+			// entry (see above). See map_team_seats_to_group_limit() for the mapping.
+			$owner_is_team_member = in_array( $owner_id, $member_ids, true );
+			$group_limit          = self::map_team_seats_to_group_limit( $seat_count, $owner_is_team_member );
 
 			// --skip-unlinked: skip teams with no linked subscription.
 			if ( $skip_unlinked && ! $raw_sub_id ) {
@@ -299,14 +309,10 @@ class Teams_Migration {
 				WP_CLI::warning( sprintf( 'Team %d: %d team member(s) skipped — not readers (e.g. administrators/editors), who already have full access.', $team_id, $non_reader_skips ) );
 			}
 
-			// Set the seat limit now that members are in. The Teams _seat_count
-			// includes the owner's seat, whereas the group limit counts members in
-			// addition to the owner (capacity = limit + owner), so the migrated group
-			// is one seat more generous than the original team — deliberately, since a
-			// tighter mapping (seat_count - 1) collides with 0 = unlimited at a single
-			// seat. 0 = unlimited maps through unchanged.
+			// Set the seat limit now that members are in, using the owner-inclusive
+			// $group_limit derived from the team's seat count above.
 			if ( ! $dry_run ) {
-				$subscription->update_meta_data( '_newspack_group_subscription_limit', $seat_count );
+				$subscription->update_meta_data( '_newspack_group_subscription_limit', $group_limit );
 				$subscription->save();
 			}
 
@@ -334,7 +340,7 @@ class Teams_Migration {
 				WP_CLI::warning( sprintf( 'Team %d: ERROR — %s', $team_id, $err ) );
 			}
 
-			$summary[] = self::summary_row( $team_id, $subscription_id, $members_added, $managers_promoted, $seat_count, $created_new, $errors );
+			$summary[] = self::summary_row( $team_id, $subscription_id, $members_added, $managers_promoted, $group_limit, $created_new, $errors );
 		}
 
 		$progress->finish();
@@ -1431,13 +1437,35 @@ class Teams_Migration {
 	}
 
 	/**
+	 * Map a WC Teams seat count to the owner-inclusive group subscription limit.
+	 *
+	 * The group limit counts the owner as one of its seats, so a team whose owner
+	 * already holds a seat (and is therefore counted in _seat_count) maps straight
+	 * across, while a team whose owner takes no seat needs one added for their group
+	 * seat. The result is floored to the 2-seat minimum (owner + one member); a seat
+	 * count of 0 (unlimited) passes through unchanged.
+	 *
+	 * @param int  $seat_count           The team's _seat_count (0 = unlimited).
+	 * @param bool $owner_is_team_member Whether the owner holds a team seat (a _member_id entry).
+	 *
+	 * @return int The owner-inclusive group limit (0 = unlimited).
+	 */
+	public static function map_team_seats_to_group_limit( $seat_count, $owner_is_team_member ) {
+		$seat_count = (int) $seat_count;
+		if ( 0 === $seat_count ) {
+			return 0;
+		}
+		return max( $seat_count + ( $owner_is_team_member ? 0 : 1 ), 2 );
+	}
+
+	/**
 	 * Build a migrate-teams summary row array.
 	 *
 	 * @param int   $team_id           Team post ID.
 	 * @param mixed $subscription_id   Subscription ID or placeholder string.
 	 * @param int   $members_added     Number of group members added.
 	 * @param int   $managers_promoted Number of managers promoted.
-	 * @param int   $seat_limit        Seat count from the team.
+	 * @param int   $seat_limit        The owner-inclusive group limit set on the subscription (0 = unlimited).
 	 * @param bool  $created_new       Whether a new subscription was created.
 	 * @param array $errors            Any error messages encountered.
 	 *

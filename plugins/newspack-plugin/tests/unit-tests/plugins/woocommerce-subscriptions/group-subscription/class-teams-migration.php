@@ -201,12 +201,33 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$first        = $this->create_reader();
 		$second       = $this->create_reader();
 		$subscription = $this->create_group_subscription( $owner );
-		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'limit', 1 );
+		// A limit of 2 is the owner plus one member seat, so the first add fills the lone
+		// non-owner seat and the second is over capacity.
+		$subscription->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'limit', 2 );
 
-		$this->assertSame( 'added', Teams_Migration::add_group_member( $subscription, $first ), 'The first member fills the single seat.' );
+		$this->assertSame( 'added', Teams_Migration::add_group_member( $subscription, $first ), 'The first member fills the single non-owner seat.' );
 		$at_capacity = Teams_Migration::add_group_member( $subscription, $second );
 		$this->assertWPError( $at_capacity, 'Adding past the limit should return a WP_Error, not silently over-fill.' );
 		$this->assertFalse( (bool) Group_Subscription::user_is_member( $second, $subscription ), 'The over-capacity member should not have been added.' );
+	}
+
+	/**
+	 * The seat-count → group-limit mapping counts the owner within the limit: a team
+	 * whose owner already holds a seat maps across unchanged; one whose owner takes no
+	 * seat gains a seat for the owner; the result is floored to the 2-seat minimum
+	 * (owner + one member); and 0 (unlimited) passes through unchanged.
+	 */
+	public function test_map_team_seats_to_group_limit() {
+		// Owner already occupies a team seat (counted in _seat_count): maps straight across.
+		$this->assertSame( 10, Teams_Migration::map_team_seats_to_group_limit( 10, true ) );
+		// Owner takes no team seat, so is uncounted: add one for their group seat.
+		$this->assertSame( 11, Teams_Migration::map_team_seats_to_group_limit( 10, false ) );
+		// Floor at the 2-seat minimum whether or not the owner holds a seat.
+		$this->assertSame( 2, Teams_Migration::map_team_seats_to_group_limit( 1, true ) );
+		$this->assertSame( 2, Teams_Migration::map_team_seats_to_group_limit( 1, false ) );
+		// 0 = unlimited passes through unchanged, regardless of the owner's seat.
+		$this->assertSame( 0, Teams_Migration::map_team_seats_to_group_limit( 0, true ) );
+		$this->assertSame( 0, Teams_Migration::map_team_seats_to_group_limit( 0, false ) );
 	}
 
 	/**
