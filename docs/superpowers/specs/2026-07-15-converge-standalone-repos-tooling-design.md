@@ -2,7 +2,7 @@
 
 **Status:** Design approved 2026-07-15; revised after multi-model (`magi`) review 2026-07-15
 **Branch:** `refactor/converge-standalone-repos-tooling` (off trunk `main` `fd6ec9ab8`)
-**Scope:** `bin/worktree.sh`, `bin/repos.sh`, `bin/env.sh`, `bin/worktree-mounts.sh`, `n`, `clone-repos.sh` (delete), `.gitignore`, `AGENTS.md`, and 2 rewritten shell tests + new interaction coverage. (`bin/link-repos.sh` and `migrate-standalone-repos.sh` explicitly stay.)
+**Scope:** `bin/worktree.sh`, `bin/repos.sh`, `bin/env.sh`, `n`, `clone-repos.sh` + `bin/worktree-mounts.sh` (both **delete**), `.gitignore`, `AGENTS.md`, and the shell tests (rewrite `repos-host-path`, replace `worktree-mounts` with a parse test, add interaction coverage). (`bin/link-repos.sh` and `migrate-standalone-repos.sh` explicitly stay.)
 
 ## Problem
 
@@ -14,7 +14,7 @@ The fork-as-trunk `main` carries a large local implementation of "standalone rep
 | Worktree location | `worktrees/standalone/<repo>/<branch>` | `worktrees-repos/<name>/<branch>` |
 | Host-path resolver | inline tier appended to `get_repo_host_path` | dedicated `get_standalone_repo_host_path` + `is_standalone_git_repo` (validates a real independent git repo) |
 | Fetch | `git fetch origin <branch>` | forced refspec `+<branch>:refs/remotes/origin/<branch>` (the trunk just adopted this fix standalone) |
-| env-create failure | no rollback | atomic multi-worktree rollback |
+| env-create failure | trap-based rollback (`EXIT` trap → `cleanup_partial_env_state`) | inline `wt_rollback` called per failure path (different style; both roll back) |
 | Branch on removal | always deleted | `remove-repos` keeps the branch |
 
 Because both sides keep editing the same tooling files, every fork-catches-up merge collides here and re-resolving by hand perpetuates the drift. Upstream's design is a strict improvement, so the sane path is to **converge onto it** and delete the fork's parallel version.
@@ -41,11 +41,12 @@ Take `feat/worktree-husky-autoactivate`'s `worktree.sh` as the base: already ups
 ### `bin/repos.sh` — adopt upstream's helpers
 Adopt upstream's `get_standalone_repo_host_path` + `is_standalone_git_repo`; delete the fork's inline standalone tier in `get_repo_host_path`. Keep every other fork-only function. **Precedence (finding #5):** the "tracked monorepo copy wins over a `repos/` duplicate" guarantee (e.g. `newspack-network`, which exists both as a monorepo extension and a standalone repo) is preserved by caller order — callers try `get_repo_host_path` (monorepo) first, fall back to `get_standalone_repo_host_path`. This must be asserted by a test (see below), not assumed.
 
-### `bin/env.sh` + `bin/worktree-mounts.sh` — the careful re-graft
-`env.sh` mixes three concerns: (a) worktree-mount emission for env compose files, (b) the fork-only `--isolated-db` sidecar (NEWS-2286), (c) sourcing the fork-only refactor helpers (`ssl-trust.sh`, `env-hosts.sh`, `worktree-mounts.sh`). Convergence:
-- **(a) Retarget the mount emission to upstream's shape.** The fork factors this into the sourced helper `bin/worktree-mounts.sh` (upstream does it inline). **Keep the fork's helper factoring but rewrite its logic** to emit upstream's `worktrees-repos/<name>/<branch>` mounts and consume the `repo|branch|kind` triple. So `worktree-mounts.sh` **is edited** (retargeted) — it is *not* in the untouched set (resolves finding #2's contradiction).
-- **(b) Re-graft `--isolated-db`** onto upstream's mount/arg parsing. This is the highest-risk seam.
-- **(c) Keep** the `ssl-trust.sh`/`env-hosts.sh` sourcing and adopt upstream's atomic multi-worktree create-rollback.
+### `bin/env.sh` — the careful re-graft (and delete `bin/worktree-mounts.sh`)
+`env.sh` mixes three concerns: (a) worktree-mount emission/parsing for env compose files, (b) the fork-only `--isolated-db` sidecar (NEWS-2286), (c) sourcing the fork-only refactor helpers. Convergence:
+- **(a) Adopt upstream's mount handling wholesale.** Upstream **inlines** mount emission in the `--worktree` parser and provides `parse_worktree_mount` / `each_worktree_in_env` / `resolve_unsanitized_branch` as functions in `env.sh`; it **deletes** `bin/worktree-mounts.sh`. So the convergence **deletes `bin/worktree-mounts.sh`** and adopts upstream's inline emission + parse functions (true convergence — this region then matches upstream and won't reconflict at catch-up). The `--worktree` branch dispatches on `get_repo_host_path` (monorepo, mounts under `worktrees/<safe>/…`) vs `get_standalone_repo_host_path` (standalone, mounts `worktrees-repos/<repo>/<safe>:/newspack-repos/<kind>/<repo>`).
+- **(b) Re-graft `--isolated-db`** onto upstream's create/destroy/list blocks — the highest-risk seam. The fork's sidecar variables (`sidecar_block`/`db_service`/`mysql_host_line`/`suffix_log`) slot into upstream's otherwise-identical YAML skeleton; the destroy block's sidecar-vs-shared conditional replaces upstream's unconditional `db` drop; the `list` block gains the `isolated_marker`/`db_kind`/porcelain column (new surface upstream lacks). The supporting helpers `sidecar_service_for_env` + `env_safe_name` live in `bin/_common.sh` (also fork-only) — carry them forward.
+- **(c) Keep** the `ssl-trust.sh`/`env-hosts.sh` sourcing. Both fork and upstream roll back created worktrees on failure — reconcile onto upstream's inline `wt_rollback` style (drop the fork's `EXIT`-trap version).
+- **Testability:** upstream's `parse_worktree_mount`/`each_worktree_in_env` are functions defined before `env.sh`'s dispatch. To keep them host-testable, **make `env.sh` sourceable** (guard the top-level dispatch behind a `main`-style guard, the fork's established pattern from `link-repos.sh`) so a test can source it and call the parse functions directly.
 
 ### `n` — adopt upstream's
 Adopt upstream's `n` (routes `worktrees-repos/` container paths + `docker-compose.override.yml` support). Drop the fork's trivial one-line difference.
@@ -57,13 +58,13 @@ Upstream deleted it (#617). **Verified: no other references** across `n`/`bin/`/
 `.gitignore`: add `worktrees-repos` + `docker-compose.override.yml`; keep fork entries. `AGENTS.md`: replace `--repo`/`worktrees/standalone` docs with `add-repos`/`worktrees-repos`; keep fork-only docs (`--isolated-db`, husky note, hosts-marker, Xdebug, `setup-networking.sh`). **Document the branch-retention asymmetry (finding #12):** `remove-repos` keeps the branch, while `n env destroy` still `git branch -D`s the bound branch — two removal paths, two outcomes; state it so it is intentional, not a surprise.
 
 ### Kept untouched (fork-only, unaffected)
-`link-repos.sh` (**verified**: references neither `get_repo_host_path` nor retired paths — finding #11), `migrate-standalone-repos.sh`, `ssl-trust.sh`, `env-hosts.sh`, `worktree-tooling.sh`, `composer-recovery.sh`, `ensure-vendor.sh`, `debug-gateways.php`.
+`link-repos.sh` (**verified**: references neither `get_repo_host_path` nor retired paths — finding #11), `migrate-standalone-repos.sh`, `ssl-trust.sh`, `env-hosts.sh`, `worktree-tooling.sh`, `composer-recovery.sh`, `ensure-vendor.sh`, `debug-gateways.php`. (`bin/_common.sh` is touched only to carry forward `sidecar_service_for_env`/`env_safe_name` if upstream's `_common.sh` lacks them — verify during the env.sh task.)
 
 ## Tests
 
 **Rewrite (retarget to upstream's design):**
 - **`tests/repos-host-path.test.sh`** — from the inline `get_repo_host_path` tier to `get_standalone_repo_host_path` + `is_standalone_git_repo` (incl. the "unzipped dir that isn't its own git repo" case), **plus a `newspack-network` case** asserting the monorepo copy wins (precedence, finding #5).
-- **`tests/worktree-mounts.test.sh`** — retarget from `worktrees/standalone/` to upstream's `worktrees-repos/` + `repo|branch|kind` triple.
+- **`tests/worktree-mounts.test.sh`** — the fork's helper is deleted, so **replace** this with a test of upstream's `parse_worktree_mount` / `each_worktree_in_env` (source the now-sourceable `env.sh`): assert the monorepo shape (`worktrees/<safe>/plugins|themes/<name>` → `repo|branch|monorepo`), the standalone shape (`worktrees-repos/<repo>/<safe>` → `repo|branch|repos`), and non-matching lines return non-zero.
 
 **Add (interaction coverage the current plan lacked — findings #1, #3):**
 - **Combined `--isolated-db` × standalone-mount path** — a host-runnable test asserting `env create --isolated-db --worktree <plugin>:<branch>` generates a compose file carrying *both* the isolated-db sidecar (with the fork's DB-naming convention) *and* the `worktrees-repos/` mount. This is the seam the design calls fragile; it must not be left to a one-off manual run.
@@ -77,7 +78,7 @@ Upstream deleted it (#617). **Verified: no other references** across `n`/`bin/`/
 1. `bin/repos.sh` (adopt helpers) + rewrite `repos-host-path.test.sh` (incl. `newspack-network` precedence).
 2. `bin/worktree.sh` (from husky branch; assert fetch-fix survives) + `--repo` compat error.
 3. `n` (adopt upstream) + `clone-repos.sh` delete (after the grep guard).
-4. `bin/env.sh` + `bin/worktree-mounts.sh` re-graft `--isolated-db` onto upstream's mount parsing/rollback + rewrite `worktree-mounts.test.sh` + add the combined-path and rollback tests — the careful step, last.
+4. `bin/env.sh`: adopt upstream's inline mount parsing + **delete `bin/worktree-mounts.sh`**, make `env.sh` sourceable, re-graft `--isolated-db` + reconcile rollback style, carry `_common.sh` helpers; replace `worktree-mounts.test.sh` with the parse test + add the combined-path and rollback tests — the careful step, last.
 5. `.gitignore` + `AGENTS.md` reconcile (incl. branch-retention note).
 6. Full-suite + real e2e verification.
 
