@@ -17,6 +17,9 @@ import { LogsView } from './logs-view';
 
 const API_PATH = '/newspack/v1/wizard/newspack-audience-integrations/settings';
 
+// Minimum time the Activate action stays busy, even when the request is faster.
+const MIN_ACTIVATION_BUSY_MS = 2000;
+
 const AudienceIntegrations = ( props, ref ) => {
 	const [ integrations, setIntegrations ] = useState( {} );
 	const [ pendingChanges, setPendingChanges ] = useState( {} );
@@ -169,14 +172,19 @@ const AudienceIntegrations = ( props, ref ) => {
 				if ( ! claimed.length ) {
 					return prev;
 				}
-				Promise.all(
-					claimed.map( slug =>
-						apiFetch( {
-							path: `/newspack/v1/plugins/${ slug }/activate`,
-							method: 'POST',
-						} )
-					)
-				)
+				Promise.all( [
+					Promise.all(
+						claimed.map( slug =>
+							apiFetch( {
+								path: `/newspack/v1/plugins/${ slug }/activate`,
+								method: 'POST',
+							} )
+						)
+					),
+					// Hold the busy state for a beat even when activation is
+					// near-instant, so the user sees that something happened.
+					new Promise( resolve => setTimeout( resolve, MIN_ACTIVATION_BUSY_MS ) ),
+				] )
 					.then( () => fetchSettings() )
 					.catch( () => {
 						// Surface nothing here; failures leave the integration in its

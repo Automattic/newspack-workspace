@@ -140,6 +140,7 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 										requirements={ requirements }
 										requirementsActionable={ canActivate || !! unsupportedReason }
 										enableLabel={ enableLabel }
+										busy={ isActivating }
 										onEnable={ onEnable }
 										onConfigure={ needsConnection || unsupportedReason ? goToSetup : goToConfigure }
 										moreControls={

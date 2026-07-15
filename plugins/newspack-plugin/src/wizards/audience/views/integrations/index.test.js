@@ -119,4 +119,33 @@ describe( 'AudienceIntegrations notices', () => {
 		} );
 		expect( mockAddNotice ).not.toHaveBeenCalled();
 	} );
+
+	it( 'keeps the activating state for a minimum window even when activation is instant', async () => {
+		jest.useFakeTimers();
+		try {
+			act( () => {
+				captured.props.onActivatePlugin( [ 'newspack-newsletters' ] );
+			} );
+			expect( captured.props.activating[ 'newspack-newsletters' ] ).toBe( true );
+			// Let the (instantly resolved) activation request settle; the minimum
+			// window has not elapsed, so the busy state must persist.
+			await act( async () => {
+				await Promise.resolve();
+				await Promise.resolve();
+				jest.advanceTimersByTime( 1000 );
+				await Promise.resolve();
+			} );
+			expect( captured.props.activating[ 'newspack-newsletters' ] ).toBe( true );
+			// Cross the minimum window; the busy state clears.
+			await act( async () => {
+				jest.advanceTimersByTime( 1100 );
+				await Promise.resolve();
+				await Promise.resolve();
+				await Promise.resolve();
+			} );
+			expect( captured.props.activating[ 'newspack-newsletters' ] ).toBeUndefined();
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
 } );

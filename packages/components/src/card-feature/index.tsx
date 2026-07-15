@@ -62,6 +62,8 @@ type CardFeatureProps = {
 	requirementsActionable?: boolean;
 	/** Primary button label when not enabled. Default: "Enable". */
 	enableLabel?: string;
+	/** Show the primary button as busy (spinner) and disabled while an action is in flight. */
+	busy?: boolean;
 	/** Primary button label when enabled. Default: "Configure". */
 	configureLabel?: string;
 	/** Called when the primary button is clicked and the feature is not enabled. */
@@ -92,6 +94,7 @@ const CardFeature = ( {
 	requirements,
 	requirementsActionable = false,
 	enableLabel,
+	busy = false,
 	configureLabel,
 	onEnable,
 	onConfigure,
@@ -159,7 +162,8 @@ const CardFeature = ( {
 							<HStack expanded={ false } spacing="8px">
 								<Button
 									variant={ isConfigureState ? 'tertiary' : 'secondary' }
-									disabled={ isMuted && ! requirementsActionable }
+									disabled={ ( isMuted && ! requirementsActionable ) || busy }
+									isBusy={ busy }
 									onClick={ handleButtonClick }
 									size="compact"
 								>

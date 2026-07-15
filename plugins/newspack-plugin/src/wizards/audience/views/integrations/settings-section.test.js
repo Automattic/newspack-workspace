@@ -76,7 +76,7 @@ const baseIntegration = {
 	required_plugins: [ { slug: 'newspack-newsletters', name: 'Newspack Newsletters', is_active: true, is_installed: true } ],
 };
 
-const renderSection = ( integrationOverrides = {} ) => {
+const renderSection = ( integrationOverrides = {}, extraProps = {} ) => {
 	const history = { push: jest.fn() };
 	const onToggleEnabled = jest.fn();
 	const onSetupAndEnable = jest.fn( () => Promise.resolve() );
@@ -88,6 +88,7 @@ const renderSection = ( integrationOverrides = {} ) => {
 			onActivatePlugin={ jest.fn() }
 			onSetupAndEnable={ onSetupAndEnable }
 			history={ history }
+			{ ...extraProps }
 		/>
 	);
 	return { history, onToggleEnabled, onSetupAndEnable, cardProps: mockCardFeatureProps[ 0 ] };
@@ -167,6 +168,17 @@ describe( 'Audience Integrations settings section card action', () => {
 		const { cardProps } = renderSection( { is_connected: false } );
 		cardProps.onEnable();
 		await waitFor( () => expect( window.location.href ).toBe( SETUP_URL ) );
+	} );
+
+	it( 'marks the card busy with an ellipsis label while its required plugin is activating', () => {
+		const { cardProps } = renderSection(
+			{
+				required_plugins: [ { slug: 'newspack-newsletters', name: 'Newspack Newsletters', is_active: false, is_installed: true } ],
+			},
+			{ activating: { 'newspack-newsletters': true } }
+		);
+		expect( cardProps.enableLabel ).toBe( 'Activating…' );
+		expect( cardProps.busy ).toBe( true );
 	} );
 
 	it( 'shows the unsupported reason as an actionable requirement routing through the handoff', async () => {
