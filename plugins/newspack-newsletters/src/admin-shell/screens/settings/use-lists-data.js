@@ -1,15 +1,17 @@
 import apiFetch from '@wordpress/api-fetch';
 import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
+import { __ } from '@wordpress/i18n';
 
 const LISTS_PATH = '/newspack-newsletters/v1/lists';
 
 // When the provider's sublists are still warming (fetched asynchronously on a
 // cold cache), GET /lists returns the audiences only and sets this header. We
 // re-poll a bounded number of times so the sublists appear on their own,
-// without the user having to reload the page.
+// without the user having to reload the page. Keep the budget in step with the
+// newspack-plugin SubscriptionLists UI, which polls the same header.
 const WARMING_HEADER = 'x-newspack-newsletters-lists-warming';
 const WARMING_POLL_INTERVAL_MS = 3000;
-const WARMING_MAX_POLLS = 8;
+const WARMING_MAX_POLLS = 10;
 
 export default function useListsData() {
 	const [ lists, setLists ] = useState( [] );
@@ -49,7 +51,7 @@ export default function useListsData() {
 					} catch ( e ) {
 						body = null;
 					}
-					throw body || new Error( 'Failed to load lists.' );
+					throw body || new Error( __( 'Could not load subscription lists.', 'newspack-newsletters' ) );
 				}
 				const warming = response?.headers?.get?.( WARMING_HEADER ) === '1';
 				const payload = await response.json();

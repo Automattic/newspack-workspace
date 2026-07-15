@@ -36,13 +36,21 @@ class Newsletters_Mailchimp_Cached_Data_Test extends WP_UnitTestCase {
 		$this->assertNotFalse(
 			has_action(
 				'newspack_newsletters_mailchimp_cache_updated',
-				[ 'Newspack_Newsletters_Subscription', 'clear_lists_cache' ]
+				[ 'Newspack_Newsletters_Subscription', 'clear_lists_cache_on_warm' ]
 			),
-			'clear_lists_cache should be hooked to the Mailchimp cache-updated action.'
+			'clear_lists_cache_on_warm should be hooked to the Mailchimp cache-updated action.'
 		);
 
+		Newspack_Newsletters::set_service_provider( 'mailchimp' );
 		$cache_key = 'newspack_newsletters_lists_mailchimp';
-		set_transient( $cache_key, [ [ 'id' => 'audience-only' ] ], HOUR_IN_SECONDS );
+		set_transient(
+			$cache_key,
+			[
+				'lists'    => [ [ 'id' => 'audience-only' ] ],
+				'complete' => false,
+			],
+			HOUR_IN_SECONDS
+		);
 		$this->assertIsArray( get_transient( $cache_key ), 'Composed lists cache should be primed.' );
 
 		do_action( 'newspack_newsletters_mailchimp_cache_updated', 'audience-only', [ 'tags' => [] ] );
@@ -75,7 +83,7 @@ class Newsletters_Mailchimp_Cached_Data_Test extends WP_UnitTestCase {
 					'id'   => 'aud1',
 					'name' => 'Audience 1',
 				],
-			] 
+			]
 		);
 		$this->assertTrue( Newspack_Newsletters_Mailchimp_Cached_Data::has_pending_sublists() );
 
@@ -86,7 +94,7 @@ class Newsletters_Mailchimp_Cached_Data_Test extends WP_UnitTestCase {
 				'tags'                => [],
 				'segments'            => [],
 				'interest_categories' => [],
-			] 
+			]
 		);
 		$this->assertFalse( Newspack_Newsletters_Mailchimp_Cached_Data::has_pending_sublists() );
 
@@ -110,7 +118,7 @@ class Newsletters_Mailchimp_Cached_Data_Test extends WP_UnitTestCase {
 					'id'   => 'aud1',
 					'name' => 'Audience 1',
 				],
-			] 
+			]
 		);
 		delete_option( $sublists_key );
 		$this->assertFalse(
@@ -191,6 +199,74 @@ class Newsletters_Mailchimp_Cached_Data_Test extends WP_UnitTestCase {
 		delete_option( $sublists_key );
 		delete_option( 'newspack_mailchimp_api_key' );
 		delete_transient( 'newspack_newsletters_lists_mailchimp' );
+	}
+
+	/**
+	 * A still-warming (incomplete) result must still be cached — flagged
+	 * incomplete — rather than vetoed, so repeated polls are served from cache
+	 * instead of re-running the provider fetch; once warm it caches as complete.
+	 */
+	public function test_get_lists_caches_partial_snapshot() {
+		$lists_key    = 'newspack_nl_mailchimp_cache_lists';
+		$date_key     = 'newspack_nl_mailchimp_cache_date_lists';
+		$audience_id  = 'audPARTIAL';
+		$sublists_key = 'newspack_nl_mailchimp_cache_' . $audience_id;
+		$cache_key    = 'newspack_newsletters_lists_mailchimp';
+
+		Newspack_Newsletters::set_service_provider( 'mailchimp' );
+		update_option( 'newspack_mailchimp_api_key', 'test-us1' );
+		add_filter(
+			'newspack_newsletters_subscription_lists_complete',
+			[ 'Newspack_Newsletters_Mailchimp_Cached_Data', 'filter_lists_complete' ]
+		);
+
+		update_option(
+			$lists_key,
+			[
+				[
+					'id'   => $audience_id,
+					'name' => 'Partial Audience',
+				],
+			]
+		);
+		update_option( $date_key, time() );
+		delete_option( $sublists_key );
+		delete_transient( $cache_key );
+
+		// Cold: audiences returned, cached as a partial snapshot flagged incomplete.
+		$lists = Newspack_Newsletters_Subscription::get_lists();
+		$this->assertIsArray( $lists );
+		$cached = get_transient( $cache_key );
+		$this->assertIsArray( $cached, 'A still-warming result must still be cached (not vetoed).' );
+		$this->assertArrayHasKey( 'complete', $cached );
+		$this->assertFalse( $cached['complete'], 'The cached snapshot must be flagged incomplete while sublists are cold.' );
+
+		// Warm + invalidate (as the cache-updated action does): recompose caches complete.
+		update_option(
+			$sublists_key,
+			[
+				'segments'            => [],
+				'interest_categories' => [],
+				'tags'                => [],
+				'folders'             => [],
+				'merge_fields'        => [],
+			]
+		);
+		delete_transient( $cache_key );
+		Newspack_Newsletters_Subscription::get_lists();
+		$cached = get_transient( $cache_key );
+		$this->assertIsArray( $cached );
+		$this->assertTrue( $cached['complete'], 'Once sublists are warm the cached snapshot must be flagged complete.' );
+
+		remove_filter(
+			'newspack_newsletters_subscription_lists_complete',
+			[ 'Newspack_Newsletters_Mailchimp_Cached_Data', 'filter_lists_complete' ]
+		);
+		delete_option( $lists_key );
+		delete_option( $date_key );
+		delete_option( $sublists_key );
+		delete_option( 'newspack_mailchimp_api_key' );
+		delete_transient( $cache_key );
 	}
 
 	/**

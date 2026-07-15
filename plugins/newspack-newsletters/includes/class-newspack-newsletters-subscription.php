@@ -35,6 +35,18 @@ class Newspack_Newsletters_Subscription {
 	const LISTS_WARMING_HEADER = 'X-Newspack-Newsletters-Lists-Warming';
 
 	/**
+	 * Whether the most recent get_lists() result was fully warmed (all of the
+	 * provider's sublists present) or a still-warming partial snapshot. Set on
+	 * every get_lists() call — from the cached completeness flag on a cache hit,
+	 * or from the completeness filter on a fresh fetch — and read by
+	 * api_get_lists() to decide the warming header without re-evaluating the
+	 * filter against possibly-newer cache state.
+	 *
+	 * @var bool
+	 */
+	private static $lists_complete = true;
+
+	/**
 	 * Memoized lists config.
 	 *
 	 * @var array
@@ -53,7 +65,9 @@ class Newspack_Newsletters_Subscription {
 		add_action( 'newspack_newsletters_provider_credentials_changed', [ __CLASS__, 'clear_lists_cache' ] );
 		// When a Mailchimp audience's sublists finish warming (async on a cold cache),
 		// drop the composed lists cache so the next read includes groups/segments/tags.
-		add_action( 'newspack_newsletters_mailchimp_cache_updated', [ __CLASS__, 'clear_lists_cache' ] );
+		// Only the active provider's cache needs busting (this action is Mailchimp-only),
+		// so avoid sweeping every provider on each per-audience warm-up.
+		add_action( 'newspack_newsletters_mailchimp_cache_updated', [ __CLASS__, 'clear_lists_cache_on_warm' ] );
 
 		/** User email verification for subscription management. */
 		add_action( 'resetpass_form', [ __CLASS__, 'set_current_user_email_verified' ] );
@@ -261,16 +275,11 @@ class Newspack_Newsletters_Subscription {
 		// Tell the admin UI when the provider's sublists are still warming
 		// (fetched asynchronously on a cold cache) so it can poll for the
 		// complete set instead of leaving the user on an audiences-only view
-		// until a manual reload.
-		if ( ! is_wp_error( $lists ) ) {
-			$complete = (bool) apply_filters(
-				'newspack_newsletters_subscription_lists_complete',
-				true,
-				is_array( $lists ) ? $lists : []
-			);
-			if ( ! $complete ) {
-				$response->header( self::LISTS_WARMING_HEADER, '1' );
-			}
+		// until a manual reload. get_lists() records completeness for exactly
+		// the payload it returned (cached or fresh), so read that rather than
+		// re-evaluating the filter against possibly-newer cache state.
+		if ( ! is_wp_error( $lists ) && ! self::$lists_complete ) {
+			$response->header( self::LISTS_WARMING_HEADER, '1' );
 		}
 
 		return $response;
@@ -501,14 +510,24 @@ class Newspack_Newsletters_Subscription {
 	 * @return array|WP_Error Lists or error.
 	 */
 	public static function get_lists() {
-		$provider = Newspack_Newsletters::get_service_provider();
+		// Reset to a known state so the flag never leaks from a prior call down an
+		// early-return path (empty provider / WP_Error); it's only meaningful when
+		// paired with a non-error return, which api_get_lists() guards for.
+		self::$lists_complete = true;
+		$provider             = Newspack_Newsletters::get_service_provider();
 		if ( empty( $provider ) ) {
 			return new WP_Error( 'newspack_newsletters_invalid_provider', __( 'Provider is not set.' ) );
 		}
 		$cache_key = self::LISTS_CACHE_PREFIX . Newspack_Newsletters::service_provider();
 		$cached    = get_transient( $cache_key );
-		if ( is_array( $cached ) ) {
-			return $cached;
+		// Cached entries are [ 'lists' => [...], 'complete' => bool ]. The
+		// completeness flag travels with the cached lists so a still-warming
+		// partial snapshot is served fast (no repeat provider fetch on every
+		// poll) while the warming header stays accurate. Anything not in that
+		// shape (e.g. a pre-upgrade cache) is treated as a miss and recomposed.
+		if ( is_array( $cached ) && isset( $cached['lists'] ) && is_array( $cached['lists'] ) ) {
+			self::$lists_complete = ! empty( $cached['complete'] );
+			return $cached['lists'];
 		}
 		try {
 			$lists = $provider->get_lists();
@@ -542,15 +561,18 @@ class Newspack_Newsletters_Subscription {
 			/**
 			 * Whether the lists fetched from the ESP are complete. A provider that
 			 * warms sublist data asynchronously (e.g. Mailchimp on a cold cache)
-			 * can transiently return audiences without their groups/tags. Such an
-			 * incomplete result must not be cached (it would show audiences only
-			 * for the cache lifetime) nor used to garbage-collect stored lists (it
-			 * would destroy configured groups/tags until the cache warms).
+			 * can transiently return audiences without their groups/tags. The
+			 * result is still cached either way — as a partial snapshot flagged
+			 * incomplete — so repeated polls don't re-run the provider fetch; but
+			 * an incomplete result is never used to garbage-collect stored lists,
+			 * which would destroy configured groups/tags for a not-yet-warmed
+			 * audience.
 			 *
 			 * @param bool  $complete     Whether the fetched lists are complete.
 			 * @param array $return_lists The composed remote lists.
 			 */
-			$lists_are_complete = (bool) apply_filters( 'newspack_newsletters_subscription_lists_complete', true, $return_lists );
+			$lists_are_complete   = (bool) apply_filters( 'newspack_newsletters_subscription_lists_complete', true, $return_lists );
+			self::$lists_complete = $lists_are_complete;
 
 			if ( $lists_are_complete ) {
 				/**
@@ -563,9 +585,22 @@ class Newspack_Newsletters_Subscription {
 			foreach ( Subscription_Lists::get_locals_for_current_provider() as $local_list ) {
 				$return_lists[] = $local_list->to_array();
 			}
-			if ( $lists_are_complete ) {
-				set_transient( $cache_key, $return_lists, self::get_lists_cache_ttl() );
-			}
+			// Cache the composed result together with its completeness. A complete
+			// result is cached for the full TTL. A partial (still-warming) snapshot
+			// is cached only briefly: on the happy path a warm-up completes in
+			// seconds and the provider's cache-updated event clears it (Mailchimp),
+			// but the short TTL is the safety net — if a warm-up loopback is dropped
+			// and no such event fires, the partial expires quickly so the next poll
+			// recomposes and re-dispatches the warm-up rather than serving a stale
+			// audiences-only snapshot for the full lists TTL.
+			set_transient(
+				$cache_key,
+				[
+					'lists'    => $return_lists,
+					'complete' => $lists_are_complete,
+				],
+				$lists_are_complete ? self::get_lists_cache_ttl() : self::get_partial_lists_cache_ttl()
+			);
 			return $return_lists;
 		} catch ( \Exception $e ) {
 			return new WP_Error(
@@ -586,12 +621,47 @@ class Newspack_Newsletters_Subscription {
 	}
 
 	/**
+	 * TTL, in seconds, for a partial (still-warming) cached lists snapshot. Kept
+	 * short so a dropped warm-up is retried on the next poll instead of serving
+	 * an audiences-only snapshot for the full lists TTL.
+	 *
+	 * @return int
+	 */
+	private static function get_partial_lists_cache_ttl() {
+		return (int) apply_filters( 'newspack_newsletters_partial_lists_cache_ttl', 15 );
+	}
+
+	/**
 	 * Clear the cached subscription lists for every registered provider.
 	 */
 	public static function clear_lists_cache() {
 		foreach ( array_keys( Newspack_Newsletters::get_registered_providers() ) as $slug ) {
 			delete_transient( self::LISTS_CACHE_PREFIX . $slug );
 		}
+	}
+
+	/**
+	 * Clear the cached subscription lists for a single provider.
+	 *
+	 * @param string|null $provider_slug Provider slug. Defaults to the active provider.
+	 */
+	public static function clear_lists_cache_for_provider( $provider_slug = null ) {
+		if ( empty( $provider_slug ) ) {
+			$provider_slug = Newspack_Newsletters::service_provider();
+		}
+		if ( ! empty( $provider_slug ) ) {
+			delete_transient( self::LISTS_CACHE_PREFIX . $provider_slug );
+		}
+	}
+
+	/**
+	 * Bust only the active provider's composed lists cache when its sublists
+	 * finish warming, so the next read recomposes with the fuller data. Hooked
+	 * to the Mailchimp cache-updated action, which fires once per audience, so a
+	 * targeted delete avoids sweeping every provider on each per-audience warm-up.
+	 */
+	public static function clear_lists_cache_on_warm() {
+		self::clear_lists_cache_for_provider();
 	}
 
 	/**

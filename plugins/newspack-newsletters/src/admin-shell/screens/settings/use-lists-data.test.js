@@ -79,14 +79,14 @@ describe( 'useListsData', () => {
 			await jest.advanceTimersByTimeAsync( 0 );
 		} );
 
-		// Drive well past the poll budget (8 polls * 3s).
-		for ( let i = 0; i < 12; i++ ) {
+		// Drive well past the poll budget (10 polls * 3s).
+		for ( let i = 0; i < 14; i++ ) {
 			await act( async () => {
 				await jest.advanceTimersByTimeAsync( 3000 );
 			} );
 		}
 
-		// 1 initial + 8 polls = 9 calls, then it gives up.
-		expect( apiFetch ).toHaveBeenCalledTimes( 9 );
+		// 1 initial + 10 polls = 11 calls, then it gives up.
+		expect( apiFetch ).toHaveBeenCalledTimes( 11 );
 	} );
 } );

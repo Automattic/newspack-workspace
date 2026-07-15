@@ -64,6 +64,16 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	const SURFACE_ERRORS_AFTER = 20 * HOUR_IN_SECONDS;
 
 	/**
+	 * How long a per-list "refresh in flight" lock lives. Long enough to cover a
+	 * warm-up round so repeated polls don't re-dispatch the same loopback refresh,
+	 * short enough that a dropped/stuck loopback is retried within the admin UI's
+	 * poll window (a successful warm-up releases the lock early via update_cache()).
+	 *
+	 * @var int
+	 */
+	const REFRESH_LOCK_TTL = 15;
+
+	/**
 	 * Memoized data to be served across the same request
 	 *
 	 * @var array
@@ -304,6 +314,8 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 		update_option( self::get_cache_date_key( $list_id ), time(), false ); // auto-load false.
 		self::$memoized_data[ $list_id ] = $data;
 		self::clear_errors( $list_id );
+		// Release the in-flight refresh lock now the data has landed.
+		delete_transient( self::OPTION_PREFIX . '_refreshing_' . $list_id );
 		Newspack_Newsletters_Logger::log( 'Mailchimp cache: Cache for list ' . $list_id . ' updated' );
 
 		/**
@@ -392,19 +404,14 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 				self::show_generic_warning();
 				return;
 			}
-			$hours = (int) self::SURFACE_ERRORS_AFTER / HOUR_IN_SECONDS;
 			?>
 			<div class="notice notice-error">
 				<p>
 					<?php
 					echo esc_html(
-						sprintf(
-							/* translators: %s is the number of hours a cache must be expired for us to surface this error */
-							__(
-								'Error retrieving data from Mailchimp. We were not able to refresh the list of Audiences and groups in the last %s hours.',
-								'newspack_newsletters'
-							),
-							$hours
+						__(
+							'Error retrieving data from Mailchimp. We were not able to refresh the list of Audiences and groups.',
+							'newspack_newsletters'
 						)
 					);
 					?>
@@ -497,6 +504,17 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 			self::fetch_lists();
 			return;
 		}
+
+		// De-dup rapid refreshes for the same list. While sublists warm,
+		// get_lists() recomposes on every poll and each still-cold read would
+		// otherwise re-fire this loopback; a short-lived lock collapses that into
+		// a single in-flight refresh per list. The lock is released on a
+		// successful update_cache(), or expires so a stuck list is retried.
+		$lock_key = self::OPTION_PREFIX . '_refreshing_' . $list_id;
+		if ( get_transient( $lock_key ) ) {
+			return;
+		}
+		set_transient( $lock_key, 1, self::REFRESH_LOCK_TTL );
 
 		if ( ! function_exists( 'wp_create_nonce' ) ) {
 			require_once ABSPATH . WPINC . '/pluggable.php';
