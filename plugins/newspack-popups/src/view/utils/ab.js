@@ -12,7 +12,13 @@ const getViewData = () => ( typeof newspack_popups_view !== 'undefined' ? newspa
 
 /**
  * djb2 (xor variant) string hash. Matches the POC's client-side hash so
- * anonymous assignments made by the POC carry over.
+ * anonymous assignments made by the POC carry over, and is bit-for-bit
+ * identical to the server-side Newspack_Popups_AB_Tests::hash_djb2().
+ *
+ * ASCII-ONLY PRECONDITION: this hashes UTF-16 code units (charCodeAt) while
+ * the server hashes UTF-8 bytes — the two agree only while every hashed input
+ * (client ID, test ID) is ASCII, which holds today by construction. If either
+ * input's charset ever widens, normalize both implementations together.
  *
  * @param {string} str String to hash.
  * @return {number} Unsigned 32-bit hash.

@@ -50,8 +50,20 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 			Newspack_Popups_AB_Tests::META_CONTROL_SHARE,
 		] as $key ) {
 			self::assertArrayHasKey( $key, $registered, "Meta key $key should be registered." );
-			self::assertTrue( $registered[ $key ]['show_in_rest'], "Meta key $key should be exposed in REST." );
+			self::assertNotEmpty( $registered[ $key ]['show_in_rest'], "Meta key $key should be exposed in REST." );
 		}
+
+		// The variant REST schema rejects invalid values with a 400 instead of a
+		// silent coercion; the empty string (no test) stays writable.
+		$variant_enum = $registered[ Newspack_Popups_AB_Tests::META_VARIANT ]['show_in_rest']['schema']['enum'];
+		self::assertContains( '', $variant_enum );
+		self::assertContains( 'a', $variant_enum );
+
+		// An unset control share must read back as the same 50 the display path
+		// assumes — never the integer schema default 0 (which would clamp to 20
+		// on a round-trip and silently re-bucket anonymous readers mid-test).
+		self::assertSame( 50, $registered[ Newspack_Popups_AB_Tests::META_CONTROL_SHARE ]['default'] );
+		self::assertSame( 50, get_post_meta( self::$popup_id, Newspack_Popups_AB_Tests::META_CONTROL_SHARE, true ) );
 	}
 
 	/**
@@ -228,6 +240,48 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 		self::assertSame( $expected, $buckets['continuity-test'], 'The persisted bucket should derive from the client ID, matching the anonymous assignment.' );
 
 		unset( $_COOKIE['newspack-cid'] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * Without a client ID cookie, the logged-in bucket hashes the user ID.
+	 */
+	public function test_logged_in_bucket_user_id_fallback() {
+		$this->create_test_variant( 'fallback-test', 'a', null, [], 50 );
+		$this->create_test_variant( 'fallback-test', 'b' );
+
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		unset( $_COOKIE['newspack-cid'] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+
+		$config   = Newspack_Popups_AB_Tests::get_tests_config();
+		$buckets  = Newspack_Popups_AB_Tests::get_logged_in_buckets( $config );
+		$expected = Newspack_Popups_AB_Tests::compute_bucket( (string) $user_id, 'fallback-test', $config['fallback-test'] );
+		self::assertSame( $expected, $buckets['fallback-test'], 'With no client ID cookie, the bucket should derive from the user ID.' );
+
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * The view_as spec (which feeds ab_view_as into script data) is admin-gated:
+	 * a non-privileged request must not be able to force a variant preview.
+	 */
+	public function test_view_as_parsing_is_admin_gated() {
+		$_GET['view_as'] = 'ab_variant:b';
+
+		$subscriber_id = self::factory()->user->create( [ 'role' => 'subscriber' ] );
+		wp_set_current_user( $subscriber_id );
+		self::assertEmpty( Newspack_Popups_View_As::parse_view_as(), 'A non-privileged user must not resolve a view_as spec.' );
+
+		wp_set_current_user( 0 );
+		self::assertEmpty( Newspack_Popups_View_As::parse_view_as(), 'An anonymous request must not resolve a view_as spec.' );
+
+		$admin_id = self::factory()->user->create( [ 'role' => 'administrator' ] );
+		wp_set_current_user( $admin_id );
+		$parsed = Newspack_Popups_View_As::parse_view_as();
+		self::assertSame( 'b', $parsed['ab_variant'], 'An admin request should resolve the previewed variant.' );
+
+		unset( $_GET['view_as'] );
 		wp_set_current_user( 0 );
 	}
 

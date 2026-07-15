@@ -74,6 +74,16 @@ final class Newspack_Popups_AB_Tests {
 				[
 					'type'              => 'string',
 					'sanitize_callback' => [ __CLASS__, 'sanitize_variant' ],
+					// The enum makes an invalid REST write fail with a 400 the editor
+					// can surface, instead of the sanitize callback silently coercing
+					// it to '' (which would detach the prompt from its test on a 200).
+					// The empty string stays valid: it is the "not part of a test" state.
+					'show_in_rest'      => [
+						'schema' => [
+							'type' => 'string',
+							'enum' => array_merge( [ '' ], self::VALID_VARIANTS ),
+						],
+					],
 				]
 			)
 		);
@@ -98,6 +108,20 @@ final class Newspack_Popups_AB_Tests {
 				[
 					'type'              => 'integer',
 					'sanitize_callback' => [ __CLASS__, 'sanitize_control_share' ],
+					// The explicit default keeps REST reads of an unset share at the
+					// same 50 the display path assumes. Without it, the schema default
+					// 0 would round-trip through an editor and clamp to 20 — silently
+					// changing the live split and re-bucketing anonymous readers
+					// mid-test (see get_tests_config()).
+					'default'           => self::DEFAULT_CONTROL_SHARE,
+					'show_in_rest'      => [
+						'schema' => [
+							'type'    => 'integer',
+							'minimum' => 20,
+							'maximum' => 80,
+							'default' => self::DEFAULT_CONTROL_SHARE,
+						],
+					],
 				]
 			)
 		);
@@ -181,6 +205,13 @@ final class Newspack_Popups_AB_Tests {
 			]
 		);
 
+		// 'fields' => 'ids' skips meta-cache priming, so without this each
+		// get_post_meta() below would issue its own query — an N+1 on the
+		// always-enqueued front-end path. One batched load instead.
+		if ( ! empty( $prompt_ids ) ) {
+			update_meta_cache( 'post', $prompt_ids );
+		}
+
 		$config = [];
 		foreach ( $prompt_ids as $prompt_id ) {
 			$fields = self::get_popup_ab_fields( $prompt_id );
@@ -231,6 +262,12 @@ final class Newspack_Popups_AB_Tests {
 	 * hash in src/view/utils/ab.js. Server and client MUST use the same hash on
 	 * the same identity (the client ID cookie) or a reader can land in different
 	 * arms anonymous vs. logged-in. Parity is pinned by tests on both sides.
+	 *
+	 * ASCII-ONLY PRECONDITION: this hashes UTF-8 *bytes* (strlen/ord) while the
+	 * client hashes UTF-16 *code units* (charCodeAt) — the two agree only while
+	 * every hashed input (client ID, test ID) is ASCII. That holds today by
+	 * construction (generated cookie IDs; sanitize_title output). If either
+	 * input's charset ever widens, normalize both implementations together.
 	 *
 	 * @param string $str String to hash.
 	 * @return int Unsigned 32-bit hash.
