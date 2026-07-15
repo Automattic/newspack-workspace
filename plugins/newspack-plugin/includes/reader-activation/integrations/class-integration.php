@@ -950,6 +950,9 @@ abstract class Integration {
 		}
 		if ( 'incoming_metadata_fields' === $key ) {
 			$map = [];
+			// Read the operator from stored raw_data: the Incoming_Field constructor does not
+			// apply it to the typed property, and some integrations' configure_incoming_field()
+			// is a no-op, so get_matching_function() alone would return the default.
 			foreach ( $this->get_enabled_incoming_fields() as $field ) {
 				$raw                      = $field->get_raw_data();
 				$map[ $field->get_key() ] = $raw['matching_function'] ?? $field->get_matching_function();

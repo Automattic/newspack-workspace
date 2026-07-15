@@ -421,12 +421,22 @@ class Test_Integrations extends \WP_UnitTestCase {
 	 */
 	public function test_get_settings_value_returns_operator_map() {
 		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
-		$integration->update_enabled_incoming_fields( [ 'amount' => 'range', 'first_name' => 'default' ] );
+		$integration->update_enabled_incoming_fields(
+			[
+				'amount'     => 'range',
+				'first_name' => 'default',
+			]
+		);
 
 		$value = $integration->get_settings_field_value( 'incoming_metadata_fields' );
 		$this->assertIsArray( $value );
-		$this->assertSame( 'range', $value['amount'] );
-		$this->assertSame( 'default', $value['first_name'] );
+		$this->assertEquals(
+			[
+				'amount'     => 'range',
+				'first_name' => 'default',
+			],
+			$value
+		);
 	}
 
 	/**
