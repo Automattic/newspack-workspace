@@ -1637,6 +1637,40 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * Incoming metadata payloads keep per-field operators; outgoing stays a key list.
+	 *
+	 * @group integrations
+	 */
+	public function test_sanitize_incoming_metadata_preserves_operators() {
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+		$method      = new \ReflectionMethod( $integration, 'sanitize_settings_field_value' );
+		$method->setAccessible( true );
+
+		$incoming_field = [
+			'key'     => 'incoming_metadata_fields',
+			'type'    => 'metadata',
+			'default' => [],
+		];
+		$out = $method->invoke(
+			$integration,
+			$incoming_field,
+			[
+				'amount' => 'range',
+				'evil'   => '<b>x</b>',
+			]
+		);
+		$this->assertSame( 'range', $out['amount'] );
+		$this->assertSame( 'default', $out['evil'] ); // Unknown operator falls back to 'default'.
+
+		$outgoing_field = [
+			'key'     => 'outgoing_metadata_fields',
+			'type'    => 'metadata',
+			'default' => [],
+		];
+		$this->assertSame( [ 'a', 'b' ], $method->invoke( $integration, $outgoing_field, [ 'a', 'b' ] ) );
+	}
+
+	/**
 	 * The REST settings save entry point (update_integration_settings) drops
 	 * oauth/hidden keys so admin clients can't overwrite server-managed values
 	 * such as OAuth tokens. Other field types pass through.

@@ -1157,6 +1157,23 @@ abstract class Integration {
 				if ( ! is_array( $value ) ) {
 					return $field['default'] ?? [];
 				}
+				// Incoming metadata fields carry a per-field operator: key => matching_function.
+				if ( 'incoming_metadata_fields' === ( $field['key'] ?? '' ) ) {
+					$allowed_matching_functions = [ 'default', 'range', 'list__in', 'list__not_in' ];
+					$sanitized                  = [];
+					if ( array_is_list( $value ) ) {
+						// Legacy: a plain list of enabled keys, no operator override.
+						foreach ( $value as $key ) {
+							$sanitized[ \sanitize_text_field( (string) $key ) ] = 'default';
+						}
+					} else {
+						foreach ( $value as $key => $operator ) {
+							$operator = is_string( $operator ) ? $operator : 'default';
+							$sanitized[ \sanitize_text_field( (string) $key ) ] = in_array( $operator, $allowed_matching_functions, true ) ? $operator : 'default';
+						}
+					}
+					return $sanitized;
+				}
 				return array_values( array_map( 'sanitize_text_field', $value ) );
 			case 'textarea':
 				return \sanitize_textarea_field( $value );
