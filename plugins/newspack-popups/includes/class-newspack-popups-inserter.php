@@ -1096,6 +1096,13 @@ final class Newspack_Popups_Inserter {
 				if ( ! empty( $ab_buckets ) ) {
 					$script_data['ab_buckets'] = $ab_buckets;
 				}
+				// Variant preview (view_as=ab_variant:x) is echoed server-side via the
+				// admin-gated View_As spec rather than parsed from the URL in JS, so a
+				// non-privileged visitor cannot self-select an arm (and pollute GA).
+				$view_as_spec = Newspack_Popups_View_As::parse_view_as();
+				if ( ! empty( $view_as_spec['ab_variant'] ) && in_array( $view_as_spec['ab_variant'], Newspack_Popups_AB_Tests::VALID_VARIANTS, true ) ) {
+					$script_data['ab_view_as'] = $view_as_spec['ab_variant'];
+				}
 			}
 
 			\wp_localize_script( $script_handle, 'newspack_popups_view', $script_data );

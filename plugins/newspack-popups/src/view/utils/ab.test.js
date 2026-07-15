@@ -21,6 +21,12 @@ describe( 'hashString', () => {
 		expect( hashString( 'reader|test' ) ).toBeGreaterThanOrEqual( 0 );
 		expect( hashString( 'reader-a|test' ) ).not.toBe( hashString( 'reader-b|test' ) );
 	} );
+	it( 'matches the server-side hash bit for bit', () => {
+		// Vector pinned in tests/test-ab-tests.php (Newspack_Popups_AB_Tests::hash_djb2)
+		// — if either implementation changes, both parity tests fail together.
+		expect( hashString( 'abc|test-x' ) ).toBe( 809016026 );
+		expect( computeBucket( 'abc', 'test-x', AB_CONFIG ) ).toBe( 'a' );
+	} );
 } );
 
 describe( 'getReaderId', () => {
@@ -72,24 +78,23 @@ describe( 'getAssignedBucket', () => {
 	beforeEach( () => {
 		global.newspack_popups_view = {};
 	} );
-	it( 'prefers the view_as variant preview', () => {
-		global.newspack_popups_view = { ab_buckets: { 'test-x': 'a' } };
-		expect( getAssignedBucket( 'test-x', AB_CONFIG, '?view_as=ab_variant:b', 'newspack-cid=abc' ) ).toBe( 'b' );
+	it( 'prefers the server-echoed variant preview', () => {
+		global.newspack_popups_view = { ab_view_as: 'b', ab_buckets: { 'test-x': 'a' } };
+		expect( getAssignedBucket( 'test-x', AB_CONFIG, 'newspack-cid=abc' ) ).toBe( 'b' );
 	} );
-	it( 'ignores a view_as variant that is not part of the test', () => {
-		expect( getAssignedBucket( 'test-x', AB_CONFIG, '?view_as=ab_variant:d', 'newspack-cid=abc' ) ).toBe(
-			computeBucket( 'abc', 'test-x', AB_CONFIG )
-		);
+	it( 'ignores a previewed variant that is not part of the test', () => {
+		global.newspack_popups_view = { ab_view_as: 'd' };
+		expect( getAssignedBucket( 'test-x', AB_CONFIG, 'newspack-cid=abc' ) ).toBe( computeBucket( 'abc', 'test-x', AB_CONFIG ) );
 	} );
 	it( 'prefers the server-computed bucket over the client hash', () => {
 		global.newspack_popups_view = { ab_buckets: { 'test-x': 'b' } };
-		expect( getAssignedBucket( 'test-x', AB_CONFIG, '?', 'newspack-cid=abc' ) ).toBe( 'b' );
+		expect( getAssignedBucket( 'test-x', AB_CONFIG, 'newspack-cid=abc' ) ).toBe( 'b' );
 	} );
 	it( 'hashes the client ID when no server bucket exists', () => {
-		expect( getAssignedBucket( 'test-x', AB_CONFIG, '?', 'newspack-cid=abc' ) ).toBe( computeBucket( 'abc', 'test-x', AB_CONFIG ) );
+		expect( getAssignedBucket( 'test-x', AB_CONFIG, 'newspack-cid=abc' ) ).toBe( computeBucket( 'abc', 'test-x', AB_CONFIG ) );
 	} );
-	it( 'returns null without a stable identity', () => {
-		expect( getAssignedBucket( 'test-x', AB_CONFIG, '?', '' ) ).toBeNull();
+	it( 'falls back to control without a stable identity', () => {
+		expect( getAssignedBucket( 'test-x', AB_CONFIG, '' ) ).toBe( 'a' );
 	} );
 } );
 
@@ -98,23 +103,25 @@ describe( 'getAbOverride', () => {
 		global.newspack_popups_view = { ab_tests: { 'test-x': AB_CONFIG } };
 	} );
 	it( 'returns null for prompts that are not part of a test', () => {
-		expect( getAbOverride( makePrompt(), '?', 'newspack-cid=abc' ) ).toBeNull();
+		expect( getAbOverride( makePrompt(), 'newspack-cid=abc' ) ).toBeNull();
 	} );
 	it( 'returns null when the test is not in the localized config', () => {
-		expect( getAbOverride( makePrompt( 'unknown-test', 'a' ), '?', 'newspack-cid=abc' ) ).toBeNull();
+		expect( getAbOverride( makePrompt( 'unknown-test', 'a' ), 'newspack-cid=abc' ) ).toBeNull();
 	} );
 	it( 'suppresses the non-assigned variant and passes the assigned one through', () => {
 		const bucket = computeBucket( 'abc', 'test-x', AB_CONFIG );
 		const loser = 'a' === bucket ? 'b' : 'a';
-		expect( getAbOverride( makePrompt( 'test-x', loser ), '?', 'newspack-cid=abc' ) ).toBe( false );
+		expect( getAbOverride( makePrompt( 'test-x', loser ), 'newspack-cid=abc' ) ).toBe( false );
 		// Never true: the assigned variant must still pass frequency/segmentation.
-		expect( getAbOverride( makePrompt( 'test-x', bucket ), '?', 'newspack-cid=abc' ) ).toBeNull();
+		expect( getAbOverride( makePrompt( 'test-x', bucket ), 'newspack-cid=abc' ) ).toBeNull();
 	} );
-	it( 'respects a view_as variant preview', () => {
-		expect( getAbOverride( makePrompt( 'test-x', 'b' ), '?view_as=ab_variant:b', 'newspack-cid=abc' ) ).toBeNull();
-		expect( getAbOverride( makePrompt( 'test-x', 'a' ), '?view_as=ab_variant:b', 'newspack-cid=abc' ) ).toBe( false );
+	it( 'respects a server-echoed variant preview', () => {
+		global.newspack_popups_view.ab_view_as = 'b';
+		expect( getAbOverride( makePrompt( 'test-x', 'b' ), 'newspack-cid=abc' ) ).toBeNull();
+		expect( getAbOverride( makePrompt( 'test-x', 'a' ), 'newspack-cid=abc' ) ).toBe( false );
 	} );
-	it( 'fails open without a stable identity', () => {
-		expect( getAbOverride( makePrompt( 'test-x', 'b' ), '?', '' ) ).toBeNull();
+	it( 'fails to control without a stable identity (one-variant invariant)', () => {
+		expect( getAbOverride( makePrompt( 'test-x', 'a' ), '' ) ).toBeNull();
+		expect( getAbOverride( makePrompt( 'test-x', 'b' ), '' ) ).toBe( false );
 	} );
 } );

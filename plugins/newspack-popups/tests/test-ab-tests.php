@@ -55,16 +55,31 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * The popup object carries A/B fields when the prompt is part of a test.
+	 * The popup object carries A/B fields when the prompt is part of a valid test.
 	 */
 	public function test_popup_object_has_ab_fields() {
-		$popup_id = $this->create_test_variant( 'donate-q3', 'b' );
-		$popup    = Newspack_Popups_Model::create_popup_object( get_post( $popup_id ) );
+		$control_id    = $this->create_test_variant( 'donate-q3', 'a' );
+		$challenger_id = $this->create_test_variant( 'donate-q3', 'b' );
+		$popup         = Newspack_Popups_Model::create_popup_object( get_post( $challenger_id ) );
 		self::assertSame( 'donate-q3', $popup['ab_test_id'] );
 		self::assertSame( 'b', $popup['ab_variant'] );
 
 		$plain_popup = Newspack_Popups_Model::create_popup_object( get_post( self::$popup_id ) );
 		self::assertArrayNotHasKey( 'ab_test_id', $plain_popup );
+	}
+
+	/**
+	 * An invalid test (no published challenger) must not present itself as a live
+	 * experiment: no popup-object fields, no markup attributes, no GA params.
+	 */
+	public function test_invalid_test_does_not_emit_ab_fields() {
+		$control_only = $this->create_test_variant( 'control-only-test', 'a' );
+		$popup        = Newspack_Popups_Model::create_popup_object( get_post( $control_only ) );
+		self::assertArrayNotHasKey( 'ab_test_id', $popup, 'A control-only test must not emit A/B fields.' );
+
+		// The unvalidated accessor still returns the raw fields (editor use).
+		$raw = Newspack_Popups_AB_Tests::get_popup_ab_fields( $control_only );
+		self::assertSame( 'control-only-test', $raw['test_id'] );
 	}
 
 	/**
@@ -126,6 +141,20 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
+	 * The server-side djb2 hash is bit-for-bit identical to the client-side hash.
+	 * The vector is pinned in src/view/utils/ab.test.js too — if either side
+	 * changes, both parity tests fail together.
+	 */
+	public function test_hash_parity_with_client() {
+		self::assertSame( 809016026, Newspack_Popups_AB_Tests::hash_djb2( 'abc|test-x' ) );
+		$parity_config = [
+			'variants'      => [ 'a', 'b' ],
+			'control_share' => 50,
+		];
+		self::assertSame( 'a', Newspack_Popups_AB_Tests::compute_bucket( 'abc', 'test-x', $parity_config ) );
+	}
+
+	/**
 	 * Bucket computation is deterministic and respects weighted ranges.
 	 */
 	public function test_compute_bucket() {
@@ -182,9 +211,31 @@ class ABTestsTest extends WP_UnitTestCase_PageWithPopups {
 	}
 
 	/**
-	 * GA event metadata includes A/B params for test prompts.
+	 * First logged-in assignment prefers the client ID cookie, so a reader who
+	 * registers mid-test stays in the arm they were seeing anonymously.
+	 */
+	public function test_logged_in_bucket_prefers_client_id() {
+		$this->create_test_variant( 'continuity-test', 'a', null, [], 50 );
+		$this->create_test_variant( 'continuity-test', 'b' );
+
+		$user_id = self::factory()->user->create();
+		wp_set_current_user( $user_id );
+		$_COOKIE['newspack-cid'] = 'reader-cid-123'; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+
+		$config   = Newspack_Popups_AB_Tests::get_tests_config();
+		$buckets  = Newspack_Popups_AB_Tests::get_logged_in_buckets( $config );
+		$expected = Newspack_Popups_AB_Tests::compute_bucket( 'reader-cid-123', 'continuity-test', $config['continuity-test'] );
+		self::assertSame( $expected, $buckets['continuity-test'], 'The persisted bucket should derive from the client ID, matching the anonymous assignment.' );
+
+		unset( $_COOKIE['newspack-cid'] ); // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+		wp_set_current_user( 0 );
+	}
+
+	/**
+	 * GA event metadata includes A/B params for valid test prompts only.
 	 */
 	public function test_ga_metadata_includes_ab_params() {
+		$this->create_test_variant( 'ga-test', 'a' );
 		$popup_id = $this->create_test_variant( 'ga-test', 'b' );
 		$metadata = Newspack_Popups_Data_Api::get_popup_metadata( $popup_id );
 		self::assertSame( 'ga-test', $metadata['ab_test_id'] );

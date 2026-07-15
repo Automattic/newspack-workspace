@@ -1,7 +1,5 @@
 /* globals newspack_popups_view */
 
-import { parseViewAs } from './segments';
-
 const DEFAULT_CID_COOKIE = 'newspack-cid';
 const DEFAULT_CONTROL_SHARE = 50;
 
@@ -80,23 +78,25 @@ export const computeBucket = ( readerId, testId, config ) => {
 /**
  * Get the reader's assigned bucket for a test.
  *
- * Precedence: view_as=ab_variant:x preview > server-computed bucket (logged-in
- * readers) > client-side hash of the reader's client ID. Returns null when no
- * stable identity is available (fail open: no A/B suppression).
+ * Precedence: server-echoed variant preview (view_as=ab_variant:x, admin-gated
+ * in PHP) > server-computed bucket (logged-in readers) > client-side hash of
+ * the reader's client ID > control. The control fallback keeps the one-variant
+ * invariant for readers with no stable identity (e.g. cookies blocked) — an
+ * inline test must not render both arms.
  *
  * @param {string}      testId       Test ID.
  * @param {Object}      config       Test config with variants and control_share.
- * @param {string|null} viewAsString Optional, for testing. A query string with view_as params.
  * @param {string|null} cookieString Optional, for testing. A cookie string to parse.
- * @return {string|null} Variant key, or null.
+ * @return {string} Variant key.
  */
-export const getAssignedBucket = ( testId, config, viewAsString = null, cookieString = null ) => {
+export const getAssignedBucket = ( testId, config, cookieString = null ) => {
 	const variants = config.variants || [];
 
-	// Variant preview for editors: ?view_as=ab_variant:b.
-	const viewAs = parseViewAs( viewAsString );
-	if ( viewAs?.ab_variant && -1 < variants.indexOf( viewAs.ab_variant ) ) {
-		return viewAs.ab_variant;
+	// Variant preview for editors, echoed by the server through the admin-gated
+	// View_As spec — never parsed from the URL here.
+	const viewAsVariant = getViewData().ab_view_as;
+	if ( viewAsVariant && -1 < variants.indexOf( viewAsVariant ) ) {
+		return viewAsVariant;
 	}
 
 	// Server-computed bucket for logged-in readers.
@@ -107,7 +107,8 @@ export const getAssignedBucket = ( testId, config, viewAsString = null, cookieSt
 
 	const readerId = getReaderId( cookieString );
 	if ( ! readerId ) {
-		return null;
+		// No stable identity: fail to control.
+		return 'a';
 	}
 	return computeBucket( readerId, testId, config );
 };
@@ -120,11 +121,10 @@ export const getAssignedBucket = ( testId, config, viewAsString = null, cookieSt
  *   assigned variant must still pass the normal display checks.
  *
  * @param {HTMLElement} prompt       HTML element of the prompt being checked.
- * @param {string|null} viewAsString Optional, for testing. A query string with view_as params.
  * @param {string|null} cookieString Optional, for testing. A cookie string to parse.
  * @return {boolean|null} The override value to pass to the shouldPromptBeDisplayed function.
  */
-export const getAbOverride = ( prompt, viewAsString = null, cookieString = null ) => {
+export const getAbOverride = ( prompt, cookieString = null ) => {
 	const testId = prompt.getAttribute( 'data-ab-test-id' );
 	if ( ! testId ) {
 		return null;
@@ -134,9 +134,6 @@ export const getAbOverride = ( prompt, viewAsString = null, cookieString = null 
 		// Unknown or invalid test (e.g. missing challenger): fail open.
 		return null;
 	}
-	const bucket = getAssignedBucket( testId, config, viewAsString, cookieString );
-	if ( ! bucket ) {
-		return null;
-	}
+	const bucket = getAssignedBucket( testId, config, cookieString );
 	return bucket === prompt.getAttribute( 'data-ab-variant' ) ? null : false;
 };

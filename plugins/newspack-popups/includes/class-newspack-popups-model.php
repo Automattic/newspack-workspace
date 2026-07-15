@@ -708,7 +708,7 @@ final class Newspack_Popups_Model {
 			$popup['duplicate_of'] = $duplicate_of;
 		}
 
-		$ab_fields = Newspack_Popups_AB_Tests::get_popup_ab_fields( $id );
+		$ab_fields = Newspack_Popups_AB_Tests::get_popup_ab_fields( $id, true );
 
 		if ( $ab_fields ) {
 			$popup['ab_test_id'] = $ab_fields['test_id'];

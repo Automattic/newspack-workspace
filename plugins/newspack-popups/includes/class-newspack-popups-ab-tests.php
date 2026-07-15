@@ -126,13 +126,20 @@ final class Newspack_Popups_AB_Tests {
 	/**
 	 * Get the A/B fields for a single prompt.
 	 *
-	 * @param int $popup_id Prompt post ID.
+	 * @param int  $popup_id Prompt post ID.
+	 * @param bool $validate If true, only return fields when the prompt's test is
+	 *                       valid (published control + at least one published
+	 *                       challenger) — an invalid test must not present itself
+	 *                       as a live experiment in markup or analytics params.
 	 * @return array|null Array with test_id and variant, or null if not part of a test.
 	 */
-	public static function get_popup_ab_fields( $popup_id ) {
+	public static function get_popup_ab_fields( $popup_id, $validate = false ) {
 		$test_id = get_post_meta( $popup_id, self::META_TEST_ID, true );
 		$variant = get_post_meta( $popup_id, self::META_VARIANT, true );
 		if ( ! $test_id || ! in_array( $variant, self::VALID_VARIANTS, true ) ) {
+			return null;
+		}
+		if ( $validate && ! isset( self::get_tests_config()[ $test_id ] ) ) {
 			return null;
 		}
 		return [
@@ -159,7 +166,10 @@ final class Newspack_Popups_AB_Tests {
 			[
 				'post_type'      => Newspack_Popups::NEWSPACK_POPUPS_CPT,
 				'post_status'    => 'publish',
-				'posts_per_page' => 100,
+				// The prompts CPT is inherently small (tens of posts) and this is
+				// further narrowed by the meta filter; a bound here would silently
+				// truncate the config and drop whole tests (fail-open, uncounted).
+				'posts_per_page' => -1, // phpcs:ignore WordPress.WP.PostsPerPage.posts_per_page_posts_per_page
 				'fields'         => 'ids',
 				'meta_query'     => [ // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 					[
@@ -191,7 +201,10 @@ final class Newspack_Popups_AB_Tests {
 			if ( 'a' === $variant ) {
 				$control_share = get_post_meta( $prompt_id, self::META_CONTROL_SHARE, true );
 				if ( $control_share ) {
-					$config[ $test_id ]['control_share'] = absint( $control_share );
+					// Clamp at read time too: direct meta writes (importers, CLI)
+					// bypass the sanitize callback, and an out-of-range share would
+					// skew the client-side range math.
+					$config[ $test_id ]['control_share'] = self::sanitize_control_share( $control_share );
 				}
 			}
 		}
@@ -214,12 +227,27 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * The djb2 (xor variant) string hash, bit-for-bit identical to the client-side
+	 * hash in src/view/utils/ab.js. Server and client MUST use the same hash on
+	 * the same identity (the client ID cookie) or a reader can land in different
+	 * arms anonymous vs. logged-in. Parity is pinned by tests on both sides.
+	 *
+	 * @param string $str String to hash.
+	 * @return int Unsigned 32-bit hash.
+	 */
+	public static function hash_djb2( $str ) {
+		$hash = 5381;
+		$len  = strlen( $str );
+		for ( $i = 0; $i < $len; $i++ ) {
+			$hash = ( ( ( $hash << 5 ) + $hash ) ^ ord( $str[ $i ] ) ) & 0xFFFFFFFF;
+		}
+		return $hash;
+	}
+
+	/**
 	 * Compute a stable bucket for a reader key using weighted ranges.
 	 *
-	 * Uses crc32, matching the POC's server-side assignment, so buckets computed
-	 * before the core integration carry over for logged-in readers.
-	 *
-	 * @param string $reader_key Stable reader identifier (e.g. user ID).
+	 * @param string $reader_key Stable reader identifier (client ID cookie, or user ID as fallback).
 	 * @param string $test_id    Test ID.
 	 * @param array  $config     Test config with variants and control_share.
 	 * @return string Variant key.
@@ -249,7 +277,7 @@ final class Newspack_Popups_AB_Tests {
 			$ranges[] = [ $variant, $cursor ];
 		}
 
-		$hash       = abs( crc32( $reader_key . '|' . $test_id ) );
+		$hash       = self::hash_djb2( $reader_key . '|' . $test_id );
 		$normalized = $hash / 4294967295;
 
 		foreach ( $ranges as $range ) {
@@ -261,11 +289,25 @@ final class Newspack_Popups_AB_Tests {
 	}
 
 	/**
+	 * Get the reader's client ID from the Reader Activation cookie, if present.
+	 *
+	 * @return string Client ID, or empty string.
+	 */
+	public static function get_client_id() {
+		$cookie_name = defined( 'NEWSPACK_CLIENT_ID_COOKIE_NAME' ) ? NEWSPACK_CLIENT_ID_COOKIE_NAME : 'newspack-cid';
+		return isset( $_COOKIE[ $cookie_name ] ) ? sanitize_text_field( wp_unslash( $_COOKIE[ $cookie_name ] ) ) : ''; // phpcs:ignore WordPressVIPMinimum.Variables.RestrictedVariables.cache_constraints___COOKIE
+	}
+
+	/**
 	 * Get (computing and persisting on first encounter) the current logged-in
 	 * user's buckets for the given tests.
 	 *
-	 * The persisted value always wins, so mid-test control-share edits never
-	 * re-bucket a reader who has already been assigned.
+	 * First assignment prefers the client ID cookie as the hash key — the same
+	 * identity and hash the anonymous client-side assignment uses — so a reader
+	 * who registers mid-test stays in the arm they were already seeing. The user
+	 * ID is the fallback key when no client ID is available. The persisted value
+	 * always wins thereafter, so mid-test control-share edits never re-bucket a
+	 * reader, and assignment is stable across devices once logged in.
 	 *
 	 * @param array $tests_config Config from get_tests_config().
 	 * @return array Buckets keyed by test ID.
@@ -276,12 +318,14 @@ final class Newspack_Popups_AB_Tests {
 			return [];
 		}
 
-		$buckets = [];
+		$client_id = self::get_client_id();
+		$buckets   = [];
 		foreach ( $tests_config as $test_id => $config ) {
 			$meta_key = self::USER_META_BUCKET_PREFIX . $test_id;
 			$bucket   = get_user_meta( $user_id, $meta_key, true );
 			if ( ! in_array( $bucket, $config['variants'], true ) ) {
-				$bucket = self::compute_bucket( (string) $user_id, $test_id, $config );
+				$reader_key = $client_id ? $client_id : (string) $user_id;
+				$bucket     = self::compute_bucket( $reader_key, $test_id, $config );
 				update_user_meta( $user_id, $meta_key, $bucket );
 			}
 			$buckets[ $test_id ] = $bucket;
