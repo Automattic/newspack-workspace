@@ -195,6 +195,20 @@ n sites-drop <name>           # Remove site
 
 **Note:** Additional sites run in the same container and share plugin code — use them for multi-site/manager workflows. For branch isolation (different plugin versions), use isolated environments instead (see below).
 
+### Worktrees
+```bash
+n worktree add <branch> [--no-install]                # Create a monorepo worktree at worktrees/<safe-branch>
+n worktree add-repos <name> <branch>                   # Create a worktree of a standalone repos/ checkout
+n worktree list                                        # List all worktrees
+n worktree remove <branch> [--yes]                     # Remove a monorepo worktree and delete the branch
+n worktree remove-repos <name> <safe-branch> [--yes]   # Remove a standalone-repo worktree (keeps the branch)
+n worktree cleanup [--all] [--yes]                     # Interactive bulk cleanup
+```
+
+`add-repos` targets a standalone checkout under `repos/plugins/<name>` or `repos/themes/<name>` (its own git repo, per Directory Structure above) and stores the worktree at `worktrees-repos/<name>/<safe-branch>` — kept out of `repos/` itself so `bin/link-repos.sh` doesn't symlink it in as a second plugin/theme. `n env create --worktree <repo>:<branch>` (see Isolated Environments below) creates and mounts these worktrees automatically, routing to `add` or `add-repos` depending on whether `<repo>` is a monorepo plugin/theme or a standalone `repos/` checkout.
+
+Branch retention differs by kind on removal: `n worktree remove` (monorepo) deletes the branch, and so does `n env destroy` when it tears down a bound monorepo worktree; `n worktree remove-repos` keeps the standalone branch, and `n env destroy` deletes the bound branch only for monorepo worktrees — it mirrors `remove-repos` and keeps the branch for a bound standalone-repo worktree.
+
 ## Architecture
 
 ### Directory Structure

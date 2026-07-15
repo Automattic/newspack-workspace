@@ -1,46 +1,48 @@
 #!/bin/bash
-# Unit tests for bin/worktree-mounts.sh (pure mount helpers). Host-runnable.
+# Unit tests for env.sh worktree-mount parsing (upstream's parse_worktree_mount /
+# each_worktree_in_env). Host-runnable; sources env.sh (sourceable-guarded).
 set -u
 BIN="$(cd "$(dirname "$0")/../bin" && pwd)"
 FIX="$(mktemp -d)"; trap 'rm -rf "$FIX"' EXIT
 pass=0; fail=0
 ok(){ if [ "$2" = "$3" ]; then echo "  PASS  $1"; pass=$((pass+1)); else echo "  FAIL  $1 (got [$2] want [$3])"; fail=$((fail+1)); fi; }
-nlines(){ printf '%s' "$1" | grep -c '.'; }
+source "$BIN/env.sh"
 
-source "$BIN/worktree-mounts.sh"
+ok "monorepo plugin mount"  "$(parse_worktree_mount '      - ./worktrees/feat-x/plugins/np-news:/newspack-plugins/np-news')" "np-news|feat-x|monorepo"
+ok "monorepo theme mount"   "$(parse_worktree_mount '      - ./worktrees/feat-y/themes/np-theme:/newspack-themes/np-theme')" "np-theme|feat-y|monorepo"
+ok "standalone repos mount" "$(parse_worktree_mount '      - ./worktrees-repos/np-manager/feat-z:/newspack-repos/plugins/np-manager')" "np-manager|feat-z|repos"
+if parse_worktree_mount '      - ./html:/var/www/html' >/dev/null 2>&1; then r=matched; else r=nomatch; fi
+ok "non-worktree mount -> non-zero" "$r" "nomatch"
 
-# --- worktree_volume_lines ---
-out=$(worktree_volume_lines "./worktrees/feat-x/plugins/newspack-newsletters" "/newspack-plugins/newspack-newsletters" "plugins/newspack-newsletters")
-ok "tier1 plugin emits 2 lines" "$(nlines "$out")" "2"
-ok "tier1 plugin serving line" "$(printf '%s\n' "$out" | grep -c -- '- ./worktrees/feat-x/plugins/newspack-newsletters:/newspack-plugins/newspack-newsletters$')" "1"
-ok "tier1 plugin member line" "$(printf '%s\n' "$out" | grep -c -- '- ./worktrees/feat-x/plugins/newspack-newsletters:/newspack-monorepo/plugins/newspack-newsletters$')" "1"
-
-out=$(worktree_volume_lines "./worktrees/feat-y/themes/newspack-theme" "/newspack-themes/newspack-theme" "themes/newspack-theme")
-ok "tier1 theme member line at /newspack-monorepo/themes" "$(printf '%s\n' "$out" | grep -c -- '- ./worktrees/feat-y/themes/newspack-theme:/newspack-monorepo/themes/newspack-theme$')" "1"
-
-out=$(worktree_volume_lines "./worktrees/standalone/newspack-community/jl-foo" "/newspack-plugins/newspack-community" "repos/plugins/newspack-community")
-ok "tier2 emits 1 line" "$(nlines "$out")" "1"
-ok "tier2 has no monorepo member" "$(printf '%s\n' "$out" | grep -c 'newspack-monorepo')" "0"
-
-# --- worktree_member_lines_to_add ---
-C1="$FIX/c1.yml"; cat > "$C1" <<'EOF'
+# each_worktree_in_env over a compose fixture with one of each shape:
+C="$FIX/c.yml"; cat > "$C" <<'EOF'
     volumes:
-      - ./worktrees/feat-x/plugins/newspack-newsletters:/newspack-plugins/newspack-newsletters
+      - ./worktrees/feat-x/plugins/np-news:/newspack-plugins/np-news
+      - ./worktrees-repos/np-manager/feat-z:/newspack-repos/plugins/np-manager
       - ./html:/var/www/html
 EOF
-ok "missing member -> emitted" "$(worktree_member_lines_to_add "$C1" | grep -c -- ':/newspack-monorepo/plugins/newspack-newsletters$')" "1"
+ok "each_worktree_in_env yields 2 triples" "$(each_worktree_in_env "$C" | grep -c '|')" "2"
 
-C2="$FIX/c2.yml"; cat > "$C2" <<'EOF'
-    volumes:
-      - ./worktrees/feat-x/plugins/newspack-newsletters:/newspack-plugins/newspack-newsletters
-      - ./worktrees/feat-x/plugins/newspack-newsletters:/newspack-monorepo/plugins/newspack-newsletters
-EOF
-ok "already-present member -> nothing (idempotent)" "$(nlines "$(worktree_member_lines_to_add "$C2")")" "0"
+# resolve_unsanitized_branch recovers the real git branch (feat/x) from a
+# worktree dir named by its safe form (feat-x). env-destroy uses this ONLY to
+# name the branch to delete separately — NOT for dir lookup: the worktree dir is
+# always removed by the safe form so a retargeted worktree isn't orphaned.
+export NABSPATH="$FIX"
+git init -q "$FIX/src"
+( cd "$FIX/src" && git commit -q --allow-empty -m init && \
+  git worktree add -q -b feat/x "$FIX/worktrees/feat-x" ) >/dev/null 2>&1
+ok "resolve_unsanitized_branch recovers real branch" "$(resolve_unsanitized_branch feat-x "")" "feat/x"
+ok "resolve_unsanitized_branch falls back to safe form when dir absent" "$(resolve_unsanitized_branch nope "")" "nope"
 
-C3="$FIX/c3.yml"; cat > "$C3" <<'EOF'
-    volumes:
-      - ./worktrees/standalone/newspack-community/jl-foo:/newspack-plugins/newspack-community
-EOF
-ok "tier2-only -> nothing" "$(nlines "$(worktree_member_lines_to_add "$C3")")" "0"
+# Retargeted worktree: env bound to safe dir feat-foo (branch feat/foo), then a
+# user runs `git checkout -b other` inside it. resolve_unsanitized_branch now
+# reports the LIVE branch (other), which is exactly why the destroy path must
+# NOT feed this into dir lookup — the dir is still named worktrees/feat-foo.
+# Removing by the resolved `other` would sanitize to worktrees/other and orphan
+# the real dir. The fix removes by the safe form and only deletes the real
+# branch separately.
+( cd "$FIX/src" && git worktree add -q -b feat/foo "$FIX/worktrees/feat-foo" && \
+  cd "$FIX/worktrees/feat-foo" && git checkout -q -b other ) >/dev/null 2>&1
+ok "resolve_unsanitized_branch reports live (retargeted) branch" "$(resolve_unsanitized_branch feat-foo "")" "other"
 
 echo ""; echo "RESULT: $pass passed, $fail failed"; [ "$fail" -eq 0 ]
