@@ -90,7 +90,7 @@ echo ""; echo "RESULT: $pass passed, $fail failed"; [ "$fail" -eq 0 ]
 - [ ] **Step 3: Run — expect PASS** (repos.sh already adopted in Step 1)
 
 Run: `bash tests/repos-host-path.test.sh`
-Expected: `RESULT: 10 passed, 0 failed`, exit 0.
+Expected: `RESULT: 9 passed, 0 failed`, exit 0.
 (Note `newspack-plugin`/`newspack-theme` must be in the `newspack_plugins`/`newspack_themes` arrays for the monorepo cases — they are, in the adopted `repos.sh`.)
 
 - [ ] **Step 4: Commit**
