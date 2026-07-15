@@ -1085,11 +1085,14 @@ abstract class Integration {
 				$incoming_fields  = $this->get_filtered_incoming_fields();
 				$field['options'] = array_map(
 					function ( $incoming_field ) {
-						$key  = $incoming_field->get_key();
-						$name = $incoming_field->get_name();
+						$key     = $incoming_field->get_key();
+						$name    = $incoming_field->get_name();
+						$options = $incoming_field->get_options();
 						return [
-							'value' => $key,
-							'label' => '' !== $name ? $name : $key,
+							'value'             => $key,
+							'label'             => '' !== $name ? $name : $key,
+							'matching_function' => $incoming_field->get_matching_function(),
+							'has_options'       => ! empty( $options ),
 						];
 					},
 					is_wp_error( $incoming_fields ) ? [] : $incoming_fields
