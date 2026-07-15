@@ -36,8 +36,14 @@
 			}
 		}
 
+		// wp-admin's common.css and the wizard shell both decorate a:focus with a
+		// box-shadow ring, a 2px border-radius, and a transparent outline. Reset
+		// all three so the component's own :focus-visible ring (an inset outline
+		// on its ::after, shipped by @wordpress/ui) is the only focus treatment.
 		&:focus {
+			border-radius: 0;
 			box-shadow: none;
+			outline: none;
 		}
 
 		&[data-disabled],
@@ -69,6 +75,19 @@
 		&:active,
 		&:focus {
 			color: wp-colors.$gray-900;
+		}
+
+		// Mirror the tabs widget's focus ring (an inset outline) with plain
+		// outline + offset, replacing wp-admin's box-shadow focus decoration.
+		&:focus {
+			box-shadow: none;
+			outline: none;
+		}
+
+		&:focus-visible {
+			border-radius: var( --wpds-border-radius-sm, #{wp-vars.$radius-small} );
+			outline: var( --wpds-border-width-focus, var( --wp-admin-border-width-focus, #{wp-vars.$border-width-focus-fallback} ) ) solid var( --wpds-color-stroke-focus, var( --wp-admin-theme-color ) );
+			outline-offset: calc( var( --wpds-dimension-padding-md, #{wp-vars.$grid-unit-15} ) * -1 );
 		}
 
 		&[aria-current="page"] {
