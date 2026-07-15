@@ -1949,14 +1949,13 @@ class Test_Integrations extends \WP_UnitTestCase {
 
 	/**
 	 * The ESP integration names its remedy: swap the manual provider for an API-based one.
+	 *
+	 * Unlike get_unsupported_reason(), the label is not provider-conditional —
+	 * ESP::get_unsupported_action_label() always returns "Change provider".
 	 */
 	public function test_esp_unsupported_action_label_is_change_provider() {
 		$esp = new \Newspack\Reader_Activation\Integrations\ESP();
 
-		update_option( 'newspack_newsletters_service_provider', 'manual' );
-		$this->assertSame( 'Requires an API-based ESP', $esp->get_unsupported_reason() );
 		$this->assertSame( 'Change provider', $esp->get_unsupported_action_label() );
-
-		delete_option( 'newspack_newsletters_service_provider' );
 	}
 }

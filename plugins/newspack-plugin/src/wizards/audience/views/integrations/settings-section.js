@@ -95,7 +95,9 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 								// (e.g. the ESP master list) or toggles the integration on directly.
 								const needsConnection = ! isConnected && !! setup_url;
 								// An unsupported integration is connected — to something that cannot do the
-								// job — so it gets the integration's own remedy label rather than "Connect".
+								// job — so it never gets "Connect". This only gates whether the remedy is
+								// actionable (somewhere to send the user); the label itself always follows
+								// unsupportedReason, see below.
 								const canFixUnsupported = !! unsupportedReason && !! setup_url;
 								const goToSetup = () => {
 									apiFetch( {
@@ -126,9 +128,11 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 										onToggleEnabled( id, true );
 									}
 								};
-								if ( canFixUnsupported ) {
-									enableLabel = unsupportedActionLabel;
-									onEnable = goToSetup;
+								if ( unsupportedReason ) {
+									enableLabel = unsupportedActionLabel || __( 'Open settings', 'newspack-plugin' );
+									if ( canFixUnsupported ) {
+										onEnable = goToSetup;
+									}
 								} else if ( needsConnection ) {
 									enableLabel = __( 'Connect', 'newspack-plugin' );
 									onEnable = goToSetup;

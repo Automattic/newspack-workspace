@@ -205,5 +205,16 @@ describe( 'Audience Integrations settings section card action', () => {
 		} );
 		expect( cardProps.requirements ).toBe( 'Requires an API-based ESP' );
 		expect( cardProps.requirementsActionable ).toBe( false );
+		// Still names the real remedy, not "Enable" — the button is inert, not a lie.
+		expect( cardProps.enableLabel ).toBe( 'Change provider' );
+	} );
+
+	it( 'falls back to "Open settings" when unsupported with no integration-supplied label', () => {
+		const { cardProps } = renderSection( {
+			is_connected: true,
+			unsupported_reason: 'Requires an API-based ESP',
+		} );
+		expect( cardProps.enableLabel ).toBe( 'Open settings' );
+		expect( cardProps.requirementsActionable ).toBe( true );
 	} );
 } );
