@@ -826,6 +826,32 @@ class Audience_Subscription_Products extends Wizard {
 			return new \WP_Error( 'duplicate_labels', __( 'Plan labels must be unique.', 'newspack-plugin' ), [ 'status' => 400 ] );
 		}
 
+		// Refuse to drop a variation that still has subscribers: deleting it would orphan live
+		// subscriptions, and silently keeping it (while stripping its label from the parent's
+		// options) leaves the product inconsistent. Check up-front, before any mutation, so a
+		// blocked removal changes nothing and the UI can surface why.
+		$kept_ids = array_filter( array_map( 'intval', wp_list_pluck( $plans, 'id' ) ) );
+		$blocked  = [];
+		foreach ( array_diff( $existing_ids, $kept_ids ) as $removed_id ) {
+			if ( ! self::product_has_blocking_subscriptions( (int) $removed_id ) ) {
+				continue;
+			}
+			$removed   = wc_get_product( (int) $removed_id );
+			$label     = $removed ? $removed->get_attribute( self::billing_period_attribute_key() ) : '';
+			$blocked[] = '' !== $label ? $label : (string) $removed_id;
+		}
+		if ( ! empty( $blocked ) ) {
+			return new \WP_Error(
+				'plan_has_subscribers',
+				sprintf(
+					/* translators: %s: comma-separated plan labels. */
+					__( 'Can’t remove a plan that still has active subscribers: %s. Cancel or move those subscriptions first.', 'newspack-plugin' ),
+					implode( ', ', $blocked )
+				),
+				[ 'status' => 409 ]
+			);
+		}
+
 		// Rebuild the parent's billing-period attribute to the desired set of plan labels.
 		$attribute = new \WC_Product_Attribute();
 		$attribute->set_name( self::BILLING_PERIOD_ATTRIBUTE_NAME );
@@ -1107,15 +1133,19 @@ class Audience_Subscription_Products extends Wizard {
 				$v_interval = (int) $variation->get_meta( '_subscription_period_interval' );
 
 				$pricing['variations'][] = [
-					'id'          => $variation_id,
-					'name'        => $variation->get_name(),
-					'plan_label'  => $variation->get_attribute( self::billing_period_attribute_key() ),
-					'base_price'  => $v_price,
-					'period'      => $v_period,
-					'interval'    => $v_interval,
-					'price_label' => self::format_price_label( $v_price, $v_period, $v_interval ),
+					'id'                   => $variation_id,
+					'name'                 => $variation->get_name(),
+					'plan_label'           => $variation->get_attribute( self::billing_period_attribute_key() ),
+					'base_price'           => $v_price,
+					'period'               => $v_period,
+					'interval'             => $v_interval,
+					'price_label'          => self::format_price_label( $v_price, $v_period, $v_interval ),
+					// Active subscribers on this specific plan — drives the UI's guard against
+					// removing a plan that still has subscribers. Free: the id is memoized for
+					// the row's total count.
+					'active_subscriptions' => count( self::active_subscription_ids_for( (int) $variation_id ) ),
 					// Group-subscription (multi-seat) settings live per variation.
-					'group'       => self::read_group_settings( $variation ),
+					'group'                => self::read_group_settings( $variation ),
 				];
 			}
 
@@ -1197,6 +1227,33 @@ class Audience_Subscription_Products extends Wizard {
 	}
 
 	/**
+	 * Per-request cache of active-subscription IDs, keyed by product/variation ID.
+	 *
+	 * @var array<int, array>
+	 */
+	private static $active_subscription_ids = [];
+
+	/**
+	 * Active (see self::ACTIVE_SUBSCRIPTION_STATUSES) subscription IDs for one product or
+	 * variation ID, memoized for the request. The same id recurs across rows — a variation feeds
+	 * both its own count and its parent's, and grouped products aggregate children also listed
+	 * individually — so each id resolves to at most one lightweight query.
+	 *
+	 * @param int $product_id The product or variation ID.
+	 *
+	 * @return array Subscription IDs (keyed id => id).
+	 */
+	private static function active_subscription_ids_for( $product_id ) {
+		$product_id = (int) $product_id;
+		if ( ! isset( self::$active_subscription_ids[ $product_id ] ) ) {
+			self::$active_subscription_ids[ $product_id ] = function_exists( 'wcs_get_subscriptions_for_product' )
+				? \wcs_get_subscriptions_for_product( $product_id, 'ids', [ 'subscription_status' => self::ACTIVE_SUBSCRIPTION_STATUSES ] )
+				: [];
+		}
+		return self::$active_subscription_ids[ $product_id ];
+	}
+
+	/**
 	 * Count active subscriptions for a product.
 	 *
 	 * Returns null (not zero) when WooCommerce Subscriptions is unavailable, so the UI
@@ -1233,23 +1290,11 @@ class Audience_Subscription_Products extends Wizard {
 			}
 		}
 
-		// Per-request memo: the same product id recurs across rows (notably grouped products
-		// that aggregate children also listed individually), and each lookup is a query — so
-		// resolve each id at most once.
-		static $ids_by_product = [];
+		// Dedupe subscription IDs across the parent, variations, and grouped children (the same
+		// id recurs across rows) via the shared per-request memo.
 		$subscription_ids = [];
 		foreach ( $product_ids as $product_id ) {
-			if ( ! isset( $ids_by_product[ $product_id ] ) ) {
-				// 'ids' returns subscription IDs from a single lightweight query — avoiding the
-				// per-row WC_Subscription hydration that fetching objects would force into memory.
-				$ids_by_product[ $product_id ] = \wcs_get_subscriptions_for_product(
-					$product_id,
-					'ids',
-					[ 'subscription_status' => self::ACTIVE_SUBSCRIPTION_STATUSES ]
-				);
-			}
-			// Dedupe across variations and repeated product ids.
-			foreach ( $ids_by_product[ $product_id ] as $subscription_id ) {
+			foreach ( self::active_subscription_ids_for( (int) $product_id ) as $subscription_id ) {
 				$subscription_ids[ $subscription_id ] = true;
 			}
 		}

@@ -9,7 +9,7 @@
 /**
  * WordPress dependencies
  */
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useState, useEffect, useCallback, useRef } from '@wordpress/element';
 import { useDispatch } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
@@ -44,13 +44,36 @@ const PERIOD_OPTIONS = [
 ];
 
 type ProductType = 'subscription' | 'variable-subscription' | 'grouped' | 'simple';
-type PlanDraft = { id?: number; label: string; price: string; period: string; interval: string; existing: boolean };
+type PlanDraft = { id?: number; label: string; price: string; period: string; interval: string; existing: boolean; activeSubscriptions: number };
 
-const newPlan = ( label = '', period = 'month' ): PlanDraft => ( { label, price: '', period, interval: '1', existing: false } );
+const newPlan = ( label = '', period = 'month' ): PlanDraft => ( {
+	label,
+	price: '',
+	period,
+	interval: '1',
+	existing: false,
+	activeSubscriptions: 0,
+} );
 
 // A price must be an explicit, non-negative number. Guards against an empty field coercing to 0
 // ( Number( '' ) === 0 ) and silently publishing a paid plan as free.
 const isValidPrice = ( value: string ): boolean => value.trim() !== '' && Number.isFinite( Number( value ) ) && Number( value ) >= 0;
+
+// Helper text under a plan's label: existing plans with subscribers can't be removed (the
+// server refuses to orphan live subscriptions), so surface the count and the reason.
+const planLabelHelp = ( plan: PlanDraft ): string | undefined => {
+	if ( ! plan.existing ) {
+		return undefined;
+	}
+	if ( plan.activeSubscriptions > 0 ) {
+		return sprintf(
+			/* translators: %d: number of active subscribers on this plan. */
+			_n( '%d active subscriber — can’t be removed', '%d active subscribers — can’t be removed', plan.activeSubscriptions, 'newspack-plugin' ),
+			plan.activeSubscriptions
+		);
+	}
+	return __( 'Existing plan', 'newspack-plugin' );
+};
 
 export default function ProductForm( {
 	mode,
@@ -99,6 +122,7 @@ export default function ProductForm( {
 					period: variation.period || 'month',
 					interval: String( variation.interval || 1 ),
 					existing: true,
+					activeSubscriptions: variation.active_subscriptions ?? 0,
 			  } ) )
 			: [ newPlan( __( 'Monthly', 'newspack-plugin' ), 'month' ), newPlan( __( 'Annual', 'newspack-plugin' ), 'year' ) ]
 	);
@@ -378,7 +402,7 @@ export default function ProductForm( {
 												value={ plan.label }
 												onChange={ value => updatePlan( index, 'label', value ) }
 												disabled={ plan.existing }
-												help={ plan.existing ? __( 'Existing plan', 'newspack-plugin' ) : undefined }
+												help={ planLabelHelp( plan ) }
 												__next40pxDefaultSize
 											/>
 										</FlexBlock>
@@ -387,7 +411,7 @@ export default function ProductForm( {
 												variant="tertiary"
 												isDestructive
 												onClick={ () => removePlan( index ) }
-												disabled={ plans.length <= 1 }
+												disabled={ plans.length <= 1 || plan.activeSubscriptions > 0 }
 											>
 												{ __( 'Remove', 'newspack-plugin' ) }
 											</Button>

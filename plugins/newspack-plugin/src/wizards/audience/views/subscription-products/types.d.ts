@@ -15,6 +15,8 @@ interface SubscriptionProductVariation {
 	period: string;
 	interval: number;
 	price_label: string;
+	// Active subscribers on this plan; a plan with subscribers can't be removed.
+	active_subscriptions: number;
 	// Group-subscription (multi-seat) settings for this plan.
 	group: { enabled: boolean; limit: number };
 }
