@@ -116,6 +116,13 @@ describe( 'criteria matching', () => {
 		expect( criteria.matches( { value: '1' } ) ).toEqual( false );
 		expect( criteria.matches( { value: 1 } ) ).toEqual( false );
 	} );
+	it( 'parses ActiveCampaign pipe-delimited reader values for list__in', () => {
+		setMatchingAttribute( criteriaId, () => '||foo||bar||' );
+		setMatchingFunction( criteriaId, 'list__in' );
+		const criteria = getCriteria( criteriaId );
+		expect( criteria.matches( { value: [ 'bar' ] } ) ).toEqual( true );
+		expect( criteria.matches( { value: [ 'baz' ] } ) ).toEqual( false );
+	} );
 	it( 'should match "list__not_in" matching function', () => {
 		setMatchingAttribute( criteriaId, () => 'bar' );
 		setMatchingFunction( criteriaId, 'list__not_in' );

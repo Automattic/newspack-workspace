@@ -1,6 +1,25 @@
 /* eslint-disable eqeqeq */
 
 /**
+ * Normalizes a reader value into an array for list matching. Mirrors the server
+ * `Newspack\Reader_Activation\Promoted_Fields::parse_list_value()`: ActiveCampaign
+ * wraps multi-select values with leading/trailing `||` (`||A||B||`); require both
+ * ends so a normal string containing `||` mid-value is left intact.
+ *
+ * @param {*} value The reader value.
+ * @return {*} An array of values when pipe-delimited, otherwise the value unchanged.
+ */
+const parseReaderListValue = value => {
+	if ( typeof value === 'string' && value.startsWith( '||' ) && value.endsWith( '||' ) ) {
+		return value
+			.split( '||' )
+			.map( item => item.trim() )
+			.filter( item => '' !== item );
+	}
+	return value;
+};
+
+/**
  * Common matching functions that can be used by criteria.
  */
 export default {
@@ -23,10 +42,11 @@ export default {
 		if ( ! Array.isArray( list ) ) {
 			return false;
 		}
-		if ( Array.isArray( criteria.value ) ) {
-			return criteria.value.some( value => list.some( configValue => configValue == value ) );
+		const readerValue = parseReaderListValue( criteria.value );
+		if ( Array.isArray( readerValue ) ) {
+			return readerValue.some( value => list.some( configValue => configValue == value ) );
 		}
-		if ( ! criteria.value || ! list.some( configValue => configValue == criteria.value ) ) {
+		if ( ! readerValue || ! list.some( configValue => configValue == readerValue ) ) {
 			return false;
 		}
 		return true;
@@ -46,10 +66,11 @@ export default {
 		if ( ! Array.isArray( list ) ) {
 			return true;
 		}
-		if ( Array.isArray( criteria.value ) ) {
-			return ! criteria.value.some( value => list.some( configValue => configValue == value ) );
+		const readerValue = parseReaderListValue( criteria.value );
+		if ( Array.isArray( readerValue ) ) {
+			return ! readerValue.some( value => list.some( configValue => configValue == value ) );
 		}
-		if ( ! criteria.value || ! list.some( configValue => configValue == criteria.value ) ) {
+		if ( ! readerValue || ! list.some( configValue => configValue == readerValue ) ) {
 			return true;
 		}
 		return false;
