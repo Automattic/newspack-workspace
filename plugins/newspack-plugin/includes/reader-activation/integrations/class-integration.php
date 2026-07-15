@@ -581,6 +581,12 @@ abstract class Integration {
 			$field = new Integrations\Incoming_Field( $key, $raw_data );
 			$field = $this->configure_incoming_field( $field );
 			if ( $field instanceof Integrations\Incoming_Field ) {
+				// The publisher's stored operator choice is authoritative. Re-apply it after
+				// configure_incoming_field(), which may (re)derive matching_function from the
+				// provider schema and clobber the choice for non-ESP integrations.
+				if ( isset( $raw_data['matching_function'] ) && is_string( $raw_data['matching_function'] ) ) {
+					$field->set_matching_function( $raw_data['matching_function'] );
+				}
 				$fields[] = $field;
 			}
 		}

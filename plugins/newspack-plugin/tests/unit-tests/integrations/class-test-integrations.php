@@ -415,6 +415,25 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A stored per-field operator survives an integration whose
+	 * configure_incoming_field() doesn't set matching_function (the non-ESP case),
+	 * so the registered segment criterion gets the publisher's chosen operator.
+	 *
+	 * @group integrations
+	 */
+	public function test_get_enabled_incoming_fields_applies_stored_operator() {
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+		$integration->update_enabled_incoming_fields( [ 'amount' => 'range' ] );
+
+		$by_key = [];
+		foreach ( $integration->get_enabled_incoming_fields() as $field ) {
+			$by_key[ $field->get_key() ] = $field;
+		}
+		$this->assertArrayHasKey( 'amount', $by_key );
+		$this->assertSame( 'range', $by_key['amount']->get_matching_function() );
+	}
+
+	/**
 	 * Non-array input to update_enabled_incoming_fields() no-ops instead of fataling.
 	 *
 	 * @group integrations
