@@ -82,8 +82,11 @@ function ConfirmDialog(
 		// A POP may have moved the URL to the target before it was blocked; put
 		// it back so the address bar matches the page the user chose to stay on.
 		bypassBlock.current = true;
-		history.replace( history.location );
-		bypassBlock.current = false;
+		try {
+			history.replace( history.location );
+		} finally {
+			bypassBlock.current = false;
+		}
 		onCancel();
 	}, [ onCancel, history ] );
 
@@ -99,17 +102,20 @@ function ConfirmDialog(
 			}
 			pendingNavigation.current = () => {
 				bypassBlock.current = true;
-				// A browser/anchor POP (e.g. a breadcrumb or back link) moves the URL
-				// to the target before navigation is blocked, and v5 leaves the hash
-				// there, so pushing the target would be a no-op. Re-sync to the
-				// still-current location first so the real navigation actually fires.
-				history.replace( history.location );
-				if ( action === 'REPLACE' ) {
-					history.replace( location );
-				} else {
-					history.push( location );
+				try {
+					// A browser/anchor POP (e.g. a breadcrumb or back link) moves the URL
+					// to the target before navigation is blocked, and v5 leaves the hash
+					// there, so pushing the target would be a no-op. Re-sync to the
+					// still-current location first so the real navigation actually fires.
+					history.replace( history.location );
+					if ( action === 'REPLACE' ) {
+						history.replace( location );
+					} else {
+						history.push( location );
+					}
+				} finally {
+					bypassBlock.current = false;
 				}
-				bypassBlock.current = false;
 			};
 			setShowDialog( true );
 			return false;
