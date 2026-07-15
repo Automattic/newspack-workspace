@@ -972,12 +972,17 @@ final class Newspack_Newsletters {
 		 * filterable via `newspack_newsletters_color_palette_capability`.
 		 */
 		$capability = apply_filters( 'newspack_newsletters_color_palette_capability', 'edit_others_posts' );
+		$did_write  = false;
 		if ( current_user_can( $capability ) ) {
-			self::update_color_palette( json_decode( $request->get_body(), true ) );
+			// update_option() returns false when the value is unchanged as well as on
+			// failure, so `updated` reports "the stored palette changed", not "no error".
+			$did_write = self::update_color_palette( json_decode( $request->get_body(), true ) );
 		} else {
 			Newspack_Newsletters_Logger::log( 'Color palette write skipped: current user lacks the "' . $capability . '" capability.' );
 		}
-		return \rest_ensure_response( [] );
+		// The route's contract is always 200; the body distinguishes a real write from a
+		// permission-skipped no-op so a client or maintainer can tell them apart.
+		return \rest_ensure_response( [ 'updated' => (bool) $did_write ] );
 	}
 
 	/**
@@ -1022,7 +1027,23 @@ final class Newspack_Newsletters {
 				)
 			);
 		}
-		return \rest_ensure_response( Newspack_Newsletters_Layouts::get_layouts() );
+		$layouts = Newspack_Newsletters_Layouts::get_layouts();
+
+		/*
+		 * The layouts list is readable at `edit_posts` so Contributors/Authors can pick a
+		 * layout, but each saved layout's `campaign_defaults` carries send/audience config
+		 * (senderEmail, send_list_id, send_sublist_id) that the editor copies into the draft.
+		 * Withhold it from roles below `edit_others_posts` so the send/audience surface stays
+		 * editor-only — the picker still applies content, colors and fonts without it.
+		 */
+		if ( ! current_user_can( 'edit_others_posts' ) ) {
+			foreach ( $layouts as $layout ) {
+				if ( isset( $layout->meta ) && is_array( $layout->meta ) ) {
+					unset( $layout->meta['campaign_defaults'] );
+				}
+			}
+		}
+		return \rest_ensure_response( $layouts );
 	}
 
 	/**
@@ -1191,8 +1212,10 @@ final class Newspack_Newsletters {
 	/**
 	 * Permission check for non-post authoring reads needed to load the
 	 * editor (e.g. the `layouts` list of saved templates). Any user who can
-	 * author posts may use them; they expose editor-support content, not
-	 * send/audience configuration.
+	 * author posts may use them. These surface editor-support content; the
+	 * one field that carries send/audience configuration (`campaign_defaults`)
+	 * is stripped from the layouts payload for roles below `edit_others_posts`
+	 * in api_get_layouts(), so this relaxed check does not broaden that surface.
 	 *
 	 * @param WP_REST_Request $request API request object.
 	 * @return bool|WP_Error
