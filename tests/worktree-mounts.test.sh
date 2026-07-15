@@ -1,46 +1,26 @@
 #!/bin/bash
-# Unit tests for bin/worktree-mounts.sh (pure mount helpers). Host-runnable.
+# Unit tests for env.sh worktree-mount parsing (upstream's parse_worktree_mount /
+# each_worktree_in_env). Host-runnable; sources env.sh (sourceable-guarded).
 set -u
 BIN="$(cd "$(dirname "$0")/../bin" && pwd)"
 FIX="$(mktemp -d)"; trap 'rm -rf "$FIX"' EXIT
 pass=0; fail=0
 ok(){ if [ "$2" = "$3" ]; then echo "  PASS  $1"; pass=$((pass+1)); else echo "  FAIL  $1 (got [$2] want [$3])"; fail=$((fail+1)); fi; }
-nlines(){ printf '%s' "$1" | grep -c '.'; }
+source "$BIN/env.sh"
 
-source "$BIN/worktree-mounts.sh"
+ok "monorepo plugin mount"  "$(parse_worktree_mount '      - ./worktrees/feat-x/plugins/np-news:/newspack-plugins/np-news')" "np-news|feat-x|monorepo"
+ok "monorepo theme mount"   "$(parse_worktree_mount '      - ./worktrees/feat-y/themes/np-theme:/newspack-themes/np-theme')" "np-theme|feat-y|monorepo"
+ok "standalone repos mount" "$(parse_worktree_mount '      - ./worktrees-repos/np-manager/feat-z:/newspack-repos/plugins/np-manager')" "np-manager|feat-z|repos"
+if parse_worktree_mount '      - ./html:/var/www/html' >/dev/null 2>&1; then r=matched; else r=nomatch; fi
+ok "non-worktree mount -> non-zero" "$r" "nomatch"
 
-# --- worktree_volume_lines ---
-out=$(worktree_volume_lines "./worktrees/feat-x/plugins/newspack-newsletters" "/newspack-plugins/newspack-newsletters" "plugins/newspack-newsletters")
-ok "tier1 plugin emits 2 lines" "$(nlines "$out")" "2"
-ok "tier1 plugin serving line" "$(printf '%s\n' "$out" | grep -c -- '- ./worktrees/feat-x/plugins/newspack-newsletters:/newspack-plugins/newspack-newsletters$')" "1"
-ok "tier1 plugin member line" "$(printf '%s\n' "$out" | grep -c -- '- ./worktrees/feat-x/plugins/newspack-newsletters:/newspack-monorepo/plugins/newspack-newsletters$')" "1"
-
-out=$(worktree_volume_lines "./worktrees/feat-y/themes/newspack-theme" "/newspack-themes/newspack-theme" "themes/newspack-theme")
-ok "tier1 theme member line at /newspack-monorepo/themes" "$(printf '%s\n' "$out" | grep -c -- '- ./worktrees/feat-y/themes/newspack-theme:/newspack-monorepo/themes/newspack-theme$')" "1"
-
-out=$(worktree_volume_lines "./worktrees/standalone/newspack-community/jl-foo" "/newspack-plugins/newspack-community" "repos/plugins/newspack-community")
-ok "tier2 emits 1 line" "$(nlines "$out")" "1"
-ok "tier2 has no monorepo member" "$(printf '%s\n' "$out" | grep -c 'newspack-monorepo')" "0"
-
-# --- worktree_member_lines_to_add ---
-C1="$FIX/c1.yml"; cat > "$C1" <<'EOF'
+# each_worktree_in_env over a compose fixture with one of each shape:
+C="$FIX/c.yml"; cat > "$C" <<'EOF'
     volumes:
-      - ./worktrees/feat-x/plugins/newspack-newsletters:/newspack-plugins/newspack-newsletters
+      - ./worktrees/feat-x/plugins/np-news:/newspack-plugins/np-news
+      - ./worktrees-repos/np-manager/feat-z:/newspack-repos/plugins/np-manager
       - ./html:/var/www/html
 EOF
-ok "missing member -> emitted" "$(worktree_member_lines_to_add "$C1" | grep -c -- ':/newspack-monorepo/plugins/newspack-newsletters$')" "1"
-
-C2="$FIX/c2.yml"; cat > "$C2" <<'EOF'
-    volumes:
-      - ./worktrees/feat-x/plugins/newspack-newsletters:/newspack-plugins/newspack-newsletters
-      - ./worktrees/feat-x/plugins/newspack-newsletters:/newspack-monorepo/plugins/newspack-newsletters
-EOF
-ok "already-present member -> nothing (idempotent)" "$(nlines "$(worktree_member_lines_to_add "$C2")")" "0"
-
-C3="$FIX/c3.yml"; cat > "$C3" <<'EOF'
-    volumes:
-      - ./worktrees/standalone/newspack-community/jl-foo:/newspack-plugins/newspack-community
-EOF
-ok "tier2-only -> nothing" "$(nlines "$(worktree_member_lines_to_add "$C3")")" "0"
+ok "each_worktree_in_env yields 2 triples" "$(each_worktree_in_env "$C" | grep -c '|')" "2"
 
 echo ""; echo "RESULT: $pass passed, $fail failed"; [ "$fail" -eq 0 ]
