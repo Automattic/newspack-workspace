@@ -32,7 +32,7 @@ test(
 
     // Save the settings and wait for the request to complete.
     await Promise.all([
-      page.waitForResponse(/newspack\/v1|wp-json/),
+      page.waitForResponse(/\/newspack\/v1\/wizard\/newspack-audience-donations/),
       page.getByRole("button", { name: "Save Settings" }).click(),
     ]);
 
@@ -51,7 +51,7 @@ test(
     // Clean up: restore the original amount.
     await updatedInput.fill("15");
     await Promise.all([
-      page.waitForResponse(/newspack\/v1|wp-json/),
+      page.waitForResponse(/\/newspack\/v1\/wizard\/newspack-audience-donations/),
       page.getByRole("button", { name: "Save Settings" }).click(),
     ]);
   }

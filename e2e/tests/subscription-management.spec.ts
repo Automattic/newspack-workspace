@@ -83,6 +83,7 @@ test(
      */
     const viewSubscriptionLink = page.locator('a[href*="view-subscription"]').first();
     const subscriptionHref = await viewSubscriptionLink.getAttribute("href");
+    expect(subscriptionHref).toBeTruthy();
     await page.goto(subscriptionHref);
     await expect(page).toHaveURL(/view-subscription/);
 
@@ -94,6 +95,7 @@ test(
       .getByRole("link", { name: /Cancel/ })
       .first()
       .getAttribute("href");
+    expect(cancelHref).toBeTruthy();
     await page.goto(cancelHref);
 
     // Confirm cancellation if a confirmation step is presented.

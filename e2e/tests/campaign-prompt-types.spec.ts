@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { logIn, goToAdminMenu, isMobileAdmin, getEditorCanvas, openEditorSettings } from "./utils-admin";
+import { logIn, goToAdminMenu, getEditorCanvas } from "./utils-admin";
 import { randomString } from "./utils";
 
 test(
@@ -9,7 +9,6 @@ test(
   },
   async ({ page }) => {
     await logIn(page);
-    const isMobile = await isMobileAdmin(page);
 
     await goToAdminMenu("Audience", "Campaigns", page);
 

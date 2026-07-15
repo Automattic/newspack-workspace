@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { logIn, isMobileAdmin, getEditorCanvas, openEditorSettings } from "./utils-admin";
+import { logIn, getEditorCanvas } from "./utils-admin";
 import { randomString } from "./utils";
 
 test("Post Carousel block renders and navigates", {
@@ -8,7 +8,6 @@ test("Post Carousel block renders and navigates", {
     async ({ page }) => {
 
     await logIn(page);
-    const isMobile = await isMobileAdmin(page);
     const randomId = randomString(4);
     const pageTitle = `Carousel Test ${randomId}`;
 
@@ -44,6 +43,7 @@ test("Post Carousel block renders and navigates", {
         .getByTestId("snackbar")
         .getByRole("link", { name: /view page/i })
         .getAttribute("href");
+    expect(pageURL).toBeTruthy();
     await page.goto(pageURL);
 
     /**
@@ -63,18 +63,20 @@ test("Post Carousel block renders and navigates", {
      * viewport those are hidden (navigation is via swipe + pagination dots), so
      * only exercise the arrow when it's actually visible.
      */
+    const activeSlideTitle = carousel
+        .locator('.swiper-slide-active .entry-title a')
+        .first();
+    await expect(activeSlideTitle).toBeVisible();
+
     const nextButton = carousel.locator('.swiper-button-next');
     if (await nextButton.isVisible()) {
+      // Capture the current active-slide title, advance, and assert the active
+      // slide actually changed -- waiting on the title (rather than a fixed
+      // timeout) makes the transition check deterministic.
+      const initialActiveTitle = (await activeSlideTitle.textContent()).trim();
       await nextButton.click();
-      // Wait for the carousel transition to complete.
-      await page.waitForTimeout(600);
+      await expect(activeSlideTitle).not.toHaveText(initialActiveTitle);
     }
-
-    // Verify the carousel has advanced by checking the active slide changed.
-    const activeSlideTitle = await carousel.locator('.swiper-slide-active .entry-title a').textContent();
-    // The carousel should have moved, so the active slide title should differ from the first one.
-    // (This works as long as there are at least 2 different posts.)
-    expect(activeSlideTitle.trim().length).toBeGreaterThan(0);
 
     /**
      * Click a post title link within the carousel to navigate to it.
