@@ -287,6 +287,14 @@ class Audience_Integrations extends Wizard {
 					[ 'status' => 400 ]
 				);
 			}
+			$unsupported_reason = $integration->get_unsupported_reason();
+			if ( $unsupported_reason ) {
+				return new WP_Error(
+					'newspack_integration_unsupported',
+					esc_html( $unsupported_reason ),
+					[ 'status' => 400 ]
+				);
+			}
 			Integrations::enable( $integration_id );
 		} else {
 			Integrations::disable( $integration_id );

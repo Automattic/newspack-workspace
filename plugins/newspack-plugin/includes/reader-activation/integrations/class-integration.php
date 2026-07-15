@@ -169,6 +169,23 @@ abstract class Integration {
 	}
 
 	/**
+	 * Why this integration cannot operate with the site's current configuration.
+	 *
+	 * A non-null string marks the integration as unsupported: the Integrations
+	 * UI shows the string verbatim as the card's error badge and routes the
+	 * primary action to get_setup_url(), and the REST layer refuses to enable
+	 * the integration. Distinct from is_connected(): connected-but-unsupported
+	 * means the external prerequisite exists but is incompatible with this
+	 * integration (e.g. the newsletters provider is "manual", which has no API
+	 * to sync contacts against). Returns null by default.
+	 *
+	 * @return string|null Reason the integration is unsupported, or null.
+	 */
+	public function get_unsupported_reason() {
+		return null;
+	}
+
+	/**
 	 * Get the URL where the user can set up this integration.
 	 *
 	 * Child classes should override this to return the admin page where

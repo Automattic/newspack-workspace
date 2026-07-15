@@ -121,6 +121,7 @@ class My_Integration extends Integration {
 | --- | --- |
 | `is_set_up()` | Whether the integration is fully configured (external prerequisites **and** the integration's own settings). Defaults to `true`. Used by the Integrations UI to mark cards as ready. |
 | `is_connected()` | Whether the external service prerequisite alone (provider chosen, key entered) is configured at its source. Defaults to `true`. The Integrations UI routes the card's primary action on this: not connected → `get_setup_url()`, connected but not set up → the integration's own settings view ("Finish setup"). |
+| `get_unsupported_reason()` | Non-null string marks the integration as unsupported with the site's current configuration (e.g. the ESP integration while the newsletters provider is "manual"). The Integrations UI shows the string verbatim as the card's error badge and routes the primary action to `get_setup_url()`; the REST layer refuses to enable. Defaults to `null`. |
 | `get_setup_url()` | Admin URL where the integration's prerequisites are configured. Defaults to empty string. |
 | `test_connection()` | Lightweight live API call to verify credentials and reachability. Called as part of `health_check()`. Defaults to `true`. |
 | `pull_contact_data( $user_id )` | Fetch contact data from the external system. Return `array` of `field_key => value` or `WP_Error`. Defaults to `[]`. |

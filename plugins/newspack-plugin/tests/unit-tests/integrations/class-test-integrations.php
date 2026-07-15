@@ -1882,4 +1882,57 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$this->assertNotWPError( $response );
 		$this->assertTrue( Integrations::is_enabled( 'connected_test' ) );
 	}
+
+	/**
+	 * The get_unsupported_reason() default flows through to the settings payload as null.
+	 */
+	public function test_unsupported_reason_defaults_to_null_in_settings_payload() {
+		Integrations::register( new Sample_Integration( 'unsupported_default_test', 'Unsupported Default Test' ) );
+		$settings = Integrations::get_all_integration_settings();
+		$this->assertArrayHasKey( 'unsupported_default_test', $settings );
+		$this->assertArrayHasKey( 'unsupported_reason', $settings['unsupported_default_test'] );
+		$this->assertNull( $settings['unsupported_default_test']['unsupported_reason'] );
+	}
+
+	/**
+	 * The enable endpoint rejects enabling an unsupported integration.
+	 */
+	public function test_enable_endpoint_rejects_unsupported_integration() {
+		$integration = new class( 'unsupported_test', 'Unsupported Test' ) extends Sample_Integration {
+			/**
+			 * Report the integration as unsupported.
+			 *
+			 * @return string
+			 */
+			public function get_unsupported_reason() {
+				return 'Requires an API-based ESP';
+			}
+		};
+		Integrations::register( $integration );
+
+		$wizard  = new \Newspack\Audience_Integrations();
+		$request = new \WP_REST_Request( 'POST' );
+		$request->set_param( 'integration_id', 'unsupported_test' );
+		$request->set_param( 'enabled', true );
+
+		$response = $wizard->api_update_integration_enabled( $request );
+		$this->assertWPError( $response );
+		$this->assertSame( 'newspack_integration_unsupported', $response->get_error_code() );
+		$this->assertFalse( Integrations::is_enabled( 'unsupported_test' ) );
+	}
+
+	/**
+	 * The ESP integration reports unsupported only while the manual provider is active.
+	 */
+	public function test_esp_unsupported_with_manual_provider() {
+		$esp = new \Newspack\Reader_Activation\Integrations\ESP();
+
+		update_option( 'newspack_newsletters_service_provider', 'manual' );
+		$this->assertSame( 'Requires an API-based ESP', $esp->get_unsupported_reason() );
+
+		update_option( 'newspack_newsletters_service_provider', 'mailchimp' );
+		$this->assertNull( $esp->get_unsupported_reason() );
+
+		delete_option( 'newspack_newsletters_service_provider' );
+	}
 }

@@ -50,6 +50,21 @@ class ESP extends Integration {
 	}
 
 	/**
+	 * Why the ESP integration cannot operate with the current provider.
+	 *
+	 * The "manual" provider is valid for authoring newsletters but exposes no
+	 * API for contact syncing: no lists, no master list, no contact upsert.
+	 *
+	 * @return string|null Reason string when the provider is manual, null otherwise.
+	 */
+	public function get_unsupported_reason() {
+		if ( class_exists( 'Newspack_Newsletters' ) && 'manual' === \Newspack_Newsletters::service_provider() ) {
+			return __( 'Requires an API-based ESP', 'newspack-plugin' );
+		}
+		return null;
+	}
+
+	/**
 	 * Whether the ESP integration is ready to sync.
 	 *
 	 * Checks STORED configuration only — provider option set + master list
