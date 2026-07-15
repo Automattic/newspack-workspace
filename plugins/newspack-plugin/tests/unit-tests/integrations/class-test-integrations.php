@@ -1764,4 +1764,33 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$this->assertTrue( $settings['connected']['is_connected'] );
 		$this->assertFalse( $settings['disconnected']['is_connected'] );
 	}
+
+	/**
+	 * The settings config passes the `required` field flag through to clients.
+	 */
+	public function test_settings_config_passes_required_flag_through() {
+		$integration = new class( 'required_flag_test', 'Required Flag Test' ) extends Sample_Integration {
+			/**
+			 * Declare a required select field.
+			 *
+			 * @return array Field declarations.
+			 */
+			public function register_settings_fields() {
+				return [
+					[
+						'key'      => 'main_list',
+						'type'     => 'select',
+						'default'  => '',
+						'required' => true,
+						'label'    => 'Main list',
+					],
+				];
+			}
+		};
+
+		$config = $integration->get_settings_config();
+		$fields = array_combine( array_column( $config, 'key' ), $config );
+		$this->assertArrayHasKey( 'main_list', $fields );
+		$this->assertTrue( $fields['main_list']['required'] );
+	}
 }

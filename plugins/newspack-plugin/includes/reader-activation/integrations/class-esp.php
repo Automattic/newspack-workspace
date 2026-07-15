@@ -10,7 +10,6 @@ namespace Newspack\Reader_Activation\Integrations;
 use Newspack\Reader_Activation\Integration;
 use Newspack\Reader_Activation\Sync;
 use Newspack\Reader_Activation\Integrations;
-use Newspack\Reader_Activation;
 use Newspack_Newsletters_Contacts;
 use Newspack_Newsletters_Subscription;
 use Newspack\Configuration_Managers;
@@ -119,6 +118,7 @@ class ESP extends Integration {
 				'key'         => 'mailchimp_audience_id',
 				'type'        => 'select',
 				'default'     => '',
+				'required'    => true,
 				'label'       => __( 'Mailchimp Audience', 'newspack-plugin' ),
 				'description' => __( 'Choose an audience to receive reader activity data.', 'newspack-plugin' ),
 			],
@@ -143,6 +143,7 @@ class ESP extends Integration {
 				'key'         => 'active_campaign_master_list',
 				'type'        => 'select',
 				'default'     => '',
+				'required'    => true,
 				'label'       => __( 'ActiveCampaign Master List', 'newspack-plugin' ),
 				'description' => __( 'Choose a master list to which all registered readers will be added.', 'newspack-plugin' ),
 			],
@@ -150,6 +151,7 @@ class ESP extends Integration {
 				'key'         => 'constant_contact_list_id',
 				'type'        => 'select',
 				'default'     => '',
+				'required'    => true,
 				'label'       => __( 'Constant Contact Master List', 'newspack-plugin' ),
 				'description' => __( 'Choose a master list to which all registered readers will be added.', 'newspack-plugin' ),
 			],
@@ -170,10 +172,14 @@ class ESP extends Integration {
 	 * expensive data (API-fetched list options).
 	 * Only called when serving the settings UI.
 	 *
+	 * Available as soon as the provider is connected (`is_connected()`),
+	 * so the master-list options can be collected right after connecting —
+	 * before any subscription lists are enabled.
+	 *
 	 * @return array Array of field declarations with current values.
 	 */
 	public function get_settings_config() {
-		if ( ! Reader_Activation::is_esp_configured() ) {
+		if ( ! $this->is_connected() ) {
 			return [];
 		}
 		$provider = $this->get_provider();
