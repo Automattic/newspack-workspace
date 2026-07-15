@@ -102,4 +102,18 @@ describe( 'ConfigureView unsaved-changes guard', () => {
 		unmount();
 		expect( onDiscardChanges ).toHaveBeenCalledWith( 'esp' );
 	} );
+
+	// A save in flight owns the pending changes: handleSave clears them itself on
+	// success, and on failure they are the user's only copy. Unmounting mid-save
+	// (e.g. the user navigates away while `when` is disarmed) must not discard them.
+	it( 'does not call onDiscardChanges on unmount while a save is in flight', () => {
+		const onDiscardChanges = jest.fn();
+		const { unmount } = renderConfigureView( {
+			pendingChanges: { esp: { mailchimp_audience_id: 'abc123' } },
+			saving: true,
+			onDiscardChanges,
+		} );
+		unmount();
+		expect( onDiscardChanges ).not.toHaveBeenCalled();
+	} );
 } );

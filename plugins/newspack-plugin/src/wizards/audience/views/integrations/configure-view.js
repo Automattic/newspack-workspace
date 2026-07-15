@@ -29,11 +29,22 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 		when: !! hasPending && ! integrationSaving && !! integration,
 	} );
 
-	// Mirrors the discard-changes dialog's promise: ConfigureView only unmounts
-	// once the user has confirmed discarding (or had nothing pending), so
-	// clearing this integration's pending changes here is exactly what "discard"
-	// means. Must run for every render path — placed above the early returns.
-	useEffect( () => () => onDiscardChanges( integrationId ), [ integrationId, onDiscardChanges ] );
+	// A save in flight owns this integration's pending changes: handleSave
+	// clears them itself on success, and on failure they are the user's only
+	// copy. A ref (rather than an `integrationSaving` dependency) is required
+	// so the cleanup reads the latest value at unmount time without re-running
+	// mid-save. Must run for every render path — placed above the early returns.
+	const savingRef = useRef( integrationSaving );
+	savingRef.current = integrationSaving;
+
+	useEffect(
+		() => () => {
+			if ( ! savingRef.current ) {
+				onDiscardChanges( integrationId );
+			}
+		},
+		[ integrationId, onDiscardChanges ]
+	);
 
 	// Split settings into groups.
 	const { settingsFields, inboundField, outboundField } = useMemo( () => {
