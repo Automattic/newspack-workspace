@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef } from '@wordpress/element';
 /**
  * Internal dependencies
  */
-import { Accordion, Divider, Grid, SectionHeader } from '../../../../../packages/components/src';
+import { Accordion, Divider, Grid, SectionHeader, useUnsavedChangesDialog } from '../../../../../packages/components/src';
 import { WIZARD_STORE_NAMESPACE } from '../../../../../packages/components/src/wizard/store';
 import WizardsTab from '../../../wizards-tab';
 import { SettingsField } from './settings-field';
@@ -23,6 +23,11 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 	const integration = integrations[ integrationId ];
 
 	const hasPending = pendingChanges[ integrationId ] && Object.keys( pendingChanges[ integrationId ] ).length > 0;
+	const integrationSaving = saving[ integrationId ];
+
+	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( {
+		when: !! hasPending && ! integrationSaving,
+	} );
 
 	// Split settings into groups.
 	const { settingsFields, inboundField, outboundField } = useMemo( () => {
@@ -59,7 +64,6 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 	}, [ integration?.id, integration?.name, integration?.description, setHeaderData ] );
 
 	// Update only the header actions when save state changes.
-	const integrationSaving = saving[ integrationId ];
 	useEffect( () => {
 		if ( ! integration ) {
 			return;
@@ -139,88 +143,93 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 	};
 
 	return (
-		<WizardsTab isFetching={ loading }>
-			<div className="newspack-configure-view">
-				{ /* Section 1: Settings */ }
-				{ settingsFields.length > 0 && (
-					<Grid columns={ 2 } gutter={ 32 }>
-						<SectionHeader heading={ 2 } title={ __( 'Settings', 'newspack-plugin' ) } />
-						<Grid columns={ 1 } rowGap={ 16 }>
-							{ settingsFields.filter( fieldIsVisible ).map( field => (
-								<SettingsField
-									key={ field.key }
-									field={ field }
-									value={ getFieldValue( field ) }
-									onChange={ val => onFieldChange( integrationId, field.key, val ) }
-								/>
-							) ) }
-						</Grid>
-					</Grid>
-				) }
-
-				{ /* Section 2: Inbound */ }
-				{ inboundField && (
-					<>
-						<Divider alignment="full-width" variant="tertiary" marginTop={ 32 } marginBottom={ 32 } />
-						<Grid columns={ 2 } gutter={ 32 } noMargin>
-							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
-							<Grid columns={ 1 } rowGap={ 8 } noMargin>
-								{ ( inboundField.options || [] ).map( option => {
-									// Framework injects options as { value, label } objects
-									// (see class-integration.php:get_settings_config()), but accepts bare strings
-									// for backward compatibility.
-									const optionValue = typeof option === 'string' ? option : option.value;
-									const optionLabel = typeof option === 'string' ? option : option.label || option.value;
-									const currentValue = getFieldValue( inboundField );
-									const selected = Array.isArray( currentValue ) ? currentValue : [];
-									return (
-										<CheckboxControl
-											className="newspack-checkbox-control"
-											key={ optionValue }
-											label={ optionLabel }
-											checked={ selected.includes( optionValue ) }
-											onChange={ checked => handleCheckboxListChange( inboundField.key, currentValue, optionValue, checked ) }
-										/>
-									);
-								} ) }
+		<>
+			{ navBlockDialog }
+			<WizardsTab isFetching={ loading }>
+				<div className="newspack-configure-view">
+					{ /* Section 1: Settings */ }
+					{ settingsFields.length > 0 && (
+						<Grid columns={ 2 } gutter={ 32 }>
+							<SectionHeader heading={ 2 } title={ __( 'Settings', 'newspack-plugin' ) } />
+							<Grid columns={ 1 } rowGap={ 16 }>
+								{ settingsFields.filter( fieldIsVisible ).map( field => (
+									<SettingsField
+										key={ field.key }
+										field={ field }
+										value={ getFieldValue( field ) }
+										onChange={ val => onFieldChange( integrationId, field.key, val ) }
+									/>
+								) ) }
 							</Grid>
 						</Grid>
-					</>
-				) }
+					) }
 
-				{ /* Section 3: Outbound */ }
-				{ outboundField && (
-					<>
-						<Divider alignment="full-width" variant="tertiary" marginTop={ 32 } marginBottom={ 32 } />
-						<Grid columns={ 2 } gutter={ 32 } noMargin>
-							<SectionHeader heading={ 2 } title={ __( 'Outbound', 'newspack-plugin' ) } noMargin />
-							<div>
-								{ ( outboundField.grouped_options || [] ).map( ( group, index ) => {
-									const currentValue = getFieldValue( outboundField );
-									const selected = Array.isArray( currentValue ) ? currentValue : [];
-									return (
-										<Accordion key={ group.section } title={ group.section } defaultOpen={ index === 0 }>
-											<Grid columns={ 1 } rowGap={ 8 } noMargin>
-												{ group.fields.map( fieldName => (
-													<CheckboxControl
-														className="newspack-checkbox-control"
-														key={ fieldName }
-														label={ fieldName }
-														checked={ selected.includes( fieldName ) }
-														onChange={ checked =>
-															handleCheckboxListChange( outboundField.key, currentValue, fieldName, checked )
-														}
-													/>
-												) ) }
-											</Grid>
-										</Accordion>
-									);
-								} ) }
-							</div>
-						</Grid>
-					</>
-				) }
-			</div>
-		</WizardsTab>
+					{ /* Section 2: Inbound */ }
+					{ inboundField && (
+						<>
+							<Divider alignment="full-width" variant="tertiary" marginTop={ 32 } marginBottom={ 32 } />
+							<Grid columns={ 2 } gutter={ 32 } noMargin>
+								<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
+								<Grid columns={ 1 } rowGap={ 8 } noMargin>
+									{ ( inboundField.options || [] ).map( option => {
+										// Framework injects options as { value, label } objects
+										// (see class-integration.php:get_settings_config()), but accepts bare strings
+										// for backward compatibility.
+										const optionValue = typeof option === 'string' ? option : option.value;
+										const optionLabel = typeof option === 'string' ? option : option.label || option.value;
+										const currentValue = getFieldValue( inboundField );
+										const selected = Array.isArray( currentValue ) ? currentValue : [];
+										return (
+											<CheckboxControl
+												className="newspack-checkbox-control"
+												key={ optionValue }
+												label={ optionLabel }
+												checked={ selected.includes( optionValue ) }
+												onChange={ checked =>
+													handleCheckboxListChange( inboundField.key, currentValue, optionValue, checked )
+												}
+											/>
+										);
+									} ) }
+								</Grid>
+							</Grid>
+						</>
+					) }
+
+					{ /* Section 3: Outbound */ }
+					{ outboundField && (
+						<>
+							<Divider alignment="full-width" variant="tertiary" marginTop={ 32 } marginBottom={ 32 } />
+							<Grid columns={ 2 } gutter={ 32 } noMargin>
+								<SectionHeader heading={ 2 } title={ __( 'Outbound', 'newspack-plugin' ) } noMargin />
+								<div>
+									{ ( outboundField.grouped_options || [] ).map( ( group, index ) => {
+										const currentValue = getFieldValue( outboundField );
+										const selected = Array.isArray( currentValue ) ? currentValue : [];
+										return (
+											<Accordion key={ group.section } title={ group.section } defaultOpen={ index === 0 }>
+												<Grid columns={ 1 } rowGap={ 8 } noMargin>
+													{ group.fields.map( fieldName => (
+														<CheckboxControl
+															className="newspack-checkbox-control"
+															key={ fieldName }
+															label={ fieldName }
+															checked={ selected.includes( fieldName ) }
+															onChange={ checked =>
+																handleCheckboxListChange( outboundField.key, currentValue, fieldName, checked )
+															}
+														/>
+													) ) }
+												</Grid>
+											</Accordion>
+										);
+									} ) }
+								</div>
+							</Grid>
+						</>
+					) }
+				</div>
+			</WizardsTab>
+		</>
 	);
 };
