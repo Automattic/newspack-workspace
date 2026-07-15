@@ -30,6 +30,17 @@ final class Modal_Checkout {
 	const CHECKOUT_REGISTRATION_ORDER_META_KEY = '_newspack_checkout_registration_meta';
 
 	/**
+	 * Billing fields with server-side format validation in the Store API,
+	 * mapped from their classic checkout keys to Store API address keys.
+	 *
+	 * @var string[]
+	 */
+	const STORE_API_VALIDATED_ADDRESS_FIELDS = [
+		'billing_state'    => 'state',
+		'billing_postcode' => 'postcode',
+	];
+
+	/**
 	 * Whether the modal checkout has been enqueued.
 	 *
 	 * @var boolean
@@ -157,6 +168,8 @@ final class Modal_Checkout {
 		add_filter( 'woocommerce_get_checkout_order_received_url', [ __CLASS__, 'woocommerce_get_return_url' ], 10, 2 );
 		add_filter( 'wc_get_template', [ __CLASS__, 'wc_get_template' ], 10, 2 );
 		add_filter( 'woocommerce_checkout_fields', [ __CLASS__, 'woocommerce_checkout_fields' ] );
+		add_filter( 'rest_pre_dispatch', [ __CLASS__, 'scrub_store_api_checkout_address' ], 10, 3 );
+		add_filter( 'woocommerce_get_country_locale', [ __CLASS__, 'relax_configured_off_locale_fields' ] );
 		add_filter( 'woocommerce_update_order_review_fragments', [ __CLASS__, 'order_review_fragments' ] );
 		add_filter( 'woocommerce_cart_needs_payment', [ __CLASS__, 'cart_needs_payment' ] );
 		add_filter( 'newspack_recaptcha_verify_captcha', [ __CLASS__, 'recaptcha_verify_captcha' ], 10, 3 );
@@ -1332,7 +1345,13 @@ final class Modal_Checkout {
 	}
 
 	/**
-	 * Modify fields for modal checkout.
+	 * Remove the configured-off billing fields from modal checkout requests.
+	 *
+	 * Deliberately scoped to modal checkout: some publishers rely on standard
+	 * Woo checkout flows that predate Audience Management, so those keep the
+	 * stock field set. The express checkout gap this leaves (wallets submitting
+	 * values for fields the buyer cannot see) is handled for modal-originated
+	 * requests by scrub_store_api_checkout_address() below.
 	 *
 	 * @param array $fields Checkout fields.
 	 *
@@ -1343,8 +1362,8 @@ final class Modal_Checkout {
 			return $fields;
 		}
 		$cart = \WC()->cart;
-		// Don't modify fields if shipping is required.
-		if ( $cart->needs_shipping_address() ) {
+		// Don't modify fields if there is no cart or shipping is required.
+		if ( ! $cart || $cart->needs_shipping_address() ) {
 			return $fields;
 		}
 		/**
@@ -1373,6 +1392,199 @@ final class Modal_Checkout {
 		}
 
 		return $fields;
+	}
+
+	/**
+	 * Scrub invalid address values from Store API checkout requests when the
+	 * corresponding billing fields are configured off.
+	 *
+	 * Express checkout wallets submit to wc/store/v1/checkout and can supply
+	 * values the buyer never sees or corrects (e.g. Apple Pay sending a suburb
+	 * as the state), which hard-fails Store API address validation. Values the
+	 * validation would accept are left untouched, and only the billing address
+	 * is scrubbed. Runs on rest_pre_dispatch because the validation happens
+	 * during dispatch.
+	 *
+	 * The shipping address is intentionally out of scope. Carts that need a
+	 * shipping address bail below, and wallets return only billing contact when
+	 * shipping is not requested, so a virtual-cart request carries no shipping
+	 * address to scrub.
+	 *
+	 * Scoped to requests originating from the modal checkout, so any Store API
+	 * checkout outside the modal (e.g. the blocks checkout page or express
+	 * buttons on product pages) keeps stock behavior.
+	 *
+	 * @param mixed            $result  Response to replace the requested version with.
+	 * @param \WP_REST_Server  $server  Server instance.
+	 * @param \WP_REST_Request $request Request used to generate the response.
+	 *
+	 * @return mixed
+	 */
+	public static function scrub_store_api_checkout_address( $result, $server, $request ) {
+		if ( null !== $result ) {
+			return $result;
+		}
+
+		if (
+			! $request instanceof \WP_REST_Request ||
+			'POST' !== $request->get_method() ||
+			0 !== strpos( $request->get_route(), '/wc/store/v1/checkout' )
+		) {
+			return $result;
+		}
+
+		if ( ! self::is_modal_checkout_referer() ) {
+			return $result;
+		}
+
+		if ( ! function_exists( 'WC' ) || ! class_exists( 'WC_Validation' ) ) {
+			return $result;
+		}
+
+		$billing_fields = apply_filters( 'newspack_blocks_donate_billing_fields_keys', [] );
+
+		if ( empty( $billing_fields ) ) {
+			return $result;
+		}
+
+		// Physical-goods flows are never modified. The cart is not always
+		// initialized this early in Store API requests; when it is, bail for
+		// carts that need a shipping address. Only the billing address is
+		// scrubbed, so shipping data is never touched either way.
+		if ( \WC()->cart && \WC()->cart->needs_shipping_address() ) {
+			return $result;
+		}
+
+		$address = $request->get_param( 'billing_address' );
+
+		if ( is_array( $address ) ) {
+			$scrubbed = self::scrub_invalid_address_values( $address, $billing_fields );
+
+			if ( $scrubbed !== $address ) {
+				$request->set_param( 'billing_address', $scrubbed );
+			}
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Whether the current request originates from the modal checkout, based on
+	 * the referer.
+	 *
+	 * Express checkout submissions go to the Store API as JSON, so the usual
+	 * modal_checkout request params are absent. The requests are made from the
+	 * modal checkout iframe, whose URL carries modal_checkout=1, so it shows up
+	 * as the (same-origin) referer.
+	 *
+	 * @return bool
+	 */
+	private static function is_modal_checkout_referer() {
+		$referer = isset( $_SERVER['HTTP_REFERER'] ) ? esc_url_raw( wp_unslash( $_SERVER['HTTP_REFERER'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		if ( ! $referer ) {
+			return false;
+		}
+
+		$query_string = \wp_parse_url( $referer, PHP_URL_QUERY );
+		\wp_parse_str( (string) $query_string, $query_params );
+
+		return ! empty( $query_params['modal_checkout'] );
+	}
+
+	/**
+	 * Drop configured-off address values that would fail Store API validation.
+	 *
+	 * @param array    $address        Store API address (billing or shipping).
+	 * @param string[] $billing_fields Configured billing field keys.
+	 *
+	 * @return array Scrubbed address.
+	 */
+	private static function scrub_invalid_address_values( $address, $billing_fields ) {
+		$country = isset( $address['country'] ) ? $address['country'] : '';
+
+		if (
+			! in_array( 'billing_state', $billing_fields, true ) &&
+			! empty( $address['state'] ) &&
+			is_string( $address['state'] ) &&
+			$country
+		) {
+			$states = \WC()->countries->get_states( $country );
+
+			if ( is_array( $states ) && ! empty( $states ) ) {
+				$code_match = array_key_exists( strtoupper( $address['state'] ), array_change_key_case( $states, CASE_UPPER ) );
+				$name_match = in_array( strtolower( $address['state'] ), array_map( 'strtolower', $states ), true );
+
+				if ( ! $code_match && ! $name_match ) {
+					$address['state'] = '';
+				}
+			}
+		}
+
+		if (
+			! in_array( 'billing_postcode', $billing_fields, true ) &&
+			! empty( $address['postcode'] ) &&
+			is_string( $address['postcode'] ) &&
+			! \WC_Validation::is_postcode( $address['postcode'], $country )
+		) {
+			$address['postcode'] = '';
+		}
+
+		return $address;
+	}
+
+	/**
+	 * Relax locale-required flags for configured-off billing fields.
+	 *
+	 * After an invalid wallet value is scrubbed (see
+	 * scrub_store_api_checkout_address), the Store API order validation would
+	 * still reject the checkout when the country locale marks the field as
+	 * required. A field the site is configured not to collect cannot be
+	 * required.
+	 *
+	 * Scoped to modal-originated requests so standard Woo flows keep the stock
+	 * locale rules.
+	 *
+	 * @param array $locale Country locale field settings.
+	 *
+	 * @return array
+	 */
+	public static function relax_configured_off_locale_fields( $locale ) {
+		if ( ! self::is_modal_checkout_referer() && ! self::is_modal_checkout() ) {
+			return $locale;
+		}
+
+		$billing_fields = apply_filters( 'newspack_blocks_donate_billing_fields_keys', [] );
+
+		if ( empty( $billing_fields ) ) {
+			return $locale;
+		}
+
+		// Never relax requirements when the cart needs a shipping address:
+		// physical-goods flows keep the full locale rules.
+		if ( function_exists( 'WC' ) && \WC()->cart && \WC()->cart->needs_shipping_address() ) {
+			return $locale;
+		}
+
+		$off = [];
+
+		foreach ( self::STORE_API_VALIDATED_ADDRESS_FIELDS as $config_key => $address_key ) {
+			if ( ! in_array( $config_key, $billing_fields, true ) ) {
+				$off[] = $address_key;
+			}
+		}
+
+		if ( empty( $off ) ) {
+			return $locale;
+		}
+
+		foreach ( array_keys( $locale ) as $country ) {
+			foreach ( $off as $address_key ) {
+				$locale[ $country ][ $address_key ]['required'] = false;
+			}
+		}
+
+		return $locale;
 	}
 
 	/**

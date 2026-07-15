@@ -1,10 +1,24 @@
 #!/bin/bash
 
-# Build a ready-to-run local environment for the newspack-e2e-tests Playwright
-# suite, end to end. This is the one-shot equivalent of the manual dance of
+# Build a ready-to-run local environment for the Newspack Playwright e2e suite
+# (in-repo at e2e/). This is the one-shot equivalent of the manual dance of
 # creating worktrees, spinning up an isolated env, building any unbuilt assets,
-# installing the e2e helper plugin, running the e2e reset script, and pointing
-# the e2e repo's .env at the new site.
+# installing the e2e helper plugin, and pointing the suite's .env at the new site.
+#
+# The suite provisions the site itself on every run: its setup projects run
+# e2e-setup.sh / site-setup.sh (a full from-scratch rebuild against the installed
+# plugin code) via `npm run test:setup`. So this script does NOT reset the DB or
+# seed content — it only stands the env up with the plugins the suite activates
+# present, installs the e2e helper plugin, and configures .env.
+#
+# Plugins the suite activates, and where they come from on a standard checkout:
+#   - newspack-plugin/blocks/popups/newsletters/ads + newspack-theme — worktrees
+#     on the target branch, created and built here.
+#   - newspack-manager and the WooCommerce stack (woocommerce, -gateway-stripe,
+#     -subscriptions, -memberships, -name-your-price) — mounted into the env from
+#     the workspace's plugins/ and repos/plugins/ (present on a standard checkout;
+#     the env's ./repos and ./plugins mounts symlink them into wp-content/plugins).
+#   - e2e-plugin — a single-file helper shipped in e2e/, installed here.
 #
 # Usage:
 #   n env e2e-setup <name> [options]
@@ -12,8 +26,7 @@
 # Options:
 #   --branch <branch>     Branch to check out for each plugin (default: release).
 #   --domain <domain>     Site domain (default: <name>.test).
-#   --e2e-repo <path>     Path to the newspack-e2e-tests checkout
-#                         (default: a sibling of this workspace).
+#   --e2e-repo <path>     Path to the e2e suite (default: <workspace>/e2e).
 #   -h, --help            Show this help.
 #
 # Safe to re-run: an existing environment is reused, and only worktrees missing
@@ -36,11 +49,24 @@ E2E_PLUGINS=(
 # load it (e.g. newspack-plugin's editor bundle, newspack-theme's compiled JS).
 build_marker_for() {
     case "$1" in
-        newspack-plugin) echo "dist/editor.asset.php" ;;
+        # commons is newspack-plugin's shared webpack runtime chunk — always emitted
+        # by a successful build, so its asset manifest is a reliable "is built" marker.
+        newspack-plugin) echo "dist/commons.asset.php" ;;
         # newspack-theme is a meta-repo; the active classic theme lives in a nested
         # newspack-theme/ subdir, and that's where its JS build output lands.
         newspack-theme)  echo "newspack-theme/js/dist" ;;
         *)               echo "dist" ;;
+    esac
+}
+
+# The in-container mount root a worktree is served from: themes live under
+# /newspack-themes, everything else under /newspack-plugins. (The worktree is
+# NOT mounted at /newspack-repos — that root is for repos/plugins checkouts — so
+# the build marker must be looked up under the serving root, not there.)
+container_root_for() {
+    case "$1" in
+        newspack-theme) echo "/newspack-themes" ;;
+        *)              echo "/newspack-plugins" ;;
     esac
 }
 
@@ -52,7 +78,7 @@ usage() {
 env_name=""
 branch="release"
 domain=""
-e2e_repo="$(cd "$NABSPATH/.." 2>/dev/null && pwd)/newspack-e2e-tests"
+e2e_repo="$NABSPATH/e2e"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -86,12 +112,12 @@ validate_name "$branch" "branch"
 [[ -n "$domain" ]] && validate_domain "$domain"
 [[ -z "$domain" ]] && domain="${env_name}.test"
 
-# Resolve the e2e-tests repo and the two files we pull from it.
+# Resolve the e2e suite and the helper plugin we install from it. e2e-setup.sh
+# is checked too, as a sanity check that $e2e_repo really points at the suite.
 e2e_plugin_src="$e2e_repo/e2e-plugin.php"
-e2e_reset_src="$e2e_repo/e2e-reset.sh"
-if [[ ! -f "$e2e_plugin_src" || ! -f "$e2e_reset_src" ]]; then
-    log_error "Could not find e2e-plugin.php / e2e-reset.sh in: $e2e_repo"
-    log_error "Pass the e2e-tests checkout with --e2e-repo <path>."
+if [[ ! -f "$e2e_plugin_src" || ! -f "$e2e_repo/e2e-setup.sh" ]]; then
+    log_error "Could not find e2e-plugin.php / e2e-setup.sh in: $e2e_repo"
+    log_error "Pass the e2e suite path with --e2e-repo <path>."
     exit 1
 fi
 
@@ -153,12 +179,13 @@ if [[ "$domain" == *.test || "$domain" == *.local ]] && ! grep -q "[[:space:]]${
 fi
 
 # 3. Build any worktree that still lacks compiled assets. --build only copies
-#    from repos/<plugin>, so a worktree whose source repo was never built has
-#    nothing to copy — compile it directly inside the container (it mounts the
-#    worktree at /newspack-repos/<repo>).
+#    from a matching repos/<plugin> checkout, so a monorepo worktree with no such
+#    source has nothing to copy — compile it directly inside the container, which
+#    serves the worktree from /newspack-plugins/<repo> (themes: /newspack-themes).
 for repo in "${E2E_PLUGINS[@]}"; do
     marker=$(build_marker_for "$repo")
-    if docker exec "$container_name" test -e "/newspack-repos/${repo}/${marker}" 2>/dev/null; then
+    root=$(container_root_for "$repo")
+    if docker exec "$container_name" test -e "${root}/${repo}/${marker}" 2>/dev/null; then
         log_info "$repo already has built assets — skipping build."
     else
         log_info "Building $repo (missing $marker)..."
@@ -167,12 +194,11 @@ for repo in "${E2E_PLUGINS[@]}"; do
     fi
 done
 
-# 3b. Wire Stripe test keys into the e2e repo's .env so the donations test can run
-#     locally. e2e-reset.sh reads STRIPE_PUB_KEY / STRIPE_SECRECT_KEY from the site's
-#     .env (which we copy into the container in step 4). The keys are sourced from
-#     newspack-workspace/bin/secrets.json — the workspace's canonical secrets file.
-#     (Today this lives in newspack-docker; once the e2e suite is merged into the
-#     workspace, that same secrets.json will be the single home for these keys.)
+# 3b. Wire Stripe test keys into the suite's .env so the donations test can run
+#     locally. dotenv loads .env into the Playwright process, which forwards
+#     STRIPE_PUB_KEY / STRIPE_SECRET_KEY into provisioning (e2e-setup.sh applies
+#     them to the WooCommerce Stripe gateway). Keys are sourced from the
+#     workspace's canonical secrets file when present.
 secrets_file="$NABSPATH/bin/secrets.json"
 if [[ -f "$secrets_file" ]] && command -v jq >/dev/null 2>&1; then
     stripe_pub=$(jq -r '.stripe.testPublishableKey // empty' "$secrets_file")
@@ -181,45 +207,18 @@ if [[ -f "$secrets_file" ]] && command -v jq >/dev/null 2>&1; then
         log_info "Wiring Stripe test keys from secrets.json into $e2e_repo/.env..."
         touch "$e2e_repo/.env"
         upsert_env_var "STRIPE_PUB_KEY" "$stripe_pub" "$e2e_repo/.env"
-        # Note: e2e-reset.sh expects the (misspelled) STRIPE_SECRECT_KEY var name.
-        upsert_env_var "STRIPE_SECRECT_KEY" "$stripe_secret" "$e2e_repo/.env"
+        upsert_env_var "STRIPE_SECRET_KEY" "$stripe_secret" "$e2e_repo/.env"
     else
         log_warning "No Stripe test keys in secrets.json — the donations test will fail locally."
     fi
 fi
 
-# 4. Install the e2e helper plugin and run the e2e reset script, both pulled from
-#    the e2e-tests repo (not vendored here). e2e-reset.sh resolves the WordPress
-#    install from its working directory, so it runs from the web root.
+# 4. Install the e2e helper plugin (a single-file plugin shipped in the suite, not
+#    vendored in the workspace). The suite activates it by slug during provisioning.
 log_info "Installing the e2e helper plugin..."
 docker cp "$e2e_plugin_src" "${container_name}:/var/www/html/wp-content/plugins/e2e-plugin.php"
 
-log_info "Running e2e-reset.sh (Newspack setup, sample content, snapshots, Woo)..."
-docker cp "$e2e_reset_src" "${container_name}:/var/www/html/e2e-reset.sh"
-# Copy the e2e repo's .env too, so optional Stripe keys are picked up; removed after.
-copied_env=false
-if [[ -f "$e2e_repo/.env" ]]; then
-    docker cp "$e2e_repo/.env" "${container_name}:/var/www/html/.env"
-    copied_env=true
-fi
-# e2e-reset.sh has no `set -e`; snapshot/manager/premium-Woo steps can fail
-# harmlessly on a local env, so don't let a non-zero exit abort this script.
-docker exec "$container_name" bash -c "cd /var/www/html && bash e2e-reset.sh" \
-    || log_warning "e2e-reset.sh reported errors (often snapshot/manager/premium-Woo steps); continuing."
-# Clean up the transient files from the web root (keep the activated plugin).
-docker exec "$container_name" rm -f /var/www/html/e2e-reset.sh
-[[ "$copied_env" == true ]] && docker exec "$container_name" rm -f /var/www/html/.env
-
-# 5. Re-assert pretty permalinks. `wp newspack setup` (run by e2e-reset) can flush
-#    rewrite rules, so write them out once more and hand .htaccess back to Apache.
-log_info "Ensuring permalink rewrite rules are in place..."
-run_user="${USE_CUSTOM_APACHE_USER:-www-data}"
-docker exec "$container_name" wp --allow-root rewrite structure '/%year%/%monthnum%/%day%/%postname%/' --hard >/dev/null 2>&1
-docker exec "$container_name" wp --allow-root rewrite flush --hard >/dev/null 2>&1
-docker exec "$container_name" chown "$run_user":"$run_user" /var/www/html/.htaccess 2>/dev/null || true
-docker exec "$container_name" wp --allow-root cache flush >/dev/null 2>&1 || true
-
-# 6. Point the e2e repo's .env at this environment, preserving any other keys
+# 5. Point the suite's .env at this environment, preserving any other keys
 #    (e.g. Stripe credentials) already present.
 log_info "Configuring $e2e_repo/.env..."
 touch "$e2e_repo/.env"
@@ -231,6 +230,8 @@ echo ""
 log_success "Local e2e environment '$env_name' is ready at https://${domain}/"
 log_success "$e2e_repo/.env is configured (SITE_URL=https://${domain})."
 echo ""
-echo "Run the suite against it:"
+echo "Run the suite against it (its setup projects provision the site each run):"
 echo "  cd $e2e_repo"
-echo "  npx playwright test --project=\"Vanilla in Desktop Chrome\""
+echo "  npm ci && npx playwright install   # first time only"
+echo "  npm run test:setup                 # full run (provision + all projects)"
+echo "  USE_SETUP=true npx playwright test --project=\"Vanilla in Desktop Chrome\"  # one project"

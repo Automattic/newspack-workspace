@@ -82,7 +82,9 @@ class Newspack_Test_Reader_Activation_Sync extends WP_UnitTestCase {
 		Integrations::enable( 'esp' );
 
 		// Allow ESP sync via constant. We're not testing `Newspack_Manager::is_connected_to_production_manager()` here.
-		define( 'NEWSPACK_ALLOW_READER_SYNC', true );
+		if ( ! defined( 'NEWSPACK_ALLOW_READER_SYNC' ) ) {
+			define( 'NEWSPACK_ALLOW_READER_SYNC', true );
+		}
 		$errors = $esp_integration->can_sync( true );
 		$this->assertNotContains( 'esp_sync_not_allowed', $errors->get_error_codes(), 'RAS ESP Sync is allowed via constant' );
 
