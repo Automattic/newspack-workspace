@@ -77,6 +77,17 @@ const AudienceIntegrations = ( props, ref ) => {
 		} ) );
 	}, [] );
 
+	const handleDiscardChanges = useCallback( integrationId => {
+		setPendingChanges( prev => {
+			if ( ! prev[ integrationId ] ) {
+				return prev;
+			}
+			const next = { ...prev };
+			delete next[ integrationId ];
+			return next;
+		} );
+	}, [] );
+
 	const handleSave = useCallback( integrationId => {
 		setPendingChanges( currentPendingChanges => {
 			const changes = currentPendingChanges[ integrationId ];
@@ -227,6 +238,7 @@ const AudienceIntegrations = ( props, ref ) => {
 		activating,
 		loading,
 		onFieldChange: handleFieldChange,
+		onDiscardChanges: handleDiscardChanges,
 		onSave: handleSave,
 		onToggleEnabled: handleToggleEnabled,
 		onActivatePlugin: handleActivatePlugin,

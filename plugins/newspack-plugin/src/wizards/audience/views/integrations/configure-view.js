@@ -16,7 +16,7 @@ import { SettingsField } from './settings-field';
 
 import './configure-view.scss';
 
-export const ConfigureView = ( { integrations, loading, pendingChanges, saving, onFieldChange, onSave, match } ) => {
+export const ConfigureView = ( { integrations, loading, pendingChanges, saving, onFieldChange, onDiscardChanges, onSave, match } ) => {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	const integrationId = match?.params?.integrationId;
@@ -26,8 +26,14 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 	const integrationSaving = saving[ integrationId ];
 
 	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( {
-		when: !! hasPending && ! integrationSaving,
+		when: !! hasPending && ! integrationSaving && !! integration,
 	} );
+
+	// Mirrors the discard-changes dialog's promise: ConfigureView only unmounts
+	// once the user has confirmed discarding (or had nothing pending), so
+	// clearing this integration's pending changes here is exactly what "discard"
+	// means. Must run for every render path — placed above the early returns.
+	useEffect( () => () => onDiscardChanges( integrationId ), [ integrationId, onDiscardChanges ] );
 
 	// Split settings into groups.
 	const { settingsFields, inboundField, outboundField } = useMemo( () => {

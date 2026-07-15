@@ -36,19 +36,19 @@ const INTEGRATION = {
 	settings: [],
 };
 
-const renderConfigureView = ( { pendingChanges = {}, saving = false } = {} ) => {
+const renderConfigureView = ( { integrations = { esp: INTEGRATION }, pendingChanges = {}, saving = false, onDiscardChanges = jest.fn() } = {} ) =>
 	render(
 		<ConfigureView
-			integrations={ { esp: INTEGRATION } }
+			integrations={ integrations }
 			loading={ false }
 			pendingChanges={ pendingChanges }
 			saving={ { esp: saving } }
 			onFieldChange={ jest.fn() }
+			onDiscardChanges={ onDiscardChanges }
 			onSave={ jest.fn() }
 			match={ { params: { integrationId: 'esp' } } }
 		/>
 	);
-};
 
 describe( 'ConfigureView unsaved-changes guard', () => {
 	beforeEach( () => {
@@ -56,14 +56,26 @@ describe( 'ConfigureView unsaved-changes guard', () => {
 		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
 	} );
 
-	it( 'arms the unsaved-changes guard only while there are pending changes and no save in flight', () => {
+	it( 'does not arm the guard when there are no pending changes and no save in flight', () => {
 		renderConfigureView( { pendingChanges: {}, saving: false } );
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
+	} );
 
+	it( 'arms the guard while there are pending changes and no save in flight', () => {
 		renderConfigureView( { pendingChanges: { esp: { mailchimp_audience_id: 'abc123' } }, saving: false } );
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
+	} );
 
+	it( 'does not arm the guard while a save is in flight, even with pending changes', () => {
 		renderConfigureView( { pendingChanges: { esp: { mailchimp_audience_id: 'abc123' } }, saving: true } );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
+	} );
+
+	// Pins Finding 2: the "integration not found" branch renders no dialog, so the
+	// guard must never arm there even if pendingChanges still has a stale entry
+	// (e.g. from an integration that disappeared from the payload on refetch).
+	it( 'does not arm the guard when the integration is missing from the payload', () => {
+		renderConfigureView( { integrations: {}, pendingChanges: { esp: { mailchimp_audience_id: 'abc123' } }, saving: false } );
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
 	} );
 
@@ -74,5 +86,20 @@ describe( 'ConfigureView unsaved-changes guard', () => {
 		} );
 		renderConfigureView( { pendingChanges: { esp: { mailchimp_audience_id: 'abc123' } }, saving: false } );
 		expect( screen.getByTestId( 'guard-dialog' ) ).toBeInTheDocument();
+	} );
+
+	// Pins Finding 1 at the ConfigureView level: unmounting must call the discard
+	// callback for the integration currently in view. The corresponding
+	// index.test.js coverage confirms the parent's real state actually clears.
+	it( 'calls onDiscardChanges for the current integration on unmount', () => {
+		const onDiscardChanges = jest.fn();
+		const { unmount } = renderConfigureView( {
+			pendingChanges: { esp: { mailchimp_audience_id: 'abc123' } },
+			saving: false,
+			onDiscardChanges,
+		} );
+		expect( onDiscardChanges ).not.toHaveBeenCalled();
+		unmount();
+		expect( onDiscardChanges ).toHaveBeenCalledWith( 'esp' );
 	} );
 } );
