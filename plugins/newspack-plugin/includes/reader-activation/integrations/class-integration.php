@@ -637,11 +637,11 @@ abstract class Integration {
 	 * Accepts an array of field keys (as sent by the UI), fetches the full
 	 * field data from the integration, and stores the matching raw field arrays.
 	 *
-	 * @param string[] $keys Array of field keys to enable.
+	 * @param array $fields Array of field keys, or a map of key => matching_function.
 	 *
 	 * @return bool True if updated, false otherwise.
 	 */
-	public function update_enabled_incoming_fields( $keys ) {
+	public function update_enabled_incoming_fields( $fields ) {
 		$available = $this->get_available_incoming_fields();
 		if ( is_wp_error( $available ) ) {
 			$available = [];
@@ -655,12 +655,28 @@ abstract class Integration {
 			}
 		}
 
-		// Store as key => raw_data map.
+		// Normalize input to a map of key => chosen matching function. Accept both a
+		// sequential list of keys (legacy callers) and an associative map (typed UI).
+		$selection = [];
+		foreach ( $fields as $index => $value ) {
+			if ( is_int( $index ) ) {
+				$selection[ (string) $value ] = null;
+			} else {
+				$selection[ (string) $index ] = is_string( $value ) ? $value : null;
+			}
+		}
+
+		$allowed = [ 'default', 'range', 'list__in', 'list__not_in' ];
+
+		// Store as key => raw_data map, overriding matching_function when chosen.
 		$fields_to_store = [];
-		foreach ( $keys as $key ) {
+		foreach ( $selection as $key => $matching_function ) {
 			$raw_data = [];
 			if ( isset( $available_by_key[ $key ] ) ) {
 				$raw_data = $available_by_key[ $key ]->get_raw_data();
+			}
+			if ( null !== $matching_function && in_array( $matching_function, $allowed, true ) ) {
+				$raw_data['matching_function'] = $matching_function;
 			}
 			$fields_to_store[ $key ] = $raw_data;
 		}

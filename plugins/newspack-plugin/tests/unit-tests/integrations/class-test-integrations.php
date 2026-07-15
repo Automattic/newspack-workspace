@@ -389,6 +389,32 @@ class Test_Integrations extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * A per-field matching_function choice is persisted into the stored raw_data,
+	 * and a plain key list still stores fields without overriding the operator.
+	 *
+	 * @group integrations
+	 */
+	public function test_update_enabled_incoming_fields_persists_operator() {
+		$integration = new Sample_Integration( 'test-id', 'Test Integration' );
+
+		// Associative map: key => chosen matching_function.
+		$integration->update_enabled_incoming_fields( [ 'amount' => 'range' ] );
+		$stored = \get_option( 'newspack_integration_incoming_fields_test-id' );
+		$this->assertArrayHasKey( 'amount', $stored );
+		$this->assertSame( 'range', $stored['amount']['matching_function'] );
+
+		// Rejects an operator not on the allowlist (never stores the bogus value).
+		$integration->update_enabled_incoming_fields( [ 'amount' => 'bogus' ] );
+		$stored = \get_option( 'newspack_integration_incoming_fields_test-id' );
+		$this->assertNotSame( 'bogus', $stored['amount']['matching_function'] ?? null );
+
+		// Backward compatibility: a sequential key list still works.
+		$integration->update_enabled_incoming_fields( [ 'first_name', 'last_name' ] );
+		$result_keys = array_map( fn( $f ) => $f->get_key(), $integration->get_enabled_incoming_fields() );
+		$this->assertSame( [ 'first_name', 'last_name' ], $result_keys );
+	}
+
+	/**
 	 * Test enqueue is skipped when no user is logged in.
 	 */
 	public function test_enqueue_skipped_when_not_logged_in() {
