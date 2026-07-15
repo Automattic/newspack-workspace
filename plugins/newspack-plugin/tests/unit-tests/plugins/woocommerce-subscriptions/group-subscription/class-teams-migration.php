@@ -394,4 +394,93 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		Group_Subscription::reset_cache();
 		$this->assertNotContains( $manager_member, array_map( 'intval', Group_Subscription::get_managers( $subscription ) ), 'A dry-run must not actually promote the member.' );
 	}
+
+	/**
+	 * The owner-owned subscription fallback ignores an inactive (e.g. cancelled) group
+	 * subscription — only an active one qualifies, so an unlinked team owning only a
+	 * cancelled group subscription is reported unresolved.
+	 */
+	public function test_backfill_skips_inactive_owner_subscription() {
+		$owner  = $this->create_reader();
+		$member = $this->create_reader();
+		// An owner-owned group subscription that is cancelled, not active.
+		$cancelled = wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'cancelled',
+				'billing_period' => 'month',
+			]
+		);
+		$cancelled->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		$team_id = $this->create_team( $owner, [ $member ], null );
+		$this->set_team_role( $member, $team_id, 'manager' );
+
+		$result = Teams_Migration::backfill_team_managers_for_team( $team_id, true );
+
+		$this->assertFalse( $result['resolved'], 'An inactive owner-owned subscription must not be resolved.' );
+		$this->assertSame( [], $result['promoted'], 'Nothing should be promoted for an unresolved team.' );
+	}
+
+	/**
+	 * The owner-owned subscription fallback ignores an active subscription that is not
+	 * group-enabled — the migration must never repurpose a member's ordinary
+	 * subscription as their group.
+	 */
+	public function test_backfill_skips_non_group_owner_subscription() {
+		$owner  = $this->create_reader();
+		$member = $this->create_reader();
+		// An active but plain (non-group) subscription owned by the team owner.
+		wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		$team_id = $this->create_team( $owner, [ $member ], null );
+		$this->set_team_role( $member, $team_id, 'manager' );
+
+		$result = Teams_Migration::backfill_team_managers_for_team( $team_id, true );
+
+		$this->assertFalse( $result['resolved'], 'An active non-group owner-owned subscription must not be resolved.' );
+		$this->assertSame( [], $result['promoted'], 'Nothing should be promoted for an unresolved team.' );
+	}
+
+	/**
+	 * Among a mix of the owner's subscriptions, the fallback selects the active
+	 * group-enabled one, skipping cancelled and non-group subscriptions — this is the
+	 * idempotency guarantee that re-running the migration reuses the right group.
+	 */
+	public function test_backfill_selects_active_group_subscription_among_mixed() {
+		$owner  = $this->create_reader();
+		$member = $this->create_reader();
+		// Noise the fallback must skip: a cancelled group sub and an active non-group sub.
+		$cancelled = wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'cancelled',
+				'billing_period' => 'month',
+			]
+		);
+		$cancelled->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
+		wcs_create_subscription(
+			[
+				'customer_id'    => $owner,
+				'status'         => 'active',
+				'billing_period' => 'month',
+			]
+		);
+		// The real target: an active, group-enabled subscription.
+		$active_group = $this->create_group_subscription( $owner );
+		Teams_Migration::add_group_member( $active_group, $member );
+
+		$team_id = $this->create_team( $owner, [ $member ], null );
+		$this->set_team_role( $member, $team_id, 'manager' );
+
+		$result = Teams_Migration::backfill_team_managers_for_team( $team_id, true );
+
+		$this->assertTrue( $result['resolved'], 'The active group subscription should resolve.' );
+		$this->assertSame( $active_group->get_id(), $result['subscription_id'], 'The active group subscription should be selected over the cancelled/non-group ones.' );
+		$this->assertSame( [ $member ], $result['promoted'], 'The manager-role member should be promoted into the resolved group.' );
+	}
 }

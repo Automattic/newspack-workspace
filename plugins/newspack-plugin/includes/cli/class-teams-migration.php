@@ -104,8 +104,14 @@ class Teams_Migration {
 
 		if ( $migration_product ) {
 			WP_CLI::line( sprintf( 'Using product: "%s" (ID: %d)', $migration_product->get_name(), $migration_product->get_id() ) );
-			$billing_period   = \get_post_meta( $product_id, '_subscription_period', true );
-			$billing_interval = \get_post_meta( $product_id, '_subscription_period_interval', true );
+			// For a variable-subscription parent these meta live on the variation, not
+			// the parent, and come back empty; default them the same way
+			// create_group_subscription()/create_individual_subscription() do so an
+			// empty period/interval never flows into wcs_create_subscription().
+			$period_meta      = \get_post_meta( $product_id, '_subscription_period', true );
+			$interval_meta    = \get_post_meta( $product_id, '_subscription_period_interval', true );
+			$billing_period   = '' !== $period_meta ? $period_meta : 'month';
+			$billing_interval = '' !== $interval_meta ? (int) $interval_meta : 1;
 		}
 
 		if ( $dry_run ) {
@@ -114,8 +120,11 @@ class Teams_Migration {
 			WP_CLI::line( '' );
 		}
 
-		// Suppress WooCommerce emails to avoid spamming customers during migration.
+		// Suppress WooCommerce emails and Newspack data-event dispatches (ESP/webhooks/
+		// network sync) so this data backfill doesn't masquerade as real new-subscription
+		// activity during the run.
 		self::suppress_woocommerce_emails();
+		self::suppress_data_events();
 
 		$teams = \get_posts(
 			[
@@ -314,6 +323,14 @@ class Teams_Migration {
 			if ( ! $dry_run ) {
 				$subscription->update_meta_data( '_newspack_group_subscription_limit', $group_limit );
 				$subscription->save();
+
+				// The team's seat count is treated as authoritative, so a reused
+				// subscription that already carried more people than the team allows is
+				// saved in an over-limit state. Warn so an operator can notice the shrink.
+				$member_count = Group_Subscription::get_member_count( $subscription );
+				if ( $group_limit > 0 && $member_count > $group_limit ) {
+					WP_CLI::warning( sprintf( 'Team %d: seat limit set to %d but the group holds %d people (owner-inclusive) — the group is now over its limit.', $team_id, $group_limit, $member_count ) );
+				}
 			}
 
 			// Promote team members whose Teams role is `manager` to group managers.
@@ -341,6 +358,10 @@ class Teams_Migration {
 			}
 
 			$summary[] = self::summary_row( $team_id, $subscription_id, $members_added, $managers_promoted, $group_limit, $created_new, $errors );
+
+			// Free the per-request object cache accumulated by the saves above so memory
+			// stays bounded across a large team list.
+			\WP_CLI\Utils\wp_clear_object_cache();
 		}
 
 		$progress->finish();
@@ -499,6 +520,10 @@ class Teams_Migration {
 				'limit'        => 0 === $max_members ? 'Unlimited' : $max_members,
 				'variations'   => $variation_count,
 			];
+
+			// Free the per-request object cache so memory stays bounded across a large
+			// product list.
+			\WP_CLI\Utils\wp_clear_object_cache();
 		}
 
 		$progress->finish();
@@ -612,8 +637,11 @@ class Teams_Migration {
 			WP_CLI::line( '' );
 		}
 
-		// Suppress WooCommerce emails to avoid spamming customers during migration.
+		// Suppress WooCommerce emails and Newspack data-event dispatches (ESP/webhooks/
+		// network sync) so this data backfill doesn't masquerade as real new-subscription
+		// activity during the run.
 		self::suppress_woocommerce_emails();
+		self::suppress_data_events();
 
 		if ( ! empty( $plan_ids ) ) {
 			$plan_ids = array_filter( array_map( 'absint', explode( ',', $plan_ids ) ) );
@@ -672,6 +700,11 @@ class Teams_Migration {
 			}
 
 			foreach ( $memberships as $membership_id ) {
+				// Free the per-request object cache accumulated by prior iterations so
+				// memory stays bounded across a large (unbounded) membership list. The
+				// held $group_subscription / $product objects are unaffected.
+				\WP_CLI\Utils\wp_clear_object_cache();
+
 				$membership_post = \get_post( $membership_id );
 				$user_id         = (int) $membership_post->post_author;
 
@@ -687,9 +720,12 @@ class Teams_Migration {
 					continue;
 				}
 
-				// Skip users whose email domain is in the skip-domains list.
+				// Skip users whose email domain is in the skip-domains list. strrchr
+				// returns false for an address with no `@`; guard it so substr( false, … )
+				// doesn't trip a PHP 8 deprecation.
 				if ( ! empty( $skip_domains ) ) {
-					$user_domain = strtolower( substr( strrchr( $user->user_email, '@' ), 1 ) );
+					$at_and_domain = strrchr( $user->user_email, '@' );
+					$user_domain   = $at_and_domain ? strtolower( substr( $at_and_domain, 1 ) ) : '';
 					if ( in_array( $user_domain, $skip_domains, true ) ) {
 						WP_CLI::line( sprintf( '  Membership %d (user %d, %s): skipped — domain in skip list.', $membership_id, $user_id, $user->user_email ) );
 						continue;
@@ -713,6 +749,14 @@ class Teams_Migration {
 						'end_date'      => '—',
 						'sub_id'        => $dry_run ? '(dry run - group)' : $group_subscription->get_id(),
 					];
+					continue;
+				}
+
+				// Individual mode: skip a member who already owns an active subscription
+				// this migration created for the same product, so a re-run is safe and
+				// doesn't stack duplicate $0 subscriptions.
+				if ( self::member_has_migration_subscription( $user_id, $product_id ) ) {
+					WP_CLI::line( sprintf( '  Membership %d (user %d, %s): skipped — already has an active migration subscription for this product.', $membership_id, $user_id, $user->user_email ) );
 					continue;
 				}
 
@@ -1198,16 +1242,7 @@ class Teams_Migration {
 			);
 		}
 
-		$dates_to_set = [
-			'start'        => $start_date,
-			'next_payment' => gmdate( 'Y-m-d H:i:s', strtotime( "+$billing_interval $billing_period", strtotime( $start_date ) ) ),
-		];
-		if ( $end_date ) {
-			$dates_to_set['end'] = $end_date;
-			if ( strtotime( $dates_to_set['next_payment'] ) >= strtotime( $end_date ) ) {
-				unset( $dates_to_set['next_payment'] );
-			}
-		}
+		$dates_to_set = self::build_subscription_dates( $start_date, $end_date, $billing_interval, $billing_period );
 
 		try {
 			$new_sub->update_dates( $dates_to_set );
@@ -1254,16 +1289,7 @@ class Teams_Migration {
 
 		$subscription->set_billing_period( $billing_period );
 		$subscription->set_billing_interval( $billing_interval );
-		$dates_to_set = [
-			'start'        => $start_date,
-			'next_payment' => gmdate( 'Y-m-d H:i:s', strtotime( "+$billing_interval $billing_period", strtotime( $start_date ) ) ),
-		];
-		if ( $end_date ) {
-			$dates_to_set['end'] = $end_date;
-			if ( strtotime( $dates_to_set['next_payment'] ) >= strtotime( $end_date ) ) {
-				unset( $dates_to_set['next_payment'] );
-			}
-		}
+		$dates_to_set = self::build_subscription_dates( $start_date, $end_date, $billing_interval, $billing_period );
 
 		try {
 			$subscription->update_dates( $dates_to_set );
@@ -1419,6 +1445,127 @@ class Teams_Migration {
 		\add_filter( 'woocommerce_email_enabled_customer_processing_order', '__return_false' );
 		\add_filter( 'woocommerce_email_enabled_new_order', '__return_false' );
 		\add_filter( 'wcs_send_auto_renewal_emails', '__return_false' );
+	}
+
+	/**
+	 * Suppress Newspack data-event dispatches for the rest of this CLI process.
+	 *
+	 * Member/manager writes already fire no data events, but activating a created
+	 * subscription fires `woocommerce_subscription_status_updated`, which Newspack's
+	 * listeners turn into dispatched data events (e.g. `woo_subscription_updated`).
+	 * Those reach the ESP contact sync, the Webhooks dispatcher, and — on a Network
+	 * Node — the Hub subscription-sync listener, making a data backfill look like a
+	 * burst of real new-subscription activity. Cancelling the dispatch at
+	 * `newspack_data_events_dispatch_body` (a WP_Error return is the documented cancel
+	 * path) stops that external traffic. Scoped to this process only, so concurrent
+	 * requests are unaffected.
+	 *
+	 * @return void
+	 */
+	private static function suppress_data_events() {
+		\add_filter(
+			'newspack_data_events_dispatch_body',
+			function () {
+				return new \WP_Error( 'newspack_migration_suppressed', 'Data event dispatch suppressed during membership migration.' );
+			}
+		);
+	}
+
+	/**
+	 * Build the update_dates() payload for a migration subscription.
+	 *
+	 * Rolls next_payment forward to the first future occurrence rather than
+	 * start + one interval, so migrating a team older than a single billing period
+	 * never stores a past-due next_payment on a live subscription (which WooCommerce
+	 * Subscriptions can treat as overdue and process immediately). An end date is set
+	 * only when it is in the future — mirroring migrate-manual-members — so an already
+	 * expired team migrates as an ongoing subscription instead of erroring on a
+	 * past end date. next_payment is dropped when it would fall on or after the end.
+	 *
+	 * @param string $start_date       The subscription start date ('Y-m-d H:i:s' UTC).
+	 * @param string $end_date         The subscription end date ('Y-m-d H:i:s' UTC), or ''.
+	 * @param int    $billing_interval The billing interval.
+	 * @param string $billing_period   The billing period (day/week/month/year).
+	 *
+	 * @return array The dates payload for WC_Subscription::update_dates().
+	 */
+	private static function build_subscription_dates( $start_date, $end_date, $billing_interval, $billing_period ) {
+		$dates_to_set = [
+			'start'        => $start_date,
+			'next_payment' => self::next_future_payment_date( $start_date, $billing_interval, $billing_period ),
+		];
+		if ( $end_date && strtotime( $end_date ) > time() ) {
+			$dates_to_set['end'] = $end_date;
+			if ( strtotime( $dates_to_set['next_payment'] ) >= strtotime( $end_date ) ) {
+				unset( $dates_to_set['next_payment'] );
+			}
+		}
+		return $dates_to_set;
+	}
+
+	/**
+	 * Compute the first future payment date, rolling forward from the start date by
+	 * the billing interval.
+	 *
+	 * @param string $start_date       The subscription start date ('Y-m-d H:i:s' UTC).
+	 * @param int    $billing_interval The billing interval.
+	 * @param string $billing_period   The billing period (day/week/month/year).
+	 *
+	 * @return string The next future payment date ('Y-m-d H:i:s' UTC).
+	 */
+	private static function next_future_payment_date( $start_date, $billing_interval, $billing_period ) {
+		$interval = max( 1, (int) $billing_interval );
+		$period   = $billing_period ? $billing_period : 'month';
+		$now      = time();
+		$start    = strtotime( $start_date );
+		$next     = strtotime( "+$interval $period", $start );
+		// Guard against a period that fails to advance the timestamp (defensive — the
+		// callers default $billing_period), so the loop below can't spin forever.
+		if ( ! $next || $next <= $start ) {
+			return gmdate( 'Y-m-d H:i:s', strtotime( '+1 month', max( $start, $now ) ) );
+		}
+		while ( $next <= $now ) {
+			$next = strtotime( "+$interval $period", $next );
+		}
+		return gmdate( 'Y-m-d H:i:s', $next );
+	}
+
+	/**
+	 * Whether a user already owns an active subscription this migration created for a
+	 * product.
+	 *
+	 * Lets migrate-manual-members' individual mode skip a member already processed on a
+	 * prior run, so re-running doesn't stack duplicate $0 subscriptions.
+	 *
+	 * @param int $user_id    The member user ID.
+	 * @param int $product_id The migration product ID.
+	 *
+	 * @return bool
+	 */
+	private static function member_has_migration_subscription( $user_id, $product_id ) {
+		$user_id    = absint( $user_id );
+		$product_id = absint( $product_id );
+		if ( ! $user_id || ! $product_id || ! function_exists( 'wcs_get_users_subscriptions' ) ) {
+			return false;
+		}
+		foreach ( \wcs_get_users_subscriptions( $user_id ) as $subscription ) {
+			// wcs_get_users_subscriptions is filtered to include member-only groups; require ownership.
+			if ( (int) $subscription->get_user_id() !== $user_id ) {
+				continue;
+			}
+			if ( 'active' !== $subscription->get_status() ) {
+				continue;
+			}
+			if ( 'manual migration' !== $subscription->get_created_via() ) {
+				continue;
+			}
+			foreach ( $subscription->get_items() as $item ) {
+				if ( method_exists( $item, 'get_product_id' ) && (int) $item->get_product_id() === $product_id ) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/**
