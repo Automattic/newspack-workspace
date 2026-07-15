@@ -91,9 +91,15 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 											destinationUrl: setup_url,
 											handoffReturnUrl: window.location.href,
 										},
-									} ).then( response => {
-										window.location.href = response.HandoffLink;
-									} );
+									} )
+										.then( response => {
+											window.location.href = response.HandoffLink;
+										} )
+										// The handoff banner is an enhancement; if registering it fails,
+										// still take the user to the setup screen.
+										.catch( () => {
+											window.location.href = setup_url;
+										} );
 								};
 								const goToConfigure = () => history?.push( `/settings/${ id }` );
 								let enableLabel = __( 'Enable', 'newspack-plugin' );

@@ -159,4 +159,11 @@ describe( 'Audience Integrations settings section card action', () => {
 		await waitFor( () => expect( window.location.href ).toBe( HANDOFF_LINK ) );
 		expect( history.push ).not.toHaveBeenCalled();
 	} );
+
+	it( 'falls back to direct navigation when the handoff request fails', async () => {
+		apiFetch.mockRejectedValue( new Error( 'nope' ) );
+		const { cardProps } = renderSection( { is_connected: false } );
+		cardProps.onEnable();
+		await waitFor( () => expect( window.location.href ).toBe( SETUP_URL ) );
+	} );
 } );

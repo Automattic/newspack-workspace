@@ -95,23 +95,31 @@ const AudienceIntegrations = ( props, ref ) => {
 				path: `${ API_PATH }/${ integrationId }`,
 				method: 'POST',
 				data: { settings },
-			} )
-				.then( () =>
-					apiFetch( {
-						path: `${ API_PATH }/${ integrationId }/enabled`,
-						method: 'POST',
-						data: { enabled: true },
+			} ).then( savedData =>
+				apiFetch( {
+					path: `${ API_PATH }/${ integrationId }/enabled`,
+					method: 'POST',
+					data: { enabled: true },
+				} )
+					// The settings save succeeded even if enabling failed — reflect
+					// the saved values so the UI doesn't offer the modal again for
+					// settings that are already stored.
+					.catch( error => {
+						setIntegrations( savedData );
+						throw error;
 					} )
-				)
-				.then( data => {
-					setIntegrations( data );
-					setPendingChanges( prev => {
-						const next = { ...prev };
-						delete next[ integrationId ];
-						return next;
-					} );
-					return data;
-				} ),
+					.then( data => {
+						setIntegrations( data );
+						return data;
+					} )
+					.finally( () => {
+						setPendingChanges( prev => {
+							const next = { ...prev };
+							delete next[ integrationId ];
+							return next;
+						} );
+					} )
+			),
 		[]
 	);
 
