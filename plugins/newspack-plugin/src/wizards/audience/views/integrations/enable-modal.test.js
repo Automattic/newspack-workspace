@@ -33,6 +33,14 @@ describe( 'getMissingRequiredFields', () => {
 		expect( getMissingRequiredFields( { settings: [ { ...audienceField, value: 'abc123' } ] } ) ).toEqual( [] );
 		expect( getMissingRequiredFields( undefined ) ).toEqual( [] );
 	} );
+
+	it( 'ignores required fields of managed types the modal cannot collect', () => {
+		expect(
+			getMissingRequiredFields( {
+				settings: [ { key: 'token', type: 'oauth', required: true, value: '' }, audienceField ],
+			} )
+		).toEqual( [ audienceField ] );
+	} );
 } );
 
 describe( 'EnableModal', () => {
@@ -53,12 +61,13 @@ describe( 'EnableModal', () => {
 		await waitFor( () => expect( onEnable ).toHaveBeenCalledWith( { mailchimp_audience_id: 'abc123' } ) );
 	} );
 
-	it( 'stays open with re-enabled buttons when enabling fails', async () => {
+	it( 'stays open with re-enabled buttons and an error notice when enabling fails', async () => {
 		const onEnable = jest.fn( () => Promise.reject( new Error( 'nope' ) ) );
 		render( <EnableModal integration={ integration } onClose={ jest.fn() } onEnable={ onEnable } onGoToSettings={ jest.fn() } /> );
 		fireEvent.change( screen.getByLabelText( /Mailchimp Audience/ ), { target: { value: 'abc123' } } );
 		fireEvent.click( screen.getByRole( 'button', { name: 'Enable' } ) );
 		await waitFor( () => expect( screen.getByRole( 'button', { name: 'Enable' } ).disabled ).toBe( false ) );
+		expect( screen.getByText( 'Something went wrong. Please try again.' ) ).toBeTruthy();
 	} );
 
 	it( 'offers the settings view when a required select has no selectable options', () => {

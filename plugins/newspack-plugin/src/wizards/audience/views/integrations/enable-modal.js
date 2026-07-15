@@ -12,6 +12,10 @@ import { SettingsField } from './settings-field';
 
 const isEmptyValue = value => value === undefined || value === null || value === '';
 
+// Server-managed field types (see Integration::MANAGED_FIELD_TYPES) can't be
+// collected here: the settings endpoint refuses client writes for them.
+const MANAGED_FIELD_TYPES = [ 'oauth', 'hidden' ];
+
 /**
  * Get an integration's required settings fields that don't have a value yet.
  *
@@ -19,7 +23,7 @@ const isEmptyValue = value => value === undefined || value === null || value ===
  * @return {Array} Required field declarations with empty values.
  */
 export const getMissingRequiredFields = integration =>
-	( integration?.settings || [] ).filter( field => field.required && isEmptyValue( field.value ) );
+	( integration?.settings || [] ).filter( field => field.required && ! MANAGED_FIELD_TYPES.includes( field.type ) && isEmptyValue( field.value ) );
 
 /**
  * Modal collecting an integration's missing required settings, then enabling it.
@@ -34,6 +38,7 @@ export const getMissingRequiredFields = integration =>
 export const EnableModal = ( { integration, onClose, onEnable, onGoToSettings } ) => {
 	const [ values, setValues ] = useState( {} );
 	const [ enabling, setEnabling ] = useState( false );
+	const [ error, setError ] = useState( null );
 
 	const missingFields = getMissingRequiredFields( integration );
 	const getValue = field => ( field.key in values ? values[ field.key ] : field.value ?? '' );
@@ -46,8 +51,11 @@ export const EnableModal = ( { integration, onClose, onEnable, onGoToSettings } 
 
 	const handleEnable = () => {
 		setEnabling( true );
+		setError( null );
 		onEnable( values )
-			.catch( () => {} )
+			.catch( () => {
+				setError( __( 'Something went wrong. Please try again.', 'newspack-plugin' ) );
+			} )
 			.finally( () => setEnabling( false ) );
 	};
 
@@ -78,6 +86,7 @@ export const EnableModal = ( { integration, onClose, onEnable, onGoToSettings } 
 				</>
 			) : (
 				<>
+					{ error && <Notice isError noticeText={ error } /> }
 					{ missingFields.map( field => (
 						<SettingsField
 							key={ field.key }

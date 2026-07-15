@@ -156,7 +156,7 @@ Settings fields are declared statically in `register_settings_fields()` and stor
 
 Supported `type` values: `text`, `password`, `textarea`, `number`, `checkbox`, `select`, `metadata`, `oauth`, `hidden`. The base class sanitizes values per type before persisting.
 
-`required => true` marks a field that must have a value before the integration can be enabled from the Integrations UI. When the card's Enable action runs while a required field is empty, the UI opens a modal that collects the missing required fields, saves them, and then enables the integration in one step.
+`required => true` marks a field that must have a value before the integration can be enabled from the Integrations UI. When the card's Enable action runs while a required field is empty, the UI opens a modal that collects the missing required fields, saves them, and then enables the integration in one step. Do not combine `required` with the managed field types (`oauth`, `hidden`) — the Integrations UI cannot collect those, and the settings endpoint refuses client writes for them.
 
 `oauth` and `hidden` are **managed field types**: `Integrations::update_integration_settings()` calls `is_managed_settings_field()` and skips them, so admin clients can't overwrite them by POSTing to the settings REST endpoint. They're writable only from trusted PHP via `update_settings_field_value()`. See `Integration::MANAGED_FIELD_TYPES`.
 

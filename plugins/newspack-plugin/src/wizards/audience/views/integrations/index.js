@@ -84,6 +84,10 @@ const AudienceIntegrations = ( props, ref ) => {
 			.then( data => {
 				setIntegrations( data );
 			} )
+			.catch( () => {
+				// Leave the integration in its previous state; apiFetch already
+				// logs the underlying error to the console and the user can retry.
+			} )
 			.finally( () => {
 				setToggling( prev => ( { ...prev, [ integrationId ]: false } ) );
 			} );
