@@ -1088,6 +1088,16 @@ final class Newspack_Popups_Inserter {
 				$script_data['donor_landing_page'] = $donor_landing_page;
 			}
 
+			$ab_tests = Newspack_Popups_AB_Tests::get_tests_config();
+			if ( ! empty( $ab_tests ) ) {
+				$script_data['ab_tests']   = $ab_tests;
+				$script_data['cid_cookie'] = defined( 'NEWSPACK_CLIENT_ID_COOKIE_NAME' ) ? NEWSPACK_CLIENT_ID_COOKIE_NAME : 'newspack-cid';
+				$ab_buckets                = Newspack_Popups_AB_Tests::get_logged_in_buckets( $ab_tests );
+				if ( ! empty( $ab_buckets ) ) {
+					$script_data['ab_buckets'] = $ab_buckets;
+				}
+			}
+
 			\wp_localize_script( $script_handle, 'newspack_popups_view', $script_data );
 			\wp_enqueue_script( $script_handle );
 		}
