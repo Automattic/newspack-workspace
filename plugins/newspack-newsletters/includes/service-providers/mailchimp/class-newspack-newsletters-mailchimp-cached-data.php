@@ -348,6 +348,13 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	 * @param string      $error The error message.
 	 */
 	private static function maybe_add_error( $list_id = null, $error = '' ) {
+		// A missing API key is an unconfigured state, not a fetch failure worth
+		// surfacing: a fetch attempted with an empty key reports a misleading
+		// "invalid key" error before the publisher has entered one. Only record
+		// errors once credentials are present.
+		if ( ! ( self::get_mc_instance() )->has_api_credentials() ) {
+			return;
+		}
 		Newspack_Newsletters_Logger::log(
 			sprintf(
 				'Mailchimp cache: handling error while fetching cache for %s',

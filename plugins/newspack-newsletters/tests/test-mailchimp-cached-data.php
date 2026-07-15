@@ -192,4 +192,35 @@ class Newsletters_Mailchimp_Cached_Data_Test extends WP_UnitTestCase {
 		delete_option( 'newspack_mailchimp_api_key' );
 		delete_transient( 'newspack_newsletters_lists_mailchimp' );
 	}
+
+	/**
+	 * Fetch failures must not surface an error while the provider has no API
+	 * key configured (an unconfigured state, not a failure), but must once a
+	 * key is present.
+	 */
+	public function test_maybe_add_error_requires_api_key() {
+		delete_option( 'newspack_mailchimp_api_key' );
+		delete_option( 'newspack_newsletters_mailchimp_api_key' );
+		delete_option( 'newspack_nl_mailchimp_cache_errors' );
+
+		$method = new ReflectionMethod( 'Newspack_Newsletters_Mailchimp_Cached_Data', 'maybe_add_error' );
+		$method->setAccessible( true );
+
+		// No key configured: the error is not recorded.
+		$method->invoke( null, 'lists', 'Invalid MailChimp API key supplied.' );
+		$this->assertFalse(
+			get_option( 'newspack_nl_mailchimp_cache_errors' ),
+			'No error should be stored while the provider has no API key.'
+		);
+
+		// Key present: a cold-cache fetch error is now surfaced.
+		update_option( 'newspack_mailchimp_api_key', 'test-us1' );
+		$method->invoke( null, 'lists', 'Invalid MailChimp API key supplied.' );
+		$errors = get_option( 'newspack_nl_mailchimp_cache_errors' );
+		$this->assertIsArray( $errors );
+		$this->assertArrayHasKey( 'lists', $errors );
+
+		delete_option( 'newspack_mailchimp_api_key' );
+		delete_option( 'newspack_nl_mailchimp_cache_errors' );
+	}
 }
