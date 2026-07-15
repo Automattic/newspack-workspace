@@ -2,7 +2,7 @@
  * WordPress dependencies
  */
 import { __ } from '@wordpress/i18n';
-import { CheckboxControl } from '@wordpress/components';
+import { CheckboxControl, SelectControl } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
 import { useEffect, useMemo, useRef } from '@wordpress/element';
 
@@ -15,6 +15,51 @@ import WizardsTab from '../../../wizards-tab';
 import { SettingsField } from './settings-field';
 
 import './configure-view.scss';
+
+/**
+ * Build the operator dropdown options for an incoming metadata field.
+ *
+ * Enumerated fields (those the ESP returns with a fixed option set) can be
+ * matched against a single value or any of several; free-form fields are
+ * matched as text or as a numeric range.
+ *
+ * @param {Object}  field             The incoming field option object.
+ * @param {boolean} field.has_options Whether the field is enumerated.
+ * @return {{label: string, value: string}[]} Operator options for a SelectControl.
+ */
+export const operatorOptionsForField = field =>
+	field?.has_options
+		? [
+				{ label: __( 'Single value', 'newspack-plugin' ), value: 'default' },
+				{ label: __( 'Multiple values', 'newspack-plugin' ), value: 'list__in' },
+		  ]
+		: [
+				{ label: __( 'Text', 'newspack-plugin' ), value: 'default' },
+				{ label: __( 'Number', 'newspack-plugin' ), value: 'range' },
+		  ];
+
+/**
+ * Toggle an incoming field in or out of the enabled operator map.
+ *
+ * Enabling a field seeds it with the field's own default matching function
+ * (falling back to `default`); disabling removes the key entirely.
+ *
+ * @param {Object}  currentMap                 The current { key => operator } map.
+ * @param {Object}  option                     The field option object.
+ * @param {string}  option.value               The field key.
+ * @param {string}  [option.matching_function] The field's default operator.
+ * @param {boolean} checked                    Whether the field is now enabled.
+ * @return {Object} The next { key => operator } map.
+ */
+export const toggleField = ( currentMap, option, checked ) => {
+	const next = { ...( currentMap || {} ) };
+	if ( checked ) {
+		next[ option.value ] = option.matching_function || 'default';
+	} else {
+		delete next[ option.value ];
+	}
+	return next;
+};
 
 export const ConfigureView = ( { integrations, loading, pendingChanges, saving, onFieldChange, onSave, match } ) => {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
@@ -166,21 +211,40 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
 							<Grid columns={ 1 } rowGap={ 8 } noMargin>
 								{ ( inboundField.options || [] ).map( option => {
-									// Framework injects options as { value, label } objects
-									// (see class-integration.php:get_settings_config()), but accepts bare strings
-									// for backward compatibility.
+									// Framework injects options as { value, label, matching_function, has_options }
+									// objects (see class-integration.php:get_settings_config()), but accepts bare
+									// strings for backward compatibility.
 									const optionValue = typeof option === 'string' ? option : option.value;
 									const optionLabel = typeof option === 'string' ? option : option.label || option.value;
-									const currentValue = getFieldValue( inboundField );
-									const selected = Array.isArray( currentValue ) ? currentValue : [];
+									// The stored value for this field is a { key => operator } map, not an array:
+									// a key present means enabled, and its value is the chosen matching operator.
+									const currentMap = getFieldValue( inboundField ) || {};
+									const checked = Object.prototype.hasOwnProperty.call( currentMap, optionValue );
 									return (
-										<CheckboxControl
-											className="newspack-checkbox-control"
-											key={ optionValue }
-											label={ optionLabel }
-											checked={ selected.includes( optionValue ) }
-											onChange={ checked => handleCheckboxListChange( inboundField.key, currentValue, optionValue, checked ) }
-										/>
+										<div key={ optionValue }>
+											<CheckboxControl
+												className="newspack-checkbox-control"
+												label={ optionLabel }
+												checked={ checked }
+												onChange={ isChecked =>
+													onFieldChange( integrationId, inboundField.key, toggleField( currentMap, option, isChecked ) )
+												}
+											/>
+											{ checked && (
+												<SelectControl
+													label={ __( 'Segment as', 'newspack-plugin' ) }
+													hideLabelFromVision
+													value={ currentMap[ optionValue ] }
+													options={ operatorOptionsForField( option ) }
+													onChange={ operator =>
+														onFieldChange( integrationId, inboundField.key, {
+															...currentMap,
+															[ optionValue ]: operator,
+														} )
+													}
+												/>
+											) }
+										</div>
 									);
 								} ) }
 							</Grid>
