@@ -103,6 +103,26 @@ describe( 'AudienceIntegrations notices', () => {
 		);
 	} );
 
+	it( 'announces an error snackbar when the save request fails', async () => {
+		act( () => {
+			captured.props.onFieldChange( 'esp', 'mailchimp_audience_id', 'abc123' );
+		} );
+		await waitFor( () => expect( captured.props.pendingChanges.esp ).toEqual( { mailchimp_audience_id: 'abc123' } ) );
+
+		apiFetch.mockRejectedValue( new Error( 'nope' ) );
+		await act( async () => {
+			captured.props.onSave( 'esp' );
+			await flushPromises();
+		} );
+		await waitFor( () =>
+			expect( mockAddNotice ).toHaveBeenCalledWith( {
+				id: 'integration-saved-esp',
+				type: 'error',
+				message: 'Something went wrong. Please try again.',
+			} )
+		);
+	} );
+
 	it( 'announces the enabled snackbar after the modal save-and-enable succeeds', async () => {
 		await act( () => captured.props.onSetupAndEnable( 'esp', { mailchimp_audience_id: 'abc123' } ) );
 		await waitFor( () =>
@@ -232,5 +252,22 @@ describe( 'AudienceIntegrations pending changes', () => {
 			captured.props.onDiscardChanges( 'esp' );
 		} );
 		expect( captured.props.pendingChanges ).toBe( pendingChangesBefore );
+	} );
+
+	// Pins a data-safety property: on a failed save, the server never received
+	// the edit, so pendingChanges is the user's only copy of it. A future
+	// refactor must not start clearing it on failure.
+	it( 'preserves pendingChanges when the save request fails', async () => {
+		act( () => {
+			captured.props.onFieldChange( 'esp', 'mailchimp_audience_id', 'abc123' );
+		} );
+		await waitFor( () => expect( captured.props.pendingChanges.esp ).toEqual( { mailchimp_audience_id: 'abc123' } ) );
+
+		apiFetch.mockRejectedValue( new Error( 'nope' ) );
+		await act( async () => {
+			captured.props.onSave( 'esp' );
+			await flushPromises();
+		} );
+		expect( captured.props.pendingChanges.esp ).toEqual( { mailchimp_audience_id: 'abc123' } );
 	} );
 } );

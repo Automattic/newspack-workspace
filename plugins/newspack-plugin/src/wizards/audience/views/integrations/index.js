@@ -88,32 +88,45 @@ const AudienceIntegrations = ( props, ref ) => {
 		} );
 	}, [] );
 
-	const handleSave = useCallback( integrationId => {
-		setPendingChanges( currentPendingChanges => {
-			const changes = currentPendingChanges[ integrationId ];
-			if ( ! changes || Object.keys( changes ).length === 0 ) {
-				return currentPendingChanges;
-			}
-			setSaving( prev => ( { ...prev, [ integrationId ]: true } ) );
-			apiFetch( {
-				path: `${ API_PATH }/${ integrationId }`,
-				method: 'POST',
-				data: { settings: changes },
-			} )
-				.then( data => {
-					setIntegrations( data );
-					setPendingChanges( prev => {
-						const next = { ...prev };
-						delete next[ integrationId ];
-						return next;
-					} );
+	const handleSave = useCallback(
+		integrationId => {
+			setPendingChanges( currentPendingChanges => {
+				const changes = currentPendingChanges[ integrationId ];
+				if ( ! changes || Object.keys( changes ).length === 0 ) {
+					return currentPendingChanges;
+				}
+				setSaving( prev => ( { ...prev, [ integrationId ]: true } ) );
+				apiFetch( {
+					path: `${ API_PATH }/${ integrationId }`,
+					method: 'POST',
+					data: { settings: changes },
 				} )
-				.finally( () => {
-					setSaving( prev => ( { ...prev, [ integrationId ]: false } ) );
-				} );
-			return currentPendingChanges;
-		} );
-	}, [] );
+					.then( data => {
+						setIntegrations( data );
+						setPendingChanges( prev => {
+							const next = { ...prev };
+							delete next[ integrationId ];
+							return next;
+						} );
+					} )
+					.catch( () => {
+						// Leave pendingChanges untouched; the server never received the
+						// edit, so it's the user's only copy. apiFetch already logs the
+						// underlying error to the console and the user can retry.
+						addNotice( {
+							id: `integration-saved-${ integrationId }`,
+							type: 'error',
+							message: __( 'Something went wrong. Please try again.', 'newspack-plugin' ),
+						} );
+					} )
+					.finally( () => {
+						setSaving( prev => ( { ...prev, [ integrationId ]: false } ) );
+					} );
+				return currentPendingChanges;
+			} );
+		},
+		[ addNotice ]
+	);
 
 	const handleToggleEnabled = useCallback(
 		( integrationId, enabled ) => {
