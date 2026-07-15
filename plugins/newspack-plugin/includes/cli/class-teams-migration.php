@@ -214,6 +214,19 @@ class Teams_Migration {
 				}
 			}
 
+			// Create a new subscription when none resolved above. This needs a
+			// migration product; with --skip-unlinked and no --product-id a team
+			// whose linked subscription is inactive/missing (so it is not skipped)
+			// can reach this point with no product to create against. Record the
+			// team as an error and move on rather than fataling on a null product
+			// inside create_migration_subscription().
+			if ( ! $subscription && ! $migration_product ) {
+				$errors[] = 'no reusable subscription and no --product-id supplied to create one';
+				WP_CLI::warning( sprintf( 'Team %d: linked subscription is inactive/missing and no --product-id was supplied to create a replacement — skipping. Re-run with --product-id to migrate these teams.', $team_id ) );
+				$summary[] = self::summary_row( $team_id, 'ERROR', 0, 0, $seat_count, false, $errors );
+				continue;
+			}
+
 			// Create a new subscription when none resolved above.
 			if ( ! $subscription ) {
 				$created_new = true;
@@ -570,7 +583,7 @@ class Teams_Migration {
 		}
 
 		if ( ! $product_id ) {
-			WP_CLI::error( 'Missing required argument: product-id' );
+			WP_CLI::error( 'Missing required option: --product-id=<id>.' );
 		}
 
 		$product = \wc_get_product( $product_id );
