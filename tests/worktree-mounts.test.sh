@@ -24,14 +24,25 @@ EOF
 ok "each_worktree_in_env yields 2 triples" "$(each_worktree_in_env "$C" | grep -c '|')" "2"
 
 # resolve_unsanitized_branch recovers the real git branch (feat/x) from a
-# worktree dir named by its safe form (feat-x). This underpins the env-destroy
-# real-branch resolution: pass the resolved name to `worktree.sh remove` so its
-# `git branch -D` targets the real branch, not the dangling safe form.
+# worktree dir named by its safe form (feat-x). env-destroy uses this ONLY to
+# name the branch to delete separately — NOT for dir lookup: the worktree dir is
+# always removed by the safe form so a retargeted worktree isn't orphaned.
 export NABSPATH="$FIX"
 git init -q "$FIX/src"
 ( cd "$FIX/src" && git commit -q --allow-empty -m init && \
   git worktree add -q -b feat/x "$FIX/worktrees/feat-x" ) >/dev/null 2>&1
 ok "resolve_unsanitized_branch recovers real branch" "$(resolve_unsanitized_branch feat-x "")" "feat/x"
 ok "resolve_unsanitized_branch falls back to safe form when dir absent" "$(resolve_unsanitized_branch nope "")" "nope"
+
+# Retargeted worktree: env bound to safe dir feat-foo (branch feat/foo), then a
+# user runs `git checkout -b other` inside it. resolve_unsanitized_branch now
+# reports the LIVE branch (other), which is exactly why the destroy path must
+# NOT feed this into dir lookup — the dir is still named worktrees/feat-foo.
+# Removing by the resolved `other` would sanitize to worktrees/other and orphan
+# the real dir. The fix removes by the safe form and only deletes the real
+# branch separately.
+( cd "$FIX/src" && git worktree add -q -b feat/foo "$FIX/worktrees/feat-foo" && \
+  cd "$FIX/worktrees/feat-foo" && git checkout -q -b other ) >/dev/null 2>&1
+ok "resolve_unsanitized_branch reports live (retargeted) branch" "$(resolve_unsanitized_branch feat-foo "")" "other"
 
 echo ""; echo "RESULT: $pass passed, $fail failed"; [ "$fail" -eq 0 ]

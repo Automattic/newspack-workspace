@@ -845,21 +845,30 @@ MIGRATE
         # remove the worktree directory the env was bound to, not whatever
         # branch is currently checked out there.
         #
-        # For monorepo worktrees the mount-derived safe form (e.g. feat-foo)
-        # won't match the real branch (feat/foo) in worktree.sh's final
-        # `git branch -D`, so passing the safe form leaves the local branch ref
-        # dangling after the worktree dir is removed. Resolve the real branch
-        # first and pass THAT: worktree.sh remove re-sanitizes the branch to
-        # locate worktrees/<safe> (so dir lookup still works with the real name)
-        # and then deletes the real branch. Standalone (repos) worktrees keep
-        # the branch by design, so they pass the safe form unchanged.
+        # For monorepo worktrees we DECOUPLE dir-lookup from branch-delete:
+        # pass the safe form to worktree.sh remove so the dir it locates
+        # (worktrees/<safe>) is always the one the env was bound to — even if
+        # the worktree was retargeted to another branch, it is never orphaned.
+        # Then separately delete the real branch (resolved before removal, while
+        # the dir still exists to read it), since the mount-derived safe form
+        # (e.g. feat-foo) won't match the real branch (feat/foo) in worktree.sh's
+        # own `git branch -D`, which would otherwise leave feat/foo dangling.
+        # Standalone (repos) worktrees keep the branch by design, so they pass
+        # the safe form unchanged.
         for entry in "${worktree_entries[@]}"; do
             IFS='|' read -r wt_repo wt_branch wt_kind <<< "$entry"
             if [[ "$wt_kind" == "repos" ]]; then
                 "$NABSPATH/bin/worktree.sh" remove-repos --yes "$wt_repo" "$wt_branch"
             else
+                # Resolve the real branch (for deletion) BEFORE removal, but
+                # remove the worktree DIR by the safe form so a retargeted
+                # worktree (checked out to a different branch after creation) is
+                # still removed by the dir the env was bound to, not orphaned.
                 real_branch=$(resolve_unsanitized_branch "$wt_branch" "")
-                "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$real_branch"
+                "$NABSPATH/bin/worktree.sh" remove --yes "$wt_repo" "$wt_branch"
+                if [[ -n "$real_branch" && "$real_branch" != "$wt_branch" ]]; then
+                    git -C "$NABSPATH" branch -D "$real_branch" 2>/dev/null && echo "Deleted branch $real_branch"
+                fi
             fi
         done
         echo "Destroyed environment '$env_name'"

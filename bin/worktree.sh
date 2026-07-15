@@ -211,8 +211,8 @@ case $1 in
         # above doesn't show them).
         for kind in plugins themes; do
             for d in "$NABSPATH/repos/$kind"/*/; do
-                [[ -e "${d}.git" ]] || continue
                 r=$(basename "$d")
+                is_standalone_git_repo "repos/$kind/$r" || continue
                 echo ""
                 echo "[$r]"
                 ( cd "$d" && git worktree list )
@@ -222,8 +222,11 @@ case $1 in
     remove)
         skip_confirm=false
         shift  # consume "remove"
-        # Substring match (not an exact flag test); safe here because branch/repo
-        # names are validated and no `--report`-style flag exists to false-match.
+        # Substring match (not an exact flag test). Known minor limitation:
+        # validate_name permits hyphens, so a branch/repo name containing the
+        # literal substring `--repo` (e.g. `fix--repo-thing`) would false-trigger
+        # this guard and be rejected. Acceptable in practice — such names are
+        # vanishingly rare and the rejection is loud, not silent.
         if [[ "$*" == *--repo* ]]; then
             echo "Error: 'n worktree remove --repo <name>' was removed; standalone repos now use a dedicated subcommand." >&2
             echo "  Use: n worktree remove-repos <name> <safe_branch>" >&2
