@@ -107,6 +107,9 @@ class WooCommerce {
 			array_keys( \wcs_get_users_subscriptions( $user_id ) ),
 			function( $acc, $subscription_id ) use ( $user_id ) {
 				$subscription = \wcs_get_subscription( $subscription_id );
+				if ( ! $subscription ) {
+					return $acc;
+				}
 				// Skip group subscriptions the user is only a *member* of (not the owner);
 				// the My Account member-injection filter can surface these on account pages,
 				// but the contact's "current product" must reflect a subscription they own.
