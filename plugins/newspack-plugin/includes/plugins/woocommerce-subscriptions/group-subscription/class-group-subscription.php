@@ -502,14 +502,11 @@ class Group_Subscription {
 	/**
 	 * Get the total member capacity for a group, or null when there is no limit.
 	 *
-	 * The configured limit governs the member seats — the people carrying member
-	 * meta, which the `update_members()` limit check counts. A promoted manager
-	 * keeps their member meta, so they occupy a member seat and are *not* extra
-	 * capacity; only the owner sits outside the limit. So the total capacity is
-	 * the limit plus the owner (the one manager who holds no member seat). This
-	 * keeps the capacity (denominator) in step with both get_member_count()
-	 * (numerator) and the add/invite limit enforcement — including the ownerless
-	 * edge case, where no phantom owner is counted.
+	 * The configured limit is the group's total capacity *including* the owner: the
+	 * owner occupies one of the limited seats rather than sitting free on top of it.
+	 * So the capacity is simply the limit, which keeps the denominator in step with
+	 * the owner-inclusive get_member_count() numerator. The member-meta seats left
+	 * for everyone but the owner are given by get_member_seat_limit().
 	 *
 	 * @param \WC_Subscription|int $subscription The subscription object or ID.
 	 *
@@ -522,16 +519,40 @@ class Group_Subscription {
 		}
 		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
 		$limit    = isset( $settings['limit'] ) ? (int) $settings['limit'] : 0;
+		return $limit > 0 ? $limit : null;
+	}
+
+	/**
+	 * Get the number of member-meta seats a group can hold, or null when unlimited.
+	 *
+	 * The configured limit is the total capacity including the owner, so the owner's
+	 * seat — the one manager who holds no member meta — is reserved out of it, leaving
+	 * `limit - 1` member seats in the common owned case (and all of `limit` in the
+	 * ownerless edge case). This is the threshold the add and invite gates count
+	 * member-meta holders against, and it stays in step with get_member_capacity():
+	 * capacity = seats + owner.
+	 *
+	 * @param \WC_Subscription|int $subscription The subscription object or ID.
+	 *
+	 * @return int|null The member-meta seat limit, or null when unlimited.
+	 */
+	public static function get_member_seat_limit( $subscription ) {
+		$subscription = WooCommerce_Subscriptions::sanitize_subscription( $subscription );
+		if ( ! $subscription ) {
+			return null;
+		}
+		$settings = Group_Subscription_Settings::get_subscription_settings( $subscription );
+		$limit    = isset( $settings['limit'] ) ? (int) $settings['limit'] : 0;
 		if ( $limit <= 0 ) {
 			return null;
 		}
-		// Managers who hold no member seat (in practice just the owner) sit outside
-		// the limit; promoted managers already count toward it via their member meta.
+		// Managers who hold no member seat (in practice just the owner) occupy a seat
+		// within the limit; promoted managers already count via their member meta.
 		$managers_without_member_seat = array_diff(
 			array_filter( array_map( 'intval', self::get_managers( $subscription ) ) ),
 			array_map( 'intval', self::get_members( $subscription ) )
 		);
-		return $limit + count( $managers_without_member_seat );
+		return max( 0, $limit - count( $managers_without_member_seat ) );
 	}
 
 	/**
@@ -581,7 +602,8 @@ class Group_Subscription {
 		// separate requests), so this can't happen today. If a caller ever combines both arrays,
 		// move this check ahead of the removal loop and compute the projected count there.
 		$existing_members = self::get_members( $subscription );
-		if ( $subscription_settings['limit'] > 0 && count( $existing_members ) + count( $members_to_add ) > $subscription_settings['limit'] ) {
+		$seat_limit       = self::get_member_seat_limit( $subscription );
+		if ( null !== $seat_limit && count( $existing_members ) + count( $members_to_add ) > $seat_limit ) {
 			return new \WP_Error( 'newspack_group_subscription_update_members', __( 'Member limit reached. Please remove some members or increase the limit.', 'newspack-plugin' ), [ 'status' => 409 ] );
 		}
 

@@ -568,9 +568,9 @@ class Test_Group_Subscription_Managers extends WP_UnitTestCase {
 	// ---- Seat accounting stays consistent once managers exist ----
 
 	/**
-	 * Promoting a member must not inflate the capacity denominator: a promoted
-	 * manager keeps their member seat, so capacity stays owner + limit and stays
-	 * in step with the count and the add limit.
+	 * Promoting a member must not change the capacity denominator: a promoted
+	 * manager keeps their member seat, so capacity stays the owner-inclusive limit
+	 * and stays in step with the count and the add limit.
 	 */
 	public function test_capacity_and_count_stay_consistent_after_promotion() {
 		$owner_id     = $this->create_reader();
@@ -582,12 +582,12 @@ class Test_Group_Subscription_Managers extends WP_UnitTestCase {
 
 		$capacity_before = Group_Subscription::get_member_capacity( $subscription );
 		$count_before    = Group_Subscription::get_member_count( $subscription );
-		$this->assertSame( 4, $capacity_before, 'Capacity is the limit (3) plus the owner.' );
-		$this->assertSame( 3, $count_before, 'Count is the owner plus two members.' );
+		$this->assertSame( 3, $capacity_before, 'Capacity is the owner-inclusive limit (3).' );
+		$this->assertSame( 3, $count_before, 'Count is the owner plus two members, which fills the group.' );
 
 		Group_Subscription::add_manager( $subscription, $member_a );
 
-		$this->assertSame( 4, Group_Subscription::get_member_capacity( $subscription ), 'Promoting a member does not change capacity — a manager keeps their member seat.' );
+		$this->assertSame( 3, Group_Subscription::get_member_capacity( $subscription ), 'Promoting a member does not change capacity — a manager keeps their member seat.' );
 		$this->assertSame( 3, Group_Subscription::get_member_count( $subscription ), 'Promoting a member does not change the headcount.' );
 	}
 }

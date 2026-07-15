@@ -157,9 +157,9 @@ class Group_Subscription_Settings {
 		$custom_product_pricing_options['newspack_group_subscription_limit'] = [
 			'id'                => self::GROUP_SUBSCRIPTION_META_PREFIX . 'limit',
 			'wrapper_class'     => 'show_if_newspack_group_subscription_enabled',
-			'label'             => __( 'Group subscription member limit (in addition to owner)', 'newspack-plugin' ),
+			'label'             => __( 'Group subscription member limit (including owner)', 'newspack-plugin' ),
 			'desc_tip'          => true,
-			'description'       => __( 'Set the maximum number of members allowed in addition to the owner. Set to 0 to allow an unlimited number of group members.', 'newspack-plugin' ),
+			'description'       => __( 'Set the maximum number of members, including the owner. The minimum is 2, so there is always room for one member besides the owner. Set to 0 to allow an unlimited number of group members.', 'newspack-plugin' ),
 			'default'           => self::DEFAULT_SETTINGS['limit'],
 			'product_types'     => [ 'subscription', 'subscription_variation' ],
 			'type'              => 'number',
@@ -189,8 +189,9 @@ class Group_Subscription_Settings {
 			return $column_content;
 		}
 		$settings = self::get_subscription_settings( $subscription );
-		// The owner counts as a member, so use the owner-inclusive count and a capacity
-		// (limit + owner) so this matches the member-facing card and Members tab.
+		// The owner counts as a member, so pair the owner-inclusive count with the
+		// owner-inclusive capacity (the limit) so this matches the member-facing card
+		// and Members tab.
 		$member_count = Group_Subscription::get_member_count( $subscription );
 		$capacity     = Group_Subscription::get_member_capacity( $subscription );
 		$limit        = null !== $capacity
@@ -310,6 +311,12 @@ class Group_Subscription_Settings {
 				$previous_value = \wc_bool_to_string( $previous_value );
 			} elseif ( is_int( self::DEFAULT_SETTINGS[ $key ] ) ) {
 				$value = absint( $value );
+			}
+			// A group must have room for at least one member besides the owner, so floor
+			// a positive limit to the 2-seat minimum (owner + 1). Unlimited (0) is left
+			// untouched. See Group_Subscription::get_member_seat_limit().
+			if ( 'limit' === $key && $value > 0 ) {
+				$value = max( 2, $value );
 			}
 			if ( $value !== $previous_value ) {
 				$subscription->update_meta_data( self::GROUP_SUBSCRIPTION_META_PREFIX . $key, $value );
