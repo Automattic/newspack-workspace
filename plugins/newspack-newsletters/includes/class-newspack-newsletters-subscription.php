@@ -45,6 +45,9 @@ class Newspack_Newsletters_Subscription {
 		add_action( 'save_post_' . Subscription_Lists::CPT, [ __CLASS__, 'clear_lists_cache' ] );
 		add_action( 'deleted_post', [ __CLASS__, 'clear_lists_cache_on_delete' ], 10, 2 );
 		add_action( 'newspack_newsletters_provider_credentials_changed', [ __CLASS__, 'clear_lists_cache' ] );
+		// When a Mailchimp audience's sublists finish warming (async on a cold cache),
+		// drop the composed lists cache so the next read includes groups/segments/tags.
+		add_action( 'newspack_newsletters_mailchimp_cache_updated', [ __CLASS__, 'clear_lists_cache' ] );
 
 		/** User email verification for subscription management. */
 		add_action( 'resetpass_form', [ __CLASS__, 'set_current_user_email_verified' ] );
@@ -513,15 +516,32 @@ class Newspack_Newsletters_Subscription {
 			);
 
 			/**
-			 * Remove from the local DB lists that no longer exist in the ESP.
-			 * This also cleans up the DB in case we accidentally created more than one list for the same ESP list.
+			 * Whether the lists fetched from the ESP are complete. A provider that
+			 * warms sublist data asynchronously (e.g. Mailchimp on a cold cache)
+			 * can transiently return audiences without their groups/tags. Such an
+			 * incomplete result must not be cached (it would show audiences only
+			 * for the cache lifetime) nor used to garbage-collect stored lists (it
+			 * would destroy configured groups/tags until the cache warms).
+			 *
+			 * @param bool  $complete     Whether the fetched lists are complete.
+			 * @param array $return_lists The composed remote lists.
 			 */
-			Subscription_Lists::garbage_collector( wp_list_pluck( $return_lists, 'db_id' ) );
+			$lists_are_complete = (bool) apply_filters( 'newspack_newsletters_subscription_lists_complete', true, $return_lists );
+
+			if ( $lists_are_complete ) {
+				/**
+				 * Remove from the local DB lists that no longer exist in the ESP.
+				 * This also cleans up the DB in case we accidentally created more than one list for the same ESP list.
+				 */
+				Subscription_Lists::garbage_collector( wp_list_pluck( $return_lists, 'db_id' ) );
+			}
 
 			foreach ( Subscription_Lists::get_locals_for_current_provider() as $local_list ) {
 				$return_lists[] = $local_list->to_array();
 			}
-			set_transient( $cache_key, $return_lists, self::get_lists_cache_ttl() );
+			if ( $lists_are_complete ) {
+				set_transient( $cache_key, $return_lists, self::get_lists_cache_ttl() );
+			}
 			return $return_lists;
 		} catch ( \Exception $e ) {
 			return new WP_Error(

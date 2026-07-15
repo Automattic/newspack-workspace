@@ -93,6 +93,25 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 		}
 
 		add_action( 'admin_notices', [ __CLASS__, 'maybe_show_error' ] );
+
+		// Report to the subscription layer that the composed lists are incomplete
+		// while any audience's sublists are still warming, so an audience-only
+		// snapshot is neither cached nor used to garbage-collect stored lists.
+		add_filter( 'newspack_newsletters_subscription_lists_complete', [ __CLASS__, 'filter_lists_complete' ] );
+	}
+
+	/**
+	 * Filters whether the composed subscription lists are complete. Returns
+	 * false while any audience's sublist cache is still cold.
+	 *
+	 * @param bool $complete Whether the lists are complete.
+	 * @return bool
+	 */
+	public static function filter_lists_complete( $complete ) {
+		if ( self::has_pending_sublists() ) {
+			return false;
+		}
+		return $complete;
 	}
 
 	/**
@@ -148,7 +167,7 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	 */
 	public static function get_segments( $list_id ) {
 		$data = self::get_data( $list_id );
-		return $data['segments'] ?? null;
+		return $data['segments'] ?? [];
 	}
 
 	/**
@@ -160,7 +179,7 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	 */
 	public static function get_interest_categories( $list_id ) {
 		$data = self::get_data( $list_id );
-		return $data['interest_categories'] ?? null;
+		return $data['interest_categories'] ?? [];
 	}
 
 	/**
@@ -172,7 +191,33 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	 */
 	public static function get_tags( $list_id ) {
 		$data = self::get_data( $list_id );
-		return $data['tags'] ?? null;
+		return $data['tags'] ?? [];
+	}
+
+	/**
+	 * Whether any known audience is still missing its cached sublist data
+	 * (segments, groups, tags). True during the window after the audiences are
+	 * fetched but before their per-list caches have been warmed asynchronously.
+	 *
+	 * Reads the persisted cache options directly (no fetch/dispatch) so it is
+	 * side-effect free and safe to call from a filter.
+	 *
+	 * @return bool True if at least one audience has a cold sublist cache.
+	 */
+	public static function has_pending_sublists() {
+		$audiences = get_option( self::get_lists_cache_key() );
+		if ( empty( $audiences ) || ! is_array( $audiences ) ) {
+			return false;
+		}
+		foreach ( $audiences as $audience ) {
+			if ( empty( $audience['id'] ) ) {
+				continue;
+			}
+			if ( empty( get_option( self::get_cache_key( $audience['id'] ) ) ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -197,7 +242,7 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	 */
 	public static function get_merge_fields( $list_id ) {
 		$data = self::get_data( $list_id );
-		return $data['merge_fields'] ?? null;
+		return $data['merge_fields'] ?? [];
 	}
 
 	/**
@@ -260,6 +305,18 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 		self::$memoized_data[ $list_id ] = $data;
 		self::clear_errors( $list_id );
 		Newspack_Newsletters_Logger::log( 'Mailchimp cache: Cache for list ' . $list_id . ' updated' );
+
+		/**
+		 * Fires after a list's sublist data (segments, groups, tags) is fetched
+		 * and cached. On a cold cache the sublists are warmed asynchronously
+		 * after the audiences are already returned, so consumers that memoize a
+		 * composed audiences+sublists list must be invalidated here to avoid
+		 * serving an audience-only result until warming completes.
+		 *
+		 * @param string $list_id The List (audience) ID that was refreshed.
+		 * @param array  $data    The cached sublist data for the list.
+		 */
+		do_action( 'newspack_newsletters_mailchimp_cache_updated', $list_id, $data );
 	}
 
 	/**
@@ -282,7 +339,10 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 	}
 
 	/**
-	 * Stores the last error for a given list, if the cache is older than self::SURFACE_ERRORS_AFTER
+	 * Stores the last error for a given list when it is worth surfacing: either
+	 * there is no cached data at all (a cold cache — e.g. an invalid API key on
+	 * first-time setup, which would otherwise fail silently) or previously-good
+	 * data has been stale for longer than self::SURFACE_ERRORS_AFTER.
 	 *
 	 * @param string|null $list_id The List ID, or null for all lists.
 	 * @param string      $error The error message.
@@ -301,7 +361,7 @@ final class Newspack_Newsletters_Mailchimp_Cached_Data {
 			$error = __( 'Unknown error', 'newspack_newsletters' );
 		}
 		$cache_date = get_option( self::get_cache_date_key( $list_id ) );
-		if ( $cache_date && ( time() - $cache_date ) > self::SURFACE_ERRORS_AFTER ) {
+		if ( ! $cache_date || ( time() - $cache_date ) > self::SURFACE_ERRORS_AFTER ) {
 			$errors             = get_option( self::ERRORS_OPTION, [] );
 			$errors[ $list_id ] = $error;
 			update_option( self::ERRORS_OPTION, $errors );
