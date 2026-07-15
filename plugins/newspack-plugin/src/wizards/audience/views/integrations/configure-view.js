@@ -29,17 +29,20 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 		when: !! hasPending && ! integrationSaving && !! integration,
 	} );
 
-	// A save in flight owns this integration's pending changes: handleSave
+	// A save in flight owns its integration's pending changes: handleSave
 	// clears them itself on success, and on failure they are the user's only
-	// copy. A ref (rather than an `integrationSaving` dependency) is required
-	// so the cleanup reads the latest value at unmount time without re-running
-	// mid-save. Must run for every render path — placed above the early returns.
-	const savingRef = useRef( integrationSaving );
-	savingRef.current = integrationSaving;
+	// copy. The ref holds the whole `saving` map (not the pre-indexed
+	// `integrationSaving` scalar) so the cleanup can read the latest state for
+	// the integration it owns — on an integrationId change, ConfigureView
+	// doesn't unmount (same route, new params), so the cleanup must check the
+	// id it closed over, not whichever id rendered last. Must run for every
+	// render path — placed above the early returns.
+	const savingRef = useRef( saving );
+	savingRef.current = saving;
 
 	useEffect(
 		() => () => {
-			if ( ! savingRef.current ) {
+			if ( ! savingRef.current[ integrationId ] ) {
 				onDiscardChanges( integrationId );
 			}
 		},

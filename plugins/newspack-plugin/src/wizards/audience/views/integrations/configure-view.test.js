@@ -36,19 +36,36 @@ const INTEGRATION = {
 	settings: [],
 };
 
-const renderConfigureView = ( { integrations = { esp: INTEGRATION }, pendingChanges = {}, saving = false, onDiscardChanges = jest.fn() } = {} ) =>
-	render(
-		<ConfigureView
-			integrations={ integrations }
-			loading={ false }
-			pendingChanges={ pendingChanges }
-			saving={ { esp: saving } }
-			onFieldChange={ jest.fn() }
-			onDiscardChanges={ onDiscardChanges }
-			onSave={ jest.fn() }
-			match={ { params: { integrationId: 'esp' } } }
-		/>
-	);
+const OTHER_INTEGRATION = {
+	id: 'other',
+	name: 'Other ESP',
+	description: 'Syncs reader data with another ESP.',
+	settings: [],
+};
+
+// `saving` accepts either the raw { [integrationId]: boolean } map, or (for the
+// single-integration tests below) a bare boolean shorthand that gets wrapped as
+// { esp: saving }.
+const buildConfigureView = ( {
+	integrations = { esp: INTEGRATION },
+	pendingChanges = {},
+	saving = false,
+	onDiscardChanges = jest.fn(),
+	integrationId = 'esp',
+} = {} ) => (
+	<ConfigureView
+		integrations={ integrations }
+		loading={ false }
+		pendingChanges={ pendingChanges }
+		saving={ typeof saving === 'object' ? saving : { esp: saving } }
+		onFieldChange={ jest.fn() }
+		onDiscardChanges={ onDiscardChanges }
+		onSave={ jest.fn() }
+		match={ { params: { integrationId } } }
+	/>
+);
+
+const renderConfigureView = props => render( buildConfigureView( props ) );
 
 describe( 'ConfigureView unsaved-changes guard', () => {
 	beforeEach( () => {
@@ -114,6 +131,27 @@ describe( 'ConfigureView unsaved-changes guard', () => {
 			onDiscardChanges,
 		} );
 		unmount();
+		expect( onDiscardChanges ).not.toHaveBeenCalled();
+	} );
+
+	// Navigating between integrations (e.g. #/settings/esp -> #/settings/other)
+	// reuses the same ConfigureView instance instead of unmounting it, since both
+	// routes match the same <Route path="/settings/:integrationId">. The cleanup
+	// from the 'esp' render must still see 'esp' was saving, not whatever
+	// integration is current by the time the cleanup runs.
+	it( 'does not call onDiscardChanges when the integration id changes mid-save', () => {
+		const onDiscardChanges = jest.fn();
+		const integrations = { esp: INTEGRATION, other: OTHER_INTEGRATION };
+		const pendingChanges = { esp: { mailchimp_audience_id: 'abc123' } };
+		const saving = { esp: true };
+		const { rerender } = renderConfigureView( {
+			integrations,
+			integrationId: 'esp',
+			pendingChanges,
+			saving,
+			onDiscardChanges,
+		} );
+		rerender( buildConfigureView( { integrations, integrationId: 'other', pendingChanges, saving, onDiscardChanges } ) );
 		expect( onDiscardChanges ).not.toHaveBeenCalled();
 	} );
 } );
