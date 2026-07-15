@@ -949,12 +949,12 @@ abstract class Integration {
 			return $this->get_enabled_outgoing_fields();
 		}
 		if ( 'incoming_metadata_fields' === $key ) {
-			return array_map(
-				function( $field ) {
-					return $field->get_key();
-				},
-				$this->get_enabled_incoming_fields()
-			);
+			$map = [];
+			foreach ( $this->get_enabled_incoming_fields() as $field ) {
+				$raw                      = $field->get_raw_data();
+				$map[ $field->get_key() ] = $raw['matching_function'] ?? $field->get_matching_function();
+			}
+			return $map;
 		}
 
 		$field = $this->get_settings_field_by_key( $key );
