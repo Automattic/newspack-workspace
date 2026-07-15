@@ -29,6 +29,12 @@ class Newspack_Newsletters_Subscription {
 	const LISTS_CACHE_PREFIX = 'newspack_newsletters_lists_';
 
 	/**
+	 * Response header set on GET /lists while the provider's sublists are still
+	 * warming asynchronously, signalling the admin UI to poll for the full set.
+	 */
+	const LISTS_WARMING_HEADER = 'X-Newspack-Newsletters-Lists-Warming';
+
+	/**
 	 * Memoized lists config.
 	 *
 	 * @var array
@@ -249,7 +255,25 @@ class Newspack_Newsletters_Subscription {
 	 * @return WP_REST_Response|WP_Error WP_REST_Response on success, or WP_Error object on failure.
 	 */
 	public static function api_get_lists() {
-		return \rest_ensure_response( self::get_lists() );
+		$lists    = self::get_lists();
+		$response = \rest_ensure_response( $lists );
+
+		// Tell the admin UI when the provider's sublists are still warming
+		// (fetched asynchronously on a cold cache) so it can poll for the
+		// complete set instead of leaving the user on an audiences-only view
+		// until a manual reload.
+		if ( ! is_wp_error( $lists ) ) {
+			$complete = (bool) apply_filters(
+				'newspack_newsletters_subscription_lists_complete',
+				true,
+				is_array( $lists ) ? $lists : []
+			);
+			if ( ! $complete ) {
+				$response->header( self::LISTS_WARMING_HEADER, '1' );
+			}
+		}
+
+		return $response;
 	}
 
 	/**

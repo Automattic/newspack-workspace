@@ -127,4 +127,69 @@ class Newsletters_Mailchimp_Cached_Data_Test extends WP_UnitTestCase {
 		delete_option( $lists_key );
 		delete_option( $sublists_key );
 	}
+
+	/**
+	 * GET /lists must advertise the warming header while sublists are cold and
+	 * drop it once they are warm, so the admin UI knows when to poll.
+	 */
+	public function test_api_get_lists_sets_warming_header_until_warm() {
+		$lists_key    = 'newspack_nl_mailchimp_cache_lists';
+		$date_key     = 'newspack_nl_mailchimp_cache_date_lists';
+		$audience_id  = 'audHDR';
+		$sublists_key = 'newspack_nl_mailchimp_cache_' . $audience_id;
+		$header       = Newspack_Newsletters_Subscription::LISTS_WARMING_HEADER;
+
+		Newspack_Newsletters::set_service_provider( 'mailchimp' );
+		update_option( 'newspack_mailchimp_api_key', 'test-us1' );
+		// Simulate the completeness veto that Cached_Data::init() would register
+		// (init only runs when the provider is mailchimp at bootstrap).
+		add_filter(
+			'newspack_newsletters_subscription_lists_complete',
+			[ 'Newspack_Newsletters_Mailchimp_Cached_Data', 'filter_lists_complete' ]
+		);
+
+		// Fresh audiences cache (so get_lists() serves without a real API call),
+		// per-list sublist cache left cold.
+		update_option(
+			$lists_key,
+			[
+				[
+					'id'   => $audience_id,
+					'name' => 'Header Audience',
+				],
+			]
+		);
+		update_option( $date_key, time() );
+		delete_option( $sublists_key );
+		delete_transient( 'newspack_newsletters_lists_mailchimp' );
+
+		$cold = Newspack_Newsletters_Subscription::api_get_lists();
+		$this->assertArrayHasKey( $header, $cold->get_headers(), 'Cold cache must set the warming header.' );
+
+		// Warm the sublist cache.
+		update_option(
+			$sublists_key,
+			[
+				'segments'            => [],
+				'interest_categories' => [],
+				'tags'                => [],
+				'folders'             => [],
+				'merge_fields'        => [],
+			]
+		);
+		delete_transient( 'newspack_newsletters_lists_mailchimp' );
+
+		$warm = Newspack_Newsletters_Subscription::api_get_lists();
+		$this->assertArrayNotHasKey( $header, $warm->get_headers(), 'Warm cache must not set the warming header.' );
+
+		remove_filter(
+			'newspack_newsletters_subscription_lists_complete',
+			[ 'Newspack_Newsletters_Mailchimp_Cached_Data', 'filter_lists_complete' ]
+		);
+		delete_option( $lists_key );
+		delete_option( $date_key );
+		delete_option( $sublists_key );
+		delete_option( 'newspack_mailchimp_api_key' );
+		delete_transient( 'newspack_newsletters_lists_mailchimp' );
+	}
 }
