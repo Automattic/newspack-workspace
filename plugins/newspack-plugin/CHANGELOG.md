@@ -1,3 +1,17 @@
+## newspack [6.45.2](https://github.com/Automattic/newspack-workspace/compare/newspack@6.45.1...newspack@6.45.2) (2026-07-14)
+
+
+### Bug Fixes
+
+* **content-gate:** keep institutional-access check URL host-relative ([#614](https://github.com/Automattic/newspack-workspace/issues/614)) ([e72f8e2](https://github.com/Automattic/newspack-workspace/commit/e72f8e2303f308ae768b504b27b5977e1b9248d0))
+
+## newspack [6.45.1](https://github.com/Automattic/newspack-workspace/compare/newspack@6.45.0...newspack@6.45.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* **wizards:** stop wizard error notices from flickering (NPPM-2733) ([#513](https://github.com/Automattic/newspack-workspace/issues/513)) ([3600da0](https://github.com/Automattic/newspack-workspace/commit/3600da05fe06fc37446e409dbea13eb245e851cc))
+
 # newspack [6.45.0](https://github.com/Automattic/newspack-workspace/compare/newspack@6.44.9...newspack@6.45.0) (2026-07-08)
 
 

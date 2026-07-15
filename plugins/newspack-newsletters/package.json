@@ -49,6 +49,7 @@
 		"qs": "^6.15.2"
 	},
 	"devDependencies": {
+		"@wordpress/dataviews": "^16.0.0",
 		"lodash": "^4.17.0",
 		"newspack-scripts": "workspace:*"
 	}
