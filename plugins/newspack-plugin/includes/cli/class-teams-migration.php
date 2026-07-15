@@ -336,17 +336,17 @@ class Teams_Migration {
 			array_map(
 				function ( $row ) {
 					return [
-						'Team Membership ID'          => $row['team_id'],
-						'Group Subscription ID'       => $row['subscription_id'],
-						'Number of Group Members'     => $row['members_added'],
-						'Number of Managers'          => $row['managers_promoted'],
-						'Group Member Limit'          => 0 === $row['seat_limit'] ? 'Unlimited' : $row['seat_limit'],
-						'Created New Group Sub (Y/N)' => $row['created_new'] ? 'Y' : 'N',
+						'Team'     => $row['team_id'],
+						'Sub'      => $row['subscription_id'],
+						'Members'  => $row['members_added'],
+						'Managers' => $row['managers_promoted'],
+						'Limit'    => 0 === $row['seat_limit'] ? 'Unlimited' : $row['seat_limit'],
+						'New?'     => $row['created_new'] ? 'Y' : 'N',
 					];
 				},
 				$summary
 			),
-			[ 'Team Membership ID', 'Group Subscription ID', 'Number of Group Members', 'Number of Managers', 'Group Member Limit', 'Created New Group Sub (Y/N)' ]
+			[ 'Team', 'Sub', 'Members', 'Managers', 'Limit', 'New?' ]
 		);
 
 		// Errors section.
@@ -492,14 +492,14 @@ class Teams_Migration {
 			'table',
 			array_map(
 				fn( $row ) => [
-					'Product ID'         => $row['product_id'],
-					'Product Name'       => $row['product_name'],
-					'Group Member Limit' => $row['limit'],
-					'Variations Updated' => $row['variations'],
+					'Product'    => $row['product_id'],
+					'Name'       => $row['product_name'],
+					'Limit'      => $row['limit'],
+					'Variations' => $row['variations'],
 				],
 				$summary
 			),
-			[ 'Product ID', 'Product Name', 'Group Member Limit', 'Variations Updated' ]
+			[ 'Product', 'Name', 'Limit', 'Variations' ]
 		);
 
 		WP_CLI::line( '' );
@@ -751,16 +751,16 @@ class Teams_Migration {
 			'table',
 			array_map(
 				fn( $row ) => [
-					'Membership ID'   => $row['membership_id'],
-					'User ID'         => $row['user_id'],
-					'User Email'      => $row['user_email'],
-					'Start Date'      => $row['start_date'],
-					'End Date'        => $row['end_date'],
-					'Subscription ID' => $row['sub_id'],
+					'Membership' => $row['membership_id'],
+					'User'       => $row['user_id'],
+					'Email'      => $row['user_email'],
+					'Start'      => $row['start_date'],
+					'End'        => $row['end_date'],
+					'Sub'        => $row['sub_id'],
 				],
 				$summary
 			),
-			[ 'Membership ID', 'User ID', 'User Email', 'Start Date', 'End Date', 'Subscription ID' ]
+			[ 'Membership', 'User', 'Email', 'Start', 'End', 'Sub' ]
 		);
 
 		WP_CLI::line( '' );
@@ -869,16 +869,16 @@ class Teams_Migration {
 				'table',
 				array_map(
 					fn( $row ) => [
-						'Team ID'                     => $row['team_id'],
-						'Subscription ID'             => $row['subscription_id'],
-						'Managers Found'              => $row['managers_found'],
-						'Already Managers'            => $row['already_manager'],
-						$live ? 'Added' : 'Would Add' => $row['added'],
-						'Not a Member'                => $row['not_a_member'],
+						'Team'                        => $row['team_id'],
+						'Sub'                         => $row['subscription_id'],
+						'Found'                       => $row['managers_found'],
+						'Already'                     => $row['already_manager'],
+						$live ? 'Added' : 'Would add' => $row['added'],
+						'Not a member'                => $row['not_a_member'],
 					],
 					$summary
 				),
-				[ 'Team ID', 'Subscription ID', 'Managers Found', 'Already Managers', $live ? 'Added' : 'Would Add', 'Not a Member' ]
+				[ 'Team', 'Sub', 'Found', 'Already', $live ? 'Added' : 'Would add', 'Not a member' ]
 			);
 		}
 
