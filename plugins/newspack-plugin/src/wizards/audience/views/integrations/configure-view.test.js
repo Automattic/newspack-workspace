@@ -14,4 +14,18 @@ describe( 'incoming-field operators', () => {
 		expect( toggleField( {}, option, true ) ).toEqual( { AMOUNT: 'default' } );
 		expect( toggleField( { AMOUNT: 'range' }, option, false ) ).toEqual( {} );
 	} );
+
+	it( 'preserves sibling fields on toggle-off and propagates the field default operator', () => {
+		expect(
+			toggleField(
+				{
+					AMOUNT: 'range',
+					NAME: 'default',
+				},
+				{ value: 'AMOUNT', has_options: false, matching_function: 'range' },
+				false
+			)
+		).toEqual( { NAME: 'default' } );
+		expect( toggleField( {}, { value: 'FAVS', has_options: true, matching_function: 'list__in' }, true ) ).toEqual( { FAVS: 'list__in' } );
+	} );
 } );

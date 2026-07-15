@@ -211,11 +211,10 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 							<SectionHeader heading={ 2 } title={ __( 'Inbound', 'newspack-plugin' ) } noMargin />
 							<Grid columns={ 1 } rowGap={ 8 } noMargin>
 								{ ( inboundField.options || [] ).map( option => {
-									// Framework injects options as { value, label, matching_function, has_options }
-									// objects (see class-integration.php:get_settings_config()), but accepts bare
-									// strings for backward compatibility.
-									const optionValue = typeof option === 'string' ? option : option.value;
-									const optionLabel = typeof option === 'string' ? option : option.label || option.value;
+									// Options are always { value, label, matching_function, has_options } objects
+									// for this field (see class-integration.php:get_settings_config()).
+									const optionValue = option.value;
+									const optionLabel = option.label || option.value;
 									// The stored value for this field is a { key => operator } map, not an array:
 									// a key present means enabled, and its value is the chosen matching operator.
 									const currentMap = getFieldValue( inboundField ) || {};
