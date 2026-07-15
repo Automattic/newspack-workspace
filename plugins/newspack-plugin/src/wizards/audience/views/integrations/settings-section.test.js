@@ -181,17 +181,29 @@ describe( 'Audience Integrations settings section card action', () => {
 		expect( cardProps.busy ).toBe( true );
 	} );
 
-	it( 'shows the unsupported reason as an actionable requirement routing through the handoff', async () => {
+	it( 'offers the integration-supplied action label, not "Connect", when unsupported', async () => {
 		const { history, onToggleEnabled, cardProps } = renderSection( {
 			is_connected: true,
 			unsupported_reason: 'Requires an API-based ESP',
+			unsupported_action_label: 'Change provider',
 		} );
 		expect( cardProps.requirements ).toBe( 'Requires an API-based ESP' );
 		expect( cardProps.requirementsActionable ).toBe( true );
-		expect( cardProps.enableLabel ).toBe( 'Connect' );
+		expect( cardProps.enableLabel ).toBe( 'Change provider' );
 		cardProps.onEnable();
 		await waitFor( () => expect( window.location.href ).toBe( HANDOFF_LINK ) );
 		expect( onToggleEnabled ).not.toHaveBeenCalled();
 		expect( history.push ).not.toHaveBeenCalled();
+	} );
+
+	it( 'disables the action for an unsupported integration with nowhere to send the user', () => {
+		const { cardProps } = renderSection( {
+			is_connected: true,
+			unsupported_reason: 'Requires an API-based ESP',
+			unsupported_action_label: 'Change provider',
+			setup_url: '',
+		} );
+		expect( cardProps.requirements ).toBe( 'Requires an API-based ESP' );
+		expect( cardProps.requirementsActionable ).toBe( false );
 	} );
 } );

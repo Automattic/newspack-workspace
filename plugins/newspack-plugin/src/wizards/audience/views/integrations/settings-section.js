@@ -66,6 +66,7 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 									enabled,
 									is_connected: isConnected = true,
 									unsupported_reason: unsupportedReason,
+									unsupported_action_label: unsupportedActionLabel,
 									setup_url,
 									name,
 									description,
@@ -93,6 +94,9 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 								// is, Enable either opens a modal collecting the missing required settings
 								// (e.g. the ESP master list) or toggles the integration on directly.
 								const needsConnection = ! isConnected && !! setup_url;
+								// An unsupported integration is connected — to something that cannot do the
+								// job — so it gets the integration's own remedy label rather than "Connect".
+								const canFixUnsupported = !! unsupportedReason && !! setup_url;
 								const goToSetup = () => {
 									apiFetch( {
 										path: '/newspack/v1/handoff',
@@ -122,7 +126,10 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 										onToggleEnabled( id, true );
 									}
 								};
-								if ( needsConnection || unsupportedReason ) {
+								if ( canFixUnsupported ) {
+									enableLabel = unsupportedActionLabel;
+									onEnable = goToSetup;
+								} else if ( needsConnection ) {
 									enableLabel = __( 'Connect', 'newspack-plugin' );
 									onEnable = goToSetup;
 								}
@@ -138,11 +145,11 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 										icon={ INTEGRATION_ICONS[ id ] || DEFAULT_ICON }
 										enabled={ isEnabled }
 										requirements={ requirements }
-										requirementsActionable={ canActivate || !! unsupportedReason }
+										requirementsActionable={ canActivate || canFixUnsupported }
 										enableLabel={ enableLabel }
 										busy={ isActivating }
 										onEnable={ onEnable }
-										onConfigure={ needsConnection || unsupportedReason ? goToSetup : goToConfigure }
+										onConfigure={ needsConnection ? goToSetup : goToConfigure }
 										moreControls={
 											isEnabled
 												? [
