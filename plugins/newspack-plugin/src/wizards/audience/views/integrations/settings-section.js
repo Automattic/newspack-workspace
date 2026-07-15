@@ -62,7 +62,14 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 						<Grid columns={ 2 } gutter={ 16 }>
 							{ integrationIds.map( id => {
 								const integration = integrations[ id ];
-								const { enabled, is_connected: isConnected = true, setup_url, name, description } = integration;
+								const {
+									enabled,
+									is_connected: isConnected = true,
+									unsupported_reason: unsupportedReason,
+									setup_url,
+									name,
+									description,
+								} = integration;
 								const missingPlugins = getMissingPlugins( integration );
 								const requiresInstallPlugins = missingPlugins.filter( plugin => ! plugin.is_installed );
 								// Only offer Activate when every missing plugin is at least installed;
@@ -71,7 +78,10 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 								const activatablePlugins = requiresInstallPlugins.length === 0 ? missingPlugins : [];
 								const canActivate = activatablePlugins.length > 0;
 								const isActivating = canActivate && activatablePlugins.some( plugin => activating[ plugin.slug ] );
-								const requirements = missingPlugins.length
+								// eslint-disable-next-line no-nested-ternary
+								const requirements = unsupportedReason
+									? unsupportedReason
+									: missingPlugins.length
 									? sprintf(
 											/* translators: %s: comma-separated list of required plugin names. */
 											__( 'Requires %s', 'newspack-plugin' ),
@@ -112,7 +122,7 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 										onToggleEnabled( id, true );
 									}
 								};
-								if ( needsConnection ) {
+								if ( needsConnection || unsupportedReason ) {
 									enableLabel = __( 'Connect', 'newspack-plugin' );
 									onEnable = goToSetup;
 								}
@@ -128,10 +138,10 @@ export const SettingsSection = ( { integrations, loading, activating = {}, onTog
 										icon={ INTEGRATION_ICONS[ id ] || DEFAULT_ICON }
 										enabled={ isEnabled }
 										requirements={ requirements }
-										requirementsActionable={ canActivate }
+										requirementsActionable={ canActivate || !! unsupportedReason }
 										enableLabel={ enableLabel }
 										onEnable={ onEnable }
-										onConfigure={ needsConnection ? goToSetup : goToConfigure }
+										onConfigure={ needsConnection || unsupportedReason ? goToSetup : goToConfigure }
 										moreControls={
 											isEnabled
 												? [

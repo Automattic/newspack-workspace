@@ -168,4 +168,18 @@ describe( 'Audience Integrations settings section card action', () => {
 		cardProps.onEnable();
 		await waitFor( () => expect( window.location.href ).toBe( SETUP_URL ) );
 	} );
+
+	it( 'shows the unsupported reason as an actionable requirement routing through the handoff', async () => {
+		const { history, onToggleEnabled, cardProps } = renderSection( {
+			is_connected: true,
+			unsupported_reason: 'Requires an API-based ESP',
+		} );
+		expect( cardProps.requirements ).toBe( 'Requires an API-based ESP' );
+		expect( cardProps.requirementsActionable ).toBe( true );
+		expect( cardProps.enableLabel ).toBe( 'Connect' );
+		cardProps.onEnable();
+		await waitFor( () => expect( window.location.href ).toBe( HANDOFF_LINK ) );
+		expect( onToggleEnabled ).not.toHaveBeenCalled();
+		expect( history.push ).not.toHaveBeenCalled();
+	} );
 } );
