@@ -280,6 +280,13 @@ class Audience_Integrations extends Wizard {
 		}
 
 		if ( $enabled ) {
+			if ( ! $integration->is_connected() ) {
+				return new WP_Error(
+					'newspack_integration_not_connected',
+					esc_html__( 'This integration must be connected before it can be enabled.', 'newspack-plugin' ),
+					[ 'status' => 400 ]
+				);
+			}
 			Integrations::enable( $integration_id );
 		} else {
 			Integrations::disable( $integration_id );

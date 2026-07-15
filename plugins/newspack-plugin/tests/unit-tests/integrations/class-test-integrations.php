@@ -1793,4 +1793,75 @@ class Test_Integrations extends \WP_UnitTestCase {
 		$this->assertArrayHasKey( 'main_list', $fields );
 		$this->assertTrue( $fields['main_list']['required'] );
 	}
+
+	/**
+	 * The enable endpoint rejects enabling an integration whose external service is not connected.
+	 */
+	public function test_enable_endpoint_rejects_unconnected_integration() {
+		$integration = new class( 'unconnected_test', 'Unconnected Test' ) extends Sample_Integration {
+			/**
+			 * Report the external service as not connected.
+			 *
+			 * @return bool
+			 */
+			public function is_connected() {
+				return false;
+			}
+		};
+		Integrations::register( $integration );
+
+		$wizard  = new \Newspack\Audience_Integrations();
+		$request = new \WP_REST_Request( 'POST' );
+		$request->set_param( 'integration_id', 'unconnected_test' );
+		$request->set_param( 'enabled', true );
+
+		$response = $wizard->api_update_integration_enabled( $request );
+		$this->assertWPError( $response );
+		$this->assertSame( 'newspack_integration_not_connected', $response->get_error_code() );
+		$this->assertFalse( Integrations::is_enabled( 'unconnected_test' ) );
+	}
+
+	/**
+	 * The enable endpoint still allows disabling an integration that is not connected.
+	 */
+	public function test_enable_endpoint_allows_disabling_unconnected_integration() {
+		$integration = new class( 'unconnected_disable_test', 'Unconnected Disable Test' ) extends Sample_Integration {
+			/**
+			 * Report the external service as not connected.
+			 *
+			 * @return bool
+			 */
+			public function is_connected() {
+				return false;
+			}
+		};
+		Integrations::register( $integration );
+		Integrations::enable( 'unconnected_disable_test' );
+
+		$wizard  = new \Newspack\Audience_Integrations();
+		$request = new \WP_REST_Request( 'POST' );
+		$request->set_param( 'integration_id', 'unconnected_disable_test' );
+		$request->set_param( 'enabled', false );
+
+		$response = $wizard->api_update_integration_enabled( $request );
+		$this->assertNotWPError( $response );
+		$this->assertFalse( Integrations::is_enabled( 'unconnected_disable_test' ) );
+	}
+
+	/**
+	 * The enable endpoint enables a connected integration.
+	 */
+	public function test_enable_endpoint_enables_connected_integration() {
+		$integration = new Sample_Integration( 'connected_test', 'Connected Test' );
+		Integrations::register( $integration );
+
+		$wizard  = new \Newspack\Audience_Integrations();
+		$request = new \WP_REST_Request( 'POST' );
+		$request->set_param( 'integration_id', 'connected_test' );
+		$request->set_param( 'enabled', true );
+
+		$response = $wizard->api_update_integration_enabled( $request );
+		$this->assertNotWPError( $response );
+		$this->assertTrue( Integrations::is_enabled( 'connected_test' ) );
+	}
 }
