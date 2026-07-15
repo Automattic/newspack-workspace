@@ -15,6 +15,7 @@ import AudienceIntegrations from './index';
 
 const mockAddNotice = jest.fn();
 const captured = {};
+const loadingStates = [];
 
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '@wordpress/data', () => ( {
@@ -33,6 +34,7 @@ jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
 jest.mock( './settings-section', () => ( {
 	SettingsSection: props => {
 		captured.props = props;
+		loadingStates.push( props.loading );
 		return null;
 	},
 } ) );
@@ -144,6 +146,56 @@ describe( 'AudienceIntegrations notices', () => {
 				await Promise.resolve();
 			} );
 			expect( captured.props.activating[ 'newspack-newsletters' ] ).toBeUndefined();
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	it( 'keeps the card grid mounted and stays busy until the post-activation refetch lands', async () => {
+		jest.useFakeTimers();
+		try {
+			// Hold the post-activation refetch (the plain GET call) open so we can
+			// inspect state while it's in flight; the activation POST resolves
+			// immediately.
+			let resolveRefetch;
+			const refetchPromise = new Promise( resolve => {
+				resolveRefetch = resolve;
+			} );
+			apiFetch.mockImplementation( ( { method } = {} ) => ( method === 'POST' ? Promise.resolve( {} ) : refetchPromise ) );
+			loadingStates.length = 0;
+
+			act( () => {
+				captured.props.onActivatePlugin( [ 'newspack-newsletters' ] );
+			} );
+			expect( captured.props.activating[ 'newspack-newsletters' ] ).toBe( true );
+
+			// Resolve the activation request and cross the minimum busy window so
+			// the refetch kicks off, but leave it unresolved.
+			await act( async () => {
+				await Promise.resolve();
+				await Promise.resolve();
+				jest.advanceTimersByTime( 2100 );
+				await Promise.resolve();
+				await Promise.resolve();
+				await Promise.resolve();
+			} );
+
+			// The refetch is in flight: the grid must stay mounted (loading never
+			// flips true) and the card must keep its own busy state rather than
+			// flashing back to a stale "Activate".
+			expect( captured.props.loading ).toBe( false );
+			expect( captured.props.activating[ 'newspack-newsletters' ] ).toBe( true );
+			expect( loadingStates ).not.toContain( true );
+
+			await act( async () => {
+				resolveRefetch( SETTINGS_MAP );
+				await Promise.resolve();
+				await Promise.resolve();
+				await Promise.resolve();
+			} );
+
+			expect( captured.props.activating[ 'newspack-newsletters' ] ).toBeUndefined();
+			expect( loadingStates ).not.toContain( true );
 		} finally {
 			jest.useRealTimers();
 		}

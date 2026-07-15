@@ -44,14 +44,23 @@ const AudienceIntegrations = ( props, ref ) => {
 		[ addNotice ]
 	);
 
-	const fetchSettings = useCallback( () => {
-		setLoading( true );
-		apiFetch( { path: API_PATH } )
+	// showLoading swaps the whole card grid for a "Loading…" line, which is right
+	// on first mount and wrong on a refetch — the cards are already on screen and
+	// the card carries its own busy state.
+	const fetchSettings = useCallback( ( { showLoading = true } = {} ) => {
+		if ( showLoading ) {
+			setLoading( true );
+		}
+		return apiFetch( { path: API_PATH } )
 			.then( data => {
 				setIntegrations( data );
 				setPendingChanges( {} );
 			} )
-			.finally( () => setLoading( false ) );
+			.finally( () => {
+				if ( showLoading ) {
+					setLoading( false );
+				}
+			} );
 	}, [] );
 
 	useEffect( () => {
@@ -185,7 +194,7 @@ const AudienceIntegrations = ( props, ref ) => {
 					// near-instant, so the user sees that something happened.
 					new Promise( resolve => setTimeout( resolve, MIN_ACTIVATION_BUSY_MS ) ),
 				] )
-					.then( () => fetchSettings() )
+					.then( () => fetchSettings( { showLoading: false } ) )
 					.catch( () => {
 						// Surface nothing here; failures leave the integration in its
 						// previous state and the user can retry. apiFetch already logs
