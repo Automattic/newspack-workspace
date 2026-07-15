@@ -468,6 +468,21 @@ class Content_Restriction_Control {
 	}
 
 	/**
+	 * Whether the current user may toggle the content-gate exemption meta.
+	 *
+	 * Single source of truth for the exemption's write capability, shared by
+	 * the meta's register_meta() auth_callback and the REST strip guard so the
+	 * two cannot drift — the strip is defined as the inverse of what the field
+	 * authorizes rather than a re-derivation of the same literal. If the
+	 * capability ever becomes filterable, both stay in lockstep.
+	 *
+	 * @return bool
+	 */
+	public static function current_user_can_edit_exemption() {
+		return current_user_can( 'edit_others_posts' );
+	}
+
+	/**
 	 * Register post meta for the exemption flag.
 	 */
 	public static function register_meta() {
@@ -485,9 +500,7 @@ class Content_Restriction_Control {
 					'type'           => 'boolean',
 					'default'        => false,
 					'single'         => true,
-					'auth_callback'  => function() {
-						return current_user_can( 'edit_others_posts' );
-					},
+					'auth_callback'  => [ __CLASS__, 'current_user_can_edit_exemption' ],
 				]
 			);
 		}
@@ -525,7 +538,7 @@ class Content_Restriction_Control {
 		if (
 			is_array( $meta ) &&
 			array_key_exists( self::IS_EXEMPT_META_KEY, $meta ) &&
-			! current_user_can( 'edit_others_posts' )
+			! self::current_user_can_edit_exemption()
 		) {
 			unset( $meta[ self::IS_EXEMPT_META_KEY ] );
 			$request['meta'] = $meta;
