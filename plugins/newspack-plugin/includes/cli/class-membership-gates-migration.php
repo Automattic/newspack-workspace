@@ -332,7 +332,7 @@ class Membership_Gates_Migration {
 				}
 				WP_CLI::warning(
 					sprintf(
-						'Plan "%s" also restricts all content in taxonomy [%s], which Access Control cannot represent. That restriction is omitted, so the generated gate under-covers what WCM gated — review it manually.',
+						'Plan "%s" also restricts every post in taxonomy [%s] (beyond any specific terms gated), which Access Control cannot represent. That blanket restriction is omitted, so the generated gate under-covers what WCM gated — review it manually.',
 						$plan_name,
 						implode( ', ', $dropped_taxonomies )
 					)
@@ -509,14 +509,17 @@ class Membership_Gates_Migration {
 				continue;
 			}
 
+			// Drop whole-taxonomy rules (no term IDs) rather than emit an empty-value rule
+			// Access Control would silently filter out; the caller warns instead. Detection
+			// is shared with whole_taxonomy_rule_slugs() so the drop and the warning can
+			// never disagree about what is dropped.
+			if ( self::is_whole_taxonomy_rule( $rule ) ) {
+				continue;
+			}
+
 			$object_ids = array_map( 'strval', array_values( $rule->get_object_ids() ) );
 
 			if ( 'taxonomy' === $rule->get_content_type() ) {
-				// Drop whole-taxonomy rules (no term IDs) rather than emit an empty-value
-				// rule Access Control would silently filter out; the caller warns instead.
-				if ( empty( $object_ids ) ) {
-					continue;
-				}
 				// Taxonomy rules key under the taxonomy slug; the value is the term IDs.
 				$slug  = $content_type_name;
 				$value = $object_ids;
@@ -581,14 +584,31 @@ class Membership_Gates_Migration {
 	private static function whole_taxonomy_rule_slugs( array $wc_rules ): array {
 		$slugs = [];
 		foreach ( $wc_rules as $rule ) {
-			$content_type_name = $rule->get_content_type_name();
-			if ( ! empty( $content_type_name )
-				&& 'taxonomy' === $rule->get_content_type()
-				&& empty( $rule->get_object_ids() ) ) {
-				$slugs[] = $content_type_name;
+			if ( self::is_whole_taxonomy_rule( $rule ) ) {
+				$slugs[] = $rule->get_content_type_name();
 			}
 		}
 		return array_values( array_unique( $slugs ) );
+	}
+
+	/**
+	 * Whether a WC rule is a whole-taxonomy restriction (NPPD-2065).
+	 *
+	 * A whole-taxonomy rule is a named taxonomy rule with no term IDs — WCM's "restrict
+	 * every post carrying this taxonomy", which Access Control has no slug for. This is
+	 * the single source of truth for that shape: map_rules_to_ac_format() drops such
+	 * rules and whole_taxonomy_rule_slugs() reports them, both via this predicate, so the
+	 * drop and the operator warning can never diverge (a divergence would silently
+	 * reintroduce the under-cover the fix closes).
+	 *
+	 * @param \WC_Memberships_Membership_Plan_Rule $rule A WC Memberships rule.
+	 *
+	 * @return bool True when the rule restricts a whole taxonomy with no term IDs.
+	 */
+	private static function is_whole_taxonomy_rule( $rule ): bool {
+		return ! empty( $rule->get_content_type_name() )
+			&& 'taxonomy' === $rule->get_content_type()
+			&& empty( $rule->get_object_ids() );
 	}
 
 	/**

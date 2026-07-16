@@ -407,12 +407,51 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-2065: is_whole_taxonomy_rule() is the single predicate both the mapper's drop
+	 * and the caller's warning key off, so pinning it here guards the safety property that
+	 * a rule is dropped by map_rules_to_ac_format() if and only if the caller warns about
+	 * it. Only a named taxonomy rule with no term IDs qualifies.
+	 *
+	 * @dataProvider whole_taxonomy_rule_cases
+	 *
+	 * @param string $content_type      The WC content type kind.
+	 * @param string $content_type_name The WC content type name.
+	 * @param int[]  $object_ids        The restricted object IDs.
+	 * @param bool   $expected          Whether the rule is a whole-taxonomy restriction.
+	 */
+	public function test_is_whole_taxonomy_rule( string $content_type, string $content_type_name, array $object_ids, bool $expected ) {
+		$rule = $this->make_rule( $content_type, $content_type_name, $object_ids );
+
+		$this->assertSame(
+			$expected,
+			$this->invoke_private_static( 'is_whole_taxonomy_rule', [ $rule ] )
+		);
+	}
+
+	/**
+	 * Cases for test_is_whole_taxonomy_rule().
+	 *
+	 * @return array<string,array{string,string,int[],bool}>
+	 */
+	public function whole_taxonomy_rule_cases(): array {
+		return [
+			'whole taxonomy (no term IDs)'    => [ 'taxonomy', 'category', [], true ],
+			'term-scoped taxonomy'            => [ 'taxonomy', 'category', [ 5 ], false ],
+			'whole post type (no object IDs)' => [ 'post_type', 'post', [], false ],
+			'specific post'                   => [ 'post_type', 'post', [ 12 ], false ],
+			'nameless taxonomy'               => [ 'taxonomy', '', [], false ],
+		];
+	}
+
+	/**
 	 * NPPD-2065 fingerprint/consolidation interaction: a dropped whole-taxonomy rule
 	 * leaves no trace in the mapped rules, so it cannot spuriously split a plan into its
 	 * own fingerprint group nor block a merge. A plan gating "all categories" plus
 	 * category term 5 fingerprints identically to a plan gating only category term 5 —
 	 * they consolidate into one gate on the representable content, while the dropped
-	 * "all categories" restriction is surfaced by the per-plan warning (asserted e2e).
+	 * "all categories" restriction is surfaced by the per-plan warning that
+	 * group_plans_by_fingerprint() emits (verified by running the migration command, as
+	 * that WC-dependent caller is exercised end-to-end rather than unit-tested).
 	 */
 	public function test_dropped_whole_taxonomy_rule_does_not_affect_fingerprint() {
 		$whole_category_rule = $this->make_rule( 'taxonomy', 'category', [] );
