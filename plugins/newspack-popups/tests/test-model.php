@@ -406,6 +406,28 @@ class ModelTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * The common case: a saved prompt with no autosave at all. wp_get_post_autosave()
+	 * returns false, so the preview renders the saved post unconditionally.
+	 */
+	public function test_preview_uses_saved_post_when_no_autosave_exists() {
+		wp_set_current_user( self::factory()->user->create( [ 'role' => 'administrator' ] ) );
+		$popup_id = self::factory()->post->create(
+			[
+				'post_type'    => Newspack_Popups::NEWSPACK_POPUPS_CPT,
+				'post_content' => '<!-- wp:paragraph --><p>Saved body.</p><!-- /wp:paragraph -->',
+			]
+		);
+		self::assertFalse( wp_get_post_autosave( $popup_id ), 'Precondition: the prompt must have no autosave.' );
+
+		$preview = Newspack_Popups_Model::retrieve_preview_popup( $popup_id );
+		self::assertStringContainsString(
+			'Saved body.',
+			$preview['content'],
+			'With no autosave, the preview must render the saved post.'
+		);
+	}
+
+	/**
 	 * A preview should only load the prompts CPT, not arbitrary post types.
 	 */
 	public function test_retrieve_preview_popup_denies_non_prompt_post_type() {
