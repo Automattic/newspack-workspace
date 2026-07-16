@@ -200,10 +200,10 @@ class TestProductNetworkIdsCLI extends WP_UnitTestCase {
 	}
 
 	/**
-	 * --map parsing coerces JSON string keys to integer product IDs and trims Network ID values.
+	 * --map parsing coerces JSON string keys to integer product IDs and sanitizes Network ID values.
 	 *
-	 * ( The empty-value branch calls WP_CLI::warning, which is unavailable under PHPUnit, so it is
-	 * exercised via the CLI end-to-end rather than here. )
+	 * ( The empty-value and non-scalar branches call WP_CLI::warning, which is unavailable under PHPUnit,
+	 * so they are exercised via the CLI end-to-end rather than here. )
 	 */
 	public function test_parse_map() {
 		$parse_map_method = new ReflectionMethod( Product_Network_Ids::class, 'parse_map' );
@@ -214,7 +214,7 @@ class TestProductNetworkIdsCLI extends WP_UnitTestCase {
 		// JSON object keys arrive as strings; they must become integer product IDs.
 		$this->assertSame( [ 5, 6 ], array_keys( $parsed ) );
 		$this->assertSame( 'premium', $parsed[5] );
-		// Values are trimmed.
+		// Values are sanitized ( sanitize_text_field trims surrounding whitespace ).
 		$this->assertSame( 'basic', $parsed[6] );
 	}
 }

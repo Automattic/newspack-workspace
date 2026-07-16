@@ -236,6 +236,9 @@ class Product_Network_Ids {
 		$to_write = 0;
 		foreach ( $assignments as $product_id => $network_id ) {
 			$product_id = (int) $product_id;
+			// Sanitize at the write path so the meta is consistent whatever the source ( plan meta or --map ),
+			// matching the product metabox's sanitize_text_field(). Done before the preview so dry-run matches apply.
+			$network_id = sanitize_text_field( (string) $network_id );
 
 			$post_type = get_post_type( $product_id );
 			if ( 'product' !== $post_type ) {
@@ -473,7 +476,11 @@ class Product_Network_Ids {
 
 		$assignments = [];
 		foreach ( $decoded as $product_id => $network_id ) {
-			$network_id = trim( (string) $network_id );
+			if ( ! is_scalar( $network_id ) ) {
+				WP_CLI::warning( sprintf( 'Skipping product #%d in --map: Network ID must be a string.', (int) $product_id ) );
+				continue;
+			}
+			$network_id = sanitize_text_field( (string) $network_id );
 			if ( '' === $network_id ) {
 				WP_CLI::warning( sprintf( 'Skipping product #%d in --map: empty Network ID.', (int) $product_id ) );
 				continue;
