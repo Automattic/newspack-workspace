@@ -244,7 +244,7 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 									const currentMap = getFieldValue( inboundField ) || {};
 									const checked = Object.prototype.hasOwnProperty.call( currentMap, optionValue );
 									return (
-										<div key={ optionValue }>
+										<div className="newspack-configure-view__inbound-field" key={ optionValue }>
 											<CheckboxControl
 												className="newspack-checkbox-control"
 												label={ optionLabel }
@@ -255,6 +255,7 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 											/>
 											{ checked && (
 												<SelectControl
+													className="newspack-configure-view__inbound-operator"
 													label={ __( 'Segment as', 'newspack-plugin' ) }
 													hideLabelFromVision
 													value={ currentMap[ optionValue ] }
