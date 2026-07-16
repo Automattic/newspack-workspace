@@ -326,7 +326,7 @@ class Membership_Gates_Migration {
 					// differently — the skip is reported per plan below.
 					WP_CLI::warning(
 						sprintf(
-							'Plan "%s" restricts all content in taxonomy [%s], which Access Control cannot represent, so no gate is generated for it. Subscribers of this plan\'s product may lose access to content that other gates cover — add that product to those gates, or hand-build this taxonomy gate.',
+							'Plan "%s" restricts all content in taxonomy [%s], which Access Control cannot represent, so no gate is generated for it. Readers who reach that content through this plan may lose access where another gate covers it — admit this plan\'s readers at those gates (for a purchase plan, add its product there; for a signup plan, allow registered access), or hand-build this taxonomy gate.',
 							$plan_name,
 							implode( ', ', $dropped_taxonomies )
 						)
@@ -342,7 +342,7 @@ class Membership_Gates_Migration {
 				}
 				WP_CLI::warning(
 					sprintf(
-						'Plan "%s" also restricts every post in taxonomy [%s], which Access Control cannot represent, so that blanket restriction is omitted and the generated gate under-covers what WCM gated. Subscribers of this plan\'s product may lose access to the omitted content where another gate covers it — add that product to those gates, or hand-build the taxonomy gate.',
+						'Plan "%s" also restricts every post in taxonomy [%s], which Access Control cannot represent, so that blanket restriction is omitted and the generated gate under-covers what WCM gated. Readers who reach the omitted content through this plan may lose access where another gate covers it — admit this plan\'s readers at those gates (for a purchase plan, add its product there; for a signup plan, allow registered access), or hand-build the taxonomy gate.',
 						$plan_name,
 						implode( ', ', $dropped_taxonomies )
 					)
