@@ -951,8 +951,24 @@ class Memberships {
 			$candidate_ids[] = $parent_id;
 		}
 		if ( class_exists( 'WC_Subscriptions_Product' ) && method_exists( 'WC_Subscriptions_Product', 'get_visible_grouped_parent_product_ids' ) ) {
-			foreach ( (array) \WC_Subscriptions_Product::get_visible_grouped_parent_product_ids( $product ) as $grouped_id ) {
-				$candidate_ids[] = (int) $grouped_id;
+			// Look the grouped parents up from the resolved parent as well as the
+			// purchased product. get_visible_grouped_parent_product_ids() resolves
+			// through get_parent_ids(), which matches a grouped product's `_children`
+			// meta -- and that holds top-level product IDs, never variation IDs. A
+			// variation therefore finds no grouped parent on its own, so a plan
+			// granting the grouped parent would be missed for a variation purchase.
+			// Layer 1 resolves to the parent before this same lookup.
+			$grouped_lookup_products = [ $product ];
+			if ( $parent_id > 0 ) {
+				$parent_product = wc_get_product( $parent_id );
+				if ( $parent_product ) {
+					$grouped_lookup_products[] = $parent_product;
+				}
+			}
+			foreach ( $grouped_lookup_products as $lookup_product ) {
+				foreach ( (array) \WC_Subscriptions_Product::get_visible_grouped_parent_product_ids( $lookup_product ) as $grouped_id ) {
+					$candidate_ids[] = (int) $grouped_id;
+				}
 			}
 		}
 		$candidate_ids = array_unique( array_filter( $candidate_ids ) );

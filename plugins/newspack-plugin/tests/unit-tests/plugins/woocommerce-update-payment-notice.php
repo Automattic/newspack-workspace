@@ -521,6 +521,35 @@ class Newspack_Test_WooCommerce_Update_Payment_Notice extends WP_UnitTestCase {
 	}
 
 	/**
+	 * A variation whose parent belongs to a grouped product is matched to a plan
+	 * granting that grouped parent. WC_Subscriptions_Product::get_parent_ids()
+	 * resolves grouped parents by matching the grouped product's `_children` meta,
+	 * which holds top-level product IDs and never variation IDs -- so the grouped
+	 * lookup only finds anything when it runs against the resolved parent.
+	 */
+	public function test_plan_lookup_matches_grouped_parent_of_variation() {
+		newspack_register_mock_membership_plan( 705, [ 8100 ] );
+		global $wcs_grouped_parents;
+		wc_create_mock_product(
+			[
+				'id'   => 8101,
+				'name' => 'Grouped child (variable)',
+			]
+		);
+		$variation = wc_create_mock_product(
+			[
+				'id'        => 8102,
+				'name'      => 'Grouped child – Monthly',
+				'parent_id' => 8101,
+			]
+		);
+		// The grouped parent is registered against the top-level product only,
+		// as WC Subscriptions does -- the variation resolves to nothing.
+		$wcs_grouped_parents[8101] = [ 8100 ];
+		$this->assertSame( [ 705 ], $this->get_plan_ids_for_product( $variation ) );
+	}
+
+	/**
 	 * A pending-cancel subscription (still has access until period end) counts as equivalent access.
 	 */
 	public function test_equivalent_access_via_pending_cancel_subscription() {
