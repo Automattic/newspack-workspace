@@ -194,8 +194,9 @@ class Distributor_Migrator {
 			unset( $payload['post_data']['post_meta'][ $meta_key ] );
 		}
 
-		// Store payload for insertion.
-		update_post_meta( $post_id, Incoming_Post::PAYLOAD_META, $payload );
+		// Store payload for insertion. Meta functions unslash their input, so
+		// slash the payload to keep escaped block-attribute JSON intact.
+		update_post_meta( $post_id, Incoming_Post::PAYLOAD_META, wp_slash( $payload ) );
 
 		try {
 			$incoming_post = new Incoming_Post( $post_id );

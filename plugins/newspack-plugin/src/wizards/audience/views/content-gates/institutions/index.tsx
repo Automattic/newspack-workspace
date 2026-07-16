@@ -49,7 +49,7 @@ export default function Institutions() {
 		const actions: HeaderAction[] = [
 			{
 				type: 'secondary',
-				label: __( 'Back to Access control', 'newspack-plugin' ),
+				label: __( 'Back to Access Control', 'newspack-plugin' ),
 				icon: 'chevronLeft',
 				href: '#/content-gates',
 			},
@@ -57,12 +57,11 @@ export default function Institutions() {
 		if ( data.length !== 0 ) {
 			actions.push( {
 				type: 'primary',
-				label: __( 'Add new institution', 'newspack-plugin' ),
+				label: __( 'Add Institution', 'newspack-plugin' ),
 				href: '#/institutions/new',
 			} );
 		}
 		setHeaderData( {
-			sectionName: __( 'Institutions', 'newspack-plugin' ),
 			actions,
 		} );
 	}, [ setHeaderData, data, isLoading ] );

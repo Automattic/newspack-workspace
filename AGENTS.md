@@ -120,6 +120,20 @@ n stop            # Stop containers
 n restart         # Stop and start
 ```
 
+#### Customizing the main dev stack (docker-compose.override.yml)
+
+`n start` invokes Compose with an explicit `-f`, which disables Compose's automatic loading of an override file. To customize the **main** dev container (extra bind mounts, env vars, ports, etc.) without editing the tracked `docker-compose.yml`, create a `docker-compose.override.yml` at the workspace root. When present, `n start` appends it (`-f docker-compose.override.yml`) so its settings merge over the base stack; when absent, nothing changes. The file is gitignored, so it stays a per-developer customization.
+
+Example – add a host directory as a bind mount on the `wordpress` service:
+```yaml
+services:
+  wordpress:
+    volumes:
+      - /Users/me/some-local-dir:/var/www/extra
+```
+
+This override applies only to the main stack (`newspack_dev`). Isolated environments (`n env`) do **not** load it; they layer their own generated `docker-compose.env-*.yml` files instead, so a root override can't clobber env-specific config.
+
 ### First-Time Setup
 ```bash
 cp default.env .env           # Create local config
@@ -255,7 +269,12 @@ n setup --env myenv --yes     # fully configured Newspack site
 ### Environment Commands
 ```bash
 n env create <name> [options]  # Create environment config
-  --worktree <repo>:<branch>   #   Mount a worktree (repeatable for multiple repos)
+  --worktree <repo>:<branch>   #   Mount a worktree (repeatable for multiple repos).
+                               #   <repo> may be a monorepo plugin/theme OR a standalone
+                               #   checkout under repos/ that is its own git repo (e.g.
+                               #   newspack-manager); the latter is worktree'd from that repo
+                               #   and mounted over just its /newspack-repos/<kind>/<name> path,
+                               #   so other envs keep the base checkout.
   --domain <domain>            #   Custom domain (default: <name>.test)
   --up                         #   Start the environment immediately after creation
 n env up <name> [--build]      # Start environment (creates DB, installs WP, sets up SSL)
@@ -298,7 +317,7 @@ n sh <name>                    # Shell into environment container
 - Each env mounts `envs/<name>/html/` as `/var/www/html` (isolated from `./html/`)
 - Each env gets its own database (`wordpress_<name>`) in the shared MariaDB server
 - Each env gets a unique `WP_CACHE_KEY_SALT` to prevent memcached key collisions
-- Worktrees override specific plugins (e.g., `newspack-plugin`) while sharing the rest from `./plugins/`
+- Worktrees override specific plugins (e.g., `newspack-plugin`) while sharing the rest from `./plugins/`. Monorepo worktrees live in `worktrees/<safe_branch>/` (a worktree of the whole workspace repo); standalone `repos/` worktrees live in `worktrees-repos/<name>/<safe_branch>/` (a worktree of that repo) and are mounted over just their `/newspack-repos/<kind>/<name>` subpath, leaving the base `repos/` checkout intact for other envs. Destroying a monorepo worktree deletes its branch; destroying a `repos/` worktree keeps the branch (standalone repos carry long-lived branches)
 - All env containers join a shared `newspack_envs` Docker bridge network with their domain as a DNS alias, enabling inter-container communication (e.g., hub/node setups)
 - `n env destroy` cleans up everything: container, DB, html dir, hosts entry, and worktrees
 
