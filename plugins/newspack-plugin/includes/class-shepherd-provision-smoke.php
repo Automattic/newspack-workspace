@@ -20,7 +20,7 @@ class Shepherd_Provision_Smoke {
 	 * @return string
 	 */
 	public static function hello( $name ) {
-		if ( $name ) {
+		if ($name) {
 			return 'hello ' . $name;
 		}
 		return 'hello';
