@@ -624,6 +624,107 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
+	 * NPPD-2066 hierarchy expansion: a rule restricting a parent category term expands
+	 * to include its descendant terms, because both WooCommerce Memberships and Access
+	 * Control cascade a parent-term restriction to posts assigned only to a child term.
+	 * The expanded value is what the consolidation decision compares, so parent ⊃ child
+	 * becomes a visible coverage relation instead of two flat, non-overlapping values.
+	 */
+	public function test_expand_rule_set_hierarchy_expands_parent_category_to_descendants() {
+		$parent_term_id = self::factory()->category->create();
+		$child_term_id  = self::factory()->category->create( [ 'parent' => $parent_term_id ] );
+
+		$parent_rule_set = [
+			[
+				'slug'  => 'category',
+				'value' => [ (string) $parent_term_id ],
+			],
+		];
+
+		$expanded = $this->invoke_private_static( 'expand_rule_set_hierarchy', [ $parent_rule_set ] );
+
+		$this->assertSame( 'category', $expanded[0]['slug'] );
+		$this->assertEqualSets(
+			[ (string) $parent_term_id, (string) $child_term_id ],
+			$expanded[0]['value'],
+			'The parent-category rule value gains its child term (values stay stringified).'
+		);
+	}
+
+	/**
+	 * NPPD-2066: expansion only touches hierarchical taxonomies. Tags (non-hierarchical)
+	 * and post_types / specific_posts rules have no term tree and pass through untouched,
+	 * so the expansion never fabricates coverage between unrelated rule sets.
+	 */
+	public function test_expand_rule_set_hierarchy_leaves_non_hierarchical_and_non_taxonomy_rules_unchanged() {
+		$tag_term_id = self::factory()->tag->create();
+
+		$rule_set = [
+			[
+				'slug'  => 'post_tag',
+				'value' => [ (string) $tag_term_id ],
+			],
+			[
+				'slug'  => 'post_types',
+				'value' => [ 'post' ],
+			],
+			[
+				'slug'  => 'specific_posts',
+				'value' => [ '42' ],
+			],
+		];
+
+		$this->assertSame(
+			$rule_set,
+			$this->invoke_private_static( 'expand_rule_set_hierarchy', [ $rule_set ] ),
+			'Non-hierarchical taxonomy, post-type, and specific-post rules are returned verbatim.'
+		);
+	}
+
+	/**
+	 * NPPD-2066 end-to-end decision: a plan restricting a parent category and a plan
+	 * restricting its child are split by fingerprint grouping (distinct flat values). Once
+	 * their rule values are hierarchy-expanded — exactly what consolidate_plan_groups()
+	 * does before delegating — the parent set covers the child set, so the child group is
+	 * absorbed into the parent and no unresolved overlap is left. Without expansion the
+	 * split is silent: neither absorbed nor flagged.
+	 */
+	public function test_hierarchy_nested_plans_consolidate_after_expansion() {
+		$parent_term_id = self::factory()->category->create();
+		$child_term_id  = self::factory()->category->create( [ 'parent' => $parent_term_id ] );
+
+		$child_group_rules  = [
+			[
+				'slug'  => 'category',
+				'value' => [ (string) $child_term_id ],
+			],
+		];
+		$parent_group_rules = [
+			[
+				'slug'  => 'category',
+				'value' => [ (string) $parent_term_id ],
+			],
+		];
+
+		$expanded_rule_sets = array_map(
+			fn( $rules ) => $this->invoke_private_static( 'expand_rule_set_hierarchy', [ $rules ] ),
+			[ $child_group_rules, $parent_group_rules ]
+		);
+
+		$plan = $this->invoke_private_static(
+			'plan_rule_set_consolidation',
+			[ $expanded_rule_sets, [ true, true ] ]
+		);
+
+		$this->assertSame(
+			[ 0 => 1 ],
+			$plan['absorbed_by'],
+			'The child-category group (index 0) is absorbed into the parent-category group (index 1).'
+		);
+		$this->assertSame( [], $plan['overlaps'], 'A clean hierarchy subset leaves no unresolved-overlap warning.' );
+	}
+
+	/**
 	 * The product-ID union across a group's plan descriptors is de-duplicated, so a
 	 * consolidated gate's paid-access list carries each merged plan's products once.
 	 */
