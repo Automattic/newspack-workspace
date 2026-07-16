@@ -4,7 +4,7 @@
 import { __ } from '@wordpress/i18n';
 import { CheckboxControl } from '@wordpress/components';
 import { useDispatch } from '@wordpress/data';
-import { useEffect, useMemo, useRef } from '@wordpress/element';
+import { useEffect, useMemo, useRef, useState } from '@wordpress/element';
 
 /**
  * Internal dependencies
@@ -16,38 +16,37 @@ import { SettingsField } from './settings-field';
 
 import './configure-view.scss';
 
-export const ConfigureView = ( { integrations, loading, pendingChanges, saving, onFieldChange, onDiscardChanges, onSave, match } ) => {
+// Remount the inner view when the integration id changes so the local draft is
+// per-integration. Switching integrations (same Route, new params) and leaving
+// the view both reset the draft structurally — no unmount cleanup effect needed.
+export const ConfigureView = props => <ConfigureViewInner key={ props.match?.params?.integrationId } { ...props } />;
+
+const ConfigureViewInner = ( { integrations, loading, inFlightChanges, saving, onSave, match } ) => {
 	const { setHeaderData } = useDispatch( WIZARD_STORE_NAMESPACE );
 
 	const integrationId = match?.params?.integrationId;
 	const integration = integrations[ integrationId ];
 
-	const hasPending = pendingChanges[ integrationId ] && Object.keys( pendingChanges[ integrationId ] ).length > 0;
+	// The live draft is local to the view. Seeded from the request layer's retry
+	// buffer so returning to an integration whose last save failed re-shows the
+	// unsaved edit. Dies at unmount — that is the discard.
+	const [ draft, setDraft ] = useState( () => inFlightChanges?.[ integrationId ] || {} );
+
+	// Header Save action is registered once per hasPending/saving transition, so
+	// its closure reads the latest draft through a ref rather than a stale copy.
+	const draftRef = useRef( draft );
+	draftRef.current = draft;
+
+	const hasPending = Object.keys( draft ).length > 0;
 	const integrationSaving = saving[ integrationId ];
 
 	const { confirmDialog: navBlockDialog } = useUnsavedChangesDialog( {
-		when: !! hasPending && ! integrationSaving && !! integration,
+		when: hasPending && ! integrationSaving && !! integration,
 	} );
 
-	// A save in flight owns its integration's pending changes: handleSave
-	// clears them itself on success, and on failure they are the user's only
-	// copy. The ref holds the whole `saving` map (not the pre-indexed
-	// `integrationSaving` scalar) so the cleanup can read the latest state for
-	// the integration it owns — on an integrationId change, ConfigureView
-	// doesn't unmount (same route, new params), so the cleanup must check the
-	// id it closed over, not whichever id rendered last. Must run for every
-	// render path — placed above the early returns.
-	const savingRef = useRef( saving );
-	savingRef.current = saving;
-
-	useEffect(
-		() => () => {
-			if ( ! savingRef.current[ integrationId ] ) {
-				onDiscardChanges( integrationId );
-			}
-		},
-		[ integrationId, onDiscardChanges ]
-	);
+	const handleFieldChange = ( fieldKey, value ) => {
+		setDraft( prev => ( { ...prev, [ fieldKey ]: value } ) );
+	};
 
 	// Split settings into groups.
 	const { settingsFields, inboundField, outboundField } = useMemo( () => {
@@ -83,7 +82,8 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 		} );
 	}, [ integration?.id, integration?.name, integration?.description, setHeaderData ] );
 
-	// Update only the header actions when save state changes.
+	// Update only the header actions when save state changes. The action reads
+	// the draft ref so it always submits the latest edit.
 	useEffect( () => {
 		if ( ! integration ) {
 			return;
@@ -93,7 +93,11 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 				{
 					type: 'primary',
 					label: __( 'Save', 'newspack-plugin' ),
-					action: () => onSave( integrationId ),
+					action: () => {
+						onSave( integrationId, draftRef.current )
+							.then( () => setDraft( {} ) )
+							.catch( () => {} );
+					},
 					disabled: ! hasPending || integrationSaving,
 				},
 			],
@@ -129,8 +133,8 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 	}
 
 	const getFieldValue = field => {
-		if ( pendingChanges[ integrationId ] && field.key in pendingChanges[ integrationId ] ) {
-			return pendingChanges[ integrationId ][ field.key ];
+		if ( field.key in draft ) {
+			return draft[ field.key ];
 		}
 		return field.value;
 	};
@@ -138,7 +142,7 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 	const handleCheckboxListChange = ( fieldKey, currentValue, optionName, checked ) => {
 		const selected = Array.isArray( currentValue ) ? currentValue : [];
 		const newValue = checked ? [ ...selected, optionName ] : selected.filter( f => f !== optionName );
-		onFieldChange( integrationId, fieldKey, newValue );
+		handleFieldChange( fieldKey, newValue );
 	};
 
 	const fieldIsVisible = field => {
@@ -177,7 +181,7 @@ export const ConfigureView = ( { integrations, loading, pendingChanges, saving, 
 										key={ field.key }
 										field={ field }
 										value={ getFieldValue( field ) }
-										onChange={ val => onFieldChange( integrationId, field.key, val ) }
+										onChange={ val => handleFieldChange( field.key, val ) }
 									/>
 								) ) }
 							</Grid>

@@ -1,20 +1,33 @@
 /**
  * External dependencies
  */
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 
 /**
  * Internal dependencies
  */
 import { ConfigureView } from './configure-view';
 import { useUnsavedChangesDialog } from '../../../../../packages/components/src';
-import registerWizardStore from '../../../../../packages/components/src/wizard/store';
 
+const mockSetHeaderData = jest.fn();
+
+jest.mock( '@wordpress/data', () => ( {
+	useDispatch: () => ( { setHeaderData: mockSetHeaderData } ),
+} ) );
+// Mocking @wordpress/data above breaks @wordpress/components' real barrel
+// (its autocomplete submodule eagerly requires @wordpress/rich-text, which
+// calls combineReducers() at module load). Stub CheckboxControl directly —
+// the fixtures below have no inbound/outbound fields, so it never renders.
+jest.mock( '@wordpress/components', () => ( {
+	CheckboxControl: () => null,
+} ) );
 jest.mock( '../../../../../packages/components/src', () => ( {
 	Accordion: ( { children } ) => children,
 	Divider: () => null,
 	Grid: ( { children } ) => children,
 	SectionHeader: () => null,
+	// Minimal controlled input so tests can drive the local draft by typing.
+	TextControl: ( { label, value, onChange } ) => <input aria-label={ label } value={ value || '' } onChange={ e => onChange( e.target.value ) } />,
 	useUnsavedChangesDialog: jest.fn( () => ( { confirmDialog: null, requestConfirm: jest.fn() } ) ),
 } ) );
 jest.mock(
@@ -23,76 +36,78 @@ jest.mock(
 		( { children } ) =>
 			children
 );
-
-// Mocking the components barrel above bypasses the Wizard module's module-load
-// side effect that registers the `newspack/wizards` @wordpress/data store, so
-// ConfigureView's useDispatch( WIZARD_STORE_NAMESPACE ) needs it registered here.
-registerWizardStore();
+jest.mock( '../../../../../packages/components/src/wizard/store', () => ( {
+	WIZARD_STORE_NAMESPACE: 'newspack/wizards',
+} ) );
 
 const INTEGRATION = {
 	id: 'esp',
 	name: 'Newsletter ESP',
 	description: 'Syncs reader data with your ESP.',
-	settings: [],
+	settings: [ { key: 'mailchimp_audience_id', type: 'text', label: 'Audience ID', value: '' } ],
 };
 
 const OTHER_INTEGRATION = {
 	id: 'other',
 	name: 'Other ESP',
 	description: 'Syncs reader data with another ESP.',
-	settings: [],
+	settings: [ { key: 'other_id', type: 'text', label: 'Other ID', value: '' } ],
 };
 
-// `saving` accepts either the raw { [integrationId]: boolean } map, or (for the
-// single-integration tests below) a bare boolean shorthand that gets wrapped as
-// { esp: saving }.
 const buildConfigureView = ( {
 	integrations = { esp: INTEGRATION },
-	pendingChanges = {},
-	saving = false,
-	onDiscardChanges = jest.fn(),
+	inFlightChanges = {},
+	saving = {},
+	onSave = jest.fn( () => Promise.resolve() ),
 	integrationId = 'esp',
 } = {} ) => (
 	<ConfigureView
 		integrations={ integrations }
 		loading={ false }
-		pendingChanges={ pendingChanges }
-		saving={ typeof saving === 'object' ? saving : { esp: saving } }
-		onFieldChange={ jest.fn() }
-		onDiscardChanges={ onDiscardChanges }
-		onSave={ jest.fn() }
+		inFlightChanges={ inFlightChanges }
+		saving={ saving }
+		onSave={ onSave }
 		match={ { params: { integrationId } } }
 	/>
 );
 
 const renderConfigureView = props => render( buildConfigureView( props ) );
 
+// The Save button lives in the wizard header, registered via setHeaderData.
+// Pull the latest registered Save action closure so tests can invoke it.
+const getLatestSaveAction = () => {
+	const calls = mockSetHeaderData.mock.calls.filter( ( [ data ] ) => data.actions );
+	return calls[ calls.length - 1 ][ 0 ].actions[ 0 ].action;
+};
+
 describe( 'ConfigureView unsaved-changes guard', () => {
 	beforeEach( () => {
+		mockSetHeaderData.mockClear();
 		useUnsavedChangesDialog.mockClear();
 		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
 	} );
 
-	it( 'does not arm the guard when there are no pending changes and no save in flight', () => {
-		renderConfigureView( { pendingChanges: {}, saving: false } );
+	it( 'does not arm the guard with no draft and no save in flight', () => {
+		renderConfigureView();
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
 	} );
 
-	it( 'arms the guard while there are pending changes and no save in flight', () => {
-		renderConfigureView( { pendingChanges: { esp: { mailchimp_audience_id: 'abc123' } }, saving: false } );
+	it( 'arms the guard once the user edits a field', () => {
+		renderConfigureView();
+		fireEvent.change( screen.getByLabelText( 'Audience ID' ), { target: { value: 'abc123' } } );
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
 	} );
 
-	it( 'does not arm the guard while a save is in flight, even with pending changes', () => {
-		renderConfigureView( { pendingChanges: { esp: { mailchimp_audience_id: 'abc123' } }, saving: true } );
+	it( 'does not arm the guard while a save is in flight, even with a draft', () => {
+		renderConfigureView( { saving: { esp: true } } );
+		fireEvent.change( screen.getByLabelText( 'Audience ID' ), { target: { value: 'abc123' } } );
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
 	} );
 
-	// Pins Finding 2: the "integration not found" branch renders no dialog, so the
-	// guard must never arm there even if pendingChanges still has a stale entry
-	// (e.g. from an integration that disappeared from the payload on refetch).
+	// The "integration not found" branch renders no dialog, so the guard must
+	// never arm there even if the retry buffer still has a stale entry.
 	it( 'does not arm the guard when the integration is missing from the payload', () => {
-		renderConfigureView( { integrations: {}, pendingChanges: { esp: { mailchimp_audience_id: 'abc123' } }, saving: false } );
+		renderConfigureView( { integrations: {}, inFlightChanges: { esp: { mailchimp_audience_id: 'abc123' } } } );
 		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
 	} );
 
@@ -101,57 +116,83 @@ describe( 'ConfigureView unsaved-changes guard', () => {
 			confirmDialog: <div data-testid="guard-dialog" />,
 			requestConfirm: jest.fn(),
 		} );
-		renderConfigureView( { pendingChanges: { esp: { mailchimp_audience_id: 'abc123' } }, saving: false } );
+		renderConfigureView( { inFlightChanges: { esp: { mailchimp_audience_id: 'abc123' } } } );
 		expect( screen.getByTestId( 'guard-dialog' ) ).toBeInTheDocument();
 	} );
+} );
 
-	// Pins Finding 1 at the ConfigureView level: unmounting must call the discard
-	// callback for the integration currently in view. The corresponding
-	// index.test.js coverage confirms the parent's real state actually clears.
-	it( 'calls onDiscardChanges for the current integration on unmount', () => {
-		const onDiscardChanges = jest.fn();
-		const { unmount } = renderConfigureView( {
-			pendingChanges: { esp: { mailchimp_audience_id: 'abc123' } },
-			saving: false,
-			onDiscardChanges,
-		} );
-		expect( onDiscardChanges ).not.toHaveBeenCalled();
-		unmount();
-		expect( onDiscardChanges ).toHaveBeenCalledWith( 'esp' );
+describe( 'ConfigureView draft seeding', () => {
+	beforeEach( () => {
+		mockSetHeaderData.mockClear();
+		useUnsavedChangesDialog.mockClear();
+		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
 	} );
 
-	// A save in flight owns the pending changes: handleSave clears them itself on
-	// success, and on failure they are the user's only copy. Unmounting mid-save
-	// (e.g. the user navigates away while `when` is disarmed) must not discard them.
-	it( 'does not call onDiscardChanges on unmount while a save is in flight', () => {
-		const onDiscardChanges = jest.fn();
-		const { unmount } = renderConfigureView( {
-			pendingChanges: { esp: { mailchimp_audience_id: 'abc123' } },
-			saving: true,
-			onDiscardChanges,
-		} );
-		unmount();
-		expect( onDiscardChanges ).not.toHaveBeenCalled();
+	// Returning to an integration whose last save failed re-shows the edit with
+	// the guard armed, so the user can retry.
+	it( 'seeds the draft from the retry buffer', () => {
+		renderConfigureView( { inFlightChanges: { esp: { mailchimp_audience_id: 'abc123' } } } );
+		expect( screen.getByLabelText( 'Audience ID' ).value ).toBe( 'abc123' );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
 	} );
 
-	// Navigating between integrations (e.g. #/settings/esp -> #/settings/other)
-	// reuses the same ConfigureView instance instead of unmounting it, since both
-	// routes match the same <Route path="/settings/:integrationId">. The cleanup
-	// from the 'esp' render must still see 'esp' was saving, not whatever
-	// integration is current by the time the cleanup runs.
-	it( 'does not call onDiscardChanges when the integration id changes mid-save', () => {
-		const onDiscardChanges = jest.fn();
+	it( 'starts with a clean draft when the retry buffer is empty', () => {
+		renderConfigureView();
+		expect( screen.getByLabelText( 'Audience ID' ).value ).toBe( '' );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
+	} );
+} );
+
+describe( 'ConfigureView save wiring', () => {
+	beforeEach( () => {
+		mockSetHeaderData.mockClear();
+		useUnsavedChangesDialog.mockClear();
+		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
+	} );
+
+	it( 'saves the current draft and clears it on success', async () => {
+		const onSave = jest.fn( () => Promise.resolve() );
+		renderConfigureView( { onSave } );
+		fireEvent.change( screen.getByLabelText( 'Audience ID' ), { target: { value: 'abc123' } } );
+		await act( async () => {
+			getLatestSaveAction()();
+		} );
+		expect( onSave ).toHaveBeenCalledWith( 'esp', { mailchimp_audience_id: 'abc123' } );
+		expect( screen.getByLabelText( 'Audience ID' ).value ).toBe( '' );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
+	} );
+
+	it( 'keeps the draft when the save fails', async () => {
+		const onSave = jest.fn( () => Promise.reject( new Error( 'nope' ) ) );
+		renderConfigureView( { onSave } );
+		fireEvent.change( screen.getByLabelText( 'Audience ID' ), { target: { value: 'abc123' } } );
+		await act( async () => {
+			getLatestSaveAction()();
+		} );
+		expect( onSave ).toHaveBeenCalledWith( 'esp', { mailchimp_audience_id: 'abc123' } );
+		expect( screen.getByLabelText( 'Audience ID' ).value ).toBe( 'abc123' );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
+	} );
+} );
+
+describe( 'ConfigureView per-id remount', () => {
+	beforeEach( () => {
+		mockSetHeaderData.mockClear();
+		useUnsavedChangesDialog.mockClear();
+		useUnsavedChangesDialog.mockReturnValue( { confirmDialog: null, requestConfirm: jest.fn() } );
+	} );
+
+	// Both #/settings/esp and #/settings/other match one Route, so React reuses
+	// the instance across an id change. Keying the inner view by id remounts it,
+	// resetting the draft — esp's edit must not bleed into other.
+	it( 'resets the draft when the integration id changes', () => {
 		const integrations = { esp: INTEGRATION, other: OTHER_INTEGRATION };
-		const pendingChanges = { esp: { mailchimp_audience_id: 'abc123' } };
-		const saving = { esp: true };
-		const { rerender } = renderConfigureView( {
-			integrations,
-			integrationId: 'esp',
-			pendingChanges,
-			saving,
-			onDiscardChanges,
-		} );
-		rerender( buildConfigureView( { integrations, integrationId: 'other', pendingChanges, saving, onDiscardChanges } ) );
-		expect( onDiscardChanges ).not.toHaveBeenCalled();
+		const { rerender } = renderConfigureView( { integrations, integrationId: 'esp' } );
+		fireEvent.change( screen.getByLabelText( 'Audience ID' ), { target: { value: 'abc123' } } );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: true } );
+
+		rerender( buildConfigureView( { integrations, integrationId: 'other' } ) );
+		expect( screen.getByLabelText( 'Other ID' ).value ).toBe( '' );
+		expect( useUnsavedChangesDialog ).toHaveBeenLastCalledWith( { when: false } );
 	} );
 } );
