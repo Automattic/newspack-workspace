@@ -169,20 +169,20 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 
 	/**
 	 * The post_type vs. taxonomy split relies on the rule's own get_content_type()
-	 * discriminator, so a custom post type (here 'guest-author') with specific
-	 * objects maps to 'specific_posts' just like a built-in post type — no hardcoded
-	 * post-type name list is consulted.
+	 * discriminator, so a whole-post-type rule for a custom post type (here
+	 * 'guest-author') maps to a 'post_types' rule carrying that custom post-type slug
+	 * as its value — no hardcoded post-type name list is consulted.
 	 */
-	public function test_map_rules_to_ac_format_maps_custom_post_type_rule_to_specific_posts() {
-		$guest_author_rule = $this->make_rule( 'post_type', 'guest-author', [ 91 ] );
+	public function test_map_rules_to_ac_format_maps_custom_post_type_to_post_types() {
+		$guest_author_rule = $this->make_rule( 'post_type', 'guest-author', [] );
 
 		$mapped_rules = $this->invoke_private_static( 'map_rules_to_ac_format', [ [ $guest_author_rule ] ] );
 
 		$this->assertSame(
 			[
 				[
-					'slug'  => 'specific_posts',
-					'value' => [ '91' ],
+					'slug'  => 'post_types',
+					'value' => [ 'guest-author' ],
 				],
 			],
 			$mapped_rules
@@ -240,7 +240,8 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	 * A mixed rule set exercises all three mappings and their merge semantics at
 	 * once: whole-post-type rules merge their post-type slugs under 'post_types',
 	 * specific-object rules (across different post types) merge their IDs under
-	 * 'specific_posts', and a taxonomy rule keeps its own slug.
+	 * 'specific_posts', and a taxonomy rule keeps its own slug. The 'post_types'
+	 * value is sorted (see the canonicalization test below).
 	 */
 	public function test_map_rules_to_ac_format_merges_mixed_rule_set_by_target_slug() {
 		$all_posts_rule    = $this->make_rule( 'post_type', 'post', [] );
@@ -258,7 +259,7 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 			[
 				[
 					'slug'  => 'post_types',
-					'value' => [ 'post', 'page' ],
+					'value' => [ 'page', 'post' ],
 				],
 				[
 					'slug'  => 'specific_posts',
@@ -270,6 +271,45 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 				],
 			],
 			$mapped_rules
+		);
+	}
+
+	/**
+	 * The 'post_types' value is sorted, so two plans restricting the same post types
+	 * in a different rule order produce identical mapped output — and therefore the
+	 * same grouping fingerprint, so they share one gate instead of splitting into
+	 * duplicates. (Post-type slugs are non-numeric, and compute_rules_fingerprint()'s
+	 * SORT_NUMERIC pass would otherwise leave their order untouched.)
+	 */
+	public function test_map_rules_to_ac_format_canonicalizes_post_types_value_order() {
+		$posts_then_pages = [
+			$this->make_rule( 'post_type', 'post', [] ),
+			$this->make_rule( 'post_type', 'page', [] ),
+		];
+		$pages_then_posts = [
+			$this->make_rule( 'post_type', 'page', [] ),
+			$this->make_rule( 'post_type', 'post', [] ),
+		];
+
+		$mapped_posts_first = $this->invoke_private_static( 'map_rules_to_ac_format', [ $posts_then_pages ] );
+		$mapped_pages_first = $this->invoke_private_static( 'map_rules_to_ac_format', [ $pages_then_posts ] );
+
+		$this->assertSame(
+			[
+				[
+					'slug'  => 'post_types',
+					'value' => [ 'page', 'post' ],
+				],
+			],
+			$mapped_posts_first,
+			'post_types values are sorted, so rule order does not change the output.'
+		);
+		$this->assertSame( $mapped_posts_first, $mapped_pages_first, 'Rule order does not change the mapped output.' );
+
+		$this->assertSame(
+			$this->invoke_private_static( 'compute_rules_fingerprint', [ $mapped_posts_first ] ),
+			$this->invoke_private_static( 'compute_rules_fingerprint', [ $mapped_pages_first ] ),
+			'Identical output yields identical fingerprints, so the plans group into one gate.'
 		);
 	}
 

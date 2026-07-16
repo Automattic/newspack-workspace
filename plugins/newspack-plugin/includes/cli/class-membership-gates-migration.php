@@ -490,6 +490,20 @@ class Membership_Gates_Migration {
 				];
 			}
 		}
+
+		// Canonicalize 'post_types' value ordering. Post-type slugs are the only
+		// non-numeric rule values, and compute_rules_fingerprint() orders values with
+		// SORT_NUMERIC (under which every non-numeric string compares as 0, leaving
+		// them unsorted). Sorting the slugs here keeps two plans that restrict the
+		// same post types in a different rule order from producing different
+		// fingerprints and splitting into duplicate gates.
+		foreach ( $ac_rules as &$ac_rule ) {
+			if ( 'post_types' === $ac_rule['slug'] ) {
+				sort( $ac_rule['value'], SORT_STRING );
+			}
+		}
+		unset( $ac_rule );
+
 		return $ac_rules;
 	}
 
