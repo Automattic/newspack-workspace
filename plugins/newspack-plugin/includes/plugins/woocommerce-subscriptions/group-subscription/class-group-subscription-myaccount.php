@@ -63,6 +63,12 @@ class Group_Subscription_MyAccount {
 		add_action( 'template_redirect', [ __CLASS__, 'redirect_legacy_manage_members' ] );
 		add_filter( 'wcs_get_users_subscriptions', [ __CLASS__, 'inject_member_group_subscriptions' ], 15, 2 );
 		add_filter( 'map_meta_cap', [ __CLASS__, 'grant_group_member_view_order_cap' ], 15, 4 );
+		// Remove a departing user from their group memberships before WooCommerce
+		// Subscriptions' `delete_user` cascade (priority 10) force-deletes their
+		// subscriptions, so the cascade never sees a group owner's subscription as
+		// belonging to the member being deleted. See NPPM-3021.
+		add_action( 'delete_user', [ __CLASS__, 'remove_deleted_user_from_groups' ], 5 );
+		add_action( 'wpmu_delete_user', [ __CLASS__, 'remove_deleted_user_from_groups' ], 5 );
 		add_filter( 'wcs_view_subscription_actions', [ __CLASS__, 'view_subscription_actions' ], 13, 3 );
 		add_action( 'admin_post_' . self::INVITE_NONCE_ACTION, [ __CLASS__, 'handle_invite_member' ] );
 		add_action( 'admin_post_' . self::CANCEL_INVITE_NONCE_ACTION, [ __CLASS__, 'handle_cancel_invite' ] );
@@ -465,7 +471,23 @@ class Group_Subscription_MyAccount {
 	 * @return array
 	 */
 	public static function inject_member_group_subscriptions( $subscriptions, $user_id ) {
+		// Never inject during a user-deletion cascade. WCS's trash_users_subscriptions()
+		// is hooked on `delete_user` and force-deletes every subscription that
+		// wcs_get_users_subscriptions() returns; because self-service account deletion
+		// runs on the My Account page (is_account_page() is true), injecting a member's
+		// group subscription here would feed the *owner's* subscription into that cascade
+		// and permanently delete it. See NPPM-3021.
+		if ( doing_action( 'delete_user' ) || doing_action( 'wpmu_delete_user' ) ) {
+			return $subscriptions;
+		}
 		if ( ! function_exists( 'is_account_page' ) || ! \is_account_page() ) {
+			return $subscriptions;
+		}
+		// Only augment the list when a member is viewing their OWN account. This keeps the
+		// member-injection out of any wcs_get_users_subscriptions( $other_user ) call that
+		// runs in an account-page request (admin/cross-user reads, or a contact sync), which
+		// must only ever see the subscriptions the user actually owns. See NPPM-3021.
+		if ( (int) $user_id !== \get_current_user_id() ) {
 			return $subscriptions;
 		}
 		// The legacy/core My Account UI has no member-safe templates, so don't surface
@@ -498,6 +520,31 @@ class Group_Subscription_MyAccount {
 	}
 
 	/**
+	 * Remove a user from every group they are a member of before the user is deleted.
+	 *
+	 * Hooked on `delete_user` (and `wpmu_delete_user`) at priority 5 — ahead of
+	 * WooCommerce Subscriptions' WC_Subscriptions_Manager::trash_users_subscriptions()
+	 * at the default priority 10, which force-deletes every subscription that
+	 * wcs_get_users_subscriptions() returns for the deleted user. Clearing the
+	 * departing member's group membership here means the cascade no longer resolves a
+	 * group owner's subscription as one of the member's own. This is the primary fix;
+	 * the doing_action( 'delete_user' ) guards in inject_member_group_subscriptions()
+	 * and grant_group_member_view_order_cap() are defense-in-depth. See NPPM-3021.
+	 *
+	 * Deleting only the membership meta (not going through update_members()) avoids
+	 * that method's side effects, e.g. re-enabling a disabled group subscription.
+	 *
+	 * @param int $user_id The ID of the user being deleted.
+	 */
+	public static function remove_deleted_user_from_groups( $user_id ) {
+		$group_ids = Group_Subscription::get_group_subscriptions_for_user( $user_id, true );
+		foreach ( $group_ids as $subscription_id ) {
+			\delete_user_meta( $user_id, Group_Subscription::GROUP_SUBSCRIPTION_USER_META_KEY, $subscription_id );
+			\delete_user_meta( $user_id, Group_Subscription::get_member_joined_meta_key( $subscription_id ) );
+		}
+	}
+
+	/**
 	 * Grant the `view_order` capability to group subscription members on My Account pages.
 	 *
 	 * WCS checks current_user_can( 'view_order', $subscription->get_id() ) before rendering
@@ -512,6 +559,11 @@ class Group_Subscription_MyAccount {
 	 * @return string[]
 	 */
 	public static function grant_group_member_view_order_cap( $caps, $cap, $user_id, $args ) {
+		// Don't elevate caps during a user-deletion cascade (defense-in-depth alongside the
+		// same guard in inject_member_group_subscriptions()). See NPPM-3021.
+		if ( doing_action( 'delete_user' ) || doing_action( 'wpmu_delete_user' ) ) {
+			return $caps;
+		}
 		if ( 'view_order' !== $cap || ! function_exists( 'is_account_page' ) || ! \is_account_page() ) {
 			return $caps;
 		}

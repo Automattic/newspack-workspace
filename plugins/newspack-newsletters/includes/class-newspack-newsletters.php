@@ -889,7 +889,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::READABLE,
 				'callback'            => [ __CLASS__, 'api_get_layouts' ],
-				'permission_callback' => [ __CLASS__, 'api_authoring_permissions_check' ],
+				'permission_callback' => [ __CLASS__, 'api_edit_posts_permissions_check' ],
 				'args'                => [
 					'defaults_only' => [
 						'type'        => 'boolean',
@@ -928,7 +928,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_set_color_palette' ],
-				'permission_callback' => [ __CLASS__, 'api_authoring_permissions_check' ],
+				'permission_callback' => [ __CLASS__, 'api_edit_posts_permissions_check' ],
 			]
 		);
 
@@ -938,7 +938,7 @@ final class Newspack_Newsletters {
 			[
 				'methods'             => \WP_REST_Server::EDITABLE,
 				'callback'            => [ __CLASS__, 'api_get_mjml' ],
-				'permission_callback' => [ __CLASS__, 'api_authoring_permissions_check' ],
+				'permission_callback' => [ __CLASS__, 'api_edit_post_permissions_check' ],
 				'args'                => [
 					'post_id' => [
 						'required'          => true,
@@ -962,9 +962,27 @@ final class Newspack_Newsletters {
 	 * @param WP_REST_Request $request API request object.
 	 */
 	public static function api_set_color_palette( $request ) {
-		self::update_color_palette( json_decode( $request->get_body(), true ) );
-
-		return \rest_ensure_response( [] );
+		/*
+		 * The newsletter editor auto-POSTs the palette on every editor load, including for
+		 * Contributors/Authors who can now reach the editor (via post-mjml) but must not
+		 * change this site-wide option. We deliberately return success WITHOUT writing for
+		 * those roles instead of a 403 — otherwise the editor surfaces a "You cannot use
+		 * this resource." notice on every load. So for unauthorized roles the response
+		 * reports success while the option write is a no-op. The write capability is
+		 * filterable via `newspack_newsletters_color_palette_capability`.
+		 */
+		$capability = apply_filters( 'newspack_newsletters_color_palette_capability', 'edit_others_posts' );
+		$did_write  = false;
+		if ( current_user_can( $capability ) ) {
+			// update_option() returns false when the value is unchanged as well as on
+			// failure, so `updated` reports "the stored palette changed", not "no error".
+			$did_write = self::update_color_palette( json_decode( $request->get_body(), true ) );
+		} else {
+			Newspack_Newsletters_Logger::log( 'Color palette write skipped: current user lacks the "' . $capability . '" capability.' );
+		}
+		// The route's contract is always 200; the body distinguishes a real write from a
+		// permission-skipped no-op so a client or maintainer can tell them apart.
+		return \rest_ensure_response( [ 'updated' => (bool) $did_write ] );
 	}
 
 	/**
@@ -1009,7 +1027,23 @@ final class Newspack_Newsletters {
 				)
 			);
 		}
-		return \rest_ensure_response( Newspack_Newsletters_Layouts::get_layouts() );
+		$layouts = Newspack_Newsletters_Layouts::get_layouts();
+
+		/*
+		 * The layouts list is readable at `edit_posts` so Contributors/Authors can pick a
+		 * layout, but each saved layout's `campaign_defaults` carries send/audience config
+		 * (senderEmail, send_list_id, send_sublist_id) that the editor copies into the draft.
+		 * Withhold it from roles below `edit_others_posts` so the send/audience surface stays
+		 * editor-only — the picker still applies content, colors and fonts without it.
+		 */
+		if ( ! current_user_can( 'edit_others_posts' ) ) {
+			foreach ( $layouts as $layout ) {
+				if ( isset( $layout->meta ) && is_array( $layout->meta ) ) {
+					unset( $layout->meta['campaign_defaults'] );
+				}
+			}
+		}
+		return \rest_ensure_response( $layouts );
 	}
 
 	/**
@@ -1150,6 +1184,54 @@ final class Newspack_Newsletters {
 			);
 		}
 		return true;
+	}
+
+	/**
+	 * Permission check for post-scoped authoring routes (e.g. `post-mjml`):
+	 * the current user must be able to edit the specific post the request
+	 * targets. Scoped on `post_id` only — never a generic `id`, which on
+	 * other routes refers to a different CPT (e.g. a layout).
+	 *
+	 * @param WP_REST_Request $request API request object.
+	 * @return bool|WP_Error
+	 */
+	public static function api_edit_post_permissions_check( $request ) {
+		$post_id = (int) $request->get_param( 'post_id' );
+		if ( $post_id && current_user_can( 'edit_post', $post_id ) ) {
+			return true;
+		}
+		return new \WP_Error(
+			'newspack_rest_forbidden',
+			esc_html__( 'You cannot use this resource.', 'newspack-newsletters' ),
+			[
+				'status' => 403,
+			]
+		);
+	}
+
+	/**
+	 * Permission check for non-post authoring reads needed to load the
+	 * editor (e.g. the `layouts` list of saved templates). Any user who can
+	 * author posts may use them. These surface editor-support content; the
+	 * one field that carries send/audience configuration (`campaign_defaults`)
+	 * is stripped from the layouts payload for roles below `edit_others_posts`
+	 * in api_get_layouts(), so this relaxed check does not broaden that surface.
+	 *
+	 * @param WP_REST_Request $request API request object.
+	 * @return bool|WP_Error
+	 */
+	public static function api_edit_posts_permissions_check( $request ) {
+		unset( $request );
+		if ( current_user_can( 'edit_posts' ) ) {
+			return true;
+		}
+		return new \WP_Error(
+			'newspack_rest_forbidden',
+			esc_html__( 'You cannot use this resource.', 'newspack-newsletters' ),
+			[
+				'status' => 403,
+			]
+		);
 	}
 
 	/**
