@@ -172,6 +172,8 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 		$member_id = $this->create_reader_user();
 		$group_sub = $this->create_group_subscription( $owner_id );
 		$this->add_member( $member_id, $group_sub );
+		// Injection only augments the current viewer's own account.
+		wp_set_current_user( $member_id );
 
 		// Start with an empty list (member has no owned subscriptions).
 		$result = Group_Subscription_MyAccount::inject_member_group_subscriptions( [], $member_id );
@@ -191,6 +193,7 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 		$member_id = $this->create_reader_user();
 		$group_sub = $this->create_group_subscription( $owner_id );
 		$this->add_member( $member_id, $group_sub );
+		wp_set_current_user( $member_id );
 
 		// Pre-populate $existing with the group sub — simulates the sub already being present.
 		$existing = [ $group_sub->get_id() => $group_sub ];
@@ -232,6 +235,7 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 		);
 		$trashed_sub->update_meta_data( Group_Subscription_Settings::GROUP_SUBSCRIPTION_META_PREFIX . 'enabled', 'yes' );
 		$this->add_member( $member_id, $trashed_sub );
+		wp_set_current_user( $member_id );
 
 		$result = Group_Subscription_MyAccount::inject_member_group_subscriptions( [], $member_id );
 
@@ -255,6 +259,7 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 			$member_id = $this->create_reader_user();
 			$group_sub = $this->create_group_subscription( $owner_id );
 			$this->add_member( $member_id, $group_sub );
+			wp_set_current_user( $member_id );
 
 			$result = Group_Subscription_MyAccount::inject_member_group_subscriptions( [], $member_id );
 		} finally {
@@ -262,6 +267,114 @@ class Test_Group_Subscription_MyAccount extends WP_UnitTestCase {
 		}
 
 		$this->assertEmpty( $result, 'Should not inject on the legacy My Account UI' );
+	}
+
+	/**
+	 * Regression (NPPM-3021): injection only augments the *current viewer's* own account.
+	 *
+	 * A wcs_get_users_subscriptions( $other_user ) call that runs in an account-page
+	 * request (an admin view, a cross-user read, or a contact sync) must return only the
+	 * subscriptions that user actually owns — never a group sub they are merely a member of.
+	 */
+	public function test_inject_skipped_for_non_current_user() {
+		$owner_id  = $this->create_reader_user();
+		$member_id = $this->create_reader_user();
+		$viewer_id = $this->create_reader_user();
+		$group_sub = $this->create_group_subscription( $owner_id );
+		$this->add_member( $member_id, $group_sub );
+
+		// A different user is the current viewer while the member's subscriptions are fetched.
+		wp_set_current_user( $viewer_id );
+
+		$result = Group_Subscription_MyAccount::inject_member_group_subscriptions( [], $member_id );
+
+		$this->assertEmpty(
+			$result,
+			'Member group sub must not be injected when fetched for a non-current user'
+		);
+	}
+
+	/**
+	 * Regression (NPPM-3021): the member-injection filter must NOT run during a
+	 * user-deletion cascade.
+	 *
+	 * WCS's WC_Subscriptions_Manager::trash_users_subscriptions() is hooked on
+	 * `delete_user` and force-deletes every subscription that
+	 * wcs_get_users_subscriptions() returns. Because self-service account deletion
+	 * runs on the My Account page (is_account_page() true), injecting a member's
+	 * group subscription here would feed the *owner's* subscription into that
+	 * cascade and permanently delete it. Fix A guards the filter with
+	 * doing_action( 'delete_user' ). Captured at priority 1 to isolate the guard
+	 * from the priority-5 membership cleanup (fix B).
+	 */
+	public function test_inject_skipped_during_user_deletion_cascade() {
+		$owner_id  = $this->create_reader_user();
+		$member_id = $this->create_reader_user();
+		$group_sub = $this->create_group_subscription( $owner_id );
+		$this->add_member( $member_id, $group_sub );
+		// Faithful self-service deletion: the member is the current user and on an account
+		// page, so both is_account_page() and the current-user allowlist pass — the
+		// delete_user guard is what must stop the injection here.
+		wp_set_current_user( $member_id );
+		$GLOBALS['newspack_test_is_account_page'] = true;
+
+		$captured = null;
+		$capture  = function () use ( &$captured, $member_id ) {
+			$captured = Group_Subscription_MyAccount::inject_member_group_subscriptions( [], $member_id );
+		};
+		add_action( 'delete_user', $capture, 1 );
+		try {
+			wp_delete_user( $member_id );
+		} finally {
+			remove_action( 'delete_user', $capture, 1 );
+		}
+
+		$this->assertSame(
+			[],
+			$captured,
+			'Owner group subscription must not be injected during the delete_user cascade'
+		);
+	}
+
+	/**
+	 * Regression (NPPM-3021): a deleted user is removed from the groups they are a
+	 * member of *before* WCS's deletion cascade runs.
+	 *
+	 * Fix B hooks `delete_user` at priority 5 (ahead of WCS's
+	 * trash_users_subscriptions at priority 10) and clears the departing user's
+	 * membership meta, so by the time the cascade queries their subscriptions the
+	 * owner's group sub is no longer associated with them. Captured at priority 8:
+	 * after the cleanup, before the cascade.
+	 */
+	public function test_user_deletion_removes_group_memberships_before_cascade() {
+		$owner_id  = $this->create_reader_user();
+		$member_id = $this->create_reader_user();
+		$group_sub = $this->create_group_subscription( $owner_id );
+		$this->add_member( $member_id, $group_sub );
+
+		// Wire the cleanup exactly as Group_Subscription_MyAccount::init() does. init() is
+		// gated behind the Access Control feature flag (off in the test bootstrap), so
+		// register it here to exercise the priority-5 ordering against WCS's delete_user
+		// cascade (priority 10).
+		$cleanup = [ Group_Subscription_MyAccount::class, 'remove_deleted_user_from_groups' ];
+		add_action( 'delete_user', $cleanup, 5 );
+
+		$still_member_at_cascade_time = null;
+		$capture                      = function () use ( &$still_member_at_cascade_time, $member_id, $group_sub ) {
+			$still_member_at_cascade_time = Group_Subscription::user_is_member( $member_id, $group_sub );
+		};
+		add_action( 'delete_user', $capture, 8 );
+		try {
+			wp_delete_user( $member_id );
+		} finally {
+			remove_action( 'delete_user', $capture, 8 );
+			remove_action( 'delete_user', $cleanup, 5 );
+		}
+
+		$this->assertFalse(
+			$still_member_at_cascade_time,
+			'Deleted user should be removed from their groups before the WCS deletion cascade'
+		);
 	}
 
 	// ---- grant_group_member_view_order_cap tests ----

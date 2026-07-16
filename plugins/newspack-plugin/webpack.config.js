@@ -93,6 +93,18 @@ const webpackConfig = getBaseWebpackConfig( {
 
 webpackConfig.output.chunkFilename = '[name].[contenthash].js';
 
+// Content-hash async CSS chunks too. The line above only governs JS chunks; the
+// async CSS chunks emitted by mini-css-extract-plugin (e.g. audience-wizards.css)
+// otherwise keep a bare, unversioned name and get served stale by CDNs/proxies
+// after a deploy (they're loaded by webpack's runtime, not wp_enqueue_style, so
+// they never pick up a ?ver). Hashing matches the JS chunks' cache-busting.
+const miniCssExtractPlugin = webpackConfig.plugins.find(
+	plugin => plugin.constructor && plugin.constructor.name === 'MiniCssExtractPlugin'
+);
+if ( miniCssExtractPlugin && miniCssExtractPlugin.options ) {
+	miniCssExtractPlugin.options.chunkFilename = '[name].[contenthash].css';
+}
+
 // Overwrite default optimisation.
 webpackConfig.optimization.splitChunks.cacheGroups.commons = {
 	name: 'commons',

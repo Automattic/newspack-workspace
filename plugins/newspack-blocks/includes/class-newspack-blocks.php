@@ -1097,6 +1097,35 @@ class Newspack_Blocks {
 	}
 
 	/**
+	 * Support for Tag Labels.
+	 *
+	 * @param int|WP_Post|null $post Post to retrieve tag labels for.
+	 *
+	 * @return array|null Tag labels, if any, for this post.
+	 */
+	public static function get_tag_labels( $post = null ) {
+		if ( class_exists( '\Newspack\Tag_Labels' ) && method_exists( '\Newspack\Tag_Labels', 'get_labels_for_post' ) ) {
+			return \Newspack\Tag_Labels::get_labels_for_post( $post );
+		}
+
+		return null;
+	}
+
+	/**
+	 * Outputs HTML for given tag labels.
+	 *
+	 * @param array|null $labels Labels to display.
+	 * @param bool       $links  Whether to include links to tag archives.
+	 *
+	 * @return void
+	 */
+	public static function display_tag_labels( $labels = null, $links = true ) {
+		if ( class_exists( '\Newspack\Tag_Labels' ) && method_exists( '\Newspack\Tag_Labels', 'display' ) ) {
+			\Newspack\Tag_Labels::display( $labels, $links, 'div' );
+		}
+	}
+
+	/**
 	 * Closure for excerpt filtering that can be added and removed.
 	 *
 	 * @var Closure

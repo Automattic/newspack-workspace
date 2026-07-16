@@ -148,20 +148,26 @@ class Teams_For_Memberships_Diagnostics {
 	}
 
 	/**
-	 * Check 1: duplicate teams with the same title + post_author.
+	 * Check 1: duplicate teams owned by the same author (title-insensitive).
 	 *
 	 * These appear when SkyVerge Teams creates a replacement team on renewal
-	 * because the subscription's line item lost its dispatch meta.
+	 * because the subscription's line item lost its dispatch meta. The replacement's
+	 * title can differ from the original only cosmetically (a possessive apostrophe,
+	 * case, or whitespace), so teams are bucketed by owner + a normalized title rather
+	 * than an exact title match – otherwise such an orphan escapes detection and leaves
+	 * a membership stranded. See normalize_team_title().
 	 *
 	 * @return void
 	 */
 	private static function check_duplicate_teams() {
-		WP_CLI::line( 'Check 1: duplicate teams (same title + same post_author)' );
+		WP_CLI::line( 'Check 1: duplicate teams (same owner, title-insensitive)' );
 
 		if ( self::$team_id ) {
 			// A naive `get_all_teams()` here returns the single requested row and Check 1
-			// becomes a no-op. Widen the search to every team sharing the target team's
-			// title + author so `--team-id` can still surface a known-duplicated team.
+			// becomes a no-op. Widen the search to every team owned by the same author so
+			// `--team-id` can still surface a known-duplicated team. Titles are bucketed
+			// insensitively below, so an orphan whose title differs only cosmetically still
+			// groups in.
 			$target = get_post( self::$team_id );
 			if ( ! $target || 'wc_memberships_team' !== $target->post_type ) {
 				WP_CLI::warning( '  SKIP: --team-id does not point to a wc_memberships_team post.' );
@@ -174,21 +180,16 @@ class Teams_For_Memberships_Diagnostics {
 					'post_status'    => 'any',
 					'posts_per_page' => -1,
 					'author'         => $target->post_author,
-					'title'          => $target->post_title,
 				]
 			);
 		} else {
 			$teams = self::get_all_teams();
 		}
 
-		$buckets = [];
-		foreach ( $teams as $team ) {
-			$key = $team->post_author . '|' . $team->post_title;
-			if ( ! isset( $buckets[ $key ] ) ) {
-				$buckets[ $key ] = [];
-			}
-			$buckets[ $key ][] = $team;
-		}
+		// When scoped with `--team-id`, only the requested team's bucket is relevant –
+		// widening by author can pull in the owner's other, unrelated teams, so restrict to it.
+		$only_key       = self::$team_id ? self::team_bucket_key( $target ) : null;
+		$buckets        = self::bucket_teams_by_owner( $teams, $only_key );
 
 		$duplicate_sets = array_filter(
 			$buckets,
@@ -204,29 +205,70 @@ class Teams_For_Memberships_Diagnostics {
 
 		$issue_count = 0;
 		foreach ( $duplicate_sets as $bucket ) {
-			// Oldest team with a _subscription_id wins. If none has one, fall back to oldest by post_date.
-			usort(
-				$bucket,
-				function ( $a, $b ) {
-					return strcmp( $a->post_date, $b->post_date );
-				}
+			// Read each team's _subscription_id once so the classifier can tell genuine
+			// renewal-bug orphans (no subscription of their own) apart from separate
+			// legitimate purchases that merely share a title + author.
+			$rows = array_map(
+				function ( $team ) {
+					return (object) [
+						'ID'              => (int) $team->ID,
+						'post_title'      => $team->post_title,
+						'post_author'     => (int) $team->post_author,
+						'post_date'       => $team->post_date,
+						'subscription_id' => (string) get_post_meta( $team->ID, '_subscription_id', true ),
+					];
+				},
+				$bucket
 			);
-			$original  = null;
-			$duplicates = [];
-			foreach ( $bucket as $team ) {
-				$sub_id = get_post_meta( $team->ID, '_subscription_id', true );
-				if ( null === $original && ! empty( $sub_id ) ) {
-					$original = $team;
-					continue;
+
+			$classification = self::classify_team_bucket( $rows );
+
+			// Teams that each own a distinct subscription are separate purchases, not the
+			// renewal-bug artifact. Report them so the collision is visible, but never merge
+			// or delete them – doing so would bind a live membership to a stale subscription
+			// and destroy a real team. See https://linear.app/a8c/issue/NPPM-2741.
+			if ( ! empty( $classification['separate_purchases'] ) ) {
+				// Show each team alongside the subscription it actually owns, so a dry run
+				// makes the collision and its real subscription links visible rather than
+				// claiming distinctness the command hasn't verified.
+				$purchases = implode(
+					', ',
+					array_map(
+						function ( $row ) {
+							return sprintf( '#%d→sub %s', $row->ID, $row->subscription_id );
+						},
+						$classification['separate_purchases']
+					)
+				);
+				$message = sprintf(
+					'  SKIP: teams "%s" (author %d) each carry their own subscription (%s) – separate purchases, not duplicates.',
+					$rows[0]->post_title,
+					$rows[0]->post_author,
+					$purchases
+				);
+				// Surface any subscription-less orphans in the same set: they can't be tied to
+				// a single purchase, so they're left for manual review rather than merged.
+				if ( ! empty( $classification['unattributed_orphans'] ) ) {
+					$orphan_ids = implode(
+						', ',
+						array_map(
+							function ( $row ) {
+								return '#' . $row->ID;
+							},
+							$classification['unattributed_orphans']
+						)
+					);
+					$message .= sprintf( ' Unlinked team(s) %s left for manual review.', $orphan_ids );
 				}
-				$duplicates[] = $team;
-			}
-			if ( null === $original ) {
-				$original   = array_shift( $bucket );
-				$duplicates = $bucket;
+				WP_CLI::line( $message );
+				continue;
 			}
 
-			foreach ( $duplicates as $dup ) {
+			$original = $classification['original'];
+			// The original is invariant across the loop; fetch its post once, and only when
+			// we'll actually repair (fix_duplicate_team needs a WP_Post, not a row object).
+			$original_post = self::$fix ? get_post( $original->ID ) : null;
+			foreach ( $classification['duplicates'] as $dup ) {
 				$issue_count++;
 				WP_CLI::line(
 					sprintf(
@@ -238,12 +280,148 @@ class Teams_For_Memberships_Diagnostics {
 					)
 				);
 				if ( self::$fix ) {
-					self::fix_duplicate_team( $original, $dup );
+					self::fix_duplicate_team( $original_post, get_post( $dup->ID ) );
 				}
 			}
 		}
 
 		self::$counts['Duplicate teams'] = $issue_count;
+	}
+
+	/**
+	 * Partition a set of same-title, same-author teams into the canonical original and
+	 * the orphan duplicates that should be merged into it.
+	 *
+	 * The renewal bug this command repairs (see
+	 * https://github.com/Automattic/newspack-plugin/pull/4661) creates an *orphan* team
+	 * with no `_subscription_id` and moves the membership onto it, while the original team
+	 * keeps its `_subscription_id`. So a team that owns its own `_subscription_id` is a
+	 * distinct, legitimate purchase – never something to merge away. Only subscription-less
+	 * orphans are merge candidates. When two or more teams in the set each own a
+	 * subscription, they are separate purchases that merely share a title + author (e.g. a
+	 * reader who let one subscription lapse and bought again, or a real account plus a
+	 * throwaway test account); those are returned as `separate_purchases` and left untouched.
+	 *
+	 * @param object[] $teams Objects with at least ->ID, ->post_date and ->subscription_id
+	 *                        (empty or '0' when the team has no linked subscription).
+	 * @return array{original:?object,duplicates:object[],separate_purchases:object[],unattributed_orphans:object[]}
+	 *               `unattributed_orphans` is only populated for the separate-purchases case:
+	 *               subscription-less teams that can't be tied to a single purchase and so are
+	 *               left for manual review.
+	 */
+	public static function classify_team_bucket( array $teams ) {
+		// Oldest first, so the earliest-created team is preferred as the canonical original.
+		usort(
+			$teams,
+			function ( $a, $b ) {
+				return strcmp( (string) $a->post_date, (string) $b->post_date );
+			}
+		);
+
+		$subscribed = [];
+		$orphans    = [];
+		foreach ( $teams as $team ) {
+			// A '0' or empty _subscription_id means no live link – the rest of this command
+			// reads the meta as an int and gates on truthiness, so a stale '0' must not pass
+			// as a real purchase (which would shield a genuine duplicate from repair).
+			if ( 0 === (int) $team->subscription_id ) {
+				$orphans[] = $team;
+			} else {
+				$subscribed[] = $team;
+			}
+		}
+
+		// Two or more independently subscribed teams = separate purchases, not duplicates.
+		// Any orphans alongside them can't be safely attributed to a single purchase, so the
+		// whole set is left for manual review.
+		if ( count( $subscribed ) > 1 ) {
+			return [
+				'original'             => null,
+				'duplicates'           => [],
+				'separate_purchases'   => $subscribed,
+				'unattributed_orphans' => $orphans,
+			];
+		}
+
+		// Exactly one subscribed team is the canonical original and every orphan merges into
+		// it. With no subscribed team at all, fall back to the oldest orphan as the original
+		// (the behaviour for fully unlinked sets).
+		if ( 1 === count( $subscribed ) ) {
+			$original = $subscribed[0];
+		} else {
+			$original = array_shift( $orphans );
+		}
+
+		return [
+			'original'             => $original,
+			'duplicates'           => $orphans,
+			'separate_purchases'   => [],
+			'unattributed_orphans' => [],
+		];
+	}
+
+	/**
+	 * Build the owner+title bucketing key for a team.
+	 *
+	 * The `|` separator keeps the author/title boundary unambiguous so two distinct
+	 * (author, title) pairs can never collide on a shared prefix.
+	 *
+	 * @param \WP_Post|object $team Team post (or any object exposing post_author + post_title).
+	 * @return string
+	 */
+	public static function team_bucket_key( $team ) {
+		return $team->post_author . '|' . self::normalize_team_title( $team->post_title );
+	}
+
+	/**
+	 * Group teams into duplicate buckets keyed by owner + normalized title.
+	 *
+	 * Extracted so the (otherwise hard-to-reach) `--team-id` scoping can be unit-tested:
+	 * widening the lookup to the owner can surface the owner's *other*, unrelated teams,
+	 * and `$only_key` is what guarantees a scoped run acts on the requested team's bucket
+	 * alone.
+	 *
+	 * @param array       $teams    Team posts/objects exposing post_author + post_title.
+	 * @param string|null $only_key When set, restrict the result to this bucket key (others dropped).
+	 * @return array<string,object[]> Map of bucket key => teams in that bucket.
+	 */
+	public static function bucket_teams_by_owner( array $teams, $only_key = null ) {
+		$buckets = [];
+		foreach ( $teams as $team ) {
+			$buckets[ self::team_bucket_key( $team ) ][] = $team;
+		}
+		if ( null !== $only_key ) {
+			$buckets = isset( $buckets[ $only_key ] ) ? [ $only_key => $buckets[ $only_key ] ] : [];
+		}
+		return $buckets;
+	}
+
+	/**
+	 * Normalize a team title into a duplicate-bucketing key.
+	 *
+	 * The renewal bug can regenerate a replacement team whose title differs from the
+	 * original only cosmetically – a possessive apostrophe ("Smith' Team" vs
+	 * "Smith's Team"), letter case, or surrounding whitespace – so collapse those
+	 * differences to a single comparison key. The collapse is intentionally aggressive:
+	 * it strips every straight or curly apostrophe plus an optional trailing 's', so even
+	 * unrelated titles that differ only by a possessive map together. That's safe because
+	 * Check 1 only ever merges subscription-less orphans of the *same owner*
+	 * (see classify_team_bucket()) – independently subscribed teams are never merged.
+	 * Case folding of non-ASCII letters depends on mbstring; without it only ASCII case is
+	 * collapsed. The result is only ever a grouping key, never displayed.
+	 *
+	 * @param string $title Raw team post_title.
+	 * @return string
+	 */
+	public static function normalize_team_title( $title ) {
+		$title = function_exists( 'mb_strtolower' ) ? mb_strtolower( (string) $title ) : strtolower( (string) $title );
+		// Drop possessive markers: a straight or curly apostrophe with an optional trailing
+		// 's', so "collyns'" and "collyns's" collapse to the same stem. The `/u` modifier can
+		// return null on malformed UTF-8 – coalesce to '' so the value stays a string.
+		$title = preg_replace( '/[\'\x{2019}]s?/u', '', $title ) ?? '';
+		// Collapse internal whitespace runs and trim.
+		$title = trim( (string) preg_replace( '/\s+/u', ' ', $title ) );
+		return $title;
 	}
 
 	/**

@@ -29,7 +29,7 @@ function WizardsTab( {
 	const className = props.className || '';
 	return (
 		<div className={ `${ isWizardLoading || isFetching ? 'is-fetching ' : '' }${ className } newspack-wizard__sections` }>
-			{ title && <h1>{ title }</h1> }
+			{ title && <h2 className="newspack-wizard__heading">{ title }</h2> }
 			{ description && <p className="newspack-wizard__sections__description">{ description }</p> }
 			{ children }
 		</div>

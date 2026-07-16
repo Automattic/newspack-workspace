@@ -22,8 +22,16 @@ class Test_Group_Management_Nav extends \WP_UnitTestCase {
 	 */
 	public function set_up() {
 		parent::set_up();
+		// The group management nav + endpoint are gated behind the Access Control
+		// feature flag; turn it on so the surface under test is wired.
+		if ( ! defined( 'NEWSPACK_CONTENT_GATES' ) ) {
+			define( 'NEWSPACK_CONTENT_GATES', true );
+		}
 		// Register the menu-items filter under test; production wires it in My_Account_UI_V1::init().
 		add_filter( 'woocommerce_account_menu_items', [ \Newspack\My_Account_UI_V1::class, 'my_account_menu_items' ], 1001 );
+		// Register the `group` query-var filter under test; production wires it in
+		// Group_Subscription_MyAccount::init() (gated behind the flag).
+		add_filter( 'woocommerce_get_query_vars', [ \Newspack\Group_Subscription_MyAccount::class, 'add_group_endpoint' ] );
 	}
 
 	/**
@@ -33,6 +41,7 @@ class Test_Group_Management_Nav extends \WP_UnitTestCase {
 		global $subscriptions_database;
 		$subscriptions_database = [];
 		remove_filter( 'woocommerce_account_menu_items', [ \Newspack\My_Account_UI_V1::class, 'my_account_menu_items' ], 1001 );
+		remove_filter( 'woocommerce_get_query_vars', [ \Newspack\Group_Subscription_MyAccount::class, 'add_group_endpoint' ] );
 		delete_option( 'newspack_group_subscription_label_singular' );
 		delete_option( 'newspack_group_subscription_label_plural' );
 		parent::tear_down();
