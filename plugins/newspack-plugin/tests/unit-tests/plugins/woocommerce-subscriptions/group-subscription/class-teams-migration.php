@@ -541,6 +541,8 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$this->create_team_invitation( $team_id, $pending_two );
 		// A second pending invitation for the same address is deduped, not returned twice.
 		$this->create_team_invitation( $team_id, $pending_one );
+		// A case variant of the same mailbox is deduped too (emails are lowercased).
+		$this->create_team_invitation( $team_id, 'Pending-One@TEST.com' );
 		// Non-pending invitations are not carried over.
 		$this->create_team_invitation( $team_id, 'accepted@test.com', 'wcmti-accepted' );
 		$this->create_team_invitation( $team_id, 'cancelled@test.com', 'wcmti-cancelled' );
@@ -616,15 +618,16 @@ class Test_Teams_Migration extends WP_UnitTestCase {
 		$new_email = 'fresh-invitee@test.com';
 		$this->create_team_invitation( $team_id, $new_email );
 
-		// A current group member — re-inviting a member is rejected.
+		// A current group member — re-inviting a member is rejected. Emails are keyed
+		// lowercase (see get_pending_team_invitation_emails()), so match on that.
 		$member       = $this->create_reader();
-		$member_email = get_userdata( $member )->user_email;
+		$member_email = strtolower( get_userdata( $member )->user_email );
 		Teams_Migration::add_group_member( $subscription, $member );
 		$this->create_team_invitation( $team_id, $member_email );
 
 		// A non-reader account (editor) — not a valid reader target.
 		$editor       = $this->create_editor();
-		$editor_email = get_userdata( $editor )->user_email;
+		$editor_email = strtolower( get_userdata( $editor )->user_email );
 		$this->create_team_invitation( $team_id, $editor_email );
 
 		$result = Teams_Migration::migrate_team_invitations( $subscription, $team_id, true );

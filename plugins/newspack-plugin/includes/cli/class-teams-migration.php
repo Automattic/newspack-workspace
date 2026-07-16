@@ -465,7 +465,7 @@ class Teams_Migration {
 		WP_CLI::line( '' );
 		WP_CLI::success( sprintf( 'Done. %d team(s) processed: %d used existing subscriptions, %d had new subscriptions created, %d skipped, %d had error(s).', count( $summary ), count( $summary ) - $new_count, $new_count, count( $skipped ), count( $errored_rows ) ) );
 		if ( ! empty( $invitation_rows ) ) {
-			WP_CLI::success( sprintf( 'Pending invitations: %d %s, %d skipped, %d listed only.', $invites_sent, $send_invitations ? 'sent' : 'would be sent', $invites_skipped, count( $invitation_rows ) - $invites_sent - $invites_skipped ) );
+			WP_CLI::success( sprintf( 'Pending invitations: %d %s, %d skipped, %d listed only.', $invites_sent, ( $dry_run && $migrate_invitations ) ? 'would be sent' : 'sent', $invites_skipped, count( $invitation_rows ) - $invites_sent - $invites_skipped ) );
 		}
 	}
 
@@ -1232,8 +1232,9 @@ class Teams_Migration {
 	 * Invitations are stored as `wc_team_invitation` posts parented to the team, with the
 	 * invitee email in the post title and a `wcmti-pending` status while unaccepted. Read
 	 * directly (rather than through the Teams API) so the migration does not depend on the
-	 * Teams plugin being active. Malformed and duplicate addresses are dropped. Exposed
-	 * for testing.
+	 * Teams plugin being active. Malformed addresses are dropped and emails are lowercased,
+	 * so case variants of one mailbox dedupe to a single entry — matching the case-insensitive
+	 * already-invited gate in migrate_team_invitations(). Exposed for testing.
 	 *
 	 * The `post_status` query filter only narrows the result when the status is
 	 * registered: WooCommerce Teams registers `wcmti-pending` on `init`, so during a
@@ -1245,7 +1246,7 @@ class Teams_Migration {
 	 *
 	 * @param int $team_id The team post ID.
 	 *
-	 * @return string[] Unique, sanitised pending invitee emails.
+	 * @return string[] Unique, lowercased, sanitised pending invitee emails.
 	 */
 	public static function get_pending_team_invitation_emails( $team_id ) {
 		$invitations = \get_posts(
@@ -1269,7 +1270,7 @@ class Teams_Migration {
 			}
 			$email = \is_email( $invitation->post_title );
 			if ( $email ) {
-				$emails[] = $email;
+				$emails[] = strtolower( $email );
 			}
 		}
 
