@@ -14,11 +14,11 @@
  *
  * NPPD-2064 (content-overlap consolidation, preserving WCM's OR access semantics):
  * the consolidation *decision* logic is extracted into WC-free pure helpers
- * (rules_cover, rule_sets_overlap, plan_rule_set_consolidation, rules_require_any_match)
- * and pinned by the net-new tests below. The group→gate wiring that drives them lives
- * in group_plans_by_fingerprint() / consolidate_plan_groups(), which depend on
- * WC_Memberships_Membership_Plan and so are exercised end-to-end against real
- * WooCommerce Memberships. The compute_rules_fingerprint() tests only pin the
+ * (rules_cover, rule_sets_overlap, plan_rule_set_consolidation, group_product_ids,
+ * format_overlap_warning) and pinned by the net-new tests below. The group→gate wiring
+ * that drives them lives in group_plans_by_fingerprint() / consolidate_plan_groups(),
+ * which depend on WC_Memberships_Membership_Plan and so are exercised end-to-end against
+ * real WooCommerce Memberships. The compute_rules_fingerprint() tests only pin the
  * fingerprint's *canonicality* (order-independence), which the 2064 fix preserves.
  *
  * @package Newspack\Tests\Content_Gate
@@ -651,30 +651,38 @@ class Test_Membership_Gates_Migration extends \WP_UnitTestCase {
 	}
 
 	/**
-	 * The OR-semantics guard: a gate carrying more than one content rule must combine
-	 * them with match-any so WCM's OR access is preserved; a single-rule gate keeps the
-	 * default match mode.
+	 * The overlap warning is built from the consolidated (merged) group, so a plan
+	 * folded into a root — the entitlement most likely to sit inside the overlap — is
+	 * named alongside the root's own plans and products. (Guards against building the
+	 * warning from the pre-consolidation group, which drops the absorbed plan.)
 	 */
-	public function test_rules_require_any_match_only_for_multiple_rules() {
-		$single_rule = [
+	public function test_format_overlap_warning_names_folded_in_plan_products() {
+		$merged_group_with_folded_plan = [
 			[
-				'slug'  => 'category',
-				'value' => [ '5' ],
+				'name'        => 'Root Plan',
+				'product_ids' => [ 200 ],
+			],
+			[
+				'name'        => 'Folded Plan',
+				'product_ids' => [ 201 ],
 			],
 		];
-		$two_rules = [
+		$other_group = [
 			[
-				'slug'  => 'category',
-				'value' => [ '5' ],
-			],
-			[
-				'slug'  => 'post_types',
-				'value' => [ 'post' ],
+				'name'        => 'Other Plan',
+				'product_ids' => [ 300 ],
 			],
 		];
 
-		$this->assertFalse( $this->invoke_private_static( 'rules_require_any_match', [ $single_rule ] ) );
-		$this->assertTrue( $this->invoke_private_static( 'rules_require_any_match', [ $two_rules ] ) );
+		$warning = $this->invoke_private_static(
+			'format_overlap_warning',
+			[ $merged_group_with_folded_plan, $other_group ]
+		);
+
+		$this->assertStringContainsString( 'Folded Plan', $warning, 'The folded-in plan name appears in the warning.' );
+		$this->assertStringContainsString( '201', $warning, 'The folded-in plan\'s product appears in the warning.' );
+		$this->assertStringContainsString( 'Root Plan', $warning );
+		$this->assertStringContainsString( 'Other Plan', $warning );
 	}
 
 	/**

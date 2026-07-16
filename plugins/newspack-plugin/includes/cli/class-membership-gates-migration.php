@@ -142,18 +142,7 @@ class Membership_Gates_Migration {
 			);
 			$access_type = $has_purchase ? 'purchase' : 'signup';
 
-			$merged_product_ids = array_values(
-				array_unique(
-					array_merge( ...array_column( $group, 'product_ids' ) )
-				)
-			);
-			// Drop product variations — gates should reference parent products only.
-			$merged_product_ids = array_values(
-				array_filter(
-					$merged_product_ids,
-					fn( $id ) => 'product_variation' !== \get_post_type( $id )
-				)
-			);
+			$merged_product_ids = self::group_product_ids( $group );
 
 			$action  = isset( $existing_gates[ $gate_key ] ) ? 'updated' : 'created';
 			$gate_id = $existing_gates[ $gate_key ] ?? null;
@@ -211,7 +200,7 @@ class Membership_Gates_Migration {
 				// a gate that now maps to one rule.
 				\Newspack\Content_Rules::update_gate_content_rules_match(
 					$gate_id,
-					self::rules_require_any_match( $ac_rules ) ? 'any' : 'all'
+					count( $ac_rules ) > 1 ? 'any' : 'all'
 				);
 
 				// Registration layout (always).
@@ -683,23 +672,6 @@ class Membership_Gates_Migration {
 	}
 
 	/**
-	 * Whether a gate must combine its content rules with match-any (OR).
-	 *
-	 * WooCommerce Memberships grants access when a reader's plan matches ANY of its
-	 * content rules, but an Access Control gate defaults to match-all (AND). A gate
-	 * carrying more than one content rule must therefore be flipped to match-any so a
-	 * plan's OR access semantics survive the migration; a single-rule gate is
-	 * unaffected by the mode and keeps the default.
-	 *
-	 * @param array[] $ac_rules AC-format content rules.
-	 *
-	 * @return bool True when the gate needs match-any.
-	 */
-	private static function rules_require_any_match( array $ac_rules ): bool {
-		return count( $ac_rules ) > 1;
-	}
-
-	/**
 	 * Whether every element of $subset_value is present in $superset_value.
 	 *
 	 * Values are the stringified term-ID or post-type-slug lists that
@@ -900,12 +872,21 @@ class Membership_Gates_Migration {
 	/**
 	 * Union of a group's parent product IDs (across all its plan descriptors).
 	 *
+	 * Product variations are dropped so the list matches what the gate carries —
+	 * gates reference parent products only.
+	 *
 	 * @param array[] $group List of plan descriptors sharing a gate.
 	 *
-	 * @return string[] De-duplicated product IDs.
+	 * @return int[] De-duplicated parent product IDs.
 	 */
 	private static function group_product_ids( array $group ): array {
-		return array_values( array_unique( array_merge( [], ...array_column( $group, 'product_ids' ) ) ) );
+		$product_ids = array_values( array_unique( array_merge( [], ...array_column( $group, 'product_ids' ) ) ) );
+		return array_values(
+			array_filter(
+				$product_ids,
+				fn( $id ) => 'product_variation' !== \get_post_type( $id )
+			)
+		);
 	}
 
 	/**
@@ -952,17 +933,33 @@ class Membership_Gates_Migration {
 
 		foreach ( $plan['overlaps'] as $pair ) {
 			list( $i, $j ) = $pair;
-			WP_CLI::warning(
-				sprintf(
-					'Plans [%s] and [%s] gate overlapping content under non-subset rule sets, so they map to separate gates. A reader entitled via one plan may be denied at the other gate (access products [%s] vs [%s]). Review gate priority and access products manually.',
-					implode( ', ', array_column( $groups[ $i ], 'name' ) ),
-					implode( ', ', array_column( $groups[ $j ], 'name' ) ),
-					implode( ', ', self::group_product_ids( $groups[ $i ] ) ),
-					implode( ', ', self::group_product_ids( $groups[ $j ] ) )
-				)
-			);
+			// Read the consolidated groups: overlap indices are always roots, so both
+			// keys are present, and any plan folded into a root is named in the warning.
+			WP_CLI::warning( self::format_overlap_warning( $merged[ $i ], $merged[ $j ] ) );
 		}
 
 		return array_values( $merged );
+	}
+
+	/**
+	 * Build the loud warning for two overlapping-but-not-subset gate groups.
+	 *
+	 * Reads the consolidated (merged) groups, so plans folded into a root — the
+	 * entitlements most likely to sit inside the overlap — are named alongside the
+	 * root's own plans and products.
+	 *
+	 * @param array[] $group_a First overlapping gate group (root plus any folded-in plans).
+	 * @param array[] $group_b Second overlapping gate group.
+	 *
+	 * @return string The warning message.
+	 */
+	private static function format_overlap_warning( array $group_a, array $group_b ): string {
+		return sprintf(
+			'Plans [%s] and [%s] gate overlapping content under non-subset rule sets, so they map to separate gates. A reader entitled via one plan may be denied at the other gate (access products [%s] vs [%s]). Review gate priority and access products manually.',
+			implode( ', ', array_column( $group_a, 'name' ) ),
+			implode( ', ', array_column( $group_b, 'name' ) ),
+			implode( ', ', self::group_product_ids( $group_a ) ),
+			implode( ', ', self::group_product_ids( $group_b ) )
+		);
 	}
 }
