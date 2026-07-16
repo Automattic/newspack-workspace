@@ -14,13 +14,7 @@ import './style.scss';
  * background. A new provider needs an icon file, an `espProviderIcons` entry,
  * and a background rule in this component's stylesheet.
  */
-const IntegrationIcon = ( {
-	provider,
-	className,
-}: {
-	provider: string;
-	className?: string;
-} ) => {
+const IntegrationIcon = ( { provider, className }: { provider: string; className?: string } ) => {
 	const node = espProviderIcons[ provider ];
 	if ( ! node ) {
 		return null;
