@@ -1,4 +1,9 @@
 /**
+ * WordPress dependencies
+ */
+import { cloneElement } from '@wordpress/element';
+
+/**
  * Internal dependencies
  */
 import { Button, Handoff, Notice, HandoffMessage, TabbedNavigation, Page } from '../';
@@ -72,15 +77,15 @@ export default function withWizardScreen( WrappedComponent, { hidePrimaryButton,
 					{ ...overridingProps }
 				/>
 			);
+		const tabbedNavigationRegion = tabbedNavigation && (
+			<TabbedNavigation
+				disableUpcoming={ disableUpcomingInTabbedNavigation }
+				items={ tabbedNavigation.filter( item => ! item.isHiddenInNav ) }
+			/>
+		);
+
 		const content = (
 			<>
-				{ tabbedNavigation && (
-					<TabbedNavigation
-						disableUpcoming={ disableUpcomingInTabbedNavigation }
-						items={ tabbedNavigation.filter( item => ! item.isHiddenInNav ) }
-					/>
-				) }
-
 				<HandoffMessage />
 
 				<div className={ classnames( 'newspack-wizard newspack-wizard__content', className ) }>
@@ -109,9 +114,16 @@ export default function withWizardScreen( WrappedComponent, { hidePrimaryButton,
 				<>
 					{ newspack_aux_data.is_debug_mode && <Notice debugMode /> }
 					{ hideHeader ? (
-						content
+						// Without the Page shell the tabs still own the content: it
+						// renders inside the active tab's panel.
+						<>{ tabbedNavigationRegion ? cloneElement( tabbedNavigationRegion, { content } ) : content }</>
 					) : (
-						<Page breadcrumbItems={ pageBreadcrumbs } subTitle={ subHeaderText } actions={ headerActions }>
+						<Page
+							breadcrumbItems={ pageBreadcrumbs }
+							subTitle={ subHeaderText }
+							actions={ headerActions }
+							tabbedNavigation={ tabbedNavigationRegion }
+						>
 							{ content }
 						</Page>
 					) }

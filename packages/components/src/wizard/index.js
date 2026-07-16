@@ -8,7 +8,7 @@ import classnames from 'classnames';
  */
 import { DropdownMenu, MenuGroup, MenuItem } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { useEffect, useState, forwardRef } from '@wordpress/element';
+import { cloneElement, isValidElement, useEffect, useState, forwardRef } from '@wordpress/element';
 import { __ } from '@wordpress/i18n';
 import { category, chevronLeft, moreVertical } from '@wordpress/icons';
 
@@ -58,10 +58,15 @@ const ResetHeaderData = () => {
  * Wizard header + content region. Rendered inside the wizard's HashRouter so it
  * can read the current route and derive the active-tab breadcrumb.
  */
-const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, subTitle, actions, children } ) => {
+const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, subTitle, actions, tabbedNavigation, children } ) => {
 	const { pathname } = useLocation();
 
 	if ( hideHeader ) {
+		// Without the Page shell the tabs still own the content: it renders
+		// inside the active tab's panel.
+		if ( isValidElement( tabbedNavigation ) ) {
+			return cloneElement( tabbedNavigation, { content: children } );
+		}
 		return children;
 	}
 
@@ -74,7 +79,7 @@ const WizardHeaderRegion = ( { hideHeader, headerText, sections, sectionName, su
 	breadcrumbItems = appendSectionName( breadcrumbItems, sectionName );
 
 	return (
-		<Page breadcrumbItems={ breadcrumbItems } subTitle={ subTitle } actions={ actions }>
+		<Page breadcrumbItems={ breadcrumbItems } subTitle={ subTitle } actions={ actions } tabbedNavigation={ tabbedNavigation }>
 			{ children }
 		</Page>
 	);
@@ -113,7 +118,6 @@ const Wizard = (
 		renderAboveSections,
 		requiredPlugins = [],
 		isInitialFetchTriggered = true,
-		fixedHeader = false,
 		hideHeader = false,
 	},
 	ref
@@ -151,13 +155,14 @@ const Wizard = (
 	// the PluginInstaller. Use it for routing so the installer actually mounts and runs.
 	const routedSections = pluginRequirementsSatisfied ? sections : displayedSections;
 
+	const tabbedNavigation = displayedSections.length > 1 && (
+		<TabbedNavigation items={ displayedSections }>
+			<WizardError />
+		</TabbedNavigation>
+	);
+
 	const content = (
 		<>
-			{ displayedSections.length > 1 && (
-				<TabbedNavigation items={ displayedSections }>
-					<WizardError />
-				</TabbedNavigation>
-			) }
 			<HandoffMessage />
 
 			{ sections.length > 1 && <ResetHeaderData /> }
@@ -270,7 +275,6 @@ const Wizard = (
 			<div
 				className={ classnames( isLoading ? 'newspack-wizard__is-loading' : 'newspack-wizard__is-loaded', {
 					'newspack-wizard__is-loading-quiet': isQuietLoading,
-					'newspack-wizard__fixed-header': fixedHeader,
 				} ) }
 			>
 				<HashRouter hashType="slash">
@@ -282,6 +286,7 @@ const Wizard = (
 						sectionName={ sectionName }
 						subTitle={ subHeaderText }
 						actions={ headerActions }
+						tabbedNavigation={ tabbedNavigation }
 					>
 						{ content }
 					</WizardHeaderRegion>

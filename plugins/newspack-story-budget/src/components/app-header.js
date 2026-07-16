@@ -14,6 +14,10 @@ export const AppHeaderActions = ( { children } ) => {
 	return <Fill>{ children }</Fill>;
 };
 
-export default ( { breadcrumbItems, subHeaderText } ) => {
-	return <Page breadcrumbItems={ breadcrumbItems } subTitle={ subHeaderText } actions={ <Slot /> } />;
+export default ( { breadcrumbItems, subHeaderText, tabbedNavigation, children } ) => {
+	return (
+		<Page breadcrumbItems={ breadcrumbItems } subTitle={ subHeaderText } actions={ <Slot /> } tabbedNavigation={ tabbedNavigation }>
+			{ children }
+		</Page>
+	);
 };

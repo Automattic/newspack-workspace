@@ -45,7 +45,6 @@ const AudienceContentGates = ( props, ref ) => {
 			headerText={ BASE_HEADER_TEXT }
 			ref={ ref }
 			sharedProps={ { updateGatesData } }
-			fixedHeader
 			sections={ [
 				{
 					path: '/content-gates',

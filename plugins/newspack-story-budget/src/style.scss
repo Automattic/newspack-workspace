@@ -462,15 +462,6 @@ body.toplevel_page_newspack-story-budget {
 	}
 }
 
-// Fix Tabbed Navigation
-.newspack-tabbed-navigation {
-	z-index: 10;
-	position: static;
-	li a {
-		box-sizing: border-box;
-	}
-}
-
 // Fix menu item cursor.
 div[role="menuitem"] {
 	cursor: pointer;

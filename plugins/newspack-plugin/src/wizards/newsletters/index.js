@@ -22,7 +22,6 @@ const NewslettersWizard = () => (
 	<Wizard
 		headerText={ __( 'Newsletters', 'newspack-plugin' ) }
 		requiredPlugins={ [ 'newspack-newsletters' ] }
-		fixedHeader
 		sections={ [
 			{
 				path: '/',
