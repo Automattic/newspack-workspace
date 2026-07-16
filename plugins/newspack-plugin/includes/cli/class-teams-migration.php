@@ -54,13 +54,15 @@ class Teams_Migration {
 	 * supplied, every re-used subscription has its line items replaced with the
 	 * migration product.
 	 *
+	 * Dry-run by default; pass --live to write.
+	 *
 	 * ## OPTIONS
 	 *
 	 * [--product-id=<id>]
 	 * : Product ID to assign to newly-created subscriptions. When supplied, also overwrites the product on any existing subscription that is re-used. Required unless --skip-unlinked is passed.
 	 *
-	 * [--dry-run]
-	 * : Preview all changes without writing anything to the database.
+	 * [--live]
+	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
 	 *
 	 * [--skip-unlinked]
 	 * : Skip teams that have no linked subscription. Skipped teams are listed in a separate table at the end.
@@ -70,10 +72,10 @@ class Teams_Migration {
 	 *
 	 * ## EXAMPLES
 	 *
-	 *     wp newspack migrate-teams --product-id=519858 --dry-run
 	 *     wp newspack migrate-teams --product-id=519858
-	 *     wp newspack migrate-teams --skip-unlinked
-	 *     wp newspack migrate-teams --product-id=519858 --only-unlinked
+	 *     wp newspack migrate-teams --product-id=519858 --live
+	 *     wp newspack migrate-teams --skip-unlinked --live
+	 *     wp newspack migrate-teams --product-id=519858 --only-unlinked --live
 	 *
 	 * @param array $args       Positional args (unused).
 	 * @param array $assoc_args Named args.
@@ -82,7 +84,7 @@ class Teams_Migration {
 	 */
 	public function migrate_teams( $args, $assoc_args ) {
 		$product_id    = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'product-id', 0 );
-		$dry_run       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'dry-run', false );
+		$dry_run       = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
 		$skip_unlinked = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'skip-unlinked', false );
 		$only_unlinked = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'only-unlinked', false );
 
@@ -116,7 +118,7 @@ class Teams_Migration {
 
 		if ( $dry_run ) {
 			WP_CLI::line( '' );
-			WP_CLI::line( '*** DRY RUN MODE — no data will be modified. ***' );
+			WP_CLI::line( '*** DRY RUN MODE — no data will be modified. Pass --live to apply. ***' );
 			WP_CLI::line( '' );
 		}
 
@@ -422,15 +424,17 @@ class Teams_Migration {
 	 * updated so the setting is available at whichever level WooCommerce Subscriptions
 	 * resolves the product ID.
 	 *
+	 * Dry-run by default; pass --live to write.
+	 *
 	 * ## OPTIONS
 	 *
-	 * [--dry-run]
-	 * : Preview all changes without writing anything to the database.
+	 * [--live]
+	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
 	 *
 	 * ## EXAMPLES
 	 *
-	 *     wp newspack migrate-team-products --dry-run
 	 *     wp newspack migrate-team-products
+	 *     wp newspack migrate-team-products --live
 	 *
 	 * @param array $args       Positional args (unused).
 	 * @param array $assoc_args Named args.
@@ -438,11 +442,11 @@ class Teams_Migration {
 	 * @return void
 	 */
 	public function migrate_team_products( $args, $assoc_args ) {
-		$dry_run = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'dry-run', false );
+		$dry_run = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
 
 		if ( $dry_run ) {
 			WP_CLI::line( '' );
-			WP_CLI::line( '*** DRY RUN MODE — no data will be modified. ***' );
+			WP_CLI::line( '*** DRY RUN MODE — no data will be modified. Pass --live to apply. ***' );
 			WP_CLI::line( '' );
 		}
 
@@ -512,7 +516,7 @@ class Teams_Migration {
 			}
 
 			$variation_count = count( $ids_to_update ) - 1;
-			WP_CLI::success( sprintf( 'Product %d ("%s"): set enabled=yes, limit=%s%s.', $product_id, $product->get_name(), 0 === $max_members ? 'Unlimited' : $max_members, $variation_count > 0 ? sprintf( ' (+ %d variation(s))', $variation_count ) : '' ) );
+			WP_CLI::success( sprintf( 'Product %d ("%s"): %s enabled=yes, limit=%s%s.', $product_id, $product->get_name(), $dry_run ? 'would set' : 'set', 0 === $max_members ? 'Unlimited' : $max_members, $variation_count > 0 ? sprintf( ' (+ %d variation(s))', $variation_count ) : '' ) );
 
 			$summary[] = [
 				'product_id'   => $product_id,
@@ -547,7 +551,7 @@ class Teams_Migration {
 		);
 
 		WP_CLI::line( '' );
-		WP_CLI::success( sprintf( 'Done. %d product(s) updated.', count( $summary ) ) );
+		WP_CLI::success( sprintf( 'Done. %d product(s) %s.', count( $summary ), $dry_run ? 'would be updated' : 'updated' ) );
 	}
 
 	/**
@@ -560,7 +564,7 @@ class Teams_Migration {
 	 * Unlike migrate-teams, this command is NOT idempotent: it creates a new
 	 * subscription on every run (a per-plan group subscription under --as-group,
 	 * one per member otherwise). Run it once per plan set; re-running duplicates
-	 * subscriptions. Always preview with --dry-run first.
+	 * subscriptions. Dry-run by default; pass --live to write.
 	 *
 	 * Under --as-group, members are added through the group data layer, which adds
 	 * readers only — a member on a non-reader role is skipped (reported inline),
@@ -583,15 +587,15 @@ class Teams_Migration {
 	 * [--group-owner-id=<id>]
 	 * : User ID to set as the owner of each group subscription created when --as-group is used. Required when --as-group is present.
 	 *
-	 * [--dry-run]
-	 * : Preview all changes without writing anything to the database.
+	 * [--live]
+	 * : Apply the changes. Without this flag the command runs as a dry-run and writes nothing.
 	 *
 	 * ## EXAMPLES
 	 *
-	 *     wp newspack migrate-manual-members --product-id=519858 --dry-run
 	 *     wp newspack migrate-manual-members --product-id=519858
-	 *     wp newspack migrate-manual-members --product-id=519858 --plan-ids=12,34,56
-	 *     wp newspack migrate-manual-members --product-id=519858 --as-group --group-owner-id=1
+	 *     wp newspack migrate-manual-members --product-id=519858 --live
+	 *     wp newspack migrate-manual-members --product-id=519858 --plan-ids=12,34,56 --live
+	 *     wp newspack migrate-manual-members --product-id=519858 --as-group --group-owner-id=1 --live
 	 *
 	 * @param array $args       Positional args (unused).
 	 * @param array $assoc_args Named args.
@@ -599,7 +603,7 @@ class Teams_Migration {
 	 * @return void
 	 */
 	public function migrate_manual_members( $args, $assoc_args ) {
-		$dry_run        = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'dry-run', false );
+		$dry_run        = ! (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'live', false );
 		$as_group       = (bool) \WP_CLI\Utils\get_flag_value( $assoc_args, 'as-group', false );
 		$group_owner_id = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'group-owner-id', 0 );
 		$product_id     = (int) \WP_CLI\Utils\get_flag_value( $assoc_args, 'product-id', 0 );
@@ -633,7 +637,7 @@ class Teams_Migration {
 
 		if ( $dry_run ) {
 			WP_CLI::line( '' );
-			WP_CLI::line( '*** DRY RUN MODE — no data will be modified. ***' );
+			WP_CLI::line( '*** DRY RUN MODE — no data will be modified. Pass --live to apply. ***' );
 			WP_CLI::line( '' );
 		}
 
