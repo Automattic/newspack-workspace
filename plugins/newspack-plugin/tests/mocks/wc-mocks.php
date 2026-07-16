@@ -912,19 +912,51 @@ function wcs_get_users_subscriptions( $user_id ) {
 	return apply_filters( 'wcs_get_users_subscriptions', $user_subscriptions, $user_id );
 }
 function wcs_get_subscriptions( $args = [] ) {
-	// Minimal mock: implements only the `customer_id` filter, the sole arg the code
-	// under test passes. If a future test needs status/paging args
-	// (subscription_status, subscriptions_per_page, paged, offset), extend the filter
-	// here rather than relying on this returning the full set.
+	// Minimal mock: implements the `customer_id` and `subscription_status` filters —
+	// the args the code under test passes. `subscription_status` accepts a single
+	// status or an array; 'any' (or unset) means no status filter. `meta_query` and
+	// paging args (subscriptions_per_page, paged, offset) are still ignored — extend
+	// here rather than relying on this returning the full set if a test needs them.
 	global $subscriptions_database;
 	$customer_id = $args['customer_id'] ?? null;
-	$matches     = [];
+	$statuses    = $args['subscription_status'] ?? 'any';
+	if ( 'any' === $statuses ) {
+		$statuses = null;
+	} elseif ( null !== $statuses ) {
+		$statuses = (array) $statuses;
+	}
+	$matches = [];
 	foreach ( $subscriptions_database as $id => $subscription ) {
-		if ( null === $customer_id || $subscription->get_customer_id() === $customer_id ) {
-			$matches[ $id ] = $subscription;
+		if ( null !== $customer_id && $subscription->get_customer_id() !== $customer_id ) {
+			continue;
 		}
+		if ( null !== $statuses && ! in_array( $subscription->get_status(), $statuses, true ) ) {
+			continue;
+		}
+		$matches[ $id ] = $subscription;
 	}
 	return $matches;
+}
+function wcs_get_subscriptions_for_product( $product_ids, $fields = 'ids', $args = [] ) {
+	// Minimal mock mirroring the real return shape: subscriptions keyed by their
+	// ID (so array_keys() yields subscription IDs), matched via WC_Subscription's
+	// `products` array (has_product()). `subscription_status`/paging args are
+	// ignored — extend here if a test needs them.
+	global $subscriptions_database;
+	$product_ids   = array_map( 'absint', (array) $product_ids );
+	$subscriptions = [];
+	foreach ( $subscriptions_database as $id => $subscription ) {
+		if ( ! method_exists( $subscription, 'has_product' ) ) {
+			continue;
+		}
+		foreach ( $product_ids as $product_id ) {
+			if ( $subscription->has_product( $product_id ) ) {
+				$subscriptions[ $id ] = ( 'ids' !== $fields ) ? $subscription : $id;
+				break;
+			}
+		}
+	}
+	return $subscriptions;
 }
 function wcs_get_canonical_product_id( $item ) {
 	if ( is_object( $item ) && method_exists( $item, 'get_product_id' ) ) {
